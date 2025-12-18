@@ -128,7 +128,7 @@
     {#if app.preference.current.panelTabByViewId[splitViewId] === 'settings'}
       <DocumentPanelSettings {editor} />
     {:else if app.preference.current.panelTabByViewId[splitViewId] === 'info'}
-      <DocumentPanelInfo {$document} />
+      <DocumentPanelInfo {$document} {editor} />
     {:else}
       <div
         class={flex({

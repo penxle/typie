@@ -76,6 +76,12 @@ pub struct ClipboardData {
     pub text: String,
 }
 
+#[wasm_bindgen(getter_with_clone)]
+pub struct TextData {
+    pub all: String,
+    pub selection: String,
+}
+
 #[wasm_bindgen]
 pub struct DragImageInfo {
     drag_image: crate::render::DragImageResult,
@@ -311,5 +317,24 @@ impl Editor {
             html,
             text,
         })
+    }
+
+    #[wasm_bindgen(js_name = getText)]
+    pub fn get_text(&self) -> TextData {
+        let state = self.runtime.state();
+
+        let all = state.doc.to_plain_text();
+
+        let selection = if state.selection.is_collapsed() {
+            String::new()
+        } else {
+            state
+                .selection
+                .extract_fragment(&state.doc)
+                .map(|f| f.to_plain_text())
+                .unwrap_or_default()
+        };
+
+        TextData { all, selection }
     }
 }

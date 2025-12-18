@@ -135,6 +135,42 @@ impl Doc {
         NodeRef::new(&self.inner, id)
     }
 
+    pub fn to_plain_text(&self) -> String {
+        use crate::state::BlockTraverser;
+
+        let mut result = String::new();
+        let Ok(mut traverser) = BlockTraverser::new(self, NodeId::ROOT) else {
+            return result;
+        };
+
+        let mut is_first_block = true;
+
+        while let Some(block_id) = traverser.next() {
+            let Some(block) = self.node(block_id) else {
+                continue;
+            };
+
+            if !is_first_block {
+                result.push('\n');
+            }
+            is_first_block = false;
+
+            for child in block.children() {
+                match child.node() {
+                    Node::Text(text_node) => {
+                        result.push_str(&text_node.text.as_str());
+                    }
+                    Node::HardBreak(_) => {
+                        result.push('\n');
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        result
+    }
+
     pub fn settings(&self) -> DocumentSettings {
         let map = self.inner.loro.get_map(SETTINGS_KEY);
         DocumentSettings::decode(&map).unwrap()
