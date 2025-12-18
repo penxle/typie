@@ -4,7 +4,7 @@ import notoPhantomUrl from '@typie/editor/pkg/Noto-Phantom.ttf?url';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { FRAGMENT_MIME, PAGE_GAP } from './constants';
 import { ensureRequiredFonts, ensureRequiredScripts, getAvailableFontsMap, loadEmojiFallback, loadInitialFonts } from './fonts';
-import { calculateRelativePosition, findNearestPageCoordinate, getPageElement, idleCallback } from './utils';
+import { calculateImageDisplaySize, calculateRelativePosition, findNearestPageCoordinate, getPageElement, idleCallback } from './utils';
 import type { Editor as WasmEditor, Modifier, PointerButton } from '@typie/editor';
 import type { ThemeColors } from './theme';
 import type { Cmd, ExternalElement, LayoutMode, Mark, MarkType, Message, Rect, SelectionStats, WritingSystem } from './types';
@@ -764,12 +764,16 @@ export class Editor {
 
       const imgElement = document.querySelector(`div[data-node-id="${el.nodeId}"] img`);
       if (imgElement instanceof HTMLImageElement) {
-        const globalX = el.bounds.x;
+        const originalWidth = el.data.originalWidth ?? 0;
+        const originalHeight = el.data.originalHeight ?? 0;
+        const { displayWidth, xOffset } = calculateImageDisplaySize(el.bounds, originalWidth, originalHeight);
+
+        const globalX = el.bounds.x + xOffset;
         const globalY = el.bounds.y;
 
         const destX = (globalX - offsetX) * scaleFactor;
         const destY = (relativePageY + globalY - offsetY) * scaleFactor;
-        const destW = el.bounds.width * scaleFactor;
+        const destW = displayWidth * scaleFactor;
         const destH = el.bounds.height * scaleFactor;
 
         ctx.drawImage(imgElement, destX, destY, destW, destH);
