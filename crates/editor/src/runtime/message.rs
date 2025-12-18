@@ -379,13 +379,9 @@ define_messages! {
     => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_extend_mark_range(mark) },
 
-    InsertImage {
-        src: String,
-        width: f32,
-        height: f32,
-    }
+    InsertImage
     => when When::key(ContextKey::CanEdit)
-    => handle(rt) { rt.handle_insert_image(src, width, height) },
+    => handle(rt) { rt.handle_insert_image() },
 
     InsertHorizontalRule { variant: HorizontalRuleVariant }
     => when When::key(ContextKey::CanEdit)
@@ -422,4 +418,16 @@ define_messages! {
     DeleteNode { node_id: String }
     => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_delete_node(node_id) },
+
+    SetImageProportion { node_id: String, proportion: f32 }
+    => when When::key(ContextKey::CanEdit)
+    => handle(rt) { rt.handle_set_image_proportion(node_id, proportion) },
+
+    SetImageDimensions { node_id: String, width: f32, height: f32 }
+    => when When::key(ContextKey::CanEdit)
+    => handle(rt) { rt.handle_set_image_dimensions(node_id, width, height) },
+
+    SetImageSrc { node_id: String, src: String, width: f32, height: f32 }
+    => when When::key(ContextKey::CanEdit)
+    => handle(rt) { rt.handle_set_image_src(node_id, src, width, height) },
 }

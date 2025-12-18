@@ -10,36 +10,55 @@ use tsify::Tsify;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Codec, Tsify)]
 pub struct ImageNode {
-    pub src: String,
-    pub width: f32,
-    pub height: f32,
+    pub src: Option<String>,
+    pub width: Option<f32>,
+    pub height: Option<f32>,
+    #[serde(default = "default_proportion")]
+    pub proportion: f32,
+}
+
+fn default_proportion() -> f32 {
+    1.0
 }
 
 impl NodeHtmlCodec for ImageNode {
     fn to_dom(&self) -> Option<DomSpec> {
+        if self.src.is_none() {
+            return None;
+        }
+
+        let mut spec = DomSpec::el("img").attr("src", self.src.clone().unwrap());
+
+        if let Some(width) = self.width {
+            spec = spec.attr("width", width.to_string());
+        }
+
+        if let Some(height) = self.height {
+            spec = spec.attr("height", height.to_string());
+        }
+
         Some(
-            DomSpec::el("img")
-                .attr("src", &self.src)
-                .attr("width", self.width.to_string())
-                .attr("height", self.height.to_string())
+            spec.attr("data-proportion", self.proportion.to_string())
                 .void(),
         )
     }
 
     fn parse_rules() -> Vec<NodeParseRule> {
         vec![NodeParseRule::simple("img", |elem| {
-            let src = elem.value().attr("src").unwrap_or("").into();
-            let width = elem
+            let src = elem.value().attr("src").map(|s| s.to_string());
+            let width = elem.value().attr("width").and_then(|s| s.parse().ok());
+            let height = elem.value().attr("height").and_then(|s| s.parse().ok());
+            let proportion = elem
                 .value()
-                .attr("width")
+                .attr("data-proportion")
                 .and_then(|s| s.parse().ok())
-                .unwrap_or(100.0);
-            let height = elem
-                .value()
-                .attr("height")
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(100.0);
-            Some(Node::Image(ImageNode { src, width, height }))
+                .unwrap_or(1.0);
+            Some(Node::Image(ImageNode {
+                src,
+                width,
+                height,
+                proportion,
+            }))
         })]
     }
 }
@@ -47,9 +66,10 @@ impl NodeHtmlCodec for ImageNode {
 impl Default for ImageNode {
     fn default() -> Self {
         Self {
-            src: String::new(),
-            width: 1.0,
-            height: 1.0,
+            src: None,
+            width: None,
+            height: None,
+            proportion: 1.0,
         }
     }
 }
@@ -57,27 +77,38 @@ impl Default for ImageNode {
 impl Hash for ImageNode {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.src.hash(state);
-        self.width.to_bits().hash(state);
-        self.height.to_bits().hash(state);
+        self.width.map(|w| w.to_bits()).hash(state);
+        self.height.map(|h| h.to_bits()).hash(state);
+        self.proportion.to_bits().hash(state);
     }
 }
 
 impl Layout for ImageNode {
     fn layout(&self, ctx: &LayoutContext, constraints: BoxConstraints) -> LayoutNode {
+        const PLACEHOLDER_HEIGHT: f32 = 48.0;
+
         let max_width = constraints.max_width;
         let max_height = constraints.max_height;
 
-        let scale = (max_width / self.width)
-            .min(max_height / self.height)
-            .min(1.0);
+        let (display_width, display_height) = if let (Some(w), Some(h)) = (self.width, self.height)
+        {
+            let proportioned_width = w * self.proportion;
+            let proportioned_height = h * self.proportion;
 
-        let display_width = self.width * scale;
-        let display_height = self.height * scale;
+            let scale = (max_width / proportioned_width)
+                .min(max_height / proportioned_height)
+                .min(1.0);
+
+            (proportioned_width * scale, proportioned_height * scale)
+        } else {
+            (max_width, PLACEHOLDER_HEIGHT)
+        };
 
         let data = ExternalElementData::Image {
             src: self.src.clone(),
             original_width: self.width,
             original_height: self.height,
+            proportion: self.proportion,
         };
 
         let parent_block = ctx.node.parent().expect("Image node must have a parent");
@@ -111,9 +142,9 @@ mod tests {
             }
             doc {
                @p image (
-                   src: "test.png".to_string(),
-                   width: 1000.0,
-                   height: 1000.0,
+                   src: Some("test.png".to_string()),
+                   width: Some(1000.0),
+                   height: Some(1000.0),
                )
             }
             selection { (p, 0) }

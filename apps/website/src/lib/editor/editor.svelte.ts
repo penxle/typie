@@ -245,7 +245,7 @@ export class Editor {
         }
 
         case 'pointerStyleChanged': {
-          if (this.pointer.currentHoverTarget) {
+          if (this.pointer.currentHoverTarget && !this.pointer.currentHoverTarget.closest('[data-external-element]')) {
             this.pointer.currentHoverTarget.style.cursor = cmd.style;
           }
           break;

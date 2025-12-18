@@ -682,10 +682,12 @@ impl Runtime {
                         src,
                         original_width,
                         original_height,
+                        proportion,
                     } => crate::layout::elements::ExternalElementData::Image {
                         src: src.clone(),
                         original_width: *original_width,
                         original_height: *original_height,
+                        proportion: *proportion,
                     },
                 };
 
@@ -1188,7 +1190,7 @@ mod tests {
         let mut rt = runtime! {
             viewport { 800, 600, 1.0 }
             doc {
-                image(src: "http://example.com/image.png".to_string(), width: 100.0, height: 100.0,)
+                image(src: Some("http://example.com/image.png".to_string()), width: Some(100.0), height: Some(100.0),)
                 paragraph {}
             }
             selection { (NodeId::ROOT, 0) -> (NodeId::ROOT, 1) }

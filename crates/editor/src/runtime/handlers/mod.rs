@@ -7,6 +7,7 @@ mod escape;
 mod fold;
 mod formatting;
 mod history;
+mod image;
 mod input;
 mod insertion;
 mod interaction;

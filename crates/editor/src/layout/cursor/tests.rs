@@ -2482,7 +2482,7 @@ fn test_hit_test_on_selected_image_preserves_selection() {
             @p1 paragraph {
                 text { "Line 1" }
             }
-            @img image(src: "test.png".to_string(), width: 100.0, height: 100.0,)
+            @img image(src: Some("test.png".to_string()), width: Some(100.0), height: Some(100.0),)
             @p2 paragraph {
                 text { "Line 2" }
             }

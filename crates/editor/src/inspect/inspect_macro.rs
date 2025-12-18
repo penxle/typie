@@ -72,10 +72,15 @@ fn format_node(node: NodeRef, indent_level: usize, labeler: &Labeler, output: &m
             output.push_str(&format!("{indent}{prefix}{text_repr}\n"));
         }
         Node::Image(image) => {
+            let src_value = match &image.src {
+                Some(s) => format!("Some(\"{}\".to_string())", escape_str(s)),
+                None => "None".to_string(),
+            };
             let attrs = format_attributes(&[
-                ("src", format!("\"{}\"", escape_str(&image.src))),
-                ("width", format_number(image.width)),
-                ("height", format_number(image.height)),
+                ("src", src_value),
+                ("width", format_option_number(image.width)),
+                ("height", format_option_number(image.height)),
+                ("proportion", format_number(image.proportion)),
             ]);
             output.push_str(&format!("{indent}{prefix}image{attrs}\n"));
         }
@@ -307,6 +312,13 @@ fn format_number<T: Into<f64>>(num: T) -> String {
     }
 }
 
+fn format_option_number(num: Option<f32>) -> String {
+    match num {
+        Some(v) => format!("Some({})", format_number(v)),
+        None => "None".to_string(),
+    }
+}
+
 struct Labeler {
     labels: HashMap<NodeId, String>,
     order: Vec<NodeId>,
@@ -494,10 +506,15 @@ fn format_fragment_node(
             output.push_str(&format!("{indent}{text_repr}\n"));
         }
         Node::Image(image) => {
+            let src_value = match &image.src {
+                Some(s) => format!("Some(\"{}\".to_string())", escape_str(s)),
+                None => "None".to_string(),
+            };
             let attrs = format_attributes(&[
-                ("src", format!("\"{}\"", escape_str(&image.src))),
-                ("width", format_number(image.width)),
-                ("height", format_number(image.height)),
+                ("src", src_value),
+                ("width", format_option_number(image.width)),
+                ("height", format_option_number(image.height)),
+                ("proportion", format_number(image.proportion)),
             ]);
             output.push_str(&format!("{indent}image{attrs}\n"));
         }
