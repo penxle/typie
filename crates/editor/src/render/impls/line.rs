@@ -39,6 +39,12 @@ impl LineElement {
             rects.push(rect);
         }
 
+        if self.has_page_break {
+            if let Some(rect) = self.page_break_indicator(point, selections) {
+                rects.push(rect);
+            }
+        }
+
         rects
     }
 
@@ -58,10 +64,6 @@ impl LineElement {
 
         if self.has_page_break {
             if let Some(rect) = self.page_break_indicator(point, selections) {
-                let selection_color = Color::from_rgba8(153, 204, 255, 77);
-                let selection_paint = create_solid_paint(selection_color);
-                pixmap.fill_rect(rect, &selection_paint, transform, None);
-
                 let accent_color = Color::from_rgba8(0, 111, 255, 255);
                 let accent_paint = create_solid_paint(accent_color);
 
