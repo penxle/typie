@@ -87,6 +87,8 @@ pub struct Runtime {
 
     undo_selections: Vec<Selection>,
     redo_selections: Vec<Selection>,
+
+    cached_plain_text: Option<String>,
 }
 
 #[allow(dead_code)]
@@ -132,6 +134,7 @@ impl Runtime {
             pointer: PointerState::default(),
             undo_selections: Vec::new(),
             redo_selections: Vec::new(),
+            cached_plain_text: None,
         }
     }
 
@@ -176,6 +179,16 @@ impl Runtime {
 
     pub fn doc(&self) -> &Doc {
         &self.state.doc
+    }
+
+    pub fn get_cached_plain_text(&mut self) -> String {
+        if let Some(ref cached) = self.cached_plain_text {
+            return cached.clone();
+        }
+
+        let text = self.state.doc.to_plain_text();
+        self.cached_plain_text = Some(text.clone());
+        text
     }
 
     pub fn selection(&self) -> &Selection {
@@ -789,6 +802,7 @@ impl Runtime {
                 }
                 Effect::DocChanged => {
                     self.selection_cache = None;
+                    self.cached_plain_text = None;
                     self.pending.doc = true;
                     self.pending.layout = true;
                     self.pending.render = true;

@@ -76,10 +76,14 @@ pub struct ClipboardData {
     pub text: String,
 }
 
-#[wasm_bindgen(getter_with_clone)]
-pub struct TextData {
-    pub all: String,
-    pub selection: String,
+#[wasm_bindgen]
+pub struct CharacterCounts {
+    pub doc_with_whitespace: u32,
+    pub doc_without_whitespace: u32,
+    pub doc_without_whitespace_and_punctuation: u32,
+    pub selection_with_whitespace: u32,
+    pub selection_without_whitespace: u32,
+    pub selection_without_whitespace_and_punctuation: u32,
 }
 
 #[wasm_bindgen]
@@ -319,13 +323,80 @@ impl Editor {
         })
     }
 
-    #[wasm_bindgen(js_name = getText)]
-    pub fn get_text(&self) -> TextData {
-        let state = self.runtime.state();
+    #[wasm_bindgen(js_name = getCharacterCounts)]
+    pub fn get_character_counts(&mut self) -> CharacterCounts {
+        let doc_text = self.runtime.get_cached_plain_text();
+        let selection_text = {
+            let state = self.runtime.state();
+            state.selection.to_plain_text(&state.doc)
+        };
 
-        TextData {
-            all: state.doc.to_plain_text(),
-            selection: state.selection.to_plain_text(&state.doc),
+        CharacterCounts {
+            doc_with_whitespace: count_with_whitespace(&doc_text),
+            doc_without_whitespace: count_without_whitespace(&doc_text),
+            doc_without_whitespace_and_punctuation: count_without_whitespace_and_punctuation(&doc_text),
+            selection_with_whitespace: count_with_whitespace(&selection_text),
+            selection_without_whitespace: count_without_whitespace(&selection_text),
+            selection_without_whitespace_and_punctuation: count_without_whitespace_and_punctuation(&selection_text),
         }
     }
+}
+
+fn count_with_whitespace(text: &str) -> u32 {
+    let cleaned = text.replace('\u{200B}', "");
+    let mut result = String::with_capacity(cleaned.len());
+    let mut prev_whitespace = false;
+
+    for c in cleaned.chars() {
+        if c.is_whitespace() {
+            if !prev_whitespace {
+                result.push(' ');
+            }
+            prev_whitespace = true;
+        } else {
+            result.push(c);
+            prev_whitespace = false;
+        }
+    }
+
+    result.trim().chars().count() as u32
+}
+
+fn count_without_whitespace(text: &str) -> u32 {
+    text.replace('\u{200B}', "")
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .count() as u32
+}
+
+fn count_without_whitespace_and_punctuation(text: &str) -> u32 {
+    use icu_properties::props::GeneralCategory;
+    use icu_provider::buf::AsDeserializingBufferProvider;
+
+    let provider = crate::icu_data::get_icu_provider();
+    let deserializing_provider = provider.as_deserializing();
+    let gc_data =
+        icu_properties::CodePointMapData::<GeneralCategory>::try_new_unstable(&deserializing_provider)
+            .expect("Failed to load GeneralCategory data");
+    let gc_map = gc_data.as_borrowed();
+
+    text.replace('\u{200B}', "")
+        .chars()
+        .filter(|&c| {
+            if c.is_whitespace() {
+                return false;
+            }
+            let gc = gc_map.get(c);
+            !matches!(
+                gc,
+                GeneralCategory::ConnectorPunctuation
+                    | GeneralCategory::DashPunctuation
+                    | GeneralCategory::ClosePunctuation
+                    | GeneralCategory::FinalPunctuation
+                    | GeneralCategory::InitialPunctuation
+                    | GeneralCategory::OtherPunctuation
+                    | GeneralCategory::OpenPunctuation
+            )
+        })
+        .count() as u32
 }
