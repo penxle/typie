@@ -140,7 +140,6 @@
 
   const clientId = nanoid();
   let syncUpdateTimeout: ReturnType<typeof setTimeout> | null = null;
-  let lastSyncedVersion: Uint8Array | null = null;
   let persistence: IndexeddbPersistence | null = null;
   let syncStatus = $state<'syncing' | 'synced' | 'error'>('synced');
   let planUpgradeModalOpen = $state(false);
@@ -244,7 +243,6 @@
       forceSyncInterval = setInterval(() => forceSync(), 10_000);
 
       await fullSync();
-      lastSyncedVersion = editor.getVersion() ?? null;
 
       unsubscribe = documentSyncStream.subscribe({ clientId, documentId: currentDocumentId }, async (payload) => {
         if (currentDocumentId !== documentId) {
@@ -256,7 +254,8 @@
         } else if (payload.type === DocumentSyncType.UPDATE) {
           editor.importUpdates(Uint8Array.fromBase64(payload.data));
         } else if (payload.type === DocumentSyncType.VECTOR) {
-          lastSyncedVersion = Uint8Array.fromBase64(payload.data);
+          const version = Editor.SyncVersion.decode(Uint8Array.fromBase64(payload.data));
+          editor.commitSync(version);
         }
       });
     });
@@ -269,14 +268,15 @@
         clearTimeout(syncUpdateTimeout);
         syncUpdateTimeout = null;
       }
-      if (currentDocumentId && lastSyncedVersion) {
-        const update = editor.exportUpdatesFrom(lastSyncedVersion);
-        if (update && update.length > 0) {
+      if (currentDocumentId) {
+        const result = editor.exportNewUpdates();
+        if (result && result.updates.length > 0) {
+          const { updates } = result;
           syncDocument({
             clientId,
             documentId: currentDocumentId,
             type: DocumentSyncType.UPDATE,
-            data: update.toBase64(),
+            data: updates.toBase64(),
           });
         }
       }
@@ -305,7 +305,9 @@
       data: update.toBase64(),
     });
 
-    lastSyncedVersion = version ?? null;
+    if (version) {
+      editor.commitSync(Editor.SyncVersion.decode(version));
+    }
   }
 
   async function forceSync() {
@@ -330,9 +332,12 @@
 
     syncStatus = 'syncing';
 
-    const update = lastSyncedVersion ? editor.exportUpdatesFrom(lastSyncedVersion) : editor.exportAllUpdates();
-    if (update && update.length > 0 && persistence) {
-      persistence.storeUpdate(update);
+    const result = editor.exportNewUpdates();
+    if (result) {
+      const { updates } = result;
+      if (updates.length > 0 && persistence) {
+        persistence.storeUpdate(updates);
+      }
     }
 
     if (syncUpdateTimeout) {
@@ -342,20 +347,21 @@
     syncUpdateTimeout = setTimeout(async () => {
       if (!documentId) return;
 
-      const syncUpdate = lastSyncedVersion ? editor.exportUpdatesFrom(lastSyncedVersion) : editor.exportAllUpdates();
+      const res = editor.exportNewUpdates();
 
-      if (syncUpdate && syncUpdate.length > 0) {
+      if (res && res.updates.length > 0) {
+        const { updates, version } = res;
         try {
           await syncDocument(
             {
               clientId,
               documentId,
               type: DocumentSyncType.UPDATE,
-              data: syncUpdate.toBase64(),
+              data: updates.toBase64(),
             },
             { transport: 'ws' },
           );
-          lastSyncedVersion = editor.getVersion() ?? null;
+          editor.commitSync(version);
           syncStatus = 'synced';
         } catch {
           syncStatus = 'error';

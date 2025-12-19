@@ -5,12 +5,46 @@ use crate::state::{Position, Selection};
 use crate::types::Affinity;
 use serde::Serialize;
 use std::rc::Rc;
-use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
+use wasm_bindgen::prelude::*;
 
 fn to_js_value<T: Serialize>(value: &T) -> JsValue {
     let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
     value.serialize(&serializer).unwrap()
+}
+
+#[wasm_bindgen]
+#[derive(Clone)]
+pub struct SyncVersion {
+    inner: loro::VersionVector,
+}
+
+#[wasm_bindgen]
+impl SyncVersion {
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> Self {
+        Self {
+            inner: loro::VersionVector::new(),
+        }
+    }
+
+    #[wasm_bindgen(js_name = encode)]
+    pub fn encode(&self) -> Vec<u8> {
+        self.inner.encode()
+    }
+
+    #[wasm_bindgen(js_name = decode)]
+    pub fn decode(data: Vec<u8>) -> Self {
+        Self {
+            inner: loro::VersionVector::decode(&data).unwrap(),
+        }
+    }
+}
+
+#[wasm_bindgen(getter_with_clone)]
+pub struct ExportedUpdates {
+    pub updates: Vec<u8>,
+    pub version: SyncVersion,
 }
 
 #[wasm_bindgen(js_name = getMemory)]
@@ -219,18 +253,35 @@ impl Editor {
     }
 
     #[wasm_bindgen(js_name = importUpdates)]
-    pub fn import_updates(&self, updates: Vec<u8>) {
-        self.runtime.doc().import_updates(&updates).unwrap()
+    pub fn import_updates(&mut self, updates: Vec<u8>) {
+        self.runtime.import_updates(&updates).unwrap()
     }
-
     #[wasm_bindgen(js_name = importUpdatesBatch)]
-    pub fn import_updates_batch(&self, updates_batch: js_sys::Array) {
+    pub fn import_updates_batch(&mut self, updates_batch: js_sys::Array) {
         let batch: Vec<Vec<u8>> = updates_batch
             .iter()
             .filter_map(|v| v.dyn_into::<js_sys::Uint8Array>().ok())
             .map(|arr| arr.to_vec())
             .collect();
-        self.runtime.doc().import_updates_batch(&batch).unwrap()
+        self.runtime.import_updates_batch(&batch).unwrap()
+    }
+
+    #[wasm_bindgen(js_name = exportNewUpdates)]
+    pub fn export_new_updates(&self) -> Result<ExportedUpdates, JsValue> {
+        let (updates, version) = self
+            .runtime
+            .export_new_updates()
+            .map_err(|e| e.to_string())?;
+
+        Ok(ExportedUpdates {
+            updates,
+            version: SyncVersion { inner: version },
+        })
+    }
+
+    #[wasm_bindgen(js_name = commitSync)]
+    pub fn commit_sync(&mut self, version: SyncVersion) {
+        self.runtime.commit_sync(version.inner);
     }
 
     #[wasm_bindgen(js_name = canDragAt)]
@@ -334,10 +385,14 @@ impl Editor {
         CharacterCounts {
             doc_with_whitespace: count_with_whitespace(&doc_text),
             doc_without_whitespace: count_without_whitespace(&doc_text),
-            doc_without_whitespace_and_punctuation: count_without_whitespace_and_punctuation(&doc_text),
+            doc_without_whitespace_and_punctuation: count_without_whitespace_and_punctuation(
+                &doc_text,
+            ),
             selection_with_whitespace: count_with_whitespace(&selection_text),
             selection_without_whitespace: count_without_whitespace(&selection_text),
-            selection_without_whitespace_and_punctuation: count_without_whitespace_and_punctuation(&selection_text),
+            selection_without_whitespace_and_punctuation: count_without_whitespace_and_punctuation(
+                &selection_text,
+            ),
         }
     }
 }
@@ -375,9 +430,10 @@ fn count_without_whitespace_and_punctuation(text: &str) -> u32 {
 
     let provider = crate::icu_data::get_icu_provider();
     let deserializing_provider = provider.as_deserializing();
-    let gc_data =
-        icu_properties::CodePointMapData::<GeneralCategory>::try_new_unstable(&deserializing_provider)
-            .expect("Failed to load GeneralCategory data");
+    let gc_data = icu_properties::CodePointMapData::<GeneralCategory>::try_new_unstable(
+        &deserializing_provider,
+    )
+    .expect("Failed to load GeneralCategory data");
     let gc_map = gc_data.as_borrowed();
 
     text.replace('\u{200B}', "")
