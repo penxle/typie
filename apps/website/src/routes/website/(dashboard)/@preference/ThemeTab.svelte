@@ -19,11 +19,11 @@
     { id: 'white', label: '화이트', previewColor: '#ffffff' },
     { id: 'snow', label: '스노우', previewColor: '#dceafa' },
     { id: 'butter', label: '버터', previewColor: '#f8f4d0' },
-    { id: 'peach', label: '피치', previewColor: '#f8d8c0' },
+    { id: 'peach', label: '피치', previewColor: '#f8c8b0' },
     { id: 'rose', label: '로즈', previewColor: '#f8dae8' },
-    { id: 'sand', label: '샌드', previewColor: '#dcd4cc' },
+    { id: 'lavender', label: '라벤더', previewColor: '#e0dcf0' },
     { id: 'mint', label: '민트', previewColor: '#d0ece0' },
-    { id: 'caramel', label: '카라멜', previewColor: '#d0c0a0' },
+    { id: 'latte', label: '라떼', previewColor: '#e8e0d4' },
   ];
 
   const darkVariants: Variant<DarkVariant>[] = [
