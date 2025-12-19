@@ -16,9 +16,9 @@ export const conditions = {
     lightButter: '[data-theme="light"][data-variant-light="butter"] &',
     lightPeach: '[data-theme="light"][data-variant-light="peach"] &',
     lightRose: '[data-theme="light"][data-variant-light="rose"] &',
-    lightSand: '[data-theme="light"][data-variant-light="sand"] &',
+    lightLavender: '[data-theme="light"][data-variant-light="lavender"] &',
     lightMint: '[data-theme="light"][data-variant-light="mint"] &',
-    lightCaramel: '[data-theme="light"][data-variant-light="caramel"] &',
+    lightLatte: '[data-theme="light"][data-variant-light="latte"] &',
 
     darkBlack: '[data-theme="dark"][data-variant-dark="black"] &',
     darkCharcoal: '[data-theme="dark"][data-variant-dark="charcoal"] &',
