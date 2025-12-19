@@ -11,12 +11,9 @@ impl Runtime {
         direction: Direction,
         extend_selection: bool,
     ) -> Vec<Effect> {
-        let is_backward = matches!(
-            direction,
-            Direction::Left | Direction::Up | Direction::WordLeft | Direction::LineStart
-        );
+        let is_upward = matches!(direction, Direction::Up);
 
-        if is_backward && !extend_selection && self.is_at_document_start() {
+        if is_upward && !extend_selection && self.is_at_document_start() {
             return vec![Effect::ExitedDocumentStart];
         }
 
