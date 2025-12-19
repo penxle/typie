@@ -513,63 +513,93 @@ fn blit_mask_with_color(
     let copy_width = (src_width - src_x_start).min(dst_width - dst_x_start);
     let copy_height = (src_height - src_y_start).min(dst_height - dst_y_start);
 
-    if copy_width <= 0 || copy_height <= 0 {
+    if copy_width <= 0 || copy_height <= 0 || src_a == 0 {
         return;
     }
+
+    let mask_data = &mask.data;
+    let dst_data = dst.data_mut();
+    let src_stride = src_width as usize;
+    let dst_stride = dst_width as usize * 4;
+    let copy_width_usize = copy_width as usize;
+
+    let is_opaque_color = src_a == 255;
 
     let src_r_linear = SRGB_TO_LINEAR[src_r as usize] as u32;
     let src_g_linear = SRGB_TO_LINEAR[src_g as usize] as u32;
     let src_b_linear = SRGB_TO_LINEAR[src_b as usize] as u32;
     let color_alpha = src_a as u32;
 
-    let mask_data = &mask.data;
-    let dst_data = dst.data_mut();
-    let src_stride = src_width as usize;
-    let dst_stride = (dst_width * 4) as usize;
-
     for row in 0..copy_height as usize {
-        let src_row_offset = (src_y_start as usize + row) * src_stride + src_x_start as usize;
-        let dst_row_offset = (dst_y_start as usize + row) * dst_stride + (dst_x_start as usize) * 4;
+        let src_row_start = (src_y_start as usize + row) * src_stride + src_x_start as usize;
+        let dst_row_start = (dst_y_start as usize + row) * dst_stride + (dst_x_start as usize) * 4;
 
-        let mut src_idx = src_row_offset;
-        let mut dst_idx = dst_row_offset;
+        let mask_row = &mask_data[src_row_start..src_row_start + copy_width_usize];
+        let dst_row = &mut dst_data[dst_row_start..dst_row_start + copy_width_usize * 4];
 
-        for _ in 0..copy_width {
-            let mask_alpha = mask_data[src_idx] as u32;
+        let mut col = 0;
+        while col < copy_width_usize {
+            let mask_alpha = mask_row[col];
 
-            if mask_alpha > 0 {
-                let combined_alpha = (color_alpha * mask_alpha + 127) / 255;
-
-                if combined_alpha >= 255 {
-                    dst_data[dst_idx] = src_r;
-                    dst_data[dst_idx + 1] = src_g;
-                    dst_data[dst_idx + 2] = src_b;
-                    dst_data[dst_idx + 3] = 255;
-                } else if combined_alpha > 0 {
-                    let dst_r_linear = SRGB_TO_LINEAR[dst_data[dst_idx] as usize] as u32;
-                    let dst_g_linear = SRGB_TO_LINEAR[dst_data[dst_idx + 1] as usize] as u32;
-                    let dst_b_linear = SRGB_TO_LINEAR[dst_data[dst_idx + 2] as usize] as u32;
-                    let dst_a = dst_data[dst_idx + 3] as u32;
-
-                    let inv_alpha = 255 - combined_alpha;
-
-                    let result_r_linear =
-                        (src_r_linear * combined_alpha + dst_r_linear * inv_alpha + 127) / 255;
-                    let result_g_linear =
-                        (src_g_linear * combined_alpha + dst_g_linear * inv_alpha + 127) / 255;
-                    let result_b_linear =
-                        (src_b_linear * combined_alpha + dst_b_linear * inv_alpha + 127) / 255;
-
-                    dst_data[dst_idx] = LINEAR_TO_SRGB[result_r_linear.min(4095) as usize];
-                    dst_data[dst_idx + 1] = LINEAR_TO_SRGB[result_g_linear.min(4095) as usize];
-                    dst_data[dst_idx + 2] = LINEAR_TO_SRGB[result_b_linear.min(4095) as usize];
-                    dst_data[dst_idx + 3] =
-                        ((combined_alpha + (dst_a * inv_alpha + 127) / 255).min(255)) as u8;
-                }
+            if mask_alpha == 0 {
+                col += 1;
+                continue;
             }
 
-            src_idx += 1;
-            dst_idx += 4;
+            let dst_idx = col * 4;
+
+            if mask_alpha == 255 && is_opaque_color {
+                dst_row[dst_idx] = src_r;
+                dst_row[dst_idx + 1] = src_g;
+                dst_row[dst_idx + 2] = src_b;
+                dst_row[dst_idx + 3] = 255;
+                col += 1;
+                continue;
+            }
+
+            let combined_alpha = if is_opaque_color {
+                mask_alpha as u32
+            } else {
+                (color_alpha * mask_alpha as u32 + 128) >> 8
+            };
+
+            if combined_alpha == 0 {
+                col += 1;
+                continue;
+            }
+
+            let dst_a = dst_row[dst_idx + 3];
+
+            if combined_alpha >= 255 {
+                dst_row[dst_idx] = src_r;
+                dst_row[dst_idx + 1] = src_g;
+                dst_row[dst_idx + 2] = src_b;
+                dst_row[dst_idx + 3] = 255;
+            } else {
+                let dst_r_linear = SRGB_TO_LINEAR[dst_row[dst_idx] as usize] as u32;
+                let dst_g_linear = SRGB_TO_LINEAR[dst_row[dst_idx + 1] as usize] as u32;
+                let dst_b_linear = SRGB_TO_LINEAR[dst_row[dst_idx + 2] as usize] as u32;
+
+                let inv_alpha = 255 - combined_alpha;
+
+                let result_r = ((src_r_linear * combined_alpha + dst_r_linear * inv_alpha + 128)
+                    >> 8)
+                    .min(4095);
+                let result_g = ((src_g_linear * combined_alpha + dst_g_linear * inv_alpha + 128)
+                    >> 8)
+                    .min(4095);
+                let result_b = ((src_b_linear * combined_alpha + dst_b_linear * inv_alpha + 128)
+                    >> 8)
+                    .min(4095);
+
+                dst_row[dst_idx] = LINEAR_TO_SRGB[result_r as usize];
+                dst_row[dst_idx + 1] = LINEAR_TO_SRGB[result_g as usize];
+                dst_row[dst_idx + 2] = LINEAR_TO_SRGB[result_b as usize];
+                dst_row[dst_idx + 3] =
+                    ((combined_alpha + ((dst_a as u32 * inv_alpha + 128) >> 8)).min(255)) as u8;
+            }
+
+            col += 1;
         }
     }
 }

@@ -5,9 +5,10 @@ use anyhow::{Context, Result};
 use std::cmp::Ordering;
 
 pub fn find_child_at_offset(block: &NodeRef, offset: usize) -> Option<(NodeId, usize)> {
+    let children: Vec<_> = block.children().collect();
     let mut current_offset = 0;
 
-    for child in block.children() {
+    for (i, child) in children.iter().enumerate() {
         let id = child.node_id();
 
         match child.node() {
@@ -18,8 +19,8 @@ pub fn find_child_at_offset(block: &NodeRef, offset: usize) -> Option<(NodeId, u
                 }
 
                 if offset == current_offset + text_len {
-                    if let Some(next_sibling) = child.next_sibling() {
-                        return Some((next_sibling.node_id(), 0));
+                    if let Some(next) = children.get(i + 1) {
+                        return Some((next.node_id(), 0));
                     } else {
                         return Some((child.node_id(), text_len));
                     }
@@ -30,9 +31,9 @@ pub fn find_child_at_offset(block: &NodeRef, offset: usize) -> Option<(NodeId, u
                 if offset == current_offset {
                     return Some((id, 0));
                 } else if offset == current_offset + 1 {
-                    if let Some(next_sibling) = child.next_sibling() {
-                        return Some((next_sibling.node_id(), 0));
-                    } else if block.last_child().map(|n| n.node_id()) == Some(id) {
+                    if let Some(next) = children.get(i + 1) {
+                        return Some((next.node_id(), 0));
+                    } else if i == children.len() - 1 {
                         return Some((id, 1));
                     }
                 }

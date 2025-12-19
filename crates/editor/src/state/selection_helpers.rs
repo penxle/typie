@@ -71,7 +71,7 @@ pub fn collect_top_level_blocks_in_range(
     Ok(top_level_blocks)
 }
 
-fn start_block_id(doc: &Doc, pos: Position) -> Result<NodeId> {
+pub(crate) fn start_block_id(doc: &Doc, pos: Position) -> Result<NodeId> {
     let block_node = doc
         .node(pos.node_id)
         .context("start_block_id: Block node not found")?;
@@ -90,7 +90,7 @@ fn start_block_id(doc: &Doc, pos: Position) -> Result<NodeId> {
     Ok(block_node.node_id())
 }
 
-fn end_boundary_node(doc: &Doc, pos: Position) -> Result<Option<NodeId>> {
+pub(crate) fn end_boundary_node(doc: &Doc, pos: Position) -> Result<Option<NodeId>> {
     let block_node = doc
         .node(pos.node_id)
         .context("end_boundary_node: Block node not found")?;
