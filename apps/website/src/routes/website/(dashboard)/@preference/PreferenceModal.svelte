@@ -8,6 +8,7 @@
   import GiftIcon from '~icons/lucide/gift';
   import KeyboardIcon from '~icons/lucide/keyboard';
   import LayoutIcon from '~icons/lucide/layout';
+  import PaletteIcon from '~icons/lucide/palette';
   import PencilIcon from '~icons/lucide/pencil';
   import ShieldIcon from '~icons/lucide/shield';
   import SlidersHorizontalIcon from '~icons/lucide/sliders-horizontal';
@@ -27,6 +28,7 @@
   import ReferralTab from './ReferralTab.svelte';
   import SecurityTab from './SecurityTab.svelte';
   import ShortcutsTab from './ShortcutsTab.svelte';
+  import ThemeTab from './ThemeTab.svelte';
   import type { Component } from 'svelte';
   import type { DashboardLayout_PreferenceModal_user } from '$graphql';
 
@@ -95,6 +97,12 @@
     {
       label: '환경',
       tabs: [
+        {
+          path: '/preference/theme',
+          label: '테마',
+          icon: PaletteIcon,
+          component: ThemeTab,
+        },
         {
           path: '/preference/interface',
           label: '인터페이스',
@@ -172,6 +180,7 @@
   style={css.raw({ maxWidth: '900px', height: 'full', maxHeight: '600px', padding: '0' })}
   onclose={() => history.back()}
   open={!!currentTab}
+  showBackdrop={currentTab?.path !== '/preference/theme'}
 >
   <div class={flex({ height: 'full' })}>
     <div

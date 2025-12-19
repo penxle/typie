@@ -18,9 +18,19 @@
     onclose?: () => void;
     overlayPadding?: number;
     focusTrapOptions?: FocusTrapOptions;
+    showBackdrop?: boolean;
   };
 
-  let { open = $bindable(), children, style, onclose, loading = false, overlayPadding = 20, focusTrapOptions = {} }: Props = $props();
+  let {
+    open = $bindable(),
+    children,
+    style,
+    onclose,
+    loading = false,
+    overlayPadding = 20,
+    focusTrapOptions = {},
+    showBackdrop = true,
+  }: Props = $props();
 
   const close = () => {
     open = false;
@@ -54,13 +64,18 @@
     use:portal
   >
     <div
-      class={css({
-        position: 'fixed',
-        inset: '0',
-        backgroundColor: 'black/25',
-        backdropFilter: 'auto',
-        backdropBlur: '4px',
-      })}
+      class={css(
+        {
+          position: 'fixed',
+          inset: '0',
+          transition: 'common',
+        },
+        showBackdrop && {
+          backgroundColor: 'black/25',
+          backdropFilter: 'auto',
+          backdropBlur: '4px',
+        },
+      )}
       onclick={close}
       role="none"
       transition:fade|global={{ duration: 150, easing: sineOut }}

@@ -8,15 +8,23 @@ import type { CookieChangeOptions } from 'universal-cookie';
 export type Theme = 'light' | 'dark' | 'auto';
 export type EffectiveTheme = Exclude<Theme, 'auto'>;
 
+export type LightVariant = 'white' | 'snow' | 'butter' | 'peach' | 'rose' | 'sand' | 'mint' | 'caramel';
+export type DarkVariant = 'black' | 'charcoal' | 'graphite' | 'midnight' | 'navy' | 'obsidian' | 'storm' | 'espresso';
+
+const LIGHT_VARIANTS = new Set<LightVariant>(['white', 'snow', 'butter', 'peach', 'rose', 'sand', 'mint', 'caramel']);
+const DARK_VARIANTS = new Set<DarkVariant>(['black', 'charcoal', 'graphite', 'midnight', 'navy', 'obsidian', 'storm', 'espresso']);
+
 const COOKIE = 'typie-th';
+const COOKIE_LIGHT_VARIANT = 'typie-th-lv';
+const COOKIE_DARK_VARIANT = 'typie-th-dv';
 
 export class ThemeState {
   #cookies = new Cookies();
 
-  #force = $state<Theme>();
-  #current = $state<Theme>('auto');
-  #effective = $derived.by<EffectiveTheme>(() => {
-    const value = this.#force ?? this.#current;
+  #overrideTheme = $state<EffectiveTheme>();
+  #currentTheme = $state<Theme>('auto');
+  #effectiveTheme = $derived.by<EffectiveTheme>(() => {
+    const value = this.#overrideTheme ?? this.#currentTheme;
     if (value === 'auto') {
       return this.#prefersDark.current ? 'dark' : 'light';
     } else {
@@ -24,31 +32,54 @@ export class ThemeState {
     }
   });
 
+  #lightVariant = $state<LightVariant>('white');
+  #darkVariant = $state<DarkVariant>('black');
+
   #prefersDark = new MediaQuery('(prefers-color-scheme: dark)');
 
   constructor() {
     const defaultTheme = page.url.pathname.includes('_webview') ? 'light' : 'auto';
 
     const value = this.#cookies.get(COOKIE);
-    this.#current = value && ['auto', 'light', 'dark'].includes(value) ? value : defaultTheme;
+    this.#currentTheme = value && ['auto', 'light', 'dark'].includes(value) ? value : defaultTheme;
+
+    const lightVariantValue = this.#cookies.get(COOKIE_LIGHT_VARIANT);
+    this.#lightVariant = lightVariantValue && LIGHT_VARIANTS.has(lightVariantValue) ? lightVariantValue : 'white';
+
+    const darkVariantValue = this.#cookies.get(COOKIE_DARK_VARIANT);
+    this.#darkVariant = darkVariantValue && DARK_VARIANTS.has(darkVariantValue) ? darkVariantValue : 'black';
 
     if (browser) {
-      document.documentElement.dataset.theme = this.#effective;
+      document.documentElement.dataset.theme = this.#effectiveTheme;
+      document.documentElement.dataset.variantLight = this.#lightVariant;
+      document.documentElement.dataset.variantDark = this.#darkVariant;
     }
 
     $effect(() => {
-      if (document.documentElement.dataset.theme !== this.#effective) {
+      void this.#effectiveTheme;
+      void this.#lightVariant;
+      void this.#darkVariant;
+
+      if (
+        document.documentElement.dataset.theme !== this.#effectiveTheme ||
+        document.documentElement.dataset.variantLight !== this.#lightVariant ||
+        document.documentElement.dataset.variantDark !== this.#darkVariant
+      ) {
         document.documentElement.dataset.noTransition = '';
         if (document.startViewTransition) {
           document
             .startViewTransition(() => {
-              document.documentElement.dataset.theme = this.#effective;
+              document.documentElement.dataset.theme = this.#effectiveTheme;
+              document.documentElement.dataset.variantLight = this.#lightVariant;
+              document.documentElement.dataset.variantDark = this.#darkVariant;
             })
             .finished.then(() => {
               delete document.documentElement.dataset.noTransition;
             });
         } else {
-          document.documentElement.dataset.theme = this.#effective;
+          document.documentElement.dataset.theme = this.#effectiveTheme;
+          document.documentElement.dataset.variantLight = this.#lightVariant;
+          document.documentElement.dataset.variantDark = this.#darkVariant;
           setTimeout(() => {
             delete document.documentElement.dataset.noTransition;
           }, 0);
@@ -59,7 +90,11 @@ export class ThemeState {
     $effect(() => {
       const handler = ({ name, value }: CookieChangeOptions) => {
         if (name === COOKIE) {
-          this.#current = value && ['auto', 'light', 'dark'].includes(value) ? value : defaultTheme;
+          this.#currentTheme = value && ['auto', 'light', 'dark'].includes(value) ? value : defaultTheme;
+        } else if (name === COOKIE_LIGHT_VARIANT) {
+          this.#lightVariant = value && LIGHT_VARIANTS.has(value) ? value : 'white';
+        } else if (name === COOKIE_DARK_VARIANT) {
+          this.#darkVariant = value && DARK_VARIANTS.has(value) ? value : 'black';
         }
       };
 
@@ -71,26 +106,40 @@ export class ThemeState {
     });
   }
 
-  get current(): Theme {
-    return this.#current;
+  get currentTheme(): Theme {
+    return this.#currentTheme;
   }
 
-  set current(theme: Theme) {
+  set currentTheme(theme: Theme) {
     this.#cookies.set(COOKIE, theme, { path: '/', maxAge: 365 * 24 * 60 * 60, sameSite: 'lax' });
   }
 
-  get effective(): EffectiveTheme {
-    return this.#effective;
+  get effectiveTheme(): EffectiveTheme {
+    return this.#effectiveTheme;
   }
 
-  force(theme: Theme) {
-    $effect(() => {
-      this.#force = theme;
+  get lightVariant(): LightVariant {
+    return this.#lightVariant;
+  }
 
-      return () => {
-        this.#force = undefined;
-      };
-    });
+  set lightVariant(variant: LightVariant) {
+    this.#cookies.set(COOKIE_LIGHT_VARIANT, variant, { path: '/', maxAge: 365 * 24 * 60 * 60, sameSite: 'lax' });
+  }
+
+  get darkVariant(): DarkVariant {
+    return this.#darkVariant;
+  }
+
+  set darkVariant(variant: DarkVariant) {
+    this.#cookies.set(COOKIE_DARK_VARIANT, variant, { path: '/', maxAge: 365 * 24 * 60 * 60, sameSite: 'lax' });
+  }
+
+  get overrideTheme(): EffectiveTheme | undefined {
+    return this.#overrideTheme;
+  }
+
+  set overrideTheme(theme: EffectiveTheme | undefined) {
+    this.#overrideTheme = theme;
   }
 }
 

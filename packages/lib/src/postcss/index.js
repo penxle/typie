@@ -18,8 +18,20 @@ const plugin = () => {
       darkThemeRules.forEach((rule) => {
         let mediaSelector;
 
+        const variantMatch = rule.selector.match(/\[data-variant-dark=['"]?([^'"\]]+)['"]?\]/);
+
         if (/^\[data-theme=['"]?dark['"]?\]$/.test(rule.selector)) {
           mediaSelector = ':root:not([data-theme="light"])';
+        } else if (/^\[data-theme=['"]?dark['"]?\]\[data-variant-dark=['"]?[^'"\]]+['"]?\]$/.test(rule.selector)) {
+          const variant = variantMatch[1];
+          mediaSelector = `:root:not([data-theme="light"])[data-variant-dark="${variant}"]`;
+        } else if (variantMatch) {
+          const variant = variantMatch[1];
+          const baseSelector = rule.selector
+            .replace(/\[data-theme=["']?dark["']?\]/, '')
+            .replace(/\[data-variant-dark=["']?[^'"\]]+["']?\]/, '')
+            .trim();
+          mediaSelector = `${baseSelector}:not([data-theme="light"] *)[data-variant-dark="${variant}"]`;
         } else {
           const baseSelector = rule.selector.replace(/\[data-theme=["']?dark["']?\]\s*/, '');
           mediaSelector = `${baseSelector}:not([data-theme="light"] *)`;
