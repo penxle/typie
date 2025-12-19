@@ -108,7 +108,8 @@ impl<'a> Context<'a> {
     }
 
     fn has_paragraph_text_in_selection(&self) -> bool {
-        use crate::state::collect_blocks_in_range;
+        use crate::state::BlockTraverser;
+        use crate::state::selection_helpers::{end_boundary_node, start_block_id};
 
         let selection = &self.state.selection;
         if selection.is_collapsed() {
@@ -119,12 +120,31 @@ impl<'a> Context<'a> {
             return false;
         };
 
-        let Ok(block_ids) = collect_blocks_in_range(&self.state.doc, from, to) else {
+        let Ok(start_id) = start_block_id(&self.state.doc, from.clone()) else {
             return false;
         };
 
-        for block_id in block_ids {
-            if let Some(block) = self.state.doc.node(block_id) {
+        if let Some(block) = self.state.doc.node(start_id) {
+            if block.spec().is_textblock(self.state.doc.schema()) {
+                return true;
+            }
+        }
+
+        if from == to {
+            return false;
+        }
+
+        let end_exclusive = end_boundary_node(&self.state.doc, to).ok().flatten();
+
+        let Ok(mut traverser) = BlockTraverser::new(&self.state.doc, start_id) else {
+            return false;
+        };
+
+        while let Some(node_id) = traverser.next() {
+            if Some(node_id) == end_exclusive {
+                break;
+            }
+            if let Some(block) = self.state.doc.node(node_id) {
                 if block.spec().is_textblock(self.state.doc.schema()) {
                     return true;
                 }

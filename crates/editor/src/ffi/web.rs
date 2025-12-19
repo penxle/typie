@@ -426,14 +426,8 @@ fn count_without_whitespace(text: &str) -> u32 {
 
 fn count_without_whitespace_and_punctuation(text: &str) -> u32 {
     use icu_properties::props::GeneralCategory;
-    use icu_provider::buf::AsDeserializingBufferProvider;
 
-    let provider = crate::icu_data::get_icu_provider();
-    let deserializing_provider = provider.as_deserializing();
-    let gc_data = icu_properties::CodePointMapData::<GeneralCategory>::try_new_unstable(
-        &deserializing_provider,
-    )
-    .expect("Failed to load GeneralCategory data");
+    let gc_data = crate::icu_data::get_general_category_map();
     let gc_map = gc_data.as_borrowed();
 
     text.replace('\u{200B}', "")

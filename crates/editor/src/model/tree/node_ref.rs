@@ -157,15 +157,14 @@ impl<'a> NodeRef<'a> {
         let mut node_ids = Vec::new();
 
         if let Some(children) = self.inner.get_children_list(self.node_id) {
-            for i in 0..children.len() {
-                let node_id = children
-                    .get(i)
-                    .and_then(|v| v.into_value().ok())
-                    .and_then(|v| v.into_string().ok())
-                    .and_then(|v| NodeId::from_string(&v));
-
-                if let Some(node_id) = node_id {
-                    node_ids.push(node_id);
+            if let loro::LoroValue::List(values) = children.get_value() {
+                node_ids.reserve(values.len());
+                for i in 0..values.len() {
+                    if let Some(loro::LoroValue::String(s)) = values.get(i) {
+                        if let Some(node_id) = NodeId::from_string(s) {
+                            node_ids.push(node_id);
+                        }
+                    }
                 }
             }
         };

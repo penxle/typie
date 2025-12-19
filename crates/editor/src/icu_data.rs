@@ -1,9 +1,13 @@
+use icu_properties::CodePointMapData;
+use icu_properties::props::GeneralCategory;
+use icu_provider::buf::AsDeserializingBufferProvider;
 use icu_provider_blob::BlobDataProvider;
 
 use std::sync::OnceLock;
 use wasm_bindgen::prelude::*;
 
 static ICU_DATA_PROVIDER: OnceLock<BlobDataProvider> = OnceLock::new();
+static GENERAL_CATEGORY_DATA: OnceLock<CodePointMapData<GeneralCategory>> = OnceLock::new();
 
 pub fn load_icu_data(data: &[u8]) -> Result<(), JsValue> {
     let provider =
@@ -21,4 +25,13 @@ pub fn get_icu_provider() -> &'static BlobDataProvider {
     ICU_DATA_PROVIDER
         .get()
         .expect("ICU data not initialized. Call load_icu_data first.")
+}
+
+pub fn get_general_category_map() -> &'static CodePointMapData<GeneralCategory> {
+    GENERAL_CATEGORY_DATA.get_or_init(|| {
+        let provider = get_icu_provider();
+        let deserializing_provider = provider.as_deserializing();
+        CodePointMapData::<GeneralCategory>::try_new_unstable(&deserializing_provider)
+            .expect("Failed to load GeneralCategory data")
+    })
 }
