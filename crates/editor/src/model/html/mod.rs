@@ -64,7 +64,7 @@ impl Fragment {
         let mut fragment = builder.build();
         fragment.open_start = open_start;
         fragment.open_end = open_end;
-        Ok(fragment)
+        Ok(fragment.merge_adjacent_text_nodes())
     }
 }
 
@@ -301,6 +301,38 @@ mod tests {
                 matches!(node.data(), Node::Paragraph(_)),
                 "Expected Paragraph node"
             );
+        }
+    }
+
+    #[test]
+    fn test_colored_spans_merged_into_single_text_node() {
+        let html = r#"<p><span style="color: rgb(255, 0, 0);">Red</span><span style="color: rgb(0, 0, 255);">Blue</span></p>"#;
+        let parsed = Fragment::from_html(html).unwrap();
+
+        let top_levels = parsed.top_level_node_ids();
+        assert_eq!(top_levels.len(), 1);
+
+        let para_id = top_levels[0];
+        let children = parsed.children_of_node(para_id);
+
+        assert_eq!(
+            children.len(),
+            1,
+            "Expected 1 merged text node, but got {}",
+            children.len()
+        );
+
+        let (_text_id, text_node) = children[0];
+        if let Node::Text(t) = text_node.data() {
+            let segments = t.text.get_rich_text_segments();
+            assert_eq!(segments.len(), 2);
+            assert_eq!(segments[0].0, "Red");
+            assert_eq!(segments[1].0, "Blue");
+
+            assert_eq!(segments[0].1.len(), 1);
+            assert_eq!(segments[1].1.len(), 1);
+        } else {
+            panic!("Expected text node");
         }
     }
 }

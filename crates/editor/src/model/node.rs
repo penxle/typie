@@ -75,6 +75,39 @@ impl Node {
             _ => 1,
         }
     }
+
+    pub fn plan_consecutive_text_merges<'a>(
+        nodes: impl Iterator<Item = (NodeId, &'a Node)>,
+    ) -> Vec<(NodeId, Vec<NodeId>, Vec<(String, Vec<Mark>)>)> {
+        let mut plans = Vec::new();
+        let mut current_merge: Option<(NodeId, Vec<NodeId>, Vec<(String, Vec<Mark>)>)> = None;
+
+        for (id, node) in nodes {
+            if let Node::Text(text_node) = node {
+                let segments = text_node.text.get_rich_text_segments();
+                if let Some(ref mut merge) = current_merge {
+                    merge.1.push(id);
+                    merge.2.extend(segments);
+                } else {
+                    current_merge = Some((id, Vec::new(), segments));
+                }
+            } else {
+                if let Some(merge) = current_merge.take() {
+                    if !merge.1.is_empty() {
+                        plans.push(merge);
+                    }
+                }
+            }
+        }
+
+        if let Some(merge) = current_merge.take() {
+            if !merge.1.is_empty() {
+                plans.push(merge);
+            }
+        }
+
+        plans
+    }
 }
 
 impl Hash for Node {

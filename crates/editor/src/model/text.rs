@@ -63,6 +63,25 @@ impl Text {
         Text { loro_text }
     }
 
+    pub fn from_segments(segments: &[(String, Vec<Mark>)]) -> Self {
+        let text = Self::new();
+        let mut total_text = String::new();
+        for (content, _) in segments {
+            total_text.push_str(content);
+        }
+        text.insert(0, &total_text);
+
+        let mut offset = 0;
+        for (content, marks) in segments {
+            let len = content.chars().count();
+            for mark in marks {
+                let _ = text.mark(offset..offset + len, mark);
+            }
+            offset += len;
+        }
+        text
+    }
+
     pub fn as_str(&self) -> String {
         self.loro_text.to_string()
     }

@@ -22,6 +22,10 @@ impl FragmentNode {
         &self.data
     }
 
+    pub fn data_mut(&mut self) -> &mut Node {
+        &mut self.data
+    }
+
     pub fn parent(&self) -> Option<NodeId> {
         self.parent
     }
@@ -59,6 +63,10 @@ impl FragmentBuilder {
     pub fn add(mut self, node: (NodeId, FragmentNode)) -> Self {
         self.nodes.insert(node.0, node.1);
         self
+    }
+
+    pub fn last_node_mut(&mut self) -> Option<&mut FragmentNode> {
+        self.nodes.last_mut().map(|(_, n)| n)
     }
 
     #[allow(dead_code)]
@@ -584,26 +592,57 @@ impl Fragment {
         (left, right)
     }
 
-    pub fn build_text_from_segments(segments: &[(String, Vec<Mark>)]) -> super::Text {
-        let text = super::Text::new();
-        let mut offset = 0;
-        let mut mark_ranges: Vec<(std::ops::Range<usize>, Vec<Mark>)> = Vec::new();
-
-        for (seg_text, seg_marks) in segments {
-            text.insert(offset, seg_text);
-            let seg_len = seg_text.chars().count();
-            if !seg_marks.is_empty() {
-                mark_ranges.push((offset..offset + seg_len, seg_marks.clone()));
-            }
-            offset += seg_len;
+    pub fn merge_adjacent_text_nodes(self) -> Self {
+        let mut parent_to_children: rustc_hash::FxHashMap<Option<NodeId>, Vec<NodeId>> =
+            rustc_hash::FxHashMap::default();
+        for (id, node) in &self.nodes {
+            parent_to_children
+                .entry(node.parent())
+                .or_default()
+                .push(*id);
         }
 
-        for (range, marks) in mark_ranges {
-            for mark in marks {
-                let _ = text.mark(range.clone(), &mark);
+        let mut next_nodes = self.nodes.clone();
+        let mut removed_ids = rustc_hash::FxHashSet::default();
+
+        for (_parent_id, siblings) in parent_to_children {
+            let siblings_nodes = siblings.iter().map(|id| (*id, self.nodes[id].data()));
+            let plans = Node::plan_consecutive_text_merges(siblings_nodes);
+
+            for (keep_id, remove_ids, segments) in plans {
+                let merged_text = crate::model::Text::from_segments(&segments);
+                let parent_id = self.nodes[&keep_id].parent();
+
+                next_nodes.insert(
+                    keep_id,
+                    FragmentNode::new(Node::Text(TextNode { text: merged_text }), parent_id),
+                );
+
+                for rid in remove_ids {
+                    removed_ids.insert(rid);
+                }
             }
         }
-        text
+
+        if !removed_ids.is_empty() {
+            let mut final_nodes = IndexMap::new();
+            for (id, node) in next_nodes {
+                if !removed_ids.contains(&id) {
+                    final_nodes.insert(id, node);
+                }
+            }
+            Self {
+                nodes: final_nodes,
+                open_start: self.open_start,
+                open_end: self.open_end,
+            }
+        } else {
+            Self {
+                nodes: next_nodes,
+                open_start: self.open_start,
+                open_end: self.open_end,
+            }
+        }
     }
 
     pub fn inline_len(&self, schema: &Schema) -> usize {

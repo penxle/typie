@@ -1404,75 +1404,30 @@ impl Transaction {
             .doc()
             .node(position.node_id)
             .context("Block not found")?;
-        let children: Vec<NodeId> = block.children().map(|n| n.node_id()).collect();
+        let children_ids: Vec<NodeId> = block.children().map(|n| n.node_id()).collect();
+        let doc = self.doc();
+        let children_refs: Vec<_> = children_ids
+            .iter()
+            .map(|id| doc.node(*id).unwrap())
+            .collect();
+        let children = children_refs.iter().map(|n| (n.node_id(), n.node()));
+        let plans = Node::plan_consecutive_text_merges(children);
 
-        let mut i = 0;
-        while i < children.len() {
-            let current_id = children[i];
-            let Some(current) = self.doc().node(current_id) else {
-                i += 1;
-                continue;
-            };
+        for (keep_id, remove_ids, segments) in plans {
+            let merged_text = Text::from_segments(&segments);
 
-            if let Node::Text(current_text) = current.node() {
-                let mut merged_segments = current_text.text.get_rich_text_segments();
-                let mut nodes_to_remove = vec![];
-
-                let mut j = i + 1;
-                while j < children.len() {
-                    let next_id = children[j];
-                    let Some(next) = self.doc().node(next_id) else {
-                        break;
-                    };
-
-                    if let Node::Text(next_text) = next.node() {
-                        merged_segments.extend(next_text.text.get_rich_text_segments());
-                        nodes_to_remove.push(next_id);
-                        j += 1;
-                    } else {
-                        break;
-                    }
+            let node = self.node_mut(keep_id).context("Node not found")?;
+            node.as_mut().update(move |node| {
+                if let Node::Text(text_node) = node {
+                    text_node.text = merged_text;
                 }
+            })?;
 
-                if !nodes_to_remove.is_empty() {
-                    let merged_text = Text::new();
-                    let mut offset = 0;
-                    let mut mark_ranges = Vec::new();
-
-                    for (segment_text, segment_marks) in merged_segments {
-                        merged_text.insert(offset, &segment_text);
-                        let segment_len = segment_text.chars().count();
-                        if !segment_marks.is_empty() {
-                            mark_ranges.push((offset..offset + segment_len, segment_marks));
-                        }
-                        offset += segment_len;
-                    }
-
-                    for (range, marks) in mark_ranges {
-                        for mark in marks {
-                            let _ = merged_text.mark(range.clone(), &mark);
-                        }
-                    }
-
-                    let node = self.node_mut(current_id).context("Node not found")?;
-                    node.as_mut().update(move |node| {
-                        if let Node::Text(text_node) = node {
-                            text_node.text = merged_text;
-                        }
-                    })?;
-
-                    for node_id in nodes_to_remove {
-                        self.delete_node_recursive(node_id)?;
-                    }
-                    self.push_effect(Effect::NodeChanged {
-                        node_id: current_id,
-                    });
-                }
-
-                i = j;
-            } else {
-                i += 1;
+            for node_id in remove_ids {
+                self.delete_node_recursive(node_id)?;
             }
+
+            self.push_effect(Effect::NodeChanged { node_id: keep_id });
         }
 
         Ok(())
@@ -1773,7 +1728,7 @@ impl Transaction {
         for child in children {
             match child {
                 SplitChild::Text(segments) => {
-                    let text_obj = Fragment::build_text_from_segments(segments);
+                    let text_obj = Text::from_segments(segments);
                     content_len += text_obj.char_len();
                     if text_obj.char_len() > 0 {
                         para.as_mut()
@@ -2195,8 +2150,8 @@ impl Transaction {
         };
 
         let (head_segs, tail_segs) = Fragment::split_segments_at(&text_node.text, offset);
-        let head = Fragment::build_text_from_segments(&head_segs);
-        let tail = Fragment::build_text_from_segments(&tail_segs);
+        let head = Text::from_segments(&head_segs);
+        let tail = Text::from_segments(&tail_segs);
 
         Ok((head, tail))
     }
