@@ -4,7 +4,7 @@ mod utils;
 
 pub use builder::DomSpec;
 pub use codec::{HtmlContext, MarkHtmlCodec, MarkParseRule, NodeHtmlCodec, NodeParseRule};
-pub use utils::{parse_as, parse_font_size, parse_styles, LengthUnit};
+pub use utils::{LengthUnit, parse_as, parse_font_size, parse_styles};
 
 use builder::HtmlBuilder;
 use codec::{
@@ -103,7 +103,14 @@ fn parse_children(
             ScraperNode::Element(_) => {
                 let elem = ElementRef::wrap(child).unwrap();
                 parse_element(
-                    &elem, parent_id, parent_type, builder, marks, schema, node_rules, mark_rules,
+                    &elem,
+                    parent_id,
+                    parent_type,
+                    builder,
+                    marks,
+                    schema,
+                    node_rules,
+                    mark_rules,
                 )?;
             }
             ScraperNode::Text(t) => {
@@ -146,7 +153,16 @@ fn parse_element(
             *builder = std::mem::take(builder).add((id, FragmentNode::new(node, parent_id)));
 
             if has_content {
-                parse_children(elem, Some(id), Some(node_type), builder, &[], schema, node_rules, mark_rules)?;
+                parse_children(
+                    elem,
+                    Some(id),
+                    Some(node_type),
+                    builder,
+                    &[],
+                    schema,
+                    node_rules,
+                    mark_rules,
+                )?;
             }
 
             return Ok(());
@@ -263,5 +279,28 @@ mod tests {
         let parsed = Fragment::from_html(&html).unwrap();
         assert_eq!(parsed.open_start, 2);
         assert_eq!(parsed.open_end, 3);
+    }
+
+    #[test]
+    fn test_vscode_div_container_parses_as_multiple_paragraphs() {
+        let html = r#"<div><div>Line 1</div><div>Line 2</div><div>Line 3</div></div>"#;
+
+        let parsed = Fragment::from_html(html).unwrap();
+
+        let top_levels = parsed.top_level_node_ids();
+        assert_eq!(
+            top_levels.len(),
+            3,
+            "Expected 3 paragraphs, got {}",
+            top_levels.len()
+        );
+
+        for id in &top_levels {
+            let node = parsed.node(*id).unwrap();
+            assert!(
+                matches!(node.data(), Node::Paragraph(_)),
+                "Expected Paragraph node"
+            );
+        }
     }
 }

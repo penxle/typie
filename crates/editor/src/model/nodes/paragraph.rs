@@ -329,6 +329,25 @@ impl NodeHtmlCodec for ParagraphNode {
                 "div",
                 10,
                 |elem| {
+                    let has_non_whitespace_text = elem.children().any(|child| {
+                        matches!(child.value(), scraper::Node::Text(t) if !t.text.trim().is_empty())
+                    });
+                    let child_elements: Vec<_> = elem
+                        .children()
+                        .filter_map(|child| scraper::ElementRef::wrap(child))
+                        .collect();
+                    let all_children_are_block = !child_elements.is_empty()
+                        && child_elements.iter().all(|c| {
+                            matches!(
+                                c.value().name(),
+                                "div" | "p" | "blockquote" | "ul" | "ol" | "li" | "br"
+                            )
+                        });
+
+                    if !has_non_whitespace_text && all_children_are_block {
+                        return false;
+                    }
+
                     elem.value().attr("data-page-break").is_none()
                         && elem.value().attr("class") != Some("fold-content")
                 },
