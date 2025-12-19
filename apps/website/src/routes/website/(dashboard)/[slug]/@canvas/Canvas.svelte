@@ -342,7 +342,7 @@
   });
 
   $effect(() => {
-    const currentTheme = theme.effective;
+    const currentTheme = theme.effectiveTheme;
 
     if (canvas && currentTheme) {
       canvas.environment.update();

@@ -61,7 +61,7 @@
         <div class={flex({ gap: '4px' })}>
           {#each values.backgroundColor as { label, value, color, darkColor } (value)}
             <button
-              style:background-color={theme.effective === 'dark' ? darkColor : color}
+              style:background-color={theme.effectiveTheme === 'dark' ? darkColor : color}
               style:outline-color={value === 'white' ? token('colors.border.default') : color}
               class={center({
                 borderWidth: '1px',

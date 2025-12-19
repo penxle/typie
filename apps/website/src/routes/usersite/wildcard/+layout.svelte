@@ -8,12 +8,12 @@
   import qs from 'query-string';
   import { onMount } from 'svelte';
   import CheckIcon from '~icons/lucide/check';
+  import EclipseIcon from '~icons/lucide/eclipse';
   import HouseIcon from '~icons/lucide/house';
   import LogOutIcon from '~icons/lucide/log-out';
   import MonitorIcon from '~icons/lucide/monitor';
   import MoonIcon from '~icons/lucide/moon';
   import SunIcon from '~icons/lucide/sun';
-  import SunMoonIcon from '~icons/lucide/sun-moon';
   import { page } from '$app/state';
   import WordmarkBlack from '$assets/logos/wordmark-black.svg?component';
   import WordmarkWhite from '$assets/logos/wordmark-white.svg?component';
@@ -153,20 +153,20 @@
           bind:open={themeMenuOpen}
         >
           {#snippet button()}
-            <Icon icon={SunMoonIcon} size={18} />
+            <Icon icon={EclipseIcon} size={16} />
           {/snippet}
 
           {#each themeNames as name (name)}
             <MenuItem
               icon={themes[name].icon}
               onclick={() => {
-                mixpanel.track('switch_theme', { old: theme.current, new: name, via: 'header' });
-                theme.current = name;
+                mixpanel.track('switch_theme', { old: theme.currentTheme, new: name, via: 'header' });
+                theme.currentTheme = name;
               }}
             >
               {themes[name].label}
 
-              {#if theme.current === name}
+              {#if theme.currentTheme === name}
                 <Icon style={css.raw({ marginLeft: 'auto', color: 'text.brand' })} icon={CheckIcon} size={14} />
               {/if}
             </MenuItem>

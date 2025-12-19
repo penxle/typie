@@ -6,10 +6,10 @@
   import { getThemeContext } from '@typie/ui/context';
   import mixpanel from 'mixpanel-browser';
   import CheckIcon from '~icons/lucide/check';
+  import EclipseIcon from '~icons/lucide/eclipse';
   import MonitorIcon from '~icons/lucide/monitor';
   import MoonIcon from '~icons/lucide/moon';
   import SunIcon from '~icons/lucide/sun';
-  import SunMoonIcon from '~icons/lucide/sun-moon';
   import type { Theme } from '@typie/ui/context';
   import type { Component } from 'svelte';
 
@@ -47,7 +47,7 @@
       type="button"
       use:tooltip={{ message: '테마 설정', placement: 'top', offset: 8 }}
     >
-      <Icon icon={SunMoonIcon} size={20} />
+      <Icon icon={EclipseIcon} size={16} />
     </button>
   {/snippet}
 
@@ -55,13 +55,13 @@
     <MenuItem
       icon={themes[name].icon}
       onclick={() => {
-        mixpanel.track('switch_theme', { old: theme.current, new: name, via: 'theme_switch' });
-        theme.current = name;
+        mixpanel.track('switch_theme', { old: theme.currentTheme, new: name, via: 'theme_switch' });
+        theme.currentTheme = name;
       }}
     >
       {themes[name].label}
 
-      {#if theme.current === name}
+      {#if theme.currentTheme === name}
         <Icon style={css.raw({ marginLeft: 'auto', color: 'text.brand' })} icon={CheckIcon} size={14} />
       {/if}
     </MenuItem>

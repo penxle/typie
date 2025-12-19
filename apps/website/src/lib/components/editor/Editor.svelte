@@ -56,7 +56,7 @@
 
   $effect(() => {
     untrack(() => {
-      editor.initialize({ theme: getEditorTheme(theme.effective), snapshot, onDocChanged, onExitedDocumentStart });
+      editor.initialize({ theme: getEditorTheme(theme.effectiveTheme), snapshot, onDocChanged, onExitedDocumentStart });
     });
 
     return () => {
@@ -77,7 +77,7 @@
 
   $effect(() => {
     if (initialized) {
-      editor.dispatch({ type: 'setTheme', theme: getEditorTheme(theme.effective) });
+      editor.dispatch({ type: 'setTheme', theme: getEditorTheme(theme.effectiveTheme) });
     }
   });
 

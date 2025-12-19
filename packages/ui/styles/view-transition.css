@@ -10,6 +10,7 @@
 
 ::view-transition-old(root) {
   animation-name: fade-out;
+  animation-delay: 0.2s;
 }
 
 ::view-transition-new(root) {

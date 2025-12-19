@@ -19,16 +19,21 @@ const log = logger.getChild('http');
 
 const theme: Handle = async ({ event, resolve }) => {
   const theme = event.cookies.get('typie-th');
+  const lightVariant = event.cookies.get('typie-th-lv') ?? 'white';
+  const darkVariant = event.cookies.get('typie-th-dv') ?? 'black';
 
   return resolve(event, {
     transformPageChunk: ({ html }) => {
       if (event.url.pathname.includes('landing')) {
-        return html.replace('%app.theme%', 'light');
+        return html.replace('%app.theme%', 'light').replace('%app.variant.light%', 'white').replace('%app.variant.dark%', 'black');
       }
 
       const defaultTheme = event.url.pathname.includes('_webview') ? 'light' : 'auto';
       const themeValue = theme && ['auto', 'light', 'dark'].includes(theme) ? theme : defaultTheme;
-      return html.replace('%app.theme%', themeValue);
+      return html
+        .replace('%app.theme%', themeValue)
+        .replace('%app.variant.light%', lightVariant)
+        .replace('%app.variant.dark%', darkVariant);
     },
   });
 };
