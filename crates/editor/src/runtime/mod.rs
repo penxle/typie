@@ -89,6 +89,7 @@ pub struct Runtime {
     redo_selections: Vec<Selection>,
 
     cached_plain_text: Option<String>,
+    last_synced_version: loro::VersionVector,
 }
 
 #[allow(dead_code)]
@@ -100,6 +101,7 @@ impl Runtime {
         let orphans = state.doc.find_orphan_nodes();
         state.garbage_ids.extend(orphans);
 
+        let last_synced_version = state.doc.loro_doc().state_vv();
         Self {
             width,
             scale_factor,
@@ -135,6 +137,7 @@ impl Runtime {
             undo_selections: Vec::new(),
             redo_selections: Vec::new(),
             cached_plain_text: None,
+            last_synced_version,
         }
     }
 
@@ -179,6 +182,60 @@ impl Runtime {
 
     pub fn doc(&self) -> &Doc {
         &self.state.doc
+    }
+
+    pub fn import_updates(&mut self, updates: &[u8]) -> Result<()> {
+        let old_frontiers = self.state.doc.frontiers();
+        self.state.doc.import_updates(updates)?;
+        let new_frontiers = self.state.doc.frontiers();
+
+        if old_frontiers != new_frontiers {
+            self.state.frontiers = new_frontiers;
+            self.last_synced_version = self.state.doc.loro_doc().state_vv();
+            self.handle_external_doc_change();
+        }
+        Ok(())
+    }
+
+    pub fn import_updates_batch(&mut self, updates_batch: &[Vec<u8>]) -> Result<()> {
+        let old_frontiers = self.state.doc.frontiers();
+        self.state.doc.import_updates_batch(updates_batch)?;
+        let new_frontiers = self.state.doc.frontiers();
+
+        if old_frontiers != new_frontiers {
+            self.state.frontiers = new_frontiers;
+            self.last_synced_version = self.state.doc.loro_doc().state_vv();
+            self.handle_external_doc_change();
+        }
+        Ok(())
+    }
+
+    pub fn export_new_updates(&self) -> Result<(Vec<u8>, loro::VersionVector)> {
+        let new_version = self.state.doc.loro_doc().state_vv();
+        let updates = self
+            .state
+            .doc
+            .export_updates_from(&self.last_synced_version)?;
+        Ok((updates, new_version))
+    }
+
+    pub fn commit_sync(&mut self, new_version: loro::VersionVector) {
+        self.last_synced_version = new_version;
+    }
+
+    fn handle_external_doc_change(&mut self) {
+        // TODO: 최적화?
+        self.layout_cache.borrow_mut().invalidate_all();
+        self.selection_cache = None;
+        self.cached_plain_text = None;
+        self.pending.layout = true;
+        self.pending.render = true;
+        self.pending.selection = true;
+        self.pending.active_marks = true;
+        self.pending.cursor = true;
+        self.pending.external_elements = true;
+        self.pending.settings = true;
+        self.pending.enabled_actions = true;
     }
 
     pub fn get_cached_plain_text(&mut self) -> String {

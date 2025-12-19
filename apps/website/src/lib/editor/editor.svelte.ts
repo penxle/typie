@@ -1,4 +1,4 @@
-import { Application, getMemory } from '@typie/editor';
+import { Application, getMemory, SyncVersion } from '@typie/editor';
 import icuPostcardUrl from '@typie/editor/pkg/icu_data.postcard?url';
 import notoPhantomUrl from '@typie/editor/pkg/Noto-Phantom.ttf?url';
 import { nanoid } from 'nanoid';
@@ -6,7 +6,7 @@ import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { FRAGMENT_MIME, PAGE_GAP } from './constants';
 import { ensureRequiredFonts, ensureRequiredScripts, getAvailableFontsMap, loadEmojiFallback, loadInitialFonts } from './fonts';
 import { calculateImageDisplaySize, calculateRelativePosition, findNearestPageCoordinate, getPageElement, idleCallback } from './utils';
-import type { Editor as WasmEditor, Modifier, PointerButton } from '@typie/editor';
+import type { Editor as WasmEditor, ExportedUpdates, Modifier, PointerButton } from '@typie/editor';
 import type { ThemeColors } from './theme';
 import type { Cmd, ExternalElement, LayoutMode, Mark, MarkType, Message, Rect, SelectionStats, WritingSystem } from './types';
 
@@ -24,6 +24,9 @@ export type EditorOptions = {
 };
 
 export class Editor {
+  static get SyncVersion() {
+    return SyncVersion;
+  }
   #application: Application | null = null;
   #wasmEditor: WasmEditor | null = null;
   #running = false;
@@ -370,6 +373,14 @@ export class Editor {
 
   exportUpdatesFrom(version: Uint8Array): Uint8Array | undefined {
     return this.#wasmEditor?.exportUpdatesFrom(version);
+  }
+
+  exportNewUpdates(): ExportedUpdates | undefined {
+    return this.#wasmEditor?.exportNewUpdates();
+  }
+
+  commitSync(version: SyncVersion): void {
+    this.#wasmEditor?.commitSync(version);
   }
 
   importUpdates(updates: Uint8Array): void {
