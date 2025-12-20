@@ -80,6 +80,7 @@
     "meilisearch": "^0.54.0",
     "nanoid": "^5.1.6",
     "p-map": "^7.0.4",
+    "pdf-lib": "^1.17.1",
     "playwright": "^1.57.0",
     "postgres": "^3.4.7",
     "query-string": "^9.3.1",
@@ -103,7 +104,6 @@
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "drizzle-kit": "^0.31.8",
-    "pdf-lib": "^1.17.1",
     "react-email": "^5.0.8",
     "sharp": "^0.34.5"
   }
