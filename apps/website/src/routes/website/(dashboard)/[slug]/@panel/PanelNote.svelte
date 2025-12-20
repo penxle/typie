@@ -7,7 +7,6 @@
   import { Button, Icon, Popover } from '@typie/ui/components';
   import { Toast } from '@typie/ui/notification';
   import { animateFlip, debounce, getNoteColors, getRandomNoteColor, handleDragScroll } from '@typie/ui/utils';
-  import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
   import GripVerticalIcon from '~icons/lucide/grip-vertical';
   import PlusIcon from '~icons/lucide/plus';
@@ -106,17 +105,15 @@
   const notes = $derived(sortedNotes || []);
 
   let noteContents = $state<Record<string, string>>({});
-  let noteLocalUpdatedAt = $state<Record<string, Date>>({});
+  let focusedNoteId = $state<string | null>(null);
 
   let lastAddedNoteId = $state<string>();
 
   $effect(() => {
     if (notes) {
       notes.forEach((note) => {
-        const updatedAt = dayjs(note.updatedAt);
-        if (!noteLocalUpdatedAt[note.id] || updatedAt.isAfter(dayjs(noteLocalUpdatedAt[note.id]))) {
+        if (note.id !== focusedNoteId) {
           noteContents[note.id] = note.content;
-          noteLocalUpdatedAt[note.id] = updatedAt.toDate();
         }
       });
     }
@@ -430,8 +427,13 @@
               backgroundColor: 'transparent',
               resize: 'none',
             })}
+            onblur={() => {
+              focusedNoteId = null;
+            }}
+            onfocus={() => {
+              focusedNoteId = note.id;
+            }}
             oninput={(e) => {
-              noteLocalUpdatedAt[note.id] = new Date();
               saveNote(note.id, e.currentTarget.value);
             }}
             onkeydown={(e) => {
