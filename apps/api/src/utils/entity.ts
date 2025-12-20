@@ -138,3 +138,54 @@ export const extractLoroDocContents = (doc: LoroDoc) => {
 
   return { json, text, characterCount, blobSize };
 };
+
+export type LoroLayoutMode =
+  | {
+      type: 'paginated';
+      pageWidth: number;
+      pageHeight: number;
+      pageMarginTop: number;
+      pageMarginBottom: number;
+      pageMarginLeft: number;
+      pageMarginRight: number;
+    }
+  | { type: 'continuous'; maxWidth: number };
+
+export const extractLoroDocLayoutMode = (snapshot: Uint8Array): LoroLayoutMode => {
+  const doc = new LoroDoc();
+  doc.import(snapshot);
+
+  const settings = doc.getMap('settings');
+  const layoutMode = settings.get('layout_mode') as LoroMap | undefined;
+
+  if (!layoutMode) {
+    return {
+      type: 'paginated',
+      pageWidth: 794,
+      pageHeight: 1123,
+      pageMarginTop: 96,
+      pageMarginBottom: 96,
+      pageMarginLeft: 96,
+      pageMarginRight: 96,
+    };
+  }
+
+  const type = layoutMode.get('type') as string;
+
+  if (type === 'continuous') {
+    return {
+      type: 'continuous',
+      maxWidth: (layoutMode.get('max_width') as number) ?? 800,
+    };
+  }
+
+  return {
+    type: 'paginated',
+    pageWidth: (layoutMode.get('page_width') as number) ?? 794,
+    pageHeight: (layoutMode.get('page_height') as number) ?? 1123,
+    pageMarginTop: (layoutMode.get('page_margin_top') as number) ?? 96,
+    pageMarginBottom: (layoutMode.get('page_margin_bottom') as number) ?? 96,
+    pageMarginLeft: (layoutMode.get('page_margin_left') as number) ?? 96,
+    pageMarginRight: (layoutMode.get('page_margin_right') as number) ?? 96,
+  };
+};

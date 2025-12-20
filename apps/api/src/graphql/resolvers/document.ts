@@ -19,7 +19,14 @@ import { DocumentSyncType, EntityAvailability, EntityState, EntityType, NoteStat
 import { NotFoundError } from '@/errors';
 import { enqueueJob } from '@/mq';
 import { pubsub } from '@/pubsub';
-import { extractLoroDocContents, generateFractionalOrder, generatePermalink, generateSlug, makeLoroDoc } from '@/utils';
+import {
+  extractLoroDocContents,
+  extractLoroDocLayoutMode,
+  generateFractionalOrder,
+  generatePermalink,
+  generateSlug,
+  makeLoroDoc,
+} from '@/utils';
 import { assertSitePermission } from '@/utils/permission';
 import { builder } from '../builder';
 import { CharacterCountChange, Document, DocumentView, Entity, EntityView, IDocument, isTypeOf } from '../objects';
@@ -43,15 +50,27 @@ Document.implement({
 
     snapshot: t.field({
       type: 'Binary',
-      nullable: true,
       resolve: async (self) => {
         const content = await db
           .select({ snapshot: DocumentContents.snapshot })
           .from(DocumentContents)
           .where(eq(DocumentContents.documentId, self.id))
-          .then(first);
+          .then(firstOrThrow);
 
-        return content?.snapshot ?? null;
+        return content.snapshot;
+      },
+    }),
+
+    layoutMode: t.field({
+      type: 'JSON',
+      resolve: async (self) => {
+        const content = await db
+          .select({ snapshot: DocumentContents.snapshot })
+          .from(DocumentContents)
+          .where(eq(DocumentContents.documentId, self.id))
+          .then(firstOrThrow);
+
+        return extractLoroDocLayoutMode(content.snapshot);
       },
     }),
 

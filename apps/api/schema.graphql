@@ -172,8 +172,9 @@ type Document implements IDocument {
   createdAt: DateTime!
   entity: Entity!
   id: ID!
+  layoutMode: JSON!
   nullableTitle: String
-  snapshot: Binary
+  snapshot: Binary!
   subtitle: String
   title: String!
   updatedAt: DateTime!
@@ -286,6 +287,21 @@ union EntityViewNode = CanvasView | DocumentView | FolderView | PostView
 enum EntityVisibility {
   PRIVATE
   UNLISTED
+}
+
+input ExportDocumentAsPdfInput {
+  documentId: ID!
+  height: Float!
+  marginBottom: Float!
+  marginLeft: Float!
+  marginRight: Float!
+  marginTop: Float!
+  width: Float!
+}
+
+type ExportDocumentAsPdfResult {
+  data: Binary!
+  filename: String!
 }
 
 enum ExportLayoutMode {
@@ -531,6 +547,7 @@ type Mutation {
   deleteWidget(input: DeleteWidgetInput!): Widget!
   dumpLocalStorage(input: DumpLocalStorageInput!): User!
   duplicatePost(input: DuplicatePostInput!): Post!
+  exportDocumentAsPdf(input: ExportDocumentAsPdfInput!): ExportDocumentAsPdfResult!
   exportPostAsDocx(input: ExportPostAsDocxInput!): ExportPostAsDocxResult!
   exportPostAsPdf(input: ExportPostAsPdfInput!): ExportPostAsPdfResult!
   generateActivityImage: Binary!
