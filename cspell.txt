@@ -120,6 +120,7 @@ vermuda
 virtio
 virtiofs
 vite
+wbindgen
 wonka
 xact
 xcarchive

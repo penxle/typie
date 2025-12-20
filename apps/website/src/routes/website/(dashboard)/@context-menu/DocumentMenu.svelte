@@ -7,11 +7,13 @@
   import mixpanel from 'mixpanel-browser';
   import { EntityAvailability, EntityVisibility } from '@/enums';
   import Columns2Icon from '~icons/lucide/columns-2';
+  import FileDownIcon from '~icons/lucide/file-down';
   import InfoIcon from '~icons/lucide/info';
   import Rows2Icon from '~icons/lucide/rows-2';
   import TrashIcon from '~icons/lucide/trash';
   import { graphql } from '$graphql';
   import { getSplitViewContext, getViewContext } from '../[slug]/@split-view/context.svelte';
+  import DocumentPdfExportModal from './DocumentPdfExportModal.svelte';
 
   type Props = {
     document: {
@@ -32,6 +34,8 @@
 
   const splitView = getSplitViewContext();
   const view = getViewContext();
+
+  let pdfExportModalOpen = $state(false);
 
   const deleteDocument = graphql(`
     mutation DocumentMenu_DeleteDocument_Mutation($input: DeleteDocumentInput!) {
@@ -104,6 +108,18 @@
 
 <MenuItem icon={Columns2Icon} onclick={() => handleAddSplitView('horizontal')}>오른쪽에 열기</MenuItem>
 <MenuItem icon={Rows2Icon} onclick={() => handleAddSplitView('vertical')}>아래에 열기</MenuItem>
+
+<HorizontalDivider color="secondary" />
+
+<MenuItem icon={FileDownIcon} noCloseOnClick onclick={() => (pdfExportModalOpen = true)}>PDF로 내보내기</MenuItem>
+
+<DocumentPdfExportModal
+  documentId={document.id}
+  onClose={() => (pdfExportModalOpen = false)}
+  slug={entity.slug}
+  {via}
+  bind:open={pdfExportModalOpen}
+/>
 
 <HorizontalDivider color="secondary" />
 
