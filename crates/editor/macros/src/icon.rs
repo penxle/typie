@@ -46,8 +46,8 @@ fn find_lucide_icons_json() -> Option<PathBuf> {
     let path = manifest_path
         .join("..")
         .join("..")
-        .join("apps")
-        .join("website")
+        .join("packages")
+        .join("ui")
         .join("node_modules")
         .join("@iconify-json")
         .join("lucide")
