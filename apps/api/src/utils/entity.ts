@@ -175,7 +175,7 @@ export const extractLoroDocLayoutMode = (snapshot: Uint8Array): LoroLayoutMode =
   if (type === 'continuous') {
     return {
       type: 'continuous',
-      maxWidth: (layoutMode.get('max_width') as number) ?? 800,
+      maxWidth: (layoutMode.get('max_width') as number) ?? 600,
     };
   }
 
