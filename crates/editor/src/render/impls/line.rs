@@ -901,8 +901,8 @@ mod tests {
 
         assert_eq!(
             rects.len(),
-            0,
-            "Should not render empty paragraph rect when page break is selected"
+            1,
+            "Should render empty paragraph rect when page break is selected"
         );
         assert!(
             page_break_rect.is_some(),

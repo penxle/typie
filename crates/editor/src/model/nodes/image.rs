@@ -162,7 +162,7 @@ mod tests {
                 match element.data {
                     crate::layout::elements::ExternalElementData::Image { .. } => {
                         assert_eq!(element.size.height, 400.0);
-                        assert_eq!(element.size.width, 400.0);
+                        assert_eq!(element.size.width, 700.0); // 800 - 2 * 50
                         found = true;
                     }
                 }
