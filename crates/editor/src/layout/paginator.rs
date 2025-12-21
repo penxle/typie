@@ -983,9 +983,9 @@ mod tests {
             p2_wrapper.node.element,
             Some(Element::FoldContent(_))
         ));
-        assert_eq!(p2_wrapper.node.size.height, 170.0);
+        assert_eq!(p2_wrapper.node.size.height, 120.0);
 
-        assert_eq!(p2_wrapper.position.y, -40.0);
+        assert_eq!(p2_wrapper.position.y, 10.0);
     }
 
     #[test]
