@@ -69,7 +69,7 @@
     } else {
       editor.dispatch({
         type: 'setLayoutMode',
-        mode: { type: 'continuous', maxWidth: 800 },
+        mode: { type: 'continuous', maxWidth: 600 },
       });
     }
     mixpanel.track('toggle_document_layout_mode', { mode });
@@ -312,7 +312,7 @@
             ]}
             onselect={handleMaxWidthChange}
             size="sm"
-            value={layoutMode.type === 'continuous' ? layoutMode.maxWidth : 800}
+            value={layoutMode.type === 'continuous' ? layoutMode.maxWidth : 600}
           />
         </div>
       </div>
