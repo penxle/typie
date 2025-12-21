@@ -18,6 +18,11 @@
 
   const counts = $derived(editor.characterCounts);
   const hasSelection = $derived(counts.selectionWithWhitespace > 0);
+
+  $effect(() => {
+    void editor.characterCountsVersion;
+    editor.updateCharacterCounts();
+  });
 </script>
 
 <details class={flex({ flexDirection: 'column', marginBottom: open ? '12px' : '8px' })} bind:open>

@@ -228,7 +228,7 @@ export class Editor {
         case 'docChanged': {
           this.#onDocChanged?.();
           this.typewriter.needsScroll = true;
-          this.#updateCharacterCounts();
+          this.characterCountsVersion++;
           break;
         }
 
@@ -264,7 +264,7 @@ export class Editor {
         case 'selectionChanged': {
           this.selection.stats = cmd.stats;
           this.selection.collapsed = cmd.collapsed;
-          this.#updateCharacterCounts();
+          this.characterCountsVersion++;
           break;
         }
 
@@ -908,8 +908,9 @@ export class Editor {
   }
 
   #characterCountsDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  characterCountsVersion = $state(0);
 
-  #updateCharacterCounts(): void {
+  updateCharacterCounts(): void {
     if (this.#characterCountsDebounceTimer) {
       clearTimeout(this.#characterCountsDebounceTimer);
     }
