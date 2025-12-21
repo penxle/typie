@@ -34,7 +34,6 @@ RUN rustup target add wasm32-unknown-unknown
 RUN cargo install wasm-pack icu4x-datagen
 
 COPY out/json/ .
-COPY out/full/packages/sark/bin/sark.js ./packages/sark/bin/sark.js
 RUN bun install --no-save
 
 FROM build-deps AS build
