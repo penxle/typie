@@ -382,62 +382,48 @@ impl Editor {
             state.selection.to_plain_text(&state.doc)
         };
 
+        let doc_counts = count_all(&doc_text);
+        let sel_counts = count_all(&selection_text);
+
         CharacterCounts {
-            doc_with_whitespace: count_with_whitespace(&doc_text),
-            doc_without_whitespace: count_without_whitespace(&doc_text),
-            doc_without_whitespace_and_punctuation: count_without_whitespace_and_punctuation(
-                &doc_text,
-            ),
-            selection_with_whitespace: count_with_whitespace(&selection_text),
-            selection_without_whitespace: count_without_whitespace(&selection_text),
-            selection_without_whitespace_and_punctuation: count_without_whitespace_and_punctuation(
-                &selection_text,
-            ),
+            doc_with_whitespace: doc_counts.0,
+            doc_without_whitespace: doc_counts.1,
+            doc_without_whitespace_and_punctuation: doc_counts.2,
+            selection_with_whitespace: sel_counts.0,
+            selection_without_whitespace: sel_counts.1,
+            selection_without_whitespace_and_punctuation: sel_counts.2,
         }
     }
 }
 
-fn count_with_whitespace(text: &str) -> u32 {
-    let cleaned = text.replace('\u{200B}', "");
-    let mut result = String::with_capacity(cleaned.len());
-    let mut prev_whitespace = false;
-
-    for c in cleaned.chars() {
-        if c.is_whitespace() {
-            if !prev_whitespace {
-                result.push(' ');
-            }
-            prev_whitespace = true;
-        } else {
-            result.push(c);
-            prev_whitespace = false;
-        }
-    }
-
-    result.trim().chars().count() as u32
-}
-
-fn count_without_whitespace(text: &str) -> u32 {
-    text.replace('\u{200B}', "")
-        .chars()
-        .filter(|c| !c.is_whitespace())
-        .count() as u32
-}
-
-fn count_without_whitespace_and_punctuation(text: &str) -> u32 {
+fn count_all(text: &str) -> (u32, u32, u32) {
     use icu_properties::props::GeneralCategory;
 
     let gc_data = crate::icu_data::get_general_category_map();
     let gc_map = gc_data.as_borrowed();
 
-    text.replace('\u{200B}', "")
-        .chars()
-        .filter(|&c| {
-            if c.is_whitespace() {
-                return false;
+    let mut with_ws: u32 = 0;
+    let mut without_ws: u32 = 0;
+    let mut without_ws_punct: u32 = 0;
+    let mut prev_whitespace = false;
+
+    for c in text.chars() {
+        if c == '\u{200B}' {
+            continue;
+        }
+
+        if c.is_whitespace() {
+            if !prev_whitespace {
+                with_ws += 1;
             }
+            prev_whitespace = true;
+        } else {
+            with_ws += 1;
+            without_ws += 1;
+            prev_whitespace = false;
+
             let gc = gc_map.get(c);
-            !matches!(
+            if !matches!(
                 gc,
                 GeneralCategory::ConnectorPunctuation
                     | GeneralCategory::DashPunctuation
@@ -446,7 +432,36 @@ fn count_without_whitespace_and_punctuation(text: &str) -> u32 {
                     | GeneralCategory::InitialPunctuation
                     | GeneralCategory::OtherPunctuation
                     | GeneralCategory::OpenPunctuation
-            )
-        })
-        .count() as u32
+            ) {
+                without_ws_punct += 1;
+            }
+        }
+    }
+
+    let first_non_ws = text
+        .chars()
+        .find(|&c| c != '\u{200B}' && !c.is_whitespace());
+
+    if first_non_ws.is_none() {
+        return (0, without_ws, without_ws_punct);
+    }
+
+    let starts_with_ws = text
+        .chars()
+        .find(|&c| c != '\u{200B}')
+        .map_or(false, |c| c.is_whitespace());
+    let ends_with_ws = text
+        .chars()
+        .rev()
+        .find(|&c| c != '\u{200B}')
+        .map_or(false, |c| c.is_whitespace());
+
+    if starts_with_ws && with_ws > 0 {
+        with_ws = with_ws.saturating_sub(1);
+    }
+    if ends_with_ws && with_ws > 0 {
+        with_ws = with_ws.saturating_sub(1);
+    }
+
+    (with_ws, without_ws, without_ws_punct)
 }
