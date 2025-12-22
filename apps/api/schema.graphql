@@ -127,6 +127,7 @@ type Document implements IDocument {
   characterCountChange: CharacterCountChange!
   createdAt: DateTime!
   entity: Entity!
+  excerpt: String!
   id: ID!
   layoutMode: JSON!
   nullableTitle: String

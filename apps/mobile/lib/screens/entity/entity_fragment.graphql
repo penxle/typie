@@ -30,6 +30,13 @@ fragment EntityScreen_Entity_entity on Entity {
         deletions
       }
     }
+
+    ... on Document {
+      id
+      title
+      excerpt
+      updatedAt
+    }
   }
 
   ancestors {

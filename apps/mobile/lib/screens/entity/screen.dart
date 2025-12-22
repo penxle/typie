@@ -14,6 +14,7 @@ import 'package:typie/constants/router_tab_index.dart';
 import 'package:typie/context/bottom_sheet.dart';
 import 'package:typie/context/modal.dart';
 import 'package:typie/context/theme.dart';
+import 'package:typie/context/toast.dart';
 import 'package:typie/extensions/jiffy.dart';
 import 'package:typie/extensions/num.dart';
 import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
@@ -28,6 +29,7 @@ import 'package:typie/modals/share.dart';
 import 'package:typie/routers/app.gr.dart';
 import 'package:typie/screens/entity/__generated__/create_folder_mutation.req.gql.dart';
 import 'package:typie/screens/entity/__generated__/create_post_mutation.req.gql.dart';
+import 'package:typie/screens/entity/__generated__/delete_document_mutation.req.gql.dart';
 import 'package:typie/screens/entity/__generated__/delete_folder_mutation.req.gql.dart';
 import 'package:typie/screens/entity/__generated__/delete_post_mutation.req.gql.dart';
 import 'package:typie/screens/entity/__generated__/duplicate_post_mutation.req.gql.dart';
@@ -416,7 +418,7 @@ class _EntityList extends HookWidget {
                       key: Key(entities[index].id),
                       padding: const Pad(vertical: 6),
                       child: GestureDetector(
-                        onTap: () async {
+                        onTap: () {
                           if (isReordering.value) {
                             return;
                           }
@@ -432,9 +434,10 @@ class _EntityList extends HookWidget {
                             return;
                           }
 
-                          await entities[index].node.when(
+                          entities[index].node.when(
                             folder: (folder) => context.router.push(EntityRoute(entityId: entities[index].id)),
                             post: (post) => context.router.push(EditorRoute(slug: entities[index].slug)),
+                            document: (document) => context.toast(ToastType.notification, '웹에서 조회 및 편집을 할 수 있어요'),
                             orElse: () => throw UnimplementedError(),
                           );
                         },
@@ -717,6 +720,61 @@ class _EntityList extends HookWidget {
                                 ],
                               ),
                             ),
+                            document: (document) => context.showBottomSheet(
+                              child: BottomMenu(
+                                header: _BottomMenuHeader(entity: entities[index]),
+                                items: [
+                                  if (!isSelecting.value && !isReordering.value) ...[
+                                    BottomMenuItem(
+                                      icon: LucideLightIcons.square_check,
+                                      label: '여러 항목 선택하기',
+                                      onTap: () {
+                                        isSelecting.value = true;
+                                        selectedItems.value = {entities[index].id};
+                                      },
+                                    ),
+                                    BottomMenuItem(
+                                      icon: LucideLightIcons.chevrons_up_down,
+                                      label: '순서 변경하기',
+                                      onTap: () {
+                                        isReordering.value = true;
+                                      },
+                                    ),
+                                    const BottomMenuSeparator(),
+                                  ],
+                                  BottomMenuItem(
+                                    icon: LucideLightIcons.trash_2,
+                                    label: '삭제하기',
+                                    onTap: () async {
+                                      await context.showModal(
+                                        intercept: true,
+                                        child: ConfirmModal(
+                                          title: '문서 삭제',
+                                          message: '"${document.title}" 문서를 삭제하시겠어요? 삭제 후 30일 동안 휴지통에 보관돼요.',
+                                          confirmText: '삭제하기',
+                                          confirmTextColor: context.colors.textBright,
+                                          confirmBackgroundColor: context.colors.accentDanger,
+                                          onConfirm: () async {
+                                            await client.request(
+                                              GEntityScreen_DeleteDocument_MutationReq(
+                                                (b) => b..vars.input.documentId = document.id,
+                                              ),
+                                            );
+
+                                            unawaited(
+                                              mixpanel.track(
+                                                'delete_document',
+                                                properties: {'via': 'entity_document_menu'},
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
                             orElse: () => throw UnimplementedError(),
                           );
                         },
@@ -769,6 +827,7 @@ class _EntityList extends HookWidget {
                                     child: entities[index].node.when(
                                       folder: (_) => _Folder(entities[index]),
                                       post: (_) => _Post(entities[index]),
+                                      document: (_) => _Document(entities[index]),
                                       orElse: () => throw UnimplementedError(),
                                     ),
                                   ),
@@ -919,6 +978,44 @@ class _Post extends StatelessWidget {
   }
 }
 
+class _Document extends StatelessWidget {
+  const _Document(this.entity);
+
+  final GEntityScreen_Entity_entity entity;
+  GEntityScreen_Entity_entity_node__asDocument get document =>
+      entity.node as GEntityScreen_Entity_entity_node__asDocument;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: 4,
+      children: [
+        Row(
+          spacing: 8,
+          children: [
+            Expanded(
+              child: Text(
+                document.title,
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
+            ),
+            Text(document.updatedAt.ago, style: TextStyle(fontSize: 14, color: context.colors.textSubtle)),
+          ],
+        ),
+        Text(
+          document.excerpt.isEmpty ? '(내용 없음)' : document.excerpt,
+          style: TextStyle(fontSize: 14, color: context.colors.textSubtle),
+          overflow: TextOverflow.ellipsis,
+          maxLines: 1,
+        ),
+      ],
+    );
+  }
+}
+
 class _BottomMenuHeader extends StatelessWidget {
   const _BottomMenuHeader({this.entity});
 
@@ -936,6 +1033,7 @@ class _BottomMenuHeader extends StatelessWidget {
               entity?.node.when(
                     folder: (_) => LucideLightIcons.folder,
                     post: (_) => LucideLightIcons.file,
+                    document: (_) => LucideLightIcons.file_text,
                     orElse: () => throw UnimplementedError(),
                   ) ??
                   LucideLightIcons.folder_open,
@@ -946,6 +1044,7 @@ class _BottomMenuHeader extends StatelessWidget {
                 entity?.node.when(
                       folder: (folder) => folder.name,
                       post: (post) => post.title,
+                      document: (document) => document.title,
                       orElse: () => throw UnimplementedError(),
                     ) ??
                     '내 포스트',
@@ -982,7 +1081,12 @@ class _BottomMenuHeader extends StatelessWidget {
                         .flattened,
                   ],
                 ),
-                if (entity!.node.when(folder: (folder) => true, post: (post) => true, orElse: () => false))
+                if (entity!.node.when(
+                  folder: (folder) => true,
+                  post: (post) => true,
+                  document: (document) => true,
+                  orElse: () => false,
+                ))
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
