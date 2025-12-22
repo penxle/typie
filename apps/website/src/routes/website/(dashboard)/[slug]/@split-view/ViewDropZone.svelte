@@ -118,7 +118,7 @@
             });
           }
         }
-      } else if (droppedItem.type === 'post' || droppedItem.type === 'canvas' || droppedItem.type === 'document') {
+      } else if (droppedItem.type === 'post' || droppedItem.type === 'document') {
         if (zone === 'center') {
           const success = splitView.replaceSplitView(viewItem.id, droppedItem.slug);
           if (!success) {

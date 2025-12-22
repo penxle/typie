@@ -19,7 +19,6 @@ export const EntityState = {
 
 export type EntityType = keyof typeof EntityType;
 export const EntityType = {
-  CANVAS: 'CANVAS',
   DOCUMENT: 'DOCUMENT',
   FOLDER: 'FOLDER',
   POST: 'POST',
@@ -122,15 +121,6 @@ export const PostSyncType = {
   PRESENCE: 'PRESENCE',
 } as const;
 
-export type CanvasSyncType = keyof typeof CanvasSyncType;
-export const CanvasSyncType = {
-  HEARTBEAT: 'HEARTBEAT',
-  UPDATE: 'UPDATE',
-  VECTOR: 'VECTOR',
-  AWARENESS: 'AWARENESS',
-  PRESENCE: 'PRESENCE',
-} as const;
-
 export type DocumentSyncType = keyof typeof DocumentSyncType;
 export const DocumentSyncType = {
   HEARTBEAT: 'HEARTBEAT',
@@ -157,7 +147,6 @@ export const PreorderPaymentState = {
 export type SearchHitType = keyof typeof SearchHitType;
 export const SearchHitType = {
   POST: 'POST',
-  CANVAS: 'CANVAS',
 } as const;
 
 export type SingleSignOnProvider = keyof typeof SingleSignOnProvider;

@@ -13,10 +13,6 @@ mutation NotesScreen_UpdateNote_Mutation($input: UpdateNoteInput!) {
           title
           type
         }
-        ... on Canvas {
-          id
-          title
-        }
       }
     }
   }

@@ -14,7 +14,6 @@
   import FolderPlusIcon from '~icons/lucide/folder-plus';
   import GlobeIcon from '~icons/lucide/globe';
   import InfoIcon from '~icons/lucide/info';
-  import LineSquiggleIcon from '~icons/lucide/line-squiggle';
   import PencilIcon from '~icons/lucide/pencil-line';
   import SquarePenIcon from '~icons/lucide/square-pen';
   import TrashIcon from '~icons/lucide/trash';
@@ -64,7 +63,6 @@
         characterCount
         folderCount
         postCount
-        canvasCount
       }
     }
   `);
@@ -258,12 +256,6 @@
           {$info.folder.postCount}개
         </div>
       {/if}
-      {#if $info.folder.canvasCount > 0}
-        <div class={center({ gap: '2px' })}>
-          <Icon style={css.raw({ color: 'text.disabled' })} icon={LineSquiggleIcon} size={14} />
-          {$info.folder.canvasCount}개
-        </div>
-      {/if}
     </div>
 
     <span>총 {comma($info.folder.characterCount)}자</span>
@@ -289,14 +281,12 @@
     {@const folders = $descendants.entity.descendants.filter((d) => d.type === EntityType.FOLDER).length}
     {@const posts = $descendants.entity.descendants.filter((d) => d.type === EntityType.POST).length}
     {@const documents = $descendants.entity.descendants.filter((d) => d.type === EntityType.DOCUMENT).length}
-    {@const canvases = $descendants.entity.descendants.filter((d) => d.type === EntityType.CANVAS).length}
 
-    {#if folders > 0 || posts > 0 || documents > 0 || canvases > 0}
+    {#if folders > 0 || posts > 0 || documents > 0}
       {@const items = [
         folders > 0 && `${folders}개의 하위 폴더`,
         posts > 0 && `${posts}개의 하위 포스트`,
         documents > 0 && `${documents}개의 하위 문서`,
-        canvases > 0 && `${canvases}개의 하위 캔버스`,
       ].filter(Boolean)}
       <div
         class={flex({

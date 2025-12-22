@@ -315,8 +315,6 @@ class _NotesContent extends HookWidget {
       final node = selectedEntity.node;
       if (node.G__typename == 'Post') {
         return (node as GNotesScreen_QueryData_me_recentlyViewedEntities_node__asPost).title;
-      } else if (node.G__typename == 'Canvas') {
-        return (node as GNotesScreen_QueryData_me_recentlyViewedEntities_node__asCanvas).title;
       }
       return null;
     }
@@ -519,8 +517,6 @@ class _SliverNotesReorderableList extends StatelessWidget {
           final node = note.entity!.node;
           if (node.G__typename == 'Post') {
             return (node as GNotesScreen_QueryData_notes_entity_node__asPost).title;
-          } else if (node.G__typename == 'Canvas') {
-            return (node as GNotesScreen_QueryData_notes_entity_node__asCanvas).title;
           }
           return null;
         }
@@ -533,8 +529,6 @@ class _SliverNotesReorderableList extends StatelessWidget {
           if (node.G__typename == 'Post') {
             final postNode = node as GNotesScreen_QueryData_notes_entity_node__asPost;
             return postNode.type == GPostType.TEMPLATE ? LucideLightIcons.shapes : LucideLightIcons.file;
-          } else if (node.G__typename == 'Canvas') {
-            return LucideLightIcons.line_squiggle;
           }
           return null;
         }
@@ -650,10 +644,6 @@ class _EntitySelector extends StatelessWidget {
                     final postNode = node as GNotesScreen_QueryData_me_recentlyViewedEntities_node__asPost;
                     title = postNode.title;
                     icon = postNode.type == GPostType.TEMPLATE ? LucideLightIcons.shapes : LucideLightIcons.file;
-                  } else if (node.G__typename == 'Canvas') {
-                    final canvasNode = node as GNotesScreen_QueryData_me_recentlyViewedEntities_node__asCanvas;
-                    title = canvasNode.title;
-                    icon = LucideLightIcons.line_squiggle;
                   }
 
                   if (title == null || icon == null) {

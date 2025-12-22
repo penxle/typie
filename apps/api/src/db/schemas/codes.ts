@@ -1,10 +1,6 @@
 // spell-checker:ignoreRegExp /: '[A-Z]{1,4}',/g
 
 export const TableCode = {
-  CANVASES: 'C',
-  CANVAS_CONTENTS: 'CC',
-  CANVAS_SNAPSHOTS: 'CS',
-  CANVAS_SNAPSHOT_CONTRIBUTORS: 'CSC',
   CREDIT_CODES: 'CRCD',
   DOCUMENTS: 'D',
   DOCUMENT_CONTENTS: 'DC',

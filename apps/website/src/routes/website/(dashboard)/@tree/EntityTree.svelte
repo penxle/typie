@@ -13,7 +13,6 @@
   import { fade } from 'svelte/transition';
   import FileIcon from '~icons/lucide/file';
   import FolderIcon from '~icons/lucide/folder';
-  import LineSquiggleIcon from '~icons/lucide/line-squiggle';
   import { fragment, graphql } from '$graphql';
   import { getDragDropContext } from '../[slug]/@split-view/drag-context.svelte';
   import SelectedEntitiesBar from './@selection/SelectedEntitiesBar.svelte';
@@ -26,7 +25,7 @@
   type EntityNode = {
     id: string;
     node: {
-      __typename: 'Canvas' | 'Document' | 'Folder' | 'Post';
+      __typename: 'Document' | 'Folder' | 'Post';
     };
     children?: EntityNode[];
     ' $$_DashboardLayout_EntityTree_Entity_entity'?: unknown;
@@ -325,10 +324,10 @@
         const entityType = dragging.element.dataset.type;
         const entitySlug = dragging.element.dataset.slug;
 
-        if (entitySlug && entityType && ['post', 'canvas', 'document'].includes(entityType)) {
+        if (entitySlug && entityType && ['post', 'document'].includes(entityType)) {
           dragDropContext.startDrag({
             slug: entitySlug,
-            type: entityType as 'post' | 'canvas' | 'document',
+            type: entityType as 'post' | 'document',
           });
         }
       }
@@ -638,7 +637,6 @@
   const draggingEntityCount = $derived.by(() => {
     let count = {
       post: 0,
-      canvas: 0,
       document: 0,
       folder: 0,
     };
@@ -658,8 +656,6 @@
         } else if (entityIds.has(entity.id)) {
           if (entity.node.__typename === 'Post') {
             count.post++;
-          } else if (entity.node.__typename === 'Canvas') {
-            count.canvas++;
           } else if (entity.node.__typename === 'Document') {
             count.document++;
           }
@@ -774,12 +770,6 @@
           <div class={center({ gap: '2px' })}>
             <Icon style={css.raw({ color: 'text.bright' })} icon={FileIcon} size={14} />
             {draggingEntityCount.post}
-          </div>
-        {/if}
-        {#if draggingEntityCount.canvas > 0}
-          <div class={center({ gap: '2px' })}>
-            <Icon style={css.raw({ color: 'text.bright' })} icon={LineSquiggleIcon} size={14} />
-            {draggingEntityCount.canvas}
           </div>
         {/if}
         {#if draggingEntityCount.document > 0}

@@ -2,7 +2,7 @@ import { getContext, setContext } from 'svelte';
 
 export type DragItem = {
   slug: string;
-  type: 'post' | 'canvas' | 'document';
+  type: 'post' | 'document';
 };
 
 export type DragView = {

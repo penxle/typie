@@ -28,10 +28,5 @@ fragment TrashScreen_Entity_entity on Entity {
       excerpt
       updatedAt
     }
-
-    ... on Canvas {
-      id
-      title
-    }
   }
 }

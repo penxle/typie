@@ -10,7 +10,6 @@
   import FileIcon from '~icons/lucide/file';
   import FolderIcon from '~icons/lucide/folder';
   import InfoIcon from '~icons/lucide/info';
-  import LineSquiggleIcon from '~icons/lucide/line-squiggle';
   import TrashIcon from '~icons/lucide/trash';
   import TriangleAlertIcon from '~icons/lucide/triangle-alert';
   import { graphql } from '$graphql';
@@ -36,7 +35,6 @@
 
   let folderIds = $state<string[]>([]);
   let postIds = $state<string[]>([]);
-  let canvasIds = $state<string[]>([]);
 
   onMount(async () => {
     const entityIds = new Set(tree.selectedEntityIds);
@@ -49,12 +47,8 @@
           }
 
           collect(entity.children ?? []);
-        } else if (entityIds.has(entity.id)) {
-          if (entity.type === 'Post') {
-            postIds.push(entity.id);
-          } else if (entity.type === 'Canvas') {
-            canvasIds.push(entity.id);
-          }
+        } else if (entityIds.has(entity.id) && entity.type === 'Post') {
+          postIds.push(entity.id);
         }
       });
     };
@@ -75,12 +69,6 @@
       <div class={center({ gap: '2px' })}>
         <Icon style={css.raw({ color: 'text.disabled' })} icon={FileIcon} size={14} />
         {postIds.length}개
-      </div>
-    {/if}
-    {#if canvasIds.length > 0}
-      <div class={center({ gap: '2px' })}>
-        <Icon style={css.raw({ color: 'text.disabled' })} icon={LineSquiggleIcon} size={14} />
-        {canvasIds.length}개
       </div>
     {/if}
   </div>
@@ -160,11 +148,7 @@
   >
     <Icon style={css.raw({ color: 'text.danger' })} icon={TriangleAlertIcon} size={14} />
     <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.danger' })}>
-      {[
-        folderIds.length > 0 && `${folderIds.length}개의 폴더`,
-        postIds.length > 0 && `${postIds.length}개의 포스트`,
-        canvasIds.length > 0 && `${canvasIds.length}개의 캔버스`,
-      ]
+      {[folderIds.length > 0 && `${folderIds.length}개의 폴더`, postIds.length > 0 && `${postIds.length}개의 포스트`]
         .filter(Boolean)
         .join(', ')}가 삭제돼요
     </span>
