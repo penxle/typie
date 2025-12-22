@@ -2,6 +2,8 @@ DROP TABLE "canvas_contents" CASCADE;
 DROP TABLE "canvas_snapshot_contributors" CASCADE;
 DROP TABLE "canvas_snapshots" CASCADE;
 DROP TABLE "canvases" CASCADE;
+DELETE FROM "notes" WHERE "entity_id" IN (SELECT "id" FROM "entities" WHERE "type" = 'CANVAS');
+DELETE FROM "entities" WHERE "type" = 'CANVAS';
 ALTER TABLE "entities" ALTER COLUMN "type" SET DATA TYPE text;
 DROP TYPE "public"."_entity_type";
 CREATE TYPE "public"."_entity_type" AS ENUM('DOCUMENT', 'FOLDER', 'POST');
