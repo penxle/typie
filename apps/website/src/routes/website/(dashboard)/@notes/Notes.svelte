@@ -13,7 +13,6 @@
   import CornerDownLeftIcon from '~icons/lucide/corner-down-left';
   import FileIcon from '~icons/lucide/file';
   import LayoutTemplateIcon from '~icons/lucide/layout-template';
-  import LineSquiggleIcon from '~icons/lucide/line-squiggle';
   import { beforeNavigate } from '$app/navigation';
   import { page } from '$app/state';
   import { cache, fragment, graphql } from '$graphql';
@@ -46,10 +45,6 @@
                 title
                 type
               }
-              ... on Canvas {
-                id
-                title
-              }
               ... on Document {
                 id
                 title
@@ -77,10 +72,6 @@
                 title
                 type
               }
-              ... on Canvas {
-                id
-                title
-              }
               ... on Document {
                 id
                 title
@@ -104,10 +95,6 @@
             id
             title
             type
-          }
-          ... on Canvas {
-            id
-            title
           }
         }
       }
@@ -133,10 +120,6 @@
               title
               type
             }
-            ... on Canvas {
-              id
-              title
-            }
           }
         }
       }
@@ -160,10 +143,6 @@
               id
               title
               type
-            }
-            ... on Canvas {
-              id
-              title
             }
           }
         }
@@ -200,7 +179,6 @@
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     return match(note.entity!.node)
       .with({ __typename: 'Post' }, (node) => node.title)
-      .with({ __typename: 'Canvas' }, (node) => node.title)
       .with({ __typename: 'Document' }, (node) => node.title)
       .with({ __typename: 'Folder' }, () => null)
       .exhaustive();
@@ -221,11 +199,6 @@
             entity,
             title: node.title,
             icon: node.type === PostType.TEMPLATE ? LayoutTemplateIcon : FileIcon,
-          }))
-          .with({ __typename: 'Canvas' }, (node) => ({
-            entity,
-            title: node.title,
-            icon: LineSquiggleIcon,
           }))
           .with({ __typename: 'Document' }, (node) => ({
             entity,

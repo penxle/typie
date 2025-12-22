@@ -38,14 +38,12 @@ class MultiEntitiesMenu extends HookWidget {
 
     final folderIds = selectedEntities.where((e) => e.node.G__typename == 'Folder').map((e) => e.id).toList();
     final postIds = selectedEntities.where((e) => e.node.G__typename == 'Post').map((e) => e.id).toList();
-    final canvasIds = selectedEntities.where((e) => e.node.G__typename == 'Canvas').map((e) => e.id).toList();
 
     return BottomMenu(
       header: MultiEntitiesMenuHeader(
         selectedCount: selectedItems.length,
         folderCount: folderIds.length,
         postCount: postIds.length,
-        canvasCount: canvasIds.length,
       ),
       items: [
         if (folderIds.isNotEmpty)
@@ -136,13 +134,11 @@ class MultiEntitiesMenuHeader extends StatelessWidget {
     required this.selectedCount,
     required this.folderCount,
     required this.postCount,
-    required this.canvasCount,
   });
 
   final int selectedCount;
   final int folderCount;
   final int postCount;
-  final int canvasCount;
 
   @override
   Widget build(BuildContext context) {
@@ -156,7 +152,7 @@ class MultiEntitiesMenuHeader extends StatelessWidget {
             Text('$selectedCount개 선택됨', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
           ],
         ),
-        if (folderCount > 0 || postCount > 0 || canvasCount > 0)
+        if (folderCount > 0 || postCount > 0)
           Padding(
             padding: const EdgeInsets.only(left: 36, top: 4),
             child: Row(
@@ -176,14 +172,6 @@ class MultiEntitiesMenuHeader extends StatelessWidget {
                     children: [
                       Icon(LucideLightIcons.file, size: 14, color: context.colors.textSubtle),
                       Text('$postCount개', style: TextStyle(fontSize: 14, color: context.colors.textSubtle)),
-                    ],
-                  ),
-                if (canvasCount > 0)
-                  Row(
-                    spacing: 4,
-                    children: [
-                      Icon(LucideLightIcons.line_squiggle, size: 14, color: context.colors.textSubtle),
-                      Text('$canvasCount개', style: TextStyle(fontSize: 14, color: context.colors.textSubtle)),
                     ],
                   ),
               ],

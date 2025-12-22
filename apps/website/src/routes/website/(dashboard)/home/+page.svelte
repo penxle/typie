@@ -12,7 +12,6 @@
   import FileIcon from '~icons/lucide/file';
   import FilePenIcon from '~icons/lucide/file-pen';
   import LayoutTemplateIcon from '~icons/lucide/layout-template';
-  import LineSquiggleIcon from '~icons/lucide/line-squiggle';
   import { goto } from '$app/navigation';
   import Logo from '$assets/logos/logo.svg?component';
   import { graphql } from '$graphql';
@@ -49,11 +48,6 @@
               subtitle
               type
               excerpt
-            }
-
-            ... on Canvas {
-              id
-              title
             }
 
             ... on Document {
@@ -181,16 +175,10 @@
                   <div class={flex({ alignItems: 'center', gap: '8px' })}>
                     <Icon
                       style={css.raw({ size: '16px', color: 'text.subtle', flexShrink: '0' })}
-                      icon={entity.node.__typename === 'Canvas'
-                        ? LineSquiggleIcon
-                        : entity.node.__typename === 'Post' && entity.node.type === PostType.TEMPLATE
-                          ? LayoutTemplateIcon
-                          : FileIcon}
+                      icon={entity.node.__typename === 'Post' && entity.node.type === PostType.TEMPLATE ? LayoutTemplateIcon : FileIcon}
                     />
                     <div class={css({ fontSize: '14px', color: 'text.default', fontWeight: 'medium' })}>
-                      {entity.node.__typename === 'Post' || entity.node.__typename === 'Canvas' || entity.node.__typename === 'Document'
-                        ? entity.node.title
-                        : ''}
+                      {entity.node.__typename === 'Post' || entity.node.__typename === 'Document' ? entity.node.title : ''}
                     </div>
                   </div>
                   {#if entity.node.__typename === 'Post' && entity.node.excerpt}

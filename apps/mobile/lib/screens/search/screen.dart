@@ -159,31 +159,6 @@ class SearchScreen extends HookWidget {
                           ),
                         ),
                       ),
-                      searchHitCanvas: (canvas) => Tappable(
-                        onTap: () async {
-                          await context.router.push(CanvasRoute(slug: canvas.canvas.entity.slug));
-                        },
-                        child: Container(
-                          decoration: BoxDecoration(
-                            border: Border.all(color: context.colors.borderStrong),
-                            borderRadius: BorderRadius.circular(8),
-                            color: context.colors.surfaceDefault,
-                          ),
-                          padding: const Pad(horizontal: 16, vertical: 12),
-                          child: Row(
-                            spacing: 8,
-                            children: [
-                              const Icon(LucideLightIcons.line_squiggle, size: 18),
-                              Expanded(
-                                child: _HTMLText(
-                                  canvas.title ?? '(제목 없음)',
-                                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
                       orElse: () => throw UnimplementedError(),
                     );
                   },
@@ -209,7 +184,6 @@ class _RecentlyViewedItem extends StatelessWidget {
       onTap: () async {
         await entity.node.when(
           post: (_) => context.router.push(EditorRoute(slug: entity.slug)),
-          canvas: (_) => context.router.push(CanvasRoute(slug: entity.slug)),
           orElse: Future<void>.value,
         );
         refreshNotifier?.refresh();
@@ -246,20 +220,6 @@ class _RecentlyViewedItem extends StatelessWidget {
                 style: TextStyle(fontSize: 14, color: context.colors.textSubtle),
                 overflow: TextOverflow.ellipsis,
                 maxLines: 1,
-              ),
-            ],
-          ),
-          canvas: (canvas) => Row(
-            spacing: 8,
-            children: [
-              const Icon(LucideLightIcons.line_squiggle, size: 18),
-              Expanded(
-                child: Text(
-                  canvas.title,
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-                  overflow: TextOverflow.ellipsis,
-                  maxLines: 1,
-                ),
               ),
             ],
           ),

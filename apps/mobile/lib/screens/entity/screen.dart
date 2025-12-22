@@ -28,7 +28,6 @@ import 'package:typie/modals/share.dart';
 import 'package:typie/routers/app.gr.dart';
 import 'package:typie/screens/entity/__generated__/create_folder_mutation.req.gql.dart';
 import 'package:typie/screens/entity/__generated__/create_post_mutation.req.gql.dart';
-import 'package:typie/screens/entity/__generated__/delete_canvas_mutation.req.gql.dart';
 import 'package:typie/screens/entity/__generated__/delete_folder_mutation.req.gql.dart';
 import 'package:typie/screens/entity/__generated__/delete_post_mutation.req.gql.dart';
 import 'package:typie/screens/entity/__generated__/duplicate_post_mutation.req.gql.dart';
@@ -436,7 +435,6 @@ class _EntityList extends HookWidget {
                           await entities[index].node.when(
                             folder: (folder) => context.router.push(EntityRoute(entityId: entities[index].id)),
                             post: (post) => context.router.push(EditorRoute(slug: entities[index].slug)),
-                            canvas: (canvas) => context.router.push(CanvasRoute(slug: entities[index].slug)),
                             orElse: () => throw UnimplementedError(),
                           );
                         },
@@ -719,79 +717,6 @@ class _EntityList extends HookWidget {
                                 ],
                               ),
                             ),
-                            canvas: (canvas) => context.showBottomSheet(
-                              child: BottomMenu(
-                                header: _BottomMenuHeader(entity: entities[index]),
-                                items: [
-                                  BottomMenuItem(
-                                    icon: LucideLightIcons.file_symlink,
-                                    label: '다른 폴더로 옮기기',
-                                    onTap: () async {
-                                      unawaited(
-                                        mixpanel.track('move_entity_try', properties: {'via': 'entity_canvas_menu'}),
-                                      );
-
-                                      await context.showBottomSheet(
-                                        intercept: true,
-                                        child: MoveEntityModal.single(
-                                          entity: entities[index],
-                                          via: 'entity_canvas_menu',
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                  const BottomMenuSeparator(),
-                                  if (!isSelecting.value && !isReordering.value) ...[
-                                    BottomMenuItem(
-                                      icon: LucideLightIcons.square_check,
-                                      label: '여러 항목 선택하기',
-                                      onTap: () {
-                                        isSelecting.value = true;
-                                        selectedItems.value = {entities[index].id};
-                                      },
-                                    ),
-                                    BottomMenuItem(
-                                      icon: LucideLightIcons.chevrons_up_down,
-                                      label: '순서 변경하기',
-                                      onTap: () {
-                                        isReordering.value = true;
-                                      },
-                                    ),
-                                    const BottomMenuSeparator(),
-                                  ],
-                                  BottomMenuItem(
-                                    icon: LucideLightIcons.trash_2,
-                                    label: '삭제하기',
-                                    onTap: () async {
-                                      await context.showModal(
-                                        intercept: true,
-                                        child: ConfirmModal(
-                                          title: '캔버스 삭제',
-                                          message: '"${canvas.title}" 캔버스를 삭제하시겠어요? 삭제 후 30일 동안 휴지통에 보관돼요.',
-                                          confirmText: '삭제하기',
-                                          confirmTextColor: context.colors.textBright,
-                                          confirmBackgroundColor: context.colors.accentDanger,
-                                          onConfirm: () async {
-                                            await client.request(
-                                              GEntityScreen_DeleteCanvas_MutationReq(
-                                                (b) => b..vars.input.canvasId = canvas.id,
-                                              ),
-                                            );
-
-                                            unawaited(
-                                              mixpanel.track(
-                                                'delete_canvas',
-                                                properties: {'via': 'entity_canvas_menu'},
-                                              ),
-                                            );
-                                          },
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                ],
-                              ),
-                            ),
                             orElse: () => throw UnimplementedError(),
                           );
                         },
@@ -844,7 +769,6 @@ class _EntityList extends HookWidget {
                                     child: entities[index].node.when(
                                       folder: (_) => _Folder(entities[index]),
                                       post: (_) => _Post(entities[index]),
-                                      canvas: (_) => _Canvas(entities[index]),
                                       orElse: () => throw UnimplementedError(),
                                     ),
                                   ),
@@ -995,31 +919,6 @@ class _Post extends StatelessWidget {
   }
 }
 
-class _Canvas extends StatelessWidget {
-  const _Canvas(this.entity);
-
-  final GEntityScreen_Entity_entity entity;
-  GEntityScreen_Entity_entity_node__asCanvas get canvas => entity.node as GEntityScreen_Entity_entity_node__asCanvas;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      spacing: 8,
-      children: [
-        const Icon(LucideLightIcons.line_squiggle, size: 18),
-        Expanded(
-          child: Text(
-            canvas.title,
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-            overflow: TextOverflow.ellipsis,
-            maxLines: 1,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 class _BottomMenuHeader extends StatelessWidget {
   const _BottomMenuHeader({this.entity});
 
@@ -1037,7 +936,6 @@ class _BottomMenuHeader extends StatelessWidget {
               entity?.node.when(
                     folder: (_) => LucideLightIcons.folder,
                     post: (_) => LucideLightIcons.file,
-                    canvas: (_) => LucideLightIcons.line_squiggle,
                     orElse: () => throw UnimplementedError(),
                   ) ??
                   LucideLightIcons.folder_open,
@@ -1048,7 +946,6 @@ class _BottomMenuHeader extends StatelessWidget {
                 entity?.node.when(
                       folder: (folder) => folder.name,
                       post: (post) => post.title,
-                      canvas: (canvas) => canvas.title,
                       orElse: () => throw UnimplementedError(),
                     ) ??
                     '내 포스트',
@@ -1085,12 +982,7 @@ class _BottomMenuHeader extends StatelessWidget {
                         .flattened,
                   ],
                 ),
-                if (entity!.node.when(
-                  folder: (folder) => true,
-                  post: (post) => true,
-                  canvas: (canvas) => false,
-                  orElse: () => false,
-                ))
+                if (entity!.node.when(folder: (folder) => true, post: (post) => true, orElse: () => false))
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -1121,9 +1013,6 @@ class _BottomMenuHeader extends StatelessWidget {
                             }
                             if (folder.postCount > 0) {
                               parts.add('포스트 ${folder.postCount.comma}개');
-                            }
-                            if (folder.canvasCount > 0) {
-                              parts.add('캔버스 ${folder.canvasCount.comma}개');
                             }
                             parts.add('총 ${folder.characterCount.comma}자');
                             return parts.join(' · ');

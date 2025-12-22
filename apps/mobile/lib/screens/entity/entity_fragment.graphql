@@ -15,7 +15,6 @@ fragment EntityScreen_Entity_entity on Entity {
       characterCount
       folderCount
       postCount
-      canvasCount
     }
 
     ... on Post {
@@ -30,11 +29,6 @@ fragment EntityScreen_Entity_entity on Entity {
         additions
         deletions
       }
-    }
-
-    ... on Canvas {
-      id
-      title
     }
   }
 

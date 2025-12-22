@@ -42,46 +42,6 @@ interface Blob {
   size: Int!
 }
 
-type Canvas implements ICanvas {
-  createdAt: DateTime!
-  entity: Entity!
-  id: ID!
-  snapshots: [CanvasSnapshot!]!
-  title: String!
-  update: Binary!
-  updatedAt: DateTime!
-  view: CanvasView!
-}
-
-type CanvasSnapshot {
-  createdAt: DateTime!
-  id: ID!
-  snapshot: Binary!
-}
-
-type CanvasSyncStreamPayload {
-  canvasId: ID!
-  data: String!
-  type: CanvasSyncType!
-}
-
-enum CanvasSyncType {
-  AWARENESS
-  HEARTBEAT
-  PRESENCE
-  UPDATE
-  VECTOR
-}
-
-type CanvasView implements ICanvas {
-  createdAt: DateTime!
-  entity: EntityView!
-  id: ID!
-  shapes: JSON!
-  title: String!
-  updatedAt: DateTime!
-}
-
 type CharacterCountChange {
   additions: Int!
   date: DateTime!
@@ -138,10 +98,6 @@ enum CreditCodeState {
 }
 
 scalar DateTime
-
-input DeleteCanvasInput {
-  canvasId: ID!
-}
 
 input DeleteDocumentInput {
   documentId: ID!
@@ -250,7 +206,7 @@ enum EntityAvailability {
   UNLISTED
 }
 
-union EntityNode = Canvas | Document | Folder | Post
+union EntityNode = Document | Folder | Post
 
 enum EntityState {
   ACTIVE
@@ -259,7 +215,6 @@ enum EntityState {
 }
 
 enum EntityType {
-  CANVAS
   DOCUMENT
   FOLDER
   POST
@@ -282,7 +237,7 @@ type EntityView implements IEntity {
   visibility: EntityVisibility!
 }
 
-union EntityViewNode = CanvasView | DocumentView | FolderView | PostView
+union EntityViewNode = DocumentView | FolderView | PostView
 
 enum EntityVisibility {
   PRIVATE
@@ -342,7 +297,6 @@ type File implements Blob {
 }
 
 type Folder implements IFolder {
-  canvasCount: Int!
   characterCount: Int!
   entity: Entity!
   folderCount: Int!
@@ -391,13 +345,6 @@ input GenerateSingleSignOnAuthorizationUrlInput {
   email: String
   provider: SingleSignOnProvider!
   state: String!
-}
-
-interface ICanvas {
-  createdAt: DateTime!
-  id: ID!
-  title: String!
-  updatedAt: DateTime!
 }
 
 interface IDocument {
@@ -537,7 +484,6 @@ type Mutation {
   createPostReaction(input: CreatePostReactionInput!): PostReaction!
   createWidget(input: CreateWidgetInput!): Widget!
   createWsSession: String!
-  deleteCanvas(input: DeleteCanvasInput!): Canvas!
   deleteDocument(input: DeleteDocumentInput!): Document!
   deleteEntities(input: DeleteEntitiesInput!): [Entity!]!
   deleteFolder(input: DeleteFolderInput!): Folder!
@@ -579,7 +525,6 @@ type Mutation {
   sendSignUpEmail(input: SendSignUpEmailInput!): Boolean!
   subscribeOrChangePlanWithInAppPurchase(input: SubscribeOrChangePlanWithInAppPurchaseInput!): Subscription_!
   subscribePlanWithBillingKey(input: SubscribePlanWithBillingKeyInput!): Subscription_!
-  syncCanvas(input: SyncCanvasInput!): Boolean!
   syncDocument(input: SyncDocumentInput!): Boolean!
   syncPost(input: SyncPostInput!): Boolean!
   unfurlEmbed(input: UnfurlEmbedInput!): Embed!
@@ -813,7 +758,6 @@ type Query {
   adminUser(userId: String!): User!
   adminUsers(limit: Int! = 20, offset: Int! = 0, role: UserRole, search: String, state: UserState): AdminUsersResult!
   announcements: [PostView!]!
-  canvas(slug: String!): Canvas!
   creditCode(code: String!): CreditCode!
   defaultPlanRule: PlanRule!
   document(slug: String!): Document!
@@ -878,14 +822,6 @@ input SchedulePlanChangeInput {
   planId: ID!
 }
 
-union SearchHit = SearchHitCanvas | SearchHitPost
-
-type SearchHitCanvas {
-  canvas: Canvas!
-  title: String
-  type: SearchHitType!
-}
-
 type SearchHitPost {
   post: Post!
   subtitle: String
@@ -895,12 +831,11 @@ type SearchHitPost {
 }
 
 enum SearchHitType {
-  CANVAS
   POST
 }
 
 type SearchResult {
-  hits: [SearchHit!]!
+  hits: [SearchHitPost!]!
   totalHits: Int!
 }
 
@@ -982,7 +917,6 @@ input SubscribePlanWithBillingKeyInput {
 }
 
 type Subscription {
-  canvasSyncStream(canvasId: ID!, clientId: String!): CanvasSyncStreamPayload!
   documentSyncStream(clientId: String!, documentId: ID!): DocumentSyncStreamPayload!
   postSyncStream(clientId: String!, postId: ID!): PostSyncStreamPayload!
   siteUpdateStream(siteId: ID!): SiteUpdateStreamPayload!
@@ -1004,13 +938,6 @@ type Subscription_ {
   startsAt: DateTime!
   state: SubscriptionState!
   user: User!
-}
-
-input SyncCanvasInput {
-  canvasId: ID!
-  clientId: String!
-  data: String!
-  type: CanvasSyncType!
 }
 
 input SyncDocumentInput {

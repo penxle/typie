@@ -112,11 +112,6 @@
               }
             }
 
-            ... on Canvas {
-              id
-              title
-            }
-
             ... on Document {
               id
               title

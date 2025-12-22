@@ -228,11 +228,7 @@
           {#if post.entity.ancestors.length > 0}
             {#each post.entity.ancestors as ancestor, i (ancestor.id)}
               <span>
-                {ancestor.node.__typename === 'Folder'
-                  ? ancestor.node.name
-                  : ancestor.node.__typename === 'Canvas'
-                    ? ''
-                    : ancestor.node.title}
+                {ancestor.node.__typename === 'Folder' ? ancestor.node.name : ancestor.node.title}
               </span>
               {#if i < post.entity.ancestors.length - 1}
                 <AdminIcon icon={ChevronRightIcon} size={12} />

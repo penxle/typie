@@ -89,16 +89,11 @@ class _TrashList extends HookWidget {
     final primaryScrollController = PrimaryScrollController.of(context);
 
     String getEntityTitle(GTrashScreen_Entity_entity entity) {
-      return entity.node.when(
-        folder: (folder) => folder.name,
-        post: (post) => post.title,
-        canvas: (canvas) => canvas.title,
-        orElse: () => '',
-      );
+      return entity.node.when(folder: (folder) => folder.name, post: (post) => post.title, orElse: () => '');
     }
 
     String getEntityType(GTrashScreen_Entity_entity entity) {
-      return entity.node.when(folder: (_) => '폴더', post: (_) => '포스트', canvas: (_) => '캔버스', orElse: () => '');
+      return entity.node.when(folder: (_) => '폴더', post: (_) => '포스트', orElse: () => '');
     }
 
     String getEntityTypename(GTrashScreen_Entity_entity entity) {
@@ -316,9 +311,6 @@ class _TrashList extends HookWidget {
                         post: (_) async {
                           await showEntityMenu(entity);
                         },
-                        canvas: (_) async {
-                          await showEntityMenu(entity);
-                        },
                         orElse: () => throw UnimplementedError(),
                       );
                     },
@@ -328,9 +320,6 @@ class _TrashList extends HookWidget {
                           await showEntityMenu(entity);
                         },
                         post: (_) async {
-                          await showEntityMenu(entity);
-                        },
-                        canvas: (_) async {
                           await showEntityMenu(entity);
                         },
                         orElse: () => throw UnimplementedError(),
@@ -348,7 +337,6 @@ class _TrashList extends HookWidget {
                           child: entity.node.when(
                             folder: (_) => _Folder(entity),
                             post: (_) => _Post(entity),
-                            canvas: (_) => _Canvas(entity),
                             orElse: () => throw UnimplementedError(),
                           ),
                         ),
@@ -426,31 +414,6 @@ class _Post extends StatelessWidget {
   }
 }
 
-class _Canvas extends StatelessWidget {
-  const _Canvas(this.entity);
-
-  final GTrashScreen_Entity_entity entity;
-  GTrashScreen_Entity_entity_node__asCanvas get canvas => entity.node as GTrashScreen_Entity_entity_node__asCanvas;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      spacing: 8,
-      children: [
-        const Icon(LucideLightIcons.line_squiggle, size: 18),
-        Expanded(
-          child: Text(
-            canvas.title,
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-            overflow: TextOverflow.ellipsis,
-            maxLines: 1,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 class _BottomMenuHeader extends StatelessWidget {
   const _BottomMenuHeader({this.entity});
 
@@ -468,7 +431,6 @@ class _BottomMenuHeader extends StatelessWidget {
               entity?.node.when(
                     folder: (_) => LucideLightIcons.folder,
                     post: (_) => LucideLightIcons.file,
-                    canvas: (_) => LucideLightIcons.line_squiggle,
                     orElse: () => throw UnimplementedError(),
                   ) ??
                   LucideLightIcons.trash_2,
@@ -479,7 +441,6 @@ class _BottomMenuHeader extends StatelessWidget {
                 entity?.node.when(
                       folder: (folder) => folder.name,
                       post: (post) => post.title,
-                      canvas: (canvas) => canvas.title,
                       orElse: () => throw UnimplementedError(),
                     ) ??
                     '휴지통',

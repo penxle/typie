@@ -9,7 +9,7 @@ import satori from 'satori';
 import sharp from 'sharp';
 import { match } from 'ts-pattern';
 import twemoji from 'twemoji';
-import { Canvases, db, Documents, Entities, first, Folders, Images, Posts } from '@/db';
+import { db, Documents, Entities, first, Folders, Images, Posts } from '@/db';
 import { EntityState, EntityType } from '@/enums';
 import * as aws from '@/external/aws';
 import type { Env } from '@/context';
@@ -84,7 +84,6 @@ og.get('/:entityId', async (c) => {
   const node = await match(entity.type)
     .with(EntityType.POST, () => renderPost(entityId))
     .with(EntityType.FOLDER, () => renderFolder(entityId))
-    .with(EntityType.CANVAS, () => renderCanvas(entityId))
     .with(EntityType.DOCUMENT, () => renderDocument(entityId))
     .exhaustive();
 
@@ -188,40 +187,6 @@ const renderFolder = async (entityId: string) => {
   }
 
   return <div>{folder.name}</div>;
-};
-
-const renderCanvas = async (entityId: string) => {
-  const canvas = await db
-    .select({
-      title: Canvases.title,
-    })
-    .from(Entities)
-    .innerJoin(Canvases, eq(Canvases.entityId, Entities.id))
-    .where(eq(Entities.id, entityId))
-    .then(first);
-
-  if (!canvas) {
-    throw new HTTPException(404);
-  }
-
-  return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        width: '1200px',
-        height: '630px',
-        fontFamily: 'SUIT, Pretendard, NotoSansKR, KoPubWorldDotum',
-        fontSize: '60px',
-        fontWeight: 800,
-        color: colors.gray[950],
-        backgroundColor: colors.gray[100],
-      }}
-    >
-      {canvas.title}
-    </div>
-  );
 };
 
 const renderDocument = async (entityId: string) => {

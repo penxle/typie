@@ -11,10 +11,6 @@ query NotesScreen_Query {
           title
           type
         }
-        ... on Canvas {
-          id
-          title
-        }
       }
     }
   }
@@ -35,10 +31,6 @@ query NotesScreen_Query {
           id
           title
           type
-        }
-        ... on Canvas {
-          id
-          title
         }
       }
     }

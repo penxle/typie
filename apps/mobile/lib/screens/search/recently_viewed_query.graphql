@@ -16,10 +16,6 @@ query SearchScreen_RecentlyViewed_Query {
           type
           updatedAt
         }
-        ... on Canvas {
-          id
-          title
-        }
       }
     }
   }

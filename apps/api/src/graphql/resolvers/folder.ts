@@ -1,6 +1,6 @@
 import dayjs from 'dayjs';
 import { and, desc, eq, getTableColumns, inArray, isNull, sql } from 'drizzle-orm';
-import { Canvases, db, Entities, first, firstOrThrow, Folders, Notes, PostContents, Posts, TableCode, validateDbId } from '@/db';
+import { db, Entities, first, firstOrThrow, Folders, Notes, PostContents, Posts, TableCode, validateDbId } from '@/db';
 import { EntityState, EntityType, EntityVisibility, NoteState } from '@/enums';
 import { TypieError } from '@/errors';
 import { enqueueJob } from '@/mq';
@@ -118,30 +118,6 @@ Folder.implement({
             SELECT COUNT(*) AS count
             FROM descendant_entities
             WHERE type = ${EntityType.POST}
-          `,
-        );
-        return Number(rows[0]?.count || 0);
-      },
-    }),
-
-    canvasCount: t.int({
-      resolve: async (self) => {
-        const rows = await db.execute<{ count: number }>(
-          sql`
-            WITH RECURSIVE descendant_entities AS (
-              SELECT id, type
-              FROM ${Entities}
-              WHERE parent_id = ${self.entityId}
-              AND state = ${EntityState.ACTIVE}
-              UNION ALL
-              SELECT e.id, e.type
-              FROM ${Entities} e
-              JOIN descendant_entities de ON e.parent_id = de.id
-              WHERE e.state = ${EntityState.ACTIVE}
-            )
-            SELECT COUNT(*) AS count
-            FROM descendant_entities
-            WHERE type = ${EntityType.CANVAS}
           `,
         );
         return Number(rows[0]?.count || 0);
@@ -407,22 +383,8 @@ builder.mutationFields((t) => ({
           ),
         );
 
-      const deletedCanvases = await db
-        .select({ id: Canvases.id })
-        .from(Canvases)
-        .where(
-          inArray(
-            Canvases.entityId,
-            descendants.filter(({ type }) => type === EntityType.CANVAS).map(({ id }) => id),
-          ),
-        );
-
       for (const post of deletedPosts) {
         await enqueueJob('post:index', post.id);
-      }
-
-      for (const canvas of deletedCanvases) {
-        await enqueueJob('canvas:index', canvas.id);
       }
 
       return folder.id;
