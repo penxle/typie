@@ -1,5 +1,5 @@
 import dayjs from 'dayjs';
-import { and, desc, eq, gte, isNull, lt, sum } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNull, lt, sum } from 'drizzle-orm';
 import { filter, pipe, Repeater } from 'graphql-yoga';
 import { redis } from '@/cache';
 import {
@@ -71,6 +71,26 @@ Document.implement({
           .then(firstOrThrow);
 
         return extractLoroDocLayoutMode(content.snapshot);
+      },
+    }),
+
+    excerpt: t.string({
+      resolve: async (self, _, ctx) => {
+        const loader = ctx.loader({
+          name: 'Document.excerpt',
+          load: async (ids) => {
+            return await db
+              .select({ documentId: DocumentContents.documentId, text: DocumentContents.text })
+              .from(DocumentContents)
+              .where(inArray(DocumentContents.documentId, ids));
+          },
+          key: ({ documentId }) => documentId,
+        });
+
+        const content = await loader.load(self.id);
+        const text = content.text.replaceAll(/\s+/g, ' ').trim();
+
+        return text.length <= 200 ? text : text.slice(0, 200) + '...';
       },
     }),
 
