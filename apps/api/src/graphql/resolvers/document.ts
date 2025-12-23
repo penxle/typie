@@ -1,5 +1,5 @@
 import dayjs from 'dayjs';
-import { and, desc, eq, gte, inArray, isNull, lt, sum } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, sum } from 'drizzle-orm';
 import { filter, pipe, Repeater } from 'graphql-yoga';
 import { redis } from '@/cache';
 import {
@@ -7,6 +7,8 @@ import {
   DocumentCharacterCountChanges,
   DocumentContents,
   Documents,
+  DocumentVersionContributors,
+  DocumentVersions,
   Entities,
   first,
   firstOrThrow,
@@ -28,6 +30,7 @@ import {
   makeLoroDoc,
 } from '@/utils';
 import { assertSitePermission } from '@/utils/permission';
+import { assertPlanRule } from '@/utils/plan';
 import { builder } from '../builder';
 import { CharacterCountChange, Document, DocumentView, Entity, EntityView, IDocument, isTypeOf } from '../objects';
 
@@ -291,6 +294,178 @@ builder.mutationFields((t) => ({
       pubsub.publish('site:usage:update', entity.siteId, null);
 
       return input.documentId;
+    },
+  }),
+
+  duplicateDocument: t.withAuth({ session: true }).fieldWithInput({
+    type: Document,
+    input: {
+      documentId: t.input.id({ validate: validateDbId(TableCode.DOCUMENTS) }),
+    },
+    resolve: async (_, { input }, ctx) => {
+      const entity = await db
+        .select({
+          id: Entities.id,
+          siteId: Entities.siteId,
+          parentEntityId: Entities.parentId,
+          order: Entities.order,
+          depth: Entities.depth,
+        })
+        .from(Entities)
+        .innerJoin(Documents, eq(Entities.id, Documents.entityId))
+        .where(eq(Documents.id, input.documentId))
+        .then(firstOrThrow);
+
+      await assertSitePermission({
+        userId: ctx.session.userId,
+        siteId: entity.siteId,
+      });
+
+      const nextEntity = await db
+        .select({ order: Entities.order })
+        .from(Entities)
+        .where(
+          and(
+            eq(Entities.siteId, entity.siteId),
+            entity.parentEntityId ? eq(Entities.parentId, entity.parentEntityId) : isNull(Entities.parentId),
+            gt(Entities.order, entity.order),
+          ),
+        )
+        .orderBy(asc(Entities.order))
+        .limit(1)
+        .then(first);
+
+      const document = await db
+        .select({
+          title: Documents.title,
+          subtitle: Documents.subtitle,
+          content: {
+            json: DocumentContents.json,
+            text: DocumentContents.text,
+            characterCount: DocumentContents.characterCount,
+            blobSize: DocumentContents.blobSize,
+            snapshot: DocumentContents.snapshot,
+            version: DocumentContents.version,
+          },
+        })
+        .from(Documents)
+        .innerJoin(DocumentContents, eq(Documents.id, DocumentContents.documentId))
+        .where(eq(Documents.id, input.documentId))
+        .then(firstOrThrow);
+
+      await assertPlanRule({ userId: ctx.session.userId, rule: 'maxTotalCharacterCount' });
+      await assertPlanRule({ userId: ctx.session.userId, rule: 'maxTotalBlobSize' });
+
+      // TODO: anchors
+
+      const notes = await db
+        .select({
+          content: Notes.content,
+          color: Notes.color,
+          order: Notes.order,
+        })
+        .from(Notes)
+        .where(and(eq(Notes.entityId, entity.id), eq(Notes.state, NoteState.ACTIVE)))
+        .orderBy(asc(Notes.order));
+
+      let lastOrder: string | null = null;
+      if (notes.length > 0) {
+        const lastUserNote = await db
+          .select({ order: Notes.order })
+          .from(Notes)
+          .where(and(eq(Notes.userId, ctx.session.userId), eq(Notes.state, NoteState.ACTIVE)))
+          .orderBy(desc(Notes.order))
+          .limit(1)
+          .then(first);
+
+        lastOrder = lastUserNote?.order ?? null;
+      }
+
+      const title = `(사본) ${document.title ?? '(제목 없음)'}`;
+
+      const newDocument = await db.transaction(async (tx) => {
+        const newEntity = await tx
+          .insert(Entities)
+          .values({
+            userId: ctx.session.userId,
+            siteId: entity.siteId,
+            parentId: entity.parentEntityId,
+            slug: generateSlug(),
+            permalink: generatePermalink(),
+            type: EntityType.DOCUMENT,
+            order: generateFractionalOrder({ lower: entity.order, upper: nextEntity?.order }),
+            depth: entity.depth,
+          })
+          .returning({ id: Entities.id })
+          .then(firstOrThrow);
+
+        const newDocument = await tx
+          .insert(Documents)
+          .values({
+            entityId: newEntity.id,
+            title,
+            subtitle: document.subtitle,
+          })
+          .returning()
+          .then(firstOrThrow);
+
+        await tx.insert(DocumentContents).values({
+          documentId: newDocument.id,
+          json: document.content.json,
+          text: document.content.text,
+          characterCount: document.content.characterCount,
+          blobSize: document.content.blobSize,
+          snapshot: document.content.snapshot,
+          version: document.content.version,
+        });
+
+        // TODO: anchors
+
+        const documentVersion = await tx
+          .insert(DocumentVersions)
+          .values({
+            documentId: newDocument.id,
+            version: document.content.version,
+          })
+          .returning({ id: DocumentVersions.id })
+          .then(firstOrThrow);
+
+        await tx.insert(DocumentVersionContributors).values({
+          versionId: documentVersion.id,
+          userId: ctx.session.userId,
+        });
+
+        if (notes.length > 0) {
+          const notesWithNewOrder = notes.map((note) => {
+            const newOrder = generateFractionalOrder({
+              lower: lastOrder,
+              upper: null,
+            });
+            lastOrder = newOrder;
+
+            return {
+              userId: ctx.session.userId,
+              entityId: newEntity.id,
+              content: note.content,
+              color: note.color,
+              order: newOrder,
+              createdAt: dayjs(),
+              updatedAt: dayjs(),
+            };
+          });
+
+          await tx.insert(Notes).values(notesWithNewOrder);
+        }
+
+        return newDocument;
+      });
+
+      pubsub.publish('site:update', entity.siteId, { scope: 'site' });
+      pubsub.publish('site:usage:update', entity.siteId, null);
+
+      // TODO: enqueueJob('document:index', newDocument.id) if document indexing is implemented
+
+      return newDocument;
     },
   }),
 
