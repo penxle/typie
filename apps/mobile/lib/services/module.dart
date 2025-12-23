@@ -18,10 +18,8 @@ abstract class RegisterModule {
   FirebaseAnalytics get firebaseAnalytics => FirebaseAnalytics.instance;
 
   @singleton
-  FlutterSecureStorage get flutterSecureStorage => const FlutterSecureStorage(
-    aOptions: AndroidOptions(encryptedSharedPreferences: true, resetOnError: true),
-    iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
-  );
+  FlutterSecureStorage get flutterSecureStorage =>
+      const FlutterSecureStorage(iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock));
 
   @preResolve
   @singleton
