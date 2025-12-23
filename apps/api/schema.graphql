@@ -166,6 +166,10 @@ input DumpLocalStorageInput {
   data: JSON!
 }
 
+input DuplicateDocumentInput {
+  documentId: ID!
+}
+
 input DuplicatePostInput {
   postId: ID!
 }
@@ -493,6 +497,7 @@ type Mutation {
   deleteUser: Boolean!
   deleteWidget(input: DeleteWidgetInput!): Widget!
   dumpLocalStorage(input: DumpLocalStorageInput!): User!
+  duplicateDocument(input: DuplicateDocumentInput!): Document!
   duplicatePost(input: DuplicatePostInput!): Post!
   exportDocumentAsPdf(input: ExportDocumentAsPdfInput!): ExportDocumentAsPdfResult!
   exportPostAsDocx(input: ExportPostAsDocxInput!): ExportPostAsDocxResult!

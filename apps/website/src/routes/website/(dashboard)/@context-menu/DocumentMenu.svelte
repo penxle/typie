@@ -2,15 +2,19 @@
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { HorizontalDivider, Icon, MenuItem } from '@typie/ui/components';
-  import { Dialog } from '@typie/ui/notification';
+  import { getAppContext } from '@typie/ui/context';
+  import { Dialog, Toast } from '@typie/ui/notification';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
   import { EntityAvailability, EntityVisibility } from '@/enums';
+  import { TypieError } from '@/errors';
   import Columns2Icon from '~icons/lucide/columns-2';
+  import CopyIcon from '~icons/lucide/copy';
   import FileDownIcon from '~icons/lucide/file-down';
   import InfoIcon from '~icons/lucide/info';
   import Rows2Icon from '~icons/lucide/rows-2';
   import TrashIcon from '~icons/lucide/trash';
+  import { goto } from '$app/navigation';
   import { graphql } from '$graphql';
   import { getSplitViewContext, getViewContext } from '../[slug]/@split-view/context.svelte';
   import DocumentPdfExportModal from './DocumentPdfExportModal.svelte';
@@ -32,6 +36,7 @@
 
   let { document, entity, via }: Props = $props();
 
+  const app = getAppContext();
   const splitView = getSplitViewContext();
   const view = getViewContext();
 
@@ -60,6 +65,37 @@
       }
     }
   `);
+
+  const duplicateDocument = graphql(`
+    mutation DocumentMenu_DuplicateDocument_Mutation($input: DuplicateDocumentInput!) {
+      duplicateDocument(input: $input) {
+        id
+
+        entity {
+          id
+          slug
+        }
+      }
+    }
+  `);
+
+  const handleDuplicate = async () => {
+    try {
+      const resp = await duplicateDocument({ documentId: document.id });
+      mixpanel.track('duplicate_document', { via });
+      await goto(`/${resp.entity.slug}`);
+    } catch (err) {
+      const errorMessages: Record<string, string> = {
+        character_count_limit_exceeded: '현재 플랜의 글자 수 제한을 초과했어요.',
+        blob_size_limit_exceeded: '현재 플랜의 파일 크기 제한을 초과했어요.',
+      };
+
+      if (err instanceof TypieError) {
+        const message = errorMessages[err.code] || err.code;
+        Toast.error(message);
+      }
+    }
+  };
 
   const handleDelete = () => {
     Dialog.confirm({
@@ -111,7 +147,15 @@
 
 <HorizontalDivider color="secondary" />
 
-<MenuItem icon={FileDownIcon} noCloseOnClick onclick={() => (pdfExportModalOpen = true)}>PDF로 내보내기</MenuItem>
+<MenuItem icon={CopyIcon} onclick={handleDuplicate}>복제</MenuItem>
+
+{#if app.preference.current.experimental_pdfExportEnabled}
+  <HorizontalDivider color="secondary" />
+{/if}
+
+{#if app.preference.current.experimental_pdfExportEnabled}
+  <MenuItem icon={FileDownIcon} noCloseOnClick onclick={() => (pdfExportModalOpen = true)}>PDF로 내보내기</MenuItem>
+{/if}
 
 <DocumentPdfExportModal
   documentId={document.id}

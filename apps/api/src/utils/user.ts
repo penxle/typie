@@ -1,12 +1,12 @@
 import { and, eq, sum } from 'drizzle-orm';
-import { db, Entities, firstOrThrow, PostContents, Posts } from '@/db';
+import { db, DocumentContents, Documents, Entities, firstOrThrow, PostContents, Posts } from '@/db';
 import { EntityState } from '@/enums';
 
 type GetUserUsageParams = {
   userId: string;
 };
 export const getUserUsage = async ({ userId }: GetUserUsageParams) => {
-  const row = await db
+  const postUsage = await db
     .select({
       totalCharacterCount: sum(PostContents.characterCount).mapWith(Number),
       totalBlobSize: sum(PostContents.blobSize).mapWith(Number),
@@ -17,8 +17,19 @@ export const getUserUsage = async ({ userId }: GetUserUsageParams) => {
     .where(and(eq(Entities.userId, userId), eq(Entities.state, EntityState.ACTIVE)))
     .then(firstOrThrow);
 
+  const documentUsage = await db
+    .select({
+      totalCharacterCount: sum(DocumentContents.characterCount).mapWith(Number),
+      totalBlobSize: sum(DocumentContents.blobSize).mapWith(Number),
+    })
+    .from(DocumentContents)
+    .innerJoin(Documents, eq(DocumentContents.documentId, Documents.id))
+    .innerJoin(Entities, eq(Documents.entityId, Entities.id))
+    .where(and(eq(Entities.userId, userId), eq(Entities.state, EntityState.ACTIVE)))
+    .then(firstOrThrow);
+
   return {
-    totalCharacterCount: row.totalCharacterCount || 0,
-    totalBlobSize: row.totalBlobSize || 0,
+    totalCharacterCount: (postUsage.totalCharacterCount || 0) + (documentUsage.totalCharacterCount || 0),
+    totalBlobSize: (postUsage.totalBlobSize || 0) + (documentUsage.totalBlobSize || 0),
   };
 };
