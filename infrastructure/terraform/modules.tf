@@ -37,3 +37,13 @@ module "ses" {
 
   route53_zone_typie_co_zone_id = module.route53.zone_typie_co_zone_id
 }
+
+module "bunnynet" {
+  source = "./modules/bunnynet"
+}
+
+module "cloudflare" {
+  source = "./modules/cloudflare"
+
+  ses_dkim_tokens = module.ses.dkim_tokens
+}
