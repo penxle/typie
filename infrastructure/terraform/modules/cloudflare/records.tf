@@ -2,7 +2,7 @@ resource "cloudflare_dns_record" "typie_co" {
   zone_id = cloudflare_zone.typie_co.id
   name    = "typie.co"
   type    = "CNAME"
-  content = "typie-ingress.b-cdn.net"
+  content = "dvnk6johx4te9.cloudfront.net"
   ttl     = 1
 }
 
@@ -10,7 +10,7 @@ resource "cloudflare_dns_record" "auth_typie_co" {
   zone_id = cloudflare_zone.typie_co.id
   name    = "auth.typie.co"
   type    = "CNAME"
-  content = "typie-ingress.b-cdn.net"
+  content = "dvnk6johx4te9.cloudfront.net"
   ttl     = 1
 }
 
@@ -51,7 +51,7 @@ resource "cloudflare_dns_record" "typie_me" {
   zone_id = cloudflare_zone.typie_me.id
   name    = "typie.me"
   type    = "CNAME"
-  content = "typie-ingress.b-cdn.net"
+  content = "d1r6antjbz3luy.cloudfront.net"
   ttl     = 1
 }
 
@@ -59,7 +59,7 @@ resource "cloudflare_dns_record" "wildcard_typie_me" {
   zone_id = cloudflare_zone.typie_me.id
   name    = "*.typie.me"
   type    = "CNAME"
-  content = "typie-ingress.b-cdn.net"
+  content = "d1r6antjbz3luy.cloudfront.net"
   ttl     = 1
 }
 
@@ -119,5 +119,21 @@ resource "cloudflare_dns_record" "ingress_k8s_typie_io" {
   name    = "ingress.k8s.typie.io"
   type    = "A"
   content = "115.68.42.155"
+  ttl     = 1
+}
+
+resource "cloudflare_dns_record" "typie_net" {
+  zone_id = cloudflare_zone.typie_net.id
+  name    = "typie.net"
+  type    = "CNAME"
+  content = "d2qdhlm1riz8yl.cloudfront.net"
+  ttl     = 1
+}
+
+resource "cloudflare_dns_record" "cdn_typie_net" {
+  zone_id = cloudflare_zone.typie_net.id
+  name    = "cdn.typie.net"
+  type    = "CNAME"
+  content = "d3cukiokgj3htl.cloudfront.net"
   ttl     = 1
 }
