@@ -48,4 +48,7 @@ abstract class Env {
 
   @EnviedField()
   static String wsUrl = _Env.wsUrl;
+
+  @EnviedField()
+  static String bootstrapUrl = _Env.bootstrapUrl;
 }

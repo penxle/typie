@@ -8,7 +8,7 @@ import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/tappable.dart';
 
 extension ModalExtension on BuildContext {
-  Future<T?> showModal<T extends Object?>({required Widget child, bool intercept = false}) {
+  Future<T?> showModal<T extends Object?>({required Widget child, bool intercept = false, bool dismissible = true}) {
     return router.root.pushWidget(
       child,
       opaque: false,
@@ -31,15 +31,17 @@ extension ModalExtension on BuildContext {
                 intercepting: intercept,
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
+                  onTap: dismissible
+                      ? () async {
+                          await context.router.root.maybePop();
+                        }
+                      : null,
                   child: FadeTransition(
                     opacity: tweenedBackdropOpacity,
                     child: SizedBox.expand(
                       child: ColoredBox(color: context.colors.overlayDefault.withValues(alpha: 0.5)),
                     ),
                   ),
-                  onTap: () async {
-                    await context.router.root.maybePop();
-                  },
                 ),
               ),
             ),

@@ -21,6 +21,8 @@ class AppRouter extends RootStackRouter {
           ],
         ),
         CustomRoute<dynamic>(page: OfflineRoute.page, transitionsBuilder: TransitionsBuilders.fadeIn),
+        CustomRoute<dynamic>(page: MaintenanceRoute.page, transitionsBuilder: TransitionsBuilders.fadeIn),
+        CustomRoute<dynamic>(page: UpdateRequiredRoute.page, transitionsBuilder: TransitionsBuilders.fadeIn),
         CustomRoute<dynamic>(
           page: DashboardRouter.page,
           transitionsBuilder: TransitionsBuilders.fadeIn,

@@ -110,7 +110,7 @@ resource "aws_cloudfront_distribution" "usercontents" {
     origin_access_control_id = aws_cloudfront_origin_access_control.s3.id
 
     origin_shield {
-      enabled = true
+      enabled              = true
       origin_shield_region = "ap-northeast-2"
     }
   }
@@ -248,6 +248,46 @@ resource "aws_cloudfront_distribution" "typie_me" {
 
   viewer_certificate {
     acm_certificate_arn      = aws_acm_certificate.cf_typie_me.arn
+    ssl_support_method       = "sni-only"
+    minimum_protocol_version = "TLSv1.2_2021"
+  }
+
+  wait_for_deployment = false
+}
+
+resource "aws_cloudfront_distribution" "config" {
+  enabled      = true
+  http_version = "http2and3"
+  aliases      = ["config.typie.net"]
+
+  origin {
+    origin_id                = "s3"
+    domain_name              = "typie-config.s3.ap-northeast-2.amazonaws.com"
+    origin_access_control_id = aws_cloudfront_origin_access_control.s3.id
+  }
+
+  default_cache_behavior {
+    target_origin_id = "s3"
+
+    compress               = true
+    viewer_protocol_policy = "redirect-to-https"
+
+    allowed_methods = ["GET", "HEAD", "OPTIONS"]
+    cached_methods  = ["GET", "HEAD", "OPTIONS"]
+
+    cache_policy_id            = aws_cloudfront_cache_policy.dynamic.id
+    origin_request_policy_id   = aws_cloudfront_origin_request_policy.static.id
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.dynamic.id
+  }
+
+  restrictions {
+    geo_restriction {
+      restriction_type = "none"
+    }
+  }
+
+  viewer_certificate {
+    acm_certificate_arn      = aws_acm_certificate.cf_typie_net.arn
     ssl_support_method       = "sni-only"
     minimum_protocol_version = "TLSv1.2_2021"
   }

@@ -51,3 +51,25 @@ export const redeemCodeSchema = z
   .toUpperCase()
   .regex(/^[A-Z0-9-]+$/, { message: '코드 형식이 맞지 않아요' })
   .transform((str) => str.replaceAll('-', '').replaceAll('O', '0').replaceAll('I', '1').replaceAll('L', '1'));
+
+export const bootstrapSchema = z.object({
+  version: z.number().int(),
+  updatedAt: z.iso.datetime(),
+  maintenance: z.object({
+    enabled: z.boolean(),
+    title: z.string(),
+    message: z.string(),
+    until: z.iso.datetime().nullable(),
+    platforms: z.array(z.enum(['ios', 'android', 'web'])),
+  }),
+  minVersion: z.object({
+    ios: z.object({
+      version: z.string(),
+      storeUrl: z.url(),
+    }),
+    android: z.object({
+      version: z.string(),
+      storeUrl: z.url(),
+    }),
+  }),
+});

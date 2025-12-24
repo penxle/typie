@@ -536,6 +536,7 @@ type Mutation {
   unfurlEmbed(input: UnfurlEmbedInput!): Embed!
   unlockPostView(input: UnlockPostViewInput!): PostView!
   updateBillingKey(input: UpdateBillingKeyInput!): UserBillingKey!
+  updateBootstrap(input: UpdateBootstrapInput!): JSON!
   updateDocument(input: UpdateDocumentInput!): Document!
   updateEmail(input: UpdateEmailInput!): Boolean!
   updateFolderOption(input: UpdateFolderOptionInput!): Folder!
@@ -771,6 +772,7 @@ type Query {
   entity(entityId: ID, slug: String): Entity!
   entityView(origin: String!, slug: String!): EntityView!
   folder(id: ID!): Folder!
+  getBootstrap: JSON!
   image(imageId: ID!): Image!
   impersonation: Impersonation
   me: User
@@ -974,6 +976,10 @@ input UpdateBillingKeyInput {
   cardNumber: String!
   expiryDate: String!
   passwordTwoDigits: String!
+}
+
+input UpdateBootstrapInput {
+  bootstrap: JSON!
 }
 
 input UpdateDocumentInput {

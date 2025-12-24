@@ -81,3 +81,15 @@ resource "aws_route53_record" "wildcard_typie_me" {
     evaluate_target_health = false
   }
 }
+
+resource "aws_route53_record" "config_typie_net" {
+  zone_id = var.route53_zone_typie_net_zone_id
+  name    = "config.typie.net"
+  type    = "A"
+
+  alias {
+    name                   = aws_cloudfront_distribution.config.domain_name
+    zone_id                = aws_cloudfront_distribution.config.hosted_zone_id
+    evaluate_target_health = false
+  }
+}
