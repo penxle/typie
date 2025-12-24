@@ -4,6 +4,7 @@
   import BarChartIcon from '~icons/lucide/bar-chart';
   import FileTextIcon from '~icons/lucide/file-text';
   import HomeIcon from '~icons/lucide/home';
+  import SettingsIcon from '~icons/lucide/settings';
   import UsersIcon from '~icons/lucide/users';
   import { page } from '$app/state';
   import { graphql } from '$graphql';
@@ -34,6 +35,7 @@
     { href: '/admin/users', label: '사용자 관리', icon: UsersIcon },
     { href: '/admin/posts', label: '포스트 관리', icon: FileTextIcon },
     { href: '/admin/stats', label: '통계', icon: BarChartIcon },
+    { href: '/admin/bootstrap', label: 'Bootstrap', icon: SettingsIcon },
   ];
 
   const isActive = (href: string) => {
