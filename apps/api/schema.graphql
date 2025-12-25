@@ -155,6 +155,7 @@ enum DocumentSyncType {
 type DocumentView implements IDocument {
   createdAt: DateTime!
   entity: EntityView!
+  excerpt: String!
   id: ID!
   nullableTitle: String
   subtitle: String
@@ -354,6 +355,7 @@ input GenerateSingleSignOnAuthorizationUrlInput {
 
 interface IDocument {
   createdAt: DateTime!
+  excerpt: String!
   id: ID!
   nullableTitle: String
   subtitle: String

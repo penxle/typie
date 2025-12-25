@@ -42,6 +42,25 @@ IDocument.implement({
     subtitle: t.exposeString('subtitle', { nullable: true }),
     createdAt: t.expose('createdAt', { type: 'DateTime' }),
     updatedAt: t.expose('updatedAt', { type: 'DateTime' }),
+    excerpt: t.string({
+      resolve: async (self, _, ctx) => {
+        const loader = ctx.loader({
+          name: 'Document.excerpt',
+          load: async (ids) => {
+            return await db
+              .select({ documentId: DocumentContents.documentId, text: DocumentContents.text })
+              .from(DocumentContents)
+              .where(inArray(DocumentContents.documentId, ids));
+          },
+          key: ({ documentId }) => documentId,
+        });
+
+        const content = await loader.load(self.id);
+        const text = content.text.replaceAll(/\s+/g, ' ').trim();
+
+        return text.length <= 200 ? text : text.slice(0, 200) + '...';
+      },
+    }),
   }),
 });
 
@@ -74,26 +93,6 @@ Document.implement({
           .then(firstOrThrow);
 
         return extractLoroDocLayoutMode(content.snapshot);
-      },
-    }),
-
-    excerpt: t.string({
-      resolve: async (self, _, ctx) => {
-        const loader = ctx.loader({
-          name: 'Document.excerpt',
-          load: async (ids) => {
-            return await db
-              .select({ documentId: DocumentContents.documentId, text: DocumentContents.text })
-              .from(DocumentContents)
-              .where(inArray(DocumentContents.documentId, ids));
-          },
-          key: ({ documentId }) => documentId,
-        });
-
-        const content = await loader.load(self.id);
-        const text = content.text.replaceAll(/\s+/g, ' ').trim();
-
-        return text.length <= 200 ? text : text.slice(0, 200) + '...';
       },
     }),
 

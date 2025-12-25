@@ -89,11 +89,16 @@ class _TrashList extends HookWidget {
     final primaryScrollController = PrimaryScrollController.of(context);
 
     String getEntityTitle(GTrashScreen_Entity_entity entity) {
-      return entity.node.when(folder: (folder) => folder.name, post: (post) => post.title, orElse: () => '');
+      return entity.node.when(
+        folder: (folder) => folder.name,
+        post: (post) => post.title,
+        document: (document) => document.title,
+        orElse: () => '',
+      );
     }
 
     String getEntityType(GTrashScreen_Entity_entity entity) {
-      return entity.node.when(folder: (_) => '폴더', post: (_) => '포스트', orElse: () => '');
+      return entity.node.when(folder: (_) => '폴더', post: (_) => '포스트', document: (_) => '문서', orElse: () => '');
     }
 
     String getEntityTypename(GTrashScreen_Entity_entity entity) {
@@ -311,6 +316,9 @@ class _TrashList extends HookWidget {
                         post: (_) async {
                           await showEntityMenu(entity);
                         },
+                        document: (_) async {
+                          await showEntityMenu(entity);
+                        },
                         orElse: () => throw UnimplementedError(),
                       );
                     },
@@ -320,6 +328,9 @@ class _TrashList extends HookWidget {
                           await showEntityMenu(entity);
                         },
                         post: (_) async {
+                          await showEntityMenu(entity);
+                        },
+                        document: (_) async {
                           await showEntityMenu(entity);
                         },
                         orElse: () => throw UnimplementedError(),
@@ -337,6 +348,7 @@ class _TrashList extends HookWidget {
                           child: entity.node.when(
                             folder: (_) => _Folder(entity),
                             post: (_) => _Post(entity),
+                            document: (_) => _Document(entity),
                             orElse: () => throw UnimplementedError(),
                           ),
                         ),
@@ -414,6 +426,44 @@ class _Post extends StatelessWidget {
   }
 }
 
+class _Document extends StatelessWidget {
+  const _Document(this.entity);
+
+  final GTrashScreen_Entity_entity entity;
+  GTrashScreen_Entity_entity_node__asDocument get document =>
+      entity.node as GTrashScreen_Entity_entity_node__asDocument;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: 4,
+      children: [
+        Row(
+          spacing: 8,
+          children: [
+            Expanded(
+              child: Text(
+                document.title,
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
+            ),
+            Text(document.updatedAt.ago, style: TextStyle(fontSize: 14, color: context.colors.textSubtle)),
+          ],
+        ),
+        Text(
+          document.excerpt.isEmpty ? '(내용 없음)' : document.excerpt,
+          style: TextStyle(fontSize: 14, color: context.colors.textSubtle),
+          overflow: TextOverflow.ellipsis,
+          maxLines: 1,
+        ),
+      ],
+    );
+  }
+}
+
 class _BottomMenuHeader extends StatelessWidget {
   const _BottomMenuHeader({this.entity});
 
@@ -431,6 +481,7 @@ class _BottomMenuHeader extends StatelessWidget {
               entity?.node.when(
                     folder: (_) => LucideLightIcons.folder,
                     post: (_) => LucideLightIcons.file,
+                    document: (_) => LucideLightIcons.file,
                     orElse: () => throw UnimplementedError(),
                   ) ??
                   LucideLightIcons.trash_2,
@@ -441,6 +492,7 @@ class _BottomMenuHeader extends StatelessWidget {
                 entity?.node.when(
                       folder: (folder) => folder.name,
                       post: (post) => post.title,
+                      document: (document) => document.title,
                       orElse: () => throw UnimplementedError(),
                     ) ??
                     '휴지통',
