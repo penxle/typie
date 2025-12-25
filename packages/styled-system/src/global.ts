@@ -30,8 +30,6 @@ export const globalCss = defineGlobalStyles({
     caretColor: 'text.default',
     backgroundColor: 'surface.default',
 
-    cursor: 'url("/cursors/default.png") 0 0, auto',
-
     lineHeight: '1.4',
     letterSpacing: '-0.015em',
 
@@ -49,11 +47,10 @@ export const globalCss = defineGlobalStyles({
 
   a: {
     textDecoration: 'inherit',
-    cursor: 'url("/cursors/pointer.png") 0 0, pointer',
   },
 
   button: {
-    cursor: 'url("/cursors/pointer.png") 0 0, pointer',
+    cursor: 'pointer',
     touchAction: 'manipulation',
   },
 
@@ -72,18 +69,9 @@ export const globalCss = defineGlobalStyles({
   },
 
   input: {
-    cursor: 'url("/cursors/text.png") 0 0, text',
     _disabled: {
       opacity: '100',
     },
-  },
-
-  textarea: {
-    cursor: 'url("/cursors/text.png") 0 0, text',
-  },
-
-  'div[contenteditable="true"]': {
-    cursor: 'url("/cursors/text.png") 0 0, text',
   },
 
   'ol, ul': {
