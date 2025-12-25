@@ -96,6 +96,11 @@
             title
             type
           }
+
+          ... on Document {
+            id
+            title
+          }
         }
       }
     }
