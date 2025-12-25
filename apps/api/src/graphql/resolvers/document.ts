@@ -254,6 +254,8 @@ builder.mutationFields((t) => ({
       pubsub.publish('site:update', input.siteId, { scope: 'site' });
       pubsub.publish('site:usage:update', input.siteId, null);
 
+      await enqueueJob('document:index', document.id);
+
       return document;
     },
   }),
@@ -292,6 +294,8 @@ builder.mutationFields((t) => ({
       pubsub.publish('site:update', entity.siteId, { scope: 'site' });
       pubsub.publish('site:update', entity.siteId, { scope: 'entity', entityId: entity.id });
       pubsub.publish('site:usage:update', entity.siteId, null);
+
+      await enqueueJob('document:index', input.documentId);
 
       return input.documentId;
     },
@@ -463,7 +467,7 @@ builder.mutationFields((t) => ({
       pubsub.publish('site:update', entity.siteId, { scope: 'site' });
       pubsub.publish('site:usage:update', entity.siteId, null);
 
-      // TODO: enqueueJob('document:index', newDocument.id) if document indexing is implemented
+      await enqueueJob('document:index', newDocument.id);
 
       return newDocument;
     },
@@ -503,6 +507,8 @@ builder.mutationFields((t) => ({
         .then(firstOrThrow);
 
       pubsub.publish('site:update', document.siteId, { scope: 'entity', entityId: document.entityId });
+
+      await enqueueJob('document:index', input.documentId);
 
       return updatedDocument;
     },

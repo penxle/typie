@@ -98,6 +98,22 @@
               }
             }
           }
+
+          ... on SearchHitDocument {
+            title
+            subtitle
+            text
+
+            document {
+              id
+              title
+
+              entity {
+                id
+                slug
+              }
+            }
+          }
         }
       }
     }
@@ -260,6 +276,7 @@
       action: match(hit)
         .with({ __typename: 'SearchHitCommand' }, (hit) => hit.action)
         .with({ __typename: 'SearchHitPost' }, (hit) => () => goto(`/${hit.post.entity.slug}`))
+        .with({ __typename: 'SearchHitDocument' }, (hit) => () => goto(`/${hit.document.entity.slug}`))
         .with({ __typename: 'SearchHitRecent' }, (hit) => () => goto(`/${hit.entity.slug}`))
         .exhaustive(),
     })),
@@ -472,6 +489,7 @@
         {match(type)
           .with('SearchHitCommand', () => '액션')
           .with('SearchHitPost', () => '포스트')
+          .with('SearchHitDocument', () => '문서')
           .with('SearchHitRecent', () => '최근 본 항목')
           .exhaustive()}
       </div>
@@ -529,6 +547,29 @@
                 {@html hit.title}
               {:else}
                 {hit.post.title}
+              {/if}
+            </div>
+
+            {#if hit.text}
+              <div class={css({ color: 'text.muted', fontSize: '12px', truncate: true })}>
+                <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+                {@html hit.text}
+              </div>
+            {/if}
+          {:else if hit.__typename === 'SearchHitDocument'}
+            <!-- TODO: document template 다르게 보여줘야 함 -->
+            <div
+              class={center({ flexShrink: '0', borderRadius: '6px', size: '24px', color: 'text.faint', backgroundColor: 'surface.muted' })}
+            >
+              <Icon icon={FileIcon} size={16} />
+            </div>
+
+            <div class={css({ fontSize: '14px', fontWeight: 'medium', truncate: true })}>
+              {#if hit.title}
+                <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+                {@html hit.title}
+              {:else}
+                {hit.document.title}
               {/if}
             </div>
 

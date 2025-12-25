@@ -830,6 +830,16 @@ input SchedulePlanChangeInput {
   planId: ID!
 }
 
+union SearchHit = SearchHitDocument | SearchHitPost
+
+type SearchHitDocument {
+  document: Document!
+  subtitle: String
+  text: String
+  title: String
+  type: SearchHitType!
+}
+
 type SearchHitPost {
   post: Post!
   subtitle: String
@@ -839,11 +849,12 @@ type SearchHitPost {
 }
 
 enum SearchHitType {
+  DOCUMENT
   POST
 }
 
 type SearchResult {
-  hits: [SearchHitPost!]!
+  hits: [SearchHit!]!
   totalHits: Int!
 }
 

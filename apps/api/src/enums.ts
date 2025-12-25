@@ -147,6 +147,7 @@ export const PreorderPaymentState = {
 export type SearchHitType = keyof typeof SearchHitType;
 export const SearchHitType = {
   POST: 'POST',
+  DOCUMENT: 'DOCUMENT',
 } as const;
 
 export type SingleSignOnProvider = keyof typeof SingleSignOnProvider;
