@@ -46,9 +46,8 @@
 >
   <div class={css({ whiteSpace: 'pre-line' })}>내용을 입력하거나</div>
   <button
-    class={flex({
-      alignItems: 'center',
-      gap: '4px',
+    class={css({
+      textAlign: 'start',
       transition: 'common',
       pointerEvents: 'auto',
       cursor: 'default',
@@ -58,7 +57,7 @@
     onclick={loadTemplate}
     type="button"
   >
-    <Icon icon={LayoutTemplateIcon} size={16} />
+    <Icon style={{ display: 'inline-block', marginRight: '4px', marginBottom: '3px' }} icon={LayoutTemplateIcon} size={16} />
     <span>템플릿 불러오기 (준비중)</span>
   </button>
 </div>
