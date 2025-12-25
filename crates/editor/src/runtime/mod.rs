@@ -52,6 +52,7 @@ struct PendingUpdates {
     enabled_actions: bool,
     exited_document_start: bool,
     pointer_mode_changed: bool,
+    placeholder: bool,
 }
 
 #[derive(Clone)]
@@ -131,6 +132,7 @@ impl Runtime {
                 enabled_actions: true,
                 exited_document_start: false,
                 pointer_mode_changed: true,
+                placeholder: true,
             },
             message_queue: Vec::new(),
             pointer: PointerState::default(),
@@ -719,6 +721,17 @@ impl Runtime {
             self.pending.pointer_mode_changed = false;
         }
 
+        if self.pending.placeholder {
+            let visible = self.doc().is_empty() && self.preedit().is_none();
+            let bounds = if visible {
+                self.get_first_paragraph_bounds()
+            } else {
+                None
+            };
+            cmds.push(Cmd::PlaceholderChanged { visible, bounds });
+            self.pending.placeholder = false;
+        }
+
         cmds
     }
 
@@ -779,6 +792,34 @@ impl Runtime {
         }
 
         elements
+    }
+
+    fn get_first_paragraph_bounds(&self) -> Option<Rect> {
+        let page = self.pages.first()?;
+        let (pos, _element) = page.first_element()?;
+
+        let settings = self.doc().settings();
+        let paragraph_indent = settings.paragraph_indent * 16.0;
+        let (page_width, margin_left, margin_right) = match settings.layout_mode {
+            LayoutMode::Paginated {
+                page_width,
+                page_margin_left,
+                page_margin_right,
+                ..
+            } => (page_width, page_margin_left, page_margin_right),
+            LayoutMode::Continuous { max_width } => {
+                let page_margin = CONTINUOUS_PAGE_MARGIN;
+                let page_width = self.width.min(max_width + 2.0 * page_margin);
+                (page_width, page_margin, page_margin)
+            }
+        };
+
+        Some(Rect {
+            x: margin_left + paragraph_indent,
+            y: pos.y,
+            width: page_width - margin_left - margin_right - paragraph_indent,
+            height: 0.0, // 안 씀
+        })
     }
 
     pub fn inspect_state(&self) -> String {
@@ -869,6 +910,7 @@ impl Runtime {
                     self.pending.active_marks = true;
                     self.pending.external_elements = true;
                     self.pending.enabled_actions = true;
+                    self.pending.placeholder = true;
                 }
                 Effect::NodeChanged { node_id } => {
                     if let Some(node) = self.doc().node(node_id) {
@@ -910,6 +952,7 @@ impl Runtime {
                     self.pending.selection = true;
                     self.pending.active_marks = true;
                     self.pending.external_elements = true;
+                    self.pending.placeholder = true;
                 }
                 Effect::PointerStyleChanged { style } => {
                     self.pending.pointer_style = Some(style);
@@ -936,6 +979,7 @@ impl Runtime {
                     self.pending.render = true;
                     self.pending.cursor = true;
                     self.pending.selection = true;
+                    self.pending.placeholder = true;
                 }
                 Effect::SettingsChanged => {
                     self.layout_cache.borrow_mut().invalidate_all();

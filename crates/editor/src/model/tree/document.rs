@@ -370,4 +370,19 @@ impl Doc {
             .filter_map(|key| NodeId::from_string(&key))
             .collect()
     }
+
+    pub fn is_empty(&self) -> bool {
+        let root_children = self.get_children_ids(NodeId::ROOT);
+        if root_children.len() != 1 {
+            return false;
+        }
+
+        let first_child_id = root_children[0];
+
+        if self.get_node_type(first_child_id) != Some(NodeType::Paragraph) {
+            return false;
+        }
+
+        self.get_children_ids(first_child_id).is_empty()
+    }
 }
