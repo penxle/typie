@@ -82,14 +82,8 @@ impl Runtime {
     pub(crate) fn handle_set_layout_mode(&mut self, mode: LayoutMode) -> Vec<Effect> {
         let _ = self.state.doc.update_settings(|s| s.layout_mode = mode);
 
-        let width = match mode {
-            LayoutMode::Paginated { page_width, .. } => page_width,
-            LayoutMode::Continuous { max_width } => {
-                max_width + 2.0 * crate::model::CONTINUOUS_PAGE_MARGIN
-            }
-        };
-
-        self.set_width(width);
+        let new_width = self.calculate_page_width(mode);
+        self.set_width(new_width);
 
         vec![
             Effect::LayoutChanged,
@@ -98,19 +92,35 @@ impl Runtime {
         ]
     }
 
-    pub(crate) fn handle_resize(&mut self, width: f32, scale_factor: f64) -> Vec<Effect> {
+    pub(crate) fn handle_resize(&mut self, viewport_width: f32, scale_factor: f64) -> Vec<Effect> {
+        let viewport_changed = self.viewport_width != viewport_width;
+        self.viewport_width = viewport_width;
+
         let layout_mode = self.doc().settings().layout_mode;
-        let new_width = match layout_mode {
-            LayoutMode::Paginated { page_width, .. } => page_width,
-            LayoutMode::Continuous { max_width } => {
-                width.min(max_width + 2.0 * crate::model::CONTINUOUS_PAGE_MARGIN)
-            }
-        };
+        let new_width = self.calculate_page_width(layout_mode);
+
+        let width_changed = self.width != new_width;
+        let scale_changed = self.scale_factor != scale_factor;
 
         self.set_width(new_width);
         self.set_scale_factor(scale_factor);
 
-        vec![Effect::LayoutChanged]
+        if width_changed || scale_changed || viewport_changed {
+            vec![Effect::LayoutChanged]
+        } else {
+            vec![]
+        }
+    }
+
+    fn calculate_page_width(&self, layout_mode: LayoutMode) -> f32 {
+        match layout_mode {
+            LayoutMode::Paginated { page_width, .. } => page_width,
+            LayoutMode::Continuous { max_width } => {
+                let margin = crate::model::CONTINUOUS_PAGE_MARGIN;
+                let max_page_width = max_width + 2.0 * margin;
+                self.viewport_width.min(max_page_width)
+            }
+        }
     }
 
     pub(crate) fn handle_set_theme(&mut self, theme: Theme) -> Vec<Effect> {

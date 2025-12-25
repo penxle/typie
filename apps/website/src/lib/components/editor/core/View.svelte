@@ -1,6 +1,6 @@
 <script lang="ts">
   import { flex } from '@typie/styled-system/patterns';
-  import { CONTINUOUS_PAGE_MARGIN, PAGE_GAP } from '$lib/editor/constants';
+  import { CONTINUOUS_VIEW_PADDING, PAGE_GAP, PAGINATED_VIEW_PADDING } from '$lib/editor/constants';
   import { getEditor } from '$lib/editor/context';
   import { typewriterPadding } from '$lib/editor/typewriter.svelte';
   import ContextMenu from './ContextMenu.svelte';
@@ -11,12 +11,10 @@
   import Page from './Page.svelte';
 
   type Props = {
-    continuousPageMargin?: number;
-    contentPadding?: number;
     defaultPaddingBottom?: number;
   };
 
-  let { continuousPageMargin = CONTINUOUS_PAGE_MARGIN, contentPadding = 40, defaultPaddingBottom = 48 }: Props = $props();
+  let { defaultPaddingBottom = 48 }: Props = $props();
 
   let containerEls = $state<HTMLDivElement[]>([]);
   let inputComponent = $state<Input>();
@@ -100,6 +98,7 @@
   };
 
   const isPaginated = $derived(editor.layout.layoutMode.type === 'paginated');
+  const viewPadding = $derived(isPaginated ? PAGINATED_VIEW_PADDING : CONTINUOUS_VIEW_PADDING);
 </script>
 
 <svelte:window
@@ -111,8 +110,8 @@
 
 <div
   bind:this={extensionAreaEl}
-  style:padding-left="{contentPadding - continuousPageMargin}px"
-  style:padding-right="{contentPadding - continuousPageMargin}px"
+  style:padding-left="{viewPadding}px"
+  style:padding-right="{viewPadding}px"
   style:gap={isPaginated ? `${PAGE_GAP}px` : '0'}
   class={flex({
     direction: 'column',

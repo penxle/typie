@@ -4,7 +4,13 @@
   import { getThemeContext } from '@typie/ui/context';
   import { handleDragScroll } from '@typie/ui/utils';
   import { untrack } from 'svelte';
-  import { CONTINUOUS_PAGE_MARGIN, PAGE_GAP } from '$lib/editor/constants';
+  import {
+    CONTINUOUS_MIN_WIDTH,
+    CONTINUOUS_PAGE_MARGIN,
+    CONTINUOUS_VIEW_PADDING,
+    PAGE_GAP,
+    PAGINATED_VIEW_PADDING,
+  } from '$lib/editor/constants';
   import { setEditor } from '$lib/editor/context';
   import { Editor } from '$lib/editor/editor.svelte';
   import { getEditorTheme } from '$lib/editor/theme';
@@ -18,7 +24,6 @@
   type Props = {
     unit?: 'px' | 'cm';
     rulerThickness?: number;
-    contentPadding?: number;
     snapshot?: Uint8Array;
     editor?: Editor;
     onDocChanged?: () => void;
@@ -30,7 +35,6 @@
   let {
     unit = 'px',
     rulerThickness = 24,
-    contentPadding = 40,
     snapshot,
     editor: externalEditor,
     onDocChanged,
@@ -46,7 +50,7 @@
 
   const theme = getThemeContext();
 
-  let width = $state(0);
+  let containerClientWidth = $state(0);
   let scaleFactor = $state(1);
   let headerHeight = $state(0);
   let horizontalRulerEl: HTMLDivElement | null = $state(null);
@@ -103,6 +107,12 @@
 
   const pageGap = $derived(layoutMode.type === 'paginated' ? PAGE_GAP : 0);
   const continuousPageMargin = $derived(layoutMode.type === 'paginated' ? 0 : CONTINUOUS_PAGE_MARGIN);
+  const viewPadding = $derived(layoutMode.type === 'paginated' ? PAGINATED_VIEW_PADDING : CONTINUOUS_VIEW_PADDING);
+  const width = $derived(
+    layoutMode.type === 'continuous'
+      ? Math.max(CONTINUOUS_MIN_WIDTH - continuousPageMargin * 2, containerClientWidth - viewPadding * 2)
+      : containerClientWidth - viewPadding * 2,
+  );
 
   $effect(() => {
     return handleDragScroll(scrollContainerEl, !editor.isPointerModeIdle);
@@ -136,7 +146,7 @@
             <HorizontalRuler
               {marginLeft}
               {marginRight}
-              padding={contentPadding}
+              padding={viewPadding}
               {pageWidth}
               thickness={rulerThickness}
               {unit}
@@ -167,17 +177,14 @@
           overflow: 'auto',
           scrollbarWidth: 'none',
           '&::-webkit-scrollbar': { display: 'none' },
-          ...(layoutMode.type === 'continuous' && { overflowX: 'hidden' }),
         })}
         {@attach (el) => {
-          const observer = new ResizeObserver((entries) => {
-            const entry = entries[0];
-            if (entry) {
-              width = Math.max(0, Math.round(entry.contentRect.width) - contentPadding * 2 + continuousPageMargin * 2);
-            }
+          const observer = new ResizeObserver(() => {
+            containerClientWidth = el.clientWidth;
           });
-
           observer.observe(el);
+          containerClientWidth = el.clientWidth;
+
           return () => observer.disconnect();
         }}
         onscroll={(e) => {
@@ -191,18 +198,20 @@
         }}
       >
         <div
+          style:min-width={layoutMode.type === 'paginated' ? 'max-content' : `${CONTINUOUS_MIN_WIDTH}px`}
           class={flex({
             direction: 'column',
             position: 'relative',
             height: 'full',
-            ...(layoutMode.type === 'paginated' && { minWidth: 'max' }),
           })}
         >
           {#if header}
             <div
-              style:width={layoutMode.type === 'paginated' ? `${pageWidth + contentPadding * 2}px` : '100%'}
-              style:max-width={layoutMode.type === 'paginated' ? 'none' : `${layoutMode.maxWidth + contentPadding * 2}px`}
-              style:padding-inline={`${contentPadding}px`}
+              style:width={layoutMode.type === 'paginated' ? `${pageWidth + viewPadding * 2}px` : '100%'}
+              style:max-width={layoutMode.type === 'paginated'
+                ? 'none'
+                : `${layoutMode.maxWidth + (viewPadding + continuousPageMargin) * 2}px`}
+              style:padding-inline={`${viewPadding + continuousPageMargin}px`}
               class={flex({
                 flexDirection: 'column',
                 flexShrink: '0',
@@ -224,7 +233,7 @@
               {@render header()}
             </div>
           {/if}
-          <View {contentPadding} {continuousPageMargin} />
+          <View />
         </div>
       </div>
       <Scrollbar scrollContainer={scrollContainerEl} />
