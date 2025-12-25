@@ -28,5 +28,13 @@ fragment TrashScreen_Entity_entity on Entity {
       excerpt
       updatedAt
     }
+
+    ... on Document {
+      id
+      title
+      excerpt
+      # TODO: add type
+      updatedAt
+    }
   }
 }

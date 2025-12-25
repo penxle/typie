@@ -1,5 +1,6 @@
 <script lang="ts">
   import { fragment, graphql } from '$graphql';
+  import TrashDocument from './TrashDocument.svelte';
   import TrashFolder from './TrashFolder.svelte';
   import TrashPost from './TrashPost.svelte';
   import type { DashboardLayout_TrashTree_TrashEntity_entity, DashboardLayout_TrashTree_TrashFolder_entity } from '$graphql';
@@ -28,6 +29,11 @@
             id
             ...DashboardLayout_TrashTree_TrashPost_post
           }
+
+          ... on Document {
+            id
+            ...DashboardLayout_TrashTree_TrashDocument_document
+          }
         }
       }
     `),
@@ -42,4 +48,6 @@
   <TrashFolder $entities={children} $folder={$entity.node} />
 {:else if $entity.node.__typename === 'Post'}
   <TrashPost $post={$entity.node} />
+{:else if $entity.node.__typename === 'Document'}
+  <TrashDocument $document={$entity.node} />
 {/if}
