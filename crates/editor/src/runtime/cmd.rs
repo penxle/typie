@@ -89,4 +89,10 @@ pub enum Cmd {
     PointerModeChanged {
         is_idle: bool,
     },
+
+    #[serde(rename_all = "camelCase")]
+    PlaceholderChanged {
+        visible: bool,
+        bounds: Option<Rect>,
+    },
 }

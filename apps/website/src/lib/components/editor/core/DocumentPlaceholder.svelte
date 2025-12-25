@@ -1,0 +1,64 @@
+<script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { flex } from '@typie/styled-system/patterns';
+  import { Icon } from '@typie/ui/components';
+  import LayoutTemplateIcon from '~icons/lucide/layout-template';
+  import { getEditor } from '$lib/editor/context';
+
+  const editor = getEditor();
+
+  let element = $state<HTMLDivElement>();
+
+  const loadTemplate = () => {
+    // TODO
+    console.log('Template click - not implemented yet');
+  };
+
+  $effect(() => {
+    if (!element) return;
+
+    const { visible, bounds } = editor.placeholder;
+    const containerEls = editor.pageContainerEls;
+
+    if (visible && bounds && containerEls[0]) {
+      containerEls[0].append(element);
+      element.style.display = 'flex';
+      element.style.top = `${bounds.y}px`;
+      element.style.left = `${bounds.x}px`;
+      element.style.width = `${bounds.width}px`;
+    } else {
+      element.style.display = 'none';
+    }
+  });
+</script>
+
+<div
+  bind:this={element}
+  class={flex({
+    position: 'absolute',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: '4px',
+    color: 'text.disabled',
+    pointerEvents: 'none',
+    userSelect: 'none',
+  })}
+>
+  <div class={css({ whiteSpace: 'pre-line' })}>내용을 입력하거나</div>
+  <button
+    class={flex({
+      alignItems: 'center',
+      gap: '4px',
+      transition: 'common',
+      pointerEvents: 'auto',
+      cursor: 'default',
+      _hover: { color: 'text.faint' },
+    })}
+    data-external-element
+    onclick={loadTemplate}
+    type="button"
+  >
+    <Icon icon={LayoutTemplateIcon} size={16} />
+    <span>템플릿 불러오기 (준비중)</span>
+  </button>
+</div>

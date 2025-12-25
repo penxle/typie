@@ -118,6 +118,11 @@ export class Editor {
   isFocused = $state(false);
   isPointerModeIdle = $state(false);
 
+  placeholder = $state({
+    visible: false,
+    bounds: null as Rect | null,
+  });
+
   typewriter = $state({
     needsScroll: false,
   });
@@ -313,6 +318,12 @@ export class Editor {
 
         case 'pointerModeChanged': {
           this.isPointerModeIdle = cmd.is_idle;
+          break;
+        }
+
+        case 'placeholderChanged': {
+          this.placeholder.visible = cmd.visible;
+          this.placeholder.bounds = cmd.bounds ?? null;
           break;
         }
       }

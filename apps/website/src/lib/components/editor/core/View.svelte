@@ -5,6 +5,7 @@
   import { typewriterPadding } from '$lib/editor/typewriter.svelte';
   import ContextMenu from './ContextMenu.svelte';
   import Cursor from './Cursor.svelte';
+  import DocumentPlaceholder from './DocumentPlaceholder.svelte';
   import Input from './Input.svelte';
   import LineHighlight from './LineHighlight.svelte';
   import Page from './Page.svelte';
@@ -149,6 +150,7 @@
   {/each}
 </div>
 
+<DocumentPlaceholder />
 <LineHighlight />
 <Cursor />
 <Input
