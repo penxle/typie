@@ -1,5 +1,5 @@
 import { ProcessBmoMentionJob } from './bmo';
-import { DocumentCompactJob, DocumentCompactScanCron, DocumentSyncCollectJob, DocumentSyncScanCron } from './document';
+import { DocumentCompactJob, DocumentCompactScanCron, DocumentIndexJob, DocumentSyncCollectJob, DocumentSyncScanCron } from './document';
 import { SendSubscriptionExpiredEmailJob, SendSubscriptionExpiringEmailJob, SendSubscriptionGracePeriodEmailJob } from './email';
 import { PostCompactJob, PostCompactScanCron, PostIndexJob, PostSyncCollectJob, PostSyncScanCron } from './post';
 import {
@@ -15,6 +15,7 @@ export const jobs = [
   PostSyncCollectJob,
   PostCompactJob,
   DocumentSyncCollectJob,
+  DocumentIndexJob,
   DocumentCompactJob,
   SubscriptionRenewalInitialJob,
   SubscriptionRenewalRetryJob,

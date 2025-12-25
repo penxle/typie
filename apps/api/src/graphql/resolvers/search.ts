@@ -4,7 +4,35 @@ import { SearchHitType } from '@/enums';
 import { meilisearch } from '@/search';
 import { assertSitePermission } from '@/utils/permission';
 import { builder } from '../builder';
-import { Post } from '../objects';
+import { Document, Post } from '../objects';
+
+/**
+ * * Types
+ */
+
+const SearchHitPost = builder.simpleObject('SearchHitPost', {
+  fields: (t) => ({
+    type: t.field({ type: SearchHitType }),
+    title: t.string({ nullable: true }),
+    subtitle: t.string({ nullable: true }),
+    text: t.string({ nullable: true }),
+    post: t.field({ type: Post }),
+  }),
+});
+
+const SearchHitDocument = builder.simpleObject('SearchHitDocument', {
+  fields: (t) => ({
+    type: t.field({ type: SearchHitType }),
+    title: t.string({ nullable: true }),
+    subtitle: t.string({ nullable: true }),
+    text: t.string({ nullable: true }),
+    document: t.field({ type: Document }),
+  }),
+});
+
+const SearchHit = builder.unionType('SearchHit', {
+  types: [SearchHitPost, SearchHitDocument],
+});
 
 /**
  * * Queries
@@ -16,17 +44,7 @@ builder.queryFields((t) => ({
       fields: (t) => ({
         totalHits: t.int(),
         hits: t.field({
-          type: [
-            builder.simpleObject('SearchHitPost', {
-              fields: (t) => ({
-                type: t.field({ type: SearchHitType }),
-                title: t.string({ nullable: true }),
-                subtitle: t.string({ nullable: true }),
-                text: t.string({ nullable: true }),
-                post: t.field({ type: Post }),
-              }),
-            }),
-          ],
+          type: [SearchHit],
         }),
       }),
     }),
@@ -57,20 +75,43 @@ builder.queryFields((t) => ({
             attributesToCrop: ['*'],
             attributesToHighlight: ['title', 'subtitle', 'text'],
           },
+          {
+            indexUid: 'documents',
+            q: args.query.trim(),
+            filter: [`siteId = ${args.siteId}`],
+            attributesToCrop: ['*'],
+            attributesToHighlight: ['title', 'subtitle', 'text'],
+          },
         ],
       });
 
       return {
         totalHits: result.estimatedTotalHits ?? 0,
-        hits: result.hits
-          .filter((hit) => hit._federation?.indexUid === 'posts')
-          .map((hit) => ({
-            type: SearchHitType.POST,
-            title: sanitizeHtml(hit._formatted?.title),
-            subtitle: sanitizeHtml(hit._formatted?.subtitle),
-            text: sanitizeHtml(hit._formatted?.text),
-            post: hit.id,
-          })),
+        hits: result.hits.map((hit) => {
+          const indexUid = hit._federation?.indexUid;
+
+          if (indexUid === 'posts') {
+            return {
+              type: SearchHitType.POST,
+              title: sanitizeHtml(hit._formatted?.title),
+              subtitle: sanitizeHtml(hit._formatted?.subtitle),
+              text: sanitizeHtml(hit._formatted?.text),
+              post: hit.id,
+            };
+          }
+
+          if (indexUid === 'documents') {
+            return {
+              type: SearchHitType.DOCUMENT,
+              title: sanitizeHtml(hit._formatted?.title),
+              subtitle: sanitizeHtml(hit._formatted?.subtitle),
+              text: sanitizeHtml(hit._formatted?.text),
+              document: hit.id,
+            };
+          }
+
+          throw new Error(`Unknown index: ${indexUid}`);
+        }),
       };
     },
   }),

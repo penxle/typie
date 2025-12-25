@@ -14,8 +14,10 @@ import {
   Entities,
   firstOrThrow,
 } from '@/db';
+import { EntityState } from '@/enums';
 import { Lock } from '@/lock';
 import { pubsub } from '@/pubsub';
+import { meilisearch } from '@/search';
 import { extractLoroDocContents } from '@/utils';
 import { enqueueJob } from '../index';
 import { defineCron, defineJob } from '../types';
@@ -204,6 +206,13 @@ export const DocumentSyncCollectJob = defineJob('document:sync:collect', async (
 
     pubsub.publish('site:update', siteId, { scope: 'entity', entityId });
     pubsub.publish('site:usage:update', siteId, null);
+
+    await enqueueJob('document:index', documentId, {
+      deduplication: {
+        id: documentId,
+        ttl: 60 * 1000,
+      },
+    });
   }
 });
 
@@ -216,6 +225,37 @@ export const DocumentSyncScanCron = defineCron('document:sync:scan', '* * * * *'
       enqueueJob('document:sync:collect', key.split(':').at(-1)!),
     ),
   );
+});
+
+export const DocumentIndexJob = defineJob('document:index', async (documentId: string) => {
+  const document = await db
+    .select({
+      id: Documents.id,
+      state: Entities.state,
+      siteId: Entities.siteId,
+      title: Documents.title,
+      subtitle: Documents.subtitle,
+      text: DocumentContents.text,
+    })
+    .from(Documents)
+    .innerJoin(DocumentContents, eq(Documents.id, DocumentContents.documentId))
+    .innerJoin(Entities, eq(Documents.entityId, Entities.id))
+    .where(eq(Documents.id, documentId))
+    .then(firstOrThrow);
+
+  if (document.state === EntityState.ACTIVE) {
+    await meilisearch.index('documents').addDocuments([
+      {
+        id: document.id,
+        siteId: document.siteId,
+        title: document.title,
+        subtitle: document.subtitle,
+        text: document.text,
+      },
+    ]);
+  } else {
+    await meilisearch.index('documents').deleteDocument(document.id);
+  }
 });
 
 export const DocumentCompactJob = defineJob('document:compact', async (documentId: string) => {
