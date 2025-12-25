@@ -8,6 +8,7 @@
   import { fragment, graphql } from '$graphql';
   import { getViewContext } from '../@split-view/context.svelte';
   import DocumentPanelInfo from './DocumentPanelInfo.svelte';
+  import DocumentPanelNote from './DocumentPanelNote.svelte';
   import DocumentPanelSettings from './DocumentPanelSettings.svelte';
   import type { DocumentPanel_document } from '$graphql';
   import type { Editor } from '$lib/editor/editor.svelte';
@@ -27,6 +28,12 @@
     graphql(`
       fragment DocumentPanel_document on Document {
         id
+
+        entity {
+          id
+          ...DocumentPanel_Note_entity
+        }
+
         ...DocumentPanel_Info_document
       }
     `),
@@ -129,6 +136,8 @@
       <DocumentPanelSettings {editor} />
     {:else if app.preference.current.panelTabByViewId[splitViewId] === 'info'}
       <DocumentPanelInfo {$document} {editor} />
+    {:else if app.preference.current.panelTabByViewId[splitViewId] === 'note'}
+      <DocumentPanelNote $entity={$document.entity} />
     {:else}
       <div
         class={flex({
