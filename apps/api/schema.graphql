@@ -548,6 +548,7 @@ type Mutation {
   updateBillingKey(input: UpdateBillingKeyInput!): UserBillingKey!
   updateBootstrap(input: UpdateBootstrapInput!): JSON!
   updateDocument(input: UpdateDocumentInput!): Document!
+  updateDocumentsOption(input: UpdateDocumentsOptionInput!): [Document!]!
   updateEmail(input: UpdateEmailInput!): Boolean!
   updateFolderOption(input: UpdateFolderOptionInput!): Folder!
   updateFoldersOption(input: UpdateFoldersOptionInput!): [Folder!]!
@@ -1007,6 +1008,12 @@ input UpdateDocumentInput {
   documentId: ID!
   subtitle: String
   title: String
+}
+
+input UpdateDocumentsOptionInput {
+  availability: EntityAvailability
+  documentIds: [ID!]!
+  visibility: EntityVisibility
 }
 
 input UpdateEmailInput {

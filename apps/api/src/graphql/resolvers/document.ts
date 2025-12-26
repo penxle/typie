@@ -18,8 +18,8 @@ import {
   TableCode,
   validateDbId,
 } from '@/db';
-import { DocumentSyncType, EntityAvailability, EntityState, EntityType, NoteState } from '@/enums';
-import { NotFoundError } from '@/errors';
+import { DocumentSyncType, EntityAvailability, EntityState, EntityType, EntityVisibility, NoteState } from '@/enums';
+import { NotFoundError, TypieError } from '@/errors';
 import { enqueueJob } from '@/mq';
 import { pubsub } from '@/pubsub';
 import {
@@ -557,6 +557,62 @@ builder.mutationFields((t) => ({
       await enqueueJob('document:index', input.documentId);
 
       return updatedDocument;
+    },
+  }),
+
+  updateDocumentsOption: t.withAuth({ session: true }).fieldWithInput({
+    type: [Document],
+    input: {
+      documentIds: t.input.idList({ validate: { items: validateDbId(TableCode.DOCUMENTS) } }),
+      availability: t.input.field({ type: EntityAvailability, required: false }),
+      visibility: t.input.field({ type: EntityVisibility, required: false }),
+    },
+    resolve: async (_, { input }, ctx) => {
+      const documents = await db
+        .select({
+          id: Documents.id,
+          siteId: Entities.siteId,
+          entityId: Entities.id,
+        })
+        .from(Documents)
+        .innerJoin(Entities, eq(Documents.entityId, Entities.id))
+        .where(and(eq(Entities.state, EntityState.ACTIVE), inArray(Documents.id, input.documentIds)));
+
+      if (documents.length === 0) {
+        throw new TypieError({ code: 'invalid_argument' });
+      }
+
+      const siteId = documents[0].siteId;
+
+      await assertSitePermission({
+        userId: ctx.session.userId,
+        siteId,
+      });
+
+      if (documents.some((doc) => doc.siteId !== siteId)) {
+        throw new TypieError({ code: 'site_mismatch' });
+      }
+
+      await db.transaction(async (tx) => {
+        if (input.availability || input.visibility) {
+          await tx
+            .update(Entities)
+            .set({
+              availability: input.availability ?? undefined,
+              visibility: input.visibility ?? undefined,
+            })
+            .where(
+              inArray(
+                Entities.id,
+                documents.map((doc) => doc.entityId),
+              ),
+            );
+        }
+      });
+
+      pubsub.publish('site:update', siteId, { scope: 'site' });
+
+      return documents.map((doc) => doc.id);
     },
   }),
 

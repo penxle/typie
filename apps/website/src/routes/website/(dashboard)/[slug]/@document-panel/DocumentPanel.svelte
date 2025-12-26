@@ -11,18 +11,19 @@
   import DocumentPanelNote from './DocumentPanelNote.svelte';
   import DocumentPanelSettings from './DocumentPanelSettings.svelte';
   import DocumentPanelTimeline from './DocumentPanelTimeline.svelte';
-  import type { DocumentPanel_document } from '$graphql';
+  import type { DocumentPanel_document, DocumentPanel_user } from '$graphql';
   import type { Editor } from '$lib/editor/editor.svelte';
 
   type Props = {
     editor: Editor;
     $document: DocumentPanel_document;
+    $user: DocumentPanel_user;
   };
 
   const minWidth = 240;
   const maxWidth = 400;
 
-  let { editor, $document: _document }: Props = $props();
+  let { editor, $document: _document, $user: _user }: Props = $props();
 
   const document = fragment(
     _document,
@@ -37,6 +38,16 @@
 
         ...DocumentPanel_Info_document
         ...DocumentPanelTimeline_document
+      }
+    `),
+  );
+
+  const user = fragment(
+    _user,
+    graphql(`
+      fragment DocumentPanel_user on User {
+        id
+        ...DocumentPanel_Info_user
       }
     `),
   );
@@ -137,7 +148,7 @@
     {#if app.preference.current.panelTabByViewId[splitViewId] === 'settings'}
       <DocumentPanelSettings {editor} />
     {:else if app.preference.current.panelTabByViewId[splitViewId] === 'info'}
-      <DocumentPanelInfo {$document} {editor} />
+      <DocumentPanelInfo {$document} {$user} {editor} />
     {:else if app.preference.current.panelTabByViewId[splitViewId] === 'note'}
       <DocumentPanelNote $entity={$document.entity} />
     {:else if app.preference.current.panelTabByViewId[splitViewId] === 'timeline'}

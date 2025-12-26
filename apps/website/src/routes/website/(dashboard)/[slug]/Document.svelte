@@ -44,6 +44,7 @@
       fragment Document_query on Query {
         me @required {
           id
+          ...DocumentPanel_user
         }
 
         entities(slugs: $slugs) {
@@ -655,7 +656,7 @@
           </div>
         </div>
 
-        <DocumentPanel $document={entity.node} {editor} />
+        <DocumentPanel $document={entity.node} $user={$query.me} {editor} />
       </div>
 
       {#if currentViewZenModeEnabled}
