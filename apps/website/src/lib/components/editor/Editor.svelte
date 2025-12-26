@@ -100,6 +100,7 @@
   });
 
   const layoutMode = $derived<LayoutMode>(editor.layout.layoutMode);
+  const showRuler = $derived(!readOnly && layoutMode.type === 'paginated');
   const pageWidth = $derived(editor.layout.pageWidth);
   const pageHeights = $derived(editor.layout.pageHeights);
   const marginTop = $derived(layoutMode.type === 'paginated' ? layoutMode.pageMarginTop : 0);
@@ -124,8 +125,8 @@
 <div class={flex({ direction: 'column', height: 'full', width: 'full' })}>
   {#if initialized}
     <div
-      style:grid-template-columns={layoutMode.type === 'paginated' ? `${rulerThickness}px 1fr` : '1fr'}
-      style:grid-template-rows={layoutMode.type === 'paginated' ? `${rulerThickness}px 1fr` : '1fr'}
+      style:grid-template-columns={showRuler ? `${rulerThickness}px 1fr` : '1fr'}
+      style:grid-template-rows={showRuler ? `${rulerThickness}px 1fr` : '1fr'}
       class={grid({
         flex: '1',
         gap: '0',
@@ -133,7 +134,7 @@
         ...(layoutMode.type === 'paginated' && { backgroundColor: 'surface.subtle' }),
       })}
     >
-      {#if layoutMode.type === 'paginated'}
+      {#if showRuler}
         <div
           class={css({
             borderRightWidth: '1px',
