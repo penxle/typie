@@ -188,6 +188,17 @@ impl Runtime {
         &self.state.doc
     }
 
+    pub fn set_read_only(&mut self, read_only: bool) {
+        if self.state.read_only != read_only {
+            self.state.read_only = read_only;
+            self.pending.enabled_actions = true;
+        }
+    }
+
+    pub fn is_read_only(&self) -> bool {
+        self.state.read_only
+    }
+
     pub fn import_updates(&mut self, updates: &[u8]) -> Result<()> {
         let old_frontiers = self.state.doc.frontiers();
         self.state.doc.import_updates(updates)?;

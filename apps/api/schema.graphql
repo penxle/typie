@@ -165,6 +165,7 @@ type DocumentView implements IDocument {
   excerpt: String!
   id: ID!
   nullableTitle: String
+  snapshot: Binary
   subtitle: String
   title: String!
   updatedAt: DateTime!

@@ -24,6 +24,8 @@
   }
 
   const handleInput = (e: Event) => {
+    if (editor.readOnly) return;
+
     const value = inputEl?.value;
     if (!inputEl || !value || (e as InputEvent).isComposing) return;
 
@@ -78,6 +80,8 @@
   };
 
   const handleCut = (e: ClipboardEvent) => {
+    if (editor.readOnly) return;
+
     const data = editor.getClipboardData();
     if (!data) return;
 
@@ -89,6 +93,8 @@
   };
 
   const handlePaste = (e: ClipboardEvent) => {
+    if (editor.readOnly) return;
+
     e.preventDefault();
 
     const fragment = e.clipboardData?.getData(FRAGMENT_MIME) || undefined;
@@ -99,17 +105,23 @@
   };
 
   const handleCompositionStart = (e: CompositionEvent) => {
+    if (editor.readOnly) return;
+
     const text = e.data || '';
     editor.dispatch({ type: 'compositionStart', text });
   };
 
   const handleCompositionUpdate = (e: CompositionEvent) => {
+    if (editor.readOnly) return;
+
     const text = e.data || '';
     editor.dispatch({ type: 'compositionUpdate', text });
     editor.typewriter.needsScroll = true;
   };
 
   const handleCompositionEnd = (e: CompositionEvent) => {
+    if (editor.readOnly) return;
+
     if (inputEl) inputEl.value = '';
     editor.dispatch({ type: 'input', text: e.data || '' });
     editor.dispatch({ type: 'compositionEnd' });

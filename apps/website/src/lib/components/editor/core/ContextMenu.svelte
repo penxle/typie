@@ -48,34 +48,36 @@
         </span>{/snippet}
       복사
     </MenuItem>
-    <MenuItem
-      disabled={editor.selection.collapsed}
-      icon={ScissorsIcon}
-      onclick={() => {
-        editor.handleCut();
-        close();
-      }}
-    >
-      {#snippet suffix()}<span class={css(shortcutStyle)}>
-          <span class={css(modKeyStyle)}>{modKey}</span>
-          X
-        </span>{/snippet}
-      잘라내기
-    </MenuItem>
-    <MenuItem
-      icon={ClipboardPasteIcon}
-      onclick={() => {
-        editor.handlePaste();
-        close();
-      }}
-    >
-      {#snippet suffix()}<span class={css(shortcutStyle)}>
-          <span class={css(modKeyStyle)}>{modKey}</span>
-          V
-        </span>{/snippet}
-      붙여넣기
-    </MenuItem>
-    <HorizontalDivider color="secondary" />
+    {#if !editor.readOnly}
+      <MenuItem
+        disabled={editor.selection.collapsed}
+        icon={ScissorsIcon}
+        onclick={() => {
+          editor.handleCut();
+          close();
+        }}
+      >
+        {#snippet suffix()}<span class={css(shortcutStyle)}>
+            <span class={css(modKeyStyle)}>{modKey}</span>
+            X
+          </span>{/snippet}
+        잘라내기
+      </MenuItem>
+      <MenuItem
+        icon={ClipboardPasteIcon}
+        onclick={() => {
+          editor.handlePaste();
+          close();
+        }}
+      >
+        {#snippet suffix()}<span class={css(shortcutStyle)}>
+            <span class={css(modKeyStyle)}>{modKey}</span>
+            V
+          </span>{/snippet}
+        붙여넣기
+      </MenuItem>
+      <HorizontalDivider color="secondary" />
+    {/if}
     <MenuItem
       icon={SquareDashedIcon}
       onclick={() => {

@@ -13,6 +13,7 @@ pub struct State {
     pub frontiers: Frontiers,
     pub garbage_ids: Vec<NodeId>,
     pub pending_loro_commit: bool,
+    pub read_only: bool,
 }
 
 impl State {
@@ -27,6 +28,7 @@ impl State {
             frontiers,
             garbage_ids: Vec::new(),
             pending_loro_commit: false,
+            read_only: false,
         }
     }
 }

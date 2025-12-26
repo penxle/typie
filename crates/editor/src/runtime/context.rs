@@ -100,7 +100,7 @@ impl<'a> Context<'a> {
             ContextKey::RangeSelection => !self.state.selection.is_collapsed(),
             ContextKey::CanUndo => self.undo_manager.can_undo(),
             ContextKey::CanRedo => self.undo_manager.can_redo(),
-            ContextKey::CanEdit => true, // TODO: 읽기 전용 구현
+            ContextKey::CanEdit => !self.state.read_only,
             ContextKey::InComposition => self.state.preedit.is_some(),
             ContextKey::HasParagraphTextInSelection => self.has_paragraph_text_in_selection(),
             ContextKey::InParagraph => self.in_paragraph(),

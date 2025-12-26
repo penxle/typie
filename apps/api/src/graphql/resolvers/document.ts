@@ -1,6 +1,7 @@
 import dayjs from 'dayjs';
 import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, sum } from 'drizzle-orm';
 import { filter, pipe, Repeater } from 'graphql-yoga';
+import { LoroDoc } from 'loro-crdt';
 import { redis } from '@/cache';
 import {
   db,
@@ -145,6 +146,32 @@ DocumentView.implement({
   interfaces: [IDocument],
   fields: (t) => ({
     entity: t.expose('entityId', { type: EntityView }),
+
+    snapshot: t.field({
+      type: 'Binary',
+      nullable: true,
+      resolve: async (self, _, ctx) => {
+        const loader = ctx.loader({
+          name: 'DocumentView.snapshot',
+          load: async (ids: string[]) => {
+            return await db
+              .select({ documentId: DocumentContents.documentId, snapshot: DocumentContents.snapshot })
+              .from(DocumentContents)
+              .where(inArray(DocumentContents.documentId, ids));
+          },
+          key: ({ documentId }: { documentId: string }) => documentId,
+        });
+
+        const content = await loader.load(self.id);
+        if (!content?.snapshot) {
+          return null;
+        }
+
+        const doc = new LoroDoc();
+        doc.import(content.snapshot);
+        return Buffer.from(doc.export({ mode: 'shallow-snapshot', frontiers: doc.oplogFrontiers() }));
+      },
+    }),
   }),
 });
 

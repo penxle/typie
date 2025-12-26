@@ -13,12 +13,19 @@ import type { Cmd, ExternalElement, LayoutMode, Mark, MarkType, Message, Rect, S
 const CLICK_INTERVAL = 500;
 const CLICK_DISTANCE = 5;
 
-const EMPTY_DRAG_IMAGE = new Image();
-EMPTY_DRAG_IMAGE.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+let EMPTY_DRAG_IMAGE: HTMLImageElement | null = null;
+const getEmptyDragImage = () => {
+  if (!EMPTY_DRAG_IMAGE && typeof Image !== 'undefined') {
+    EMPTY_DRAG_IMAGE = new Image();
+    EMPTY_DRAG_IMAGE.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+  }
+  return EMPTY_DRAG_IMAGE;
+};
 
 export type EditorOptions = {
   theme: ThemeColors;
   snapshot?: Uint8Array;
+  readOnly?: boolean;
   onDocChanged?: () => void;
   onExitedDocumentStart?: () => void;
 };
@@ -117,6 +124,7 @@ export class Editor {
 
   isFocused = $state(false);
   isPointerModeIdle = $state(false);
+  readOnly = $state(false);
 
   placeholder = $state({
     visible: false,
@@ -189,6 +197,10 @@ export class Editor {
     });
 
     this.dispatch({ type: 'navigate', direction: 'documentStart', extend: false });
+
+    if (options.readOnly) {
+      this.setReadOnly(true);
+    }
 
     this.#start();
     this.#readyResolve?.();
@@ -517,7 +529,7 @@ export class Editor {
     const rect = pageElement.getBoundingClientRect();
     const relX = e.clientX - rect.left;
     const relY = e.clientY - rect.top;
-    this.isDraggable = this.canDragAt(pageIdx, relX, relY);
+    this.isDraggable = !this.readOnly && this.canDragAt(pageIdx, relX, relY);
 
     if (e.button === 0) {
       if (!this.isDraggable) {
@@ -731,7 +743,7 @@ export class Editor {
 
     const rect = pageElement.getBoundingClientRect();
 
-    if (!this.canDragAt(pageIdx, x, y)) {
+    if (this.readOnly || !this.canDragAt(pageIdx, x, y)) {
       e.preventDefault();
       return;
     }
@@ -758,7 +770,10 @@ export class Editor {
         const cleanup = () => dragImage.element.remove();
         setTimeout(cleanup, 0);
       } else {
-        e.dataTransfer.setDragImage(EMPTY_DRAG_IMAGE, 0, 0);
+        const emptyImage = getEmptyDragImage();
+        if (emptyImage) {
+          e.dataTransfer.setDragImage(emptyImage, 0, 0);
+        }
       }
     }
 
@@ -928,6 +943,15 @@ export class Editor {
 
   can(messageType: string): boolean {
     return this.enabledActions.has(messageType);
+  }
+
+  setReadOnly(readOnly: boolean): void {
+    this.readOnly = readOnly;
+    this.#wasmEditor?.setReadOnly(readOnly);
+  }
+
+  isReadOnly(): boolean {
+    return this.#wasmEditor?.isReadOnly() ?? this.readOnly;
   }
 
   canDragAt(pageIdx: number, x: number, y: number): boolean {

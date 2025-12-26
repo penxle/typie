@@ -66,7 +66,7 @@
   setContext('close', close);
 
   $effect(() => {
-    if (open) {
+    if (open && app) {
       return untrack(() => {
         app.state.openMenuCount++;
         return () => {
