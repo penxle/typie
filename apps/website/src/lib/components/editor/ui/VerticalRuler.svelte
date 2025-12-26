@@ -63,7 +63,7 @@
               position: 'absolute',
               right: '0',
               height: '1px',
-              backgroundColor: inMargin ? 'gray.400' : 'gray.600',
+              backgroundColor: inMargin ? 'text.disabled' : 'text.muted',
             })}
           ></div>
           {#if tick.label}
@@ -91,7 +91,7 @@
               position: 'absolute',
               right: '0',
               height: '1px',
-              backgroundColor: inMargin ? 'gray.300' : 'gray.500',
+              backgroundColor: inMargin ? 'border.strong' : 'text.faint',
             })}
           ></div>
         {/if}
