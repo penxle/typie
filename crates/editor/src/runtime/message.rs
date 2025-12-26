@@ -1,5 +1,5 @@
 use super::effect::Effect;
-use super::{ContextKey, Runtime, When};
+use super::{Context, ContextKey, Runtime, When};
 use crate::model::{HorizontalRuleVariant, LayoutMode, Mark, TextAlign};
 use crate::types::Theme;
 use serde::{Deserialize, Serialize};
@@ -70,6 +70,11 @@ macro_rules! define_messages {
             }
 
             pub fn handle(self, runtime: &mut Runtime) -> Vec<Effect> {
+                let ctx = Context::new(&runtime.state, &runtime.undo_manager);
+                if !self.when().evaluate(&ctx) {
+                    return Vec::new();
+                }
+
                 match self {
                     $(
                         Self::$name $( { $($field),* } )? => {

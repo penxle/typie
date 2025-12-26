@@ -73,6 +73,7 @@ observablehq
 oklch
 on+
 ondelete
+oplog
 oslllo
 penxle
 pgbouncer

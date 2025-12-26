@@ -25,6 +25,7 @@
     unit?: 'px' | 'cm';
     rulerThickness?: number;
     snapshot?: Uint8Array;
+    readOnly?: boolean;
     editor?: Editor;
     onDocChanged?: () => void;
     onExitedDocumentStart?: () => void;
@@ -36,6 +37,7 @@
     unit = 'px',
     rulerThickness = 24,
     snapshot,
+    readOnly = false,
     editor: externalEditor,
     onDocChanged,
     onExitedDocumentStart,
@@ -60,7 +62,7 @@
 
   $effect(() => {
     untrack(() => {
-      editor.initialize({ theme: getEditorTheme(theme.effectiveTheme), snapshot, onDocChanged, onExitedDocumentStart });
+      editor.initialize({ theme: getEditorTheme(theme.effectiveTheme), snapshot, readOnly, onDocChanged, onExitedDocumentStart });
     });
 
     return () => {

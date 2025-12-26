@@ -437,6 +437,16 @@ impl Editor {
 
         Ok(count)
     }
+
+    #[wasm_bindgen(js_name = setReadOnly)]
+    pub fn set_read_only(&mut self, read_only: bool) {
+        self.runtime.set_read_only(read_only);
+    }
+
+    #[wasm_bindgen(js_name = isReadOnly)]
+    pub fn is_read_only(&self) -> bool {
+        self.runtime.is_read_only()
+    }
 }
 
 fn count_all(text: &str) -> (u32, u32, u32) {

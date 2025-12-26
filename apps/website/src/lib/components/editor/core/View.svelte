@@ -149,9 +149,12 @@
   {/each}
 </div>
 
-<DocumentPlaceholder />
-<LineHighlight />
-<Cursor />
+{#if !editor.readOnly}
+  <DocumentPlaceholder />
+  <LineHighlight />
+  <Cursor />
+{/if}
+
 <Input
   bind:this={inputComponent}
   onBlur={(e) => {
@@ -164,4 +167,5 @@
     editor.isFocused = true;
   }}
 />
+
 <ContextMenu />

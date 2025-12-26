@@ -5,6 +5,12 @@ import { findScroller } from './utils';
 
 export function typewriterPadding(node: HTMLElement, defaultPadding: number) {
   const editor = getEditor();
+
+  if (editor.readOnly) {
+    node.style.paddingBottom = `${defaultPadding}px`;
+    return;
+  }
+
   const app = getAppContext();
 
   const scroller = findScroller(node);

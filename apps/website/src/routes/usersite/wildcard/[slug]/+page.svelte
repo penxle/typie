@@ -1,5 +1,6 @@
 <script lang="ts">
   import { graphql } from '$graphql';
+  import DocumentView from './DocumentView.svelte';
   import FolderView from './FolderView.svelte';
   import PostView from './PostView.svelte';
 
@@ -18,6 +19,7 @@
           __typename
         }
 
+        ...UsersiteWildcardSlugPage_DocumentView_entityView
         ...UsersiteWildcardSlugPage_FolderView_entityView
         ...UsersiteWildcardSlugPage_PostView_entityView
       }
@@ -27,6 +29,8 @@
 
 {#if $query.entityView.node.__typename === 'PostView'}
   <PostView $entityView={$query.entityView} $user={$query.me} />
+{:else if $query.entityView.node.__typename === 'DocumentView'}
+  <DocumentView $entityView={$query.entityView} />
 {:else}
   <FolderView $entityView={$query.entityView} />
 {/if}
