@@ -77,6 +77,12 @@ impl Doc {
         Self { inner }
     }
 
+    pub fn fork(&self) -> Self {
+        Self {
+            inner: self.inner.fork(),
+        }
+    }
+
     pub fn loro_doc(&self) -> &LoroDoc {
         &self.inner.loro
     }
@@ -125,6 +131,20 @@ impl Doc {
     pub fn revert_to(&self, frontiers: &Frontiers) -> Result<()> {
         self.inner.loro.revert_to(frontiers)?;
         Ok(())
+    }
+
+    pub fn checkout(&self, frontiers: &Frontiers) -> Result<()> {
+        self.inner.loro.checkout(frontiers)?;
+        Ok(())
+    }
+
+    pub fn checkout_to_latest(&self) -> Result<()> {
+        self.inner.loro.checkout_to_latest();
+        Ok(())
+    }
+
+    pub fn is_detached(&self) -> bool {
+        self.inner.loro.is_detached()
     }
 
     pub fn schema(&self) -> &Schema {

@@ -284,6 +284,33 @@ impl Editor {
         self.runtime.commit_sync(version.inner);
     }
 
+    #[wasm_bindgen(js_name = checkout)]
+    pub fn checkout(&mut self, version: Vec<u8>) -> Result<(), JsValue> {
+        self.runtime.checkout(&version).map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    #[wasm_bindgen(js_name = checkoutToLatest)]
+    pub fn checkout_to_latest(&mut self) -> Result<(), JsValue> {
+        self.runtime
+            .checkout_to_latest()
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    #[wasm_bindgen(js_name = isDetached)]
+    pub fn is_detached(&self) -> bool {
+        self.runtime.is_detached()
+    }
+
+    #[wasm_bindgen(js_name = revertTo)]
+    pub fn revert_to(&mut self, version: Vec<u8>) -> Result<(), JsValue> {
+        self.runtime
+            .revert_to(&version)
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
     #[wasm_bindgen(js_name = canDragAt)]
     pub fn can_drag_at(&self, page_idx: usize, x: f32, y: f32) -> bool {
         self.runtime.can_drag_at(page_idx, x, y)
@@ -393,6 +420,22 @@ impl Editor {
             selection_without_whitespace: sel_counts.1,
             selection_without_whitespace_and_punctuation: sel_counts.2,
         }
+    }
+
+    #[wasm_bindgen(js_name = getCharacterCountAtVersion)]
+    pub fn get_character_count_at_version(&self, version: Vec<u8>) -> Result<u32, JsValue> {
+        let vv = loro::VersionVector::decode(&version).map_err(|e| e.to_string())?;
+        let target_frontiers = self.runtime.doc().loro_doc().vv_to_frontiers(&vv);
+
+        let forked_doc = self.runtime.doc().fork();
+        forked_doc
+            .checkout(&target_frontiers)
+            .map_err(|e| e.to_string())?;
+
+        let text = forked_doc.to_plain_text();
+        let count = count_all(&text).0;
+
+        Ok(count)
     }
 }
 

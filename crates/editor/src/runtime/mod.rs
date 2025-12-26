@@ -227,6 +227,32 @@ impl Runtime {
         self.last_synced_version = new_version;
     }
 
+    pub fn checkout(&mut self, version: &[u8]) -> Result<()> {
+        let vv = loro::VersionVector::decode(version)?;
+        let frontiers = self.state.doc.loro_doc().vv_to_frontiers(&vv);
+        self.state.doc.checkout(&frontiers)?;
+        self.handle_external_doc_change();
+        Ok(())
+    }
+
+    pub fn checkout_to_latest(&mut self) -> Result<()> {
+        self.state.doc.checkout_to_latest()?;
+        self.handle_external_doc_change();
+        Ok(())
+    }
+
+    pub fn is_detached(&self) -> bool {
+        self.state.doc.is_detached()
+    }
+
+    pub fn revert_to(&mut self, version: &[u8]) -> Result<()> {
+        let vv = loro::VersionVector::decode(version)?;
+        let frontiers = self.state.doc.loro_doc().vv_to_frontiers(&vv);
+        self.state.doc.revert_to(&frontiers)?;
+        self.handle_external_doc_change();
+        Ok(())
+    }
+
     fn handle_external_doc_change(&mut self) {
         // TODO: 최적화?
         self.layout_cache.borrow_mut().invalidate_all();

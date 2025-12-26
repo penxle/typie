@@ -135,6 +135,7 @@ type Document implements IDocument {
   subtitle: String
   title: String!
   updatedAt: DateTime!
+  versions: [DocumentVersion!]!
   view: DocumentView!
 }
 
@@ -150,6 +151,12 @@ enum DocumentSyncType {
   PRESENCE
   UPDATE
   VECTOR
+}
+
+type DocumentVersion {
+  createdAt: DateTime!
+  id: ID!
+  version: Binary!
 }
 
 type DocumentView implements IDocument {

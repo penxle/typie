@@ -19,8 +19,10 @@
 
     const { visible, bounds } = editor.placeholder;
     const containerEls = editor.pageContainerEls;
+    const isDetached = editor.isDetached();
 
-    if (visible && bounds && containerEls[0]) {
+    if (visible && bounds && containerEls[0] && !isDetached) {
+      // TODO: isDetached 대신 읽기 모드인지 검사?
       containerEls[0].append(element);
       element.style.display = 'flex';
       element.style.top = `${bounds.y}px`;

@@ -64,6 +64,7 @@ export const Plan = createObjectRef('Plan', T.Plans);
 export const Post = createObjectRef('Post', T.Posts);
 export const PostReaction = createObjectRef('PostReaction', T.PostReactions);
 export const PostSnapshot = createObjectRef('PostSnapshot', T.PostSnapshots);
+export const DocumentVersion = createObjectRef('DocumentVersion', T.DocumentVersions);
 export const Referral = createObjectRef('Referral', T.Referrals);
 export const Site = createObjectRef('Site', T.Sites);
 export const Subscription = createObjectRef('Subscription_', T.Subscriptions);
