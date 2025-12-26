@@ -402,6 +402,26 @@ export class Editor {
     this.#wasmEditor?.importUpdatesBatch(updatesBatch);
   }
 
+  checkout(version: Uint8Array): void {
+    this.#wasmEditor?.checkout(version);
+  }
+
+  checkoutToLatest(): void {
+    this.#wasmEditor?.checkoutToLatest();
+  }
+
+  isDetached(): boolean {
+    return this.#wasmEditor?.isDetached() ?? false;
+  }
+
+  getCharacterCountAtVersion(version: Uint8Array): number | undefined {
+    return this.#wasmEditor?.getCharacterCountAtVersion(version);
+  }
+
+  revertTo(version: Uint8Array): void {
+    this.#wasmEditor?.revertTo(version);
+  }
+
   inspectState(): string | undefined {
     return this.#wasmEditor?.inspectState();
   }

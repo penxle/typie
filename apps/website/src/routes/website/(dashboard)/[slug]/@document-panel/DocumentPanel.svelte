@@ -10,6 +10,7 @@
   import DocumentPanelInfo from './DocumentPanelInfo.svelte';
   import DocumentPanelNote from './DocumentPanelNote.svelte';
   import DocumentPanelSettings from './DocumentPanelSettings.svelte';
+  import DocumentPanelTimeline from './DocumentPanelTimeline.svelte';
   import type { DocumentPanel_document } from '$graphql';
   import type { Editor } from '$lib/editor/editor.svelte';
 
@@ -35,6 +36,7 @@
         }
 
         ...DocumentPanel_Info_document
+        ...DocumentPanelTimeline_document
       }
     `),
   );
@@ -138,6 +140,8 @@
       <DocumentPanelInfo {$document} {editor} />
     {:else if app.preference.current.panelTabByViewId[splitViewId] === 'note'}
       <DocumentPanelNote $entity={$document.entity} />
+    {:else if app.preference.current.panelTabByViewId[splitViewId] === 'timeline'}
+      <DocumentPanelTimeline {$document} {editor} />
     {:else}
       <div
         class={flex({

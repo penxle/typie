@@ -14,6 +14,13 @@ impl DocInner {
         Self { loro, schema }
     }
 
+    pub fn fork(&self) -> Self {
+        Self {
+            loro: self.loro.fork(),
+            schema: self.schema.clone(),
+        }
+    }
+
     pub fn get_node_map(&self, node_id: NodeId) -> Option<LoroMap> {
         let nodes = self.loro.get_map("nodes");
         nodes

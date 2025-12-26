@@ -32,7 +32,7 @@ import {
 import { assertSitePermission } from '@/utils/permission';
 import { assertPlanRule } from '@/utils/plan';
 import { builder } from '../builder';
-import { CharacterCountChange, Document, DocumentView, Entity, EntityView, IDocument, isTypeOf } from '../objects';
+import { CharacterCountChange, Document, DocumentVersion, DocumentView, Entity, EntityView, IDocument, isTypeOf } from '../objects';
 
 IDocument.implement({
   fields: (t) => ({
@@ -126,6 +126,17 @@ Document.implement({
     }),
 
     entity: t.expose('entityId', { type: Entity }),
+
+    versions: t.field({
+      type: [DocumentVersion],
+      resolve: async (self) => {
+        return await db
+          .select()
+          .from(DocumentVersions)
+          .where(eq(DocumentVersions.documentId, self.id))
+          .orderBy(asc(DocumentVersions.createdAt), asc(DocumentVersions.order));
+      },
+    }),
   }),
 });
 
@@ -134,6 +145,15 @@ DocumentView.implement({
   interfaces: [IDocument],
   fields: (t) => ({
     entity: t.expose('entityId', { type: EntityView }),
+  }),
+});
+
+DocumentVersion.implement({
+  isTypeOf: isTypeOf(TableCode.DOCUMENT_VERSIONS),
+  fields: (t) => ({
+    id: t.exposeID('id'),
+    version: t.field({ type: 'Binary', resolve: (self) => self.version }),
+    createdAt: t.expose('createdAt', { type: 'DateTime' }),
   }),
 });
 
