@@ -3,6 +3,7 @@
   import { Modal } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { graphql } from '$graphql';
+  import Document from './Document.svelte';
   import Folder from './Folder.svelte';
   import Post from './Post.svelte';
 
@@ -25,6 +26,12 @@
             id
 
             ...DashboardLayout_Share_Post_post
+          }
+
+          ... on Document {
+            id
+
+            ...DashboardLayout_Share_Document_document
           }
         }
       }
@@ -63,11 +70,14 @@
     {@const entities = $entitiesQuery.entities}
     {@const allFolders = entities.every((e) => e.type === 'FOLDER')}
     {@const allPosts = entities.every((e) => e.type === 'POST')}
+    {@const allDocuments = entities.every((e) => e.type === 'DOCUMENT')}
 
     {#if allFolders}
       <Folder $folders={$entitiesQuery.entities.map((e) => e.node).filter((e) => e.__typename === 'Folder')} />
     {:else if allPosts}
       <Post $posts={$entitiesQuery.entities.map((e) => e.node).filter((e) => e.__typename === 'Post')} />
+    {:else if allDocuments}
+      <Document $documents={$entitiesQuery.entities.map((e) => e.node).filter((e) => e.__typename === 'Document')} />
     {/if}
   {/if}
 </Modal>
