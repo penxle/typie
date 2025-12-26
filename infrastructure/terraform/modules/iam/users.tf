@@ -9,8 +9,8 @@ resource "aws_iam_user_policy" "external_secrets" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect = "Allow"
-        Action = "ssm:GetParameter*"
+        Effect   = "Allow"
+        Action   = "ssm:GetParameter*"
         Resource = "*"
       }
     ]
@@ -101,7 +101,9 @@ resource "aws_iam_user_policy" "api" {
           "arn:aws:s3:::typie-usercontents",
           "arn:aws:s3:::typie-usercontents/*",
           "arn:aws:s3:::typie-misc",
-          "arn:aws:s3:::typie-misc/*"
+          "arn:aws:s3:::typie-misc/*",
+          "arn:aws:s3:::typie-config",
+          "arn:aws:s3:::typie-config/*"
         ]
       },
       {
