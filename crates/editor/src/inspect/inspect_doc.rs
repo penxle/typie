@@ -127,7 +127,7 @@ fn format_node_info(node: &NodeRef) -> String {
             format!("FoldContent {}", id)
         }
         Node::Callout(callout_node) => {
-            format!("Callout {} type={:?}", id, callout_node.callout_type)
+            format!("Callout {} variant={:?}", id, callout_node.variant)
         }
     }
 }

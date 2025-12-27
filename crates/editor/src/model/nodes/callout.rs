@@ -19,7 +19,7 @@ pub const CALLOUT_BORDER_WIDTH: f32 = 1.0;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, Tsify)]
 #[serde(rename_all = "snake_case")]
-pub enum CalloutType {
+pub enum CalloutVariant {
     #[default]
     Info,
     Success,
@@ -27,43 +27,43 @@ pub enum CalloutType {
     Danger,
 }
 
-impl CalloutType {
+impl CalloutVariant {
     pub fn from_str(s: &str) -> Self {
         match s {
-            "success" => CalloutType::Success,
-            "warning" => CalloutType::Warning,
-            "danger" => CalloutType::Danger,
-            _ => CalloutType::Info,
+            "success" => CalloutVariant::Success,
+            "warning" => CalloutVariant::Warning,
+            "danger" => CalloutVariant::Danger,
+            _ => CalloutVariant::Info,
         }
     }
 
     pub fn as_str(&self) -> &'static str {
         match self {
-            CalloutType::Info => "info",
-            CalloutType::Success => "success",
-            CalloutType::Warning => "warning",
-            CalloutType::Danger => "danger",
+            CalloutVariant::Info => "info",
+            CalloutVariant::Success => "success",
+            CalloutVariant::Warning => "warning",
+            CalloutVariant::Danger => "danger",
         }
     }
 
     pub fn next(&self) -> Self {
         match self {
-            CalloutType::Info => CalloutType::Success,
-            CalloutType::Success => CalloutType::Warning,
-            CalloutType::Warning => CalloutType::Danger,
-            CalloutType::Danger => CalloutType::Info,
+            CalloutVariant::Info => CalloutVariant::Success,
+            CalloutVariant::Success => CalloutVariant::Warning,
+            CalloutVariant::Warning => CalloutVariant::Danger,
+            CalloutVariant::Danger => CalloutVariant::Info,
         }
     }
 }
 
-impl crate::model::Codec for CalloutType {
+impl crate::model::Codec for CalloutVariant {
     fn to_value(&self) -> Option<loro::LoroValue> {
         Some(loro::LoroValue::String(self.as_str().to_string().into()))
     }
 
     fn from_value(value: loro::LoroValue) -> anyhow::Result<Self> {
         match value {
-            loro::LoroValue::String(s) => Ok(CalloutType::from_str(&s)),
+            loro::LoroValue::String(s) => Ok(CalloutVariant::from_str(&s)),
             _ => anyhow::bail!("value not string"),
         }
     }
@@ -72,7 +72,7 @@ impl crate::model::Codec for CalloutType {
 #[derive(Debug, Clone, Default, PartialEq, Hash, Serialize, Deserialize, Codec, Tsify)]
 pub struct CalloutNode {
     #[serde(default)]
-    pub callout_type: CalloutType,
+    pub variant: CalloutVariant,
 }
 
 impl NodeHtmlCodec for CalloutNode {
@@ -80,7 +80,7 @@ impl NodeHtmlCodec for CalloutNode {
         Some(
             DomSpec::el("div")
                 .attr("class", "callout")
-                .attr("data-type", self.callout_type.as_str())
+                .attr("data-variant", self.variant.as_str())
                 .hole(),
         )
     }
@@ -91,12 +91,12 @@ impl NodeHtmlCodec for CalloutNode {
             55,
             |elem| elem.value().attr("class") == Some("callout"),
             |elem| {
-                let callout_type = elem
+                let variant = elem
                     .value()
-                    .attr("data-type")
-                    .map(CalloutType::from_str)
+                    .attr("data-variant")
+                    .map(CalloutVariant::from_str)
                     .unwrap_or_default();
-                Some(Node::Callout(CalloutNode { callout_type }))
+                Some(Node::Callout(CalloutNode { variant }))
             },
         )]
     }
@@ -140,7 +140,7 @@ impl Layout for CalloutNode {
 
         let icon_element = CalloutIconElement::new(
             Size::new(ICON_WIDTH, ICON_HEIGHT),
-            self.callout_type,
+            self.variant,
             node_id,
         );
 
@@ -175,7 +175,7 @@ impl Layout for CalloutNode {
         }
 
         let background_element =
-            CalloutBackgroundElement::new(total_size, self.callout_type, node_id, SplitEdges::default());
+            CalloutBackgroundElement::new(total_size, self.variant, node_id, SplitEdges::default());
 
         let background_wrapper = PositionedNode {
             position: Point::new(0.0, 0.0),

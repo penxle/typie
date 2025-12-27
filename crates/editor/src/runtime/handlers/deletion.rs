@@ -143,7 +143,7 @@ impl Runtime {
 #[cfg(test)]
 mod tests {
     use crate::{
-        model::CalloutType,
+        model::CalloutVariant,
         runtime::{Effect, Message},
     };
 
@@ -563,7 +563,7 @@ mod tests {
                 @n1 paragraph {
                     text { "outside" }
                 }
-                @callout callout(callout_type: CalloutType::Success,) {
+                @callout callout(variant: CalloutVariant::Success,) {
                     @n2 paragraph {
                         text { "line 1" }
                     }
@@ -610,7 +610,7 @@ mod tests {
                 @n1 paragraph {
                     text { "out1" }
                 }
-                callout(callout_type: CalloutType::Success,) {
+                callout(variant: CalloutVariant::Success,) {
                     paragraph {
                         text { "line 2" }
                     }

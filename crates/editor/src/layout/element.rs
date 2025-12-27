@@ -159,7 +159,7 @@ impl Element {
             Element::CalloutBackground(e) => {
                 Some(Element::CalloutBackground(CalloutBackgroundElement::new(
                     Size::new(e.size.width, new_height),
-                    e.callout_type,
+                    e.variant,
                     e.node_id,
                     split_edges,
                 )))
@@ -176,13 +176,13 @@ impl Element {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{CalloutType, NodeId};
+    use crate::model::{CalloutVariant, NodeId};
 
     fn all_wrapper_elements() -> Vec<Element> {
         vec![
             Element::CalloutBackground(CalloutBackgroundElement::new(
                 Size::new(100.0, 100.0),
-                CalloutType::Info,
+                CalloutVariant::Info,
                 NodeId::new(),
                 SplitEdges::default(),
             )),

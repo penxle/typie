@@ -2,7 +2,7 @@ use crate::model::{Node, NodeId};
 use crate::runtime::{Effect, Runtime};
 
 impl Runtime {
-    pub(crate) fn cycle_callout_type(&mut self, node_id: NodeId) -> Vec<Effect> {
+    pub(crate) fn cycle_callout_variant(&mut self, node_id: NodeId) -> Vec<Effect> {
         let Some(node_ref) = self.state.doc.node(node_id) else {
             return vec![];
         };
@@ -11,14 +11,14 @@ impl Runtime {
             return vec![];
         };
 
-        let next_type = callout.callout_type.next();
+        let next_type = callout.variant.next();
 
         if let Err(e) = node_ref.as_mut().update(|node| {
             if let Node::Callout(c) = node {
-                c.callout_type = next_type;
+                c.variant = next_type;
             }
         }) {
-            eprintln!("Failed to cycle callout type: {:?}", e);
+            eprintln!("Failed to cycle callout variant: {:?}", e);
             return vec![];
         }
 
