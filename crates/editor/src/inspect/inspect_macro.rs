@@ -153,8 +153,8 @@ fn format_node(node: NodeRef, indent_level: usize, labeler: &Labeler, output: &m
         }
         Node::Callout(callout) => {
             let attrs = format_attributes(&[(
-                "callout_type",
-                format!("CalloutType::{:?}", callout.callout_type),
+                "variant",
+                format!("CalloutVariant::{:?}", callout.variant),
             )]);
             format_container_node(
                 &format!("{prefix}callout{attrs}"),
@@ -590,8 +590,8 @@ fn format_fragment_node(
         }
         Node::Callout(callout) => {
             let attrs = format_attributes(&[(
-                "callout_type",
-                format!("CalloutType::{:?}", callout.callout_type),
+                "variant",
+                format!("CalloutVariant::{:?}", callout.variant),
             )]);
             format_fragment_container_node(
                 &format!("callout{attrs}"),

@@ -1,6 +1,6 @@
 use crate::layout::elements::SplitEdges;
 use crate::layout::elements::{CalloutBackgroundElement, CalloutIconElement};
-use crate::model::CalloutType;
+use crate::model::CalloutVariant;
 use crate::model::{CALLOUT_BORDER_RADIUS, CALLOUT_BORDER_WIDTH};
 use crate::render::{GlyphRenderer, Render, RenderContext};
 use macros::svg_icon_path;
@@ -17,7 +17,7 @@ impl Render for CalloutBackgroundElement {
         transform: Transform,
         ctx: &RenderContext,
     ) {
-        let color_key = format!("ui.callout.{}", self.callout_type.as_str());
+        let color_key = format!("ui.callout.{}", self.variant.as_str());
         let border_color = ctx.theme.color(&color_key);
         let bg_color = ctx.theme.color_with_alpha(&color_key, 8);
 
@@ -77,7 +77,7 @@ impl Render for CalloutIconElement {
         transform: Transform,
         ctx: &RenderContext,
     ) {
-        let color_key = format!("ui.callout.{}", self.callout_type.as_str());
+        let color_key = format!("ui.callout.{}", self.variant.as_str());
         let icon_color = ctx.theme.color(&color_key);
 
         let mut icon_paint = Paint::default();
@@ -94,11 +94,11 @@ impl Render for CalloutIconElement {
         let cx = self.size.width / 2.0;
         let cy = self.size.height / 2.0;
 
-        let path = match self.callout_type {
-            CalloutType::Info => svg_icon_path!("lucide/info", ICON_SIZE, cx, cy),
-            CalloutType::Success => svg_icon_path!("lucide/circle-check", ICON_SIZE, cx, cy),
-            CalloutType::Warning => svg_icon_path!("lucide/circle-alert", ICON_SIZE, cx, cy),
-            CalloutType::Danger => svg_icon_path!("lucide/triangle-alert", ICON_SIZE, cx, cy),
+        let path = match self.variant {
+            CalloutVariant::Info => svg_icon_path!("lucide/info", ICON_SIZE, cx, cy),
+            CalloutVariant::Success => svg_icon_path!("lucide/circle-check", ICON_SIZE, cx, cy),
+            CalloutVariant::Warning => svg_icon_path!("lucide/circle-alert", ICON_SIZE, cx, cy),
+            CalloutVariant::Danger => svg_icon_path!("lucide/triangle-alert", ICON_SIZE, cx, cy),
         };
 
         if let Some(path) = path {

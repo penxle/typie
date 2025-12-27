@@ -1,6 +1,6 @@
 use crate::layout::elements::{SplitEdges, WrapperPadding};
 use crate::layout::interactive::{InteractionKind, Interactive};
-use crate::model::CalloutType;
+use crate::model::CalloutVariant;
 use crate::model::NodeId;
 use crate::types::Size;
 
@@ -10,16 +10,16 @@ pub const CALLOUT_PADDING_Y: f32 = 16.0;
 #[derive(Debug, Clone)]
 pub struct CalloutBackgroundElement {
     pub size: Size,
-    pub callout_type: CalloutType,
+    pub variant: CalloutVariant,
     pub node_id: NodeId,
     pub split_edges: SplitEdges,
 }
 
 impl CalloutBackgroundElement {
-    pub fn new(size: Size, callout_type: CalloutType, node_id: NodeId, split_edges: SplitEdges) -> Self {
+    pub fn new(size: Size, variant: CalloutVariant, node_id: NodeId, split_edges: SplitEdges) -> Self {
         Self {
             size,
-            callout_type,
+            variant,
             node_id,
             split_edges,
         }
@@ -39,15 +39,15 @@ impl crate::layout::elements::Wrapper for CalloutBackgroundElement {
 #[derive(Debug, Clone)]
 pub struct CalloutIconElement {
     pub size: Size,
-    pub callout_type: CalloutType,
+    pub variant: CalloutVariant,
     pub node_id: NodeId,
 }
 
 impl CalloutIconElement {
-    pub fn new(size: Size, callout_type: CalloutType, node_id: NodeId) -> Self {
+    pub fn new(size: Size, variant: CalloutVariant, node_id: NodeId) -> Self {
         Self {
             size,
-            callout_type,
+            variant,
             node_id,
         }
     }
@@ -55,7 +55,7 @@ impl CalloutIconElement {
 
 impl Interactive for CalloutIconElement {
     fn interaction_kind(&self) -> InteractionKind {
-        InteractionKind::CycleCalloutType {
+        InteractionKind::CycleCalloutVariant {
             node_id: self.node_id,
         }
     }
