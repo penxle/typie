@@ -222,4 +222,24 @@ impl Cursor {
     pub fn move_to_document_end(ctx: &NavigationContext, pages: &[Page]) -> Option<Selection> {
         navigation::move_to_document_end(ctx, pages)
     }
+
+    pub fn move_page_up(
+        ctx: &NavigationContext,
+        pages: &[Page],
+        position: Position,
+        preferred_x: f32,
+        viewport_height: f32,
+    ) -> Option<Selection> {
+        navigation::move_page_up(ctx, pages, position, preferred_x, viewport_height)
+    }
+
+    pub fn move_page_down(
+        ctx: &NavigationContext,
+        pages: &[Page],
+        position: Position,
+        preferred_x: f32,
+        viewport_height: f32,
+    ) -> Option<Selection> {
+        navigation::move_page_down(ctx, pages, position, preferred_x, viewport_height)
+    }
 }

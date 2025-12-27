@@ -504,3 +504,63 @@ fn find_last_navigable_element<'a>(page: &'a Page) -> Option<(Point, &'a Element
 
     best.map(|(pos, element, _)| (pos, element))
 }
+
+pub fn move_page_up(
+    ctx: &NavigationContext,
+    pages: &[Page],
+    position: Position,
+    preferred_x: f32,
+    viewport_height: f32,
+) -> Option<Selection> {
+    let (mut page_idx, rect) = bounds(ctx, pages, position.clone())?;
+    let mut target_y = rect.y - viewport_height;
+
+    while target_y < 0.0 && page_idx > 0 {
+        page_idx -= 1;
+        let page_height = pages[page_idx].root.node.size.height;
+        target_y += page_height;
+    }
+
+    if target_y < 0.0 {
+        return move_to_document_start(ctx, pages);
+    }
+
+    if let Some(selection) =
+        find_selection_vertical(ctx, pages, page_idx, target_y, preferred_x, VerticalDirection::Down)
+    {
+        return Some(selection);
+    }
+
+    move_to_document_start(ctx, pages)
+}
+
+pub fn move_page_down(
+    ctx: &NavigationContext,
+    pages: &[Page],
+    position: Position,
+    preferred_x: f32,
+    viewport_height: f32,
+) -> Option<Selection> {
+    let (mut page_idx, rect) = bounds(ctx, pages, position.clone())?;
+    let mut target_y = rect.y + viewport_height;
+
+    while page_idx < pages.len() {
+        let page_height = pages[page_idx].root.node.size.height;
+        if target_y < page_height {
+            break;
+        }
+        target_y -= page_height;
+        page_idx += 1;
+        if page_idx >= pages.len() {
+            return move_to_document_end(ctx, pages);
+        }
+    }
+
+    if let Some(selection) =
+        find_selection_vertical(ctx, pages, page_idx, target_y, preferred_x, VerticalDirection::Up)
+    {
+        return Some(selection);
+    }
+
+    move_to_document_end(ctx, pages)
+}

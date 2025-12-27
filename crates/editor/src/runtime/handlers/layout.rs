@@ -92,9 +92,15 @@ impl Runtime {
         ]
     }
 
-    pub(crate) fn handle_resize(&mut self, viewport_width: f32, scale_factor: f64) -> Vec<Effect> {
+    pub(crate) fn handle_resize(
+        &mut self,
+        viewport_width: f32,
+        viewport_height: f32,
+        scale_factor: f64,
+    ) -> Vec<Effect> {
         let viewport_changed = self.viewport_width != viewport_width;
         self.viewport_width = viewport_width;
+        self.viewport_height = viewport_height;
 
         let layout_mode = self.doc().settings().layout_mode;
         let new_width = self.calculate_page_width(layout_mode);
