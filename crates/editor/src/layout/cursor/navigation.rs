@@ -525,9 +525,14 @@ pub fn move_page_up(
         return move_to_document_start(ctx, pages);
     }
 
-    if let Some(selection) =
-        find_selection_vertical(ctx, pages, page_idx, target_y, preferred_x, VerticalDirection::Down)
-    {
+    if let Some(selection) = find_selection_vertical(
+        ctx,
+        pages,
+        page_idx,
+        target_y,
+        preferred_x,
+        VerticalDirection::Down,
+    ) {
         return Some(selection);
     }
 
@@ -556,9 +561,14 @@ pub fn move_page_down(
         }
     }
 
-    if let Some(selection) =
-        find_selection_vertical(ctx, pages, page_idx, target_y, preferred_x, VerticalDirection::Up)
-    {
+    if let Some(selection) = find_selection_vertical(
+        ctx,
+        pages,
+        page_idx,
+        target_y,
+        preferred_x,
+        VerticalDirection::Up,
+    ) {
         return Some(selection);
     }
 

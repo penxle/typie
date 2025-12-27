@@ -439,10 +439,12 @@ impl Paginator {
             }
             state.parent_stack.pop();
         } else {
-            let merged_hints = state.parent_stack.iter().fold(
-                positioned.node.render_hints.clone(),
-                |acc, parent| acc.merge(&parent.render_hints),
-            );
+            let merged_hints = state
+                .parent_stack
+                .iter()
+                .fold(positioned.node.render_hints.clone(), |acc, parent| {
+                    acc.merge(&parent.render_hints)
+                });
 
             let adjusted_node = if merged_hints.default_text_color.is_some() {
                 PositionedNode {

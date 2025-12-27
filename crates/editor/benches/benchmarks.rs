@@ -1,12 +1,12 @@
-use criterion::{criterion_group, criterion_main, Criterion};
-use std::time::Duration;
+use criterion::{Criterion, criterion_group, criterion_main};
 use editor::model::{Node, NodeId, Text, TextNode};
 use editor::runtime::{Direction, Message, Runtime, State};
 use editor::state::{Position, Selection};
+use editor::transact;
 use editor::transaction::Transaction;
 use editor::types::Affinity;
-use editor::transact;
 use std::rc::Rc;
+use std::time::Duration;
 
 fn runtime_with_paragraphs(count: usize) -> Runtime {
     editor::test_utils::init_test_icu();
@@ -106,7 +106,9 @@ fn bench_select_all(c: &mut Criterion) {
 
 fn bench_delete_selection(c: &mut Criterion) {
     let mut group = c.benchmark_group("delete_selection");
-    group.sample_size(10).measurement_time(Duration::from_secs(10));
+    group
+        .sample_size(10)
+        .measurement_time(Duration::from_secs(10));
 
     group.bench_function("delete_all", |b| {
         b.iter_with_setup(
@@ -133,7 +135,9 @@ fn bench_delete_selection(c: &mut Criterion) {
 
 fn bench_paste(c: &mut Criterion) {
     let mut group = c.benchmark_group("paste");
-    group.sample_size(10).measurement_time(Duration::from_secs(10));
+    group
+        .sample_size(10)
+        .measurement_time(Duration::from_secs(10));
 
     group.bench_function("paste_large_text", |b| {
         let paragraph_count = 1000;

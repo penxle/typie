@@ -16,7 +16,12 @@ pub struct CalloutBackgroundElement {
 }
 
 impl CalloutBackgroundElement {
-    pub fn new(size: Size, variant: CalloutVariant, node_id: NodeId, split_edges: SplitEdges) -> Self {
+    pub fn new(
+        size: Size,
+        variant: CalloutVariant,
+        node_id: NodeId,
+        split_edges: SplitEdges,
+    ) -> Self {
         Self {
             size,
             variant,
