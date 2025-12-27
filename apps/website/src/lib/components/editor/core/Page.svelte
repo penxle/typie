@@ -100,13 +100,22 @@
 
       {#if isPaginated}
         <svg
-          class={css({ pointerEvents: 'none', position: 'absolute', inset: '0', height: 'full', width: 'full', overflow: 'visible' })}
+          class={css({
+            pointerEvents: 'none',
+            position: 'absolute',
+            inset: '0',
+            height: 'full',
+            width: 'full',
+            overflow: 'visible',
+            color: 'text.default',
+            opacity: '15',
+          })}
           xmlns="http://www.w3.org/2000/svg"
         >
           <path
             d={`M ${marginLeft} ${marginTop - CROP_MARKER_SIZE} L ${marginLeft} ${marginTop} L ${marginLeft - CROP_MARKER_SIZE} ${marginTop} M ${pageWidth - marginRight} ${marginTop - CROP_MARKER_SIZE} L ${pageWidth - marginRight} ${marginTop} L ${pageWidth - marginRight + CROP_MARKER_SIZE} ${marginTop} M ${marginLeft} ${pageHeight - marginBottom + CROP_MARKER_SIZE} L ${marginLeft} ${pageHeight - marginBottom} L ${marginLeft - CROP_MARKER_SIZE} ${pageHeight - marginBottom} M ${pageWidth - marginRight} ${pageHeight - marginBottom + CROP_MARKER_SIZE} L ${pageWidth - marginRight} ${pageHeight - marginBottom} L ${pageWidth - marginRight + CROP_MARKER_SIZE} ${pageHeight - marginBottom}`}
             fill="none"
-            stroke="rgba(0,0,0,0.15)"
+            stroke="currentColor"
           />
         </svg>
       {/if}
