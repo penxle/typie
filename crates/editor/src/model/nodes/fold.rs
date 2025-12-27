@@ -97,6 +97,7 @@ impl FoldNode {
                     element: None,
                     children: None,
                     page_break_policy: Default::default(),
+                    render_hints: Default::default(),
                 });
 
                 let wrapper = Rc::new(LayoutNode {
@@ -116,6 +117,7 @@ impl FoldNode {
                         },
                     ]),
                     page_break_policy: Default::default(),
+                    render_hints: Default::default(),
                 });
 
                 children.push(PositionedNode {
@@ -149,6 +151,7 @@ impl FoldNode {
                 )),
                 children: None,
                 page_break_policy: PageBreakPolicy::Avoid,
+                render_hints: Default::default(),
             }),
         }
     }
@@ -190,6 +193,7 @@ impl Layout for FoldNode {
             element: None,
             children: Some(children),
             page_break_policy: PageBreakPolicy::Auto,
+            render_hints: Default::default(),
         }
     }
 }

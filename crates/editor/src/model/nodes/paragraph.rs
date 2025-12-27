@@ -2,7 +2,10 @@ use crate::global::GLOBALS;
 use crate::layout::elements::{LineElement, build_metrics};
 use crate::layout::{Element, Layout, LayoutContext, LayoutNode, PageBreakPolicy, PositionedNode};
 use crate::model::html::{DomSpec, NodeHtmlCodec, NodeParseRule, parse_styles};
-use crate::model::{FontFamilyMark, Mark, Node, PreeditDecor};
+use crate::model::{
+    FontFamilyMark, FontSizeMark, FontWeightMark, LetterSpacingMark, Mark, Node, PreeditDecor,
+    TextColorMark,
+};
 use crate::schema::Expand;
 use crate::types::{BoxConstraints, Point, Size};
 use crate::utils::{LengthUnit, char_to_byte_offset, convert_length};
@@ -408,12 +411,21 @@ impl Layout for ParagraphNode {
                 builder.push_default(StyleProperty::FontStack(FontStack::Single(
                     FontFamily::Named(FontFamilyMark::default().family.into()),
                 )));
-                builder.push_default(StyleProperty::FontSize(16.0));
-                builder.push_default(StyleProperty::FontWeight(FontWeight::new(400.0)));
+                builder.push_default(StyleProperty::FontSize(convert_length(
+                    FontSizeMark::default().size,
+                    LengthUnit::Pt,
+                    LengthUnit::Px,
+                )));
+                builder.push_default(StyleProperty::FontWeight(FontWeight::new(
+                    FontWeightMark::default().weight as f32,
+                )));
                 builder.push_default(StyleProperty::LineHeight(LineHeight::FontSizeRelative(
                     line_height,
                 )));
-                builder.push_default(StyleProperty::LetterSpacing(0.0));
+                builder.push_default(StyleProperty::LetterSpacing(
+                    LetterSpacingMark::default().spacing,
+                ));
+                builder.push_default(StyleProperty::Brush(TextColorMark::default().key));
 
                 builder.push_default(StyleProperty::FontFeatures(FontSettings::Source(
                     Cow::Owned("\"ss05\" 1, \"cv12\" 1, \"ss18\" 1".to_string()),
@@ -460,10 +472,7 @@ impl Layout for ParagraphNode {
                         builder.push(StyleProperty::Strikethrough(true), range)
                     }
                     Mark::Underline(_) => builder.push(StyleProperty::Underline(true), range),
-                    Mark::TextColor(m) => builder.push(
-                        StyleProperty::Brush(format!("text.{}", m.key.clone())),
-                        range,
-                    ),
+                    Mark::TextColor(m) => builder.push(StyleProperty::Brush(m.key.clone()), range),
                     Mark::Ruby(_) => {
                         // Parley가 아직 ruby를 지원하지 않으므로 layout 단계가 아닌 rendering 단계에서 처리
                         // https://github.com/linebender/parley/issues/255
@@ -660,6 +669,7 @@ impl Layout for ParagraphNode {
                     element: Some(Element::Line(line_element)),
                     children: None,
                     page_break_policy: PageBreakPolicy::Avoid,
+                    render_hints: Default::default(),
                 }),
             });
 
@@ -676,6 +686,7 @@ impl Layout for ParagraphNode {
             element: None,
             children: Some(children),
             page_break_policy: PageBreakPolicy::Auto,
+            render_hints: Default::default(),
         }
     }
 }

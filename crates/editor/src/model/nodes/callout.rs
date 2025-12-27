@@ -151,6 +151,7 @@ impl Layout for CalloutNode {
                 element: Some(Element::CalloutIcon(icon_element)),
                 children: None,
                 page_break_policy: PageBreakPolicy::Avoid,
+                render_hints: Default::default(),
             }),
         };
 
@@ -166,6 +167,7 @@ impl Layout for CalloutNode {
                     element: None,
                     children: Some(vec![icon_wrapper, first_child]),
                     page_break_policy: PageBreakPolicy::Avoid,
+                    render_hints: Default::default(),
                 }),
             };
             bg_children.push(header_wrapper);
@@ -184,6 +186,7 @@ impl Layout for CalloutNode {
                 element: Some(Element::CalloutBackground(background_element)),
                 children: Some(bg_children),
                 page_break_policy: PageBreakPolicy::Auto,
+                render_hints: Default::default(),
             }),
         };
 
@@ -192,6 +195,7 @@ impl Layout for CalloutNode {
             element: None,
             children: Some(vec![background_wrapper]),
             page_break_policy: PageBreakPolicy::Auto,
+            render_hints: Default::default(),
         }
     }
 }

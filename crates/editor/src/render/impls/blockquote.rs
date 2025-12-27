@@ -1,7 +1,7 @@
+use crate::layout::elements::SplitEdges;
 use crate::layout::elements::blockquote::{
     BlockquoteLineElement, BlockquoteMessageElement, BlockquoteQuoteElement,
 };
-use crate::layout::elements::SplitEdges;
 use crate::model::BlockquoteVariant;
 use crate::render::{GlyphRenderer, Render, RenderContext};
 use macros::svg_icon_path;
@@ -51,13 +51,7 @@ impl Render for BlockquoteQuoteElement {
         let path = svg_icon_path!("typie/blockquote-quote", QUOTE_ICON_SIZE, cx, cy);
 
         if let Some(path) = path {
-            pixmap.fill_path(
-                &path,
-                &paint,
-                tiny_skia::FillRule::Winding,
-                transform,
-                None,
-            );
+            pixmap.fill_path(&path, &paint, tiny_skia::FillRule::Winding, transform, None);
         }
     }
 }
@@ -93,31 +87,15 @@ impl Render for BlockquoteMessageElement {
             }
         }
 
-        if let Some(path) = build_rounded_rect(
-            0.0,
-            0.0,
-            self.size.width,
-            self.size.height,
-            tl,
-            tr,
-            br,
-            bl,
-        ) {
-            pixmap.fill_path(
-                &path,
-                &paint,
-                tiny_skia::FillRule::Winding,
-                transform,
-                None,
-            );
+        if let Some(path) =
+            build_rounded_rect(0.0, 0.0, self.size.width, self.size.height, tl, tr, br, bl)
+        {
+            pixmap.fill_path(&path, &paint, tiny_skia::FillRule::Winding, transform, None);
         }
 
         if has_tail {
-            if let Some(tail_path) = build_message_tail(
-                self.size.width,
-                self.size.height,
-                is_sent,
-            ) {
+            if let Some(tail_path) = build_message_tail(self.size.width, self.size.height, is_sent)
+            {
                 pixmap.fill_path(
                     &tail_path,
                     &paint,

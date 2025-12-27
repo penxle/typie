@@ -82,7 +82,7 @@ impl Runtime {
     }
 
     pub(crate) fn handle_toggle_text_color(&mut self, key: String) -> Vec<Effect> {
-        self.transact(|tr| tr.toggle_mark(Mark::TextColor(TextColorMark { key })))
+        self.transact(|tr| tr.add_mark(Mark::TextColor(TextColorMark { key })))
     }
 
     pub(crate) fn handle_toggle_background_color(&mut self, key: Option<String>) -> Vec<Effect> {

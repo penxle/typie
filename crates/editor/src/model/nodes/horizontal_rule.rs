@@ -107,6 +107,7 @@ impl Layout for HorizontalRuleNode {
             element: Some(Element::HorizontalRule(element)),
             children: None,
             page_break_policy: PageBreakPolicy::Avoid,
+            render_hints: Default::default(),
         }
     }
 }

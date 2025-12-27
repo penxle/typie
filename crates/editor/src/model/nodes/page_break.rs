@@ -31,6 +31,7 @@ impl Layout for PageBreakNode {
             element: None,
             children: None,
             page_break_policy: PageBreakPolicy::Avoid,
+            render_hints: Default::default(),
         }
     }
 }

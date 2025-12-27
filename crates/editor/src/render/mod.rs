@@ -3,17 +3,18 @@ mod impls;
 
 pub use glyph::GlyphRenderer;
 
-use crate::layout::{Element, Page, PositionedNode};
+use crate::layout::{Element, Page, PositionedNode, RenderHints};
 use crate::model::{Doc, SelectionDecor};
 use crate::runtime::DropIndicator;
 use crate::types::{Point, Theme};
-use tiny_skia::{Pixmap, PixmapMut, Rect, Transform};
+use tiny_skia::{Color, Pixmap, PixmapMut, Rect, Transform};
 
 pub struct RenderContext<'a> {
     pub scale_factor: f64,
     pub selections: &'a [SelectionDecor],
     pub theme: &'a Theme,
     pub doc: &'a Doc,
+    pub default_text_color: Option<Color>,
 }
 
 pub trait Render {
@@ -118,6 +119,7 @@ impl Renderer {
             selections,
             theme: &self.theme,
             doc,
+            default_text_color: None,
         };
 
         let mut pixmap = self.pixmap.as_mut();
@@ -129,6 +131,7 @@ impl Renderer {
             Point::zero(),
             transform,
             &ctx,
+            &RenderHints::default(),
         );
 
         if let Some(indicator) = drop_indicator {
@@ -193,6 +196,7 @@ impl Renderer {
         offset: Point,
         transform: Transform,
         ctx: &RenderContext<'_>,
+        inherited_hints: &RenderHints,
     ) {
         let scale = transform.sy;
         let pos = Point::new(
@@ -200,16 +204,25 @@ impl Renderer {
             ((offset.y + positioned.position.y) * scale).round() / scale,
         );
 
+        let merged_hints = positioned.node.render_hints.merge(inherited_hints);
+        let child_ctx = merged_hints.default_text_color.as_ref().map(|color_key| {
+            RenderContext {
+                default_text_color: Some(ctx.theme.color(color_key)),
+                ..*ctx
+            }
+        });
+        let render_ctx = child_ctx.as_ref().unwrap_or(ctx);
+
         if let Some(ref element) = positioned.node.element {
             if let Some(render) = element.as_render() {
                 let element_transform = transform.pre_translate(pos.x, pos.y);
-                render.render(pixmap, glyph_renderer, element_transform, ctx);
+                render.render(pixmap, glyph_renderer, element_transform, render_ctx);
             }
         }
 
         if let Some(children) = &positioned.node.children {
             for child in children {
-                Self::render_node(pixmap, glyph_renderer, child, pos, transform, ctx);
+                Self::render_node(pixmap, glyph_renderer, child, pos, transform, render_ctx, &merged_hints);
             }
         }
     }
@@ -251,6 +264,7 @@ impl Renderer {
                 selections: &[],
                 theme: &self.theme,
                 doc,
+                default_text_color: None,
             };
 
             Self::render_page_part_inner(
@@ -353,6 +367,7 @@ impl Renderer {
             Point::zero(),
             transform,
             ctx,
+            &RenderHints::default(),
         );
 
         let mut clip_rects = Vec::new();

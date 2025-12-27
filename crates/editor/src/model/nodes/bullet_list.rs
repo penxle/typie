@@ -47,6 +47,7 @@ impl Layout for BulletListNode {
             element: None,
             children: Some(child_nodes),
             page_break_policy: Default::default(),
+            render_hints: Default::default(),
         }
     }
 }
