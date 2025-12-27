@@ -1,7 +1,7 @@
 use crate::model::{Doc, Fragment, Node, NodeId};
+use crate::state::BlockTraverser;
 use crate::state::position::Position;
 use crate::state::position_helpers::{compare_positions, is_block_position};
-use crate::state::BlockTraverser;
 use anyhow::{Context, Result};
 use std::cmp::Ordering;
 
@@ -127,7 +127,12 @@ fn extract_block_text_full(doc: &Doc, block_id: NodeId) -> String {
     result
 }
 
-fn extract_block_text_range(doc: &Doc, block_id: NodeId, from_offset: usize, to_offset: usize) -> String {
+fn extract_block_text_range(
+    doc: &Doc,
+    block_id: NodeId,
+    from_offset: usize,
+    to_offset: usize,
+) -> String {
     let full_text = extract_block_text_full(doc, block_id);
     let chars: Vec<char> = full_text.chars().collect();
     let from = from_offset.min(chars.len());

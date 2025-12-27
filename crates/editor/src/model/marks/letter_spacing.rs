@@ -1,5 +1,7 @@
 use crate::model::Mark;
-use crate::model::html::{DomSpec, LengthUnit, MarkHtmlCodec, MarkParseRule, parse_as, parse_styles};
+use crate::model::html::{
+    DomSpec, LengthUnit, MarkHtmlCodec, MarkParseRule, parse_as, parse_styles,
+};
 use macros::Codec;
 use serde::{Deserialize, Serialize};
 use std::hash::{Hash, Hasher};

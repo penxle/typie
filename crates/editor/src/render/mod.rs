@@ -205,12 +205,13 @@ impl Renderer {
         );
 
         let merged_hints = positioned.node.render_hints.merge(inherited_hints);
-        let child_ctx = merged_hints.default_text_color.as_ref().map(|color_key| {
-            RenderContext {
+        let child_ctx = merged_hints
+            .default_text_color
+            .as_ref()
+            .map(|color_key| RenderContext {
                 default_text_color: Some(ctx.theme.color(color_key)),
                 ..*ctx
-            }
-        });
+            });
         let render_ctx = child_ctx.as_ref().unwrap_or(ctx);
 
         if let Some(ref element) = positioned.node.element {
@@ -222,7 +223,15 @@ impl Renderer {
 
         if let Some(children) = &positioned.node.children {
             for child in children {
-                Self::render_node(pixmap, glyph_renderer, child, pos, transform, render_ctx, &merged_hints);
+                Self::render_node(
+                    pixmap,
+                    glyph_renderer,
+                    child,
+                    pos,
+                    transform,
+                    render_ctx,
+                    &merged_hints,
+                );
             }
         }
     }

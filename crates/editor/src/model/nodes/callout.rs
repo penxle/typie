@@ -138,11 +138,8 @@ impl Layout for CalloutNode {
 
         let mut bg_children = Vec::new();
 
-        let icon_element = CalloutIconElement::new(
-            Size::new(ICON_WIDTH, ICON_HEIGHT),
-            self.variant,
-            node_id,
-        );
+        let icon_element =
+            CalloutIconElement::new(Size::new(ICON_WIDTH, ICON_HEIGHT), self.variant, node_id);
 
         let icon_wrapper = PositionedNode {
             position: Point::new(PADDING_X, PADDING_Y),

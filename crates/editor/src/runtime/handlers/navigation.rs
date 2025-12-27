@@ -153,7 +153,10 @@ impl Runtime {
                         Direction::Right | Direction::WordRight => {
                             (rect.x + rect.width, rect.y + rect.height)
                         }
-                        Direction::Up | Direction::Down | Direction::PageUp | Direction::PageDown => {
+                        Direction::Up
+                        | Direction::Down
+                        | Direction::PageUp
+                        | Direction::PageDown => {
                             let x = cached_preferred_x.unwrap_or(rect.x);
                             let y = if matches!(direction, Direction::Up | Direction::PageUp) {
                                 rect.y
@@ -174,9 +177,13 @@ impl Runtime {
                         Direction::PageUp => {
                             Cursor::move_page_up(ctx, pages, position, preferred_x, viewport_height)
                         }
-                        Direction::PageDown => {
-                            Cursor::move_page_down(ctx, pages, position, preferred_x, viewport_height)
-                        }
+                        Direction::PageDown => Cursor::move_page_down(
+                            ctx,
+                            pages,
+                            position,
+                            preferred_x,
+                            viewport_height,
+                        ),
                         Direction::LineStart => Cursor::move_to_line_start(ctx, pages, position),
                         Direction::LineEnd => Cursor::move_to_line_end(ctx, pages, position),
                         Direction::WordLeft => {
