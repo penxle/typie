@@ -167,7 +167,7 @@
       borderRadius: '4px',
       pointerEvents: 'none',
       transition: '[0.1s ease-in-out]',
-      zIndex: 'overPanel',
+      zIndex: 'ghost',
     },
     variants: {
       zone: {
