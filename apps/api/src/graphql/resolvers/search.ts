@@ -1,4 +1,5 @@
 import DOMPurify from 'isomorphic-dompurify';
+import { match } from 'ts-pattern';
 import { TableCode, validateDbId } from '@/db';
 import { SearchHitType } from '@/enums';
 import { meilisearch } from '@/search';
@@ -32,6 +33,11 @@ const SearchHitDocument = builder.simpleObject('SearchHitDocument', {
 
 const SearchHit = builder.unionType('SearchHit', {
   types: [SearchHitPost, SearchHitDocument],
+  resolveType: (self) =>
+    match(self.type)
+      .with(SearchHitType.DOCUMENT, () => 'SearchHitDocument')
+      .with(SearchHitType.POST, () => 'SearchHitPost')
+      .exhaustive(),
 });
 
 /**
