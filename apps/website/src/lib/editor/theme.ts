@@ -87,6 +87,7 @@ const LIGHT_RAW_COLORS: Record<string, string> = {
   'bg.green': '#dff3e3',
   'bg.blue': '#e7f3f8',
   'bg.purple': '#f0e7fe',
+  selection: '#99ccff',
 };
 
 const DARK_RAW_COLORS: Record<string, string> = {
@@ -160,6 +161,7 @@ const DARK_RAW_COLORS: Record<string, string> = {
   'bg.green': '#2c4331',
   'bg.blue': '#153b4f',
   'bg.purple': '#3f2e50',
+  selection: '#99ccff',
 };
 
 const buildTheme = (rawColors: Record<string, string>): ThemeColors => ({

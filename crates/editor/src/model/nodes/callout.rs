@@ -54,15 +54,6 @@ impl CalloutType {
             CalloutType::Danger => CalloutType::Info,
         }
     }
-
-    pub fn color(&self) -> (u8, u8, u8) {
-        match self {
-            CalloutType::Info => (59, 130, 246),    // #3B82F6
-            CalloutType::Success => (34, 197, 94),  // #22C55E
-            CalloutType::Warning => (245, 158, 11), // #F59E0B
-            CalloutType::Danger => (239, 68, 68),   // #EF4444
-        }
-    }
 }
 
 impl crate::model::Codec for CalloutType {

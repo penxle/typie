@@ -4,7 +4,7 @@ use crate::model::CalloutType;
 use crate::model::{CALLOUT_BORDER_RADIUS, CALLOUT_BORDER_WIDTH};
 use crate::render::{GlyphRenderer, Render, RenderContext};
 use macros::svg_icon_path;
-use tiny_skia::{Color, Paint, PathBuilder, PixmapMut, Stroke, Transform};
+use tiny_skia::{Paint, PathBuilder, PixmapMut, Stroke, Transform};
 
 const ICON_SIZE: f32 = 20.0;
 const ICON_STROKE_WIDTH: f32 = 1.5;
@@ -15,12 +15,11 @@ impl Render for CalloutBackgroundElement {
         pixmap: &mut PixmapMut,
         _glyph_renderer: &mut GlyphRenderer,
         transform: Transform,
-        _ctx: &RenderContext,
+        ctx: &RenderContext,
     ) {
-        let (r, g, b) = self.callout_type.color();
-        let border_color = Color::from_rgba8(r, g, b, 255);
-
-        let bg_color = Color::from_rgba8(r, g, b, 8); // ~3% of 255
+        let color_key = format!("ui.callout.{}", self.callout_type.as_str());
+        let border_color = ctx.theme.color(&color_key);
+        let bg_color = ctx.theme.color_with_alpha(&color_key, 8);
 
         let mut bg_paint = Paint::default();
         bg_paint.set_color(bg_color);
@@ -76,10 +75,10 @@ impl Render for CalloutIconElement {
         pixmap: &mut PixmapMut,
         _glyph_renderer: &mut GlyphRenderer,
         transform: Transform,
-        _ctx: &RenderContext,
+        ctx: &RenderContext,
     ) {
-        let (r, g, b) = self.callout_type.color();
-        let icon_color = Color::from_rgba8(r, g, b, 255);
+        let color_key = format!("ui.callout.{}", self.callout_type.as_str());
+        let icon_color = ctx.theme.color(&color_key);
 
         let mut icon_paint = Paint::default();
         icon_paint.set_color(icon_color);

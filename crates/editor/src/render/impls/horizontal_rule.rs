@@ -2,7 +2,7 @@ use crate::layout::elements::HorizontalRuleElement;
 use crate::model::HorizontalRuleVariant;
 use crate::render::{GlyphRenderer, Render, RenderContext};
 use crate::state::position_helpers::calculate_offset_before_child;
-use tiny_skia::{Color, Paint, PathBuilder, PixmapMut, Rect, Stroke, Transform};
+use tiny_skia::{Paint, PathBuilder, PixmapMut, Rect, Stroke, Transform};
 
 const LINE_HEIGHT: f32 = 1.0;
 const SHAPE_SIZE_LARGE: f32 = 10.0;
@@ -72,8 +72,7 @@ impl HorizontalRuleElement {
             return;
         }
 
-        // TODO: selection color token
-        let color = Color::from_rgba8(153, 204, 255, 77);
+        let color = ctx.theme.color_with_alpha("selection", 77);
         let mut paint = Paint::default();
         paint.set_color(color);
 

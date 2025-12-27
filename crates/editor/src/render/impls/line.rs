@@ -53,18 +53,18 @@ impl LineElement {
         pixmap: &mut PixmapMut,
         transform: Transform,
         point: Point,
-        selections: &[SelectionDecor],
+        ctx: &RenderContext,
     ) {
-        let color = Color::from_rgba8(153, 204, 255, 77);
+        let color = ctx.theme.color_with_alpha("selection", 77);
         let paint = create_solid_paint(color);
 
-        for rect in self.selection_rects(point, selections) {
+        for rect in self.selection_rects(point, ctx.selections) {
             pixmap.fill_rect(rect, &paint, transform, None);
         }
 
         if self.has_page_break {
-            if let Some(rect) = self.page_break_indicator(point, selections) {
-                let accent_color = Color::from_rgba8(0, 111, 255, 255);
+            if let Some(rect) = self.page_break_indicator(point, ctx.selections) {
+                let accent_color = ctx.theme.color("ui.accent.brand.default");
                 let accent_paint = create_solid_paint(accent_color);
 
                 if let Some(line_rect) = Rect::from_xywh(
@@ -230,7 +230,7 @@ impl LineElement {
         )
     }
 
-    fn render_preedit(&self, pixmap: &mut PixmapMut, transform: Transform, point: Point) {
+    fn render_preedit(&self, pixmap: &mut PixmapMut, transform: Transform, point: Point, ctx: &RenderContext) {
         let Some(preedit) = &self.preedit else {
             return;
         };
@@ -262,7 +262,7 @@ impl LineElement {
             return;
         };
 
-        let color = Color::from_rgba8(128, 128, 128, 255);
+        let color = ctx.theme.color("ui.text.muted");
         let paint = create_solid_paint(color);
         pixmap.fill_rect(rect, &paint, transform, None);
     }
@@ -435,7 +435,7 @@ impl Render for LineElement {
 
         let point = Point::zero();
 
-        self.render_selection(pixmap, transform, point, ctx.selections);
+        self.render_selection(pixmap, transform, point, ctx);
 
         let line_metrics = line.metrics();
 
@@ -529,7 +529,7 @@ impl Render for LineElement {
             }
         }
 
-        self.render_preedit(pixmap, transform, point);
+        self.render_preedit(pixmap, transform, point, ctx);
         self.render_ruby_marks(pixmap, glyph_renderer, transform, &line_metrics, ctx);
     }
 }

@@ -2,7 +2,7 @@ use crate::layout::elements::{FoldContentElement, FoldTitleBackgroundElement, Fo
 use crate::model::{FOLD_BORDER_RADIUS, FOLD_BORDER_WIDTH};
 use crate::render::{GlyphRenderer, Render, RenderContext};
 use macros::svg_icon_path;
-use tiny_skia::{Color, Paint, Path, PathBuilder, PixmapMut, Stroke, Transform};
+use tiny_skia::{Paint, Path, PathBuilder, PixmapMut, Stroke, Transform};
 
 const CHEVRON_SIZE: f32 = 20.0;
 const CHEVRON_STROKE_WIDTH: f32 = 1.5;
@@ -13,9 +13,9 @@ impl Render for FoldTitleElement {
         pixmap: &mut PixmapMut,
         _glyph_renderer: &mut GlyphRenderer,
         transform: Transform,
-        _ctx: &RenderContext,
+        ctx: &RenderContext,
     ) {
-        let color = Color::from_rgba8(100, 100, 100, 255);
+        let color = ctx.theme.color("ui.text.subtle");
         let mut paint = Paint::default();
         paint.set_color(color);
         paint.anti_alias = true;
@@ -48,10 +48,10 @@ impl Render for FoldTitleBackgroundElement {
         pixmap: &mut PixmapMut,
         _glyph_renderer: &mut GlyphRenderer,
         transform: Transform,
-        _ctx: &RenderContext,
+        ctx: &RenderContext,
     ) {
         let mut paint = Paint::default();
-        paint.set_color(Color::from_rgba8(245, 245, 245, 255));
+        paint.set_color(ctx.theme.color("ui.surface.subtle"));
         paint.anti_alias = true;
 
         let inner_radius = (FOLD_BORDER_RADIUS - FOLD_BORDER_WIDTH).max(0.0);
@@ -77,7 +77,7 @@ impl Render for FoldTitleBackgroundElement {
         }
 
         let mut border_paint = Paint::default();
-        border_paint.set_color(Color::from_rgba8(200, 200, 200, 255));
+        border_paint.set_color(ctx.theme.color("ui.border.default"));
         border_paint.anti_alias = true;
 
         let stroke = Stroke {
@@ -137,10 +137,10 @@ impl Render for FoldContentElement {
         pixmap: &mut PixmapMut,
         _glyph_renderer: &mut GlyphRenderer,
         transform: Transform,
-        _ctx: &RenderContext,
+        ctx: &RenderContext,
     ) {
         let mut paint = Paint::default();
-        paint.set_color(Color::from_rgba8(200, 200, 200, 255));
+        paint.set_color(ctx.theme.color("ui.border.default"));
         paint.anti_alias = true;
 
         let stroke = Stroke {
