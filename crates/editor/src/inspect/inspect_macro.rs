@@ -58,9 +58,13 @@ fn format_node(node: NodeRef, indent_level: usize, labeler: &Labeler, output: &m
                 output,
             );
         }
-        Node::Blockquote(_) => {
+        Node::Blockquote(blockquote) => {
+            let attrs = format_attributes(&[(
+                "variant",
+                format!("BlockquoteVariant::{:?}", blockquote.variant),
+            )]);
             format_container_node(
-                &format!("{prefix}blockquote"),
+                &format!("{prefix}blockquote{attrs}"),
                 node,
                 indent_level,
                 labeler,
@@ -491,9 +495,13 @@ fn format_fragment_node(
                 output,
             );
         }
-        Node::Blockquote(_) => {
+        Node::Blockquote(blockquote) => {
+            let attrs = format_attributes(&[(
+                "variant",
+                format!("BlockquoteVariant::{:?}", blockquote.variant),
+            )]);
             format_fragment_container_node(
-                "blockquote",
+                &format!("blockquote{attrs}"),
                 id,
                 fragment,
                 indent_level,

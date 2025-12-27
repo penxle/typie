@@ -40,8 +40,8 @@ fn format_node_info(node: &NodeRef) -> String {
         Node::Paragraph(_) => {
             format!("Paragraph {}", id)
         }
-        Node::Blockquote(_) => {
-            format!("Blockquote {}", id)
+        Node::Blockquote(blockquote_node) => {
+            format!("Blockquote {} variant={:?}", id, blockquote_node.variant)
         }
         Node::Text(text_node) => {
             let display_text = truncate_str(&text_node.text.as_str(), 50);

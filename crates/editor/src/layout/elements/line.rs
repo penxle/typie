@@ -828,6 +828,7 @@ pub struct LineMetric {
     pub height: f32,
     pub leading: f32,
     pub baseline: f32,
+    pub content_width: f32,
     pub start_offset: usize,
     pub end_offset: usize,
     pub clusters: Vec<ClusterMetric>,
@@ -937,12 +938,15 @@ pub fn build_metrics(
 
         grapheme_cursor = cursor;
 
+        let content_width = advance_x - inline_prefix;
+
         lines.push(LineMetric {
             top: snap_to_pixel(line_top, scale_factor),
             left: snap_to_pixel(line_metrics.offset + inline_prefix, scale_factor),
             height,
             leading,
             baseline: snap_to_pixel(line_metrics.baseline, scale_factor),
+            content_width: snap_to_pixel(content_width, scale_factor),
             start_offset: line_start_char,
             end_offset: line_end_char,
             clusters,

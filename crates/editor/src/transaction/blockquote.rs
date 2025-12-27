@@ -1,14 +1,14 @@
-use crate::model::{BlockquoteNode, Node};
+use crate::model::{BlockquoteNode, BlockquoteVariant, Node};
 use crate::transaction::Transaction;
 use anyhow::Result;
 
 impl Transaction {
-    pub fn toggle_blockquote(&mut self) -> Result<bool> {
+    pub fn toggle_blockquote(&mut self, variant: BlockquoteVariant) -> Result<bool> {
         if self.lift_from_ancestor(|parent, _blocks| matches!(parent, Node::Blockquote(_)))? {
             return Ok(true);
         }
 
-        if self.wrap_in_ancestor(Node::Blockquote(BlockquoteNode::default()))? {
+        if self.wrap_in_ancestor(Node::Blockquote(BlockquoteNode { variant }))? {
             return Ok(true);
         }
 
@@ -18,6 +18,8 @@ impl Transaction {
 
 #[cfg(test)]
 mod tests {
+    use crate::model::BlockquoteVariant;
+
     #[test]
     fn toggle_wraps_when_outside() {
         let mut p1 = id!();
@@ -31,7 +33,9 @@ mod tests {
             selection { (p1, 0) -> (p2, 1) }
         };
 
-        let actual = transact!(initial, |tr| tr.toggle_blockquote().unwrap());
+        let actual = transact!(initial, |tr| tr
+            .toggle_blockquote(BlockquoteVariant::default())
+            .unwrap());
 
         let expected = state! {
             doc {
@@ -61,7 +65,9 @@ mod tests {
             selection { (p, 0) -> (p, 1) }
         };
 
-        let actual = transact!(initial, |tr| tr.toggle_blockquote().unwrap());
+        let actual = transact!(initial, |tr| tr
+            .toggle_blockquote(BlockquoteVariant::default())
+            .unwrap());
 
         let expected = state! {
             doc {
@@ -90,7 +96,7 @@ mod tests {
         };
 
         let mut tr = crate::transaction::Transaction::new(&state);
-        let result = tr.toggle_blockquote().unwrap();
+        let result = tr.toggle_blockquote(BlockquoteVariant::default()).unwrap();
 
         assert!(!result);
     }
@@ -111,7 +117,9 @@ mod tests {
             selection { (p, 0) -> (p, 1) }
         };
 
-        let actual = transact!(state, |tr| tr.toggle_blockquote().unwrap());
+        let actual = transact!(state, |tr| tr
+            .toggle_blockquote(BlockquoteVariant::default())
+            .unwrap());
 
         let expected = state! {
             doc {
@@ -155,7 +163,9 @@ mod tests {
             selection { (p1, 0) -> (p2, 1) }
         };
 
-        let actual = transact!(state, |tr| tr.toggle_blockquote().unwrap());
+        let actual = transact!(state, |tr| tr
+            .toggle_blockquote(BlockquoteVariant::default())
+            .unwrap());
 
         let expected = state! {
             doc {
@@ -199,7 +209,9 @@ mod tests {
             selection { (p, 0) -> (p, 1) }
         };
 
-        let actual = transact!(state, |tr| tr.toggle_blockquote().unwrap());
+        let actual = transact!(state, |tr| tr
+            .toggle_blockquote(BlockquoteVariant::default())
+            .unwrap());
 
         let expected = state! {
             doc {
@@ -229,7 +241,9 @@ mod tests {
             selection { (p, 0) }
         };
 
-        let (_, effects) = transact_with_effect!(initial, |tr| tr.toggle_blockquote().unwrap());
+        let (_, effects) = transact_with_effect!(initial, |tr| tr
+            .toggle_blockquote(BlockquoteVariant::default())
+            .unwrap());
 
         let has_paragraph_changed = effects
             .iter()
@@ -267,7 +281,9 @@ mod tests {
             selection { (p1, 0) -> (p2, 1) }
         };
 
-        let actual = transact!(state, |tr| tr.toggle_blockquote().unwrap());
+        let actual = transact!(state, |tr| tr
+            .toggle_blockquote(BlockquoteVariant::default())
+            .unwrap());
 
         let expected = state! {
             doc {

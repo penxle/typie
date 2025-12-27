@@ -30,8 +30,11 @@ impl Runtime {
         })
     }
 
-    pub(crate) fn handle_toggle_blockquote(&mut self) -> Vec<Effect> {
-        self.transact(|tr| tr.toggle_blockquote())
+    pub(crate) fn handle_toggle_blockquote(
+        &mut self,
+        variant: crate::model::BlockquoteVariant,
+    ) -> Vec<Effect> {
+        self.transact(|tr| tr.toggle_blockquote(variant))
     }
 
     pub(crate) fn handle_toggle_callout(&mut self) -> Vec<Effect> {

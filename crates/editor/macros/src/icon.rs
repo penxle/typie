@@ -92,7 +92,6 @@ fn get_svg_body(icon_path: &str) -> Result<String, String> {
             get_macros_dir().ok_or_else(|| "Could not get CARGO_MANIFEST_DIR".to_string())?;
 
         let svg_path = manifest_path
-            .join("..")
             .join("assets")
             .join("icons")
             .join(format!("{}.svg", icon_name));
