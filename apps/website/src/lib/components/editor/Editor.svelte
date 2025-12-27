@@ -53,6 +53,7 @@
   const theme = getThemeContext();
 
   let containerClientWidth = $state(0);
+  let containerClientHeight = $state(0);
   let scaleFactor = $state(1);
   let headerHeight = $state(0);
   let horizontalRulerEl: HTMLDivElement | null = $state(null);
@@ -78,7 +79,7 @@
   });
 
   $effect(() => {
-    editor.dispatch({ type: 'resize', width, scaleFactor });
+    editor.dispatch({ type: 'resize', width, height: containerClientHeight, scaleFactor });
   });
 
   $effect(() => {
@@ -184,9 +185,11 @@
         {@attach (el) => {
           const observer = new ResizeObserver(() => {
             containerClientWidth = el.clientWidth;
+            containerClientHeight = el.clientHeight;
           });
           observer.observe(el);
           containerClientWidth = el.clientWidth;
+          containerClientHeight = el.clientHeight;
 
           return () => observer.disconnect();
         }}

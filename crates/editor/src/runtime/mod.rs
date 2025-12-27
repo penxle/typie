@@ -69,6 +69,7 @@ struct SelectionSnapshot {
 #[allow(dead_code)]
 pub struct Runtime {
     viewport_width: f32,
+    viewport_height: f32,
     width: f32,
     scale_factor: f64,
     renderer: Renderer,
@@ -106,6 +107,7 @@ impl Runtime {
         let last_synced_version = state.doc.loro_doc().state_vv();
         Self {
             viewport_width: width,
+            viewport_height: 0.0,
             width,
             scale_factor,
             renderer: Renderer::new(scale_factor),

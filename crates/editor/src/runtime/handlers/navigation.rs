@@ -11,16 +11,22 @@ impl Runtime {
         direction: Direction,
         extend_selection: bool,
     ) -> Vec<Effect> {
-        let is_upward = matches!(direction, Direction::Up);
+        let is_upward = matches!(direction, Direction::Up | Direction::PageUp);
 
         if is_upward && !extend_selection && self.is_at_document_start() {
             return vec![Effect::ExitedDocumentStart];
         }
 
-        let invalidate_preferred_x = !matches!(direction, Direction::Up | Direction::Down);
+        let invalidate_preferred_x = !matches!(
+            direction,
+            Direction::Up | Direction::Down | Direction::PageUp | Direction::PageDown
+        );
 
         let ctx = NavigationContext::new(&self.state.doc);
-        let cached_preferred_x = if matches!(direction, Direction::Up | Direction::Down) {
+        let cached_preferred_x = if matches!(
+            direction,
+            Direction::Up | Direction::Down | Direction::PageUp | Direction::PageDown
+        ) {
             if let Some(x) = self.state.preferred_x {
                 Some(x)
             } else {
@@ -36,6 +42,7 @@ impl Runtime {
             direction,
             extend_selection,
             cached_preferred_x,
+            self.viewport_height,
         );
 
         let new_preferred_x = if invalidate_preferred_x {
@@ -116,6 +123,7 @@ impl Runtime {
         direction: Direction,
         extend_selection: bool,
         cached_preferred_x: Option<f32>,
+        viewport_height: f32,
     ) -> (Position, Position) {
         let pages = &self.pages;
 
@@ -127,16 +135,15 @@ impl Runtime {
                     let (_, rect) = match Cursor::bounds(ctx, pages, position.clone()) {
                         Some(r) => r,
                         None => {
-                            // block position
                             let go_forward = matches!(
                                 direction,
                                 Direction::Right
                                     | Direction::Down
+                                    | Direction::PageDown
                                     | Direction::LineEnd
                                     | Direction::WordRight
                                     | Direction::DocumentEnd
                             );
-                            // TODO: pages 정보 없이 node 정보만으로 navigation 하는 게 맞나?
                             let resolved = move_from_block_position(ctx.doc, position, go_forward);
                             return Selection::collapsed(resolved);
                         }
@@ -146,9 +153,9 @@ impl Runtime {
                         Direction::Right | Direction::WordRight => {
                             (rect.x + rect.width, rect.y + rect.height)
                         }
-                        Direction::Up | Direction::Down => {
+                        Direction::Up | Direction::Down | Direction::PageUp | Direction::PageDown => {
                             let x = cached_preferred_x.unwrap_or(rect.x);
-                            let y = if matches!(direction, Direction::Up) {
+                            let y = if matches!(direction, Direction::Up | Direction::PageUp) {
                                 rect.y
                             } else {
                                 rect.y + rect.height
@@ -164,6 +171,12 @@ impl Runtime {
                         Direction::Right => Cursor::move_right(ctx, pages, position, preferred_y),
                         Direction::Up => Cursor::move_up(ctx, pages, position, preferred_x),
                         Direction::Down => Cursor::move_down(ctx, pages, position, preferred_x),
+                        Direction::PageUp => {
+                            Cursor::move_page_up(ctx, pages, position, preferred_x, viewport_height)
+                        }
+                        Direction::PageDown => {
+                            Cursor::move_page_down(ctx, pages, position, preferred_x, viewport_height)
+                        }
                         Direction::LineStart => Cursor::move_to_line_start(ctx, pages, position),
                         Direction::LineEnd => Cursor::move_to_line_end(ctx, pages, position),
                         Direction::WordLeft => {
@@ -186,6 +199,7 @@ impl Runtime {
 
             let (anchor, new_head) = match direction {
                 Direction::Up
+                | Direction::PageUp
                 | Direction::Left
                 | Direction::WordLeft
                 | Direction::LineStart
@@ -196,6 +210,7 @@ impl Runtime {
                     }
                 }
                 Direction::Down
+                | Direction::PageDown
                 | Direction::Right
                 | Direction::WordRight
                 | Direction::LineEnd
@@ -212,11 +227,13 @@ impl Runtime {
             let base = match direction {
                 Direction::Left
                 | Direction::Up
+                | Direction::PageUp
                 | Direction::LineStart
                 | Direction::WordLeft
                 | Direction::DocumentStart => from,
                 Direction::Right
                 | Direction::Down
+                | Direction::PageDown
                 | Direction::LineEnd
                 | Direction::WordRight
                 | Direction::DocumentEnd => to,

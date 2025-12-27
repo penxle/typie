@@ -57,6 +57,12 @@ export const getActionFromKeyEvent = (e: KeyboardEvent): Message | null => {
         return nav('lineEnd', e.shiftKey);
       }
     }
+    case 'PageUp': {
+      return nav('pageUp', e.shiftKey);
+    }
+    case 'PageDown': {
+      return nav('pageDown', e.shiftKey);
+    }
     case 'Backspace': {
       if (IS_MAC && e.metaKey) {
         return { type: 'deleteToLineStart' };

@@ -41,6 +41,8 @@ pub enum Direction {
     WordRight,
     DocumentStart,
     DocumentEnd,
+    PageUp,
+    PageDown,
 }
 
 macro_rules! define_messages {
@@ -405,9 +407,9 @@ define_messages! {
     => when When::True
     => handle(rt) { rt.handle_set_layout_mode(mode) },
 
-    Resize { width: f32, scale_factor: f64 }
+    Resize { width: f32, height: f32, scale_factor: f64 }
     => when When::True
-    => handle(rt) { rt.handle_resize(width, scale_factor) },
+    => handle(rt) { rt.handle_resize(width, height, scale_factor) },
 
     SetTheme { theme: Theme }
     => when When::True
