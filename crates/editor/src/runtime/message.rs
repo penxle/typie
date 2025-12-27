@@ -1,6 +1,6 @@
 use super::effect::Effect;
 use super::{Context, ContextKey, Runtime, When};
-use crate::model::{HorizontalRuleVariant, LayoutMode, Mark, TextAlign};
+use crate::model::{BlockquoteVariant, HorizontalRuleVariant, LayoutMode, Mark, TextAlign};
 use crate::types::Theme;
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
@@ -304,9 +304,9 @@ define_messages! {
         .and(When::key(ContextKey::HasParagraphTextInSelection))
     => handle(rt) { rt.handle_toggle_ruby(text) },
 
-    ToggleBlockquote
+    ToggleBlockquote { variant: BlockquoteVariant }
     => when When::key(ContextKey::CanEdit)
-    => handle(rt) { rt.handle_toggle_blockquote() },
+    => handle(rt) { rt.handle_toggle_blockquote(variant) },
 
     ToggleCallout
     => when When::key(ContextKey::CanEdit)

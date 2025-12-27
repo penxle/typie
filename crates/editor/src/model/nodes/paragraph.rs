@@ -666,8 +666,13 @@ impl Layout for ParagraphNode {
             y_offset += metric.height + metric.leading;
         }
 
+        let content_width = metrics
+            .iter()
+            .map(|m| m.content_width)
+            .fold(0.0f32, |a, b| a.max(b));
+
         LayoutNode {
-            size: Size::new(constraints.max_width, y_offset),
+            size: Size::new(content_width, y_offset),
             element: None,
             children: Some(children),
             page_break_policy: PageBreakPolicy::Auto,

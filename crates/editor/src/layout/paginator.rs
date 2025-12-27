@@ -466,6 +466,7 @@ mod tests {
                 height: 20.0,
                 leading: 0.0,
                 baseline: 14.0,
+                content_width: 100.0,
                 start_offset: 0,
                 end_offset: 0,
                 clusters: vec![],
