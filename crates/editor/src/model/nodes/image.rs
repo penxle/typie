@@ -131,6 +131,7 @@ impl Layout for ImageNode {
             element: Some(Element::External(element)),
             children: None,
             page_break_policy: PageBreakPolicy::Avoid,
+            render_hints: Default::default(),
         }
     }
 }

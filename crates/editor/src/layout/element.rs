@@ -19,11 +19,28 @@ pub enum PageBreakPolicy {
     Avoid,
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct RenderHints {
+    pub default_text_color: Option<String>,
+}
+
+impl RenderHints {
+    pub fn merge(&self, parent: &RenderHints) -> RenderHints {
+        RenderHints {
+            default_text_color: self
+                .default_text_color
+                .clone()
+                .or_else(|| parent.default_text_color.clone()),
+        }
+    }
+}
+
 pub struct LayoutNode {
     pub size: Size,
     pub element: Option<Element>,
     pub children: Option<Vec<PositionedNode>>,
     pub page_break_policy: PageBreakPolicy,
+    pub render_hints: RenderHints,
 }
 
 pub struct PositionedNode {

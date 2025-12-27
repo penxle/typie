@@ -167,6 +167,7 @@ impl Layout for FoldTitleNode {
                     element: Some(Element::Line(line_element)),
                     children: None,
                     page_break_policy: PageBreakPolicy::Avoid,
+                    render_hints: Default::default(),
                 }),
             });
 
@@ -191,6 +192,7 @@ impl Layout for FoldTitleNode {
                     element: Some(Element::FoldTitle(toggle_element)),
                     children: None,
                     page_break_policy: PageBreakPolicy::Avoid,
+                    render_hints: Default::default(),
                 }),
             },
         );
@@ -200,6 +202,7 @@ impl Layout for FoldTitleNode {
             element: None,
             children: Some(children),
             page_break_policy: PageBreakPolicy::Avoid,
+            render_hints: Default::default(),
         }
     }
 }

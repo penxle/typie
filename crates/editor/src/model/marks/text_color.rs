@@ -12,7 +12,7 @@ pub struct TextColorMark {
 impl Default for TextColorMark {
     fn default() -> Self {
         Self {
-            key: "default".to_string(),
+            key: "black".to_string(),
         }
     }
 }

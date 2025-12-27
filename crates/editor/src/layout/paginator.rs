@@ -1,4 +1,6 @@
-use crate::layout::{Element, LayoutNode, Page, PageBreakPolicy, PositionedNode, SplitEdges};
+use crate::layout::{
+    Element, LayoutNode, Page, PageBreakPolicy, PositionedNode, RenderHints, SplitEdges,
+};
 use crate::model::LayoutMode;
 use crate::types::{Point, Size};
 use std::rc::Rc;
@@ -18,6 +20,7 @@ struct ParentInfo {
     element: Option<Element>,
     index_in_current_page: Option<usize>,
     page_break_policy: PageBreakPolicy,
+    render_hints: RenderHints,
 }
 
 struct PaginationState {
@@ -144,6 +147,7 @@ impl PaginationState {
                 element: None,
                 children: Some(std::mem::take(&mut self.current_page_nodes)),
                 page_break_policy: PageBreakPolicy::default(),
+                render_hints: Default::default(),
             }),
         };
 
@@ -188,6 +192,7 @@ impl PaginationState {
                     element: Some(new_element),
                     children: None,
                     page_break_policy: old_node.node.page_break_policy,
+                    render_hints: old_node.node.render_hints.clone(),
                 }),
             };
             self.current_page_nodes[idx] = new_node;
@@ -233,6 +238,7 @@ impl PaginationState {
                     element: final_element,
                     children: None,
                     page_break_policy: parent.page_break_policy,
+                    render_hints: parent.render_hints.clone(),
                 }),
             };
             self.current_page_nodes.push(replicated);
@@ -256,6 +262,7 @@ impl PaginationState {
                 element: None,
                 children: Some(std::mem::take(&mut self.current_page_nodes)),
                 page_break_policy: PageBreakPolicy::default(),
+                render_hints: Default::default(),
             }),
         };
 
@@ -273,6 +280,7 @@ impl PaginationState {
                     element: None,
                     children: None,
                     page_break_policy: Default::default(),
+                    render_hints: Default::default(),
                 }),
             }));
         }
@@ -410,6 +418,7 @@ impl Paginator {
                     element: node.element.clone(),
                     children: None,
                     page_break_policy: node.page_break_policy,
+                    render_hints: node.render_hints.clone(),
                 }),
             };
 
@@ -422,6 +431,7 @@ impl Paginator {
                 element: node.element.clone(),
                 index_in_current_page: Some(added_index),
                 page_break_policy: node.page_break_policy,
+                render_hints: node.render_hints.clone(),
             });
 
             for child in children {
@@ -429,9 +439,27 @@ impl Paginator {
             }
             state.parent_stack.pop();
         } else {
-            let adjusted_node = PositionedNode {
-                position: adjusted_position,
-                node: Rc::clone(&positioned.node),
+            let merged_hints = state.parent_stack.iter().fold(
+                positioned.node.render_hints.clone(),
+                |acc, parent| acc.merge(&parent.render_hints),
+            );
+
+            let adjusted_node = if merged_hints.default_text_color.is_some() {
+                PositionedNode {
+                    position: adjusted_position,
+                    node: Rc::new(LayoutNode {
+                        size: positioned.node.size,
+                        element: positioned.node.element.clone(),
+                        children: None,
+                        page_break_policy: positioned.node.page_break_policy,
+                        render_hints: merged_hints,
+                    }),
+                }
+            } else {
+                PositionedNode {
+                    position: adjusted_position,
+                    node: Rc::clone(&positioned.node),
+                }
             };
             state.current_y = node_bottom;
             state.current_page_nodes.push(adjusted_node);
@@ -500,6 +528,7 @@ mod tests {
             element: None,
             children: None,
             page_break_policy: Default::default(),
+            render_hints: Default::default(),
         });
 
         let node2 = Rc::new(LayoutNode {
@@ -507,6 +536,7 @@ mod tests {
             element: None,
             children: None,
             page_break_policy: Default::default(),
+            render_hints: Default::default(),
         });
 
         let children = vec![
@@ -525,6 +555,7 @@ mod tests {
             element: None,
             children: Some(children),
             page_break_policy: Default::default(),
+            render_hints: Default::default(),
         };
 
         let paginator = Paginator::new(
@@ -566,6 +597,7 @@ mod tests {
             element: None,
             children: None,
             page_break_policy: Default::default(),
+            render_hints: Default::default(),
         });
 
         let node2 = Rc::new(LayoutNode {
@@ -573,6 +605,7 @@ mod tests {
             element: None,
             children: None,
             page_break_policy: Default::default(),
+            render_hints: Default::default(),
         });
 
         let children = vec![
@@ -591,6 +624,7 @@ mod tests {
             element: None,
             children: Some(children),
             page_break_policy: Default::default(),
+            render_hints: Default::default(),
         };
 
         let paginator = Paginator::new(
@@ -631,6 +665,7 @@ mod tests {
             element: None,
             children: None,
             page_break_policy: Default::default(),
+            render_hints: Default::default(),
         });
 
         let node2 = Rc::new(LayoutNode {
@@ -638,6 +673,7 @@ mod tests {
             element: None,
             children: None,
             page_break_policy: Default::default(),
+            render_hints: Default::default(),
         });
 
         let children = vec![
@@ -656,6 +692,7 @@ mod tests {
             element: None,
             children: Some(children),
             page_break_policy: Default::default(),
+            render_hints: Default::default(),
         };
 
         let paginator = Paginator::new(
@@ -696,6 +733,7 @@ mod tests {
             element: Some(Element::Line(create_dummy_line_element(false))),
             children: None,
             page_break_policy: Default::default(),
+            render_hints: Default::default(),
         });
 
         let node2 = Rc::new(LayoutNode {
@@ -703,6 +741,7 @@ mod tests {
             element: Some(Element::Line(create_dummy_line_element(true))),
             children: None,
             page_break_policy: Default::default(),
+            render_hints: Default::default(),
         });
 
         let node3 = Rc::new(LayoutNode {
@@ -710,6 +749,7 @@ mod tests {
             element: Some(Element::Line(create_dummy_line_element(false))),
             children: None,
             page_break_policy: Default::default(),
+            render_hints: Default::default(),
         });
 
         let children = vec![
@@ -732,6 +772,7 @@ mod tests {
             element: None,
             children: Some(children),
             page_break_policy: Default::default(),
+            render_hints: Default::default(),
         };
 
         let paginator = Paginator::new(
@@ -773,6 +814,7 @@ mod tests {
             element: Some(Element::Line(create_dummy_line_element(false))),
             children: None,
             page_break_policy: Default::default(),
+            render_hints: Default::default(),
         });
 
         let node2 = Rc::new(LayoutNode {
@@ -780,6 +822,7 @@ mod tests {
             element: Some(Element::Line(create_dummy_line_element(false))),
             children: None,
             page_break_policy: Default::default(),
+            render_hints: Default::default(),
         });
 
         let node3 = Rc::new(LayoutNode {
@@ -787,6 +830,7 @@ mod tests {
             element: Some(Element::Line(create_dummy_line_element(false))),
             children: None,
             page_break_policy: Default::default(),
+            render_hints: Default::default(),
         });
 
         let children = vec![
@@ -809,6 +853,7 @@ mod tests {
             element: None,
             children: Some(children),
             page_break_policy: Default::default(),
+            render_hints: Default::default(),
         };
 
         let paginator = Paginator::new(
@@ -842,6 +887,7 @@ mod tests {
             element: None,
             children: None,
             page_break_policy: Default::default(),
+            render_hints: Default::default(),
         });
 
         let node2 = Rc::new(LayoutNode {
@@ -849,6 +895,7 @@ mod tests {
             element: None,
             children: None,
             page_break_policy: crate::layout::PageBreakPolicy::Avoid,
+            render_hints: Default::default(),
         });
 
         let children = vec![
@@ -867,6 +914,7 @@ mod tests {
             element: None,
             children: Some(children),
             page_break_policy: Default::default(),
+            render_hints: Default::default(),
         };
 
         let paginator = Paginator::new(
@@ -909,6 +957,7 @@ mod tests {
             element: None,
             children: None,
             page_break_policy: Default::default(),
+            render_hints: Default::default(),
         });
 
         let item2 = Rc::new(LayoutNode {
@@ -916,6 +965,7 @@ mod tests {
             element: None,
             children: None,
             page_break_policy: Default::default(),
+            render_hints: Default::default(),
         });
 
         let content_children = vec![
@@ -934,6 +984,7 @@ mod tests {
             element: None,
             children: Some(content_children),
             page_break_policy: Default::default(),
+            render_hints: Default::default(),
         });
 
         let wrapper_node = Rc::new(LayoutNode {
@@ -949,6 +1000,7 @@ mod tests {
                 node: content_node,
             }]),
             page_break_policy: Default::default(),
+            render_hints: Default::default(),
         });
 
         let root_children = vec![PositionedNode {
@@ -961,6 +1013,7 @@ mod tests {
             element: None,
             children: Some(root_children),
             page_break_policy: Default::default(),
+            render_hints: Default::default(),
         };
 
         let paginator = Paginator::new(
@@ -1007,6 +1060,7 @@ mod tests {
             element: None,
             children: None,
             page_break_policy: Default::default(),
+            render_hints: Default::default(),
         });
 
         let node2 = Rc::new(LayoutNode {
@@ -1014,6 +1068,7 @@ mod tests {
             element: None,
             children: None,
             page_break_policy: crate::layout::PageBreakPolicy::Avoid,
+            render_hints: Default::default(),
         });
 
         let children = vec![
@@ -1032,6 +1087,7 @@ mod tests {
             element: None,
             children: Some(children),
             page_break_policy: Default::default(),
+            render_hints: Default::default(),
         };
 
         let paginator = Paginator::new(
@@ -1082,12 +1138,14 @@ mod tests {
             element: Some(Element::Line(create_dummy_line_element(false))),
             children: None,
             page_break_policy: Default::default(),
+            render_hints: Default::default(),
         });
         let p1_line2 = Rc::new(LayoutNode {
             size: Size::new(80.0, 20.0),
             element: Some(Element::Line(create_dummy_line_element(true))),
             children: None,
             page_break_policy: Default::default(),
+            render_hints: Default::default(),
         });
         let p1 = Rc::new(LayoutNode {
             size: Size::new(80.0, 40.0),
@@ -1103,6 +1161,7 @@ mod tests {
                 },
             ]),
             page_break_policy: Default::default(),
+            render_hints: Default::default(),
         });
 
         let p2_line1 = Rc::new(LayoutNode {
@@ -1110,6 +1169,7 @@ mod tests {
             element: Some(Element::Line(create_dummy_line_element(false))),
             children: None,
             page_break_policy: Default::default(),
+            render_hints: Default::default(),
         });
         let p2 = Rc::new(LayoutNode {
             size: Size::new(80.0, 20.0),
@@ -1119,6 +1179,7 @@ mod tests {
                 node: p2_line1,
             }]),
             page_break_policy: Default::default(),
+            render_hints: Default::default(),
         });
 
         let children = vec![
@@ -1137,6 +1198,7 @@ mod tests {
             element: None,
             children: Some(children),
             page_break_policy: Default::default(),
+            render_hints: Default::default(),
         };
 
         let paginator = Paginator::new(
@@ -1250,6 +1312,7 @@ mod tests {
             element: Some(Element::Line(create_dummy_line_element(false))),
             children: None,
             page_break_policy: Default::default(),
+            render_hints: Default::default(),
         });
 
         let node2 = Rc::new(LayoutNode {
@@ -1257,6 +1320,7 @@ mod tests {
             element: Some(Element::Line(create_dummy_line_element(true))),
             children: None,
             page_break_policy: Default::default(),
+            render_hints: Default::default(),
         });
 
         let node3 = Rc::new(LayoutNode {
@@ -1264,6 +1328,7 @@ mod tests {
             element: Some(Element::Line(create_dummy_line_element(false))),
             children: None,
             page_break_policy: Default::default(),
+            render_hints: Default::default(),
         });
 
         let children = vec![
@@ -1286,6 +1351,7 @@ mod tests {
             element: None,
             children: Some(children),
             page_break_policy: Default::default(),
+            render_hints: Default::default(),
         };
 
         let paginator = Paginator::new(
@@ -1326,6 +1392,7 @@ mod tests {
             element: Some(Element::Line(create_dummy_line_element(false))),
             children: None,
             page_break_policy: Default::default(),
+            render_hints: Default::default(),
         });
 
         let node2 = Rc::new(LayoutNode {
@@ -1333,6 +1400,7 @@ mod tests {
             element: Some(Element::Line(create_dummy_line_element(false))),
             children: None,
             page_break_policy: Default::default(),
+            render_hints: Default::default(),
         });
 
         let children = vec![
@@ -1351,6 +1419,7 @@ mod tests {
             element: Some(parent_element),
             children: Some(children),
             page_break_policy: Default::default(),
+            render_hints: Default::default(),
         };
 
         let paginator = Paginator::new(

@@ -10,6 +10,8 @@ pub mod query;
 
 pub use cache::LayoutCache;
 pub use context::LayoutContext;
-pub use element::{Element, Layout, LayoutNode, PageBreakPolicy, PositionedNode, SplitEdges};
+pub use element::{
+    Element, Layout, LayoutNode, PageBreakPolicy, PositionedNode, RenderHints, SplitEdges,
+};
 pub use page::Page;
 pub use paginator::Paginator;

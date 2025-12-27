@@ -1,8 +1,10 @@
+use crate::layout::elements::SplitEdges;
 use crate::layout::elements::blockquote::{
     BlockquoteLineElement, BlockquoteMessageElement, BlockquoteQuoteElement,
 };
-use crate::layout::elements::SplitEdges;
-use crate::layout::{Element, Layout, LayoutContext, LayoutNode, PageBreakPolicy, PositionedNode};
+use crate::layout::{
+    Element, Layout, LayoutContext, LayoutNode, PageBreakPolicy, PositionedNode, RenderHints,
+};
 use crate::model::Node;
 use crate::model::html::{DomSpec, NodeHtmlCodec, NodeParseRule};
 use crate::types::{BoxConstraints, Point, Size};
@@ -145,6 +147,7 @@ impl BlockquoteNode {
                 ))),
                 children: None,
                 page_break_policy: Default::default(),
+                render_hints: Default::default(),
             };
 
             child_nodes.push(PositionedNode {
@@ -166,6 +169,7 @@ impl BlockquoteNode {
             element: None,
             children: Some(child_nodes),
             page_break_policy: Default::default(),
+            render_hints: Default::default(),
         }
     }
 
@@ -196,6 +200,7 @@ impl BlockquoteNode {
             ))),
             children: None,
             page_break_policy: PageBreakPolicy::Avoid,
+            render_hints: Default::default(),
         };
 
         child_nodes.push(PositionedNode {
@@ -225,6 +230,7 @@ impl BlockquoteNode {
             element: None,
             children: Some(child_nodes),
             page_break_policy: Default::default(),
+            render_hints: Default::default(),
         }
     }
 
@@ -232,7 +238,8 @@ impl BlockquoteNode {
         let max_bubble_width = constraints.max_width * MESSAGE_MAX_WIDTH_RATIO;
         let max_content_width = (max_bubble_width - MESSAGE_PADDING_X * 2.0).max(0.0);
 
-        let child_constraints = BoxConstraints::new(0.0, max_content_width, 0.0, constraints.max_height);
+        let child_constraints =
+            BoxConstraints::new(0.0, max_content_width, 0.0, constraints.max_height);
 
         let children: Vec<_> = ctx.node.children().collect();
         let child_count = children.len();
@@ -283,6 +290,13 @@ impl BlockquoteNode {
             element: Some(Element::BlockquoteMessage(background_element)),
             children: Some(content_nodes),
             page_break_policy: PageBreakPolicy::Auto,
+            render_hints: if is_sent {
+                RenderHints {
+                    default_text_color: Some("text.bright".into()),
+                }
+            } else {
+                Default::default()
+            },
         };
 
         LayoutNode {
@@ -293,6 +307,7 @@ impl BlockquoteNode {
                 node: Rc::new(bubble_node),
             }]),
             page_break_policy: Default::default(),
+            render_hints: Default::default(),
         }
     }
 }
