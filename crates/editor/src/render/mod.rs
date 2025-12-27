@@ -7,7 +7,7 @@ use crate::layout::{Element, Page, PositionedNode};
 use crate::model::{Doc, SelectionDecor};
 use crate::runtime::DropIndicator;
 use crate::types::{Point, Theme};
-use tiny_skia::{Color, Pixmap, PixmapMut, Rect, Transform};
+use tiny_skia::{Pixmap, PixmapMut, Rect, Transform};
 
 pub struct RenderContext<'a> {
     pub scale_factor: f64,
@@ -132,7 +132,7 @@ impl Renderer {
         );
 
         if let Some(indicator) = drop_indicator {
-            Self::render_drop_indicator(&mut pixmap, indicator, page_idx, transform);
+            Self::render_drop_indicator(&mut pixmap, indicator, page_idx, transform, &ctx);
         }
 
         let data = self.pixmap.data();
@@ -149,8 +149,9 @@ impl Renderer {
         indicator: &DropIndicator,
         current_page_idx: usize,
         transform: Transform,
+        ctx: &RenderContext,
     ) {
-        let indicator_color = Color::from_rgba8(0, 111, 255, 255);
+        let indicator_color = ctx.theme.color("ui.accent.brand.default");
         let mut paint = tiny_skia::Paint::default();
         paint.set_color(indicator_color);
         paint.anti_alias = true;

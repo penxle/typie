@@ -1,15 +1,14 @@
+use crate::utils::rgba_from_u32;
+use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use tiny_skia::Color;
 use tsify::Tsify;
 
-use crate::utils::rgba_from_u32;
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Tsify)]
 #[serde(rename_all = "camelCase")]
 pub struct Theme {
-    pub colors: HashMap<String, u32>,
+    pub colors: FxHashMap<String, u32>,
 }
 
 impl Hash for Theme {
@@ -26,7 +25,7 @@ impl Hash for Theme {
 impl Default for Theme {
     fn default() -> Self {
         Self {
-            colors: HashMap::new(),
+            colors: FxHashMap::default(),
         }
     }
 }
@@ -48,5 +47,10 @@ impl Theme {
     pub fn color_rgba(&self, key: &str) -> [u8; 4] {
         let color = self.color_u32(key);
         rgba_from_u32(color)
+    }
+
+    pub fn color_with_alpha(&self, key: &str, alpha: u8) -> Color {
+        let [r, g, b, _] = self.color_rgba(key);
+        Color::from_rgba8(r, g, b, alpha)
     }
 }
