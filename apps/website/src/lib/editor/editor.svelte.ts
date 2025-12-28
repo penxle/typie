@@ -634,35 +634,6 @@ export class Editor {
     this.contextMenu.isOpen = true;
   }
 
-  handleOverlayContextMenu(e: MouseEvent, overlayEl: HTMLElement): void {
-    e.preventDefault();
-
-    overlayEl.style.visibility = 'hidden';
-    const targetEl = document.elementFromPoint(e.clientX, e.clientY);
-    overlayEl.style.visibility = 'visible';
-
-    if (!(targetEl instanceof HTMLElement)) return;
-
-    const resolved = this.#resolvePointerCoordinate(e, targetEl);
-    if (!resolved) return;
-
-    const { pageIdx, x, y } = resolved;
-
-    this.dispatch({
-      type: 'pointerDown',
-      pageIdx,
-      x,
-      y,
-      clickCount: 1,
-      button: 'secondary',
-      modifier: this.#toModifier(e),
-    });
-
-    this.contextMenu.x = e.clientX;
-    this.contextMenu.y = e.clientY;
-    this.contextMenu.isOpen = true;
-  }
-
   closeContextMenu(): void {
     this.contextMenu.isOpen = false;
   }

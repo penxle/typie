@@ -201,6 +201,7 @@ pub fn collect_mark_parse_rules() -> Vec<MarkParseRule> {
     rules.extend(TextColorMark::parse_rules());
     rules.extend(BackgroundColorMark::parse_rules());
     rules.extend(RubyMark::parse_rules());
+    rules.extend(LinkMark::parse_rules());
     rules.sort_by(|a, b| b.priority.cmp(&a.priority));
     rules
 }
