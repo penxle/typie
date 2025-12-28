@@ -16,6 +16,13 @@ query SearchScreen_RecentlyViewed_Query {
           type
           updatedAt
         }
+
+        ... on Document {
+          id
+          title
+          excerpt
+          updatedAt
+        }
       }
     }
   }

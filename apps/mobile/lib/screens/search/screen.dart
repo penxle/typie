@@ -5,6 +5,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
 import 'package:typie/constants/router_tab_index.dart';
 import 'package:typie/context/theme.dart';
+import 'package:typie/context/toast.dart';
 import 'package:typie/extensions/jiffy.dart';
 import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
 import 'package:typie/graphql/widget.dart';
@@ -159,6 +160,44 @@ class SearchScreen extends HookWidget {
                           ),
                         ),
                       ),
+                      searchHitDocument: (document) => Tappable(
+                        onTap: () {
+                          context.toast(ToastType.notification, '웹에서 조회 및 편집을 할 수 있어요');
+                        },
+                        child: Container(
+                          decoration: BoxDecoration(
+                            border: Border.all(color: context.colors.borderStrong),
+                            borderRadius: BorderRadius.circular(8),
+                            color: context.colors.surfaceDefault,
+                          ),
+                          padding: const Pad(horizontal: 16, vertical: 12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            spacing: 4,
+                            children: [
+                              Row(
+                                spacing: 8,
+                                children: [
+                                  Expanded(
+                                    child: _HTMLText(
+                                      document.title ?? '(제목 없음)',
+                                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                                    ),
+                                  ),
+                                  Text(
+                                    document.document.updatedAt.ago,
+                                    style: TextStyle(fontSize: 14, color: context.colors.textSubtle),
+                                  ),
+                                ],
+                              ),
+                              _HTMLText(
+                                document.text ?? '(내용 없음)',
+                                style: TextStyle(fontSize: 14, color: context.colors.textSubtle),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                       orElse: () => throw UnimplementedError(),
                     );
                   },
@@ -184,6 +223,10 @@ class _RecentlyViewedItem extends StatelessWidget {
       onTap: () async {
         await entity.node.when(
           post: (_) => context.router.push(EditorRoute(slug: entity.slug)),
+          document: (_) {
+            context.toast(ToastType.notification, '웹에서 조회 및 편집을 할 수 있어요');
+            return Future<void>.value();
+          },
           orElse: Future<void>.value,
         );
         refreshNotifier?.refresh();
@@ -217,6 +260,32 @@ class _RecentlyViewedItem extends StatelessWidget {
               ),
               Text(
                 post.excerpt.isEmpty ? '(내용 없음)' : post.excerpt,
+                style: TextStyle(fontSize: 14, color: context.colors.textSubtle),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
+            ],
+          ),
+          document: (document) => Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: 4,
+            children: [
+              Row(
+                spacing: 8,
+                children: [
+                  Expanded(
+                    child: Text(
+                      document.title,
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
+                  ),
+                  Text(document.updatedAt.ago, style: TextStyle(fontSize: 14, color: context.colors.textSubtle)),
+                ],
+              ),
+              Text(
+                document.excerpt.isEmpty ? '(내용 없음)' : document.excerpt,
                 style: TextStyle(fontSize: 14, color: context.colors.textSubtle),
                 overflow: TextOverflow.ellipsis,
                 maxLines: 1,
