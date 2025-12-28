@@ -1,7 +1,10 @@
-use crate::layout::elements::SplitEdges;
+use crate::layout::elements::{SplitEdges, WrapperPadding};
 use crate::model::BlockquoteVariant;
 use crate::model::NodeId;
 use crate::types::Size;
+
+const MESSAGE_PADDING_X: f32 = 14.0;
+const MESSAGE_PADDING_Y: f32 = 8.0;
 
 #[derive(Debug, Clone)]
 pub struct BlockquoteLineElement {
@@ -48,5 +51,15 @@ impl BlockquoteMessageElement {
             variant,
             split_edges,
         }
+    }
+}
+
+impl crate::layout::elements::Wrapper for BlockquoteMessageElement {
+    fn padding(&self) -> WrapperPadding {
+        WrapperPadding::symmetric(MESSAGE_PADDING_Y, MESSAGE_PADDING_X)
+    }
+
+    fn prevent_empty_on_page_break(&self) -> bool {
+        true
     }
 }

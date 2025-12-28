@@ -162,6 +162,7 @@ impl Element {
     pub fn as_wrapper(&self) -> Option<&dyn crate::layout::elements::Wrapper> {
         match self {
             Element::CalloutBackground(e) => Some(e),
+            Element::BlockquoteMessage(e) => Some(e),
             Element::FoldContent(e) => Some(e),
             _ => None,
         }
@@ -178,6 +179,14 @@ impl Element {
                     Size::new(e.size.width, new_height),
                     e.variant,
                     e.node_id,
+                    split_edges,
+                )))
+            }
+            Element::BlockquoteMessage(e) => {
+                Some(Element::BlockquoteMessage(BlockquoteMessageElement::new(
+                    Size::new(e.size.width, new_height),
+                    e.block_id,
+                    e.variant,
                     split_edges,
                 )))
             }
