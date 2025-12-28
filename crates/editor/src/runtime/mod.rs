@@ -53,6 +53,7 @@ struct PendingUpdates {
     exited_document_start: bool,
     pointer_mode_changed: bool,
     placeholder: bool,
+    link_overlays: bool,
 }
 
 #[derive(Clone)]
@@ -137,6 +138,7 @@ impl Runtime {
                 exited_document_start: false,
                 pointer_mode_changed: true,
                 placeholder: true,
+                link_overlays: false,
             },
             message_queue: Vec::new(),
             pointer: PointerState::default(),
@@ -676,6 +678,10 @@ impl Runtime {
                 page_heights,
             });
             self.pending.layout = false;
+
+            if self.state.read_only {
+                self.pending.link_overlays = true;
+            }
         }
 
         if self.pending.cursor {
@@ -775,6 +781,12 @@ impl Runtime {
             self.pending.placeholder = false;
         }
 
+        if self.pending.link_overlays {
+            let overlays = self.build_link_overlays();
+            cmds.push(Cmd::LinkOverlaysChanged { overlays });
+            self.pending.link_overlays = false;
+        }
+
         cmds
     }
 
@@ -835,6 +847,23 @@ impl Runtime {
         }
 
         elements
+    }
+
+    fn build_link_overlays(&self) -> Vec<cmd::LinkOverlay> {
+        let link_ranges = self.doc().get_link_ranges();
+        let mut overlays = Vec::new();
+
+        for (page_idx, page) in self.pages.iter().enumerate() {
+            for (href, bounds) in page.get_link_overlays(&link_ranges) {
+                overlays.push(cmd::LinkOverlay {
+                    page_idx,
+                    href,
+                    bounds,
+                });
+            }
+        }
+
+        overlays
     }
 
     fn get_first_paragraph_bounds(&self) -> Option<Rect> {
