@@ -27,7 +27,7 @@ impl MarkHtmlCodec for LinkMark {
     }
 
     fn parse_rules() -> Vec<MarkParseRule> {
-        vec![MarkParseRule::from_tag("a[href]", |elem| {
+        vec![MarkParseRule::from_tag("a", |elem| {
             elem.value()
                 .attr("href")
                 .map(|href| Mark::Link(LinkMark { href: href.into() }))
