@@ -151,9 +151,12 @@
 
   onMount(() => {
     wasDetached = editor.isDetached();
+    const wasReadOnly = editor.isReadOnly();
+    editor.setReadOnly(true);
     initialize();
 
     return () => {
+      editor.setReadOnly(wasReadOnly);
       if (editor.isDetached() && !wasDetached) {
         editor.checkoutToLatest();
       }
