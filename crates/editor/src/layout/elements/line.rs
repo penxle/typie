@@ -540,6 +540,32 @@ impl LineElement {
 
         None
     }
+
+    pub fn offset_to_x(&self, offset: usize) -> f32 {
+        if self.metric.clusters.is_empty() {
+            return self.metric.left;
+        }
+
+        if let Some(first) = self.metric.clusters.first() {
+            if offset <= first.start_offset {
+                return self.metric.left + first.x;
+            }
+        }
+
+        if let Some(last) = self.metric.clusters.last() {
+            if offset >= last.end_offset {
+                return self.metric.left + last.x + last.width;
+            }
+        }
+
+        for cluster in &self.metric.clusters {
+            if offset < cluster.end_offset {
+                return self.metric.left + cluster.x;
+            }
+        }
+
+        self.metric.left
+    }
 }
 
 impl CursorNavigable for LineElement {

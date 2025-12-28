@@ -24,6 +24,14 @@ pub struct SelectionStats {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct LinkOverlay {
+    pub page_idx: usize,
+    pub href: String,
+    pub bounds: Vec<Rect>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Tsify)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum Cmd {
     DocChanged,
@@ -95,4 +103,9 @@ pub enum Cmd {
         visible: bool,
         bounds: Option<Rect>,
     },
+
+    LinkOverlaysChanged {
+        overlays: Vec<LinkOverlay>,
+    },
 }
+

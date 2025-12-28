@@ -290,4 +290,96 @@ impl Page {
 
         None
     }
+
+    pub fn get_text_range_bounds(
+        &self,
+        block_id: crate::model::NodeId,
+        start_offset: usize,
+        end_offset: usize,
+    ) -> Vec<crate::types::Rect> {
+        let mut rects = Vec::new();
+
+        Self::collect_text_range_bounds(
+            &self.root,
+            Point::zero(),
+            block_id,
+            start_offset,
+            end_offset,
+            &mut rects,
+        );
+
+        rects
+    }
+
+    fn collect_text_range_bounds(
+        positioned: &PositionedNode,
+        offset: Point,
+        block_id: crate::model::NodeId,
+        start_offset: usize,
+        end_offset: usize,
+        rects: &mut Vec<crate::types::Rect>,
+    ) {
+        let abs_pos = Point::new(
+            offset.x + positioned.position.x,
+            offset.y + positioned.position.y,
+        );
+
+        if let Some(ref element) = positioned.node.element {
+            if let Element::Line(line) = element {
+                if line.block_id == block_id {
+                    let line_start = line.metric.start_offset;
+                    let line_end = line.metric.end_offset;
+
+                    if start_offset < line_end && end_offset > line_start {
+                        let range_start = start_offset.max(line_start);
+                        let range_end = end_offset.min(line_end);
+
+                        let start_x = line.offset_to_x(range_start);
+                        let end_x = line.offset_to_x(range_end);
+
+                        let width = end_x - start_x;
+                        if width > 0.0 {
+                            rects.push(crate::types::Rect {
+                                x: abs_pos.x + start_x,
+                                y: abs_pos.y + line.metric.top,
+                                width,
+                                height: line.metric.height + line.metric.leading,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        if let Some(children) = &positioned.node.children {
+            for child in children {
+                Self::collect_text_range_bounds(
+                    child,
+                    abs_pos,
+                    block_id,
+                    start_offset,
+                    end_offset,
+                    rects,
+                );
+            }
+        }
+    }
+
+    pub fn get_link_overlays(
+        &self,
+        link_ranges: &[crate::model::LinkRange],
+    ) -> Vec<(String, Vec<crate::types::Rect>)> {
+        let mut results = Vec::new();
+
+        for range in link_ranges {
+            let bounds =
+                self.get_text_range_bounds(range.block_id, range.start_offset, range.end_offset);
+
+            if !bounds.is_empty() {
+                results.push((range.href.clone(), bounds));
+            }
+        }
+
+        results
+    }
 }

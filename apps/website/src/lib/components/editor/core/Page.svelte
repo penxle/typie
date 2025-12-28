@@ -98,6 +98,29 @@
         {/if}
       {/each}
 
+      {#if editor.readOnly}
+        {#each editor.linkOverlays.filter((o) => o.pageIdx === page) as overlay, i (`${i}-${overlay.href}`)}
+          {#each overlay.bounds as bound, j (`${j}-${overlay.href}`)}
+            <a
+              style:left={`${bound.x}px`}
+              style:top={`${bound.y}px`}
+              style:width={`${bound.width}px`}
+              style:height={`${bound.height}px`}
+              class={css({
+                position: 'absolute',
+                cursor: 'pointer',
+                display: 'block',
+              })}
+              data-external-element
+              href={overlay.href}
+              rel="noopener noreferrer"
+              target="_blank"
+              title={overlay.href}
+            ></a>
+          {/each}
+        {/each}
+      {/if}
+
       {#if isPaginated}
         <svg
           class={css({

@@ -131,6 +131,8 @@ export class Editor {
     bounds: null as Rect | null,
   });
 
+  linkOverlays = $state<{ pageIdx: number; href: string; bounds: Rect[] }[]>([]);
+
   typewriter = $state({
     needsScroll: false,
   });
@@ -336,6 +338,11 @@ export class Editor {
         case 'placeholderChanged': {
           this.placeholder.visible = cmd.visible;
           this.placeholder.bounds = cmd.bounds ?? null;
+          break;
+        }
+
+        case 'linkOverlaysChanged': {
+          this.linkOverlays = cmd.overlays;
           break;
         }
       }

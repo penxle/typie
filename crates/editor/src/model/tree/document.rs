@@ -405,4 +405,72 @@ impl Doc {
 
         self.get_children_ids(first_child_id).is_empty()
     }
+
+    pub fn get_link_ranges(&self) -> Vec<LinkRange> {
+        let mut ranges = Vec::new();
+
+        for block_id in self.get_children_ids(NodeId::ROOT) {
+            if self.get_node_type(block_id) != Some(NodeType::Paragraph) {
+                continue;
+            }
+
+            let mut current_offset = 0;
+            let mut link_ranges: Vec<(usize, usize, String)> = Vec::new();
+
+            for child_id in self.get_children_ids(block_id) {
+                if self.get_node_type(child_id) != Some(NodeType::Text) {
+                    continue;
+                }
+
+                let Some(node_map) = self.inner.get_node_map(child_id) else {
+                    continue;
+                };
+
+                let Ok(text) = Text::decode_field(&node_map, "text") else {
+                    continue;
+                };
+
+                for (segment_text, marks) in text.get_rich_text_segments() {
+                    let segment_len = segment_text.chars().count();
+
+                    for mark in &marks {
+                        if let Mark::Link(link) = mark {
+                            let start = current_offset;
+                            let end = current_offset + segment_len;
+
+                            if let Some(last) = link_ranges.last_mut() {
+                                if last.2 == link.href && last.1 == start {
+                                    last.1 = end;
+                                    continue;
+                                }
+                            }
+
+                            link_ranges.push((start, end, link.href.clone()));
+                        }
+                    }
+
+                    current_offset += segment_len;
+                }
+            }
+
+            for (start_offset, end_offset, href) in link_ranges {
+                ranges.push(LinkRange {
+                    block_id,
+                    start_offset,
+                    end_offset,
+                    href,
+                });
+            }
+        }
+
+        ranges
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct LinkRange {
+    pub block_id: NodeId,
+    pub start_offset: usize,
+    pub end_offset: usize,
+    pub href: String,
 }
