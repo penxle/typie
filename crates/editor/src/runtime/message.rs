@@ -1,6 +1,6 @@
 use super::effect::Effect;
 use super::{Context, ContextKey, Runtime, When};
-use crate::model::{BlockquoteVariant, HorizontalRuleVariant, LayoutMode, Mark, TextAlign};
+use crate::model::{BlockquoteVariant, HorizontalRuleVariant, LayoutMode, MarkType, TextAlign};
 use crate::types::Theme;
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
@@ -107,6 +107,7 @@ const TRACKED_ACTIONS: &[&str] = &[
     "ToggleUnderline",
     "ToggleTextColor",
     "ToggleBackgroundColor",
+    "ToggleLink",
     "ToggleRuby",
     "SetTextAlign",
     "SetLineHeight",
@@ -304,6 +305,11 @@ define_messages! {
         .and(When::key(ContextKey::HasParagraphTextInSelection))
     => handle(rt) { rt.handle_toggle_ruby(text) },
 
+    ToggleLink { href: String }
+    => when When::key(ContextKey::CanEdit)
+        .and(When::key(ContextKey::HasParagraphTextInSelection))
+    => handle(rt) { rt.handle_toggle_link(href) },
+
     ToggleBlockquote { variant: BlockquoteVariant }
     => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_toggle_blockquote(variant) },
@@ -391,9 +397,9 @@ define_messages! {
     => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_outdent() },
 
-    ExtendMarkRange { mark: Mark }
+    ExtendMarkRange { mark_type: MarkType }
     => when When::key(ContextKey::CanEdit)
-    => handle(rt) { rt.handle_extend_mark_range(mark) },
+    => handle(rt) { rt.handle_extend_mark_range(mark_type) },
 
     InsertImage { upload_id: Option<String> }
     => when When::key(ContextKey::CanEdit)

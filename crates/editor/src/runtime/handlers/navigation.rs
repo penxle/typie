@@ -1,6 +1,6 @@
 use super::super::{Direction, Effect, Runtime};
 use crate::layout::cursor::{Cursor, NavigationContext};
-use crate::model::{Mark, NodeId};
+use crate::model::{MarkType, NodeId};
 use crate::state::position_helpers::{compare_positions, move_from_block_position};
 use crate::state::{Position, Selection, block_content_len};
 use std::cmp::Ordering;
@@ -112,8 +112,8 @@ impl Runtime {
         })
     }
 
-    pub(crate) fn handle_extend_mark_range(&mut self, mark: Mark) -> Vec<Effect> {
-        self.transact(|tr| tr.extend_mark_range(mark))
+    pub(crate) fn handle_extend_mark_range(&mut self, mark_type: MarkType) -> Vec<Effect> {
+        self.transact(|tr| tr.extend_mark_range(mark_type))
     }
 
     fn compute_navigation(

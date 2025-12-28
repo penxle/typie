@@ -97,6 +97,42 @@ fn check_range_has_mark(
     Ok(true)
 }
 
+fn range_contains_mark_type(
+    tr: &Transaction,
+    from: Position,
+    to: Position,
+    mark_type: MarkType,
+) -> Result<bool> {
+    let ranges = collect_text_ranges_in_selection(tr, from, to)?;
+
+    for (text_node_id, start_offset, end_offset) in ranges {
+        let Some(node) = tr.node(text_node_id) else {
+            continue;
+        };
+        if let Node::Text(text_node) = node.node() {
+            let segments = text_node.text.get_rich_text_segments();
+            let mut current_offset = 0;
+
+            for (segment_text, segment_marks) in segments {
+                let segment_len = segment_text.chars().count();
+                let segment_end = current_offset + segment_len;
+                let overlap_start = current_offset.max(start_offset);
+                let overlap_end = segment_end.min(end_offset);
+
+                if overlap_start < overlap_end
+                    && segment_marks.iter().any(|m| m.as_type() == mark_type)
+                {
+                    return Ok(true);
+                }
+
+                current_offset = segment_end;
+            }
+        }
+    }
+
+    Ok(false)
+}
+
 fn get_common_mark_in_range(
     tr: &Transaction,
     from: Position,
@@ -327,11 +363,20 @@ impl Transaction {
         Ok(true)
     }
 
-    pub fn extend_mark_range(&mut self, mark: Mark) -> Result<bool> {
+    pub fn extend_mark_range(&mut self, mark_type: MarkType) -> Result<bool> {
         let selection = self.selection().clone();
         let (from, to) = selection.as_sorted(self.doc())?;
 
-        if !check_range_has_mark(self, from.clone(), to.clone(), &mark)? {
+        let has_mark_type = |marks: &[Mark]| marks.iter().any(|m| m.as_type() == mark_type);
+
+        let cursor_has_mark = if selection.is_collapsed() {
+            let marks = get_marks_at_cursor(self, &from);
+            has_mark_type(&marks)
+        } else {
+            range_contains_mark_type(self, from.clone(), to.clone(), mark_type)?
+        };
+
+        if !cursor_has_mark {
             return Ok(false);
         }
 
@@ -361,10 +406,10 @@ impl Transaction {
 
         let cursor_segment_idx = all_segments.iter().position(|(seg_start, seg_end, marks)| {
             if from.offset > *seg_start && from.offset <= *seg_end {
-                return marks.contains(&mark);
+                return has_mark_type(marks);
             }
             if from.offset == *seg_start {
-                return marks.contains(&mark);
+                return has_mark_type(marks);
             }
             false
         });
@@ -373,7 +418,7 @@ impl Transaction {
             all_segments
                 .iter()
                 .position(|(_seg_start, seg_end, marks)| {
-                    from.offset == *seg_end && marks.contains(&mark)
+                    from.offset == *seg_end && has_mark_type(marks)
                 })
         });
 
@@ -384,7 +429,7 @@ impl Transaction {
         let mut start_idx = cursor_idx;
         while start_idx > 0 {
             let (_, _, marks) = &all_segments[start_idx - 1];
-            if !marks.contains(&mark) {
+            if !has_mark_type(marks) {
                 break;
             }
             start_idx -= 1;
@@ -393,7 +438,7 @@ impl Transaction {
         let mut end_idx = cursor_idx;
         while end_idx < all_segments.len() - 1 {
             let (_, _, marks) = &all_segments[end_idx + 1];
-            if !marks.contains(&mark) {
+            if !has_mark_type(marks) {
                 break;
             }
             end_idx += 1;

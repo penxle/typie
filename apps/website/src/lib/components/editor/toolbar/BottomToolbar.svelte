@@ -27,6 +27,7 @@
   import ToolbarFontSize from './ToolbarFontSize.svelte';
   import ToolbarFontWeight from './ToolbarFontWeight.svelte';
   import ToolbarIcon from './ToolbarIcon.svelte';
+  import ToolbarLink from './ToolbarLink.svelte';
   import ToolbarRuby from './ToolbarRuby.svelte';
   import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { Mark, MarkType, TextAlign } from '$lib/editor/types';
@@ -341,21 +342,37 @@
   <VerticalDivider style={css.raw({ height: '12px' })} />
 
   <div class={flex({ alignItems: 'center', gap: '4px' })}>
-    <ToolbarDropdownButton active={isLinkActive} disabled={true} label="링크 (준비중)" onEscape={() => editor.focus()} size="small">
+    <ToolbarDropdownButton
+      active={isLinkActive}
+      disabled={!(editor.can('toggleLink') || isLinkActive)}
+      label="링크"
+      onEscape={() => editor.focus()}
+      onOpenChange={(opened) => {
+        if (opened && isLinkActive) {
+          editor.dispatch({ type: 'extendMarkRange', markType: 'link' });
+        }
+      }}
+      size="small"
+    >
       {#snippet anchor()}
         <ToolbarIcon icon={LinkIcon} />
       {/snippet}
 
-      {#snippet floating()}
-        <div class={css({ padding: '8px' })}>링크 기능 준비 중</div>
+      {#snippet floating({ close })}
+        <ToolbarLink {close} />
       {/snippet}
     </ToolbarDropdownButton>
 
     <ToolbarDropdownButton
       active={isRubyActive}
-      disabled={!editor.can('toggleRuby')}
+      disabled={!(editor.can('toggleRuby') || isRubyActive)}
       label="루비"
       onEscape={() => editor.focus()}
+      onOpenChange={(opened) => {
+        if (opened && isRubyActive) {
+          editor.dispatch({ type: 'extendMarkRange', markType: 'ruby' });
+        }
+      }}
       size="small"
     >
       {#snippet anchor()}
