@@ -369,6 +369,7 @@ class _NotesContent extends HookWidget {
     }
 
     return Screen(
+      resizeToAvoidBottomInset: true,
       heading: Heading(
         title: '노트',
         titleIcon: LucideLightIcons.sticky_note,
@@ -378,6 +379,7 @@ class _NotesContent extends HookWidget {
           ? const _EmptyNotesView()
           : CustomScrollView(
               controller: scrollController,
+              physics: const AlwaysScrollableScrollPhysics(),
               slivers: [
                 if (selectedFilterEntityId.value != null)
                   SliverStickyHeader(
@@ -425,8 +427,7 @@ class _NotesContent extends HookWidget {
                             },
                           ),
                   ),
-                if (selectedFilterEntityId.value != null && notesNotRelatedToEntity.isNotEmpty)
-                  const SliverToBoxAdapter(child: SizedBox(height: 24)),
+                if (selectedFilterEntityId.value != null && notesNotRelatedToEntity.isNotEmpty) const SliverGap(24),
                 if (selectedFilterEntityId.value == null || notesNotRelatedToEntity.isNotEmpty)
                   SliverStickyHeader(
                     header: _NotesSectionHeader(
@@ -454,7 +455,7 @@ class _NotesContent extends HookWidget {
                       },
                     ),
                   ),
-                SliverPadding(padding: EdgeInsets.only(bottom: MediaQuery.viewPaddingOf(context).bottom + 20)),
+                const SliverGap(20),
               ],
             ),
     );
@@ -715,14 +716,14 @@ class _NotesSectionHeader extends StatelessWidget {
 
     if (!showSelector) {
       return Container(
-        color: context.colors.surfaceDefault,
+        color: context.colors.surfaceSubtle,
         padding: const Pad(horizontal: 20, vertical: 8),
         child: textWidget,
       );
     }
 
     return Container(
-      color: context.colors.surfaceDefault,
+      color: context.colors.surfaceSubtle,
       padding: const Pad(horizontal: 20, vertical: 8),
       child: Tappable(
         onTap: onTap,
