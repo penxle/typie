@@ -457,15 +457,16 @@ impl Render for LineElement {
                     let run = glyph_run.run();
                     let style = glyph_run.style();
 
-                    let color =
-                        if style.brush.is_empty() || style.brush == TextColorMark::default().key {
-                            ctx.default_text_color.unwrap_or_else(|| {
-                                ctx.theme
-                                    .color(&format!("text.{}", TextColorMark::default().key))
-                            })
-                        } else {
-                            ctx.theme.color(&format!("text.{}", style.brush))
-                        };
+                    let color = if style.brush.is_empty()
+                        || style.brush == format!("text.{}", TextColorMark::default().key)
+                    {
+                        ctx.default_text_color.unwrap_or_else(|| {
+                            ctx.theme
+                                .color(&format!("text.{}", TextColorMark::default().key))
+                        })
+                    } else {
+                        ctx.theme.color(&style.brush)
+                    };
                     let text_paint = create_solid_paint(color);
 
                     let run_x = glyph_run.offset();

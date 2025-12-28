@@ -283,6 +283,7 @@ fn mark_to_macro(mark: &Mark) -> String {
         Mark::FontWeight(m) => format!("font_weight({})", m.weight),
         Mark::Italic(_) => "italic()".to_string(),
         Mark::LetterSpacing(m) => format!("letter_spacing({})", format_number(m.spacing)),
+        Mark::Link(m) => format!("link(\"{}\")", escape_str(&m.href)),
         Mark::Ruby(m) => format!("ruby(\"{}\")", escape_str(&m.text)),
         Mark::Strikethrough(_) => "strikethrough()".to_string(),
         Mark::Underline(_) => "underline()".to_string(),

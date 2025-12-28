@@ -30,6 +30,18 @@ impl Runtime {
         })
     }
 
+    pub(crate) fn handle_toggle_link(&mut self, href: String) -> Vec<Effect> {
+        self.transact(|tr| {
+            let selection = tr.selection().clone();
+
+            if selection.is_collapsed() {
+                return Ok(false);
+            }
+
+            tr.toggle_mark(Mark::Link(LinkMark { href }))
+        })
+    }
+
     pub(crate) fn handle_toggle_blockquote(
         &mut self,
         variant: crate::model::BlockquoteVariant,

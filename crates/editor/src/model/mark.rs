@@ -6,7 +6,9 @@ use std::hash::{Hash, Hasher};
 use tsify::Tsify;
 use wasm_bindgen::prelude::*;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Tsify)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, Tsify,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum MarkType {
     BackgroundColor,
@@ -16,13 +18,14 @@ pub enum MarkType {
     FontWeight,
     Italic,
     LetterSpacing,
+    Link,
     Ruby,
     Strikethrough,
     Underline,
 }
 
 impl MarkType {
-    pub const fn all() -> [MarkType; 10] {
+    pub const fn all() -> [MarkType; 11] {
         [
             MarkType::BackgroundColor,
             MarkType::TextColor,
@@ -31,6 +34,7 @@ impl MarkType {
             MarkType::FontWeight,
             MarkType::Italic,
             MarkType::LetterSpacing,
+            MarkType::Link,
             MarkType::Ruby,
             MarkType::Strikethrough,
             MarkType::Underline,
@@ -48,6 +52,7 @@ pub enum Mark {
     FontWeight(FontWeightMark),
     Italic(ItalicMark),
     LetterSpacing(LetterSpacingMark),
+    Link(LinkMark),
     Ruby(RubyMark),
     Strikethrough(StrikethroughMark),
     Underline(UnderlineMark),
@@ -63,6 +68,7 @@ impl Mark {
             Mark::FontWeight(_) => MarkType::FontWeight,
             Mark::Italic(_) => MarkType::Italic,
             Mark::LetterSpacing(_) => MarkType::LetterSpacing,
+            Mark::Link(_) => MarkType::Link,
             Mark::Ruby(_) => MarkType::Ruby,
             Mark::Strikethrough(_) => MarkType::Strikethrough,
             Mark::Underline(_) => MarkType::Underline,
@@ -78,6 +84,7 @@ impl Mark {
             Mark::FontWeight(m) => m == &FontWeightMark::default(),
             Mark::Italic(_) => false,
             Mark::LetterSpacing(m) => m == &LetterSpacingMark::default(),
+            Mark::Link(m) => m == &LinkMark::default(),
             Mark::Ruby(m) => m == &RubyMark::default(),
             Mark::Strikethrough(_) => false,
             Mark::Underline(_) => false,
@@ -96,6 +103,7 @@ impl Hash for Mark {
             Mark::FontWeight(m) => m.hash(state),
             Mark::Italic(m) => m.hash(state),
             Mark::LetterSpacing(m) => m.hash(state),
+            Mark::Link(m) => m.hash(state),
             Mark::Ruby(m) => m.hash(state),
             Mark::Strikethrough(m) => m.hash(state),
             Mark::Underline(m) => m.hash(state),
@@ -113,6 +121,7 @@ impl MarkHtmlCodec for Mark {
             Mark::FontWeight(m) => m.to_dom(),
             Mark::Italic(m) => m.to_dom(),
             Mark::LetterSpacing(m) => m.to_dom(),
+            Mark::Link(m) => m.to_dom(),
             Mark::Ruby(m) => m.to_dom(),
             Mark::Strikethrough(m) => m.to_dom(),
             Mark::Underline(m) => m.to_dom(),

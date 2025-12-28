@@ -87,6 +87,7 @@ impl Default for Schema {
                     MarkType::FontWeight,
                     MarkType::Italic,
                     MarkType::LetterSpacing,
+                    MarkType::Link,
                     MarkType::Ruby,
                     MarkType::Strikethrough,
                     MarkType::TextColor,
@@ -253,6 +254,12 @@ impl Default for Schema {
             MarkType::TextColor,
             MarkSpec {
                 ..Default::default()
+            },
+        );
+        schema.add_mark(
+            MarkType::Link,
+            MarkSpec {
+                expand: Expand::None,
             },
         );
         schema.add_mark(
