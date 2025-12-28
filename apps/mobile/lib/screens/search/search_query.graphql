@@ -16,6 +16,21 @@ query SearchScreen_Query($siteId: ID!, $query: String!) {
           }
         }
       }
+
+      ... on SearchHitDocument {
+        title
+        text
+
+        document {
+          id
+          updatedAt
+
+          entity {
+            id
+            slug
+          }
+        }
+      }
     }
   }
 }
