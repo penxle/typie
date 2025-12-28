@@ -479,7 +479,7 @@ export class Editor {
 
     if (this.layout.layoutMode.type === 'continuous') {
       const { containerEl, pageElements } = this.extensionArea;
-      if (containerEl && pageElements.length > 0) {
+      if (containerEl && pageElements.length > 0 && containerEl.contains(e.target as Node)) {
         const coord = findNearestPageCoordinate(e, pageElements, this.layout.pageWidth);
         if (coord) {
           return {
