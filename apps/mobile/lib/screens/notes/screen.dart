@@ -31,6 +31,7 @@ import 'package:typie/screens/notes/__generated__/notes_query.req.gql.dart';
 import 'package:typie/screens/notes/__generated__/notes_update_note_mutation.req.gql.dart';
 import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/note.dart';
+import 'package:typie/widgets/screen.dart';
 import 'package:typie/widgets/tappable.dart';
 
 @RoutePage()
@@ -367,18 +368,13 @@ class _NotesContent extends HookWidget {
       }
     }
 
-    return Scaffold(
-      backgroundColor: context.colors.surfaceDefault,
-      resizeToAvoidBottomInset: false,
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(56),
-        child: Heading(
-          title: '노트',
-          titleIcon: LucideLightIcons.sticky_note,
-          actions: [HeadingAction(icon: LucideLightIcons.plus, onTap: handleCreateNote)],
-        ),
+    return Screen(
+      heading: Heading(
+        title: '노트',
+        titleIcon: LucideLightIcons.sticky_note,
+        actions: [HeadingAction(icon: LucideLightIcons.plus, onTap: handleCreateNote)],
       ),
-      body: sortedNotes.isEmpty
+      child: sortedNotes.isEmpty
           ? const _EmptyNotesView()
           : CustomScrollView(
               controller: scrollController,
