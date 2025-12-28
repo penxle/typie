@@ -41,17 +41,22 @@ class HomeScreen extends HookWidget {
       duration: Duration.zero,
       transitionBuilder: (context, child, animation) => child,
       builder: (context, child) {
-        final padding = MediaQuery.viewPaddingOf(context);
+        final mediaQuery = MediaQuery.of(context);
+        final screenMediaQuery = mediaQuery.copyWith(
+          viewInsets: mediaQuery.viewInsets.copyWith(
+            bottom: mediaQuery.viewInsets.bottom - mediaQuery.viewPadding.bottom - 52,
+          ),
+        );
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Expanded(
-              child: MediaQuery.removeViewPadding(context: context, removeBottom: true, child: child),
+              child: MediaQuery(data: screenMediaQuery, child: child),
             ),
             Container(
-              height: padding.bottom + 52,
-              padding: Pad(horizontal: 24, bottom: padding.bottom),
+              height: mediaQuery.viewPadding.bottom + 52,
+              padding: Pad(horizontal: 24, bottom: mediaQuery.viewPadding.bottom),
               decoration: BoxDecoration(
                 border: Border(top: BorderSide(color: context.colors.borderDefault)),
                 color: context.colors.surfaceDefault,

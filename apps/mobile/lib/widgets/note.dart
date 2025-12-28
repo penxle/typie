@@ -87,57 +87,55 @@ class NoteCard extends StatelessWidget {
       children: [
         ClipPath(
           clipper: _NoteFoldClipper(),
-          child: Material(
+          child: ColoredBox(
             color: backgroundColor,
-            child: IntrinsicHeight(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      ReorderableDragStartListener(
-                        index: index,
-                        child: Container(
-                          width: 32,
-                          padding: const Pad(horizontal: 8, vertical: 12),
-                          color: Colors.transparent,
-                          child: Icon(LucideLightIcons.grip_vertical, color: context.colors.textFaint, size: 16),
-                        ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ReorderableDragStartListener(
+                      index: index,
+                      child: Container(
+                        width: 32,
+                        padding: const Pad(horizontal: 8, vertical: 12),
+                        color: Colors.transparent,
+                        child: Icon(LucideLightIcons.grip_vertical, color: context.colors.textFaint, size: 16),
                       ),
-                      Expanded(
-                        child: Padding(
-                          padding: const Pad(top: 12, right: 12, bottom: 12),
-                          child: isExpanded
-                              ? TextField(
-                                  controller: controller,
-                                  focusNode: focusNode,
-                                  smartDashesType: SmartDashesType.disabled,
-                                  smartQuotesType: SmartQuotesType.disabled,
-                                  autocorrect: false,
-                                  keyboardType: TextInputType.multiline,
-                                  maxLines: null,
-                                  minLines: 3,
-                                  decoration: const InputDecoration.collapsed(
-                                    hintText: '기억할 내용이나 작성에 도움이 되는 내용을 자유롭게 적어보세요.',
-                                  ),
-                                  onChanged: onUpdateContent,
-                                )
-                              : GestureDetector(
-                                  onTap: onExpand,
-                                  child: Text(
-                                    controller?.text.replaceAll('\n', ' ') ?? '',
-                                    maxLines: 3,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
+                    ),
+                    Expanded(
+                      child: Padding(
+                        padding: const Pad(top: 12, right: 12, bottom: 12),
+                        child: isExpanded
+                            ? TextField(
+                                controller: controller,
+                                focusNode: focusNode,
+                                smartDashesType: SmartDashesType.disabled,
+                                smartQuotesType: SmartQuotesType.disabled,
+                                autocorrect: false,
+                                keyboardType: TextInputType.multiline,
+                                maxLines: null,
+                                minLines: 3,
+                                decoration: const InputDecoration.collapsed(
+                                  hintText: '기억할 내용이나 작성에 도움이 되는 내용을 자유롭게 적어보세요.',
                                 ),
-                        ),
+                                onChanged: onUpdateContent,
+                              )
+                            : GestureDetector(
+                                onTap: onExpand,
+                                child: Text(
+                                  controller?.text.replaceAll('\n', ' ') ?? '',
+                                  maxLines: 3,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
                       ),
-                    ],
-                  ),
-                  ?footer,
-                ],
-              ),
+                    ),
+                  ],
+                ),
+                ?footer,
+              ],
             ),
           ),
         ),
