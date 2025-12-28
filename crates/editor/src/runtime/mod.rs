@@ -763,7 +763,9 @@ impl Runtime {
         }
 
         if self.pending.placeholder {
-            let visible = self.doc().is_empty() && self.preedit().is_none();
+            let visible = self.doc().is_empty()
+                && self.preedit().is_none()
+                && self.selection().is_collapsed();
             let bounds = if visible {
                 self.get_first_paragraph_bounds()
             } else {
@@ -979,6 +981,7 @@ impl Runtime {
                     self.pending.render = true;
                     self.pending.external_elements = true;
                     self.pending.enabled_actions = true;
+                    self.pending.placeholder = true;
                 }
                 Effect::PendingMarksChanged => {
                     self.pending.active_marks = true;
