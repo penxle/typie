@@ -6,7 +6,7 @@ import { createDbId } from './id';
 import { bytea, datetime } from './types';
 import type { JSONContent } from '@tiptap/core';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
-import type { PageLayout, PlanRules } from './json';
+import type { CouponCondition, PageLayout, PlanRules } from './json';
 
 export const Documents = pgTable(
   'documents',
@@ -111,6 +111,43 @@ export const DocumentCharacterCountChanges = pgTable(
       .default(sql`now()`),
   },
   (t) => [uniqueIndex().on(t.userId, t.documentId, t.bucket), index().on(t.userId, t.bucket)],
+);
+
+export const Coupons = pgTable('coupons', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => createDbId(TableCode.COUPONS)),
+  code: text('code').unique().notNull(),
+  name: text('name').notNull(),
+  description: text('description'),
+  creditAmount: integer('credit_amount').notNull(),
+  condition: jsonb('condition').$type<CouponCondition>(),
+  startsAt: datetime('starts_at').notNull(),
+  expiresAt: datetime('expires_at').notNull(),
+  state: E._CouponState('state').notNull().default('ACTIVE'),
+  createdAt: datetime('created_at')
+    .notNull()
+    .default(sql`now()`),
+});
+
+export const CouponRedemptions = pgTable(
+  'coupon_redemptions',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.COUPON_REDEMPTIONS)),
+    couponId: text('coupon_id')
+      .notNull()
+      .references(() => Coupons.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    creditAmount: integer('credit_amount').notNull(),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [unique().on(t.couponId, t.userId), index().on(t.userId), index().on(t.couponId)],
 );
 
 export const CreditCodes = pgTable('credit_codes', {

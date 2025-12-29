@@ -84,6 +84,7 @@
         "ioredis": "^5.8.2",
         "isomorphic-dompurify": "^2.34.0",
         "jose": "^6.1.3",
+        "json-logic-engine": "^5.0.3",
         "ky": "^1.14.1",
         "loro-crdt": "^1.10.3",
         "meilisearch": "^0.54.0",
@@ -3023,6 +3024,8 @@
     "json-bigint": ["json-bigint@1.0.0", "", { "dependencies": { "bignumber.js": "^9.0.0" } }, "sha512-SiPv/8VpZuWbvLSMtTDU8hEfrZWg/mH/nV/b4o0CYbSxu1UIQPLdwKOCIyLQX+VIPO5vrLX3i8qtqFyhdPSUSQ=="],
 
     "json-buffer": ["json-buffer@3.0.1", "", {}, "sha512-4bV5BfR2mqfQTJm+V5tPPdf+ZpuhiIvTuAB5g8kcrXOZpTT/QwwVRWBywX1ozr6lEuPdbHxwaJlm9G6mI2sfSQ=="],
+
+    "json-logic-engine": ["json-logic-engine@5.0.3", "", {}, "sha512-s8XHAfE39uuBtsCcFJz82j77xbHZX70dkNBkkDpzOUQVeMBQ53dcxtmhro2w7JzzPzF3SF0a+o01aWAS0ZvF5Q=="],
 
     "json-parse-even-better-errors": ["json-parse-even-better-errors@2.3.1", "", {}, "sha512-xyFwyhro/JEof6Ghe2iz2NcXoj2sloNsWr/XsERDK/oiPCfaNhl5ONfp+jQdAZRQQ0IJWNzH9zIZF7li91kh2w=="],
 

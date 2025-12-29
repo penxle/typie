@@ -40,6 +40,8 @@
           throw new FormError('code', '유효하지 않은 할인 코드입니다.');
         } else if (error.code === 'already_redeemed') {
           throw new FormError('code', '이미 등록된 할인 코드입니다.');
+        } else if (error.code === 'condition_not_met') {
+          throw new FormError('code', '사용 조건에 맞지 않는 할인 코드입니다.');
         }
       }
     },
@@ -56,7 +58,15 @@
   <form class={flex({ direction: 'column', gap: '20px' })} onsubmit={form.handleSubmit}>
     <div class={flex({ direction: 'column', gap: '8px' })}>
       <label class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.default' })} for="code">할인 코드</label>
-      <TextInput id="code" style={css.raw({ width: 'full' })} placeholder="할인 코드를 입력하세요" bind:value={form.fields.code} />
+      <TextInput
+        id="code"
+        style={css.raw({ width: 'full', textTransform: 'uppercase' })}
+        oninput={(e) => {
+          e.currentTarget.value = e.currentTarget.value.toUpperCase();
+        }}
+        placeholder="할인 코드를 입력하세요"
+        bind:value={form.fields.code}
+      />
 
       {#if form.errors.code}
         <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'text.danger' })}>{form.errors.code}</div>

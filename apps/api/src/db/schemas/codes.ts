@@ -1,6 +1,8 @@
 // spell-checker:ignoreRegExp /: '[A-Z]{1,4}',/g
 
 export const TableCode = {
+  COUPONS: 'CPN',
+  COUPON_REDEMPTIONS: 'CPNR',
   CREDIT_CODES: 'CRCD',
   DOCUMENTS: 'D',
   DOCUMENT_CONTENTS: 'DC',
