@@ -932,6 +932,12 @@ export class Editor {
     return this.#wasmEditor?.isReadOnly() ?? this.readOnly;
   }
 
+  setAutoSurroundEnabled(enabled: boolean): void {
+    this.ready.then(() => {
+      this.#wasmEditor?.setAutoSurroundEnabled(enabled);
+    });
+  }
+
   canDragAt(pageIdx: number, x: number, y: number): boolean {
     return this.#wasmEditor?.canDragAt(pageIdx, x, y) ?? false;
   }

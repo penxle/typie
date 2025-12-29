@@ -132,6 +132,43 @@ fn resolve_affinity_after_edit(
 }
 
 impl Transaction {
+    pub fn surround_selection(&mut self, left: &str, right: &str) -> Result<bool> {
+        let selection = self.selection().clone();
+        if selection.is_collapsed() {
+            return Ok(false);
+        }
+
+        let (from, to) = selection.as_sorted(self.doc())?;
+
+        let left_len = bytecount::num_chars(left.as_bytes());
+        let right_len = bytecount::num_chars(right.as_bytes());
+
+        self.set_selection(Selection::collapsed(to));
+        self.insert_text(right)?;
+
+        self.set_selection(Selection::collapsed(from));
+        self.insert_text(left)?;
+
+        let new_to = if from.node_id == to.node_id {
+            Position::new(to.node_id, to.offset + left_len + right_len, to.affinity)
+        } else {
+            Position::new(to.node_id, to.offset + right_len, to.affinity)
+        };
+
+        self.set_selection(Selection::new(from, new_to));
+
+        self.push_effect(Effect::NodeChanged {
+            node_id: from.node_id,
+        });
+        if from.node_id != to.node_id {
+            self.push_effect(Effect::NodeChanged {
+                node_id: to.node_id,
+            });
+        }
+
+        Ok(true)
+    }
+
     pub fn insert_text(&mut self, s: &str) -> Result<bool> {
         if s.is_empty() {
             return Ok(false);

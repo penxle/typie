@@ -94,6 +94,8 @@ pub struct Runtime {
 
     cached_plain_text: Option<String>,
     last_synced_version: loro::VersionVector,
+
+    auto_surround_enabled: bool,
 }
 
 #[allow(dead_code)]
@@ -146,6 +148,7 @@ impl Runtime {
             redo_selections: Vec::new(),
             cached_plain_text: None,
             last_synced_version,
+            auto_surround_enabled: true,
         }
     }
 
@@ -201,6 +204,14 @@ impl Runtime {
 
     pub fn is_read_only(&self) -> bool {
         self.state.read_only
+    }
+
+    pub fn set_auto_surround_enabled(&mut self, enabled: bool) {
+        self.auto_surround_enabled = enabled;
+    }
+
+    pub fn is_auto_surround_enabled(&self) -> bool {
+        self.auto_surround_enabled
     }
 
     pub fn import_updates(&mut self, updates: &[u8]) -> Result<()> {

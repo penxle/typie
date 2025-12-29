@@ -1,4 +1,5 @@
 mod callout;
+mod auto_surround;
 mod clipboard;
 mod composition;
 mod deletion;
