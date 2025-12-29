@@ -447,6 +447,11 @@ impl Editor {
     pub fn is_read_only(&self) -> bool {
         self.runtime.is_read_only()
     }
+
+    #[wasm_bindgen(js_name = setAutoSurroundEnabled)]
+    pub fn set_auto_surround_enabled(&mut self, enabled: bool) {
+        self.runtime.set_auto_surround_enabled(enabled);
+    }
 }
 
 fn count_all(text: &str) -> (u32, u32, u32) {
