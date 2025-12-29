@@ -288,6 +288,13 @@
       "when": 1766315636359,
       "tag": "0040_exotic_vin_gonzales",
       "breakpoints": false
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1767001410813,
+      "tag": "0041_colorful_ulik",
+      "breakpoints": false
     }
   ]
 }

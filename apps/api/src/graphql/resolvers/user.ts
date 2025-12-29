@@ -8,12 +8,13 @@ import qs from 'query-string';
 import * as uuid from 'uuid';
 import { redis } from '@/cache';
 import {
+  CouponRedemptions,
+  Coupons,
   CreditCodes,
   db,
   Entities,
   first,
   firstOrThrow,
-  firstOrThrowWith,
   FontFamilies,
   PaymentInvoices,
   PostCharacterCountChanges,
@@ -39,6 +40,7 @@ import {
 import { sendEmail } from '@/email';
 import { EmailUpdatedEmail, EmailUpdateEmail } from '@/email/templates';
 import {
+  CouponState,
   CreditCodeState,
   EntityState,
   FontFamilyState,
@@ -53,6 +55,7 @@ import { env, stack } from '@/env';
 import { TypieError } from '@/errors';
 import * as aws from '@/external/aws';
 import * as portone from '@/external/portone';
+import { evaluateCouponCondition } from '@/utils/coupon';
 import { delay } from '@/utils/promise';
 import { getUserUsage } from '@/utils/user';
 import { redeemCodeSchema, userSchema } from '@/validation';
@@ -650,35 +653,90 @@ builder.mutationFields((t) => ({
           .from(CreditCodes)
           .where(and(eq(CreditCodes.code, code), gt(CreditCodes.expiresAt, dayjs())))
           .for('update')
-          .then(firstOrThrowWith(new TypieError({ code: 'invalid_code' })));
+          .then(first);
 
-        if (creditCode.state === CreditCodeState.USED) {
-          throw new TypieError({ code: 'already_redeemed' });
+        if (creditCode) {
+          if (creditCode.state === CreditCodeState.USED) {
+            throw new TypieError({ code: 'already_redeemed' });
+          }
+
+          await tx
+            .update(CreditCodes)
+            .set({
+              userId: ctx.session.userId,
+              state: CreditCodeState.USED,
+              usedAt: dayjs(),
+            })
+            .where(eq(CreditCodes.id, creditCode.id));
+
+          await tx
+            .insert(UserPaymentCredits)
+            .values({
+              userId: ctx.session.userId,
+              amount: creditCode.amount,
+            })
+            .onConflictDoUpdate({
+              target: [UserPaymentCredits.userId],
+              set: {
+                amount: sql`${UserPaymentCredits.amount} + ${creditCode.amount}`,
+              },
+            });
+
+          return ctx.session.userId;
         }
 
-        await tx
-          .update(CreditCodes)
-          .set({
-            userId: ctx.session.userId,
-            state: CreditCodeState.USED,
-            usedAt: dayjs(),
-          })
-          .where(eq(CreditCodes.id, creditCode.id));
+        const coupon = await tx
+          .select()
+          .from(Coupons)
+          .where(
+            and(
+              eq(Coupons.code, code),
+              eq(Coupons.state, CouponState.ACTIVE),
+              lt(Coupons.startsAt, dayjs()),
+              gt(Coupons.expiresAt, dayjs()),
+            ),
+          )
+          .for('update')
+          .then(first);
 
-        await tx
-          .insert(UserPaymentCredits)
-          .values({
+        if (coupon) {
+          const existingRedemption = await tx
+            .select({ id: CouponRedemptions.id })
+            .from(CouponRedemptions)
+            .where(and(eq(CouponRedemptions.couponId, coupon.id), eq(CouponRedemptions.userId, ctx.session.userId)));
+
+          if (existingRedemption.length > 0) {
+            throw new TypieError({ code: 'already_redeemed' });
+          }
+
+          const conditionMet = await evaluateCouponCondition(coupon.condition, ctx.session.userId);
+          if (!conditionMet) {
+            throw new TypieError({ code: 'condition_not_met' });
+          }
+
+          await tx.insert(CouponRedemptions).values({
+            couponId: coupon.id,
             userId: ctx.session.userId,
-            amount: creditCode.amount,
-          })
-          .onConflictDoUpdate({
-            target: [UserPaymentCredits.userId],
-            set: {
-              amount: sql`${UserPaymentCredits.amount} + ${creditCode.amount}`,
-            },
+            creditAmount: coupon.creditAmount,
           });
 
-        return ctx.session.userId;
+          await tx
+            .insert(UserPaymentCredits)
+            .values({
+              userId: ctx.session.userId,
+              amount: coupon.creditAmount,
+            })
+            .onConflictDoUpdate({
+              target: [UserPaymentCredits.userId],
+              set: {
+                amount: sql`${UserPaymentCredits.amount} + ${coupon.creditAmount}`,
+              },
+            });
+
+          return ctx.session.userId;
+        }
+
+        throw new TypieError({ code: 'invalid_code' });
       });
     },
   }),

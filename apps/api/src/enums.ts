@@ -1,3 +1,9 @@
+export type CouponState = keyof typeof CouponState;
+export const CouponState = {
+  ACTIVE: 'ACTIVE',
+  DISABLED: 'DISABLED',
+} as const;
+
 export type CreditCodeState = keyof typeof CreditCodeState;
 export const CreditCodeState = {
   AVAILABLE: 'AVAILABLE',

@@ -52,6 +52,11 @@ input CheckSpellingInput {
   body: JSON!
 }
 
+enum CouponState {
+  ACTIVE
+  DISABLED
+}
+
 input CreateDocumentInput {
   parentEntityId: ID
   siteId: ID!
