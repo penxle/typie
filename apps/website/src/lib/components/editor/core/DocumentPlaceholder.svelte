@@ -51,7 +51,6 @@
       textAlign: 'start',
       transition: 'common',
       pointerEvents: 'auto',
-      cursor: 'default',
       _hover: { color: 'text.faint' },
     })}
     data-external-element
