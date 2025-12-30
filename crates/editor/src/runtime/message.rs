@@ -456,4 +456,8 @@ define_messages! {
     SelectSpellcheckError { error_id: String }
     => when When::True
     => handle(rt) { rt.handle_select_spellcheck_error(error_id) },
+
+    SetFocused { focused: bool }
+    => when When::True
+    => handle(rt) { rt.handle_set_focused(focused) },
 }

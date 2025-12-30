@@ -15,6 +15,7 @@ pub struct RenderContext<'a> {
     pub theme: &'a Theme,
     pub doc: &'a Doc,
     pub default_text_color: Option<Color>,
+    pub is_focused: bool,
 }
 
 pub trait Render {
@@ -63,6 +64,7 @@ pub struct Renderer {
     pixmap: Pixmap,
     glyph_renderer: GlyphRenderer,
     theme: Theme,
+    is_focused: bool,
 }
 
 impl Renderer {
@@ -74,6 +76,7 @@ impl Renderer {
             pixmap,
             glyph_renderer: GlyphRenderer::new(),
             theme: Theme::default(),
+            is_focused: true,
         }
     }
 
@@ -91,6 +94,10 @@ impl Renderer {
 
     pub fn set_theme(&mut self, theme: Theme) {
         self.theme = theme;
+    }
+
+    pub fn set_focused(&mut self, focused: bool) {
+        self.is_focused = focused;
     }
 
     pub fn width(&self) -> u16 {
@@ -120,6 +127,7 @@ impl Renderer {
             theme: &self.theme,
             doc,
             default_text_color: None,
+            is_focused: self.is_focused,
         };
 
         let mut pixmap = self.pixmap.as_mut();
@@ -274,6 +282,7 @@ impl Renderer {
                 theme: &self.theme,
                 doc,
                 default_text_color: None,
+                is_focused: true,
             };
 
             Self::render_page_part_inner(

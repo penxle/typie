@@ -123,6 +123,12 @@
   $effect(() => {
     return handleDragScroll(scrollContainerEl, !editor.isPointerModeIdle);
   });
+
+  $effect(() => {
+    if (initialized) {
+      editor.dispatch({ type: 'setFocused', focused: editor.isFocused });
+    }
+  });
 </script>
 
 <div class={flex({ direction: 'column', height: 'full', width: 'full' })}>

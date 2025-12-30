@@ -101,6 +101,7 @@ pub struct Runtime {
     auto_surround_enabled: bool,
     spellcheck_errors: Vec<SpellcheckError>,
     active_spellcheck_error_id: Option<String>,
+    is_focused: bool,
 }
 
 #[allow(dead_code)]
@@ -157,6 +158,7 @@ impl Runtime {
             auto_surround_enabled: true,
             spellcheck_errors: Vec::new(),
             active_spellcheck_error_id: None,
+            is_focused: true,
         }
     }
 
@@ -495,6 +497,7 @@ impl Runtime {
 
         self.renderer
             .set_size(self.width.ceil(), page_height, self.scale_factor);
+        self.renderer.set_focused(self.is_focused);
 
         let drop_indicator = self.pending.drop_indicator.as_ref();
 

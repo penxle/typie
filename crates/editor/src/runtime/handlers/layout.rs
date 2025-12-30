@@ -138,4 +138,13 @@ impl Runtime {
         self.layout_cache.borrow_mut().invalidate_all();
         vec![Effect::LayoutChanged]
     }
+
+    pub(crate) fn handle_set_focused(&mut self, focused: bool) -> Vec<Effect> {
+        if self.is_focused != focused {
+            self.is_focused = focused;
+            vec![Effect::LayoutChanged]
+        } else {
+            vec![]
+        }
+    }
 }
