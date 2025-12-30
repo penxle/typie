@@ -18,7 +18,7 @@ import {
   TableCode,
   validateDbId,
 } from '@/db';
-import { DocumentSyncType, EntityAvailability, EntityState, EntityType, EntityVisibility, NoteState } from '@/enums';
+import { DocumentSyncType, DocumentType, EntityAvailability, EntityState, EntityType, EntityVisibility, NoteState } from '@/enums';
 import { NotFoundError, TypieError } from '@/errors';
 import { enqueueJob } from '@/mq';
 import { pubsub } from '@/pubsub';
@@ -41,6 +41,7 @@ IDocument.implement({
     title: t.string({ resolve: (self) => self.title || '(제목 없음)' }),
     nullableTitle: t.exposeString('title', { nullable: true }),
     subtitle: t.exposeString('subtitle', { nullable: true }),
+    type: t.expose('type', { type: DocumentType }),
     createdAt: t.expose('createdAt', { type: 'DateTime' }),
     updatedAt: t.expose('updatedAt', { type: 'DateTime' }),
     excerpt: t.string({
@@ -555,6 +556,39 @@ builder.mutationFields((t) => ({
       pubsub.publish('site:update', document.siteId, { scope: 'entity', entityId: document.entityId });
 
       await enqueueJob('document:index', input.documentId);
+
+      return updatedDocument;
+    },
+  }),
+
+  updateDocumentType: t.withAuth({ session: true }).fieldWithInput({
+    type: Document,
+    input: {
+      documentId: t.input.id({ validate: validateDbId(TableCode.DOCUMENTS) }),
+      type: t.input.field({ type: DocumentType }),
+    },
+    resolve: async (_, { input }, ctx) => {
+      const document = await db
+        .select({ siteId: Entities.siteId, entityId: Entities.id })
+        .from(Documents)
+        .innerJoin(Entities, eq(Documents.entityId, Entities.id))
+        .where(eq(Documents.id, input.documentId))
+        .then(firstOrThrow);
+
+      await assertSitePermission({
+        userId: ctx.session.userId,
+        siteId: document.siteId,
+      });
+
+      const updatedDocument = await db
+        .update(Documents)
+        .set({ type: input.type })
+        .where(eq(Documents.id, input.documentId))
+        .returning()
+        .then(firstOrThrow);
+
+      pubsub.publish('site:update', document.siteId, { scope: 'site' });
+      pubsub.publish('site:update', document.siteId, { scope: 'entity', entityId: document.entityId });
 
       return updatedDocument;
     },

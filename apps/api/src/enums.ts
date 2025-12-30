@@ -136,6 +136,12 @@ export const DocumentSyncType = {
   PRESENCE: 'PRESENCE',
 } as const;
 
+export type DocumentType = keyof typeof DocumentType;
+export const DocumentType = {
+  NORMAL: 'NORMAL',
+  TEMPLATE: 'TEMPLATE',
+} as const;
+
 export type PostViewBodyUnavailableReason = keyof typeof PostViewBodyUnavailableReason;
 export const PostViewBodyUnavailableReason = {
   REQUIRE_PASSWORD: 'REQUIRE_PASSWORD',

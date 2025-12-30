@@ -139,6 +139,7 @@ type Document implements IDocument {
   snapshot: Binary!
   subtitle: String
   title: String!
+  type: DocumentType!
   updatedAt: DateTime!
   versions: [DocumentVersion!]!
   view: DocumentView!
@@ -158,6 +159,11 @@ enum DocumentSyncType {
   VECTOR
 }
 
+enum DocumentType {
+  NORMAL
+  TEMPLATE
+}
+
 type DocumentVersion {
   createdAt: DateTime!
   id: ID!
@@ -173,6 +179,7 @@ type DocumentView implements IDocument {
   snapshot: Binary
   subtitle: String
   title: String!
+  type: DocumentType!
   updatedAt: DateTime!
 }
 
@@ -373,6 +380,7 @@ interface IDocument {
   nullableTitle: String
   subtitle: String
   title: String!
+  type: DocumentType!
   updatedAt: DateTime!
 }
 
@@ -553,6 +561,7 @@ type Mutation {
   updateBillingKey(input: UpdateBillingKeyInput!): UserBillingKey!
   updateBootstrap(input: UpdateBootstrapInput!): JSON!
   updateDocument(input: UpdateDocumentInput!): Document!
+  updateDocumentType(input: UpdateDocumentTypeInput!): Document!
   updateDocumentsOption(input: UpdateDocumentsOptionInput!): [Document!]!
   updateEmail(input: UpdateEmailInput!): Boolean!
   updateFolderOption(input: UpdateFolderOptionInput!): Folder!
@@ -900,6 +909,7 @@ enum SingleSignOnProvider {
 
 type Site implements ISite {
   deletedEntities: [Entity!]!
+  documentTemplates: [Document!]!
   entities: [Entity!]!
   firstEntity(type: EntityType!): Entity
   fonts: [Font!]!
@@ -1013,6 +1023,11 @@ input UpdateDocumentInput {
   documentId: ID!
   subtitle: String
   title: String
+}
+
+input UpdateDocumentTypeInput {
+  documentId: ID!
+  type: DocumentType!
 }
 
 input UpdateDocumentsOptionInput {

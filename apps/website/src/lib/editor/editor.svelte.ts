@@ -417,6 +417,10 @@ export class Editor {
     this.#wasmEditor?.importUpdates(updates);
   }
 
+  insertTemplateFragment(snapshot: Uint8Array): void {
+    this.#wasmEditor?.insertTemplateFragment(snapshot);
+  }
+
   importUpdatesBatch(updatesBatch: Uint8Array[]): void {
     this.#wasmEditor?.importUpdatesBatch(updatesBatch);
   }

@@ -4,8 +4,10 @@
   import { contextMenu } from '@typie/ui/actions';
   import { Icon, Menu } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
+  import { DocumentType } from '@/enums';
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import FileIcon from '~icons/lucide/file';
+  import LayoutTemplateIcon from '~icons/lucide/layout-template';
   import { fragment, graphql } from '$graphql';
   import DocumentMenu from '../@context-menu/DocumentMenu.svelte';
   import EntitySelectionIndicator from './@selection/EntitySelectionIndicator.svelte';
@@ -25,6 +27,7 @@
       fragment DashboardLayout_EntityTree_Document_document on Document {
         id
         title
+        documentType: type
         createdAt
         updatedAt
 
@@ -103,7 +106,11 @@
 >
   <EntitySelectionIndicator entityId={$document.entity.id} visibility={$document.entity.visibility} />
 
-  <Icon style={css.raw({ color: 'accent.brand.default' })} icon={FileIcon} size={14} />
+  <Icon
+    style={css.raw({ color: 'accent.brand.default' })}
+    icon={$document.documentType === DocumentType.TEMPLATE ? LayoutTemplateIcon : FileIcon}
+    size={14}
+  />
 
   <span
     class={css(
