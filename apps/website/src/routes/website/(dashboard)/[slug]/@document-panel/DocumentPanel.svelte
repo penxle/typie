@@ -10,6 +10,7 @@
   import DocumentPanelInfo from './DocumentPanelInfo.svelte';
   import DocumentPanelNote from './DocumentPanelNote.svelte';
   import DocumentPanelSettings from './DocumentPanelSettings.svelte';
+  import DocumentPanelSpellcheck from './DocumentPanelSpellcheck.svelte';
   import DocumentPanelTimeline from './DocumentPanelTimeline.svelte';
   import type { DocumentPanel_document, DocumentPanel_user } from '$graphql';
   import type { Editor } from '$lib/editor/editor.svelte';
@@ -37,6 +38,7 @@
         }
 
         ...DocumentPanel_Info_document
+        ...DocumentPanel_Spellcheck_document
         ...DocumentPanelTimeline_document
       }
     `),
@@ -48,6 +50,7 @@
       fragment DocumentPanel_user on User {
         id
         ...DocumentPanel_Info_user
+        ...DocumentPanel_Spellcheck_user
       }
     `),
   );
@@ -153,6 +156,8 @@
       <DocumentPanelNote $entity={$document.entity} />
     {:else if app.preference.current.panelTabByViewId[splitViewId] === 'timeline'}
       <DocumentPanelTimeline {$document} {editor} />
+    {:else if app.preference.current.panelTabByViewId[splitViewId] === 'spellcheck'}
+      <DocumentPanelSpellcheck {$document} {$user} {editor} />
     {:else}
       <div
         class={flex({

@@ -1,7 +1,7 @@
 import dayjs from 'dayjs';
 import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, sum } from 'drizzle-orm';
 import { filter, pipe, Repeater } from 'graphql-yoga';
-import { LoroDoc } from 'loro-crdt';
+import { LoroDoc, LoroList, LoroMap } from 'loro-crdt';
 import { redis } from '@/cache';
 import {
   db,
@@ -20,6 +20,7 @@ import {
 } from '@/db';
 import { DocumentSyncType, DocumentType, EntityAvailability, EntityState, EntityType, EntityVisibility, NoteState } from '@/enums';
 import { NotFoundError, TypieError } from '@/errors';
+import * as spellcheck from '@/external/spellcheck';
 import { enqueueJob } from '@/mq';
 import { pubsub } from '@/pubsub';
 import {
@@ -720,7 +721,150 @@ builder.mutationFields((t) => ({
       return true;
     },
   }),
+
+  checkSpellingDocument: t.withAuth({ session: true }).fieldWithInput({
+    type: [
+      builder.simpleObject('DocumentSpellingError', {
+        fields: (t) => ({
+          id: t.string(),
+          nodeId: t.string(),
+          startOffset: t.int(),
+          endOffset: t.int(),
+          context: t.string(),
+          corrections: t.stringList(),
+          explanation: t.string(),
+        }),
+      }),
+    ],
+    input: { documentId: t.input.id({ validate: validateDbId(TableCode.DOCUMENTS) }) },
+    resolve: async (_, { input }, ctx) => {
+      const document = await db
+        .select({ siteId: Entities.siteId, availability: Entities.availability })
+        .from(Documents)
+        .innerJoin(Entities, eq(Documents.entityId, Entities.id))
+        .where(eq(Documents.id, input.documentId))
+        .then(firstOrThrow);
+
+      if (document.availability === EntityAvailability.PRIVATE) {
+        await assertSitePermission({
+          userId: ctx.session.userId,
+          siteId: document.siteId,
+        });
+      }
+
+      const content = await db
+        .select({ snapshot: DocumentContents.snapshot })
+        .from(DocumentContents)
+        .where(eq(DocumentContents.documentId, input.documentId))
+        .then(firstOrThrow);
+
+      const doc = new LoroDoc();
+      doc.import(content.snapshot);
+
+      const { fullText, nodeMappings } = extractLoroTextWithMappings(doc);
+      if (!fullText.trim()) {
+        return [];
+      }
+
+      const errors = await spellcheck.check(fullText);
+
+      const mapRange = (textStart: number, textEnd: number) => {
+        const startMapping = nodeMappings.find((m) => textStart >= m.textStart && textStart < m.textEnd);
+        const endMapping = nodeMappings.find((m) => textEnd > m.textStart && textEnd <= m.textEnd);
+
+        if (!startMapping || !endMapping || startMapping.nodeId !== endMapping.nodeId) {
+          return null;
+        }
+
+        const startOffset = startMapping.blockOffset + (textStart - startMapping.textStart);
+        const endOffset = startMapping.blockOffset + (textEnd - startMapping.textStart);
+
+        return { nodeId: startMapping.nodeId, startOffset, endOffset };
+      };
+
+      let errorId = 0;
+      return errors
+        .map((error) => {
+          const range = mapRange(error.start, error.end);
+          if (!range) return null;
+
+          return {
+            id: `err-${errorId++}`,
+            nodeId: range.nodeId,
+            startOffset: range.startOffset,
+            endOffset: range.endOffset,
+            context: error.context,
+            corrections: error.corrections,
+            explanation: error.explanation,
+          };
+        })
+        .filter((error): error is NonNullable<typeof error> => error !== null);
+    },
+  }),
 }));
+
+type LoroTextMapping = {
+  nodeId: string;
+  textStart: number;
+  textEnd: number;
+  blockOffset: number;
+};
+
+function extractLoroTextWithMappings(doc: LoroDoc) {
+  const nodes = doc.getMap('nodes');
+  const ROOT_ID = '00000000000000000000000000000000';
+
+  const rootNode = nodes.get(ROOT_ID) as LoroMap | undefined;
+  if (!rootNode) return { fullText: '', nodeMappings: [] };
+
+  const rootChildren = (rootNode.get('children') as LoroList)?.toArray() as string[] | undefined;
+  if (!rootChildren) return { fullText: '', nodeMappings: [] };
+
+  let fullText = '';
+  const nodeMappings: LoroTextMapping[] = [];
+
+  for (const nodeId of rootChildren) {
+    const blockNode = nodes.get(nodeId) as LoroMap | undefined;
+    if (!blockNode) continue;
+
+    const blockData = blockNode.toJSON() as { type: string };
+    if (blockData.type !== 'paragraph') continue; // TODO: 다른 textblock도 처리? (예: fold title)
+
+    const children = (blockNode.get('children') as LoroList)?.toArray() as string[] | undefined;
+    if (!children) continue;
+
+    let blockOffset = 0;
+    for (const childId of children) {
+      const childNode = nodes.get(childId) as LoroMap | undefined;
+      if (!childNode) continue;
+
+      const childData = childNode.toJSON() as { type: string; text?: string };
+      if (childData.type !== 'text') continue;
+
+      const nodeText = childData.text;
+      if (!nodeText || typeof nodeText !== 'string') continue;
+
+      const textStart = fullText.length;
+      fullText += nodeText;
+      const textEnd = fullText.length;
+
+      nodeMappings.push({
+        nodeId,
+        textStart,
+        textEnd,
+        blockOffset,
+      });
+
+      blockOffset += [...nodeText].length;
+    }
+
+    if (fullText.length > 0) {
+      fullText += '\n';
+    }
+  }
+
+  return { fullText, nodeMappings };
+}
 
 builder.subscriptionFields((t) => ({
   documentSyncStream: t.withAuth({ session: true }).field({

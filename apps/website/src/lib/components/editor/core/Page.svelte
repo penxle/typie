@@ -121,6 +121,27 @@
         {/each}
       {/if}
 
+      {#each editor.spellcheckOverlays.filter((o) => o.pageIdx === page) as overlay, i (`${i}-${overlay.id}`)}
+        {#each overlay.bounds as bound, j (`${j}-${overlay.id}`)}
+          <div
+            style:left={`${bound.x}px`}
+            style:top={`${bound.y + bound.ascent + 2}px`}
+            style:width={`${bound.width}px`}
+            class={css({
+              position: 'absolute',
+              height: '4px',
+              pointerEvents: 'none',
+              backgroundImage: `url("data:image/svg+xml,${encodeURIComponent(
+                '<svg width="6" height="3" viewBox="0 0 6 3" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M0 0.5C1.5 0.5 1.5 2.5 3 2.5C4.5 2.5 4.5 0.5 6 0.5" stroke="#DC2626" stroke-linecap="round"/></svg>',
+              )}")`,
+              backgroundRepeat: 'repeat-x',
+              backgroundPosition: 'bottom',
+            })}
+            data-spellcheck-overlay={overlay.id}
+          ></div>
+        {/each}
+      {/each}
+
       {#if isPaginated}
         <svg
           class={css({

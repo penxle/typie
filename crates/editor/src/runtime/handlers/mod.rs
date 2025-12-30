@@ -1,5 +1,5 @@
-mod callout;
 mod auto_surround;
+mod callout;
 mod clipboard;
 mod composition;
 mod deletion;
@@ -15,3 +15,4 @@ mod interaction;
 mod layout;
 mod navigation;
 mod pointer;
+mod spellcheck;

@@ -53,6 +53,16 @@ pub struct Rect {
     pub height: f32,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Tsify)]
+#[allow(dead_code)]
+pub struct TextBound {
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+    pub ascent: f32,
+}
+
 #[allow(dead_code)]
 impl Rect {
     pub fn new(x: f32, y: f32, width: f32, height: f32) -> Self {
@@ -79,6 +89,23 @@ impl Rect {
             width: self.width - padding.left - padding.right,
             height: self.height - padding.top - padding.bottom,
         }
+    }
+}
+
+#[allow(dead_code)]
+impl TextBound {
+    pub fn new(x: f32, y: f32, width: f32, height: f32, ascent: f32) -> Self {
+        Self {
+            x,
+            y,
+            width,
+            height,
+            ascent,
+        }
+    }
+
+    pub fn zero() -> Self {
+        Self::new(0.0, 0.0, 0.0, 0.0, 0.0)
     }
 }
 

@@ -452,4 +452,8 @@ define_messages! {
     SetImageSrc { node_id: String, src: String, width: f32, height: f32 }
     => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_set_image_src(node_id, src, width, height) },
+
+    SelectSpellcheckError { error_id: String }
+    => when When::True
+    => handle(rt) { rt.handle_select_spellcheck_error(error_id) },
 }

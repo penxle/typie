@@ -5,6 +5,7 @@ mod effect;
 mod handlers;
 mod message;
 mod pointer;
+pub mod spellcheck;
 mod state;
 mod view_state;
 
@@ -14,6 +15,7 @@ pub use dnd::*;
 pub use effect::*;
 pub use message::*;
 pub use pointer::*;
+pub use spellcheck::{RawSpellcheckError, SpellcheckError};
 pub use state::*;
 pub use view_state::*;
 
@@ -54,6 +56,7 @@ struct PendingUpdates {
     pointer_mode_changed: bool,
     placeholder: bool,
     link_overlays: bool,
+    spellcheck_overlays: bool,
 }
 
 #[derive(Clone)]
@@ -96,6 +99,8 @@ pub struct Runtime {
     last_synced_version: loro::VersionVector,
 
     auto_surround_enabled: bool,
+    spellcheck_errors: Vec<SpellcheckError>,
+    active_spellcheck_error_id: Option<String>,
 }
 
 #[allow(dead_code)]
@@ -141,6 +146,7 @@ impl Runtime {
                 pointer_mode_changed: true,
                 placeholder: true,
                 link_overlays: false,
+                spellcheck_overlays: false,
             },
             message_queue: Vec::new(),
             pointer: PointerState::default(),
@@ -149,6 +155,8 @@ impl Runtime {
             cached_plain_text: None,
             last_synced_version,
             auto_surround_enabled: true,
+            spellcheck_errors: Vec::new(),
+            active_spellcheck_error_id: None,
         }
     }
 
@@ -715,6 +723,10 @@ impl Runtime {
             if self.state.read_only {
                 self.pending.link_overlays = true;
             }
+
+            if self.has_spellcheck_errors() {
+                self.pending.spellcheck_overlays = true;
+            }
         }
 
         if self.pending.cursor {
@@ -820,6 +832,12 @@ impl Runtime {
             self.pending.link_overlays = false;
         }
 
+        if self.pending.spellcheck_overlays {
+            let overlays = self.build_spellcheck_overlays();
+            cmds.push(Cmd::SpellcheckOverlaysChanged { overlays });
+            self.pending.spellcheck_overlays = false;
+        }
+
         cmds
     }
 
@@ -897,6 +915,15 @@ impl Runtime {
         }
 
         overlays
+    }
+
+    fn build_spellcheck_overlays(&self) -> Vec<cmd::SpellcheckOverlay> {
+        spellcheck::build_spellcheck_overlays(
+            &self.pages,
+            &self.spellcheck_errors,
+            &self.state.doc,
+            self.active_spellcheck_error_id.as_ref(),
+        )
     }
 
     fn get_first_paragraph_bounds(&self) -> Option<Rect> {
@@ -1153,11 +1180,30 @@ impl Runtime {
 
         match result {
             Ok((new_state, effects)) => {
-                if effects.iter().any(|e| matches!(e, Effect::DocChanged)) {
+                let doc_changed = effects.iter().any(|e| matches!(e, Effect::DocChanged));
+                let selection_changed = effects
+                    .iter()
+                    .any(|e| matches!(e, Effect::SelectionChanged));
+
+                if doc_changed {
                     self.undo_selections.push(previous_selection);
                     self.redo_selections.clear();
                 }
+
                 self.state = new_state;
+
+                if doc_changed {
+                    if self.clean_invalidated_spellcheck_errors() {
+                        self.pending.spellcheck_overlays = true;
+                    }
+                }
+
+                if doc_changed || selection_changed {
+                    if self.update_active_spellcheck_error() {
+                        self.pending.spellcheck_overlays = true;
+                    }
+                }
+
                 effects
             }
             Err(e) => {

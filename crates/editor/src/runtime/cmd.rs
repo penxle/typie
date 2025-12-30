@@ -1,6 +1,6 @@
 use crate::layout::elements::ExternalElementData;
 use crate::model::{LayoutMode, Mark, MarkType, TextAlign};
-use crate::types::{PointerStyle, Rect, WritingSystem};
+use crate::types::{PointerStyle, Rect, TextBound, WritingSystem};
 use serde::Serialize;
 use tsify::Tsify;
 
@@ -28,7 +28,16 @@ pub struct SelectionStats {
 pub struct LinkOverlay {
     pub page_idx: usize,
     pub href: String,
-    pub bounds: Vec<Rect>,
+    pub bounds: Vec<TextBound>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct SpellcheckOverlay {
+    pub page_idx: usize,
+    pub id: String,
+    pub bounds: Vec<TextBound>,
+    pub is_active: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Tsify)]
@@ -107,5 +116,8 @@ pub enum Cmd {
     LinkOverlaysChanged {
         overlays: Vec<LinkOverlay>,
     },
-}
 
+    SpellcheckOverlaysChanged {
+        overlays: Vec<SpellcheckOverlay>,
+    },
+}

@@ -32,6 +32,22 @@ macro_rules! error {
     }
 }
 
+#[allow(unused)]
+macro_rules! warn {
+    ( $( $t:tt )* ) => {
+        {
+            #[cfg(target_arch = "wasm32")]
+            {
+                web_sys::console::warn_1(&format!( $( $t )* ).into());
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                eprintln!( $( $t )* );
+            }
+        }
+    }
+}
+
 pub fn byte_to_char_offset(text: &str, byte_offset: usize) -> usize {
     bytecount::num_chars(text[..text.floor_char_boundary(byte_offset)].as_bytes())
 }

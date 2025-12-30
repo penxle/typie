@@ -8,7 +8,19 @@ import { ensureRequiredFonts, ensureRequiredScripts, getAvailableFontsMap, loadE
 import { calculateImageDisplaySize, calculateRelativePosition, findNearestPageCoordinate, getPageElement, idleCallback } from './utils';
 import type { Editor as WasmEditor, ExportedUpdates, Modifier, PointerButton } from '@typie/editor';
 import type { ThemeColors } from './theme';
-import type { Cmd, ExternalElement, LayoutMode, Mark, MarkType, Message, Rect, SelectionStats, WritingSystem } from './types';
+import type {
+  Cmd,
+  ExternalElement,
+  LayoutMode,
+  Mark,
+  MarkType,
+  Message,
+  Rect,
+  SelectionStats,
+  SpellcheckErrorData,
+  SpellcheckOverlay,
+  WritingSystem,
+} from './types';
 
 const CLICK_INTERVAL = 500;
 const CLICK_DISTANCE = 5;
@@ -105,6 +117,7 @@ export class Editor {
     bounds: null as Rect | null,
     show: false,
     scrollToCursor: false,
+    animate: false,
   });
 
   inputElement = $state<HTMLInputElement | null>(null);
@@ -132,6 +145,10 @@ export class Editor {
   });
 
   linkOverlays = $state<{ pageIdx: number; href: string; bounds: Rect[] }[]>([]);
+
+  spellcheckOverlays = $state<SpellcheckOverlay[]>([]);
+  activeSpellcheckErrorId = $state<string | null>(null);
+  fullSpellcheckErrors = $state<SpellcheckErrorData[]>([]);
 
   typewriter = $state({
     needsScroll: false,
@@ -343,6 +360,17 @@ export class Editor {
 
         case 'linkOverlaysChanged': {
           this.linkOverlays = cmd.overlays;
+          break;
+        }
+
+        case 'spellcheckOverlaysChanged': {
+          this.spellcheckOverlays = cmd.overlays;
+          this.activeSpellcheckErrorId = cmd.overlays.find((o) => o.isActive)?.id ?? null;
+
+          const validIds = new SvelteSet(cmd.overlays.map((o) => o.id));
+          if (this.fullSpellcheckErrors.length > 0) {
+            this.fullSpellcheckErrors = this.fullSpellcheckErrors.filter((e) => validIds.has(e.id));
+          }
           break;
         }
       }
@@ -940,6 +968,40 @@ export class Editor {
     this.ready.then(() => {
       this.#wasmEditor?.setAutoSurroundEnabled(enabled);
     });
+  }
+
+  setSpellcheckErrors(errors: { id: string; nodeId: string; startOffset: number; endOffset: number }[]): void {
+    this.ready.then(() => {
+      this.#wasmEditor?.setSpellcheckErrors(errors);
+    });
+  }
+
+  clearSpellcheckErrors(): void {
+    this.ready.then(() => {
+      this.#wasmEditor?.clearSpellcheckErrors();
+    });
+  }
+
+  applySpellcheckCorrection(nodeId: string, startOffset: number, endOffset: number, correction: string): boolean {
+    return this.#wasmEditor?.applySpellcheckCorrection(nodeId, startOffset, endOffset, correction) ?? false;
+  }
+
+  getSpellcheckErrors(): { id: string; nodeId: string; startOffset: number; endOffset: number }[] {
+    return this.#wasmEditor?.getSpellcheckErrors() ?? [];
+  }
+
+  selectSpellcheckError(errorId: string, options?: { focusEditor?: boolean; animate?: boolean }): void {
+    const focusEditor = options?.focusEditor ?? true;
+    const animate = options?.animate ?? false;
+
+    if (animate) {
+      this.cursor.animate = true;
+    }
+
+    this.dispatch({ type: 'selectSpellcheckError', errorId });
+    if (focusEditor) {
+      this.focus();
+    }
   }
 
   canDragAt(pageIdx: number, x: number, y: number): boolean {

@@ -60,8 +60,12 @@ export function createFloatingActions(options?: CreateFloatingActionsOptions): C
     });
 
     if (middlewareData.hide) {
+      const isHidden = middlewareData.hide.referenceHidden || middlewareData.hide.escaped;
       Object.assign(floatingElement.style, {
-        visibility: middlewareData.hide.referenceHidden || middlewareData.hide.escaped ? 'hidden' : 'visible',
+        visibility: isHidden ? 'hidden' : 'visible',
+        // Reset position when hidden to prevent overflow
+        top: isHidden ? '0' : `${y}px`,
+        left: isHidden ? '0' : `${x}px`,
       });
     }
 
