@@ -102,6 +102,27 @@ impl Fragment {
         FragmentBuilder::new()
     }
 
+    pub fn from_doc(doc: &Doc) -> Result<Self> {
+        let root = doc.node(NodeId::ROOT).context("Root not found")?;
+        let child_count = root.children().count();
+
+        if child_count == 0 {
+            return Ok(Self::empty());
+        }
+
+        let selection = Selection::new(
+            Position::new(NodeId::ROOT, 0, crate::types::Affinity::Downstream),
+            Position::new(NodeId::ROOT, child_count, crate::types::Affinity::Upstream),
+        );
+
+        Self::new_from_selection(doc, &selection)
+    }
+
+    pub fn from_snapshot(snapshot: &[u8]) -> Result<Self> {
+        let doc = std::rc::Rc::new(Doc::from_snapshot(snapshot.to_vec()));
+        Self::from_doc(&doc)
+    }
+
     pub fn from_text(text: &str) -> Self {
         if text.is_empty() {
             return Self::empty();

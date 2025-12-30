@@ -279,6 +279,28 @@ impl Runtime {
         Ok(())
     }
 
+    pub fn insert_template_fragment(&mut self, snapshot: Vec<u8>) -> Result<()> {
+        let template_doc = std::rc::Rc::new(Doc::from_snapshot(snapshot));
+        let template_settings = template_doc.settings();
+        let fragment = Fragment::from_doc(&template_doc)?;
+
+        let effects = self.transact(|tr| {
+            tr.doc().update_settings(|s| {
+                s.block_gap = template_settings.block_gap;
+                s.paragraph_indent = template_settings.paragraph_indent;
+                s.layout_mode = template_settings.layout_mode;
+            })?;
+
+            tr.delete_selection()?;
+            tr.paste_fragment(fragment)?;
+
+            tr.push_effect(Effect::SettingsChanged);
+            Ok(true)
+        });
+        self.process_effects(effects);
+        Ok(())
+    }
+
     fn handle_external_doc_change(&mut self) {
         // TODO: 최적화?
         self.layout_cache.borrow_mut().invalidate_all();

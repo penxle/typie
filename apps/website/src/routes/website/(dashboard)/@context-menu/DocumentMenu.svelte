@@ -6,12 +6,13 @@
   import { Dialog, Toast } from '@typie/ui/notification';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
-  import { EntityAvailability, EntityVisibility } from '@/enums';
+  import { DocumentType, EntityAvailability, EntityVisibility } from '@/enums';
   import { TypieError } from '@/errors';
   import Columns2Icon from '~icons/lucide/columns-2';
   import CopyIcon from '~icons/lucide/copy';
   import FileDownIcon from '~icons/lucide/file-down';
   import InfoIcon from '~icons/lucide/info';
+  import LayoutTemplateIcon from '~icons/lucide/layout-template';
   import Rows2Icon from '~icons/lucide/rows-2';
   import TrashIcon from '~icons/lucide/trash';
   import { goto } from '$app/navigation';
@@ -23,6 +24,7 @@
     document: {
       id: string;
       title: string;
+      documentType: DocumentType;
       createdAt: string;
       updatedAt: string;
     };
@@ -79,6 +81,27 @@
     }
   `);
 
+  const updateDocumentType = graphql(`
+    mutation DocumentMenu_UpdateDocumentType_Mutation($input: UpdateDocumentTypeInput!) {
+      updateDocumentType(input: $input) {
+        id
+        type
+
+        entity {
+          id
+
+          site {
+            id
+
+            documentTemplates {
+              id
+            }
+          }
+        }
+      }
+    }
+  `);
+
   const handleDuplicate = async () => {
     try {
       const resp = await duplicateDocument({ documentId: document.id });
@@ -107,6 +130,21 @@
       actionHandler: async () => {
         await deleteDocument({ documentId: document.id });
         mixpanel.track('delete_document', { via });
+      },
+    });
+  };
+
+  const handleTypeChange = (newType: DocumentType) => {
+    const isToTemplate = newType === DocumentType.TEMPLATE;
+
+    Dialog.confirm({
+      title: isToTemplate ? '템플릿으로 전환' : '문서로 전환',
+      message: isToTemplate
+        ? '이 문서를 템플릿으로 전환하시겠어요?\n앞으로 새 문서를 생성할 때 이 문서의 내용을 쉽게 이용할 수 있어요.'
+        : '이 템플릿을 다시 일반 문서로 전환하시겠어요?',
+      actionLabel: '전환',
+      actionHandler: async () => {
+        await updateDocumentType({ documentId: document.id, type: newType });
       },
     });
   };
@@ -148,6 +186,12 @@
 <HorizontalDivider color="secondary" />
 
 <MenuItem icon={CopyIcon} onclick={handleDuplicate}>복제</MenuItem>
+
+{#if document.documentType === DocumentType.NORMAL}
+  <MenuItem icon={LayoutTemplateIcon} onclick={() => handleTypeChange(DocumentType.TEMPLATE)}>템플릿으로 전환</MenuItem>
+{:else if document.documentType === DocumentType.TEMPLATE}
+  <MenuItem icon={LayoutTemplateIcon} onclick={() => handleTypeChange(DocumentType.NORMAL)}>문서로 전환</MenuItem>
+{/if}
 
 {#if app.preference.current.experimental_pdfExportEnabled}
   <HorizontalDivider color="secondary" />

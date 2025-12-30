@@ -10,8 +10,7 @@
   let element = $state<HTMLDivElement>();
 
   const loadTemplate = () => {
-    // TODO
-    console.log('Template click - not implemented yet');
+    window.dispatchEvent(new CustomEvent('open-document-template-modal'));
   };
 
   $effect(() => {
@@ -60,6 +59,6 @@
     type="button"
   >
     <Icon style={{ display: 'inline-block', marginRight: '4px', marginBottom: '3px' }} icon={LayoutTemplateIcon} size={16} />
-    <span>템플릿 불러오기 (준비중)</span>
+    <span>템플릿 불러오기</span>
   </button>
 </div>

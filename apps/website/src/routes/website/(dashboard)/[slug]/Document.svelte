@@ -28,6 +28,7 @@
   import { getDragDropContext } from './@split-view/drag-context.svelte';
   import { dragView } from './@split-view/drag-view-action';
   import { getEditorRegistry } from './@split-view/editor-registry.svelte';
+  import DocumentTemplateModal from './DocumentTemplateModal.svelte';
   import type { Document_query } from '$graphql';
 
   type Props = {
@@ -45,6 +46,11 @@
         me @required {
           id
           ...DocumentPanel_user
+
+          sites {
+            id
+            ...DocumentTemplateModal_site
+          }
         }
 
         entities(slugs: $slugs) {
@@ -82,6 +88,7 @@
               title
               nullableTitle
               subtitle
+              documentType: type
               snapshot
               createdAt
               updatedAt
@@ -738,3 +745,7 @@
   <br />
   모든 프리미엄 기능을 무제한으로 사용할 수 있어요.
 </PlanUpgradeModal>
+
+{#if $query.me.sites[0]}
+  <DocumentTemplateModal $site={$query.me.sites[0]} {editor} {focused} />
+{/if}

@@ -3,8 +3,21 @@ import { and, asc, desc, eq, getTableColumns, gt, inArray, isNull, or, sql, sum 
 import { alias } from 'drizzle-orm/pg-core';
 import { match } from 'ts-pattern';
 import { clearLoaders } from '@/context';
-import { db, Entities, first, firstOrThrow, FontFamilies, Fonts, PostContents, Posts, Sites, TableCode, validateDbId } from '@/db';
-import { EntityState, EntityType, FontState, PostType } from '@/enums';
+import {
+  db,
+  Documents,
+  Entities,
+  first,
+  firstOrThrow,
+  FontFamilies,
+  Fonts,
+  PostContents,
+  Posts,
+  Sites,
+  TableCode,
+  validateDbId,
+} from '@/db';
+import { DocumentType, EntityState, EntityType, FontState, PostType } from '@/enums';
 import { env } from '@/env';
 import { TypieError } from '@/errors';
 import { pubsub } from '@/pubsub';
@@ -12,7 +25,7 @@ import { generateRandomName } from '@/utils/name';
 import { assertSitePermission } from '@/utils/permission';
 import { siteSchema } from '@/validation';
 import { builder } from '../builder';
-import { Entity, Font, ISite, isTypeOf, Post, Site, SiteView, User } from '../objects';
+import { Document, Entity, Font, ISite, isTypeOf, Post, Site, SiteView, User } from '../objects';
 
 /**
  * * Types
@@ -106,6 +119,18 @@ Site.implement({
           .innerJoin(Entities, eq(Posts.entityId, Entities.id))
           .where(and(eq(Entities.siteId, self.id), eq(Posts.type, PostType.TEMPLATE), eq(Entities.state, EntityState.ACTIVE)))
           .orderBy(asc(Posts.createdAt));
+      },
+    }),
+
+    documentTemplates: t.field({
+      type: [Document],
+      resolve: async (self) => {
+        return await db
+          .select(getTableColumns(Documents))
+          .from(Documents)
+          .innerJoin(Entities, eq(Documents.entityId, Entities.id))
+          .where(and(eq(Entities.siteId, self.id), eq(Documents.type, DocumentType.TEMPLATE), eq(Entities.state, EntityState.ACTIVE)))
+          .orderBy(asc(Documents.createdAt));
       },
     }),
 

@@ -256,6 +256,12 @@ impl Editor {
     pub fn import_updates(&mut self, updates: Vec<u8>) {
         self.runtime.import_updates(&updates).unwrap()
     }
+
+    #[wasm_bindgen(js_name = insertTemplateFragment)]
+    pub fn insert_template_fragment(&mut self, snapshot: Vec<u8>) {
+        self.runtime.insert_template_fragment(snapshot).unwrap()
+    }
+
     #[wasm_bindgen(js_name = importUpdatesBatch)]
     pub fn import_updates_batch(&mut self, updates_batch: js_sys::Array) {
         let batch: Vec<Vec<u8>> = updates_batch
