@@ -55,7 +55,11 @@ impl LineElement {
         point: Point,
         ctx: &RenderContext,
     ) {
-        let color = ctx.theme.color_with_alpha("selection", 77);
+        let color = if ctx.is_focused {
+            ctx.theme.color_with_alpha("selection", 77)
+        } else {
+            ctx.theme.color_with_alpha("ui.surface.dark", 32)
+        };
         let paint = create_solid_paint(color);
 
         for rect in self.selection_rects(point, ctx.selections) {
