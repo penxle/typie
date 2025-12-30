@@ -1,6 +1,6 @@
 use crate::global::{register_fallback_font_family, register_font_family};
 use crate::model::{Doc, LayoutMode, Node, NodeId, ParagraphNode};
-use crate::runtime::{Message, Runtime, State};
+use crate::runtime::{Message, RawSpellcheckError, Runtime, State};
 use crate::state::{Position, Selection};
 use crate::types::Affinity;
 use serde::Serialize;
@@ -457,6 +457,37 @@ impl Editor {
     #[wasm_bindgen(js_name = setAutoSurroundEnabled)]
     pub fn set_auto_surround_enabled(&mut self, enabled: bool) {
         self.runtime.set_auto_surround_enabled(enabled);
+    }
+
+    #[wasm_bindgen(js_name = setSpellcheckErrors)]
+    pub fn set_spellcheck_errors(&mut self, raw_errors: Vec<RawSpellcheckError>) {
+        self.runtime.set_spellcheck_errors(raw_errors);
+    }
+
+    #[wasm_bindgen(js_name = getSpellcheckErrors)]
+    pub fn get_spellcheck_errors(&mut self) -> Result<JsValue, JsValue> {
+        let errors = self.runtime.get_spellcheck_errors();
+        Ok(serde_wasm_bindgen::to_value(&errors).map_err(|e| e.to_string())?)
+    }
+
+    #[wasm_bindgen(js_name = clearSpellcheckErrors)]
+    pub fn clear_spellcheck_errors(&mut self) {
+        self.runtime.clear_spellcheck_errors();
+    }
+
+    #[wasm_bindgen(js_name = applySpellcheckCorrection)]
+    pub fn apply_spellcheck_correction(
+        &mut self,
+        block_id: &str,
+        start_offset: usize,
+        end_offset: usize,
+        correction: &str,
+    ) -> bool {
+        let Some(block_id) = NodeId::from_string(block_id) else {
+            return false;
+        };
+        self.runtime
+            .apply_spellcheck_correction(block_id, start_offset, end_offset, correction)
     }
 }
 

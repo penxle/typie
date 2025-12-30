@@ -1,5 +1,6 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
+  import { cubicOut } from 'svelte/easing';
   import { getEditor } from '$lib/editor/context';
   import { findScroller } from '$lib/editor/utils';
 
@@ -7,6 +8,7 @@
 
   let element = $state<HTMLDivElement>();
   let prevCursorPos: { x: number; y: number } | null = null;
+  let animationId: number | null = null;
 
   function resetAnimation() {
     if (!element) return;
@@ -19,9 +21,9 @@
     });
   }
 
-  function scrollIntoView() {
+  function scrollIntoView(animate: boolean, position = 0.5) {
     if (!element) return;
-    if (!editor.isPointerModeIdle) return;
+    if (!animate && !editor.isPointerModeIdle) return;
 
     const scroller = findScroller(element);
     const scrollerRect = scroller.getBoundingClientRect();
@@ -31,11 +33,52 @@
     const scrollerTop = scrollerRect.top + margin;
     const scrollerBottom = scrollerRect.bottom - margin;
 
-    if (cursorRect.top < scrollerTop) {
-      const delta = cursorRect.top - scrollerTop;
-      scroller.scrollBy({ top: delta, behavior: 'instant' });
-    } else if (cursorRect.bottom > scrollerBottom) {
-      const delta = cursorRect.bottom - scrollerBottom;
+    let delta = 0;
+
+    if (animate) {
+      const cursorTop = cursorRect.top;
+      const cursorHeight = cursorRect.height;
+      const availableHeight = scrollerRect.height - cursorHeight;
+      const targetOffset = scrollerRect.top + availableHeight * position;
+      delta = cursorTop - targetOffset;
+    } else {
+      if (cursorRect.top < scrollerTop) {
+        delta = cursorRect.top - scrollerTop;
+      } else if (cursorRect.bottom > scrollerBottom) {
+        delta = cursorRect.bottom - scrollerBottom;
+      }
+    }
+
+    if (delta === 0) {
+      return;
+    }
+
+    if (animate) {
+      const startScrollTop = scroller.scrollTop;
+      const duration = 150;
+      const startTime = performance.now();
+
+      const animateScroll = (currentTime: number) => {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        const eased = cubicOut(progress);
+
+        scroller.scrollTop = startScrollTop + delta * eased;
+
+        if (progress < 1) {
+          animationId = requestAnimationFrame(animateScroll);
+        } else {
+          animationId = null;
+        }
+      };
+
+      if (animationId) {
+        cancelAnimationFrame(animationId);
+        animationId = null;
+      }
+
+      animationId = requestAnimationFrame(animateScroll);
+    } else {
       scroller.scrollBy({ top: delta, behavior: 'instant' });
     }
   }
@@ -47,15 +90,15 @@
     const containerEls = editor.pageContainerEls;
     const inputEl = editor.inputElement;
 
-    if (editor.isFocused && bounds && containerEls[pageIdx]) {
+    if (bounds && containerEls[pageIdx]) {
       containerEls[pageIdx].append(element);
 
-      element.style.visibility = show ? 'visible' : 'hidden';
+      element.style.visibility = show && editor.isFocused ? 'visible' : 'hidden';
       element.style.left = `${bounds.x}px`;
       element.style.top = `${bounds.y}px`;
       element.style.height = `${bounds.height}px`;
 
-      if (inputEl) {
+      if (inputEl && editor.isFocused) {
         const rect = element.getBoundingClientRect();
         inputEl.style.left = `${rect.left}px`;
         inputEl.style.top = `${rect.top + rect.height / 2}px`;
@@ -67,7 +110,13 @@
       }
 
       if (scrollToCursor) {
-        scrollIntoView();
+        const animate = editor.cursor.animate;
+        requestAnimationFrame(() => {
+          scrollIntoView(animate);
+        });
+        if (animate) {
+          editor.cursor.animate = false;
+        }
       }
     } else {
       element.style.visibility = 'hidden';

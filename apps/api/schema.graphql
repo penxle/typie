@@ -48,6 +48,10 @@ type CharacterCountChange {
   deletions: Int!
 }
 
+input CheckSpellingDocumentInput {
+  documentId: ID!
+}
+
 input CheckSpellingInput {
   body: JSON!
 }
@@ -143,6 +147,16 @@ type Document implements IDocument {
   updatedAt: DateTime!
   versions: [DocumentVersion!]!
   view: DocumentView!
+}
+
+type DocumentSpellingError {
+  context: String!
+  corrections: [String!]!
+  endOffset: Int!
+  explanation: String!
+  id: String!
+  nodeId: String!
+  startOffset: Int!
 }
 
 type DocumentSyncStreamPayload {
@@ -505,6 +519,7 @@ type Mutation {
   cancelPlanChange: Subscription_!
   cancelSubscriptionCancellation: Subscription_!
   checkSpelling(input: CheckSpellingInput!): [SpellingError!]!
+  checkSpellingDocument(input: CheckSpellingDocumentInput!): [DocumentSpellingError!]!
   createDocument(input: CreateDocumentInput!): Document!
   createFolder(input: CreateFolderInput!): Folder!
   createNote(input: CreateNoteInput!): Note!

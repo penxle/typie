@@ -296,8 +296,8 @@ impl Page {
         block_id: crate::model::NodeId,
         start_offset: usize,
         end_offset: usize,
-    ) -> Vec<crate::types::Rect> {
-        let mut rects = Vec::new();
+    ) -> Vec<crate::types::TextBound> {
+        let mut bounds = Vec::new();
 
         Self::collect_text_range_bounds(
             &self.root,
@@ -305,10 +305,10 @@ impl Page {
             block_id,
             start_offset,
             end_offset,
-            &mut rects,
+            &mut bounds,
         );
 
-        rects
+        bounds
     }
 
     fn collect_text_range_bounds(
@@ -317,7 +317,7 @@ impl Page {
         block_id: crate::model::NodeId,
         start_offset: usize,
         end_offset: usize,
-        rects: &mut Vec<crate::types::Rect>,
+        bounds: &mut Vec<crate::types::TextBound>,
     ) {
         let abs_pos = Point::new(
             offset.x + positioned.position.x,
@@ -339,11 +339,12 @@ impl Page {
 
                         let width = end_x - start_x;
                         if width > 0.0 {
-                            rects.push(crate::types::Rect {
+                            bounds.push(crate::types::TextBound {
                                 x: abs_pos.x + start_x,
                                 y: abs_pos.y + line.metric.top,
                                 width,
-                                height: line.metric.height + line.metric.leading,
+                                height: line.metric.height,
+                                ascent: line.metric.ascent,
                             });
                         }
                     }
@@ -359,7 +360,7 @@ impl Page {
                     block_id,
                     start_offset,
                     end_offset,
-                    rects,
+                    bounds,
                 );
             }
         }
@@ -368,7 +369,7 @@ impl Page {
     pub fn get_link_overlays(
         &self,
         link_ranges: &[crate::model::LinkRange],
-    ) -> Vec<(String, Vec<crate::types::Rect>)> {
+    ) -> Vec<(String, Vec<crate::types::TextBound>)> {
         let mut results = Vec::new();
 
         for range in link_ranges {

@@ -31,6 +31,7 @@
     onExitedDocumentStart?: () => void;
     onEditorReady?: (editor: Editor) => void;
     header?: Snippet;
+    children?: Snippet;
   };
 
   let {
@@ -43,6 +44,7 @@
     onExitedDocumentStart,
     onEditorReady,
     header,
+    children,
   }: Props = $props();
 
   const editor = externalEditor ?? new Editor();
@@ -240,6 +242,9 @@
             </div>
           {/if}
           <View />
+          {#if children}
+            {@render children()}
+          {/if}
         </div>
       </div>
       <Scrollbar scrollContainer={scrollContainerEl} />

@@ -57,6 +57,10 @@ impl Text {
         }
     }
 
+    pub fn into_loro_text(&self) -> LoroText {
+        self.loro_text.clone()
+    }
+
     pub fn from<S: Into<String>>(s: S) -> Self {
         let loro_text = LoroText::new();
         let _ = loro_text.insert(0, &s.into());

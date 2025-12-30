@@ -56,6 +56,19 @@ pub fn is_inline_position(doc: &Doc, position: Position) -> bool {
         .unwrap_or(true)
 }
 
+pub fn find_text_at_offset(
+    doc: &Doc,
+    block: &NodeRef,
+    offset: usize,
+) -> Option<(NodeId, usize, loro::LoroText)> {
+    let (child_id, internal_offset) = find_child_at_offset(block, offset)?;
+    let child = doc.node(child_id)?;
+    match child.node() {
+        Node::Text(t) => Some((child_id, internal_offset, t.text.into_loro_text())),
+        _ => None,
+    }
+}
+
 pub fn is_block_position(doc: &Doc, position: Position) -> bool {
     !is_inline_position(doc, position)
 }

@@ -29,6 +29,7 @@
   import { dragView } from './@split-view/drag-view-action';
   import { getEditorRegistry } from './@split-view/editor-registry.svelte';
   import DocumentTemplateModal from './DocumentTemplateModal.svelte';
+  import SpellcheckPopover from './SpellcheckPopover.svelte';
   import type { Document_query } from '$graphql';
 
   type Props = {
@@ -665,6 +666,7 @@
                   </div>
                 </div>
               {/snippet}
+              <SpellcheckPopover {editor} />
             </EditorComponent>
           </div>
         </div>
