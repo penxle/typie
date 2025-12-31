@@ -429,19 +429,25 @@ impl Editor {
     }
 
     #[wasm_bindgen(js_name = getCharacterCountAtVersion)]
-    pub fn get_character_count_at_version(&self, version: Vec<u8>) -> Result<u32, JsValue> {
-        let vv = loro::VersionVector::decode(&version).map_err(|e| e.to_string())?;
-        let target_frontiers = self.runtime.doc().loro_doc().vv_to_frontiers(&vv);
+    pub fn get_character_count_at_version(&self, version: Vec<u8>) -> Option<u32> {
+        let vv = loro::VersionVector::decode(&version).ok()?;
+        let loro_doc = self.runtime.doc().loro_doc();
 
-        let forked_doc = self.runtime.doc().fork();
-        forked_doc
-            .checkout(&target_frontiers)
-            .map_err(|e| e.to_string())?;
+        if !loro_doc.oplog_vv().includes_vv(&vv) {
+            return None;
+        }
 
-        let text = forked_doc.to_plain_text();
-        let count = count_all(&text).0;
+        let target_frontiers = loro_doc.vv_to_frontiers(&vv);
 
-        Ok(count)
+        if target_frontiers == loro_doc.oplog_frontiers() {
+            return Some(count_all(&self.runtime.doc().to_plain_text()).0);
+        }
+
+        let snapshot = loro_doc.export(loro::ExportMode::Snapshot).ok()?;
+        let history_doc = Doc::from_snapshot(snapshot);
+        history_doc.loro_doc().checkout(&target_frontiers).ok()?;
+
+        Some(count_all(&history_doc.to_plain_text()).0)
     }
 
     #[wasm_bindgen(js_name = setReadOnly)]
