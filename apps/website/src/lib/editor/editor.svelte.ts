@@ -16,6 +16,7 @@ import type {
   MarkType,
   Message,
   Rect,
+  SearchOverlay,
   SelectionStats,
   SpellcheckErrorData,
   SpellcheckOverlay,
@@ -149,6 +150,12 @@ export class Editor {
   spellcheckOverlays = $state<SpellcheckOverlay[]>([]);
   activeSpellcheckErrorId = $state<string | null>(null);
   fullSpellcheckErrors = $state<SpellcheckErrorData[]>([]);
+
+  searchResults = $state({
+    overlays: [] as SearchOverlay[],
+    totalCount: 0,
+    currentIndex: 0,
+  });
 
   typewriter = $state({
     needsScroll: false,
@@ -372,6 +379,28 @@ export class Editor {
           const validIds = new SvelteSet(cmd.overlays.map((o) => o.id));
           if (this.fullSpellcheckErrors.length > 0) {
             this.fullSpellcheckErrors = this.fullSpellcheckErrors.filter((e) => validIds.has(e.id));
+          }
+          break;
+        }
+
+        case 'searchResultsChanged': {
+          this.searchResults.overlays = cmd.overlays;
+          this.searchResults.totalCount = cmd.totalCount;
+          this.searchResults.currentIndex = cmd.currentIndex;
+
+          const currentOverlay = cmd.overlays.find((o) => o.isCurrent);
+          if (currentOverlay && currentOverlay.bounds.length > 0) {
+            const pageEl = this.pageContainerEls[currentOverlay.pageIdx];
+            const scroller = this.scrollContainerEl;
+            if (pageEl && scroller) {
+              const pageRect = pageEl.getBoundingClientRect();
+              const scrollerRect = scroller.getBoundingClientRect();
+              const bound = currentOverlay.bounds[0];
+              const targetY = pageRect.top + bound.y - scrollerRect.top + scroller.scrollTop;
+              const viewportCenter = scroller.clientHeight / 2;
+              const targetScroll = targetY - viewportCenter + bound.height / 2;
+              scroller.scrollTo({ top: Math.max(0, targetScroll), behavior: 'smooth' });
+            }
           }
           break;
         }
@@ -1036,6 +1065,34 @@ export class Editor {
       }
       this.#characterCountsDebounceTimer = null;
     }, 150);
+  }
+
+  search(query: string, options?: { matchWholeWord?: boolean }): void {
+    this.dispatch({
+      type: 'search',
+      query,
+      matchWholeWord: options?.matchWholeWord ?? false,
+    });
+  }
+
+  clearSearch(): void {
+    this.dispatch({ type: 'clearSearch' });
+  }
+
+  findNext(): void {
+    this.dispatch({ type: 'findNext' });
+  }
+
+  findPrevious(): void {
+    this.dispatch({ type: 'findPrevious' });
+  }
+
+  replace(replacement: string): void {
+    this.dispatch({ type: 'replace', replacement });
+  }
+
+  replaceAll(replacement: string): void {
+    this.dispatch({ type: 'replaceAll', replacement });
   }
 
   focus(): Editor {

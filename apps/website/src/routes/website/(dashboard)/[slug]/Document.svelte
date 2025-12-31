@@ -28,6 +28,7 @@
   import { getDragDropContext } from './@split-view/drag-context.svelte';
   import { dragView } from './@split-view/drag-view-action';
   import { getEditorRegistry } from './@split-view/editor-registry.svelte';
+  import DocumentFindReplace from './DocumentFindReplace.svelte';
   import DocumentTemplateModal from './DocumentTemplateModal.svelte';
   import SpellcheckPopover from './SpellcheckPopover.svelte';
   import type { Document_query } from '$graphql';
@@ -152,6 +153,7 @@
   let persistence: IndexeddbPersistence | null = null;
   let syncStatus = $state<'syncing' | 'synced' | 'error'>('synced');
   let planUpgradeModalOpen = $state(false);
+  let showFindReplace = $state(false);
 
   let titleEl = $state<HTMLTextAreaElement>();
   let subtitleEl = $state<HTMLTextAreaElement>();
@@ -386,7 +388,16 @@
       }
     }, 1000);
   }
+
+  function handleGlobalKeydown(e: KeyboardEvent) {
+    if ((e.ctrlKey || e.metaKey) && e.code === 'KeyF' && focused) {
+      e.preventDefault();
+      showFindReplace = true;
+    }
+  }
 </script>
+
+<svelte:window onkeydown={handleGlobalKeydown} />
 
 {#if focused}
   <Helmet title={`${title || '(제목 없음)'} 작성 중`} />
@@ -561,7 +572,7 @@
 
       <div class={flex({ position: 'relative', flexGrow: '1', overflowY: 'hidden' })}>
         <div class={flex({ position: 'relative', flexDirection: 'column', flexGrow: '1', overflowX: 'auto' })}>
-          <BottomToolbar />
+          <BottomToolbar onSearchClick={() => (showFindReplace = !showFindReplace)} />
 
           <div
             style:position={currentViewZenModeEnabled ? 'fixed' : 'relative'}
@@ -668,6 +679,9 @@
               {/snippet}
               <SpellcheckPopover {editor} />
             </EditorComponent>
+            {#if showFindReplace}
+              <DocumentFindReplace close={() => (showFindReplace = false)} {editor} />
+            {/if}
           </div>
         </div>
 

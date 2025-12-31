@@ -5,6 +5,7 @@ mod effect;
 mod handlers;
 mod message;
 mod pointer;
+pub mod search;
 pub mod spellcheck;
 mod state;
 mod view_state;
@@ -28,7 +29,9 @@ use crate::render::{RenderResult, Renderer};
 
 use crate::schema::Expand;
 use crate::state::selection_helpers::{build_selection_decorations, compute_selection_aggregates};
-use crate::state::{Position, Preedit, Selection, find_child_at_offset, position_in_selection};
+use crate::state::{
+    Position, Preedit, Selection, find_child_at_offset, find_text_at_offset, position_in_selection,
+};
 use crate::transaction::Transaction;
 use crate::types::{Affinity, BoxConstraints, PointerStyle, Rect, Size, WritingSystem};
 use anyhow::Result;
@@ -57,6 +60,7 @@ struct PendingUpdates {
     placeholder: bool,
     link_overlays: bool,
     spellcheck_overlays: bool,
+    search_overlays: bool,
 }
 
 #[derive(Clone)]
@@ -101,6 +105,7 @@ pub struct Runtime {
     auto_surround_enabled: bool,
     spellcheck_errors: Vec<SpellcheckError>,
     active_spellcheck_error_id: Option<String>,
+    search_state: search::SearchState,
     is_focused: bool,
 }
 
@@ -148,6 +153,7 @@ impl Runtime {
                 placeholder: true,
                 link_overlays: false,
                 spellcheck_overlays: false,
+                search_overlays: false,
             },
             message_queue: Vec::new(),
             pointer: PointerState::default(),
@@ -158,6 +164,7 @@ impl Runtime {
             auto_surround_enabled: true,
             spellcheck_errors: Vec::new(),
             active_spellcheck_error_id: None,
+            search_state: search::SearchState::default(),
             is_focused: true,
         }
     }
@@ -330,6 +337,58 @@ impl Runtime {
         self.pending.external_elements = true;
         self.pending.settings = true;
         self.pending.enabled_actions = true;
+    }
+
+    pub fn replace_text_in_block(
+        &mut self,
+        block_id: NodeId,
+        start_offset: usize,
+        end_offset: usize,
+        replacement: &str,
+    ) -> Result<()> {
+        use anyhow::Context;
+        let doc_handle = self.state.doc.clone();
+
+        let node = doc_handle
+            .node(block_id)
+            .context(format!("Failed to find block node: {:?}", block_id))?;
+
+        let (start_child_id, start_internal, _) =
+            find_text_at_offset(&doc_handle, &node, start_offset).context(format!(
+                "Failed to find text at start offset: {} in block {:?}",
+                start_offset, block_id
+            ))?;
+
+        let (end_child_id, _, _) =
+            find_text_at_offset(&doc_handle, &node, end_offset).context(format!(
+                "Failed to find text at end offset: {} in block {:?}",
+                end_offset, block_id
+            ))?;
+
+        if start_child_id != end_child_id {
+            anyhow::bail!(
+                "Replacement across different text nodes is not supported: {:?} vs {:?}",
+                start_child_id,
+                end_child_id
+            );
+        }
+
+        let (_, _, text_node) =
+            find_text_at_offset(&doc_handle, &node, start_offset).context(format!(
+                "Failed to re-find text node at start offset: {} (this should not happen)",
+                start_offset
+            ))?;
+
+        let end_internal_offset = end_offset - start_offset + start_internal;
+        let _ = text_node.splice(
+            start_internal,
+            end_internal_offset - start_internal,
+            replacement,
+        );
+
+        self.handle_external_doc_change();
+
+        Ok(())
     }
 
     pub fn get_cached_plain_text(&mut self) -> String {
@@ -847,6 +906,20 @@ impl Runtime {
             self.pending.spellcheck_overlays = false;
         }
 
+        if self.pending.search_overlays {
+            let overlays = search::build_search_overlays(
+                &self.pages,
+                &self.search_state.matches,
+                self.search_state.current_index,
+            );
+            cmds.push(Cmd::SearchResultsChanged {
+                overlays,
+                total_count: self.search_state.total_count(),
+                current_index: self.search_state.current_index,
+            });
+            self.pending.search_overlays = false;
+        }
+
         cmds
     }
 
@@ -1052,6 +1125,13 @@ impl Runtime {
                     self.pending.external_elements = true;
                     self.pending.enabled_actions = true;
                     self.pending.placeholder = true;
+
+                    if !self.search_state.query.is_empty() {
+                        let new_matches =
+                            search::perform_search(&self.doc(), &self.search_state.query);
+                        self.search_state.refresh(new_matches);
+                        self.pending.search_overlays = true;
+                    }
                 }
                 Effect::NodeChanged { node_id } => {
                     if let Some(node) = self.doc().node(node_id) {
@@ -1140,6 +1220,10 @@ impl Runtime {
                 }
                 Effect::ExitedDocumentStart => {
                     self.pending.exited_document_start = true;
+                }
+                Effect::SearchStateChanged => {
+                    self.pending.search_overlays = true;
+                    self.pending.render = true;
                 }
             }
         }

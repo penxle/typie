@@ -34,9 +34,10 @@
 
   type Props = {
     style?: SystemStyleObject;
+    onSearchClick?: () => void;
   };
 
-  let { style }: Props = $props();
+  let { style, onSearchClick }: Props = $props();
 
   const app = getAppContext();
   const editor = getEditor();
@@ -473,5 +474,5 @@
 
   <div class={css({ flexGrow: '1' })}></div>
 
-  <ToolbarButton disabled={true} icon={SearchIcon} keys={['Mod', 'F']} label="찾기, 바꾸기" size="small" />
+  <ToolbarButton icon={SearchIcon} keys={['Mod', 'F']} label="찾기, 바꾸기" onclick={() => onSearchClick?.()} size="small" />
 </div>

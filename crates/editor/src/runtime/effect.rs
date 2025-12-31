@@ -20,4 +20,5 @@ pub enum Effect {
     DropTargetChanged { target: Option<Position> },
     StructureChanged, // 구조적 변경 (노드 추가 / 삭제)
     ExitedDocumentStart,
+    SearchStateChanged,
 }
