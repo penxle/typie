@@ -27,6 +27,12 @@
     offset: 4,
     middleware: [
       inline(),
+      shift({
+        get boundary() {
+          return scroller ?? undefined;
+        },
+        padding: 8,
+      }),
       size({
         get boundary() {
           return scroller ?? undefined;
@@ -44,12 +50,6 @@
           return scroller ?? undefined;
         },
         padding: 32,
-      }),
-      shift({
-        get boundary() {
-          return scroller ?? undefined;
-        },
-        padding: 8,
       }),
     ],
   });
