@@ -265,6 +265,9 @@ impl Runtime {
 
     pub fn checkout(&mut self, version: &[u8]) -> Result<()> {
         let vv = loro::VersionVector::decode(version)?;
+        if !self.state.doc.loro_doc().oplog_vv().includes_vv(&vv) {
+            anyhow::bail!("Cannot checkout to unknown version");
+        }
         let frontiers = self.state.doc.loro_doc().vv_to_frontiers(&vv);
         self.state.doc.checkout(&frontiers)?;
         self.handle_external_doc_change();
@@ -283,6 +286,9 @@ impl Runtime {
 
     pub fn revert_to(&mut self, version: &[u8]) -> Result<()> {
         let vv = loro::VersionVector::decode(version)?;
+        if !self.state.doc.loro_doc().oplog_vv().includes_vv(&vv) {
+            anyhow::bail!("Cannot revert to unknown version");
+        }
         let frontiers = self.state.doc.loro_doc().vv_to_frontiers(&vv);
         self.state.doc.revert_to(&frontiers)?;
         self.handle_external_doc_change();
