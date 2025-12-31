@@ -1,4 +1,4 @@
-use crate::model::tree::{DocInner, NodeRef};
+use crate::model::tree::{BlockTextIterator, DocInner, NodeRef, TextSegmentIterator};
 use crate::model::*;
 use crate::schema::{Expand, Schema};
 use anyhow::{Context, Result};
@@ -156,39 +156,15 @@ impl Doc {
     }
 
     pub fn to_plain_text(&self) -> String {
-        use crate::state::BlockTraverser;
+        let mut text = String::new();
 
-        let mut result = String::new();
-        let Ok(mut traverser) = BlockTraverser::new(self, NodeId::ROOT) else {
-            return result;
-        };
-
-        let mut is_first_block = true;
-
-        while let Some(block_id) = traverser.next() {
-            let Some(block) = self.node(block_id) else {
-                continue;
-            };
-
-            if !is_first_block {
-                result.push('\n');
+        for (_, block_text) in self.iter_blocks() {
+            if !text.is_empty() {
+                text.push('\n');
             }
-            is_first_block = false;
-
-            for child in block.children() {
-                match child.node() {
-                    Node::Text(text_node) => {
-                        result.push_str(&text_node.text.as_str());
-                    }
-                    Node::HardBreak(_) => {
-                        result.push('\n');
-                    }
-                    _ => {}
-                }
-            }
+            text.push_str(&block_text);
         }
-
-        result
+        text
     }
 
     pub fn settings(&self) -> DocumentSettings {
@@ -410,84 +386,67 @@ impl Doc {
         let mut result = String::new();
 
         for child_id in self.get_children_ids(block_id) {
-            if self.get_node_type(child_id) != Some(NodeType::Text) {
-                continue;
-            }
-
-            let Some(node_map) = self.inner.get_node_map(child_id) else {
-                continue;
-            };
-
-            let Ok(text) = Text::decode_field(&node_map, "text") else {
-                continue;
-            };
-
-            for (segment_text, _) in text.get_rich_text_segments() {
-                result.push_str(&segment_text);
+            match self.get_node_type(child_id) {
+                Some(NodeType::Text) => {
+                    if let Some(segments) = self.get_text_segments(child_id) {
+                        for (segment_text, _) in segments {
+                            result.push_str(&segment_text);
+                        }
+                    }
+                }
+                Some(NodeType::HardBreak) => {
+                    result.push('\n');
+                }
+                _ => {}
             }
         }
 
         result
     }
 
+    pub(crate) fn get_text_segments(&self, node_id: NodeId) -> Option<Vec<(String, Vec<Mark>)>> {
+        let node_map = self.inner.get_node_map(node_id)?;
+        let text = Text::decode_field(&node_map, "text").ok()?;
+        Some(text.get_rich_text_segments())
+    }
+
     pub fn get_link_ranges(&self) -> Vec<LinkRange> {
-        let mut ranges = Vec::new();
+        let mut ranges: Vec<LinkRange> = Vec::new();
 
-        for block_id in self.get_children_ids(NodeId::ROOT) {
-            if self.get_node_type(block_id) != Some(NodeType::Paragraph) {
-                continue;
-            }
+        for (block_id, offset, text, marks) in self.iter_segments() {
+            let segment_len = text.chars().count();
 
-            let mut current_offset = 0;
-            let mut link_ranges: Vec<(usize, usize, String)> = Vec::new();
-
-            for child_id in self.get_children_ids(block_id) {
-                if self.get_node_type(child_id) != Some(NodeType::Text) {
-                    continue;
-                }
-
-                let Some(node_map) = self.inner.get_node_map(child_id) else {
-                    continue;
-                };
-
-                let Ok(text) = Text::decode_field(&node_map, "text") else {
-                    continue;
-                };
-
-                for (segment_text, marks) in text.get_rich_text_segments() {
-                    let segment_len = segment_text.chars().count();
-
-                    for mark in &marks {
-                        if let Mark::Link(link) = mark {
-                            let start = current_offset;
-                            let end = current_offset + segment_len;
-
-                            if let Some(last) = link_ranges.last_mut() {
-                                if last.2 == link.href && last.1 == start {
-                                    last.1 = end;
-                                    continue;
-                                }
-                            }
-
-                            link_ranges.push((start, end, link.href.clone()));
+            for mark in &marks {
+                if let Mark::Link(link) = mark {
+                    if let Some(last) = ranges.last_mut() {
+                        if last.block_id == block_id
+                            && last.href == link.href
+                            && last.end_offset == offset
+                        {
+                            last.end_offset = offset + segment_len;
+                            continue;
                         }
                     }
 
-                    current_offset += segment_len;
+                    ranges.push(LinkRange {
+                        block_id,
+                        start_offset: offset,
+                        end_offset: offset + segment_len,
+                        href: link.href.clone(),
+                    });
                 }
-            }
-
-            for (start_offset, end_offset, href) in link_ranges {
-                ranges.push(LinkRange {
-                    block_id,
-                    start_offset,
-                    end_offset,
-                    href,
-                });
             }
         }
 
         ranges
+    }
+
+    pub fn iter_blocks(&self) -> BlockTextIterator<'_> {
+        BlockTextIterator::new(self)
+    }
+
+    pub fn iter_segments(&self) -> TextSegmentIterator<'_> {
+        TextSegmentIterator::new(self)
     }
 }
 
