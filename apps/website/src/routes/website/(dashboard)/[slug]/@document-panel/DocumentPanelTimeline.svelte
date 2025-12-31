@@ -16,7 +16,7 @@
   import MinusIcon from '~icons/lucide/minus';
   import PlusIcon from '~icons/lucide/plus';
   import { fragment, graphql } from '$graphql';
-  import { findScroller, idleCallback } from '$lib/editor/utils';
+  import { idleCallback } from '$lib/editor/utils';
   import { getViewContext } from '../@split-view/context.svelte';
   import type { Action } from 'svelte/action';
   import type { PointerEventHandler } from 'svelte/elements';
@@ -61,14 +61,7 @@
   const app = getAppContext();
   const view = getViewContext();
 
-  let editorContainer = $state<HTMLElement | null>(null);
-
-  $effect(() => {
-    const containerEl = editor.extensionArea.containerEl;
-    if (containerEl) {
-      editorContainer = findScroller(containerEl).parentElement;
-    }
-  });
+  let editorContainer = $derived.by(() => editor.scrollContainerEl);
 
   let selectedVersionId = $state<string | null>(null);
   let isLoading = $state(true);

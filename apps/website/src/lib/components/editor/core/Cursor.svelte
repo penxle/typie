@@ -2,7 +2,6 @@
   import { css } from '@typie/styled-system/css';
   import { cubicOut } from 'svelte/easing';
   import { getEditor } from '$lib/editor/context';
-  import { findScroller } from '$lib/editor/utils';
 
   const editor = getEditor();
 
@@ -25,7 +24,9 @@
     if (!element) return;
     if (!animate && !editor.isPointerModeIdle) return;
 
-    const scroller = findScroller(element);
+    const scroller = editor.scrollContainerEl;
+    if (!scroller) return;
+
     const scrollerRect = scroller.getBoundingClientRect();
     const cursorRect = element.getBoundingClientRect();
 

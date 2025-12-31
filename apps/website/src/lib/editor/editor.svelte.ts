@@ -161,6 +161,8 @@ export class Editor {
     pageElements: [] as HTMLElement[],
   });
 
+  scrollContainerEl = $state<HTMLElement | null>(null);
+
   pageContainerEls = $state<HTMLDivElement[]>([]);
 
   #lastClickTime = 0;

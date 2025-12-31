@@ -5,7 +5,6 @@
   import { Icon } from '@typie/ui/components';
   import ArrowRightIcon from '~icons/lucide/arrow-right';
   import XIcon from '~icons/lucide/x';
-  import { findScroller } from '$lib/editor/utils';
   import type { Editor } from '$lib/editor/editor.svelte';
 
   type Props = {
@@ -21,7 +20,7 @@
     editor.activeSpellcheckErrorId ? editor.fullSpellcheckErrors.find((e) => e.id === editor.activeSpellcheckErrorId) : null,
   );
 
-  let scroller = $state<HTMLElement | null>(null);
+  const scroller = $derived.by(() => editor.scrollContainerEl);
 
   const { anchor, floating } = createFloatingActions({
     placement: 'top',
@@ -58,11 +57,6 @@
   $effect(() => {
     if (activeOverlay?.bounds?.[0]) {
       const pageIdx = activeOverlay.pageIdx;
-      const pageEl = editor.pageContainerEls[pageIdx];
-
-      if (pageEl) {
-        scroller = findScroller(pageEl) as HTMLElement;
-      }
 
       const virtualEl = {
         getBoundingClientRect: () => {

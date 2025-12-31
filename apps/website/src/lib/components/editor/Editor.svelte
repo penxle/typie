@@ -64,6 +64,10 @@
   let initialized = $state(false);
 
   $effect(() => {
+    editor.scrollContainerEl = scrollContainerEl;
+  });
+
+  $effect(() => {
     untrack(() => {
       editor.initialize({ theme: getEditorTheme(theme.effectiveTheme), snapshot, readOnly, onDocChanged, onExitedDocumentStart });
     });

@@ -1,7 +1,6 @@
 import { getAppContext } from '@typie/ui/context';
 import { CONTINUOUS_PAGE_MARGIN, PAGE_GAP } from './constants';
 import { getEditor } from './context';
-import { findScroller } from './utils';
 
 export function typewriterPadding(node: HTMLElement, defaultPadding: number) {
   const editor = getEditor();
@@ -11,9 +10,13 @@ export function typewriterPadding(node: HTMLElement, defaultPadding: number) {
     return;
   }
 
+  const scroller = editor.scrollContainerEl;
+  if (!scroller) {
+    return;
+  }
+
   const app = getAppContext();
 
-  const scroller = findScroller(node);
   let scrollContainerHeight = 0;
 
   const resizeObserver = new ResizeObserver((entries) => {
