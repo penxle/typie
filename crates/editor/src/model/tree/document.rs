@@ -406,6 +406,30 @@ impl Doc {
         self.get_children_ids(first_child_id).is_empty()
     }
 
+    pub fn get_block_text(&self, block_id: NodeId) -> String {
+        let mut result = String::new();
+
+        for child_id in self.get_children_ids(block_id) {
+            if self.get_node_type(child_id) != Some(NodeType::Text) {
+                continue;
+            }
+
+            let Some(node_map) = self.inner.get_node_map(child_id) else {
+                continue;
+            };
+
+            let Ok(text) = Text::decode_field(&node_map, "text") else {
+                continue;
+            };
+
+            for (segment_text, _) in text.get_rich_text_segments() {
+                result.push_str(&segment_text);
+            }
+        }
+
+        result
+    }
+
     pub fn get_link_ranges(&self) -> Vec<LinkRange> {
         let mut ranges = Vec::new();
 

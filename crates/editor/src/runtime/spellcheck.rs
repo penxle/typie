@@ -228,34 +228,14 @@ impl Runtime {
         end_offset: usize,
         correction: &str,
     ) -> bool {
-        let doc_handle = self.state.doc.clone();
-
-        let Some(node) = doc_handle.node(node_id) else {
-            return false;
-        };
-
-        let Some((start_child_id, start_internal, _)) =
-            find_text_at_offset(&doc_handle, &node, start_offset)
-        else {
-            return false;
-        };
-
-        let Some((end_child_id, end_internal, _)) =
-            find_text_at_offset(&doc_handle, &node, end_offset)
-        else {
-            return false;
-        };
-
-        if start_child_id != end_child_id {
+        if self
+            .replace_text_in_block(node_id, start_offset, end_offset, correction)
+            .is_err()
+        {
             return false;
         }
 
-        let Some((_, _, text_node)) = find_text_at_offset(&doc_handle, &node, start_offset) else {
-            return false;
-        };
-
-        let _ = text_node.splice(start_internal, end_internal - start_internal, correction);
-
+        let doc_handle = self.state.doc.clone();
         let mut to_remove = Vec::new();
         for e in &self.spellcheck_errors {
             if e.node_id != node_id {
@@ -274,7 +254,6 @@ impl Runtime {
         self.spellcheck_errors
             .retain(|e| !to_remove.contains(&e.id));
 
-        self.handle_external_doc_change();
         self.pending.spellcheck_overlays = true;
 
         true

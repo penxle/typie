@@ -12,6 +12,7 @@ export type {
   NodeType,
   PointerStyle,
   Rect,
+  SearchOverlay,
   SelectionStats,
   SpellcheckOverlay,
   TextAlign,

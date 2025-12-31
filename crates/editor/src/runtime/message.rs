@@ -460,4 +460,28 @@ define_messages! {
     SetFocused { focused: bool }
     => when When::True
     => handle(rt) { rt.handle_set_focused(focused) },
+
+    Search { query: String, match_whole_word: bool }
+    => when When::True
+    => handle(rt) { rt.handle_search(query, match_whole_word) },
+
+    ClearSearch
+    => when When::True
+    => handle(rt) { rt.handle_clear_search() },
+
+    FindNext
+    => when When::True
+    => handle(rt) { rt.handle_find_next() },
+
+    FindPrevious
+    => when When::True
+    => handle(rt) { rt.handle_find_previous() },
+
+    Replace { replacement: String }
+    => when When::key(ContextKey::CanEdit)
+    => handle(rt) { rt.handle_replace(replacement) },
+
+    ReplaceAll { replacement: String }
+    => when When::key(ContextKey::CanEdit)
+    => handle(rt) { rt.handle_replace_all(replacement) },
 }

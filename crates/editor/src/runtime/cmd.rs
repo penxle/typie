@@ -41,6 +41,14 @@ pub struct SpellcheckOverlay {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchOverlay {
+    pub page_idx: usize,
+    pub bounds: Vec<TextBound>,
+    pub is_current: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Tsify)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum Cmd {
     DocChanged,
@@ -119,5 +127,12 @@ pub enum Cmd {
 
     SpellcheckOverlaysChanged {
         overlays: Vec<SpellcheckOverlay>,
+    },
+
+    #[serde(rename_all = "camelCase")]
+    SearchResultsChanged {
+        overlays: Vec<SearchOverlay>,
+        total_count: usize,
+        current_index: usize,
     },
 }
