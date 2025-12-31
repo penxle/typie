@@ -1,7 +1,7 @@
 import dayjs from 'dayjs';
 import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, sum } from 'drizzle-orm';
 import { filter, pipe, Repeater } from 'graphql-yoga';
-import { LoroDoc, LoroList, LoroMap } from 'loro-crdt';
+import { LoroDoc } from 'loro-crdt';
 import { redis } from '@/cache';
 import {
   db,
@@ -736,7 +736,22 @@ builder.mutationFields((t) => ({
         }),
       }),
     ],
-    input: { documentId: t.input.id({ validate: validateDbId(TableCode.DOCUMENTS) }) },
+    input: {
+      documentId: t.input.id({ validate: validateDbId(TableCode.DOCUMENTS) }),
+      text: t.input.string(),
+      mappings: t.input.field({
+        type: [
+          builder.inputType('SpellcheckTextMappingInput', {
+            fields: (t) => ({
+              nodeId: t.string(),
+              textStart: t.int(),
+              textEnd: t.int(),
+              blockOffset: t.int(),
+            }),
+          }),
+        ],
+      }),
+    },
     resolve: async (_, { input }, ctx) => {
       const document = await db
         .select({ siteId: Entities.siteId, availability: Entities.availability })
@@ -752,25 +767,38 @@ builder.mutationFields((t) => ({
         });
       }
 
-      const content = await db
-        .select({ snapshot: DocumentContents.snapshot })
-        .from(DocumentContents)
-        .where(eq(DocumentContents.documentId, input.documentId))
-        .then(firstOrThrow);
-
-      const doc = new LoroDoc();
-      doc.import(content.snapshot);
-
-      const { fullText, nodeMappings } = extractLoroTextWithMappings(doc);
-      if (!fullText.trim()) {
+      const { text, mappings } = input;
+      if (!text.trim()) {
         return [];
       }
 
-      const errors = await spellcheck.check(fullText);
+      const errors = await spellcheck.check(text);
+
+      const findMapping = (position: number) => {
+        let left = 0;
+        let right = mappings.length - 1;
+
+        while (left <= right) {
+          const mid = (left + right) >> 1;
+          const m = mappings[mid];
+
+          if (position >= m.textStart && position < m.textEnd) {
+            return m;
+          }
+
+          if (position < m.textStart) {
+            right = mid - 1;
+          } else {
+            left = mid + 1;
+          }
+        }
+
+        return;
+      };
 
       const mapRange = (textStart: number, textEnd: number) => {
-        const startMapping = nodeMappings.find((m) => textStart >= m.textStart && textStart < m.textEnd);
-        const endMapping = nodeMappings.find((m) => textEnd > m.textStart && textEnd <= m.textEnd);
+        const startMapping = findMapping(textStart);
+        const endMapping = findMapping(textEnd - 1);
 
         if (!startMapping || !endMapping || startMapping.nodeId !== endMapping.nodeId) {
           return null;
@@ -802,69 +830,6 @@ builder.mutationFields((t) => ({
     },
   }),
 }));
-
-type LoroTextMapping = {
-  nodeId: string;
-  textStart: number;
-  textEnd: number;
-  blockOffset: number;
-};
-
-function extractLoroTextWithMappings(doc: LoroDoc) {
-  const nodes = doc.getMap('nodes');
-  const ROOT_ID = '00000000000000000000000000000000';
-
-  const rootNode = nodes.get(ROOT_ID) as LoroMap | undefined;
-  if (!rootNode) return { fullText: '', nodeMappings: [] };
-
-  const rootChildren = (rootNode.get('children') as LoroList)?.toArray() as string[] | undefined;
-  if (!rootChildren) return { fullText: '', nodeMappings: [] };
-
-  let fullText = '';
-  const nodeMappings: LoroTextMapping[] = [];
-
-  for (const nodeId of rootChildren) {
-    const blockNode = nodes.get(nodeId) as LoroMap | undefined;
-    if (!blockNode) continue;
-
-    const blockData = blockNode.toJSON() as { type: string };
-    if (blockData.type !== 'paragraph') continue; // TODO: 다른 textblock도 처리? (예: fold title)
-
-    const children = (blockNode.get('children') as LoroList)?.toArray() as string[] | undefined;
-    if (!children) continue;
-
-    let blockOffset = 0;
-    for (const childId of children) {
-      const childNode = nodes.get(childId) as LoroMap | undefined;
-      if (!childNode) continue;
-
-      const childData = childNode.toJSON() as { type: string; text?: string };
-      if (childData.type !== 'text') continue;
-
-      const nodeText = childData.text;
-      if (!nodeText || typeof nodeText !== 'string') continue;
-
-      const textStart = fullText.length;
-      fullText += nodeText;
-      const textEnd = fullText.length;
-
-      nodeMappings.push({
-        nodeId,
-        textStart,
-        textEnd,
-        blockOffset,
-      });
-
-      blockOffset += [...nodeText].length;
-    }
-
-    if (fullText.length > 0) {
-      fullText += '\n';
-    }
-  }
-
-  return { fullText, nodeMappings };
-}
 
 builder.subscriptionFields((t) => ({
   documentSyncStream: t.withAuth({ session: true }).field({

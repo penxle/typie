@@ -1021,6 +1021,10 @@ export class Editor {
     return this.#wasmEditor?.getSpellcheckErrors() ?? [];
   }
 
+  getSpellcheckText(): { text: string; mappings: { nodeId: string; textStart: number; textEnd: number; blockOffset: number }[] } | null {
+    return this.#wasmEditor?.getSpellcheckText() ?? null;
+  }
+
   selectSpellcheckError(errorId: string, options?: { focusEditor?: boolean; animate?: boolean }): void {
     const focusEditor = options?.focusEditor ?? true;
     const animate = options?.animate ?? false;

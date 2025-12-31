@@ -13,6 +13,23 @@ pub struct Doc {
     inner: DocInner,
 }
 
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SpellcheckTextMapping {
+    #[serde(serialize_with = "serialize_node_id")]
+    pub node_id: NodeId,
+    pub text_start: usize,
+    pub text_end: usize,
+    pub block_offset: usize,
+}
+
+fn serialize_node_id<S>(node_id: &NodeId, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    serializer.serialize_str(&node_id.to_string())
+}
+
 impl Doc {
     #[allow(dead_code)]
     pub fn new() -> Self {
@@ -165,6 +182,70 @@ impl Doc {
             text.push_str(&block_text);
         }
         text
+    }
+
+    pub fn to_spellcheck_text(&self) -> (String, Vec<SpellcheckTextMapping>) {
+        let mut full_text = String::new();
+        let mut mappings = Vec::new();
+        let mut char_offset = 0usize;
+
+        for (block_id, _) in self.iter_blocks() {
+            let mut block_offset = 0;
+
+            for child_id in self.get_children_ids(block_id) {
+                match self.get_node_type(child_id) {
+                    Some(NodeType::Text) => {
+                        if let Some(segments) = self.get_text_segments(child_id) {
+                            for (segment_text, _) in segments {
+                                let text_start = char_offset;
+                                let char_len = segment_text.chars().count();
+                                full_text.push_str(&segment_text);
+                                char_offset += char_len;
+
+                                mappings.push(SpellcheckTextMapping {
+                                    node_id: block_id,
+                                    text_start,
+                                    text_end: char_offset,
+                                    block_offset,
+                                });
+
+                                block_offset += char_len;
+                            }
+                        }
+                    }
+                    Some(NodeType::HardBreak) => {
+                        let text_start = char_offset;
+                        full_text.push('\n');
+                        char_offset += 1;
+
+                        mappings.push(SpellcheckTextMapping {
+                            node_id: block_id,
+                            text_start,
+                            text_end: char_offset,
+                            block_offset,
+                        });
+
+                        block_offset += 1;
+                    }
+                    _ => {}
+                }
+            }
+
+            if !full_text.is_empty() && !full_text.ends_with('\n') {
+                full_text.push('\n');
+                let text_start = char_offset;
+                char_offset += 1;
+
+                mappings.push(SpellcheckTextMapping {
+                    node_id: block_id,
+                    text_start,
+                    text_end: char_offset,
+                    block_offset,
+                });
+            }
+        }
+
+        (full_text, mappings)
     }
 
     pub fn settings(&self) -> DocumentSettings {

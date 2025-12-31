@@ -65,7 +65,21 @@ pub fn find_text_at_offset(
     let child = doc.node(child_id)?;
     match child.node() {
         Node::Text(t) => Some((child_id, internal_offset, t.text.into_loro_text())),
-        _ => None,
+        _ => {
+            // boundary case: text와 hard break 사이에서 text를 우선
+            if offset > 0 {
+                let (prev_child_id, prev_internal) = find_child_at_offset(block, offset - 1)?;
+                let prev_child = doc.node(prev_child_id)?;
+                match prev_child.node() {
+                    Node::Text(t) => {
+                        Some((prev_child_id, prev_internal + 1, t.text.into_loro_text()))
+                    }
+                    _ => None,
+                }
+            } else {
+                None
+            }
+        }
     }
 }
 
@@ -133,14 +147,8 @@ fn position_path(doc: &Doc, pos: Position) -> Result<Vec<usize>> {
     Ok(path)
 }
 
-fn is_inline_container(node: &NodeRef<'_>) -> bool {
-    // TODO: is_textblock
-    matches!(node.node(), Node::Paragraph(_))
-        || node.node().as_type() == crate::model::NodeType::FoldTitle
-}
-
 pub fn leaf_block_start(node: &NodeRef<'_>) -> Position {
-    if is_inline_container(node) {
+    if node.spec().is_textblock(node.schema()) {
         return Position::new(node.node_id(), 0, Affinity::Downstream);
     }
 
@@ -164,7 +172,9 @@ pub fn leaf_block_start(node: &NodeRef<'_>) -> Position {
 }
 
 pub fn leaf_block_end(node: &NodeRef<'_>) -> Position {
-    if is_inline_container(node) {
+    if node.spec().is_textblock(node.schema())
+        || node.node_type() == crate::model::NodeType::FoldTitle
+    {
         return Position::new(
             node.node_id(),
             block_content_len(node),
@@ -196,7 +206,9 @@ pub fn move_from_block_position(doc: &Doc, position: Position, go_forward: bool)
         return position;
     };
 
-    if is_inline_container(&node) {
+    if node.spec().is_textblock(node.schema())
+        || node.node_type() == crate::model::NodeType::FoldTitle
+    {
         return position;
     }
 

@@ -50,6 +50,8 @@ type CharacterCountChange {
 
 input CheckSpellingDocumentInput {
   documentId: ID!
+  mappings: [SpellcheckTextMappingInput!]!
+  text: String!
 }
 
 input CheckSpellingInput {
@@ -957,6 +959,13 @@ type SiteView implements ISite {
   name: String!
   slug: String!
   url: String!
+}
+
+input SpellcheckTextMappingInput {
+  blockOffset: Int!
+  nodeId: String!
+  textEnd: Int!
+  textStart: Int!
 }
 
 type SpellingError {
