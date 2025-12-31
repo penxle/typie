@@ -26,24 +26,6 @@ export const calculateRelativePosition = (element: HTMLElement, e: MouseEvent | 
   };
 };
 
-export const findScroller = (element: HTMLElement): HTMLElement => {
-  let currentElement = element;
-  while (true) {
-    const style = getComputedStyle(currentElement);
-    const overflowY = style.overflowY;
-    const isScrollable = overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay';
-
-    if (isScrollable && currentElement.scrollHeight > currentElement.clientHeight) {
-      return currentElement;
-    }
-    if (!currentElement.parentElement || !(currentElement.parentElement instanceof HTMLElement)) {
-      break;
-    }
-    currentElement = currentElement.parentElement;
-  }
-  return currentElement;
-};
-
 export const idleCallback = (callback: () => void): void => {
   if (typeof requestIdleCallback === 'undefined') {
     setTimeout(callback);
