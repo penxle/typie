@@ -1,5 +1,5 @@
 use crate::layout::Page;
-use crate::model::{Doc, Node, NodeId};
+use crate::model::{Doc, NodeId};
 use crate::runtime::cmd::SearchOverlay;
 
 #[derive(Clone, Debug, Default)]
@@ -107,80 +107,46 @@ pub fn perform_search(doc: &Doc, query: &SearchQuery) -> Vec<SearchMatch> {
         return Vec::new();
     }
 
-    let mut matches = Vec::new();
+    let mut matches: Vec<SearchMatch> = Vec::new();
     let query_lower = query.text.to_lowercase();
+    let query_char_len = query_lower.chars().count();
+    let match_whole_word = query.match_whole_word;
 
-    collect_matches_from_root(doc, &query_lower, query.match_whole_word, &mut matches);
+    for (block_id, block_text) in doc.iter_blocks() {
+        let block_text_lower = block_text.to_lowercase();
+        let block_chars: Vec<char> = block_text_lower.chars().collect();
+
+        if block_chars.len() < query_char_len {
+            continue;
+        }
+
+        let mut char_offset = 0;
+        while char_offset + query_char_len <= block_chars.len() {
+            let candidate: String = block_chars[char_offset..char_offset + query_char_len]
+                .iter()
+                .collect();
+
+            if candidate == query_lower {
+                let is_match = if match_whole_word {
+                    is_word_boundary(&block_chars, char_offset, query_char_len)
+                } else {
+                    true
+                };
+
+                if is_match {
+                    matches.push(SearchMatch {
+                        node_id: block_id,
+                        start_offset: char_offset,
+                        end_offset: char_offset + query_char_len,
+                    });
+                }
+            }
+
+            char_offset += 1;
+        }
+    }
 
     matches
-}
-
-fn collect_matches_from_root(
-    doc: &Doc,
-    query_lower: &str,
-    match_whole_word: bool,
-    matches: &mut Vec<SearchMatch>,
-) {
-    let Some(root) = doc.node(NodeId::ROOT) else {
-        return;
-    };
-
-    for child in root.children() {
-        collect_matches_from_block(doc, child.node_id(), query_lower, match_whole_word, matches);
-    }
-}
-
-fn collect_matches_from_block(
-    doc: &Doc,
-    block_id: NodeId,
-    query_lower: &str,
-    match_whole_word: bool,
-    matches: &mut Vec<SearchMatch>,
-) {
-    let Some(block_node) = doc.node(block_id) else {
-        return;
-    };
-
-    let block_text = doc.get_block_text(block_id);
-    let block_text_lower = block_text.to_lowercase();
-
-    let query_chars: Vec<char> = query_lower.chars().collect();
-    let query_char_len = query_chars.len();
-    let block_chars: Vec<char> = block_text_lower.chars().collect();
-
-    let mut char_offset = 0;
-    while char_offset + query_char_len <= block_chars.len() {
-        if block_chars[char_offset..char_offset + query_char_len] == query_chars[..] {
-            let is_match = if match_whole_word {
-                is_word_boundary(&block_chars, char_offset, query_char_len)
-            } else {
-                true
-            };
-
-            if is_match {
-                matches.push(SearchMatch {
-                    node_id: block_id,
-                    start_offset: char_offset,
-                    end_offset: char_offset + query_char_len,
-                });
-            }
-        }
-
-        char_offset += 1;
-    }
-
-    for child in block_node.children() {
-        let child_node = child.node();
-        if !matches!(child_node, Node::Text(_)) {
-            collect_matches_from_block(
-                doc,
-                child.node_id(),
-                query_lower,
-                match_whole_word,
-                matches,
-            );
-        }
-    }
 }
 
 fn is_word_boundary(chars: &[char], start: usize, len: usize) -> bool {
