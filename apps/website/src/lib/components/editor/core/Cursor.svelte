@@ -50,6 +50,15 @@
       }
     }
 
+    const maxScrollTop = scroller.scrollHeight - scroller.clientHeight;
+    const currentScrollTop = scroller.scrollTop;
+
+    if (delta < 0) {
+      delta = Math.max(delta, -currentScrollTop);
+    } else {
+      delta = Math.min(delta, maxScrollTop - currentScrollTop);
+    }
+
     if (delta === 0) {
       return;
     }
