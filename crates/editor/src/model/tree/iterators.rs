@@ -21,11 +21,13 @@ impl<'a> Iterator for BlockTextIterator<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(block_id) = self.traverser.next() {
-            if self.doc.get_node_type(block_id) != Some(NodeType::Paragraph) {
-                continue;
+            if let Some(node_type) = self.doc.get_node_type(block_id) {
+                let schema = self.doc.schema();
+                if schema.node_spec(node_type).is_textblock(schema) {
+                    let text = self.doc.get_block_text(block_id);
+                    return Some((block_id, text));
+                }
             }
-            let text = self.doc.get_block_text(block_id);
-            return Some((block_id, text));
         }
         None
     }

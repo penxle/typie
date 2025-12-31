@@ -476,6 +476,20 @@ impl Editor {
         Ok(serde_wasm_bindgen::to_value(&errors).map_err(|e| e.to_string())?)
     }
 
+    #[wasm_bindgen(js_name = getSpellcheckText)]
+    pub fn get_spellcheck_text(&self) -> Result<JsValue, JsValue> {
+        #[derive(serde::Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct SpellcheckTextResult {
+            text: String,
+            mappings: Vec<crate::model::SpellcheckTextMapping>,
+        }
+
+        let (text, mappings) = self.runtime.doc().to_spellcheck_text();
+        let result = SpellcheckTextResult { text, mappings };
+        Ok(serde_wasm_bindgen::to_value(&result).map_err(|e| e.to_string())?)
+    }
+
     #[wasm_bindgen(js_name = clearSpellcheckErrors)]
     pub fn clear_spellcheck_errors(&mut self) {
         self.runtime.clear_spellcheck_errors();

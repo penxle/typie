@@ -21,4 +21,4 @@ pub use node::*;
 pub use nodes::*;
 pub use settings::*;
 pub use text::*;
-pub use tree::{Doc, LinkRange, NodeRef};
+pub use tree::{Doc, LinkRange, NodeRef, SpellcheckTextMapping};

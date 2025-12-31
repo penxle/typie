@@ -74,12 +74,23 @@
       return;
     }
 
+    await editor.ready;
+
+    const spellcheckData = editor.getSpellcheckText();
+    if (!spellcheckData?.text?.trim()) {
+      return;
+    }
+
     inflight = true;
     hasChecked = true;
     checkFailed = false;
 
     try {
-      const resp = await checkSpellingDocument({ documentId: $document.id });
+      const resp = await checkSpellingDocument({
+        documentId: $document.id,
+        text: spellcheckData.text,
+        mappings: spellcheckData.mappings,
+      });
       editor.fullSpellcheckErrors = resp.map((error) => ({
         id: error.id,
         nodeId: error.nodeId,
