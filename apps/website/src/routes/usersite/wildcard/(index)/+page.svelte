@@ -220,6 +220,21 @@
                     <span class="post-title">{entity.node.title}</span>
                   </h2>
 
+                  {#if entity.node.subtitle}
+                    <h3
+                      class={css({
+                        marginTop: '2px',
+                        fontSize: '14px',
+                        fontWeight: 'medium',
+                        lineHeight: '[1.5]',
+                        color: 'text.subtle',
+                        lineClamp: '2',
+                      })}
+                    >
+                      {entity.node.subtitle}
+                    </h3>
+                  {/if}
+
                   {#if entity.node.excerpt}
                     <p
                       class={css({
