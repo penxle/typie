@@ -248,7 +248,7 @@ EntityView.implement({
                 and(
                   inArray(Entities.parentId, ids),
                   eq(Entities.state, EntityState.ACTIVE),
-                  eq(Entities.visibility, EntityVisibility.UNLISTED),
+                  inArray(Entities.visibility, [EntityVisibility.UNLISTED, EntityVisibility.PUBLIC]),
                 ),
               )
               .orderBy(asc(Entities.order));
@@ -274,7 +274,7 @@ EntityView.implement({
             FROM ${Entities}
             JOIN sq ON ${Entities.id} = sq.parent_id
             WHERE sq.parent_id IS NOT NULL AND
-            ${eq(Entities.visibility, EntityVisibility.UNLISTED)}
+            ${inArray(Entities.visibility, [EntityVisibility.UNLISTED, EntityVisibility.PUBLIC])}
           ) 
           SELECT id
           FROM sq

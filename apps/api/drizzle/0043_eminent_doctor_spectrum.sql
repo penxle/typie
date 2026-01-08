@@ -1,0 +1,1 @@
+ALTER TYPE "public"."_entity_visibility" ADD VALUE 'PUBLIC' BEFORE 'UNLISTED';

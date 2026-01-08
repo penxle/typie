@@ -283,6 +283,7 @@ union EntityViewNode = DocumentView | FolderView | PostView
 
 enum EntityVisibility {
   PRIVATE
+  PUBLIC
   UNLISTED
 }
 

@@ -379,7 +379,12 @@
               <span
                 class={css({
                   fontSize: '12px',
-                  color: $query.adminPost.entity.visibility === 'UNLISTED' ? 'green.400' : 'gray.400',
+                  color:
+                    $query.adminPost.entity.visibility === 'UNLISTED'
+                      ? 'green.400'
+                      : $query.adminPost.entity.visibility === 'PUBLIC'
+                        ? 'blue.400'
+                        : 'gray.400',
                 })}
               >
                 [{$query.adminPost.entity.visibility}]

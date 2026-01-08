@@ -13,6 +13,7 @@
   import Dice5Icon from '~icons/lucide/dice-5';
   import EyeIcon from '~icons/lucide/eye';
   import EyeOffIcon from '~icons/lucide/eye-off';
+  import GlobeIcon from '~icons/lucide/globe';
   import IdCardIcon from '~icons/lucide/id-card';
   import LinkIcon from '~icons/lucide/link';
   import LockIcon from '~icons/lucide/lock';
@@ -306,6 +307,12 @@
 
         <Select
           items={[
+            {
+              icon: GlobeIcon,
+              label: '공개',
+              description: '누구나 볼 수 있어요.',
+              value: EntityVisibility.PUBLIC,
+            },
             {
               icon: LinkIcon,
               label: '링크가 있는 사람',

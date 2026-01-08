@@ -88,7 +88,21 @@
   <div class={flex({ flexDirection: 'column', gap: '20px', paddingX: '20px', paddingY: '16px', overflowY: 'auto' })}>
     <div class={flex({ flexDirection: 'column', gap: '6px' })}>
       <div class={flex({ justifyContent: 'space-between', alignItems: 'center' })}>
-        <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>공유 및 게시</div>
+        <div class={flex({ alignItems: 'center', gap: '4px' })}>
+          <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>공유 및 게시</div>
+
+          {#if $user.id === $post.entity.user.id}
+            <a
+              class={cx('group', center({ size: '20px' }))}
+              href={$post.entity.url}
+              rel="noopener noreferrer"
+              target="_blank"
+              use:tooltip={{ message: '사이트에서 열기' }}
+            >
+              <Icon style={css.raw({ color: 'text.faint', _groupHover: { color: 'text.subtle' } })} icon={ExternalLinkIcon} size={14} />
+            </a>
+          {/if}
+        </div>
 
         {#if $user.id === $post.entity.user.id}
           <button
@@ -111,7 +125,7 @@
       </div>
 
       <div class={flex({ alignItems: 'center', gap: '4px' })}>
-        {#if $post.entity.visibility === EntityVisibility.UNLISTED || $post.entity.availability === EntityAvailability.UNLISTED}
+        {#if $post.entity.visibility === EntityVisibility.PUBLIC}
           <div
             class={css({
               borderRadius: '4px',
@@ -120,20 +134,30 @@
               width: 'fit',
               fontSize: '12px',
               fontWeight: 'semibold',
-              color: 'text.link',
-              backgroundColor: { base: 'blue.100', _dark: 'dark.blue.900' },
+              color: 'accent.success.default',
+              backgroundColor: 'accent.success.subtle',
               userSelect: 'none',
             })}
           >
-            {#if $post.entity.visibility === EntityVisibility.UNLISTED && $post.entity.availability === EntityAvailability.UNLISTED}
-              링크 조회/편집
-            {:else if $post.entity.visibility === EntityVisibility.UNLISTED}
-              링크 조회
-            {:else if $post.entity.availability === EntityAvailability.UNLISTED}
-              링크 편집
-            {/if}
+            공개 조회
           </div>
-        {:else if $post.entity.visibility === EntityVisibility.PRIVATE}
+        {:else if $post.entity.visibility === EntityVisibility.UNLISTED}
+          <div
+            class={css({
+              borderRadius: '4px',
+              paddingX: '8px',
+              paddingY: '4px',
+              width: 'fit',
+              fontSize: '12px',
+              fontWeight: 'semibold',
+              color: 'accent.brand.default',
+              backgroundColor: 'accent.brand.subtle',
+              userSelect: 'none',
+            })}
+          >
+            링크 조회
+          </div>
+        {:else}
           <div
             class={css({
               borderRadius: '4px',
@@ -143,7 +167,7 @@
               fontSize: '12px',
               fontWeight: 'semibold',
               color: 'text.muted',
-              backgroundColor: 'interactive.hover',
+              backgroundColor: 'surface.subtle',
               userSelect: 'none',
             })}
           >
@@ -151,16 +175,38 @@
           </div>
         {/if}
 
-        {#if $user.id === $post.entity.user.id}
-          <a
-            class={cx('group', center({ size: '20px' }))}
-            href={$post.entity.url}
-            rel="noopener noreferrer"
-            target="_blank"
-            use:tooltip={{ message: '사이트에서 열기' }}
+        {#if $post.entity.availability === EntityAvailability.UNLISTED}
+          <div
+            class={css({
+              borderRadius: '4px',
+              paddingX: '8px',
+              paddingY: '4px',
+              width: 'fit',
+              fontSize: '12px',
+              fontWeight: 'semibold',
+              color: 'accent.brand.default',
+              backgroundColor: 'accent.brand.subtle',
+              userSelect: 'none',
+            })}
           >
-            <Icon style={css.raw({ color: 'text.faint', _groupHover: { color: 'text.subtle' } })} icon={ExternalLinkIcon} size={14} />
-          </a>
+            링크 편집
+          </div>
+        {:else}
+          <div
+            class={css({
+              borderRadius: '4px',
+              paddingX: '8px',
+              paddingY: '4px',
+              width: 'fit',
+              fontSize: '12px',
+              fontWeight: 'semibold',
+              color: 'text.muted',
+              backgroundColor: 'surface.subtle',
+              userSelect: 'none',
+            })}
+          >
+            나만 편집
+          </div>
         {/if}
       </div>
     </div>

@@ -141,6 +141,7 @@
         transition: 'common',
         _groupHover: { opacity: '0' },
       },
+      visibility === EntityVisibility.PUBLIC && { backgroundColor: 'accent.success.default' },
       visibility === EntityVisibility.UNLISTED && { backgroundColor: 'accent.brand.default' },
       selected && { opacity: '0' },
     )}

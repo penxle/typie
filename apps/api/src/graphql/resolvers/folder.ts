@@ -150,7 +150,7 @@ FolderView.implement({
             SELECT COUNT(*) AS count
             FROM descendant_entities
             WHERE type = ${EntityType.FOLDER}
-            AND visibility = ${EntityVisibility.UNLISTED}
+            AND visibility IN (${EntityVisibility.UNLISTED}, ${EntityVisibility.PUBLIC})
           `,
         );
         return Number(rows[0]?.count || 0);
@@ -175,7 +175,7 @@ FolderView.implement({
             SELECT COUNT(*) AS count
             FROM descendant_entities
             WHERE type = ${EntityType.POST}
-            AND visibility = ${EntityVisibility.UNLISTED}
+            AND visibility IN (${EntityVisibility.UNLISTED}, ${EntityVisibility.PUBLIC})
           `,
         );
         return Number(rows[0]?.count || 0);

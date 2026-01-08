@@ -302,6 +302,13 @@
       "when": 1767076811594,
       "tag": "0042_opposite_doomsday",
       "breakpoints": false
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1767855774920,
+      "tag": "0043_eminent_doctor_spectrum",
+      "breakpoints": false
     }
   ]
 }
