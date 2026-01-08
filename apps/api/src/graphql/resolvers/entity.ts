@@ -1,5 +1,5 @@
 import dayjs from 'dayjs';
-import { and, asc, desc, eq, getTableColumns, gt, inArray, isNull, ne, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, isNull, ne, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import escape from 'escape-string-regexp';
 import { match } from 'ts-pattern';
@@ -236,28 +236,15 @@ EntityView.implement({
 
     children: t.field({
       type: [EntityView],
-      resolve: async (self, _, ctx) => {
-        const loader = ctx.loader({
-          name: 'EntityView.children',
-          many: true,
-          load: async (ids) => {
-            return await db
-              .select(getTableColumns(Entities))
-              .from(Entities)
-              .where(
-                and(
-                  inArray(Entities.parentId, ids),
-                  eq(Entities.state, EntityState.ACTIVE),
-                  inArray(Entities.visibility, [EntityVisibility.UNLISTED, EntityVisibility.PUBLIC]),
-                ),
-              )
-              .orderBy(asc(Entities.order));
-          },
-          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-          key: ({ parentId }) => parentId!,
-        });
+      resolve: async (self) => {
+        const visibilities =
+          self.visibility === EntityVisibility.PUBLIC ? [EntityVisibility.PUBLIC] : [EntityVisibility.PUBLIC, EntityVisibility.UNLISTED];
 
-        return await loader.load(self.id);
+        return await db
+          .select()
+          .from(Entities)
+          .where(and(eq(Entities.parentId, self.id), eq(Entities.state, EntityState.ACTIVE), inArray(Entities.visibility, visibilities)))
+          .orderBy(asc(Entities.order));
       },
     }),
 

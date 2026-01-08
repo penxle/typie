@@ -957,6 +957,7 @@ type SiteUsage {
 }
 
 type SiteView implements ISite {
+  entities: [Entity!]!
   fonts: [Font!]!
   id: ID!
   logo: Image!
