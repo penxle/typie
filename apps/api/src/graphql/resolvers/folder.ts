@@ -8,7 +8,7 @@ import { pubsub } from '@/pubsub';
 import { generateFractionalOrder, generatePermalink, generateSlug } from '@/utils';
 import { assertSitePermission } from '@/utils/permission';
 import { builder } from '../builder';
-import { Entity, EntityView, Folder, FolderView, IFolder, isTypeOf } from '../objects';
+import { Entity, EntityView, Folder, FolderView, IFolder, Image, isTypeOf } from '../objects';
 
 /**
  * * Types
@@ -18,6 +18,7 @@ IFolder.implement({
   fields: (t) => ({
     id: t.exposeID('id'),
     name: t.exposeString('name'),
+    thumbnail: t.expose('thumbnailId', { type: Image, nullable: true }),
   }),
 });
 
@@ -396,6 +397,7 @@ builder.mutationFields((t) => ({
     input: {
       folderId: t.input.id({ validate: validateDbId(TableCode.FOLDERS) }),
       visibility: t.input.field({ type: EntityVisibility }),
+      thumbnailId: t.input.id({ required: false, validate: validateDbId(TableCode.IMAGES) }),
       recursive: t.input.boolean({ required: false, defaultValue: false }),
     },
     resolve: async (_, { input }, ctx) => {
@@ -413,6 +415,10 @@ builder.mutationFields((t) => ({
 
       await db.transaction(async (tx) => {
         await tx.update(Entities).set({ visibility: input.visibility }).where(eq(Entities.id, folder.entityId));
+
+        if (input.thumbnailId !== undefined) {
+          await tx.update(Folders).set({ thumbnailId: input.thumbnailId }).where(eq(Folders.id, input.folderId));
+        }
 
         if (input.recursive) {
           const descendantEntityIds = await tx
@@ -444,6 +450,7 @@ builder.mutationFields((t) => ({
     input: {
       folderIds: t.input.idList({ validate: { items: validateDbId(TableCode.FOLDERS) } }),
       visibility: t.input.field({ type: EntityVisibility, required: false }),
+      thumbnailId: t.input.id({ required: false, validate: validateDbId(TableCode.IMAGES) }),
       recursive: t.input.boolean({ required: false, defaultValue: false }),
     },
     resolve: async (_, { input }, ctx) => {
@@ -471,20 +478,29 @@ builder.mutationFields((t) => ({
         throw new TypieError({ code: 'site_mismatch' });
       }
 
-      if (!input.visibility) {
+      if (!input.visibility && input.thumbnailId === undefined) {
         return folders;
       }
 
       const updatedEntities = await db.transaction(async (tx) => {
         const entityIds = folders.map((folder) => folder.entityId);
+        const folderIds = folders.map((folder) => folder.id);
 
-        const updatedEntities = await tx
-          .update(Entities)
-          .set({ visibility: input.visibility ?? undefined })
-          .where(inArray(Entities.id, entityIds))
-          .returning({ id: Entities.id });
+        let updatedEntities: { id: string }[] = [];
 
-        if (input.recursive) {
+        if (input.visibility) {
+          updatedEntities = await tx
+            .update(Entities)
+            .set({ visibility: input.visibility ?? undefined })
+            .where(inArray(Entities.id, entityIds))
+            .returning({ id: Entities.id });
+        }
+
+        if (input.thumbnailId !== undefined) {
+          await tx.update(Folders).set({ thumbnailId: input.thumbnailId }).where(inArray(Folders.id, folderIds));
+        }
+
+        if (input.recursive && input.visibility) {
           const descendantEntityIds = await tx
             .execute<{ id: string }>(
               sql`
@@ -501,7 +517,6 @@ builder.mutationFields((t) => ({
             .then((rows) => rows.map(({ id }) => id));
 
           if (descendantEntityIds.length > 0) {
-            // visibility는 not null이므로 null이여도 undefined로 취급
             const updatedDescendantEntities = await tx
               .update(Entities)
               .set({ visibility: input.visibility ?? undefined })

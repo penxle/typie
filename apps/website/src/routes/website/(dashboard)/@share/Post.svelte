@@ -15,14 +15,18 @@
   import EyeOffIcon from '~icons/lucide/eye-off';
   import GlobeIcon from '~icons/lucide/globe';
   import IdCardIcon from '~icons/lucide/id-card';
+  import ImageIcon from '~icons/lucide/image';
   import LinkIcon from '~icons/lucide/link';
   import LockIcon from '~icons/lucide/lock';
   import LockKeyholeIcon from '~icons/lucide/lock-keyhole';
   import ShieldIcon from '~icons/lucide/shield';
   import SmileIcon from '~icons/lucide/smile';
+  import Trash2Icon from '~icons/lucide/trash-2';
   import UsersRoundIcon from '~icons/lucide/users-round';
   import { env } from '$env/dynamic/public';
   import { fragment, graphql } from '$graphql';
+  import { Img } from '$lib/components';
+  import { uploadBlobAsImage } from '$lib/utils';
   import type { DashboardLayout_Share_Post_post } from '$graphql';
 
   type Props = {
@@ -41,6 +45,11 @@
         contentRating
         allowReaction
         protectContent
+
+        thumbnail {
+          id
+          ...Img_image
+        }
 
         entity {
           id
@@ -67,6 +76,11 @@
         allowReaction
         protectContent
 
+        thumbnail {
+          id
+          ...Img_image
+        }
+
         entity {
           id
           visibility
@@ -81,11 +95,13 @@
 
   let showPassword = $state(false);
   let isRolling = $state(false);
+  let thumbnailUploading = $state(false);
 
   const visibilityIndeterminate = $derived($posts.length > 1 && $posts.some((p) => p.entity.visibility !== $posts[0].entity.visibility));
   const availabilityIndeterminate = $derived(
     $posts.length > 1 && $posts.some((p) => p.entity.availability !== $posts[0].entity.availability),
   );
+  const thumbnailIndeterminate = $derived($posts.length > 1 && $posts.some((p) => p.thumbnail?.id !== $posts[0].thumbnail?.id));
 
   const form = createForm({
     schema: z.object({
@@ -181,6 +197,33 @@
 
     copied = true;
     timer = setTimeout(() => (copied = false), 2000);
+  };
+
+  const handleThumbnailUpload = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+
+    input.addEventListener('change', async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+
+      thumbnailUploading = true;
+      try {
+        const image = await uploadBlobAsImage(file);
+        await updatePostsOption({ postIds, thumbnailId: image.id });
+        mixpanel.track('update_post_thumbnail', { count: $posts.length });
+      } finally {
+        thumbnailUploading = false;
+      }
+    });
+
+    input.click();
+  };
+
+  const handleThumbnailRemove = async () => {
+    await updatePostsOption({ postIds, thumbnailId: null });
+    mixpanel.track('remove_post_thumbnail', { count: $posts.length });
   };
 </script>
 
@@ -427,6 +470,92 @@
           values={$posts.map((p) => p.contentRating)}
           bind:value={form.fields.contentRating}
         />
+      </div>
+    </div>
+
+    <div class={flex({ flexDirection: 'column', gap: '12px' })}>
+      <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>썸네일</div>
+
+      <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
+        <div class={flex({ alignItems: 'center', gap: '8px' })}>
+          <Icon style={css.raw({ color: 'text.faint' })} icon={ImageIcon} />
+          <div class={css({ fontSize: '12px', color: 'text.subtle' })}>미리보기 이미지</div>
+        </div>
+
+        <div class={flex({ gap: '8px', alignItems: 'center' })}>
+          {#if thumbnailIndeterminate}
+            <button
+              class={center({
+                width: '64px',
+                height: '36px',
+                borderRadius: '6px',
+                backgroundColor: 'surface.muted',
+                fontSize: '10px',
+                color: 'text.faint',
+              })}
+              disabled={thumbnailUploading}
+              onclick={handleThumbnailUpload}
+              type="button"
+            >
+              {thumbnailUploading ? '...' : '다름'}
+            </button>
+          {:else if $posts[0].thumbnail}
+            <div class={flex({ alignItems: 'center', gap: '4px' })}>
+              <button
+                class={css({ position: 'relative', cursor: 'pointer' })}
+                disabled={thumbnailUploading}
+                onclick={handleThumbnailUpload}
+                type="button"
+              >
+                <Img
+                  style={css.raw({
+                    width: '64px',
+                    height: '36px',
+                    borderRadius: '6px',
+                    objectFit: 'cover',
+                  })}
+                  $image={$posts[0].thumbnail}
+                  alt="썸네일"
+                  size={128}
+                />
+              </button>
+              <button
+                class={center({
+                  size: '24px',
+                  borderRadius: '4px',
+                  color: 'text.faint',
+                  _hover: { backgroundColor: 'surface.muted', color: 'text.danger' },
+                })}
+                onclick={handleThumbnailRemove}
+                type="button"
+                use:tooltip={{ message: '삭제', placement: 'top' }}
+              >
+                <Icon icon={Trash2Icon} size={14} />
+              </button>
+            </div>
+          {:else}
+            <button
+              class={center({
+                width: '64px',
+                height: '36px',
+                borderWidth: '1px',
+                borderStyle: 'dashed',
+                borderRadius: '6px',
+                color: 'text.faint',
+                _hover: { backgroundColor: 'surface.muted' },
+              })}
+              disabled={thumbnailUploading}
+              onclick={handleThumbnailUpload}
+              type="button"
+            >
+              {#if thumbnailUploading}
+                <span class={css({ fontSize: '10px' })}>...</span>
+              {:else}
+                <Icon icon={ImageIcon} size={14} />
+              {/if}
+            </button>
+          {/if}
+        </div>
       </div>
     </div>
 

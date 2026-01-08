@@ -1,6 +1,6 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
-  import { flex } from '@typie/styled-system/patterns';
+  import { center, flex } from '@typie/styled-system/patterns';
   import { tooltip } from '@typie/ui/actions';
   import { Button, HorizontalDivider, Icon, RingSpinner, Select } from '@typie/ui/components';
   import { createForm } from '@typie/ui/form';
@@ -10,10 +10,14 @@
   import BlendIcon from '~icons/lucide/blend';
   import CheckIcon from '~icons/lucide/check';
   import GlobeIcon from '~icons/lucide/globe';
+  import ImageIcon from '~icons/lucide/image';
   import Layers2Icon from '~icons/lucide/layers-2';
   import LinkIcon from '~icons/lucide/link';
   import LockIcon from '~icons/lucide/lock';
+  import Trash2Icon from '~icons/lucide/trash-2';
   import { fragment, graphql } from '$graphql';
+  import { Img } from '$lib/components';
+  import { uploadBlobAsImage } from '$lib/utils';
   import type { DashboardLayout_Share_Folder_folder } from '$graphql';
 
   type Props = {
@@ -28,6 +32,11 @@
       fragment DashboardLayout_Share_Folder_folder on Folder {
         id
         name
+
+        thumbnail {
+          id
+          ...Img_image
+        }
 
         entity {
           id
@@ -45,6 +54,11 @@
     mutation DashboardLayout_Share_Folder_UpdateFoldersOption_Mutation($input: UpdateFoldersOptionInput!) {
       updateFoldersOption(input: $input) {
         id
+
+        thumbnail {
+          id
+          ...Img_image
+        }
 
         entity {
           id
@@ -74,6 +88,7 @@
 
   let recursiveState = $state<'idle' | 'inflight' | 'success'>('idle');
   let recursiveTimer: NodeJS.Timeout | undefined;
+  let thumbnailUploading = $state(false);
 
   const form = createForm({
     schema: z.object({
@@ -118,6 +133,7 @@
   const visibilityIndeterminate = $derived(
     $folders.length > 1 && $folders.some((f) => f.entity.visibility !== $folders[0].entity.visibility),
   );
+  const thumbnailIndeterminate = $derived($folders.length > 1 && $folders.some((f) => f.thumbnail?.id !== $folders[0].thumbnail?.id));
 
   const handleCopyLink = () => {
     if ($folders.length === 0) return;
@@ -132,6 +148,33 @@
 
     copied = true;
     timer = setTimeout(() => (copied = false), 2000);
+  };
+
+  const handleThumbnailUpload = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+
+    input.addEventListener('change', async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+
+      thumbnailUploading = true;
+      try {
+        const image = await uploadBlobAsImage(file);
+        await updateFoldersOption({ folderIds, thumbnailId: image.id });
+        mixpanel.track('update_folder_thumbnail', { count: $folders.length });
+      } finally {
+        thumbnailUploading = false;
+      }
+    });
+
+    input.click();
+  };
+
+  const handleThumbnailRemove = async () => {
+    await updateFoldersOption({ folderIds, thumbnailId: null });
+    mixpanel.track('remove_folder_thumbnail', { count: $folders.length });
   };
 </script>
 
@@ -245,5 +288,91 @@
         하위 요소에 동일한 설정 적용하기
       {/if}
     </Button>
+  </div>
+
+  <div class={flex({ flexDirection: 'column', gap: '12px' })}>
+    <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>썸네일</div>
+
+    <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
+      <div class={flex({ alignItems: 'center', gap: '8px' })}>
+        <Icon style={css.raw({ color: 'text.faint' })} icon={ImageIcon} />
+        <div class={css({ fontSize: '12px', color: 'text.subtle' })}>미리보기 이미지</div>
+      </div>
+
+      <div class={flex({ gap: '8px', alignItems: 'center' })}>
+        {#if thumbnailIndeterminate}
+          <button
+            class={center({
+              width: '64px',
+              height: '36px',
+              borderRadius: '6px',
+              backgroundColor: 'surface.muted',
+              fontSize: '10px',
+              color: 'text.faint',
+            })}
+            disabled={thumbnailUploading}
+            onclick={handleThumbnailUpload}
+            type="button"
+          >
+            {thumbnailUploading ? '...' : '다름'}
+          </button>
+        {:else if $folders[0].thumbnail}
+          <div class={flex({ alignItems: 'center', gap: '4px' })}>
+            <button
+              class={css({ position: 'relative', cursor: 'pointer' })}
+              disabled={thumbnailUploading}
+              onclick={handleThumbnailUpload}
+              type="button"
+            >
+              <Img
+                style={css.raw({
+                  width: '64px',
+                  height: '36px',
+                  borderRadius: '6px',
+                  objectFit: 'cover',
+                })}
+                $image={$folders[0].thumbnail}
+                alt="썸네일"
+                size={128}
+              />
+            </button>
+            <button
+              class={center({
+                size: '24px',
+                borderRadius: '4px',
+                color: 'text.faint',
+                _hover: { backgroundColor: 'surface.muted', color: 'text.danger' },
+              })}
+              onclick={handleThumbnailRemove}
+              type="button"
+              use:tooltip={{ message: '삭제', placement: 'top' }}
+            >
+              <Icon icon={Trash2Icon} size={14} />
+            </button>
+          </div>
+        {:else}
+          <button
+            class={center({
+              width: '64px',
+              height: '36px',
+              borderWidth: '1px',
+              borderStyle: 'dashed',
+              borderRadius: '6px',
+              color: 'text.faint',
+              _hover: { backgroundColor: 'surface.muted' },
+            })}
+            disabled={thumbnailUploading}
+            onclick={handleThumbnailUpload}
+            type="button"
+          >
+            {#if thumbnailUploading}
+              <span class={css({ fontSize: '10px' })}>...</span>
+            {:else}
+              <Icon icon={ImageIcon} size={14} />
+            {/if}
+          </button>
+        {/if}
+      </div>
+    </div>
   </div>
 </div>

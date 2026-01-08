@@ -190,6 +190,7 @@ export const Folders = pgTable(
       .notNull()
       .references(() => Entities.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     name: text('name').notNull(),
+    thumbnailId: text('thumbnail_id').references(() => Images.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     createdAt: datetime('created_at')
       .notNull()
       .default(sql`now()`),
@@ -409,6 +410,7 @@ export const Posts = pgTable(
     subtitle: text('subtitle'),
     maxWidth: integer('max_width').notNull().default(800),
     coverImageId: text('cover_image_id').references(() => Images.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    thumbnailId: text('thumbnail_id').references(() => Images.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     password: text('password'),
     contentRating: E._PostContentRating('content_rating').notNull().default('ALL'),
     allowReaction: boolean('allow_reaction').notNull().default(true),
