@@ -347,6 +347,7 @@ type Folder implements IFolder {
   maxDescendantFoldersDepth: Int!
   name: String!
   postCount: Int!
+  thumbnail: Image
   view: FolderView!
 }
 
@@ -356,6 +357,7 @@ type FolderView implements IFolder {
   id: ID!
   name: String!
   postCount: Int!
+  thumbnail: Image
 }
 
 type Font implements Blob {
@@ -417,6 +419,7 @@ interface IEntity {
 interface IFolder {
   id: ID!
   name: String!
+  thumbnail: Image
 }
 
 interface IPost {
@@ -433,6 +436,7 @@ interface IPost {
   pageLayout: JSON
   protectContent: Boolean!
   subtitle: String
+  thumbnail: Image
   title: String!
   type: PostType!
   updatedAt: DateTime!
@@ -701,6 +705,7 @@ type Post implements IPost {
   snapshots: [PostSnapshot!]!
   storedMarks: JSON!
   subtitle: String
+  thumbnail: Image
   title: String!
   type: PostType!
   update: Binary!
@@ -772,6 +777,7 @@ type PostView implements IPost {
   protectContent: Boolean!
   reactions: [PostReaction!]!
   subtitle: String
+  thumbnail: Image
   title: String!
   type: PostType!
   updatedAt: DateTime!
@@ -1074,12 +1080,14 @@ input UpdateEmailInput {
 input UpdateFolderOptionInput {
   folderId: ID!
   recursive: Boolean = false
+  thumbnailId: ID
   visibility: EntityVisibility!
 }
 
 input UpdateFoldersOptionInput {
   folderIds: [ID!]!
   recursive: Boolean = false
+  thumbnailId: ID
   visibility: EntityVisibility
 }
 
@@ -1106,6 +1114,7 @@ input UpdatePostOptionInput {
   password: String
   postId: ID!
   protectContent: Boolean!
+  thumbnailId: ID
   visibility: EntityVisibility!
 }
 
@@ -1121,6 +1130,7 @@ input UpdatePostsOptionInput {
   password: String
   postIds: [ID!]!
   protectContent: Boolean
+  thumbnailId: ID
   visibility: EntityVisibility
 }
 

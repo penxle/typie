@@ -64,6 +64,7 @@ IPost.implement({
     subtitle: t.exposeString('subtitle', { nullable: true }),
     maxWidth: t.exposeInt('maxWidth'),
     coverImage: t.expose('coverImageId', { type: Image, nullable: true }),
+    thumbnail: t.expose('thumbnailId', { type: Image, nullable: true }),
 
     contentRating: t.expose('contentRating', { type: PostContentRating }),
     allowComment: t.boolean({ resolve: () => false }),
@@ -621,6 +622,7 @@ builder.mutationFields((t) => ({
           subtitle: Posts.subtitle,
           maxWidth: Posts.maxWidth,
           coverImageId: Posts.coverImageId,
+          thumbnailId: Posts.thumbnailId,
           allowReaction: Posts.allowReaction,
           protectContent: Posts.protectContent,
           password: Posts.password,
@@ -709,6 +711,7 @@ builder.mutationFields((t) => ({
             subtitle: post.subtitle,
             maxWidth: post.maxWidth,
             coverImageId: post.coverImageId,
+            thumbnailId: post.thumbnailId,
             allowReaction: post.allowReaction,
             protectContent: post.protectContent,
             password: post.password,
@@ -831,6 +834,7 @@ builder.mutationFields((t) => ({
       availability: t.input.field({ type: EntityAvailability, required: false }),
       visibility: t.input.field({ type: EntityVisibility }),
       password: t.input.string({ required: false }),
+      thumbnailId: t.input.id({ required: false, validate: validateDbId(TableCode.IMAGES) }),
       contentRating: t.input.field({ type: PostContentRating }),
       allowReaction: t.input.boolean(),
       protectContent: t.input.boolean(),
@@ -861,6 +865,7 @@ builder.mutationFields((t) => ({
           .update(Posts)
           .set({
             password: input.password || null,
+            thumbnailId: input.thumbnailId,
             contentRating: input.contentRating,
             allowReaction: input.allowReaction,
             protectContent: input.protectContent,
@@ -879,6 +884,7 @@ builder.mutationFields((t) => ({
       availability: t.input.field({ type: EntityAvailability, required: false }),
       visibility: t.input.field({ type: EntityVisibility, required: false }),
       password: t.input.string({ required: false }),
+      thumbnailId: t.input.id({ required: false, validate: validateDbId(TableCode.IMAGES) }),
       contentRating: t.input.field({ type: PostContentRating, required: false }),
       allowReaction: t.input.boolean({ required: false }),
       protectContent: t.input.boolean({ required: false }),
@@ -930,9 +936,10 @@ builder.mutationFields((t) => ({
           input.contentRating ||
           typeof input.allowReaction === 'boolean' ||
           typeof input.protectContent === 'boolean' ||
-          input.password !== undefined
+          input.password !== undefined ||
+          input.thumbnailId !== undefined
         ) {
-          // 상동, password는 nullable이므로 null과 undefined 구분
+          // 상동, password, thumbnailId는 nullable이므로 null과 undefined 구분
           await tx
             .update(Posts)
             .set({
@@ -940,6 +947,7 @@ builder.mutationFields((t) => ({
               allowReaction: input.allowReaction ?? undefined,
               protectContent: input.protectContent ?? undefined,
               password: input.password,
+              thumbnailId: input.thumbnailId,
             })
             .where(
               inArray(
