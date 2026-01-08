@@ -271,7 +271,7 @@
 <MenuItem icon={Columns2Icon} onclick={() => handleAddSplitView('horizontal')}>오른쪽에 열기</MenuItem>
 <MenuItem icon={Rows2Icon} onclick={() => handleAddSplitView('vertical')}>아래에 열기</MenuItem>
 
-<MenuItem external href={entity.url} icon={GlobeIcon} type="link">사이트에서 열기</MenuItem>
+<MenuItem external href={entity.url} icon={GlobeIcon} type="link">스페이스에서 열기</MenuItem>
 
 <HorizontalDivider color="secondary" />
 

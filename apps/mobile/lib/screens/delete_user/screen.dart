@@ -64,7 +64,7 @@ class DeleteUserScreen extends HookWidget {
                   style: TextStyle(fontSize: 14, color: context.colors.textSubtle),
                 ),
                 Text(
-                  '- 이용중인 사이트 주소는 다시 이용할 수 없어요. 사이트 주소를 다시 사용할 계획이라면, 탈퇴 전 기존 주소를 변경해주세요.',
+                  '- 이용중인 스페이스 주소는 다시 이용할 수 없어요. 스페이스 주소를 다시 사용할 계획이라면, 탈퇴 전 기존 주소를 변경해주세요.',
                   style: TextStyle(fontSize: 14, color: context.colors.textSubtle),
                 ),
                 Text(

@@ -25,7 +25,7 @@ class UpdateSiteSlugScreen extends HookWidget {
     final mixpanel = useService<Mixpanel>();
 
     return Screen(
-      heading: const Heading(title: '사이트 주소 변경'),
+      heading: const Heading(title: '스페이스 주소 변경'),
       resizeToAvoidBottomInset: true,
       padding: const Pad(top: 20),
       bottomAction: BottomAction(
@@ -44,13 +44,13 @@ class UpdateSiteSlugScreen extends HookWidget {
             schema: l.schema({
               'slug': l
                   .string()
-                  .min(4, message: '사이트 주소는 4글자 이상이여야 해요')
-                  .max(63, message: '사이트 주소는 63글자를 넘을 수 없어요')
-                  .regex(r'^[\da-z-]+$', message: '사이트 주소는 소문자, 숫자, 하이픈만 사용할 수 있어요')
+                  .min(4, message: '스페이스 주소는 4글자 이상이여야 해요')
+                  .max(63, message: '스페이스 주소는 63글자를 넘을 수 없어요')
+                  .regex(r'^[\da-z-]+$', message: '스페이스 주소는 소문자, 숫자, 하이픈만 사용할 수 있어요')
                   .regex(r'^(?!.*--)[\da-z-]+$', message: '하이픈을 연속으로 사용할 수 없어요')
-                  .regex(r'^[\da-z][\da-z-]*[\da-z]$', message: '사이트 주소는 하이픈으로 시작하거나 끝날 수 없어요')
-                  .custom((value) => !unavailableSiteSlugs.contains(value), message: '사용할 수 없는 사이트 주소에요')
-                  .required(message: '사이트 주소를 입력해 주세요'),
+                  .regex(r'^[\da-z][\da-z-]*[\da-z]$', message: '스페이스 주소는 하이픈으로 시작하거나 끝날 수 없어요')
+                  .custom((value) => !unavailableSiteSlugs.contains(value), message: '사용할 수 없는 스페이스 주소에요')
+                  .required(message: '스페이스 주소를 입력해 주세요'),
             }),
             onSubmit: (form) async {
               try {
@@ -65,14 +65,14 @@ class UpdateSiteSlugScreen extends HookWidget {
                 await mixpanel.track('update_site_slug');
 
                 if (context.mounted) {
-                  context.toast(ToastType.success, '사이트 주소가 변경되었어요.');
+                  context.toast(ToastType.success, '스페이스 주소가 변경되었어요.');
                   await context.router.maybePop();
                 }
               } on TypieError catch (e) {
                 if (context.mounted) {
                   switch (e.code) {
                     case 'site_slug_already_exists':
-                      form.setError('slug', '이미 존재하는 사이트 주소예요.');
+                      form.setError('slug', '이미 존재하는 스페이스 주소예요.');
                     default:
                       context.toast(ToastType.error, '오류가 발생했어요. 잠시 후 다시 시도해주세요.', bottom: 64);
                   }
@@ -84,8 +84,8 @@ class UpdateSiteSlugScreen extends HookWidget {
                 padding: const Pad(horizontal: 20),
                 child: HookFormTextField(
                   name: 'slug',
-                  label: '사이트 주소',
-                  placeholder: '사이트 주소',
+                  label: '스페이스 주소',
+                  placeholder: '스페이스 주소',
                   initialValue: data.me!.sites[0].slug,
                   autofocus: true,
                 ),

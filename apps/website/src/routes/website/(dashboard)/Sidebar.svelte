@@ -474,7 +474,7 @@
           mixpanel.track('open_site_settings', { via: 'sidebar' });
         }}
         type="button"
-        use:tooltip={{ message: '사이트 설정' }}
+        use:tooltip={{ message: '스페이스 설정' }}
       >
         <Icon icon={SettingsIcon} size={12} />
       </button>

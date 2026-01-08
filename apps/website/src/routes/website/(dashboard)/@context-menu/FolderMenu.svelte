@@ -134,7 +134,7 @@
 
 <HorizontalDivider color="secondary" />
 
-<MenuItem external href={entity.url} icon={GlobeIcon} type="link">사이트에서 열기</MenuItem>
+<MenuItem external href={entity.url} icon={GlobeIcon} type="link">스페이스에서 열기</MenuItem>
 
 <HorizontalDivider color="secondary" />
 
