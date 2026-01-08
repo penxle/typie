@@ -230,7 +230,9 @@
 
 <div class={css({ paddingX: '10px', paddingY: '4px', fontSize: '12px', color: 'text.disabled', userSelect: 'none' })}>
   <div class={css({ fontWeight: 'medium' })}>
-    {#if entity.visibility === EntityVisibility.UNLISTED}
+    {#if entity.visibility === EntityVisibility.PUBLIC}
+      <span class={css({ color: 'accent.success.default' })}>공개 폴더</span>
+    {:else if entity.visibility === EntityVisibility.UNLISTED}
       <span class={css({ color: 'accent.brand.default' })}>링크 조회 가능 폴더</span>
     {:else}
       <span>비공개 폴더</span>

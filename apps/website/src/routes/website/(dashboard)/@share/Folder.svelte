@@ -9,6 +9,7 @@
   import { EntityVisibility } from '@/enums';
   import BlendIcon from '~icons/lucide/blend';
   import CheckIcon from '~icons/lucide/check';
+  import GlobeIcon from '~icons/lucide/globe';
   import Layers2Icon from '~icons/lucide/layers-2';
   import LinkIcon from '~icons/lucide/link';
   import LockIcon from '~icons/lucide/lock';
@@ -182,6 +183,12 @@
 
       <Select
         items={[
+          {
+            icon: GlobeIcon,
+            label: '공개',
+            description: '누구나 폴더와 폴더 내의 공개 포스트를 볼 수 있어요.',
+            value: EntityVisibility.PUBLIC,
+          },
           {
             icon: LinkIcon,
             label: '링크가 있는 사람',

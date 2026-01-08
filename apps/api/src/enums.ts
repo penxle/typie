@@ -32,6 +32,7 @@ export const EntityType = {
 
 export type EntityVisibility = keyof typeof EntityVisibility;
 export const EntityVisibility = {
+  PUBLIC: 'PUBLIC',
   UNLISTED: 'UNLISTED',
   PRIVATE: 'PRIVATE',
 } as const;
