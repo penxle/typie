@@ -2,8 +2,8 @@
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Helmet, Icon } from '@typie/ui/components';
+  import dayjs from 'dayjs';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
-  import FileIcon from '~icons/lucide/file';
   import FolderIcon from '~icons/lucide/folder';
   import { fragment, graphql } from '$graphql';
   import { Img } from '$lib/components';
@@ -58,13 +58,21 @@
               name
               folderCount
               postCount
+              thumbnail {
+                id
+                ...Img_image
+              }
             }
 
             ... on PostView {
               id
               title
-              subtitle
               excerpt
+              updatedAt
+              thumbnail {
+                id
+                ...Img_image
+              }
             }
           }
         }
@@ -97,162 +105,236 @@
     title={$entityView.node.name}
   />
 
-  <div class={flex({ flexDirection: 'column', alignItems: 'center', width: 'full', height: 'full' })}>
+  <div class={flex({ flexDirection: 'column', alignItems: 'center', width: 'full', minHeight: 'full' })}>
     <div
       class={flex({
         flexDirection: 'column',
         flexGrow: '1',
-        paddingX: '20px',
-        paddingTop: { base: '24px', md: '48px' },
-        paddingBottom: '80px',
+        paddingX: { base: '20px', md: '40px' },
+        paddingTop: { base: '48px', md: '80px' },
+        paddingBottom: '120px',
         width: 'full',
-        maxWidth: '860px',
-        backgroundColor: 'surface.default',
+        maxWidth: '680px',
       })}
     >
-      <div class={flex({ alignItems: 'center', gap: '6px', wrap: 'wrap', marginBottom: '8px' })}>
-        <a class={flex({ alignItems: 'center', gap: '6px' })} href={$entityView.site.url}>
-          {#if $entityView.site.logo}
-            <Img
-              style={css.raw({ size: '20px', borderRadius: '4px', objectFit: 'cover' })}
-              $image={$entityView.site.logo}
-              alt={`${$entityView.site.name} 로고`}
-              size={24}
-            />
-          {/if}
-          <span class={css({ fontSize: '13px', color: 'text.disabled' })}>{$entityView.site.name}</span>
-        </a>
+      <header class={css({ marginBottom: { base: '56px', md: '72px' } })}>
+        <nav class={flex({ alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginBottom: '20px' })}>
+          <a class={flex({ alignItems: 'center', gap: '6px' })} href={$entityView.site.url}>
+            {#if $entityView.site.logo}
+              <Img
+                style={css.raw({ size: '18px', borderRadius: '4px', objectFit: 'cover' })}
+                $image={$entityView.site.logo}
+                alt={`${$entityView.site.name} 로고`}
+                size={24}
+              />
+            {/if}
+            <span class={css({ fontSize: '13px', color: 'text.faint', _hover: { color: 'text.muted' } })}>
+              {$entityView.site.name}
+            </span>
+          </a>
 
-        {#each $entityView.ancestors as ancestor (ancestor.id)}
-          {#if ancestor.node.__typename === 'FolderView'}
-            <div class={css({ fontSize: '13px', color: 'text.disabled' })}>/</div>
-            <a class={css({ fontSize: '13px', color: 'text.disabled' })} href={ancestor.url}>{ancestor.node.name}</a>
-          {/if}
-        {/each}
-      </div>
-
-      <h1 class={css({ fontSize: { base: '24px', md: '28px' }, fontWeight: 'bold' })}>{$entityView.node.name}</h1>
-
-      <div
-        class={flex({
-          align: 'center',
-          gap: '8px',
-          marginTop: { base: '8px', md: '4px' },
-          fontSize: '14px',
-          fontWeight: 'medium',
-          color: 'text.faint',
-          mdDown: { fontSize: '14px' },
-        })}
-      >
-        {#if folders.length > 0}
-          <span>폴더 {folders.length}개</span>
-        {/if}
-
-        {#if posts.length > 0}
-          <span>포스트 {posts.length}개</span>
-        {/if}
-
-        <ShareLinkPopover href={$entityView.url} />
-      </div>
-
-      <div class={flex({ direction: 'column', gap: '32px', marginTop: { base: '48px', md: '60px' } })}>
-        <div
-          class={flex({
-            direction: 'column',
-            gap: '4px',
-            padding: '2px',
-          })}
-        >
-          {#each $entityView.children as entity (entity.id)}
-            {#if entity.node.__typename === 'PostView'}
-              <a
-                class={flex({
-                  align: 'center',
-                  gap: '12px',
-                  borderWidth: '1px',
-                  borderColor: 'border.subtle',
-                  borderRadius: '4px',
-                  paddingX: { base: '12px', md: '16px' },
-                  backgroundColor: 'surface.default',
-                  height: '62px',
-                  _hover: { backgroundColor: 'surface.subtle' },
-                })}
-                href={entity.url}
-              >
-                <Icon style={css.raw({ color: 'text.faint' })} icon={FileIcon} size={14} />
-
-                <div class={css({ flexGrow: '1', truncate: true })}>
-                  <p class={css({ fontSize: '14px', fontWeight: 'semibold', truncate: true })}>
-                    {entity.node.title}
-                  </p>
-
-                  <div class={flex({ align: 'center', gap: '4px', fontSize: '13px' })}>
-                    {#if entity.node.subtitle}
-                      <p class={css({ fontWeight: 'medium', color: 'text.muted' })}>
-                        {entity.node.subtitle}
-                      </p>
-
-                      <p>|</p>
-                    {/if}
-                    <p class={css({ color: 'text.faint', truncate: true })}>
-                      {entity.node.excerpt || '(내용 없음)'}
-                    </p>
-                  </div>
-                </div>
-              </a>
-            {:else if entity.node.__typename === 'FolderView'}
-              <a
-                class={flex({
-                  align: 'center',
-                  gap: '12px',
-                  borderWidth: '1px',
-                  borderColor: 'border.subtle',
-                  borderRadius: '4px',
-                  paddingX: { base: '12px', md: '16px' },
-                  fontSize: '14px',
-                  color: 'text.subtle',
-                  height: '62px',
-                  backgroundColor: 'surface.subtle',
-                  truncate: true,
-                  _hover: { backgroundColor: 'surface.muted' },
-                })}
-                href={entity.url}
-              >
-                <Icon style={css.raw({ color: 'text.faint' })} icon={FolderIcon} size={14} />
-                <div class={css({ truncate: true })}>
-                  <p class={css({ fontWeight: 'semibold', truncate: true })}>{entity.node.name}</p>
-
-                  <p class={css({ color: 'text.muted', fontWeight: 'medium', fontSize: '13px' })}>
-                    {#if entity.node.folderCount > 0}
-                      폴더 {entity.node.folderCount}개
-                    {/if}
-                    {#if entity.node.folderCount > 0 && entity.node.postCount}
-                      ·
-                    {/if}
-                    {#if entity.node.postCount > 0}
-                      포스트 {entity.node.postCount}개
-                    {/if}
-                  </p>
-                </div>
-
-                <Icon style={css.raw({ marginLeft: 'auto', color: 'text.faint' })} icon={ChevronRightIcon} />
+          {#each $entityView.ancestors as ancestor (ancestor.id)}
+            {#if ancestor.node.__typename === 'FolderView'}
+              <span class={css({ fontSize: '13px', color: 'text.faint' })}>/</span>
+              <a class={css({ fontSize: '13px', color: 'text.faint', _hover: { color: 'text.muted' } })} href={ancestor.url}>
+                {ancestor.node.name}
               </a>
             {/if}
-          {:else}
-            <p
-              class={css({
-                paddingX: { base: '12px', md: '16px' },
-                paddingY: '36px',
-                textAlign: 'center',
-                fontSize: '14px',
-                color: 'text.disabled',
-              })}
-            >
-              포스트가 없어요
-            </p>
           {/each}
+        </nav>
+
+        <h1 class={css({ fontSize: '22px', fontWeight: 'bold', letterSpacing: '-0.01em', lineHeight: '[1.3]' })}>
+          {$entityView.node.name}
+        </h1>
+
+        <div class={flex({ alignItems: 'center', gap: '8px', marginTop: '8px' })}>
+          {#if folders.length > 0 || posts.length > 0}
+            <p class={css({ fontSize: '14px', color: 'text.muted' })}>
+              {#if folders.length > 0}
+                폴더 {folders.length}개
+              {/if}
+              {#if folders.length > 0 && posts.length > 0}
+                ·
+              {/if}
+              {#if posts.length > 0}
+                포스트 {posts.length}개
+              {/if}
+            </p>
+          {/if}
+
+          <ShareLinkPopover href={$entityView.url} />
         </div>
-      </div>
+      </header>
+
+      {#if folders.length > 0}
+        <section class={css({ marginBottom: '48px' })}>
+          <div class={flex({ flexDirection: 'column', gap: '4px' })}>
+            {#each folders as entity (entity.id)}
+              {#if entity.node.__typename === 'FolderView'}
+                <a
+                  class={flex({
+                    align: 'center',
+                    gap: '14px',
+                    paddingY: '12px',
+                    cursor: 'pointer',
+                    _hover: { '& .folder-name': { color: 'text.muted' } },
+                  })}
+                  href={entity.url}
+                >
+                  {#if entity.node.thumbnail}
+                    <div
+                      class={css({
+                        flexShrink: '0',
+                        size: '48px',
+                        borderRadius: '8px',
+                        backgroundColor: 'surface.subtle',
+                        overflow: 'hidden',
+                      })}
+                    >
+                      <Img
+                        style={css.raw({ width: 'full', height: 'full', objectFit: 'cover' })}
+                        $image={entity.node.thumbnail}
+                        alt={entity.node.name}
+                        size={48}
+                      />
+                    </div>
+                  {:else}
+                    <div
+                      class={flex({
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: '0',
+                        size: '48px',
+                        borderRadius: '8px',
+                        backgroundColor: 'surface.subtle',
+                      })}
+                    >
+                      <Icon style={css.raw({ color: 'text.faint' })} icon={FolderIcon} size={18} />
+                    </div>
+                  {/if}
+
+                  <div class={css({ flex: '1', minWidth: '0' })}>
+                    <p
+                      class={css({
+                        fontSize: '15px',
+                        fontWeight: 'medium',
+                        color: 'text.default',
+                        truncate: true,
+                        transition: 'colors',
+                      })}
+                    >
+                      <span class="folder-name">{entity.node.name}</span>
+                    </p>
+                    {#if entity.node.folderCount > 0 || entity.node.postCount > 0}
+                      <p class={css({ marginTop: '2px', fontSize: '13px', color: 'text.faint' })}>
+                        {#if entity.node.folderCount > 0}
+                          폴더 {entity.node.folderCount}개
+                        {/if}
+                        {#if entity.node.folderCount > 0 && entity.node.postCount > 0}
+                          ·
+                        {/if}
+                        {#if entity.node.postCount > 0}
+                          포스트 {entity.node.postCount}개
+                        {/if}
+                      </p>
+                    {/if}
+                  </div>
+
+                  <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={ChevronRightIcon} size={16} />
+                </a>
+              {/if}
+            {/each}
+          </div>
+        </section>
+      {/if}
+
+      {#if posts.length > 0}
+        <section>
+          <div class={flex({ flexDirection: 'column' })}>
+            {#each posts as entity, index (entity.id)}
+              {#if entity.node.__typename === 'PostView'}
+                <a
+                  class={flex({
+                    gap: '24px',
+                    paddingY: '20px',
+                    borderTopWidth: index === 0 ? '0' : '1px',
+                    borderColor: 'border.subtle',
+                    cursor: 'pointer',
+                    _hover: { '& .post-title': { color: 'text.muted' } },
+                  })}
+                  href={entity.url}
+                >
+                  <div class={css({ flex: '1', minWidth: '0' })}>
+                    <h2
+                      class={css({
+                        fontSize: '16px',
+                        fontWeight: 'semibold',
+                        lineHeight: '[1.5]',
+                        letterSpacing: '-0.01em',
+                        lineClamp: '2',
+                        transition: 'colors',
+                      })}
+                    >
+                      <span class="post-title">{entity.node.title}</span>
+                    </h2>
+
+                    {#if entity.node.excerpt}
+                      <p
+                        class={css({
+                          marginTop: '6px',
+                          fontSize: '14px',
+                          lineHeight: '[1.6]',
+                          color: 'text.muted',
+                          lineClamp: '2',
+                        })}
+                      >
+                        {entity.node.excerpt}
+                      </p>
+                    {/if}
+
+                    <p class={css({ marginTop: '10px', fontSize: '13px', color: 'text.faint' })}>
+                      {dayjs(entity.node.updatedAt).format('YYYY. M. D.')}
+                    </p>
+                  </div>
+
+                  {#if entity.node.thumbnail}
+                    <div
+                      class={css({
+                        flexShrink: '0',
+                        width: { base: '72px', md: '100px' },
+                        aspectRatio: '1/1',
+                        borderRadius: '6px',
+                        backgroundColor: 'surface.subtle',
+                        overflow: 'hidden',
+                      })}
+                    >
+                      <Img
+                        style={css.raw({ width: 'full', height: 'full', objectFit: 'cover' })}
+                        $image={entity.node.thumbnail}
+                        alt={entity.node.title}
+                        size={256}
+                      />
+                    </div>
+                  {/if}
+                </a>
+              {/if}
+            {/each}
+          </div>
+        </section>
+      {/if}
+
+      {#if folders.length === 0 && posts.length === 0}
+        <div
+          class={flex({
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            paddingY: '80px',
+          })}
+        >
+          <p class={css({ fontSize: '14px', color: 'text.faint' })}>공유된 콘텐츠가 없어요</p>
+        </div>
+      {/if}
     </div>
   </div>
 {/if}
