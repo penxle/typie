@@ -58,6 +58,7 @@
       fragment DashboardLayout_Sidebar_site on Site {
         id
         name
+        url
 
         logo {
           id
@@ -459,25 +460,40 @@
         <Img style={css.raw({ size: '16px', borderRadius: '4px' })} $image={$site.logo} alt={$site.name} size={32} />
         <span class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>{$site.name}</span>
       </div>
-      <button
-        class={center({
-          borderRadius: '4px',
-          size: '20px',
-          color: 'text.faint',
-          opacity: '0',
-          transition: 'common',
-          _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
-          _groupHover: { opacity: '100' },
-        })}
-        onclick={() => {
-          pushState('', { shallowRoute: '/site-settings/general' });
-          mixpanel.track('open_site_settings', { via: 'sidebar' });
-        }}
-        type="button"
-        use:tooltip={{ message: '스페이스 설정' }}
-      >
-        <Icon icon={SettingsIcon} size={12} />
-      </button>
+      <div class={flex({ alignItems: 'center', gap: '2px', opacity: '0', _groupHover: { opacity: '100' }, transition: 'common' })}>
+        <a
+          class={center({
+            borderRadius: '4px',
+            size: '20px',
+            color: 'text.faint',
+            transition: 'common',
+            _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
+          })}
+          href={$site.url}
+          rel="noopener noreferrer"
+          target="_blank"
+          use:tooltip={{ message: '스페이스 열기' }}
+        >
+          <Icon icon={ExternalLinkIcon} size={12} />
+        </a>
+        <button
+          class={center({
+            borderRadius: '4px',
+            size: '20px',
+            color: 'text.faint',
+            transition: 'common',
+            _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
+          })}
+          onclick={() => {
+            pushState('', { shallowRoute: '/site-settings/general' });
+            mixpanel.track('open_site_settings', { via: 'sidebar' });
+          }}
+          type="button"
+          use:tooltip={{ message: '스페이스 설정' }}
+        >
+          <Icon icon={SettingsIcon} size={12} />
+        </button>
+      </div>
     </div>
 
     <div
