@@ -321,7 +321,7 @@ PostView.implement({
       resolve: async (self, _, ctx) => {
         const access = await checkPostViewAccess(self, ctx);
         if (!access.accessible) {
-          return '(미리보기가 제한된 글입니다)';
+          return '(미리보기가 제한된 포스트입니다)';
         }
 
         const loader = ctx.loader({
