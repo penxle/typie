@@ -829,6 +829,7 @@ type Query {
   search(query: String!, siteId: ID!): SearchResult!
   seed: Float!
   site(siteId: ID!): Site!
+  siteView(origin: String!): SiteView!
   stats: JSON!
   welcome: Welcome!
   widgets: [Widget!]!
@@ -957,7 +958,7 @@ type SiteUsage {
 }
 
 type SiteView implements ISite {
-  entities: [Entity!]!
+  entities: [EntityView!]!
   fonts: [Font!]!
   id: ID!
   logo: Image!

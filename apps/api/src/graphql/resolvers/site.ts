@@ -1,6 +1,7 @@
 import dayjs from 'dayjs';
 import { and, asc, desc, eq, getTableColumns, gt, inArray, isNull, or, sql, sum } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
+import escape from 'escape-string-regexp';
 import { match } from 'ts-pattern';
 import { clearLoaders } from '@/context';
 import {
@@ -9,6 +10,7 @@ import {
   Entities,
   first,
   firstOrThrow,
+  firstOrThrowWith,
   FontFamilies,
   Fonts,
   PostContents,
@@ -17,15 +19,15 @@ import {
   TableCode,
   validateDbId,
 } from '@/db';
-import { DocumentType, EntityState, EntityType, EntityVisibility, FontState, PostType } from '@/enums';
+import { DocumentType, EntityState, EntityType, EntityVisibility, FontState, PostType, SiteState } from '@/enums';
 import { env } from '@/env';
-import { TypieError } from '@/errors';
+import { NotFoundError, TypieError } from '@/errors';
 import { pubsub } from '@/pubsub';
 import { generateRandomName } from '@/utils/name';
 import { assertSitePermission } from '@/utils/permission';
 import { siteSchema } from '@/validation';
 import { builder } from '../builder';
-import { Document, Entity, Font, Image, ISite, isTypeOf, Post, Site, SiteView, User } from '../objects';
+import { Document, Entity, EntityView, Font, Image, ISite, isTypeOf, Post, Site, SiteView, User } from '../objects';
 
 /**
  * * Types
@@ -195,7 +197,7 @@ SiteView.implement({
     }),
 
     entities: t.field({
-      type: [Entity],
+      type: [EntityView],
       resolve: async (self, _, ctx) => {
         const loader = ctx.loader({
           name: 'SiteView.entities',
@@ -238,6 +240,26 @@ builder.queryFields((t) => ({
       });
 
       return args.siteId;
+    },
+  }),
+
+  siteView: t.field({
+    type: SiteView,
+    args: { origin: t.arg.string() },
+    resolve: async (_, args) => {
+      const pattern = new RegExp(`^${escape(env.USERSITE_URL).replace(String.raw`\*\.`, String.raw`([^.]+)\.`)}$`);
+      const slug = args.origin.match(pattern)?.[1];
+      if (!slug) {
+        throw new TypieError({ code: 'invalid_hostname' });
+      }
+
+      const site = await db
+        .select()
+        .from(Sites)
+        .where(and(eq(Sites.slug, slug), eq(Sites.state, SiteState.ACTIVE)))
+        .then(firstOrThrowWith(new NotFoundError()));
+
+      return site;
     },
   }),
 }));
