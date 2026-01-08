@@ -364,7 +364,7 @@ class Editor extends HookWidget {
                           ),
                           BottomMenuItem(
                             icon: LucideLightIcons.external_link,
-                            label: '사이트에서 열기',
+                            label: '스페이스에서 열기',
                             onTap: () async {
                               unawaited(mixpanel.track('open_post_in_browser', properties: {'via': 'editor'}));
 

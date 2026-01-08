@@ -97,7 +97,7 @@
               href={$post.entity.url}
               rel="noopener noreferrer"
               target="_blank"
-              use:tooltip={{ message: '사이트에서 열기' }}
+              use:tooltip={{ message: '스페이스에서 열기' }}
             >
               <Icon style={css.raw({ color: 'text.faint', _groupHover: { color: 'text.subtle' } })} icon={ExternalLinkIcon} size={14} />
             </a>

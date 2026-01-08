@@ -77,13 +77,13 @@
 
   const form = createForm({
     schema: z.object({
-      name: z.string({ error: '사이트 이름을 입력해주세요.' }).min(1, '사이트 이름을 입력해주세요.'),
+      name: z.string({ error: '스페이스 이름을 입력해주세요.' }).min(1, '스페이스 이름을 입력해주세요.'),
       logoId: z.string(),
     }),
     onSubmit: async (data) => {
       await updateSite({ siteId: $site.id, name: data.name, logoId: data.logoId });
       mixpanel.track('update_site');
-      Toast.success('사이트 설정이 업데이트됐어요.');
+      Toast.success('스페이스 설정이 업데이트됐어요.');
     },
     defaultValues: {
       name: $site.name,
@@ -98,11 +98,11 @@
     onSubmit: async (data) => {
       await updateSiteSlug({ siteId: $site.id, slug: data.slug });
       mixpanel.track('update_site_slug');
-      Toast.success('사이트 주소가 변경됐어요.');
+      Toast.success('스페이스 주소가 변경됐어요.');
     },
     onError: (error) => {
       if (error instanceof TypieError && error.code === 'site_slug_already_exists') {
-        throw new FormError('slug', '이미 존재하는 사이트 주소예요.');
+        throw new FormError('slug', '이미 존재하는 스페이스 주소예요.');
       }
     },
     defaultValues: {
@@ -238,7 +238,7 @@
                   backgroundColor: 'transparent',
                   border: 'none',
                 })}
-                aria-label="사이트 주소 기능 업그레이드"
+                aria-label="스페이스 주소 기능 업그레이드"
                 onclick={() => {
                   planUpgradeModalOpen = true;
                   mixpanel.track('open_plan_upgrade_modal', { via: 'site_address' });
@@ -258,4 +258,4 @@
   </SettingsCard>
 </div>
 
-<PlanUpgradeModal bind:open={planUpgradeModalOpen}>사이트 주소 기능은 FULL ACCESS 플랜에서 사용할 수 있어요.</PlanUpgradeModal>
+<PlanUpgradeModal bind:open={planUpgradeModalOpen}>스페이스 주소 기능은 FULL ACCESS 플랜에서 사용할 수 있어요.</PlanUpgradeModal>

@@ -181,7 +181,7 @@ class SettingsScreen extends HookWidget {
                     title: '타이피 멤버십',
                     children: [
                       _Item(
-                        label: '사이트 주소 변경',
+                        label: '스페이스 주소 변경',
                         onTap: () async {
                           await context.router.push(const UpdateSiteSlugRoute());
                         },
