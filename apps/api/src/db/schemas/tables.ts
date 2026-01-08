@@ -622,6 +622,9 @@ export const Sites = pgTable(
     userId: text('user_id')
       .notNull()
       .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    logoId: text('logo_id')
+      .notNull()
+      .references(() => Images.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     slug: text('slug').notNull(),
     name: text('name').notNull(),
     state: E._SiteState('state').notNull().default('ACTIVE'),

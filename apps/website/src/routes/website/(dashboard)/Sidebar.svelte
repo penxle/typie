@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { css } from '@typie/styled-system/css';
+  import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { tooltip } from '@typie/ui/actions';
   import { Icon } from '@typie/ui/components';
@@ -25,6 +25,7 @@
   import { goto, pushState } from '$app/navigation';
   import { page } from '$app/state';
   import { fragment, graphql } from '$graphql';
+  import { Img } from '$lib/components';
   import EntityTree from './@tree/EntityTree.svelte';
   import PlanUsageWidget from './PlanUsageWidget.svelte';
   import Profile from './Profile.svelte';
@@ -56,6 +57,12 @@
     graphql(`
       fragment DashboardLayout_Sidebar_site on Site {
         id
+        name
+
+        logo {
+          id
+          ...Img_image
+        }
 
         ...DashboardLayout_EntityTree_site
         ...DashboardLayout_PlanUsageWidget_site
@@ -434,8 +441,43 @@
       </button>
     </div>
 
-    <div class={css({ marginX: '8px', paddingX: '8px', marginTop: '8px', paddingTop: '6px' })}>
-      <span class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>포스트</span>
+    <div
+      class={cx(
+        'group',
+        css({
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginX: '8px',
+          paddingX: '8px',
+          marginTop: '8px',
+          paddingTop: '6px',
+        }),
+      )}
+    >
+      <div class={flex({ alignItems: 'center', gap: '6px' })}>
+        <Img style={css.raw({ size: '16px', borderRadius: '4px' })} $image={$site.logo} alt={$site.name} size={32} />
+        <span class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>{$site.name}</span>
+      </div>
+      <button
+        class={center({
+          borderRadius: '4px',
+          size: '20px',
+          color: 'text.faint',
+          opacity: '0',
+          transition: 'common',
+          _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
+          _groupHover: { opacity: '100' },
+        })}
+        onclick={() => {
+          pushState('', { shallowRoute: '/site-settings/general' });
+          mixpanel.track('open_site_settings', { via: 'sidebar' });
+        }}
+        type="button"
+        use:tooltip={{ message: '사이트 설정' }}
+      >
+        <Icon icon={SettingsIcon} size={12} />
+      </button>
     </div>
 
     <div

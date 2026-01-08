@@ -145,13 +145,14 @@ builder.mutationFields((t) => ({
       }
 
       const user = await db.transaction(async (tx) => {
-        const file = await generateRandomAvatar();
-        const avatar = await persistBlobAsImage({ file });
+        const [avatarFile, logoFile] = await Promise.all([generateRandomAvatar(), generateRandomAvatar()]);
+        const [avatar, logo] = await Promise.all([persistBlobAsImage({ file: avatarFile }), persistBlobAsImage({ file: logoFile })]);
 
         const user = await createUser(tx, {
           email,
           name,
           avatarId: avatar.id,
+          logoId: logo.id,
           referralCode,
         });
 
@@ -247,10 +248,14 @@ builder.mutationFields((t) => ({
           avatar = await persistBlobAsImage({ file });
         }
 
+        const logoFile = await generateRandomAvatar();
+        const logo = await persistBlobAsImage({ file: logoFile });
+
         const user = await createUser(tx, {
           email: externalUser.email,
           name: externalUser.name ?? generateRandomName(),
           avatarId: avatar.id,
+          logoId: logo.id,
           referralCode: input.referralCode ?? undefined,
         });
 
@@ -354,8 +359,8 @@ const createSession = async (ctx: UserContext, userId: string) => {
   });
 };
 
-type CreateUserParams = { email: string; name: string; avatarId: string; referralCode?: string };
-const createUser = async (tx: Transaction, { email, name: _name, avatarId, referralCode }: CreateUserParams) => {
+type CreateUserParams = { email: string; name: string; avatarId: string; logoId: string; referralCode?: string };
+const createUser = async (tx: Transaction, { email, name: _name, avatarId, logoId, referralCode }: CreateUserParams) => {
   const name = _name.trim().slice(0, 20);
 
   const user = await tx.insert(Users).values({ email, name, avatarId }).returning({ id: Users.id }).then(firstOrThrow);
@@ -368,6 +373,7 @@ const createUser = async (tx: Transaction, { email, name: _name, avatarId, refer
       faker.word.noun({ length: { min: 4, max: 6 } }),
       faker.string.numeric({ length: { min: 3, max: 4 } }),
     ].join('-'),
+    logoId,
     tx,
   });
 

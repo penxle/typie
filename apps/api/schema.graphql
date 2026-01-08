@@ -441,6 +441,7 @@ interface IPost {
 interface ISite {
   fonts: [Font!]!
   id: ID!
+  logo: Image!
   name: String!
   slug: String!
   url: String!
@@ -591,6 +592,7 @@ type Mutation {
   updatePostType(input: UpdatePostTypeInput!): Post!
   updatePostsOption(input: UpdatePostsOptionInput!): [Post!]!
   updatePreferences(input: UpdatePreferencesInput!): User!
+  updateSite(input: UpdateSiteInput!): Site!
   updateSiteSlug(input: UpdateSiteSlugInput!): Site!
   updateUser(input: UpdateUserInput!): User!
   updateWidget(input: UpdateWidgetInput!): Widget!
@@ -932,6 +934,7 @@ type Site implements ISite {
   firstEntity(type: EntityType!): Entity
   fonts: [Font!]!
   id: ID!
+  logo: Image!
   name: String!
   slug: String!
   templates: [Post!]!
@@ -956,6 +959,7 @@ type SiteUsage {
 type SiteView implements ISite {
   fonts: [Font!]!
   id: ID!
+  logo: Image!
   myMasqueradeName: String!
   name: String!
   slug: String!
@@ -1120,6 +1124,12 @@ input UpdatePostsOptionInput {
 
 input UpdatePreferencesInput {
   value: JSON!
+}
+
+input UpdateSiteInput {
+  logoId: ID
+  name: String
+  siteId: ID!
 }
 
 input UpdateSiteSlugInput {
