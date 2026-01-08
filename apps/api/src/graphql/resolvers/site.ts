@@ -17,7 +17,7 @@ import {
   TableCode,
   validateDbId,
 } from '@/db';
-import { DocumentType, EntityState, EntityType, FontState, PostType } from '@/enums';
+import { DocumentType, EntityState, EntityType, EntityVisibility, FontState, PostType } from '@/enums';
 import { env } from '@/env';
 import { TypieError } from '@/errors';
 import { pubsub } from '@/pubsub';
@@ -191,6 +191,33 @@ SiteView.implement({
     myMasqueradeName: t.string({
       resolve: async (self, _, ctx) => {
         return generateRandomName(`${self.id}:${ctx.session?.userId ?? ctx.deviceId}`);
+      },
+    }),
+
+    entities: t.field({
+      type: [Entity],
+      resolve: async (self, _, ctx) => {
+        const loader = ctx.loader({
+          name: 'SiteView.entities',
+          many: true,
+          load: async (ids) => {
+            return await db
+              .select()
+              .from(Entities)
+              .where(
+                and(
+                  inArray(Entities.siteId, ids),
+                  eq(Entities.state, EntityState.ACTIVE),
+                  eq(Entities.visibility, EntityVisibility.PUBLIC),
+                  isNull(Entities.parentId),
+                ),
+              )
+              .orderBy(asc(Entities.order));
+          },
+          key: ({ siteId }) => siteId,
+        });
+
+        return await loader.load(self.id);
       },
     }),
   }),
