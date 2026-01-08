@@ -52,6 +52,7 @@ import { assertSitePermission } from '@/utils/permission';
 import { assertPlanRule } from '@/utils/plan';
 import { builder } from '../builder';
 import { CharacterCountChange, Entity, EntityView, Image, IPost, isTypeOf, Post, PostReaction, PostSnapshot, PostView } from '../objects';
+import type { Context } from '@/context';
 
 /**
  * * Types
@@ -263,11 +264,83 @@ Post.implement({
   }),
 });
 
+async function checkPostViewAccess(
+  post: Pick<typeof Posts.$inferSelect, 'id' | 'contentRating' | 'password'>,
+  ctx: Context,
+): Promise<{ accessible: true } | { accessible: false; reason: PostViewBodyUnavailableReason }> {
+  if (post.contentRating !== PostContentRating.ALL) {
+    if (!ctx.session) {
+      return { accessible: false, reason: PostViewBodyUnavailableReason.REQUIRE_IDENTITY_VERIFICATION };
+    }
+
+    const identity = await db
+      .select({
+        birthday: UserPersonalIdentities.birthDate,
+        expiresAt: UserPersonalIdentities.expiresAt,
+      })
+      .from(UserPersonalIdentities)
+      .where(eq(UserPersonalIdentities.userId, ctx.session.userId))
+      .then(first);
+
+    if (!identity) {
+      return { accessible: false, reason: PostViewBodyUnavailableReason.REQUIRE_IDENTITY_VERIFICATION };
+    }
+
+    if (identity.expiresAt.isBefore(dayjs())) {
+      return { accessible: false, reason: PostViewBodyUnavailableReason.REQUIRE_IDENTITY_VERIFICATION };
+    }
+
+    const minAge = match(post.contentRating)
+      .with(PostContentRating.R15, () => 15)
+      .with(PostContentRating.R19, () => 19)
+      .exhaustive();
+
+    if (getKoreanAge(identity.birthday) < minAge) {
+      return { accessible: false, reason: PostViewBodyUnavailableReason.REQUIRE_MINIMUM_AGE };
+    }
+  }
+
+  if (post.password !== null) {
+    const passwordUnlock = await redis.get(`postview:unlock:${post.id}:${ctx.deviceId}`);
+
+    if (passwordUnlock !== 'true') {
+      return { accessible: false, reason: PostViewBodyUnavailableReason.REQUIRE_PASSWORD };
+    }
+  }
+
+  return { accessible: true };
+}
+
 PostView.implement({
   isTypeOf: isTypeOf(TableCode.POSTS),
   interfaces: [IPost],
   fields: (t) => ({
     hasPassword: t.boolean({ resolve: (self) => !!self.password }),
+
+    excerpt: t.string({
+      resolve: async (self, _, ctx) => {
+        const access = await checkPostViewAccess(self, ctx);
+        if (!access.accessible) {
+          return '(미리보기가 제한된 글입니다)';
+        }
+
+        const loader = ctx.loader({
+          name: 'Post.excerpt',
+          load: async (ids) => {
+            return await db
+              .select({ postId: PostContents.postId, text: PostContents.text })
+              .from(PostContents)
+              .where(inArray(PostContents.postId, ids));
+          },
+          key: ({ postId }) => postId,
+        });
+
+        const content = await loader.load(self.id);
+        const text = content.text.replaceAll(/\s+/g, ' ').trim();
+
+        return text.length <= 200 ? text : text.slice(0, 200) + '...';
+      },
+    }),
 
     body: t.field({
       type: t.builder.unionType('PostViewBody', {
@@ -281,59 +354,12 @@ PostView.implement({
         ],
       }),
       resolve: async (self, _, ctx) => {
-        if (self.contentRating !== PostContentRating.ALL) {
-          if (!ctx.session) {
-            return {
-              __typename: 'PostViewBodyUnavailable',
-              reason: PostViewBodyUnavailableReason.REQUIRE_IDENTITY_VERIFICATION,
-            };
-          }
-
-          const identity = await db
-            .select({
-              birthday: UserPersonalIdentities.birthDate,
-              expiresAt: UserPersonalIdentities.expiresAt,
-            })
-            .from(UserPersonalIdentities)
-            .where(eq(UserPersonalIdentities.userId, ctx.session.userId))
-            .then(first);
-
-          if (!identity) {
-            return {
-              __typename: 'PostViewBodyUnavailable',
-              reason: PostViewBodyUnavailableReason.REQUIRE_IDENTITY_VERIFICATION,
-            };
-          }
-
-          if (identity.expiresAt.isBefore(dayjs())) {
-            return {
-              __typename: 'PostViewBodyUnavailable',
-              reason: PostViewBodyUnavailableReason.REQUIRE_IDENTITY_VERIFICATION,
-            };
-          }
-
-          const minAge = match(self.contentRating)
-            .with(PostContentRating.R15, () => 15)
-            .with(PostContentRating.R19, () => 19)
-            .exhaustive();
-
-          if (getKoreanAge(identity.birthday) < minAge) {
-            return {
-              __typename: 'PostViewBodyUnavailable',
-              reason: PostViewBodyUnavailableReason.REQUIRE_MINIMUM_AGE,
-            };
-          }
-        }
-
-        if (self.password !== null) {
-          const passwordUnlock = await redis.get(`postview:unlock:${self.id}:${ctx.deviceId}`);
-
-          if (passwordUnlock !== 'true') {
-            return {
-              __typename: 'PostViewBodyUnavailable',
-              reason: PostViewBodyUnavailableReason.REQUIRE_PASSWORD,
-            };
-          }
+        const access = await checkPostViewAccess(self, ctx);
+        if (!access.accessible) {
+          return {
+            __typename: 'PostViewBodyUnavailable',
+            reason: access.reason,
+          };
         }
 
         const loader = ctx.loader({
