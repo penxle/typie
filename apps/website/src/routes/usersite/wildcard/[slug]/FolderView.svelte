@@ -6,6 +6,7 @@
   import FileIcon from '~icons/lucide/file';
   import FolderIcon from '~icons/lucide/folder';
   import { fragment, graphql } from '$graphql';
+  import { Img } from '$lib/components';
   import ShareLinkPopover from './ShareLinkPopover.svelte';
   import type { UsersiteWildcardSlugPage_FolderView_entityView } from '$graphql';
 
@@ -67,6 +68,17 @@
             }
           }
         }
+
+        site {
+          id
+          name
+          url
+
+          logo {
+            id
+            ...Img_image
+          }
+        }
       }
     `),
   );
@@ -98,17 +110,25 @@
         backgroundColor: 'surface.default',
       })}
     >
-      <div class={flex({ alignItems: 'center', gap: '6px', marginBottom: '8px' })}>
+      <div class={flex({ alignItems: 'center', gap: '6px', wrap: 'wrap', marginBottom: '8px' })}>
+        <a class={flex({ alignItems: 'center', gap: '6px' })} href={$entityView.site.url}>
+          {#if $entityView.site.logo}
+            <Img
+              style={css.raw({ size: '20px', borderRadius: '4px', objectFit: 'cover' })}
+              $image={$entityView.site.logo}
+              alt={`${$entityView.site.name} 로고`}
+              size={24}
+            />
+          {/if}
+          <span class={css({ fontSize: '13px', color: 'text.disabled' })}>{$entityView.site.name}</span>
+        </a>
+
         {#each $entityView.ancestors as ancestor (ancestor.id)}
           {#if ancestor.node.__typename === 'FolderView'}
-            <a class={css({ fontSize: '13px', color: 'text.disabled' })} href={ancestor.url}>{ancestor.node.name}</a>
             <div class={css({ fontSize: '13px', color: 'text.disabled' })}>/</div>
+            <a class={css({ fontSize: '13px', color: 'text.disabled' })} href={ancestor.url}>{ancestor.node.name}</a>
           {/if}
         {/each}
-
-        {#if $entityView.ancestors.length > 0}
-          <div class={css({ fontSize: '13px' })}>{$entityView.node.name}</div>
-        {/if}
       </div>
 
       <h1 class={css({ fontSize: { base: '24px', md: '28px' }, fontWeight: 'bold' })}>{$entityView.node.name}</h1>
