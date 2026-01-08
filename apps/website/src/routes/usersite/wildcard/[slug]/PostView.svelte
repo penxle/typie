@@ -290,51 +290,53 @@
 
       <div
         class={css({
-          paddingTop: $entityView.node.coverImage ? '0' : { base: '24px', md: '48px' },
+          paddingTop: $entityView.node.coverImage ? '0' : { base: '48px', md: '80px' },
           width: 'full',
           maxWidth: 'var(--prosemirror-max-width)',
         })}
       >
         <div class={flex({ flexDirection: 'column', width: 'full', maxWidth: 'var(--prosemirror-max-width)' })}>
-          <div class={flex({ alignItems: 'center', gap: '6px', wrap: 'wrap', marginBottom: { base: '4px', lg: '8px' } })}>
+          <nav class={flex({ alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginBottom: '20px' })}>
             <a class={flex({ alignItems: 'center', gap: '6px' })} href={$entityView.site.url}>
               {#if $entityView.site.logo}
                 <Img
-                  style={css.raw({ size: '20px', borderRadius: '4px', objectFit: 'cover' })}
+                  style={css.raw({ size: '18px', borderRadius: '4px', objectFit: 'cover' })}
                   $image={$entityView.site.logo}
                   alt={`${$entityView.site.name} 로고`}
                   size={24}
                 />
               {/if}
-              <span class={css({ fontSize: { base: '12px', lg: '13px' }, color: 'text.disabled' })}>{$entityView.site.name}</span>
+              <span class={css({ fontSize: '13px', color: 'text.faint', _hover: { color: 'text.muted' } })}>
+                {$entityView.site.name}
+              </span>
             </a>
 
             {#each $entityView.ancestors as ancestor (ancestor.id)}
               {#if ancestor.node.__typename === 'FolderView'}
-                <div class={css({ fontSize: { base: '12px', lg: '13px' }, color: 'text.disabled' })}>/</div>
-                <a class={css({ fontSize: { base: '12px', lg: '13px' }, color: 'text.disabled' })} href={ancestor.url}>
+                <span class={css({ fontSize: '13px', color: 'text.faint' })}>/</span>
+                <a class={css({ fontSize: '13px', color: 'text.faint', _hover: { color: 'text.muted' } })} href={ancestor.url}>
                   {ancestor.node.name}
                 </a>
               {/if}
             {/each}
-          </div>
+          </nav>
 
-          <div class={css({ fontSize: { base: '24px', lg: '28px' }, fontWeight: 'bold' })}>
+          <h1 class={css({ fontSize: '22px', fontWeight: 'bold', letterSpacing: '-0.01em', lineHeight: '[1.4]' })}>
             {$entityView.node.title}
-          </div>
+          </h1>
 
           {#if $entityView.node.subtitle}
-            <div class={css({ marginTop: '4px', fontSize: { base: '14px', lg: '16px' }, fontWeight: 'medium' })}>
+            <p class={css({ marginTop: '8px', fontSize: '15px', color: 'text.muted' })}>
               {$entityView.node.subtitle}
-            </div>
+            </p>
           {/if}
 
-          <div class={flex({ align: 'center', justify: 'space-between', marginTop: '20px', paddingBottom: '10px' })}>
-            <div class={flex({ align: 'center', gap: '8px', fontSize: '13px', color: 'text.disabled' })}>
+          <div class={flex({ align: 'center', justify: 'space-between', marginTop: '24px', paddingBottom: '16px' })}>
+            <div class={flex({ align: 'center', gap: '8px', fontSize: '13px', color: 'text.faint' })}>
               {#if $entityView.node.allowReaction && $entityView.node.reactions.length > 0}
                 <div class={flex({ align: 'center', gap: '3px' })}>
                   <Icon icon={SmileIcon} />
-                  <span class={css({ marginTop: '1px' })}>{comma($entityView.node.reactions.length)}</span>
+                  <span>{comma($entityView.node.reactions.length)}</span>
                 </div>
               {/if}
             </div>
@@ -346,7 +348,7 @@
             </div>
           </div>
 
-          <HorizontalDivider style={css.raw({ marginBottom: '20px' })} />
+          <HorizontalDivider style={css.raw({ marginBottom: '24px' })} />
         </div>
 
         {#if $entityView.node.body.__typename === 'PostViewBodyAvailable'}
