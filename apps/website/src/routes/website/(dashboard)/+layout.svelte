@@ -21,6 +21,7 @@
   import Notes from './@notes/Notes.svelte';
   import PreferenceModal from './@preference/PreferenceModal.svelte';
   import ShareModal from './@share/ShareModal.svelte';
+  import SiteSettingsModal from './@site-settings/SiteSettingsModal.svelte';
   import StatsModal from './@stats/StatsModal.svelte';
   import TrashModal from './@trash/TrashModal.svelte';
   import CommandPalette from './CommandPalette.svelte';
@@ -60,6 +61,7 @@
           }
 
           ...DashboardLayout_Sidebar_site
+          ...DashboardLayout_SiteSettingsModal_site
           ...DashboardLayout_TrashModal_site
         }
 
@@ -72,6 +74,7 @@
         ...DashboardLayout_CommandPalette_user
         ...DashboardLayout_PreferenceModal_user
         ...DashboardLayout_Sidebar_user
+        ...DashboardLayout_SiteSettingsModal_user
       }
 
       ...AdminImpersonateBanner_query
@@ -360,6 +363,7 @@
 <CommandPalette $user={$query.me} />
 <Notes {$query} />
 <PreferenceModal $user={$query.me} />
+<SiteSettingsModal $site={$query.me.sites[0]} $user={$query.me} />
 <ShareModal />
 <StatsModal />
 <TrashModal $site={$query.me.sites[0]} />

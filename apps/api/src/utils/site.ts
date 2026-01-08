@@ -10,16 +10,18 @@ type CreateSiteParams = {
   userId: string;
   name: string;
   slug: string;
+  logoId: string;
   tx: Transaction;
 };
 
-export const createSite = async ({ userId, name, slug, tx }: CreateSiteParams) => {
+export const createSite = async ({ userId, name, slug, logoId, tx }: CreateSiteParams) => {
   const site = await tx
     .insert(Sites)
     .values({
       userId,
       slug,
       name,
+      logoId,
     })
     .returning({
       id: Sites.id,

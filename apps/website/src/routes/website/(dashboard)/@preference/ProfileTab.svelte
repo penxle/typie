@@ -3,21 +3,18 @@
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { Button, Icon, Switch, TextInput } from '@typie/ui/components';
-  import { createForm, FormError } from '@typie/ui/form';
+  import { createForm } from '@typie/ui/form';
   import { Dialog, Toast } from '@typie/ui/notification';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
   import { z } from 'zod';
   import { TypieError } from '@/errors';
-  import { siteSchema } from '@/validation';
   import CheckCircle2Icon from '~icons/lucide/check-circle-2';
   import PencilIcon from '~icons/lucide/pencil';
   import UploadIcon from '~icons/lucide/upload';
-  import { env } from '$env/dynamic/public';
   import { fragment, graphql } from '$graphql';
   import { LoadableImg, SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
   import { uploadBlobAsImage } from '$lib/utils';
-  import PlanUpgradeModal from '../PlanUpgradeModal.svelte';
   import UpdateEmailModal from './UpdateEmailModal.svelte';
   import type { DashboardLayout_PreferenceModal_ProfileTab_user } from '$graphql';
 
@@ -39,15 +36,6 @@
         avatar {
           id
           ...Img_image
-        }
-
-        sites {
-          id
-          slug
-        }
-
-        subscription {
-          id
         }
 
         personalIdentity {
@@ -76,15 +64,6 @@
       updateMarketingConsent(input: $input) {
         id
         marketingConsent
-      }
-    }
-  `);
-
-  const updateSiteSlug = graphql(`
-    mutation DashboardLayout_PreferenceModal_ProfileTab_UpdateSiteSlug_Mutation($input: UpdateSiteSlugInput!) {
-      updateSiteSlug(input: $input) {
-        id
-        slug
       }
     }
   `);
@@ -118,29 +97,8 @@
     },
   });
 
-  const siteForm = createForm({
-    schema: z.object({
-      slug: siteSchema.slug,
-    }),
-    onSubmit: async (data) => {
-      await updateSiteSlug({ siteId: $user.sites[0].id, slug: data.slug });
-
-      mixpanel.track('update_site_slug');
-      Toast.success('사이트 주소가 변경됐어요.');
-    },
-    onError: (error) => {
-      if (error instanceof TypieError && error.code === 'site_slug_already_exists') {
-        throw new FormError('slug', '이미 존재하는 사이트 주소예요.');
-      }
-    },
-    defaultValues: {
-      slug: $user.sites[0]?.slug ?? '',
-    },
-  });
-
   $effect(() => {
     void form;
-    void siteForm;
   });
 
   const handleVerification = async () => {
@@ -175,7 +133,6 @@
   };
 
   let updateEmailOpen = $state(false);
-  let planUpgradeModalOpen = $state(false);
 </script>
 
 <div class={flex({ direction: 'column', gap: '40px', maxWidth: '640px' })}>
@@ -293,73 +250,6 @@
             {/if}
           {/snippet}
         </SettingsRow>
-
-        {#if $user.sites.length > 0}
-          <SettingsDivider />
-
-          <!-- Site URL Row -->
-          <SettingsRow>
-            {#snippet label()}
-              사이트 주소
-            {/snippet}
-            {#snippet description()}
-              포스트를 공유할 때 사용할 주소예요.
-            {/snippet}
-            {#snippet value()}
-              <div class={css({ position: 'relative' })}>
-                <TextInput
-                  style={css.raw({ width: '[280px]', height: '32px', fontSize: '13px' })}
-                  disabled={!$user.subscription}
-                  onblur={() => {
-                    if ($user.subscription && siteForm.state.isDirty) {
-                      siteForm.handleSubmit();
-                    }
-                  }}
-                  rightItemAttached
-                  bind:value={siteForm.fields.slug}
-                >
-                  {#snippet rightItem()}
-                    <span
-                      class={css({
-                        fontSize: '13px',
-                        color: 'text.subtle',
-                        backgroundColor: 'surface.muted',
-                        paddingX: '12px',
-                        height: 'full',
-                        display: 'flex',
-                        alignItems: 'center',
-                      })}
-                    >
-                      .{env.PUBLIC_USERSITE_HOST}
-                    </span>
-                  {/snippet}
-                </TextInput>
-                {#if !$user.subscription}
-                  <button
-                    class={css({
-                      position: 'absolute',
-                      inset: '0',
-                      cursor: 'pointer',
-                      backgroundColor: 'transparent',
-                      border: 'none',
-                    })}
-                    aria-label="사이트 주소 기능 업그레이드"
-                    onclick={() => {
-                      planUpgradeModalOpen = true;
-                      mixpanel.track('open_plan_upgrade_modal', { via: 'site_address' });
-                    }}
-                    type="button"
-                  ></button>
-                {/if}
-              </div>
-            {/snippet}
-            {#snippet error()}
-              {#if siteForm.errors.slug}
-                <p class={css({ fontSize: '12px', color: 'text.danger', textAlign: 'right' })}>{siteForm.errors.slug}</p>
-              {/if}
-            {/snippet}
-          </SettingsRow>
-        {/if}
       </form>
     </SettingsCard>
   </div>
@@ -442,4 +332,3 @@
 </div>
 
 <UpdateEmailModal email={$user.email} bind:open={updateEmailOpen} />
-<PlanUpgradeModal bind:open={planUpgradeModalOpen}>사이트 주소 기능은 FULL ACCESS 플랜에서 사용할 수 있어요.</PlanUpgradeModal>

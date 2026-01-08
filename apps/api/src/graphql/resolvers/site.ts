@@ -25,7 +25,7 @@ import { generateRandomName } from '@/utils/name';
 import { assertSitePermission } from '@/utils/permission';
 import { siteSchema } from '@/validation';
 import { builder } from '../builder';
-import { Document, Entity, Font, ISite, isTypeOf, Post, Site, SiteView, User } from '../objects';
+import { Document, Entity, Font, Image, ISite, isTypeOf, Post, Site, SiteView, User } from '../objects';
 
 /**
  * * Types
@@ -36,6 +36,7 @@ ISite.implement({
     id: t.exposeID('id'),
     slug: t.exposeString('slug'),
     name: t.exposeString('name'),
+    logo: t.expose('logoId', { type: Image }),
 
     url: t.string({ resolve: (self) => env.USERSITE_URL.replace('*', self.slug) }),
 
@@ -219,6 +220,35 @@ builder.queryFields((t) => ({
  */
 
 builder.mutationFields((t) => ({
+  updateSite: t.withAuth({ session: true }).fieldWithInput({
+    type: Site,
+    input: {
+      siteId: t.input.id({ validate: validateDbId(TableCode.SITES) }),
+      name: t.input.string({ required: false }),
+      logoId: t.input.id({ required: false }),
+    },
+    resolve: async (_, { input }, ctx) => {
+      await assertSitePermission({
+        userId: ctx.session.userId,
+        siteId: input.siteId,
+      });
+
+      const updateData: { name?: string; logoId?: string } = {};
+      if (input.name !== undefined && input.name !== null) {
+        updateData.name = input.name;
+      }
+      if (input.logoId !== undefined && input.logoId !== null) {
+        updateData.logoId = input.logoId;
+      }
+
+      if (Object.keys(updateData).length === 0) {
+        return await db.select().from(Sites).where(eq(Sites.id, input.siteId)).then(firstOrThrow);
+      }
+
+      return await db.update(Sites).set(updateData).where(eq(Sites.id, input.siteId)).returning().then(firstOrThrow);
+    },
+  }),
+
   updateSiteSlug: t.withAuth({ session: true }).fieldWithInput({
     type: Site,
     input: {
