@@ -132,12 +132,39 @@ Document.implement({
 
     versions: t.field({
       type: [DocumentVersion],
-      resolve: async (self) => {
+      args: {
+        first: t.arg.int({ defaultValue: 20 }),
+        before: t.arg({ type: 'DateTime', required: false }),
+      },
+      resolve: async (self, args) => {
         return await db
           .select()
           .from(DocumentVersions)
+          .where(
+            args.before
+              ? and(eq(DocumentVersions.documentId, self.id), lt(DocumentVersions.createdAt, args.before))
+              : eq(DocumentVersions.documentId, self.id),
+          )
+          .orderBy(desc(DocumentVersions.createdAt))
+          .limit(args.first);
+      },
+    }),
+
+    versionMetas: t.field({
+      type: [
+        builder.simpleObject('DocumentVersionMeta', {
+          fields: (t) => ({
+            id: t.id(),
+            createdAt: t.field({ type: 'DateTime' }),
+          }),
+        }),
+      ],
+      resolve: async (self) => {
+        return await db
+          .select({ id: DocumentVersions.id, createdAt: DocumentVersions.createdAt })
+          .from(DocumentVersions)
           .where(eq(DocumentVersions.documentId, self.id))
-          .orderBy(asc(DocumentVersions.createdAt), asc(DocumentVersions.order));
+          .orderBy(asc(DocumentVersions.createdAt));
       },
     }),
   }),
