@@ -1,8 +1,13 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:math';
 
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
+import 'package:built_value/json_object.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
@@ -35,13 +40,17 @@ import 'package:typie/screens/entity/__generated__/delete_post_mutation.req.gql.
 import 'package:typie/screens/entity/__generated__/duplicate_post_mutation.req.gql.dart';
 import 'package:typie/screens/entity/__generated__/entity_fragment.data.gql.dart';
 import 'package:typie/screens/entity/__generated__/move_entity_mutation.req.gql.dart';
+import 'package:typie/screens/entity/__generated__/persist_blob_as_image_mutation.req.gql.dart';
 import 'package:typie/screens/entity/__generated__/rename_folder_mutation.req.gql.dart';
 import 'package:typie/screens/entity/__generated__/screen_with_entity_id_query.data.gql.dart';
 import 'package:typie/screens/entity/__generated__/screen_with_entity_id_query.req.gql.dart';
 import 'package:typie/screens/entity/__generated__/screen_with_site_id_query.req.gql.dart';
+import 'package:typie/screens/entity/__generated__/site_fragment.data.gql.dart';
+import 'package:typie/screens/entity/__generated__/update_site_mutation.req.gql.dart';
 import 'package:typie/screens/entity/move_entity_modal.dart';
 import 'package:typie/screens/entity/multi_entities_menu.dart';
 import 'package:typie/screens/entity/selected_entities_bar.dart';
+import 'package:typie/services/blob.dart';
 import 'package:typie/services/preference.dart';
 import 'package:typie/widgets/forms/form.dart';
 import 'package:typie/widgets/forms/text_field.dart';
@@ -84,7 +93,7 @@ class _WithSiteId extends HookWidget {
       operation: GEntityScreen_WithSiteId_QueryReq((b) => b..vars.siteId = pref.siteId),
       refreshNotifier: refreshNotifier,
       builder: (context, client, data) {
-        return _EntityList(null, data.site.entities.toList());
+        return _EntityList(null, data.site.entities.toList(), site: data.site);
       },
     );
   }
@@ -113,10 +122,11 @@ class _WithEntityId extends HookWidget {
 }
 
 class _EntityList extends HookWidget {
-  const _EntityList(this.entity, this.entities);
+  const _EntityList(this.entity, this.entities, {this.site});
 
   final GEntityScreen_WithEntityId_QueryData_entity? entity;
   final List<GEntityScreen_Entity_entity> entities;
+  final GEntityScreen_Site_site? site;
 
   GEntityScreen_WithEntityId_QueryData_entity_node__asFolder? get folder =>
       entity?.node as GEntityScreen_WithEntityId_QueryData_entity_node__asFolder?;
@@ -126,15 +136,20 @@ class _EntityList extends HookWidget {
     final client = useService<GraphQLClient>();
     final pref = useService<Pref>();
     final mixpanel = useService<Mixpanel>();
+    final blob = useService<Blob>();
 
     final animationController = useAnimationController(duration: const Duration(milliseconds: 150));
     final textEditingController = useTextEditingController();
+    final siteNameController = useTextEditingController(text: site?.name ?? '');
     final primaryScrollController = PrimaryScrollController.of(context);
 
     final isReordering = useState(false);
     final isRenaming = useState(false);
+    final isSiteRenaming = useState(false);
     final isSelecting = useState(false);
     final selectedItems = useState<Set<String>>({});
+    final currentSiteLogoUrl = useState(site?.logo.url);
+    final currentSiteName = useState(site?.name);
 
     useEffect(() {
       void listener() {
@@ -181,7 +196,58 @@ class _EntityList extends HookWidget {
             titleWidget: Row(
               spacing: 8,
               children: [
-                Icon(entity == null ? LucideLightIcons.folder_open : LucideLightIcons.folder, size: 20),
+                if (entity == null && currentSiteLogoUrl.value != null)
+                  GestureDetector(
+                    onTap: () async {
+                      final result = await FilePicker.platform.pickFiles(type: FileType.image);
+                      if (result == null) {
+                        return;
+                      }
+
+                      final pickedFile = result.files.firstOrNull;
+                      if (pickedFile == null) {
+                        return;
+                      }
+
+                      final file = File(pickedFile.path!);
+                      final path = await blob.upload(file);
+                      final resp = await client.request(
+                        GEntityScreen_PersistBlobAsImage_MutationReq(
+                          (b) => b
+                            ..vars.input.path = path
+                            ..vars.input.modification = Value.present(
+                              JsonObject({
+                                'resize': {'width': 512, 'height': 512, 'fit': 'cover', 'withoutEnlargement': true},
+                                'format': 'png',
+                              }),
+                            ),
+                        ),
+                      );
+
+                      await client.request(
+                        GEntityScreen_UpdateSite_MutationReq(
+                          (b) => b
+                            ..vars.input.siteId = site!.id
+                            ..vars.input.logoId = Value.present(resp.persistBlobAsImage.id),
+                        ),
+                      );
+
+                      currentSiteLogoUrl.value = resp.persistBlobAsImage.url;
+                      unawaited(mixpanel.track('update_site_logo'));
+                    },
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: CachedNetworkImage(
+                        imageUrl:
+                            '${currentSiteLogoUrl.value}?s=${pow(2, (log(24 * MediaQuery.devicePixelRatioOf(context)) / log(2)).ceil()).toInt()}&q=75',
+                        width: 24,
+                        height: 24,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                  )
+                else
+                  Icon(entity == null ? LucideLightIcons.folder_open : LucideLightIcons.folder, size: 20),
                 Expanded(
                   child: isRenaming.value
                       ? HookFormTextField.collapsed(
@@ -192,15 +258,48 @@ class _EntityList extends HookWidget {
                           placeholder: '폴더 이름',
                           style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                         )
+                      : isSiteRenaming.value
+                      ? TextField(
+                          controller: siteNameController,
+                          autofocus: true,
+                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                          decoration: const InputDecoration(
+                            border: InputBorder.none,
+                            isDense: true,
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                          onSubmitted: (value) async {
+                            if (value.isEmpty) {
+                              isSiteRenaming.value = false;
+                              siteNameController.text = currentSiteName.value ?? '';
+                              return;
+                            }
+
+                            await client.request(
+                              GEntityScreen_UpdateSite_MutationReq(
+                                (b) => b
+                                  ..vars.input.siteId = site!.id
+                                  ..vars.input.name = Value.present(value),
+                              ),
+                            );
+
+                            currentSiteName.value = value;
+                            isSiteRenaming.value = false;
+                            unawaited(mixpanel.track('update_site_name'));
+                          },
+                        )
                       : GestureDetector(
                           onDoubleTap: () {
                             if (entity != null) {
                               isRenaming.value = true;
+                            } else if (site != null) {
+                              siteNameController.text = currentSiteName.value ?? '';
+                              isSiteRenaming.value = true;
                             }
                           },
                           child: Text(
                             entity == null
-                                ? '내 포스트'
+                                ? currentSiteName.value ?? '내 포스트'
                                 : textEditingController.text.isEmpty
                                 ? folder!.name
                                 : textEditingController.text,
@@ -221,13 +320,13 @@ class _EntityList extends HookWidget {
                   )
                 : null,
             actions: [
-              if (!isRenaming.value && !isReordering.value && !isSelecting.value)
+              if (!isRenaming.value && !isSiteRenaming.value && !isReordering.value && !isSelecting.value)
                 HeadingAction(
                   icon: LucideLightIcons.ellipsis,
                   onTap: () async {
                     await context.showBottomSheet(
                       child: BottomMenu(
-                        header: _BottomMenuHeader(entity: entity),
+                        header: _BottomMenuHeader(entity: entity, siteName: currentSiteName.value),
                         items: [
                           if (entity != null) ...[
                             BottomMenuItem(
@@ -364,7 +463,62 @@ class _EntityList extends HookWidget {
                               },
                             ),
                           ],
-                          if (entity == null)
+                          if (entity == null) ...[
+                            BottomMenuItem(
+                              icon: LucideLightIcons.image,
+                              label: '스페이스 로고 변경',
+                              onTap: () async {
+                                final result = await FilePicker.platform.pickFiles(type: FileType.image);
+                                if (result == null) {
+                                  return;
+                                }
+
+                                final pickedFile = result.files.firstOrNull;
+                                if (pickedFile == null) {
+                                  return;
+                                }
+
+                                final file = File(pickedFile.path!);
+                                final path = await blob.upload(file);
+                                final resp = await client.request(
+                                  GEntityScreen_PersistBlobAsImage_MutationReq(
+                                    (b) => b
+                                      ..vars.input.path = path
+                                      ..vars.input.modification = Value.present(
+                                        JsonObject({
+                                          'resize': {
+                                            'width': 512,
+                                            'height': 512,
+                                            'fit': 'cover',
+                                            'withoutEnlargement': true,
+                                          },
+                                          'format': 'png',
+                                        }),
+                                      ),
+                                  ),
+                                );
+
+                                await client.request(
+                                  GEntityScreen_UpdateSite_MutationReq(
+                                    (b) => b
+                                      ..vars.input.siteId = site!.id
+                                      ..vars.input.logoId = Value.present(resp.persistBlobAsImage.id),
+                                  ),
+                                );
+
+                                currentSiteLogoUrl.value = resp.persistBlobAsImage.url;
+                                unawaited(mixpanel.track('update_site_logo', properties: {'via': 'bottom_menu'}));
+                              },
+                            ),
+                            BottomMenuItem(
+                              icon: LucideLightIcons.pen_line,
+                              label: '스페이스 이름 변경',
+                              onTap: () {
+                                siteNameController.text = currentSiteName.value ?? '';
+                                isSiteRenaming.value = true;
+                              },
+                            ),
+                            const BottomMenuSeparator(),
                             BottomMenuItem(
                               icon: LucideLightIcons.trash_2,
                               label: '휴지통',
@@ -372,6 +526,7 @@ class _EntityList extends HookWidget {
                                 await context.router.push(TrashRoute());
                               },
                             ),
+                          ],
                         ],
                       ),
                     );
@@ -391,6 +546,25 @@ class _EntityList extends HookWidget {
                   onTap: () async {
                     if (isRenaming.value) {
                       await form.submit();
+                    } else if (isSiteRenaming.value) {
+                      final value = siteNameController.text;
+                      if (value.isEmpty) {
+                        isSiteRenaming.value = false;
+                        siteNameController.text = currentSiteName.value ?? '';
+                        return;
+                      }
+
+                      await client.request(
+                        GEntityScreen_UpdateSite_MutationReq(
+                          (b) => b
+                            ..vars.input.siteId = site!.id
+                            ..vars.input.name = Value.present(value),
+                        ),
+                      );
+
+                      currentSiteName.value = value;
+                      isSiteRenaming.value = false;
+                      unawaited(mixpanel.track('update_site_name'));
                     } else if (isReordering.value) {
                       isReordering.value = false;
                     }
@@ -464,7 +638,7 @@ class _EntityList extends HookWidget {
                           await entities[index].node.when(
                             folder: (folder) => context.showBottomSheet(
                               child: BottomMenu(
-                                header: _BottomMenuHeader(entity: entities[index]),
+                                header: _BottomMenuHeader(entity: entities[index], siteName: currentSiteName.value),
                                 items: [
                                   BottomMenuItem(
                                     icon: LucideLightIcons.folder_symlink,
@@ -613,7 +787,7 @@ class _EntityList extends HookWidget {
                             ),
                             post: (post) => context.showBottomSheet(
                               child: BottomMenu(
-                                header: _BottomMenuHeader(entity: entities[index]),
+                                header: _BottomMenuHeader(entity: entities[index], siteName: currentSiteName.value),
                                 items: [
                                   BottomMenuItem(
                                     icon: LucideLightIcons.file_symlink,
@@ -722,7 +896,7 @@ class _EntityList extends HookWidget {
                             ),
                             document: (document) => context.showBottomSheet(
                               child: BottomMenu(
-                                header: _BottomMenuHeader(entity: entities[index]),
+                                header: _BottomMenuHeader(entity: entities[index], siteName: currentSiteName.value),
                                 items: [
                                   if (!isSelecting.value && !isReordering.value) ...[
                                     BottomMenuItem(
@@ -1017,9 +1191,10 @@ class _Document extends StatelessWidget {
 }
 
 class _BottomMenuHeader extends StatelessWidget {
-  const _BottomMenuHeader({this.entity});
+  const _BottomMenuHeader({this.entity, this.siteName});
 
   final GEntityScreen_Entity_entity? entity;
+  final String? siteName;
 
   @override
   Widget build(BuildContext context) {
@@ -1047,6 +1222,7 @@ class _BottomMenuHeader extends StatelessWidget {
                       document: (document) => document.title,
                       orElse: () => throw UnimplementedError(),
                     ) ??
+                    siteName ??
                     '내 포스트',
                 style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
                 overflow: TextOverflow.ellipsis,
@@ -1064,7 +1240,7 @@ class _BottomMenuHeader extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Text('내 포스트', style: TextStyle(fontSize: 14, color: context.colors.textSubtle)),
+                    Text(siteName ?? '내 포스트', style: TextStyle(fontSize: 14, color: context.colors.textSubtle)),
                     ...?entity?.ancestors
                         .map(
                           (ancestor) => [
