@@ -3,6 +3,7 @@ export * from './context-menu.svelte';
 export * from './floating.svelte';
 export * from './focus-trap.svelte';
 export * from './hover.svelte';
+export * from './infinite-scroll.svelte';
 export * from './outside-click.svelte';
 export * from './portal.svelte';
 export * from './scroll-lock.svelte';
