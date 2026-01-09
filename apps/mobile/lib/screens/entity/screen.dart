@@ -1091,8 +1091,10 @@ class _BottomMenuHeader extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        entity!.visibility == GEntityVisibility.UNLISTED &&
-                                entity!.availability == GEntityAvailability.UNLISTED
+                        entity!.visibility == GEntityVisibility.PUBLIC
+                            ? '공개'
+                            : entity!.visibility == GEntityVisibility.UNLISTED &&
+                                  entity!.availability == GEntityAvailability.UNLISTED
                             ? '링크 조회/편집 가능'
                             : entity!.visibility == GEntityVisibility.UNLISTED
                             ? '링크 조회 가능'
@@ -1102,7 +1104,8 @@ class _BottomMenuHeader extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 14,
                           color:
-                              entity!.visibility == GEntityVisibility.UNLISTED ||
+                              entity!.visibility == GEntityVisibility.PUBLIC ||
+                                  entity!.visibility == GEntityVisibility.UNLISTED ||
                                   entity!.availability == GEntityAvailability.UNLISTED
                               ? context.colors.accentBrand
                               : context.colors.textFaint,

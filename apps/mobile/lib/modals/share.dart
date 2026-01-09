@@ -187,6 +187,12 @@ class SharePostsContent extends HookWidget {
                           values: entities.map((e) => e.visibility).toList(),
                           items: const [
                             HookFormSelectItem(
+                              icon: LucideLightIcons.globe,
+                              label: '공개',
+                              description: '누구나 볼 수 있어요.',
+                              value: GEntityVisibility.PUBLIC,
+                            ),
+                            HookFormSelectItem(
                               icon: LucideLightIcons.link,
                               label: '링크가 있는 사람',
                               description: '링크가 있는 누구나 볼 수 있어요.',
@@ -394,11 +400,23 @@ class ShareFoldersContent extends HookWidget {
                       initialValue: entities.first.visibility,
                       values: entities.map((e) => e.visibility).toList(),
                       items: const [
-                        HookFormSelectItem(icon: LucideLightIcons.lock, label: '비공개', value: GEntityVisibility.PRIVATE),
+                        HookFormSelectItem(
+                          icon: LucideLightIcons.globe,
+                          label: '공개',
+                          description: '누구나 볼 수 있어요.',
+                          value: GEntityVisibility.PUBLIC,
+                        ),
                         HookFormSelectItem(
                           icon: LucideLightIcons.link,
                           label: '링크가 있는 사람',
+                          description: '링크가 있는 누구나 볼 수 있어요.',
                           value: GEntityVisibility.UNLISTED,
+                        ),
+                        HookFormSelectItem(
+                          icon: LucideLightIcons.lock,
+                          label: '비공개',
+                          description: '나만 볼 수 있어요.',
+                          value: GEntityVisibility.PRIVATE,
                         ),
                       ],
                     ),
