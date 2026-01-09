@@ -1,0 +1,11 @@
+mutation EntityScreen_UpdateSite_Mutation($input: UpdateSiteInput!) {
+  updateSite(input: $input) {
+    id
+    name
+
+    logo {
+      id
+      url
+    }
+  }
+}

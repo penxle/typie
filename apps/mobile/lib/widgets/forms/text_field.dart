@@ -262,6 +262,7 @@ class _HookFormCollapsedTextField extends HookFormTextField {
         }, [effectiveController]);
 
         return Column(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             TextField(

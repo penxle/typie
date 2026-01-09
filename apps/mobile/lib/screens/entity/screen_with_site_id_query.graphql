@@ -1,8 +1,10 @@
 # import "./entity_fragment.graphql"
+# import "./site_fragment.graphql"
 
 query EntityScreen_WithSiteId_Query($siteId: ID!) {
   site(siteId: $siteId) {
     id
+    ...EntityScreen_Site_site
 
     entities {
       id
