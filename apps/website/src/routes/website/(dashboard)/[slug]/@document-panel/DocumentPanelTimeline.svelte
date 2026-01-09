@@ -139,60 +139,22 @@
     idleCallback(processNext);
   };
 
-  const loadVersionsAround = async (targetIndex: number) => {
-    if (!$query || versionMetas.length === 0) return;
-
-    const targetMeta = versionMetas[targetIndex];
-    if (versionCache.has(targetMeta.id)) return;
-
-    let beforeCursor: (typeof versionMetas)[number] | null = null;
-    for (let i = targetIndex + 1; i < versionMetas.length; i++) {
-      if (versionCache.has(versionMetas[i].id)) {
-        beforeCursor = versionMetas[i];
-        break;
-      }
-    }
-
-    const result = await query.load({
-      slug: $document.entity.slug,
-      first: 20,
-      before: beforeCursor?.createdAt ?? null,
-    });
-
-    const newVersions: { id: string; version: string }[] = [];
-    for (const v of result.document.versions) {
-      if (!versionCache.has(v.id)) {
-        versionCache.set(v.id, v.version);
-        newVersions.push(v);
-      }
-    }
-
-    processVersionsCharacterCounts(newVersions);
-  };
-
   let isLoadingMore = $state(false);
   let hasMoreVersions = $derived(versionMetas.some((meta) => !versionCache.has(meta.id)));
 
   const loadMoreVersions = async () => {
-    if (isLoadingMore || !$query || versionMetas.length === 0) return;
+    if (isLoadingMore || !$query || loadedVersions.length === 0) return;
     if (!hasMoreVersions) return;
 
     isLoadingMore = true;
     try {
-      let oldestLoadedCreatedAt: (typeof versionMetas)[number]['createdAt'] | null = null;
-      for (const versionMeta of versionMetas) {
-        if (versionCache.has(versionMeta.id)) {
-          oldestLoadedCreatedAt = versionMeta.createdAt;
-          break;
-        }
-      }
-
-      if (!oldestLoadedCreatedAt) return;
+      const oldestDisplayed = loadedVersions[0];
+      if (!oldestDisplayed) return;
 
       const result = await query.load({
         slug: $document.entity.slug,
         first: 20,
-        before: oldestLoadedCreatedAt,
+        before: oldestDisplayed.createdAt,
       });
 
       const newVersions: { id: string; version: string }[] = [];
@@ -263,11 +225,10 @@
     prevSelectedId = currentId;
 
     untrack(async () => {
-      const index = versionMetas.findIndex((s) => s.id === currentId);
-
-      if (!versionCache.has(currentId) && index !== -1) {
-        await loadVersionsAround(index);
+      while (!versionCache.has(currentId) && hasMoreVersions) {
+        await loadMoreVersions();
       }
+
       scrollToVersion(currentId);
       updateViewVersion.call(currentId);
     });

@@ -191,60 +191,22 @@
     }
   };
 
-  const loadSnapshotsAround = async (targetIndex: number) => {
-    if (!$query || snapshotMetas.length === 0) return;
-
-    const targetMeta = snapshotMetas[targetIndex];
-    if (snapshotCache.has(targetMeta.id)) return;
-
-    let beforeCursor: (typeof snapshotMetas)[number] | null = null;
-    for (let i = targetIndex + 1; i < snapshotMetas.length; i++) {
-      if (snapshotCache.has(snapshotMetas[i].id)) {
-        beforeCursor = snapshotMetas[i];
-        break;
-      }
-    }
-
-    const result = await query.load({
-      slug: $post.entity.slug,
-      first: 20,
-      before: beforeCursor?.createdAt ?? null,
-    });
-
-    const newSnapshots: { id: string; snapshot: string }[] = [];
-    for (const s of result.post.snapshots) {
-      if (!snapshotCache.has(s.id)) {
-        snapshotCache.set(s.id, s.snapshot);
-        newSnapshots.push(s);
-      }
-    }
-
-    processSnapshotsCharacterCounts(newSnapshots);
-  };
-
   let isLoadingMore = $state(false);
   let hasMoreSnapshots = $derived(snapshotMetas.some((meta) => !snapshotCache.has(meta.id)));
 
   const loadMoreSnapshots = async () => {
-    if (isLoadingMore || !$query || snapshotMetas.length === 0) return;
+    if (isLoadingMore || !$query || loadedSnapshots.length === 0) return;
     if (!hasMoreSnapshots) return;
 
     isLoadingMore = true;
     try {
-      let oldestLoadedCreatedAt: (typeof snapshotMetas)[number]['createdAt'] | null = null;
-      for (const snapshotMeta of snapshotMetas) {
-        if (snapshotCache.has(snapshotMeta.id)) {
-          oldestLoadedCreatedAt = snapshotMeta.createdAt;
-          break;
-        }
-      }
-
-      if (!oldestLoadedCreatedAt) return;
+      const oldestDisplayed = loadedSnapshots[0];
+      if (!oldestDisplayed) return;
 
       const result = await query.load({
         slug: $post.entity.slug,
         first: 20,
-        before: oldestLoadedCreatedAt,
+        before: oldestDisplayed.createdAt,
       });
 
       const newSnapshots: { id: string; snapshot: string }[] = [];
@@ -324,11 +286,10 @@
     prevSelectedId = currentId;
 
     untrack(async () => {
-      const index = snapshotMetas.findIndex((s) => s.id === currentId);
-
-      if (!snapshotCache.has(currentId) && index !== -1) {
-        await loadSnapshotsAround(index);
+      while (!snapshotCache.has(currentId) && hasMoreSnapshots) {
+        await loadMoreSnapshots();
       }
+
       scrollToSnapshot(currentId);
       updateViewDoc.call(currentId);
     });
