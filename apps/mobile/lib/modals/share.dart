@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math';
 
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
 import 'package:built_value/built_value.dart' show EnumClass;
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
@@ -18,10 +20,12 @@ import 'package:typie/graphql/client.dart';
 import 'package:typie/graphql/widget.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_light.dart';
+import 'package:typie/modals/__generated__/persist_blob_as_image_mutation.req.gql.dart';
 import 'package:typie/modals/__generated__/share_entities_query.data.gql.dart';
 import 'package:typie/modals/__generated__/share_entities_query.req.gql.dart';
 import 'package:typie/modals/__generated__/update_folders_option_mutation.req.gql.dart';
 import 'package:typie/modals/__generated__/update_posts_option_mutation.req.gql.dart';
+import 'package:typie/services/blob.dart';
 import 'package:typie/widgets/forms/form.dart';
 import 'package:typie/widgets/forms/select.dart';
 import 'package:typie/widgets/forms/switch.dart';
@@ -89,10 +93,15 @@ class SharePostsContent extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final mixpanel = useService<Mixpanel>();
+    final blob = useService<Blob>();
     final passwordController = useTextEditingController();
     final rotationController = useAnimationController(duration: const Duration(milliseconds: 500));
     final scaleController = useAnimationController(duration: const Duration(milliseconds: 250));
     final random = useRef(Random());
+
+    final thumbnailUrl = useState<String?>(posts.first.thumbnail?.url);
+    final thumbnailUploading = useState(false);
+    final thumbnailIndeterminate = posts.length > 1 && posts.any((p) => p.thumbnail?.id != posts.first.thumbnail?.id);
 
     final rotationAnimation = useMemoized(
       () =>
@@ -117,6 +126,51 @@ class SharePostsContent extends HookWidget {
 
       unawaited(rotationController.forward(from: 0));
       unawaited(scaleController.forward(from: 0).then((_) => scaleController.reverse()));
+    }
+
+    Future<void> handleThumbnailUpload() async {
+      final result = await FilePicker.platform.pickFiles(type: FileType.image);
+      if (result == null) {
+        return;
+      }
+
+      final pickedFile = result.files.firstOrNull;
+      if (pickedFile == null) {
+        return;
+      }
+
+      final file = File(pickedFile.path!);
+      thumbnailUploading.value = true;
+
+      try {
+        final path = await blob.upload(file);
+        final resp = await client.request(GSharePost_PersistBlobAsImage_MutationReq((b) => b..vars.input.path = path));
+
+        await client.request(
+          GSharePost_UpdatePostsOption_MutationReq(
+            (b) => b
+              ..vars.input.postIds.addAll(posts.map((p) => p.id))
+              ..vars.input.thumbnailId = Value.present(resp.persistBlobAsImage.id),
+          ),
+        );
+
+        thumbnailUrl.value = resp.persistBlobAsImage.url;
+        unawaited(mixpanel.track('update_post_thumbnail', properties: {'count': posts.length}));
+      } finally {
+        thumbnailUploading.value = false;
+      }
+    }
+
+    Future<void> handleThumbnailRemove() async {
+      await client.request(
+        GSharePost_UpdatePostsOption_MutationReq(
+          (b) => b
+            ..vars.input.postIds.addAll(posts.map((p) => p.id))
+            ..vars.input.thumbnailId = const Value.present(null),
+        ),
+      );
+      thumbnailUrl.value = null;
+      unawaited(mixpanel.track('remove_post_thumbnail', properties: {'count': posts.length}));
     }
 
     return HookForm(
@@ -257,6 +311,96 @@ class SharePostsContent extends HookWidget {
                     ],
                   ),
                   _Section(
+                    title: '썸네일',
+                    children: [
+                      SizedBox(
+                        height: 48,
+                        child: Row(
+                          children: [
+                            Icon(LucideLightIcons.image, size: 20, color: context.colors.textSubtle),
+                            const Gap(8),
+                            Expanded(
+                              child: Text('미리보기 이미지', style: TextStyle(fontSize: 16, color: context.colors.textSubtle)),
+                            ),
+                            if (thumbnailIndeterminate)
+                              Tappable(
+                                onTap: () {
+                                  if (!thumbnailUploading.value) {
+                                    unawaited(handleThumbnailUpload());
+                                  }
+                                },
+                                child: Container(
+                                  width: 64,
+                                  height: 36,
+                                  decoration: BoxDecoration(
+                                    color: context.colors.surfaceMuted,
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: Text(
+                                    thumbnailUploading.value ? '...' : '다름',
+                                    style: TextStyle(fontSize: 12, color: context.colors.textFaint),
+                                  ),
+                                ),
+                              )
+                            else if (thumbnailUrl.value != null)
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Tappable(
+                                    onTap: () {
+                                      if (!thumbnailUploading.value) {
+                                        unawaited(handleThumbnailUpload());
+                                      }
+                                    },
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(6),
+                                      child: Image.network(
+                                        thumbnailUrl.value!,
+                                        width: 64,
+                                        height: 36,
+                                        fit: BoxFit.cover,
+                                      ),
+                                    ),
+                                  ),
+                                  const Gap(4),
+                                  Tappable(
+                                    onTap: () => unawaited(handleThumbnailRemove()),
+                                    child: Container(
+                                      width: 24,
+                                      height: 24,
+                                      alignment: Alignment.center,
+                                      child: Icon(LucideLightIcons.trash_2, size: 14, color: context.colors.textFaint),
+                                    ),
+                                  ),
+                                ],
+                              )
+                            else
+                              Tappable(
+                                onTap: () {
+                                  if (!thumbnailUploading.value) {
+                                    unawaited(handleThumbnailUpload());
+                                  }
+                                },
+                                child: Container(
+                                  width: 64,
+                                  height: 36,
+                                  decoration: BoxDecoration(
+                                    border: Border.all(color: context.colors.borderDefault),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: thumbnailUploading.value
+                                      ? Text('...', style: TextStyle(fontSize: 12, color: context.colors.textFaint))
+                                      : Icon(LucideLightIcons.image, size: 14, color: context.colors.textFaint),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  _Section(
                     title: '포스트 상호작용',
                     children: [
                       _Option(
@@ -355,6 +499,57 @@ class ShareFoldersContent extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final mixpanel = useService<Mixpanel>();
+    final blob = useService<Blob>();
+
+    final thumbnailUrl = useState<String?>(folders.first.thumbnail?.url);
+    final thumbnailUploading = useState(false);
+    final thumbnailIndeterminate =
+        folders.length > 1 && folders.any((f) => f.thumbnail?.id != folders.first.thumbnail?.id);
+
+    Future<void> handleThumbnailUpload() async {
+      final result = await FilePicker.platform.pickFiles(type: FileType.image);
+      if (result == null) {
+        return;
+      }
+
+      final pickedFile = result.files.firstOrNull;
+      if (pickedFile == null) {
+        return;
+      }
+
+      final file = File(pickedFile.path!);
+      thumbnailUploading.value = true;
+
+      try {
+        final path = await blob.upload(file);
+        final resp = await client.request(GSharePost_PersistBlobAsImage_MutationReq((b) => b..vars.input.path = path));
+
+        await client.request(
+          GShareFolder_UpdateFoldersOption_MutationReq(
+            (b) => b
+              ..vars.input.folderIds.addAll(folders.map((f) => f.id))
+              ..vars.input.thumbnailId = Value.present(resp.persistBlobAsImage.id),
+          ),
+        );
+
+        thumbnailUrl.value = resp.persistBlobAsImage.url;
+        unawaited(mixpanel.track('update_folder_thumbnail', properties: {'count': folders.length}));
+      } finally {
+        thumbnailUploading.value = false;
+      }
+    }
+
+    Future<void> handleThumbnailRemove() async {
+      await client.request(
+        GShareFolder_UpdateFoldersOption_MutationReq(
+          (b) => b
+            ..vars.input.folderIds.addAll(folders.map((f) => f.id))
+            ..vars.input.thumbnailId = const Value.present(null),
+        ),
+      );
+      thumbnailUrl.value = null;
+      unawaited(mixpanel.track('remove_folder_thumbnail', properties: {'count': folders.length}));
+    }
 
     return HookForm(
       submitMode: HookFormSubmitMode.onChange,
@@ -389,37 +584,133 @@ class ShareFoldersContent extends HookWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Expanded(
-              child: _Section(
-                title: '폴더 조회 권한',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                spacing: 32,
                 children: [
-                  _Option(
-                    icon: LucideLightIcons.blend,
-                    label: '공개 범위',
-                    trailing: HookFormSelect(
-                      name: 'visibility',
-                      initialValue: entities.first.visibility,
-                      values: entities.map((e) => e.visibility).toList(),
-                      items: const [
-                        HookFormSelectItem(
-                          icon: LucideLightIcons.globe,
-                          label: '공개',
-                          description: '누구나 볼 수 있어요.',
-                          value: GEntityVisibility.PUBLIC,
+                  _Section(
+                    title: '폴더 조회 권한',
+                    children: [
+                      _Option(
+                        icon: LucideLightIcons.blend,
+                        label: '공개 범위',
+                        trailing: HookFormSelect(
+                          name: 'visibility',
+                          initialValue: entities.first.visibility,
+                          values: entities.map((e) => e.visibility).toList(),
+                          items: const [
+                            HookFormSelectItem(
+                              icon: LucideLightIcons.globe,
+                              label: '공개',
+                              description: '누구나 볼 수 있어요.',
+                              value: GEntityVisibility.PUBLIC,
+                            ),
+                            HookFormSelectItem(
+                              icon: LucideLightIcons.link,
+                              label: '링크가 있는 사람',
+                              description: '링크가 있는 누구나 볼 수 있어요.',
+                              value: GEntityVisibility.UNLISTED,
+                            ),
+                            HookFormSelectItem(
+                              icon: LucideLightIcons.lock,
+                              label: '비공개',
+                              description: '나만 볼 수 있어요.',
+                              value: GEntityVisibility.PRIVATE,
+                            ),
+                          ],
                         ),
-                        HookFormSelectItem(
-                          icon: LucideLightIcons.link,
-                          label: '링크가 있는 사람',
-                          description: '링크가 있는 누구나 볼 수 있어요.',
-                          value: GEntityVisibility.UNLISTED,
+                      ),
+                    ],
+                  ),
+                  _Section(
+                    title: '썸네일',
+                    children: [
+                      SizedBox(
+                        height: 48,
+                        child: Row(
+                          children: [
+                            Icon(LucideLightIcons.image, size: 20, color: context.colors.textSubtle),
+                            const Gap(8),
+                            Expanded(
+                              child: Text('미리보기 이미지', style: TextStyle(fontSize: 16, color: context.colors.textSubtle)),
+                            ),
+                            if (thumbnailIndeterminate)
+                              Tappable(
+                                onTap: () {
+                                  if (!thumbnailUploading.value) {
+                                    unawaited(handleThumbnailUpload());
+                                  }
+                                },
+                                child: Container(
+                                  width: 64,
+                                  height: 36,
+                                  decoration: BoxDecoration(
+                                    color: context.colors.surfaceMuted,
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: Text(
+                                    thumbnailUploading.value ? '...' : '다름',
+                                    style: TextStyle(fontSize: 12, color: context.colors.textFaint),
+                                  ),
+                                ),
+                              )
+                            else if (thumbnailUrl.value != null)
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Tappable(
+                                    onTap: () {
+                                      if (!thumbnailUploading.value) {
+                                        unawaited(handleThumbnailUpload());
+                                      }
+                                    },
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(6),
+                                      child: Image.network(
+                                        thumbnailUrl.value!,
+                                        width: 64,
+                                        height: 36,
+                                        fit: BoxFit.cover,
+                                      ),
+                                    ),
+                                  ),
+                                  const Gap(4),
+                                  Tappable(
+                                    onTap: () => unawaited(handleThumbnailRemove()),
+                                    child: Container(
+                                      width: 24,
+                                      height: 24,
+                                      alignment: Alignment.center,
+                                      child: Icon(LucideLightIcons.trash_2, size: 14, color: context.colors.textFaint),
+                                    ),
+                                  ),
+                                ],
+                              )
+                            else
+                              Tappable(
+                                onTap: () {
+                                  if (!thumbnailUploading.value) {
+                                    unawaited(handleThumbnailUpload());
+                                  }
+                                },
+                                child: Container(
+                                  width: 64,
+                                  height: 36,
+                                  decoration: BoxDecoration(
+                                    border: Border.all(color: context.colors.borderDefault),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: thumbnailUploading.value
+                                      ? Text('...', style: TextStyle(fontSize: 12, color: context.colors.textFaint))
+                                      : Icon(LucideLightIcons.image, size: 14, color: context.colors.textFaint),
+                                ),
+                              ),
+                          ],
                         ),
-                        HookFormSelectItem(
-                          icon: LucideLightIcons.lock,
-                          label: '비공개',
-                          description: '나만 볼 수 있어요.',
-                          value: GEntityVisibility.PRIVATE,
-                        ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ],
               ),

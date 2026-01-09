@@ -13,6 +13,11 @@ query ShareEntities_Query($entityIds: [ID!]!) {
       ... on Folder {
         id
         name
+
+        thumbnail {
+          id
+          url
+        }
       }
 
       ... on Post {
@@ -22,6 +27,11 @@ query ShareEntities_Query($entityIds: [ID!]!) {
         contentRating
         allowReaction
         protectContent
+
+        thumbnail {
+          id
+          url
+        }
       }
     }
   }

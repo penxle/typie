@@ -2,6 +2,11 @@ mutation ShareFolder_UpdateFoldersOption_Mutation($input: UpdateFoldersOptionInp
   updateFoldersOption(input: $input) {
     id
 
+    thumbnail {
+      id
+      url
+    }
+
     entity {
       id
       visibility
