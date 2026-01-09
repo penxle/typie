@@ -375,7 +375,9 @@ class Editor extends HookWidget {
                           BottomMenuItem(
                             icon: LucideLightIcons.blend,
                             label: '공유하기',
-                            trailing: data.post.entity.visibility == GEntityVisibility.UNLISTED
+                            trailing:
+                                data.post.entity.visibility == GEntityVisibility.PUBLIC ||
+                                    data.post.entity.visibility == GEntityVisibility.UNLISTED
                                 ? Container(
                                     decoration: BoxDecoration(
                                       border: Border.all(color: context.colors.borderStrong),
@@ -383,7 +385,7 @@ class Editor extends HookWidget {
                                     ),
                                     padding: const Pad(horizontal: 8, vertical: 4),
                                     child: Text(
-                                      '링크 공개 중',
+                                      data.post.entity.visibility == GEntityVisibility.PUBLIC ? '공개 중' : '링크 공개 중',
                                       style: TextStyle(
                                         fontSize: 12,
                                         fontWeight: FontWeight.w500,
