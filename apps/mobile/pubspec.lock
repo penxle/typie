@@ -45,10 +45,10 @@ packages:
     dependency: "direct main"
     description:
       name: appsflyer_sdk
-      sha256: b5908378c20a3983760ba463060711f7b1363fd26e4d0ccdf8d5bd8352b7ef69
+      sha256: da6ba88d7643aaf553305150a921b21e6ee5096a55d9b5ca50c16eb8220cf8d7
       url: "https://pub.dev"
     source: hosted
-    version: "6.17.7+1"
+    version: "6.17.8"
   args:
     dependency: transitive
     description:
@@ -253,10 +253,10 @@ packages:
     dependency: transitive
     description:
       name: code_builder
-      sha256: "11654819532ba94c34de52ff5feb52bd81cba1de00ef2ed622fd50295f9d4243"
+      sha256: "6a6cab2ba4680d6423f34a9b972a4c9a94ebe1b62ecec4e1a1f2cba91fd1319d"
       url: "https://pub.dev"
     source: hosted
-    version: "4.11.0"
+    version: "4.11.1"
   collection:
     dependency: "direct main"
     description:
@@ -405,10 +405,10 @@ packages:
     dependency: transitive
     description:
       name: equatable
-      sha256: "567c64b3cb4cf82397aac55f4f0cbd3ca20d77c6c03bedbc4ceaddc08904aef7"
+      sha256: "3e0141505477fd8ad55d6eb4e7776d3fe8430be8e497ccb1521370c3f21a3e2b"
       url: "https://pub.dev"
     source: hosted
-    version: "2.0.7"
+    version: "2.0.8"
   fake_async:
     dependency: transitive
     description:
@@ -469,10 +469,10 @@ packages:
     dependency: transitive
     description:
       name: ffi
-      sha256: "289279317b4b16eb2bb7e271abccd4bf84ec9bdcbe999e278a94b804f5630418"
+      sha256: d07d37192dbf97461359c1518788f203b0c9102cfd2c35a716b823741219542c
       url: "https://pub.dev"
     source: hosted
-    version: "2.1.4"
+    version: "2.1.5"
   file:
     dependency: transitive
     description:
@@ -1013,10 +1013,10 @@ packages:
     dependency: "direct main"
     description:
       name: injectable
-      sha256: "8fc24421cfeff76d1d38484d8b9617beeb54a58b6edfd002b10cc896b8b8f3fe"
+      sha256: "32b36a9d87f18662bee0b1951b81f47a01f2bf28cd6ea94f60bc5453c7bf598c"
       url: "https://pub.dev"
     source: hosted
-    version: "2.7.1+2"
+    version: "2.7.1+4"
   injectable_generator:
     dependency: "direct dev"
     description:
@@ -1237,10 +1237,10 @@ packages:
     dependency: "direct main"
     description:
       name: naver_login_sdk
-      sha256: eeeed78e7d3540229fe1086f34401b10cc5f24272c1ff8243ff4ae06382bdbe0
+      sha256: b7e6bf3241acdf08df0a649b58ffbb4708de96fbfa346031580d17918cabf9d1
       url: "https://pub.dev"
     source: hosted
-    version: "3.1.6"
+    version: "3.1.7"
   normalize:
     dependency: transitive
     description:
@@ -1525,18 +1525,18 @@ packages:
     dependency: "direct main"
     description:
       name: sentry
-      sha256: "9b2fe138df1a104f6e41d8ebf2b1e4fe39d4370d2200eb4eea29913d38b8b33b"
+      sha256: b6020007d35199f2be3170443c01243c8533232261fcd54237e38710788cebd0
       url: "https://pub.dev"
     source: hosted
-    version: "9.9.1"
+    version: "9.9.2"
   sentry_flutter:
     dependency: "direct main"
     description:
       name: sentry_flutter
-      sha256: "698e0d47c0cf7362ad3b8034f6af5e9f3b2175d7a0cf58f78a967c29b43072b7"
+      sha256: "9bc083608f406921f45836d409abf8713bc307486276a129e3fdd6a8df88b171"
       url: "https://pub.dev"
     source: hosted
-    version: "9.9.1"
+    version: "9.9.2"
   share_plus:
     dependency: "direct main"
     description:
@@ -1930,10 +1930,10 @@ packages:
     dependency: transitive
     description:
       name: watcher
-      sha256: f52385d4f73589977c80797e60fe51014f7f2b957b5e9a62c3f6ada439889249
+      sha256: "1398c9f081a753f9226febe8900fce8f7d0a67163334e1c94a2438339d79d635"
       url: "https://pub.dev"
     source: hosted
-    version: "1.2.0"
+    version: "1.2.1"
   web:
     dependency: transitive
     description:
