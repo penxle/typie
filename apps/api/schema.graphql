@@ -702,7 +702,8 @@ type Post implements IPost {
   password: String
   protectContent: Boolean!
   reactionCount: Int!
-  snapshots: [PostSnapshot!]!
+  snapshotMetas: [PostSnapshotMeta!]!
+  snapshots(before: DateTime, first: Int! = 20): [PostSnapshot!]!
   storedMarks: JSON!
   subtitle: String
   thumbnail: Image
@@ -738,6 +739,11 @@ type PostSnapshot {
   createdAt: DateTime!
   id: ID!
   snapshot: Binary!
+}
+
+type PostSnapshotMeta {
+  createdAt: DateTime!
+  id: ID!
 }
 
 type PostSyncStreamPayload {

@@ -2,7 +2,7 @@
   import { getText } from '@tiptap/core';
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex, wrap } from '@typie/styled-system/patterns';
-  import { createFloatingActions, portal, tooltip } from '@typie/ui/actions';
+  import { createFloatingActions, infiniteScroll, portal, tooltip } from '@typie/ui/actions';
   import { Icon, RingSpinner } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { Toast } from '@typie/ui/notification';
@@ -12,6 +12,7 @@
   import mixpanel from 'mixpanel-browser';
   import { onMount, tick, untrack } from 'svelte';
   import { on } from 'svelte/events';
+  import { SvelteMap } from 'svelte/reactivity';
   import { fly } from 'svelte/transition';
   import { yXmlFragmentToProseMirrorRootNode } from 'y-prosemirror';
   import * as Y from 'yjs';
@@ -55,12 +56,17 @@
   );
 
   const query = graphql(`
-    query Editor_PanelTimeline_Query($slug: String!) @client {
+    query Editor_PanelTimeline_Query($slug: String!, $first: Int!, $before: DateTime) @client {
       post(slug: $slug) {
         id
         update
 
-        snapshots {
+        snapshotMetas {
+          id
+          createdAt
+        }
+
+        snapshots(first: $first, before: $before) {
           id
           snapshot
           createdAt
@@ -81,13 +87,21 @@
   let snapshotCharCounts = $state<Record<string, number>>({});
   let internalViewDoc = $state<Y.Doc>();
 
-  const snapshots = $derived($query?.post.snapshots ?? []);
+  const snapshotMetas = $derived($query?.post.snapshotMetas ?? []);
+
+  let snapshotCache = new SvelteMap<string, string>();
+
+  const loadedSnapshots = $derived.by(() => {
+    return snapshotMetas
+      .filter((meta) => snapshotCache.has(meta.id))
+      .map((meta) => ({ ...meta, snapshot: snapshotCache.get(meta.id) ?? '' }));
+  });
 
   const groupedSnapshots = $derived.by(() => {
-    const groups: { date: string; snapshots: typeof snapshots }[] = [];
-    const dateGroups: Record<string, typeof snapshots> = {};
+    const groups: { date: string; snapshots: typeof loadedSnapshots }[] = [];
+    const dateGroups: Record<string, typeof loadedSnapshots> = {};
 
-    snapshots.forEach((snapshot) => {
+    loadedSnapshots.forEach((snapshot) => {
       const date = dayjs(snapshot.createdAt).format('YYYY년 M월 D일');
       if (!dateGroups[date]) {
         dateGroups[date] = [];
@@ -111,8 +125,8 @@
   let showTooltip = $state(false);
   let isDraggingSlider = $state(false);
 
-  const sliderIndex = $derived(selectedSnapshotId ? snapshots.findIndex((s) => s.id === selectedSnapshotId) : snapshots.length - 1);
-  const max = $derived($query ? $query.post.snapshots.length - 1 : 0);
+  const sliderIndex = $derived(selectedSnapshotId ? snapshotMetas.findIndex((s) => s.id === selectedSnapshotId) : snapshotMetas.length - 1);
+  const max = $derived(snapshotMetas.length - 1);
   const p = $derived(max > 0 && sliderIndex >= 0 ? `${(sliderIndex / max) * 100}%` : '100%');
 
   // NOTE: 서버와 동일한 글자수 세기 로직
@@ -128,67 +142,146 @@
     return [...text.replaceAll(/\s+/g, ' ').trim()].length;
   };
 
+  const processSnapshotsCharacterCounts = (snapshots: { id: string; snapshot: string }[]) => {
+    if (!baseDoc || snapshots.length === 0) return;
+
+    let currentIndex = 0;
+
+    const processNext = (deadline: IdleDeadline) => {
+      if (!baseDoc) return;
+
+      while (currentIndex < snapshots.length && deadline.timeRemaining() > 0) {
+        const snapshot = snapshots[currentIndex];
+        if (snapshotCharCounts[snapshot.id] === undefined) {
+          const snapshotData = Y.decodeSnapshotV2(Uint8Array.fromBase64(snapshot.snapshot));
+          const snapshotDoc = Y.createDocFromSnapshot(baseDoc, snapshotData);
+          snapshotCharCounts = { ...snapshotCharCounts, [snapshot.id]: getCharacterCount(snapshotDoc) };
+        }
+        currentIndex++;
+      }
+
+      if (currentIndex < snapshots.length) {
+        requestIdleCallback(processNext);
+      }
+    };
+
+    if ('requestIdleCallback' in window) {
+      requestIdleCallback(processNext);
+    } else {
+      const processChunk = () => {
+        if (!baseDoc) return;
+
+        const chunkSize = 5;
+        for (let i = 0; i < chunkSize && currentIndex < snapshots.length; i++) {
+          const snapshot = snapshots[currentIndex];
+          if (snapshotCharCounts[snapshot.id] === undefined) {
+            const snapshotData = Y.decodeSnapshotV2(Uint8Array.fromBase64(snapshot.snapshot));
+            const snapshotDoc = Y.createDocFromSnapshot(baseDoc, snapshotData);
+            snapshotCharCounts = { ...snapshotCharCounts, [snapshot.id]: getCharacterCount(snapshotDoc) };
+          }
+          currentIndex++;
+        }
+
+        if (currentIndex < snapshots.length) {
+          setTimeout(processChunk);
+        }
+      };
+
+      setTimeout(processChunk);
+    }
+  };
+
+  const loadSnapshotsAround = async (targetIndex: number) => {
+    if (!$query || snapshotMetas.length === 0) return;
+
+    const targetMeta = snapshotMetas[targetIndex];
+    if (snapshotCache.has(targetMeta.id)) return;
+
+    let beforeCursor: (typeof snapshotMetas)[number] | null = null;
+    for (let i = targetIndex + 1; i < snapshotMetas.length; i++) {
+      if (snapshotCache.has(snapshotMetas[i].id)) {
+        beforeCursor = snapshotMetas[i];
+        break;
+      }
+    }
+
+    const result = await query.load({
+      slug: $post.entity.slug,
+      first: 20,
+      before: beforeCursor?.createdAt ?? null,
+    });
+
+    const newSnapshots: { id: string; snapshot: string }[] = [];
+    for (const s of result.post.snapshots) {
+      if (!snapshotCache.has(s.id)) {
+        snapshotCache.set(s.id, s.snapshot);
+        newSnapshots.push(s);
+      }
+    }
+
+    processSnapshotsCharacterCounts(newSnapshots);
+  };
+
+  let isLoadingMore = $state(false);
+  let hasMoreSnapshots = $derived(snapshotMetas.some((meta) => !snapshotCache.has(meta.id)));
+
+  const loadMoreSnapshots = async () => {
+    if (isLoadingMore || !$query || snapshotMetas.length === 0) return;
+    if (!hasMoreSnapshots) return;
+
+    isLoadingMore = true;
+    try {
+      let oldestLoadedCreatedAt: (typeof snapshotMetas)[number]['createdAt'] | null = null;
+      for (const snapshotMeta of snapshotMetas) {
+        if (snapshotCache.has(snapshotMeta.id)) {
+          oldestLoadedCreatedAt = snapshotMeta.createdAt;
+          break;
+        }
+      }
+
+      if (!oldestLoadedCreatedAt) return;
+
+      const result = await query.load({
+        slug: $post.entity.slug,
+        first: 20,
+        before: oldestLoadedCreatedAt,
+      });
+
+      const newSnapshots: { id: string; snapshot: string }[] = [];
+      for (const s of result.post.snapshots) {
+        if (!snapshotCache.has(s.id)) {
+          snapshotCache.set(s.id, s.snapshot);
+          newSnapshots.push(s);
+        }
+      }
+
+      processSnapshotsCharacterCounts(newSnapshots);
+    } finally {
+      isLoadingMore = false;
+    }
+  };
+
   const initialize = async () => {
     isLoading = true;
     try {
-      const result = await query.load({ slug: $post.entity.slug });
+      const result = await query.load({ slug: $post.entity.slug, first: 20, before: null });
 
       baseDoc = new Y.Doc({ gc: false });
       Y.applyUpdateV2(baseDoc, Uint8Array.fromBase64(result.post.update));
 
-      const counts: Record<string, number> = {};
-      const snapshots = [...result.post.snapshots].toReversed();
-
-      selectedSnapshotId = snapshots[0].id;
-      let currentIndex = 0;
-
-      const processNextSnapshot = (deadline: IdleDeadline) => {
-        if (!baseDoc) {
-          return;
-        }
-
-        while (currentIndex < snapshots.length && deadline.timeRemaining() > 0) {
-          const snapshot = snapshots[currentIndex];
-          const snapshotData = Y.decodeSnapshotV2(Uint8Array.fromBase64(snapshot.snapshot));
-          const snapshotDoc = Y.createDocFromSnapshot(baseDoc, snapshotData);
-          counts[snapshot.id] = getCharacterCount(snapshotDoc);
-          currentIndex++;
-
-          snapshotCharCounts = { ...counts };
-        }
-
-        if (currentIndex < snapshots.length) {
-          requestIdleCallback(processNextSnapshot);
-        }
-      };
-
-      if ('requestIdleCallback' in window) {
-        requestIdleCallback(processNextSnapshot);
-      } else {
-        // NOTE: Safari 등 requestIdleCallback이 없는 경우 fallback
-        const processChunk = () => {
-          if (!baseDoc) {
-            return;
-          }
-
-          const chunkSize = 5;
-          for (let i = 0; i < chunkSize && currentIndex < snapshots.length; i++) {
-            const snapshot = snapshots[currentIndex];
-            const snapshotData = Y.decodeSnapshotV2(Uint8Array.fromBase64(snapshot.snapshot));
-            const snapshotDoc = Y.createDocFromSnapshot(baseDoc, snapshotData);
-            counts[snapshot.id] = getCharacterCount(snapshotDoc);
-            currentIndex++;
-          }
-
-          snapshotCharCounts = { ...counts };
-
-          if (currentIndex < snapshots.length) {
-            setTimeout(processChunk);
-          }
-        };
-
-        setTimeout(processChunk);
+      const newCache = new SvelteMap<string, string>();
+      for (const s of result.post.snapshots) {
+        newCache.set(s.id, s.snapshot);
       }
+      snapshotCache = newCache;
+
+      const metas = result.post.snapshotMetas;
+      if (metas.length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        selectedSnapshotId = metas.at(-1)!.id;
+      }
+
+      processSnapshotsCharacterCounts(result.post.snapshots);
     } finally {
       tick().then(() => {
         isLoading = false;
@@ -221,24 +314,37 @@
     element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }, 50);
 
+  let prevSelectedId: string | null = null;
+
   $effect(() => {
-    if (selectedSnapshotId && $query) {
-      scrollToSnapshot(selectedSnapshotId);
-      updateViewDoc.call(selectedSnapshotId);
-    }
+    const currentId = selectedSnapshotId;
+    if (!currentId || !$query) return;
+
+    if (currentId === prevSelectedId) return;
+    prevSelectedId = currentId;
+
+    untrack(async () => {
+      const index = snapshotMetas.findIndex((s) => s.id === currentId);
+
+      if (!snapshotCache.has(currentId) && index !== -1) {
+        await loadSnapshotsAround(index);
+      }
+      scrollToSnapshot(currentId);
+      updateViewDoc.call(currentId);
+    });
   });
 
   const updateViewDoc = throttle((snapshotId: string) => {
     if (!baseDoc || !$query) return;
 
-    const snapshot = $query.post.snapshots.find((s) => s.id === snapshotId);
-    if (!snapshot) return;
+    const snapshotBinary = snapshotCache.get(snapshotId);
+    if (!snapshotBinary) return;
 
     if (!internalViewDoc) {
       internalViewDoc = new Y.Doc({ gc: false });
     }
 
-    const snapshotData = Y.decodeSnapshotV2(Uint8Array.fromBase64(snapshot.snapshot));
+    const snapshotData = Y.decodeSnapshotV2(Uint8Array.fromBase64(snapshotBinary));
     const snapshotDoc = Y.createDocFromSnapshot(baseDoc, snapshotData);
 
     const currentStateVector = Y.encodeStateVector(internalViewDoc);
@@ -286,8 +392,8 @@
     const ratio = clamp((pointerLeft - parentLeft) / parentWidth, 0, 1);
     const index = Math.round(ratio * max);
 
-    if (snapshots[index]) {
-      selectedSnapshotId = snapshots[index].id;
+    if (snapshotMetas[index]) {
+      selectedSnapshotId = snapshotMetas[index].id;
     }
   };
 
@@ -296,7 +402,11 @@
       return;
     }
 
-    const snapshot = Y.decodeSnapshotV2(Uint8Array.fromBase64($query.post.snapshots[sliderIndex].snapshot));
+    const selectedMeta = snapshotMetas[sliderIndex];
+    const snapshotBinary = snapshotCache.get(selectedMeta.id);
+    if (!snapshotBinary) return;
+
+    const snapshot = Y.decodeSnapshotV2(Uint8Array.fromBase64(snapshotBinary));
     const snapshotDoc = Y.createDocFromSnapshot(baseDoc, snapshot);
 
     const currentStateVector = Y.encodeStateVector(doc);
@@ -404,8 +514,8 @@
               {@const isSelected = selectedSnapshotId === snapshot.id}
               {@const time = dayjs(snapshot.createdAt)}
               {@const currentCount = snapshotCharCounts[snapshot.id] ?? null}
-              {@const snapshotIndex = snapshots.findIndex((s) => s.id === snapshot.id)}
-              {@const prevSnapshot = snapshotIndex > 0 ? snapshots[snapshotIndex - 1] : null}
+              {@const snapshotIndex = loadedSnapshots.findIndex((s) => s.id === snapshot.id)}
+              {@const prevSnapshot = snapshotIndex > 0 ? loadedSnapshots[snapshotIndex - 1] : null}
               {@const prevCount =
                 prevSnapshot && snapshotCharCounts[prevSnapshot.id] !== undefined ? snapshotCharCounts[prevSnapshot.id] : null}
               {@const charDiff =
@@ -441,8 +551,8 @@
                     selectedSnapshotId = snapshot.id;
                   } else if (e.key === 'ArrowUp') {
                     e.preventDefault();
-                    const currentIndex = snapshots.findIndex((s) => s.id === snapshot.id);
-                    const nextSnapshot = snapshots[currentIndex + 1];
+                    const currentIndex = loadedSnapshots.findIndex((s) => s.id === snapshot.id);
+                    const nextSnapshot = loadedSnapshots[currentIndex + 1];
                     if (nextSnapshot) {
                       selectedSnapshotId = nextSnapshot.id;
                       tick().then(() => {
@@ -452,8 +562,8 @@
                     }
                   } else if (e.key === 'ArrowDown') {
                     e.preventDefault();
-                    const currentIndex = snapshots.findIndex((s) => s.id === snapshot.id);
-                    const prevSnapshot = snapshots[currentIndex - 1];
+                    const currentIndex = loadedSnapshots.findIndex((s) => s.id === snapshot.id);
+                    const prevSnapshot = loadedSnapshots[currentIndex - 1];
                     if (prevSnapshot) {
                       selectedSnapshotId = prevSnapshot.id;
                       tick().then(() => {
@@ -508,6 +618,22 @@
             {/each}
           </div>
         {/each}
+
+        {#if hasMoreSnapshots}
+          <div
+            class={center({ padding: '16px' })}
+            use:infiniteScroll={{
+              onLoadMore: loadMoreSnapshots,
+              enabled: !isLoadingMore,
+            }}
+          >
+            {#if isLoadingMore}
+              <RingSpinner style={css.raw({ size: '20px', color: 'text.subtle' })} />
+            {:else}
+              <div class={css({ fontSize: '12px', color: 'text.subtle' })}>스크롤하여 더 불러오기</div>
+            {/if}
+          </div>
+        {/if}
       </div>
     {/if}
   </div>
@@ -645,7 +771,7 @@
           textAlign: 'center',
         })}
       >
-        {dayjs($query.post.snapshots[sliderIndex]?.createdAt).formatAsSmart()}
+        {dayjs(snapshotMetas[sliderIndex]?.createdAt).formatAsSmart()}
       </div>
 
       <div
@@ -667,7 +793,7 @@
         role="tooltip"
         use:floating
       >
-        {dayjs($query.post.snapshots[sliderIndex]?.createdAt).formatAsSmart()}
+        {dayjs(snapshotMetas[sliderIndex]?.createdAt).formatAsSmart()}
         <div
           class={css({
             size: '6px',
@@ -678,7 +804,7 @@
         ></div>
       </div>
 
-      {#if selectedSnapshotId === $query?.post.snapshots.at(-1)?.id}
+      {#if selectedSnapshotId === snapshotMetas.at(-1)?.id}
         <div
           class={center({
             flexShrink: '0',

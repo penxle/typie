@@ -58,6 +58,13 @@ import type { Context } from '@/context';
  * * Types
  */
 
+const PostSnapshotMeta = builder.simpleObject('PostSnapshotMeta', {
+  fields: (t) => ({
+    id: t.id(),
+    createdAt: t.field({ type: 'DateTime' }),
+  }),
+});
+
 IPost.implement({
   fields: (t) => ({
     id: t.exposeID('id'),
@@ -175,8 +182,32 @@ Post.implement({
 
     snapshots: t.field({
       type: [PostSnapshot],
+      args: {
+        first: t.arg.int({ defaultValue: 20 }),
+        before: t.arg({ type: 'DateTime', required: false }),
+      },
+      resolve: async (self, args) => {
+        return await db
+          .select()
+          .from(PostSnapshots)
+          .where(
+            args.before
+              ? and(eq(PostSnapshots.postId, self.id), lt(PostSnapshots.createdAt, args.before))
+              : eq(PostSnapshots.postId, self.id),
+          )
+          .orderBy(desc(PostSnapshots.createdAt))
+          .limit(args.first);
+      },
+    }),
+
+    snapshotMetas: t.field({
+      type: [PostSnapshotMeta],
       resolve: async (self) => {
-        return await db.select().from(PostSnapshots).where(eq(PostSnapshots.postId, self.id)).orderBy(asc(PostSnapshots.createdAt));
+        return await db
+          .select({ id: PostSnapshots.id, createdAt: PostSnapshots.createdAt })
+          .from(PostSnapshots)
+          .where(eq(PostSnapshots.postId, self.id))
+          .orderBy(asc(PostSnapshots.createdAt));
       },
     }),
 
