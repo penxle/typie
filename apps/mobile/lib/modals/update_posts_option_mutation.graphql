@@ -6,6 +6,11 @@ mutation SharePost_UpdatePostsOption_Mutation($input: UpdatePostsOptionInput!) {
     allowReaction
     protectContent
 
+    thumbnail {
+      id
+      url
+    }
+
     entity {
       id
       visibility
