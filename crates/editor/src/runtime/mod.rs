@@ -1175,6 +1175,7 @@ impl Runtime {
                     self.pending.active_marks = true;
                     self.pending.external_elements = true;
                     self.pending.placeholder = true;
+                    self.pending.search_overlays = true;
                 }
                 Effect::PointerStyleChanged { style } => {
                     self.pending.pointer_style = Some(style);
