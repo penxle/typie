@@ -1,15 +1,16 @@
 <script lang="ts">
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex, wrap } from '@typie/styled-system/patterns';
-  import { createFloatingActions, portal, tooltip } from '@typie/ui/actions';
+  import { createFloatingActions, infiniteScroll, portal, tooltip } from '@typie/ui/actions';
   import { Icon, RingSpinner } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { Toast } from '@typie/ui/notification';
   import { clamp, debounce, throttle } from '@typie/ui/utils';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
-  import { onMount, tick } from 'svelte';
+  import { onMount, tick, untrack } from 'svelte';
   import { on } from 'svelte/events';
+  import { SvelteMap } from 'svelte/reactivity';
   import { fly } from 'svelte/transition';
   import ClockRewindIcon from '~icons/lucide/clock-arrow-up';
   import IconClockFading from '~icons/lucide/clock-fading';
@@ -45,11 +46,16 @@
   );
 
   const query = graphql(`
-    query Editor_DocumentPanelTimeline_Query($slug: String!) @client {
+    query Editor_DocumentPanelTimeline_Query($slug: String!, $first: Int!, $before: DateTime) @client {
       document(slug: $slug) {
         id
 
-        versions {
+        versionMetas {
+          id
+          createdAt
+        }
+
+        versions(first: $first, before: $before) {
           id
           version
           createdAt
@@ -67,13 +73,19 @@
   let isLoading = $state(true);
   let versionCharCounts = $state<Record<string, number>>({});
   let wasDetached = $state(false);
-  let versions = $state<{ id: string; version: string; createdAt: string }[]>([]);
+
+  const versionMetas = $derived($query?.document.versionMetas ?? []);
+  let versionCache = new SvelteMap<string, string>();
+
+  const loadedVersions = $derived.by(() => {
+    return versionMetas.filter((meta) => versionCache.has(meta.id)).map((meta) => ({ ...meta, version: versionCache.get(meta.id) ?? '' }));
+  });
 
   const groupedVersions = $derived.by(() => {
-    const groups: { date: string; versions: typeof versions }[] = [];
-    const dateGroups: Record<string, typeof versions> = {};
+    const groups: { date: string; versions: typeof loadedVersions }[] = [];
+    const dateGroups: Record<string, typeof loadedVersions> = {};
 
-    versions.forEach((version) => {
+    loadedVersions.forEach((version) => {
       const date = dayjs(version.createdAt).format('YYYY년 M월 D일');
       if (!dateGroups[date]) {
         dateGroups[date] = [];
@@ -97,44 +109,124 @@
   let showTooltip = $state(false);
   let isDraggingSlider = $state(false);
 
-  const sliderIndex = $derived(selectedVersionId ? versions.findIndex((s) => s.id === selectedVersionId) : versions.length - 1);
-  const max = $derived(versions.length > 0 ? versions.length - 1 : 0);
+  const sliderIndex = $derived(selectedVersionId ? versionMetas.findIndex((s) => s.id === selectedVersionId) : versionMetas.length - 1);
+  const max = $derived(versionMetas.length > 0 ? versionMetas.length - 1 : 0);
   const p = $derived(max > 0 && sliderIndex >= 0 ? `${(sliderIndex / max) * 100}%` : '100%');
+
+  const processVersionsCharacterCounts = (versions: { id: string; version: string }[]) => {
+    if (versions.length === 0) return;
+
+    let currentIndex = 0;
+
+    const processNext = () => {
+      if (currentIndex < versions.length) {
+        const version = versions[currentIndex];
+        if (versionCharCounts[version.id] === undefined) {
+          const versionData = Uint8Array.fromBase64(version.version);
+          const count = editor.getCharacterCountAtVersion(versionData);
+          if (count !== undefined) {
+            versionCharCounts = { ...versionCharCounts, [version.id]: count };
+          }
+        }
+        currentIndex++;
+
+        if (currentIndex < versions.length) {
+          idleCallback(processNext);
+        }
+      }
+    };
+
+    idleCallback(processNext);
+  };
+
+  const loadVersionsAround = async (targetIndex: number) => {
+    if (!$query || versionMetas.length === 0) return;
+
+    const targetMeta = versionMetas[targetIndex];
+    if (versionCache.has(targetMeta.id)) return;
+
+    let beforeCursor: (typeof versionMetas)[number] | null = null;
+    for (let i = targetIndex + 1; i < versionMetas.length; i++) {
+      if (versionCache.has(versionMetas[i].id)) {
+        beforeCursor = versionMetas[i];
+        break;
+      }
+    }
+
+    const result = await query.load({
+      slug: $document.entity.slug,
+      first: 20,
+      before: beforeCursor?.createdAt ?? null,
+    });
+
+    const newVersions: { id: string; version: string }[] = [];
+    for (const v of result.document.versions) {
+      if (!versionCache.has(v.id)) {
+        versionCache.set(v.id, v.version);
+        newVersions.push(v);
+      }
+    }
+
+    processVersionsCharacterCounts(newVersions);
+  };
+
+  let isLoadingMore = $state(false);
+  let hasMoreVersions = $derived(versionMetas.some((meta) => !versionCache.has(meta.id)));
+
+  const loadMoreVersions = async () => {
+    if (isLoadingMore || !$query || versionMetas.length === 0) return;
+    if (!hasMoreVersions) return;
+
+    isLoadingMore = true;
+    try {
+      let oldestLoadedCreatedAt: (typeof versionMetas)[number]['createdAt'] | null = null;
+      for (const versionMeta of versionMetas) {
+        if (versionCache.has(versionMeta.id)) {
+          oldestLoadedCreatedAt = versionMeta.createdAt;
+          break;
+        }
+      }
+
+      if (!oldestLoadedCreatedAt) return;
+
+      const result = await query.load({
+        slug: $document.entity.slug,
+        first: 20,
+        before: oldestLoadedCreatedAt,
+      });
+
+      const newVersions: { id: string; version: string }[] = [];
+      for (const v of result.document.versions) {
+        if (!versionCache.has(v.id)) {
+          versionCache.set(v.id, v.version);
+          newVersions.push(v);
+        }
+      }
+
+      processVersionsCharacterCounts(newVersions);
+    } finally {
+      isLoadingMore = false;
+    }
+  };
 
   const initialize = async () => {
     isLoading = true;
     try {
-      const result = await query.load({ slug: $document.entity.slug });
-      versions = [...result.document.versions];
+      const result = await query.load({ slug: $document.entity.slug, first: 20, before: null });
 
-      if (versions.length > 0) {
-        const latestVersion = versions.at(-1);
-        if (latestVersion) {
-          selectedVersionId = latestVersion.id;
-        }
+      const newCache = new SvelteMap<string, string>();
+      for (const v of result.document.versions) {
+        newCache.set(v.id, v.version);
+      }
+      versionCache = newCache;
+
+      const metas = result.document.versionMetas;
+      if (metas.length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        selectedVersionId = metas.at(-1)!.id;
       }
 
-      const counts: Record<string, number> = {};
-      let currentIndex = 0;
-
-      const processNextVersion = () => {
-        if (currentIndex < versions.length) {
-          const version = versions[currentIndex];
-          const versionData = Uint8Array.fromBase64(version.version);
-          const count = editor.getCharacterCountAtVersion(versionData);
-          if (count !== undefined) {
-            counts[version.id] = count;
-          }
-          currentIndex++;
-          versionCharCounts = { ...counts };
-
-          if (currentIndex < versions.length) {
-            idleCallback(processNextVersion);
-          }
-        }
-      };
-
-      idleCallback(processNextVersion);
+      processVersionsCharacterCounts(result.document.versions);
     } finally {
       tick().then(() => {
         isLoading = false;
@@ -161,23 +253,36 @@
     element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }, 50);
 
+  let prevSelectedId: string | null = null;
+
   $effect(() => {
-    if (selectedVersionId && versions.length > 0) {
-      scrollToVersion(selectedVersionId);
-      updateViewVersion.call(selectedVersionId);
-    }
+    const currentId = selectedVersionId;
+    if (!currentId || !$query) return;
+
+    if (currentId === prevSelectedId) return;
+    prevSelectedId = currentId;
+
+    untrack(async () => {
+      const index = versionMetas.findIndex((s) => s.id === currentId);
+
+      if (!versionCache.has(currentId) && index !== -1) {
+        await loadVersionsAround(index);
+      }
+      scrollToVersion(currentId);
+      updateViewVersion.call(currentId);
+    });
   });
 
   const updateViewVersion = throttle((versionId: string) => {
-    const version = versions.find((s) => s.id === versionId);
-    if (!version) return;
+    const versionBinary = versionCache.get(versionId);
+    if (!versionBinary) return;
 
-    const versionData = Uint8Array.fromBase64(version.version);
+    const versionData = Uint8Array.fromBase64(versionBinary);
     editor.checkout(versionData);
   }, 32);
 
   const handleSlide: PointerEventHandler<HTMLElement> = (e) => {
-    if (!e.currentTarget.parentElement || versions.length === 0) {
+    if (!e.currentTarget.parentElement || versionMetas.length === 0) {
       return;
     }
 
@@ -186,16 +291,19 @@
     const ratio = clamp((pointerLeft - parentLeft) / parentWidth, 0, 1);
     const index = Math.round(ratio * max);
 
-    if (versions[index]) {
-      selectedVersionId = versions[index].id;
+    if (versionMetas[index]) {
+      selectedVersionId = versionMetas[index].id;
     }
   };
 
   const restore = () => {
-    const version = versions[sliderIndex];
+    const version = versionMetas[sliderIndex];
     if (!version) return;
 
-    const versionData = Uint8Array.fromBase64(version.version);
+    const versionBinary = versionCache.get(version.id);
+    if (!versionBinary) return;
+
+    const versionData = Uint8Array.fromBase64(versionBinary);
 
     editor.checkoutToLatest();
     editor.revertTo(versionData);
@@ -267,7 +375,7 @@
       <div class={center({ padding: '32px' })}>
         <RingSpinner style={css.raw({ size: '24px', color: 'text.subtle' })} />
       </div>
-    {:else if versions.length === 0}
+    {:else if versionMetas.length === 0}
       <div class={center({ padding: '32px', flexDirection: 'column', gap: '8px', color: 'text.subtle', fontSize: '13px' })}>
         <Icon style={css.raw({ color: 'text.faint' })} icon={IconClockFading} size={24} />
         아직 버전 기록이 없습니다
@@ -298,8 +406,8 @@
               {@const isSelected = selectedVersionId === version.id}
               {@const time = dayjs(version.createdAt)}
               {@const currentCount = versionCharCounts[version.id] ?? null}
-              {@const versionIndex = versions.findIndex((s) => s.id === version.id)}
-              {@const prevVersion = versionIndex > 0 ? versions[versionIndex - 1] : null}
+              {@const versionIndex = loadedVersions.findIndex((s) => s.id === version.id)}
+              {@const prevVersion = versionIndex > 0 ? loadedVersions[versionIndex - 1] : null}
               {@const prevCount = prevVersion && versionCharCounts[prevVersion.id] !== undefined ? versionCharCounts[prevVersion.id] : null}
               {@const charDiff =
                 versionIndex === 0 ? currentCount : prevCount === null || currentCount === null ? null : currentCount - prevCount}
@@ -334,8 +442,8 @@
                     selectedVersionId = version.id;
                   } else if (e.key === 'ArrowUp') {
                     e.preventDefault();
-                    const currentIndex = versions.findIndex((s) => s.id === version.id);
-                    const nextVersion = versions[currentIndex + 1];
+                    const currentIndex = loadedVersions.findIndex((s) => s.id === version.id);
+                    const nextVersion = loadedVersions[currentIndex + 1];
                     if (nextVersion) {
                       selectedVersionId = nextVersion.id;
                       tick().then(() => {
@@ -347,8 +455,8 @@
                     }
                   } else if (e.key === 'ArrowDown') {
                     e.preventDefault();
-                    const currentIndex = versions.findIndex((s) => s.id === version.id);
-                    const prevVersion = versions[currentIndex - 1];
+                    const currentIndex = loadedVersions.findIndex((s) => s.id === version.id);
+                    const prevVersion = loadedVersions[currentIndex - 1];
                     if (prevVersion) {
                       selectedVersionId = prevVersion.id;
                       tick().then(() => {
@@ -405,12 +513,22 @@
             {/each}
           </div>
         {/each}
+
+        {#if hasMoreVersions}
+          <div class={center({ padding: '16px' })} use:infiniteScroll={{ onLoadMore: loadMoreVersions, enabled: !isLoadingMore }}>
+            {#if isLoadingMore}
+              <RingSpinner style={css.raw({ size: '20px', color: 'text.subtle' })} />
+            {:else}
+              <span class={css({ fontSize: '12px', color: 'text.subtle' })}>스크롤하여 더 불러오기</span>
+            {/if}
+          </div>
+        {/if}
       </div>
     {/if}
   </div>
 </div>
 
-{#if editorContainer && !isLoading && versions.length > 0}
+{#if editorContainer && !isLoading && versionMetas.length > 0}
   <div
     class={center({ position: 'absolute', left: '0', right: '0', bottom: '32px', pointerEvents: 'none' })}
     use:portal={editorContainer}
@@ -542,7 +660,7 @@
           textAlign: 'center',
         })}
       >
-        {dayjs(versions[sliderIndex]?.createdAt).formatAsSmart()}
+        {dayjs(versionMetas[sliderIndex]?.createdAt).formatAsSmart()}
       </div>
 
       <div
@@ -564,7 +682,7 @@
         role="tooltip"
         use:floating
       >
-        {dayjs(versions[sliderIndex]?.createdAt).formatAsSmart()}
+        {dayjs(versionMetas[sliderIndex]?.createdAt).formatAsSmart()}
         <div
           class={css({
             size: '6px',
@@ -575,7 +693,7 @@
         ></div>
       </div>
 
-      {#if selectedVersionId === versions.at(-1)?.id}
+      {#if selectedVersionId === versionMetas.at(-1)?.id}
         <div
           class={center({
             flexShrink: '0',

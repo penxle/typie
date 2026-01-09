@@ -147,7 +147,8 @@ type Document implements IDocument {
   title: String!
   type: DocumentType!
   updatedAt: DateTime!
-  versions: [DocumentVersion!]!
+  versionMetas: [DocumentVersionMeta!]!
+  versions(before: DateTime, first: Int! = 20): [DocumentVersion!]!
   view: DocumentView!
 }
 
@@ -184,6 +185,11 @@ type DocumentVersion {
   createdAt: DateTime!
   id: ID!
   version: Binary!
+}
+
+type DocumentVersionMeta {
+  createdAt: DateTime!
+  id: ID!
 }
 
 type DocumentView implements IDocument {
