@@ -499,6 +499,44 @@ export const PostContents = pgTable(
   (t) => [index().on(t.postId), index().on(t.updatedAt), index().on(t.compactedAt)],
 );
 
+export const PostPaywalls = pgTable(
+  'post_paywalls',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.POST_PAYWALLS)),
+    postId: text('post_id')
+      .notNull()
+      .references(() => Posts.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    nodeId: text('node_id').notNull(),
+    price: integer('price').notNull(),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [uniqueIndex().on(t.postId, t.nodeId), index().on(t.postId)],
+);
+
+export const PostPaywallPurchases = pgTable(
+  'post_paywall_purchases',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.POST_PAYWALL_PURCHASES)),
+    paywallId: text('paywall_id').references(() => PostPaywalls.id, { onUpdate: 'cascade', onDelete: 'set null' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    billingAmount: integer('billing_amount').notNull(),
+    creditAmount: integer('credit_amount').notNull(),
+    data: jsonb('data').notNull(),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [unique().on(t.paywallId, t.userId), index().on(t.userId), index().on(t.paywallId)],
+);
+
 export const PostSnapshots = pgTable(
   'post_snapshots',
   {
@@ -746,6 +784,20 @@ export const UserPaymentCredits = pgTable('user_payment_credits', {
   id: text('id')
     .primaryKey()
     .$defaultFn(() => createDbId(TableCode.USER_PAYMENT_CREDITS)),
+  userId: text('user_id')
+    .notNull()
+    .unique()
+    .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+  amount: integer('amount').notNull(),
+  createdAt: datetime('created_at')
+    .notNull()
+    .default(sql`now()`),
+});
+
+export const UserRevenues = pgTable('user_revenues', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => createDbId(TableCode.USER_REVENUES)),
   userId: text('user_id')
     .notNull()
     .unique()

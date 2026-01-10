@@ -16,6 +16,7 @@
   import InfoIcon from '~icons/lucide/info';
   import ListIcon from '~icons/lucide/list';
   import ListOrderedIcon from '~icons/lucide/list-ordered';
+  import LockKeyholeIcon from '~icons/lucide/lock-keyhole';
   import PaperclipIcon from '~icons/lucide/paperclip';
   import QuoteIcon from '~icons/lucide/quote';
   import SettingsIcon from '~icons/lucide/settings';
@@ -262,6 +263,16 @@
       label="HTML"
       onclick={() => {
         editor?.current.chain().focus().setHtmlBlock().run();
+      }}
+      size={toolbarSize}
+    />
+
+    <ToolbarButton
+      disabled={!editor?.current.can().togglePaywall()}
+      icon={LockKeyholeIcon}
+      label="유료 블록"
+      onclick={() => {
+        editor?.current.chain().focus().togglePaywall().run();
       }}
       size={toolbarSize}
     />

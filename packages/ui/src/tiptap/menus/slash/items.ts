@@ -6,6 +6,7 @@ import GalleryVerticalEndIcon from '~icons/lucide/gallery-vertical-end';
 import ImageIcon from '~icons/lucide/image';
 import ListIcon from '~icons/lucide/list';
 import ListOrderedIcon from '~icons/lucide/list-ordered';
+import LockKeyholeIcon from '~icons/lucide/lock-keyhole';
 import MinusIcon from '~icons/lucide/minus';
 import PaperclipIcon from '~icons/lucide/paperclip';
 import TableIcon from '~icons/lucide/table';
@@ -148,6 +149,17 @@ export const menuItems: MenuItem[] = [
     icon: CodeXmlIcon,
     command: ({ editor, range }) => {
       chain(editor, range).setHtmlBlock().run();
+    },
+  },
+  {
+    id: 'paywall',
+    type: 'paywall',
+    group: 'block',
+    name: '유료 블록',
+    keywords: ['paywall', 'paid', 'premium', '유료', '결제'],
+    icon: LockKeyholeIcon,
+    command: ({ editor, range }) => {
+      chain(editor, range).togglePaywall().run();
     },
   },
 ];

@@ -2,6 +2,7 @@
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Icon, Modal } from '@typie/ui/components';
+  import CoinsIcon from '~icons/lucide/coins';
   import CreditCardIcon from '~icons/lucide/credit-card';
   import FlaskConicalIcon from '~icons/lucide/flask-conical';
   import GemIcon from '~icons/lucide/gem';
@@ -26,6 +27,7 @@
   import PresetTab from './PresetTab.svelte';
   import ProfileTab from './ProfileTab.svelte';
   import ReferralTab from './ReferralTab.svelte';
+  import RevenueTab from './RevenueTab.svelte';
   import SecurityTab from './SecurityTab.svelte';
   import ShortcutsTab from './ShortcutsTab.svelte';
   import ThemeTab from './ThemeTab.svelte';
@@ -64,6 +66,7 @@
         ...DashboardLayout_PreferenceModal_PresetTab_user
         ...DashboardLayout_PreferenceModal_PlanTab_user
         ...DashboardLayout_PreferenceModal_BillingTab_user
+        ...DashboardLayout_PreferenceModal_RevenueTab_user
         ...DashboardLayout_PreferenceModal_ReferralTab_user
         ...DashboardLayout_PreferenceModal_LaboratoryTab_user
         ...DashboardLayout_PreferenceModal_ShortcutsTab_user
@@ -143,6 +146,12 @@
           label: '결제',
           icon: CreditCardIcon,
           component: BillingTab,
+        },
+        {
+          path: '/preference/revenue',
+          label: '수익',
+          icon: CoinsIcon,
+          component: RevenueTab,
         },
         {
           path: '/preference/referral',

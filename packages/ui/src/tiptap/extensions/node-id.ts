@@ -21,6 +21,7 @@ const types = [
   'horizontal_rule',
   'html-block',
   'image',
+  'paywall',
   'table',
   'table_row',
   'table_cell',

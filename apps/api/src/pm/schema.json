@@ -125,6 +125,14 @@
       },
       "parseDOM": [{ "tag": "node-view[data-node-view-type=image]" }]
     },
+    "paywall": {
+      "content": "block+",
+      "group": "block",
+      "defining": true,
+      "isolating": true,
+      "attrs": { "nodeId": { "default": null }, "price": { "default": 0 } },
+      "parseDOM": [{ "tag": "node-view[data-node-view-type=paywall]" }]
+    },
     "table": {
       "tableRole": "table",
       "content": "table_row+",

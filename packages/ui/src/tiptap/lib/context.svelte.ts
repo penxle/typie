@@ -5,6 +5,7 @@ const key: unique symbol = Symbol('EditorContext');
 type EditorContext = {
   pdf: boolean;
   timeline: boolean;
+  onPaywallPurchase?: (nodeId: string, price: number) => void;
 };
 
 export const getEditorContext = () => {

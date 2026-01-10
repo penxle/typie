@@ -16,6 +16,8 @@ import {
   PostAnchors,
   PostCharacterCountChanges,
   PostContents,
+  PostPaywallPurchases,
+  PostPaywalls,
   PostReactions,
   Posts,
   PostSnapshotContributors,
@@ -356,10 +358,10 @@ PostView.implement({
         }
 
         const loader = ctx.loader({
-          name: 'Post.excerpt',
+          name: 'PostView.excerpt',
           load: async (ids) => {
             return await db
-              .select({ postId: PostContents.postId, text: PostContents.text })
+              .select({ postId: PostContents.postId, body: PostContents.body })
               .from(PostContents)
               .where(inArray(PostContents.postId, ids));
           },
@@ -367,7 +369,29 @@ PostView.implement({
         });
 
         const content = await loader.load(self.id);
-        const text = content.text.replaceAll(/\s+/g, ' ').trim();
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const extractText = (node: any): string => {
+          if (!node || typeof node !== 'object') {
+            return '';
+          }
+
+          if (node.type === 'paywall') {
+            return '';
+          }
+
+          if (node.type === 'text') {
+            return node.text ?? '';
+          }
+
+          if (Array.isArray(node.content)) {
+            return node.content.map(extractText).join('');
+          }
+
+          return '';
+        };
+
+        const text = extractText(content.body).replaceAll(/\s+/g, ' ').trim();
 
         return text.length <= 200 ? text : text.slice(0, 200) + '...';
       },
@@ -406,9 +430,71 @@ PostView.implement({
 
         const content = await loader.load(self.id);
 
+        const author = await db.select({ userId: Entities.userId }).from(Entities).where(eq(Entities.id, self.entityId)).then(first);
+
+        const isAuthor = ctx.session?.userId === author?.userId;
+
+        const paywalls = await db
+          .select({ nodeId: PostPaywalls.nodeId, price: PostPaywalls.price, id: PostPaywalls.id })
+          .from(PostPaywalls)
+          .where(eq(PostPaywalls.postId, self.id));
+
+        const purchasedPaywallIds = ctx.session
+          ? new Set(
+              await db
+                .select({ paywallId: PostPaywallPurchases.paywallId })
+                .from(PostPaywallPurchases)
+                .where(
+                  and(
+                    eq(PostPaywallPurchases.userId, ctx.session.userId),
+                    inArray(
+                      PostPaywallPurchases.paywallId,
+                      paywalls.map((p) => p.id),
+                    ),
+                  ),
+                )
+                .then((rows) => rows.map((r) => r.paywallId)),
+            )
+          : new Set<string>();
+
+        const paywallMap = new Map(paywalls.map((p) => [p.nodeId, { id: p.id, price: p.price }]));
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const processNode = (node: any): any => {
+          if (!node || typeof node !== 'object') {
+            return node;
+          }
+
+          if (node.type === 'paywall' && node.attrs?.nodeId) {
+            const paywall = paywallMap.get(node.attrs.nodeId);
+            if (paywall) {
+              const canAccess = isAuthor || purchasedPaywallIds.has(paywall.id);
+              return {
+                ...node,
+                attrs: {
+                  ...node.attrs,
+                  price: canAccess ? -1 : paywall.price,
+                },
+                content: canAccess ? node.content?.map(processNode) : [],
+              };
+            }
+          }
+
+          if (Array.isArray(node.content)) {
+            return {
+              ...node,
+              content: node.content.map(processNode),
+            };
+          }
+
+          return node;
+        };
+
+        const processedBody = processNode(content.body);
+
         return {
           __typename: 'PostViewBodyAvailable',
-          content: content.body,
+          content: processedBody,
         };
       },
     }),
