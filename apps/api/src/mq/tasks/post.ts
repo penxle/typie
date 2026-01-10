@@ -13,6 +13,7 @@ import {
   PostAnchors,
   PostCharacterCountChanges,
   PostContents,
+  PostPaywalls,
   Posts,
   PostSnapshotContributors,
   PostSnapshots,
@@ -221,6 +222,29 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
             .onConflictDoUpdate({
               target: [PostAnchors.postId, PostAnchors.nodeId],
               set: { name },
+            });
+        }
+
+        const paywallNodes = findChildren(node, (n) => n.type.name === 'paywall');
+        const paywalls = paywallNodes.map(({ node: n }) => ({
+          nodeId: n.attrs.nodeId as string,
+          price: (n.attrs.price as number) ?? 0,
+        }));
+
+        const paywallNodeIds = paywalls.map((p) => p.nodeId);
+        if (paywallNodeIds.length > 0) {
+          await tx.delete(PostPaywalls).where(and(eq(PostPaywalls.postId, postId), notInArray(PostPaywalls.nodeId, paywallNodeIds)));
+        } else {
+          await tx.delete(PostPaywalls).where(eq(PostPaywalls.postId, postId));
+        }
+
+        for (const paywall of paywalls) {
+          await tx
+            .insert(PostPaywalls)
+            .values({ postId, nodeId: paywall.nodeId, price: paywall.price })
+            .onConflictDoUpdate({
+              target: [PostPaywalls.postId, PostPaywalls.nodeId],
+              set: { price: paywall.price },
             });
         }
 

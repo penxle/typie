@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Editor, Extension } from '@tiptap/core';
   import { css, cx } from '@typie/styled-system/css';
-  import { getAllContexts, onMount } from 'svelte';
+  import { getAllContexts, onMount, untrack } from 'svelte';
   import { Ref } from '../../utils';
   import { GAP_HEIGHT_PX } from '../extensions';
   import { renderHTML } from '../lib/html';
@@ -26,6 +26,14 @@
   const allExtensions = $derived([...baseExtensions, ...(extensions ?? [])]);
 
   const html = $derived(renderHTML(content, allExtensions));
+
+  $effect(() => {
+    void content;
+
+    untrack(() => {
+      editor?.current.commands.setContent(content);
+    });
+  });
 
   onMount(() => {
     const e = new Editor({

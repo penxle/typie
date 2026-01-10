@@ -9,7 +9,7 @@
   import { Icon } from '../../../components';
   import { getAncestorWrappingNodeIds, unwrapWrappingNodes } from '../../extensions/clipboard';
   import { TEXT_NODE_TYPES, WRAPPING_NODE_TYPES } from '../../extensions/node-commands';
-  import { Blockquote, Callout, CodeBlock, Fold, HtmlBlock } from '../../node-views';
+  import { Blockquote, Callout, CodeBlock, Fold, HtmlBlock, Paywall } from '../../node-views';
   import type { Editor } from '@tiptap/core';
 
   type Props = {
@@ -25,6 +25,7 @@
     [Fold.name]: '접기 해제',
     [CodeBlock.name]: '코드 해제',
     [HtmlBlock.name]: 'HTML 해제',
+    [Paywall.name]: '유료 블록 해제',
   };
 
   const node = $derived(editor.state.doc.nodeAt(pos));

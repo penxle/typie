@@ -31,6 +31,7 @@ import {
   UserPersonalIdentities,
   UserPreferences,
   UserPushNotificationTokens,
+  UserRevenues,
   Users,
   UserSessions,
   UserSingleSignOns,
@@ -241,6 +242,18 @@ User.implement({
           .then(first);
 
         return credit?.amount ?? 0;
+      },
+    }),
+
+    revenue: t.int({
+      resolve: async (user) => {
+        const revenue = await db
+          .select({ amount: UserRevenues.amount })
+          .from(UserRevenues)
+          .where(eq(UserRevenues.userId, user.id))
+          .then(first);
+
+        return revenue?.amount ?? 0;
       },
     }),
 

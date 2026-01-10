@@ -1,19 +1,24 @@
 import { createHash } from 'node:crypto';
 import dayjs from 'dayjs';
-import { and, eq, gt, inArray, ne } from 'drizzle-orm';
+import { and, eq, gt, inArray, ne, sql } from 'drizzle-orm';
 import { defaultPlanRules } from '@/const';
 import {
   CreditCodes,
   db,
+  Entities,
   first,
   firstOrThrow,
   firstOrThrowWith,
   PaymentInvoices,
   Plans,
+  PostPaywallPurchases,
+  PostPaywalls,
+  Posts,
   Subscriptions,
   TableCode,
   UserBillingKeys,
   UserInAppPurchases,
+  UserRevenues,
   validateDbId,
 } from '@/db';
 import { CreditCodeState, InAppPurchaseStore, PaymentInvoiceState, PlanAvailability, PlanInterval, SubscriptionState } from '@/enums';
@@ -21,7 +26,7 @@ import { NotFoundError, TypieError } from '@/errors';
 import * as appstore from '@/external/appstore';
 import * as googleplay from '@/external/googleplay';
 import * as portone from '@/external/portone';
-import { getSubscriptionExpiresAt, payInvoiceWithBillingKey } from '@/utils';
+import { getSubscriptionExpiresAt, payAmountWithBillingKey, payInvoiceWithBillingKey } from '@/utils';
 import { delay } from '@/utils/promise';
 import { cardSchema, redeemCodeSchema } from '@/validation';
 import { builder } from '../builder';
@@ -461,6 +466,68 @@ builder.mutationFields((t) => ({
           .where(eq(Subscriptions.id, willExpireSubscription.id))
           .returning()
           .then(firstOrThrow);
+      });
+    },
+  }),
+
+  purchasePaywall: t.withAuth({ session: true }).fieldWithInput({
+    type: 'Boolean',
+    input: {
+      postId: t.input.id({ validate: validateDbId(TableCode.POSTS) }),
+      nodeId: t.input.string(),
+    },
+    resolve: async (_, { input }, ctx) => {
+      const paywall = await db
+        .select({ id: PostPaywalls.id, price: PostPaywalls.price, authorId: Entities.userId })
+        .from(PostPaywalls)
+        .innerJoin(Posts, eq(PostPaywalls.postId, Posts.id))
+        .innerJoin(Entities, eq(Posts.entityId, Entities.id))
+        .where(and(eq(PostPaywalls.postId, input.postId), eq(PostPaywalls.nodeId, input.nodeId)))
+        .then(firstOrThrowWith(new NotFoundError()));
+
+      if (paywall.authorId === ctx.session.userId) {
+        throw new TypieError({ code: 'cannot_purchase_own_post' });
+      }
+
+      return await db.transaction(async (tx) => {
+        const existingPurchase = await tx
+          .select({ id: PostPaywallPurchases.id })
+          .from(PostPaywallPurchases)
+          .where(and(eq(PostPaywallPurchases.paywallId, paywall.id), eq(PostPaywallPurchases.userId, ctx.session.userId)))
+          .for('no key update')
+          .then(first);
+
+        if (existingPurchase) {
+          throw new TypieError({ code: 'paywall_already_purchased' });
+        }
+        const result = await payAmountWithBillingKey(tx, {
+          paymentId: `${ctx.session.userId}_${paywall.id}`,
+          userId: ctx.session.userId,
+          orderName: `타이피 ${paywall.price} P`,
+          amount: paywall.price,
+        });
+
+        await tx.insert(PostPaywallPurchases).values({
+          paywallId: paywall.id,
+          userId: ctx.session.userId,
+          billingAmount: result.billingAmount,
+          creditAmount: result.creditAmount,
+          data: result.data,
+        });
+
+        if (result.status !== 'succeeded') {
+          throw new TypieError({ code: 'payment_failed' });
+        }
+
+        await tx
+          .insert(UserRevenues)
+          .values({ userId: paywall.authorId, amount: paywall.price })
+          .onConflictDoUpdate({
+            target: [UserRevenues.userId],
+            set: { amount: sql`${UserRevenues.amount} + ${paywall.price}` },
+          });
+
+        return true;
       });
     },
   }),

@@ -567,6 +567,7 @@ type Mutation {
   persistBlobAsFile(input: PersistBlobAsFileInput!): File!
   persistBlobAsFont(input: PersistBlobAsFontInput!): Font!
   persistBlobAsImage(input: PersistBlobAsImageInput!): Image!
+  purchasePaywall(input: PurchasePaywallInput!): Boolean!
   purgeEntities(input: PurgeEntitiesInput!): Site!
   recordSurvey(input: RecordSurveyInput!): User!
   recoverEntity(input: RecoverEntityInput!): Entity!
@@ -815,6 +816,11 @@ enum PreorderPaymentState {
   COMPLETED
   FAILED
   PENDING
+}
+
+input PurchasePaywallInput {
+  nodeId: String!
+  postId: ID!
 }
 
 input PurgeEntitiesInput {
@@ -1191,6 +1197,7 @@ type User {
   recentlyViewedEntities: [Entity!]!
   referral: Referral
   referrals: [Referral!]!
+  revenue: Int!
   role: UserRole!
   singleSignOns: [UserSingleSignOn!]!
   sites: [Site!]!

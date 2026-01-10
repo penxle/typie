@@ -1,8 +1,9 @@
 <script lang="ts">
   import * as PortOne from '@portone/browser-sdk/v2';
+  import { cache } from '@typie/sark/internal';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
-  import { Button, ContentProtect, Helmet, HorizontalDivider, Icon, TextInput } from '@typie/ui/components';
+  import { Button, Checkbox, ContentProtect, Helmet, HorizontalDivider, Icon, Modal, TextInput } from '@typie/ui/components';
   import { createForm, FormError } from '@typie/ui/form';
   import { Toast } from '@typie/ui/notification';
   import { setupEditorContext, TiptapRenderer } from '@typie/ui/tiptap';
@@ -12,6 +13,8 @@
   import qs from 'query-string';
   import { z } from 'zod';
   import { TypieError } from '@/errors';
+  import { cardSchema } from '@/validation';
+  import ChevronLeftIcon from '~icons/lucide/chevron-left';
   import LockIcon from '~icons/lucide/lock';
   import ShieldAlertIcon from '~icons/lucide/shield-alert';
   import SmileIcon from '~icons/lucide/smile';
@@ -122,6 +125,10 @@
     graphql(`
       fragment UsersiteWildcardSlugPage_PostView_user on User {
         id
+
+        billingKey {
+          id
+        }
       }
     `),
   );
@@ -159,6 +166,21 @@
     }
   `);
 
+  const updateBillingKey = graphql(`
+    mutation UsersiteWildcardSlugPage_UpdateBillingKey_Mutation($input: UpdateBillingKeyInput!) {
+      updateBillingKey(input: $input) {
+        id
+        name
+      }
+    }
+  `);
+
+  const purchasePaywall = graphql(`
+    mutation UsersiteWildcardSlugPage_PurchasePaywall_Mutation($input: PurchasePaywallInput!) {
+      purchasePaywall(input: $input)
+    }
+  `);
+
   const form = createForm({
     schema: z.object({
       password: z.string(),
@@ -188,7 +210,111 @@
     void form;
   });
 
-  setupEditorContext();
+  let paywallNodeId = $state<string | null>(null);
+  let paywallPrice = $state<number | null>(null);
+  let paywallModalOpen = $state(false);
+  let showCardRegistration = $state(false);
+  let cardSubmitError = $state<string | null>(null);
+  let hasBillingKey = $state($user?.billingKey !== null);
+
+  const cardAgreements = [
+    { name: '타이피 결제 이용약관', url: 'https://typie.co/legal/terms' },
+    { name: 'NICEPAY 전자금융거래 기본약관', url: 'https://www.nicepay.co.kr/cs/terms/policy1.do' },
+  ];
+
+  let cardAgreementChecks = $state(cardAgreements.map(() => false));
+  const allCardAgreementsChecked = $derived(cardAgreementChecks.every(Boolean));
+
+  const handleAllCardAgreementCheck = () => {
+    cardAgreementChecks = cardAgreementChecks.map(() => !allCardAgreementsChecked);
+  };
+
+  const cardForm = createForm({
+    schema: z.object({
+      cardNumber: cardSchema.cardNumber,
+      expiryDate: cardSchema.expiryDate,
+      birthOrBusinessRegistrationNumber: cardSchema.birthOrBusinessRegistrationNumber,
+      passwordTwoDigits: cardSchema.passwordTwoDigits,
+      agreementsAccepted: z.boolean(),
+    }),
+    defaultValues: {
+      agreementsAccepted: false,
+    },
+    onSubmit: async (data) => {
+      cardSubmitError = null;
+
+      if (!data.agreementsAccepted) {
+        throw new FormError('agreementsAccepted', '약관에 동의해주세요.');
+      }
+
+      await updateBillingKey({
+        cardNumber: data.cardNumber,
+        expiryDate: data.expiryDate,
+        birthOrBusinessRegistrationNumber: data.birthOrBusinessRegistrationNumber,
+        passwordTwoDigits: data.passwordTwoDigits,
+      });
+
+      mixpanel.track('paywall_register_card');
+      hasBillingKey = true;
+      showCardRegistration = false;
+    },
+    onError: (error) => {
+      if (error instanceof TypieError && error.code === 'billing_key_issue_failed') {
+        cardSubmitError = '카드 정보를 확인해주세요.';
+      }
+    },
+  });
+
+  $effect(() => {
+    void cardForm;
+  });
+
+  $effect(() => {
+    cardForm.fields.agreementsAccepted = allCardAgreementsChecked;
+  });
+
+  const formatCardNumber = (event: Event) => {
+    const input = event.target as HTMLInputElement;
+    const value = input.value.replaceAll(/\D/g, '');
+    const parts = [value.slice(0, 4), value.slice(4, 8), value.slice(8, 12), value.slice(12)];
+    input.value = parts.filter(Boolean).join('-');
+  };
+
+  const formatCardExpiry = (event: Event) => {
+    const input = event.target as HTMLInputElement;
+    const value = input.value.replaceAll(/\D/g, '');
+    input.value = value.length > 2 ? value.slice(0, 2) + '/' + value.slice(2, 4) : value;
+  };
+
+  const formatBusinessNumber = (event: Event) => {
+    const input = event.target as HTMLInputElement;
+    const value = input.value.replaceAll(/\D/g, '');
+
+    if (value.length <= 6) {
+      input.value = value;
+    } else {
+      const parts = [value.slice(0, 3), value.slice(3, 5), value.slice(5)];
+      input.value = parts.filter(Boolean).join('-');
+    }
+  };
+
+  const handlePaywallPurchase = (nodeId: string, price: number) => {
+    if (!$user) {
+      window.location.href = authorizeUrl;
+      return;
+    }
+
+    paywallNodeId = nodeId;
+    paywallPrice = price;
+    paywallModalOpen = true;
+    showCardRegistration = false;
+    cardForm.reset();
+    cardSubmitError = null;
+  };
+
+  setupEditorContext({
+    onPaywallPurchase: handlePaywallPurchase,
+  });
 
   const fontFaces = $derived(
     $entityView.site.fonts
@@ -425,3 +551,185 @@
     </div>
   </div>
 {/if}
+
+<Modal style={css.raw({ padding: '24px', maxWidth: '440px' })} bind:open={paywallModalOpen}>
+  {#if showCardRegistration}
+    <div class={flex({ flexDirection: 'column', gap: '16px' })}>
+      <div class={flex({ alignItems: 'center', gap: '8px' })}>
+        <button
+          class={css({ padding: '4px', color: 'text.muted', cursor: 'pointer', _hover: { color: 'text.default' } })}
+          onclick={() => (showCardRegistration = false)}
+          type="button"
+        >
+          <Icon icon={ChevronLeftIcon} size={20} />
+        </button>
+        <h2 class={css({ fontSize: '16px', fontWeight: 'semibold', color: 'text.default' })}>결제 수단 등록</h2>
+      </div>
+
+      <form class={flex({ flexDirection: 'column', gap: '16px' })} onsubmit={cardForm.handleSubmit}>
+        <div class={flex({ flexDirection: 'column', gap: '8px' })}>
+          <TextInput
+            style={css.raw({ width: 'full' })}
+            inputmode="numeric"
+            maxlength={19}
+            oninput={formatCardNumber}
+            placeholder="카드 번호"
+            bind:value={cardForm.fields.cardNumber}
+          />
+
+          <div class={flex({ gap: '8px' })}>
+            <TextInput
+              style={css.raw({ flex: '1' })}
+              inputmode="numeric"
+              maxlength={5}
+              oninput={formatCardExpiry}
+              placeholder="유효기간 (MM/YY)"
+              bind:value={cardForm.fields.expiryDate}
+            />
+            <TextInput
+              style={css.raw({ flex: '1' })}
+              autocomplete="off"
+              inputmode="numeric"
+              maxlength={2}
+              placeholder="비밀번호 앞 2자리"
+              type="password"
+              bind:value={cardForm.fields.passwordTwoDigits}
+            />
+          </div>
+
+          <TextInput
+            style={css.raw({ width: 'full' })}
+            inputmode="numeric"
+            maxlength={12}
+            oninput={formatBusinessNumber}
+            placeholder="생년월일 6자리 또는 사업자번호 10자리"
+            bind:value={cardForm.fields.birthOrBusinessRegistrationNumber}
+          />
+        </div>
+
+        <div class={flex({ flexDirection: 'column', gap: '8px' })}>
+          <div
+            class={css({
+              borderRadius: '8px',
+              borderWidth: '1px',
+              borderColor: 'border.subtle',
+              padding: '16px',
+              backgroundColor: 'surface.default',
+            })}
+          >
+            <div class={flex({ flexDirection: 'column', gap: '12px' })}>
+              <Checkbox checked={allCardAgreementsChecked} onchange={handleAllCardAgreementCheck} size="sm">
+                <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.default' })}>전체 동의</span>
+              </Checkbox>
+
+              <div class={css({ height: '1px', backgroundColor: 'border.subtle' })}></div>
+
+              <div class={flex({ flexDirection: 'column', gap: '8px' })}>
+                {#each cardAgreements as agreement, i (agreement.name)}
+                  <Checkbox size="sm" bind:checked={cardAgreementChecks[i]}>
+                    <span class={css({ fontSize: '13px', color: 'text.subtle' })}>
+                      <a
+                        class={css({ color: 'text.default', textDecoration: 'underline', _hover: { color: 'accent.brand.default' } })}
+                        href={agreement.url}
+                        rel="noopener noreferrer"
+                        target="_blank"
+                      >
+                        {agreement.name}
+                      </a>
+                      동의 (필수)
+                    </span>
+                  </Checkbox>
+                {/each}
+              </div>
+            </div>
+          </div>
+
+          {#if cardForm.errors.agreementsAccepted}
+            <p class={css({ paddingLeft: '4px', fontSize: '12px', color: 'text.danger' })}>{cardForm.errors.agreementsAccepted}</p>
+          {/if}
+        </div>
+
+        {#if cardSubmitError}
+          <div
+            class={css({
+              padding: '12px',
+              borderRadius: '6px',
+              backgroundColor: 'accent.danger.subtle',
+              borderWidth: '1px',
+              borderColor: 'border.danger',
+            })}
+          >
+            <p class={css({ fontSize: '13px', color: 'text.danger' })}>{cardSubmitError}</p>
+          </div>
+        {/if}
+
+        <Button style={css.raw({ width: 'full' })} type="submit">등록하기</Button>
+      </form>
+    </div>
+  {:else}
+    <div class={flex({ flexDirection: 'column', gap: '16px' })}>
+      <h2 class={css({ fontSize: '16px', fontWeight: 'semibold', color: 'text.default' })}>유료 콘텐츠 결제</h2>
+
+      <p class={css({ fontSize: '14px', color: 'text.subtle', lineHeight: '[1.6]' })}>
+        이 콘텐츠를 보려면 {comma(paywallPrice ?? 0)} P가 필요해요.
+      </p>
+
+      <div
+        class={css({
+          padding: '12px',
+          borderRadius: '6px',
+          backgroundColor: 'surface.subtle',
+          fontSize: '13px',
+          color: 'text.muted',
+          lineHeight: '[1.6]',
+        })}
+      >
+        <ul class={css({ paddingLeft: '16px', listStyleType: 'disc' })}>
+          <li>디지털 콘텐츠의 특성상 결제 후에는 환불이 어려워요.</li>
+          <li>결제한 콘텐츠는 현재 로그인한 계정에서만 볼 수 있어요.</li>
+          <li>작성자가 콘텐츠를 삭제하면 더 이상 열람할 수 없어요.</li>
+        </ul>
+      </div>
+
+      {#if hasBillingKey}
+        <Button
+          style={css.raw({ width: 'full' })}
+          onclick={async () => {
+            if ($entityView.node.__typename !== 'PostView' || !paywallNodeId) {
+              return;
+            }
+
+            try {
+              await purchasePaywall({
+                postId: $entityView.node.id,
+                nodeId: paywallNodeId,
+              });
+
+              mixpanel.track('purchase_paywall', {
+                postId: $entityView.node.id,
+                nodeId: paywallNodeId,
+                price: paywallPrice,
+              });
+
+              cache.invalidate({ __typename: 'PostView', id: $entityView.node.id, field: 'body' });
+              paywallModalOpen = false;
+            } catch (err) {
+              if (err instanceof TypieError) {
+                Toast.error(err.message);
+              }
+            }
+          }}
+        >
+          {comma(paywallPrice ?? 0)} P 결제하기
+        </Button>
+      {:else}
+        <div class={flex({ flexDirection: 'column', gap: '8px' })}>
+          <p class={css({ fontSize: '13px', color: 'text.muted', textAlign: 'center' })}>
+            결제를 진행하려면 먼저 결제 수단을 등록해주세요.
+          </p>
+          <Button style={css.raw({ width: 'full' })} onclick={() => (showCardRegistration = true)}>결제 수단 등록하기</Button>
+        </div>
+      {/if}
+    </div>
+  {/if}
+</Modal>
