@@ -79,6 +79,10 @@ export const Paywall = createNodeView(Component, {
       new Plugin({
         key: new PluginKey('paywallDelete'),
         filterTransaction: (tr, state) => {
+          if (!editor.isEditable) {
+            return true;
+          }
+
           if (tr.getMeta('allowPaywallDelete')) {
             return true;
           }
@@ -129,17 +133,18 @@ export const Paywall = createNodeView(Component, {
             return null;
           }
 
-          const { tr } = newState;
-          let modified = false;
+          const nestedPaywalls: { from: number; to: number; content: typeof newState.doc.content }[] = [];
 
           newState.doc.descendants((node, pos) => {
             if (node.type.name === paywallType.name) {
               node.descendants((child, childPos) => {
                 if (child.type.name === paywallType.name) {
                   const absolutePos = pos + 1 + childPos;
-                  tr.replaceWith(absolutePos, absolutePos + child.nodeSize, child.content);
-                  modified = true;
-                  return false;
+                  nestedPaywalls.push({
+                    from: absolutePos,
+                    to: absolutePos + child.nodeSize,
+                    content: child.content,
+                  });
                 }
                 return true;
               });
@@ -147,7 +152,18 @@ export const Paywall = createNodeView(Component, {
             return true;
           });
 
-          return modified ? tr : null;
+          if (nestedPaywalls.length === 0) {
+            return null;
+          }
+
+          const { tr } = newState;
+          tr.setMeta('allowPaywallDelete', true);
+          nestedPaywalls.sort((a, b) => b.from - a.from);
+          for (const { from, to, content } of nestedPaywalls) {
+            tr.replaceWith(from, to, content);
+          }
+
+          return tr;
         },
       }),
     ];
