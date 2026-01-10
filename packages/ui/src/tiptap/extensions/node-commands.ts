@@ -1,10 +1,10 @@
 import { Extension } from '@tiptap/core';
 import { NodeSelection, TextSelection } from '@tiptap/pm/state';
 import { findNodeUpward } from '../lib/node-utils';
-import { Blockquote, Callout, CodeBlock, Fold, HtmlBlock } from '../node-views';
+import { Blockquote, Callout, CodeBlock, Fold, HtmlBlock, Paywall } from '../node-views';
 
 // NOTE: unwrap 가능한 defining: true인 노드들 (list_item 제외)
-export const WRAPPING_NODE_TYPES = [Blockquote.name, Callout.name, Fold.name];
+export const WRAPPING_NODE_TYPES = [Blockquote.name, Callout.name, Fold.name, Paywall.name];
 
 // NOTE: content: text* 인 노드들
 export const TEXT_NODE_TYPES = [CodeBlock.name, HtmlBlock.name];
@@ -48,6 +48,7 @@ export const NodeCommands = Extension.create({
             if (!parent.canReplace(index, index + 1, unwrappedContent)) {
               return false;
             }
+            tr.setMeta('allowPaywallDelete', true);
             tr.replaceWith(nodeStart, nodeEnd, unwrappedContent);
             dispatch(tr);
             return true;

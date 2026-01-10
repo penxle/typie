@@ -185,6 +185,23 @@
           <Icon icon={LockKeyholeIcon} size={16} />
           <span class={css({ fontSize: '14px', fontWeight: 'semibold', color: 'text.default' })}>유료 블록</span>
         </div>
+      {:else if price === 0}
+        <div
+          class={flex({
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '16px',
+            padding: '32px',
+          })}
+          contenteditable={false}
+        >
+          <Icon style={css.raw({ color: 'text.muted' })} icon={LockKeyholeIcon} size={32} />
+
+          <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '4px' })}>
+            <p class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.default' })}>유료 블록</p>
+            <p class={css({ fontSize: '13px', color: 'text.muted' })}>가격이 설정되지 않아 구매할 수 없어요.</p>
+          </div>
+        </div>
       {:else}
         <div
           class={flex({
