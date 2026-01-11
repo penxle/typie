@@ -188,6 +188,7 @@
                     format: 'png',
                   });
                   form.fields.avatarId = resp.id;
+                  form.handleSubmit();
                 }}
                 type="file"
               />
