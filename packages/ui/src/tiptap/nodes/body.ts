@@ -64,10 +64,10 @@ export const Body = Node.create({
                 '[calc(var(--prosemirror-padding-bottom) - var(--prosemirror-page-gap-height) - var(--prosemirror-page-margin-top))]',
               paddingRight: '[calc(var(--prosemirror-page-margin-right) + var(--prosemirror-padding-x))]',
             },
-            '& > .paragraph-indent, & > .selected-node > .paragraph-indent': {
+            '& > .paragraph-indent, & > .selected-node > .paragraph-indent, & [data-node-view-content-editable] > .paragraph-indent': {
               textIndent: 'var(--prosemirror-paragraph-indent)',
             },
-            '& > :is(ol, ul), & > .selected-node > :is(ol, ul)': {
+            '& > :is(ol, ul), & > .selected-node > :is(ol, ul), & [data-node-view-content-editable] > :is(ol, ul)': {
               paddingLeft: 'var(--prosemirror-paragraph-indent)',
             },
           }),
