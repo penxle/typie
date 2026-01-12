@@ -48,6 +48,7 @@
         me @required {
           id
           ...DocumentPanel_user
+          ...DashboardLayout_PlanUpgradeModal_user
 
           sites {
             id
@@ -76,6 +77,7 @@
 
           user {
             id
+            ...DocumentEditor_TopToolbar_user
 
             subscription {
               id
@@ -143,8 +145,6 @@
   const snapshot = $derived(
     entity?.node.__typename === 'Document' && entity.node.snapshot ? Uint8Array.fromBase64(entity.node.snapshot) : undefined,
   );
-  const hasSubscription = $derived(!!entity?.user.subscription);
-
   const editor = new Editor();
   setEditor(editor);
 
@@ -568,7 +568,7 @@
 
       <HorizontalDivider color="secondary" />
 
-      <TopToolbar {hasSubscription} />
+      <TopToolbar $user={entity.user} />
 
       <div class={flex({ position: 'relative', flexGrow: '1', overflowY: 'hidden' })}>
         <div class={flex({ position: 'relative', flexDirection: 'column', flexGrow: '1', overflowX: 'auto' })}>
@@ -756,7 +756,7 @@
   </div>
 {/if}
 
-<PlanUpgradeModal bind:open={planUpgradeModalOpen}>
+<PlanUpgradeModal $user={$query.me} bind:open={planUpgradeModalOpen}>
   FULL ACCESS로 업그레이드하면
   <br />
   모든 프리미엄 기능을 무제한으로 사용할 수 있어요.

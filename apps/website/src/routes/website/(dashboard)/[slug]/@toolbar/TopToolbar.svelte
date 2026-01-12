@@ -32,10 +32,10 @@
   import type { Editor } from '@tiptap/core';
   import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { Ref } from '@typie/ui/utils';
-  import type { Editor_TopToolbar_site, Optional } from '$graphql';
+  import type { Editor_TopToolbar_site } from '$graphql';
 
   type Props = {
-    $site?: Optional<Editor_TopToolbar_site>;
+    $site: Editor_TopToolbar_site;
     editor?: Ref<Editor>;
     style?: SystemStyleObject;
   };
@@ -50,6 +50,7 @@
 
         user {
           id
+          ...Editor_TopToolbar_PanelTabButton_user
 
           subscription {
             id
@@ -297,11 +298,11 @@
   <VerticalDivider style={css.raw({ height: '[80%]', marginX: '12px' })} />
 
   <div class={flex({ alignItems: 'center', gap: '4px' })}>
-    <ToolbarPanelTabButton icon={InfoIcon} label="정보" tab="info" />
-    <ToolbarPanelTabButton icon={StickyNoteIcon} label="노트" tab="note" />
-    <ToolbarPanelTabButton icon={BookmarkIcon} label="북마크" tab="anchors" />
-    <ToolbarPanelTabButton icon={SpellCheckIcon} label="맞춤법" needPlanUpgrade={!$site?.user.subscription} tab="spellcheck" />
-    <ToolbarPanelTabButton icon={ClockFadingIcon} label="타임라인" tab="timeline" />
-    <ToolbarPanelTabButton icon={SettingsIcon} label="본문 설정" tab="settings" />
+    <ToolbarPanelTabButton $user={$site.user} icon={InfoIcon} label="정보" tab="info" />
+    <ToolbarPanelTabButton $user={$site.user} icon={StickyNoteIcon} label="노트" tab="note" />
+    <ToolbarPanelTabButton $user={$site.user} icon={BookmarkIcon} label="북마크" tab="anchors" />
+    <ToolbarPanelTabButton $user={$site.user} icon={SpellCheckIcon} label="맞춤법" needSubscription tab="spellcheck" />
+    <ToolbarPanelTabButton $user={$site.user} icon={ClockFadingIcon} label="타임라인" tab="timeline" />
+    <ToolbarPanelTabButton $user={$site.user} icon={SettingsIcon} label="본문 설정" tab="settings" />
   </div>
 </div>

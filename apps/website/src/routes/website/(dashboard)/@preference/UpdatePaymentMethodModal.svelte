@@ -13,6 +13,7 @@
   import { cardSchema } from '@/validation';
   import { fragment, graphql } from '$graphql';
   import { fb } from '$lib/analytics';
+  import SubscriptionCelebrationModal from '../SubscriptionCelebrationModal.svelte';
   import type { DashboardLayout_PreferenceModal_BillingTab_UpdatePaymentMethodModal_user } from '$graphql';
 
   type Props = {
@@ -74,6 +75,7 @@
 
   let interval = $state<PlanInterval>(PlanInterval.MONTHLY);
   let submitError = $state<string | null>(null);
+  let celebrationModalOpen = $state(false);
 
   const form = createForm({
     schema: z.object({
@@ -118,6 +120,7 @@
         }
 
         open = false;
+        celebrationModalOpen = true;
       }
     },
     onError: (error) => {
@@ -399,3 +402,9 @@
     </Button>
   </form>
 </Modal>
+
+<SubscriptionCelebrationModal
+  message="타이피의 모든 기능을 자유롭게 이용해보세요."
+  title="구독이 시작됐어요!"
+  bind:open={celebrationModalOpen}
+/>

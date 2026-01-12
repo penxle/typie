@@ -27,6 +27,7 @@
     graphql(`
       fragment Editor_BottomToolbar_FontFamily_user on User {
         id
+        ...DashboardLayout_PlanUpgradeModal_user
 
         fontFamilies {
           id
@@ -150,4 +151,4 @@
 </SearchableDropdown>
 
 <FontUploadModal userId={$user.id} bind:open={uploadModalOpen} />
-<PlanUpgradeModal bind:open={planUpgradeOpen}>폰트 업로드 기능은 FULL ACCESS 플랜에서 사용할 수 있어요.</PlanUpgradeModal>
+<PlanUpgradeModal {$user} bind:open={planUpgradeOpen}>폰트 업로드 기능은 FULL ACCESS 플랜에서 사용할 수 있어요.</PlanUpgradeModal>

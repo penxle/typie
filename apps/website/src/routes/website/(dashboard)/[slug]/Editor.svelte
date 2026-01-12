@@ -76,6 +76,7 @@
           role
 
           ...Editor_Panel_user
+          ...DashboardLayout_PlanUpgradeModal_user
         }
 
         entities(slugs: $slugs) {
@@ -1418,7 +1419,7 @@
     }
   }
 />
-<PlanUpgradeModal bind:open={planUpgradeModalOpen}>
+<PlanUpgradeModal $user={$query.me} bind:open={planUpgradeModalOpen}>
   FULL ACCESS로 업그레이드하면
   <br />
   모든 프리미엄 기능을 무제한으로 사용할 수 있어요.

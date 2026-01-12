@@ -5,21 +5,40 @@
   import { Icon } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import mixpanel from 'mixpanel-browser';
+  import { fragment, graphql } from '$graphql';
   import PlanUpgradeModal from '../../PlanUpgradeModal.svelte';
   import { getViewContext } from '../@split-view/context.svelte';
   import type { TooltipParameter } from '@typie/ui/actions';
   import type { AppPreference } from '@typie/ui/context';
   import type { Component } from 'svelte';
+  import type { Editor_TopToolbar_PanelTabButton_user } from '$graphql';
 
   type Props = {
     tab: AppPreference['panelTabByViewId'][string];
     label: string;
     icon: Component;
     keys?: TooltipParameter['keys'];
-    needPlanUpgrade?: boolean;
+    $user: Editor_TopToolbar_PanelTabButton_user;
+    needSubscription?: boolean;
   };
 
-  let { tab, label, icon, keys, needPlanUpgrade }: Props = $props();
+  let { tab, label, icon, keys, $user: _user, needSubscription }: Props = $props();
+
+  const user = fragment(
+    _user,
+    graphql(`
+      fragment Editor_TopToolbar_PanelTabButton_user on User {
+        id
+        ...DashboardLayout_PlanUpgradeModal_user
+
+        subscription {
+          id
+        }
+      }
+    `),
+  );
+
+  const needPlanUpgrade = $derived(needSubscription && !$user.subscription);
 
   let planUpgradeModalOpen = $state(false);
 
@@ -99,4 +118,6 @@
   {/if}
 </button>
 
-<PlanUpgradeModal bind:open={planUpgradeModalOpen}>{label} 기능은 FULL ACCESS 플랜에서 사용할 수 있어요.</PlanUpgradeModal>
+{#if $user}
+  <PlanUpgradeModal {$user} bind:open={planUpgradeModalOpen}>{label} 기능은 FULL ACCESS 플랜에서 사용할 수 있어요.</PlanUpgradeModal>
+{/if}

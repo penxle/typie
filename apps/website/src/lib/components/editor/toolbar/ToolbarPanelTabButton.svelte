@@ -5,20 +5,42 @@
   import { Icon } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import mixpanel from 'mixpanel-browser';
+  import { fragment, graphql } from '$graphql';
   import { getViewContext } from '../../../../routes/website/(dashboard)/[slug]/@split-view/context.svelte';
+  import PlanUpgradeModal from '../../../../routes/website/(dashboard)/PlanUpgradeModal.svelte';
   import type { TooltipParameter } from '@typie/ui/actions';
   import type { AppPreference } from '@typie/ui/context';
   import type { Component } from 'svelte';
+  import type { DocumentEditor_TopToolbar_PanelTabButton_user } from '$graphql';
 
   type Props = {
     tab: AppPreference['panelTabByViewId'][string];
     label: string;
     icon: Component;
     keys?: TooltipParameter['keys'];
-    disabled?: boolean;
+    $user: DocumentEditor_TopToolbar_PanelTabButton_user;
+    needSubscription?: boolean;
   };
 
-  let { tab, label, icon, keys, disabled = false }: Props = $props();
+  let { tab, label, icon, keys, $user: _user, needSubscription }: Props = $props();
+
+  const user = fragment(
+    _user,
+    graphql(`
+      fragment DocumentEditor_TopToolbar_PanelTabButton_user on User {
+        id
+        ...DashboardLayout_PlanUpgradeModal_user
+
+        subscription {
+          id
+        }
+      }
+    `),
+  );
+
+  const needPlanUpgrade = $derived(needSubscription && !$user.subscription);
+
+  let planUpgradeModalOpen = $state(false);
 
   const app = getAppContext();
 
@@ -45,9 +67,12 @@
     _disabled: { opacity: '50' },
   })}
   aria-expanded={isExpanded && isTab}
-  {disabled}
   onclick={() => {
-    if (disabled) return;
+    if (needPlanUpgrade) {
+      planUpgradeModalOpen = true;
+      mixpanel.track('open_plan_upgrade_modal', { via: 'panel_tab_button', tab });
+      return;
+    }
 
     if (isExpanded) {
       if (isTab) {
@@ -93,3 +118,7 @@
     <span class={css({ fontSize: '11px', whiteSpace: 'nowrap' })}>{label}</span>
   {/if}
 </button>
+
+{#if $user}
+  <PlanUpgradeModal {$user} bind:open={planUpgradeModalOpen}>{label} 기능은 FULL ACCESS 플랜에서 사용할 수 있어요.</PlanUpgradeModal>
+{/if}

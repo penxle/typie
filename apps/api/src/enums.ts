@@ -86,6 +86,7 @@ export type PlanAvailability = keyof typeof PlanAvailability;
 export const PlanAvailability = {
   BILLING_KEY: 'BILLING_KEY',
   IN_APP_PURCHASE: 'IN_APP_PURCHASE',
+  TRIAL: 'TRIAL',
   MANUAL: 'MANUAL',
 } as const;
 
@@ -93,6 +94,7 @@ export type PlanInterval = keyof typeof PlanInterval;
 export const PlanInterval = {
   MONTHLY: 'MONTHLY',
   YEARLY: 'YEARLY',
+  TRIAL: 'TRIAL',
   LIFETIME: 'LIFETIME',
 } as const;
 

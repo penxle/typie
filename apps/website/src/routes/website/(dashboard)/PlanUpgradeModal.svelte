@@ -1,8 +1,11 @@
 <script lang="ts">
+  import { cache } from '@typie/sark/internal';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Button, HorizontalDivider, Icon, Modal } from '@typie/ui/components';
   import { PLAN_FEATURES } from '@typie/ui/constants';
+  import { Dialog } from '@typie/ui/notification';
+  import mixpanel from 'mixpanel-browser';
   import ArrowRightIcon from '~icons/lucide/arrow-right';
   import CrownIcon from '~icons/lucide/crown';
   import GiftIcon from '~icons/lucide/gift';
@@ -10,14 +13,55 @@
   import StarIcon from '~icons/lucide/star';
   import TagIcon from '~icons/lucide/tag';
   import { pushState } from '$app/navigation';
+  import { fragment, graphql } from '$graphql';
+  import SubscriptionCelebrationModal from './SubscriptionCelebrationModal.svelte';
   import type { Snippet } from 'svelte';
+  import type { DashboardLayout_PlanUpgradeModal_user } from '$graphql';
 
   type Props = {
     open: boolean;
+    $user: DashboardLayout_PlanUpgradeModal_user;
     children?: Snippet;
   };
 
-  let { open = $bindable(false), children }: Props = $props();
+  let { open = $bindable(false), $user: _user, children }: Props = $props();
+
+  const user = fragment(
+    _user,
+    graphql(`
+      fragment DashboardLayout_PlanUpgradeModal_user on User {
+        id
+
+        trial {
+          id
+        }
+
+        subscription {
+          id
+        }
+      }
+    `),
+  );
+
+  const subscribePlanWithTrial = graphql(`
+    mutation DashboardLayout_PlanUpgradeModal_SubscribePlanWithTrial_Mutation {
+      subscribePlanWithTrial {
+        id
+        state
+        expiresAt
+
+        plan {
+          id
+          name
+          availability
+        }
+      }
+    }
+  `);
+
+  const canStartTrial = $derived(!$user.trial && !$user.subscription);
+
+  let trialStartedModalOpen = $state(false);
 </script>
 
 <Modal
@@ -109,25 +153,58 @@
     </ul>
   </div>
 
-  <Button
-    style={css.raw({ marginTop: '32px', width: 'full', height: '40px' })}
-    gradient
-    onclick={() => {
-      open = false;
-      pushState('', { shallowRoute: '/preference/billing' });
-    }}
-  >
-    <div class={flex({ alignItems: 'center', gap: '4px' })}>
-      <span>업그레이드</span>
+  <div class={flex({ flexDirection: 'column', gap: '8px', marginTop: '32px', width: 'full' })}>
+    {#if canStartTrial}
+      <Button
+        style={css.raw({ width: 'full', height: '40px' })}
+        gradient
+        onclick={() => {
+          Dialog.confirm({
+            title: '무료 체험을 시작하시겠어요?',
+            message: '결제 수단 등록 없이 2주간 타이피의 모든 기능을 무료로 이용할 수 있어요. 체험 종료 후 자동 결제되지 않아요.',
+            actionLabel: '시작하기',
+            actionHandler: async () => {
+              await subscribePlanWithTrial();
+              cache.invalidate({ __typename: 'User', id: $user.id, field: 'subscription' });
+              cache.invalidate({ __typename: 'User', id: $user.id, field: 'trial' });
+              mixpanel.track('start_trial');
+              open = false;
+              trialStartedModalOpen = true;
+            },
+          });
+        }}
+      >
+        <div class={flex({ alignItems: 'center', gap: '4px' })}>
+          <span>2주 무료 체험하기</span>
 
-      <Icon
-        style={css.raw({
-          transition: 'transform',
-          _groupHover: { transform: 'translateX(2px)' },
-        })}
-        icon={ArrowRightIcon}
-        size={16}
-      />
-    </div>
-  </Button>
+          <Icon
+            style={css.raw({
+              transition: 'transform',
+              _groupHover: { transform: 'translateX(2px)' },
+            })}
+            icon={ArrowRightIcon}
+            size={16}
+          />
+        </div>
+      </Button>
+    {/if}
+
+    <Button
+      style={css.raw({ width: 'full', height: '40px' })}
+      gradient={!canStartTrial}
+      onclick={() => {
+        open = false;
+        pushState('', { shallowRoute: '/preference/billing' });
+      }}
+      variant={canStartTrial ? 'secondary' : undefined}
+    >
+      업그레이드
+    </Button>
+  </div>
 </Modal>
+
+<SubscriptionCelebrationModal
+  message="2주간 타이피의 모든 기능을 자유롭게 이용해보세요."
+  title="무료 체험이 시작됐어요!"
+  bind:open={trialStartedModalOpen}
+/>

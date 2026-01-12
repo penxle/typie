@@ -344,6 +344,13 @@
       "when": 1768041043898,
       "tag": "0048_cold_moon_knight",
       "breakpoints": false
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1768220343563,
+      "tag": "0049_absurd_hitman",
+      "breakpoints": false
     }
   ]
 }

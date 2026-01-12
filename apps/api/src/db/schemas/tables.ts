@@ -808,6 +808,24 @@ export const UserRevenues = pgTable('user_revenues', {
     .default(sql`now()`),
 });
 
+export const UserTrials = pgTable('user_trials', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => createDbId(TableCode.USER_TRIALS)),
+  userId: text('user_id')
+    .notNull()
+    .unique()
+    .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+  subscriptionId: text('subscription_id')
+    .notNull()
+    .references(() => Subscriptions.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+  startedAt: datetime('started_at').notNull(),
+  expiresAt: datetime('expires_at').notNull(),
+  createdAt: datetime('created_at')
+    .notNull()
+    .default(sql`now()`),
+});
+
 export const UserPersonalIdentities = pgTable('user_personal_identities', {
   id: text('id')
     .primaryKey()
