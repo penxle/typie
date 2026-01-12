@@ -13,8 +13,8 @@ import 'package:in_app_purchase_android/in_app_purchase_android.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:typie/constants/plan_features.dart';
+import 'package:typie/context/bottom_sheet.dart';
 import 'package:typie/context/loader.dart';
-import 'package:typie/context/modal.dart';
 import 'package:typie/context/theme.dart';
 import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
 import 'package:typie/graphql/widget.dart';
@@ -23,6 +23,8 @@ import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/logger.dart';
 import 'package:typie/screens/enroll_plan/__generated__/screen_query.req.gql.dart';
 import 'package:typie/screens/enroll_plan/__generated__/subscribe_or_change_plan_with_in_app_purchase_mutation.req.gql.dart';
+import 'package:typie/screens/enroll_plan/__generated__/subscribe_plan_with_trial_mutation.req.gql.dart';
+import 'package:typie/screens/enroll_plan/subscription_celebration_bottom_sheet.dart';
 import 'package:typie/screens/profile/__generated__/profile_query.req.gql.dart';
 import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/horizontal_divider.dart';
@@ -94,8 +96,11 @@ class EnrollPlanScreen extends HookWidget {
                     );
 
                     if (context.mounted) {
-                      await context.showModal(
-                        child: const AlertModal(title: '구독이 완료되었어요', message: '타이피의 모든 기능을 이용해보세요!'),
+                      await context.showBottomSheet(
+                        child: const SubscriptionCelebrationBottomSheet(
+                          title: '구독이 시작됐어요!',
+                          message: '타이피의 모든 기능을 자유롭게 이용해보세요.',
+                        ),
                       );
                     }
                   }
@@ -112,6 +117,9 @@ class EnrollPlanScreen extends HookWidget {
 
             return subscription.cancel;
           }, []);
+
+          final isOnTrial = data.me!.subscription?.plan.availability == GPlanAvailability.TRIAL;
+          final canStartTrial = data.me!.canStartTrial;
 
           return Column(
             spacing: 12,
@@ -160,7 +168,32 @@ class EnrollPlanScreen extends HookWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          const Text('타이피 FULL ACCESS', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                          Row(
+                            children: [
+                              const Text(
+                                '타이피 FULL ACCESS',
+                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                              ),
+                              if (isOnTrial) ...[
+                                const Gap(8),
+                                Container(
+                                  padding: const Pad(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: context.colors.accentBrand.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    '무료 체험 중',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: context.colors.accentBrand,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
                           const Gap(12),
                           HorizontalDivider(color: context.colors.borderStrong),
                           const Gap(12),
@@ -179,6 +212,35 @@ class EnrollPlanScreen extends HookWidget {
                       child: Column(
                         spacing: 12,
                         children: [
+                          if (canStartTrial)
+                            _TrialButton(
+                              onTap: () async {
+                                await context.showBottomSheet(
+                                  child: ConfirmBottomSheet(
+                                    title: '무료 체험을 시작하시겠어요?',
+                                    message: '결제 수단 등록 없이 2주간 타이피의 모든 기능을 무료로 이용할 수 있어요. 체험 종료 후 자동 결제되지 않아요.',
+                                    confirmText: '시작하기',
+                                    onConfirm: () async {
+                                      await context.runWithLoader(() async {
+                                        await client.request(GEnrollPlanScreen_SubscribePlanWithTrial_MutationReq());
+                                        await client.refetch(GEnrollPlanScreen_QueryReq());
+                                        await client.refetch(GProfileScreen_QueryReq());
+                                        unawaited(mixpanel.track('start_trial'));
+                                      });
+
+                                      if (context.mounted) {
+                                        await context.showBottomSheet(
+                                          child: const SubscriptionCelebrationBottomSheet(
+                                            title: '무료 체험이 시작됐어요!',
+                                            message: '2주간 타이피의 모든 기능을 자유롭게 이용해보세요.',
+                                          ),
+                                        );
+                                      }
+                                    },
+                                  ),
+                                );
+                              },
+                            ),
                           _PurchaseButton(
                             label: '1개월 구독하기',
                             product: productDetailsMap.data?[PlanInterval.monthly],
@@ -283,6 +345,34 @@ class _PurchaseButton extends HookWidget {
               const Gap(4),
               const Icon(LucideLightIcons.chevron_right, size: 16),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TrialButton extends StatelessWidget {
+  const _TrialButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tappable(
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(color: context.colors.surfaceInverse, borderRadius: BorderRadius.circular(8)),
+        padding: const Pad(all: 12),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          spacing: 6,
+          children: [
+            Icon(LucideLightIcons.zap, size: 16, color: context.colors.textInverse),
+            Text(
+              '2주 무료 체험하기',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: context.colors.textInverse),
+            ),
           ],
         ),
       ),

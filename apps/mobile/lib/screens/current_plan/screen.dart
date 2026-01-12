@@ -56,20 +56,27 @@ class CurrentPlanScreen extends StatelessWidget {
                       const Gap(4),
                       Text(data.me!.subscription!.plan.name, style: const TextStyle(fontWeight: FontWeight.w600)),
                       const Gap(8),
-                      Text(
-                        '이용권 가격: ${data.me!.subscription!.plan.fee.comma}원',
-                        style: TextStyle(fontSize: 14, color: context.colors.textFaint),
-                      ),
-                      if (data.me!.subscription!.state == GSubscriptionState.ACTIVE)
+                      if (data.me!.subscription!.plan.availability == GPlanAvailability.TRIAL)
                         Text(
-                          '다음 결제일: ${data.me!.subscription!.expiresAt.toLocal().yyyyMMdd}',
+                          '무료 체험이 ${data.me!.subscription!.expiresAt.toLocal().yyyyMMdd}에 종료돼요.',
+                          style: TextStyle(fontSize: 14, color: context.colors.textFaint),
+                        )
+                      else ...[
+                        Text(
+                          '이용권 가격: ${data.me!.subscription!.plan.fee.comma}원',
                           style: TextStyle(fontSize: 14, color: context.colors.textFaint),
                         ),
-                      if (data.me!.subscription!.state == GSubscriptionState.WILL_EXPIRE)
-                        Text(
-                          '해지 예정일: ${data.me!.subscription!.expiresAt.toLocal().yyyyMMdd}',
-                          style: TextStyle(fontSize: 14, color: context.colors.textFaint),
-                        ),
+                        if (data.me!.subscription!.state == GSubscriptionState.ACTIVE)
+                          Text(
+                            '다음 결제일: ${data.me!.subscription!.expiresAt.toLocal().yyyyMMdd}',
+                            style: TextStyle(fontSize: 14, color: context.colors.textFaint),
+                          ),
+                        if (data.me!.subscription!.state == GSubscriptionState.WILL_EXPIRE)
+                          Text(
+                            '해지 예정일: ${data.me!.subscription!.expiresAt.toLocal().yyyyMMdd}',
+                            style: TextStyle(fontSize: 14, color: context.colors.textFaint),
+                          ),
+                      ],
                     ],
                   ),
                 ),
@@ -117,6 +124,32 @@ class CurrentPlanScreen extends StatelessWidget {
                     child: Text(
                       '정보 변경을 할 수 없는 이용권이에요.\n정보 변경이 필요할 경우 고객센터에 문의해주세요.',
                       style: TextStyle(fontSize: 14, color: context.colors.textFaint),
+                    ),
+                  )
+                else if (data.me!.subscription!.plan.availability == GPlanAvailability.TRIAL)
+                  Padding(
+                    padding: const Pad(all: 16),
+                    child: Tappable(
+                      onTap: () async {
+                        await context.router.push(const EnrollPlanRoute());
+                      },
+                      child: Container(
+                        padding: const Pad(vertical: 12),
+                        decoration: BoxDecoration(
+                          color: context.colors.surfaceInverse,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Center(
+                          child: Text(
+                            '지금 업그레이드',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: context.colors.textInverse,
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
                   ),
               ],

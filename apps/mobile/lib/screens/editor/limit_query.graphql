@@ -1,7 +1,6 @@
-query EnrollPlanScreen_Query {
+query LimitBottomSheet_Query {
   me {
     id
-    uuid
 
     canStartTrial
 

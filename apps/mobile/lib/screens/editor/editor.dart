@@ -15,6 +15,7 @@ import 'package:typie/env.dart';
 import 'package:typie/extensions/jiffy.dart';
 import 'package:typie/extensions/num.dart';
 import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
+import 'package:typie/graphql/client.dart';
 import 'package:typie/graphql/widget.dart';
 import 'package:typie/hooks/async_effect.dart';
 import 'package:typie/hooks/service.dart';
@@ -61,6 +62,7 @@ class Editor extends HookWidget {
     useAutomaticKeepAlive();
 
     final auth = useService<Auth>();
+    final client = useService<GraphQLClient>();
     final keyboard = useService<Keyboard>();
     final pref = useService<Pref>();
     final state = useService<AppState>();
@@ -146,7 +148,22 @@ class Editor extends HookWidget {
           case 'limitExceeded':
             await webViewController.clearFocus();
             if (context.mounted) {
-              await context.showBottomSheet(intercept: true, child: const LimitBottomSheet());
+              final trialStarted = await context.showBottomSheet<bool>(
+                intercept: true,
+                child: const LimitBottomSheet(),
+              );
+
+              if (trialStarted ?? false) {
+                unawaited(
+                  client.refetch(
+                    GEditorScreen_QueryReq(
+                      (b) => b
+                        ..vars.slug = slug
+                        ..vars.siteId = pref.siteId,
+                    ),
+                  ),
+                );
+              }
             }
           case 'useTemplate':
             await webViewController.clearFocus();
@@ -237,7 +254,7 @@ class Editor extends HookWidget {
       onLoaded: (data) {
         scope.data.value = data;
       },
-      builder: (context, client, data) {
+      builder: (context, _, data) {
         return Screen(
           heading: Heading(
             titleIcon: data.post.type == GPostType.NORMAL ? LucideLabIcons.text_square : LucideLightIcons.shapes,
@@ -316,10 +333,22 @@ class Editor extends HookWidget {
                             label: '맞춤법 검사',
                             onTap: () async {
                               if (data.me!.subscription == null) {
-                                await context.showBottomSheet(
+                                final trialStarted = await context.showBottomSheet<bool>(
                                   intercept: true,
                                   child: const LimitBottomSheet(type: LimitBottomSheetType.spellCheck),
                                 );
+
+                                if (trialStarted ?? false) {
+                                  unawaited(
+                                    client.refetch(
+                                      GEditorScreen_QueryReq(
+                                        (b) => b
+                                          ..vars.slug = slug
+                                          ..vars.siteId = pref.siteId,
+                                      ),
+                                    ),
+                                  );
+                                }
 
                                 return;
                               }
