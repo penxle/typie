@@ -102,6 +102,28 @@ User.implement({
       },
     }),
 
+    canStartTrial: t.boolean({
+      resolve: async (self) => {
+        const existingTrial = await db.select({ id: UserTrials.id }).from(UserTrials).where(eq(UserTrials.userId, self.id)).then(first);
+
+        if (existingTrial) {
+          return false;
+        }
+
+        const subscriptionHistory = await db
+          .select({ id: Subscriptions.id })
+          .from(Subscriptions)
+          .where(eq(Subscriptions.userId, self.id))
+          .then(first);
+
+        if (subscriptionHistory) {
+          return false;
+        }
+
+        return true;
+      },
+    }),
+
     uuid: t.string({
       // just a randomly-picked uuid for namespace
       resolve: (self) => uuid.v5(self.id, '1d394eb5-c61c-4c49-944e-05c9f9435adf'),
