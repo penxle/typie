@@ -16,8 +16,8 @@ export type PlanFeature = {
 
 export const PLAN_FEATURES: Record<'basic' | 'full', PlanFeature[]> = {
   basic: [
-    { icon: TypeIcon, label: '총 16,000자의 글자 작성' },
-    { icon: ImagesIcon, label: '총 20MB의 파일 업로드' },
+    { icon: TypeIcon, label: '총 200,000자의 글자 작성' },
+    { icon: ImagesIcon, label: '총 100MB의 파일 업로드' },
   ],
   full: [
     { icon: TypeIcon, label: '무제한 글자 수' },

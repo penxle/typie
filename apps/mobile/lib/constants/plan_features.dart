@@ -9,8 +9,8 @@ class PlanFeature {
 }
 
 const basicPlanFeatures = <PlanFeature>[
-  PlanFeature(icon: LucideLightIcons.book_open_text, label: '16,000자까지 작성 가능'),
-  PlanFeature(icon: LucideLightIcons.images, label: '20MB까지 파일 업로드 가능'),
+  PlanFeature(icon: LucideLightIcons.book_open_text, label: '200,000자까지 작성 가능'),
+  PlanFeature(icon: LucideLightIcons.images, label: '100MB까지 파일 업로드 가능'),
 ];
 
 const fullPlanFeatures = <PlanFeature>[
