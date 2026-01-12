@@ -21,10 +21,11 @@
   type Props = {
     open: boolean;
     $user: DashboardLayout_PlanUpgradeModal_user;
+    title?: string;
     children?: Snippet;
   };
 
-  let { open = $bindable(false), $user: _user, children }: Props = $props();
+  let { open = $bindable(false), $user: _user, title = '플랜 업그레이드가 필요해요', children }: Props = $props();
 
   const user = fragment(
     _user,
@@ -109,7 +110,7 @@
   </div>
 
   <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '8px', marginTop: '16px', textAlign: 'center' })}>
-    <div class={css({ fontSize: '18px', fontWeight: 'bold' })}>플랜 업그레이드가 필요해요</div>
+    <div class={css({ fontSize: '18px', fontWeight: 'bold' })}>{title}</div>
 
     <div class={css({ fontSize: '13px', color: 'text.faint' })}>
       {@render children?.()}
