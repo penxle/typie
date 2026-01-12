@@ -584,6 +584,7 @@ type Mutation {
   sendSignUpEmail(input: SendSignUpEmailInput!): Boolean!
   subscribeOrChangePlanWithInAppPurchase(input: SubscribeOrChangePlanWithInAppPurchaseInput!): Subscription_!
   subscribePlanWithBillingKey(input: SubscribePlanWithBillingKeyInput!): Subscription_!
+  subscribePlanWithTrial: Subscription_!
   syncDocument(input: SyncDocumentInput!): Boolean!
   syncPost(input: SyncPostInput!): Boolean!
   unfurlEmbed(input: UnfurlEmbedInput!): Embed!
@@ -677,11 +678,13 @@ enum PlanAvailability {
   BILLING_KEY
   IN_APP_PURCHASE
   MANUAL
+  TRIAL
 }
 
 enum PlanInterval {
   LIFETIME
   MONTHLY
+  TRIAL
   YEARLY
 }
 
@@ -1205,6 +1208,7 @@ type User {
   subscription: Subscription_
   surveys: [String!]!
   totalCharacterCount: Int!
+  trial: UserTrial
   usage: UserUsage!
   uuid: String!
 }
@@ -1238,6 +1242,12 @@ type UserSingleSignOn {
 enum UserState {
   ACTIVE
   DEACTIVATED
+}
+
+type UserTrial {
+  expiresAt: DateTime!
+  id: ID!
+  startedAt: DateTime!
 }
 
 type UserUsage {

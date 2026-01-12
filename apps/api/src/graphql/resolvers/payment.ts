@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import dayjs from 'dayjs';
 import { and, eq, gt, inArray, ne, sql } from 'drizzle-orm';
-import { defaultPlanRules } from '@/const';
+import { defaultPlanRules, PlanId, TRIAL_DURATION_DAYS } from '@/const';
 import {
   CreditCodes,
   db,
@@ -19,6 +19,7 @@ import {
   UserBillingKeys,
   UserInAppPurchases,
   UserRevenues,
+  UserTrials,
   validateDbId,
 } from '@/db';
 import { CreditCodeState, InAppPurchaseStore, PaymentInvoiceState, PlanAvailability, PlanInterval, SubscriptionState } from '@/enums';
@@ -30,7 +31,7 @@ import { getSubscriptionExpiresAt, payAmountWithBillingKey, payInvoiceWithBillin
 import { delay } from '@/utils/promise';
 import { cardSchema, redeemCodeSchema } from '@/validation';
 import { builder } from '../builder';
-import { CreditCode, isTypeOf, PaymentInvoice, Plan, PlanRule, Subscription, User, UserBillingKey } from '../objects';
+import { CreditCode, isTypeOf, PaymentInvoice, Plan, PlanRule, Subscription, User, UserBillingKey, UserTrial } from '../objects';
 
 /**
  * * Types
@@ -85,6 +86,15 @@ Subscription.implement({
   }),
 });
 
+UserTrial.implement({
+  isTypeOf: isTypeOf(TableCode.USER_TRIALS),
+  fields: (t) => ({
+    id: t.exposeID('id'),
+    startedAt: t.expose('startedAt', { type: 'DateTime' }),
+    expiresAt: t.expose('expiresAt', { type: 'DateTime' }),
+  }),
+});
+
 /**
  * * Queries
  */
@@ -119,6 +129,57 @@ builder.queryFields((t) => ({
  */
 
 builder.mutationFields((t) => ({
+  subscribePlanWithTrial: t.withAuth({ session: true }).field({
+    type: Subscription,
+    resolve: async (_, __, ctx) => {
+      const subscriptionHistory = await db
+        .select({ id: Subscriptions.id })
+        .from(Subscriptions)
+        .where(eq(Subscriptions.userId, ctx.session.userId))
+        .then(first);
+
+      if (subscriptionHistory) {
+        throw new TypieError({ code: 'subscription_history_exists' });
+      }
+
+      const existingTrial = await db
+        .select({ id: UserTrials.id })
+        .from(UserTrials)
+        .where(eq(UserTrials.userId, ctx.session.userId))
+        .then(first);
+
+      if (existingTrial) {
+        throw new TypieError({ code: 'trial_already_used' });
+      }
+
+      const startsAt = dayjs();
+      const expiresAt = startsAt.add(TRIAL_DURATION_DAYS, 'days');
+
+      return await db.transaction(async (tx) => {
+        const subscription = await tx
+          .insert(Subscriptions)
+          .values({
+            userId: ctx.session.userId,
+            planId: PlanId.FULL_ACCESS_TRIAL,
+            startsAt,
+            expiresAt,
+            state: SubscriptionState.WILL_EXPIRE,
+          })
+          .returning()
+          .then(firstOrThrow);
+
+        await tx.insert(UserTrials).values({
+          userId: ctx.session.userId,
+          subscriptionId: subscription.id,
+          startedAt: startsAt,
+          expiresAt,
+        });
+
+        return subscription;
+      });
+    },
+  }),
+
   updateBillingKey: t.withAuth({ session: true }).fieldWithInput({
     type: UserBillingKey,
     input: {
@@ -175,12 +236,13 @@ builder.mutationFields((t) => ({
     input: { planId: t.input.id({ validate: validateDbId(TableCode.PLANS) }) },
     resolve: async (_, { input }, ctx) => {
       const existingSubscription = await db
-        .select({ id: Subscriptions.id })
+        .select({ id: Subscriptions.id, planAvailability: Plans.availability, state: Subscriptions.state })
         .from(Subscriptions)
+        .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
         .where(and(eq(Subscriptions.userId, ctx.session.userId), ne(Subscriptions.state, SubscriptionState.EXPIRED)))
         .then(first);
 
-      if (existingSubscription) {
+      if (existingSubscription && existingSubscription.planAvailability !== PlanAvailability.TRIAL) {
         throw new TypieError({ code: 'subscription_already_exists' });
       }
 
@@ -194,6 +256,10 @@ builder.mutationFields((t) => ({
       const expiresAt = getSubscriptionExpiresAt(startsAt, plan.interval);
 
       return await db.transaction(async (tx) => {
+        if (existingSubscription) {
+          await tx.update(Subscriptions).set({ state: SubscriptionState.EXPIRED }).where(eq(Subscriptions.id, existingSubscription.id));
+        }
+
         const subscription = await tx
           .insert(Subscriptions)
           .values({
@@ -319,6 +385,7 @@ builder.mutationFields((t) => ({
             eq(Subscriptions.userId, ctx.session.userId),
             ne(Subscriptions.state, SubscriptionState.EXPIRED),
             ne(Plans.availability, PlanAvailability.IN_APP_PURCHASE),
+            ne(Plans.availability, PlanAvailability.TRIAL),
           ),
         )
         .then(first);
@@ -326,6 +393,19 @@ builder.mutationFields((t) => ({
       if (existingSubscription) {
         throw new TypieError({ code: 'subscription_already_exists' });
       }
+
+      const trialSubscription = await db
+        .select({ id: Subscriptions.id })
+        .from(Subscriptions)
+        .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
+        .where(
+          and(
+            eq(Subscriptions.userId, ctx.session.userId),
+            ne(Subscriptions.state, SubscriptionState.EXPIRED),
+            eq(Plans.availability, PlanAvailability.TRIAL),
+          ),
+        )
+        .then(first);
 
       let identifier: string;
       let planId: string;
@@ -374,6 +454,10 @@ builder.mutationFields((t) => ({
         .then(firstOrThrow);
 
       return await db.transaction(async (tx) => {
+        if (trialSubscription) {
+          await tx.update(Subscriptions).set({ state: SubscriptionState.EXPIRED }).where(eq(Subscriptions.id, trialSubscription.id));
+        }
+
         await tx
           .insert(UserInAppPurchases)
           .values({

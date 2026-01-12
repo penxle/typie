@@ -36,6 +36,7 @@ import {
   UserSessions,
   UserSingleSignOns,
   UserSurveys,
+  UserTrials,
   validateDbId,
 } from '@/db';
 import { sendEmail } from '@/email';
@@ -75,6 +76,7 @@ import {
   UserBillingKey,
   UserPersonalIdentity,
   UserSingleSignOn,
+  UserTrial,
 } from '../objects';
 
 /**
@@ -91,6 +93,14 @@ User.implement({
     role: t.expose('role', { type: UserRole }),
     state: t.expose('state', { type: UserState }),
     createdAt: t.expose('createdAt', { type: 'DateTime' }),
+
+    trial: t.field({
+      type: UserTrial,
+      nullable: true,
+      resolve: async (self) => {
+        return await db.select().from(UserTrials).where(eq(UserTrials.userId, self.id)).then(first);
+      },
+    }),
 
     uuid: t.string({
       // just a randomly-picked uuid for namespace

@@ -72,6 +72,7 @@ export const User = createObjectRef('User', T.Users);
 export const UserBillingKey = createObjectRef('UserBillingKey', T.UserBillingKeys);
 export const UserPersonalIdentity = createObjectRef('UserPersonalIdentity', T.UserPersonalIdentities);
 export const UserSingleSignOn = createObjectRef('UserSingleSignOn', T.UserSingleSignOns);
+export const UserTrial = createObjectRef('UserTrial', T.UserTrials);
 export const Widget = createObjectRef('Widget', T.Widgets);
 
 export const DocumentView = createObjectRef('DocumentView', T.Documents);

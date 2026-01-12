@@ -47,5 +47,6 @@ export const TableCode = {
   USER_SESSIONS: 'USES',
   USER_SINGLE_SIGN_ONS: 'USSO',
   USER_SURVEYS: 'USVY',
+  USER_TRIALS: 'UTRL',
   WIDGETS: 'WDGT',
 } as const;

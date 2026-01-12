@@ -8,9 +8,10 @@
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
   import { PlanPair } from '@/const';
-  import { PlanInterval, SubscriptionState } from '@/enums';
+  import { PlanAvailability, PlanInterval, SubscriptionState } from '@/enums';
   import { fragment, graphql } from '$graphql';
   import { SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
+  import SubscriptionCelebrationModal from '../SubscriptionCelebrationModal.svelte';
   import RedeemCreditCodeModal from './RedeemCreditCodeModal.svelte';
   import SubscriptionCancellationSurveyModal from './SubscriptionCancellationSurveyModal.svelte';
   import UpdatePaymentMethodModal from './UpdatePaymentMethodModal.svelte';
@@ -31,6 +32,10 @@
         ...DashboardLayout_PreferenceModal_BillingTab_UpdatePaymentMethodModal_user
         ...DashboardLayout_PreferenceModal_BillingTab_SubscriptionCancellationSurveyModal_user
 
+        trial {
+          id
+        }
+
         billingKey {
           id
           name
@@ -47,6 +52,7 @@
             name
             fee
             interval
+            availability
           }
         }
 
@@ -66,6 +72,8 @@
       }
     `),
   );
+
+  const isTrial = $derived($user.subscription?.plan.availability === PlanAvailability.TRIAL);
 
   const scheduleSubscriptionCancellation = graphql(`
     mutation DashboardLayout_PreferenceModal_BillingTab_ScheduleSubscriptionCancellation_Mutation {
@@ -121,9 +129,28 @@
     }
   `);
 
+  const subscribePlanWithTrial = graphql(`
+    mutation DashboardLayout_PreferenceModal_BillingTab_SubscribePlanWithTrial_Mutation {
+      subscribePlanWithTrial {
+        id
+        state
+        expiresAt
+
+        plan {
+          id
+          name
+          availability
+        }
+      }
+    }
+  `);
+
+  const canStartTrial = $derived(!$user.trial && !$user.subscription);
+
   let updatePaymentMethodOpen = $state(false);
   let redeemCreditCodeOpen = $state(false);
   let cancellationSurveyOpen = $state(false);
+  let trialStartedModalOpen = $state(false);
 
   async function handleCancellationSurveySubmit(surveyData: unknown) {
     await recordSurvey({
@@ -157,7 +184,33 @@
             타이피의 기본 기능을 무료로 이용할 수 있어요.
           {/snippet}
           {#snippet value()}
-            <Button onclick={() => (updatePaymentMethodOpen = true)} size="sm" variant="secondary">업그레이드</Button>
+            <div class={flex({ gap: '8px' })}>
+              {#if canStartTrial}
+                <Button
+                  onclick={() => {
+                    Dialog.confirm({
+                      title: '무료 체험을 시작하시겠어요?',
+                      message: '결제 수단 등록 없이 2주간 타이피의 모든 기능을 무료로 이용할 수 있어요. 체험 종료 후 자동 결제되지 않아요.',
+                      actionLabel: '시작하기',
+                      actionHandler: async () => {
+                        await subscribePlanWithTrial();
+                        cache.invalidate({ __typename: 'User', id: $user.id, field: 'subscription' });
+                        cache.invalidate({ __typename: 'User', id: $user.id, field: 'trial' });
+                        mixpanel.track('start_trial');
+                        trialStartedModalOpen = true;
+                      },
+                    });
+                  }}
+                  size="sm"
+                  variant="primary"
+                >
+                  2주 무료 체험하기
+                </Button>
+              {/if}
+              <Button onclick={() => (updatePaymentMethodOpen = true)} size="sm" variant={canStartTrial ? 'secondary' : 'primary'}>
+                업그레이드
+              </Button>
+            </div>
           {/snippet}
         </SettingsRow>
       </SettingsCard>
@@ -169,7 +222,11 @@
             {subscription.plan.name} 플랜
           {/snippet}
           {#snippet description()}
-            {#if subscription.state === SubscriptionState.ACTIVE}
+            {#if isTrial}
+              <span>
+                무료 체험이 {dayjs(subscription.expiresAt).formatAsDate()}에 종료돼요.
+              </span>
+            {:else if subscription.state === SubscriptionState.ACTIVE}
               <span>
                 {dayjs(subscription.expiresAt).formatAsDate()}에 {comma(subscription.plan.fee)}원 결제 예정
               </span>
@@ -229,33 +286,47 @@
         {#if subscription.state === SubscriptionState.WILL_EXPIRE && !$user.nextSubscription}
           <SettingsDivider />
 
-          <SettingsRow>
-            {#snippet label()}
-              구독 재개
-            {/snippet}
-            {#snippet description()}
-              해지를 취소하고 다음 결제일부터 자동 갱신을 계속해요.
-            {/snippet}
-            {#snippet value()}
-              <Button
-                onclick={() => {
-                  Dialog.confirm({
-                    title: '구독 해지를 취소하시겠어요?',
-                    message: '구독이 계속 유지되며, 다음 결제일에 자동으로 결제돼요.',
-                    actionLabel: '해지 취소',
-                    actionHandler: async () => {
-                      await cancelSubscriptionCancellation();
-                      mixpanel.track('resume_subscription');
-                    },
-                  });
-                }}
-                size="sm"
-                variant="secondary"
-              >
-                해지 취소
-              </Button>
-            {/snippet}
-          </SettingsRow>
+          {#if isTrial}
+            <SettingsRow>
+              {#snippet label()}
+                업그레이드
+              {/snippet}
+              {#snippet description()}
+                결제 수단을 등록하고 유료 플랜으로 업그레이드하세요.
+              {/snippet}
+              {#snippet value()}
+                <Button onclick={() => (updatePaymentMethodOpen = true)} size="sm" variant="primary">지금 업그레이드</Button>
+              {/snippet}
+            </SettingsRow>
+          {:else}
+            <SettingsRow>
+              {#snippet label()}
+                구독 재개
+              {/snippet}
+              {#snippet description()}
+                해지를 취소하고 다음 결제일부터 자동 갱신을 계속해요.
+              {/snippet}
+              {#snippet value()}
+                <Button
+                  onclick={() => {
+                    Dialog.confirm({
+                      title: '구독 해지를 취소하시겠어요?',
+                      message: '구독이 계속 유지되며, 다음 결제일에 자동으로 결제돼요.',
+                      actionLabel: '해지 취소',
+                      actionHandler: async () => {
+                        await cancelSubscriptionCancellation();
+                        mixpanel.track('resume_subscription');
+                      },
+                    });
+                  }}
+                  size="sm"
+                  variant="secondary"
+                >
+                  해지 취소
+                </Button>
+              {/snippet}
+            </SettingsRow>
+          {/if}
         {/if}
       </SettingsCard>
 
@@ -387,3 +458,8 @@
 <UpdatePaymentMethodModal {$user} bind:open={updatePaymentMethodOpen} />
 <RedeemCreditCodeModal bind:open={redeemCreditCodeOpen} />
 <SubscriptionCancellationSurveyModal {$user} onSubmit={handleCancellationSurveySubmit} bind:open={cancellationSurveyOpen} />
+<SubscriptionCelebrationModal
+  message="2주간 타이피의 모든 기능을 자유롭게 이용해보세요."
+  title="무료 체험이 시작됐어요!"
+  bind:open={trialStartedModalOpen}
+/>

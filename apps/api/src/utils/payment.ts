@@ -12,6 +12,10 @@ export const getSubscriptionExpiresAt = (startsAt: dayjs.Dayjs, interval: PlanIn
     return dayjs('9999-12-31T00:00:00.000Z');
   }
 
+  if (interval === PlanInterval.TRIAL) {
+    return startsAt.add(14, 'days');
+  }
+
   const startOfMonth = startsAt.kst().startOf('month').startOf('day');
   const expiresAtMonth = match(interval)
     .with(PlanInterval.MONTHLY, () => startOfMonth.add(1, 'month'))

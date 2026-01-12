@@ -44,6 +44,7 @@
 
         user {
           id
+          ...DashboardLayout_PlanUpgradeModal_user
 
           subscription {
             id
@@ -173,7 +174,7 @@
   });
 </script>
 
-<PlanUpgradeModal bind:open>
+<PlanUpgradeModal $user={$site.user} bind:open>
   현재 플랜의 최대 사용량을 초과했어요.
   <br />
   이어서 작성하려면 플랜을 업그레이드 해주세요.

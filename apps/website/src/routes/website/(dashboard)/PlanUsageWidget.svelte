@@ -23,6 +23,7 @@
     graphql(`
       fragment DashboardLayout_PlanUsageWidget_user on User {
         id
+        ...DashboardLayout_PlanUpgradeModal_user
 
         subscription {
           id
@@ -163,7 +164,7 @@
     </div>
   </button>
 
-  <PlanUpgradeModal bind:open={planUpgradeModalOpen}>
+  <PlanUpgradeModal {$user} bind:open={planUpgradeModalOpen}>
     FULL ACCESS로 업그레이드하면
     <br />
     무제한으로 글을 작성하고 파일을 업로드할 수 있어요.

@@ -3,8 +3,11 @@
   import { flex, grid } from '@typie/styled-system/patterns';
   import { Button, Icon } from '@typie/ui/components';
   import { PLAN_FEATURES } from '@typie/ui/constants';
+  import { Dialog } from '@typie/ui/notification';
+  import mixpanel from 'mixpanel-browser';
   import { replaceState } from '$app/navigation';
-  import { fragment, graphql } from '$graphql';
+  import { cache, fragment, graphql } from '$graphql';
+  import SubscriptionCelebrationModal from '../SubscriptionCelebrationModal.svelte';
   import type { DashboardLayout_PreferenceModal_PlanTab_user } from '$graphql';
 
   type Props = {
@@ -19,24 +22,52 @@
       fragment DashboardLayout_PreferenceModal_PlanTab_user on User {
         id
 
+        trial {
+          id
+          expiresAt
+        }
+
         subscription {
           id
           state
+          expiresAt
 
           plan {
             id
             name
+            availability
           }
         }
       }
     `),
   );
 
+  const subscribePlanWithTrial = graphql(`
+    mutation DashboardLayout_PreferenceModal_PlanTab_SubscribePlanWithTrial_Mutation {
+      subscribePlanWithTrial {
+        id
+        state
+        expiresAt
+
+        plan {
+          id
+          name
+          availability
+        }
+      }
+    }
+  `);
+
   const hasActiveSubscription = $derived(
     $user.subscription?.state === 'ACTIVE' ||
       $user.subscription?.state === 'IN_GRACE_PERIOD' ||
       $user.subscription?.state === 'WILL_EXPIRE',
   );
+
+  const isOnTrial = $derived($user.subscription?.plan.availability === 'TRIAL');
+  const canStartTrial = $derived(!$user.trial && !hasActiveSubscription);
+
+  let trialStartedModalOpen = $state(false);
 </script>
 
 <div class={flex({ direction: 'column', gap: '40px', maxWidth: '640px' })}>
@@ -134,7 +165,36 @@
           <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.subtle' })}>원 / 월</span>
         </div>
 
-        {#if hasActiveSubscription}
+        {#if isOnTrial}
+          <div
+            class={css({
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              height: '32px',
+              fontSize: '13px',
+              fontWeight: 'semibold',
+              color: 'accent.brand.default',
+              backgroundColor: 'accent.brand.subtle',
+              borderWidth: '1px',
+              borderColor: 'accent.brand.default',
+              borderRadius: '6px',
+              marginBottom: '8px',
+            })}
+          >
+            무료 체험 중
+          </div>
+          <Button
+            style={css.raw({ width: 'full', marginBottom: '20px' })}
+            onclick={() => {
+              replaceState('', { shallowRoute: '/preference/billing' });
+            }}
+            size="sm"
+            variant="primary"
+          >
+            지금 업그레이드
+          </Button>
+        {:else if hasActiveSubscription}
           <div
             class={css({
               display: 'flex',
@@ -154,13 +214,36 @@
             현재 이용중
           </div>
         {:else}
+          {#if canStartTrial}
+            <Button
+              style={css.raw({ width: 'full', marginBottom: '8px' })}
+              onclick={() => {
+                Dialog.confirm({
+                  title: '무료 체험을 시작하시겠어요?',
+                  message: '결제 수단 등록 없이 2주간 타이피의 모든 기능을 무료로 이용할 수 있어요. 체험 종료 후 자동 결제되지 않아요.',
+                  actionLabel: '시작하기',
+                  actionHandler: async () => {
+                    await subscribePlanWithTrial();
+                    cache.invalidate({ __typename: 'User', id: $user.id, field: 'subscription' });
+                    cache.invalidate({ __typename: 'User', id: $user.id, field: 'trial' });
+                    mixpanel.track('start_trial');
+                    trialStartedModalOpen = true;
+                  },
+                });
+              }}
+              size="sm"
+              variant="primary"
+            >
+              2주 무료 체험하기
+            </Button>
+          {/if}
           <Button
             style={css.raw({ width: 'full', marginBottom: '20px' })}
             onclick={() => {
               replaceState('', { shallowRoute: '/preference/billing' });
             }}
             size="sm"
-            variant="primary"
+            variant={canStartTrial ? 'secondary' : 'primary'}
           >
             업그레이드
           </Button>
@@ -180,3 +263,9 @@
     </div>
   </div>
 </div>
+
+<SubscriptionCelebrationModal
+  message="2주간 타이피의 모든 기능을 자유롭게 이용해보세요."
+  title="무료 체험이 시작됐어요!"
+  bind:open={trialStartedModalOpen}
+/>

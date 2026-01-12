@@ -22,19 +22,31 @@
   import StickyNoteIcon from '~icons/lucide/sticky-note';
   import TableIcon from '~icons/lucide/table';
   import HorizontalRuleIcon from '~icons/typie/horizontal-rule';
+  import { fragment, graphql } from '$graphql';
   import { getEditor } from '$lib/editor/context';
   import ToolbarButton from './ToolbarButton.svelte';
   import ToolbarDropdownButton from './ToolbarDropdownButton.svelte';
   import ToolbarIcon from './ToolbarIcon.svelte';
   import ToolbarPanelTabButton from './ToolbarPanelTabButton.svelte';
   import type { SystemStyleObject } from '@typie/styled-system/types';
+  import type { DocumentEditor_TopToolbar_user } from '$graphql';
 
   type Props = {
     style?: SystemStyleObject;
-    hasSubscription?: boolean;
+    $user: DocumentEditor_TopToolbar_user;
   };
 
-  let { style, hasSubscription = false }: Props = $props();
+  let { style, $user: _user }: Props = $props();
+
+  const user = fragment(
+    _user,
+    graphql(`
+      fragment DocumentEditor_TopToolbar_user on User {
+        id
+        ...DocumentEditor_TopToolbar_PanelTabButton_user
+      }
+    `),
+  );
 
   const app = getAppContext();
   const editor = getEditor();
@@ -226,11 +238,11 @@
   <VerticalDivider style={css.raw({ height: '[80%]', marginX: '12px' })} />
 
   <div class={flex({ alignItems: 'center', gap: '4px' })}>
-    <ToolbarPanelTabButton icon={InfoIcon} label="정보" tab="info" />
-    <ToolbarPanelTabButton icon={StickyNoteIcon} label="노트" tab="note" />
-    <ToolbarPanelTabButton icon={BookmarkIcon} label="북마크" tab="anchors" />
-    <ToolbarPanelTabButton disabled={!hasSubscription} icon={SpellCheckIcon} label="맞춤법" tab="spellcheck" />
-    <ToolbarPanelTabButton icon={ClockFadingIcon} label="타임라인" tab="timeline" />
-    <ToolbarPanelTabButton icon={SettingsIcon} label="본문 설정" tab="settings" />
+    <ToolbarPanelTabButton {$user} icon={InfoIcon} label="정보" tab="info" />
+    <ToolbarPanelTabButton {$user} icon={StickyNoteIcon} label="노트" tab="note" />
+    <ToolbarPanelTabButton {$user} icon={BookmarkIcon} label="북마크" tab="anchors" />
+    <ToolbarPanelTabButton {$user} icon={SpellCheckIcon} label="맞춤법" needSubscription tab="spellcheck" />
+    <ToolbarPanelTabButton {$user} icon={ClockFadingIcon} label="타임라인" tab="timeline" />
+    <ToolbarPanelTabButton {$user} icon={SettingsIcon} label="본문 설정" tab="settings" />
   </div>
 </div>

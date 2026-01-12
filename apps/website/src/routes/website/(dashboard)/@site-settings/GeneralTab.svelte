@@ -44,6 +44,7 @@
     graphql(`
       fragment DashboardLayout_SiteSettingsModal_GeneralTab_user on User {
         id
+        ...DashboardLayout_PlanUpgradeModal_user
 
         subscription {
           id
@@ -258,4 +259,4 @@
   </SettingsCard>
 </div>
 
-<PlanUpgradeModal bind:open={planUpgradeModalOpen}>스페이스 주소 기능은 FULL ACCESS 플랜에서 사용할 수 있어요.</PlanUpgradeModal>
+<PlanUpgradeModal {$user} bind:open={planUpgradeModalOpen}>스페이스 주소 기능은 FULL ACCESS 플랜에서 사용할 수 있어요.</PlanUpgradeModal>
