@@ -30,6 +30,7 @@
   import PlanUsageWidget from './PlanUsageWidget.svelte';
   import Profile from './Profile.svelte';
   import ThemeSwitch from './ThemeSwitch.svelte';
+  import TrialWidget from './TrialWidget.svelte';
   import type { DashboardLayout_Sidebar_site, DashboardLayout_Sidebar_user } from '$graphql';
 
   type Props = {
@@ -48,6 +49,7 @@
 
         ...DashboardLayout_Profile_user
         ...DashboardLayout_PlanUsageWidget_user
+        ...DashboardLayout_TrialWidget_user
       }
     `),
   );
@@ -539,6 +541,7 @@
     </div>
 
     <PlanUsageWidget {$site} {$user} />
+    <TrialWidget {$user} />
 
     <div
       class={flex({

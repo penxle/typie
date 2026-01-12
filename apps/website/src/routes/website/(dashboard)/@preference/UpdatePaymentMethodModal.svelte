@@ -8,7 +8,7 @@
   import mixpanel from 'mixpanel-browser';
   import { z } from 'zod';
   import { PlanId } from '@/const';
-  import { PlanInterval } from '@/enums';
+  import { PlanAvailability, PlanInterval } from '@/enums';
   import { TypieError } from '@/errors';
   import { cardSchema } from '@/validation';
   import { fragment, graphql } from '$graphql';
@@ -32,10 +32,17 @@
 
         subscription {
           id
+
+          plan {
+            id
+            availability
+          }
         }
       }
     `),
   );
+
+  const isTrial = $derived($user.subscription?.plan.availability === PlanAvailability.TRIAL);
 
   const updateBillingKey = graphql(`
     mutation DashboardLayout_PreferenceModal_BillingTab_UpdatePaymentMethodModal_UpdateBillingKey_Mutation($input: UpdateBillingKeyInput!) {
@@ -105,7 +112,7 @@
       mixpanel.track('update_payment_billing_key');
       fb.track('AddPaymentInfo');
 
-      if ($user.subscription) {
+      if ($user.subscription && !isTrial) {
         Toast.success('카드 정보가 변경되었어요.');
         open = false;
       } else {
@@ -189,11 +196,11 @@
 
 <Modal style={css.raw({ padding: '24px', maxWidth: '480px' })} bind:open>
   <h2 class={css({ fontSize: '16px', fontWeight: 'semibold', color: 'text.default', marginBottom: '24px' })}>
-    {$user.subscription ? '결제 수단 변경' : '플랜 업그레이드'}
+    {$user.subscription && !isTrial ? '결제 수단 변경' : '플랜 업그레이드'}
   </h2>
 
   <form class={flex({ direction: 'column', gap: '24px' })} onsubmit={form.handleSubmit}>
-    {#if !$user.subscription}
+    {#if !$user.subscription || isTrial}
       <div class={flex({ direction: 'column', gap: '16px' })}>
         <div>
           <div class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.default', marginBottom: '8px' })}>플랜 선택</div>
@@ -392,7 +399,7 @@
     {/if}
 
     <Button style={css.raw({ width: 'full' })} type="submit">
-      {#if $user.subscription}
+      {#if $user.subscription && !isTrial}
         변경하기
       {:else if finalAmount === 0}
         무료로 시작하기
