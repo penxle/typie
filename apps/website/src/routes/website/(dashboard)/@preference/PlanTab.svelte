@@ -22,10 +22,7 @@
       fragment DashboardLayout_PreferenceModal_PlanTab_user on User {
         id
 
-        trial {
-          id
-          expiresAt
-        }
+        canStartTrial
 
         subscription {
           id
@@ -65,7 +62,7 @@
   );
 
   const isOnTrial = $derived($user.subscription?.plan.availability === 'TRIAL');
-  const canStartTrial = $derived(!$user.trial && !hasActiveSubscription);
+  const canStartTrial = $derived($user.canStartTrial);
 
   let trialStartedModalOpen = $state(false);
 </script>
@@ -225,7 +222,7 @@
                   actionHandler: async () => {
                     await subscribePlanWithTrial();
                     cache.invalidate({ __typename: 'User', id: $user.id, field: 'subscription' });
-                    cache.invalidate({ __typename: 'User', id: $user.id, field: 'trial' });
+                    cache.invalidate({ __typename: 'User', id: $user.id, field: 'canStartTrial' });
                     mixpanel.track('start_trial');
                     trialStartedModalOpen = true;
                   },

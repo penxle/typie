@@ -32,9 +32,7 @@
         ...DashboardLayout_PreferenceModal_BillingTab_UpdatePaymentMethodModal_user
         ...DashboardLayout_PreferenceModal_BillingTab_SubscriptionCancellationSurveyModal_user
 
-        trial {
-          id
-        }
+        canStartTrial
 
         billingKey {
           id
@@ -74,6 +72,7 @@
   );
 
   const isTrial = $derived($user.subscription?.plan.availability === PlanAvailability.TRIAL);
+  const canStartTrial = $derived($user.canStartTrial);
 
   const scheduleSubscriptionCancellation = graphql(`
     mutation DashboardLayout_PreferenceModal_BillingTab_ScheduleSubscriptionCancellation_Mutation {
@@ -145,8 +144,6 @@
     }
   `);
 
-  const canStartTrial = $derived(!$user.trial && !$user.subscription);
-
   let updatePaymentMethodOpen = $state(false);
   let redeemCreditCodeOpen = $state(false);
   let cancellationSurveyOpen = $state(false);
@@ -195,7 +192,7 @@
                       actionHandler: async () => {
                         await subscribePlanWithTrial();
                         cache.invalidate({ __typename: 'User', id: $user.id, field: 'subscription' });
-                        cache.invalidate({ __typename: 'User', id: $user.id, field: 'trial' });
+                        cache.invalidate({ __typename: 'User', id: $user.id, field: 'canStartTrial' });
                         mixpanel.track('start_trial');
                         trialStartedModalOpen = true;
                       },

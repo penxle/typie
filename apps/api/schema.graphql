@@ -1183,6 +1183,7 @@ input UpdateWidgetInput {
 type User {
   avatar: Image!
   billingKey: UserBillingKey
+  canStartTrial: Boolean!
   characterCountChanges: [CharacterCountChange!]!
   createdAt: DateTime!
   credit: Int!
