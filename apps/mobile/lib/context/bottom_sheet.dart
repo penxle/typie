@@ -321,6 +321,104 @@ class BottomMenuItem extends StatelessWidget {
   }
 }
 
+class ConfirmBottomSheet extends StatelessWidget {
+  const ConfirmBottomSheet({
+    this.title,
+    this.message,
+    this.child,
+    required this.onConfirm,
+    this.onCancel,
+    this.confirmText = '확인',
+    this.cancelText = '취소',
+    this.confirmTextColor,
+    this.confirmBackgroundColor,
+    super.key,
+  });
+
+  final String? title;
+  final String? message;
+  final Widget? child;
+
+  final String confirmText;
+  final String cancelText;
+
+  final Color? confirmTextColor;
+  final Color? confirmBackgroundColor;
+
+  final void Function() onConfirm;
+  final void Function()? onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppBottomSheet(
+      padding: const Pad(horizontal: 20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (title != null) ...[
+            Text(title!, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+            const Gap(8),
+          ],
+          if (message != null) ...[
+            Text(message!, style: TextStyle(fontSize: 14, color: context.colors.textFaint)),
+            const Gap(24),
+          ],
+          if (child != null) ...[child!, const Gap(24)],
+          Row(
+            spacing: 8,
+            children: [
+              Expanded(
+                child: Tappable(
+                  onTap: () async {
+                    await context.router.maybePop();
+                    onCancel?.call();
+                  },
+                  child: Container(
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: context.colors.surfaceMuted,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    padding: const Pad(vertical: 16),
+                    child: Text(cancelText, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Tappable(
+                  onTap: () async {
+                    onConfirm();
+                    if (context.mounted) {
+                      await context.router.maybePop();
+                    }
+                  },
+                  child: Container(
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: confirmBackgroundColor ?? context.colors.surfaceInverse,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    padding: const Pad(vertical: 16),
+                    child: Text(
+                      confirmText,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: confirmTextColor ?? context.colors.textInverse,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class AppDraggableBottomSheet extends StatelessWidget {
   const AppDraggableBottomSheet({
     required this.builder,
