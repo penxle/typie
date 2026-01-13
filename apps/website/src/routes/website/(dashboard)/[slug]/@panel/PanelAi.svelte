@@ -13,9 +13,9 @@
   import { absolutePositionToRelativePosition, relativePositionToAbsolutePosition, ySyncPluginKey } from 'y-prosemirror';
   import CircleAlertIcon from '~icons/lucide/circle-alert';
   import CircleCheckIcon from '~icons/lucide/circle-check';
-  import SparklesIcon from '~icons/lucide/sparkles';
+  import LightbulbIcon from '~icons/lucide/lightbulb';
   import XIcon from '~icons/lucide/x';
-  import { replaceState } from '$app/navigation';
+  import { pushState } from '$app/navigation';
   import { fragment, graphql } from '$graphql';
   import { getViewContext } from '../@split-view/context.svelte';
   import type { Editor } from '@tiptap/core';
@@ -339,7 +339,7 @@
           color: 'text.faint',
         })}
       >
-        <Icon icon={SparklesIcon} size={28} />
+        <Icon icon={LightbulbIcon} size={28} />
       </div>
 
       <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '8px' })}>
@@ -350,7 +350,7 @@
         </p>
       </div>
 
-      <Button onclick={() => replaceState('', { shallowRoute: '/preference/ai' })} size="sm" variant="secondary">설정으로 이동</Button>
+      <Button onclick={() => pushState('', { shallowRoute: '/preference/ai' })} size="sm" variant="secondary">설정으로 이동</Button>
     </div>
   {:else if !hasChecked && !inflight}
     <div
@@ -370,7 +370,7 @@
           color: 'text.faint',
         })}
       >
-        <Icon icon={SparklesIcon} size={28} />
+        <Icon icon={LightbulbIcon} size={28} />
       </div>
 
       <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '8px' })}>
