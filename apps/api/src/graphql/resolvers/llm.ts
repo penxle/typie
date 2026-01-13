@@ -1,4 +1,4 @@
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, ThinkingLevel } from '@google/genai';
 import { Node } from '@tiptap/pm/model';
 import { Repeater } from 'graphql-yoga';
 import pMap from 'p-map';
@@ -73,7 +73,6 @@ JSON Lines:
 </output>`;
 
 const CHUNK_SIZE = 1000;
-const SUMMARY_MAX_TOKENS = 300;
 const CACHE_TTL = 60 * 60 * 24;
 const SUMMARIZE_CONCURRENCY = 5;
 const ANALYZE_CONCURRENCY = 3;
@@ -194,7 +193,6 @@ const summarizeChunk = async (chunkText: string): Promise<string> => {
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
     config: {
-      maxOutputTokens: SUMMARY_MAX_TOKENS,
       systemInstruction: summarizePrompt,
     },
     contents: `요약할 텍스트:\n\n${chunkText}`,
@@ -267,10 +265,9 @@ const analyzeChunkWithContext = async (context: ChunkContext, onFeedback: (feedb
   const stream = await ai.models.generateContentStream({
     model: 'gemini-3-flash-preview',
     config: {
-      maxOutputTokens: 16_000,
       systemInstruction: systemPrompt,
       thinkingConfig: {
-        thinkingBudget: 10_000,
+        thinkingLevel: ThinkingLevel.HIGH,
       },
     },
     contents: userContent,
