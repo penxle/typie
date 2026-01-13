@@ -498,14 +498,15 @@ type LiteraryAnalysisPayload {
 
 type LiteraryAnalysisProgress {
   current: Int!
+  phase: String!
   total: Int!
 }
 
 type LiteraryFeedbackResult {
+  endText: String!
   feedback: String!
   from: Int!
-  score: Int!
-  text: String!
+  startText: String!
   to: Int!
 }
 

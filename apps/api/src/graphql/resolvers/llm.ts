@@ -10,66 +10,68 @@ import { builder } from '../builder';
 
 const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
 
-type DraftFeedback = {
-  text: string;
+type Feedback = {
+  start: string;
+  end: string;
   feedback: string;
 };
-
-type ValidatedFeedback = {
-  text: string;
-  feedback: string;
-  score: number;
-  confidence: number;
-};
-
-const MIN_CONFIDENCE = 0.5;
 
 const LiteraryFeedbackResult = builder.simpleObject('LiteraryFeedbackResult', {
   fields: (t) => ({
     from: t.int(),
     to: t.int(),
-    text: t.string(),
+    startText: t.string(),
+    endText: t.string(),
     feedback: t.string(),
-    score: t.int(),
   }),
 });
 
-const systemPrompt = `당신은 소설 작법에 정통한 문학 편집자입니다. 작가의 산문을 개선하도록 돕습니다.
+const systemPrompt = `당신은 글을 읽는 첫 번째 독자입니다.
 
-<core_principle>
-좋은 산문은 독자를 이야기 속에 몰입시킵니다. 나쁜 산문은 독자를 밀어냅니다.
-몰입을 방해하는 모든 요소가 피드백 대상입니다.
-</core_principle>
+<context>
+현재 분석할 구간 앞뒤로 요약이 제공됩니다.
+- [이전 내용 요약]: 현재 구간 이전의 이야기 흐름
+- [이후 내용 요약]: 현재 구간 이후의 이야기 흐름
+</context>
 
-<examples_of_craft_issues>
-- 감정/상태 직접 서술: "그는 슬펐다" → 행동과 감각으로 보여주기
-- 클리셰: 과용되어 힘을 잃은 표현들
-- 약한 동사+부사: "빠르게 달렸다" → "질주했다"
-- 필터 워드: "~을 보았다", "~을 느꼈다"가 만드는 거리감
-- 중복: 대사가 이미 전달하는 감정을 태그로 또 설명
-- 과잉 수식: 불필요한 형용사/부사의 나열
-- 추상적 서술: 감각적 디테일 없이 요약만
+<principle>
+꼼꼼하게 읽고, 개선할 수 있는 부분을 찾아주세요.
+이 글의 이 부분에서 실제로 발생하는 구체적인 문제만 지적하세요.
+</principle>
 
-(이 외에도 산문의 질을 떨어뜨리는 작법 문제가 있다면 지적하세요)
-</examples_of_craft_issues>
+<focus>
+- 감정이나 상태를 직접 서술하는 대신 보여줄 수 있는 부분
+- 대화 태그가 과잉 설명하는 부분
+- 장면 전환이 급하거나 어색한 부분
+- 누가 말하는지 헷갈리는 대화
+- 설정이나 복선이 회수되지 않는 부분
+- 반복되는 단어나 표현
+- 독자로서 읽다가 걸리는 부분
+</focus>
 
-<what_is_not_a_problem>
-- 담백한 서술: "문이 열렸다", "비가 내렸다"
-- 의도적 문체: 작가가 효과를 위해 선택한 표현
-- 주관적 선호: "더 좋을 수 있다" 수준의 사소한 것
-</what_is_not_a_problem>
+<examples>
+- "여기서 '슬펐다'고 직접 말하는 대신, 행동이나 묘사로 보여주면 더 와닿을 것 같아요."
+- "'화난 목소리로 말했다' 대신 대사 자체로 감정을 드러내면 어떨까요?"
+- "대화가 길어지면서 누가 말하는지 헷갈려요. 중간에 행동 묘사를 넣으면 좋을 것 같아요."
+- "이 장면 전환이 갑작스러워요. 사이에 뭔가 있으면 자연스러울 것 같아요."
+- "앞에서 언급한 OO이 여기서 다시 나오면 좋을 것 같은데, 그냥 지나가네요."
+</examples>
+
+<tone>
+"~하면 어떨까요?", "~인 것 같아요"
+</tone>
 
 <output>
-JSON Lines (한 줄에 하나):
-{"text":"원문","feedback":"무엇이 문제인지 + 왜 문제인지 + 개선 방향"}
+JSON Lines:
+{"start":"구간 시작 문장","end":"구간 끝 문장","feedback":"피드백"}
 
-피드백할 게 없으면 아무것도 출력하지 마세요.
+피드백할 게 없으면 출력하지 마세요.
 </output>`;
 
-const MAX_CHUNK_SIZE = 1000;
-const MAX_CONCURRENCY = 5;
+const CHUNK_SIZE = 1000;
+const SUMMARY_MAX_TOKENS = 300;
 const CACHE_TTL = 60 * 60 * 24;
-const SENTENCE_PATTERN = /([.!?。！？]+\s*)/g;
+const SUMMARIZE_CONCURRENCY = 5;
 
 const extractTextAndMappings = (body: unknown) => {
   const node = Node.fromJSON(schema, body);
@@ -112,234 +114,166 @@ const extractTextAndMappings = (body: unknown) => {
 
 const createChunks = (text: string) => {
   const chunks: { text: string; start: number; end: number }[] = [];
-  let chunk = '';
-  let chunkStartOffset = 0;
-  let offset = 0;
 
-  const paragraphs: { text: string; start: number; end: number }[] = [];
+  let pos = 0;
+  while (pos < text.length) {
+    let end = pos + CHUNK_SIZE;
 
-  while (offset < text.length) {
-    const nextNewline = text.indexOf('\n', offset);
-    const paragraphEnd = nextNewline === -1 ? text.length : nextNewline;
-    const paragraph = text.slice(offset, paragraphEnd);
+    if (end < text.length) {
+      const searchStart = Math.max(pos, end - 200);
+      let breakPoint = -1;
 
-    if (paragraph.trim().length > 0) {
-      paragraphs.push({
-        text: paragraph,
-        start: offset,
-        end: paragraphEnd,
-      });
-    }
-
-    offset = paragraphEnd + 1;
-  }
-
-  let chunkEndOffset = 0;
-
-  for (const paragraph of paragraphs) {
-    if (chunk.length + (chunk ? 1 : 0) + paragraph.text.length <= MAX_CHUNK_SIZE) {
-      if (chunk) {
-        chunk += '\n' + paragraph.text;
-        chunkEndOffset = paragraph.end;
-      } else {
-        chunk = paragraph.text;
-        chunkStartOffset = paragraph.start;
-        chunkEndOffset = paragraph.end;
-      }
-    } else {
-      if (chunk && chunkEndOffset > 0) {
-        chunks.push({
-          text: text.slice(chunkStartOffset, chunkEndOffset),
-          start: chunkStartOffset,
-          end: chunkEndOffset,
-        });
+      for (let i = end; i >= searchStart; i--) {
+        if (text[i] === '\n') {
+          breakPoint = i + 1;
+          break;
+        }
       }
 
-      if (paragraph.text.length > MAX_CHUNK_SIZE) {
-        let sentenceChunk = '';
-        let sentenceStartOffset = paragraph.start;
-        let sentenceEndOffset = paragraph.start;
-        let endOffset = 0;
-
-        const pattern = new RegExp(SENTENCE_PATTERN.source, SENTENCE_PATTERN.flags);
+      if (breakPoint === -1) {
+        const sentencePattern = /[.!?。！？]\s*/g;
+        sentencePattern.lastIndex = searchStart;
+        let lastMatch = -1;
         let match;
 
-        while ((match = pattern.exec(paragraph.text))) {
-          const matchEndOffset = match.index + match[0].length;
-          const sentence = paragraph.text.slice(endOffset, matchEndOffset);
-
-          if (sentenceChunk.length + sentence.length <= MAX_CHUNK_SIZE) {
-            sentenceChunk += sentence;
-            sentenceEndOffset = paragraph.start + matchEndOffset;
-          } else {
-            if (sentenceChunk) {
-              chunks.push({
-                text: text.slice(sentenceStartOffset, sentenceEndOffset),
-                start: sentenceStartOffset,
-                end: sentenceEndOffset,
-              });
-            }
-            sentenceChunk = sentence;
-            sentenceStartOffset = paragraph.start + endOffset;
-            sentenceEndOffset = paragraph.start + matchEndOffset;
-          }
-          endOffset = matchEndOffset;
+        while ((match = sentencePattern.exec(text)) && match.index <= end) {
+          lastMatch = match.index + match[0].length;
         }
 
-        const remaining = paragraph.text.slice(endOffset);
-        if (remaining) {
-          if (sentenceChunk.length + remaining.length <= MAX_CHUNK_SIZE) {
-            sentenceChunk += remaining;
-            sentenceEndOffset = paragraph.end;
-          } else {
-            if (sentenceChunk) {
-              chunks.push({
-                text: text.slice(sentenceStartOffset, sentenceEndOffset),
-                start: sentenceStartOffset,
-                end: sentenceEndOffset,
-              });
-            }
-            sentenceChunk = remaining;
-            sentenceStartOffset = paragraph.start + endOffset;
-            sentenceEndOffset = paragraph.end;
-          }
+        if (lastMatch > pos) {
+          breakPoint = lastMatch;
         }
-
-        if (sentenceChunk) {
-          chunks.push({
-            text: text.slice(sentenceStartOffset, sentenceEndOffset),
-            start: sentenceStartOffset,
-            end: sentenceEndOffset,
-          });
-        }
-
-        chunk = '';
-        chunkEndOffset = 0;
-      } else {
-        chunk = paragraph.text;
-        chunkStartOffset = paragraph.start;
-        chunkEndOffset = paragraph.end;
       }
-    }
-  }
 
-  if (chunk && chunkEndOffset > 0) {
+      if (breakPoint > pos) {
+        end = breakPoint;
+      }
+    } else {
+      end = text.length;
+    }
+
     chunks.push({
-      text: text.slice(chunkStartOffset, chunkEndOffset),
-      start: chunkStartOffset,
-      end: chunkEndOffset,
+      text: text.slice(pos, end),
+      start: pos,
+      end,
     });
+
+    pos = end;
   }
 
   return chunks;
 };
 
+const summarizePrompt = `다음 텍스트를 요약하세요.
+
+포함할 내용:
+- 등장인물과 그들의 관계
+- 주요 사건과 행동
+- 감정 변화와 분위기
+- 장소나 시간의 변화
+- 대화의 핵심 내용
+- 중요하거나 일반적이지 않은 단어나 용어
+
+300자 이내로 작성하세요.
+`;
+
+const summarizeChunk = async (chunkText: string): Promise<string> => {
+  const hash = rapidhash(summarizePrompt + chunkText);
+  const cacheKey = `literary:summary:${hash}`;
+
+  const cached = await redis.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  const response = await anthropic.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: SUMMARY_MAX_TOKENS,
+    system: summarizePrompt,
+    messages: [
+      {
+        role: 'user',
+        content: `요약할 텍스트:\n\n${chunkText}`,
+      },
+    ],
+  });
+
+  const summary = response.content[0].type === 'text' ? response.content[0].text : '';
+  await redis.setex(cacheKey, CACHE_TTL, summary);
+
+  return summary;
+};
+
 const createMapRange = (text: string, textNodeMappings: { textStart: number; textEnd: number; pmStart: number }[]) => {
-  return (quotedText: string, searchStart = 0) => {
-    const textStart = text.indexOf(quotedText, searchStart);
-    if (textStart === -1) {
+  return (startText: string, endText: string, searchStart = 0) => {
+    const rangeStart = text.indexOf(startText, searchStart);
+    if (rangeStart === -1) {
       return null;
     }
-    const textEnd = textStart + quotedText.length;
 
-    const startMapping = textNodeMappings.find((m) => textStart >= m.textStart && textStart < m.textEnd);
-    const endMapping = textNodeMappings.find((m) => textEnd > m.textStart && textEnd <= m.textEnd);
+    const endSearchStart = startText === endText ? rangeStart : rangeStart + startText.length;
+    const endIndex = text.indexOf(endText, endSearchStart);
+    if (endIndex === -1) {
+      return null;
+    }
+    const rangeEnd = endIndex + endText.length;
+
+    const startMapping = textNodeMappings.find((m) => rangeStart >= m.textStart && rangeStart < m.textEnd);
+    const endMapping = textNodeMappings.find((m) => rangeEnd > m.textStart && rangeEnd <= m.textEnd);
 
     if (!startMapping || !endMapping) {
       return null;
     }
 
-    const from = startMapping.pmStart + (textStart - startMapping.textStart);
-    const to = endMapping.pmStart + (textEnd - endMapping.textStart);
+    const from = startMapping.pmStart + (rangeStart - startMapping.textStart);
+    const to = endMapping.pmStart + (rangeEnd - endMapping.textStart);
 
     return { from, to };
   };
 };
 
-const validationPrompt = `당신은 문학 작법 피드백을 검증합니다.
-
-<principle>
-기본적으로 valid: true입니다. 명백히 억지인 경우만 false로 판정하세요.
-</principle>
-
-<invalid_cases>
-- "문이 열렸다" 같은 담백한 서술을 비판
-- 구체적 근거 없이 "더 좋게 쓸 수 있다"만 말함
-</invalid_cases>
-
-<scoring>
-1-3: 심각 (감정 직접 서술, 클리셰)
-4-6: 중간 (개선 여지)
-7-10: 경미
-</scoring>
-
-<output>
-{"valid":true/false,"score":1-10,"confidence":0.5-1.0}
-</output>`;
-
-const validateFeedback = async (originalText: string, draft: DraftFeedback): Promise<ValidatedFeedback | null> => {
-  const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-5-20250929',
-    max_tokens: 100,
-    system: validationPrompt,
-    messages: [
-      {
-        role: 'user',
-        content: `원문:\n"${originalText}"\n\n비평 대상: "${draft.text}"\n비평 내용: "${draft.feedback}"`,
-      },
-    ],
-  });
-
-  const text = response.content[0].type === 'text' ? response.content[0].text : '';
-
-  try {
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      console.log('[literary:validation] no JSON found:', text);
-      return null;
-    }
-
-    const result = JSON.parse(jsonMatch[0]) as { valid: boolean; score: number; confidence: number };
-    console.log('[literary:validation] result:', { draft: draft.text, result });
-
-    if (result.valid && result.confidence >= MIN_CONFIDENCE) {
-      return {
-        text: draft.text,
-        feedback: draft.feedback,
-        score: result.score,
-        confidence: result.confidence,
-      };
-    }
-  } catch (err) {
-    console.log('[literary:validation] parse error:', text, err);
-  }
-
-  return null;
+type ChunkContext = {
+  precedingSummary: string;
+  followingSummary: string;
+  currentText: string;
 };
 
-const analyzeChunkStreaming = async (chunkText: string, onFeedback: (feedback: ValidatedFeedback) => void): Promise<void> => {
-  const hash = rapidhash(systemPrompt + validationPrompt + chunkText);
-  const cacheKey = `literary:${hash}`;
+const analyzeChunkWithContext = async (context: ChunkContext, onFeedback: (feedback: Feedback) => void): Promise<void> => {
+  const hash = rapidhash(systemPrompt + JSON.stringify(context) + '1');
+  const cacheKey = `literary:feedback:${hash}`;
 
   const cached = await redis.get(cacheKey);
   if (cached) {
-    const feedbacks = JSON.parse(cached) as ValidatedFeedback[];
+    const feedbacks = JSON.parse(cached) as Feedback[];
     for (const feedback of feedbacks) {
       onFeedback(feedback);
     }
     return;
   }
 
-  const feedbacks: ValidatedFeedback[] = [];
+  const feedbacks: Feedback[] = [];
+
+  let userContent = '';
+  if (context.precedingSummary) {
+    userContent += `[이전 내용 요약]\n${context.precedingSummary}\n\n`;
+  }
+  userContent += `[현재 분석할 구간]\n${context.currentText}`;
+  if (context.followingSummary) {
+    userContent += `\n\n[이후 내용 요약]\n${context.followingSummary}`;
+  }
 
   const stream = anthropic.messages.stream({
     model: 'claude-sonnet-4-5-20250929',
-    max_tokens: 4096,
+    max_tokens: 16_000,
+    thinking: {
+      type: 'enabled',
+      budget_tokens: 10_000,
+    },
     system: systemPrompt,
     messages: [
       {
         role: 'user',
-        content: `다음 텍스트를 문학적으로 분석해주세요:\n\n${chunkText}`,
+        content: userContent,
       },
     ],
   });
@@ -358,14 +292,10 @@ const analyzeChunkStreaming = async (chunkText: string, onFeedback: (feedback: V
         if (!trimmed) continue;
 
         try {
-          const draft = JSON.parse(trimmed) as DraftFeedback;
-          console.log('[literary:draft] parsed:', draft);
-          if (draft.text && draft.feedback) {
-            const validated = await validateFeedback(chunkText, draft);
-            if (validated) {
-              feedbacks.push(validated);
-              onFeedback(validated);
-            }
+          const feedback = JSON.parse(trimmed) as Feedback;
+          if (feedback.start && feedback.end && feedback.feedback) {
+            feedbacks.push(feedback);
+            onFeedback(feedback);
           }
         } catch {
           // skip invalid JSON
@@ -376,13 +306,10 @@ const analyzeChunkStreaming = async (chunkText: string, onFeedback: (feedback: V
 
   if (buffer.trim()) {
     try {
-      const draft = JSON.parse(buffer.trim()) as DraftFeedback;
-      if (draft.text && draft.feedback) {
-        const validated = await validateFeedback(chunkText, draft);
-        if (validated) {
-          feedbacks.push(validated);
-          onFeedback(validated);
-        }
+      const feedback = JSON.parse(buffer.trim()) as Feedback;
+      if (feedback.start && feedback.end && feedback.feedback) {
+        feedbacks.push(feedback);
+        onFeedback(feedback);
       }
     } catch {
       // skip invalid JSON
@@ -393,8 +320,8 @@ const analyzeChunkStreaming = async (chunkText: string, onFeedback: (feedback: V
 };
 
 type AnalysisPayload =
-  | { type: 'feedback'; data: { from: number; to: number; text: string; feedback: string; score: number } }
-  | { type: 'progress'; data: { current: number; total: number } }
+  | { type: 'feedback'; data: { from: number; to: number; startText: string; endText: string; feedback: string } }
+  | { type: 'progress'; data: { current: number; total: number; phase: 'summarizing' | 'analyzing' } }
   | { type: 'complete' }
   | { type: 'error' };
 
@@ -402,6 +329,7 @@ const LiteraryAnalysisProgress = builder.simpleObject('LiteraryAnalysisProgress'
   fields: (t) => ({
     current: t.int(),
     total: t.int(),
+    phase: t.string(),
   }),
 });
 
@@ -433,14 +361,41 @@ builder.subscriptionFields((t) => ({
 
         const chunks = createChunks(text);
         const mapRange = createMapRange(text, textNodeMappings);
-        let completedChunks = 0;
 
         try {
+          const summaries: string[] = [];
           await pMap(
             chunks,
-            async (chunk) => {
-              await analyzeChunkStreaming(chunk.text, (feedback) => {
-                const range = mapRange(feedback.text, chunk.start);
+            async (chunk, index) => {
+              const summary = await summarizeChunk(chunk.text);
+              summaries[index] = summary;
+              push({
+                type: 'progress',
+                data: { current: summaries.filter(Boolean).length, total: chunks.length, phase: 'summarizing' },
+              });
+            },
+            { concurrency: SUMMARIZE_CONCURRENCY },
+          );
+
+          for (let i = 0; i < chunks.length; i++) {
+            const chunk = chunks[i];
+
+            push({
+              type: 'progress',
+              data: { current: i, total: chunks.length, phase: 'analyzing' },
+            });
+
+            const precedingSummary = summaries.slice(0, i).join('\n\n');
+            const followingSummary = summaries.slice(i + 1).join('\n\n');
+
+            await analyzeChunkWithContext(
+              {
+                precedingSummary,
+                followingSummary,
+                currentText: chunk.text,
+              },
+              (feedback) => {
+                const range = mapRange(feedback.start, feedback.end, chunk.start);
 
                 if (range) {
                   push({
@@ -448,26 +403,18 @@ builder.subscriptionFields((t) => ({
                     data: {
                       from: range.from,
                       to: range.to,
-                      text: feedback.text,
+                      startText: feedback.start,
+                      endText: feedback.end,
                       feedback: feedback.feedback,
-                      score: feedback.score,
                     },
                   });
                 }
-              });
-
-              completedChunks++;
-              push({
-                type: 'progress',
-                data: { current: completedChunks, total: chunks.length },
-              });
-            },
-            { concurrency: MAX_CONCURRENCY },
-          );
+              },
+            );
+          }
 
           push({ type: 'complete' });
-        } catch (err) {
-          console.error('[literary:analysis] error:', err);
+        } catch {
           push({ type: 'error' });
         }
 
