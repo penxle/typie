@@ -12,6 +12,7 @@ const schema = z.object({
   APPLE_TEAM_ID: z.string(),
   AUTH_URL: z.string(),
   DATABASE_URL: z.string(),
+  GEMINI_API_KEY: z.string(),
   GITHUB_TOKEN: z.string(),
   GOOGLE_OAUTH_CLIENT_ID: z.string(),
   GOOGLE_OAUTH_CLIENT_SECRET: z.string(),
