@@ -1,4 +1,4 @@
-import { Anthropic } from '@anthropic-ai/sdk';
+import { GoogleGenAI } from '@google/genai';
 import { Node } from '@tiptap/pm/model';
 import { Repeater } from 'graphql-yoga';
 import pMap from 'p-map';
@@ -8,7 +8,7 @@ import { env } from '@/env';
 import { schema, textSerializers } from '@/pm';
 import { builder } from '../builder';
 
-const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
+const ai = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
 
 type Feedback = {
   start: string;
@@ -191,19 +191,16 @@ const summarizeChunk = async (chunkText: string): Promise<string> => {
     return cached;
   }
 
-  const response = await anthropic.messages.create({
-    model: 'claude-haiku-4-5-20251001',
-    max_tokens: SUMMARY_MAX_TOKENS,
-    system: summarizePrompt,
-    messages: [
-      {
-        role: 'user',
-        content: `요약할 텍스트:\n\n${chunkText}`,
-      },
-    ],
+  const response = await ai.models.generateContent({
+    model: 'gemini-3-flash-preview',
+    config: {
+      maxOutputTokens: SUMMARY_MAX_TOKENS,
+      systemInstruction: summarizePrompt,
+    },
+    contents: `요약할 텍스트:\n\n${chunkText}`,
   });
 
-  const summary = response.content[0].type === 'text' ? response.content[0].text : '';
+  const summary = response.text ?? '';
   await redis.setex(cacheKey, CACHE_TTL, summary);
 
   return summary;
@@ -267,27 +264,24 @@ const analyzeChunkWithContext = async (context: ChunkContext, onFeedback: (feedb
     userContent += `\n\n[이후 내용 요약]\n${context.followingSummary}`;
   }
 
-  const stream = anthropic.messages.stream({
-    model: 'claude-sonnet-4-5-20250929',
-    max_tokens: 16_000,
-    thinking: {
-      type: 'enabled',
-      budget_tokens: 10_000,
-    },
-    system: systemPrompt,
-    messages: [
-      {
-        role: 'user',
-        content: userContent,
+  const stream = await ai.models.generateContentStream({
+    model: 'gemini-3-flash-preview',
+    config: {
+      maxOutputTokens: 16_000,
+      systemInstruction: systemPrompt,
+      thinkingConfig: {
+        thinkingBudget: 10_000,
       },
-    ],
+    },
+    contents: userContent,
   });
 
   let buffer = '';
 
-  for await (const event of stream) {
-    if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-      buffer += event.delta.text;
+  for await (const chunk of stream) {
+    const text = chunk.text;
+    if (text) {
+      buffer += text;
 
       const lines = buffer.split('\n');
       buffer = lines.pop() || '';

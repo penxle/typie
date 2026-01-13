@@ -33,6 +33,7 @@ fira
 fntf
 fnts
 fstype
+genai
 healthz
 icns
 iconify
