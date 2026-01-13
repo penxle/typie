@@ -5,6 +5,7 @@
   import { clamp } from '@typie/ui/utils';
   import { fragment, graphql } from '$graphql';
   import { getViewContext } from '../@split-view/context.svelte';
+  import PanelAi from './PanelAi.svelte';
   import PanelAnchors from './PanelAnchors.svelte';
   import PanelBodySettings from './PanelBodySettings.svelte';
   import PanelInfo from './PanelInfo.svelte';
@@ -36,6 +37,7 @@
       fragment Editor_Panel_user on User {
         id
 
+        ...Editor_Panel_PanelAi_user
         ...Editor_Panel_PanelInfo_user
         ...Editor_Panel_PanelSpellcheck_user
       }
@@ -167,6 +169,10 @@
 
     {#if app.preference.current.panelTabByViewId[splitViewId] === 'spellcheck'}
       <PanelSpellcheck {$user} {editor} />
+    {/if}
+
+    {#if app.preference.current.panelTabByViewId[splitViewId] === 'ai'}
+      <PanelAi {$user} {editor} />
     {/if}
 
     {#if app.preference.current.panelTabByViewId[splitViewId] === 'timeline'}
