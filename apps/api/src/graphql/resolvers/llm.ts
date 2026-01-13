@@ -37,24 +37,26 @@ const systemPrompt = `당신은 글을 읽는 첫 번째 독자입니다.
 <principle>
 꼼꼼하게 읽고, 개선할 수 있는 부분을 찾아주세요.
 이 글의 이 부분에서 실제로 발생하는 구체적인 문제만 지적하세요.
+특정 유형의 피드백에 집착하지 마세요. 다양한 관점에서 균형 있게 살펴보세요.
 </principle>
 
 <focus>
-- 감정이나 상태를 직접 서술하는 대신 보여줄 수 있는 부분
-- 대화 태그가 과잉 설명하는 부분
+- 독자로서 읽다가 걸리거나 몰입이 깨지는 부분
 - 장면 전환이 급하거나 어색한 부분
 - 누가 말하는지 헷갈리는 대화
+- 인물의 행동이나 반응이 맥락상 부자연스러운 부분
 - 설정이나 복선이 회수되지 않는 부분
 - 반복되는 단어나 표현
-- 독자로서 읽다가 걸리는 부분
+- 문장이 너무 길거나 구조가 복잡해서 읽기 어려운 부분
+- 묘사가 부족하거나 과한 부분
 </focus>
 
 <examples>
-- "여기서 '슬펐다'고 직접 말하는 대신, 행동이나 묘사로 보여주면 더 와닿을 것 같아요."
-- "'화난 목소리로 말했다' 대신 대사 자체로 감정을 드러내면 어떨까요?"
-- "대화가 길어지면서 누가 말하는지 헷갈려요. 중간에 행동 묘사를 넣으면 좋을 것 같아요."
 - "이 장면 전환이 갑작스러워요. 사이에 뭔가 있으면 자연스러울 것 같아요."
+- "대화가 길어지면서 누가 말하는지 헷갈려요. 중간에 행동 묘사를 넣으면 좋을 것 같아요."
 - "앞에서 언급한 OO이 여기서 다시 나오면 좋을 것 같은데, 그냥 지나가네요."
+- "이 문장이 좀 길어서 한 번에 읽기 어려워요. 나눠보면 어떨까요?"
+- "여기서 인물이 갑자기 태도가 바뀌는데, 이유가 좀 더 드러나면 좋겠어요."
 </examples>
 
 <tone>
@@ -72,6 +74,7 @@ const CHUNK_SIZE = 1000;
 const SUMMARY_MAX_TOKENS = 300;
 const CACHE_TTL = 60 * 60 * 24;
 const SUMMARIZE_CONCURRENCY = 5;
+const ANALYZE_CONCURRENCY = 3;
 
 const extractTextAndMappings = (body: unknown) => {
   const node = Node.fromJSON(schema, body);
@@ -377,41 +380,45 @@ builder.subscriptionFields((t) => ({
             { concurrency: SUMMARIZE_CONCURRENCY },
           );
 
-          for (let i = 0; i < chunks.length; i++) {
-            const chunk = chunks[i];
+          let analyzedCount = 0;
+          await pMap(
+            chunks,
+            async (chunk, i) => {
+              const precedingSummary = summaries.slice(0, i).join('\n\n');
+              const followingSummary = summaries.slice(i + 1).join('\n\n');
 
-            push({
-              type: 'progress',
-              data: { current: i, total: chunks.length, phase: 'analyzing' },
-            });
+              await analyzeChunkWithContext(
+                {
+                  precedingSummary,
+                  followingSummary,
+                  currentText: chunk.text,
+                },
+                (feedback) => {
+                  const range = mapRange(feedback.start, feedback.end, chunk.start);
 
-            const precedingSummary = summaries.slice(0, i).join('\n\n');
-            const followingSummary = summaries.slice(i + 1).join('\n\n');
+                  if (range) {
+                    push({
+                      type: 'feedback',
+                      data: {
+                        from: range.from,
+                        to: range.to,
+                        startText: feedback.start,
+                        endText: feedback.end,
+                        feedback: feedback.feedback,
+                      },
+                    });
+                  }
+                },
+              );
 
-            await analyzeChunkWithContext(
-              {
-                precedingSummary,
-                followingSummary,
-                currentText: chunk.text,
-              },
-              (feedback) => {
-                const range = mapRange(feedback.start, feedback.end, chunk.start);
-
-                if (range) {
-                  push({
-                    type: 'feedback',
-                    data: {
-                      from: range.from,
-                      to: range.to,
-                      startText: feedback.start,
-                      endText: feedback.end,
-                      feedback: feedback.feedback,
-                    },
-                  });
-                }
-              },
-            );
-          }
+              analyzedCount++;
+              push({
+                type: 'progress',
+                data: { current: analyzedCount, total: chunks.length, phase: 'analyzing' },
+              });
+            },
+            { concurrency: ANALYZE_CONCURRENCY },
+          );
 
           push({ type: 'complete' });
         } catch {
