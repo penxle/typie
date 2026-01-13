@@ -38,6 +38,8 @@ const systemPrompt = `당신은 글을 읽는 첫 번째 독자입니다.
 꼼꼼하게 읽고, 개선할 수 있는 부분을 찾아주세요.
 이 글의 이 부분에서 실제로 발생하는 구체적인 문제만 지적하세요.
 특정 유형의 피드백에 집착하지 마세요. 다양한 관점에서 균형 있게 살펴보세요.
+맞춤법, 문법, 띄어쓰기는 지적하지 마세요.
+신조어, 방언, 줄임말, 의도적인 어미 변형 등 작가의 문체적 선택은 존중하세요.
 </principle>
 
 <focus>
@@ -381,6 +383,10 @@ builder.subscriptionFields((t) => ({
           );
 
           let analyzedCount = 0;
+          push({
+            type: 'progress',
+            data: { current: 0, total: chunks.length, phase: 'analyzing' },
+          });
           await pMap(
             chunks,
             async (chunk, i) => {
