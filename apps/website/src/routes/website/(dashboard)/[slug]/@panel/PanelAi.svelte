@@ -32,9 +32,9 @@
     to: number;
     relativeFrom: unknown;
     relativeTo: unknown;
-    text: string;
+    startText: string;
+    endText: string;
     feedback: string;
-    score: number;
   };
 
   let { $user: _user, editor }: Props = $props();
@@ -61,7 +61,7 @@
   let hasChecked = $state(false);
   let checkFailed = $state(false);
   let listContainer = $state<HTMLElement>();
-  let progress = $state<{ current: number; total: number } | null>(null);
+  let progress = $state<{ current: number; total: number; phase: string } | null>(null);
 
   const literaryAnalysisStream = graphql(`
     subscription Editor_Panel_Ai_LiteraryAnalysisStream($body: JSON!) {
@@ -70,13 +70,14 @@
         feedback {
           from
           to
-          text
+          startText
+          endText
           feedback
-          score
         }
         progress {
           current
           total
+          phase
         }
       }
     }
@@ -120,9 +121,9 @@
           id: nanoid(),
           from: item.from,
           to: item.to,
-          text: item.text,
+          startText: item.startText,
+          endText: item.endText,
           feedback: item.feedback,
-          score: item.score,
           relativeFrom: absolutePositionToRelativePosition(item.from, binding.type, binding.mapping),
           relativeTo: absolutePositionToRelativePosition(item.to, binding.type, binding.mapping),
         };
@@ -183,24 +184,6 @@
         })
         .filter((feedback) => feedback !== null);
     }
-
-    if (transaction.selectionSet) {
-      const newActiveFeedback = feedbacks.find((feedback) => {
-        return feedback.from <= transaction.selection.from && feedback.to >= transaction.selection.to;
-      });
-
-      if (newActiveFeedback && newActiveFeedback !== activeFeedback) {
-        activeFeedback = newActiveFeedback;
-        setTimeout(() => {
-          const feedbackElement = document.querySelector(`[data-view-id="${view.id}"] [data-panel-ai-feedback="${newActiveFeedback.id}"]`);
-          if (feedbackElement) {
-            feedbackElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          }
-        }, 0);
-      } else if (!newActiveFeedback) {
-        activeFeedback = undefined;
-      }
-    }
   };
 
   $effect(() => {
@@ -211,6 +194,7 @@
 
   $effect(() => {
     void feedbacks;
+    void activeFeedback;
     untrack(() => {
       if (editor?.current) {
         editor.current.view.dispatch(editor.current.view.state.tr);
@@ -229,20 +213,19 @@
             key,
             props: {
               decorations: (state) => {
-                return DecorationSet.create(
-                  state.doc,
-                  feedbacks.map((feedback) =>
-                    Decoration.inline(feedback.from, feedback.to, {
-                      class: css({
-                        textDecoration: 'underline',
-                        textDecorationColor: 'accent.brand.default',
-                        textDecorationStyle: 'dotted',
-                        textUnderlineOffset: '2px',
-                      }),
-                      'data-ai-feedback': feedback.id,
+                if (!activeFeedback) {
+                  return DecorationSet.empty;
+                }
+
+                return DecorationSet.create(state.doc, [
+                  Decoration.inline(activeFeedback.from, activeFeedback.to, {
+                    class: css({
+                      backgroundColor: 'accent.brand.subtle',
+                      borderRadius: '2px',
                     }),
-                  ),
-                );
+                    'data-ai-feedback': activeFeedback.id,
+                  }),
+                ]);
               },
             },
           }),
@@ -473,7 +456,11 @@
 
           <div class={flex({ flexDirection: 'column', gap: '8px', paddingRight: '24px' })}>
             <div class={css({ fontSize: '14px', color: 'text.default' })}>
-              "{feedback.text}"
+              {#if feedback.startText === feedback.endText}
+                "{feedback.startText}"
+              {:else}
+                "{feedback.startText}" ... "{feedback.endText}"
+              {/if}
             </div>
 
             <div
@@ -485,21 +472,6 @@
             >
               {feedback.feedback}
             </div>
-
-            <div
-              class={css({
-                borderRadius: '4px',
-                paddingX: '8px',
-                paddingY: '4px',
-                fontSize: '12px',
-                fontWeight: 'semibold',
-                color: 'text.subtle',
-                backgroundColor: 'surface.muted',
-                alignSelf: 'flex-start',
-              })}
-            >
-              {feedback.score}점
-            </div>
           </div>
         </div>
       {/each}
@@ -509,9 +481,13 @@
           <RingSpinner style={css.raw({ size: '16px', color: 'text.faint' })} />
           <div class={css({ fontSize: '13px', color: 'text.faint' })}>
             {#if progress}
-              {Math.round((progress.current / progress.total) * 100)}% 분석 중...
+              {#if progress.phase === 'summarizing'}
+                분석 중... ({progress.current}/{progress.total})
+              {:else}
+                피드백 중... ({progress.current}/{progress.total})
+              {/if}
             {:else}
-              분석 중...
+              준비 중...
             {/if}
           </div>
         </div>
