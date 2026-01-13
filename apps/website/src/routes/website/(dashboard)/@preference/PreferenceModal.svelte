@@ -13,11 +13,13 @@
   import PencilIcon from '~icons/lucide/pencil';
   import ShieldIcon from '~icons/lucide/shield';
   import SlidersHorizontalIcon from '~icons/lucide/sliders-horizontal';
+  import SparklesIcon from '~icons/lucide/sparkles';
   import TypeIcon from '~icons/lucide/type';
   import UserIcon from '~icons/lucide/user';
   import { replaceState } from '$app/navigation';
   import { page } from '$app/state';
   import { fragment, graphql } from '$graphql';
+  import AiTab from './AiTab.svelte';
   import BillingTab from './BillingTab.svelte';
   import EditorTab from './EditorTab.svelte';
   import FontTab from './FontTab.svelte';
@@ -70,6 +72,7 @@
         ...DashboardLayout_PreferenceModal_ReferralTab_user
         ...DashboardLayout_PreferenceModal_LaboratoryTab_user
         ...DashboardLayout_PreferenceModal_ShortcutsTab_user
+        ...DashboardLayout_PreferenceModal_AiTab_user
       }
     `),
   );
@@ -164,6 +167,12 @@
     {
       label: '고급',
       tabs: [
+        {
+          path: '/preference/ai',
+          label: 'AI',
+          icon: SparklesIcon,
+          component: AiTab,
+        },
         {
           path: '/preference/laboratory',
           label: '실험실',

@@ -3,9 +3,9 @@
   import { Plugin, PluginKey, Transaction } from '@tiptap/pm/state';
   import { Decoration, DecorationSet } from '@tiptap/pm/view';
   import { css } from '@typie/styled-system/css';
-  import { flex } from '@typie/styled-system/patterns';
+  import { center, flex } from '@typie/styled-system/patterns';
   import { tooltip } from '@typie/ui/actions';
-  import { Icon, RingSpinner } from '@typie/ui/components';
+  import { Button, Icon, RingSpinner } from '@typie/ui/components';
   import mixpanel from 'mixpanel-browser';
   import { nanoid } from 'nanoid';
   import { onMount, tick, untrack } from 'svelte';
@@ -15,6 +15,7 @@
   import CircleCheckIcon from '~icons/lucide/circle-check';
   import SparklesIcon from '~icons/lucide/sparkles';
   import XIcon from '~icons/lucide/x';
+  import { replaceState } from '$app/navigation';
   import { fragment, graphql } from '$graphql';
   import { getViewContext } from '../@split-view/context.svelte';
   import type { Editor } from '@tiptap/core';
@@ -44,6 +45,7 @@
     graphql(`
       fragment Editor_Panel_PanelAi_user on User {
         id
+        preferences
 
         subscription {
           id
@@ -53,6 +55,7 @@
   );
 
   const view = getViewContext();
+  const aiOptIn = $derived(($user.preferences.aiOptIn as boolean | undefined) ?? false);
 
   let inflight = $state(false);
   let mounted = $state(false);
@@ -301,7 +304,7 @@
       {/if}
     </div>
 
-    {#if !inflight && hasChecked}
+    {#if !inflight && hasChecked && aiOptIn}
       <button
         class={css({
           fontSize: '13px',
@@ -318,28 +321,67 @@
     {/if}
   </div>
 
-  {#if !hasChecked && !inflight}
-    <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '12px', paddingY: '40px' })}>
-      <Icon style={css.raw({ color: 'text.faint' })} icon={SparklesIcon} size={32} />
-      <div class={css({ fontSize: '16px', color: 'text.faint' })}>글에 대한 피드백을 받아보세요</div>
-      <button
-        class={css({
-          borderRadius: '6px',
-          paddingX: '16px',
-          paddingY: '8px',
-          fontSize: '14px',
-          fontWeight: 'semibold',
-          color: 'text.default',
+  {#if !aiOptIn}
+    <div
+      class={flex({
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: '20px',
+        paddingY: '60px',
+      })}
+    >
+      <div
+        class={center({
+          size: '64px',
+          borderRadius: '16px',
           backgroundColor: 'surface.muted',
-          transition: 'common',
-          _hover: { backgroundColor: 'interactive.hover' },
-          _focusVisible: { backgroundColor: 'interactive.hover' },
+          color: 'text.faint',
         })}
-        onclick={runAnalysis}
-        type="button"
       >
-        분석 시작
-      </button>
+        <Icon icon={SparklesIcon} size={28} />
+      </div>
+
+      <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '8px' })}>
+        <p class={css({ fontSize: '13px', color: 'text.faint', textAlign: 'center' })}>
+          AI 기능을 사용하려면
+          <br />
+          설정에서 활성화해주세요
+        </p>
+      </div>
+
+      <Button onclick={() => replaceState('', { shallowRoute: '/preference/ai' })} size="sm" variant="secondary">설정으로 이동</Button>
+    </div>
+  {:else if !hasChecked && !inflight}
+    <div
+      class={flex({
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: '20px',
+        paddingY: '60px',
+      })}
+    >
+      <div
+        class={center({
+          size: '64px',
+          borderRadius: '16px',
+          backgroundColor: 'surface.muted',
+          color: 'text.faint',
+        })}
+      >
+        <Icon icon={SparklesIcon} size={28} />
+      </div>
+
+      <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '8px' })}>
+        <p class={css({ fontSize: '13px', color: 'text.faint', textAlign: 'center' })}>
+          글에 대한 AI 피드백을
+          <br />
+          받아보세요
+        </p>
+      </div>
+
+      <Button onclick={runAnalysis} size="sm" variant="secondary">분석 시작</Button>
     </div>
   {:else if (hasChecked && checkFailed) || !$user.subscription}
     <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '8px', paddingY: '40px' })}>
