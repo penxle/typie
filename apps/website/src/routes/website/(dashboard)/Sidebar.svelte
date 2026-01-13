@@ -5,6 +5,7 @@
   import { Icon } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { clamp } from '@typie/ui/utils';
+  import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
   import { untrack } from 'svelte';
   import BarChart3Icon from '~icons/lucide/bar-chart-3';
@@ -47,12 +48,38 @@
         id
         role
 
+        characterCountChanges {
+          date
+          additions
+        }
+
         ...DashboardLayout_Profile_user
         ...DashboardLayout_PlanUsageWidget_user
         ...DashboardLayout_TrialWidget_user
       }
     `),
   );
+
+  const currentStreak = $derived.by(() => {
+    const today = dayjs.kst().startOf('day');
+    const activeDates = new Set(
+      $user.characterCountChanges.filter((c) => c.additions > 0).map((c) => dayjs(c.date as string).format('YYYY-MM-DD')),
+    );
+
+    let streak = 0;
+    let checkDate = today;
+
+    if (!activeDates.has(today.format('YYYY-MM-DD'))) {
+      checkDate = today.subtract(1, 'day');
+    }
+
+    while (activeDates.has(checkDate.format('YYYY-MM-DD'))) {
+      streak++;
+      checkDate = checkDate.subtract(1, 'day');
+    }
+
+    return streak;
+  });
 
   const site = fragment(
     _site,
@@ -441,6 +468,11 @@
       >
         <Icon style={css.raw({ color: 'text.faint' })} icon={BarChart3Icon} size={14} />
         <span class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.muted' })}>통계</span>
+        {#if currentStreak > 0}
+          <span class={css({ marginLeft: 'auto', fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>
+            연속 {currentStreak}일째 작성중
+          </span>
+        {/if}
       </button>
     </div>
 

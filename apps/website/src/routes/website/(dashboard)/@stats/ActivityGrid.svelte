@@ -172,7 +172,7 @@
             position: 'absolute',
             left: '0',
             insetY: '0',
-            fontSize: '13px',
+            fontSize: '10px',
             fontWeight: 'medium',
             color: 'text.faint',
           })}
@@ -190,7 +190,7 @@
         class={css({
           gridRow: '1',
           paddingY: '1px',
-          fontSize: '13px',
+          fontSize: '10px',
           fontWeight: 'medium',
           color: 'text.faint',
           whiteSpace: 'nowrap',
