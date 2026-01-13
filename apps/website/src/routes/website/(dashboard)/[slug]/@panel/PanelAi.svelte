@@ -183,6 +183,15 @@
           return { ...feedback, from, to };
         })
         .filter((feedback) => feedback !== null);
+
+      if (activeFeedback) {
+        const updatedActive = feedbacks.find((f) => f.id === activeFeedback?.id);
+        if (updatedActive) {
+          activeFeedback = updatedActive;
+        } else {
+          activeFeedback = undefined;
+        }
+      }
     }
   };
 
