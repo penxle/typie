@@ -267,7 +267,7 @@
 
 <div class={flex({ flexDirection: 'column', gap: '16px', width: 'full' })}>
   <div class={flex({ justifyContent: 'space-between', alignItems: 'center' })}>
-    <div class={css({ fontSize: '14px', fontWeight: 'semibold', color: 'text.faint' })}>지난 3개월의 그래프</div>
+    <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>지난 3개월간의 기록</div>
     <div class={flex({ alignItems: 'center', gap: '12px' })}>
       {#if compressionRange.end > compressionRange.start && !isHoveringCompressedBar}
         <span class={css({ fontSize: '11px', color: 'text.faint' })}>
@@ -278,12 +278,12 @@
   </div>
 
   <div class={flex({ flexDirection: 'column', gap: '4px' })}>
-    <div class={flex({ alignItems: 'flex-end', gap: '2px', height: '141px', overflow: 'hidden', position: 'relative' })}>
+    <div class={flex({ alignItems: 'flex-end', gap: '2px', height: '100px', overflow: 'hidden', position: 'relative' })}>
       <!-- 배경 격자 -->
       <div class={css({ position: 'absolute', inset: '0', pointerEvents: 'none' })}>
         {#each [1, 2, 3, 4, 5] as i (i)}
           <div
-            style:bottom="{i * 28}px"
+            style:bottom="{i * 20}px"
             class={css({
               position: 'absolute',
               left: '0',
@@ -446,7 +446,7 @@
     </div>
   </div>
 </div>
-<div class={flex({ gap: '16px', fontSize: '12px', alignSelf: 'flex-end' })}>
+<div class={flex({ marginTop: '8px', gap: '16px', fontSize: '12px', alignSelf: 'flex-end' })}>
   <button
     class={flex({ alignItems: 'center', gap: '6px', userSelect: 'none' })}
     onclick={() => (showAdditions = !showAdditions)}
