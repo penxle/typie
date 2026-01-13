@@ -20,6 +20,7 @@
   import PaperclipIcon from '~icons/lucide/paperclip';
   import QuoteIcon from '~icons/lucide/quote';
   import SettingsIcon from '~icons/lucide/settings';
+  import SparklesIcon from '~icons/lucide/sparkles';
   import SpellCheckIcon from '~icons/lucide/spell-check';
   import StickyNoteIcon from '~icons/lucide/sticky-note';
   import TableIcon from '~icons/lucide/table';
@@ -302,6 +303,7 @@
     <ToolbarPanelTabButton $user={$site.user} icon={StickyNoteIcon} label="노트" tab="note" />
     <ToolbarPanelTabButton $user={$site.user} icon={BookmarkIcon} label="북마크" tab="anchors" />
     <ToolbarPanelTabButton $user={$site.user} icon={SpellCheckIcon} label="맞춤법" needSubscription tab="spellcheck" />
+    <ToolbarPanelTabButton $user={$site.user} icon={SparklesIcon} label="AI" needSubscription tab="ai" />
     <ToolbarPanelTabButton $user={$site.user} icon={ClockFadingIcon} label="타임라인" tab="timeline" />
     <ToolbarPanelTabButton $user={$site.user} icon={SettingsIcon} label="본문 설정" tab="settings" />
   </div>

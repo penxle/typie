@@ -490,6 +490,25 @@ The `JSON` scalar type represents JSON values as specified by [ECMA-404](http://
 """
 scalar JSON
 
+type LiteraryAnalysisPayload {
+  feedback: LiteraryFeedbackResult
+  progress: LiteraryAnalysisProgress
+  type: String!
+}
+
+type LiteraryAnalysisProgress {
+  current: Int!
+  total: Int!
+}
+
+type LiteraryFeedbackResult {
+  feedback: String!
+  from: Int!
+  score: Int!
+  text: String!
+  to: Int!
+}
+
 input LoginWithEmailInput {
   email: String!
   password: String!
@@ -1021,6 +1040,7 @@ input SubscribePlanWithBillingKeyInput {
 
 type Subscription {
   documentSyncStream(clientId: String!, documentId: ID!): DocumentSyncStreamPayload!
+  literaryAnalysisStream(body: JSON!): LiteraryAnalysisPayload!
   postSyncStream(clientId: String!, postId: ID!): PostSyncStreamPayload!
   siteUpdateStream(siteId: ID!): SiteUpdateStreamPayload!
   siteUsageUpdateStream(siteId: ID!): Site!
