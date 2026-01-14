@@ -13,6 +13,7 @@ import { builder } from '../builder';
 const ai = new GoogleGenAI({
   vertexai: true,
   project: 'typie-co',
+  location: 'global',
   googleAuthOptions: {
     credentials: JSON.parse(env.GOOGLE_SERVICE_ACCOUNT),
   },
@@ -93,6 +94,24 @@ const CHUNK_SIZE = 1000;
 const CACHE_TTL = 60 * 60 * 24;
 const SUMMARIZE_CONCURRENCY = 5;
 const ANALYZE_CONCURRENCY = 3;
+const MAX_RETRIES = 3;
+const INITIAL_RETRY_DELAY = 3000;
+
+const withRetry = async <T>(fn: () => Promise<T>, maxRetries = MAX_RETRIES, initialDelay = INITIAL_RETRY_DELAY): Promise<T> => {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastError = err;
+      if (attempt < maxRetries) {
+        const delay = initialDelay * 2 ** attempt;
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+  }
+  throw lastError;
+};
 
 const extractTextAndMappings = (body: unknown) => {
   const node = Node.fromJSON(schema, body);
@@ -208,15 +227,16 @@ const summarizeChunk = async (chunkText: string): Promise<string> => {
     return cached;
   }
 
-  const response = await ai.models.generateContent({
-    model: 'gemini-3-flash-preview',
-    config: {
-      systemInstruction: summarizePrompt,
-    },
-    contents: `요약할 텍스트:\n\n${chunkText}`,
+  const summary = await withRetry(async () => {
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      config: {
+        systemInstruction: summarizePrompt,
+      },
+      contents: `요약할 텍스트:\n\n${chunkText}`,
+    });
+    return response.text ?? '';
   });
-
-  const summary = response.text ?? '';
   await redis.setex(cacheKey, CACHE_TTL, summary);
 
   return summary;
@@ -285,16 +305,18 @@ const analyzeChunkWithContext = async (context: ChunkContext, onFeedback: (feedb
     </이후 내용>
   `;
 
-  const stream = await ai.models.generateContentStream({
-    model: 'gemini-3-flash-preview',
-    config: {
-      systemInstruction: systemPrompt,
-      thinkingConfig: {
-        thinkingLevel: ThinkingLevel.HIGH,
+  const stream = await withRetry(() =>
+    ai.models.generateContentStream({
+      model: 'gemini-3-flash-preview',
+      config: {
+        systemInstruction: systemPrompt,
+        thinkingConfig: {
+          thinkingLevel: ThinkingLevel.HIGH,
+        },
       },
-    },
-    contents: userContent,
-  });
+      contents: userContent,
+    }),
+  );
 
   let buffer = '';
 
@@ -443,6 +465,7 @@ builder.subscriptionFields((t) => ({
           push({ type: 'complete' });
         } catch (err) {
           Sentry.captureException(err);
+          console.error(err);
           push({ type: 'error' });
         }
 
