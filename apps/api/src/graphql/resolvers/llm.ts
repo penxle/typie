@@ -1,5 +1,6 @@
 import { GoogleGenAI, ThinkingLevel } from '@google/genai';
 import { Node } from '@tiptap/pm/model';
+import dedent from 'dedent';
 import { Repeater } from 'graphql-yoga';
 import pMap from 'p-map';
 import { rapidhash } from 'rapidhash-js';
@@ -26,51 +27,59 @@ const LiteraryFeedbackResult = builder.simpleObject('LiteraryFeedbackResult', {
   }),
 });
 
-const systemPrompt = `당신은 글을 읽는 첫 번째 독자입니다.
+const systemPrompt = dedent`
+  당신은 글을 읽는 첫 번째 독자입니다.
 
-<context>
-현재 분석할 구간 앞뒤로 요약이 제공됩니다.
-- [이전 내용 요약]: 현재 구간 이전의 이야기 흐름
-- [이후 내용 요약]: 현재 구간 이후의 이야기 흐름
-</context>
+  <context>
+  현재 분석할 구간 앞뒤로 이야기 흐름이 제공됩니다.
 
-<principle>
-꼼꼼하게 읽고, 개선할 수 있는 부분을 찾아주세요.
-이 글의 이 부분에서 실제로 발생하는 구체적인 문제만 지적하세요.
-특정 유형의 피드백에 집착하지 마세요. 다양한 관점에서 균형 있게 살펴보세요.
-맞춤법, 문법, 띄어쓰기는 지적하지 마세요.
-신조어, 방언, 줄임말, 의도적인 어미 변형 등 작가의 문체적 선택은 존중하세요.
-</principle>
+  - [이전 내용]: 현재 구간 이전의 이야기 흐름
+  - [현재 분석할 구간]: 현재 분석할 구간의 내용
+  - [이후 내용]: 현재 구간 이후의 이야기 흐름
 
-<focus>
-- 독자로서 읽다가 걸리거나 몰입이 깨지는 부분
-- 장면 전환이 급하거나 어색한 부분
-- 누가 말하는지 헷갈리는 대화
-- 인물의 행동이나 반응이 맥락상 부자연스러운 부분
-- 설정이나 복선이 회수되지 않는 부분
-- 반복되는 단어나 표현
-- 문장이 너무 길거나 구조가 복잡해서 읽기 어려운 부분
-- 묘사가 부족하거나 과한 부분
-</focus>
+  현재 분석할 구간의 내용은 이전 내용과 이후 내용 사이에 있습니다.
+  만약 피드백에서 이전 내용과 이후 내용을 언급해야 한다면, 이전 내용 혹은 이후 내용이라고 정확하게 언급하세요.
+  </context>
 
-<examples>
-- "이 장면 전환이 갑작스러워요. 사이에 뭔가 있으면 자연스러울 것 같아요."
-- "대화가 길어지면서 누가 말하는지 헷갈려요. 중간에 행동 묘사를 넣으면 좋을 것 같아요."
-- "앞에서 언급한 OO이 여기서 다시 나오면 좋을 것 같은데, 그냥 지나가네요."
-- "이 문장이 좀 길어서 한 번에 읽기 어려워요. 나눠보면 어떨까요?"
-- "여기서 인물이 갑자기 태도가 바뀌는데, 이유가 좀 더 드러나면 좋겠어요."
-</examples>
+  <principle>
+  꼼꼼하게 읽고, 개선할 수 있는 부분을 찾아주세요.
+  이 글의 이 부분에서 실제로 발생하는 구체적인 문제만 지적하세요.
+  특정 유형의 피드백에 집착하지 마세요. 다양한 관점에서 균형 있게 살펴보세요.
+  맞춤법, 문법, 띄어쓰기는 지적하지 마세요.
+  신조어, 방언, 줄임말, 의도적인 어미 변형 등 작가의 문체적 선택은 존중하세요.
+  언제나 전체 글을 읽고 있는 독자의 시선으로 작성하세요.
+  </principle>
 
-<tone>
-"~하면 어떨까요?", "~인 것 같아요"
-</tone>
+  <focus>
+  - 독자로서 읽다가 걸리거나 몰입이 깨지는 부분
+  - 장면 전환이 급하거나 어색한 부분
+  - 누가 말하는지 헷갈리는 대화
+  - 인물의 행동이나 반응이 맥락상 부자연스러운 부분
+  - 설정이나 복선이 회수되지 않는 부분
+  - 반복되는 단어나 표현
+  - 문장이 너무 길거나 구조가 복잡해서 읽기 어려운 부분
+  - 묘사가 부족하거나 과한 부분
+  </focus>
 
-<output>
-JSON Lines:
-{"start":"구간 시작 문장","end":"구간 끝 문장","feedback":"피드백"}
+  <examples>
+  - "이 장면 전환이 갑작스러워요. 사이에 뭔가 있으면 자연스러울 것 같아요."
+  - "대화가 길어지면서 누가 말하는지 헷갈려요. 중간에 행동 묘사를 넣으면 좋을 것 같아요."
+  - "앞에서 언급한 OO이 여기서 다시 나오면 좋을 것 같은데, 그냥 지나가네요."
+  - "이 문장이 좀 길어서 한 번에 읽기 어려워요. 나눠보면 어떨까요?"
+  - "여기서 인물이 갑자기 태도가 바뀌는데, 이유가 좀 더 드러나면 좋겠어요."
+  </examples>
 
-피드백할 게 없으면 출력하지 마세요.
-</output>`;
+  <tone>
+  "~하면 어떨까요?", "~인 것 같아요"
+  </tone>
+
+  <output>
+  JSON Lines:
+  {"start":"구간 시작 문장","end":"구간 끝 문장","feedback":"피드백"}
+
+  피드백할 게 없으면 출력하지 마세요.
+  </output>
+`;
 
 const CHUNK_SIZE = 1000;
 const CACHE_TTL = 60 * 60 * 24;
@@ -168,17 +177,18 @@ const createChunks = (text: string) => {
   return chunks;
 };
 
-const summarizePrompt = `다음 텍스트를 요약하세요.
+const summarizePrompt = dedent`
+  다음 텍스트를 요약하세요.
 
-포함할 내용:
-- 등장인물과 그들의 관계
-- 주요 사건과 행동
-- 감정 변화와 분위기
-- 장소나 시간의 변화
-- 대화의 핵심 내용
-- 중요하거나 일반적이지 않은 단어나 용어
+  포함할 내용:
+  - 등장인물과 그들의 관계
+  - 주요 사건과 행동
+  - 감정 변화와 분위기
+  - 장소나 시간의 변화
+  - 대화의 핵심 내용
+  - 중요하거나 일반적이지 않은 단어나 용어
 
-300자 이내로 작성하세요.
+  300자 이내로 작성하세요.
 `;
 
 const summarizeChunk = async (chunkText: string): Promise<string> => {
@@ -253,14 +263,19 @@ const analyzeChunkWithContext = async (context: ChunkContext, onFeedback: (feedb
 
   const feedbacks: Feedback[] = [];
 
-  let userContent = '';
-  if (context.precedingSummary) {
-    userContent += `[이전 내용 요약]\n${context.precedingSummary}\n\n`;
-  }
-  userContent += `[현재 분석할 구간]\n${context.currentText}`;
-  if (context.followingSummary) {
-    userContent += `\n\n[이후 내용 요약]\n${context.followingSummary}`;
-  }
+  const userContent = dedent`
+    <이전 내용>
+    ${context.precedingSummary || '(글의 시작 부분입니다)'}
+    </이전 내용>
+
+    <현재 분석할 구간>
+    ${context.currentText}
+    </현재 분석할 구간>
+
+    <이후 내용>
+    ${context.followingSummary || '(글의 마지막 부분입니다)'}
+    </이후 내용>
+  `;
 
   const stream = await ai.models.generateContentStream({
     model: 'gemini-3-flash-preview',
