@@ -10,7 +10,13 @@ import { env } from '@/env';
 import { schema, textSerializers } from '@/pm';
 import { builder } from '../builder';
 
-const ai = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
+const ai = new GoogleGenAI({
+  vertexai: true,
+  project: 'typie-co',
+  googleAuthOptions: {
+    credentials: JSON.parse(env.GOOGLE_SERVICE_ACCOUNT),
+  },
+});
 
 type Feedback = {
   start: string;
@@ -40,6 +46,7 @@ const systemPrompt = dedent`
 
   현재 분석할 구간의 내용은 이전 내용과 이후 내용 사이에 있습니다.
   만약 피드백에서 이전 내용과 이후 내용을 언급해야 한다면, 이전 내용 혹은 이후 내용이라고 정확하게 언급하세요.
+  단, 이전 내용 혹은 이후 내용을 언급할 때는 특수문자로 감싸지 마세요.
   </context>
 
   <principle>

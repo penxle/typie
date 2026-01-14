@@ -120,6 +120,7 @@ unstub
 unsubscriber
 vcpu
 vermuda
+vertexai
 virtio
 virtiofs
 vite
