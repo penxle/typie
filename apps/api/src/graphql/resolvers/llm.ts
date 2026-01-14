@@ -1,4 +1,5 @@
 import { GoogleGenAI, ThinkingLevel } from '@google/genai';
+import * as Sentry from '@sentry/bun';
 import { Node } from '@tiptap/pm/model';
 import dedent from 'dedent';
 import { Repeater } from 'graphql-yoga';
@@ -433,7 +434,8 @@ builder.subscriptionFields((t) => ({
           );
 
           push({ type: 'complete' });
-        } catch {
+        } catch (err) {
+          Sentry.captureException(err);
           push({ type: 'error' });
         }
 
