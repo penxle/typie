@@ -19,6 +19,7 @@
     overlayPadding?: number;
     focusTrapOptions?: FocusTrapOptions;
     showBackdrop?: boolean;
+    closable?: boolean;
   };
 
   let {
@@ -30,6 +31,7 @@
     overlayPadding = 20,
     focusTrapOptions = {},
     showBackdrop = true,
+    closable = true,
   }: Props = $props();
 
   const close = () => {
@@ -40,7 +42,7 @@
   $effect(() => {
     if (open) {
       return pushEscapeHandler(() => {
-        if (open) {
+        if (open && closable) {
           close();
           return true;
         }
@@ -76,7 +78,7 @@
           backdropBlur: '4px',
         },
       )}
-      onclick={close}
+      onclick={closable ? close : undefined}
       role="none"
       transition:fade|global={{ duration: 150, easing: sineOut }}
     ></div>

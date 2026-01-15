@@ -257,11 +257,25 @@ User.implement({
     marketingConsent: t.field({
       type: 'Boolean',
       resolve: async (user) => {
-        return !!(await db
-          .select({ id: UserMarketingConsents.id })
+        const consent = await db
+          .select({ consented: UserMarketingConsents.consented })
           .from(UserMarketingConsents)
           .where(eq(UserMarketingConsents.userId, user.id))
-          .then(first));
+          .then(first);
+        return consent?.consented ?? false;
+      },
+    }),
+
+    marketingConsentAskedAt: t.field({
+      type: 'DateTime',
+      nullable: true,
+      resolve: async (user) => {
+        const consent = await db
+          .select({ askedAt: UserMarketingConsents.askedAt })
+          .from(UserMarketingConsents)
+          .where(eq(UserMarketingConsents.userId, user.id))
+          .then(first);
+        return consent?.askedAt ?? null;
       },
     }),
 
@@ -555,11 +569,13 @@ builder.mutationFields((t) => ({
       marketingConsent: t.input.boolean(),
     },
     resolve: async (_, { input }, ctx) => {
-      if (input.marketingConsent) {
-        await db.insert(UserMarketingConsents).values({ userId: ctx.session.userId }).onConflictDoNothing();
-      } else {
-        await db.delete(UserMarketingConsents).where(eq(UserMarketingConsents.userId, ctx.session.userId));
-      }
+      await db
+        .insert(UserMarketingConsents)
+        .values({ userId: ctx.session.userId, consented: input.marketingConsent })
+        .onConflictDoUpdate({
+          target: [UserMarketingConsents.userId],
+          set: { consented: input.marketingConsent },
+        });
 
       return ctx.session.userId;
     },

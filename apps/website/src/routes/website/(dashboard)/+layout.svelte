@@ -26,6 +26,7 @@
   import TrashModal from './@trash/TrashModal.svelte';
   import CommandPalette from './CommandPalette.svelte';
   import EditorSelectModal from './EditorSelectModal.svelte';
+  import MarketingConsentModal from './MarketingConsentModal.svelte';
   import ReferralWelcomeModal from './ReferralWelcomeModal.svelte';
   import Shortcuts from './Shortcuts.svelte';
   import Sidebar from './Sidebar.svelte';
@@ -70,6 +71,8 @@
         }
 
         surveys
+        marketingConsentAskedAt
+        totalCharacterCount
 
         ...DashboardLayout_CommandPalette_user
         ...DashboardLayout_PreferenceModal_user
@@ -180,6 +183,7 @@
   setupEditorRegistry();
 
   let referralWelcomeModalOpen = $state(false);
+  let marketingConsentModalOpen = $state(false);
   let userSurveyModalOpen = $state(false);
 
   const fontFaces = $derived(
@@ -230,12 +234,14 @@
     if ($query.me.referral && !app.preference.current.referralWelcomeModalShown) {
       referralWelcomeModalOpen = true;
       app.preference.current.referralWelcomeModalShown = true;
+    } else if ($query.me.marketingConsentAskedAt === null && $query.me.totalCharacterCount >= 100) {
+      marketingConsentModalOpen = true;
     }
 
     const skipUntil = localStorage.getItem('surveySkipUntil');
     const shouldShowSurvey = $query.me.surveys.includes('202509_ir') && (!skipUntil || new Date(skipUntil) < new Date());
 
-    if (shouldShowSurvey) {
+    if (shouldShowSurvey && !marketingConsentModalOpen) {
       userSurveyModalOpen = true;
     }
 
@@ -370,6 +376,7 @@
 <Shortcuts {$query} />
 
 <ReferralWelcomeModal bind:open={referralWelcomeModalOpen} />
+<MarketingConsentModal bind:open={marketingConsentModalOpen} />
 <UserSurveyModal bind:open={userSurveyModalOpen} />
 
 <EditorSelectModal
