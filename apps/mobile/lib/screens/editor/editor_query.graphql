@@ -1,6 +1,7 @@
 query EditorScreen_Query($slug: String!, $siteId: ID!) {
   me {
     id
+    preferences
 
     fontFamilies {
       id

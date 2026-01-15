@@ -20,7 +20,7 @@ import 'package:typie/screens/enroll_plan/subscription_celebration_bottom_sheet.
 import 'package:typie/widgets/horizontal_divider.dart';
 import 'package:typie/widgets/tappable.dart';
 
-enum LimitBottomSheetType { limit, spellCheck }
+enum LimitBottomSheetType { limit, spellCheck, aiFeedback }
 
 class LimitBottomSheet extends HookWidget {
   const LimitBottomSheet({this.type = LimitBottomSheetType.limit, super.key});
@@ -91,9 +91,15 @@ class LimitBottomSheet extends HookWidget {
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 14, color: context.colors.textFaint),
                 ),
-              ] else
+              ] else if (type == LimitBottomSheetType.spellCheck)
                 Text(
                   '맞춤법 검사는 유료 플랜에서 이용할 수 있어요.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 14, color: context.colors.textFaint),
+                )
+              else
+                Text(
+                  'AI 피드백은 유료 플랜에서 이용할 수 있어요.',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 14, color: context.colors.textFaint),
                 ),
