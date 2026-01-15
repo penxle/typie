@@ -4,6 +4,7 @@ import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:typie/error.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/providers/in_app_purchase.dart';
+import 'package:typie/providers/marketing_consent.dart';
 import 'package:typie/providers/push_notification.dart';
 import 'package:typie/routers/app.dart';
 import 'package:typie/routers/observer.dart';
@@ -15,7 +16,7 @@ class App extends HookWidget {
 
   @override
   Widget build(BuildContext context) {
-    final router = useMemoized(AppRouter.new);
+    final router = useService<AppRouter>();
     final theme = useService<AppTheme>();
 
     useListenable(theme);
@@ -40,7 +41,11 @@ class App extends HookWidget {
                   return Stack(
                     children: [
                       child!,
-                      const Offstage(child: Stack(children: [PushNotificationProvider(), InAppPurchaseProvider()])),
+                      const Offstage(
+                        child: Stack(
+                          children: [PushNotificationProvider(), InAppPurchaseProvider(), MarketingConsentProvider()],
+                        ),
+                      ),
                     ],
                   );
                 },
