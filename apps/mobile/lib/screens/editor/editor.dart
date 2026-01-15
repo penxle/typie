@@ -28,6 +28,7 @@ import 'package:typie/screens/editor/__generated__/duplicate_post_mutation.req.g
 import 'package:typie/screens/editor/__generated__/editor_query.data.gql.dart';
 import 'package:typie/screens/editor/__generated__/editor_query.req.gql.dart';
 import 'package:typie/screens/editor/__generated__/update_post_type_mutation.req.gql.dart';
+import 'package:typie/screens/editor/ai_feedback.dart';
 import 'package:typie/screens/editor/anchor.dart';
 import 'package:typie/screens/editor/body_setting_bottom_sheet.dart';
 import 'package:typie/screens/editor/find_replace.dart';
@@ -359,6 +360,42 @@ class Editor extends HookWidget {
                                 intercept: true,
                                 overlayOpacity: 0.05,
                                 child: SpellCheckBottomSheet(scope: scope, mixpanel: mixpanel),
+                              );
+                            },
+                          ),
+                          BottomMenuItem(
+                            icon: LucideLightIcons.lightbulb,
+                            label: 'AI 피드백',
+                            onTap: () async {
+                              if (data.me!.subscription == null) {
+                                final trialStarted = await context.showBottomSheet<bool>(
+                                  intercept: true,
+                                  child: const LimitBottomSheet(type: LimitBottomSheetType.aiFeedback),
+                                );
+
+                                if (trialStarted ?? false) {
+                                  unawaited(
+                                    client.refetch(
+                                      GEditorScreen_QueryReq(
+                                        (b) => b
+                                          ..vars.slug = slug
+                                          ..vars.siteId = pref.siteId,
+                                      ),
+                                    ),
+                                  );
+                                }
+
+                                return;
+                              }
+
+                              unawaited(mixpanel.track('ai-feedback', properties: {'via': 'editor'}));
+
+                              final aiOptIn = data.me!.preferences.asMap['aiOptIn'] as bool? ?? false;
+
+                              await context.showBottomSheet(
+                                intercept: true,
+                                overlayOpacity: 0.05,
+                                child: AiFeedbackBottomSheet(scope: scope, aiOptIn: aiOptIn),
                               );
                             },
                           ),

@@ -1,0 +1,6 @@
+query EditorSettingsScreen_Query {
+  me {
+    id
+    preferences
+  }
+}

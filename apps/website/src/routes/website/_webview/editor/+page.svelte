@@ -24,6 +24,7 @@
   import { browser } from '$app/environment';
   import { graphql } from '$graphql';
   import { unfurlEmbed, uploadBlobAsFile, uploadBlobAsImage } from '$lib/utils';
+  import AiFeedback from './AiFeedback.svelte';
   import Anchors from './Anchors.svelte';
   import { handleCaretMovement } from './caret';
   import FindReplace from './FindReplace.svelte';
@@ -1256,6 +1257,7 @@
         {/if}
         <Limit {$query} {editor} />
         <Spellcheck {editor} />
+        <AiFeedback {editor} />
         <FindReplace {editor} />
         <Anchors {doc} {editor} />
       {/if}
