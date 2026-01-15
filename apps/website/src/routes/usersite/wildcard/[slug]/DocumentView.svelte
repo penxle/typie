@@ -21,11 +21,12 @@
     graphql(`
       fragment UsersiteWildcardSlugPage_DocumentView_entityView on EntityView {
         id
+        slug
         url
 
         ancestors {
           id
-          url
+          slug
 
           node {
             __typename
@@ -104,7 +105,7 @@
           <div class={flex({ alignItems: 'center', gap: '4px', wrap: 'wrap', marginBottom: { base: '4px', lg: '8px' } })}>
             {#each $entityView.ancestors as ancestor (ancestor.id)}
               {#if ancestor.node.__typename === 'FolderView'}
-                <a class={css({ fontSize: { base: '12px', lg: '13px' }, color: 'text.disabled' })} href={ancestor.url}>
+                <a class={css({ fontSize: { base: '12px', lg: '13px' }, color: 'text.disabled' })} href={`/${ancestor.slug}`}>
                   {ancestor.node.name}
                 </a>
                 <div class={css({ fontSize: { base: '12px', lg: '13px' }, color: 'text.disabled' })}>/</div>

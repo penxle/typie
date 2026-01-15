@@ -21,7 +21,7 @@
 
         entities {
           id
-          url
+          slug
 
           node {
             __typename
@@ -121,7 +121,7 @@
                   cursor: 'pointer',
                   _hover: { '& .folder-name': { color: 'text.muted' } },
                 })}
-                href={entity.url}
+                href={`/${entity.slug}`}
               >
                 {#if entity.node.thumbnail}
                   <div
@@ -204,7 +204,7 @@
                   cursor: 'pointer',
                   _hover: { '& .post-title': { color: 'text.muted' } },
                 })}
-                href={entity.url}
+                href={`/${entity.slug}`}
               >
                 <div class={css({ flex: '1', minWidth: '0' })}>
                   <h2
