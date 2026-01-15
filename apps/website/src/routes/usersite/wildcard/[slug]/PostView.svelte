@@ -41,11 +41,12 @@
     graphql(`
       fragment UsersiteWildcardSlugPage_PostView_entityView on EntityView {
         id
+        slug
         url
 
         ancestors {
           id
-          url
+          slug
 
           node {
             __typename
@@ -442,7 +443,7 @@
             {#each $entityView.ancestors as ancestor (ancestor.id)}
               {#if ancestor.node.__typename === 'FolderView'}
                 <span class={css({ fontSize: '13px', color: 'text.faint' })}>/</span>
-                <a class={css({ fontSize: '13px', color: 'text.faint', _hover: { color: 'text.muted' } })} href={ancestor.url}>
+                <a class={css({ fontSize: '13px', color: 'text.faint', _hover: { color: 'text.muted' } })} href={`/${ancestor.slug}`}>
                   {ancestor.node.name}
                 </a>
               {/if}

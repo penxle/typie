@@ -22,7 +22,7 @@
 
         prevPost {
           id
-          url
+          slug
 
           node {
             __typename
@@ -40,7 +40,7 @@
 
         nextPost {
           id
-          url
+          slug
 
           node {
             __typename
@@ -87,7 +87,7 @@
           transition: 'background',
           _hover: { backgroundColor: 'surface.muted' },
         })}
-        href={$entityView.prevPost.url}
+        href={`/${$entityView.prevPost.slug}`}
       >
         {#if $entityView.prevPost.node.thumbnail}
           <div
@@ -135,7 +135,7 @@
           transition: 'background',
           _hover: { backgroundColor: 'surface.muted' },
         })}
-        href={$entityView.nextPost.url}
+        href={`/${$entityView.nextPost.slug}`}
       >
         {#if $entityView.nextPost.node.thumbnail}
           <div

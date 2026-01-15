@@ -21,11 +21,12 @@
     graphql(`
       fragment UsersiteWildcardSlugPage_FolderView_entityView on EntityView {
         id
+        slug
         url
 
         ancestors {
           id
-          url
+          slug
 
           node {
             __typename
@@ -48,7 +49,7 @@
 
         children {
           id
-          url
+          slug
 
           node {
             __typename
@@ -136,7 +137,7 @@
           {#each $entityView.ancestors as ancestor (ancestor.id)}
             {#if ancestor.node.__typename === 'FolderView'}
               <span class={css({ fontSize: '13px', color: 'text.faint' })}>/</span>
-              <a class={css({ fontSize: '13px', color: 'text.faint', _hover: { color: 'text.muted' } })} href={ancestor.url}>
+              <a class={css({ fontSize: '13px', color: 'text.faint', _hover: { color: 'text.muted' } })} href={`/${ancestor.slug}`}>
                 {ancestor.node.name}
               </a>
             {/if}
@@ -179,7 +180,7 @@
                     cursor: 'pointer',
                     _hover: { '& .folder-name': { color: 'text.muted' } },
                   })}
-                  href={entity.url}
+                  href={`/${entity.slug}`}
                 >
                   {#if entity.node.thumbnail}
                     <div
@@ -262,7 +263,7 @@
                     cursor: 'pointer',
                     _hover: { '& .post-title': { color: 'text.muted' } },
                   })}
-                  href={entity.url}
+                  href={`/${entity.slug}`}
                 >
                   <div class={css({ flex: '1', minWidth: '0' })}>
                     <h2
