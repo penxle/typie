@@ -2,7 +2,7 @@
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Icon, Modal } from '@typie/ui/components';
-  import SettingsIcon from '~icons/lucide/settings';
+  import OrbitIcon from '~icons/lucide/orbit';
   import { replaceState } from '$app/navigation';
   import { page } from '$app/state';
   import { fragment, graphql } from '$graphql';
@@ -51,7 +51,7 @@
     {
       path: '/site-settings/general',
       label: '일반',
-      icon: SettingsIcon,
+      icon: OrbitIcon,
       component: GeneralTab,
     },
   ];

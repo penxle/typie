@@ -1,5 +1,5 @@
 import dayjs from 'dayjs';
-import { and, asc, desc, eq, gt, inArray, isNull, ne, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, isNull, lt, ne, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import escape from 'escape-string-regexp';
 import { match } from 'ts-pattern';
@@ -262,7 +262,7 @@ EntityView.implement({
             JOIN sq ON ${Entities.id} = sq.parent_id
             WHERE sq.parent_id IS NOT NULL AND
             ${inArray(Entities.visibility, [EntityVisibility.UNLISTED, EntityVisibility.PUBLIC])}
-          ) 
+          )
           SELECT id
           FROM sq
           WHERE ${ne(sql`id`, self.id)}
@@ -270,6 +270,84 @@ EntityView.implement({
         `);
 
         return rows.map(({ id }) => id);
+      },
+    }),
+
+    prevPost: t.field({
+      type: EntityView,
+      nullable: true,
+      resolve: async (self) => {
+        if (self.type !== EntityType.POST) return null;
+
+        let visibilities: EntityVisibility[] = [EntityVisibility.PUBLIC];
+
+        if (self.parentId) {
+          const parent = await db
+            .select({ visibility: Entities.visibility })
+            .from(Entities)
+            .where(eq(Entities.id, self.parentId))
+            .then(first);
+
+          if (parent?.visibility === EntityVisibility.UNLISTED) {
+            visibilities = [EntityVisibility.PUBLIC, EntityVisibility.UNLISTED];
+          }
+        }
+
+        return await db
+          .select()
+          .from(Entities)
+          .where(
+            and(
+              eq(Entities.siteId, self.siteId),
+              self.parentId ? eq(Entities.parentId, self.parentId) : isNull(Entities.parentId),
+              eq(Entities.state, EntityState.ACTIVE),
+              eq(Entities.type, EntityType.POST),
+              inArray(Entities.visibility, visibilities),
+              lt(Entities.order, self.order),
+            ),
+          )
+          .orderBy(desc(Entities.order))
+          .limit(1)
+          .then(first);
+      },
+    }),
+
+    nextPost: t.field({
+      type: EntityView,
+      nullable: true,
+      resolve: async (self) => {
+        if (self.type !== EntityType.POST) return null;
+
+        let visibilities: EntityVisibility[] = [EntityVisibility.PUBLIC];
+
+        if (self.parentId) {
+          const parent = await db
+            .select({ visibility: Entities.visibility })
+            .from(Entities)
+            .where(eq(Entities.id, self.parentId))
+            .then(first);
+
+          if (parent?.visibility === EntityVisibility.UNLISTED) {
+            visibilities = [EntityVisibility.PUBLIC, EntityVisibility.UNLISTED];
+          }
+        }
+
+        return await db
+          .select()
+          .from(Entities)
+          .where(
+            and(
+              eq(Entities.siteId, self.siteId),
+              self.parentId ? eq(Entities.parentId, self.parentId) : isNull(Entities.parentId),
+              eq(Entities.state, EntityState.ACTIVE),
+              eq(Entities.type, EntityType.POST),
+              inArray(Entities.visibility, visibilities),
+              gt(Entities.order, self.order),
+            ),
+          )
+          .orderBy(asc(Entities.order))
+          .limit(1)
+          .then(first);
       },
     }),
   }),
