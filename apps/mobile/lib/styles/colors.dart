@@ -23,17 +23,17 @@ class AppColors {
   static const light = _LightColors();
   static const dark = _DarkColors();
 
-  static const brand_50 = Color(0xFFEEF2FF);
-  static const brand_100 = Color(0xFFE0E7FF);
-  static const brand_200 = Color(0xFFC6D2FF);
-  static const brand_300 = Color(0xFFA3B3FF);
-  static const brand_400 = Color(0xFF7C86FF);
-  static const brand_500 = Color(0xFF615FFF);
-  static const brand_600 = Color(0xFF4F39F6);
-  static const brand_700 = Color(0xFF432DD7);
-  static const brand_800 = Color(0xFF372AAC);
-  static const brand_900 = Color(0xFF312C85);
-  static const brand_950 = Color(0xFF1E1A4D);
+  static const brand_50 = Color(0xFFFFFBEB);
+  static const brand_100 = Color(0xFFFEF3C6);
+  static const brand_200 = Color(0xFFFEE685);
+  static const brand_300 = Color(0xFFFFD230);
+  static const brand_400 = Color(0xFFFFBA00);
+  static const brand_500 = Color(0xFFFD9A00);
+  static const brand_600 = Color(0xFFE17100);
+  static const brand_700 = Color(0xFFBB4D00);
+  static const brand_800 = Color(0xFF973C00);
+  static const brand_900 = Color(0xFF7B3306);
+  static const brand_950 = Color(0xFF461901);
 
   static const red_50 = Color(0xFFFEF2F2);
   static const red_100 = Color(0xFFFFE2E2);
@@ -88,17 +88,17 @@ class _LightColors {
   final gray_900 = const Color(0xFF18181B);
   final gray_950 = const Color(0xFF09090B);
 
-  final brand_50 = const Color(0xFFEEF2FF);
-  final brand_100 = const Color(0xFFE0E7FF);
-  final brand_200 = const Color(0xFFC6D2FF);
-  final brand_300 = const Color(0xFFA3B3FF);
-  final brand_400 = const Color(0xFF7C86FF);
-  final brand_500 = const Color(0xFF615FFF);
-  final brand_600 = const Color(0xFF4F39F6);
-  final brand_700 = const Color(0xFF432DD7);
-  final brand_800 = const Color(0xFF372AAC);
-  final brand_900 = const Color(0xFF312C85);
-  final brand_950 = const Color(0xFF1E1A4D);
+  final brand_50 = const Color(0xFFFFFBEB);
+  final brand_100 = const Color(0xFFFEF3C6);
+  final brand_200 = const Color(0xFFFEE685);
+  final brand_300 = const Color(0xFFFFD230);
+  final brand_400 = const Color(0xFFFFBA00);
+  final brand_500 = const Color(0xFFFD9A00);
+  final brand_600 = const Color(0xFFE17100);
+  final brand_700 = const Color(0xFFBB4D00);
+  final brand_800 = const Color(0xFF973C00);
+  final brand_900 = const Color(0xFF7B3306);
+  final brand_950 = const Color(0xFF461901);
 
   final red_50 = const Color(0xFFFEF2F2);
   final red_100 = const Color(0xFFFFE2E2);
@@ -153,17 +153,17 @@ class _DarkColors {
   final gray_900 = const Color(0xFF1C1D1F);
   final gray_950 = const Color(0xFF131416);
 
-  final brand_50 = const Color(0xFFBFCAFF);
-  final brand_100 = const Color(0xFFA6B2F7);
-  final brand_200 = const Color(0xFF8996EE);
-  final brand_300 = const Color(0xFF6E7AE5);
-  final brand_400 = const Color(0xFF5960D8);
-  final brand_500 = const Color(0xFF4748C5);
-  final brand_600 = const Color(0xFF3937AC);
-  final brand_700 = const Color(0xFF2C2A8E);
-  final brand_800 = const Color(0xFF212268);
-  final brand_900 = const Color(0xFF161944);
-  final brand_950 = const Color(0xFF0D102E);
+  final brand_50 = const Color(0xFFFFD199);
+  final brand_100 = const Color(0xFFF4B877);
+  final brand_200 = const Color(0xFFE39D55);
+  final brand_300 = const Color(0xFFD18239);
+  final brand_400 = const Color(0xFFBD6922);
+  final brand_500 = const Color(0xFFA5540F);
+  final brand_600 = const Color(0xFF8A4308);
+  final brand_700 = const Color(0xFF6D3404);
+  final brand_800 = const Color(0xFF512701);
+  final brand_900 = const Color(0xFF361B00);
+  final brand_950 = const Color(0xFF221100);
 
   final red_50 = const Color(0xFFFEBAB2);
   final red_100 = const Color(0xFFF19F95);
