@@ -163,7 +163,7 @@ builder.mutationFields((t) => ({
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       const buffer = await object.Body!.transformToByteArray();
 
-      let img = sharp(buffer, { failOn: 'none' });
+      let img = sharp(buffer, { failOn: 'none', animated: true });
 
       img = img.rotate();
 
@@ -187,8 +187,7 @@ builder.mutationFields((t) => ({
 
       const mimetype = info.format === 'svg' ? 'image/svg+xml' : `image/${info.format}`;
 
-      const raw = await img
-        .clone()
+      const raw = await sharp(data, { pages: 1 })
         .resize({ width: 100, height: 100, fit: 'inside' })
         .ensureAlpha()
         .raw()
@@ -217,7 +216,7 @@ builder.mutationFields((t) => ({
           size: data.length,
           format: mimetype,
           width: info.width!,
-          height: info.height!,
+          height: info.pageHeight || info.height!,
           path: input.path,
           placeholder: placeholder.toBase64(),
         })
