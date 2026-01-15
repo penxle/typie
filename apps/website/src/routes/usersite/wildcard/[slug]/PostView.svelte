@@ -24,6 +24,7 @@
   import { Img } from '$lib/components';
   import EmojiReaction from './EmojiReaction.svelte';
   import PostActionMenu from './PostActionMenu.svelte';
+  import PostNavigation from './PostNavigation.svelte';
   import PostViewBodyUnavailable from './PostViewBodyUnavailable.svelte';
   import ShareLinkPopover from './ShareLinkPopover.svelte';
   import type { Optional, UsersiteWildcardSlugPage_PostView_entityView, UsersiteWildcardSlugPage_PostView_user } from '$graphql';
@@ -116,6 +117,7 @@
         }
 
         ...UsersiteWildcardSlugPage_PostActionMenu_entityView
+        ...UsersiteWildcardSlugPage_PostNavigation_entityView
       }
     `),
   );
@@ -547,6 +549,8 @@
             {/if}
           </div>
         {/if}
+
+        <PostNavigation {$entityView} />
       </div>
     </div>
   </div>

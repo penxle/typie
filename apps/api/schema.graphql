@@ -274,9 +274,11 @@ type EntityView implements IEntity {
   children: [EntityView!]!
   depth: Int!
   id: ID!
+  nextPost: EntityView
   node: EntityViewNode!
   order: String!
   permalink: String!
+  prevPost: EntityView
   site: SiteView!
   slug: String!
   state: EntityState!
