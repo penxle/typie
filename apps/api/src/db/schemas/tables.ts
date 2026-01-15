@@ -775,6 +775,10 @@ export const UserMarketingConsents = pgTable('user_marketing_consents', {
     .notNull()
     .unique()
     .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+  consented: boolean('consented').notNull(),
+  askedAt: datetime('asked_at')
+    .notNull()
+    .default(sql`now()`),
   createdAt: datetime('created_at')
     .notNull()
     .default(sql`now()`),

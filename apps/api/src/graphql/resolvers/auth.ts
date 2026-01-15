@@ -161,6 +161,8 @@ builder.mutationFields((t) => ({
         if (marketingAgreed) {
           await tx.insert(UserMarketingConsents).values({
             userId: user.id,
+            consented: true,
+            askedAt: dayjs(),
           });
         }
 
