@@ -11,10 +11,14 @@ import 'package:injectable/injectable.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:typie/env.dart';
+import 'package:typie/routers/app.dart';
 import 'package:typie/styles/colors.dart';
 
 @module
 abstract class RegisterModule {
+  @singleton
+  AppRouter get appRouter => AppRouter();
+
   @singleton
   FirebaseAnalytics get firebaseAnalytics => FirebaseAnalytics.instance;
 

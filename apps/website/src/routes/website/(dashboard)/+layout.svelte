@@ -72,7 +72,10 @@
 
         surveys
         marketingConsentAskedAt
-        totalCharacterCount
+
+        usage {
+          totalCharacterCount
+        }
 
         ...DashboardLayout_CommandPalette_user
         ...DashboardLayout_PreferenceModal_user
@@ -234,7 +237,7 @@
     if ($query.me.referral && !app.preference.current.referralWelcomeModalShown) {
       referralWelcomeModalOpen = true;
       app.preference.current.referralWelcomeModalShown = true;
-    } else if ($query.me.marketingConsentAskedAt === null && $query.me.totalCharacterCount >= 100) {
+    } else if ($query.me.marketingConsentAskedAt === null && $query.me.usage.totalCharacterCount >= 100) {
       marketingConsentModalOpen = true;
     }
 
