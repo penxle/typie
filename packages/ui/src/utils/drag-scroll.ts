@@ -1,7 +1,8 @@
 export type DragScrollOptions = {
   scrollZoneSize?: number;
   maxScrollSpeed?: number;
-  onScroll?: () => void;
+  onScroll?: (clientX: number, clientY: number) => void;
+  onScrollThrottleMs?: number;
 };
 
 // NOTE: 드래그 중 위, 아래 끝에서 자동 스크롤
@@ -12,11 +13,12 @@ export function handleDragScroll(
 ): (() => void) | undefined {
   if (!isDragging || !scrollContainer) return;
 
-  const { scrollZoneSize = 50, maxScrollSpeed = 15, onScroll } = options;
+  const { scrollZoneSize = 50, maxScrollSpeed = 15, onScroll, onScrollThrottleMs = 50 } = options;
 
   let lastPointerX = 0;
   let lastPointerY = 0;
   let animationId: number | null = null;
+  let lastOnScrollTime = 0;
 
   const updatePointer = (clientX: number, clientY: number) => {
     lastPointerX = clientX;
@@ -52,17 +54,28 @@ export function handleDragScroll(
       return;
     }
 
+    const now = performance.now();
+    const shouldCallOnScroll = now - lastOnScrollTime >= onScrollThrottleMs;
+
     if (lastPointerY < containerRect.top + scrollZoneSize) {
       const distance = containerRect.top + scrollZoneSize - lastPointerY;
       const scrollSpeed = Math.min(maxScrollSpeed, Math.max(1, distance / 3));
+      const prevScrollTop = scrollContainer.scrollTop;
       scrollContainer.scrollBy(0, -scrollSpeed);
-      onScroll?.();
+      if (shouldCallOnScroll && scrollContainer.scrollTop !== prevScrollTop) {
+        lastOnScrollTime = now;
+        onScroll?.(lastPointerX, lastPointerY);
+      }
       animationId = requestAnimationFrame(scroll);
     } else if (lastPointerY > containerRect.bottom - scrollZoneSize) {
       const distance = lastPointerY - (containerRect.bottom - scrollZoneSize);
       const scrollSpeed = Math.min(maxScrollSpeed, Math.max(1, distance / 3));
+      const prevScrollTop = scrollContainer.scrollTop;
       scrollContainer.scrollBy(0, scrollSpeed);
-      onScroll?.();
+      if (shouldCallOnScroll && scrollContainer.scrollTop !== prevScrollTop) {
+        lastOnScrollTime = now;
+        onScroll?.(lastPointerX, lastPointerY);
+      }
       animationId = requestAnimationFrame(scroll);
     } else {
       animationId = null;

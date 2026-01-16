@@ -2,31 +2,41 @@ import { getAppContext } from '@typie/ui/context';
 import { CONTINUOUS_PAGE_MARGIN, PAGE_GAP } from './constants';
 import { getEditor } from './context';
 
-export function typewriterPadding(node: HTMLElement, defaultPadding: number) {
+export function setupTypewriter(getTargetEl: () => HTMLElement | undefined, defaultPadding: number) {
   const editor = getEditor();
 
   if (editor.readOnly) {
-    node.style.paddingBottom = `${defaultPadding}px`;
-    return;
-  }
-
-  const scroller = editor.scrollContainerEl;
-  if (!scroller) {
+    $effect(() => {
+      const el = getTargetEl();
+      if (el) {
+        el.style.paddingBottom = `${defaultPadding}px`;
+      }
+    });
     return;
   }
 
   const app = getAppContext();
 
-  let scrollContainerHeight = 0;
+  let scrollContainerHeight = $state(0);
 
-  const resizeObserver = new ResizeObserver((entries) => {
-    const entry = entries[0];
-    if (entry) {
-      scrollContainerHeight = entry.contentRect.height;
-      updatePadding();
+  $effect(() => {
+    const scroller = editor.scrollContainerEl;
+    if (!scroller) {
+      return;
     }
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry) {
+        scrollContainerHeight = entry.contentRect.height;
+      }
+    });
+    resizeObserver.observe(scroller);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
   });
-  resizeObserver.observe(scroller);
 
   function calculatePadding(): number {
     if (!app.preference.current.typewriterEnabled || scrollContainerHeight <= 0) {
@@ -63,12 +73,6 @@ export function typewriterPadding(node: HTMLElement, defaultPadding: number) {
     return Math.max(defaultPadding, extraPaddingNeeded);
   }
 
-  function updatePadding() {
-    node.style.paddingBottom = `${calculatePadding()}px`;
-  }
-
-  updatePadding();
-
   $effect(() => {
     void editor.cursor.bounds;
     void editor.cursor.pageIdx;
@@ -76,8 +80,12 @@ export function typewriterPadding(node: HTMLElement, defaultPadding: number) {
     void editor.layout.layoutMode;
     void app.preference.current.typewriterEnabled;
     void app.preference.current.typewriterPosition;
+    void scrollContainerHeight;
 
-    updatePadding();
+    const el = getTargetEl();
+    if (el) {
+      el.style.paddingBottom = `${calculatePadding()}px`;
+    }
   });
 
   $effect(() => {
@@ -91,6 +99,11 @@ export function typewriterPadding(node: HTMLElement, defaultPadding: number) {
 
     const bounds = editor.cursor.bounds;
     if (!bounds) {
+      return;
+    }
+
+    const scroller = editor.scrollContainerEl;
+    if (!scroller) {
       return;
     }
 
@@ -117,14 +130,4 @@ export function typewriterPadding(node: HTMLElement, defaultPadding: number) {
       scroller.scrollBy({ top: delta, behavior: 'instant' });
     }
   });
-
-  return {
-    update(newDefaultPadding: number) {
-      defaultPadding = newDefaultPadding;
-      updatePadding();
-    },
-    destroy() {
-      resizeObserver.disconnect();
-    },
-  };
 }
