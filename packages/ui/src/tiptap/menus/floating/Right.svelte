@@ -16,13 +16,14 @@
   let { editor, pos }: Props = $props();
 
   const node = $derived(editor.state.doc.nodeAt(pos));
+  const currentAnchor = $derived(editor.storage.anchors && node ? editor.storage.anchors.current[node.attrs.nodeId] : undefined);
 
   const handleAnchor = () => {
     if (!node) {
       return;
     }
 
-    if (editor.storage.anchors.current[node.attrs.nodeId] === undefined) {
+    if (currentAnchor === undefined) {
       editor.storage.anchors.current = { ...editor.storage.anchors.current, [node.attrs.nodeId]: null };
 
       mixpanel.track('anchor_add');
@@ -42,13 +43,13 @@
       class={css({
         borderRadius: '6px',
         padding: '2px',
-        color: editor.storage.anchors.current[node.attrs.nodeId] === undefined ? 'text.faint' : { base: '[#FACC15]', _dark: '[#B8860B]' },
+        color: currentAnchor === undefined ? 'text.faint' : { base: '[#FACC15]', _dark: '[#B8860B]' },
         _hover: { backgroundColor: 'interactive.hover' },
       })}
       onclick={handleAnchor}
       type="button"
     >
-      <Icon icon={editor.storage.anchors.current[node.attrs.nodeId] === undefined ? BookmarkIcon : BookmarkFilledIcon} size={18} />
+      <Icon icon={currentAnchor === undefined ? BookmarkIcon : BookmarkFilledIcon} size={18} />
     </button>
 
     <div
@@ -60,7 +61,7 @@
         truncate: true,
       })}
     >
-      {editor.storage.anchors.current[node.attrs.nodeId]}
+      {currentAnchor}
     </div>
   </div>
 {/if}
