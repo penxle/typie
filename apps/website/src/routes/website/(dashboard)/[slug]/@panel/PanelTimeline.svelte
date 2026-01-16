@@ -192,35 +192,45 @@
   };
 
   let isLoadingMore = $state(false);
+  let loadingPromise: Promise<void> | null = null;
   let hasMoreSnapshots = $derived(snapshotMetas.some((meta) => !snapshotCache.has(meta.id)));
 
   const loadMoreSnapshots = async () => {
-    if (isLoadingMore || !$query || loadedSnapshots.length === 0) return;
+    if (loadingPromise) {
+      await loadingPromise;
+      return;
+    }
+    if (!$query || loadedSnapshots.length === 0) return;
     if (!hasMoreSnapshots) return;
 
     isLoadingMore = true;
-    try {
-      const oldestDisplayed = loadedSnapshots[0];
-      if (!oldestDisplayed) return;
+    loadingPromise = (async () => {
+      try {
+        const oldestDisplayed = loadedSnapshots[0];
+        if (!oldestDisplayed) return;
 
-      const result = await query.load({
-        slug: $post.entity.slug,
-        first: 20,
-        before: oldestDisplayed.createdAt,
-      });
+        const result = await query.load({
+          slug: $post.entity.slug,
+          first: 20,
+          before: oldestDisplayed.createdAt,
+        });
 
-      const newSnapshots: { id: string; snapshot: string }[] = [];
-      for (const s of result.post.snapshots) {
-        if (!snapshotCache.has(s.id)) {
-          snapshotCache.set(s.id, s.snapshot);
-          newSnapshots.push(s);
+        const newSnapshots: { id: string; snapshot: string }[] = [];
+        for (const s of result.post.snapshots) {
+          if (!snapshotCache.has(s.id)) {
+            snapshotCache.set(s.id, s.snapshot);
+            newSnapshots.push(s);
+          }
         }
-      }
 
-      processSnapshotsCharacterCounts(newSnapshots);
-    } finally {
-      isLoadingMore = false;
-    }
+        processSnapshotsCharacterCounts(newSnapshots);
+      } finally {
+        isLoadingMore = false;
+        loadingPromise = null;
+      }
+    })();
+
+    await loadingPromise;
   };
 
   const initialize = async () => {
