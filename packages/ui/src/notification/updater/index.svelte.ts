@@ -1,3 +1,4 @@
+import { untrack } from 'svelte';
 import { toast as sonner } from 'svelte-sonner';
 import Item from './Item.svelte';
 
@@ -6,17 +7,19 @@ export type UpdaterOptions = {
 };
 
 const show = (options?: UpdaterOptions) => {
-  const existing = sonner.getActiveToasts().filter((toast) => toast.id === 'updater');
+  const existing = untrack(() => sonner.getActiveToasts().filter((toast) => toast.id === 'updater'));
   if (existing.length > 0) {
     return;
   }
 
-  sonner.custom(Item, {
-    id: 'updater',
-    componentProps: {
-      onRefresh: options?.onRefresh,
-    },
-    duration: Infinity,
+  $effect(() => {
+    sonner.custom(Item, {
+      id: 'updater',
+      componentProps: {
+        onRefresh: options?.onRefresh,
+      },
+      duration: Infinity,
+    });
   });
 };
 
