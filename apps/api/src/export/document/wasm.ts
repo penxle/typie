@@ -13,7 +13,11 @@ let wasmModule: WebAssembly.Module | null = null;
 let icuData: Uint8Array | null = null;
 let phantomFont: Uint8Array | null = null;
 
-async function loadResources() {
+async function loadResources(): Promise<{
+  wasmModule: WebAssembly.Module;
+  icuData: Uint8Array;
+  phantomFont: Uint8Array;
+}> {
   if (!wasmModule) {
     const wasmBuffer = await readFile(WASM_PATH);
     wasmModule = await WebAssembly.compile(wasmBuffer);
@@ -51,9 +55,9 @@ export async function createWasmApplication(): Promise<{
 
   const glue = (await import(GLUE_PATH)) as unknown as GlueModule;
 
-  const instance = await WebAssembly.instantiate(resources.wasmModule, {
+  const instance = (await WebAssembly.instantiate(resources.wasmModule, {
     './editor_bg.js': glue as unknown as WebAssembly.ModuleImports,
-  });
+  })) as unknown as WebAssembly.Instance;
 
   const exports = instance.exports as WasmExports;
   glue.__wbg_set_wasm(exports);

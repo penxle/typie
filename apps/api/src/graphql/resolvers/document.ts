@@ -198,7 +198,7 @@ DocumentView.implement({
 
         const doc = new LoroDoc();
         doc.import(content.snapshot);
-        return Buffer.from(doc.export({ mode: 'shallow-snapshot', frontiers: doc.oplogFrontiers() }));
+        return new Uint8Array(doc.export({ mode: 'shallow-snapshot', frontiers: doc.oplogFrontiers() }));
       },
     }),
   }),

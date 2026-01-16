@@ -2,7 +2,7 @@ import sharp from 'sharp';
 import type { Editor, RenderInfo } from '@typie/editor';
 
 export type RenderPageResult = {
-  png: Buffer;
+  png: Uint8Array;
   width: number;
   height: number;
 };
@@ -26,7 +26,7 @@ export async function renderDocumentPages(
 
     renderInfo.free();
 
-    const png = await sharp(rgbaCopy, {
+    const pngBuffer = await sharp(rgbaCopy, {
       raw: {
         width,
         height,
@@ -36,7 +36,7 @@ export async function renderDocumentPages(
       .png()
       .toBuffer();
 
-    results.push({ png, width, height });
+    results.push({ png: new Uint8Array(pngBuffer), width, height });
   }
 
   return results;
