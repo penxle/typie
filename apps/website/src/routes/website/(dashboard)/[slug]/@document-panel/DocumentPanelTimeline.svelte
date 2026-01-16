@@ -140,35 +140,45 @@
   };
 
   let isLoadingMore = $state(false);
+  let loadingPromise: Promise<void> | null = null;
   let hasMoreVersions = $derived(versionMetas.some((meta) => !versionCache.has(meta.id)));
 
   const loadMoreVersions = async () => {
-    if (isLoadingMore || !$query || loadedVersions.length === 0) return;
+    if (loadingPromise) {
+      await loadingPromise;
+      return;
+    }
+    if (!$query || loadedVersions.length === 0) return;
     if (!hasMoreVersions) return;
 
     isLoadingMore = true;
-    try {
-      const oldestDisplayed = loadedVersions[0];
-      if (!oldestDisplayed) return;
+    loadingPromise = (async () => {
+      try {
+        const oldestDisplayed = loadedVersions[0];
+        if (!oldestDisplayed) return;
 
-      const result = await query.load({
-        slug: $document.entity.slug,
-        first: 20,
-        before: oldestDisplayed.createdAt,
-      });
+        const result = await query.load({
+          slug: $document.entity.slug,
+          first: 20,
+          before: oldestDisplayed.createdAt,
+        });
 
-      const newVersions: { id: string; version: string }[] = [];
-      for (const v of result.document.versions) {
-        if (!versionCache.has(v.id)) {
-          versionCache.set(v.id, v.version);
-          newVersions.push(v);
+        const newVersions: { id: string; version: string }[] = [];
+        for (const v of result.document.versions) {
+          if (!versionCache.has(v.id)) {
+            versionCache.set(v.id, v.version);
+            newVersions.push(v);
+          }
         }
-      }
 
-      processVersionsCharacterCounts(newVersions);
-    } finally {
-      isLoadingMore = false;
-    }
+        processVersionsCharacterCounts(newVersions);
+      } finally {
+        isLoadingMore = false;
+        loadingPromise = null;
+      }
+    })();
+
+    await loadingPromise;
   };
 
   const initialize = async () => {

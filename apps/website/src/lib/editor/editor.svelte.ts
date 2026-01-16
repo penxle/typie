@@ -547,19 +547,17 @@ export class Editor {
       }
     }
 
-    if (this.layout.layoutMode.type === 'continuous') {
-      const { containerEl, pageElements } = this.extensionArea;
-      if (containerEl && pageElements.length > 0 && containerEl.contains(e.target as Node)) {
-        const coord = findNearestPageCoordinate(e, pageElements, this.layout.pageWidth);
-        if (coord) {
-          return {
-            pageIdx: coord.pageIdx,
-            x: coord.x,
-            y: coord.y,
-            pageElement: coord.pageElement,
-            isExtensionArea: true,
-          };
-        }
+    const { containerEl, pageElements } = this.extensionArea;
+    if (containerEl && pageElements.length > 0) {
+      const coord = findNearestPageCoordinate(e, pageElements, this.layout.pageWidth);
+      if (coord) {
+        return {
+          pageIdx: coord.pageIdx,
+          x: coord.x,
+          y: coord.y,
+          pageElement: coord.pageElement,
+          isExtensionArea: true,
+        };
       }
     }
 
@@ -639,6 +637,29 @@ export class Editor {
       y,
       buttons: e.buttons,
       modifier: this.#toModifier(e),
+    });
+  }
+
+  handlePointerMoveFromCoordinate(clientX: number, clientY: number): void {
+    const pointEl = document.elementFromPoint(clientX, clientY);
+    const targetEl = pointEl instanceof HTMLElement ? pointEl : this.extensionArea.containerEl;
+    if (!targetEl) return;
+
+    const syntheticEvent = { clientX, clientY, target: targetEl } as unknown as MouseEvent;
+    const resolved = this.#resolvePointerCoordinate(syntheticEvent, targetEl);
+    if (!resolved) return;
+
+    const { pageIdx, x, y, isExtensionArea } = resolved;
+
+    this.pointer.currentHoverTarget = isExtensionArea ? (this.extensionArea.containerEl ?? targetEl) : targetEl;
+
+    this.dispatch({
+      type: 'pointerMove',
+      pageIdx,
+      x,
+      y,
+      buttons: 1,
+      modifier: { shift: false, ctrl: false, alt: false, meta: false },
     });
   }
 

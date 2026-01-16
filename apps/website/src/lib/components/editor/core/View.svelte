@@ -2,7 +2,7 @@
   import { flex } from '@typie/styled-system/patterns';
   import { CONTINUOUS_VIEW_PADDING, PAGE_GAP, PAGINATED_VIEW_PADDING } from '$lib/editor/constants';
   import { getEditor } from '$lib/editor/context';
-  import { typewriterPadding } from '$lib/editor/typewriter.svelte';
+  import { setupTypewriter } from '$lib/editor/typewriter.svelte';
   import ContextMenu from './ContextMenu.svelte';
   import Cursor from './Cursor.svelte';
   import DocumentPlaceholder from './DocumentPlaceholder.svelte';
@@ -39,6 +39,8 @@
   $effect(() => {
     editor.extensionArea.pageElements = containerEls.filter((el): el is HTMLDivElement => el != null);
   });
+
+  setupTypewriter(() => extensionAreaEl, defaultPaddingBottom);
 
   const focusInput = () => {
     editor.focus();
@@ -142,7 +144,6 @@
   onkeydown={focusInput}
   role="textbox"
   tabindex="0"
-  use:typewriterPadding={defaultPaddingBottom}
 >
   {#each editor.layout.pageHeights, i}
     <Page page={i} bind:containerEl={containerEls[i]} />
@@ -158,6 +159,9 @@
 <Input
   bind:this={inputComponent}
   onBlur={(e) => {
+    if (editor.pointer.isPressed) {
+      return;
+    }
     if (extensionAreaEl?.contains(e.relatedTarget as Node) || e.relatedTarget === extensionAreaEl) {
       return;
     }

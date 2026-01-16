@@ -125,7 +125,11 @@
   );
 
   $effect(() => {
-    return handleDragScroll(scrollContainerEl, !editor.isPointerModeIdle);
+    return handleDragScroll(scrollContainerEl, !editor.isPointerModeIdle, {
+      onScroll: (clientX, clientY) => {
+        editor.handlePointerMoveFromCoordinate(clientX, clientY);
+      },
+    });
   });
 
   $effect(() => {

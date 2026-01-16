@@ -12,11 +12,21 @@
   const pageIdx = $derived(editor.cursor.pageIdx);
   const bounds = $derived(editor.cursor.bounds);
 
-  const top = $derived(bounds ? bounds.y - PADDING : 0);
-  const height = $derived(bounds ? bounds.height + PADDING * 2 : 0);
-  const container = $derived(editor.pageContainerEls[pageIdx]);
+  const isPaginated = $derived(editor.layout.layoutMode.type === 'paginated');
 
-  const inset = $derived(editor.layout.layoutMode.type === 'paginated' ? '0' : '-9999px');
+  const top = $derived.by(() => {
+    if (!bounds) return 0;
+    if (isPaginated) {
+      return bounds.y - PADDING;
+    }
+    const pageEl = editor.pageContainerEls[pageIdx];
+    const wrapperEl = pageEl?.parentElement;
+    return (wrapperEl?.offsetTop ?? 0) + bounds.y - PADDING;
+  });
+
+  const height = $derived(bounds ? bounds.height + PADDING * 2 : 0);
+
+  const container = $derived(isPaginated ? editor.pageContainerEls[pageIdx] : editor.extensionArea.containerEl);
 
   let element = $state<HTMLDivElement>();
 
@@ -33,11 +43,10 @@
     style:display={show ? 'block' : 'none'}
     style:top={`${top}px`}
     style:height={`${height}px`}
-    style:left={inset}
-    style:right={inset}
     class={css({
       position: 'absolute',
       backgroundColor: 'surface.muted',
+      insetX: '0',
       zIndex: '[-1]',
       pointerEvents: 'none',
     })}
