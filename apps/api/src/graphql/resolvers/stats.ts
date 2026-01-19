@@ -17,7 +17,7 @@ import {
   Subscriptions,
   Users,
 } from '@/db';
-import { SubscriptionState, UserState } from '@/enums';
+import { PlanAvailability, SubscriptionState, UserState } from '@/enums';
 import { env } from '@/env';
 import * as aws from '@/external/aws';
 import { builder } from '../builder';
@@ -288,6 +288,8 @@ builder.queryField('stats', (t) =>
           LEFT JOIN ${Subscriptions} ON ${Subscriptions.startsAt} <= (date_series.date + interval '1 day')
             AND ${Subscriptions.expiresAt} >= date_series.date
             AND ${Subscriptions.state} IN (${SubscriptionState.ACTIVE}, ${SubscriptionState.WILL_EXPIRE}, ${SubscriptionState.IN_GRACE_PERIOD})
+          LEFT JOIN ${Plans} ON ${Subscriptions.planId} = ${Plans.id}
+            AND ${Plans.availability} != ${PlanAvailability.TRIAL}
           GROUP BY date_series.date
           ORDER BY date_series.date
         `);
