@@ -23,10 +23,11 @@
       value: d.value,
     }));
 
+    const strokeWidth = 1.5;
     const chart = Plot.plot({
       width,
       height,
-      margin: 0,
+      margin: strokeWidth,
       x: {
         type: 'time',
         axis: null,
@@ -40,7 +41,7 @@
           x: 'date',
           y: 'value',
           stroke: color,
-          strokeWidth: 1.5,
+          strokeWidth,
         }),
       ],
       style: {
