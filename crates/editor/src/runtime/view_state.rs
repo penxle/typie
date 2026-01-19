@@ -8,6 +8,10 @@ pub enum NodeViewState {
     Fold {
         expanded: bool,
     },
+    Image {
+        width: f32,
+        height: f32,
+    },
 }
 
 impl NodeViewState {
@@ -15,6 +19,13 @@ impl NodeViewState {
         match self {
             NodeViewState::Fold { expanded } => *expanded,
             _ => false,
+        }
+    }
+
+    pub fn image_dimensions(&self) -> Option<(f32, f32)> {
+        match self {
+            NodeViewState::Image { width, height } => Some((*width, *height)),
+            _ => None,
         }
     }
 }

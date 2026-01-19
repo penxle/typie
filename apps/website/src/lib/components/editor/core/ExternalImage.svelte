@@ -94,7 +94,7 @@
       const { width, height } = await getImageDimensions(objectUrl);
 
       editor.dispatch({
-        type: 'setImageDimensions',
+        type: 'setImageDimensionsEphemeral',
         nodeId: el.nodeId,
         width,
         height,

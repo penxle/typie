@@ -445,9 +445,9 @@ define_messages! {
     => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_set_image_proportion(node_id, proportion) },
 
-    SetImageDimensions { node_id: String, width: f32, height: f32 }
+    SetImageDimensionsEphemeral { node_id: String, width: f32, height: f32 }
     => when When::key(ContextKey::CanEdit)
-    => handle(rt) { rt.handle_set_image_dimensions(node_id, width, height) },
+    => handle(rt) { rt.handle_set_image_dimensions_ephemeral(node_id, width, height) },
 
     SetImageSrc { node_id: String, src: String, width: f32, height: f32 }
     => when When::key(ContextKey::CanEdit)

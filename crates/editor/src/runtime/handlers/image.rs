@@ -1,5 +1,5 @@
 use crate::model::{ImageNode, Node, NodeId};
-use crate::runtime::{Effect, Runtime};
+use crate::runtime::{Effect, NodeViewState, Runtime};
 
 impl Runtime {
     pub(crate) fn handle_insert_image(&mut self, upload_id: Option<String>) -> Vec<Effect> {
@@ -45,7 +45,7 @@ impl Runtime {
         })
     }
 
-    pub(crate) fn handle_set_image_dimensions(
+    pub(crate) fn handle_set_image_dimensions_ephemeral(
         &mut self,
         node_id: String,
         width: f32,
@@ -55,25 +55,19 @@ impl Runtime {
             return vec![];
         };
 
-        self.transact(move |tr| {
-            let Some(node_ref) = tr.node_mut(node_id) else {
-                return Ok(false);
-            };
+        self.view_states
+            .insert(node_id, NodeViewState::Image { width, height });
 
-            if !matches!(node_ref.node(), Node::Image(_)) {
-                return Ok(false);
-            }
+        if let Some(node) = self.doc().node(node_id) {
+            let ancestors: Vec<_> = node.ancestors().map(|n| n.node_id()).collect();
+            self.layout_cache
+                .borrow_mut()
+                .invalidate_with_ancestors(node_id, ancestors.into_iter());
+        } else {
+            self.layout_cache.borrow_mut().invalidate(node_id);
+        }
 
-            node_ref.as_mut().update(|node| {
-                if let Node::Image(image) = node {
-                    image.width = Some(width);
-                    image.height = Some(height);
-                    image.proportion = 1.0;
-                }
-            })?;
-            tr.push_effect(Effect::NodeChanged { node_id });
-            Ok(true)
-        })
+        vec![Effect::LayoutChanged]
     }
 
     pub(crate) fn handle_set_image_src(
@@ -86,6 +80,8 @@ impl Runtime {
         let Some(node_id) = NodeId::from_string(&node_id) else {
             return vec![];
         };
+
+        self.view_states.remove(&node_id);
 
         self.transact(move |tr| {
             let Some(node_ref) = tr.node_mut(node_id) else {
