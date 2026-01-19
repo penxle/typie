@@ -21,8 +21,7 @@
 
   const editor = getEditor();
 
-  // TODO: isEditable 구현 필요
-  const isEditable = true;
+  const isEditable = $derived(!editor.isReadOnly());
 
   let inflightUrl = $state<string>();
   let processedUploadId = $state<string>();
