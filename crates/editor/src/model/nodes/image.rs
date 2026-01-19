@@ -94,7 +94,13 @@ impl Layout for ImageNode {
         let max_width = constraints.max_width;
         let max_height = constraints.max_height;
 
-        let display_height = if let (Some(w), Some(h)) = (self.width, self.height) {
+        let dimensions = ctx
+            .view_states
+            .get(&ctx.node.node_id())
+            .and_then(|s| s.image_dimensions())
+            .or_else(|| self.width.zip(self.height));
+
+        let display_height = if let Some((w, h)) = dimensions {
             let proportioned_width = w * self.proportion;
             let proportioned_height = h * self.proportion;
 
@@ -109,8 +115,8 @@ impl Layout for ImageNode {
 
         let data = ExternalElementData::Image {
             src: self.src.clone(),
-            original_width: self.width,
-            original_height: self.height,
+            original_width: dimensions.map(|(w, _)| w).or(self.width),
+            original_height: dimensions.map(|(_, h)| h).or(self.height),
             proportion: self.proportion,
             upload_id: self.upload_id.clone(),
         };
