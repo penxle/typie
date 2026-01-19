@@ -19,6 +19,8 @@
     $user: DashboardLayout_Stats_ActivityChart_user;
   };
 
+  const chartHeight = 100;
+
   const { $user: _user }: Props = $props();
 
   const user = fragment(
@@ -158,7 +160,7 @@
         )
       : maxVal;
 
-    const scaleFactor = hasCompression && maxCompressedHeight > 0 ? 140 / maxCompressedHeight : 1;
+    const scaleFactor = hasCompression && maxCompressedHeight > 0 ? chartHeight / maxCompressedHeight : 1;
 
     const calculateAdditionHeight = () => {
       if (data.additions === 0 || !showAdditions) {
@@ -166,7 +168,7 @@
       }
 
       if (!hasCompression) {
-        return (data.additions / maxVal) * 140;
+        return (data.additions / maxVal) * chartHeight;
       }
 
       const value = data.additions;
@@ -195,7 +197,7 @@
       }
 
       if (!hasCompression) {
-        return (data.deletions / maxVal) * 140;
+        return (data.deletions / maxVal) * chartHeight;
       }
 
       let height = 0;
@@ -278,7 +280,7 @@
   </div>
 
   <div class={flex({ flexDirection: 'column', gap: '4px' })}>
-    <div class={flex({ alignItems: 'flex-end', gap: '2px', height: '100px', overflow: 'hidden', position: 'relative' })}>
+    <div style:height="{chartHeight}px" class={flex({ alignItems: 'flex-end', gap: '2px', overflow: 'hidden', position: 'relative' })}>
       <!-- 배경 격자 -->
       <div class={css({ position: 'absolute', inset: '0', pointerEvents: 'none' })}>
         {#each [1, 2, 3, 4, 5] as i (i)}
@@ -301,10 +303,10 @@
 
         <div class={flex({ flex: '1', flexDirection: 'column', justifyContent: 'flex-end', position: 'relative' })}>
           <div
+            style:min-height="{chartHeight}px"
             class={flex({
               flexDirection: 'column',
               width: 'full',
-              minHeight: '140px',
               justifyContent: 'flex-end',
               cursor: 'pointer',
             })}
