@@ -853,6 +853,7 @@ input PurgeEntitiesInput {
 }
 
 type Query {
+  activeWritersCount: Int!
   adminPost(postId: String!): Post!
   adminPosts(limit: Int! = 20, offset: Int! = 0, search: String, state: EntityState, type: PostType): AdminPostsResult!
   adminRawQuery(params: [JSON!], query: String!): [JSON!]!

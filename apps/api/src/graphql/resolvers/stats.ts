@@ -763,3 +763,17 @@ builder.queryField('stats', (t) =>
     },
   }),
 );
+
+builder.queryField('activeWritersCount', (t) =>
+  t.field({
+    type: 'Int',
+    resolve: async () => {
+      const thirtySecondsAgo = Date.now() - 30_000;
+
+      await redis.zremrangebyscore('writers:active', '-inf', thirtySecondsAgo);
+
+      const count = await redis.zcard('writers:active');
+      return count;
+    },
+  }),
+);

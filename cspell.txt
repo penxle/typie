@@ -41,6 +41,7 @@ iframely
 ilike
 indexeddb
 initdb
+inview
 ipaddr
 kakao
 karpenter
@@ -128,6 +129,9 @@ wbindgen
 wonka
 xact
 xcarchive
+zadd
+zcard
+zremrangebyscore
 xlarge
 xsmall
 xxlarge
