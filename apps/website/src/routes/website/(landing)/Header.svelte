@@ -1,13 +1,14 @@
 <script lang="ts">
   import { css, cx } from '@typie/styled-system/css';
-  import { center, flex } from '@typie/styled-system/patterns';
+  import { flex } from '@typie/styled-system/patterns';
   import { outsideClick } from '@typie/ui/actions';
   import { Icon } from '@typie/ui/components';
   import ArrowRightIcon from '~icons/lucide/arrow-right';
   import MenuIcon from '~icons/lucide/menu';
+  import XIcon from '~icons/lucide/x';
   import { afterNavigate } from '$app/navigation';
   import { page } from '$app/state';
-  import WordmarkBlack from '$assets/logos/wordmark-black.svg?component';
+  import WordmarkWhite from '$assets/logos/wordmark-white.svg?component';
 
   let mobileMenuOpen = false;
 
@@ -17,138 +18,130 @@
 </script>
 
 <header
-  class={flex({
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingX: { sm: '16px', lg: '24px' },
-    height: { sm: '64px', lg: '80px' },
-    gap: { sm: '16px', lg: '32px' },
-    backgroundColor: 'white',
-    border: '4px solid',
-    borderColor: 'gray.900',
+  class={css({
+    backgroundColor: 'dark.gray.950',
+    borderBottomWidth: '1px',
+    borderBottomColor: 'dark.gray.800',
     position: 'fixed',
-    top: { sm: '8px', lg: '16px' },
-    left: { sm: '8px', lg: '16px' },
-    right: { sm: '8px', lg: '16px' },
+    top: '0',
+    left: '0',
+    right: '0',
     zIndex: '50',
-    boxShadow: '[8px 8px 0 0 #000]',
+    paddingX: { sm: '24px', lg: '80px' },
   })}
 >
-  <a
-    class={css({
-      position: 'relative',
-      display: 'block',
-      transition: '[transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
-      _hover: {
-        transform: 'translateY(-2px) rotate(-1deg)',
-      },
+  <div
+    class={flex({
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      height: { sm: '56px', lg: '64px' },
+      gap: { sm: '16px', lg: '32px' },
+      maxWidth: '[1200px]',
+      marginX: 'auto',
     })}
-    href="/"
   >
-    <WordmarkBlack class={css({ height: { sm: '18px', lg: '22px' } })} />
-  </a>
-
-  <div class={flex({ alignItems: 'center', gap: '24px', display: { sm: 'none', lg: 'flex' } })}>
     <a
       class={css({
-        fontSize: '16px',
-        fontWeight: 'bold',
-        color: 'gray.900',
-        textTransform: 'uppercase',
-        letterSpacing: '[0.05em]',
-        paddingY: '6px',
-        paddingX: '16px',
         position: 'relative',
-        transition: '[all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+        display: 'block',
+        transition: '[opacity 0.2s ease-out]',
         _hover: {
-          backgroundColor: 'amber.400',
-          transform: 'translateY(-2px) rotate(-1deg)',
+          opacity: '[0.7]',
         },
       })}
-      href="/pricing"
+      href="/"
     >
-      구독 안내
+      <WordmarkWhite class={css({ height: { sm: '18px', lg: '20px' } })} />
     </a>
 
-    <a
-      class={css({
-        fontSize: '16px',
-        fontWeight: 'bold',
-        color: 'gray.900',
-        textTransform: 'uppercase',
-        letterSpacing: '[0.05em]',
-        paddingY: '6px',
-        paddingX: '16px',
-        position: 'relative',
-        transition: '[all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
-        _hover: {
-          backgroundColor: 'amber.400',
-          transform: 'translateY(-2px) rotate(-1deg)',
-        },
-      })}
-      href="/changelog"
-    >
-      업데이트 노트
-    </a>
-
-    <a
-      class={cx(
-        'group',
-        center({
-          gap: '8px',
-          paddingX: '24px',
-          paddingY: '10px',
-          backgroundColor: 'gray.900',
-          color: 'white',
-          fontSize: '16px',
-          fontWeight: 'black',
-          textTransform: 'uppercase',
-          letterSpacing: '[0.05em]',
-          border: '4px solid',
-          borderColor: 'gray.900',
-          position: 'relative',
-          boxShadow: '[4px 4px 0 0 #000]',
-          transition: '[transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+    <div class={flex({ alignItems: 'center', gap: '0', display: { sm: 'none', lg: 'flex' } })}>
+      <a
+        class={css({
+          fontSize: '14px',
+          fontWeight: 'medium',
+          color: 'dark.gray.400',
+          paddingY: '8px',
+          paddingX: '20px',
+          transition: '[color 0.2s ease-out]',
           _hover: {
-            transform: 'translate(-2px, -2px)',
-            boxShadow: '[6px 6px 0 0 #000]',
-          },
-          _active: {
-            transform: 'translate(2px, 2px)',
-            boxShadow: '[2px 2px 0 0 #000]',
-          },
-        }),
-      )}
-      href={page.data.startUrl}
-    >
-      시작하기
-      <Icon
-        style={css.raw({
-          transition: '[transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
-          _groupHover: {
-            transform: 'translateX(4px) rotate(-15deg)',
+            color: 'dark.gray.100',
           },
         })}
-        icon={ArrowRightIcon}
-      />
-    </a>
-  </div>
+        href="/pricing"
+      >
+        구독 안내
+      </a>
 
-  <div class={flex({ alignItems: 'center', gap: '8px', display: { sm: 'flex', lg: 'none' } })}>
-    <button
-      class={css({
-        padding: '8px',
-        backgroundColor: 'gray.900',
-        color: 'white',
-        border: '2px solid',
-        borderColor: 'gray.900',
-        transition: '[all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
-      })}
-      onclick={() => (mobileMenuOpen = !mobileMenuOpen)}
-      type="button"
-    >
-      <Icon icon={MenuIcon} />
-    </button>
+      <a
+        class={css({
+          fontSize: '14px',
+          fontWeight: 'medium',
+          color: 'dark.gray.400',
+          paddingY: '8px',
+          paddingX: '20px',
+          transition: '[color 0.2s ease-out]',
+          _hover: {
+            color: 'dark.gray.100',
+          },
+        })}
+        href="/changelog"
+      >
+        업데이트 노트
+      </a>
+
+      <a
+        class={cx(
+          'group',
+          css({
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            marginLeft: '16px',
+            paddingX: '20px',
+            paddingY: '10px',
+            backgroundColor: 'dark.gray.800',
+            color: 'dark.gray.100',
+            fontSize: '14px',
+            fontWeight: 'medium',
+            transition: '[all 0.2s ease-out]',
+            _hover: {
+              backgroundColor: 'dark.gray.700',
+            },
+          }),
+        )}
+        href={page.data.startUrl}
+      >
+        시작하기
+        <Icon
+          style={css.raw({
+            transition: '[transform 0.2s ease-out]',
+            _groupHover: {
+              transform: 'translateX(2px)',
+            },
+          })}
+          icon={ArrowRightIcon}
+          size={14}
+        />
+      </a>
+    </div>
+
+    <div class={flex({ alignItems: 'center', gap: '8px', display: { sm: 'flex', lg: 'none' } })}>
+      <button
+        class={css({
+          padding: '8px',
+          backgroundColor: 'transparent',
+          color: 'dark.gray.400',
+          transition: '[color 0.2s ease-out]',
+          _hover: {
+            color: 'dark.gray.100',
+          },
+        })}
+        onclick={() => (mobileMenuOpen = !mobileMenuOpen)}
+        type="button"
+      >
+        <Icon icon={mobileMenuOpen ? XIcon : MenuIcon} size={20} />
+      </button>
+    </div>
   </div>
 </header>
 
@@ -156,16 +149,14 @@
   <div
     class={css({
       position: 'fixed',
-      top: '88px',
-      left: '8px',
-      right: '8px',
-      backgroundColor: 'white',
-      border: '4px solid',
-      borderColor: 'gray.900',
-      boxShadow: '[8px 8px 0 0 #000]',
+      top: '56px',
+      left: '0',
+      right: '0',
+      backgroundColor: 'dark.gray.950',
+      borderBottomWidth: '1px',
+      borderBottomColor: 'dark.gray.800',
       zIndex: '40',
       display: { sm: 'block', lg: 'none' },
-      paddingY: '16px',
     })}
     onoutsideclick={() => (mobileMenuOpen = false)}
     use:outsideClick
@@ -173,14 +164,17 @@
     <a
       class={css({
         display: 'block',
-        fontSize: '16px',
-        fontWeight: 'bold',
-        color: 'gray.900',
-        textTransform: 'uppercase',
-        letterSpacing: '[0.05em]',
-        paddingY: '12px',
+        fontSize: '15px',
+        fontWeight: 'medium',
+        color: 'dark.gray.400',
+        paddingY: '16px',
         paddingX: '24px',
-        transition: '[all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+        borderBottomWidth: '1px',
+        borderBottomColor: 'dark.gray.900',
+        transition: '[color 0.2s ease-out]',
+        _hover: {
+          color: 'dark.gray.100',
+        },
       })}
       href="/"
     >
@@ -190,14 +184,17 @@
     <a
       class={css({
         display: 'block',
-        fontSize: '16px',
-        fontWeight: 'bold',
-        color: 'gray.900',
-        textTransform: 'uppercase',
-        letterSpacing: '[0.05em]',
-        paddingY: '12px',
+        fontSize: '15px',
+        fontWeight: 'medium',
+        color: 'dark.gray.400',
+        paddingY: '16px',
         paddingX: '24px',
-        transition: '[all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+        borderBottomWidth: '1px',
+        borderBottomColor: 'dark.gray.900',
+        transition: '[color 0.2s ease-out]',
+        _hover: {
+          color: 'dark.gray.100',
+        },
       })}
       href="/pricing"
     >
@@ -207,45 +204,49 @@
     <a
       class={css({
         display: 'block',
-        fontSize: '16px',
-        fontWeight: 'bold',
-        color: 'gray.900',
-        textTransform: 'uppercase',
-        letterSpacing: '[0.05em]',
-        paddingY: '12px',
+        fontSize: '15px',
+        fontWeight: 'medium',
+        color: 'dark.gray.400',
+        paddingY: '16px',
         paddingX: '24px',
-        transition: '[all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
+        borderBottomWidth: '1px',
+        borderBottomColor: 'dark.gray.900',
+        transition: '[color 0.2s ease-out]',
+        _hover: {
+          color: 'dark.gray.100',
+        },
       })}
       href="/changelog"
     >
       업데이트 노트
     </a>
 
-    <a
-      class={cx(
-        'group',
-        css({
-          display: 'block',
-          marginX: '24px',
-          marginTop: '16px',
-          paddingX: '24px',
-          paddingY: '12px',
-          backgroundColor: 'gray.900',
-          color: 'white',
-          fontSize: '16px',
-          fontWeight: 'black',
-          textTransform: 'uppercase',
-          letterSpacing: '[0.05em]',
-          border: '4px solid',
-          borderColor: 'gray.900',
-          textAlign: 'center',
-          boxShadow: '[4px 4px 0 0 #000]',
-          transition: '[transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
-        }),
-      )}
-      href={page.data.startUrl}
-    >
-      시작하기
-    </a>
+    <div class={css({ paddingX: '24px', paddingY: '16px' })}>
+      <a
+        class={cx(
+          'group',
+          css({
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px',
+            paddingX: '20px',
+            paddingY: '14px',
+            backgroundColor: 'dark.gray.800',
+            color: 'dark.gray.100',
+            fontSize: '15px',
+            fontWeight: 'medium',
+            transition: '[all 0.2s ease-out]',
+            _hover: {
+              backgroundColor: 'dark.gray.700',
+            },
+          }),
+        )}
+        href={page.data.startUrl}
+      >
+        시작하기
+        <Icon icon={ArrowRightIcon} size={14} />
+      </a>
+    </div>
   </div>
 {/if}

@@ -1,6 +1,8 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
-  import { center, flex } from '@typie/styled-system/patterns';
+  import { onMount } from 'svelte';
+  import { fade } from 'svelte/transition';
+  import { inview } from './inview';
 
   type Testimonial = {
     avatar: string;
@@ -90,193 +92,330 @@
   ];
   // spell-checker:enable
 
-  const makeColumns = (items: Testimonial[]) => {
-    const columns = [[], [], []] as Testimonial[][];
-    items.forEach((item, index) => {
-      columns[index % 3].push(item);
-    });
-    return columns;
+  let currentIndex = $state(0);
+  let isPaused = $state(false);
+
+  const cardHeight = 180;
+  const activeCard = $derived(testimonials[currentIndex]);
+
+  const getOffset = (idx: number, center: number) => {
+    const total = testimonials.length;
+    let diff = idx - center;
+    if (diff > total / 2) diff -= total;
+    if (diff < -total / 2) diff += total;
+    return diff;
   };
 
-  const columns = makeColumns(testimonials);
+  onMount(() => {
+    const interval = setInterval(() => {
+      if (!isPaused) {
+        currentIndex = (currentIndex + 1) % testimonials.length;
+      }
+    }, 4000);
+
+    return () => clearInterval(interval);
+  });
 </script>
 
-<section class={css({ position: 'relative', paddingY: { sm: '80px', lg: '120px' }, backgroundColor: 'gray.50' })}>
-  <div class={css({ position: 'relative', maxWidth: '[1024px]', marginX: 'auto', paddingX: { sm: '16px', lg: '40px' } })}>
-    <div
-      class={center({
-        flexDirection: 'column',
-        marginBottom: { sm: '60px', lg: '80px' },
-        opacity: '0',
-        transform: { sm: 'translate3d(0, 20px, 0)', lg: 'translate3d(0, 20px, 0) rotate(-1deg)' },
-        transition: {
-          sm: '[opacity 0.3s ease-out, transform 0.3s ease-out]',
-          lg: '[opacity 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94), transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
-        },
-        willChange: 'transform, opacity',
-        '&.in-view': {
-          opacity: '100',
-          transform: { sm: 'translate3d(0, 0, 0)', lg: 'translate3d(0, 0, 0) rotate(0)' },
-        },
-      })}
-      data-observe
-    >
-      <div
-        class={css({
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '8px',
-          paddingX: { sm: '16px', lg: '20px' },
-          paddingY: { sm: '6px', lg: '8px' },
-          marginBottom: { sm: '24px', lg: '40px' },
-          backgroundColor: 'gray.900',
-          color: 'white',
-          fontSize: { sm: '12px', lg: '14px' },
-          fontWeight: 'bold',
-          letterSpacing: '[0.1em]',
-          textTransform: 'uppercase',
-          transform: { sm: 'rotate(0)', lg: 'rotate(-2deg)' },
-        })}
-      >
-        TESTIMONIALS
-      </div>
+<section
+  class={css({
+    position: 'relative',
+    paddingX: { sm: '24px', lg: '80px' },
+    paddingY: { sm: '80px', lg: '120px' },
+    backgroundColor: 'dark.gray.950',
+    borderTopWidth: '1px',
+    borderTopColor: 'dark.gray.900',
+    overflow: 'hidden',
+  })}
+>
+  <div
+    class={css({
+      position: 'absolute',
+      left: { sm: '16px', lg: '48px' },
+      top: '0',
+      bottom: '0',
+      width: '1px',
+      backgroundColor: 'dark.gray.800',
+      display: { sm: 'none', lg: 'block' },
+    })}
+  ></div>
 
-      <h2
-        class={css({
-          fontSize: { sm: '[36px]', lg: '[56px]' },
-          fontWeight: 'black',
-          color: 'gray.900',
-          textAlign: 'center',
-          fontFamily: 'Paperlogy',
-          marginBottom: { sm: '16px', lg: '24px' },
-          lineHeight: '[1.1]',
-          textTransform: 'uppercase',
-        })}
-      >
-        실제 이용자가 전하는
-        <br />
-        <span
-          class={css({
-            backgroundColor: 'amber.400',
-            paddingX: { sm: '16px', lg: '20px' },
-            display: 'inline-block',
-            transform: { sm: 'rotate(0)', lg: 'rotate(1deg)' },
-          })}
-        >
-          생생한 후기
-        </span>
-      </h2>
-      <p
-        class={css({
-          fontSize: { sm: '16px', lg: '20px' },
-          fontWeight: 'medium',
-          color: 'gray.700',
-          textAlign: 'center',
-          maxWidth: '[800px]',
-          lineHeight: '[1.6]',
-          marginX: 'auto',
-        })}
-      >
-        실제로 써본 사람들이 말하는 타이피의 장점, 지금 직접 확인해보세요.
-      </p>
-    </div>
-
+  <div class={css({ maxWidth: '[1200px]', marginX: 'auto' })}>
     <div
       class={css({
         display: 'grid',
-        gridTemplateColumns: { sm: '1fr', lg: 'repeat(3, 1fr)' },
-        gap: { sm: '16px', lg: '24px' },
-        alignItems: 'start',
+        gridTemplateColumns: { sm: '1fr', lg: '[1fr 1fr]' },
+        gap: { sm: '48px', lg: '80px' },
+        alignItems: 'center',
       })}
     >
-      {#each columns as column, colIndex (colIndex)}
-        <div
-          style:transition={`opacity 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) ${0.1 + colIndex * 0.1}s, transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) ${0.1 + colIndex * 0.1}s`}
+      <div
+        class={css({
+          opacity: '0',
+          transform: 'translate3d(0, 28px, 0)',
+          transition: '[opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1), transform 0.8s cubic-bezier(0.16, 1, 0.3, 1)]',
+          '&.in-view': {
+            opacity: '100',
+            transform: 'translate3d(0, 0, 0)',
+          },
+        })}
+        {@attach inview}
+      >
+        <span
           class={css({
-            display: 'flex',
-            flexDirection: 'column',
-            gap: { sm: '16px', lg: '24px' },
-            opacity: '0',
-            transform: 'translate3d(0, 20px, 0)',
-            willChange: 'transform, opacity',
-            '&.in-view': {
-              opacity: '100',
-              transform: 'translate3d(0, 0, 0)',
-            },
+            display: 'block',
+            fontSize: '[11px]',
+            fontFamily: 'mono',
+            color: 'dark.gray.500',
+            letterSpacing: '[0.1em]',
+            textTransform: 'uppercase',
+            marginBottom: '24px',
           })}
-          data-observe
         >
-          {#each column as testimonial, idx (idx)}
-            <a
+          Testimonials
+        </span>
+
+        <h2
+          class={css({
+            fontSize: { sm: '[32px]', lg: '[48px]' },
+            fontWeight: 'medium',
+            color: 'dark.gray.100',
+            lineHeight: '[1.2]',
+            letterSpacing: '[-0.02em]',
+            fontFamily: 'Paperlogy',
+            marginBottom: '20px',
+          })}
+        >
+          지금도 누구나
+          <br />
+          쓰고 고치는 중.
+        </h2>
+
+        <p
+          class={css({
+            fontSize: { sm: '16px', lg: '18px' },
+            color: 'dark.gray.400',
+            lineHeight: '[1.65]',
+            maxWidth: '[400px]',
+          })}
+        >
+          왜 타이피인지, 직접 확인해보세요.
+        </p>
+
+        <div class={css({ display: 'flex', gap: '8px', marginTop: '32px' })}>
+          {#each testimonials as testimonial, idx (testimonial.handle)}
+            <button
               class={css({
-                display: 'block',
-                padding: { sm: '16px', lg: '24px' },
-                backgroundColor: 'white',
-                border: '4px solid',
-                borderColor: 'gray.900',
-                textDecoration: 'none',
-                transition: '[transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)]',
-                boxShadow: '[6px 6px 0 0 #000]',
-                transform: { sm: 'translate3d(0, 0, 0)', lg: idx % 2 === 0 ? 'rotate(-1deg)' : 'rotate(1deg)' },
+                width: '8px',
+                height: '8px',
+                backgroundColor: idx === currentIndex ? 'dark.brand.400' : 'dark.gray.700',
+                border: 'none',
+                cursor: 'pointer',
+                transition: '[background-color 0.3s ease-out]',
                 _hover: {
-                  transform: { sm: 'translate3d(-2px, -2px, 0)', lg: 'translate3d(-4px, -4px, 0) rotate(0deg)' },
-                  boxShadow: { sm: '[8px 8px 0 0 #000]', lg: '[10px 10px 0 0 #000]' },
+                  backgroundColor: idx === currentIndex ? 'dark.brand.400' : 'dark.gray.600',
                 },
               })}
-              href={testimonial.url}
-              rel="noopener noreferrer"
-              target="_blank"
+              aria-label={testimonial.author}
+              onclick={() => (currentIndex = idx)}
+              type="button"
+            ></button>
+          {/each}
+        </div>
+      </div>
+
+      <div
+        class={css({
+          position: 'relative',
+          height: { sm: '[500px]', lg: '[600px]' },
+          overflow: 'hidden',
+          opacity: '0',
+          transform: 'translate3d(0, 20px, 0)',
+          transition: '[opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.15s, transform 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.15s]',
+          '&.in-view': {
+            opacity: '100',
+            transform: 'translate3d(0, 0, 0)',
+          },
+        })}
+        {@attach inview}
+        onmouseenter={() => (isPaused = true)}
+        onmouseleave={() => (isPaused = false)}
+        role="region"
+      >
+        <div
+          class={css({
+            position: 'absolute',
+            top: '0',
+            left: '0',
+            right: '0',
+            height: '[120px]',
+            background: '[linear-gradient(to bottom, token(colors.dark.gray.950), transparent)]',
+            zIndex: '20',
+            pointerEvents: 'none',
+          })}
+        ></div>
+        <div
+          class={css({
+            position: 'absolute',
+            bottom: '0',
+            left: '0',
+            right: '0',
+            height: '[120px]',
+            background: '[linear-gradient(to top, token(colors.dark.gray.950), transparent)]',
+            zIndex: '20',
+            pointerEvents: 'none',
+          })}
+        ></div>
+
+        <button
+          class={css({
+            position: 'absolute',
+            top: '[50%]',
+            transform: 'translateY(-50%)',
+            right: '0',
+            width: { sm: '[calc(100% - 16px)]', lg: '[calc(100% - 24px)]' },
+            height: '[180px]',
+            paddingX: '24px',
+            paddingY: '20px',
+            backgroundColor: 'dark.gray.900',
+            borderWidth: '1px',
+            borderColor: 'dark.brand.400',
+            textAlign: 'left',
+            cursor: 'pointer',
+            overflow: 'hidden',
+            zIndex: '[15]',
+            transition: '[border-color 0.3s ease-out]',
+            _hover: {
+              borderColor: 'dark.brand.300',
+            },
+          })}
+          onclick={() => window.open(activeCard.url, '_blank', 'noopener,noreferrer')}
+          type="button"
+        >
+          {#key currentIndex}
+            <div
+              class={css({ position: 'absolute', inset: '0', paddingX: '24px', paddingY: '20px' })}
+              in:fade={{ duration: 200, delay: 150 }}
+              out:fade={{ duration: 150 }}
             >
-              <div class={flex({ alignItems: 'center', gap: { sm: '8px', lg: '12px' }, marginBottom: { sm: '12px', lg: '16px' } })}>
+              <p
+                class={css({
+                  fontSize: '15px',
+                  color: 'dark.gray.200',
+                  lineHeight: '[1.65]',
+                  marginBottom: '20px',
+                  whiteSpace: 'pre-line',
+                  lineClamp: '3',
+                  overflow: 'hidden',
+                })}
+              >
+                {activeCard.content}
+              </p>
+
+              <div class={css({ display: 'flex', alignItems: 'center', gap: '12px', position: 'absolute', bottom: '20px', left: '24px' })}>
                 <img
                   class={css({
-                    size: { sm: '32px', lg: '40px' },
-                    backgroundColor: 'gray.200',
+                    size: '36px',
                     objectFit: 'cover',
-                    border: '3px solid',
-                    borderColor: 'gray.900',
+                    borderRadius: 'full',
                   })}
-                  alt={testimonial.author}
-                  src={testimonial.avatar}
+                  alt={activeCard.author}
+                  src={activeCard.avatar}
                 />
-                <div class={css({ flex: '1' })}>
-                  <div
+                <div>
+                  <span class={css({ display: 'block', fontSize: '14px', fontWeight: 'medium', color: 'dark.gray.100' })}>
+                    {activeCard.author}
+                  </span>
+                  <span class={css({ display: 'block', fontSize: '12px', color: 'dark.gray.500' })}>
+                    {activeCard.handle}
+                  </span>
+                </div>
+              </div>
+            </div>
+          {/key}
+        </button>
+
+        <div
+          class={css({
+            position: 'absolute',
+            top: '[50%]',
+            right: '0',
+            width: { sm: '[calc(100% - 16px)]', lg: '[calc(100% - 24px)]' },
+            zIndex: '[10]',
+          })}
+        >
+          {#each testimonials as testimonial, idx (testimonial.handle)}
+            {@const offset = getOffset(idx, currentIndex)}
+            {@const isActive = offset === 0}
+            {@const isVisible = Math.abs(offset) <= 1}
+            <button
+              style:transform={`translateY(${offset * cardHeight - cardHeight / 2}px)`}
+              style:opacity={isActive || !isVisible ? 0 : 1}
+              class={css({
+                position: 'absolute',
+                top: '0',
+                left: '0',
+                width: 'full',
+                height: '[180px]',
+                backgroundColor: 'dark.gray.950',
+                borderTopWidth: '0',
+                borderBottomWidth: '0',
+                borderLeftWidth: '1px',
+                borderRightWidth: '1px',
+                borderColor: 'dark.gray.900',
+                textAlign: 'left',
+                cursor: 'pointer',
+                overflow: 'hidden',
+                transition: '[transform 0.5s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease-out, border-color 0.2s ease-out]',
+                _hover: {
+                  borderColor: 'dark.gray.800',
+                },
+              })}
+              onclick={() => (currentIndex = idx)}
+              type="button"
+            >
+              <div class={css({ position: 'absolute', inset: '0', paddingX: '24px', paddingY: '20px' })}>
+                <p
+                  class={css({
+                    fontSize: '15px',
+                    color: 'dark.gray.400',
+                    lineHeight: '[1.65]',
+                    whiteSpace: 'pre-line',
+                    lineClamp: '3',
+                    overflow: 'hidden',
+                  })}
+                >
+                  {testimonial.content}
+                </p>
+
+                <div
+                  class={css({ display: 'flex', alignItems: 'center', gap: '12px', position: 'absolute', bottom: '20px', left: '24px' })}
+                >
+                  <img
                     class={css({
-                      fontSize: { sm: '14px', lg: '16px' },
-                      fontWeight: 'black',
-                      color: 'gray.900',
-                      textTransform: 'uppercase',
+                      size: '32px',
+                      objectFit: 'cover',
+                      borderRadius: 'full',
+                      filter: '[grayscale(100%)]',
+                      opacity: '[0.5]',
                     })}
-                  >
-                    {testimonial.author}
-                  </div>
-                  <div
-                    class={css({
-                      fontSize: { sm: '12px', lg: '13px' },
-                      fontWeight: 'medium',
-                      color: 'gray.600',
-                    })}
-                  >
-                    {testimonial.handle}
+                    alt={testimonial.author}
+                    src={testimonial.avatar}
+                  />
+                  <div>
+                    <span class={css({ display: 'block', fontSize: '13px', fontWeight: 'medium', color: 'dark.gray.500' })}>
+                      {testimonial.author}
+                    </span>
+                    <span class={css({ display: 'block', fontSize: '11px', color: 'dark.gray.600' })}>
+                      {testimonial.handle}
+                    </span>
                   </div>
                 </div>
               </div>
-
-              <p
-                class={css({
-                  fontSize: { sm: '14px', lg: '15px' },
-                  lineHeight: '[1.7]',
-                  color: 'gray.800',
-                  whiteSpace: 'pre-wrap',
-                  fontWeight: 'medium',
-                })}
-              >
-                {testimonial.content}
-              </p>
-            </a>
+            </button>
           {/each}
         </div>
-      {/each}
+      </div>
     </div>
   </div>
 </section>

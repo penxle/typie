@@ -1444,7 +1444,8 @@ builder.subscriptionFields((t) => ({
       const repeater = Repeater.merge([
         pubsub.subscribe('post:sync', args.postId),
         new Repeater<{ target: string; type: PostSyncType; data: string }>(async (push, stop) => {
-          const heartbeat = () => {
+          const heartbeat = async () => {
+            await redis.zadd('writers:active', Date.now(), ctx.session.userId);
             push({
               target: args.clientId,
               type: PostSyncType.HEARTBEAT,
@@ -1452,7 +1453,7 @@ builder.subscriptionFields((t) => ({
             });
           };
 
-          heartbeat();
+          await heartbeat();
           const interval = setInterval(heartbeat, 1000);
 
           await stop;
