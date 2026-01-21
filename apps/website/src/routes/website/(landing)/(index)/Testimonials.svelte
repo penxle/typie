@@ -29,7 +29,7 @@
       url: 'https://x.com/izatsuyu_dream/status/1947480997010018709?s=46&t=CT-W3Ige047OuUmFWL09YA',
     },
     {
-      avatar: 'https://pbs.twimg.com/profile_images/1990274009926422528/ydVC8oAB_400x400.jpg',
+      avatar: 'https://pbs.twimg.com/profile_images/2013751032355160064/gvpZY3x6_400x400.jpg',
       author: '8484',
       handle: '@aibo8484',
       content:
