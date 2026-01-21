@@ -1,25 +1,8 @@
-import { GetCostAndUsageCommand } from '@aws-sdk/client-cost-explorer';
 import dayjs from 'dayjs';
 import { sql } from 'drizzle-orm';
-import ky from 'ky';
 import { redis } from '@/cache';
-import {
-  db,
-  Entities,
-  Files,
-  Images,
-  Plans,
-  PostCharacterCountChanges,
-  PostContents,
-  PostReactions,
-  Posts,
-  Sites,
-  Subscriptions,
-  Users,
-} from '@/db';
+import { db, Entities, Plans, PostCharacterCountChanges, Posts, Sites, Subscriptions, Users } from '@/db';
 import { PlanAvailability, SubscriptionState, UserState } from '@/enums';
-import { env } from '@/env';
-import * as aws from '@/external/aws';
 import { builder } from '../builder';
 
 builder.queryField('stats', (t) =>
@@ -38,117 +21,6 @@ builder.queryField('stats', (t) =>
       const thirtyDaysAgo = current.subtract(30, 'days').toISOString();
       const twentyFourHoursAgo = current.subtract(24, 'hours').toISOString();
       const fortyEightHoursAgo = current.subtract(48, 'hours').toISOString();
-
-      const getGitStatistics = async () => {
-        const oneWeekAgo = current.subtract(7, 'days');
-
-        const query = `
-          query($owner: String!, $repo: String!, $since: GitTimestamp!) {
-            repository(owner: $owner, name: $repo) {
-              defaultBranchRef {
-                target {
-                  ... on Commit {
-                    totalCommits: history {
-                      totalCount
-                    }
-                    weeklyCommits: history(since: $since) {
-                      totalCount
-                    }
-                  }
-                }
-              }
-            }
-          }
-        `;
-
-        const variables = {
-          owner: 'penxle',
-          repo: 'typie',
-          since: oneWeekAgo,
-        };
-
-        try {
-          const { data } = await ky
-            .post('https://api.github.com/graphql', {
-              headers: {
-                Authorization: `Bearer ${env.GITHUB_TOKEN}`,
-              },
-              json: { query, variables },
-            })
-            .json<{
-              data: {
-                repository?: {
-                  defaultBranchRef?: { target?: { totalCommits: { totalCount: number }; weeklyCommits: { totalCount: number } } };
-                };
-              };
-            }>();
-
-          if (!data?.repository?.defaultBranchRef?.target) {
-            throw new Error('GitHub API response invalid');
-          }
-
-          return {
-            totalCommits: data.repository.defaultBranchRef.target.totalCommits.totalCount,
-            weeklyCommits: data.repository.defaultBranchRef.target.weeklyCommits.totalCount,
-          };
-        } catch {
-          return {
-            totalCommits: 0,
-            weeklyCommits: 0,
-          };
-        }
-      };
-
-      const getUsdToKrwRate = async (): Promise<number> => {
-        const cacheKey = 'usd-krw-rate';
-
-        const cached = await redis.get(cacheKey);
-        if (cached) {
-          return Number.parseFloat(cached);
-        }
-
-        try {
-          const data = await ky.get('https://open.er-api.com/v6/latest/USD').json<{ rates: { KRW: number } }>();
-          const rate = data.rates.KRW;
-
-          if (rate && typeof rate === 'number') {
-            await redis.setex(cacheKey, 86_400, rate.toString());
-            return rate;
-          }
-
-          throw new Error('Invalid rate response');
-        } catch {
-          return 1350;
-        }
-      };
-
-      const getInfraCost = async () => {
-        try {
-          const command = new GetCostAndUsageCommand({
-            TimePeriod: {
-              Start: current.subtract(30, 'days').format('YYYY-MM-DD'),
-              End: current.format('YYYY-MM-DD'),
-            },
-            Granularity: 'MONTHLY',
-            Metrics: ['BlendedCost'],
-          });
-
-          const response = await aws.costExplorer.send(command);
-
-          const awsTotal = response.ResultsByTime?.reduce((acc, curr) => {
-            return acc + Number.parseFloat(curr.Total?.BlendedCost?.Amount ?? '0');
-          }, 0);
-
-          const usdToKrw = await getUsdToKrwRate();
-
-          const idcMonthly = 400_000; // IDC
-          const devicesDepreciationMonthly = 17_345_940 / 36; // 장비 감가 36개월
-
-          return Math.round((awsTotal ?? 0) * usdToKrw + idcMonthly + devicesDepreciationMonthly);
-        } catch {
-          return 0;
-        }
-      };
 
       // User metrics
       const getUsersTotal = () =>
@@ -280,16 +152,20 @@ builder.queryField('stats', (t) =>
         db.execute(sql`
           WITH date_series AS (
             SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
+          ),
+          valid_subscriptions AS (
+            SELECT ${Subscriptions.id}, ${Subscriptions.startsAt}, ${Subscriptions.expiresAt}
+            FROM ${Subscriptions}
+            INNER JOIN ${Plans} ON ${Subscriptions.planId} = ${Plans.id}
+            WHERE ${Subscriptions.state} IN (${SubscriptionState.ACTIVE}, ${SubscriptionState.WILL_EXPIRE}, ${SubscriptionState.IN_GRACE_PERIOD})
+              AND ${Plans.availability} != ${PlanAvailability.TRIAL}
           )
-          SELECT 
+          SELECT
             date_series.date::text as date,
-            COALESCE(COUNT(${Subscriptions.id}), 0)::int as value
+            COALESCE(COUNT(vs.id), 0)::int as value
           FROM date_series
-          LEFT JOIN ${Subscriptions} ON ${Subscriptions.startsAt} <= (date_series.date + interval '1 day')
-            AND ${Subscriptions.expiresAt} >= date_series.date
-            AND ${Subscriptions.state} IN (${SubscriptionState.ACTIVE}, ${SubscriptionState.WILL_EXPIRE}, ${SubscriptionState.IN_GRACE_PERIOD})
-          LEFT JOIN ${Plans} ON ${Subscriptions.planId} = ${Plans.id}
-            AND ${Plans.availability} != ${PlanAvailability.TRIAL}
+          LEFT JOIN valid_subscriptions vs ON vs.starts_at <= (date_series.date + interval '1 day')
+            AND vs.expires_at >= date_series.date
           GROUP BY date_series.date
           ORDER BY date_series.date
         `);
@@ -353,83 +229,7 @@ builder.queryField('stats', (t) =>
           ORDER BY date_series.date
         `);
 
-      const getPostsAverageLength = () =>
-        db.execute(sql`
-          WITH date_series AS (
-            SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
-          ),
-          daily_avg AS (
-            SELECT 
-              DATE(${Posts.createdAt}) as post_date,
-              AVG(${PostContents.characterCount}) as avg_length
-            FROM ${Posts}
-            INNER JOIN ${PostContents} ON ${Posts.id} = ${PostContents.postId}
-            INNER JOIN ${Entities} ON ${Posts.entityId} = ${Entities.id}
-            INNER JOIN ${Sites} ON ${Entities.siteId} = ${Sites.id}
-            WHERE ${Posts.createdAt} >= ${thirtyDaysAgo}
-              AND ${Entities.createdAt} != ${Sites.createdAt}
-            GROUP BY DATE(${Posts.createdAt})
-          )
-          SELECT 
-            date_series.date::text as date,
-            COALESCE(ROUND(da.avg_length), 0)::int as value
-          FROM date_series
-          LEFT JOIN daily_avg da ON da.post_date = date_series.date
-          GROUP BY date_series.date, da.avg_length
-          ORDER BY date_series.date
-        `);
-
-      const getPostsPrivateRatio = () =>
-        db.execute(sql`
-          WITH date_series AS (
-            SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
-          ),
-          daily_visibility AS (
-            SELECT 
-              DATE(${Posts.createdAt}) as post_date,
-              COUNT(DISTINCT CASE WHEN ${Entities.visibility} = 'PRIVATE' THEN ${Posts.id} END) as private_count,
-              COUNT(DISTINCT ${Posts.id}) as total_count
-            FROM ${Posts}
-            INNER JOIN ${Entities} ON ${Posts.entityId} = ${Entities.id}
-            INNER JOIN ${Sites} ON ${Entities.siteId} = ${Sites.id}
-            WHERE ${Posts.createdAt} >= ${thirtyDaysAgo}
-              AND ${Entities.createdAt} != ${Sites.createdAt}
-            GROUP BY DATE(${Posts.createdAt})
-          )
-          SELECT 
-            date_series.date::text as date,
-            COALESCE(
-              CASE 
-                WHEN dv.total_count > 0 THEN ROUND((dv.private_count::float / dv.total_count::float) * 100)
-                ELSE 0 
-              END, 
-              0
-            )::int as value
-          FROM date_series
-          LEFT JOIN daily_visibility dv ON dv.post_date = date_series.date
-          GROUP BY date_series.date, dv.private_count, dv.total_count
-          ORDER BY date_series.date
-        `);
-
       // Character metrics
-      const getCharactersTotal = () =>
-        db.execute(sql`
-          WITH date_series AS (
-            SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
-          )
-          SELECT 
-            date_series.date::text as date,
-            COALESCE(SUM(${PostContents.characterCount}), 0)::int as value
-          FROM date_series
-          LEFT JOIN ${Posts} ON ${Posts.createdAt} < (date_series.date + interval '1 day')
-          LEFT JOIN ${PostContents} ON ${Posts.id} = ${PostContents.postId}
-          LEFT JOIN ${Entities} ON ${Posts.entityId} = ${Entities.id}
-          LEFT JOIN ${Sites} ON ${Entities.siteId} = ${Sites.id}
-          WHERE ${Entities.createdAt} != ${Sites.createdAt} OR ${Entities.createdAt} IS NULL
-          GROUP BY date_series.date
-          ORDER BY date_series.date
-        `);
-
       const getCharactersInput = () =>
         db.execute(sql`
           WITH date_series AS (
@@ -494,158 +294,6 @@ builder.queryField('stats', (t) =>
           ORDER BY date_series.date
         `);
 
-      // Reaction metrics
-      const getReactionsTotal = () =>
-        db.execute(sql`
-          WITH date_series AS (
-            SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
-          ),
-          valid_reactions AS (
-            SELECT ${PostReactions.id}, ${PostReactions.createdAt}
-            FROM ${PostReactions}
-            INNER JOIN ${Posts} ON ${PostReactions.postId} = ${Posts.id}
-            INNER JOIN ${Entities} ON ${Posts.entityId} = ${Entities.id}
-            INNER JOIN ${Sites} ON ${Entities.siteId} = ${Sites.id}
-            WHERE ${Entities.createdAt} != ${Sites.createdAt}
-          )
-          SELECT 
-            date_series.date::text as date,
-            COALESCE(COUNT(vr.id), 0)::int as value
-          FROM date_series
-          LEFT JOIN valid_reactions vr ON vr.created_at < (date_series.date + interval '1 day')
-          GROUP BY date_series.date
-          ORDER BY date_series.date
-        `);
-
-      const getReactionsNew = () =>
-        db.execute(sql`
-          WITH date_series AS (
-            SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
-          ),
-          current_period AS (
-            SELECT COUNT(${PostReactions.id})::int as count
-            FROM ${PostReactions}
-            INNER JOIN ${Posts} ON ${PostReactions.postId} = ${Posts.id}
-            INNER JOIN ${Entities} ON ${Posts.entityId} = ${Entities.id}
-            INNER JOIN ${Sites} ON ${Entities.siteId} = ${Sites.id}
-            WHERE ${PostReactions.createdAt} >= ${twentyFourHoursAgo}
-              AND ${PostReactions.createdAt} < ${now}
-              AND ${Entities.createdAt} != ${Sites.createdAt}
-          ),
-          previous_period AS (
-            SELECT COUNT(${PostReactions.id})::int as count
-            FROM ${PostReactions}
-            INNER JOIN ${Posts} ON ${PostReactions.postId} = ${Posts.id}
-            INNER JOIN ${Entities} ON ${Posts.entityId} = ${Entities.id}
-            INNER JOIN ${Sites} ON ${Entities.siteId} = ${Sites.id}
-            WHERE ${PostReactions.createdAt} >= ${fortyEightHoursAgo}
-              AND ${PostReactions.createdAt} < ${twentyFourHoursAgo}
-              AND ${Entities.createdAt} != ${Sites.createdAt}
-          ),
-          valid_reactions AS (
-            SELECT ${PostReactions.id}, ${PostReactions.createdAt}
-            FROM ${PostReactions}
-            INNER JOIN ${Posts} ON ${PostReactions.postId} = ${Posts.id}
-            INNER JOIN ${Entities} ON ${Posts.entityId} = ${Entities.id}
-            INNER JOIN ${Sites} ON ${Entities.siteId} = ${Sites.id}
-            WHERE ${Entities.createdAt} != ${Sites.createdAt}
-          )
-          SELECT 
-            date_series.date::text as date,
-            CASE 
-              WHEN date_series.date = CURRENT_DATE - INTERVAL '1 day' THEN COALESCE((SELECT count FROM previous_period), 0)
-              WHEN date_series.date = CURRENT_DATE THEN COALESCE((SELECT count FROM current_period), 0)
-              ELSE COALESCE(COUNT(vr.id), 0)
-            END::int as value
-          FROM date_series
-          LEFT JOIN valid_reactions vr ON DATE(vr.created_at) = date_series.date
-          GROUP BY date_series.date
-          ORDER BY date_series.date
-        `);
-
-      // Media metrics
-      const getMediaTotal = () =>
-        db.execute(sql`
-          WITH date_series AS (
-            SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
-          ),
-          media_base AS (
-            SELECT 
-              ${thirtyDaysAgo} as base_date,
-              (SELECT COUNT(*) FROM ${Images} WHERE ${Images.createdAt} < ${thirtyDaysAgo}) +
-              (SELECT COUNT(*) FROM ${Files} WHERE ${Files.createdAt} < ${thirtyDaysAgo}) as base_count
-          ),
-          daily_additions AS (
-            SELECT 
-              DATE(created_at) as date,
-              COUNT(*) as additions
-            FROM (
-              SELECT ${Images.createdAt} as created_at FROM ${Images} WHERE ${Images.createdAt} >= ${thirtyDaysAgo}
-              UNION ALL
-              SELECT ${Files.createdAt} as created_at FROM ${Files} WHERE ${Files.createdAt} >= ${thirtyDaysAgo}
-            ) combined
-            GROUP BY DATE(created_at)
-          )
-          SELECT 
-            ds.date::text as date,
-            (mb.base_count + COALESCE(SUM(da.additions) FILTER (WHERE da.date <= ds.date), 0))::int as value
-          FROM date_series ds
-          CROSS JOIN media_base mb
-          LEFT JOIN daily_additions da ON da.date >= ${thirtyDaysAgo}::date AND da.date <= ds.date
-          GROUP BY ds.date, mb.base_count
-          ORDER BY ds.date
-        `);
-
-      const getMediaNew = () =>
-        db.execute(sql`
-          WITH date_series AS (
-            SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
-          ),
-          current_period AS (
-            SELECT 
-              (SELECT COUNT(${Images.id}) FROM ${Images} WHERE ${Images.createdAt} >= ${twentyFourHoursAgo} AND ${Images.createdAt} < ${now}) +
-              (SELECT COUNT(${Files.id}) FROM ${Files} WHERE ${Files.createdAt} >= ${twentyFourHoursAgo} AND ${Files.createdAt} < ${now}) as count
-          ),
-          previous_period AS (
-            SELECT 
-              (SELECT COUNT(${Images.id}) FROM ${Images} WHERE ${Images.createdAt} >= ${fortyEightHoursAgo} AND ${Images.createdAt} < ${twentyFourHoursAgo}) +
-              (SELECT COUNT(${Files.id}) FROM ${Files} WHERE ${Files.createdAt} >= ${fortyEightHoursAgo} AND ${Files.createdAt} < ${twentyFourHoursAgo}) as count
-          ),
-          daily_media AS (
-            SELECT 
-              date_series.date,
-              (SELECT COUNT(*) FROM ${Images} WHERE DATE(${Images.createdAt}) = date_series.date) +
-              (SELECT COUNT(*) FROM ${Files} WHERE DATE(${Files.createdAt}) = date_series.date) as daily_count
-            FROM date_series
-          )
-          SELECT 
-            date_series.date::text as date,
-            CASE 
-              WHEN date_series.date = CURRENT_DATE - INTERVAL '1 day' THEN COALESCE((SELECT count FROM previous_period), 0)
-              WHEN date_series.date = CURRENT_DATE THEN COALESCE((SELECT count FROM current_period), 0)
-              ELSE COALESCE(dm.daily_count, 0)
-            END::int as value
-          FROM date_series
-          LEFT JOIN daily_media dm ON dm.date = date_series.date
-          ORDER BY date_series.date
-        `);
-
-      const getMediaTotalSize = () =>
-        db.execute(sql`
-          WITH date_series AS (
-            SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
-          )
-          SELECT 
-            date_series.date::text as date,
-            COALESCE(
-              (SELECT SUM(${Images.size}) FROM ${Images} WHERE ${Images.createdAt} < (date_series.date + interval '1 day')) +
-              (SELECT SUM(${Files.size}) FROM ${Files} WHERE ${Files.createdAt} < (date_series.date + interval '1 day')),
-              0
-            )::bigint as value
-          FROM date_series
-          ORDER BY date_series.date
-        `);
-
       // System metrics
       const getSystemServiceDays = () =>
         db.execute(sql`
@@ -673,19 +321,9 @@ builder.queryField('stats', (t) =>
         subscriptionsActive,
         postsTotal,
         postsNew,
-        postsAverageLength,
-        postsPrivateRatio,
-        charactersTotal,
         charactersInput,
         charactersDaily,
-        reactionsTotal,
-        reactionsNew,
-        mediaTotal,
-        mediaNew,
-        mediaTotalSize,
         systemServiceDays,
-        gitStatistics,
-        infraCost,
       ] = await Promise.all([
         getUsersTotal(),
         getUsersNew(),
@@ -694,19 +332,9 @@ builder.queryField('stats', (t) =>
         getSubscriptionsActive(),
         getPostsTotal(),
         getPostsNew(),
-        getPostsAverageLength(),
-        getPostsPrivateRatio(),
-        getCharactersTotal(),
         getCharactersInput(),
         getCharactersDaily(),
-        getReactionsTotal(),
-        getReactionsNew(),
-        getMediaTotal(),
-        getMediaNew(),
-        getMediaTotalSize(),
         getSystemServiceDays(),
-        getGitStatistics(),
-        getInfraCost(),
       ]);
 
       const transformToData = (rows: Record<string, unknown>[]) => {
@@ -731,30 +359,13 @@ builder.queryField('stats', (t) =>
         // Post metrics
         postsTotal: transformToData(postsTotal),
         postsNew: transformToData(postsNew),
-        postsAverageLength: transformToData(postsAverageLength),
-        postsPrivateRatio: transformToData(postsPrivateRatio),
 
         // Character metrics
-        charactersTotal: transformToData(charactersTotal),
         charactersInput: transformToData(charactersInput),
         charactersDaily: transformToData(charactersDaily),
 
-        // Reaction metrics
-        reactionsTotal: transformToData(reactionsTotal),
-        reactionsNew: transformToData(reactionsNew),
-
-        // Media metrics
-        mediaTotal: transformToData(mediaTotal),
-        mediaNew: transformToData(mediaNew),
-        mediaTotalSize: transformToData(mediaTotalSize),
-
         // System metrics
         systemServiceDays: transformToData(systemServiceDays),
-
-        // External metrics
-        gitTotalCommits: gitStatistics.totalCommits,
-        gitWeeklyCommits: gitStatistics.weeklyCommits,
-        infraMonthlyCost: infraCost,
       };
 
       await redis.setex(cacheKey, 3600, JSON.stringify(result));

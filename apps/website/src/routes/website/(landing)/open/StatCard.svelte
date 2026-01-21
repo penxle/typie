@@ -37,55 +37,57 @@
 
   const change = $derived(calculateChange(data, type));
   const changeValue = $derived(formatChange(change));
-  const changeStyle = $derived(css({ color: change === 0 ? 'gray.500' : change > 0 ? 'green.600' : 'red.600' }));
+  const changeColor = $derived(change === 0 ? 'dark.gray.500' : change > 0 ? '[#22c55e]' : '[#ef4444]');
 </script>
 
 <div
   class={css({
-    backgroundColor: 'white',
-    border: '1px solid',
-    borderColor: 'gray.200',
-    borderRadius: '[16px]',
-    padding: '28px',
+    backgroundColor: 'dark.gray.900',
+    borderWidth: '1px',
+    borderColor: 'dark.gray.800',
+    padding: { sm: '24px', lg: '28px' },
     position: 'relative',
-    transition: 'all',
-    boxShadow: '[0 1px 3px rgba(0, 0, 0, 0.04)]',
+    transition: '[all 0.2s ease-out]',
     _hover: {
-      borderColor: 'gray.300',
-      boxShadow: '[0 4px 12px rgba(0, 0, 0, 0.08)]',
+      borderColor: 'dark.gray.700',
+      backgroundColor: 'dark.gray.900/80',
     },
   })}
 >
-  <div class={flex({ justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' })}>
+  <div class={flex({ justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' })}>
     <div>
       <h3
         class={css({
           fontSize: '14px',
           fontWeight: 'medium',
-          color: 'gray.700',
+          color: 'dark.gray.200',
           marginBottom: '4px',
         })}
       >
         {title}
       </h3>
-      <p class={css({ fontSize: '13px', color: 'gray.500' })}>{description}</p>
+      <p class={css({ fontSize: '13px', color: 'dark.gray.500' })}>{description}</p>
     </div>
-    <Sparkline color="#6b7280" {data} height={24} width={80} />
+    <Sparkline {data} height={28} width={80} />
   </div>
 
   <p
     class={css({
-      fontSize: '[36px]',
-      fontWeight: 'bold',
-      color: 'gray.900',
+      fontSize: { sm: '[32px]', lg: '[36px]' },
+      fontWeight: 'medium',
+      color: 'dark.gray.100',
       lineHeight: '[1]',
-      marginBottom: '8px',
+      marginBottom: '10px',
+      fontFamily: 'Paperlogy',
     })}
   >
     {value}
   </p>
-  <p class={css({ fontSize: '13px', color: 'gray.600', display: 'flex', alignItems: 'center', gap: '4px' })}>
-    <span class={css({ color: 'gray.500' })}>이전 기간 대비</span>
-    <span class={changeStyle}>{changeValue}</span>
-  </p>
+
+  <div class={flex({ alignItems: 'center', gap: '8px' })}>
+    <span class={css({ fontSize: '12px', fontFamily: 'mono', color: 'dark.gray.400', textTransform: 'uppercase' })}>
+      {type === 'daily' ? '전일 대비' : '30일 전 대비'}
+    </span>
+    <span class={css({ fontSize: '13px', fontFamily: 'mono', fontWeight: 'medium', color: changeColor })}>{changeValue}</span>
+  </div>
 </div>
