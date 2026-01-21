@@ -221,7 +221,7 @@
                 color: 'dark.gray.200',
               },
             })}
-            href="https://typie.co/legal/terms"
+            href="/legal/terms"
             rel="noopener noreferrer"
             target="_blank"
           >
@@ -236,7 +236,7 @@
                 color: 'dark.gray.200',
               },
             })}
-            href="https://typie.co/legal/privacy"
+            href="/legal/privacy"
             rel="noopener noreferrer"
             target="_blank"
           >
