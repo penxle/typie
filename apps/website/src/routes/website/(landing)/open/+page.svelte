@@ -478,7 +478,7 @@
                   backgroundColor: 'dark.gray.800',
                   borderRadius: '2px',
                   marginBottom: '16px',
-                  animation: 'pulse',
+                  animation: 'pulse 1.5s ease-in-out infinite',
                 })}
               ></div>
               <div
@@ -488,7 +488,7 @@
                   backgroundColor: 'dark.gray.900',
                   borderRadius: '4px',
                   marginBottom: '12px',
-                  animation: 'pulse',
+                  animation: 'pulse 1.5s ease-in-out infinite',
                 })}
               ></div>
               <div
@@ -497,7 +497,7 @@
                   height: '14px',
                   backgroundColor: 'dark.gray.800',
                   borderRadius: '2px',
-                  animation: 'pulse',
+                  animation: 'pulse 1.5s ease-in-out infinite',
                 })}
               ></div>
             </div>

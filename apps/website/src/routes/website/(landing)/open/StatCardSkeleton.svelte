@@ -21,7 +21,7 @@
           backgroundColor: 'dark.gray.800',
           borderRadius: '2px',
           marginBottom: '8px',
-          animation: 'pulse',
+          animation: 'pulse 1.5s ease-in-out infinite',
         })}
       ></div>
       <div
@@ -30,7 +30,7 @@
           height: '13px',
           backgroundColor: 'dark.gray.800/50',
           borderRadius: '2px',
-          animation: 'pulse',
+          animation: 'pulse 1.5s ease-in-out infinite',
         })}
       ></div>
     </div>
@@ -40,7 +40,7 @@
         height: '28px',
         backgroundColor: 'dark.gray.800',
         borderRadius: '2px',
-        animation: 'pulse',
+        animation: 'pulse 1.5s ease-in-out infinite',
       })}
     ></div>
   </div>
@@ -52,7 +52,7 @@
       backgroundColor: 'dark.gray.800',
       borderRadius: '4px',
       marginBottom: '10px',
-      animation: 'pulse',
+      animation: 'pulse 1.5s ease-in-out infinite',
     })}
   ></div>
 
@@ -63,7 +63,7 @@
         height: '12px',
         backgroundColor: 'dark.gray.800/50',
         borderRadius: '2px',
-        animation: 'pulse',
+        animation: 'pulse 1.5s ease-in-out infinite',
       })}
     ></div>
     <div
@@ -72,7 +72,7 @@
         height: '13px',
         backgroundColor: 'dark.gray.800',
         borderRadius: '2px',
-        animation: 'pulse',
+        animation: 'pulse 1.5s ease-in-out infinite',
       })}
     ></div>
   </div>
