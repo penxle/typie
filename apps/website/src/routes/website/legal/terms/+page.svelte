@@ -12,150 +12,257 @@
   class={css({
     position: 'relative',
     minHeight: '[100vh]',
-    overflow: 'hidden',
-    backgroundColor: 'white',
+    backgroundColor: 'dark.gray.950',
   })}
 >
   <div
     class={css({
       position: 'absolute',
-      inset: '0',
-      backgroundImage:
-        'linear-gradient(to bottom, token(colors.white), token(colors.gray.50) 25%, token(colors.gray.50) 75%, token(colors.white))',
-      zIndex: '0',
-    })}
-  ></div>
-
-  <div
-    class={css({
-      position: 'absolute',
-      inset: '0',
-      backgroundImage: 'radial-gradient(circle at 1px 1px, token(colors.gray.200) 1px, transparent 1px)',
-      backgroundSize: '[50px 50px]',
-      opacity: '[0.3]',
-      pointerEvents: 'none',
-      zIndex: '1',
+      left: { sm: '16px', lg: '48px' },
+      top: '0',
+      bottom: '0',
+      width: '1px',
+      backgroundColor: 'dark.gray.800',
+      display: { sm: 'none', lg: 'block' },
     })}
   ></div>
 
   <section
     class={css({
       position: 'relative',
-      paddingY: { sm: '80px', lg: '120px' },
-      paddingX: { sm: '16px', lg: '24px' },
-      zIndex: '2',
+      paddingTop: { sm: '100px', lg: '140px' },
+      paddingBottom: { sm: '80px', lg: '120px' },
+      paddingX: { sm: '24px', lg: '80px' },
     })}
   >
     <div class={css({ maxWidth: '[900px]', marginX: 'auto' })}>
-      <div
+      <span
         class={css({
-          backgroundColor: 'white',
-          border: '4px solid',
-          borderColor: 'gray.900',
-          borderRadius: '0',
-          paddingY: { sm: '40px', lg: '60px' },
-          paddingX: { sm: '24px', lg: '48px' },
-          position: 'relative',
-          boxShadow: '[8px 8px 0 0 #000]',
+          display: 'block',
+          fontSize: '[11px]',
+          fontFamily: 'mono',
+          color: 'dark.gray.500',
+          letterSpacing: '[0.1em]',
+          textTransform: 'uppercase',
+          marginBottom: '24px',
         })}
       >
-        <h1
-          class={css({
-            fontSize: { sm: '[32px]', lg: '[48px]' },
-            fontWeight: 'black',
-            color: 'gray.900',
-            fontFamily: 'Paperlogy',
-            lineHeight: '[1]',
-            textTransform: 'uppercase',
-            marginBottom: '16px',
-          })}
-        >
-          {data.document.title}
-        </h1>
+        Legal
+      </span>
 
-        <div
-          class={css({
-            fontSize: '16px',
-            lineHeight: '[1.8]',
-            color: 'gray.800',
+      <h1
+        class={css({
+          fontSize: { sm: '[36px]', lg: '[56px]' },
+          fontWeight: 'medium',
+          color: 'dark.gray.100',
+          lineHeight: '[1.2]',
+          letterSpacing: '[-0.02em]',
+          fontFamily: 'Paperlogy',
+          marginBottom: '48px',
+          paddingBottom: '48px',
+          borderBottomWidth: '1px',
+          borderBottomColor: 'dark.gray.900',
+        })}
+      >
+        {data.document.title}
+      </h1>
+
+      <div
+        class={css({
+          fontSize: { sm: '15px', lg: '16px' },
+          lineHeight: '[1.75]',
+          color: 'dark.gray.300',
+          wordBreak: 'keep-all',
+
+          '& > *:first-child': {
+            marginTop: '0',
+          },
+          '& > *:last-child': {
+            marginBottom: '0',
+          },
+
+          '& p': {
+            marginTop: '0',
+            marginBottom: '24px',
+          },
+
+          '& h1': {
+            fontSize: { sm: '28px', lg: '32px' },
             fontWeight: 'medium',
-            '& p': {
-              marginBottom: '20px',
+            fontFamily: 'Paperlogy',
+            color: 'dark.gray.100',
+            lineHeight: '[1.3]',
+            letterSpacing: '[-0.01em]',
+            marginTop: '64px',
+            marginBottom: '24px',
+            paddingBottom: '16px',
+            borderBottomWidth: '1px',
+            borderBottomColor: 'dark.gray.800',
+          },
+          '& h2': {
+            fontSize: { sm: '22px', lg: '24px' },
+            fontWeight: 'medium',
+            fontFamily: 'Paperlogy',
+            color: 'dark.gray.100',
+            lineHeight: '[1.4]',
+            letterSpacing: '[-0.01em]',
+            marginTop: '56px',
+            marginBottom: '20px',
+          },
+          '& h3': {
+            fontSize: { sm: '18px', lg: '20px' },
+            fontWeight: 'medium',
+            fontFamily: 'Paperlogy',
+            color: 'dark.gray.200',
+            lineHeight: '[1.4]',
+            marginTop: '40px',
+            marginBottom: '16px',
+          },
+          '& h4': {
+            fontSize: { sm: '16px', lg: '17px' },
+            fontWeight: 'medium',
+            color: 'dark.gray.200',
+            lineHeight: '[1.5]',
+            marginTop: '32px',
+            marginBottom: '12px',
+          },
+
+          '& h1 + p, & h2 + p, & h3 + p, & h4 + p': {
+            marginTop: '0',
+          },
+
+          '& ul, & ol': {
+            marginTop: '0',
+            marginBottom: '24px',
+            paddingLeft: '24px',
+          },
+          '& ul': {
+            listStyleType: 'disc',
+          },
+          '& ol': {
+            listStyleType: 'decimal',
+          },
+          '& li': {
+            marginBottom: '10px',
+            paddingLeft: '4px',
+          },
+          '& li:last-child': {
+            marginBottom: '0',
+          },
+          '& li::marker': {
+            color: 'dark.gray.500',
+          },
+          '& li > ul, & li > ol': {
+            marginTop: '10px',
+            marginBottom: '0',
+          },
+          '& li > p': {
+            marginBottom: '10px',
+          },
+          '& li > p:last-child': {
+            marginBottom: '0',
+          },
+
+          '& a': {
+            color: 'dark.brand.300',
+            textDecoration: 'underline',
+            textDecorationColor: 'dark.brand.300/40',
+            textUnderlineOffset: '3px',
+            transition: '[text-decoration-color 0.2s ease]',
+            _hover: {
+              textDecorationColor: 'dark.brand.300',
             },
-            '& p:last-child': {
-              marginBottom: '0',
-            },
-            '& h1, & h2, & h3': {
-              fontWeight: 'black',
-              color: 'gray.900',
-              marginTop: '32px',
-              marginBottom: '16px',
-            },
-            '& h1': {
-              fontSize: '28px',
-            },
-            '& h2': {
-              fontSize: '24px',
-            },
-            '& h3': {
-              fontSize: '20px',
-            },
-            '& h1:first-child, & h2:first-child, & h3:first-child': {
-              marginTop: '0',
-            },
-            '& ul, & ol': {
-              marginLeft: '24px',
-              marginBottom: '20px',
-            },
-            '& ul': {
-              listStyle: 'disc',
-            },
-            '& ol': {
-              listStyle: 'decimal',
-            },
-            '& li': {
-              marginBottom: '8px',
-            },
-            '& a': {
-              color: 'gray.900',
-              fontWeight: 'bold',
-              textDecoration: 'underline',
-              textDecorationThickness: '2px',
-              textDecorationColor: 'amber.400',
-              textUnderlineOffset: '2px',
-              transition: '[all 0.2s ease]',
-              _hover: {
-                backgroundColor: 'amber.400',
-                textDecoration: 'none',
-              },
-            },
-            '& strong, & b': {
-              fontWeight: 'black',
-              color: 'gray.900',
-            },
-            '& em, & i': {
-              fontStyle: 'italic',
-            },
-            '& blockquote': {
-              borderLeft: '4px solid',
-              borderColor: 'amber.400',
-              backgroundColor: 'amber.50',
-              padding: '20px',
-              marginY: '24px',
-              fontWeight: 'semibold',
-              color: 'gray.900',
-            },
-            '& hr': {
-              border: 'none',
-              borderTop: '2px solid',
-              borderColor: 'gray.300',
-              marginY: '32px',
-            },
-          })}
-        >
-          <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-          {@html marked(data.document.body, { gfm: true, breaks: true })}
-        </div>
+          },
+
+          '& strong, & b': {
+            fontWeight: 'semibold',
+            color: 'dark.gray.100',
+          },
+          '& em, & i': {
+            fontStyle: 'italic',
+          },
+
+          '& blockquote': {
+            borderLeftWidth: '3px',
+            borderLeftColor: 'dark.gray.700',
+            paddingLeft: '20px',
+            paddingY: '4px',
+            marginTop: '24px',
+            marginBottom: '24px',
+            color: 'dark.gray.400',
+            fontStyle: 'italic',
+          },
+          '& blockquote p': {
+            marginBottom: '12px',
+          },
+          '& blockquote p:last-child': {
+            marginBottom: '0',
+          },
+
+          '& hr': {
+            border: 'none',
+            height: '1px',
+            backgroundColor: 'dark.gray.800',
+            marginTop: '48px',
+            marginBottom: '48px',
+          },
+
+          '& table': {
+            width: 'full',
+            borderCollapse: 'collapse',
+            marginTop: '24px',
+            marginBottom: '24px',
+            fontSize: '14px',
+          },
+          '& thead': {
+            borderBottomWidth: '2px',
+            borderBottomColor: 'dark.gray.700',
+          },
+          '& th': {
+            paddingX: '16px',
+            paddingY: '12px',
+            fontWeight: 'medium',
+            color: 'dark.gray.200',
+            textAlign: 'left',
+            backgroundColor: 'dark.gray.900/50',
+          },
+          '& td': {
+            paddingX: '16px',
+            paddingY: '12px',
+            borderBottomWidth: '1px',
+            borderBottomColor: 'dark.gray.800',
+            verticalAlign: 'top',
+          },
+          '& tbody tr:last-child td': {
+            borderBottomWidth: '0',
+          },
+
+          '& code': {
+            fontFamily: 'mono',
+            fontSize: '[0.9em]',
+            backgroundColor: 'dark.gray.800',
+            paddingX: '6px',
+            paddingY: '2px',
+            borderRadius: '4px',
+            color: 'dark.gray.200',
+          },
+          '& pre': {
+            backgroundColor: 'dark.gray.900',
+            padding: '20px',
+            borderRadius: '8px',
+            overflowX: 'auto',
+            marginTop: '24px',
+            marginBottom: '24px',
+          },
+          '& pre code': {
+            backgroundColor: 'transparent',
+            padding: '0',
+            borderRadius: '0',
+          },
+        })}
+      >
+        <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+        {@html marked(data.document.body, { gfm: true, breaks: true })}
       </div>
     </div>
   </section>
