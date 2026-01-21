@@ -65,6 +65,7 @@
     "fast-json-stable-stringify": "^2.1.0",
     "fast-xml-parser": "^5.3.3",
     "firebase-admin": "^13.6.0",
+    "fluent-ffmpeg": "^2.1.3",
     "fractional-indexing-jittered": "^1.0.0",
     "google-auth-library": "^10.5.0",
     "graphql": "^16.12.0",
@@ -102,6 +103,7 @@
   },
   "devDependencies": {
     "@types/bun": "^1.3.5",
+    "@types/fluent-ffmpeg": "^2.1.28",
     "@types/image-size": "^0.8.0",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
