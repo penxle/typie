@@ -4,14 +4,15 @@
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import ChevronUpIcon from '~icons/lucide/chevron-up';
   import { Icon } from '../../../components';
-  import { NodeView, NodeViewContentEditable } from '../../lib';
+  import { getEditorContext, NodeView, NodeViewContentEditable } from '../../lib';
   import type { NodeViewProps } from '../../lib';
 
   type Props = NodeViewProps;
 
   let { node, editor, updateAttributes, HTMLAttributes }: Props = $props();
 
-  let open = $state(editor?.current.isEditable ? node.attrs.open : false);
+  const context = getEditorContext();
+  let open = $state(context?.pdf ? true : editor?.current.isEditable ? node.attrs.open : false);
 </script>
 
 <NodeView {...HTMLAttributes}>
