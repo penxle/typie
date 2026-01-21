@@ -5,6 +5,10 @@ export const keyframes = defineKeyframes({
     '0%, 100%': { opacity: '100' },
     '50%': { opacity: '0' },
   },
+  pulse: {
+    '0%, 100%': { opacity: '100' },
+    '50%': { opacity: '40' },
+  },
   alarm: {
     '0%, 50%, 100%': { transform: 'rotate(0deg)' },
     '5%': { transform: 'rotate(12deg)' },
