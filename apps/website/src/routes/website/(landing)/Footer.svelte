@@ -175,6 +175,19 @@
                 color: 'dark.gray.200',
               },
             })}
+            href="/open"
+          >
+            오픈 대시보드
+          </a>
+          <a
+            class={css({
+              fontSize: '14px',
+              color: 'dark.gray.400',
+              transition: '[color 0.2s ease]',
+              _hover: {
+                color: 'dark.gray.200',
+              },
+            })}
             href="https://typie.link/help"
             rel="noopener noreferrer"
             target="_blank"

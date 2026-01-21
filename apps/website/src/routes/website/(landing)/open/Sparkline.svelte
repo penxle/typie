@@ -4,12 +4,11 @@
 
   type SparklineProps = {
     data: { date: string; value: number }[];
-    color?: string;
     width?: number;
     height?: number;
   };
 
-  let { data, color = '#3b82f6', width = 100, height = 30 }: SparklineProps = $props();
+  let { data, width = 100, height = 30 }: SparklineProps = $props();
   let chartContainer: HTMLDivElement;
 
   $effect(() => {
@@ -40,7 +39,7 @@
         Plot.lineY(chartData, {
           x: 'date',
           y: 'value',
-          stroke: color,
+          stroke: '#525252',
           strokeWidth,
         }),
       ],
