@@ -27,6 +27,8 @@
 
   let loaded = $state(false);
 
+  const isVideo = $derived(url.endsWith('.mp4'));
+
   const src = $derived(qs.stringifyUrl({ url, query: { s: size === 'full' ? undefined : size, q: quality } }));
   const src2x = $derived(size !== 'full' && qs.stringifyUrl({ url, query: { s: size * 2, q: quality } }));
   const src3x = $derived(size !== 'full' && qs.stringifyUrl({ url, query: { s: size * 3, q: quality } }));
@@ -41,25 +43,43 @@
       return;
     }
 
-    const imgEl = document.createElement('img');
+    if (isVideo) {
+      const videoEl = document.createElement('video');
 
-    imgEl.addEventListener('load', async () => {
-      loaded = true;
-      await tick();
-      // eslint-disable-next-line svelte/no-dom-manipulating
-      targetEl?.append(imgEl);
-    });
+      videoEl.addEventListener('loadeddata', async () => {
+        loaded = true;
+        await tick();
+        // eslint-disable-next-line svelte/no-dom-manipulating
+        targetEl?.append(videoEl);
+      });
 
-    if (srcset && sizes) {
-      imgEl.sizes = sizes;
-      imgEl.srcset = srcset;
+      videoEl.className = css({ size: 'full', objectFit: 'cover' }, style);
+      videoEl.autoplay = true;
+      videoEl.loop = true;
+      videoEl.muted = true;
+      videoEl.playsInline = true;
+      videoEl.src = url;
+    } else {
+      const imgEl = document.createElement('img');
+
+      imgEl.addEventListener('load', async () => {
+        loaded = true;
+        await tick();
+        // eslint-disable-next-line svelte/no-dom-manipulating
+        targetEl?.append(imgEl);
+      });
+
+      if (srcset && sizes) {
+        imgEl.sizes = sizes;
+        imgEl.srcset = srcset;
+      }
+
+      imgEl.className = css({ size: 'full', objectFit: 'cover' }, style);
+      imgEl.alt = alt;
+      imgEl.src = src;
+
+      Object.assign(imgEl, rest);
     }
-
-    imgEl.className = css({ size: 'full', objectFit: 'cover' }, style);
-    imgEl.alt = alt;
-    imgEl.src = src;
-
-    Object.assign(imgEl, rest);
   };
 
   $effect(() => {
@@ -104,19 +124,33 @@
       {/if}
     </div>
   {:else}
-    <img
-      class={css(style)}
-      {alt}
-      {sizes}
-      {src}
-      {srcset}
-      {...rest}
-      onload={() => {
-        loaded = true;
-      }}
-    />
+    {#if isVideo}
+      <video
+        class={css(style, { size: 'full', objectFit: 'cover' })}
+        autoplay
+        loop
+        muted
+        onloadeddata={() => {
+          loaded = true;
+        }}
+        playsinline
+        src={url}
+      ></video>
+    {:else}
+      <img
+        class={css(style)}
+        {alt}
+        {sizes}
+        {src}
+        {srcset}
+        {...rest}
+        onload={() => {
+          loaded = true;
+        }}
+      />
+    {/if}
     {#if !loaded && placeholderUrl}
-      <img class={css(style, { size: 'full', objectFit: 'cover' })} src={placeholderUrl} {...rest} />
+      <img class={css(style, { size: 'full', objectFit: 'cover' })} {alt} src={placeholderUrl} {...rest} />
     {/if}
   {/if}
 {/key}
