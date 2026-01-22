@@ -88,6 +88,26 @@ fn format_node(node: NodeRef, indent_level: usize, labeler: &Labeler, output: &m
             ]);
             output.push_str(&format!("{indent}{prefix}image{attrs}\n"));
         }
+        Node::File(file) => {
+            let name_value = match &file.name {
+                Some(s) => format!("Some(\"{}\".to_string())", escape_str(s)),
+                None => "None".to_string(),
+            };
+            let src_value = match &file.src {
+                Some(s) => format!("Some(\"{}\".to_string())", escape_str(s)),
+                None => "None".to_string(),
+            };
+            let size_value = match file.size {
+                Some(s) => format!("Some({})", s),
+                None => "None".to_string(),
+            };
+            let attrs = format_attributes(&[
+                ("name", name_value),
+                ("src", src_value),
+                ("size", size_value),
+            ]);
+            output.push_str(&format!("{indent}{prefix}file{attrs}\n"));
+        }
         Node::HardBreak(_) => {
             output.push_str(&format!("{indent}{prefix}hard_break {{}}\n"));
         }
@@ -555,6 +575,26 @@ fn format_fragment_node(
                 ("proportion", format_number(image.proportion)),
             ]);
             output.push_str(&format!("{indent}image{attrs}\n"));
+        }
+        Node::File(file) => {
+            let name_value = match &file.name {
+                Some(s) => format!("Some(\"{}\".to_string())", escape_str(s)),
+                None => "None".to_string(),
+            };
+            let src_value = match &file.src {
+                Some(s) => format!("Some(\"{}\".to_string())", escape_str(s)),
+                None => "None".to_string(),
+            };
+            let size_value = match file.size {
+                Some(s) => format!("Some({})", s),
+                None => "None".to_string(),
+            };
+            let attrs = format_attributes(&[
+                ("name", name_value),
+                ("src", src_value),
+                ("size", size_value),
+            ]);
+            output.push_str(&format!("{indent}file{attrs}\n"));
         }
         Node::HardBreak(_) => {
             output.push_str(&format!("{indent}hard_break {{}}\n"));

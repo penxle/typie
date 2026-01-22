@@ -11,13 +11,17 @@
   import { getEditor } from '$lib/editor/context';
   import { calculateImageDisplaySize } from '$lib/editor/utils';
   import { uploadBlobAsImage } from '$lib/utils/blob.svelte';
-  import type { ExternalElement } from '$lib/editor/types';
+  import type { ExternalElement, ExternalElementData } from '$lib/editor/types';
+
+  type ImageData = Extract<ExternalElementData, { type: 'image' }>;
 
   type Props = {
     el: ExternalElement;
   };
 
   let { el }: Props = $props();
+
+  const imageData = $derived(el.data as ImageData);
 
   const editor = getEditor();
 
@@ -26,7 +30,7 @@
   let inflightUrl = $state<string>();
   let processedUploadId = $state<string>();
 
-  const hasImage = $derived(!!el.data.src || !!inflightUrl);
+  const hasImage = $derived(!!imageData.src || !!inflightUrl);
   const isUploading = $derived(!!inflightUrl);
 
   let pickerOpened = $state(false);
@@ -35,18 +39,18 @@
   });
 
   let containerEl = $state<HTMLDivElement>();
-  let proportion = $state(el.data.proportion);
+  let proportion = $state(imageData.proportion);
   let isResizing = $state(false);
   let initialResizeData: { x: number; width: number; proportion: number; reverse: boolean } | null = null;
 
   $effect(() => {
     if (!isResizing) {
-      proportion = el.data.proportion;
+      proportion = imageData.proportion;
     }
   });
 
   $effect(() => {
-    const uploadId = el.data.uploadId;
+    const uploadId = imageData.uploadId;
     if (uploadId && uploadId !== processedUploadId) {
       const file = editor.popUpload(uploadId);
       if (file) {
@@ -184,7 +188,7 @@
     }
 
     const dx = (event.clientX - initialResizeData.x) * (initialResizeData.reverse ? -1 : 1);
-    const maxWidth = el.data.originalWidth ?? 0;
+    const maxWidth = imageData.originalWidth ?? 0;
     if (maxWidth <= 0) return;
 
     const newWidth = Math.max(maxWidth * 0.1, Math.min(maxWidth, initialResizeData.width + dx * 2));
@@ -219,8 +223,8 @@
     };
   });
 
-  const originalWidth = $derived(el.data.originalWidth ?? 0);
-  const originalHeight = $derived(el.data.originalHeight ?? 0);
+  const originalWidth = $derived(imageData.originalWidth ?? 0);
+  const originalHeight = $derived(imageData.originalHeight ?? 0);
   const aspectRatio = $derived(originalWidth > 0 ? originalHeight / originalWidth : 0);
   const { displayWidth } = $derived(calculateImageDisplaySize(el.bounds, originalWidth, originalHeight));
 
@@ -253,11 +257,11 @@
     use:anchor
   >
     {#if hasImage}
-      {#if el.data.src && !isUploading}
+      {#if imageData.src && !isUploading}
         <img
           class={css({ width: 'full', height: 'full', objectFit: 'contain', borderRadius: '4px' })}
           alt="본문 이미지"
-          src={el.data.src}
+          src={imageData.src}
         />
       {:else if inflightUrl}
         <img

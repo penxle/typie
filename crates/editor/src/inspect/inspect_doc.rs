@@ -99,6 +99,17 @@ fn format_node_info(node: &NodeRef) -> String {
                 id, src_display, image_node.width, image_node.height, image_node.proportion
             )
         }
+        Node::File(file_node) => {
+            let name_display = file_node
+                .name
+                .as_deref()
+                .map(|s| truncate_str(s, 30))
+                .unwrap_or_else(|| "(placeholder)".to_string());
+            format!(
+                "File {} name=\"{}\" size={:?}",
+                id, name_display, file_node.size
+            )
+        }
         Node::HardBreak(_) => {
             format!("HardBreak {}", id)
         }

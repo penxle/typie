@@ -3,6 +3,7 @@
   import { CROP_MARKER_SIZE } from '$lib/editor/constants';
   import { getEditor } from '$lib/editor/context';
   import { WebGLRenderer } from '$lib/editor/webgl';
+  import ExternalFile from './ExternalFile.svelte';
   import ExternalImage from './ExternalImage.svelte';
 
   type Props = {
@@ -95,6 +96,8 @@
       {#each mediaOnPage as el (el.nodeId)}
         {#if el.data.type === 'image'}
           <ExternalImage {el} />
+        {:else if el.data.type === 'file'}
+          <ExternalFile {el} />
         {/if}
       {/each}
 
