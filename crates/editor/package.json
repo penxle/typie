@@ -14,6 +14,6 @@
     "wasm:release": "RUSTFLAGS=\"-C target-feature=+simd128\" wasm-pack build --target=bundler --no-pack"
   },
   "devDependencies": {
-    "wasm-pack": "^0.13.1"
+    "wasm-pack": "^0.14.0"
   }
 }
