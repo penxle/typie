@@ -63,7 +63,7 @@ impl Default for Schema {
         schema.add_node(
             NodeType::Root,
             NodeSpec {
-                content: content_expr!([((Paragraph | Image | Blockquote | Callout | BulletList | OrderedList | HorizontalRule | Fold)*), (Paragraph)]),
+                content: content_expr!([((Paragraph | Image | Blockquote | Callout | BulletList | OrderedList | HorizontalRule | Fold | Table)*), (Paragraph)]),
                 ..Default::default()
             },
         );
@@ -198,6 +198,34 @@ impl Default for Schema {
             NodeType::Callout,
             NodeSpec {
                 content: content_expr!((Paragraph | BulletList | OrderedList)+),
+                ..Default::default()
+            },
+        );
+
+        schema.add_node(
+            NodeType::Table,
+            NodeSpec {
+                content: content_expr!(TableRow+),
+                isolating: true,
+                ..Default::default()
+            },
+        );
+
+        schema.add_node(
+            NodeType::TableRow,
+            NodeSpec {
+                content: content_expr!(TableCell+),
+                structural: true,
+                ..Default::default()
+            },
+        );
+
+        schema.add_node(
+            NodeType::TableCell,
+            NodeSpec {
+                content: content_expr!((Paragraph | Image | BulletList | OrderedList)+),
+                isolating: true,
+                structural: true,
                 ..Default::default()
             },
         );

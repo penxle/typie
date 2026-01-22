@@ -54,6 +54,7 @@ impl Layout for FoldContentNode {
             children: Some(positioned_children),
             page_break_policy: Default::default(),
             render_hints: Default::default(),
+            scope_id: None,
         }
     }
 }

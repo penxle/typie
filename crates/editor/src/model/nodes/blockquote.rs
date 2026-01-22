@@ -148,6 +148,7 @@ impl BlockquoteNode {
                 children: None,
                 page_break_policy: Default::default(),
                 render_hints: Default::default(),
+                scope_id: None,
             };
 
             child_nodes.push(PositionedNode {
@@ -170,6 +171,7 @@ impl BlockquoteNode {
             children: Some(child_nodes),
             page_break_policy: Default::default(),
             render_hints: Default::default(),
+            scope_id: None,
         }
     }
 
@@ -201,6 +203,7 @@ impl BlockquoteNode {
             children: None,
             page_break_policy: PageBreakPolicy::Avoid,
             render_hints: Default::default(),
+            scope_id: None,
         };
 
         child_nodes.push(PositionedNode {
@@ -231,6 +234,7 @@ impl BlockquoteNode {
             children: Some(child_nodes),
             page_break_policy: Default::default(),
             render_hints: Default::default(),
+            scope_id: None,
         }
     }
 
@@ -297,6 +301,7 @@ impl BlockquoteNode {
             } else {
                 Default::default()
             },
+            scope_id: None,
         };
 
         LayoutNode {
@@ -308,6 +313,7 @@ impl BlockquoteNode {
             }]),
             page_break_policy: Default::default(),
             render_hints: Default::default(),
+            scope_id: None,
         }
     }
 }

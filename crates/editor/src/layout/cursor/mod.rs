@@ -1,5 +1,5 @@
 use crate::layout::Page;
-use crate::model::Doc;
+use crate::model::{Doc, NodeId, NodeType};
 use crate::state::{Position, Selection};
 use crate::types::Rect;
 
@@ -16,6 +16,46 @@ pub struct NavigationContext<'a> {
 impl<'a> NavigationContext<'a> {
     pub fn new(doc: &'a Doc) -> Self {
         Self { doc }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum Scope {
+    Document,
+    TableCell { node_id: NodeId },
+}
+
+impl Scope {
+    pub fn scope_id(&self) -> NodeId {
+        match self {
+            Scope::Document => NodeId::ROOT,
+            Scope::TableCell { node_id } => *node_id,
+        }
+    }
+}
+
+pub fn find_scope(ctx: &NavigationContext, node_id: NodeId) -> Scope {
+    let doc = ctx.doc;
+    let mut current = node_id;
+
+    loop {
+        let Some(parent_id) = doc.get_parent_id(current) else {
+            return Scope::Document;
+        };
+        let Some(parent_type) = doc.get_node_type(parent_id) else {
+            return Scope::Document;
+        };
+
+        if parent_type == NodeType::TableCell {
+            let node_id = parent_id;
+            return Scope::TableCell { node_id };
+        }
+
+        if parent_type == NodeType::Root {
+            return Scope::Document;
+        }
+
+        current = parent_id;
     }
 }
 
@@ -92,13 +132,13 @@ pub trait CursorNavigable {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub(crate) enum HorizontalDirection {
     Left,
     Right,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub(crate) enum VerticalDirection {
     Up,
     Down,

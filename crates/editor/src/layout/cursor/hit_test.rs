@@ -1,5 +1,6 @@
 use super::{CursorNavigable, GapBehavior, NavigationContext};
 use crate::layout::{Element, Page};
+use crate::model::NodeId;
 use crate::state::Selection;
 use crate::types::Point;
 use rstar::AABB;
@@ -11,6 +12,7 @@ pub fn hit_test(ctx: &NavigationContext, page: &Page, x: f32, y: f32) -> Option<
         x,
         y,
         GapBehavior::SnapToClosestX,
+        None,
         |nav, ctx, x, y| nav.find_selection_at_point(ctx, x, y),
     )
 }
@@ -22,6 +24,7 @@ pub fn hit_test_drag(ctx: &NavigationContext, page: &Page, x: f32, y: f32) -> Op
         x,
         y,
         GapBehavior::ClosestNode,
+        None,
         |nav, ctx, x, y| nav.find_drag_target(ctx, x, y),
     )
 }
@@ -33,6 +36,7 @@ pub fn hit_test_dnd(ctx: &NavigationContext, page: &Page, x: f32, y: f32) -> Opt
         x,
         y,
         GapBehavior::BlockPosition,
+        None,
         |nav, ctx, x, y| nav.find_selection_at_point(ctx, x, y),
     )
 }
@@ -43,14 +47,50 @@ fn hit_test_with_gap_behavior<F>(
     x: f32,
     y: f32,
     gap_behavior: GapBehavior,
+    scope_node_id: Option<NodeId>,
     selector: F,
 ) -> Option<Selection>
 where
     F: Fn(&dyn CursorNavigable, &NavigationContext, f32, f32) -> Option<Selection> + Copy,
 {
-    let (closest_node, first_node, last_node) = find_closest_navigable_node(page, x, y)?;
+    match scope_node_id {
+        None => {
+            if let Some(found_scope_id) = find_container_scope(page, x, y) {
+                return hit_test_with_gap_behavior(
+                    ctx,
+                    page,
+                    x,
+                    y,
+                    gap_behavior,
+                    Some(found_scope_id),
+                    selector,
+                );
+            }
 
-    if matches!(gap_behavior, GapBehavior::BlockPosition) {
+            hit_test_in_scope(ctx, page, x, y, gap_behavior, None, selector)
+        }
+        Some(scope_id) => {
+            hit_test_in_scope(ctx, page, x, y, gap_behavior, Some(scope_id), selector)
+        }
+    }
+}
+
+fn hit_test_in_scope<F>(
+    ctx: &NavigationContext,
+    page: &Page,
+    x: f32,
+    y: f32,
+    gap_behavior: GapBehavior,
+    scope_node_id: Option<NodeId>,
+    selector: F,
+) -> Option<Selection>
+where
+    F: Fn(&dyn CursorNavigable, &NavigationContext, f32, f32) -> Option<Selection> + Copy,
+{
+    let (closest_node, first_node, last_node) =
+        find_closest_navigable_node_in_scope(page, x, y, ctx, scope_node_id)?;
+
+    if matches!(gap_behavior, GapBehavior::BlockPosition) && scope_node_id.is_none() {
         if let Some(selection) = find_block_gap_position(ctx, page, x, y) {
             return Some(selection);
         }
@@ -60,17 +100,29 @@ where
         return Some(selection);
     }
 
-    if let Some(selection) = try_document_boundary_hit(ctx, y, first_node, last_node, selector) {
+    if let Some(selection) = try_scope_boundary_hit(ctx, y, first_node, last_node, selector) {
         return Some(selection);
     }
 
     if matches!(gap_behavior, GapBehavior::SnapToClosestX) {
-        if let Some(selection) = find_closest_cursor_in_gap(ctx, page, x, y, closest_node) {
+        if let Some(selection) =
+            find_closest_cursor_in_gap_scoped(ctx, page, x, y, closest_node, scope_node_id)
+        {
             return Some(selection);
         }
     }
 
     find_selection_in_closest_node(ctx, closest_node, x, y, selector)
+}
+
+fn find_container_scope(page: &Page, x: f32, y: f32) -> Option<NodeId> {
+    let scope = page.scope_at(x, y)?;
+
+    if scope.scope_id != NodeId::ROOT {
+        Some(scope.scope_id)
+    } else {
+        None
+    }
 }
 
 fn find_block_gap_position(
@@ -230,12 +282,13 @@ fn find_element_below(page: &Page, x: f32, y: f32) -> Option<&crate::layout::pag
         })
 }
 
-fn find_closest_cursor_in_gap(
+fn find_closest_cursor_in_gap_scoped(
     ctx: &NavigationContext,
     page: &Page,
     x: f32,
     y: f32,
     closest_node: (Point, &Element),
+    scope_node_id: Option<NodeId>,
 ) -> Option<Selection> {
     let (pos, element) = closest_node;
     if y >= pos.y && y < pos.y + element.size().height {
@@ -243,8 +296,32 @@ fn find_closest_cursor_in_gap(
         return None;
     }
 
-    let element_above = find_element_above(page, x, y);
-    let element_below = find_element_below(page, x, y);
+    let mut element_above: Option<&crate::layout::page::ElementEntry> = None;
+    let mut element_below: Option<&crate::layout::page::ElementEntry> = None;
+
+    for entry in page.spatial_index().iter() {
+        if entry.element().block_id().is_some() {
+            let in_scope = match scope_node_id {
+                None => true,
+                Some(scope_id) => entry.scope_id == scope_id,
+            };
+
+            if in_scope {
+                if entry.pos.y + entry.size.height <= y {
+                    if element_above.is_none()
+                        || entry.pos.y + entry.size.height
+                            > element_above.unwrap().pos.y + element_above.unwrap().size.height
+                    {
+                        element_above = Some(entry);
+                    }
+                } else if entry.pos.y >= y {
+                    if element_below.is_none() || entry.pos.y < element_below.unwrap().pos.y {
+                        element_below = Some(entry);
+                    }
+                }
+            }
+        }
+    }
 
     let y_dist_above = element_above
         .map(|e| y - (e.pos.y + e.size.height))
@@ -260,6 +337,70 @@ fn find_closest_cursor_in_gap(
     let navigable = target_entry.element().as_cursor_navigable()?;
     let relative_x = x - target_entry.pos.x;
     navigable.find_selection_at_point(ctx, relative_x, relative_y)
+}
+
+fn find_closest_navigable_node_in_scope<'a>(
+    page: &'a Page,
+    x: f32,
+    y: f32,
+    _ctx: &NavigationContext,
+    scope_node_id: Option<NodeId>,
+) -> Option<(
+    (Point, &'a Element),
+    (Point, &'a Element),
+    (Point, &'a Element),
+)> {
+    match scope_node_id {
+        None => find_closest_navigable_node(page, x, y),
+        Some(scope_id) => {
+            let mut closest: Option<(&crate::layout::page::ElementEntry, f32)> = None;
+            let mut first: Option<&crate::layout::page::ElementEntry> = None;
+            let mut last: Option<&crate::layout::page::ElementEntry> = None;
+
+            for entry in page.spatial_index().iter() {
+                if entry.element().block_id().is_some() {
+                    if entry.scope_id == scope_id {
+                        if first.is_none() || entry.pos.y < first.unwrap().pos.y {
+                            first = Some(entry);
+                        }
+                        if last.is_none() || entry.pos.y > last.unwrap().pos.y {
+                            last = Some(entry);
+                        }
+
+                        let dx = if x < entry.pos.x {
+                            entry.pos.x - x
+                        } else if x > entry.pos.x + entry.size.width {
+                            x - (entry.pos.x + entry.size.width)
+                        } else {
+                            0.0
+                        };
+                        let dy = if y < entry.pos.y {
+                            entry.pos.y - y
+                        } else if y > entry.pos.y + entry.size.height {
+                            y - (entry.pos.y + entry.size.height)
+                        } else {
+                            0.0
+                        };
+                        let dist = dx * dx + dy * dy;
+
+                        if closest.is_none() || dist < closest.unwrap().1 {
+                            closest = Some((entry, dist));
+                        }
+                    }
+                }
+            }
+
+            let closest_entry = closest?.0;
+            let first_entry = first?;
+            let last_entry = last?;
+
+            Some((
+                (closest_entry.pos, closest_entry.element()),
+                (first_entry.pos, first_entry.element()),
+                (last_entry.pos, last_entry.element()),
+            ))
+        }
+    }
 }
 
 fn find_closest_navigable_node<'a>(
@@ -305,7 +446,7 @@ where
     selector(navigable, ctx, relative_x, relative_y)
 }
 
-fn try_document_boundary_hit<F>(
+fn try_scope_boundary_hit<F>(
     ctx: &NavigationContext,
     y: f32,
     first: (Point, &Element),

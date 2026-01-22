@@ -24,6 +24,7 @@
   import HorizontalRuleIcon from '~icons/typie/horizontal-rule';
   import { fragment, graphql } from '$graphql';
   import { getEditor } from '$lib/editor/context';
+  import TableSizeSelector from './TableSizeSelector.svelte';
   import ToolbarButton from './ToolbarButton.svelte';
   import ToolbarDropdownButton from './ToolbarDropdownButton.svelte';
   import ToolbarIcon from './ToolbarIcon.svelte';
@@ -179,7 +180,20 @@
       size={toolbarSize}
     />
 
-    <ToolbarButton disabled={true} icon={TableIcon} label="표" size={toolbarSize} />
+    <ToolbarDropdownButton label="표" placement="bottom-start" size={toolbarSize}>
+      {#snippet anchor()}
+        <ToolbarIcon icon={TableIcon} />
+      {/snippet}
+
+      {#snippet floating({ close })}
+        <TableSizeSelector
+          onSelect={(rows, cols) => {
+            editor.focus().dispatch({ type: 'insertTable', rows, cols });
+            close();
+          }}
+        />
+      {/snippet}
+    </ToolbarDropdownButton>
 
     <ToolbarDropdownButton label="목록" size={toolbarSize}>
       {#snippet anchor()}

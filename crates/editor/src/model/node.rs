@@ -26,6 +26,9 @@ pub enum NodeType {
     Fold,
     FoldTitle,
     FoldContent,
+    Table,
+    TableRow,
+    TableCell,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Codec, Tsify)]
@@ -46,6 +49,9 @@ pub enum Node {
     Fold(FoldNode),
     FoldTitle(FoldTitleNode),
     FoldContent(FoldContentNode),
+    Table(TableNode),
+    TableRow(TableRowNode),
+    TableCell(TableCellNode),
 }
 
 impl Node {
@@ -66,6 +72,9 @@ impl Node {
             Node::Fold(_) => NodeType::Fold,
             Node::FoldTitle(_) => NodeType::FoldTitle,
             Node::FoldContent(_) => NodeType::FoldContent,
+            Node::Table(_) => NodeType::Table,
+            Node::TableRow(_) => NodeType::TableRow,
+            Node::TableCell(_) => NodeType::TableCell,
         }
     }
 
@@ -129,6 +138,9 @@ impl Hash for Node {
             Node::Fold(n) => n.hash(state),
             Node::FoldTitle(n) => n.hash(state),
             Node::FoldContent(n) => n.hash(state),
+            Node::Table(n) => n.hash(state),
+            Node::TableRow(n) => n.hash(state),
+            Node::TableCell(n) => n.hash(state),
         }
     }
 }
@@ -149,6 +161,9 @@ impl Layout for Node {
             Node::Fold(node) => node.layout(ctx, constraints),
             Node::FoldTitle(node) => node.layout(ctx, constraints),
             Node::FoldContent(node) => node.layout(ctx, constraints),
+            Node::Table(node) => node.layout(ctx, constraints),
+            Node::TableRow(node) => node.layout(ctx, constraints),
+            Node::TableCell(node) => node.layout(ctx, constraints),
             _ => panic!("Unsupported node type"),
         }
     }
@@ -172,6 +187,9 @@ impl NodeHtmlCodec for Node {
             Node::Fold(node) => node.to_dom(),
             Node::FoldTitle(node) => node.to_dom(),
             Node::FoldContent(node) => node.to_dom(),
+            Node::Table(node) => node.to_dom(),
+            Node::TableRow(node) => node.to_dom(),
+            Node::TableCell(node) => node.to_dom(),
         }
     }
 }

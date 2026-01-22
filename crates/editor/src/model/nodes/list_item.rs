@@ -99,6 +99,7 @@ impl Layout for ListItemNode {
             children: None,
             page_break_policy: Default::default(),
             render_hints: Default::default(),
+            scope_id: None,
         };
 
         child_nodes.insert(
@@ -115,6 +116,7 @@ impl Layout for ListItemNode {
             children: Some(child_nodes),
             page_break_policy: Default::default(),
             render_hints: Default::default(),
+            scope_id: None,
         }
     }
 }
