@@ -962,6 +962,17 @@ impl Runtime {
                         proportion: *proportion,
                         upload_id: upload_id.clone(),
                     },
+                    crate::layout::elements::ExternalElementData::File {
+                        name,
+                        size,
+                        src,
+                        upload_id,
+                    } => crate::layout::elements::ExternalElementData::File {
+                        name: name.clone(),
+                        size: *size,
+                        src: src.clone(),
+                        upload_id: upload_id.clone(),
+                    },
                 };
 
                 elements.push(ExternalElement {

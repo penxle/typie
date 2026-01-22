@@ -120,16 +120,14 @@ impl Runtime {
             return vec![];
         };
 
-        // TODO: 다른 external 추가되면 수정
-        let is_image = self
+        let is_external = self
             .doc()
             .node(node_id)
-            .map(|n| matches!(n.node(), Node::Image(_)))
+            .map(|n| matches!(n.node(), Node::Image(_) | Node::File(_)))
             .unwrap_or(false);
 
         self.transact(move |tr| {
-            if is_image {
-                // TODO: delete_node_recursive 에서 처리하는 게 맞나..
+            if is_external {
                 tr.push_effect(Effect::ExternalElementChanged);
             }
 

@@ -17,6 +17,13 @@ pub enum ExternalElementData {
         proportion: f32,
         upload_id: Option<String>,
     },
+    #[serde(rename_all = "camelCase")]
+    File {
+        name: Option<String>,
+        size: Option<u64>,
+        src: Option<String>,
+        upload_id: Option<String>,
+    },
 }
 
 #[allow(dead_code)]

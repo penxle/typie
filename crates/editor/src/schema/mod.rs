@@ -63,7 +63,7 @@ impl Default for Schema {
         schema.add_node(
             NodeType::Root,
             NodeSpec {
-                content: content_expr!([((Paragraph | Image | Blockquote | Callout | BulletList | OrderedList | HorizontalRule | Fold | Table)*), (Paragraph)]),
+                content: content_expr!([((Paragraph | Image | File | Blockquote | Callout | BulletList | OrderedList | HorizontalRule | Fold | Table)*), (Paragraph)]),
                 ..Default::default()
             },
         );
@@ -108,6 +108,14 @@ impl Default for Schema {
 
         schema.add_node(
             NodeType::Image,
+            NodeSpec {
+                selectable: true,
+                ..Default::default()
+            },
+        );
+
+        schema.add_node(
+            NodeType::File,
             NodeSpec {
                 selectable: true,
                 ..Default::default()
@@ -187,7 +195,7 @@ impl Default for Schema {
         schema.add_node(
             NodeType::FoldContent,
             NodeSpec {
-                content: content_expr!((Paragraph | Image | Blockquote | Callout | BulletList | OrderedList | HorizontalRule | Fold)+),
+                content: content_expr!((Paragraph | Image | File | Blockquote | Callout | BulletList | OrderedList | HorizontalRule | Fold)+),
                 isolating: true,
                 structural: true,
                 ..Default::default()
@@ -223,7 +231,7 @@ impl Default for Schema {
         schema.add_node(
             NodeType::TableCell,
             NodeSpec {
-                content: content_expr!((Paragraph | Image | BulletList | OrderedList)+),
+                content: content_expr!((Paragraph | Image | File | BulletList | OrderedList)+),
                 isolating: true,
                 structural: true,
                 ..Default::default()

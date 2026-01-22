@@ -951,7 +951,10 @@ export class Editor {
     const { pageIdx, x, y } = resolved;
 
     if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      const imageFiles = [...e.dataTransfer.files].filter((file) => file.type.startsWith('image/'));
+      const allFiles = [...e.dataTransfer.files];
+      const imageFiles = allFiles.filter((file) => file.type.startsWith('image/'));
+      const otherFiles = allFiles.filter((file) => !file.type.startsWith('image/'));
+
       if (imageFiles.length > 0) {
         const uploadIds: string[] = [];
         for (const file of imageFiles) {
@@ -966,6 +969,25 @@ export class Editor {
           y,
           uploadIds,
         }).focus();
+      }
+
+      if (otherFiles.length > 0) {
+        const uploadIds: string[] = [];
+        for (const file of otherFiles) {
+          const uploadId = nanoid();
+          this.queueUpload(uploadId, file);
+          uploadIds.push(uploadId);
+        }
+        this.dispatch({
+          type: 'dropFiles',
+          pageIdx,
+          x,
+          y,
+          uploadIds,
+        }).focus();
+      }
+
+      if (imageFiles.length > 0 || otherFiles.length > 0) {
         return;
       }
     }

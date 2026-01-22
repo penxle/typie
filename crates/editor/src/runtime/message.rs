@@ -228,6 +228,15 @@ define_messages! {
     => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_drop_images(page_idx, x, y, upload_ids) },
 
+    DropFiles {
+        page_idx: usize,
+        x: f32,
+        y: f32,
+        upload_ids: Vec<String>,
+    }
+    => when When::key(ContextKey::CanEdit)
+    => handle(rt) { rt.handle_drop_files(page_idx, x, y, upload_ids) },
+
     DragEnd
     => when When::True
     => handle(rt) { rt.handle_drag_end() },
@@ -405,6 +414,10 @@ define_messages! {
     => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_insert_image(upload_id) },
 
+    InsertFile { upload_id: Option<String> }
+    => when When::key(ContextKey::CanEdit)
+    => handle(rt) { rt.handle_insert_file(upload_id) },
+
     InsertHorizontalRule { variant: HorizontalRuleVariant }
     => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_insert_horizontal_rule(variant) },
@@ -456,6 +469,10 @@ define_messages! {
     SetImageSrc { node_id: String, src: String, width: f32, height: f32 }
     => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_set_image_src(node_id, src, width, height) },
+
+    SetFileSrc { node_id: String, src: String, name: String, size: u64 }
+    => when When::key(ContextKey::CanEdit)
+    => handle(rt) { rt.handle_set_file_src(node_id, src, name, size) },
 
     SelectSpellcheckError { error_id: String }
     => when When::True

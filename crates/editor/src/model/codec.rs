@@ -120,6 +120,20 @@ impl Codec for u16 {
     }
 }
 
+impl Codec for u64 {
+    fn to_value(&self) -> Option<LoroValue> {
+        Some(LoroValue::I64(*self as i64))
+    }
+
+    fn from_value(value: LoroValue) -> anyhow::Result<Self> {
+        match value {
+            LoroValue::I64(i) => Ok(i as u64),
+            LoroValue::Double(d) => Ok(d as u64),
+            _ => anyhow::bail!("value not number"),
+        }
+    }
+}
+
 impl Codec for bool {
     fn to_value(&self) -> Option<LoroValue> {
         Some(LoroValue::Bool(*self))

@@ -202,6 +202,36 @@ impl Runtime {
         effects
     }
 
+    pub(crate) fn handle_drop_files(
+        &mut self,
+        page_idx: usize,
+        x: f32,
+        y: f32,
+        upload_ids: Vec<String>,
+    ) -> Vec<Effect> {
+        let Some(drop_position) = self.resolve_drop_position(page_idx, x, y) else {
+            return self.handle_drag_end_internal();
+        };
+
+        self.pointer.drop_target = None;
+        self.set_pointer_mode(PointerMode::Idle);
+
+        let mut effects = self.transact(|tr| {
+            tr.set_selection(Selection::collapsed(drop_position));
+            for upload_id in upload_ids {
+                tr.insert_node(crate::model::Node::File(crate::model::FileNode {
+                    name: None,
+                    size: None,
+                    src: None,
+                    upload_id: Some(upload_id),
+                }))?;
+            }
+            Ok(true)
+        });
+        effects.push(Effect::DropTargetChanged { target: None });
+        effects
+    }
+
     pub(crate) fn handle_drag_end(&mut self) -> Vec<Effect> {
         self.handle_drag_end_internal()
     }

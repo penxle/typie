@@ -113,7 +113,15 @@
       size={toolbarSize}
     />
 
-    <ToolbarButton disabled={true} icon={PaperclipIcon} label="파일" size={toolbarSize} />
+    <ToolbarButton
+      icon={PaperclipIcon}
+      label="파일"
+      onclick={() => {
+        editor.dispatch({ type: 'insertFile', uploadId: undefined });
+        editor.focus();
+      }}
+      size={toolbarSize}
+    />
 
     <ToolbarButton disabled={true} icon={FileUpIcon} label="임베드" size={toolbarSize} />
 

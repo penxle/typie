@@ -5,6 +5,7 @@ mod composition;
 mod deletion;
 mod drag;
 mod escape;
+mod file;
 mod fold;
 mod formatting;
 mod history;
