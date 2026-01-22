@@ -138,6 +138,7 @@ impl Layout for ImageNode {
             children: None,
             page_break_policy: PageBreakPolicy::Avoid,
             render_hints: Default::default(),
+            scope_id: None,
         }
     }
 }

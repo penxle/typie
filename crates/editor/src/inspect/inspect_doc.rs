@@ -129,5 +129,14 @@ fn format_node_info(node: &NodeRef) -> String {
         Node::Callout(callout_node) => {
             format!("Callout {} variant={:?}", id, callout_node.variant)
         }
+        Node::Table(table_node) => {
+            format!("Table {} border_style={:?}", id, table_node.border_style)
+        }
+        Node::TableRow(_) => {
+            format!("TableRow {}", id)
+        }
+        Node::TableCell(cell_node) => {
+            format!("TableCell {} col_width={:?}", id, cell_node.col_width)
+        }
     }
 }

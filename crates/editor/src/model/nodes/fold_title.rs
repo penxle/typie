@@ -168,6 +168,7 @@ impl Layout for FoldTitleNode {
                     children: None,
                     page_break_policy: PageBreakPolicy::Avoid,
                     render_hints: Default::default(),
+                    scope_id: None,
                 }),
             });
 
@@ -193,6 +194,7 @@ impl Layout for FoldTitleNode {
                     children: None,
                     page_break_policy: PageBreakPolicy::Avoid,
                     render_hints: Default::default(),
+                    scope_id: None,
                 }),
             },
         );
@@ -203,6 +205,7 @@ impl Layout for FoldTitleNode {
             children: Some(children),
             page_break_policy: PageBreakPolicy::Avoid,
             render_hints: Default::default(),
+            scope_id: None,
         }
     }
 }

@@ -17,3 +17,4 @@ mod navigation;
 mod pointer;
 mod search;
 mod spellcheck;
+mod table;

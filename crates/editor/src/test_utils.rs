@@ -947,6 +947,78 @@ macro_rules! __doc_create_node_with_id {
             __doc_items!($tr, $id, _child_prev; $($children)*);
         }
     };
+
+    ($tr:ident, $id:expr, $parent:expr, $prev:expr, table, [$($attrs:tt)*], [$($children:tt)*]) => {
+        {
+            let parent_node = $tr.doc().node($parent).unwrap();
+            let index = if let Some(prev_id) = $prev {
+                let prev_node = $tr.doc().node(prev_id).unwrap();
+                prev_node.index().unwrap() + 1
+            } else {
+                0
+            };
+            parent_node.as_mut().insert_child_with_id(
+                index,
+                $id,
+                $crate::model::Node::Table($crate::model::TableNode {
+                    $($attrs)*
+                    ..Default::default()
+                })
+            ).unwrap();
+
+            #[allow(unused_mut)]
+            let mut _child_prev: Option<$crate::model::NodeId> = None;
+            __doc_items!($tr, $id, _child_prev; $($children)*);
+        }
+    };
+
+    ($tr:ident, $id:expr, $parent:expr, $prev:expr, table_row, [$($attrs:tt)*], [$($children:tt)*]) => {
+        {
+            let parent_node = $tr.doc().node($parent).unwrap();
+            let index = if let Some(prev_id) = $prev {
+                let prev_node = $tr.doc().node(prev_id).unwrap();
+                prev_node.index().unwrap() + 1
+            } else {
+                0
+            };
+            parent_node.as_mut().insert_child_with_id(
+                index,
+                $id,
+                $crate::model::Node::TableRow($crate::model::TableRowNode {
+                    $($attrs)*
+                    ..Default::default()
+                })
+            ).unwrap();
+
+            #[allow(unused_mut)]
+            let mut _child_prev: Option<$crate::model::NodeId> = None;
+            __doc_items!($tr, $id, _child_prev; $($children)*);
+        }
+    };
+
+    ($tr:ident, $id:expr, $parent:expr, $prev:expr, table_cell, [$($attrs:tt)*], [$($children:tt)*]) => {
+        {
+            let parent_node = $tr.doc().node($parent).unwrap();
+            let index = if let Some(prev_id) = $prev {
+                let prev_node = $tr.doc().node(prev_id).unwrap();
+                prev_node.index().unwrap() + 1
+            } else {
+                0
+            };
+            parent_node.as_mut().insert_child_with_id(
+                index,
+                $id,
+                $crate::model::Node::TableCell($crate::model::TableCellNode {
+                    $($attrs)*
+                    ..Default::default()
+                })
+            ).unwrap();
+
+            #[allow(unused_mut)]
+            let mut _child_prev: Option<$crate::model::NodeId> = None;
+            __doc_items!($tr, $id, _child_prev; $($children)*);
+        }
+    };
 }
 
 #[macro_export]

@@ -12,6 +12,7 @@ mod paragraph;
 mod preedit;
 mod root;
 mod selection;
+mod table;
 mod text;
 
 #[allow(unused_imports)]
@@ -300,6 +301,9 @@ impl Transaction {
             NodeType::FoldTitle => Node::FoldTitle(FoldTitleNode::default()),
             NodeType::FoldContent => Node::FoldContent(FoldContentNode::default()),
             NodeType::Callout => Node::Callout(CalloutNode::default()),
+            NodeType::Table => Node::Table(TableNode::default()),
+            NodeType::TableRow => Node::TableRow(TableRowNode::default()),
+            NodeType::TableCell => Node::TableCell(TableCellNode::default()),
             NodeType::Root => anyhow::bail!("Cannot create Root node"),
         })
     }

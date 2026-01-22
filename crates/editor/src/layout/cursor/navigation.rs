@@ -1,8 +1,9 @@
 use super::{
     CursorNavigable, CursorNavigation, HorizontalDirection, NavigationContext, VerticalDirection,
-    WordDirection,
+    WordDirection, find_scope,
 };
-use crate::layout::{Element, Page};
+use crate::layout::Element;
+use crate::layout::page::{ElementEntry, Page};
 use crate::model::NodeId;
 use crate::state::{Position, Selection};
 use crate::types::{Point, Rect};
@@ -40,21 +41,41 @@ fn navigate_horizontal<F>(
 where
     F: FnOnce(&dyn CursorNavigable, &NavigationContext, Position, f32) -> Option<CursorNavigation>,
 {
-    let (page_idx, _pos, element) = find_element_at_position(ctx, pages, &position)?;
+    let (page_idx, pos, element) = find_element_at_position(ctx, pages, &position)?;
     let navigable = element.as_cursor_navigable()?;
 
     match navigate_fn(navigable, ctx, position, preferred_y)? {
         CursorNavigation::Moved { selection } => Some(selection),
-        CursorNavigation::Exit { preferred_y, .. } => match direction {
-            HorizontalDirection::Left => {
-                let selection = find_selection_above(ctx, pages, page_idx, preferred_y, 1.0e6)?;
-                Some(selection)
+        CursorNavigation::Exit { preferred_y, .. } => {
+            let current_scope = find_scope(ctx, position.node_id);
+            let scope_id = current_scope.scope_id();
+
+            if let Some((entry, _)) = find_horizontal_target(
+                pages,
+                page_idx,
+                pos,
+                preferred_y,
+                scope_id,
+                element,
+                direction,
+            ) {
+                if let Some(nav) = entry.element().as_cursor_navigable() {
+                    let rel_x = match direction {
+                        HorizontalDirection::Left => entry.size.width,
+                        HorizontalDirection::Right => 0.0,
+                    };
+                    let rel_y = match direction {
+                        HorizontalDirection::Left => entry.size.height - 1.0,
+                        HorizontalDirection::Right => 1.0,
+                    };
+                    if let Some(selection) = nav.find_selection_at_point(ctx, rel_x, rel_y) {
+                        return Some(selection);
+                    }
+                }
             }
-            HorizontalDirection::Right => {
-                let selection = find_selection_below(ctx, pages, page_idx, preferred_y, -1.0e6)?;
-                Some(selection)
-            }
-        },
+
+            None
+        }
         CursorNavigation::SoftWrap { offset } => {
             let next_pos = match direction {
                 HorizontalDirection::Left => {
@@ -119,31 +140,36 @@ where
 {
     let (page_idx, pos, element) = find_element_at_position(ctx, pages, &position)?;
     let navigable = element.as_cursor_navigable()?;
+    let current_scope = find_scope(ctx, position.node_id);
+    let scope_id = current_scope.scope_id();
 
     let relative_x = preferred_x - pos.x;
-    match navigate_fn(navigable, ctx, position.clone(), relative_x)? {
+    match navigate_fn(navigable, ctx, position, relative_x)? {
         CursorNavigation::Moved { selection } => Some(selection),
         CursorNavigation::Exit { preferred_y, .. } => {
             let absolute_y = pos.y + preferred_y;
-            let find_selection = match direction {
-                VerticalDirection::Up => find_selection_above,
-                VerticalDirection::Down => find_selection_below,
-            };
-            if let Some(selection) = find_selection(ctx, pages, page_idx, absolute_y, preferred_x) {
-                return Some(selection);
+
+            if let Some((entry, _)) = find_vertical_target(
+                pages,
+                page_idx,
+                preferred_x,
+                absolute_y,
+                scope_id,
+                element,
+                direction,
+            ) {
+                return resolve_and_find_selection(
+                    ctx,
+                    entry,
+                    Some(preferred_x),
+                    match direction {
+                        VerticalDirection::Up => Some(entry.size.height - 1.0),
+                        VerticalDirection::Down => Some(0.0),
+                    },
+                );
             }
 
-            let Some(mut selection) = fallback(ctx, pages, position) else {
-                return None;
-            };
-
-            if selection.head.node_id == position.node_id
-                && selection.head.offset == position.offset
-            {
-                selection = Selection::collapsed(position);
-            }
-
-            Some(selection)
+            fallback(ctx, pages, position)
         }
         CursorNavigation::SoftWrap { .. } => None,
     }
@@ -297,40 +323,6 @@ pub fn move_to_document_end(ctx: &NavigationContext, pages: &[Page]) -> Option<S
             navigable.find_selection_at_point(ctx, size.width, size.height)
         })
     })
-}
-
-fn find_selection_above(
-    ctx: &NavigationContext,
-    pages: &[Page],
-    current_page_idx: usize,
-    current_y: f32,
-    preferred_x: f32,
-) -> Option<Selection> {
-    find_selection_vertical(
-        ctx,
-        pages,
-        current_page_idx,
-        current_y,
-        preferred_x,
-        VerticalDirection::Up,
-    )
-}
-
-fn find_selection_below(
-    ctx: &NavigationContext,
-    pages: &[Page],
-    current_page_idx: usize,
-    current_y: f32,
-    preferred_x: f32,
-) -> Option<Selection> {
-    find_selection_vertical(
-        ctx,
-        pages,
-        current_page_idx,
-        current_y,
-        preferred_x,
-        VerticalDirection::Down,
-    )
 }
 
 fn find_selection_vertical(
@@ -573,4 +565,212 @@ pub fn move_page_down(
     }
 
     move_to_document_end(ctx, pages)
+}
+
+fn find_vertical_target<'a>(
+    pages: &'a [Page],
+    current_page_idx: usize,
+    preferred_x: f32,
+    absolute_y: f32,
+    scope_id: NodeId,
+    current_element: &Element,
+    direction: VerticalDirection,
+) -> Option<(&'a ElementEntry, usize)> {
+    let page = &pages[current_page_idx];
+
+    let next_entry = if scope_id == NodeId::ROOT {
+        match direction {
+            VerticalDirection::Up => page.find_above(preferred_x, absolute_y, None),
+            VerticalDirection::Down => page.find_below(preferred_x, absolute_y, None),
+        }
+    } else {
+        let internal = match direction {
+            VerticalDirection::Up => page.find_above_in_scope(
+                preferred_x,
+                absolute_y,
+                scope_id,
+                Some(current_element as *const _),
+            ),
+            VerticalDirection::Down => page.find_below_in_scope(
+                preferred_x,
+                absolute_y,
+                scope_id,
+                Some(current_element as *const _),
+            ),
+        };
+
+        if internal.is_some() {
+            internal
+        } else {
+            let mut boundary_y = absolute_y;
+            if let Some(scope_entry) = page.scope_entry(scope_id) {
+                boundary_y = match direction {
+                    VerticalDirection::Up => scope_entry.pos.y,
+                    VerticalDirection::Down => scope_entry.pos.y + scope_entry.size.height,
+                };
+            }
+            match direction {
+                VerticalDirection::Up => {
+                    page.find_target_above(preferred_x, boundary_y, Some(scope_id))
+                }
+                VerticalDirection::Down => {
+                    page.find_target_below(preferred_x, boundary_y, Some(scope_id))
+                }
+            }
+        }
+    };
+
+    if let Some(entry) = next_entry {
+        return Some((entry, current_page_idx));
+    }
+
+    let next_page_idx = match direction {
+        VerticalDirection::Up => (current_page_idx > 0).then(|| current_page_idx - 1),
+        VerticalDirection::Down => {
+            (current_page_idx + 1 < pages.len()).then(|| current_page_idx + 1)
+        }
+    }?;
+
+    let next_page = &pages[next_page_idx];
+    let entry = match direction {
+        VerticalDirection::Up => {
+            next_page.find_target_above(preferred_x, next_page.root.node.size.height, None)
+        }
+        VerticalDirection::Down => next_page.find_target_below(preferred_x, 0.0, None),
+    }?;
+
+    Some((entry, next_page_idx))
+}
+
+fn find_horizontal_target<'a>(
+    pages: &'a [Page],
+    current_page_idx: usize,
+    pos: Point,
+    preferred_y: f32,
+    scope_id: NodeId,
+    current_element: &Element,
+    direction: HorizontalDirection,
+) -> Option<(&'a ElementEntry, usize)> {
+    let page = &pages[current_page_idx];
+
+    let vert_direction = match direction {
+        HorizontalDirection::Left => VerticalDirection::Up,
+        HorizontalDirection::Right => VerticalDirection::Down,
+    };
+
+    let search_x = match direction {
+        HorizontalDirection::Left => 1_000_000.0,
+        HorizontalDirection::Right => -1_000_000.0,
+    };
+
+    let next_entry = if scope_id == NodeId::ROOT {
+        match vert_direction {
+            VerticalDirection::Up => page.find_above(search_x, preferred_y, None),
+            VerticalDirection::Down => page.find_below(search_x, preferred_y, None),
+        }
+    } else {
+        match vert_direction {
+            VerticalDirection::Up => page.find_above_in_scope(
+                search_x,
+                preferred_y,
+                scope_id,
+                Some(current_element as *const _),
+            ),
+            VerticalDirection::Down => page.find_below_in_scope(
+                search_x,
+                preferred_y,
+                scope_id,
+                Some(current_element as *const _),
+            ),
+        }
+    };
+
+    if next_entry.is_some() {
+        return next_entry.map(|e| (e, current_page_idx));
+    }
+
+    if scope_id != NodeId::ROOT {
+        let (boundary_x, boundary_y) = if let Some(scope_entry) = page.scope_entry(scope_id) {
+            match direction {
+                HorizontalDirection::Left => (scope_entry.pos.x, pos.y),
+                HorizontalDirection::Right => (scope_entry.pos.x + scope_entry.size.width, pos.y),
+            }
+        } else {
+            (pos.x, preferred_y)
+        };
+
+        let boundary_entry = match direction {
+            HorizontalDirection::Left => {
+                page.find_target_left(boundary_x, boundary_y, Some(scope_id))
+            }
+            HorizontalDirection::Right => {
+                page.find_target_right(boundary_x, boundary_y, Some(scope_id))
+            }
+        };
+
+        if boundary_entry.is_some() {
+            return boundary_entry.map(|e| (e, current_page_idx));
+        }
+
+        let boundary_y = if let Some(scope_entry) = page.scope_entry(scope_id) {
+            match vert_direction {
+                VerticalDirection::Up => scope_entry.pos.y,
+                VerticalDirection::Down => scope_entry.pos.y + scope_entry.size.height,
+            }
+        } else {
+            preferred_y
+        };
+
+        let wrap_entry = match vert_direction {
+            VerticalDirection::Up => page.find_target_above(search_x, boundary_y, Some(scope_id)),
+            VerticalDirection::Down => page.find_target_below(search_x, boundary_y, Some(scope_id)),
+        };
+
+        if wrap_entry.is_some() {
+            return wrap_entry.map(|e| (e, current_page_idx));
+        }
+    }
+
+    let next_page_idx = match direction {
+        HorizontalDirection::Left => (current_page_idx > 0).then(|| current_page_idx - 1),
+        HorizontalDirection::Right => {
+            (current_page_idx + 1 < pages.len()).then(|| current_page_idx + 1)
+        }
+    }?;
+
+    let next_page = &pages[next_page_idx];
+    let (search_x_page, search_y_page, vert_dir_page) = match direction {
+        HorizontalDirection::Left => (
+            1_000_000.0,
+            next_page.root.node.size.height,
+            VerticalDirection::Up,
+        ),
+        HorizontalDirection::Right => (-1_000_000.0, 0.0, VerticalDirection::Down),
+    };
+
+    let page_entry = match vert_dir_page {
+        VerticalDirection::Up => next_page.find_target_above(search_x_page, search_y_page, None),
+        VerticalDirection::Down => next_page.find_target_below(search_x_page, search_y_page, None),
+    }?;
+
+    Some((page_entry, next_page_idx))
+}
+
+fn resolve_and_find_selection(
+    ctx: &NavigationContext,
+    entry: &ElementEntry,
+    target_absolute_x: Option<f32>,
+    target_relative_y: Option<f32>,
+) -> Option<Selection> {
+    let nav = entry.element().as_cursor_navigable()?;
+
+    let rel_x = if let Some(abs_x) = target_absolute_x {
+        (abs_x - entry.pos.x).max(0.0)
+    } else {
+        0.0
+    };
+
+    let rel_y = target_relative_y.unwrap_or(0.0);
+
+    nav.find_selection_at_point(ctx, rel_x, rel_y)
 }

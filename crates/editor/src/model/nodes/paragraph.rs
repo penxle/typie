@@ -679,6 +679,7 @@ impl Layout for ParagraphNode {
                     children: None,
                     page_break_policy: PageBreakPolicy::Avoid,
                     render_hints: Default::default(),
+                    scope_id: None,
                 }),
             });
 
@@ -696,6 +697,7 @@ impl Layout for ParagraphNode {
             children: Some(children),
             page_break_policy: PageBreakPolicy::Auto,
             render_hints: Default::default(),
+            scope_id: None,
         }
     }
 }

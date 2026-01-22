@@ -5,6 +5,7 @@ pub mod fold;
 pub mod horizontal_rule;
 pub mod line;
 pub mod list_marker;
+pub mod table;
 
 pub use blockquote::*;
 pub use callout::*;
@@ -13,6 +14,7 @@ pub use fold::*;
 pub use horizontal_rule::*;
 pub use line::*;
 pub use list_marker::*;
+pub use table::*;
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct WrapperPadding {

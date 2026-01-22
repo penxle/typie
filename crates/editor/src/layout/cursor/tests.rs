@@ -2574,3 +2574,1477 @@ fn test_hit_test_below_wrapped_text_goes_to_document_end() {
         expected_end_offset
     );
 }
+
+#[test]
+fn test_table_navigate_right_to_next_cell() {
+    let mut cell1_p = id!();
+    let mut cell2_p = id!();
+    let rt = runtime! {
+        viewport { paginated { width: 400.0, height: 400.0, margin: PAGE_MARGIN } }
+        doc {
+            table {
+                table_row {
+                    table_cell {
+                        @cell1_p paragraph {
+                            text { "A" }
+                        }
+                    }
+                    table_cell {
+                        @cell2_p paragraph {
+                            text { "B" }
+                        }
+                    }
+                }
+            }
+        }
+        selection { (cell1_p, 1) }
+    };
+
+    let pages = rt.pages();
+    let (_, rect) = Cursor::bounds(&ctx(&rt.state()), &pages, rt.selection().head).unwrap();
+    let new_selection = Cursor::move_right(
+        &ctx(&rt.state()),
+        &pages,
+        rt.selection().head,
+        rect.y + rect.height,
+    )
+    .unwrap();
+
+    assert_eq!(
+        new_selection.head.node_id, cell2_p,
+        "Should move to next cell"
+    );
+    assert_eq!(
+        new_selection.head.offset, 0,
+        "Should be at start of next cell"
+    );
+}
+
+#[test]
+fn test_table_navigate_left_to_previous_cell() {
+    let mut cell1_p = id!();
+    let mut cell2_p = id!();
+    let rt = runtime! {
+        viewport { paginated { width: 400.0, height: 400.0, margin: PAGE_MARGIN } }
+        doc {
+            table {
+                table_row {
+                    table_cell {
+                        @cell1_p paragraph {
+                            text { "A" }
+                        }
+                    }
+                    table_cell {
+                        @cell2_p paragraph {
+                            text { "B" }
+                        }
+                    }
+                }
+            }
+        }
+        selection { (cell2_p, 0) }
+    };
+
+    let pages = rt.pages();
+    let (_, rect) = Cursor::bounds(&ctx(&rt.state()), &pages, rt.selection().head).unwrap();
+    let new_selection =
+        Cursor::move_left(&ctx(&rt.state()), &pages, rt.selection().head, rect.y).unwrap();
+
+    assert_eq!(
+        new_selection.head.node_id, cell1_p,
+        "Should move to previous cell"
+    );
+    assert_eq!(
+        new_selection.head.offset, 1,
+        "Should be at end of previous cell"
+    );
+}
+
+#[test]
+fn test_table_navigate_right_wraps_to_next_row_first_cell() {
+    let mut r1c2_p = id!();
+    let mut r2c1_p = id!();
+    let rt = runtime! {
+        viewport { paginated { width: 400.0, height: 400.0, margin: PAGE_MARGIN } }
+        doc {
+            table {
+                table_row {
+                    table_cell {
+                        paragraph {
+                            text { "A" }
+                        }
+                    }
+                    table_cell {
+                        @r1c2_p paragraph {
+                            text { "B" }
+                        }
+                    }
+                }
+                table_row {
+                    table_cell {
+                        @r2c1_p paragraph {
+                            text { "C" }
+                        }
+                    }
+                    table_cell {
+                        paragraph {
+                            text { "D" }
+                        }
+                    }
+                }
+            }
+        }
+        selection { (r1c2_p, 1) }
+    };
+
+    let pages = rt.pages();
+    let (_, rect) = Cursor::bounds(&ctx(&rt.state()), &pages, rt.selection().head).unwrap();
+    let new_selection = Cursor::move_right(
+        &ctx(&rt.state()),
+        &pages,
+        rt.selection().head,
+        rect.y + rect.height,
+    )
+    .unwrap();
+
+    assert_eq!(
+        new_selection.head.node_id, r2c1_p,
+        "Should wrap to first cell of next row"
+    );
+    assert_eq!(new_selection.head.offset, 0, "Should be at start of cell");
+}
+
+#[test]
+fn test_table_navigate_left_wraps_to_previous_row_last_cell() {
+    let mut r1c2_p = id!();
+    let mut r2c1_p = id!();
+    let rt = runtime! {
+        viewport { paginated { width: 400.0, height: 400.0, margin: PAGE_MARGIN } }
+        doc {
+            table {
+                table_row {
+                    table_cell {
+                        paragraph {
+                            text { "A" }
+                        }
+                    }
+                    table_cell {
+                        @r1c2_p paragraph {
+                            text { "B" }
+                        }
+                    }
+                }
+                table_row {
+                    table_cell {
+                        @r2c1_p paragraph {
+                            text { "C" }
+                        }
+                    }
+                    table_cell {
+                        paragraph {
+                            text { "D" }
+                        }
+                    }
+                }
+            }
+        }
+        selection { (r2c1_p, 0) }
+    };
+
+    let pages = rt.pages();
+    let (_, rect) = Cursor::bounds(&ctx(&rt.state()), &pages, rt.selection().head).unwrap();
+    let new_selection =
+        Cursor::move_left(&ctx(&rt.state()), &pages, rt.selection().head, rect.y).unwrap();
+
+    assert_eq!(
+        new_selection.head.node_id, r1c2_p,
+        "Should wrap to last cell of previous row"
+    );
+    assert_eq!(new_selection.head.offset, 1, "Should be at end of cell");
+}
+
+#[test]
+fn test_table_navigate_down_to_cell_below() {
+    let mut r1c1_p = id!();
+    let mut r2c1_p = id!();
+    let rt = runtime! {
+        viewport { paginated { width: 400.0, height: 400.0, margin: PAGE_MARGIN } }
+        doc {
+            table {
+                table_row {
+                    table_cell {
+                        @r1c1_p paragraph {
+                            text { "A" }
+                        }
+                    }
+                    table_cell {
+                        paragraph {
+                            text { "B" }
+                        }
+                    }
+                }
+                table_row {
+                    table_cell {
+                        @r2c1_p paragraph {
+                            text { "C" }
+                        }
+                    }
+                    table_cell {
+                        paragraph {
+                            text { "D" }
+                        }
+                    }
+                }
+            }
+        }
+        selection { (r1c1_p, 0) }
+    };
+
+    let pages = rt.pages();
+    let new_selection =
+        Cursor::move_down(&ctx(&rt.state()), &pages, rt.selection().head, 0.0).unwrap();
+
+    assert_eq!(
+        new_selection.head.node_id, r2c1_p,
+        "Should move to cell below in same column"
+    );
+}
+
+#[test]
+fn test_table_navigate_up_to_cell_above() {
+    let mut r1c1_p = id!();
+    let mut r2c1_p = id!();
+    let rt = runtime! {
+        viewport { paginated { width: 400.0, height: 400.0, margin: PAGE_MARGIN } }
+        doc {
+            table {
+                table_row {
+                    table_cell {
+                        @r1c1_p paragraph {
+                            text { "A" }
+                        }
+                    }
+                    table_cell {
+                        paragraph {
+                            text { "B" }
+                        }
+                    }
+                }
+                table_row {
+                    table_cell {
+                        @r2c1_p paragraph {
+                            text { "C" }
+                        }
+                    }
+                    table_cell {
+                        paragraph {
+                            text { "D" }
+                        }
+                    }
+                }
+            }
+        }
+        selection { (r2c1_p, 0) }
+    };
+
+    let pages = rt.pages();
+    let new_selection =
+        Cursor::move_up(&ctx(&rt.state()), &pages, rt.selection().head, 0.0).unwrap();
+
+    assert_eq!(
+        new_selection.head.node_id, r1c1_p,
+        "Should move to cell above in same column"
+    );
+}
+
+#[test]
+fn test_cell_navigation_with_paragraphs_before_table() {
+    let mut p1 = id!();
+    let mut p2 = id!();
+
+    let rt = runtime! {
+        viewport { paginated { width: 400.0, height: 800.0, margin: PAGE_MARGIN } }
+        doc {
+            paragraph {
+                text { "Paragraph before table 1" }
+            }
+            paragraph {
+                text { "Paragraph before table 2" }
+            }
+            table {
+                table_row {
+                    table_cell {
+                        @p1 paragraph {
+                            text { "Cell Line1" }
+                        }
+                        @p2 paragraph {
+                            text { "Cell Line2" }
+                        }
+                        paragraph {
+                            text { "Cell Line3" }
+                        }
+                        paragraph {
+                            text { "Cell Line4" }
+                        }
+                    }
+                }
+            }
+        }
+        selection { (p2, 3) }
+    };
+
+    let pages = rt.pages();
+
+    let new_selection =
+        Cursor::move_up(&ctx(&rt.state()), &pages, rt.selection().head, 0.0).unwrap();
+
+    assert_eq!(
+        new_selection.head.node_id, p1,
+        "Up from Cell Line2 should go to Cell Line1 (with paragraphs before table)"
+    );
+}
+
+#[test]
+fn test_cell_navigation_down_with_paragraphs_before_table() {
+    let mut p1 = id!();
+    let mut p2 = id!();
+
+    let rt = runtime! {
+        viewport { paginated { width: 400.0, height: 800.0, margin: PAGE_MARGIN } }
+        doc {
+            paragraph {
+                text { "Paragraph before table 1" }
+            }
+            paragraph {
+                text { "Paragraph before table 2" }
+            }
+            table {
+                table_row {
+                    table_cell {
+                        @p1 paragraph {
+                            text { "Cell Line1" }
+                        }
+                        @p2 paragraph {
+                            text { "Cell Line2" }
+                        }
+                        paragraph {
+                            text { "Cell Line3" }
+                        }
+                        paragraph {
+                            text { "Cell Line4" }
+                        }
+                    }
+                }
+            }
+        }
+        selection { (p1, 0) }
+    };
+
+    let pages = rt.pages();
+    let new_selection =
+        Cursor::move_down(&ctx(&rt.state()), &pages, rt.selection().head, 0.0).unwrap();
+
+    assert_eq!(
+        new_selection.head.node_id, p2,
+        "Down from Cell Line1 should go to Cell Line2 (not skip to Line3)"
+    );
+}
+
+#[test]
+fn test_hard_break_navigation_down_in_table_cell() {
+    let mut p = id!();
+
+    let rt = runtime! {
+        viewport { paginated { width: 400.0, height: 800.0, margin: PAGE_MARGIN } }
+        doc {
+            paragraph {
+                text { "Before table" }
+            }
+            table {
+                table_row {
+                    table_cell {
+                        @p paragraph {
+                            text { "Line 1" }
+                            hard_break {}
+                            text { "Line 2" }
+                        }
+                    }
+                }
+            }
+        }
+        selection { (p, 0) }
+    };
+
+    let pages = rt.pages();
+    let new_selection =
+        Cursor::move_down(&ctx(&rt.state()), &pages, rt.selection().head, 0.0).unwrap();
+
+    assert_eq!(
+        new_selection.head.node_id, p,
+        "Should stay in same paragraph"
+    );
+    assert_eq!(new_selection.head.offset, 7, "Should be at start of Line 2");
+}
+
+#[test]
+fn test_hard_break_navigation_up_in_table_cell() {
+    let mut p = id!();
+
+    let rt = runtime! {
+        viewport { paginated { width: 400.0, height: 800.0, margin: PAGE_MARGIN } }
+        doc {
+            paragraph {
+                text { "Before table" }
+            }
+            table {
+                table_row {
+                    table_cell {
+                        @p paragraph {
+                            text { "Line 1" }
+                            hard_break {}
+                            text { "Line 2" }
+                        }
+                    }
+                }
+            }
+        }
+        selection { (p, 10) }
+    };
+
+    let pages = rt.pages();
+    let new_selection =
+        Cursor::move_up(&ctx(&rt.state()), &pages, rt.selection().head, 0.0).unwrap();
+
+    assert_eq!(
+        new_selection.head.node_id, p,
+        "Should stay in same paragraph"
+    );
+    assert!(
+        new_selection.head.offset < 7,
+        "Should be in Line 1 (before hard_break)"
+    );
+}
+
+#[test]
+fn test_consecutive_hard_breaks_navigation_no_table() {
+    let mut p = id!();
+
+    let rt = runtime! {
+        viewport { paginated { width: 600.0, height: 800.0, margin: PAGE_MARGIN } }
+        doc {
+            paragraph {
+                text { "Before" }
+            }
+            @p paragraph {
+                text { "Line1" }       // offset 0-4
+                hard_break {}          // offset 5
+                text { "L2" }          // offset 6-7
+                hard_break {}          // offset 8
+                text { "Line3" }       // offset 9-13
+                hard_break {}          // offset 14
+                hard_break {}          // offset 15
+                text { "Line5" }       // offset 16-20
+                hard_break {}          // offset 21
+                text { "LastLine" }    // offset 22+
+            }
+        }
+        selection { (p, 20) }  // At end of "Line5" (offset 20)
+    };
+
+    let pages = rt.pages();
+
+    let sel1 = Cursor::move_down(&ctx(&rt.state()), &pages, rt.selection().head, 0.0).unwrap();
+
+    assert!(
+        sel1.head.offset >= 22,
+        "Down from Line5 should reach LastLine (offset 22+), got {}",
+        sel1.head.offset
+    );
+}
+
+#[test]
+fn test_consecutive_hard_breaks_navigation_in_table_cell() {
+    let mut p = id!();
+
+    let rt = runtime! {
+        viewport { paginated { width: 600.0, height: 800.0, margin: PAGE_MARGIN } }
+        doc {
+            paragraph {
+                text { "Before" }
+            }
+            paragraph {
+                text { "Before2" }
+            }
+            table {
+                table_row {
+                    table_cell {
+                        @p paragraph {
+                            text { "Line1" }       // offset 0-4 (5 chars)
+                            hard_break {}          // offset 5
+                            text { "L2" }          // offset 6-7 (2 chars)
+                            hard_break {}          // offset 8
+                            text { "Line3" }       // offset 9-13 (5 chars)
+                            hard_break {}          // offset 14
+                            hard_break {}          // offset 15 (consecutive - empty line)
+                            text { "Line5" }       // offset 16-20 (5 chars)
+                            hard_break {}          // offset 21
+                            text { "LastLine" }    // offset 22+ (shorter text)
+                        }
+                    }
+                }
+            }
+        }
+        selection { (p, 7) }  // At end of "L2"
+    };
+
+    let pages = rt.pages();
+
+    let sel1 = Cursor::move_down(&ctx(&rt.state()), &pages, rt.selection().head, 0.0).unwrap();
+    assert_eq!(sel1.head.node_id, p, "Should stay in paragraph");
+
+    let sel2 = Cursor::move_down(&ctx(&rt.state()), &pages, sel1.head, 0.0).unwrap();
+    let sel3 = Cursor::move_down(&ctx(&rt.state()), &pages, sel2.head, 0.0).unwrap();
+    let sel4 = Cursor::move_down(&ctx(&rt.state()), &pages, sel3.head, 0.0).unwrap();
+    let sel5 = Cursor::move_down(&ctx(&rt.state()), &pages, sel4.head, 0.0);
+    let sel6 = if let Some(s5) = &sel5 {
+        Cursor::move_down(&ctx(&rt.state()), &pages, s5.head, 0.0)
+    } else {
+        None
+    };
+
+    let all_offsets = [
+        Some(sel1.head.offset),
+        Some(sel2.head.offset),
+        Some(sel3.head.offset),
+        Some(sel4.head.offset),
+        sel5.as_ref().map(|s| s.head.offset),
+        sel6.as_ref().map(|s| s.head.offset),
+    ];
+
+    let reached_last_line = all_offsets
+        .iter()
+        .any(|o| o.map(|x| x >= 22).unwrap_or(false));
+    assert!(
+        reached_last_line,
+        "Should reach last line (offset 22+), got offsets: {:?}",
+        all_offsets
+    );
+}
+
+#[test]
+fn test_table_exit_up_from_first_row() {
+    let mut para_before = id!();
+    let mut table_cell_p = id!();
+
+    let rt = runtime! {
+        viewport { paginated { width: 400.0, height: 400.0, margin: PAGE_MARGIN } }
+        doc {
+            @para_before paragraph {
+                text { "Before table" }
+            }
+            table {
+                table_row {
+                    table_cell {
+                        @table_cell_p paragraph {
+                            text { "Cell content" }
+                        }
+                    }
+                }
+            }
+        }
+        selection { (table_cell_p, 0) }
+    };
+
+    let pages = rt.pages();
+    let new_selection =
+        Cursor::move_up(&ctx(&rt.state()), &pages, rt.selection().head, 0.0).unwrap();
+
+    assert_eq!(
+        new_selection.head.node_id, para_before,
+        "Up from first row should exit table to paragraph above"
+    );
+}
+
+#[test]
+fn test_table_exit_down_from_last_row() {
+    let mut table_cell_p = id!();
+    let mut para_after = id!();
+
+    let rt = runtime! {
+        viewport { paginated { width: 400.0, height: 400.0, margin: PAGE_MARGIN } }
+        doc {
+            table {
+                table_row {
+                    table_cell {
+                        @table_cell_p paragraph {
+                            text { "Cell content" }
+                        }
+                    }
+                }
+            }
+            @para_after paragraph {
+                text { "After table" }
+            }
+        }
+        selection { (table_cell_p, 0) }
+    };
+
+    let pages = rt.pages();
+    let new_selection =
+        Cursor::move_down(&ctx(&rt.state()), &pages, rt.selection().head, 0.0).unwrap();
+
+    assert_eq!(
+        new_selection.head.node_id, para_after,
+        "Down from last row should exit table to paragraph below"
+    );
+}
+
+#[test]
+fn test_table_entry_selects_correct_column() {
+    let mut para_before = id!();
+    let mut cell1_p = id!();
+    let mut cell2_p = id!();
+
+    let rt = runtime! {
+        viewport { paginated { width: 400.0, height: 400.0, margin: PAGE_MARGIN } }
+        doc {
+            @para_before paragraph {
+                text { "Before table - this text is long enough" }
+            }
+            table {
+                table_row {
+                    table_cell {
+                        @cell1_p paragraph {
+                            text { "Cell 1" }
+                        }
+                    }
+                    table_cell {
+                        @cell2_p paragraph {
+                            text { "Cell 2" }
+                        }
+                    }
+                }
+            }
+        }
+        selection { (para_before, 30) }
+    };
+
+    let pages = rt.pages();
+
+    let new_selection =
+        Cursor::move_down(&ctx(&rt.state()), &pages, rt.selection().head, 300.0).unwrap();
+
+    assert_eq!(
+        new_selection.head.node_id, cell2_p,
+        "Entering table with preferred_x in second column should go to cell2"
+    );
+}
+
+#[test]
+fn test_table_exit_preserves_preferred_x() {
+    let mut para_before = id!();
+    let mut cell_p = id!();
+
+    let rt = runtime! {
+        viewport { paginated { width: 400.0, height: 400.0, margin: PAGE_MARGIN } }
+        doc {
+            @para_before paragraph {
+                text { "Before table with some longer text here" }
+            }
+            table {
+                table_row {
+                    table_cell {
+                        @cell_p paragraph {
+                            text { "Cell content" }
+                        }
+                    }
+                }
+            }
+        }
+        selection { (cell_p, 5) }
+    };
+
+    let pages = rt.pages();
+
+    let new_selection =
+        Cursor::move_up(&ctx(&rt.state()), &pages, rt.selection().head, 100.0).unwrap();
+
+    assert_eq!(
+        new_selection.head.node_id, para_before,
+        "Up from first row should exit table to paragraph above"
+    );
+    assert!(
+        new_selection.head.offset > 0,
+        "Exit should maintain preferred_x, not go to start"
+    );
+}
+
+#[test]
+fn test_table_entry_down_goes_to_first_line_with_hard_breaks() {
+    let mut para_above = id!();
+    let mut cell_p = id!();
+    let rt = runtime! {
+        viewport { paginated { width: 400.0, height: 800.0, margin: PAGE_MARGIN } }
+        doc {
+            @para_above paragraph {
+                text { "Above" }
+            }
+            table {
+                table_row {
+                    table_cell {
+                        @cell_p paragraph {
+                            text { "Line1" }
+                            hard_break {}
+                            text { "Line2" }
+                            hard_break {}
+                            text { "Line3" }
+                        }
+                    }
+                    table_cell {
+                        paragraph {}
+                    }
+                }
+            }
+        }
+        selection { (para_above, 0) }
+    };
+
+    let pages = rt.pages();
+    let new_selection =
+        Cursor::move_down(&ctx(&rt.state()), &pages, rt.selection().head, 0.0).unwrap();
+
+    assert_eq!(
+        new_selection.head.node_id, cell_p,
+        "Down from paragraph should enter table cell"
+    );
+    assert!(
+        new_selection.head.offset <= 5,
+        "Should be on first line (Line1), but offset is {}",
+        new_selection.head.offset
+    );
+}
+
+#[test]
+fn test_table_to_table_up_goes_to_last_line_with_hard_breaks() {
+    let mut table1_cell_p = id!();
+    let mut table2_cell_p = id!();
+    let rt = runtime! {
+        viewport { paginated { width: 400.0, height: 800.0, margin: PAGE_MARGIN } }
+        doc {
+            table {
+                table_row {
+                    table_cell {
+                        @table1_cell_p paragraph {
+                            text { "Line1" }
+                            hard_break {}
+                            text { "Line2" }
+                            hard_break {}
+                            text { "Line3" }
+                        }
+                    }
+                    table_cell {
+                        paragraph {}
+                    }
+                }
+            }
+            table {
+                table_row {
+                    table_cell {
+                        @table2_cell_p paragraph {
+                            text { "TableB" }
+                        }
+                    }
+                    table_cell {
+                        paragraph {}
+                    }
+                }
+            }
+        }
+        selection { (table2_cell_p, 0) }
+    };
+
+    let pages = rt.pages();
+    let new_selection =
+        Cursor::move_up(&ctx(&rt.state()), &pages, rt.selection().head, 0.0).unwrap();
+
+    assert_eq!(
+        new_selection.head.node_id, table1_cell_p,
+        "Up from Table2 should go to Table1 cell"
+    );
+    assert!(
+        new_selection.head.offset >= 12,
+        "Should be on last line (Line3), but offset is {}",
+        new_selection.head.offset
+    );
+}
+
+#[test]
+fn test_click_in_short_cell_empty_space_stays_in_cell() {
+    let mut left_p = id!();
+    let mut right_p = id!();
+    let rt = runtime! {
+        viewport { paginated { width: 400.0, height: 800.0, margin: PAGE_MARGIN } }
+        doc {
+            table {
+                table_row {
+                    table_cell {
+                        @left_p paragraph {
+                            text { "Line1" }
+                            hard_break {}
+                            text { "Line2" }
+                            hard_break {}
+                            text { "Line3" }
+                        }
+                    }
+                    table_cell {
+                        @right_p paragraph {
+                            text { "Short" }
+                        }
+                    }
+                }
+            }
+        }
+        selection { (left_p, 0) }
+    };
+
+    let pages = rt.pages();
+    let test_x = 280.0;
+    let test_y = 80.0;
+    let selection = Cursor::hit_test(&ctx(&rt.state()), &pages[0], test_x, test_y);
+
+    assert!(selection.is_some(), "Should find a selection");
+    let sel = selection.unwrap();
+
+    assert_eq!(
+        sel.head.node_id, right_p,
+        "Click in right cell's empty space should go to right cell paragraph, not left cell"
+    );
+}
+
+#[test]
+fn test_table_cell_up_stays_in_scope() {
+    let mut n1 = id!();
+    let mut n2 = id!();
+
+    let rt = runtime! {
+        viewport { paginated { width: 400.0, height: 600.0, margin: PAGE_MARGIN } }
+        doc {
+            paragraph {}
+            table {
+                table_row {
+                    table_cell {
+                        @n1 paragraph {
+                            text { "1" }
+                        }
+                        @n2 paragraph {
+                            text { "2" }
+                        }
+                    }
+                    table_cell {
+                        paragraph {
+                            text { "3" }
+                        }
+                    }
+                }
+            }
+            paragraph {}
+        }
+        selection { (n2, 1, Affinity::Upstream) }
+    };
+
+    let pages = rt.pages();
+    let new_selection =
+        Cursor::move_up(&ctx(&rt.state()), &pages, rt.selection().head, 0.0).unwrap();
+
+    assert_eq!(
+        new_selection.head.node_id, n1,
+        "Up from paragraph '2' should go to paragraph '1' within same cell, not exit table"
+    );
+}
+
+#[test]
+fn test_table_entry_from_above() {
+    let mut above_para = id!();
+    let mut cell_para = id!();
+    let rt = runtime! {
+        viewport { paginated { width: 400.0, height: 800.0, margin: PAGE_MARGIN } }
+        doc {
+            @above_para paragraph {
+                text { "Above the table" }
+            }
+            table {
+                table_row {
+                    table_cell {
+                        @cell_para paragraph {
+                            text { "Cell content" }
+                        }
+                    }
+                }
+            }
+        }
+        selection { (above_para, 0) }
+    };
+
+    let pages = rt.pages();
+    let (_, rect) = Cursor::bounds(&ctx(&rt.state()), &pages, rt.selection().head).unwrap();
+    let new_selection =
+        Cursor::move_down(&ctx(&rt.state()), &pages, rt.selection().head, rect.x).unwrap();
+
+    assert_eq!(
+        new_selection.head.node_id, cell_para,
+        "Down from paragraph above table should enter table's first cell"
+    );
+}
+
+#[test]
+fn test_table_entry_multi_column() {
+    let mut above_para = id!();
+    let mut cell1_para = id!();
+    let mut cell2_para = id!();
+    let rt = runtime! {
+        viewport { paginated { width: 400.0, height: 800.0, margin: PAGE_MARGIN } }
+        doc {
+            @above_para paragraph {
+                text { "Above the table" }
+            }
+            table {
+                table_row {
+                    table_cell {
+                        @cell1_para paragraph {
+                            text { "Cell 1" }
+                        }
+                    }
+                    table_cell {
+                        @cell2_para paragraph {
+                            text { "Cell 2" }
+                        }
+                    }
+                }
+            }
+        }
+        selection { (above_para, 5) }
+    };
+
+    let pages = rt.pages();
+    let (_, rect) = Cursor::bounds(&ctx(&rt.state()), &pages, rt.selection().head).unwrap();
+
+    let new_selection =
+        Cursor::move_down(&ctx(&rt.state()), &pages, rt.selection().head, rect.x).unwrap();
+
+    assert!(
+        new_selection.head.node_id == cell1_para || new_selection.head.node_id == cell2_para,
+        "Down from paragraph above table should enter a table cell, got {:?}",
+        new_selection.head.node_id
+    );
+}
+
+#[test]
+fn test_table_entry_from_below() {
+    let mut below_para = id!();
+    let mut cell_para = id!();
+    let rt = runtime! {
+        viewport { paginated { width: 400.0, height: 800.0, margin: PAGE_MARGIN } }
+        doc {
+            table {
+                table_row {
+                    table_cell {
+                        @cell_para paragraph {
+                            text { "Cell content" }
+                        }
+                    }
+                }
+            }
+            @below_para paragraph {
+                text { "Below the table" }
+            }
+        }
+        selection { (below_para, 0) }
+    };
+
+    let pages = rt.pages();
+    let (_, rect) = Cursor::bounds(&ctx(&rt.state()), &pages, rt.selection().head).unwrap();
+    let new_selection =
+        Cursor::move_up(&ctx(&rt.state()), &pages, rt.selection().head, rect.x).unwrap();
+
+    assert_eq!(
+        new_selection.head.node_id, cell_para,
+        "Up from paragraph below table should enter table's cell"
+    );
+}
+
+#[test]
+fn test_down_in_single_line_cell_goes_to_cell_below() {
+    let mut cell1_p = id!();
+    let mut cell2_p = id!();
+    let mut cell3_p = id!();
+    let rt = runtime! {
+        viewport { paginated { width: 400.0, height: 800.0, margin: PAGE_MARGIN } }
+        doc {
+            table {
+                table_row {
+                    table_cell {
+                        @cell1_p paragraph {
+                            text { "Short" }
+                        }
+                    }
+                    table_cell {
+                        @cell2_p paragraph {
+                            text { "Line 1" }
+                            hard_break {}
+                            text { "Line 2" }
+                            hard_break {}
+                            text { "Line 3" }
+                        }
+                    }
+                }
+                table_row {
+                    table_cell {
+                        @cell3_p paragraph {
+                            text { "Below" }
+                        }
+                    }
+                    table_cell {
+                        paragraph {
+                            text { "Other" }
+                        }
+                    }
+                }
+            }
+        }
+        selection { (cell1_p, 0) }
+    };
+
+    let pages = rt.pages();
+    let (_, rect) = Cursor::bounds(&ctx(&rt.state()), &pages, rt.selection().head).unwrap();
+
+    let new_selection =
+        Cursor::move_down(&ctx(&rt.state()), &pages, rt.selection().head, rect.x).unwrap();
+
+    assert_eq!(
+        new_selection.head.node_id, cell3_p,
+        "Down in single-line cell should go to cell BELOW, not adjacent cell. Got {:?}",
+        new_selection.head.node_id
+    );
+}
+
+#[test]
+fn test_table_cell_horizontal_navigation() {
+    let mut p1 = id!();
+    let mut p2 = id!();
+    let mut rt = runtime! {
+        doc {
+            table {
+                table_row {
+                    table_cell {
+                        @p1 paragraph { text { "Line 1" } }
+                        @p2 paragraph { text { "Line 2" } }
+                    }
+                }
+            }
+        }
+    };
+
+    rt.layout();
+
+    let pages = rt.pages();
+
+    let start_pos = Position::new(p2, 0, Affinity::Downstream);
+
+    let (_, rect) = Cursor::bounds(&ctx(&rt.state()), &pages, start_pos).unwrap();
+    let new_selection =
+        Cursor::move_left(&ctx(&rt.state()), &pages, start_pos, rect.y).expect("Should move left");
+
+    assert_eq!(
+        new_selection.head.node_id, p1,
+        "Should move to p1 line above, but moved to {:?}",
+        new_selection.head.node_id
+    );
+    assert_eq!(
+        new_selection.head.offset, 6,
+        "Should be at the end of 'Line 1' (offset 6)"
+    );
+}
+
+#[test]
+fn test_table_cell_3para_horizontal_navigation() {
+    let mut p1 = id!();
+    let mut p2 = id!();
+    let mut p3 = id!();
+    let mut rt = runtime! {
+        doc {
+            paragraph {}
+            table {
+                table_row {
+                    table_cell {
+                        @p1 paragraph { text { "Para 1" } }
+                        @p2 paragraph { text { "Para 2" } }
+                        @p3 paragraph { text { "Para 3" } }
+                    }
+                }
+            }
+        }
+    };
+
+    rt.layout();
+
+    let pages = rt.pages();
+
+    let start_pos = Position::new(p2, 0, Affinity::Downstream);
+    let (_, rect) = Cursor::bounds(&ctx(&rt.state()), &pages, start_pos).unwrap();
+    let new_sel =
+        Cursor::move_left(&ctx(&rt.state()), &pages, start_pos, rect.y).expect("Should move left");
+
+    assert_eq!(
+        new_sel.head.node_id, p1,
+        "Left from p2 start should go to p1, but went to {:?}",
+        new_sel.head.node_id
+    );
+    assert_eq!(new_sel.head.offset, 6, "Should be at end of 'Para 1'");
+
+    let start_pos2 = Position::new(p1, 6, Affinity::Upstream);
+    let (_, rect2) = Cursor::bounds(&ctx(&rt.state()), &pages, start_pos2).unwrap();
+    let new_sel2 = Cursor::move_right(&ctx(&rt.state()), &pages, start_pos2, rect2.y)
+        .expect("Should move right");
+
+    assert_eq!(
+        new_sel2.head.node_id, p2,
+        "Right from p1 end should go to p2, but went to {:?}",
+        new_sel2.head.node_id
+    );
+    assert_eq!(new_sel2.head.offset, 0, "Should be at start of 'Para 2'");
+}
+
+#[test]
+fn test_table_cell_up_stays_in_column() {
+    let mut cell1_p = id!();
+    let mut cell2_p = id!();
+    let mut cell3_p = id!();
+    let mut cell4_p = id!();
+
+    let mut rt = runtime! {
+        viewport { 800.0, 600.0, 1.0 }
+        doc {
+            table {
+                table_row {
+                    table_cell {
+                        @cell1_p paragraph { text { "short" } }
+                    }
+                    table_cell {
+                        @cell2_p paragraph {
+                            text { "long" }
+                            hard_break {}
+                            text { "long" }
+                            hard_break {}
+                            text { "long" }
+                        }
+                    }
+                }
+                table_row {
+                    table_cell {
+                        @cell3_p paragraph { text { "target" } }
+                    }
+                    table_cell {
+                        @cell4_p paragraph { text { "dummy" } }
+                    }
+                }
+            }
+        }
+        selection { (cell3_p, 0) }
+    };
+
+    rt.layout();
+    let pages = rt.pages();
+
+    let new_sel = Cursor::move_up(&ctx(&rt.state()), &pages, rt.selection().head, 0.0).unwrap();
+
+    assert_eq!(
+        new_sel.head.node_id, cell1_p,
+        "Up from cell3 should go to cell1 (short), but went to {:?} (likely cell2 adj)",
+        new_sel.head.node_id
+    );
+}
+
+#[test]
+fn test_page_boundary_navigation() {
+    let mut p1 = id!();
+    let mut filler = id!();
+    let mut p2 = id!();
+    let rt = runtime! {
+        viewport { paginated { width: 500.0, height: 200.0, margin: PAGE_MARGIN } }
+        doc {
+             @p1 paragraph { text { "Page 1 Content" } }
+             @filler paragraph {
+                 text { "Filler" } hard_break {}
+                 text { "Filler" } hard_break {}
+                 text { "Filler" } hard_break {}
+                 text { "Filler" } hard_break {}
+                 text { "Filler" } hard_break {}
+                 text { "Filler" } hard_break {}
+                 text { "Filler" } hard_break {}
+                 text { "Filler" } hard_break {}
+                 text { "Filler" } hard_break {}
+                 text { "Filler" } hard_break {}
+                 text { "Filler" } hard_break {}
+                 text { "Filler" } hard_break {}
+                 text { "Filler" } hard_break {}
+                 text { "Filler" } hard_break {}
+                 text { "Filler" }
+             }
+             @p2 paragraph { text { "Page 2 Content" } }
+        }
+    };
+
+    let pages = rt.pages();
+    assert!(
+        pages.len() >= 2,
+        "Should have at least 2 pages. Got {}",
+        pages.len()
+    );
+
+    let start_pos_1 = Position::new(p1, 0, Affinity::Downstream);
+    let new_sel_down =
+        Cursor::move_down(&ctx(&rt.state()), &pages, start_pos_1, 0.0).expect("Should move down");
+    assert_eq!(
+        new_sel_down.head.node_id, filler,
+        "Down from p1 should go to filler"
+    );
+
+    let start_pos_2 = Position::new(p2, 0, Affinity::Downstream);
+    let new_sel_up = Cursor::move_up(&ctx(&rt.state()), &pages, start_pos_2, 0.0)
+        .expect("Should move up from p2");
+    assert_eq!(
+        new_sel_up.head.node_id, filler,
+        "Up from p2 should go to filler"
+    );
+}
+
+#[test]
+fn test_table_entry_from_right() {
+    let mut p1 = id!();
+    let mut t1 = id!();
+    let mut cell_p = id!();
+    let rt = runtime! {
+        viewport { paginated { width: 800.0, height: 600.0, margin: PAGE_MARGIN } }
+        doc {
+            @p1 paragraph { text { "Above" } }
+            @t1 table {
+                table_row {
+                    table_cell {
+                         @cell_p paragraph { text { "Cell Content" } }
+                    }
+                }
+            }
+        }
+    };
+
+    let pages = rt.pages();
+    let preferred_x = 2000.0;
+    let new_sel = Cursor::move_down(
+        &ctx(&rt.state()),
+        &pages,
+        Position::new(p1, 0, Affinity::Downstream),
+        preferred_x,
+    )
+    .expect("Should move down");
+
+    assert_eq!(
+        new_sel.head.node_id, cell_p,
+        "Should enter table cell even from far right"
+    );
+}
+
+#[test]
+fn test_hard_break_left_navigation() {
+    let mut p1 = id!();
+    let rt = runtime! {
+        viewport { paginated { width: 400.0, height: 400.0, margin: PAGE_MARGIN } }
+        doc {
+             @p1 paragraph {
+                 text { "Line 1" }
+                 hard_break {}
+                 text { "Line 2" }
+             }
+        }
+        selection { (p1, 7) }
+    };
+
+    let pages = rt.pages();
+    let (_, rect) = Cursor::bounds(&ctx(&rt.state()), &pages, rt.selection().head).unwrap();
+    let new_sel = Cursor::move_left(&ctx(&rt.state()), &pages, rt.selection().head, rect.y)
+        .expect("Should move left");
+
+    assert_eq!(new_sel.head.node_id, p1, "Should stay in paragraph");
+    assert_eq!(new_sel.head.offset, 6, "Should move to end of Line 1");
+}
+
+#[test]
+fn test_table_hard_break_left_navigation() {
+    let mut p1 = id!();
+    let rt = runtime! {
+        viewport { paginated { width: 400.0, height: 400.0, margin: PAGE_MARGIN } }
+        doc {
+            paragraph {}
+            table {
+                table_row {
+                    table_cell {
+                        @p1 paragraph {
+                            text { "Line 1" } hard_break {} text { "Line 2" }
+                        }
+                    }
+                    table_cell {
+                         paragraph { text { "Col 2" } }
+                    }
+                }
+            }
+        }
+        selection { (p1, 7) }
+    };
+    let pages = rt.pages();
+    let (_, rect) = Cursor::bounds(&ctx(&rt.state()), &pages, rt.selection().head).unwrap();
+    let new_sel = Cursor::move_left(&ctx(&rt.state()), &pages, rt.selection().head, rect.y)
+        .expect("Should move left");
+
+    assert_eq!(new_sel.head.node_id, p1, "Should stay in paragraph");
+    assert_eq!(new_sel.head.offset, 6, "Should move to end of Line 1");
+}
+
+#[test]
+fn test_table_at_start_navigation() {
+    let mut p1 = id!();
+    let mut p2 = id!();
+    let rt = runtime! {
+        doc {
+            table {
+                table_row {
+                    table_cell { @p1 paragraph { text { "Col 1" } } }
+                    table_cell { @p2 paragraph { text { "Col 2" } } }
+                }
+            }
+        }
+    };
+
+    let pages = rt.pages();
+    let start_pos = Position::new(p1, 0, Affinity::Downstream);
+
+    let new_sel_up = Cursor::move_up(&ctx(&rt.state()), &pages, start_pos, 0.0);
+    if let Some(sel) = new_sel_up {
+        assert_eq!(
+            sel.head.node_id, p1,
+            "Up from start should stay in p1 (or noop)"
+        );
+    }
+
+    let new_sel_left = Cursor::move_left(&ctx(&rt.state()), &pages, start_pos, 0.0);
+    assert!(
+        new_sel_left.is_none() || new_sel_left.unwrap().head.node_id == p1,
+        "Left from start should stay in p1 (or None)"
+    );
+}
+
+#[test]
+fn test_page_boundary_navigation_repr() {
+    let mut p1 = id!();
+    let mut p2 = id!();
+    let mut rt = runtime! {
+        viewport { paginated { width: 400.0, height: 100.0, margin: PAGE_MARGIN } }
+        doc {
+            @p1 paragraph { text { "Page 1 Content" } }
+            @p2 paragraph { text { "Page 2 Content" } }
+        }
+        selection { (p1, 0) }
+    };
+
+    rt.layout();
+    let pages = rt.pages();
+    assert_eq!(pages.len(), 2, "Should have 2 pages");
+
+    let start_pos = Position::new(p1, 0, Affinity::Downstream);
+    let (_, rect1) = Cursor::bounds(&ctx(&rt.state()), &pages, start_pos).unwrap();
+
+    let sel_down = Cursor::move_down(&ctx(&rt.state()), &pages, start_pos, rect1.x)
+        .expect("Should move down to next page");
+
+    assert_eq!(
+        sel_down.head.node_id, p2,
+        "Down from Page 1 should go to Page 2"
+    );
+
+    let p1_end = Position::new(p1, 14, Affinity::Upstream);
+    let (_, rect_end) = Cursor::bounds(&ctx(&rt.state()), &pages, p1_end).unwrap();
+
+    let sel_right = Cursor::move_right(&ctx(&rt.state()), &pages, p1_end, rect_end.y)
+        .expect("Should move right to next page");
+
+    assert_eq!(
+        sel_right.head.node_id, p2,
+        "Right from Page 1 end should go to Page 2"
+    );
+    assert_eq!(sel_right.head.offset, 0, "Should be at start of Page 2");
+}
+
+#[test]
+fn test_table_down_from_tall_cell_goes_to_next_row() {
+    let mut n1 = id!();
+    let mut target = id!();
+    let rt = runtime! {
+        viewport { paginated { width: 400.0, height: 600.0, margin: PAGE_MARGIN } }
+        doc {
+            paragraph {}
+            table {
+                table_row {
+                    table_cell {
+                        paragraph {}
+                    }
+                    table_cell {
+                        bullet_list {
+                            list_item {
+                                paragraph {
+                                    text { "ㅁㄴㅇ" }
+                                }
+                            }
+                            list_item {
+                                paragraph {
+                                    text { "ㅁㄴㅇ" }
+                                }
+                            }
+                            list_item {
+                                @n1 paragraph {
+                                    text { "ㅁㄴㅇ" }
+                                }
+                            }
+                        }
+                    }
+                    table_cell {
+                        paragraph {
+                            text { "ㅁㄴㅇ" }
+                        }
+                        paragraph {
+                            text { "ㅁㄴㅇ" }
+                        }
+                    }
+                }
+                table_row {
+                    table_cell {
+                        paragraph {}
+                    }
+                    table_cell {
+                        @target paragraph {}
+                    }
+                    table_cell {
+                        paragraph {}
+                    }
+                }
+            }
+            paragraph {}
+        }
+        selection { (n1, 1) }
+    };
+
+    let pages = rt.pages();
+    let start_pos = Position::new(n1, 1, Affinity::Downstream);
+    let (_, rect) = Cursor::bounds(&ctx(&rt.state()), &pages, start_pos).unwrap();
+
+    let sel_down = Cursor::move_down(&ctx(&rt.state()), &pages, start_pos, rect.x).unwrap();
+
+    assert_eq!(sel_down.head.node_id, target);
+}

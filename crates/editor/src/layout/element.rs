@@ -41,8 +41,10 @@ pub struct LayoutNode {
     pub children: Option<Vec<PositionedNode>>,
     pub page_break_policy: PageBreakPolicy,
     pub render_hints: RenderHints,
+    pub scope_id: Option<crate::model::NodeId>, // TableCell처럼 새 scope를 만드는 경우 그 NodeId
 }
 
+#[derive(Clone)]
 pub struct PositionedNode {
     pub position: Point,
     pub node: Rc<LayoutNode>,
@@ -62,6 +64,7 @@ pub enum Element {
     FoldTitle(FoldTitleElement),
     FoldTitleBackground(FoldTitleBackgroundElement),
     FoldContent(FoldContentElement),
+    TableBorder(TableBorderElement),
 }
 
 impl Element {
@@ -79,6 +82,7 @@ impl Element {
             Element::FoldTitle(e) => e.size,
             Element::FoldTitleBackground(e) => e.size,
             Element::FoldContent(e) => e.size,
+            Element::TableBorder(e) => e.size,
         }
     }
 
@@ -96,6 +100,7 @@ impl Element {
             Element::FoldTitle(_) => None,
             Element::FoldTitleBackground(_) => None,
             Element::FoldContent(_) => None,
+            Element::TableBorder(_) => None,
         }
     }
 
@@ -113,6 +118,7 @@ impl Element {
             Element::FoldTitle(e) => Some(e),
             Element::FoldTitleBackground(e) => Some(e),
             Element::FoldContent(e) => Some(e),
+            Element::TableBorder(e) => Some(e),
         }
     }
 
@@ -130,6 +136,7 @@ impl Element {
             Element::FoldTitle(_) => PointerStyle::Pointer,
             Element::FoldTitleBackground(_) => PointerStyle::Pointer,
             Element::FoldContent(_) => PointerStyle::Default,
+            Element::TableBorder(_) => PointerStyle::Text,
         }
     }
 
@@ -147,6 +154,7 @@ impl Element {
             Element::FoldTitle(e) => Some(e.block_id),
             Element::FoldTitleBackground(_) => None,
             Element::FoldContent(_) => None,
+            Element::TableBorder(e) => Some(e.node_id),
         }
     }
 

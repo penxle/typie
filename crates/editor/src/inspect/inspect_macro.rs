@@ -162,6 +162,37 @@ fn format_node(node: NodeRef, indent_level: usize, labeler: &Labeler, output: &m
                 output,
             );
         }
+        Node::Table(table) => {
+            let attrs = format_attributes(&[(
+                "border_style",
+                format!("TableBorderStyle::{:?}", table.border_style),
+            )]);
+            format_container_node(
+                &format!("{prefix}table{attrs}"),
+                node,
+                indent_level,
+                labeler,
+                output,
+            );
+        }
+        Node::TableRow(_) => {
+            format_container_node(
+                &format!("{prefix}table_row"),
+                node,
+                indent_level,
+                labeler,
+                output,
+            );
+        }
+        Node::TableCell(_) => {
+            format_container_node(
+                &format!("{prefix}table_cell"),
+                node,
+                indent_level,
+                labeler,
+                output,
+            );
+        }
         Node::Root(_) => {}
     }
 }
@@ -592,6 +623,40 @@ fn format_fragment_node(
                 format_attributes(&[("variant", format!("CalloutVariant::{:?}", callout.variant))]);
             format_fragment_container_node(
                 &format!("callout{attrs}"),
+                id,
+                fragment,
+                indent_level,
+                labeler,
+                output,
+            );
+        }
+        Node::Table(table) => {
+            let attrs = format_attributes(&[(
+                "border_style",
+                format!("TableBorderStyle::{:?}", table.border_style),
+            )]);
+            format_fragment_container_node(
+                &format!("table{attrs}"),
+                id,
+                fragment,
+                indent_level,
+                labeler,
+                output,
+            );
+        }
+        Node::TableRow(_) => {
+            format_fragment_container_node(
+                "table_row",
+                id,
+                fragment,
+                indent_level,
+                labeler,
+                output,
+            );
+        }
+        Node::TableCell(_) => {
+            format_fragment_container_node(
+                "table_cell",
                 id,
                 fragment,
                 indent_level,

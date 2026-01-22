@@ -12,6 +12,7 @@ mod ordered_list;
 mod page_break;
 mod paragraph;
 mod root;
+mod table;
 mod text;
 
 pub use blockquote::*;
@@ -28,4 +29,5 @@ pub use ordered_list::*;
 pub use page_break::*;
 pub use paragraph::*;
 pub use root::*;
+pub use table::*;
 pub use text::*;
