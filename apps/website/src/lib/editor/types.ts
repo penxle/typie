@@ -30,3 +30,18 @@ export type SpellcheckErrorData = {
   corrections: string[];
   explanation: string;
 };
+
+export type ImageAsset = {
+  id: string;
+  url: string;
+  width: number;
+  height: number;
+  placeholder: string;
+};
+
+export type FileAsset = {
+  id: string;
+  url: string;
+  name: string;
+  size: number;
+};

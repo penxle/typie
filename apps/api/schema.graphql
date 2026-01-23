@@ -135,6 +135,7 @@ input DeleteWidgetInput {
 }
 
 type Document implements IDocument {
+  assets: [DocumentAsset!]!
   characterCountChange: CharacterCountChange!
   createdAt: DateTime!
   entity: Entity!
@@ -151,6 +152,8 @@ type Document implements IDocument {
   versions(before: DateTime, first: Int! = 20): [DocumentVersion!]!
   view: DocumentView!
 }
+
+union DocumentAsset = File | Image
 
 type DocumentSpellingError {
   context: String!
@@ -460,11 +463,13 @@ interface ISite {
 }
 
 type Image implements Blob {
+  height: Int!
   id: ID!
   placeholder: String!
   ratio: Float!
   size: Int!
   url: String!
+  width: Int!
 }
 
 type Impersonation {

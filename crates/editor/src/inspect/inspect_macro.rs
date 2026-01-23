@@ -76,36 +76,22 @@ fn format_node(node: NodeRef, indent_level: usize, labeler: &Labeler, output: &m
             output.push_str(&format!("{indent}{prefix}{text_repr}\n"));
         }
         Node::Image(image) => {
-            let src_value = match &image.src {
+            let id_value = match &image.id {
                 Some(s) => format!("Some(\"{}\".to_string())", escape_str(s)),
                 None => "None".to_string(),
             };
             let attrs = format_attributes(&[
-                ("src", src_value),
-                ("width", format_option_number(image.width)),
-                ("height", format_option_number(image.height)),
+                ("id", id_value),
                 ("proportion", format_number(image.proportion)),
             ]);
             output.push_str(&format!("{indent}{prefix}image{attrs}\n"));
         }
         Node::File(file) => {
-            let name_value = match &file.name {
+            let id_value = match &file.id {
                 Some(s) => format!("Some(\"{}\".to_string())", escape_str(s)),
                 None => "None".to_string(),
             };
-            let src_value = match &file.src {
-                Some(s) => format!("Some(\"{}\".to_string())", escape_str(s)),
-                None => "None".to_string(),
-            };
-            let size_value = match file.size {
-                Some(s) => format!("Some({})", s),
-                None => "None".to_string(),
-            };
-            let attrs = format_attributes(&[
-                ("name", name_value),
-                ("src", src_value),
-                ("size", size_value),
-            ]);
+            let attrs = format_attributes(&[("id", id_value)]);
             output.push_str(&format!("{indent}{prefix}file{attrs}\n"));
         }
         Node::HardBreak(_) => {
@@ -366,13 +352,6 @@ fn format_number<T: Into<f64>>(num: T) -> String {
     }
 }
 
-fn format_option_number(num: Option<f32>) -> String {
-    match num {
-        Some(v) => format!("Some({})", format_number(v)),
-        None => "None".to_string(),
-    }
-}
-
 struct Labeler {
     labels: HashMap<NodeId, String>,
     order: Vec<NodeId>,
@@ -564,36 +543,22 @@ fn format_fragment_node(
             output.push_str(&format!("{indent}{text_repr}\n"));
         }
         Node::Image(image) => {
-            let src_value = match &image.src {
+            let id_value = match &image.id {
                 Some(s) => format!("Some(\"{}\".to_string())", escape_str(s)),
                 None => "None".to_string(),
             };
             let attrs = format_attributes(&[
-                ("src", src_value),
-                ("width", format_option_number(image.width)),
-                ("height", format_option_number(image.height)),
+                ("id", id_value),
                 ("proportion", format_number(image.proportion)),
             ]);
             output.push_str(&format!("{indent}image{attrs}\n"));
         }
         Node::File(file) => {
-            let name_value = match &file.name {
+            let id_value = match &file.id {
                 Some(s) => format!("Some(\"{}\".to_string())", escape_str(s)),
                 None => "None".to_string(),
             };
-            let src_value = match &file.src {
-                Some(s) => format!("Some(\"{}\".to_string())", escape_str(s)),
-                None => "None".to_string(),
-            };
-            let size_value = match file.size {
-                Some(s) => format!("Some({})", s),
-                None => "None".to_string(),
-            };
-            let attrs = format_attributes(&[
-                ("name", name_value),
-                ("src", src_value),
-                ("size", size_value),
-            ]);
+            let attrs = format_attributes(&[("id", id_value)]);
             output.push_str(&format!("{indent}file{attrs}\n"));
         }
         Node::HardBreak(_) => {

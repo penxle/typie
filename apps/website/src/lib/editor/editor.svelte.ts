@@ -11,6 +11,8 @@ import type { ThemeColors } from './theme';
 import type {
   Cmd,
   ExternalElement,
+  FileAsset,
+  ImageAsset,
   LayoutMode,
   Mark,
   MarkType,
@@ -110,6 +112,11 @@ export class Editor {
   });
 
   externalElements = $state<ExternalElement[]>([]);
+
+  imageAssets = $state(new SvelteMap<string, ImageAsset>());
+  fileAssets = $state(new SvelteMap<string, FileAsset>());
+  inflightImages = $state(new SvelteMap<string, { url: string; width: number; height: number }>());
+  inflightFiles = $state(new SvelteMap<string, { url: string; name: string; size: number }>());
 
   enabledActions = $state(new SvelteSet<string>());
 
@@ -894,9 +901,13 @@ export class Editor {
       }
 
       const imgElement = document.querySelector(`div[data-node-id="${el.nodeId}"] img`);
-      if (imgElement instanceof HTMLImageElement) {
-        const originalWidth = el.data.originalWidth ?? 0;
-        const originalHeight = el.data.originalHeight ?? 0;
+      if (imgElement instanceof HTMLImageElement && el.data.type === 'image') {
+        const imageId = el.data.id;
+        const uploadId = el.data.uploadId;
+        const asset = imageId ? this.imageAssets.get(imageId) : undefined;
+        const inflight = uploadId ? this.inflightImages.get(uploadId) : undefined;
+        const originalWidth = asset?.width ?? inflight?.width ?? 0;
+        const originalHeight = asset?.height ?? inflight?.height ?? 0;
         const { displayWidth, xOffset } = calculateImageDisplaySize(el.bounds, originalWidth, originalHeight);
 
         const globalX = el.bounds.x + xOffset;

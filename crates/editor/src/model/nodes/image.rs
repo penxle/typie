@@ -10,9 +10,7 @@ use tsify::Tsify;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Codec, Tsify)]
 pub struct ImageNode {
-    pub src: Option<String>,
-    pub width: Option<f32>,
-    pub height: Option<f32>,
+    pub id: Option<String>,
     #[serde(default = "default_proportion")]
     pub proportion: f32,
     #[serde(skip_serializing, default)]
@@ -25,40 +23,28 @@ fn default_proportion() -> f32 {
 
 impl NodeHtmlCodec for ImageNode {
     fn to_dom(&self) -> Option<DomSpec> {
-        if self.src.is_none() {
+        if self.id.is_none() {
             return None;
         }
 
-        let mut spec = DomSpec::el("img").attr("src", self.src.clone().unwrap());
-
-        if let Some(width) = self.width {
-            spec = spec.attr("width", width.to_string());
-        }
-
-        if let Some(height) = self.height {
-            spec = spec.attr("height", height.to_string());
-        }
-
         Some(
-            spec.attr("data-proportion", self.proportion.to_string())
+            DomSpec::el("img")
+                .attr("data-image-id", self.id.clone().unwrap())
+                .attr("data-proportion", self.proportion.to_string())
                 .void(),
         )
     }
 
     fn parse_rules() -> Vec<NodeParseRule> {
-        vec![NodeParseRule::simple("img", |elem| {
-            let src = elem.value().attr("src").map(|s| s.to_string());
-            let width = elem.value().attr("width").and_then(|s| s.parse().ok());
-            let height = elem.value().attr("height").and_then(|s| s.parse().ok());
+        vec![NodeParseRule::simple("img[data-image-id]", |elem| {
+            let id = elem.value().attr("data-image-id").map(|s| s.to_string());
             let proportion = elem
                 .value()
                 .attr("data-proportion")
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(1.0);
             Some(Node::Image(ImageNode {
-                src,
-                width,
-                height,
+                id,
                 proportion,
                 upload_id: None,
             }))
@@ -69,9 +55,7 @@ impl NodeHtmlCodec for ImageNode {
 impl Default for ImageNode {
     fn default() -> Self {
         Self {
-            src: None,
-            width: None,
-            height: None,
+            id: None,
             proportion: 1.0,
             upload_id: None,
         }
@@ -80,43 +64,23 @@ impl Default for ImageNode {
 
 impl Hash for ImageNode {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.src.hash(state);
-        self.width.map(|w| w.to_bits()).hash(state);
-        self.height.map(|h| h.to_bits()).hash(state);
+        self.id.hash(state);
         self.proportion.to_bits().hash(state);
     }
 }
 
 impl Layout for ImageNode {
     fn layout(&self, ctx: &LayoutContext, constraints: BoxConstraints) -> LayoutNode {
-        const PLACEHOLDER_HEIGHT: f32 = 48.0;
-
         let max_width = constraints.max_width;
-        let max_height = constraints.max_height;
 
-        let dimensions = ctx
+        let display_height = ctx
             .view_states
             .get(&ctx.node.node_id())
-            .and_then(|s| s.image_dimensions())
-            .or_else(|| self.width.zip(self.height));
-
-        let display_height = if let Some((w, h)) = dimensions {
-            let proportioned_width = w * self.proportion;
-            let proportioned_height = h * self.proportion;
-
-            let scale = (max_width / proportioned_width)
-                .min(max_height / proportioned_height)
-                .min(1.0);
-
-            proportioned_height * scale
-        } else {
-            PLACEHOLDER_HEIGHT
-        };
+            .and_then(|s| s.external_height())
+            .unwrap_or(0.0);
 
         let data = ExternalElementData::Image {
-            src: self.src.clone(),
-            original_width: dimensions.map(|(w, _)| w).or(self.width),
-            original_height: dimensions.map(|(_, h)| h).or(self.height),
+            id: self.id.clone(),
             proportion: self.proportion,
             upload_id: self.upload_id.clone(),
         };
@@ -146,7 +110,7 @@ impl Layout for ImageNode {
 #[cfg(test)]
 mod tests {
     #[test]
-    fn test_image_layout_height_limit_in_paginated_mode() {
+    fn test_image_layout_with_placeholder_height() {
         let mut p = id!();
         let runtime = runtime! {
             viewport {
@@ -154,9 +118,7 @@ mod tests {
             }
             doc {
                @p image (
-                   src: Some("test.png".to_string()),
-                   width: Some(1000.0),
-                   height: Some(1000.0),
+                   id: Some("test-image-id".to_string()),
                )
             }
             selection { (p, 0) }
@@ -167,12 +129,14 @@ mod tests {
 
         for page in pages {
             for (_, element) in page.external_elements() {
-                match element.data {
-                    crate::layout::elements::ExternalElementData::Image { .. } => {
-                        assert_eq!(element.size.height, 400.0);
+                match &element.data {
+                    crate::layout::elements::ExternalElementData::Image { id, .. } => {
+                        assert_eq!(id.as_deref(), Some("test-image-id"));
+                        assert_eq!(element.size.height, 0.0);
                         assert_eq!(element.size.width, 700.0); // 800 - 2 * 50
                         found = true;
                     }
+                    _ => {}
                 }
             }
         }

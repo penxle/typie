@@ -633,7 +633,7 @@ mod tests {
             viewport { 800, 600, 1.0 }
             doc {
                 @p1 paragraph { text { "before" } }
-                @img image(src: Some("test.png".to_string()), width: Some(100.0), height: Some(100.0),) {}
+                @img image(id: Some("test-image-id".to_string()),) {}
                 @p2 paragraph { text { "after" } }
             }
             selection { (NodeId::ROOT, 1) -> (NodeId::ROOT, 2) }

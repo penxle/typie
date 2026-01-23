@@ -89,26 +89,23 @@ fn format_node_info(node: &NodeRef) -> String {
             info
         }
         Node::Image(image_node) => {
-            let src_display = image_node
-                .src
+            let id_display = image_node
+                .id
                 .as_deref()
                 .map(|s| truncate_str(s, 30))
                 .unwrap_or_else(|| "(placeholder)".to_string());
             format!(
-                "Image {} src=\"{}\" width={:?} height={:?} proportion={}",
-                id, src_display, image_node.width, image_node.height, image_node.proportion
+                "Image {} imageId=\"{}\" proportion={}",
+                id, id_display, image_node.proportion
             )
         }
         Node::File(file_node) => {
-            let name_display = file_node
-                .name
+            let id_display = file_node
+                .id
                 .as_deref()
                 .map(|s| truncate_str(s, 30))
                 .unwrap_or_else(|| "(placeholder)".to_string());
-            format!(
-                "File {} name=\"{}\" size={:?}",
-                id, name_display, file_node.size
-            )
+            format!("File {} fileId=\"{}\"", id, id_display)
         }
         Node::HardBreak(_) => {
             format!("HardBreak {}", id)

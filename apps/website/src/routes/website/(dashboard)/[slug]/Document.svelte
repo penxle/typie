@@ -97,6 +97,25 @@
               createdAt
               updatedAt
 
+              assets {
+                __typename
+
+                ... on Image {
+                  id
+                  url
+                  width
+                  height
+                  placeholder
+                }
+
+                ... on File {
+                  id
+                  url
+                  name
+                  size
+                }
+              }
+
               ...DocumentPanel_document
             }
           }
@@ -145,8 +164,32 @@
   const snapshot = $derived(
     entity?.node.__typename === 'Document' && entity.node.snapshot ? Uint8Array.fromBase64(entity.node.snapshot) : undefined,
   );
+  const assets = $derived(entity?.node.__typename === 'Document' ? entity.node.assets : undefined);
   const editor = new Editor();
   setEditor(editor);
+
+  $effect(() => {
+    if (assets) {
+      for (const asset of assets) {
+        if (asset.__typename === 'Image') {
+          editor.imageAssets.set(asset.id, {
+            id: asset.id,
+            url: asset.url,
+            width: asset.width,
+            height: asset.height,
+            placeholder: asset.placeholder,
+          });
+        } else if (asset.__typename === 'File') {
+          editor.fileAssets.set(asset.id, {
+            id: asset.id,
+            url: asset.url,
+            name: asset.name,
+            size: asset.size,
+          });
+        }
+      }
+    }
+  });
 
   const clientId = nanoid();
   let syncUpdateTimeout: ReturnType<typeof setTimeout> | null = null;

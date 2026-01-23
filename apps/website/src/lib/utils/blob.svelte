@@ -29,7 +29,9 @@
         id
         url
         size
-        ...Img_image
+        width
+        height
+        placeholder
       }
     }
   `);

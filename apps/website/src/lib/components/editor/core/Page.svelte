@@ -3,8 +3,8 @@
   import { CROP_MARKER_SIZE } from '$lib/editor/constants';
   import { getEditor } from '$lib/editor/context';
   import { WebGLRenderer } from '$lib/editor/webgl';
-  import ExternalFile from './ExternalFile.svelte';
-  import ExternalImage from './ExternalImage.svelte';
+  import ExternalFile from '../external/ExternalFile.svelte';
+  import ExternalImage from '../external/ExternalImage.svelte';
 
   type Props = {
     page: number;
@@ -22,7 +22,7 @@
   const marginLeft = $derived(editor.layout.layoutMode.type === 'paginated' ? editor.layout.layoutMode.pageMarginLeft : 0);
   const marginRight = $derived(editor.layout.layoutMode.type === 'paginated' ? editor.layout.layoutMode.pageMarginRight : 0);
   const layoutMode = $derived(editor.layout.layoutMode);
-  const mediaOnPage = $derived(editor.externalElements.filter((el) => el.pageIdx === page));
+  const externalElements = $derived(editor.externalElements.filter((el) => el.pageIdx === page));
   const isPaginated = $derived(layoutMode.type === 'paginated');
 
   let renderer = $state<WebGLRenderer | null>(null);
@@ -93,7 +93,7 @@
         }}
       ></canvas>
 
-      {#each mediaOnPage as el (el.nodeId)}
+      {#each externalElements as el (el.nodeId)}
         {#if el.data.type === 'image'}
           <ExternalImage {el} />
         {:else if el.data.type === 'file'}

@@ -85,7 +85,7 @@ export const DocumentSyncCollectJob = defineJob('document:sync:collect', async (
         prevVersionEncoded.length === newVersionEncoded.length && prevVersionEncoded.every((v, i) => v === newVersionEncoded[i]);
 
       if (!versionsEqual) {
-        const { characterCount: currentCharacterCount } = extractLoroDocContents(doc);
+        const { characterCount: currentCharacterCount } = await extractLoroDocContents(doc);
         const delta = currentCharacterCount - prevCharacterCount;
 
         versions.push({
@@ -104,7 +104,7 @@ export const DocumentSyncCollectJob = defineJob('document:sync:collect', async (
 
     if (versions.length > 0) {
       const updatedAt = dayjs();
-      const { json, text, characterCount, blobSize } = extractLoroDocContents(doc);
+      const { json, text, characterCount, blobSize } = await extractLoroDocContents(doc);
 
       await db.transaction(async (tx) => {
         for (const version of versions) {
