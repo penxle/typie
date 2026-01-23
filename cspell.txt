@@ -24,6 +24,7 @@ crdt
 creds
 cxzv
 dearmor
+disablepictureinpicture
 dmarc
 dotenv
 dotum

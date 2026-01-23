@@ -51,6 +51,7 @@
         await tick();
         // eslint-disable-next-line svelte/no-dom-manipulating
         targetEl?.append(videoEl);
+        videoEl.play();
       });
 
       videoEl.className = css({ size: 'full', objectFit: 'cover' }, style);
@@ -58,6 +59,7 @@
       videoEl.loop = true;
       videoEl.muted = true;
       videoEl.playsInline = true;
+      videoEl.disablePictureInPicture = true;
       videoEl.src = url;
     } else {
       const imgEl = document.createElement('img');
@@ -128,10 +130,12 @@
       <video
         class={css(style, { size: 'full', objectFit: 'cover' })}
         autoplay
+        disablepictureinpicture
         loop
         muted
-        onloadeddata={() => {
+        onloadeddata={(e) => {
           loaded = true;
+          e.currentTarget.play();
         }}
         playsinline
         src={url}
