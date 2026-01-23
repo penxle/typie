@@ -6,12 +6,11 @@
   import IconCopy from '~icons/lucide/copy';
   import { Icon } from '../../../components';
   import { NodeView, NodeViewContentEditable } from '../../lib';
-  import Menu from './Menu.svelte';
   import type { NodeViewProps } from '../../lib';
 
   type Props = NodeViewProps;
 
-  let { node, editor, updateAttributes, HTMLAttributes }: Props = $props();
+  let { node, HTMLAttributes }: Props = $props();
 
   let attrs = $state(node.attrs);
   $effect(() => {
@@ -66,13 +65,9 @@
     </div>
 
     <div class={center({ position: 'absolute', inset: '0', pointerEvents: 'none' })}>
-      {#if editor?.current.isEditable}
-        <Menu {node} {updateAttributes} />
-      {:else}
-        <div class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.muted', userSelect: 'none' })}>
-          {languages[attrs.language]}
-        </div>
-      {/if}
+      <div class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.muted', userSelect: 'none' })}>
+        {languages[attrs.language]}
+      </div>
     </div>
 
     <button
