@@ -8,6 +8,7 @@ mod pointer;
 pub mod search;
 pub mod spellcheck;
 mod state;
+mod table;
 mod view_state;
 
 pub use cmd::*;
@@ -61,6 +62,7 @@ struct PendingUpdates {
     link_overlays: bool,
     spellcheck_overlays: bool,
     search_overlays: bool,
+    table_overlays: bool,
 }
 
 #[derive(Clone)]
@@ -107,6 +109,7 @@ pub struct Runtime {
     active_spellcheck_error_id: Option<String>,
     search_state: search::SearchState,
     is_focused: bool,
+    last_table_overlays: Vec<TableOverlay>,
 }
 
 #[allow(dead_code)]
@@ -154,6 +157,7 @@ impl Runtime {
                 link_overlays: false,
                 spellcheck_overlays: false,
                 search_overlays: false,
+                table_overlays: true,
             },
             message_queue: Vec::new(),
             pointer: PointerState::default(),
@@ -166,6 +170,7 @@ impl Runtime {
             active_spellcheck_error_id: None,
             search_state: search::SearchState::default(),
             is_focused: true,
+            last_table_overlays: Vec::new(),
         }
     }
 
@@ -795,6 +800,8 @@ impl Runtime {
             if self.has_spellcheck_errors() {
                 self.pending.spellcheck_overlays = true;
             }
+
+            self.pending.table_overlays = true;
         }
 
         if self.pending.cursor {
@@ -918,6 +925,15 @@ impl Runtime {
                 current_index: self.search_state.current_index,
             });
             self.pending.search_overlays = false;
+        }
+
+        if self.pending.table_overlays {
+            let overlays = self.build_table_overlays();
+            if overlays != self.last_table_overlays {
+                self.last_table_overlays = overlays.clone();
+                cmds.push(Cmd::TableOverlaysChanged { overlays });
+            }
+            self.pending.table_overlays = false;
         }
 
         cmds
@@ -1109,7 +1125,7 @@ impl Runtime {
                     self.pending.external_elements = true;
                     self.pending.enabled_actions = true;
                     self.pending.placeholder = true;
-
+                    self.pending.table_overlays = true;
                     if !self.search_state.query.is_empty() {
                         let new_matches =
                             search::perform_search(&self.doc(), &self.search_state.query);
@@ -1133,6 +1149,28 @@ impl Runtime {
                     self.pending.selection = true;
                     self.pending.active_marks = true;
                     self.pending.external_elements = true;
+                }
+                Effect::SubtreeChanged { node_id } => {
+                    if let Some(node) = self.doc().node(node_id) {
+                        let descendants: Vec<_> = node.descendants().map(|n| n.node_id()).collect();
+                        self.layout_cache
+                            .borrow_mut()
+                            .invalidate_with_descendants(node_id, descendants.into_iter());
+                        let ancestors: Vec<_> = node.ancestors().map(|n| n.node_id()).collect();
+                        for ancestor_id in ancestors {
+                            self.layout_cache.borrow_mut().invalidate(ancestor_id);
+                        }
+                    } else {
+                        self.layout_cache.borrow_mut().invalidate(node_id);
+                    }
+                    self.selection_cache = None;
+                    self.pending.layout = true;
+                    self.pending.render = true;
+                    self.pending.cursor = true;
+                    self.pending.selection = true;
+                    self.pending.active_marks = true;
+                    self.pending.external_elements = true;
+                    self.pending.table_overlays = true;
                 }
                 Effect::SelectionChanged => {
                     self.selection_cache = None;
@@ -1160,6 +1198,7 @@ impl Runtime {
                     self.pending.external_elements = true;
                     self.pending.placeholder = true;
                     self.pending.search_overlays = true;
+                    self.pending.table_overlays = true;
                 }
                 Effect::PointerStyleChanged { style } => {
                     self.pending.pointer_style = Some(style);

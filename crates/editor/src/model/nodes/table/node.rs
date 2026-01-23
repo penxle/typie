@@ -108,14 +108,36 @@ impl Layout for TableNode {
             };
         }
 
-        let col_widths = calculate_col_widths(max_width, col_count, None);
+        let custom_widths: Option<Vec<f32>> = rows.first().and_then(|first_row| {
+            let widths: Vec<Option<f32>> = first_row
+                .children()
+                .map(|cell| {
+                    if let Node::TableCell(cell_node) = cell.node() {
+                        cell_node.col_width
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
+            if widths.iter().all(|w| w.is_some()) {
+                Some(widths.into_iter().map(|w| w.unwrap()).collect())
+            } else {
+                None
+            }
+        });
+
+        let col_widths = calculate_col_widths(col_count, custom_widths.as_deref());
+        let actual_table_width =
+            col_widths.iter().sum::<f32>() + TABLE_BORDER_WIDTH * (col_count as f32 + 1.0);
 
         let mut children = Vec::new();
         let mut row_heights = Vec::new();
         let mut y = TABLE_BORDER_WIDTH;
 
         for row in &rows {
-            let row_constraints = BoxConstraints::new(max_width, max_width, 0.0, f32::MAX);
+            let row_constraints =
+                BoxConstraints::new(actual_table_width, actual_table_width, 0.0, f32::MAX);
             let row_layout = ctx.layout(row, row_constraints);
             let row_height = row_layout.size.height;
 
@@ -130,7 +152,7 @@ impl Layout for TableNode {
 
         y += TABLE_BORDER_WIDTH;
 
-        let table_size = Size::new(max_width, y);
+        let table_size = Size::new(actual_table_width, y);
 
         let border_element = TableBorderElement::new(
             table_size,

@@ -206,6 +206,32 @@ impl<'a> NodeRef<'a> {
         }
     }
 
+    pub fn descendants(&self) -> NodeRefIter<'_> {
+        let mut node_ids = Vec::new();
+        let mut queue = vec![self.node_id];
+
+        while let Some(current_id) = queue.pop() {
+            if let Some(children) = self.inner.get_children_list(current_id) {
+                if let loro::LoroValue::List(values) = children.get_value() {
+                    for i in 0..values.len() {
+                        if let Some(loro::LoroValue::String(s)) = values.get(i) {
+                            if let Some(child_id) = NodeId::from_string(s) {
+                                node_ids.push(child_id);
+                                queue.push(child_id);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        NodeRefIter {
+            inner: self.inner,
+            node_ids,
+            index: 0,
+        }
+    }
+
     pub fn depth(&self) -> usize {
         self.ancestors().count() - 1
     }

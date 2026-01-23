@@ -166,6 +166,20 @@ export class Editor {
     currentIndex: 0,
   });
 
+  tableOverlays = $state<
+    {
+      pageIdx: number;
+      tableId: string;
+      bounds: Rect;
+      borderStyle: string;
+      colWidths: number[];
+      colPositions: number[];
+      rowHeights: number[];
+      rowPositions: number[];
+      isFocused: boolean;
+    }[]
+  >([]);
+
   typewriter = $state({
     needsScroll: false,
   });
@@ -413,6 +427,11 @@ export class Editor {
           }
           break;
         }
+
+        case 'tableOverlaysChanged': {
+          this.tableOverlays = cmd.overlays;
+          break;
+        }
       }
     }
   }
@@ -595,6 +614,8 @@ export class Editor {
   handlePointerDown(e: PointerEvent): void {
     if (!(e.target instanceof HTMLElement)) return;
 
+    if (e.target.closest('[data-pointer-capture]')) return;
+
     const resolved = this.#resolvePointerCoordinate(e, e.target);
     if (!resolved) {
       this.isDraggable = false;
@@ -631,6 +652,8 @@ export class Editor {
   handlePointerMove(e: PointerEvent): void {
     const targetEl = document.elementFromPoint(e.clientX, e.clientY);
     if (!(targetEl instanceof HTMLElement)) return;
+
+    if (targetEl.closest('[data-pointer-capture]')) return;
 
     const resolved = this.#resolvePointerCoordinate(e, targetEl);
     if (!resolved) return;
@@ -681,6 +704,11 @@ export class Editor {
 
     const targetEl = document.elementFromPoint(e.clientX, e.clientY);
     if (!(targetEl instanceof HTMLElement)) return;
+
+    if (targetEl.closest('[data-pointer-capture]')) {
+      this.pointer.isPressed = false;
+      return;
+    }
 
     const resolved = this.#resolvePointerCoordinate(e, targetEl);
     if (!resolved) {

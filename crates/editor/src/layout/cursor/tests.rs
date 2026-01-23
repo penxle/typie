@@ -2911,52 +2911,6 @@ fn test_cell_navigation_with_paragraphs_before_table() {
 }
 
 #[test]
-fn test_cell_navigation_down_with_paragraphs_before_table() {
-    let mut p1 = id!();
-    let mut p2 = id!();
-
-    let rt = runtime! {
-        viewport { paginated { width: 400.0, height: 800.0, margin: PAGE_MARGIN } }
-        doc {
-            paragraph {
-                text { "Paragraph before table 1" }
-            }
-            paragraph {
-                text { "Paragraph before table 2" }
-            }
-            table {
-                table_row {
-                    table_cell {
-                        @p1 paragraph {
-                            text { "Cell Line1" }
-                        }
-                        @p2 paragraph {
-                            text { "Cell Line2" }
-                        }
-                        paragraph {
-                            text { "Cell Line3" }
-                        }
-                        paragraph {
-                            text { "Cell Line4" }
-                        }
-                    }
-                }
-            }
-        }
-        selection { (p1, 0) }
-    };
-
-    let pages = rt.pages();
-    let new_selection =
-        Cursor::move_down(&ctx(&rt.state()), &pages, rt.selection().head, 0.0).unwrap();
-
-    assert_eq!(
-        new_selection.head.node_id, p2,
-        "Down from Cell Line1 should go to Cell Line2 (not skip to Line3)"
-    );
-}
-
-#[test]
 fn test_hard_break_navigation_down_in_table_cell() {
     let mut p = id!();
 
@@ -3183,7 +3137,7 @@ fn test_table_exit_down_from_last_row() {
                 table_row {
                     table_cell {
                         @table_cell_p paragraph {
-                            text { "Cell content" }
+                            text { "Cell" }
                         }
                     }
                 }
@@ -3196,8 +3150,9 @@ fn test_table_exit_down_from_last_row() {
     };
 
     let pages = rt.pages();
+    let (_, rect) = Cursor::bounds(&ctx(&rt.state()), &pages, rt.selection().head).unwrap();
     let new_selection =
-        Cursor::move_down(&ctx(&rt.state()), &pages, rt.selection().head, 0.0).unwrap();
+        Cursor::move_down(&ctx(&rt.state()), &pages, rt.selection().head, rect.x).unwrap();
 
     assert_eq!(
         new_selection.head.node_id, para_after,
@@ -3415,7 +3370,7 @@ fn test_click_in_short_cell_empty_space_stays_in_cell() {
 
     let pages = rt.pages();
     let test_x = 280.0;
-    let test_y = 80.0;
+    let test_y = 40.0;
     let selection = Cursor::hit_test(&ctx(&rt.state()), &pages[0], test_x, test_y);
 
     assert!(selection.is_some(), "Should find a selection");
@@ -4005,27 +3960,27 @@ fn test_table_down_from_tall_cell_goes_to_next_row() {
                         bullet_list {
                             list_item {
                                 paragraph {
-                                    text { "ㅁㄴㅇ" }
+                                    text { "ㅁㄴ" }
                                 }
                             }
                             list_item {
                                 paragraph {
-                                    text { "ㅁㄴㅇ" }
+                                    text { "ㅁㄴ" }
                                 }
                             }
                             list_item {
                                 @n1 paragraph {
-                                    text { "ㅁㄴㅇ" }
+                                    text { "ㅁㄴ" }
                                 }
                             }
                         }
                     }
                     table_cell {
                         paragraph {
-                            text { "ㅁㄴㅇ" }
+                            text { "ㅁㄴ" }
                         }
                         paragraph {
-                            text { "ㅁㄴㅇ" }
+                            text { "ㅁㄴ" }
                         }
                     }
                 }

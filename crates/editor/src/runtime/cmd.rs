@@ -49,6 +49,20 @@ pub struct SearchOverlay {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct TableOverlay {
+    pub page_idx: usize,
+    pub table_id: String,
+    pub bounds: Rect,
+    pub border_style: String,
+    pub col_widths: Vec<f32>,
+    pub col_positions: Vec<f32>,
+    pub row_heights: Vec<f32>,
+    pub row_positions: Vec<f32>,
+    pub is_focused: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Tsify)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum Cmd {
     DocChanged,
@@ -134,5 +148,9 @@ pub enum Cmd {
         overlays: Vec<SearchOverlay>,
         total_count: usize,
         current_index: usize,
+    },
+
+    TableOverlaysChanged {
+        overlays: Vec<TableOverlay>,
     },
 }

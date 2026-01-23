@@ -7,7 +7,8 @@ use crate::{
 #[derive(Debug, Clone, PartialEq)]
 pub enum Effect {
     DocChanged,
-    NodeChanged { node_id: NodeId },
+    NodeChanged { node_id: NodeId },    // 노드와 조상 invalidate
+    SubtreeChanged { node_id: NodeId }, // 노드와 자손 invalidate
     SelectionChanged,
     PendingMarksChanged,
     SettingsChanged,

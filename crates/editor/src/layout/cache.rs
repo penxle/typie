@@ -37,6 +37,17 @@ impl LayoutCache {
         }
     }
 
+    pub fn invalidate_with_descendants(
+        &mut self,
+        node_id: NodeId,
+        descendants: impl Iterator<Item = NodeId>,
+    ) {
+        self.cache.remove(&node_id);
+        for descendant_id in descendants {
+            self.cache.remove(&descendant_id);
+        }
+    }
+
     pub fn invalidate_all(&mut self) {
         self.cache.clear();
     }

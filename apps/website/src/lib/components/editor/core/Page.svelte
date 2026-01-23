@@ -6,6 +6,7 @@
   import ExternalEmbed from '../external/ExternalEmbed.svelte';
   import ExternalFile from '../external/ExternalFile.svelte';
   import ExternalImage from '../external/ExternalImage.svelte';
+  import TableOverlay from './TableOverlay.svelte';
 
   type Props = {
     page: number;
@@ -103,6 +104,12 @@
           <ExternalEmbed {el} />
         {/if}
       {/each}
+
+      {#if !editor.readOnly}
+        {#each editor.tableOverlays.filter((o) => o.pageIdx === page) as overlay (overlay.tableId)}
+          <TableOverlay {editor} {overlay} />
+        {/each}
+      {/if}
 
       {#if editor.readOnly}
         {#each editor.linkOverlays.filter((o) => o.pageIdx === page) as overlay, i (`${i}-${overlay.href}`)}
