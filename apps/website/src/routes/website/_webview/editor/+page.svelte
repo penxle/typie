@@ -817,10 +817,6 @@
         editor?.current.chain().focus().sinkListItem('list_item').run();
       } else if (name === 'lift_list_item') {
         editor?.current.chain().focus().liftListItem('list_item').run();
-      } else if (name === 'code_block') {
-        editor?.current.chain().focus().setCodeBlock().run();
-      } else if (name === 'html_block') {
-        editor?.current.chain().focus().setHtmlBlock().run();
       } else if (name === 'undo') {
         undoManager.undo();
       } else if (name === 'redo') {

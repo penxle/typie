@@ -7,8 +7,6 @@
   import BookmarkIcon from '~icons/lucide/bookmark';
   import ChevronsDownUpIcon from '~icons/lucide/chevrons-down-up';
   import ClockFadingIcon from '~icons/lucide/clock-fading';
-  import CodeIcon from '~icons/lucide/code';
-  import CodeXmlIcon from '~icons/lucide/code-xml';
   import FilePlusIcon from '~icons/lucide/file-plus';
   import FileUpIcon from '~icons/lucide/file-up';
   import GalleryVerticalEndIcon from '~icons/lucide/gallery-vertical-end';
@@ -17,7 +15,6 @@
   import LightbulbIcon from '~icons/lucide/lightbulb';
   import ListIcon from '~icons/lucide/list';
   import ListOrderedIcon from '~icons/lucide/list-ordered';
-  import LockKeyholeIcon from '~icons/lucide/lock-keyhole';
   import PaperclipIcon from '~icons/lucide/paperclip';
   import QuoteIcon from '~icons/lucide/quote';
   import SettingsIcon from '~icons/lucide/settings';
@@ -248,36 +245,6 @@
         </DropdownMenu>
       {/snippet}
     </ToolbarDropdownButton>
-
-    <ToolbarButton
-      disabled={!editor?.current.can().setCodeBlock()}
-      icon={CodeIcon}
-      label="코드"
-      onclick={() => {
-        editor?.current.chain().focus().setCodeBlock().run();
-      }}
-      size={toolbarSize}
-    />
-
-    <ToolbarButton
-      disabled={!editor?.current.can().setHtmlBlock()}
-      icon={CodeXmlIcon}
-      label="HTML"
-      onclick={() => {
-        editor?.current.chain().focus().setHtmlBlock().run();
-      }}
-      size={toolbarSize}
-    />
-
-    <ToolbarButton
-      disabled={!editor?.current.can().togglePaywall()}
-      icon={LockKeyholeIcon}
-      label="유료 블록"
-      onclick={() => {
-        editor?.current.chain().focus().togglePaywall().run();
-      }}
-      size={toolbarSize}
-    />
 
     {#if editor?.current.storage.page.layout}
       <VerticalDivider style={css.raw({ height: '16px' })} />

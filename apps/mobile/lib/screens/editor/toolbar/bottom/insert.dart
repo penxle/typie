@@ -36,8 +36,6 @@ class InsertBottomToolbar extends HookWidget {
     const _Node(icon: 'chevrons-down-up', label: '접기', type: 'fold'),
     const _Node(icon: 'table', label: '표', type: 'table'),
     const _Node(icon: 'list', label: '목록', type: 'bullet_list', activeNodeTypes: ['bullet_list', 'ordered_list']),
-    const _Node(icon: 'code', label: '코드', type: 'code_block'),
-    const _Node(icon: 'code-xml', label: 'HTML', type: 'html_block'),
   ];
 
   @override
@@ -48,7 +46,7 @@ class InsertBottomToolbar extends HookWidget {
     final proseMirrorState = useValueListenable(scope.proseMirrorState);
     final yjsState = useValueListenable(scope.yjsState);
 
-    final hiddenInPageLayout = {'blockquote', 'callout', 'fold', 'table', 'code_block', 'html_block'};
+    final hiddenInPageLayout = {'blockquote', 'callout', 'fold', 'table'};
     final visibleNodes = yjsState?.layoutMode == GPostLayoutMode.PAGE.name
         ? _nodes.where((node) => !hiddenInPageLayout.contains(node.type)).toList()
         : _nodes;

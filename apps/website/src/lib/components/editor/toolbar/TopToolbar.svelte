@@ -6,8 +6,6 @@
   import BookmarkIcon from '~icons/lucide/bookmark';
   import ChevronsDownUpIcon from '~icons/lucide/chevrons-down-up';
   import ClockFadingIcon from '~icons/lucide/clock-fading';
-  import CodeIcon from '~icons/lucide/code';
-  import CodeXmlIcon from '~icons/lucide/code-xml';
   import FilePlusIcon from '~icons/lucide/file-plus';
   import FileUpIcon from '~icons/lucide/file-up';
   import GalleryVerticalEndIcon from '~icons/lucide/gallery-vertical-end';
@@ -244,10 +242,6 @@
         </DropdownMenu>
       {/snippet}
     </ToolbarDropdownButton>
-
-    <ToolbarButton disabled={true} icon={CodeIcon} label="코드" size={toolbarSize} />
-
-    <ToolbarButton disabled={true} icon={CodeXmlIcon} label="HTML" size={toolbarSize} />
 
     {#if layoutMode.type === 'paginated'}
       <VerticalDivider style={css.raw({ height: '16px' })} />

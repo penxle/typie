@@ -1,5 +1,7 @@
 import { Extension } from '@tiptap/core';
+import { Fragment, Node as ProseMirrorNode, Slice } from '@tiptap/pm/model';
 import { Plugin } from '@tiptap/pm/state';
+import { ReplaceStep } from '@tiptap/pm/transform';
 import { Table } from '../node-views';
 import { TEXT_NODE_TYPES, WRAPPING_NODE_TYPES } from './node-commands';
 
@@ -127,7 +129,63 @@ export const Behavior = Extension.create({
   },
 
   addProseMirrorPlugins() {
+    const transformFragment = (fragment: Fragment): Fragment => {
+      const nodes: ProseMirrorNode[] = [];
+
+      fragment.forEach((node) => {
+        if (node.type.name === 'code_block' || node.type.name === 'html_block') {
+          return;
+        } else if (node.content.size > 0) {
+          const transformedContent = transformFragment(node.content);
+          nodes.push(node.copy(transformedContent));
+        } else {
+          nodes.push(node);
+        }
+      });
+
+      return Fragment.from(nodes);
+    };
+
+    const readonlyNodeTypes = new Set(['code_block', 'html_block']);
+
     return [
+      new Plugin({
+        filterTransaction: (tr, state) => {
+          if (!tr.docChanged) {
+            return true;
+          }
+
+          let blocked = false;
+
+          for (const step of tr.steps) {
+            if (step instanceof ReplaceStep) {
+              const { from, to } = step as ReplaceStep;
+
+              state.doc.nodesBetween(from, to, (node, pos) => {
+                if (readonlyNodeTypes.has(node.type.name)) {
+                  const nodeStart = pos;
+                  const nodeEnd = pos + node.nodeSize;
+
+                  if (from > nodeStart || to < nodeEnd) {
+                    blocked = true;
+                    return false;
+                  }
+                }
+              });
+            }
+          }
+
+          return !blocked;
+        },
+      }),
+      new Plugin({
+        props: {
+          transformPasted: (slice) => {
+            const transformedContent = transformFragment(slice.content);
+            return new Slice(transformedContent, slice.openStart, slice.openEnd);
+          },
+        },
+      }),
       new Plugin({
         appendTransaction: (transactions, oldState, newState) => {
           if (transactions.some((tr) => tr.storedMarksSet)) {
