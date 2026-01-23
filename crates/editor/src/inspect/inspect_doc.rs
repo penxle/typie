@@ -107,6 +107,14 @@ fn format_node_info(node: &NodeRef) -> String {
                 .unwrap_or_else(|| "(placeholder)".to_string());
             format!("File {} fileId=\"{}\"", id, id_display)
         }
+        Node::Embed(embed_node) => {
+            let id_display = embed_node
+                .id
+                .as_deref()
+                .map(|s| truncate_str(s, 30))
+                .unwrap_or_else(|| "(placeholder)".to_string());
+            format!("Embed {} embedId=\"{}\"", id, id_display)
+        }
         Node::HardBreak(_) => {
             format!("HardBreak {}", id)
         }

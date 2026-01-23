@@ -123,7 +123,15 @@
       size={toolbarSize}
     />
 
-    <ToolbarButton disabled={true} icon={FileUpIcon} label="임베드" size={toolbarSize} />
+    <ToolbarButton
+      icon={FileUpIcon}
+      label="임베드"
+      onclick={() => {
+        editor.dispatch({ type: 'insertEmbed' });
+        editor.focus();
+      }}
+      size={toolbarSize}
+    />
 
     <ToolbarDropdownButton label="구분선" size={toolbarSize}>
       {#snippet anchor()}

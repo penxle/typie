@@ -11,6 +11,7 @@ import {
   Documents,
   DocumentVersionContributors,
   DocumentVersions,
+  Embeds,
   Entities,
   Files,
   first,
@@ -43,6 +44,7 @@ import {
   Document,
   DocumentVersion,
   DocumentView,
+  Embed,
   Entity,
   EntityView,
   File,
@@ -186,17 +188,19 @@ Document.implement({
     assets: t.field({
       type: [
         builder.loadableUnion('DocumentAsset', {
-          types: [Image, File],
+          types: [Image, File, Embed],
           load: async (ids: string[]) => {
             const imageIds = ids.filter((id) => decodeDbId(id) === TableCode.IMAGES);
             const fileIds = ids.filter((id) => decodeDbId(id) === TableCode.FILES);
+            const embedIds = ids.filter((id) => decodeDbId(id) === TableCode.EMBEDS);
 
-            const [images, files] = await Promise.all([
+            const [images, files, embeds] = await Promise.all([
               imageIds.length > 0 ? db.select().from(Images).where(inArray(Images.id, imageIds)) : [],
               fileIds.length > 0 ? db.select().from(Files).where(inArray(Files.id, fileIds)) : [],
+              embedIds.length > 0 ? db.select().from(Embeds).where(inArray(Embeds.id, embedIds)) : [],
             ]);
 
-            return [...images, ...files];
+            return [...images, ...files, ...embeds];
           },
           toKey: (item) => item.id,
           sort: true,
@@ -211,9 +215,9 @@ Document.implement({
 
         const doc = new LoroDoc();
         doc.import(content.snapshot);
-        const { imageIds, fileIds } = extractAssetIdsFromLoroDoc(doc);
+        const { imageIds, fileIds, embedIds } = extractAssetIdsFromLoroDoc(doc);
 
-        return [...imageIds, ...fileIds];
+        return [...imageIds, ...fileIds, ...embedIds];
       },
     }),
   }),

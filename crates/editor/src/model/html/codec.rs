@@ -182,6 +182,7 @@ pub fn collect_node_parse_rules() -> Vec<NodeParseRule> {
     rules.extend(FoldTitleNode::parse_rules());
     rules.extend(FoldContentNode::parse_rules());
     rules.extend(ImageNode::parse_rules());
+    rules.extend(EmbedNode::parse_rules());
     rules.extend(HorizontalRuleNode::parse_rules());
     rules.extend(HardBreakNode::parse_rules());
     rules.extend(PageBreakNode::parse_rules());

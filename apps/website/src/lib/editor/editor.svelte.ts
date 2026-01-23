@@ -10,6 +10,7 @@ import type { Editor as WasmEditor, ExportedUpdates, Modifier, PointerButton } f
 import type { ThemeColors } from './theme';
 import type {
   Cmd,
+  EmbedAsset,
   ExternalElement,
   FileAsset,
   ImageAsset,
@@ -115,6 +116,7 @@ export class Editor {
 
   imageAssets = $state(new SvelteMap<string, ImageAsset>());
   fileAssets = $state(new SvelteMap<string, FileAsset>());
+  embedAssets = $state(new SvelteMap<string, EmbedAsset>());
   inflightImages = $state(new SvelteMap<string, { url: string; width: number; height: number }>());
   inflightFiles = $state(new SvelteMap<string, { url: string; name: string; size: number }>());
 

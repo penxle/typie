@@ -114,6 +114,15 @@
                   name
                   size
                 }
+
+                ... on Embed {
+                  id
+                  url
+                  title
+                  description
+                  thumbnailUrl
+                  html
+                }
               }
 
               ...DocumentPanel_document
@@ -185,6 +194,15 @@
             url: asset.url,
             name: asset.name,
             size: asset.size,
+          });
+        } else if (asset.__typename === 'Embed') {
+          editor.embedAssets.set(asset.id, {
+            id: asset.id,
+            url: asset.url,
+            title: asset.title ?? null,
+            description: asset.description ?? null,
+            thumbnailUrl: asset.thumbnailUrl ?? null,
+            html: asset.html ?? null,
           });
         }
       }

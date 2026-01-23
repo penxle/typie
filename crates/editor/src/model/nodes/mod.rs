@@ -1,6 +1,7 @@
 mod blockquote;
 mod bullet_list;
 mod callout;
+mod embed;
 mod file;
 mod fold;
 mod fold_content;
@@ -19,6 +20,7 @@ mod text;
 pub use blockquote::*;
 pub use bullet_list::*;
 pub use callout::*;
+pub use embed::*;
 pub use file::*;
 pub use fold::*;
 pub use fold_content::*;

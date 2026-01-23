@@ -291,6 +291,7 @@ impl Transaction {
             NodeType::Text => Node::Text(TextNode::default()),
             NodeType::Image => Node::Image(ImageNode::default()),
             NodeType::File => Node::File(FileNode::default()),
+            NodeType::Embed => Node::Embed(EmbedNode::default()),
             NodeType::HardBreak => Node::HardBreak(HardBreakNode::default()),
             NodeType::PageBreak => Node::PageBreak(PageBreakNode::default()),
             NodeType::HorizontalRule => Node::HorizontalRule(HorizontalRuleNode::default()),

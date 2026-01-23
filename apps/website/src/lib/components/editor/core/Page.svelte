@@ -3,6 +3,7 @@
   import { CROP_MARKER_SIZE } from '$lib/editor/constants';
   import { getEditor } from '$lib/editor/context';
   import { WebGLRenderer } from '$lib/editor/webgl';
+  import ExternalEmbed from '../external/ExternalEmbed.svelte';
   import ExternalFile from '../external/ExternalFile.svelte';
   import ExternalImage from '../external/ExternalImage.svelte';
 
@@ -98,6 +99,8 @@
           <ExternalImage {el} />
         {:else if el.data.type === 'file'}
           <ExternalFile {el} />
+        {:else if el.data.type === 'embed'}
+          <ExternalEmbed {el} />
         {/if}
       {/each}
 
