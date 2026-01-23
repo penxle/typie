@@ -53,6 +53,25 @@ import {
   isTypeOf,
 } from '../objects';
 
+const DocumentAsset = builder.loadableUnion('DocumentAsset', {
+  types: [Image, File, Embed],
+  load: async (ids: string[]) => {
+    const imageIds = ids.filter((id) => decodeDbId(id) === TableCode.IMAGES);
+    const fileIds = ids.filter((id) => decodeDbId(id) === TableCode.FILES);
+    const embedIds = ids.filter((id) => decodeDbId(id) === TableCode.EMBEDS);
+
+    const [images, files, embeds] = await Promise.all([
+      imageIds.length > 0 ? db.select().from(Images).where(inArray(Images.id, imageIds)) : [],
+      fileIds.length > 0 ? db.select().from(Files).where(inArray(Files.id, fileIds)) : [],
+      embedIds.length > 0 ? db.select().from(Embeds).where(inArray(Embeds.id, embedIds)) : [],
+    ]);
+
+    return [...images, ...files, ...embeds];
+  },
+  toKey: (item) => item.id,
+  sort: true,
+});
+
 IDocument.implement({
   fields: (t) => ({
     id: t.exposeID('id'),
@@ -79,6 +98,23 @@ IDocument.implement({
         const text = content.text.replaceAll(/\s+/g, ' ').trim();
 
         return text.length <= 200 ? text : text.slice(0, 200) + '...';
+      },
+    }),
+
+    assets: t.field({
+      type: [DocumentAsset],
+      resolve: async (self) => {
+        const content = await db
+          .select({ snapshot: DocumentContents.snapshot })
+          .from(DocumentContents)
+          .where(eq(DocumentContents.documentId, self.id))
+          .then(firstOrThrow);
+
+        const doc = new LoroDoc();
+        doc.import(content.snapshot);
+        const { imageIds, fileIds, embedIds } = extractAssetIdsFromLoroDoc(doc);
+
+        return [...imageIds, ...fileIds, ...embedIds];
       },
     }),
   }),
@@ -182,42 +218,6 @@ Document.implement({
           .from(DocumentVersions)
           .where(eq(DocumentVersions.documentId, self.id))
           .orderBy(asc(DocumentVersions.createdAt));
-      },
-    }),
-
-    assets: t.field({
-      type: [
-        builder.loadableUnion('DocumentAsset', {
-          types: [Image, File, Embed],
-          load: async (ids: string[]) => {
-            const imageIds = ids.filter((id) => decodeDbId(id) === TableCode.IMAGES);
-            const fileIds = ids.filter((id) => decodeDbId(id) === TableCode.FILES);
-            const embedIds = ids.filter((id) => decodeDbId(id) === TableCode.EMBEDS);
-
-            const [images, files, embeds] = await Promise.all([
-              imageIds.length > 0 ? db.select().from(Images).where(inArray(Images.id, imageIds)) : [],
-              fileIds.length > 0 ? db.select().from(Files).where(inArray(Files.id, fileIds)) : [],
-              embedIds.length > 0 ? db.select().from(Embeds).where(inArray(Embeds.id, embedIds)) : [],
-            ]);
-
-            return [...images, ...files, ...embeds];
-          },
-          toKey: (item) => item.id,
-          sort: true,
-        }),
-      ],
-      resolve: async (self) => {
-        const content = await db
-          .select({ snapshot: DocumentContents.snapshot })
-          .from(DocumentContents)
-          .where(eq(DocumentContents.documentId, self.id))
-          .then(firstOrThrow);
-
-        const doc = new LoroDoc();
-        doc.import(content.snapshot);
-        const { imageIds, fileIds, embedIds } = extractAssetIdsFromLoroDoc(doc);
-
-        return [...imageIds, ...fileIds, ...embedIds];
       },
     }),
   }),
