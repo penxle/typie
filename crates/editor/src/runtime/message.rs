@@ -458,6 +458,30 @@ define_messages! {
     => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_insert_table(rows, cols) },
 
+    SetColumnWidths { table_id: String, col_widths: Vec<f32> }
+    => when When::key(ContextKey::CanEdit)
+    => handle(rt) { rt.handle_set_column_widths(table_id, col_widths) },
+
+    AddTableRow { table_id: String, after_row: usize }
+    => when When::key(ContextKey::CanEdit)
+    => handle(rt) { rt.handle_add_table_row(table_id, after_row) },
+
+    AddTableColumn { table_id: String, after_col: usize }
+    => when When::key(ContextKey::CanEdit)
+    => handle(rt) { rt.handle_add_table_column(table_id, after_col) },
+
+    DeleteTableRow { table_id: String, row: usize }
+    => when When::key(ContextKey::CanEdit)
+    => handle(rt) { rt.handle_delete_table_row(table_id, row) },
+
+    DeleteTableColumn { table_id: String, col: usize }
+    => when When::key(ContextKey::CanEdit)
+    => handle(rt) { rt.handle_delete_table_column(table_id, col) },
+
+    SetTableBorderStyle { table_id: String, style: String }
+    => when When::key(ContextKey::CanEdit)
+    => handle(rt) { rt.handle_set_table_border_style(table_id, style) },
+
     DeleteNode { node_id: String }
     => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_delete_node(node_id) },

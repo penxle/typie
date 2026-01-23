@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::hash::Hash;
 use tsify::Tsify;
 
-use super::{TABLE_BORDER_WIDTH, calculate_col_widths};
+use super::TABLE_BORDER_WIDTH;
 
 #[derive(Debug, Clone, Default, PartialEq, Hash, Serialize, Deserialize, Codec, Tsify)]
 pub struct TableRowNode {}
@@ -25,13 +25,11 @@ impl NodeHtmlCodec for TableRowNode {
 }
 
 impl Layout for TableRowNode {
-    fn layout(&self, ctx: &LayoutContext, constraints: BoxConstraints) -> LayoutNode {
-        let max_width = constraints.max_width;
-
+    fn layout(&self, ctx: &LayoutContext, _constraints: BoxConstraints) -> LayoutNode {
         let cells: Vec<_> = ctx.node.children().collect();
         if cells.is_empty() {
             return LayoutNode {
-                size: Size::new(max_width, 0.0),
+                size: Size::new(0.0, 0.0),
                 element: None,
                 children: None,
                 page_break_policy: PageBreakPolicy::Avoid,
@@ -40,19 +38,33 @@ impl Layout for TableRowNode {
             };
         }
 
-        let col_count = cells.len();
-        let default_col_widths = calculate_col_widths(max_width, col_count, None);
-        let default_col_width = default_col_widths.first().copied().unwrap_or(0.0);
+        let col_widths: Vec<f32> = if let Some(table) = ctx.node.parent() {
+            if let Some(first_row) = table.children().next() {
+                first_row
+                    .children()
+                    .map(|cell| {
+                        if let Node::TableCell(cell_node) = cell.node() {
+                            cell_node.col_width.unwrap_or(super::DEFAULT_CELL_WIDTH)
+                        } else {
+                            super::DEFAULT_CELL_WIDTH
+                        }
+                    })
+                    .collect()
+            } else {
+                vec![super::DEFAULT_CELL_WIDTH; cells.len()]
+            }
+        } else {
+            vec![super::DEFAULT_CELL_WIDTH; cells.len()]
+        };
 
         let mut cell_layouts = Vec::new();
         let mut max_height: f32 = 0.0;
 
-        for cell in &cells {
-            let cell_width = if let Node::TableCell(cell_node) = cell.node() {
-                cell_node.col_width.unwrap_or(default_col_width)
-            } else {
-                default_col_width
-            };
+        for (col_idx, cell) in cells.iter().enumerate() {
+            let cell_width = col_widths
+                .get(col_idx)
+                .copied()
+                .unwrap_or(super::DEFAULT_CELL_WIDTH);
 
             let cell_constraints = BoxConstraints::new(cell_width, cell_width, 0.0, f32::MAX);
             let cell_layout = ctx.layout(cell, cell_constraints);
@@ -96,8 +108,10 @@ impl Layout for TableRowNode {
             x += cell_width + TABLE_BORDER_WIDTH;
         }
 
+        let actual_row_width = x;
+
         LayoutNode {
-            size: Size::new(max_width, max_height + TABLE_BORDER_WIDTH),
+            size: Size::new(actual_row_width, max_height + TABLE_BORDER_WIDTH),
             element: None,
             children: Some(children),
             page_break_policy: PageBreakPolicy::Avoid,
