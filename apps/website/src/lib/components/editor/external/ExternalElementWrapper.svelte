@@ -60,6 +60,7 @@
     userSelect: 'none',
     display: 'flex',
     justifyContent: 'center',
+    visibility: reportedHeight === undefined ? 'hidden' : 'visible',
   })}
   data-external-element
   data-node-id={el.nodeId}
