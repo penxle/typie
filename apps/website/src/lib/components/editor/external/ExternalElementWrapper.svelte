@@ -16,24 +16,37 @@
   const editor = getEditor();
 
   let reportedHeight = $state<number>();
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   $effect(() => {
     if (!containerEl) return;
 
     const observer = new ResizeObserver((entries) => {
       const height = entries[0].contentRect.height;
-      if (height !== reportedHeight && height > 0) {
+      if (height <= 0 || height === reportedHeight) return;
+
+      if (debounceTimer) {
+        clearTimeout(debounceTimer);
+      }
+
+      debounceTimer = setTimeout(() => {
         reportedHeight = height;
         editor.dispatch({
           type: 'setExternalElementHeight',
           nodeId: el.nodeId,
           height,
         });
-      }
+        debounceTimer = null;
+      }, 100);
     });
 
     observer.observe(containerEl);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      if (debounceTimer) {
+        clearTimeout(debounceTimer);
+      }
+    };
   });
 </script>
 

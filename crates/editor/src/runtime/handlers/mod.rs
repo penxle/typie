@@ -4,6 +4,7 @@ mod clipboard;
 mod composition;
 mod deletion;
 mod drag;
+mod embed;
 mod escape;
 mod file;
 mod fold;

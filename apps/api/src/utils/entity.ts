@@ -114,11 +114,12 @@ const extractTextFromLoroDoc = (doc: LoroDoc): string => {
   return texts.join('');
 };
 
-export const extractAssetIdsFromLoroDoc = (doc: LoroDoc): { imageIds: string[]; fileIds: string[] } => {
+export const extractAssetIdsFromLoroDoc = (doc: LoroDoc): { imageIds: string[]; fileIds: string[]; embedIds: string[] } => {
   const nodes = doc.getMap('nodes').toJSON() as Record<string, unknown>;
 
   const imageIds: string[] = [];
   const fileIds: string[] = [];
+  const embedIds: string[] = [];
 
   for (const node of Object.values(nodes)) {
     const typedNode = node as { type?: string; id?: string };
@@ -126,10 +127,12 @@ export const extractAssetIdsFromLoroDoc = (doc: LoroDoc): { imageIds: string[]; 
       imageIds.push(typedNode.id);
     } else if (typedNode.type === 'file' && typedNode.id) {
       fileIds.push(typedNode.id);
+    } else if (typedNode.type === 'embed' && typedNode.id) {
+      embedIds.push(typedNode.id);
     }
   }
 
-  return { imageIds, fileIds };
+  return { imageIds, fileIds, embedIds };
 };
 
 export const calculateBlobSizeFromAssetIds = async (imageIds: string[], fileIds: string[]): Promise<number> => {

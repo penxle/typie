@@ -418,6 +418,10 @@ define_messages! {
     => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_insert_file(upload_id) },
 
+    InsertEmbed
+    => when When::key(ContextKey::CanEdit)
+    => handle(rt) { rt.handle_insert_embed() },
+
     InsertHorizontalRule { variant: HorizontalRuleVariant }
     => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_insert_horizontal_rule(variant) },
@@ -469,6 +473,10 @@ define_messages! {
     SetFileId { node_id: String, file_id: String }
     => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_set_file_id(node_id, file_id) },
+
+    SetEmbedId { node_id: String, embed_id: String }
+    => when When::key(ContextKey::CanEdit)
+    => handle(rt) { rt.handle_set_embed_id(node_id, embed_id) },
 
     SetExternalElementHeight { node_id: String, height: f32 }
     => when When::True

@@ -20,6 +20,8 @@ pub enum ExternalElementData {
         id: Option<String>,
         upload_id: Option<String>,
     },
+    #[serde(rename_all = "camelCase")]
+    Embed { id: Option<String> },
 }
 
 #[allow(dead_code)]

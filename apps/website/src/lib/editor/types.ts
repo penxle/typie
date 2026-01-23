@@ -45,3 +45,12 @@ export type FileAsset = {
   name: string;
   size: number;
 };
+
+export type EmbedAsset = {
+  id: string;
+  url: string;
+  title: string | null;
+  description: string | null;
+  thumbnailUrl: string | null;
+  html: string | null;
+};

@@ -153,7 +153,7 @@ type Document implements IDocument {
   view: DocumentView!
 }
 
-union DocumentAsset = File | Image
+union DocumentAsset = Embed | File | Image
 
 type DocumentSpellingError {
   context: String!
