@@ -47,6 +47,34 @@
             subtitle
             excerpt
             snapshot
+
+            assets {
+              __typename
+
+              ... on Image {
+                id
+                url
+                width
+                height
+                placeholder
+              }
+
+              ... on File {
+                id
+                url
+                name
+                size
+              }
+
+              ... on Embed {
+                id
+                url
+                title
+                description
+                thumbnailUrl
+                html
+              }
+            }
           }
         }
 
@@ -73,6 +101,39 @@
   const document = $derived($entityView.node.__typename === 'DocumentView' ? $entityView.node : null);
 
   const snapshot = $derived(document?.snapshot ? Uint8Array.fromBase64(document.snapshot) : undefined);
+  const assets = $derived(document?.assets);
+
+  $effect(() => {
+    if (assets) {
+      for (const asset of assets) {
+        if (asset.__typename === 'Image') {
+          editor.imageAssets.set(asset.id, {
+            id: asset.id,
+            url: asset.url,
+            width: asset.width,
+            height: asset.height,
+            placeholder: asset.placeholder,
+          });
+        } else if (asset.__typename === 'File') {
+          editor.fileAssets.set(asset.id, {
+            id: asset.id,
+            url: asset.url,
+            name: asset.name,
+            size: asset.size,
+          });
+        } else if (asset.__typename === 'Embed') {
+          editor.embedAssets.set(asset.id, {
+            id: asset.id,
+            url: asset.url,
+            title: asset.title ?? null,
+            description: asset.description ?? null,
+            thumbnailUrl: asset.thumbnailUrl ?? null,
+            html: asset.html ?? null,
+          });
+        }
+      }
+    }
+  });
 
   const fontFaces = $derived(
     $entityView.site.fonts

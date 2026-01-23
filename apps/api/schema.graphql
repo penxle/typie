@@ -196,6 +196,7 @@ type DocumentVersionMeta {
 }
 
 type DocumentView implements IDocument {
+  assets: [DocumentAsset!]!
   createdAt: DateTime!
   entity: EntityView!
   excerpt: String!
@@ -404,6 +405,7 @@ input GenerateSingleSignOnAuthorizationUrlInput {
 }
 
 interface IDocument {
+  assets: [DocumentAsset!]!
   createdAt: DateTime!
   excerpt: String!
   id: ID!
