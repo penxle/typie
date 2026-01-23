@@ -4009,3 +4009,44 @@ fn test_table_down_from_tall_cell_goes_to_next_row() {
 
     assert_eq!(sel_down.head.node_id, target);
 }
+
+#[test]
+fn test_table_navigation_left_image_to_text() {
+    let mut n1 = id!();
+    let mut p_prev = id!();
+    let rt = runtime! {
+        viewport { paginated { width: 800.0, height: 600.0, margin: 20.0 } }
+        doc {
+            table {
+                table_row {
+                    table_cell { paragraph { text { "1" } } }
+                    table_cell { paragraph { text { "2" } } }
+                }
+                table_row {
+                    table_cell {
+                        @p_prev paragraph { text { "3" } }
+                    }
+                    @n1 table_cell {
+                        image(id: Some("IMG_ID".to_string()), proportion: 1.0,)
+                    }
+                }
+            }
+        }
+        selection { (n1, 0) -> (n1, 1) }
+    };
+
+    let pages = rt.pages();
+    let ctx = NavigationContext::new(rt.doc());
+
+    let start_pos = crate::state::Position::new(n1, 0, Affinity::Downstream);
+
+    let (_, rect) = Cursor::bounds(&ctx, &pages, start_pos).expect("bounds at start");
+
+    let new_selection = Cursor::move_left(&ctx, &pages, start_pos, rect.y).expect("move_left 1");
+
+    assert_eq!(
+        new_selection.head.node_id, p_prev,
+        "Should be in previous cell paragraph"
+    );
+    assert_eq!(new_selection.head.offset, 1, "Should be at end of '3'");
+}
