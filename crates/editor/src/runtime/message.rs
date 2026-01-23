@@ -462,17 +462,17 @@ define_messages! {
     => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_set_image_proportion(node_id, proportion) },
 
-    SetImageDimensionsEphemeral { node_id: String, width: f32, height: f32 }
+    SetImageId { node_id: String, image_id: String }
     => when When::key(ContextKey::CanEdit)
-    => handle(rt) { rt.handle_set_image_dimensions_ephemeral(node_id, width, height) },
+    => handle(rt) { rt.handle_set_image_id(node_id, image_id) },
 
-    SetImageSrc { node_id: String, src: String, width: f32, height: f32 }
+    SetFileId { node_id: String, file_id: String }
     => when When::key(ContextKey::CanEdit)
-    => handle(rt) { rt.handle_set_image_src(node_id, src, width, height) },
+    => handle(rt) { rt.handle_set_file_id(node_id, file_id) },
 
-    SetFileSrc { node_id: String, src: String, name: String, size: u64 }
-    => when When::key(ContextKey::CanEdit)
-    => handle(rt) { rt.handle_set_file_src(node_id, src, name, size) },
+    SetExternalElementHeight { node_id: String, height: f32 }
+    => when When::True
+    => handle(rt) { rt.handle_set_external_element_height(node_id, height) },
 
     SelectSpellcheckError { error_id: String }
     => when When::True

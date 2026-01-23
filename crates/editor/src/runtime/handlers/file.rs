@@ -5,20 +5,16 @@ impl Runtime {
     pub(crate) fn handle_insert_file(&mut self, upload_id: Option<String>) -> Vec<Effect> {
         self.transact(|tr| {
             tr.insert_node(Node::File(FileNode {
-                name: None,
-                size: None,
-                src: None,
+                id: None,
                 upload_id,
             }))
         })
     }
 
-    pub(crate) fn handle_set_file_src(
+    pub(crate) fn handle_set_file_id(
         &mut self,
         node_id: String,
-        src: String,
-        name: String,
-        size: u64,
+        file_id: String,
     ) -> Vec<Effect> {
         let Some(node_id) = NodeId::from_string(&node_id) else {
             return vec![];
@@ -35,9 +31,7 @@ impl Runtime {
 
             node_ref.as_mut().update(|node| {
                 if let Node::File(file) = node {
-                    file.src = Some(src);
-                    file.name = Some(name);
-                    file.size = Some(size);
+                    file.id = Some(file_id);
                 }
             })?;
             tr.push_effect(Effect::NodeChanged { node_id });

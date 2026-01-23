@@ -5,15 +5,18 @@ import { LoroDoc } from 'loro-crdt';
 import { redis } from '@/cache';
 import {
   db,
+  decodeDbId,
   DocumentCharacterCountChanges,
   DocumentContents,
   Documents,
   DocumentVersionContributors,
   DocumentVersions,
   Entities,
+  Files,
   first,
   firstOrThrow,
   firstOrThrowWith,
+  Images,
   Notes,
   TableCode,
   validateDbId,
@@ -24,6 +27,7 @@ import * as spellcheck from '@/external/spellcheck';
 import { enqueueJob } from '@/mq';
 import { pubsub } from '@/pubsub';
 import {
+  extractAssetIdsFromLoroDoc,
   extractLoroDocContents,
   extractLoroDocLayoutMode,
   generateFractionalOrder,
@@ -34,7 +38,18 @@ import {
 import { assertSitePermission } from '@/utils/permission';
 import { assertPlanRule } from '@/utils/plan';
 import { builder } from '../builder';
-import { CharacterCountChange, Document, DocumentVersion, DocumentView, Entity, EntityView, IDocument, isTypeOf } from '../objects';
+import {
+  CharacterCountChange,
+  Document,
+  DocumentVersion,
+  DocumentView,
+  Entity,
+  EntityView,
+  File,
+  IDocument,
+  Image,
+  isTypeOf,
+} from '../objects';
 
 IDocument.implement({
   fields: (t) => ({
@@ -165,6 +180,40 @@ Document.implement({
           .from(DocumentVersions)
           .where(eq(DocumentVersions.documentId, self.id))
           .orderBy(asc(DocumentVersions.createdAt));
+      },
+    }),
+
+    assets: t.field({
+      type: [
+        builder.loadableUnion('DocumentAsset', {
+          types: [Image, File],
+          load: async (ids: string[]) => {
+            const imageIds = ids.filter((id) => decodeDbId(id) === TableCode.IMAGES);
+            const fileIds = ids.filter((id) => decodeDbId(id) === TableCode.FILES);
+
+            const [images, files] = await Promise.all([
+              imageIds.length > 0 ? db.select().from(Images).where(inArray(Images.id, imageIds)) : [],
+              fileIds.length > 0 ? db.select().from(Files).where(inArray(Files.id, fileIds)) : [],
+            ]);
+
+            return [...images, ...files];
+          },
+          toKey: (item) => item.id,
+          sort: true,
+        }),
+      ],
+      resolve: async (self) => {
+        const content = await db
+          .select({ snapshot: DocumentContents.snapshot })
+          .from(DocumentContents)
+          .where(eq(DocumentContents.documentId, self.id))
+          .then(firstOrThrow);
+
+        const doc = new LoroDoc();
+        doc.import(content.snapshot);
+        const { imageIds, fileIds } = extractAssetIdsFromLoroDoc(doc);
+
+        return [...imageIds, ...fileIds];
       },
     }),
   }),
@@ -311,7 +360,7 @@ builder.mutationFields((t) => ({
         const emptyDoc = makeLoroDoc();
         const snapshot = emptyDoc.export({ mode: 'snapshot' });
         const version = emptyDoc.version().encode();
-        const { json, text, characterCount, blobSize } = extractLoroDocContents(emptyDoc);
+        const { json, text, characterCount, blobSize } = await extractLoroDocContents(emptyDoc);
 
         await tx.insert(DocumentContents).values({
           documentId: document.id,

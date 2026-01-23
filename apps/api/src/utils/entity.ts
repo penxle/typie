@@ -1,9 +1,11 @@
 import { faker } from '@faker-js/faker';
 import { getText } from '@tiptap/core';
 import { Node } from '@tiptap/pm/model';
+import { inArray } from 'drizzle-orm';
 import { LoroDoc, LoroList, LoroMap } from 'loro-crdt';
 import { prosemirrorToYXmlFragment } from 'y-prosemirror';
 import * as Y from 'yjs';
+import { db, Files, Images } from '@/db';
 import { PostLayoutMode } from '@/enums';
 import { schema, textSerializers } from '@/pm';
 import type { JSONContent } from '@tiptap/core';
@@ -112,15 +114,35 @@ const extractTextFromLoroDoc = (doc: LoroDoc): string => {
   return texts.join('');
 };
 
-const extractBlobSizeFromLoroDoc = (doc: LoroDoc): number => {
+export const extractAssetIdsFromLoroDoc = (doc: LoroDoc): { imageIds: string[]; fileIds: string[] } => {
   const nodes = doc.getMap('nodes').toJSON() as Record<string, unknown>;
 
-  let totalSize = 0;
+  const imageIds: string[] = [];
+  const fileIds: string[] = [];
+
   for (const node of Object.values(nodes)) {
-    const typedNode = node as { type?: string; size?: number };
-    if (typedNode.type === 'file' || typedNode.type === 'image') {
-      totalSize += typedNode.size ?? 0;
+    const typedNode = node as { type?: string; id?: string };
+    if (typedNode.type === 'image' && typedNode.id) {
+      imageIds.push(typedNode.id);
+    } else if (typedNode.type === 'file' && typedNode.id) {
+      fileIds.push(typedNode.id);
     }
+  }
+
+  return { imageIds, fileIds };
+};
+
+export const calculateBlobSizeFromAssetIds = async (imageIds: string[], fileIds: string[]): Promise<number> => {
+  let totalSize = 0;
+
+  if (imageIds.length > 0) {
+    const images = await db.select({ size: Images.size }).from(Images).where(inArray(Images.id, imageIds));
+    totalSize += images.reduce((sum, img) => sum + img.size, 0);
+  }
+
+  if (fileIds.length > 0) {
+    const files = await db.select({ size: Files.size }).from(Files).where(inArray(Files.id, fileIds));
+    totalSize += files.reduce((sum, file) => sum + file.size, 0);
   }
 
   return totalSize;
@@ -130,11 +152,12 @@ export const getLoroDocCharacterCount = (text: string) => {
   return [...text.replaceAll('\u200B', '').replaceAll(/\s+/g, ' ').trim()].length;
 };
 
-export const extractLoroDocContents = (doc: LoroDoc) => {
+export const extractLoroDocContents = async (doc: LoroDoc) => {
   const json = doc.toJSON();
   const text = extractTextFromLoroDoc(doc);
   const characterCount = getLoroDocCharacterCount(text);
-  const blobSize = extractBlobSizeFromLoroDoc(doc);
+  const { imageIds, fileIds } = extractAssetIdsFromLoroDoc(doc);
+  const blobSize = await calculateBlobSizeFromAssetIds(imageIds, fileIds);
 
   return { json, text, characterCount, blobSize };
 };

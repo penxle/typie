@@ -8,46 +8,30 @@ use serde::{Deserialize, Serialize};
 use std::hash::{Hash, Hasher};
 use tsify::Tsify;
 
-const FILE_NODE_HEIGHT: f32 = 48.0;
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Codec, Tsify)]
 pub struct FileNode {
-    pub name: Option<String>,
-    pub size: Option<u64>,
-    pub src: Option<String>,
+    pub id: Option<String>,
     #[serde(skip_serializing, default)]
     pub upload_id: Option<String>,
 }
 
 impl NodeHtmlCodec for FileNode {
     fn to_dom(&self) -> Option<DomSpec> {
-        if self.src.is_none() {
+        if self.id.is_none() {
             return None;
         }
 
-        let mut spec = DomSpec::el("a")
-            .attr("href", self.src.clone().unwrap())
-            .attr("data-file", "true".to_string())
-            .attr("download", self.name.clone().unwrap_or_default());
-
-        if let Some(size) = self.size {
-            spec = spec.attr("data-size", size.to_string());
-        }
-
-        Some(spec.text(self.name.clone().unwrap_or_default()))
+        Some(
+            DomSpec::el("a")
+                .attr("data-file-id", self.id.clone().unwrap())
+                .text(""),
+        )
     }
 
     fn parse_rules() -> Vec<NodeParseRule> {
-        vec![NodeParseRule::simple("a[data-file]", |elem| {
-            let src = elem.value().attr("href").map(|s| s.to_string());
-            let name = elem.value().attr("download").map(|s| s.to_string());
-            let size = elem.value().attr("data-size").and_then(|s| s.parse().ok());
-            Some(Node::File(FileNode {
-                name,
-                size,
-                src,
-                upload_id: None,
-            }))
+        vec![NodeParseRule::simple("a[data-file-id]", |elem| {
+            let id = elem.value().attr("data-file-id").map(|s| s.to_string());
+            Some(Node::File(FileNode { id, upload_id: None }))
         })]
     }
 }
@@ -55,9 +39,7 @@ impl NodeHtmlCodec for FileNode {
 impl Default for FileNode {
     fn default() -> Self {
         Self {
-            name: None,
-            size: None,
-            src: None,
+            id: None,
             upload_id: None,
         }
     }
@@ -65,9 +47,7 @@ impl Default for FileNode {
 
 impl Hash for FileNode {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.name.hash(state);
-        self.size.hash(state);
-        self.src.hash(state);
+        self.id.hash(state);
     }
 }
 
@@ -75,10 +55,14 @@ impl Layout for FileNode {
     fn layout(&self, ctx: &LayoutContext, constraints: BoxConstraints) -> LayoutNode {
         let max_width = constraints.max_width;
 
+        let display_height = ctx
+            .view_states
+            .get(&ctx.node.node_id())
+            .and_then(|s| s.external_height())
+            .unwrap_or(0.0);
+
         let data = ExternalElementData::File {
-            name: self.name.clone(),
-            size: self.size,
-            src: self.src.clone(),
+            id: self.id.clone(),
             upload_id: self.upload_id.clone(),
         };
 
@@ -87,11 +71,11 @@ impl Layout for FileNode {
         let element = ExternalElement::new(
             ctx.node.node_id(),
             parent_block.node_id(),
-            Size::new(max_width, FILE_NODE_HEIGHT),
+            Size::new(max_width, display_height),
             data,
         );
 
-        let size = Size::new(max_width, FILE_NODE_HEIGHT);
+        let size = Size::new(max_width, display_height);
 
         LayoutNode {
             size,

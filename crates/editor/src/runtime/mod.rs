@@ -948,33 +948,6 @@ impl Runtime {
 
         for (page_idx, p) in self.pages.iter().enumerate() {
             for (pos, ext) in p.external_elements() {
-                let data = match &ext.data {
-                    crate::layout::elements::ExternalElementData::Image {
-                        src,
-                        original_width,
-                        original_height,
-                        proportion,
-                        upload_id,
-                    } => crate::layout::elements::ExternalElementData::Image {
-                        src: src.clone(),
-                        original_width: *original_width,
-                        original_height: *original_height,
-                        proportion: *proportion,
-                        upload_id: upload_id.clone(),
-                    },
-                    crate::layout::elements::ExternalElementData::File {
-                        name,
-                        size,
-                        src,
-                        upload_id,
-                    } => crate::layout::elements::ExternalElementData::File {
-                        name: name.clone(),
-                        size: *size,
-                        src: src.clone(),
-                        upload_id: upload_id.clone(),
-                    },
-                };
-
                 elements.push(ExternalElement {
                     page_idx,
                     node_id: ext.id.to_string(),
@@ -984,7 +957,7 @@ impl Runtime {
                         width: ext.size.width,
                         height: ext.size.height,
                     },
-                    data,
+                    data: ext.data.clone(),
                     is_selected: selected_nodes.contains(&ext.id),
                 });
             }
@@ -1564,7 +1537,7 @@ mod tests {
         let mut rt = runtime! {
             viewport { 800, 600, 1.0 }
             doc {
-                image(src: Some("http://example.com/image.png".to_string()), width: Some(100.0), height: Some(100.0),)
+                image(id: Some("test-image-id".to_string()),)
                 paragraph {}
             }
             selection { (NodeId::ROOT, 0) -> (NodeId::ROOT, 1) }

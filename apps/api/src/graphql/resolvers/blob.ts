@@ -110,6 +110,8 @@ Image.implement({
   interfaces: [Blob],
   fields: (t) => ({
     placeholder: t.exposeString('placeholder'),
+    width: t.exposeInt('width'),
+    height: t.exposeInt('height'),
 
     ratio: t.float({ resolve: (image) => image.width / image.height }),
     url: t.string({

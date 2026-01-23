@@ -8,8 +8,7 @@ pub enum NodeViewState {
     Fold {
         expanded: bool,
     },
-    Image {
-        width: f32,
+    ExternalHeight {
         height: f32,
     },
 }
@@ -22,9 +21,9 @@ impl NodeViewState {
         }
     }
 
-    pub fn image_dimensions(&self) -> Option<(f32, f32)> {
+    pub fn external_height(&self) -> Option<f32> {
         match self {
-            NodeViewState::Image { width, height } => Some((*width, *height)),
+            NodeViewState::ExternalHeight { height } => Some(*height),
             _ => None,
         }
     }

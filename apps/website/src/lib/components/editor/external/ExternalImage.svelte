@@ -2,15 +2,16 @@
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { createFloatingActions } from '@typie/ui/actions';
-  import { Icon, Menu, MenuItem, RingSpinner } from '@typie/ui/components';
+  import { Icon, Img, Menu, MenuItem, RingSpinner } from '@typie/ui/components';
   import { Toast } from '@typie/ui/notification';
   import { nanoid } from 'nanoid';
+  import { untrack } from 'svelte';
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import ImageIcon from '~icons/lucide/image';
   import Trash2Icon from '~icons/lucide/trash-2';
   import { getEditor } from '$lib/editor/context';
-  import { calculateImageDisplaySize } from '$lib/editor/utils';
   import { uploadBlobAsImage } from '$lib/utils/blob.svelte';
+  import ExternalElementWrapper from './ExternalElementWrapper.svelte';
   import type { ExternalElement, ExternalElementData } from '$lib/editor/types';
 
   type ImageData = Extract<ExternalElementData, { type: 'image' }>;
@@ -21,31 +22,72 @@
 
   let { el }: Props = $props();
 
-  const imageData = $derived(el.data as ImageData);
-
   const editor = getEditor();
 
-  const isEditable = $derived(!editor.isReadOnly());
-
-  let inflightUrl = $state<string>();
-  let processedUploadId = $state<string>();
-
-  const hasImage = $derived(!!imageData.src || !!inflightUrl);
-  const isUploading = $derived(!!inflightUrl);
-
   let pickerOpened = $state(false);
+  let proportion = $state(0);
+  let isResizing = $state(false);
+  let initialResizeData: { x: number; width: number; proportion: number; reverse: boolean } | null = null;
+  let processedUploadId = $state<string>();
+  let localUploadId = $state<string>();
+
+  const imageData = $derived(el.data as ImageData);
+  const isEditable = $derived(!editor.isReadOnly());
+  const asset = $derived(imageData.id ? editor.imageAssets.get(imageData.id) : undefined);
+  const currentUploadId = $derived(imageData.uploadId ?? localUploadId);
+  const inflight = $derived(currentUploadId ? editor.inflightImages.get(currentUploadId) : undefined);
+  const imageSrc = $derived(asset?.url ?? inflight?.url);
+  const hasImage = $derived(!!imageSrc);
+  const isUploading = $derived(!!inflight && !asset);
+  const originalWidth = $derived(asset?.width ?? inflight?.width ?? 0);
+  const originalHeight = $derived(asset?.height ?? inflight?.height ?? 0);
+  const aspectRatio = $derived(originalWidth > 0 ? originalHeight / originalWidth : 0);
+
+  const liveWidth = $derived(originalWidth <= 0 ? el.bounds.width * proportion : Math.min(originalWidth, el.bounds.width * proportion));
+  const liveHeight = $derived(aspectRatio <= 0 ? 0 : liveWidth * aspectRatio);
+
+  const { anchor, floating } = createFloatingActions({
+    placement: 'bottom',
+    offset: 4,
+  });
+
   $effect(() => {
     pickerOpened = el.isSelected;
   });
 
-  let containerEl = $state<HTMLDivElement>();
-  let proportion = $state(imageData.proportion);
-  let isResizing = $state(false);
-  let initialResizeData: { x: number; width: number; proportion: number; reverse: boolean } | null = null;
+  const getWidthBounds = (boundsWidth: number) => {
+    const maxWidth = Math.min(originalWidth, boundsWidth);
+    const minWidth = Math.max(boundsWidth * 0.1, 100);
+    return { minWidth, maxWidth };
+  };
+
+  const clampWidth = (width: number, boundsWidth: number) => {
+    const { minWidth, maxWidth } = getWidthBounds(boundsWidth);
+    return Math.max(minWidth, Math.min(maxWidth, width));
+  };
 
   $effect(() => {
-    if (!isResizing) {
-      proportion = imageData.proportion;
+    const dataProportion = imageData.proportion;
+    if (!untrack(() => isResizing)) {
+      proportion = dataProportion;
+    }
+  });
+
+  $effect(() => {
+    const boundsWidth = el.bounds.width;
+    if (isResizing || boundsWidth <= 0 || originalWidth <= 0) return;
+
+    const currentWidth = Math.min(originalWidth, boundsWidth * proportion);
+    const clampedWidth = clampWidth(currentWidth, boundsWidth);
+
+    if (currentWidth !== clampedWidth) {
+      const newProportion = clampedWidth / boundsWidth;
+      proportion = newProportion;
+      editor.dispatch({
+        type: 'setImageProportion',
+        nodeId: el.nodeId,
+        proportion: newProportion,
+      });
     }
   });
 
@@ -55,7 +97,7 @@
       const file = editor.popUpload(uploadId);
       if (file) {
         processedUploadId = uploadId;
-        void processFile(file);
+        void processFile(file, uploadId);
       } else {
         console.warn('Upload file not found for uploadId:', uploadId);
       }
@@ -68,64 +110,51 @@
     };
   });
 
-  const { anchor, floating } = createFloatingActions({
-    placement: 'bottom',
-    offset: 4,
-  });
-
-  const handleDelete = () => {
-    editor.dispatch({ type: 'deleteNode', nodeId: el.nodeId });
-    editor.focus();
-  };
-
   const getImageDimensions = (src: string): Promise<{ width: number; height: number }> => {
     return new Promise((resolve, reject) => {
       const img = new Image();
-      img.addEventListener('load', () => {
-        resolve({ width: img.naturalWidth, height: img.naturalHeight });
-      });
-      img.addEventListener('error', () => {
-        reject(new Error('Failed to load image'));
-      });
+      img.addEventListener('load', () => resolve({ width: img.naturalWidth, height: img.naturalHeight }));
+      img.addEventListener('error', () => reject(new Error('Failed to load image')));
       img.src = src;
     });
   };
 
-  const processFile = async (file: File) => {
+  const processFile = async (file: File, uploadId: string) => {
     const objectUrl = URL.createObjectURL(file);
 
     try {
       const { width, height } = await getImageDimensions(objectUrl);
-
-      editor.dispatch({
-        type: 'setImageDimensionsEphemeral',
-        nodeId: el.nodeId,
-        width,
-        height,
-      });
-
-      inflightUrl = objectUrl;
+      editor.inflightImages.set(uploadId, { url: objectUrl, width, height });
 
       const uploadedImage = await uploadBlobAsImage(file);
+      editor.imageAssets.set(uploadedImage.id, {
+        id: uploadedImage.id,
+        url: uploadedImage.url,
+        width: uploadedImage.width,
+        height: uploadedImage.height,
+        placeholder: uploadedImage.placeholder,
+      });
 
       editor.dispatch({
-        type: 'setImageSrc',
+        type: 'setImageId',
         nodeId: el.nodeId,
-        src: uploadedImage.url,
-        width,
-        height,
+        imageId: uploadedImage.id,
       });
-      inflightUrl = undefined;
+
       editor.focus();
     } catch (err) {
       console.error('Image upload failed:', err);
       Toast.error(`${file.name} 이미지 업로드에 실패했습니다.`);
-      inflightUrl = undefined;
     } finally {
-      if (!inflightUrl) {
-        URL.revokeObjectURL(objectUrl);
-      }
+      editor.inflightImages.delete(uploadId);
+      localUploadId = undefined;
+      URL.revokeObjectURL(objectUrl);
     }
+  };
+
+  const handleDelete = () => {
+    editor.dispatch({ type: 'deleteNode', nodeId: el.nodeId });
+    editor.focus();
   };
 
   const handleUpload = async () => {
@@ -143,8 +172,13 @@
       }
 
       const [firstFile, ...restFiles] = [...files];
+      const firstUploadId = imageData.uploadId ?? nanoid();
 
-      void processFile(firstFile);
+      if (!imageData.uploadId) {
+        localUploadId = firstUploadId;
+        editor.queueUpload(firstUploadId, firstFile);
+      }
+      void processFile(firstFile, firstUploadId);
 
       for (const file of restFiles) {
         const uploadId = nanoid();
@@ -166,8 +200,6 @@
   };
 
   const handleResizeStart = (event: PointerEvent, reverse: boolean) => {
-    if (!containerEl) return;
-
     const target = event.currentTarget as HTMLElement;
     target.setPointerCapture(event.pointerId);
     event.preventDefault();
@@ -175,7 +207,7 @@
     isResizing = true;
     initialResizeData = {
       x: event.clientX,
-      width: containerEl.clientWidth,
+      width: liveWidth,
       proportion,
       reverse,
     };
@@ -183,22 +215,16 @@
 
   const handleResize = (event: PointerEvent) => {
     const target = event.currentTarget as HTMLElement;
-    if (!target.hasPointerCapture(event.pointerId) || !initialResizeData || !containerEl) {
+    if (!target.hasPointerCapture(event.pointerId) || !initialResizeData) {
       return;
     }
 
+    const boundsWidth = el.bounds.width;
+    if (boundsWidth <= 0) return;
+
     const dx = (event.clientX - initialResizeData.x) * (initialResizeData.reverse ? -1 : 1);
-    const maxWidth = imageData.originalWidth ?? 0;
-    if (maxWidth <= 0) return;
-
-    const newWidth = Math.max(maxWidth * 0.1, Math.min(maxWidth, initialResizeData.width + dx * 2));
-    proportion = newWidth / maxWidth;
-
-    editor.dispatch({
-      type: 'setImageProportion',
-      nodeId: el.nodeId,
-      proportion,
-    });
+    const newWidth = clampWidth(initialResizeData.width + dx * 2, boundsWidth);
+    proportion = newWidth / boundsWidth;
   };
 
   const handleResizeEnd = (event: PointerEvent) => {
@@ -214,64 +240,27 @@
     });
     editor.focus();
   };
-
-  $effect(() => {
-    return () => {
-      if (inflightUrl?.startsWith('blob:')) {
-        URL.revokeObjectURL(inflightUrl);
-      }
-    };
-  });
-
-  const originalWidth = $derived(imageData.originalWidth ?? 0);
-  const originalHeight = $derived(imageData.originalHeight ?? 0);
-  const aspectRatio = $derived(originalWidth > 0 ? originalHeight / originalWidth : 0);
-  const { displayWidth } = $derived(calculateImageDisplaySize(el.bounds, originalWidth, originalHeight));
-
-  const liveWidth = $derived(isResizing && originalWidth > 0 ? Math.min(originalWidth * proportion, el.bounds.width) : displayWidth);
-  const liveHeight = $derived(
-    isResizing && originalWidth > 0 ? Math.min(originalWidth * proportion * aspectRatio, el.bounds.height) : el.bounds.height,
-  );
 </script>
 
-<div
-  style:left="{el.bounds.x}px"
-  style:top="{el.bounds.y}px"
-  style:width="{el.bounds.width}px"
-  style:height="{el.bounds.height}px"
-  class={css({
-    position: 'absolute',
-    userSelect: 'none',
-    display: 'flex',
-    justifyContent: 'center',
-    backgroundColor: 'surface.default', // for mix-blend-mode: difference
-  })}
-  data-external-element
-  data-node-id={el.nodeId}
->
+<ExternalElementWrapper {el} minHeight={hasImage ? undefined : '48px'}>
   <div
-    bind:this={containerEl}
-    style:width="{liveWidth}px"
-    style:height="{liveHeight}px"
-    class={cx('group', css({ position: 'relative' }))}
+    style:width={hasImage ? `${liveWidth}px` : '100%'}
+    style:height={hasImage ? `${liveHeight}px` : undefined}
+    class={cx('group', css({ position: 'relative', margin: '[0 auto]' }))}
     use:anchor
   >
     {#if hasImage}
-      {#if imageData.src && !isUploading}
-        <img
-          class={css({ width: 'full', height: 'full', objectFit: 'contain', borderRadius: '4px' })}
-          alt="본문 이미지"
-          src={imageData.src}
-        />
-      {:else if inflightUrl}
-        <img
-          class={css({ width: 'full', height: 'full', objectFit: 'contain', borderRadius: '4px' })}
-          alt=""
-          onerror={(e) => {
-            (e.currentTarget as HTMLImageElement).src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
-          }}
-          src={inflightUrl}
-        />
+      <Img
+        style={css.raw({ width: 'full', borderRadius: '4px' })}
+        alt="본문 이미지"
+        placeholder={asset?.placeholder}
+        progressive
+        ratio={originalHeight > 0 ? originalWidth / originalHeight : undefined}
+        size="full"
+        url={imageSrc ?? ''}
+      />
+
+      {#if isUploading}
         <div class={center({ position: 'absolute', inset: '0', backgroundColor: 'white/50' })}>
           <RingSpinner style={css.raw({ size: '24px', color: 'text.disabled' })} />
         </div>
@@ -382,7 +371,7 @@
           borderRadius: '4px',
           backgroundColor: 'surface.muted',
           width: 'full',
-          height: 'full',
+          height: '48px',
         })}
         use:anchor
       >
@@ -431,10 +420,7 @@
       </div>
     {/if}
   </div>
-  {#if el.isSelected}
-    <div class={css({ position: 'absolute', inset: '0', backgroundColor: 'selection', pointerEvents: 'none' })}></div>
-  {/if}
-</div>
+</ExternalElementWrapper>
 
 {#if pickerOpened && !hasImage && isEditable}
   <div
