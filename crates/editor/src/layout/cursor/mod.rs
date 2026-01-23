@@ -38,6 +38,12 @@ pub fn find_scope(ctx: &NavigationContext, node_id: NodeId) -> Scope {
     let doc = ctx.doc;
     let mut current = node_id;
 
+    if let Some(node_type) = doc.get_node_type(current) {
+        if node_type == NodeType::TableCell {
+            return Scope::TableCell { node_id: current };
+        }
+    }
+
     loop {
         let Some(parent_id) = doc.get_parent_id(current) else {
             return Scope::Document;
@@ -47,8 +53,7 @@ pub fn find_scope(ctx: &NavigationContext, node_id: NodeId) -> Scope {
         };
 
         if parent_type == NodeType::TableCell {
-            let node_id = parent_id;
-            return Scope::TableCell { node_id };
+            return Scope::TableCell { node_id: parent_id };
         }
 
         if parent_type == NodeType::Root {
