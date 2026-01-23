@@ -379,9 +379,9 @@ builder.queryField('activeWritersCount', (t) =>
   t.field({
     type: 'Int',
     resolve: async () => {
-      const thirtySecondsAgo = Date.now() - 30_000;
+      const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
 
-      await redis.zremrangebyscore('writers:active', '-inf', thirtySecondsAgo);
+      await redis.zremrangebyscore('writers:active', '-inf', sevenDaysAgo);
 
       const count = await redis.zcard('writers:active');
       return count;
