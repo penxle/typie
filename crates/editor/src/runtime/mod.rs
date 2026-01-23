@@ -1408,10 +1408,11 @@ mod tests {
             "should only decorate first empty paragraph"
         );
         let decor = &decorations[0];
-        assert_eq!(decor.node_id, p1);
-        assert_eq!(decor.start_offset, 0);
+        assert_eq!(decor.node_id(), p1);
+        assert_eq!(decor.start_offset(), 0);
         assert_eq!(
-            decor.end_offset, 1,
+            decor.end_offset(),
+            1,
             "empty paragraph should render minimal range"
         );
     }

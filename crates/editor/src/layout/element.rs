@@ -65,6 +65,7 @@ pub enum Element {
     FoldTitleBackground(FoldTitleBackgroundElement),
     FoldContent(FoldContentElement),
     TableBorder(TableBorderElement),
+    TableCell(TableCellElement),
 }
 
 impl Element {
@@ -83,6 +84,7 @@ impl Element {
             Element::FoldTitleBackground(e) => e.size,
             Element::FoldContent(e) => e.size,
             Element::TableBorder(e) => e.size,
+            Element::TableCell(e) => e.size,
         }
     }
 
@@ -101,6 +103,7 @@ impl Element {
             Element::FoldTitleBackground(_) => None,
             Element::FoldContent(_) => None,
             Element::TableBorder(_) => None,
+            Element::TableCell(_) => None,
         }
     }
 
@@ -119,6 +122,7 @@ impl Element {
             Element::FoldTitleBackground(e) => Some(e),
             Element::FoldContent(e) => Some(e),
             Element::TableBorder(e) => Some(e),
+            Element::TableCell(e) => Some(e),
         }
     }
 
@@ -137,6 +141,7 @@ impl Element {
             Element::FoldTitleBackground(_) => PointerStyle::Pointer,
             Element::FoldContent(_) => PointerStyle::Default,
             Element::TableBorder(_) => PointerStyle::Text,
+            Element::TableCell(_) => PointerStyle::Text,
         }
     }
 
@@ -155,6 +160,7 @@ impl Element {
             Element::FoldTitleBackground(_) => None,
             Element::FoldContent(_) => None,
             Element::TableBorder(e) => Some(e.node_id),
+            Element::TableCell(e) => Some(e.node_id),
         }
     }
 

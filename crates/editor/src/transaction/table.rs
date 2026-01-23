@@ -1,5 +1,6 @@
 use crate::model::{Node, NodeId, ParagraphNode, TableCellNode, TableNode, TableRowNode};
 use crate::runtime::Effect;
+use crate::state::selection_helpers::CellSelectionInfo;
 use crate::state::{Position, Selection};
 use crate::transaction::Transaction;
 use crate::types::Affinity;
@@ -290,5 +291,203 @@ impl Transaction {
         self.push_effect(Effect::LayoutChanged);
 
         Ok(true)
+    }
+
+    pub fn delete_cell_selection(&mut self, info: &CellSelectionInfo) -> Result<bool> {
+        match info {
+            CellSelectionInfo::None => Ok(false),
+            CellSelectionInfo::FullTables(_) => Ok(false),
+            CellSelectionInfo::Rectangular { table_id, range } => {
+                let table_node = self.node(*table_id).context("Table not found")?;
+                let row_ids: Vec<_> = table_node.children().map(|c| c.node_id()).collect();
+
+                let ((r_start, r_end), (c_start, c_end)) = range;
+                let mut first_new_para_id = None;
+
+                for r in *r_start..=*r_end {
+                    if let Some(row_id) = row_ids.get(r) {
+                        let row_node = self.node(*row_id).context("Row not found")?;
+                        let cell_ids: Vec<_> = row_node.children().map(|c| c.node_id()).collect();
+
+                        for c in *c_start..=*c_end {
+                            if let Some(cell_id) = cell_ids.get(c) {
+                                let cell = self.node(*cell_id).context("Cell not found")?;
+                                let children: Vec<_> =
+                                    cell.children().map(|c| c.node_id()).collect();
+
+                                for child_id in children {
+                                    self.delete_node_recursive(child_id)?;
+                                }
+
+                                let para_id = NodeId::new();
+                                let cell_mut = self.node_mut(*cell_id).context("Cell not found")?;
+                                cell_mut.as_mut().insert_child_with_id(
+                                    0,
+                                    para_id,
+                                    Node::Paragraph(ParagraphNode::default()),
+                                )?;
+
+                                if first_new_para_id.is_none() {
+                                    first_new_para_id = Some(para_id);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                self.push_effect(Effect::SubtreeChanged { node_id: *table_id });
+
+                if let Some(para_id) = first_new_para_id {
+                    self.set_selection(Selection::collapsed(Position::new(
+                        para_id,
+                        0,
+                        Affinity::Downstream,
+                    )));
+                }
+
+                Ok(true)
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{model::NodeId, runtime::Message};
+
+    #[test]
+    fn test_delete_cell_selection_rectangular() {
+        let mut p1 = id!();
+        let mut p2 = id!();
+
+        let initial = state! {
+            doc {
+                table {
+                    table_row {
+                        table_cell { @p1 paragraph { text { "cell1" } } }
+                        table_cell { @p2 paragraph { text { "cell2" } } }
+                    }
+                }
+            }
+            selection { (p1, 0) -> (p2, 5) }
+        };
+
+        let actual = transact!(initial, |tr| {
+            tr.delete_selection().unwrap();
+        });
+
+        let doc = actual.doc;
+        let root = doc.node(NodeId::ROOT).unwrap();
+        let table = root.first_child().unwrap();
+        let row = table.first_child().unwrap();
+        let cell1 = row.first_child().unwrap();
+        let cell2 = row.children().nth(1).unwrap();
+
+        assert_eq!(cell1.children().count(), 1);
+        let p1_new = cell1.first_child().unwrap();
+        assert_eq!(p1_new.children().count(), 0);
+
+        assert_eq!(cell2.children().count(), 1);
+        let p2_new = cell2.first_child().unwrap();
+        assert_eq!(p2_new.children().count(), 0);
+    }
+
+    #[test]
+    fn test_delete_cell_selection_full_table() {
+        let mut t = id!();
+        let mut p_before = id!();
+        let mut p_after = id!();
+
+        let mut rt = runtime! {
+            doc {
+                @p_before paragraph { text { "before" } }
+                @t table {
+                    table_row {
+                        table_cell { paragraph { text { "cell" } } }
+                    }
+                }
+                @p_after paragraph { text { "after" } }
+            }
+            selection { (p_before, 0) -> (p_after, 5) }
+        };
+
+        rt.update(Message::DeleteSelection);
+        rt.flush();
+
+        let doc = rt.doc();
+        assert!(doc.node(t).is_none());
+    }
+
+    #[test]
+    fn test_delete_cell_selection_internal_to_external() {
+        let mut t = id!();
+        let mut p_internal = id!();
+        let mut p_external = id!();
+
+        let initial = state! {
+          doc {
+            @t table {
+              table_row {
+                table_cell { @p_internal paragraph { text { "internal" } } }
+              }
+            }
+            @p_external paragraph { text { "external" } }
+          }
+          selection { (p_internal, 0) -> (p_external, 3) }
+        };
+
+        let actual = transact!(initial, |tr| {
+            tr.delete_selection().unwrap();
+        });
+
+        let doc = actual.doc;
+        assert!(
+            doc.node(t).is_none(),
+            "Table should be deleted when selected internal-to-external"
+        );
+    }
+
+    #[test]
+    fn test_delete_mixed_table_selection() {
+        use crate::model::{Node, TableBorderStyle};
+        let mut n2 = id!();
+        let mut n3 = id!();
+
+        let initial = state! {
+            doc {
+                paragraph {}
+                table(border_style: TableBorderStyle::Solid,) {
+                    table_row {
+                        table_cell {
+                            @n2 paragraph {
+                                text { "123" }
+                            }
+                        }
+                    }
+                }
+                @n3 paragraph {
+                    text { "456" }
+                }
+            }
+            selection { (n3, 1) -> (n2, 2) }
+        };
+
+        let actual = transact!(initial, |tr| {
+            tr.delete_selection().unwrap();
+        });
+
+        let doc = actual.doc;
+
+        let n3_node = doc.node(n3).expect("n3 should exist");
+        if let Node::Paragraph(_p) = n3_node.node() {
+            let text_child = n3_node.first_child().expect("n3 should have text child");
+            if let Node::Text(t) = text_child.node() {
+                assert_eq!(t.text.to_string(), "56", "Expected '4' to be deleted");
+            } else {
+                panic!("n3 child should be text");
+            }
+        } else {
+            panic!("n3 should be paragraph");
+        }
     }
 }

@@ -502,7 +502,7 @@ impl Renderer {
                 }
                 _ => {
                     if let Some(block_id) = element.block_id() {
-                        if selections.iter().any(|s| s.node_id == block_id) {
+                        if selections.iter().any(|s| s.node_id() == block_id) {
                             let node_size = &positioned.node.size;
                             if let Some(translated) = Rect::from_xywh(
                                 (pos.x - bounds_origin.x) * scale,

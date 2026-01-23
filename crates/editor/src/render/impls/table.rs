@@ -1,4 +1,4 @@
-use crate::layout::elements::TableBorderElement;
+use crate::layout::elements::{TableBorderElement, TableCellElement};
 use crate::model::{TABLE_BORDER_WIDTH, TableBorderStyle};
 use crate::render::{GlyphRenderer, Render, RenderContext};
 use tiny_skia::{Paint, PathBuilder, PixmapMut, Stroke, Transform};
@@ -64,6 +64,30 @@ impl Render for TableBorderElement {
 
         if let Some(path) = pb.finish() {
             pixmap.stroke_path(&path, &paint, &stroke, transform, None);
+        }
+    }
+}
+
+impl Render for TableCellElement {
+    fn render(
+        &self,
+        pixmap: &mut PixmapMut,
+        _glyph_renderer: &mut GlyphRenderer,
+        transform: Transform,
+        ctx: &RenderContext,
+    ) {
+        let is_selected = ctx.selections.iter().any(|s| {
+            s.is_cell() && s.node_id() == self.node_id
+        });
+
+        if is_selected {
+            let color = ctx.theme.color_with_alpha("selection", 77);
+            let mut paint = Paint::default();
+            paint.set_color(color);
+            
+            if let Some(rect) = tiny_skia::Rect::from_xywh(0.0, 0.0, self.size.width, self.size.height) {
+                pixmap.fill_rect(rect, &paint, transform, None);
+            }
         }
     }
 }

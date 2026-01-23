@@ -102,7 +102,7 @@ impl LineElement {
         &self,
         selections: &'a [SelectionDecor],
     ) -> Option<&'a SelectionDecor> {
-        selections.iter().find(|s| s.node_id == self.block_id)
+        selections.iter().find(|s| s.node_id() == self.block_id)
     }
 
     fn selection_highlight(
@@ -162,7 +162,7 @@ impl LineElement {
             == parley::layout::BreakReason::Explicit
             && self.line_idx + 1 < self.layout.len()
             && local_start <= self.metric.end_offset
-            && selection.end_offset >= self.metric.end_offset;
+            && selection.end_offset() >= self.metric.end_offset;
 
         if !selection_covers_explicit_break {
             return None;
@@ -178,15 +178,15 @@ impl LineElement {
     }
 
     fn intersect_selection_segment(&self, selection: &SelectionDecor) -> Option<(usize, usize)> {
-        if selection.start_offset >= self.metric.end_offset
-            || selection.end_offset <= self.metric.start_offset
+        if selection.start_offset() >= self.metric.end_offset
+            || selection.end_offset() <= self.metric.start_offset
         {
             return None;
         }
 
         Some((
-            selection.start_offset.max(self.metric.start_offset),
-            selection.end_offset.min(self.metric.end_offset),
+            selection.start_offset().max(self.metric.start_offset),
+            selection.end_offset().min(self.metric.end_offset),
         ))
     }
 
@@ -195,7 +195,7 @@ impl LineElement {
             return None;
         };
 
-        if !self.is_empty && selection.end_offset <= self.metric.end_offset {
+        if !self.is_empty && selection.end_offset() <= self.metric.end_offset {
             return None;
         }
 
@@ -880,7 +880,7 @@ mod tests {
             true, // has_page_break
         );
 
-        let selection = SelectionDecor {
+        let selection = SelectionDecor::Text {
             node_id: line.block_id,
             start_offset: 0,
             end_offset: 1,
@@ -942,19 +942,19 @@ mod tests {
         println!("list_p1: {:?}", list_p1);
         println!("list_p2: {:?}", list_p2);
 
-        let list_p1_decor = selections.iter().find(|s| s.node_id == list_p1).unwrap();
-        let list_p2_decor = selections.iter().find(|s| s.node_id == list_p2).unwrap();
+        let list_p1_decor = selections.iter().find(|s| s.node_id() == list_p1).unwrap();
+        let list_p2_decor = selections.iter().find(|s| s.node_id() == list_p2).unwrap();
 
         assert_eq!(
-            list_p1_decor.start_offset, 0,
+            list_p1_decor.start_offset(), 0,
             "list_p1 start offset mismatch"
         );
-        assert_eq!(list_p1_decor.end_offset, 1, "list_p1 end offset mismatch");
+        assert_eq!(list_p1_decor.end_offset(), 1, "list_p1 end offset mismatch");
 
         assert_eq!(
-            list_p2_decor.start_offset, 0,
+            list_p2_decor.start_offset(), 0,
             "list_p2 start offset mismatch"
         );
-        assert_eq!(list_p2_decor.end_offset, 1, "list_p2 end offset mismatch");
+        assert_eq!(list_p2_decor.end_offset(), 1, "list_p2 end offset mismatch");
     }
 }

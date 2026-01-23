@@ -34,3 +34,15 @@ impl TableBorderElement {
         }
     }
 }
+
+#[derive(Debug, Clone)]
+pub struct TableCellElement {
+    pub size: Size,
+    pub node_id: NodeId,
+}
+
+impl TableCellElement {
+    pub fn new(size: Size, node_id: NodeId) -> Self {
+        Self { size, node_id }
+    }
+}
