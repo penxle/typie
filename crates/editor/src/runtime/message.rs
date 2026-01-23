@@ -482,6 +482,22 @@ define_messages! {
     => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_set_table_border_style(table_id, style) },
 
+    SelectTableRow { table_id: String, row: usize }
+    => when When::True
+    => handle(rt) { rt.handle_select_table_row(table_id, row) },
+
+    SelectTableColumn { table_id: String, col: usize }
+    => when When::True
+    => handle(rt) { rt.handle_select_table_column(table_id, col) },
+
+    MoveTableRow { table_id: String, from_row: usize, to_row: usize }
+    => when When::key(ContextKey::CanEdit)
+    => handle(rt) { rt.handle_move_table_row(table_id, from_row, to_row) },
+
+    MoveTableColumn { table_id: String, from_col: usize, to_col: usize }
+    => when When::key(ContextKey::CanEdit)
+    => handle(rt) { rt.handle_move_table_column(table_id, from_col, to_col) },
+
     DeleteNode { node_id: String }
     => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_delete_node(node_id) },
