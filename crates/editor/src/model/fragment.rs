@@ -1,7 +1,7 @@
 use super::{Doc, Mark, Node, NodeId, TextNode};
 use crate::schema::Schema;
 use crate::state::position_helpers::find_child_at_offset;
-use crate::state::{Position, Selection};
+use crate::state::{CellSelectionInfo, Position, Selection, compute_cell_selection};
 use anyhow::{Context, Result};
 use indexmap::IndexMap;
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -118,6 +118,62 @@ impl Fragment {
         Self::new_from_selection(doc, &selection)
     }
 
+    fn extract_rectangular_cells(
+        doc: &Doc,
+        table_id: NodeId,
+        range: ((usize, usize), (usize, usize)),
+    ) -> Result<Self> {
+        let table = doc.node(table_id).context("Table not found")?;
+
+        let ((r_start, r_end), (c_start, c_end)) = range;
+
+        let mut builder = Self::builder();
+
+        let table_frag_node = FragmentNode::new(table.node().clone(), None);
+        builder = builder.add((table_id, table_frag_node));
+
+        let row_ids: Vec<_> = table.children().map(|c| c.node_id()).collect();
+
+        for r in r_start..=r_end {
+            if let Some(&row_id) = row_ids.get(r) {
+                let row = doc.node(row_id).context("Row not found")?;
+                let row_frag_node = FragmentNode::new(row.node().clone(), Some(table_id));
+                builder = builder.add((row_id, row_frag_node));
+
+                let cell_ids: Vec<_> = row.children().map(|c| c.node_id()).collect();
+
+                for c in c_start..=c_end {
+                    if let Some(&cell_id) = cell_ids.get(c) {
+                        let cell = doc.node(cell_id).context("Cell not found")?;
+                        let cell_frag_node = FragmentNode::new(cell.node().clone(), Some(row_id));
+                        builder = builder.add((cell_id, cell_frag_node));
+
+                        Self::collect_descendants(doc, cell_id, &mut builder)?;
+                    }
+                }
+            }
+        }
+
+        Ok(builder.open_start(0).open_end(0).build())
+    }
+
+    fn collect_descendants(
+        doc: &Doc,
+        parent_id: NodeId,
+        builder: &mut FragmentBuilder,
+    ) -> Result<()> {
+        if let Some(node) = doc.node(parent_id) {
+            for child in node.children() {
+                let child_id = child.node_id();
+                let frag_node = FragmentNode::new(child.node().clone(), Some(parent_id));
+
+                builder.nodes.insert(child_id, frag_node);
+                Self::collect_descendants(doc, child_id, builder)?;
+            }
+        }
+        Ok(())
+    }
+
     pub fn from_snapshot(snapshot: &[u8]) -> Result<Self> {
         let doc = std::rc::Rc::new(Doc::from_snapshot(snapshot.to_vec()));
         Self::from_doc(&doc)
@@ -173,6 +229,11 @@ impl Fragment {
     pub fn new_from_selection(doc: &Doc, selection: &Selection) -> Result<Self> {
         if selection.is_collapsed() {
             return Ok(Self::empty());
+        }
+
+        let cell_info = compute_cell_selection(doc, selection);
+        if let CellSelectionInfo::Rectangular { table_id, range } = cell_info {
+            return Self::extract_rectangular_cells(doc, table_id, range);
         }
 
         let (from, to) = selection.as_sorted(doc)?;
@@ -1738,5 +1799,62 @@ mod tests {
         };
 
         assert_fragment_eq!(fragment, expected);
+    }
+
+    #[test]
+    fn test_new_from_selection_rectangular_cells() {
+        let mut p1 = id!(); // Row 0, Col 0
+        let mut p2 = id!(); // Row 1, Col 1
+
+        let state = state! {
+            doc {
+                table {
+                    // Row 0
+                    table_row {
+                        table_cell { @p1 paragraph { text { "0-0" } } }
+                        table_cell { paragraph { text { "0-1" } } }
+                        table_cell { paragraph { text { "0-2" } } }
+                    }
+                    // Row 1
+                    table_row {
+                        table_cell { paragraph { text { "1-0" } } }
+                        table_cell { @p2 paragraph { text { "1-1" } } }
+                        table_cell { paragraph { text { "1-2" } } }
+                    }
+                }
+            }
+            selection { (p1, 0) -> (p2, 3) }
+        };
+
+        let fragment = Fragment::new_from_selection(&state.doc, &state.selection).unwrap();
+
+        assert_eq!(fragment.top_level_node_ids().len(), 1);
+        let (_, table_node) = fragment.nodes.get_index(0).unwrap();
+        assert!(matches!(table_node.data(), Node::Table(_)));
+
+        let table_id = *fragment.nodes.keys().next().unwrap();
+        let rows = fragment.children_of_node(table_id);
+        assert_eq!(rows.len(), 2, "Should extract 2 rows");
+
+        let (r0_id, _) = rows[0];
+        let r0_cells = fragment.children_of_node(r0_id);
+        assert_eq!(r0_cells.len(), 2, "Row 0 should have 2 cells (0-0, 0-1)");
+
+        let (c00_id, _) = r0_cells[0];
+        let c00_content = fragment.children_of_node(c00_id);
+        assert_eq!(c00_content.len(), 1);
+        let (p00_id, _) = c00_content[0];
+        let p00_text = fragment.text_segments_of_node(p00_id);
+        assert_eq!(p00_text[0].0, "0-0");
+
+        let (r1_id, _) = rows[1];
+        let r1_cells = fragment.children_of_node(r1_id);
+        assert_eq!(r1_cells.len(), 2, "Row 1 should have 2 cells (1-0, 1-1)");
+
+        let (c11_id, _) = r1_cells[1];
+        let c11_content = fragment.children_of_node(c11_id);
+        let (p11_id, _) = c11_content[0];
+        let p11_text = fragment.text_segments_of_node(p11_id);
+        assert_eq!(p11_text[0].0, "1-1");
     }
 }

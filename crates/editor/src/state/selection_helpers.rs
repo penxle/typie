@@ -1,11 +1,13 @@
-use crate::model::{Doc, Mark, MarkType, Node, NodeId, NodeRef, SelectionDecor, TextAlign};
+use crate::model::{
+    Doc, Mark, MarkType, Node, NodeId, NodeRef, NodeType, SelectionDecor, TextAlign,
+};
 use crate::state::position::Position;
 use crate::state::position_helpers::compare_positions;
 use crate::state::position_helpers::find_child_at_offset;
 use crate::state::{BlockTraverser, Selection};
 use anyhow::{Context, Result};
 use rustc_hash::{FxHashMap, FxHashSet};
-use std::cmp::Ordering;
+use std::cmp::{Ordering, max, min};
 
 pub fn collect_blocks_in_range(doc: &Doc, from: Position, to: Position) -> Result<Vec<NodeId>> {
     let start_id = start_block_id(doc, from)?;
@@ -171,6 +173,47 @@ pub fn build_selection_decorations(
         Err(_) => return Vec::new(),
     };
 
+    let cell_selection_info = compute_cell_selection(doc, selection);
+    let mut processed_cells = FxHashSet::default();
+
+    match &cell_selection_info {
+        CellSelectionInfo::Rectangular { table_id, range } => {
+            if let Some(table) = doc.node(*table_id) {
+                for (r_idx, row) in table.children().enumerate() {
+                    if r_idx < range.0.0 || r_idx > range.0.1 {
+                        continue;
+                    }
+
+                    for (c_idx, cell) in row.children().enumerate() {
+                        if c_idx < range.1.0 || c_idx > range.1.1 {
+                            continue;
+                        }
+
+                        let cell_id = cell.node_id();
+                        if processed_cells.insert(cell_id) {
+                            decorations.push(SelectionDecor::Cell { node_id: cell_id });
+                        }
+                    }
+                }
+            }
+        }
+        CellSelectionInfo::FullTables(table_ids) => {
+            for &table_id in table_ids {
+                if let Some(table) = doc.node(table_id) {
+                    for row in table.children() {
+                        for cell in row.children() {
+                            let cell_id = cell.node_id();
+                            if processed_cells.insert(cell_id) {
+                                decorations.push(SelectionDecor::Cell { node_id: cell_id });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        CellSelectionInfo::None => {}
+    }
+
     let block_ids = match block_ids {
         Some(ids) => ids.to_vec(),
         None => collect_blocks_in_range(doc, from, to).unwrap_or_default(),
@@ -185,10 +228,42 @@ pub fn build_selection_decorations(
             continue;
         }
 
-        let block_len = block_content_len(&block).max(1);
+        let should_skip = {
+            let mut result = false;
+            let mut current_id = Some(block.node_id());
+            while let Some(id) = current_id {
+                if processed_cells.contains(&id) {
+                    result = true;
+                    break;
+                }
+
+                if let CellSelectionInfo::Rectangular { table_id, .. } = &cell_selection_info {
+                    if id == *table_id {
+                        result = true;
+                        break;
+                    }
+                }
+
+                if let Some(node) = doc.node(id) {
+                    if node.node_type() == NodeType::Table {
+                        break;
+                    }
+                    current_id = node.parent().map(|n| n.node_id());
+                } else {
+                    break;
+                }
+            }
+            result
+        };
+
+        if should_skip {
+            continue;
+        }
+
+        let block_len = block_content_len(&doc.node(block_id).unwrap()).max(1);
         let (start_offset, end_offset) = calculate_block_offsets(block_id, block_len, from, to);
 
-        decorations.push(SelectionDecor {
+        decorations.push(SelectionDecor::Text {
             node_id: block_id,
             start_offset,
             end_offset,
@@ -295,7 +370,7 @@ fn add_ancestor_decorations(
         }
 
         if end_offset > start_offset {
-            decorations.push(SelectionDecor {
+            decorations.push(SelectionDecor::Text {
                 node_id: ancestor_id,
                 start_offset,
                 end_offset,
@@ -504,6 +579,126 @@ where
         })
         .collect())
 }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CellSelectionInfo {
+    None,
+    Rectangular {
+        table_id: NodeId,
+        range: ((usize, usize), (usize, usize)),
+    },
+    FullTables(Vec<NodeId>),
+}
+
+pub fn compute_cell_selection(doc: &Doc, selection: &Selection) -> CellSelectionInfo {
+    let anchor_info = find_table_cell(doc, selection.anchor.node_id);
+    let head_info = find_table_cell(doc, selection.head.node_id);
+
+    match (anchor_info, head_info) {
+        (Some((_, t1, r1, c1)), Some((_, t2, r2, c2))) if t1 == t2 => {
+            if r1 == r2 && c1 == c2 {
+                CellSelectionInfo::None
+            } else {
+                CellSelectionInfo::Rectangular {
+                    table_id: t1,
+                    range: ((min(r1, r2), max(r1, r2)), (min(c1, c2), max(c1, c2))),
+                }
+            }
+        }
+        _ => {
+            let tables = collect_relevant_tables(doc, selection).unwrap_or_default();
+
+            if tables.is_empty() {
+                CellSelectionInfo::None
+            } else {
+                CellSelectionInfo::FullTables(tables)
+            }
+        }
+    }
+}
+
+fn collect_relevant_tables(doc: &Doc, selection: &Selection) -> Result<Vec<NodeId>> {
+    let mut table_ids = FxHashSet::default();
+
+    if let Ok(traversed) =
+        collect_nodes_in_selection(doc, selection, |node| matches!(node, Node::Table(_)))
+    {
+        table_ids.extend(traversed);
+    }
+
+    for &node_id in &[selection.anchor.node_id, selection.head.node_id] {
+        let mut current_id = Some(node_id);
+        while let Some(id) = current_id {
+            if let Some(node) = doc.node(id) {
+                if node.node_type() == NodeType::Table {
+                    table_ids.insert(id);
+                }
+                current_id = node.parent().map(|n| n.node_id());
+            } else {
+                break;
+            }
+        }
+    }
+
+    let mut result: Vec<_> = table_ids
+        .into_iter()
+        .filter(|&id| {
+            let fully_selected = is_node_fully_selected(doc, selection, id).unwrap_or(false);
+            let contains_anchor =
+                id == selection.anchor.node_id || is_ancestor(doc, id, selection.anchor.node_id);
+            let contains_head =
+                id == selection.head.node_id || is_ancestor(doc, id, selection.head.node_id);
+
+            fully_selected || contains_anchor || contains_head
+        })
+        .collect();
+
+    result.sort_by(|&a, &b| {
+        let pos_a = Position::new(a, 0, crate::types::Affinity::default());
+        let pos_b = Position::new(b, 0, crate::types::Affinity::default());
+        compare_positions(doc, pos_a, pos_b).unwrap_or(Ordering::Equal)
+    });
+
+    Ok(result)
+}
+
+fn find_table_cell(doc: &Doc, node_id: NodeId) -> Option<(NodeId, NodeId, usize, usize)> {
+    let mut current_id = node_id;
+
+    loop {
+        let Some(node) = doc.node(current_id) else {
+            break;
+        };
+
+        if node.node_type() == NodeType::TableCell {
+            let cell = node;
+            let row = cell.parent()?;
+            if row.node_type() != NodeType::TableRow {
+                return None;
+            }
+            let table = row.parent()?;
+            if table.node_type() != NodeType::Table {
+                return None;
+            }
+
+            let row_idx = row.index()?;
+            let col_idx = cell.index()?;
+
+            return Some((cell.node_id(), table.node_id(), row_idx, col_idx));
+        }
+        if node.node_type() == NodeType::Table {
+            break;
+        }
+
+        if let Some(parent) = node.parent() {
+            current_id = parent.node_id();
+        } else {
+            break;
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -570,15 +765,15 @@ mod tests {
 
         let decorations = build_selection_decorations(&state.doc, &state.selection, None);
 
-        let fold_title_decor = decorations.iter().find(|d| d.node_id == n1);
+        let fold_title_decor = decorations.iter().find(|d| d.node_id() == n1);
         assert!(
             fold_title_decor.is_some(),
             "FoldTitle should have a selection decoration"
         );
 
         let decor = fold_title_decor.unwrap();
-        assert_eq!(decor.start_offset, 8);
-        assert_eq!(decor.end_offset, 14);
+        assert_eq!(decor.start_offset(), 8);
+        assert_eq!(decor.end_offset(), 14);
     }
 
     #[test]
@@ -601,29 +796,29 @@ mod tests {
 
         let decorations = build_selection_decorations(&state.doc, &state.selection, None);
 
-        let para_1_decor = decorations.iter().find(|d| d.node_id == n1);
+        let para_1_decor = decorations.iter().find(|d| d.node_id() == n1);
         assert!(
             para_1_decor.is_some(),
             "Paragraph 1 should have a selection decoration"
         );
-        assert_eq!(para_1_decor.unwrap().start_offset, 0);
-        assert_eq!(para_1_decor.unwrap().end_offset, 1);
+        assert_eq!(para_1_decor.unwrap().start_offset(), 0);
+        assert_eq!(para_1_decor.unwrap().end_offset(), 1);
 
-        let fold_title_decor = decorations.iter().find(|d| d.node_id == n2);
+        let fold_title_decor = decorations.iter().find(|d| d.node_id() == n2);
         assert!(
             fold_title_decor.is_some(),
             "FoldTitle should have a selection decoration"
         );
-        assert_eq!(fold_title_decor.unwrap().start_offset, 0);
-        assert_eq!(fold_title_decor.unwrap().end_offset, 1);
+        assert_eq!(fold_title_decor.unwrap().start_offset(), 0);
+        assert_eq!(fold_title_decor.unwrap().end_offset(), 1);
 
-        let fold_content_decor = decorations.iter().find(|d| d.node_id == n3);
+        let fold_content_decor = decorations.iter().find(|d| d.node_id() == n3);
         assert!(
             fold_content_decor.is_some(),
             "FoldContent should have a selection decoration"
         );
-        assert_eq!(fold_content_decor.unwrap().start_offset, 0);
-        assert_eq!(fold_content_decor.unwrap().end_offset, 1);
+        assert_eq!(fold_content_decor.unwrap().start_offset(), 0);
+        assert_eq!(fold_content_decor.unwrap().end_offset(), 1);
     }
 
     #[test]
@@ -639,19 +834,124 @@ mod tests {
 
         let decorations = build_selection_decorations(&state.doc, &state.selection, None);
 
-        let root_decor = decorations.iter().find(|d| d.node_id == NodeId::ROOT);
+        let root_decor = decorations.iter().find(|d| d.node_id() == NodeId::ROOT);
         assert!(
             root_decor.is_some(),
             "ROOT should have a selection decoration when selecting a single HR"
         );
         let decor = root_decor.unwrap();
         assert_eq!(
-            decor.start_offset, 1,
+            decor.start_offset(),
+            1,
             "decoration should start at offset 1 (before HR)"
         );
         assert_eq!(
-            decor.end_offset, 2,
+            decor.end_offset(),
+            2,
             "decoration should end at offset 2 (after HR)"
         );
+    }
+
+    #[test]
+    fn test_compute_cell_selection_rectangular_reverse() {
+        let mut t = id!();
+        let mut r1 = id!();
+        let mut c1_1 = id!();
+        let mut c1_2 = id!();
+        let mut r2 = id!();
+        let mut c2_1 = id!();
+        let mut c2_2 = id!();
+
+        let mut p_anchor = id!();
+        let mut p_head = id!();
+
+        let state = state! {
+            doc {
+                @t table {
+                    @r1 table_row {
+                        @c1_1 table_cell { paragraph {} }
+                        @c1_2 table_cell { @p_anchor paragraph { text { "A" } } }
+                    }
+                    @r2 table_row {
+                        @c2_1 table_cell { @p_head paragraph { text { "B" } } }
+                        @c2_2 table_cell { paragraph {} }
+                    }
+                }
+            }
+            selection { (p_anchor, 0) -> (p_head, 0) }
+        };
+
+        let cell_selection = compute_cell_selection(&state.doc, &state.selection);
+
+        match cell_selection {
+            CellSelectionInfo::Rectangular { table_id, range } => {
+                assert_eq!(table_id, t);
+                assert_eq!(range.0, (0, 1), "Row range mismatch");
+                assert_eq!(range.1, (0, 1), "Col range mismatch");
+            }
+            _ => panic!("Expected Rectangular selection, got {:?}", cell_selection),
+        }
+    }
+
+    #[test]
+    fn test_compute_cell_selection_full_table() {
+        let mut t = id!();
+        let mut p_before = id!();
+        let mut p_after = id!();
+
+        let state = state! {
+            doc {
+                @p_before paragraph { text { "before" } }
+                @t table {
+                    table_row {
+                        table_cell { paragraph { text { "cell" } } }
+                    }
+                }
+                @p_after paragraph { text { "after" } }
+            }
+            selection { (p_before, 0) -> (p_after, 5) }
+        };
+
+        let cell_selection = compute_cell_selection(&state.doc, &state.selection);
+
+        match cell_selection {
+            CellSelectionInfo::FullTables(tables) => {
+                assert_eq!(tables.len(), 1);
+                assert_eq!(tables[0], t);
+            }
+            _ => panic!("Expected FullTables selection, got {:?}", cell_selection),
+        }
+    }
+
+    #[test]
+    fn test_compute_cell_selection_internal_to_external() {
+        let mut t1 = id!();
+        let mut c1 = id!();
+        let mut p1 = id!();
+        let mut p2 = id!();
+
+        let state = state! {
+            doc {
+                @t1 table {
+                    table_row {
+                        @c1 table_cell {
+                            @p1 paragraph { text { "Cell" } }
+                        }
+                    }
+                }
+                @p2 paragraph { text { "Outside" } }
+            }
+            selection { (p1, 0) -> (p2, 2) }
+        };
+
+        let cell_selection = compute_cell_selection(&state.doc, &state.selection);
+
+        match cell_selection {
+            CellSelectionInfo::FullTables(ids) => {
+                assert_eq!(ids.len(), 1);
+                assert_eq!(ids[0], t1);
+            }
+            _ => panic!("Expected FullTables selection, got {:?}", cell_selection),
+        }
     }
 }

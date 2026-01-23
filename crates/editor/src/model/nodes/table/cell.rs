@@ -1,4 +1,7 @@
-use crate::layout::{Layout, LayoutContext, LayoutNode, PageBreakPolicy, PositionedNode};
+use crate::layout::elements::TableCellElement;
+use crate::layout::{
+    Element, Layout, LayoutContext, LayoutNode, PageBreakPolicy, PositionedNode,
+};
 use crate::model::Node;
 use crate::model::html::{DomSpec, NodeHtmlCodec, NodeParseRule};
 use crate::types::{BoxConstraints, Point, Size};
@@ -73,7 +76,10 @@ impl Layout for TableCellNode {
 
         LayoutNode {
             size: Size::new(max_width, y),
-            element: None,
+            element: Some(Element::TableCell(TableCellElement::new(
+                Size::new(max_width, y),
+                cell_id,
+            ))),
             children: Some(children),
             page_break_policy: PageBreakPolicy::Avoid,
             render_hints: Default::default(),

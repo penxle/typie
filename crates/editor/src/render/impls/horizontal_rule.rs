@@ -54,7 +54,7 @@ impl HorizontalRuleElement {
         let Some(selection) = ctx
             .selections
             .iter()
-            .find(|sel| sel.node_id == self.parent_id)
+            .find(|sel| sel.node_id() == self.parent_id)
         else {
             return false;
         };
@@ -64,7 +64,7 @@ impl HorizontalRuleElement {
         };
 
         let offset = calculate_offset_before_child(&parent, self.node_id);
-        selection.start_offset <= offset && offset < selection.end_offset
+        selection.start_offset() <= offset && offset < selection.end_offset()
     }
 
     fn render_selection(&self, pixmap: &mut PixmapMut, transform: Transform, ctx: &RenderContext) {

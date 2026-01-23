@@ -1,6 +1,7 @@
 use crate::model::*;
 use crate::runtime::Effect;
 use crate::state::position_helpers::{calculate_offset_before_child, find_child_at_offset};
+use crate::state::selection_helpers::{CellSelectionInfo, compute_cell_selection};
 use crate::state::{Position, Selection, block_content_len};
 use crate::transaction::Transaction;
 use crate::types::Affinity;
@@ -492,7 +493,47 @@ impl Transaction {
     }
 
     pub fn delete_selection(&mut self) -> Result<bool> {
-        Ok(self.delete_selection_with_merge()?.deleted())
+        let cell_selection = compute_cell_selection(self.doc(), self.selection());
+
+        if let CellSelectionInfo::Rectangular { .. } = cell_selection {
+            return self.delete_cell_selection(&cell_selection);
+        }
+
+        if let CellSelectionInfo::FullTables(table_ids) = cell_selection {
+            let (mut from, mut to) = self.selection().as_sorted(self.doc())?;
+
+            for table_id in table_ids {
+                let Some(table) = self.node(table_id) else {
+                    continue;
+                };
+                let Some(parent) = table.parent() else {
+                    continue;
+                };
+                let index = table.index().unwrap_or(0);
+
+                let start_pos = Position::new(parent.node_id(), index, Affinity::Downstream);
+                let end_pos = Position::new(parent.node_id(), index + 1, Affinity::Downstream);
+
+                if crate::state::position_helpers::compare_positions(self.doc(), start_pos, from)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+                    .is_lt()
+                {
+                    from = start_pos;
+                }
+                if crate::state::position_helpers::compare_positions(self.doc(), end_pos, to)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+                    .is_gt()
+                {
+                    to = end_pos;
+                }
+            }
+
+            self.set_selection(Selection::new(from, to));
+        }
+
+        let deleted = self.delete_selection_with_merge()?.deleted();
+
+        Ok(deleted)
     }
 
     pub fn delete_selection_with_merge(&mut self) -> Result<DeleteResult> {

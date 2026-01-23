@@ -9,10 +9,46 @@ pub struct PreeditDecor {
 }
 
 #[derive(Debug, Clone)]
-pub struct SelectionDecor {
-    pub node_id: NodeId,
-    pub start_offset: usize,
-    pub end_offset: usize,
+pub enum SelectionDecor {
+    Text {
+        node_id: NodeId,
+        start_offset: usize,
+        end_offset: usize,
+    },
+    Cell {
+        node_id: NodeId,
+    },
+}
+
+impl SelectionDecor {
+    pub fn node_id(&self) -> NodeId {
+        match self {
+            SelectionDecor::Text { node_id, .. } => *node_id,
+            SelectionDecor::Cell { node_id } => *node_id,
+        }
+    }
+
+    pub fn start_offset(&self) -> usize {
+        match self {
+            SelectionDecor::Text { start_offset, .. } => *start_offset,
+            SelectionDecor::Cell { .. } => 0,
+        }
+    }
+
+    pub fn end_offset(&self) -> usize {
+        match self {
+            SelectionDecor::Text { end_offset, .. } => *end_offset,
+            SelectionDecor::Cell { .. } => usize::MAX,
+        }
+    }
+
+    pub fn is_text(&self) -> bool {
+        matches!(self, SelectionDecor::Text { .. })
+    }
+
+    pub fn is_cell(&self) -> bool {
+        matches!(self, SelectionDecor::Cell { .. })
+    }
 }
 
 #[derive(Debug, Clone, Default)]
