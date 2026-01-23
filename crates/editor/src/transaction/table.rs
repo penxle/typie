@@ -293,6 +293,127 @@ impl Transaction {
         Ok(true)
     }
 
+    pub fn select_table_row(&mut self, table_id: NodeId, row: usize) -> Result<bool> {
+        use crate::state::{leaf_block_end, leaf_block_start};
+
+        let table_node = self.node(table_id).context("Table not found")?;
+
+        let row_node = table_node.children().nth(row);
+        let Some(row_node) = row_node else {
+            return Ok(false);
+        };
+
+        let start_pos = leaf_block_start(&row_node);
+        let end_pos = leaf_block_end(&row_node);
+
+        self.set_selection(Selection::new(start_pos, end_pos));
+
+        Ok(true)
+    }
+
+    pub fn select_table_column(&mut self, table_id: NodeId, col: usize) -> Result<bool> {
+        use crate::state::{leaf_block_end, leaf_block_start};
+
+        let table_node = self.node(table_id).context("Table not found")?;
+
+        let first_row = table_node.first_child();
+        let last_row = table_node.children().last();
+
+        let (Some(first_row), Some(last_row)) = (first_row, last_row) else {
+            return Ok(false);
+        };
+
+        let first_cell = first_row.children().nth(col);
+        let last_cell = last_row.children().nth(col);
+
+        let (Some(first_cell), Some(last_cell)) = (first_cell, last_cell) else {
+            return Ok(false);
+        };
+
+        let start_pos = leaf_block_start(&first_cell);
+        let end_pos = leaf_block_end(&last_cell);
+
+        self.set_selection(Selection::new(start_pos, end_pos));
+
+        Ok(true)
+    }
+
+    pub fn move_table_row(
+        &mut self,
+        table_id: NodeId,
+        from_row: usize,
+        to_row: usize,
+    ) -> Result<bool> {
+        if from_row == to_row {
+            return Ok(false);
+        }
+
+        let table_node = self.node(table_id).context("Table not found")?;
+        let row_count = table_node.children().count();
+
+        if from_row >= row_count || to_row >= row_count {
+            return Ok(false);
+        }
+
+        let row_id = table_node
+            .children()
+            .nth(from_row)
+            .map(|r| r.node_id())
+            .context("Row not found")?;
+
+        let row_node = self.node_mut(row_id).context("Row not found")?;
+        row_node.as_mut().move_to(table_id, to_row)?;
+
+        self.push_effect(Effect::SubtreeChanged { node_id: table_id });
+        self.push_effect(Effect::StructureChanged);
+        self.push_effect(Effect::LayoutChanged);
+
+        Ok(true)
+    }
+
+    pub fn move_table_column(
+        &mut self,
+        table_id: NodeId,
+        from_col: usize,
+        to_col: usize,
+    ) -> Result<bool> {
+        if from_col == to_col {
+            return Ok(false);
+        }
+
+        let table_node = self.node(table_id).context("Table not found")?;
+        let row_ids: Vec<_> = table_node.children().map(|r| r.node_id()).collect();
+
+        if row_ids.is_empty() {
+            return Ok(false);
+        }
+
+        let first_row = self.node(row_ids[0]).context("First row not found")?;
+        let col_count = first_row.children().count();
+
+        if from_col >= col_count || to_col >= col_count {
+            return Ok(false);
+        }
+
+        for row_id in &row_ids {
+            let row_node = self.node(*row_id).context("Row not found")?;
+            let cell_id = row_node
+                .children()
+                .nth(from_col)
+                .map(|c| c.node_id())
+                .context("Cell not found")?;
+
+            let cell_node = self.node_mut(cell_id).context("Cell not found")?;
+            cell_node.as_mut().move_to(*row_id, to_col)?;
+        }
+
+        self.push_effect(Effect::SubtreeChanged { node_id: table_id });
+        self.push_effect(Effect::StructureChanged);
+        self.push_effect(Effect::LayoutChanged);
+
+        Ok(true)
+    }
+
     pub fn delete_cell_selection(&mut self, info: &CellSelectionInfo) -> Result<bool> {
         match info {
             CellSelectionInfo::None => Ok(false),

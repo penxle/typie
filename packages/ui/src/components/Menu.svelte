@@ -21,6 +21,7 @@
     disabled?: boolean;
     onopen?: () => void;
     onclose?: () => void;
+    ontransitionend?: () => void;
     button?: Snippet<[{ open: boolean }]>;
     action?: Snippet;
     children?: Snippet<[{ close: () => void }]>;
@@ -38,6 +39,7 @@
     disabled = false,
     onopen,
     onclose,
+    ontransitionend,
     button,
     action,
     children,
@@ -195,7 +197,12 @@
 {/if}
 
 {#if open}
-  <div class={css({ position: 'fixed', inset: '0', zIndex: 'menu' })} onclick={close} role="none" use:portal></div>
+  <div
+    class={css({ position: 'fixed', inset: '0', zIndex: 'menu', pointerEvents: open ? 'auto' : 'none' })}
+    onclick={close}
+    role="none"
+    use:portal
+  ></div>
 
   <ul
     bind:this={menuEl}
@@ -213,10 +220,12 @@
         boxShadow: 'small',
         overflowY: 'auto',
         zIndex: 'menu',
+        pointerEvents: open ? 'auto' : 'none',
       },
       action && { paddingBottom: '0' },
       listStyle,
     )}
+    onoutroend={ontransitionend}
     role="menu"
     use:floating
     use:focusTrap={{

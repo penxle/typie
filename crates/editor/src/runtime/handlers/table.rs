@@ -76,4 +76,50 @@ impl Runtime {
 
         self.transact(|tr| tr.set_table_border_style(node_id, &style))
     }
+
+    pub(crate) fn handle_select_table_row(&mut self, table_id: String, row: usize) -> Vec<Effect> {
+        let Some(node_id) = NodeId::from_string(&table_id) else {
+            return vec![];
+        };
+
+        self.transact(|tr| tr.select_table_row(node_id, row))
+    }
+
+    pub(crate) fn handle_select_table_column(
+        &mut self,
+        table_id: String,
+        col: usize,
+    ) -> Vec<Effect> {
+        let Some(node_id) = NodeId::from_string(&table_id) else {
+            return vec![];
+        };
+
+        self.transact(|tr| tr.select_table_column(node_id, col))
+    }
+
+    pub(crate) fn handle_move_table_row(
+        &mut self,
+        table_id: String,
+        from_row: usize,
+        to_row: usize,
+    ) -> Vec<Effect> {
+        let Some(node_id) = NodeId::from_string(&table_id) else {
+            return vec![];
+        };
+
+        self.transact(|tr| tr.move_table_row(node_id, from_row, to_row))
+    }
+
+    pub(crate) fn handle_move_table_column(
+        &mut self,
+        table_id: String,
+        from_col: usize,
+        to_col: usize,
+    ) -> Vec<Effect> {
+        let Some(node_id) = NodeId::from_string(&table_id) else {
+            return vec![];
+        };
+
+        self.transact(|tr| tr.move_table_column(node_id, from_col, to_col))
+    }
 }
