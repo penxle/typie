@@ -1,12 +1,9 @@
 import ChevronsDownUpIcon from '~icons/lucide/chevrons-down-up';
-import CodeIcon from '~icons/lucide/code';
-import CodeXmlIcon from '~icons/lucide/code-xml';
 import FileUpIcon from '~icons/lucide/file-up';
 import GalleryVerticalEndIcon from '~icons/lucide/gallery-vertical-end';
 import ImageIcon from '~icons/lucide/image';
 import ListIcon from '~icons/lucide/list';
 import ListOrderedIcon from '~icons/lucide/list-ordered';
-import LockKeyholeIcon from '~icons/lucide/lock-keyhole';
 import MinusIcon from '~icons/lucide/minus';
 import PaperclipIcon from '~icons/lucide/paperclip';
 import TableIcon from '~icons/lucide/table';
@@ -127,39 +124,6 @@ export const menuItems: MenuItem[] = [
     icon: FileUpIcon,
     command: ({ editor, range }) => {
       chain(editor, range).setEmbed().run();
-    },
-  },
-  {
-    id: 'code-block',
-    type: 'code_block',
-    group: 'code',
-    name: '코드 블록',
-    keywords: ['code'],
-    icon: CodeIcon,
-    command: ({ editor, range }) => {
-      chain(editor, range).setCodeBlock().run();
-    },
-  },
-  {
-    id: 'html-block',
-    type: 'html_block',
-    group: 'code',
-    name: 'HTML 블록',
-    keywords: ['html'],
-    icon: CodeXmlIcon,
-    command: ({ editor, range }) => {
-      chain(editor, range).setHtmlBlock().run();
-    },
-  },
-  {
-    id: 'paywall',
-    type: 'paywall',
-    group: 'block',
-    name: '유료 블록',
-    keywords: ['paywall', 'paid', 'premium', '유료', '결제'],
-    icon: LockKeyholeIcon,
-    command: ({ editor, range }) => {
-      chain(editor, range).togglePaywall().run();
     },
   },
 ];
