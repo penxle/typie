@@ -110,7 +110,6 @@
   class={css({
     position: 'absolute',
     pointerEvents: 'none',
-    zIndex: 'editor',
   })}
   data-external-element
   data-table-overlay={overlay.tableId}
