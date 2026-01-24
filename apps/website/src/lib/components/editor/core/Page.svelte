@@ -95,6 +95,12 @@
         }}
       ></canvas>
 
+      {#if !editor.readOnly}
+        {#each editor.tableOverlays.filter((o) => o.pageIdx === page) as overlay (overlay.tableId)}
+          <TableOverlay {editor} {overlay} />
+        {/each}
+      {/if}
+
       {#each externalElements as el (el.nodeId)}
         {#if el.data.type === 'image'}
           <ExternalImage {el} />
@@ -104,12 +110,6 @@
           <ExternalEmbed {el} />
         {/if}
       {/each}
-
-      {#if !editor.readOnly}
-        {#each editor.tableOverlays.filter((o) => o.pageIdx === page) as overlay (overlay.tableId)}
-          <TableOverlay {editor} {overlay} />
-        {/each}
-      {/if}
 
       {#if editor.readOnly}
         {#each editor.linkOverlays.filter((o) => o.pageIdx === page) as overlay, i (`${i}-${overlay.href}`)}
