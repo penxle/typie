@@ -570,6 +570,7 @@ type Mutation {
   createPostReaction(input: CreatePostReactionInput!): PostReaction!
   createWidget(input: CreateWidgetInput!): Widget!
   createWsSession: String!
+  deleteBillingKey: Boolean!
   deleteDocument(input: DeleteDocumentInput!): Document!
   deleteEntities(input: DeleteEntitiesInput!): [Entity!]!
   deleteFolder(input: DeleteFolderInput!): Folder!
