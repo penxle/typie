@@ -1,0 +1,6 @@
+query SurveyProvider_Me_Query {
+  me {
+    id
+    surveys
+  }
+}

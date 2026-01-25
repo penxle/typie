@@ -6,6 +6,7 @@ import 'package:typie/hooks/service.dart';
 import 'package:typie/providers/in_app_purchase.dart';
 import 'package:typie/providers/marketing_consent.dart';
 import 'package:typie/providers/push_notification.dart';
+import 'package:typie/providers/survey.dart';
 import 'package:typie/routers/app.dart';
 import 'package:typie/routers/observer.dart';
 import 'package:typie/services/theme.dart';
@@ -43,7 +44,12 @@ class App extends HookWidget {
                       child!,
                       const Offstage(
                         child: Stack(
-                          children: [PushNotificationProvider(), InAppPurchaseProvider(), MarketingConsentProvider()],
+                          children: [
+                            PushNotificationProvider(),
+                            InAppPurchaseProvider(),
+                            MarketingConsentProvider(),
+                            SurveyProvider(),
+                          ],
                         ),
                       ),
                     ],
