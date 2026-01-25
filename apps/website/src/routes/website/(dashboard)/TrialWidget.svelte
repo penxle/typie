@@ -94,7 +94,11 @@
   >
     <Icon style={css.raw({ color: 'text.faint' })} icon={HourglassIcon} size={14} />
     <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.default' })}>
-      무료 체험이 {trialDaysRemaining}일 후 종료돼요
+      {#if trialDaysRemaining === 0}
+        무료 체험이 오늘 종료돼요
+      {:else}
+        무료 체험이 {trialDaysRemaining}일 후 종료돼요
+      {/if}
     </span>
   </button>
 {/if}

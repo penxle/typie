@@ -30,6 +30,7 @@
   import ReferralWelcomeModal from './ReferralWelcomeModal.svelte';
   import Shortcuts from './Shortcuts.svelte';
   import Sidebar from './Sidebar.svelte';
+  import TrialExpiredModal from './TrialExpiredModal.svelte';
   import UserSurveyModal from './UserSurveyModal.svelte';
 
   let { children } = $props();
@@ -81,6 +82,7 @@
         ...DashboardLayout_PreferenceModal_user
         ...DashboardLayout_Sidebar_user
         ...DashboardLayout_SiteSettingsModal_user
+        ...DashboardLayout_TrialExpiredModal_user
       }
 
       ...AdminImpersonateBanner_query
@@ -188,6 +190,7 @@
   let referralWelcomeModalOpen = $state(false);
   let marketingConsentModalOpen = $state(false);
   let userSurveyModalOpen = $state(false);
+  let trialExpiredModalOpen = $state(false);
 
   const fontFaces = $derived(
     $query.me.sites[0].fonts
@@ -237,6 +240,8 @@
     if ($query.me.referral && !app.preference.current.referralWelcomeModalShown) {
       referralWelcomeModalOpen = true;
       app.preference.current.referralWelcomeModalShown = true;
+    } else if ($query.me.surveys.includes('trial_expired_modal')) {
+      trialExpiredModalOpen = true;
     } else if ($query.me.marketingConsentAskedAt === null && $query.me.usage.totalCharacterCount >= 100) {
       marketingConsentModalOpen = true;
     }
@@ -244,7 +249,7 @@
     const skipUntil = localStorage.getItem('surveySkipUntil');
     const shouldShowSurvey = $query.me.surveys.includes('202509_ir') && (!skipUntil || new Date(skipUntil) < new Date());
 
-    if (shouldShowSurvey && !marketingConsentModalOpen) {
+    if (shouldShowSurvey && !marketingConsentModalOpen && !trialExpiredModalOpen) {
       userSurveyModalOpen = true;
     }
 
@@ -380,6 +385,7 @@
 
 <ReferralWelcomeModal bind:open={referralWelcomeModalOpen} />
 <MarketingConsentModal bind:open={marketingConsentModalOpen} />
+<TrialExpiredModal $user={$query.me} bind:open={trialExpiredModalOpen} />
 <UserSurveyModal bind:open={userSurveyModalOpen} />
 
 <EditorSelectModal
