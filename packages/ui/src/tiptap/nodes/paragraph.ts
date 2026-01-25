@@ -8,6 +8,7 @@ import {
   Node,
 } from '@tiptap/core';
 import { Plugin } from '@tiptap/pm/state';
+import { css, cx } from '@typie/styled-system/css';
 import { ySyncPluginKey } from 'y-prosemirror';
 import { closest } from '../../utils';
 import { defaultValues, values } from '../values';
@@ -89,7 +90,13 @@ export const Paragraph = Node.create({
     return [
       'p',
       mergeAttributes(HTMLAttributes, {
-        class: node.attrs.textAlign === 'left' || node.attrs.textAlign === 'justify' ? 'paragraph-indent' : undefined,
+        class: cx(
+          node.attrs.textAlign === 'left' || node.attrs.textAlign === 'justify' ? 'paragraph-indent' : undefined,
+          css({
+            // 사파리에서 text-indent가 적용됐을 때 텍스트 편집시 자동 들여쓰기가 이상한 곳에 생기는 문제 해결
+            lineClamp: '[9999999999]',
+          }),
+        ),
       }),
       !this.editor?.isEditable && node.content.size === 0 ? ['br', { class: 'ProseMirror-trailingBreak' }] : 0,
     ];
