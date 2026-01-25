@@ -3,7 +3,7 @@
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Button } from '@typie/ui/components';
-  import { Dialog } from '@typie/ui/notification';
+  import { Dialog, Toast } from '@typie/ui/notification';
   import { comma } from '@typie/ui/utils';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
@@ -141,6 +141,12 @@
           availability
         }
       }
+    }
+  `);
+
+  const deleteBillingKey = graphql(`
+    mutation DashboardLayout_PreferenceModal_BillingTab_DeleteBillingKey_Mutation {
+      deleteBillingKey
     }
   `);
 
@@ -384,9 +390,33 @@
           {/if}
         {/snippet}
         {#snippet value()}
-          <Button onclick={() => (updatePaymentMethodOpen = true)} size="sm" variant="secondary">
-            {$user.billingKey ? '카드 변경' : '카드 등록'}
-          </Button>
+          <div class={flex({ gap: '8px' })}>
+            <Button onclick={() => (updatePaymentMethodOpen = true)} size="sm" variant="secondary">
+              {$user.billingKey ? '카드 변경' : '카드 등록'}
+            </Button>
+            {#if $user.billingKey && (!$user.subscription || isTrial)}
+              <Button
+                onclick={() => {
+                  Dialog.confirm({
+                    title: '결제 카드를 삭제하시겠어요?',
+                    message: '등록된 카드 정보가 삭제돼요. 유료 플랜을 구독하려면 다시 등록해야 해요.',
+                    action: 'danger',
+                    actionLabel: '삭제',
+                    actionHandler: async () => {
+                      await deleteBillingKey();
+                      cache.invalidate({ __typename: 'User', id: $user.id, field: 'billingKey' });
+                      mixpanel.track('delete_billing_key');
+                      Toast.success('카드가 삭제되었어요');
+                    },
+                  });
+                }}
+                size="sm"
+                variant="secondary"
+              >
+                카드 삭제
+              </Button>
+            {/if}
+          </div>
         {/snippet}
       </SettingsRow>
     </SettingsCard>

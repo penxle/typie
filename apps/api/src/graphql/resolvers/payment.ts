@@ -231,6 +231,47 @@ builder.mutationFields((t) => ({
     },
   }),
 
+  deleteBillingKey: t.withAuth({ session: true }).field({
+    type: 'Boolean',
+    resolve: async (_, __, ctx) => {
+      const activeSubscription = await db
+        .select({ id: Subscriptions.id })
+        .from(Subscriptions)
+        .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
+        .where(
+          and(
+            eq(Subscriptions.userId, ctx.session.userId),
+            inArray(Subscriptions.state, [
+              SubscriptionState.ACTIVE,
+              SubscriptionState.WILL_EXPIRE,
+              SubscriptionState.IN_GRACE_PERIOD,
+              SubscriptionState.WILL_ACTIVATE,
+            ]),
+            eq(Plans.availability, PlanAvailability.BILLING_KEY),
+          ),
+        )
+        .then(first);
+
+      if (activeSubscription) {
+        throw new TypieError({ code: 'active_subscription_exists' });
+      }
+
+      const billingKey = await db.transaction(async (tx) => {
+        return await tx
+          .delete(UserBillingKeys)
+          .where(eq(UserBillingKeys.userId, ctx.session.userId))
+          .returning({ billingKey: UserBillingKeys.billingKey })
+          .then(first);
+      });
+
+      if (billingKey) {
+        await portone.deleteBillingKey({ billingKey: billingKey.billingKey });
+      }
+
+      return true;
+    },
+  }),
+
   subscribePlanWithBillingKey: t.withAuth({ session: true }).fieldWithInput({
     type: Subscription,
     input: { planId: t.input.id({ validate: validateDbId(TableCode.PLANS) }) },
