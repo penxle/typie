@@ -151,6 +151,7 @@
   `);
 
   let updatePaymentMethodOpen = $state(false);
+  let updatePaymentMethodMode = $state<'register' | 'subscribe'>('register');
   let redeemCreditCodeOpen = $state(false);
   let cancellationSurveyOpen = $state(false);
   let trialStartedModalOpen = $state(false);
@@ -164,6 +165,7 @@
     await scheduleSubscriptionCancellation();
 
     mixpanel.track('cancel_plan', surveyData as Record<string, unknown>);
+    Toast.success('구독이 해지되었어요');
   }
 </script>
 
@@ -210,7 +212,14 @@
                   2주 무료 체험하기
                 </Button>
               {/if}
-              <Button onclick={() => (updatePaymentMethodOpen = true)} size="sm" variant={canStartTrial ? 'secondary' : 'primary'}>
+              <Button
+                onclick={() => {
+                  updatePaymentMethodMode = 'subscribe';
+                  updatePaymentMethodOpen = true;
+                }}
+                size="sm"
+                variant={canStartTrial ? 'secondary' : 'primary'}
+              >
                 업그레이드
               </Button>
             </div>
@@ -274,6 +283,7 @@
                         from: isMonthly ? 'monthly' : 'yearly',
                         to: isMonthly ? 'yearly' : 'monthly',
                       });
+                      Toast.success(isMonthly ? '연간 플랜으로 전환되었어요' : '월간 플랜으로 전환되었어요');
                     },
                   });
                 }}
@@ -298,7 +308,16 @@
                 결제 수단을 등록하고 유료 플랜으로 업그레이드하세요.
               {/snippet}
               {#snippet value()}
-                <Button onclick={() => (updatePaymentMethodOpen = true)} size="sm" variant="primary">지금 업그레이드</Button>
+                <Button
+                  onclick={() => {
+                    updatePaymentMethodMode = 'subscribe';
+                    updatePaymentMethodOpen = true;
+                  }}
+                  size="sm"
+                  variant="primary"
+                >
+                  지금 업그레이드
+                </Button>
               {/snippet}
             </SettingsRow>
           {:else}
@@ -319,6 +338,7 @@
                       actionHandler: async () => {
                         await cancelSubscriptionCancellation();
                         mixpanel.track('resume_subscription');
+                        Toast.success('구독 해지가 취소되었어요');
                       },
                     });
                   }}
@@ -357,6 +377,7 @@
                         cache.invalidate({ __typename: 'User', id: $user.id, field: 'subscription' });
                         cache.invalidate({ __typename: 'User', id: $user.id, field: 'nextSubscription' });
                         mixpanel.track('cancel_plan_change');
+                        Toast.success('플랜 전환이 취소되었어요');
                       },
                     });
                   }}
@@ -391,8 +412,15 @@
         {/snippet}
         {#snippet value()}
           <div class={flex({ gap: '8px' })}>
-            <Button onclick={() => (updatePaymentMethodOpen = true)} size="sm" variant="secondary">
-              {$user.billingKey ? '카드 변경' : '카드 등록'}
+            <Button
+              onclick={() => {
+                updatePaymentMethodMode = 'register';
+                updatePaymentMethodOpen = true;
+              }}
+              size="sm"
+              variant="secondary"
+            >
+              {$user.billingKey ? '변경' : '카드 등록'}
             </Button>
             {#if $user.billingKey && (!$user.subscription || isTrial)}
               <Button
@@ -413,7 +441,7 @@
                 size="sm"
                 variant="secondary"
               >
-                카드 삭제
+                삭제
               </Button>
             {/if}
           </div>
@@ -482,7 +510,7 @@
   {/if}
 </div>
 
-<UpdatePaymentMethodModal {$user} bind:open={updatePaymentMethodOpen} />
+<UpdatePaymentMethodModal {$user} mode={updatePaymentMethodMode} bind:open={updatePaymentMethodOpen} />
 <RedeemCreditCodeModal bind:open={redeemCreditCodeOpen} />
 <SubscriptionCancellationSurveyModal {$user} onSubmit={handleCancellationSurveySubmit} bind:open={cancellationSurveyOpen} />
 <SubscriptionCelebrationModal
