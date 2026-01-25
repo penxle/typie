@@ -3,6 +3,7 @@ import {
   findChildrenInRange,
   findParentNodeClosestToPos,
   getChangedRanges,
+  isiOS,
   isNodeActive,
   mergeAttributes,
   Node,
@@ -94,7 +95,7 @@ export const Paragraph = Node.create({
           node.attrs.textAlign === 'left' || node.attrs.textAlign === 'justify' ? 'paragraph-indent' : undefined,
           css({
             // 사파리에서 text-indent가 적용됐을 때 텍스트 편집시 자동 들여쓰기가 이상한 곳에 생기는 문제 해결
-            lineClamp: '[9999999999]',
+            lineClamp: this.editor?.isEditable && isiOS() ? '[9999999999]' : undefined,
           }),
         ),
       }),
