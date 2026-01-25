@@ -17,6 +17,7 @@ import {
   firstOrThrow,
   FontFamilies,
   PaymentInvoices,
+  Plans,
   PostCharacterCountChanges,
   Posts,
   ReferralCodes,
@@ -47,6 +48,7 @@ import {
   EntityState,
   FontFamilyState,
   PaymentInvoiceState,
+  PlanAvailability,
   SingleSignOnProvider,
   SiteState,
   SubscriptionState,
@@ -383,31 +385,53 @@ User.implement({
 
     surveys: t.stringList({
       resolve: async (self) => {
-        const survey = await db
-          .select({ id: UserSurveys.id })
+        const results: string[] = [];
+
+        const existingSurveys = await db
+          .select({ name: UserSurveys.name })
           .from(UserSurveys)
-          .where(and(eq(UserSurveys.userId, self.id), eq(UserSurveys.name, '202509_ir')))
-          .then(first);
+          .where(and(eq(UserSurveys.userId, self.id), inArray(UserSurveys.name, ['202509_ir', 'trial_expired_modal_shown'])));
 
-        if (survey) {
-          return [];
-        }
+        const shownSurveys = new Set(existingSurveys.map((s) => s.name));
 
-        const subscription = await db
+        const activeSubscription = await db
           .select({ id: Subscriptions.id })
           .from(Subscriptions)
-          .where(and(eq(Subscriptions.userId, self.id), eq(Subscriptions.state, SubscriptionState.ACTIVE)))
+          .where(
+            and(
+              eq(Subscriptions.userId, self.id),
+              inArray(Subscriptions.state, [SubscriptionState.ACTIVE, SubscriptionState.WILL_EXPIRE, SubscriptionState.IN_GRACE_PERIOD]),
+            ),
+          )
           .then(first);
 
-        if (!subscription) {
-          return [];
+        if (!shownSurveys.has('trial_expired_modal_shown')) {
+          const trial = await db.select({ id: UserTrials.id }).from(UserTrials).where(eq(UserTrials.userId, self.id)).then(first);
+
+          if (trial && !activeSubscription) {
+            const paidSubscription = await db
+              .select({ id: Subscriptions.id })
+              .from(Subscriptions)
+              .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
+              .where(
+                and(
+                  eq(Subscriptions.userId, self.id),
+                  inArray(Plans.availability, [PlanAvailability.BILLING_KEY, PlanAvailability.IN_APP_PURCHASE]),
+                ),
+              )
+              .then(first);
+
+            if (!paidSubscription) {
+              results.push('trial_expired_modal');
+            }
+          }
         }
 
-        if (self.createdAt.isAfter(dayjs().subtract(1, 'weeks'))) {
-          return [];
+        if (!shownSurveys.has('202509_ir') && activeSubscription && self.createdAt.isBefore(dayjs().subtract(1, 'weeks'))) {
+          results.push('202509_ir');
         }
 
-        return ['202509_ir'];
+        return results;
       },
     }),
   }),
