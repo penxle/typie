@@ -1,14 +1,16 @@
 <script lang="ts">
+  import { cache } from '@typie/sark/internal';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
-  import { Button, Checkbox, Modal, SegmentButtons, TextInput } from '@typie/ui/components';
+  import { Button, Checkbox, Modal, TextInput } from '@typie/ui/components';
   import { createForm, FormError } from '@typie/ui/form';
   import { Toast } from '@typie/ui/notification';
   import { comma } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
+  import { untrack } from 'svelte';
   import { z } from 'zod';
   import { PlanId } from '@/const';
-  import { PlanAvailability, PlanInterval } from '@/enums';
+  import { PlanInterval } from '@/enums';
   import { TypieError } from '@/errors';
   import { cardSchema } from '@/validation';
   import { fragment, graphql } from '$graphql';
@@ -19,9 +21,10 @@
   type Props = {
     open: boolean;
     $user: DashboardLayout_PreferenceModal_BillingTab_UpdatePaymentMethodModal_user;
+    mode: 'register' | 'subscribe';
   };
 
-  let { open = $bindable(), $user: _user }: Props = $props();
+  let { open = $bindable(), $user: _user, mode }: Props = $props();
 
   const user = fragment(
     _user,
@@ -29,6 +32,11 @@
       fragment DashboardLayout_PreferenceModal_BillingTab_UpdatePaymentMethodModal_user on User {
         id
         credit
+
+        billingKey {
+          id
+          name
+        }
 
         subscription {
           id
@@ -41,8 +49,6 @@
       }
     `),
   );
-
-  const isTrial = $derived($user.subscription?.plan.availability === PlanAvailability.TRIAL);
 
   const updateBillingKey = graphql(`
     mutation DashboardLayout_PreferenceModal_BillingTab_UpdatePaymentMethodModal_UpdateBillingKey_Mutation($input: UpdateBillingKeyInput!) {
@@ -83,13 +89,14 @@
   let interval = $state<PlanInterval>(PlanInterval.MONTHLY);
   let submitError = $state<string | null>(null);
   let celebrationModalOpen = $state(false);
+  let isEditingCard = $state(false);
 
   const form = createForm({
     schema: z.object({
-      cardNumber: cardSchema.cardNumber,
-      expiryDate: cardSchema.expiryDate,
-      birthOrBusinessRegistrationNumber: cardSchema.birthOrBusinessRegistrationNumber,
-      passwordTwoDigits: cardSchema.passwordTwoDigits,
+      cardNumber: cardSchema.cardNumber.optional(),
+      expiryDate: cardSchema.expiryDate.optional(),
+      birthOrBusinessRegistrationNumber: cardSchema.birthOrBusinessRegistrationNumber.optional(),
+      passwordTwoDigits: cardSchema.passwordTwoDigits.optional(),
       agreementsAccepted: z.boolean(),
     }),
     defaultValues: {
@@ -102,18 +109,36 @@
         throw new FormError('agreementsAccepted', '약관에 동의해주세요.');
       }
 
-      await updateBillingKey({
-        birthOrBusinessRegistrationNumber: data.birthOrBusinessRegistrationNumber,
-        cardNumber: data.cardNumber,
-        expiryDate: data.expiryDate,
-        passwordTwoDigits: data.passwordTwoDigits,
-      });
+      const needsCardRegistration = mode === 'register' || !$user.billingKey || isEditingCard;
 
-      mixpanel.track('update_payment_billing_key');
-      fb.track('AddPaymentInfo');
+      if (needsCardRegistration) {
+        if (!data.cardNumber) {
+          throw new FormError('cardNumber', '카드 번호를 입력해 주세요');
+        }
+        if (!data.expiryDate) {
+          throw new FormError('expiryDate', '만료일을 입력해 주세요');
+        }
+        if (!data.passwordTwoDigits) {
+          throw new FormError('passwordTwoDigits', '카드 비밀번호를 입력해 주세요');
+        }
+        if (!data.birthOrBusinessRegistrationNumber) {
+          throw new FormError('birthOrBusinessRegistrationNumber', '생년월일 또는 사업자 등록번호를 입력해 주세요');
+        }
 
-      if ($user.subscription && !isTrial) {
-        Toast.success('카드 정보가 변경되었어요.');
+        await updateBillingKey({
+          birthOrBusinessRegistrationNumber: data.birthOrBusinessRegistrationNumber,
+          cardNumber: data.cardNumber,
+          expiryDate: data.expiryDate,
+          passwordTwoDigits: data.passwordTwoDigits,
+        });
+
+        cache.invalidate({ __typename: 'User', id: $user.id, field: 'billingKey' });
+        mixpanel.track('update_payment_billing_key');
+        fb.track('AddPaymentInfo');
+      }
+
+      if (mode === 'register') {
+        Toast.success($user.billingKey ? '카드 정보가 변경되었어요.' : '카드가 등록되었어요.');
         open = false;
       } else {
         if (interval === PlanInterval.MONTHLY) {
@@ -146,6 +171,17 @@
 
   $effect(() => {
     void form;
+  });
+
+  $effect(() => {
+    if (!open) {
+      untrack(() => {
+        form.reset();
+        isEditingCard = false;
+        submitError = null;
+        agreementChecks = agreements.map(() => false);
+      });
+    }
   });
 
   const agreements = [
@@ -196,32 +232,59 @@
 
 <Modal style={css.raw({ padding: '24px', maxWidth: '480px' })} bind:open>
   <h2 class={css({ fontSize: '16px', fontWeight: 'semibold', color: 'text.default', marginBottom: '24px' })}>
-    {$user.subscription && !isTrial ? '결제 수단 변경' : '플랜 업그레이드'}
+    {mode === 'register' ? ($user.billingKey ? '결제 카드 변경' : '결제 카드 등록') : '플랜 업그레이드'}
   </h2>
 
   <form class={flex({ direction: 'column', gap: '24px' })} onsubmit={form.handleSubmit}>
-    {#if !$user.subscription || isTrial}
-      <div class={flex({ direction: 'column', gap: '16px' })}>
-        <div>
-          <div class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.default', marginBottom: '8px' })}>플랜 선택</div>
-          <div class={css({ position: 'relative' })}>
-            <SegmentButtons
-              items={[
-                { label: '월 4,900원', value: PlanInterval.MONTHLY },
-                { label: '연 49,000원', value: PlanInterval.YEARLY },
-              ]}
-              onselect={(value) => {
-                interval = value;
-              }}
-              size="sm"
-              value={interval}
-            />
+    {#if mode === 'subscribe'}
+      <div>
+        <div class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.default', marginBottom: '8px' })}>플랜 선택</div>
+        <div class={flex({ gap: '8px' })}>
+          <button
+            class={css({
+              flex: '1',
+              padding: '12px',
+              borderRadius: '6px',
+              borderWidth: '1px',
+              borderColor: interval === PlanInterval.MONTHLY ? 'accent.brand.default' : 'border.subtle',
+              backgroundColor: 'surface.default',
+              cursor: 'pointer',
+              transition: 'common',
+              textAlign: 'left',
+              _hover: { borderColor: interval === PlanInterval.MONTHLY ? 'accent.brand.default' : 'border.default' },
+            })}
+            onclick={() => (interval = PlanInterval.MONTHLY)}
+            type="button"
+          >
+            <div class={flex({ justify: 'space-between', alignItems: 'center' })}>
+              <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.default' })}>월간</span>
+              <span class={css({ fontSize: '14px', fontWeight: 'semibold', color: 'text.default' })}>4,900원</span>
+            </div>
+            <div class={css({ fontSize: '12px', color: 'text.subtle', marginTop: '4px' })}>매월 결제</div>
+          </button>
 
+          <button
+            class={css({
+              flex: '1',
+              position: 'relative',
+              padding: '12px',
+              borderRadius: '6px',
+              borderWidth: '1px',
+              borderColor: interval === PlanInterval.YEARLY ? 'accent.brand.default' : 'border.subtle',
+              backgroundColor: 'surface.default',
+              cursor: 'pointer',
+              transition: 'common',
+              textAlign: 'left',
+              _hover: { borderColor: interval === PlanInterval.YEARLY ? 'accent.brand.default' : 'border.default' },
+            })}
+            onclick={() => (interval = PlanInterval.YEARLY)}
+            type="button"
+          >
             <div
               class={css({
                 position: 'absolute',
                 top: '-8px',
-                right: '4px',
+                right: '8px',
                 borderRadius: 'full',
                 paddingX: '8px',
                 paddingY: '2px',
@@ -229,14 +292,132 @@
                 fontWeight: 'semibold',
                 color: 'text.bright',
                 backgroundColor: 'accent.brand.default',
-                pointerEvents: 'none',
               })}
             >
               2개월 무료
             </div>
+            <div class={flex({ justify: 'space-between', alignItems: 'center' })}>
+              <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.default' })}>연간</span>
+              <span class={css({ fontSize: '14px', fontWeight: 'semibold', color: 'text.default' })}>49,000원</span>
+            </div>
+            <div class={css({ fontSize: '12px', color: 'text.subtle', marginTop: '4px' })}>
+              매년 결제 · <span class={css({ color: 'accent.brand.default', fontWeight: 'medium' })}>월 4,083원</span>
+            </div>
+          </button>
+        </div>
+      </div>
+    {/if}
+
+    {#if mode === 'subscribe' && $user.billingKey && !isEditingCard}
+      <div class={flex({ direction: 'column', gap: '12px' })}>
+        <div class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.default', marginBottom: '4px' })}>결제 카드</div>
+        <div
+          class={flex({
+            justify: 'space-between',
+            alignItems: 'center',
+            borderRadius: '8px',
+            borderWidth: '1px',
+            borderColor: 'border.subtle',
+            padding: '12px',
+            backgroundColor: 'surface.default',
+          })}
+        >
+          <span class={css({ fontSize: '14px', color: 'text.default' })}>{$user.billingKey.name}</span>
+          <Button onclick={() => (isEditingCard = true)} size="sm" variant="secondary">카드 변경</Button>
+        </div>
+      </div>
+    {:else}
+      <div class={flex({ direction: 'column', gap: '12px' })}>
+        <div class={flex({ justify: 'space-between', alignItems: 'center', marginBottom: '4px' })}>
+          <div class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.default' })}>카드 정보</div>
+          {#if isEditingCard && $user.billingKey}
+            <button
+              class={css({
+                fontSize: '13px',
+                fontWeight: 'medium',
+                color: 'text.faint',
+                cursor: 'pointer',
+                transition: 'common',
+                _hover: { color: 'text.muted' },
+              })}
+              onclick={() => (isEditingCard = false)}
+              type="button"
+            >
+              기존 카드 사용하기
+            </button>
+          {/if}
+        </div>
+
+        <div class={flex({ direction: 'column', gap: '8px' })}>
+          <TextInput
+            id="cardNumber"
+            style={css.raw({ width: 'full' })}
+            inputmode="numeric"
+            maxlength={19}
+            oninput={formatCardNumber}
+            placeholder="카드 번호"
+            bind:value={form.fields.cardNumber}
+          />
+          {#if form.errors.cardNumber}
+            <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'text.danger' })}>{form.errors.cardNumber}</div>
+          {/if}
+        </div>
+
+        <div class={flex({ gap: '8px' })}>
+          <div class={flex({ direction: 'column', gap: '8px', flex: '1' })}>
+            <TextInput
+              id="expiryDate"
+              style={css.raw({ width: 'full' })}
+              inputmode="numeric"
+              maxlength={5}
+              oninput={formatCardExpiry}
+              placeholder="유효기간 (MM/YY)"
+              bind:value={form.fields.expiryDate}
+            />
+            {#if form.errors.expiryDate}
+              <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'text.danger' })}>{form.errors.expiryDate}</div>
+            {/if}
+          </div>
+
+          <div class={flex({ direction: 'column', gap: '8px', flex: '1' })}>
+            <TextInput
+              id="passwordTwoDigits"
+              style={css.raw({ width: 'full' })}
+              autocomplete="off"
+              inputmode="numeric"
+              maxlength={2}
+              placeholder="비밀번호 앞 2자리"
+              type="password"
+              bind:value={form.fields.passwordTwoDigits}
+            />
+            {#if form.errors.passwordTwoDigits}
+              <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'text.danger' })}>{form.errors.passwordTwoDigits}</div>
+            {/if}
           </div>
         </div>
 
+        <div class={flex({ direction: 'column', gap: '8px' })}>
+          <TextInput
+            id="birthOrBusinessRegistrationNumber"
+            style={css.raw({ width: 'full' })}
+            inputmode="numeric"
+            maxlength={12}
+            oninput={formatBusinessNumber}
+            placeholder="생년월일 6자리 또는 사업자번호 10자리"
+            bind:value={form.fields.birthOrBusinessRegistrationNumber}
+          />
+          {#if form.errors.birthOrBusinessRegistrationNumber}
+            <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'text.danger' })}>
+              {form.errors.birthOrBusinessRegistrationNumber}
+            </div>
+          {/if}
+        </div>
+      </div>
+    {/if}
+
+    {#if mode === 'subscribe'}
+      <div>
+        <div class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.default', marginBottom: '8px' })}>결제 정보</div>
         <div
           class={css({
             borderRadius: '6px',
@@ -272,75 +453,6 @@
         </div>
       </div>
     {/if}
-
-    <div class={flex({ direction: 'column', gap: '12px' })}>
-      <div class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.default', marginBottom: '4px' })}>카드 정보</div>
-
-      <div class={flex({ direction: 'column', gap: '8px' })}>
-        <TextInput
-          id="cardNumber"
-          style={css.raw({ width: 'full' })}
-          inputmode="numeric"
-          maxlength={19}
-          oninput={formatCardNumber}
-          placeholder="카드 번호"
-          bind:value={form.fields.cardNumber}
-        />
-        {#if form.errors.cardNumber}
-          <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'text.danger' })}>{form.errors.cardNumber}</div>
-        {/if}
-      </div>
-
-      <div class={flex({ gap: '8px' })}>
-        <div class={flex({ direction: 'column', gap: '8px', flex: '1' })}>
-          <TextInput
-            id="expiryDate"
-            style={css.raw({ width: 'full' })}
-            inputmode="numeric"
-            maxlength={5}
-            oninput={formatCardExpiry}
-            placeholder="유효기간 (MM/YY)"
-            bind:value={form.fields.expiryDate}
-          />
-          {#if form.errors.expiryDate}
-            <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'text.danger' })}>{form.errors.expiryDate}</div>
-          {/if}
-        </div>
-
-        <div class={flex({ direction: 'column', gap: '8px', flex: '1' })}>
-          <TextInput
-            id="passwordTwoDigits"
-            style={css.raw({ width: 'full' })}
-            autocomplete="off"
-            inputmode="numeric"
-            maxlength={2}
-            placeholder="비밀번호 앞 2자리"
-            type="password"
-            bind:value={form.fields.passwordTwoDigits}
-          />
-          {#if form.errors.passwordTwoDigits}
-            <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'text.danger' })}>{form.errors.passwordTwoDigits}</div>
-          {/if}
-        </div>
-      </div>
-
-      <div class={flex({ direction: 'column', gap: '8px' })}>
-        <TextInput
-          id="birthOrBusinessRegistrationNumber"
-          style={css.raw({ width: 'full' })}
-          inputmode="numeric"
-          maxlength={12}
-          oninput={formatBusinessNumber}
-          placeholder="생년월일 6자리 또는 사업자번호 10자리"
-          bind:value={form.fields.birthOrBusinessRegistrationNumber}
-        />
-        {#if form.errors.birthOrBusinessRegistrationNumber}
-          <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'text.danger' })}>
-            {form.errors.birthOrBusinessRegistrationNumber}
-          </div>
-        {/if}
-      </div>
-    </div>
 
     <div class={flex({ direction: 'column', gap: '8px' })}>
       <div
@@ -398,9 +510,9 @@
       </div>
     {/if}
 
-    <Button style={css.raw({ width: 'full' })} type="submit">
-      {#if $user.subscription && !isTrial}
-        변경하기
+    <Button style={css.raw({ width: 'full' })} loading={form.state.isLoading} type="submit">
+      {#if mode === 'register'}
+        {$user.billingKey ? '변경하기' : '등록하기'}
       {:else if finalAmount === 0}
         무료로 시작하기
       {:else}
