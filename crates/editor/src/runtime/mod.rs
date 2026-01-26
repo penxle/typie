@@ -429,8 +429,8 @@ impl Runtime {
 
         if needs_rebuild {
             let block_ids =
-                crate::state::collect_blocks_in_range(self.doc(), from.clone(), to.clone())
-                    .unwrap_or_default();
+                crate::state::selection_helpers::collect_selected_block_ids(self.doc(), selection);
+
             let mut block_set = FxHashSet::default();
             block_set.extend(block_ids.iter().copied());
 
