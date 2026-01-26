@@ -497,7 +497,6 @@ mod tests {
     use crate::layout::{Element, LayoutNode, Paginator, PositionedNode, SplitEdges};
     use crate::model::{LayoutMode, NodeId};
     use crate::types::{Point, Size};
-    use crate::{id, runtime};
     use std::rc::Rc;
 
     fn create_dummy_line_element(has_page_break: bool) -> LineElement {

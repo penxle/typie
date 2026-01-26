@@ -54,7 +54,7 @@ impl Layout for EmbedNode {
             .view_states
             .get(&ctx.node.node_id())
             .and_then(|s| s.external_height())
-            .unwrap_or(0.0);
+            .unwrap_or(1.0);
 
         let data = ExternalElementData::Embed {
             id: self.id.clone(),
