@@ -76,16 +76,23 @@ impl Render for TableCellElement {
         transform: Transform,
         ctx: &RenderContext,
     ) {
-        let is_selected = ctx.selections.iter().any(|s| {
-            s.is_cell() && s.node_id() == self.node_id
-        });
+        let is_selected = ctx
+            .selections
+            .iter()
+            .any(|s| s.is_cell() && s.node_id() == self.node_id);
 
         if is_selected {
-            let color = ctx.theme.color_with_alpha("selection", 77);
+            let color = if ctx.is_focused {
+                ctx.theme.color_with_alpha("selection", 77)
+            } else {
+                ctx.theme.color_with_alpha("ui.surface.dark", 32)
+            };
             let mut paint = Paint::default();
             paint.set_color(color);
-            
-            if let Some(rect) = tiny_skia::Rect::from_xywh(0.0, 0.0, self.size.width, self.size.height) {
+
+            if let Some(rect) =
+                tiny_skia::Rect::from_xywh(0.0, 0.0, self.size.width, self.size.height)
+            {
                 pixmap.fill_rect(rect, &paint, transform, None);
             }
         }
