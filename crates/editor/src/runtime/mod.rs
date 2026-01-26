@@ -1209,6 +1209,7 @@ impl Runtime {
                     self.pending.external_elements = true;
                     self.pending.enabled_actions = true;
                     self.pending.placeholder = true;
+                    self.pending.table_overlays = true;
                 }
                 Effect::PendingMarksChanged => {
                     self.pending.active_marks = true;

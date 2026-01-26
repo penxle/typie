@@ -7,6 +7,7 @@
   import ArrowLeftToLineIcon from '~icons/lucide/arrow-left-to-line';
   import ArrowRightToLineIcon from '~icons/lucide/arrow-right-to-line';
   import ArrowUpToLineIcon from '~icons/lucide/arrow-up-to-line';
+  import BanIcon from '~icons/lucide/ban';
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import EllipsisVerticalIcon from '~icons/lucide/ellipsis-vertical';
   import MoveDownIcon from '~icons/lucide/move-down';
@@ -14,6 +15,7 @@
   import MoveRightIcon from '~icons/lucide/move-right';
   import MoveUpIcon from '~icons/lucide/move-up';
   import PlusIcon from '~icons/lucide/plus';
+  import TableProperties from '~icons/lucide/table-properties';
   import Trash2Icon from '~icons/lucide/trash-2';
   import type { TableOverlay as TableOverlayType } from '@typie/editor';
   import type { Editor } from '$lib/editor/editor.svelte';
@@ -100,6 +102,12 @@
     hoveredRowIndex = null;
     hoveredColIndex = null;
   }
+
+  let isTableHovered = $state(false);
+  let menuOpen = $state(false);
+  let buttonHovered = $state(false);
+
+  const isButtonVisible = $derived(isTableHovered || overlay.isFocused || menuOpen || buttonHovered);
 </script>
 
 <div
@@ -113,6 +121,8 @@
   })}
   data-external-element
   data-table-overlay={overlay.tableId}
+  onpointerenter={() => (isTableHovered = true)}
+  onpointerleave={() => (isTableHovered = false)}
 >
   {#each overlay.rowHeights, rowIndex (rowIndex)}
     {#each overlay.colWidths, colIndex (colIndex)}
@@ -595,4 +605,121 @@
   >
     <Icon icon={PlusIcon} size={14} />
   </button>
+</div>
+
+<div
+  style:left="{overlay.bounds.x + overlay.bounds.width / 2}px"
+  style:top="{overlay.bounds.y - 38}px"
+  class={center({
+    position: 'absolute',
+    width: '32px',
+    height: '32px',
+    translate: 'auto',
+    translateX: '-1/2',
+    pointerEvents: 'auto',
+    zIndex: '1',
+  })}
+  data-external-element
+  onpointerenter={() => (buttonHovered = true)}
+  onpointerleave={() => (buttonHovered = false)}
+>
+  <Menu offset={4} onopen={() => (menuOpen = true)} ontransitionend={() => (menuOpen = false)} placement="bottom">
+    {#snippet button({ open })}
+      <button
+        class={center({
+          display: isButtonVisible ? 'flex' : 'none',
+          fontSize: '14px',
+          fontWeight: 'medium',
+          color: 'text.faint',
+          backgroundColor: 'surface.default',
+          width: '24px',
+          height: '24px',
+          borderRadius: '4px',
+          boxShadow: 'medium',
+          borderWidth: '1px',
+          borderColor: 'border.strong',
+          cursor: 'pointer',
+          _hover: {
+            backgroundColor: 'interactive.hover',
+          },
+          _pressed: {
+            color: 'text.bright',
+            backgroundColor: 'accent.brand.default',
+            borderWidth: '0',
+          },
+        })}
+        aria-pressed={open}
+        type="button"
+      >
+        <Icon icon={TableProperties} size={14} />
+      </button>
+    {/snippet}
+
+    {#snippet children({ close })}
+      <MenuItem
+        onclick={() => {
+          close();
+          editor.dispatch({ type: 'setTableBorderStyle', tableId: overlay.tableId, style: 'solid' });
+          editor.focus();
+        }}
+      >
+        <div
+          class={css({
+            width: '14px',
+            height: '0',
+            borderBottomWidth: '2px',
+            borderBottomStyle: 'solid',
+            borderColor: 'text.default',
+          })}
+        ></div>
+        <span>실선</span>
+      </MenuItem>
+      <MenuItem
+        onclick={() => {
+          close();
+          editor.dispatch({ type: 'setTableBorderStyle', tableId: overlay.tableId, style: 'dashed' });
+          editor.focus();
+        }}
+      >
+        <div
+          class={css({
+            width: '14px',
+            height: '0',
+            borderBottomWidth: '2px',
+            borderBottomStyle: 'dashed',
+            borderColor: 'text.default',
+          })}
+        ></div>
+        <span>파선</span>
+      </MenuItem>
+      <MenuItem
+        onclick={() => {
+          close();
+          editor.dispatch({ type: 'setTableBorderStyle', tableId: overlay.tableId, style: 'dotted' });
+          editor.focus();
+        }}
+      >
+        <div
+          class={css({
+            width: '14px',
+            height: '0',
+            borderBottomWidth: '2px',
+            borderBottomStyle: 'dotted',
+            borderColor: 'text.default',
+          })}
+        ></div>
+        <span>점선</span>
+      </MenuItem>
+      <MenuItem
+        onclick={() => {
+          close();
+          editor.dispatch({ type: 'setTableBorderStyle', tableId: overlay.tableId, style: 'none' });
+          editor.focus();
+        }}
+      >
+        <Icon icon={BanIcon} size={14} />
+        <span>없음</span>
+      </MenuItem>
+    {/snippet}
+  </Menu>
 </div>
