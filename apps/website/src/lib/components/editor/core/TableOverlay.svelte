@@ -3,6 +3,9 @@
   import { center } from '@typie/styled-system/patterns';
   import { Icon, Menu, MenuItem } from '@typie/ui/components';
   import { clamp } from '@typie/ui/utils';
+  import AlignCenterIcon from '~icons/lucide/align-center';
+  import AlignLeftIcon from '~icons/lucide/align-left';
+  import AlignRightIcon from '~icons/lucide/align-right';
   import ArrowDownToLineIcon from '~icons/lucide/arrow-down-to-line';
   import ArrowLeftToLineIcon from '~icons/lucide/arrow-left-to-line';
   import ArrowRightToLineIcon from '~icons/lucide/arrow-right-to-line';
@@ -180,20 +183,16 @@
               display: open || isVisible ? 'flex' : 'none',
               width: '24px',
               height: '18px',
-              backgroundColor: 'surface.default',
+              backgroundColor: open ? 'interactive.hover' : 'surface.default',
               borderWidth: '1px',
               borderColor: 'border.strong',
               borderRadius: '4px',
-              color: 'text.faint',
-              boxShadow: 'medium',
+              color: open ? 'text.default' : 'text.faint',
+              boxShadow: 'small',
               cursor: 'pointer',
               _hover: {
                 backgroundColor: 'interactive.hover',
-              },
-              _pressed: {
-                color: 'text.bright',
-                backgroundColor: 'accent.brand.default',
-                borderWidth: '0',
+                color: 'text.default',
               },
             })}
             aria-pressed={open}
@@ -301,20 +300,16 @@
               display: open || isVisible ? 'flex' : 'none',
               width: '18px',
               height: '24px',
-              backgroundColor: 'surface.default',
+              backgroundColor: open ? 'interactive.hover' : 'surface.default',
               borderWidth: '1px',
               borderColor: 'border.strong',
               borderRadius: '4px',
-              color: 'text.faint',
-              boxShadow: 'medium',
+              color: open ? 'text.default' : 'text.faint',
+              boxShadow: 'small',
               cursor: 'pointer',
               _hover: {
                 backgroundColor: 'interactive.hover',
-              },
-              _pressed: {
-                color: 'text.bright',
-                backgroundColor: 'accent.brand.default',
-                borderWidth: '0',
+                color: 'text.default',
               },
             })}
             aria-pressed={open}
@@ -612,12 +607,22 @@
   style:top="{overlay.bounds.y - 38}px"
   class={center({
     position: 'absolute',
-    width: '32px',
-    height: '32px',
+    width: 'auto',
+    height: '30px',
+    display: isButtonVisible ? 'flex' : 'none',
+    gap: '2px',
+    alignItems: 'center',
     translate: 'auto',
     translateX: '-1/2',
     pointerEvents: 'auto',
     zIndex: '1',
+    backgroundColor: 'surface.default',
+    borderRadius: '6px',
+    boxShadow: 'small',
+    borderWidth: '1px',
+    borderColor: 'border.strong',
+    padding: '2px',
+    cursor: 'default',
   })}
   data-external-element
   onpointerenter={() => (buttonHovered = true)}
@@ -627,25 +632,83 @@
     {#snippet button({ open })}
       <button
         class={center({
-          display: isButtonVisible ? 'flex' : 'none',
+          display: 'flex',
           fontSize: '14px',
           fontWeight: 'medium',
-          color: 'text.faint',
-          backgroundColor: 'surface.default',
+          color: open ? 'text.default' : 'text.faint',
+          backgroundColor: open ? 'interactive.hover' : 'transparent',
           width: '24px',
           height: '24px',
           borderRadius: '4px',
-          boxShadow: 'medium',
-          borderWidth: '1px',
-          borderColor: 'border.strong',
           cursor: 'pointer',
           _hover: {
             backgroundColor: 'interactive.hover',
+            color: 'text.default',
           },
-          _pressed: {
-            color: 'text.bright',
-            backgroundColor: 'accent.brand.default',
-            borderWidth: '0',
+        })}
+        aria-pressed={open}
+        type="button"
+      >
+        {#if overlay.align === 'center'}
+          <Icon icon={AlignCenterIcon} size={14} />
+        {:else if overlay.align === 'right'}
+          <Icon icon={AlignRightIcon} size={14} />
+        {:else}
+          <Icon icon={AlignLeftIcon} size={14} />
+        {/if}
+      </button>
+    {/snippet}
+
+    {#snippet children({ close })}
+      <MenuItem
+        onclick={() => {
+          close();
+          editor.dispatch({ type: 'setTableAlign', tableId: overlay.tableId, align: 'left' });
+          editor.focus();
+        }}
+      >
+        <Icon icon={AlignLeftIcon} size={14} />
+        <span>왼쪽 정렬</span>
+      </MenuItem>
+      <MenuItem
+        onclick={() => {
+          close();
+          editor.dispatch({ type: 'setTableAlign', tableId: overlay.tableId, align: 'center' });
+          editor.focus();
+        }}
+      >
+        <Icon icon={AlignCenterIcon} size={14} />
+        <span>가운데 정렬</span>
+      </MenuItem>
+      <MenuItem
+        onclick={() => {
+          close();
+          editor.dispatch({ type: 'setTableAlign', tableId: overlay.tableId, align: 'right' });
+          editor.focus();
+        }}
+      >
+        <Icon icon={AlignRightIcon} size={14} />
+        <span>오른쪽 정렬</span>
+      </MenuItem>
+    {/snippet}
+  </Menu>
+
+  <Menu offset={4} onopen={() => (menuOpen = true)} ontransitionend={() => (menuOpen = false)} placement="bottom">
+    {#snippet button({ open })}
+      <button
+        class={center({
+          display: 'flex',
+          fontSize: '14px',
+          fontWeight: 'medium',
+          color: open ? 'text.default' : 'text.faint',
+          backgroundColor: open ? 'interactive.hover' : 'transparent',
+          width: '24px',
+          height: '24px',
+          borderRadius: '4px',
+          cursor: 'pointer',
+          _hover: {
+            backgroundColor: 'interactive.hover',
+            color: 'text.default',
           },
         })}
         aria-pressed={open}

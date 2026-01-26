@@ -74,6 +74,11 @@ fn collect_table_overlays_from_tree(
                     height: table_border.size.height,
                 },
                 border_style: border_style.to_string(),
+                align: match table_border.align {
+                    crate::model::TableAlign::Left => "left".to_string(),
+                    crate::model::TableAlign::Center => "center".to_string(),
+                    crate::model::TableAlign::Right => "right".to_string(),
+                },
                 col_widths: table_border.col_widths.clone(),
                 col_positions,
                 row_heights: table_border.row_heights.clone(),

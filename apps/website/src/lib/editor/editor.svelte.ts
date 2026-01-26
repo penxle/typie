@@ -177,6 +177,7 @@ export class Editor {
       rowHeights: number[];
       rowPositions: number[];
       isFocused: boolean;
+      align: string;
     }[]
   >([]);
 

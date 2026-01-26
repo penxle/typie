@@ -293,6 +293,25 @@ impl Transaction {
         Ok(true)
     }
 
+    pub fn set_table_align(
+        &mut self,
+        table_id: NodeId,
+        align: crate::model::TableAlign,
+    ) -> Result<bool> {
+        let table_mut = self.node_mut(table_id).context("Table not found")?;
+
+        table_mut.as_mut().update(|node| {
+            if let Node::Table(table_node) = node {
+                table_node.align = align;
+            }
+        })?;
+
+        self.push_effect(Effect::NodeChanged { node_id: table_id });
+        self.push_effect(Effect::LayoutChanged);
+
+        Ok(true)
+    }
+
     pub fn select_table_row(&mut self, table_id: NodeId, row: usize) -> Result<bool> {
         use crate::state::{leaf_block_end, leaf_block_start};
 
