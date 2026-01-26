@@ -1097,7 +1097,72 @@ impl Runtime {
 
     pub(crate) fn is_position_in_selection(&self, position: Position) -> bool {
         let selection = self.state.selection;
-        !selection.is_collapsed() && position_in_selection(&self.state.doc, position, &selection)
+        if selection.is_collapsed() {
+            return false;
+        }
+
+        let cell_selection =
+            crate::state::selection_helpers::compute_cell_selection(self.doc(), &selection);
+
+        match cell_selection {
+            crate::state::selection_helpers::CellSelectionInfo::Rectangular { table_id, range } => {
+                let Some(_table) = self.doc().node(table_id) else {
+                    return position_in_selection(&self.state.doc, position, &selection);
+                };
+
+                let ((r_start, r_end), (c_start, c_end)) = range;
+
+                let mut current_id = Some(position.node_id);
+                while let Some(id) = current_id {
+                    let Some(node) = self.doc().node(id) else {
+                        break;
+                    };
+
+                    if node.node_type() == NodeType::TableCell {
+                        let parent = node.parent();
+                        if let Some(row) = parent {
+                            if row.parent().map(|t| t.node_id()) == Some(table_id) {
+                                let r_idx = row.index().unwrap_or(0);
+                                let c_idx = node.index().unwrap_or(0);
+
+                                if r_idx >= r_start
+                                    && r_idx <= r_end
+                                    && c_idx >= c_start
+                                    && c_idx <= c_end
+                                {
+                                    return true;
+                                } else {
+                                    return false;
+                                }
+                            }
+                        }
+                    } else if node.node_type() == NodeType::Table {
+                        if id == table_id {
+                            break;
+                        }
+                    }
+
+                    current_id = node.parent().map(|n| n.node_id());
+                }
+
+                false
+            }
+            crate::state::selection_helpers::CellSelectionInfo::FullTables(table_ids) => {
+                let mut current_id = Some(position.node_id);
+                while let Some(id) = current_id {
+                    if table_ids.contains(&id) {
+                        return true;
+                    }
+                    if let Some(node) = self.doc().node(id) {
+                        current_id = node.parent().map(|n| n.node_id());
+                    } else {
+                        break;
+                    }
+                }
+                false
+            }
+            _ => position_in_selection(&self.state.doc, position, &selection),
+        }
     }
 
     pub(crate) fn is_block_selectable_hit(&self, hit_selection: &Selection) -> bool {

@@ -109,8 +109,63 @@ impl Transaction {
         let children_before = collect_children(self.doc(), target.node_id);
         let fragment = prepare_fragment(fragment, self.doc().schema(), is_block_drop);
 
-        self.set_selection(source);
-        let delete_result = self.delete_selection_with_merge()?;
+        let cell_selection =
+            crate::state::selection_helpers::compute_cell_selection(self.doc(), &source);
+
+        let delete_result = match cell_selection {
+            crate::state::selection_helpers::CellSelectionInfo::Rectangular { .. } => {
+                self.delete_cell_selection(&cell_selection)?;
+                DeleteResult::None
+            }
+            crate::state::selection_helpers::CellSelectionInfo::FullTables(ref table_ids) => {
+                let mut expanded_source = source;
+                if let Ok((mut from, mut to)) = source.as_sorted(self.doc()) {
+                    for &table_id in table_ids {
+                        if let Some(table) = self.node(table_id) {
+                            if let Some(parent) = table.parent() {
+                                let index = table.index().unwrap_or(0);
+                                let start_pos =
+                                    Position::new(parent.node_id(), index, Affinity::Downstream);
+                                let end_pos = Position::new(
+                                    parent.node_id(),
+                                    index + 1,
+                                    Affinity::Downstream,
+                                );
+
+                                if crate::state::position_helpers::compare_positions(
+                                    self.doc(),
+                                    start_pos,
+                                    from,
+                                )
+                                .unwrap_or(std::cmp::Ordering::Equal)
+                                .is_lt()
+                                {
+                                    from = start_pos;
+                                }
+                                if crate::state::position_helpers::compare_positions(
+                                    self.doc(),
+                                    end_pos,
+                                    to,
+                                )
+                                .unwrap_or(std::cmp::Ordering::Equal)
+                                .is_gt()
+                                {
+                                    to = end_pos;
+                                }
+                            }
+                        }
+                    }
+                    expanded_source = Selection::new(from, to);
+                }
+
+                self.set_selection(expanded_source);
+                self.delete_selection_with_merge()?
+            }
+            _ => {
+                self.set_selection(source);
+                self.delete_selection_with_merge()?
+            }
+        };
 
         let insert_pos = compute_insert_position(
             self.doc(),
@@ -216,4 +271,80 @@ fn collect_children(doc: &Doc, node_id: NodeId) -> Vec<NodeId> {
     doc.node(node_id)
         .map(|n| n.children().map(|c| c.node_id()).collect())
         .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::state::Position;
+    use crate::types::Affinity;
+
+    #[test]
+    fn test_drag_and_drop_rectangular_table_selection() {
+        let mut t = id!();
+        let mut p_out = id!();
+        let mut cell_a = id!();
+        let mut cell_b = id!();
+        let mut cell_c = id!();
+        let mut cell_d = id!();
+
+        let mut para_a = id!();
+        let mut para_b = id!();
+        let mut para_c = id!();
+        let mut para_d = id!();
+
+        let initial = state! {
+            doc {
+                @t table {
+                    table_row {
+                        @cell_a table_cell { @para_a paragraph { text { "A" } } }
+                        @cell_b table_cell { @para_b paragraph { text { "B" } } }
+                    }
+                    table_row {
+                        @cell_c table_cell { @para_c paragraph { text { "C" } } }
+                        @cell_d table_cell { @para_d paragraph { text { "D" } } }
+                    }
+                }
+                @p_out paragraph { text { "Target" } }
+            }
+            selection { (para_a, 0) -> (para_c, 1) }
+        };
+
+        let actual = transact!(initial, |tr| {
+            tr.drag_and_drop(Position::new(p_out, 0, Affinity::Downstream))
+                .unwrap();
+        });
+
+        let doc = actual.doc;
+
+        let table = doc.node(t).unwrap();
+        let row0 = table.first_child().unwrap();
+        let row1 = table.last_child().unwrap();
+
+        let cell00 = row0.first_child().unwrap();
+        let cell01 = row0.last_child().unwrap();
+        let cell10 = row1.first_child().unwrap();
+
+        // Check 0,0 (A) - should be empty
+        let p00 = cell00.first_child().unwrap();
+        assert_eq!(p00.children().count(), 0, "Cell 0,0 should be empty");
+
+        // Check 1,0 (C) - should be empty
+        let p10 = cell10.first_child().unwrap();
+        assert_eq!(p10.children().count(), 0, "Cell 1,0 should be empty");
+
+        // Check 0,1 (B) - should RETAIN "B"
+        let p01 = cell01.first_child().unwrap();
+        let text_node = p01
+            .first_child()
+            .expect("Cell B should still have text node");
+        if let crate::model::Node::Text(t) = text_node.node() {
+            assert_eq!(
+                t.text.to_string(),
+                "B",
+                "Cell B content should be preserved"
+            );
+        } else {
+            panic!("Cell B should have text");
+        }
+    }
 }
