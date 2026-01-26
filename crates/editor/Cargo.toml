@@ -4,11 +4,24 @@ version.workspace = true
 edition.workspace = true
 
 [lib]
-crate-type = ["cdylib", "rlib"]
+crate-type = ["cdylib", "rlib", "staticlib"]
+
+[features]
+default = ["wasm"]
+wasm = [
+  "dep:web-sys",
+  "dep:serde-wasm-bindgen",
+  "dep:wasm-bindgen",
+  "dep:tsify",
+  "dep:wasm-bindgen-futures",
+  "dep:console_error_panic_hook",
+  "dep:js-sys",
+  "uuid/js",
+]
+native = []
 
 [dependencies]
 macros = { path = "./macros" }
-web-sys = { version = "0.3", features = ["console"] }
 tiny-skia = "0.11"
 skrifa = "0.40"
 image = { version = "0.25", default-features = false, features = ["png"] }
@@ -16,13 +29,7 @@ parley = "0.7.0"
 fontique = { version = "0.7.0", features = ["icu_properties"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-serde-wasm-bindgen = "0.6"
-wasm-bindgen = "0.2"
-tsify = { version = "0.5", features = ["js"] }
-wasm-bindgen-futures = "0.4"
-console_error_panic_hook = "0.1"
-js-sys = "0.3"
-uuid = { version = "1.11", features = ["v4", "js", "serde"] }
+uuid = { version = "1.11", features = ["v4", "serde"] }
 bytemuck = { version = "1.14", features = ["derive"] }
 icu_segmenter = { version = "2.1.1", default-features = false, features = [
   "serde",
@@ -42,6 +49,14 @@ icu_properties = { version = "2.1.1", default-features = false, features = [
 icu_provider = { version = "2.1.1", features = ["serde"] }
 icu_provider_blob = "2.1.1"
 scraper = "0.25"
+
+web-sys = { version = "0.3", features = ["console"], optional = true }
+serde-wasm-bindgen = { version = "0.6", optional = true }
+wasm-bindgen = { version = "0.2", optional = true }
+tsify = { version = "0.5", features = ["js"], optional = true }
+wasm-bindgen-futures = { version = "0.4", optional = true }
+console_error_panic_hook = { version = "0.1", optional = true }
+js-sys = { version = "0.3", optional = true }
 
 [dev-dependencies]
 criterion = "0.8"

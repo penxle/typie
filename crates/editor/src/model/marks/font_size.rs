@@ -3,9 +3,9 @@ use crate::model::html::{DomSpec, MarkHtmlCodec, MarkParseRule, parse_font_size,
 use macros::Codec;
 use serde::{Deserialize, Serialize};
 use std::hash::{Hash, Hasher};
-use tsify::Tsify;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Codec, Tsify)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Codec)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 pub struct FontSizeMark {
     pub size: f32,
 }

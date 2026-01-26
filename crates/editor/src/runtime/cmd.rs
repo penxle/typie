@@ -2,9 +2,9 @@ use crate::layout::elements::ExternalElementData;
 use crate::model::{LayoutMode, Mark, MarkType, TextAlign};
 use crate::types::{PointerStyle, Rect, TextBound, WritingSystem};
 use serde::Serialize;
-use tsify::Tsify;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Tsify)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 #[serde(rename_all = "camelCase")]
 pub struct ExternalElement {
     pub page_idx: usize,
@@ -14,7 +14,8 @@ pub struct ExternalElement {
     pub is_selected: bool,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Tsify)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 #[serde(rename_all = "camelCase")]
 pub struct SelectionStats {
     pub block_count: usize,
@@ -23,7 +24,8 @@ pub struct SelectionStats {
     pub uniform_line_height: Option<f32>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Tsify)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 #[serde(rename_all = "camelCase")]
 pub struct LinkOverlay {
     pub page_idx: usize,
@@ -31,7 +33,8 @@ pub struct LinkOverlay {
     pub bounds: Vec<TextBound>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Tsify)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 #[serde(rename_all = "camelCase")]
 pub struct SpellcheckOverlay {
     pub page_idx: usize,
@@ -40,7 +43,8 @@ pub struct SpellcheckOverlay {
     pub is_active: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Tsify)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 #[serde(rename_all = "camelCase")]
 pub struct SearchOverlay {
     pub page_idx: usize,
@@ -48,7 +52,8 @@ pub struct SearchOverlay {
     pub is_current: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Tsify)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 #[serde(rename_all = "camelCase")]
 pub struct TableOverlay {
     pub page_idx: usize,
@@ -63,7 +68,8 @@ pub struct TableOverlay {
     pub is_focused: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Tsify)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum Cmd {
     DocChanged,

@@ -3,9 +3,9 @@ use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use std::hash::{Hash, Hasher};
 use tiny_skia::Color;
-use tsify::Tsify;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 #[serde(rename_all = "camelCase")]
 pub struct Theme {
     pub colors: FxHashMap<String, u32>,

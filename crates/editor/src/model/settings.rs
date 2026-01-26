@@ -1,11 +1,11 @@
 use macros::Codec;
 use serde::{Deserialize, Serialize};
 use std::hash::{Hash, Hasher};
-use tsify::Tsify;
 
 pub const CONTINUOUS_PAGE_MARGIN: f32 = 20.0;
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Codec, Tsify)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Codec)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum LayoutMode {
     #[serde(rename_all = "camelCase")]

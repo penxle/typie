@@ -11,7 +11,6 @@ use crate::types::{BoxConstraints, Point, Size};
 use macros::Codec;
 use serde::{Deserialize, Serialize};
 use std::rc::Rc;
-use tsify::Tsify;
 
 const LINE_WIDTH: f32 = 4.0;
 const CONTENT_PADDING: f32 = 16.0;
@@ -24,7 +23,8 @@ const MESSAGE_PADDING_Y: f32 = 8.0;
 const MESSAGE_MAX_WIDTH_RATIO: f32 = 0.8;
 const MESSAGE_MIN_WIDTH: f32 = 40.0;
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, Tsify)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 #[serde(rename_all = "kebab-case")]
 pub enum BlockquoteVariant {
     #[default]
@@ -67,7 +67,8 @@ impl crate::model::Codec for BlockquoteVariant {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Hash, Serialize, Deserialize, Codec, Tsify)]
+#[derive(Debug, Clone, Default, PartialEq, Hash, Serialize, Deserialize, Codec)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 pub struct BlockquoteNode {
     #[serde(default)]
     pub variant: BlockquoteVariant,

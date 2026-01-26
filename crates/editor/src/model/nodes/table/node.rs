@@ -7,13 +7,11 @@ use macros::Codec;
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;
 use std::rc::Rc;
-use tsify::Tsify;
 
 use super::{TABLE_BORDER_WIDTH, calculate_col_widths};
 
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize, Codec, Tsify,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize, Codec)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 #[serde(rename_all = "snake_case")]
 pub enum TableAlign {
     #[default]
@@ -45,9 +43,8 @@ impl std::str::FromStr for TableAlign {
     }
 }
 
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize, Codec, Tsify,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize, Codec)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 #[serde(rename_all = "snake_case")]
 pub enum TableBorderStyle {
     #[default]
@@ -77,7 +74,8 @@ impl TableBorderStyle {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Hash, Serialize, Deserialize, Codec, Tsify)]
+#[derive(Debug, Clone, PartialEq, Hash, Serialize, Deserialize, Codec)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 pub struct TableNode {
     #[serde(default)]
     pub border_style: TableBorderStyle,

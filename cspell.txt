@@ -30,6 +30,7 @@ dotenv
 dotum
 ebgp
 eulyoo
+ffigen
 ffprobe
 fira
 fntf

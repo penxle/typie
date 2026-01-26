@@ -5,9 +5,9 @@ use crate::state::Position;
 use crate::state::position_helpers::is_inline_position;
 
 use serde::Serialize;
-use tsify::Tsify;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Tsify)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum DropIndicator {
     #[serde(rename_all = "camelCase")]

@@ -17,3 +17,7 @@ panic = "abort"
 
 [profile.release.package."*"]
 opt-level = 3
+
+[profile.release-native]
+inherits = "release"
+panic = "unwind"

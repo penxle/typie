@@ -3,9 +3,9 @@ use super::{Context, ContextKey, Runtime, When};
 use crate::model::{BlockquoteVariant, HorizontalRuleVariant, LayoutMode, MarkType, TextAlign};
 use crate::types::Theme;
 use serde::{Deserialize, Serialize};
-use tsify::Tsify;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 #[serde(rename_all = "camelCase")]
 pub enum PointerButton {
     Primary,
@@ -19,7 +19,8 @@ impl PointerButton {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 #[serde(rename_all = "camelCase")]
 pub struct Modifier {
     pub shift: bool,
@@ -28,7 +29,8 @@ pub struct Modifier {
     pub meta: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 #[serde(rename_all = "camelCase")]
 pub enum Direction {
     Left,
@@ -53,7 +55,8 @@ macro_rules! define_messages {
             => handle($rt:ident) $block:block
         ),* $(,)?
     ) => {
-        #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+        #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
         #[serde(tag = "type", rename_all = "camelCase")]
         pub enum Message {
             $(

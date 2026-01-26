@@ -13,7 +13,6 @@ use macros::Codec;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::rc::Rc;
-use tsify::Tsify;
 
 fn map_range_with_preedit(
     (start, end): (usize, usize),
@@ -210,9 +209,8 @@ fn extract_background_segments(
     merged
 }
 
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Default, Hash, Serialize, Deserialize, Codec, Tsify,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Hash, Serialize, Deserialize, Codec)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 #[serde(rename_all = "snake_case")]
 pub enum TextAlign {
     #[default]
@@ -251,7 +249,8 @@ fn default_line_height() -> f32 {
     1.6
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Codec, Tsify)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Codec)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 pub struct ParagraphNode {
     #[serde(default)]
     pub align: TextAlign,

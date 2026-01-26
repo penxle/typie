@@ -5,13 +5,11 @@ use crate::model::html::{DomSpec, NodeHtmlCodec, NodeParseRule};
 use crate::types::{BoxConstraints, Size};
 use macros::Codec;
 use serde::{Deserialize, Serialize};
-use tsify::Tsify;
 
 const DEFAULT_HEIGHT: f32 = 24.0;
 
-#[derive(
-    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, Codec, Tsify,
-)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, Codec)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 #[serde(rename_all = "snake_case")]
 pub enum HorizontalRuleVariant {
     #[default]
@@ -61,7 +59,8 @@ impl std::str::FromStr for HorizontalRuleVariant {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Hash, Serialize, Deserialize, Codec, Tsify)]
+#[derive(Debug, Clone, Default, PartialEq, Hash, Serialize, Deserialize, Codec)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 pub struct HorizontalRuleNode {
     #[serde(default)]
     pub variant: HorizontalRuleVariant,

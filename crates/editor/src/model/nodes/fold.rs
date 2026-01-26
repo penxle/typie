@@ -6,7 +6,6 @@ use crate::types::{BoxConstraints, Point, Size};
 use macros::Codec;
 use serde::{Deserialize, Serialize};
 use std::rc::Rc;
-use tsify::Tsify;
 
 const TITLE_PADDING_X: f32 = 12.0;
 const TITLE_PADDING_Y: f32 = 8.0;
@@ -16,7 +15,8 @@ const CONTENT_PADDING_Y: f32 = 16.0;
 pub const FOLD_BORDER_RADIUS: f32 = 8.0;
 pub const FOLD_BORDER_WIDTH: f32 = 1.0;
 
-#[derive(Debug, Clone, Default, PartialEq, Hash, Serialize, Deserialize, Codec, Tsify)]
+#[derive(Debug, Clone, Default, PartialEq, Hash, Serialize, Deserialize, Codec)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 pub struct FoldNode {}
 
 impl NodeHtmlCodec for FoldNode {
