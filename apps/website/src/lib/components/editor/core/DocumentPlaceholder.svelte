@@ -26,7 +26,7 @@
     }
   });
 
-  const shouldShow = $derived(editor.placeholder.visible && editor.placeholder.bounds);
+  const shouldShow = $derived(editor.placeholder.visible && editor.placeholder.bounds && editor.pageContainerEls[0]);
 </script>
 
 {#if shouldShow}
