@@ -69,11 +69,11 @@ impl CursorNavigable for ExternalElement {
 
         let offset = self.offset_in_block(ctx);
 
-        if position.offset == offset {
+        if position.offset == offset && position.affinity == Affinity::Downstream {
             return Some(Rect::new(0.0, 0.0, 0.0, self.size.height));
         }
 
-        if position.offset == offset + 1 {
+        if position.offset == offset + 1 && position.affinity == Affinity::Upstream {
             return Some(Rect::new(self.size.width, 0.0, 0.0, self.size.height));
         }
 

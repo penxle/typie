@@ -77,7 +77,7 @@ impl Layout for ImageNode {
             .view_states
             .get(&ctx.node.node_id())
             .and_then(|s| s.external_height())
-            .unwrap_or(0.0);
+            .unwrap_or(1.0);
 
         let data = ExternalElementData::Image {
             id: self.id.clone(),
@@ -132,7 +132,7 @@ mod tests {
                 match &element.data {
                     crate::layout::elements::ExternalElementData::Image { id, .. } => {
                         assert_eq!(id.as_deref(), Some("test-image-id"));
-                        assert_eq!(element.size.height, 0.0);
+                        assert_eq!(element.size.height, 1.0);
                         assert_eq!(element.size.width, 700.0); // 800 - 2 * 50
                         found = true;
                     }

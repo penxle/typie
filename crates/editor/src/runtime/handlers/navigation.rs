@@ -3,6 +3,7 @@ use crate::layout::cursor::{Cursor, NavigationContext};
 use crate::model::{MarkType, NodeId};
 use crate::state::position_helpers::{compare_positions, move_from_block_position};
 use crate::state::{Position, Selection, block_content_len};
+use crate::types::Affinity;
 use std::cmp::Ordering;
 
 impl Runtime {
@@ -237,13 +238,17 @@ impl Runtime {
                 | Direction::PageUp
                 | Direction::LineStart
                 | Direction::WordLeft
-                | Direction::DocumentStart => from,
+                | Direction::DocumentStart => {
+                    Position::new(from.node_id, from.offset, Affinity::Downstream)
+                }
                 Direction::Right
                 | Direction::Down
                 | Direction::PageDown
                 | Direction::LineEnd
                 | Direction::WordRight
-                | Direction::DocumentEnd => to,
+                | Direction::DocumentEnd => {
+                    Position::new(to.node_id, to.offset, Affinity::Upstream)
+                }
             };
             let span = move_from(base);
             (span.anchor, span.head)
@@ -745,5 +750,57 @@ mod tests {
         let selection = &rt.state().selection;
         assert_eq!(selection.head.node_id, p2);
         assert_eq!(selection.head.offset, 0);
+    }
+
+    #[test]
+    fn move_down_adjacent_images() {
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                paragraph {}
+                image(id: Some("image1".to_string()), proportion: 1.0,) {}
+                image(id: Some("image2".to_string()), proportion: 1.0,) {}
+                paragraph {}
+            }
+            selection { (NodeId::ROOT, 1) -> (NodeId::ROOT, 2) }
+        };
+
+        rt.layout();
+        rt.update(Message::Navigate {
+            direction: Direction::Down,
+            extend: false,
+        });
+
+        let selection = &rt.state().selection;
+        assert_eq!(selection.anchor.node_id, NodeId::ROOT);
+        assert_eq!(selection.anchor.offset, 2);
+        assert_eq!(selection.head.node_id, NodeId::ROOT);
+        assert_eq!(selection.head.offset, 3);
+    }
+
+    #[test]
+    fn move_up_adjacent_images() {
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                paragraph {}
+                image(id: Some("image1".to_string()), proportion: 1.0,) {}
+                image(id: Some("image2".to_string()), proportion: 1.0,) {}
+                paragraph {}
+            }
+            selection { (NodeId::ROOT, 2) -> (NodeId::ROOT, 3) }
+        };
+
+        rt.layout();
+        rt.update(Message::Navigate {
+            direction: Direction::Up,
+            extend: false,
+        });
+
+        let selection = &rt.state().selection;
+        assert_eq!(selection.anchor.node_id, NodeId::ROOT);
+        assert_eq!(selection.anchor.offset, 1);
+        assert_eq!(selection.head.node_id, NodeId::ROOT);
+        assert_eq!(selection.head.offset, 2);
     }
 }
