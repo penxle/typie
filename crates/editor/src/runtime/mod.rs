@@ -721,11 +721,38 @@ impl Runtime {
         let len = self.state.garbage_ids.len();
         let drain_count = chunk_size.min(len);
 
-        let ids_to_delete: Vec<NodeId> = self.state.garbage_ids.drain(0..drain_count).collect();
+        let candidates: Vec<NodeId> = self.state.garbage_ids.drain(0..drain_count).collect();
 
-        for &id in &ids_to_delete {
-            let children = self.doc().get_children_ids(id);
-            self.state.garbage_ids.extend(children);
+        let mut ids_to_delete = Vec::with_capacity(candidates.len());
+
+        for &id in &candidates {
+            if id == NodeId::ROOT {
+                continue;
+            }
+
+            let mut curr = id;
+            let is_reachable = loop {
+                if let Some(parent_id) = self.doc().get_parent_id(curr) {
+                    let siblings = self.doc().get_children_ids(parent_id);
+                    if !siblings.contains(&curr) {
+                        break false;
+                    }
+
+                    if parent_id == NodeId::ROOT {
+                        break true;
+                    }
+                    curr = parent_id;
+                } else {
+                    break false;
+                }
+            };
+
+            if !is_reachable {
+                let children = self.doc().get_children_ids(id);
+                self.state.garbage_ids.extend(children);
+
+                ids_to_delete.push(id);
+            }
         }
 
         if let Err(e) = self.doc().delete_nodes_batch(&ids_to_delete) {
