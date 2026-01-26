@@ -4,10 +4,10 @@ use crate::runtime::Runtime;
 use crate::runtime::cmd::SpellcheckOverlay;
 use crate::state::position_helpers::{calculate_offset_before_child, find_text_at_offset};
 use serde::{Deserialize, Serialize};
-use tsify::Tsify;
 
-#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
 #[serde(rename_all = "camelCase")]
 pub struct RawSpellcheckError {
     pub id: String,

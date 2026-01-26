@@ -6,11 +6,11 @@ use crate::types::{BoxConstraints, Point, Size};
 use macros::Codec;
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;
-use tsify::Tsify;
 
 use super::TABLE_BORDER_WIDTH;
 
-#[derive(Debug, Clone, Default, PartialEq, Hash, Serialize, Deserialize, Codec, Tsify)]
+#[derive(Debug, Clone, Default, PartialEq, Hash, Serialize, Deserialize, Codec)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 pub struct TableRowNode {}
 
 impl NodeHtmlCodec for TableRowNode {

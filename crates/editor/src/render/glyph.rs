@@ -203,8 +203,16 @@ impl GlyphRenderer {
             };
 
             if !self.cache.contains_key(&cache_key) {
-                let font_ref =
-                    font_ref_lazy.get_or_insert_with(|| FontRef::new(font_data).unwrap());
+                let font_ref = match font_ref_lazy {
+                    Some(ref f) => f,
+                    None => match FontRef::new(font_data) {
+                        Ok(f) => font_ref_lazy.insert(f),
+                        Err(e) => {
+                            error!("[GlyphRenderer] FontRef::new failed: {:?}, font_data.len={}", e, font_data.len());
+                            continue;
+                        }
+                    },
+                };
 
                 let glyph_id = GlyphId::new(glyph.id);
                 let size = skrifa::instance::Size::new(quantized_size);

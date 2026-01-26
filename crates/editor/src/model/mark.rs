@@ -3,12 +3,12 @@ use crate::model::marks::*;
 use macros::{Codec, LoroMark};
 use serde::{Deserialize, Serialize};
 use std::hash::{Hash, Hasher};
-use tsify::Tsify;
+
+#[cfg(feature = "wasm")]
 use wasm_bindgen::prelude::*;
 
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, Tsify,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 #[serde(rename_all = "snake_case")]
 pub enum MarkType {
     BackgroundColor,
@@ -42,7 +42,8 @@ impl MarkType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Codec, LoroMark, Tsify)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Codec, LoroMark)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Mark {
     BackgroundColor(BackgroundColorMark),

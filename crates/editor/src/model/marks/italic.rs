@@ -2,9 +2,9 @@ use crate::model::Mark;
 use crate::model::html::{DomSpec, MarkHtmlCodec, MarkParseRule, parse_styles};
 use macros::Codec;
 use serde::{Deserialize, Serialize};
-use tsify::Tsify;
 
-#[derive(Debug, Clone, Default, PartialEq, Hash, Serialize, Deserialize, Codec, Tsify)]
+#[derive(Debug, Clone, Default, PartialEq, Hash, Serialize, Deserialize, Codec)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 pub struct ItalicMark;
 
 impl MarkHtmlCodec for ItalicMark {

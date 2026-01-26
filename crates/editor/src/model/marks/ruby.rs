@@ -3,9 +3,9 @@ use crate::model::html::{DomSpec, MarkHtmlCodec, MarkParseRule};
 use macros::Codec;
 use scraper::{ElementRef, Node as ScraperNode, Selector};
 use serde::{Deserialize, Serialize};
-use tsify::Tsify;
 
-#[derive(Debug, Clone, PartialEq, Hash, Serialize, Deserialize, Codec, Tsify)]
+#[derive(Debug, Clone, PartialEq, Hash, Serialize, Deserialize, Codec)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 pub struct RubyMark {
     pub text: String,
 }

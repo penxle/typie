@@ -4,9 +4,9 @@ use crate::state::position_helpers::calculate_offset_before_child;
 use crate::state::{Position, Selection};
 use crate::types::{Affinity, Rect, Size};
 use serde::{Deserialize, Serialize};
-use tsify::Tsify;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum ExternalElementData {
     #[serde(rename_all = "camelCase")]

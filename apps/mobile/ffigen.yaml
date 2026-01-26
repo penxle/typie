@@ -1,0 +1,33 @@
+name: EditorBindings
+description: FFI bindings for the native editor library
+output: 'lib/native/editor_bindings.dart'
+headers:
+  entry-points:
+    - '../../crates/editor/include/editor.h'
+preamble: |
+  // ignore_for_file: type=lint
+comments:
+  style: any
+  length: full
+ffi-native:
+functions:
+  include:
+    - 'editor_.*'
+structs:
+  include:
+    - 'ByteBuffer'
+    - 'RenderResult'
+    - 'EditorApplication'
+    - 'EditorHandle'
+typedefs:
+  include:
+    - 'LogCallback'
+unnamed-enums:
+  exclude:
+    - '.*'
+globals:
+  exclude:
+    - '.*'
+macros:
+  exclude:
+    - '.*'

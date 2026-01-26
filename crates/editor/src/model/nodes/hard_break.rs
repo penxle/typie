@@ -2,9 +2,9 @@ use crate::model::Node;
 use crate::model::html::{DomSpec, NodeHtmlCodec, NodeParseRule};
 use macros::Codec;
 use serde::{Deserialize, Serialize};
-use tsify::Tsify;
 
-#[derive(Debug, Clone, Default, PartialEq, Hash, Serialize, Deserialize, Codec, Tsify)]
+#[derive(Debug, Clone, Default, PartialEq, Hash, Serialize, Deserialize, Codec)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 pub struct HardBreakNode {}
 
 impl NodeHtmlCodec for HardBreakNode {

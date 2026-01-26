@@ -1,7 +1,7 @@
 use serde::Serialize;
-use tsify::Tsify;
 
-#[derive(Debug, Clone, Copy, Serialize, Tsify)]
+#[derive(Debug, Clone, Copy, Serialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 #[allow(dead_code)]
 pub struct Point {
     pub x: f32,
@@ -19,7 +19,8 @@ impl Point {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Tsify)]
+#[derive(Debug, Clone, Copy, Serialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 #[allow(dead_code)]
 pub struct Size {
     pub width: f32,
@@ -44,7 +45,8 @@ impl Size {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Tsify)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 #[allow(dead_code)]
 pub struct Rect {
     pub x: f32,
@@ -53,7 +55,8 @@ pub struct Rect {
     pub height: f32,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Tsify)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 #[allow(dead_code)]
 pub struct TextBound {
     pub x: f32,

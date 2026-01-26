@@ -1,14 +1,19 @@
+#[cfg(feature = "wasm")]
 extern crate web_sys;
 
 #[allow(unused)]
 macro_rules! log {
     ( $( $t:tt )* ) => {
         {
-            #[cfg(target_arch = "wasm32")]
+            #[cfg(all(feature = "wasm", target_arch = "wasm32"))]
             {
                 web_sys::console::log_1(&format!( $( $t )* ).into());
             }
-            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(feature = "native")]
+            {
+                crate::ffi::native::native_log(crate::ffi::native::LOG_LEVEL_INFO, &format!( $( $t )* ));
+            }
+            #[cfg(not(any(all(feature = "wasm", target_arch = "wasm32"), feature = "native")))]
             {
                 println!( $( $t )* );
             }
@@ -20,11 +25,15 @@ macro_rules! log {
 macro_rules! error {
     ( $( $t:tt )* ) => {
         {
-            #[cfg(target_arch = "wasm32")]
+            #[cfg(all(feature = "wasm", target_arch = "wasm32"))]
             {
                 web_sys::console::error_1(&format!( $( $t )* ).into());
             }
-            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(feature = "native")]
+            {
+                crate::ffi::native::native_log(crate::ffi::native::LOG_LEVEL_ERROR, &format!( $( $t )* ));
+            }
+            #[cfg(not(any(all(feature = "wasm", target_arch = "wasm32"), feature = "native")))]
             {
                 eprintln!( $( $t )* );
             }
@@ -36,11 +45,15 @@ macro_rules! error {
 macro_rules! warn {
     ( $( $t:tt )* ) => {
         {
-            #[cfg(target_arch = "wasm32")]
+            #[cfg(all(feature = "wasm", target_arch = "wasm32"))]
             {
                 web_sys::console::warn_1(&format!( $( $t )* ).into());
             }
-            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(feature = "native")]
+            {
+                crate::ffi::native::native_log(crate::ffi::native::LOG_LEVEL_WARN, &format!( $( $t )* ));
+            }
+            #[cfg(not(any(all(feature = "wasm", target_arch = "wasm32"), feature = "native")))]
             {
                 eprintln!( $( $t )* );
             }

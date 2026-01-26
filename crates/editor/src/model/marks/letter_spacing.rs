@@ -5,9 +5,9 @@ use crate::model::html::{
 use macros::Codec;
 use serde::{Deserialize, Serialize};
 use std::hash::{Hash, Hasher};
-use tsify::Tsify;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Codec, Tsify)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Codec)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 pub struct LetterSpacingMark {
     pub spacing: f32,
 }

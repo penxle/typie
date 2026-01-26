@@ -8,11 +8,11 @@ use crate::types::{BoxConstraints, Point, Size};
 use macros::Codec;
 use serde::{Deserialize, Serialize};
 use std::hash::{Hash, Hasher};
-use tsify::Tsify;
 
 use super::TABLE_CELL_PADDING;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Codec, Tsify)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Codec)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 pub struct TableCellNode {
     #[serde(default)]
     pub col_width: Option<f32>,

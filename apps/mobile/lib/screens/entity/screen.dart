@@ -19,7 +19,6 @@ import 'package:typie/constants/router_tab_index.dart';
 import 'package:typie/context/bottom_sheet.dart';
 import 'package:typie/context/modal.dart';
 import 'package:typie/context/theme.dart';
-import 'package:typie/context/toast.dart';
 import 'package:typie/extensions/jiffy.dart';
 import 'package:typie/extensions/num.dart';
 import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
@@ -608,11 +607,14 @@ class _EntityList extends HookWidget {
                             return;
                           }
 
-                          entities[index].node.when(
-                            folder: (folder) => context.router.push(EntityRoute(entityId: entities[index].id)),
-                            post: (post) => context.router.push(EditorRoute(slug: entities[index].slug)),
-                            document: (document) => context.toast(ToastType.notification, '웹에서 조회 및 편집을 할 수 있어요'),
-                            orElse: () => throw UnimplementedError(),
+                          unawaited(
+                            entities[index].node.when(
+                              folder: (folder) => context.router.push(EntityRoute(entityId: entities[index].id)),
+                              post: (post) => context.router.push(EditorRoute(slug: entities[index].slug)),
+                              document: (document) =>
+                                  context.router.push(NativeEditorRoute(slug: entities[index].slug)),
+                              orElse: () => throw UnimplementedError(),
+                            ),
                           );
                         },
                         onLongPress: () async {

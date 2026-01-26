@@ -6,7 +6,6 @@ use crate::types::{BoxConstraints, Point, Size};
 use macros::Codec;
 use serde::{Deserialize, Serialize};
 use std::rc::Rc;
-use tsify::Tsify;
 
 const ICON_WIDTH: f32 = 20.0;
 const ICON_HEIGHT: f32 = 28.0;
@@ -17,7 +16,8 @@ const PADDING_Y: f32 = 16.0;
 pub const CALLOUT_BORDER_RADIUS: f32 = 8.0;
 pub const CALLOUT_BORDER_WIDTH: f32 = 1.0;
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, Tsify)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 #[serde(rename_all = "snake_case")]
 pub enum CalloutVariant {
     #[default]
@@ -69,7 +69,8 @@ impl crate::model::Codec for CalloutVariant {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Hash, Serialize, Deserialize, Codec, Tsify)]
+#[derive(Debug, Clone, Default, PartialEq, Hash, Serialize, Deserialize, Codec)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 pub struct CalloutNode {
     #[serde(default)]
     pub variant: CalloutVariant,

@@ -17,7 +17,7 @@ impl Runtime {
                     });
                 }
                 Err(e) => {
-                    web_sys::console::error_1(&format!("Fragment parse error: {:?}", e).into());
+                    error!("Fragment parse error: {:?}", e);
                 }
             }
         }
@@ -31,7 +31,7 @@ impl Runtime {
                     });
                 }
                 Err(e) => {
-                    web_sys::console::error_1(&format!("HTML parse error: {:?}", e).into());
+                    error!("HTML parse error: {:?}", e);
                 }
             }
         }

@@ -9,7 +9,6 @@ use macros::Codec;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::rc::Rc;
-use tsify::Tsify;
 
 const TOGGLE_ICON_WIDTH: f32 = 20.0;
 const TOGGLE_ICON_PADDING: f32 = 8.0;
@@ -26,7 +25,8 @@ fn preedit_for_node<'a>(ctx: &'a LayoutContext<'a>) -> Option<&'a PreeditDecor> 
         .filter(|preedit| preedit.node_id == ctx.node.node_id())
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Hash, Serialize, Deserialize, Codec, Tsify)]
+#[derive(Debug, Clone, Default, PartialEq, Hash, Serialize, Deserialize, Codec)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 pub struct FoldTitleNode {}
 
 impl NodeHtmlCodec for FoldTitleNode {
