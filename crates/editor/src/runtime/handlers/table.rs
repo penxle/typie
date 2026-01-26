@@ -77,6 +77,18 @@ impl Runtime {
         self.transact(|tr| tr.set_table_border_style(node_id, &style))
     }
 
+    pub(crate) fn handle_set_table_align(
+        &mut self,
+        table_id: String,
+        align: crate::model::TableAlign,
+    ) -> Vec<Effect> {
+        let Some(node_id) = NodeId::from_string(&table_id) else {
+            return vec![];
+        };
+
+        self.transact(|tr| tr.set_table_align(node_id, align))
+    }
+
     pub(crate) fn handle_select_table_row(&mut self, table_id: String, row: usize) -> Vec<Effect> {
         let Some(node_id) = NodeId::from_string(&table_id) else {
             return vec![];

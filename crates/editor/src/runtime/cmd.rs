@@ -55,6 +55,7 @@ pub struct TableOverlay {
     pub table_id: String,
     pub bounds: Rect,
     pub border_style: String,
+    pub align: String,
     pub col_widths: Vec<f32>,
     pub col_positions: Vec<f32>,
     pub row_heights: Vec<f32>,

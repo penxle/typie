@@ -482,6 +482,10 @@ define_messages! {
     => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_set_table_border_style(table_id, style) },
 
+    SetTableAlign { table_id: String, align: crate::model::TableAlign }
+    => when When::key(ContextKey::CanEdit)
+    => handle(rt) { rt.handle_set_table_align(table_id, align) },
+
     SelectTableRow { table_id: String, row: usize }
     => when When::True
     => handle(rt) { rt.handle_select_table_row(table_id, row) },

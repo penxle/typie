@@ -15,6 +15,40 @@ use super::{TABLE_BORDER_WIDTH, calculate_col_widths};
     Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize, Codec, Tsify,
 )]
 #[serde(rename_all = "snake_case")]
+pub enum TableAlign {
+    #[default]
+    Left,
+    Center,
+    Right,
+}
+
+impl std::fmt::Display for TableAlign {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            TableAlign::Left => "left",
+            TableAlign::Center => "center",
+            TableAlign::Right => "right",
+        };
+        f.write_str(s)
+    }
+}
+
+impl std::str::FromStr for TableAlign {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
+            "center" => TableAlign::Center,
+            "right" => TableAlign::Right,
+            _ => TableAlign::Left,
+        })
+    }
+}
+
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize, Codec, Tsify,
+)]
+#[serde(rename_all = "snake_case")]
 pub enum TableBorderStyle {
     #[default]
     Solid,
@@ -47,23 +81,37 @@ impl TableBorderStyle {
 pub struct TableNode {
     #[serde(default)]
     pub border_style: TableBorderStyle,
+    #[serde(default)]
+    pub align: TableAlign,
 }
 
 impl Default for TableNode {
     fn default() -> Self {
         Self {
             border_style: TableBorderStyle::Solid,
+            align: TableAlign::Left,
         }
     }
 }
 
 impl NodeHtmlCodec for TableNode {
     fn to_dom(&self) -> Option<DomSpec> {
-        Some(
-            DomSpec::el("table")
-                .attr("data-border-style", self.border_style.as_str())
-                .hole(),
-        )
+        let mut builder =
+            DomSpec::el("table").attr("data-border-style", self.border_style.as_str());
+
+        if self.align != TableAlign::Left {
+            match self.align {
+                TableAlign::Center => {
+                    builder = builder.attr("data-align", "center");
+                }
+                TableAlign::Right => {
+                    builder = builder.attr("data-align", "right");
+                }
+                _ => {}
+            }
+        }
+
+        Some(builder.hole())
     }
 
     fn parse_rules() -> Vec<NodeParseRule> {
@@ -73,7 +121,17 @@ impl NodeHtmlCodec for TableNode {
                 .attr("data-border-style")
                 .map(TableBorderStyle::from_str)
                 .unwrap_or_default();
-            Some(Node::Table(TableNode { border_style }))
+
+            let align = match elem.value().attr("data-align") {
+                Some("center") => TableAlign::Center,
+                Some("right") => TableAlign::Right,
+                _ => TableAlign::Left,
+            };
+
+            Some(Node::Table(TableNode {
+                border_style,
+                align,
+            }))
         })]
     }
 }
@@ -131,6 +189,16 @@ impl Layout for TableNode {
         let actual_table_width =
             col_widths.iter().sum::<f32>() + TABLE_BORDER_WIDTH * (col_count as f32 + 1.0);
 
+        let x_offset = if actual_table_width < max_width {
+            match self.align {
+                TableAlign::Center => (max_width - actual_table_width) / 2.0,
+                TableAlign::Right => max_width - actual_table_width,
+                TableAlign::Left => 0.0,
+            }
+        } else {
+            0.0
+        };
+
         let mut children = Vec::new();
         let mut row_heights = Vec::new();
         let mut y = TABLE_BORDER_WIDTH;
@@ -142,7 +210,7 @@ impl Layout for TableNode {
             let row_height = row_layout.size.height;
 
             children.push(PositionedNode {
-                position: Point::new(0.0, y),
+                position: Point::new(x_offset, y),
                 node: row_layout.clone(),
             });
 
@@ -158,6 +226,7 @@ impl Layout for TableNode {
             table_size,
             node_id,
             self.border_style,
+            self.align,
             rows.len(),
             col_count,
             row_heights,
@@ -176,13 +245,13 @@ impl Layout for TableNode {
         children.insert(
             0,
             PositionedNode {
-                position: Point::new(0.0, 0.0),
+                position: Point::new(x_offset, 0.0),
                 node: Rc::new(border_node),
             },
         );
 
         LayoutNode {
-            size: table_size,
+            size: Size::new(max_width, y),
             element: None,
             children: Some(children),
             page_break_policy: PageBreakPolicy::Auto,
