@@ -17,6 +17,7 @@ import 'package:typie/screens/native_editor/__generated__/native_editor_query.re
 import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/screen.dart';
 
+import 'cursor.dart';
 import 'theme.dart';
 
 const _fontCdnBase = 'https://cdn.typie.net/fonts/editor';
@@ -174,6 +175,8 @@ class _EditorView extends HookWidget {
   Widget build(BuildContext context) {
     final layout = useState<_LayoutInfo?>(null);
     final renderVersion = useState<Object>(Object());
+    final cursorInfo = useState<CursorInfo?>(null);
+    final isFocused = useState(true);
     final lastSize = useRef<(double, double, double)?>(null);
     final tickerProvider = useSingleTickerProvider();
 
@@ -208,6 +211,8 @@ class _EditorView extends HookWidget {
                 );
               case {'type': 'renderRequired'}:
                 renderVersion.value = Object();
+              case {'type': 'cursorChanged'}:
+                cursorInfo.value = CursorInfo.fromMap(cmd as Map<String, dynamic>);
             }
           }
         }
@@ -225,6 +230,8 @@ class _EditorView extends HookWidget {
       return ticker.dispose;
     }, []);
 
+    final isSelecting = useState(false);
+
     final currentLayout = layout.value;
     if (currentLayout == null) {
       return const Center(child: CircularProgressIndicator());
@@ -233,10 +240,12 @@ class _EditorView extends HookWidget {
     return ListView.builder(
       itemCount: currentLayout.pageCount,
       cacheExtent: 1000,
+      physics: isSelecting.value ? const NeverScrollableScrollPhysics() : null,
       itemBuilder: (context, index) {
         final isLast = index == currentLayout.pageCount - 1;
         final gap = currentLayout.isPaginated && !isLast ? _pageGap : 0.0;
         final pageHeight = currentLayout.pageHeights.elementAtOrNull(index);
+        final pageCursor = cursorInfo.value?.pageIdx == index ? cursorInfo.value : null;
         return _PageItem(
           key: ValueKey(index),
           pageIndex: index,
@@ -244,6 +253,10 @@ class _EditorView extends HookWidget {
           renderVersion: renderVersion.value,
           bottomGap: gap,
           placeholderHeight: pageHeight,
+          cursorInfo: pageCursor,
+          isFocused: isFocused.value,
+          onSelectionStart: () => isSelecting.value = true,
+          onSelectionEnd: () => isSelecting.value = false,
         );
       },
     );
@@ -265,6 +278,10 @@ class _PageItem extends HookWidget {
     required this.renderVersion,
     required this.bottomGap,
     required this.placeholderHeight,
+    required this.cursorInfo,
+    required this.isFocused,
+    required this.onSelectionStart,
+    required this.onSelectionEnd,
     super.key,
   });
 
@@ -273,6 +290,10 @@ class _PageItem extends HookWidget {
   final Object renderVersion;
   final double bottomGap;
   final double? placeholderHeight;
+  final CursorInfo? cursorInfo;
+  final bool isFocused;
+  final VoidCallback onSelectionStart;
+  final VoidCallback onSelectionEnd;
 
   @override
   Widget build(BuildContext context) {
@@ -290,7 +311,68 @@ class _PageItem extends HookWidget {
     if (image.value != null) {
       return Padding(
         padding: EdgeInsets.only(bottom: bottomGap),
-        child: RawImage(image: image.value),
+        child: GestureDetector(
+          onTapDown: (details) {
+            editor.dispatch({
+              'type': 'pointerDown',
+              'pageIdx': pageIndex,
+              'x': details.localPosition.dx,
+              'y': details.localPosition.dy,
+              'clickCount': 1,
+              'button': 'primary',
+              'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
+            });
+          },
+          onTapUp: (details) {
+            editor.dispatch({
+              'type': 'pointerUp',
+              'pageIdx': pageIndex,
+              'x': details.localPosition.dx,
+              'y': details.localPosition.dy,
+              'button': 'primary',
+              'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
+            });
+          },
+          onLongPressStart: (details) {
+            onSelectionStart();
+            editor.dispatch({
+              'type': 'pointerDown',
+              'pageIdx': pageIndex,
+              'x': details.localPosition.dx,
+              'y': details.localPosition.dy,
+              'clickCount': 1,
+              'button': 'primary',
+              'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
+            });
+          },
+          onLongPressMoveUpdate: (details) {
+            editor.dispatch({
+              'type': 'pointerMove',
+              'pageIdx': pageIndex,
+              'x': details.localPosition.dx,
+              'y': details.localPosition.dy,
+              'buttons': 1,
+              'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
+            });
+          },
+          onLongPressEnd: (details) {
+            editor.dispatch({
+              'type': 'pointerUp',
+              'pageIdx': pageIndex,
+              'x': details.localPosition.dx,
+              'y': details.localPosition.dy,
+              'button': 'primary',
+              'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
+            });
+            onSelectionEnd();
+          },
+          child: Stack(
+            children: [
+              RawImage(image: image.value),
+              EditorCursor(cursorInfo: cursorInfo, isFocused: isFocused),
+            ],
+          ),
+        ),
       );
     }
 

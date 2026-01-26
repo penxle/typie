@@ -373,6 +373,30 @@ fn derive_enum_codec(input: &DeriveInput, data: &syn::DataEnum) -> TokenStream {
             }
         });
 
+        let default_variant = data
+            .variants
+            .iter()
+            .find(|v| v.attrs.iter().any(|attr| attr.path().is_ident("default")));
+
+        let decode_field_impl = if let Some(variant) = default_variant {
+            let variant_name = &variant.ident;
+            quote! {
+                fn decode_field(map: &loro::LoroMap, key: &str) -> anyhow::Result<Self> {
+                    match map.get(key) {
+                        Some(value_or_container) => {
+                            if let Ok(value) = value_or_container.into_value() {
+                                return Self::from_value(value);
+                            }
+                            Ok(#name::#variant_name)
+                        }
+                        None => Ok(#name::#variant_name),
+                    }
+                }
+            }
+        } else {
+            quote! {}
+        };
+
         let expanded = quote! {
             impl crate::model::Codec for #name {
                 fn to_value(&self) -> Option<loro::LoroValue> {
@@ -399,6 +423,8 @@ fn derive_enum_codec(input: &DeriveInput, data: &syn::DataEnum) -> TokenStream {
                 fn decode(_map: &loro::LoroMap) -> anyhow::Result<Self> {
                     anyhow::bail!("unit enum should use from_value")
                 }
+
+                #decode_field_impl
             }
         };
 
