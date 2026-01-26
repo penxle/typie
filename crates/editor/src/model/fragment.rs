@@ -236,6 +236,39 @@ impl Fragment {
             return Self::extract_rectangular_cells(doc, table_id, range);
         }
 
+        if let CellSelectionInfo::FullTables(ref table_ids) = cell_info {
+            let (mut f, mut t) = selection.as_sorted(doc)?;
+
+            for &table_id in table_ids {
+                if let Some(table) = doc.node(table_id) {
+                    if let (Some(parent), Some(idx)) = (table.parent(), table.index()) {
+                        let from_node = doc.node(f.node_id).context("From node not found")?;
+                        if f.node_id == table_id
+                            || from_node.ancestors().any(|n| n.node_id() == table_id)
+                        {
+                            f = Position::new(
+                                parent.node_id(),
+                                idx,
+                                crate::types::Affinity::Downstream,
+                            );
+                        }
+
+                        let to_node = doc.node(t.node_id).context("To node not found")?;
+                        if t.node_id == table_id
+                            || to_node.ancestors().any(|n| n.node_id() == table_id)
+                        {
+                            t = Position::new(
+                                parent.node_id(),
+                                idx + 1,
+                                crate::types::Affinity::Upstream,
+                            );
+                        }
+                    }
+                }
+            }
+            return Self::extract_range(doc, f, t);
+        }
+
         let (from, to) = selection.as_sorted(doc)?;
 
         // 여러 블록에 걸친 선택
@@ -1856,5 +1889,61 @@ mod tests {
         let (p11_id, _) = c11_content[0];
         let p11_text = fragment.text_segments_of_node(p11_id);
         assert_eq!(p11_text[0].0, "1-1");
+    }
+    #[test]
+    fn test_new_from_selection_full_tables_mixed() {
+        let mut p1 = id!();
+        let mut t1 = id!();
+        let mut last_cell_p = id!();
+        let mut p2 = id!();
+
+        let state = state! {
+            doc {
+                @p1 paragraph { text { "Before" } }
+                @t1 table {
+                    table_row {
+                        table_cell { paragraph { text { "Row 0 Cell 0" } } }
+                        table_cell { paragraph { text { "Row 0 Cell 1" } } }
+                    }
+                    table_row {
+                        table_cell { paragraph { text { "Row 1 Cell 0" } } }
+                        table_cell { @last_cell_p paragraph { text { "Row 1 Cell 1" } } }
+                    }
+                }
+                @p2 paragraph { text { "After" } }
+            }
+            selection { (last_cell_p, 0) -> (p2, 2) } // Select from LAST cell to "Af" of "After"
+        };
+
+        let fragment = Fragment::new_from_selection(&state.doc, &state.selection).unwrap();
+
+        // Should return Table + Paragraph
+        assert_eq!(
+            fragment.top_level_node_ids().len(),
+            2,
+            "Should have 2 top level nodes"
+        );
+
+        // Check Table
+        let table_node_entry = fragment
+            .nodes
+            .iter()
+            .find(|(_, n)| matches!(n.data(), Node::Table(_)));
+        assert!(table_node_entry.is_some(), "Should contain table");
+        let (table_id, _) = table_node_entry.unwrap();
+
+        let rows = fragment.children_of_node(*table_id);
+
+        // Critical Assertion:
+        // Visual selection highlights the WHOLE table because it crosses boundary.
+        // User expects to copy the WHOLE table.
+        // Current implementation likely only copies from the start point (Row 1 Cell 1) onwards.
+        // So Row 0 will be missing.
+        assert_eq!(rows.len(), 2, "Should contain ALL rows of the table");
+
+        // Verify Row 0 content
+        let (r0_id, _) = rows[0];
+        let r0_cells = fragment.children_of_node(r0_id);
+        assert_eq!(r0_cells.len(), 2, "Row 0 should have all cells");
     }
 }
