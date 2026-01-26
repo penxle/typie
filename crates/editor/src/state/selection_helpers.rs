@@ -176,7 +176,52 @@ pub fn build_selection_decorations(
     let cell_selection_info = compute_cell_selection(doc, selection);
     let mut processed_cells = FxHashSet::default();
 
-    match &cell_selection_info {
+    decorations.extend(collect_cell_decorations(
+        doc,
+        &cell_selection_info,
+        &mut processed_cells,
+    ));
+
+    let block_ids = match block_ids {
+        Some(ids) => ids.to_vec(),
+        None => collect_selected_block_ids(doc, selection),
+    };
+
+    for &block_id in &block_ids {
+        let Some(block) = doc.node(block_id) else {
+            continue;
+        };
+
+        if !block.spec().is_textblock(doc.schema()) {
+            continue;
+        }
+
+        if should_skip_block_decoration(doc, block, &processed_cells) {
+            continue;
+        }
+
+        let block_len = block_content_len(&doc.node(block_id).unwrap()).max(1);
+        let (start_offset, end_offset) = calculate_block_offsets(block_id, block_len, from, to);
+
+        decorations.push(SelectionDecor::Text {
+            node_id: block_id,
+            start_offset,
+            end_offset,
+        });
+    }
+
+    add_ancestor_decorations(doc, from, to, &cell_selection_info, &mut decorations);
+
+    decorations
+}
+
+fn collect_cell_decorations(
+    doc: &Doc,
+    cell_selection: &CellSelectionInfo,
+    processed_cells: &mut FxHashSet<NodeId>,
+) -> Vec<SelectionDecor> {
+    let mut decorations = Vec::new();
+    match cell_selection {
         CellSelectionInfo::Rectangular { table_id, range } => {
             if let Some(table) = doc.node(*table_id) {
                 for (r_idx, row) in table.children().enumerate() {
@@ -213,72 +258,37 @@ pub fn build_selection_decorations(
         }
         CellSelectionInfo::None => {}
     }
-
-    let block_ids = match block_ids {
-        Some(ids) => ids.to_vec(),
-        None => collect_blocks_in_range(doc, from, to).unwrap_or_default(),
-    };
-
-    for &block_id in &block_ids {
-        let Some(block) = doc.node(block_id) else {
-            continue;
-        };
-
-        if !block.spec().is_textblock(doc.schema()) {
-            continue;
-        }
-
-        let should_skip = {
-            let mut result = false;
-            let mut current_id = Some(block.node_id());
-            while let Some(id) = current_id {
-                if processed_cells.contains(&id) {
-                    result = true;
-                    break;
-                }
-
-                if let CellSelectionInfo::Rectangular { table_id, .. } = &cell_selection_info {
-                    if id == *table_id {
-                        result = true;
-                        break;
-                    }
-                }
-
-                if let Some(node) = doc.node(id) {
-                    if node.node_type() == NodeType::Table {
-                        break;
-                    }
-                    current_id = node.parent().map(|n| n.node_id());
-                } else {
-                    break;
-                }
-            }
-            result
-        };
-
-        if should_skip {
-            continue;
-        }
-
-        let block_len = block_content_len(&doc.node(block_id).unwrap()).max(1);
-        let (start_offset, end_offset) = calculate_block_offsets(block_id, block_len, from, to);
-
-        decorations.push(SelectionDecor::Text {
-            node_id: block_id,
-            start_offset,
-            end_offset,
-        });
-    }
-
-    add_ancestor_decorations(doc, from, to, &mut decorations);
-
     decorations
+}
+
+fn should_skip_block_decoration(
+    doc: &Doc,
+    block: NodeRef,
+    processed_cells: &FxHashSet<NodeId>,
+) -> bool {
+    let mut current_id = Some(block.node_id());
+    while let Some(id) = current_id {
+        if processed_cells.contains(&id) {
+            return true;
+        }
+
+        if let Some(node) = doc.node(id) {
+            if node.node_type() == NodeType::Table {
+                return true;
+            }
+            current_id = node.parent().map(|n| n.node_id());
+        } else {
+            break;
+        }
+    }
+    false
 }
 
 fn add_ancestor_decorations(
     doc: &Doc,
     from: Position,
     to: Position,
+    cell_selection: &CellSelectionInfo,
     decorations: &mut Vec<SelectionDecor>,
 ) {
     let Some(from_node) = doc.node(from.node_id) else {
@@ -308,38 +318,39 @@ fn add_ancestor_decorations(
             break;
         };
 
+        match cell_selection {
+            CellSelectionInfo::Rectangular { table_id, .. } if *table_id == ancestor_id => break,
+            CellSelectionInfo::FullTables(table_ids) if table_ids.contains(&ancestor_id) => break,
+            _ => {}
+        }
+
         let start_child_id = if from_idx > 0 {
-            from_path[from_idx - 1]
+            Some(from_path[from_idx - 1])
         } else {
-            match find_child_at_offset(&ancestor, from.offset) {
-                Some((child_id, _)) => child_id,
-                None => break,
-            }
+            find_child_at_offset(&ancestor, from.offset).map(|(id, _)| id)
         };
 
         let end_child_id = if to_idx > 0 {
             let direct_child_id = to_path[to_idx - 1];
             if to.offset == 0 {
-                if let Some(direct_child) = doc.node(direct_child_id) {
-                    if let Some(prev) = direct_child.prev_sibling() {
-                        prev.node_id()
-                    } else {
-                        break;
-                    }
-                } else {
-                    break;
-                }
+                // If to.offset is 0, the selection ends at the start of direct_child_id.
+                // We should stop at the previous sibling.
+                doc.node(direct_child_id)
+                    .and_then(|node| node.prev_sibling().map(|n| n.node_id()))
             } else {
-                direct_child_id
+                Some(direct_child_id)
             }
         } else {
+            // to_idx == 0 means 'to' is directly on ancestor.
             if to.offset == 0 {
-                break;
+                None
+            } else {
+                find_child_at_offset(&ancestor, to.offset.saturating_sub(1)).map(|(id, _)| id)
             }
-            match find_child_at_offset(&ancestor, to.offset.saturating_sub(1)) {
-                Some((child_id, _)) => child_id,
-                None => break,
-            }
+        };
+
+        let (Some(start_child_id), Some(end_child_id)) = (start_child_id, end_child_id) else {
+            break;
         };
 
         if start_child_id == end_child_id && (from_idx != 0 || to_idx != 0) {
@@ -348,22 +359,21 @@ fn add_ancestor_decorations(
 
         let mut start_offset = 0usize;
         let mut end_offset = 0usize;
+        let mut found_start = false;
 
         for child in ancestor.children() {
             let child_id = child.node_id();
             let child_len = child.node().len();
 
             if child_id == start_child_id {
-                break;
+                found_start = true;
             }
-            start_offset += child_len;
-        }
 
-        for child in ancestor.children() {
-            let child_id = child.node_id();
-            let child_len = child.node().len();
+            if !found_start {
+                start_offset += child_len;
+            }
+
             end_offset += child_len;
-
             if child_id == end_child_id {
                 break;
             }
@@ -578,6 +588,70 @@ where
                 .unwrap_or(false)
         })
         .collect())
+}
+
+fn collect_all_blocks_in_subtree(doc: &Doc, root_id: NodeId) -> Vec<NodeId> {
+    let mut blocks = vec![root_id];
+    let mut traverser = match BlockTraverser::new(doc, root_id) {
+        Ok(t) => t,
+        Err(_) => return blocks,
+    };
+
+    while let Some(node_id) = traverser.next() {
+        if !is_ancestor(doc, root_id, node_id) {
+            break;
+        }
+        blocks.push(node_id);
+    }
+
+    blocks
+}
+
+pub fn collect_selected_block_ids(doc: &Doc, selection: &Selection) -> Vec<NodeId> {
+    let Ok((from, to)) = selection.as_sorted(doc) else {
+        return Vec::new();
+    };
+
+    let cell_selection = compute_cell_selection(doc, selection);
+
+    match &cell_selection {
+        CellSelectionInfo::Rectangular { table_id, range } => {
+            let mut ids = Vec::new();
+            if let Some(table) = doc.node(*table_id) {
+                for (r_idx, row) in table.children().enumerate() {
+                    if r_idx < range.0.0 || r_idx > range.0.1 {
+                        continue;
+                    }
+                    for (c_idx, cell) in row.children().enumerate() {
+                        if c_idx < range.1.0 || c_idx > range.1.1 {
+                            continue;
+                        }
+                        ids.extend(collect_all_blocks_in_subtree(doc, cell.node_id()));
+                    }
+                }
+            }
+            ids
+        }
+        CellSelectionInfo::FullTables(table_ids) => {
+            let mut ids: FxHashSet<NodeId> = collect_blocks_in_range(doc, from, to)
+                .unwrap_or_default()
+                .into_iter()
+                .collect();
+
+            for &table_id in table_ids {
+                ids.extend(collect_all_blocks_in_subtree(doc, table_id));
+            }
+
+            let mut result: Vec<NodeId> = ids.into_iter().collect();
+            result.sort_by(|&a, &b| {
+                let pos_a = Position::new(a, 0, crate::types::Affinity::default());
+                let pos_b = Position::new(b, 0, crate::types::Affinity::default());
+                compare_positions(doc, pos_a, pos_b).unwrap_or(Ordering::Equal)
+            });
+            result
+        }
+        CellSelectionInfo::None => collect_blocks_in_range(doc, from, to).unwrap_or_default(),
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -953,5 +1027,58 @@ mod tests {
             }
             _ => panic!("Expected FullTables selection, got {:?}", cell_selection),
         }
+    }
+
+    #[test]
+    fn test_reproduce_table_selection_bug() {
+        let mut n1 = id!();
+        let mut n2 = id!();
+        let mut p_after = id!();
+
+        let state = state! {
+            doc {
+                paragraph {}
+                table {
+                    table_row {
+                        table_cell {
+                            paragraph {
+                                text { "1" }
+                            }
+                        }
+                        table_cell {
+                            @n1 paragraph {
+                                text { "2" }
+                            }
+                        }
+                    }
+                    table_row {
+                        table_cell {
+                            paragraph {
+                                text { "3" }
+                            }
+                        }
+                        table_cell {
+                            @n2 paragraph {
+                                text { "4" }
+                            }
+                        }
+                    }
+                }
+                @p_after paragraph {
+                    text { "ㅁ" }
+                }
+            }
+            selection { (n1, 1) -> (n2, 1) }
+        };
+
+        let decorations = build_selection_decorations(&state.doc, &state.selection, None);
+
+        let after_decor = decorations.iter().find(|d| d.node_id() == p_after);
+
+        assert!(
+            after_decor.is_none(),
+            "Paragraph after table should NOT have selection decoration, but found: {:?}",
+            after_decor
+        );
     }
 }
