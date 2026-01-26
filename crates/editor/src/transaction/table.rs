@@ -488,6 +488,10 @@ mod tests {
                         table_cell { @p1 paragraph { text { "cell1" } } }
                         table_cell { @p2 paragraph { text { "cell2" } } }
                     }
+                    table_row {
+                        table_cell { paragraph { text { "cell3" } } }
+                        table_cell { paragraph { text { "cell4" } } }
+                    }
                 }
             }
             selection { (p1, 0) -> (p2, 5) }
@@ -499,7 +503,10 @@ mod tests {
 
         let doc = actual.doc;
         let root = doc.node(NodeId::ROOT).unwrap();
-        let table = root.first_child().unwrap();
+        let table = root
+            .children()
+            .find(|n| n.node_type() == crate::model::NodeType::Table)
+            .unwrap();
         let row = table.first_child().unwrap();
         let cell1 = row.first_child().unwrap();
         let cell2 = row.children().nth(1).unwrap();
