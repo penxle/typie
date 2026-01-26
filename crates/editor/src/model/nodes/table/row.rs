@@ -1,4 +1,5 @@
-use crate::layout::{Layout, LayoutContext, LayoutNode, PageBreakPolicy, PositionedNode};
+use crate::layout::elements::TableCellElement;
+use crate::layout::{Element, Layout, LayoutContext, LayoutNode, PageBreakPolicy, PositionedNode};
 use crate::model::Node;
 use crate::model::html::{DomSpec, NodeHtmlCodec, NodeParseRule};
 use crate::types::{BoxConstraints, Point, Size};
@@ -77,21 +78,20 @@ impl Layout for TableRowNode {
 
         for (cell_layout, cell_width) in cell_layouts {
             let extended_cell = if cell_layout.size.height < max_height {
-                let inner_cell = std::rc::Rc::new(LayoutNode {
-                    size: cell_layout.size,
-                    element: cell_layout.element.clone(),
-                    children: cell_layout.children.clone(),
-                    page_break_policy: cell_layout.page_break_policy,
-                    render_hints: cell_layout.render_hints.clone(),
-                    scope_id: None,
-                });
+                let new_size = Size::new(cell_layout.size.width, max_height);
+                let element = if let Some(Element::TableCell(cell_elem)) = &cell_layout.element {
+                    Some(Element::TableCell(TableCellElement::new(
+                        new_size,
+                        cell_elem.node_id,
+                    )))
+                } else {
+                    cell_layout.element.clone()
+                };
+
                 std::rc::Rc::new(LayoutNode {
-                    size: Size::new(cell_layout.size.width, max_height),
-                    element: None,
-                    children: Some(vec![PositionedNode {
-                        position: Point::new(0.0, 0.0),
-                        node: inner_cell,
-                    }]),
+                    size: new_size,
+                    element,
+                    children: cell_layout.children.clone(),
                     page_break_policy: cell_layout.page_break_policy,
                     render_hints: cell_layout.render_hints.clone(),
                     scope_id: cell_layout.scope_id,
