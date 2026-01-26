@@ -428,8 +428,13 @@ impl Runtime {
             .unwrap_or(true);
 
         if needs_rebuild {
-            let block_ids =
-                crate::state::selection_helpers::collect_selected_block_ids(self.doc(), selection);
+            let cell_selection =
+                crate::state::selection_helpers::compute_cell_selection(self.doc(), selection);
+            let block_ids = crate::state::selection_helpers::collect_selected_block_ids(
+                self.doc(),
+                selection,
+                &cell_selection,
+            );
 
             let mut block_set = FxHashSet::default();
             block_set.extend(block_ids.iter().copied());

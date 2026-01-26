@@ -184,8 +184,10 @@ pub fn build_selection_decorations(
 
     let block_ids = match block_ids {
         Some(ids) => ids.to_vec(),
-        None => collect_selected_block_ids(doc, selection),
+        None => collect_selected_block_ids(doc, selection, &cell_selection_info),
     };
+
+    let block_id_set: FxHashSet<NodeId> = block_ids.iter().cloned().collect();
 
     for &block_id in &block_ids {
         let Some(block) = doc.node(block_id) else {
@@ -210,7 +212,14 @@ pub fn build_selection_decorations(
         });
     }
 
-    add_ancestor_decorations(doc, from, to, &cell_selection_info, &mut decorations);
+    add_ancestor_decorations(
+        doc,
+        from,
+        to,
+        &cell_selection_info,
+        &block_id_set,
+        &mut decorations,
+    );
 
     decorations
 }
@@ -273,9 +282,6 @@ fn should_skip_block_decoration(
         }
 
         if let Some(node) = doc.node(id) {
-            if node.node_type() == NodeType::Table {
-                return true;
-            }
             current_id = node.parent().map(|n| n.node_id());
         } else {
             break;
@@ -289,6 +295,7 @@ fn add_ancestor_decorations(
     from: Position,
     to: Position,
     cell_selection: &CellSelectionInfo,
+    processed_blocks: &FxHashSet<NodeId>,
     decorations: &mut Vec<SelectionDecor>,
 ) {
     let Some(from_node) = doc.node(from.node_id) else {
@@ -306,6 +313,10 @@ fn add_ancestor_decorations(
         .collect();
 
     for (from_idx, &ancestor_id) in from_path.iter().enumerate() {
+        if processed_blocks.contains(&ancestor_id) {
+            continue;
+        }
+
         let Some(to_idx) = to_path.iter().position(|&id| id == ancestor_id) else {
             continue;
         };
@@ -607,14 +618,16 @@ fn collect_all_blocks_in_subtree(doc: &Doc, root_id: NodeId) -> Vec<NodeId> {
     blocks
 }
 
-pub fn collect_selected_block_ids(doc: &Doc, selection: &Selection) -> Vec<NodeId> {
+pub fn collect_selected_block_ids(
+    doc: &Doc,
+    selection: &Selection,
+    cell_selection: &CellSelectionInfo,
+) -> Vec<NodeId> {
     let Ok((from, to)) = selection.as_sorted(doc) else {
         return Vec::new();
     };
 
-    let cell_selection = compute_cell_selection(doc, selection);
-
-    match &cell_selection {
+    match cell_selection {
         CellSelectionInfo::Rectangular { table_id, range } => {
             let mut ids = Vec::new();
             if let Some(table) = doc.node(*table_id) {
@@ -1107,6 +1120,7 @@ mod tests {
             after_decor
         );
     }
+
     #[test]
     fn test_compute_cell_selection_rectangular_becomes_full_table() {
         let mut t = id!();
@@ -1138,5 +1152,37 @@ mod tests {
             }
             _ => panic!("Expected FullTables selection, got {:?}", cell_selection),
         }
+    }
+
+    #[test]
+    fn test_reproduce_table_cell_partial_selection_decorated_fully() {
+        let mut p1 = id!();
+        let state = state! {
+            doc {
+                table {
+                    table_row {
+                        table_cell {
+                            @p1 paragraph {
+                                text { "Hello World" }
+                            }
+                        }
+                    }
+                }
+            }
+            selection { (p1, 2) -> (p1, 4) }
+        };
+
+        let decorations = build_selection_decorations(&state.doc, &state.selection, None);
+
+        let p1_decors: Vec<_> = decorations.iter().filter(|d| d.node_id() == p1).collect();
+
+        assert_eq!(
+            p1_decors.len(),
+            1,
+            "Should have exactly 1 decoration for paragraph"
+        );
+        let d = p1_decors[0];
+        assert_eq!(d.start_offset(), 2, "Start offset mismatch");
+        assert_eq!(d.end_offset(), 4, "End offset mismatch");
     }
 }
