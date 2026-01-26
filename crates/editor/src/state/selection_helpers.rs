@@ -673,9 +673,31 @@ pub fn compute_cell_selection(doc: &Doc, selection: &Selection) -> CellSelection
             if r1 == r2 && c1 == c2 {
                 CellSelectionInfo::None
             } else {
+                let start_row = min(r1, r2);
+                let end_row = max(r1, r2);
+                let start_col = min(c1, c2);
+                let end_col = max(c1, c2);
+
+                if let Some(table) = doc.node(t1) {
+                    let num_rows = table.children().count();
+                    let num_cols = table
+                        .children()
+                        .next()
+                        .map(|row| row.children().count())
+                        .unwrap_or(0);
+
+                    if start_row == 0
+                        && end_row == num_rows.saturating_sub(1)
+                        && start_col == 0
+                        && end_col == num_cols.saturating_sub(1)
+                    {
+                        return CellSelectionInfo::FullTables(vec![t1]);
+                    }
+                }
+
                 CellSelectionInfo::Rectangular {
                     table_id: t1,
-                    range: ((min(r1, r2), max(r1, r2)), (min(c1, c2), max(c1, c2))),
+                    range: ((start_row, end_row), (start_col, end_col)),
                 }
             }
         }
@@ -950,6 +972,10 @@ mod tests {
                         @c2_1 table_cell { @p_head paragraph { text { "B" } } }
                         @c2_2 table_cell { paragraph {} }
                     }
+                    table_row {
+                        table_cell { paragraph {} }
+                        table_cell { paragraph {} }
+                    }
                 }
             }
             selection { (p_anchor, 0) -> (p_head, 0) }
@@ -1080,5 +1106,37 @@ mod tests {
             "Paragraph after table should NOT have selection decoration, but found: {:?}",
             after_decor
         );
+    }
+    #[test]
+    fn test_compute_cell_selection_rectangular_becomes_full_table() {
+        let mut t = id!();
+        let mut p_start = id!();
+        let mut p_end = id!();
+
+        let state = state! {
+            doc {
+                @t table {
+                    table_row {
+                        table_cell { @p_start paragraph { text { "A" } } }
+                        table_cell { paragraph { text { "B" } } }
+                    }
+                    table_row {
+                        table_cell { paragraph { text { "C" } } }
+                        table_cell { @p_end paragraph { text { "D" } } }
+                    }
+                }
+            }
+            selection { (p_start, 0) -> (p_end, 1) }
+        };
+
+        let cell_selection = compute_cell_selection(&state.doc, &state.selection);
+
+        match cell_selection {
+            CellSelectionInfo::FullTables(tables) => {
+                assert_eq!(tables.len(), 1);
+                assert_eq!(tables[0], t);
+            }
+            _ => panic!("Expected FullTables selection, got {:?}", cell_selection),
+        }
     }
 }
