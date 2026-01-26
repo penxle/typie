@@ -85,10 +85,7 @@
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       const uploadedAttrs = await editor!.current.storage.uploadBlobAsImage(firstFile);
       inflightUrl = undefined;
-      updateAttributes({
-        ...uploadedAttrs,
-        ratio: uploadedAttrs.width && uploadedAttrs.height ? (uploadedAttrs.width as number) / (uploadedAttrs.height as number) : undefined,
-      });
+      updateAttributes(uploadedAttrs);
     } catch {
       inflightUrl = undefined;
       Toast.error(`${firstFile.name} 이미지 업로드에 실패했습니다.`);
@@ -137,10 +134,7 @@
       inflightUrl = event.detail.url;
     } else if (event.type === 'success') {
       inflightUrl = undefined;
-      updateAttributes({
-        ...event.detail.attrs,
-        ratio: event.detail.attrs.width && event.detail.attrs.height ? event.detail.attrs.width / event.detail.attrs.height : undefined,
-      });
+      updateAttributes(event.detail.attrs);
     } else if (event.type === 'error') {
       inflightUrl = undefined;
     } else if (event.type === 'pending-files') {

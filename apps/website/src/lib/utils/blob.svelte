@@ -31,6 +31,7 @@
         size
         width
         height
+        ratio
         placeholder
       }
     }
