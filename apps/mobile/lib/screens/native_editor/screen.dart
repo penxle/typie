@@ -164,6 +164,242 @@ class _Content extends HookWidget {
 
 const _pageGap = 24.0;
 
+class _EditorInput extends StatefulWidget {
+  const _EditorInput({required this.editor, required this.focusNode, required this.child, super.key});
+
+  final NativeEditor editor;
+  final FocusNode focusNode;
+  final Widget child;
+
+  @override
+  State<_EditorInput> createState() => _EditorInputState();
+}
+
+class _EditorInputState extends State<_EditorInput> implements TextInputClient {
+  static const _sentinel = '\u200B';
+  static const _sentinelValue = TextEditingValue(text: _sentinel, selection: TextSelection.collapsed(offset: 1));
+
+  TextInputConnection? _connection;
+  TextEditingValue _currentValue = _sentinelValue;
+  bool _isComposing = false;
+  String _composingText = '';
+  int _committedLength = 1;
+  Timer? _deferTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.focusNode.addListener(_onFocusChanged);
+  }
+
+  @override
+  void dispose() {
+    _deferTimer?.cancel();
+    widget.focusNode.removeListener(_onFocusChanged);
+    _closeConnection();
+    super.dispose();
+  }
+
+  void _onFocusChanged() {
+    if (widget.focusNode.hasFocus) {
+      _openConnection();
+    } else {
+      _closeConnection();
+    }
+  }
+
+  void _openConnection() {
+    if (_connection != null && _connection!.attached) {
+      return;
+    }
+
+    _deferTimer?.cancel();
+    _connection = TextInput.attach(
+      this,
+      const TextInputConfiguration(inputType: TextInputType.multiline, inputAction: TextInputAction.newline),
+    );
+    _connection!.show();
+    _resetState();
+  }
+
+  void _closeConnection() {
+    _deferTimer?.cancel();
+    _connection?.close();
+    _connection = null;
+    _commitComposing();
+  }
+
+  void open() {
+    widget.focusNode.requestFocus();
+    _openConnection();
+  }
+
+  @override
+  void updateEditingValue(TextEditingValue value) {
+    _deferTimer?.cancel();
+    _deferTimer = null;
+    _currentValue = value;
+
+    final newText = value.text;
+
+    if (newText.isEmpty) {
+      if (_isComposing) {
+        _deferCancelComposing();
+      } else {
+        widget.editor.dispatch({'type': 'deleteBackward'});
+        _resetState();
+      }
+      return;
+    }
+
+    final uncommitted = newText.substring(_committedLength.clamp(0, newText.length));
+
+    if (uncommitted.isEmpty) {
+      if (_isComposing) {
+        _deferCancelComposing();
+      }
+      return;
+    }
+
+    if (uncommitted.contains('\n')) {
+      _commitComposing();
+      _resetState();
+      return;
+    }
+
+    final composing = _isComposingText(value, uncommitted);
+
+    if (uncommitted.length == 1 && composing) {
+      _composingText = uncommitted;
+      if (!_isComposing) {
+        _isComposing = true;
+        widget.editor.dispatch({'type': 'compositionStart', 'text': uncommitted});
+      } else {
+        widget.editor.dispatch({'type': 'compositionUpdate', 'text': uncommitted});
+      }
+      return;
+    }
+
+    if (_isComposing) {
+      final lastChar = uncommitted[uncommitted.length - 1];
+      final prefix = uncommitted.substring(0, uncommitted.length - 1);
+
+      if (_isComposingText(value, lastChar)) {
+        widget.editor.dispatch({'type': 'input', 'text': prefix});
+        widget.editor.dispatch({'type': 'compositionEnd'});
+        _committedLength += prefix.length;
+        _isComposing = true;
+        _composingText = lastChar;
+        widget.editor.dispatch({'type': 'compositionStart', 'text': lastChar});
+      } else {
+        widget.editor.dispatch({'type': 'input', 'text': uncommitted});
+        widget.editor.dispatch({'type': 'compositionEnd'});
+        _isComposing = false;
+        _composingText = '';
+        _resetState();
+      }
+      return;
+    }
+
+    widget.editor.dispatch({'type': 'input', 'text': uncommitted});
+    _resetState();
+  }
+
+  void _commitComposing() {
+    _deferTimer?.cancel();
+    _deferTimer = null;
+    if (_isComposing) {
+      widget.editor.dispatch({'type': 'input', 'text': _composingText});
+      widget.editor.dispatch({'type': 'compositionEnd'});
+      _isComposing = false;
+      _composingText = '';
+    }
+  }
+
+  void _deferCancelComposing() {
+    _deferTimer = Timer(Duration.zero, () {
+      if (_isComposing) {
+        widget.editor.dispatch({'type': 'compositionUpdate', 'text': ''});
+        widget.editor.dispatch({'type': 'compositionEnd'});
+        _isComposing = false;
+        _composingText = '';
+      }
+      _resetState();
+    });
+  }
+
+  void _resetState() {
+    _currentValue = _sentinelValue;
+    _isComposing = false;
+    _composingText = '';
+    _committedLength = 1;
+    _connection?.setEditingState(_sentinelValue);
+  }
+
+  bool _isComposingText(TextEditingValue value, String text) {
+    if (value.composing != TextRange.empty) {
+      return true;
+    }
+    if (text.isEmpty) {
+      return false;
+    }
+    return text.codeUnitAt(text.length - 1) > 0x7F;
+  }
+
+  @override
+  void performAction(TextInputAction action) {
+    if (action == TextInputAction.newline) {
+      _commitComposing();
+      widget.editor.dispatch({'type': 'insertNewline'});
+      _resetState();
+    }
+  }
+
+  @override
+  void performPrivateCommand(String action, Map<String, dynamic> data) {}
+
+  @override
+  void showAutocorrectionPromptRect(int start, int end) {}
+
+  @override
+  void updateFloatingCursor(RawFloatingCursorPoint point) {}
+
+  @override
+  void connectionClosed() {
+    _commitComposing();
+    _connection = null;
+  }
+
+  @override
+  AutofillScope? get currentAutofillScope => null;
+
+  @override
+  TextEditingValue? get currentTextEditingValue => _currentValue;
+
+  @override
+  void insertContent(KeyboardInsertedContent content) {}
+
+  @override
+  void didChangeInputControl(TextInputControl? oldControl, TextInputControl? newControl) {}
+
+  @override
+  void insertTextPlaceholder(Size size) {}
+
+  @override
+  void removeTextPlaceholder() {}
+
+  @override
+  void showToolbar() {}
+
+  @override
+  void performSelector(String selectorName) {}
+
+  @override
+  Widget build(BuildContext context) {
+    return widget.child;
+  }
+}
+
 class _EditorView extends HookWidget {
   const _EditorView({required this.editor, required this.width, required this.height});
 
@@ -176,9 +412,11 @@ class _EditorView extends HookWidget {
     final layout = useState<_LayoutInfo?>(null);
     final renderVersion = useState<Object>(Object());
     final cursorInfo = useState<CursorInfo?>(null);
-    final isFocused = useState(true);
+    final isFocused = useState(false);
     final lastSize = useRef<(double, double, double)?>(null);
     final tickerProvider = useSingleTickerProvider();
+    final focusNode = useFocusNode();
+    final inputKey = useMemoized(GlobalKey<_EditorInputState>.new);
 
     useEffect(() {
       void onTick(Duration elapsed) {
@@ -226,7 +464,9 @@ class _EditorView extends HookWidget {
         );
       }
 
-      final ticker = tickerProvider.createTicker(onTick)..start();
+      final ticker = tickerProvider.createTicker(onTick);
+      unawaited(ticker.start());
+
       return ticker.dispose;
     }, []);
 
@@ -237,28 +477,42 @@ class _EditorView extends HookWidget {
       return const Center(child: CircularProgressIndicator());
     }
 
-    return ListView.builder(
-      itemCount: currentLayout.pageCount,
-      cacheExtent: 1000,
-      physics: isSelecting.value ? const NeverScrollableScrollPhysics() : null,
-      itemBuilder: (context, index) {
-        final isLast = index == currentLayout.pageCount - 1;
-        final gap = currentLayout.isPaginated && !isLast ? _pageGap : 0.0;
-        final pageHeight = currentLayout.pageHeights.elementAtOrNull(index);
-        final pageCursor = cursorInfo.value?.pageIdx == index ? cursorInfo.value : null;
-        return _PageItem(
-          key: ValueKey(index),
-          pageIndex: index,
-          editor: editor,
-          renderVersion: renderVersion.value,
-          bottomGap: gap,
-          placeholderHeight: pageHeight,
-          cursorInfo: pageCursor,
-          isFocused: isFocused.value,
-          onSelectionStart: () => isSelecting.value = true,
-          onSelectionEnd: () => isSelecting.value = false,
-        );
-      },
+    return Focus(
+      focusNode: focusNode,
+      onFocusChange: (focused) => isFocused.value = focused,
+      child: _EditorInput(
+        key: inputKey,
+        editor: editor,
+        focusNode: focusNode,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => inputKey.currentState?.open(),
+          child: ListView.builder(
+            itemCount: currentLayout.pageCount,
+            cacheExtent: 1000,
+            physics: isSelecting.value ? const NeverScrollableScrollPhysics() : null,
+            itemBuilder: (context, index) {
+              final isLast = index == currentLayout.pageCount - 1;
+              final gap = currentLayout.isPaginated && !isLast ? _pageGap : 0.0;
+              final pageHeight = currentLayout.pageHeights.elementAtOrNull(index);
+              final pageCursor = cursorInfo.value?.pageIdx == index ? cursorInfo.value : null;
+              return _PageItem(
+                key: ValueKey(index),
+                pageIndex: index,
+                editor: editor,
+                renderVersion: renderVersion.value,
+                bottomGap: gap,
+                placeholderHeight: pageHeight,
+                cursorInfo: pageCursor,
+                isFocused: isFocused.value,
+                onSelectionStart: () => isSelecting.value = true,
+                onSelectionEnd: () => isSelecting.value = false,
+                onTap: () => inputKey.currentState?.open(),
+              );
+            },
+          ),
+        ),
+      ),
     );
   }
 }
@@ -282,6 +536,7 @@ class _PageItem extends HookWidget {
     required this.isFocused,
     required this.onSelectionStart,
     required this.onSelectionEnd,
+    required this.onTap,
     super.key,
   });
 
@@ -294,6 +549,7 @@ class _PageItem extends HookWidget {
   final bool isFocused;
   final VoidCallback onSelectionStart;
   final VoidCallback onSelectionEnd;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -313,6 +569,7 @@ class _PageItem extends HookWidget {
         padding: EdgeInsets.only(bottom: bottomGap),
         child: GestureDetector(
           onTapDown: (details) {
+            onTap();
             editor.dispatch({
               'type': 'pointerDown',
               'pageIdx': pageIndex,
