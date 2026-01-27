@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 
 import 'package:auto_route/auto_route.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
@@ -190,14 +191,36 @@ class _EditorInputState extends State<_EditorInput> implements TextInputClient {
   void initState() {
     super.initState();
     widget.focusNode.addListener(_onFocusChanged);
+    HardwareKeyboard.instance.addHandler(_onKeyEvent);
   }
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_onKeyEvent);
     _deferTimer?.cancel();
     widget.focusNode.removeListener(_onFocusChanged);
     _closeConnection();
     super.dispose();
+  }
+
+  bool _onKeyEvent(KeyEvent event) {
+    if (_connection == null || !_connection!.attached) {
+      return false;
+    }
+
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return false;
+    }
+
+    final message = _getActionFromKeyEvent(event);
+    if (message == null) {
+      return false;
+    }
+
+    _commitComposing();
+    widget.editor.dispatch(message);
+    _resetState();
+    return true;
   }
 
   void _onFocusChanged() {
@@ -639,6 +662,119 @@ class _PageItem extends HookWidget {
       child: const Center(child: CircularProgressIndicator()),
     );
   }
+}
+
+Map<String, dynamic> _nav(String direction, bool extend) => {
+  'type': 'navigate',
+  'direction': direction,
+  'extend': extend,
+};
+
+Map<String, dynamic>? _getActionFromKeyEvent(KeyEvent event) {
+  final key = event.logicalKey;
+  final shift = HardwareKeyboard.instance.isShiftPressed;
+  final meta = HardwareKeyboard.instance.isMetaPressed;
+  final ctrl = HardwareKeyboard.instance.isControlPressed;
+  final alt = HardwareKeyboard.instance.isAltPressed;
+
+  final wordModifier = defaultTargetPlatform == TargetPlatform.iOS ? alt : ctrl;
+  final actionModifier = defaultTargetPlatform == TargetPlatform.iOS ? meta : ctrl;
+
+  if (key == LogicalKeyboardKey.arrowLeft) {
+    if (defaultTargetPlatform == TargetPlatform.iOS && meta) {
+      return _nav('lineStart', shift);
+    } else if (wordModifier) {
+      return _nav('wordLeft', shift);
+    } else {
+      return _nav('left', shift);
+    }
+  } else if (key == LogicalKeyboardKey.arrowRight) {
+    if (defaultTargetPlatform == TargetPlatform.iOS && meta) {
+      return _nav('lineEnd', shift);
+    } else if (wordModifier) {
+      return _nav('wordRight', shift);
+    } else {
+      return _nav('right', shift);
+    }
+  } else if (key == LogicalKeyboardKey.arrowUp) {
+    if (defaultTargetPlatform == TargetPlatform.iOS && meta) {
+      return _nav('documentStart', shift);
+    } else {
+      return _nav('up', shift);
+    }
+  } else if (key == LogicalKeyboardKey.arrowDown) {
+    if (defaultTargetPlatform == TargetPlatform.iOS && meta) {
+      return _nav('documentEnd', shift);
+    } else {
+      return _nav('down', shift);
+    }
+  } else if (key == LogicalKeyboardKey.home) {
+    if (ctrl) {
+      return _nav('documentStart', shift);
+    } else {
+      return _nav('lineStart', shift);
+    }
+  } else if (key == LogicalKeyboardKey.end) {
+    if (ctrl) {
+      return _nav('documentEnd', shift);
+    } else {
+      return _nav('lineEnd', shift);
+    }
+  } else if (key == LogicalKeyboardKey.pageUp) {
+    return _nav('pageUp', shift);
+  } else if (key == LogicalKeyboardKey.pageDown) {
+    return _nav('pageDown', shift);
+  } else if (key == LogicalKeyboardKey.backspace) {
+    if (defaultTargetPlatform == TargetPlatform.iOS && meta) {
+      return {'type': 'deleteToLineStart'};
+    } else if (wordModifier) {
+      return {'type': 'deleteWordBackward'};
+    } else {
+      return {'type': 'deleteBackward'};
+    }
+  } else if (key == LogicalKeyboardKey.delete) {
+    if (wordModifier) {
+      return {'type': 'deleteWordForward'};
+    } else {
+      return {'type': 'deleteForward'};
+    }
+  } else if (key == LogicalKeyboardKey.enter || key == LogicalKeyboardKey.numpadEnter) {
+    if (actionModifier) {
+      return {'type': 'insertPageBreak'};
+    } else if (shift) {
+      return {'type': 'insertHardBreak'};
+    } else {
+      return {'type': 'insertNewline'};
+    }
+  } else if (key == LogicalKeyboardKey.keyA && actionModifier) {
+    return {'type': 'selectAll'};
+  } else if (key == LogicalKeyboardKey.keyB && actionModifier) {
+    return {'type': 'toggleBold'};
+  } else if (key == LogicalKeyboardKey.keyI && actionModifier) {
+    return {'type': 'toggleItalic'};
+  } else if (key == LogicalKeyboardKey.keyU && actionModifier) {
+    return {'type': 'toggleUnderline'};
+  } else if (key == LogicalKeyboardKey.keyS && shift && actionModifier) {
+    return {'type': 'toggleStrikethrough'};
+  } else if (key == LogicalKeyboardKey.keyZ && actionModifier) {
+    if (shift) {
+      return {'type': 'redo'};
+    } else {
+      return {'type': 'undo'};
+    }
+  } else if (key == LogicalKeyboardKey.backslash && actionModifier) {
+    return {'type': 'clearFormatting'};
+  } else if (key == LogicalKeyboardKey.tab) {
+    if (shift) {
+      return {'type': 'outdent'};
+    } else {
+      return {'type': 'indent'};
+    }
+  } else if (key == LogicalKeyboardKey.escape) {
+    return {'type': 'escape'};
+  }
+
+  return null;
 }
 
 Future<NativeEditorApplication> _initApplication() async {
