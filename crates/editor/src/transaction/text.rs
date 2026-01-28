@@ -1,7 +1,7 @@
 use crate::model::*;
 use crate::runtime::Effect;
 use crate::state::position_helpers::{calculate_offset_before_child, find_child_at_offset};
-use crate::state::selection_helpers::{CellSelectionInfo, compute_cell_selection};
+use crate::state::selection_helpers::{StructureSelectionInfo, compute_structure_selection};
 use crate::state::{Position, Selection, block_content_len};
 use crate::transaction::Transaction;
 use crate::types::Affinity;
@@ -493,23 +493,23 @@ impl Transaction {
     }
 
     pub fn delete_selection(&mut self) -> Result<bool> {
-        let cell_selection = compute_cell_selection(self.doc(), self.selection());
+        let structure_selection = compute_structure_selection(self.doc(), self.selection());
 
-        if let CellSelectionInfo::Rectangular { .. } = cell_selection {
-            return self.delete_cell_selection(&cell_selection);
+        if let StructureSelectionInfo::Rectangular { .. } = structure_selection {
+            return self.delete_structure_selection(&structure_selection);
         }
 
-        if let CellSelectionInfo::FullTables(table_ids) = cell_selection {
+        if let StructureSelectionInfo::Structural(block_ids) = structure_selection {
             let (mut from, mut to) = self.selection().as_sorted(self.doc())?;
 
-            for table_id in table_ids {
-                let Some(table) = self.node(table_id) else {
+            for block_id in block_ids {
+                let Some(block) = self.node(block_id) else {
                     continue;
                 };
-                let Some(parent) = table.parent() else {
+                let Some(parent) = block.parent() else {
                     continue;
                 };
-                let index = table.index().unwrap_or(0);
+                let index = block.index().unwrap_or(0);
 
                 let start_pos = Position::new(parent.node_id(), index, Affinity::Downstream);
                 let end_pos = Position::new(parent.node_id(), index + 1, Affinity::Downstream);
@@ -529,6 +529,8 @@ impl Transaction {
             }
 
             self.set_selection(Selection::new(from, to));
+            self.delete_structural_range(from, to)?;
+            return Ok(true);
         }
 
         let deleted = self.delete_selection_with_merge()?.deleted();
@@ -3372,6 +3374,40 @@ mod tests {
                 @p2 paragraph { text { "text2" } }
             }
             selection { (p1, 0) }
+        };
+
+        assert_state_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_delete_fold_selection_structural() {
+        let mut fold_id = id!();
+        let mut p1 = id!();
+        let mut p2 = id!();
+
+        let initial = state! {
+            doc {
+                @p1 paragraph { text { "before" } }
+                @fold_id fold {
+                    fold_title { text { "Title" } }
+                    fold_content {
+                        paragraph { text { "Inside" } }
+                    }
+                }
+                @p2 paragraph { text { "after" } }
+            }
+            selection { (p1, 6) -> (p2, 0) }
+        };
+
+        let actual = transact!(initial, |tr| {
+            tr.delete_selection().unwrap();
+        });
+
+        let expected = state! {
+            doc {
+                @p1 paragraph { text { "beforeafter" } }
+            }
+            selection { (p1, 6) -> (p1, 6) }
         };
 
         assert_state_eq!(actual, expected);

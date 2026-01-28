@@ -62,11 +62,16 @@ impl Interactive for FoldTitleBackgroundElement {
 pub struct FoldContentElement {
     pub size: Size,
     pub split_edges: SplitEdges,
+    pub fold_id: NodeId,
 }
 
 impl FoldContentElement {
-    pub fn new(size: Size, split_edges: SplitEdges) -> Self {
-        Self { size, split_edges }
+    pub fn new(size: Size, split_edges: SplitEdges, fold_id: NodeId) -> Self {
+        Self {
+            size,
+            split_edges,
+            fold_id,
+        }
     }
 }
 

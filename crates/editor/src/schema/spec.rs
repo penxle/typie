@@ -21,6 +21,20 @@ impl NodeSpec {
         }
         allowed.iter().all(|t| schema.node_spec(*t).inline)
     }
+
+    pub fn is_structural_root(&self, schema: &Schema) -> bool {
+        if !self.isolating {
+            return false;
+        }
+        if self.structural {
+            return false;
+        }
+        let allowed = self.content.allowed_types();
+        if allowed.is_empty() {
+            return false;
+        }
+        allowed.iter().any(|t| schema.node_spec(*t).structural)
+    }
 }
 
 impl Default for NodeSpec {

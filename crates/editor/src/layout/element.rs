@@ -207,6 +207,7 @@ impl Element {
             Element::FoldContent(e) => Some(Element::FoldContent(FoldContentElement::new(
                 Size::new(e.size.width, new_height),
                 split_edges,
+                e.fold_id,
             ))),
             _ => None,
         }
@@ -229,6 +230,7 @@ mod tests {
             Element::FoldContent(FoldContentElement::new(
                 Size::new(100.0, 100.0),
                 SplitEdges::default(),
+                NodeId::new(),
             )),
         ]
     }

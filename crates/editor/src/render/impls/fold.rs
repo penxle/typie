@@ -74,6 +74,31 @@ impl Render for FoldTitleBackgroundElement {
             bottom_left_radius,
         ) {
             pixmap.fill_path(&path, &paint, tiny_skia::FillRule::Winding, transform, None);
+
+            let is_selected = ctx.selections.iter().any(|s| {
+                if let crate::model::SelectionDecor::Fold { node_id } = s {
+                    *node_id == self.fold_id
+                } else {
+                    false
+                }
+            });
+
+            if is_selected {
+                let color = if ctx.is_focused {
+                    ctx.theme.color_with_alpha("selection", 77)
+                } else {
+                    ctx.theme.color_with_alpha("ui.surface.dark", 32)
+                };
+                let mut sel_paint = Paint::default();
+                sel_paint.set_color(color);
+                pixmap.fill_path(
+                    &path,
+                    &sel_paint,
+                    tiny_skia::FillRule::Winding,
+                    transform,
+                    None,
+                );
+            }
         }
 
         let mut border_paint = Paint::default();
@@ -178,6 +203,68 @@ impl Render for FoldContentElement {
                 self.size.height - FOLD_BORDER_RADIUS,
             );
             pb.line_to(self.size.width - mb, 0.0);
+        }
+
+        let is_selected = ctx.selections.iter().any(|s| {
+            if let crate::model::SelectionDecor::Fold { node_id } = s {
+                *node_id == self.fold_id
+            } else {
+                false
+            }
+        });
+
+        if is_selected {
+            let color = if ctx.is_focused {
+                ctx.theme.color_with_alpha("selection", 77)
+            } else {
+                ctx.theme.color_with_alpha("ui.surface.dark", 32)
+            };
+            let mut sel_paint = Paint::default();
+            sel_paint.set_color(color);
+
+            let mb = FOLD_BORDER_WIDTH / 2.0;
+            let mut pb = PathBuilder::new();
+
+            if self.split_edges.top && self.split_edges.bottom {
+                pb.move_to(mb, 0.0);
+                pb.line_to(mb, self.size.height);
+                pb.line_to(self.size.width - mb, self.size.height);
+                pb.line_to(self.size.width - mb, 0.0);
+                pb.close();
+            } else if self.split_edges.bottom {
+                pb.move_to(mb, 0.0);
+                pb.line_to(mb, self.size.height);
+                pb.line_to(self.size.width - mb, self.size.height);
+                pb.close();
+            } else {
+                pb.move_to(mb, 0.0);
+                pb.line_to(mb, self.size.height - FOLD_BORDER_RADIUS);
+                pb.quad_to(
+                    mb,
+                    self.size.height - mb,
+                    FOLD_BORDER_RADIUS,
+                    self.size.height - mb,
+                );
+                pb.line_to(self.size.width - FOLD_BORDER_RADIUS, self.size.height - mb);
+                pb.quad_to(
+                    self.size.width - mb,
+                    self.size.height - mb,
+                    self.size.width - mb,
+                    self.size.height - FOLD_BORDER_RADIUS,
+                );
+                pb.line_to(self.size.width - mb, 0.0);
+                pb.close();
+            }
+
+            if let Some(path) = pb.finish() {
+                pixmap.fill_path(
+                    &path,
+                    &sel_paint,
+                    tiny_skia::FillRule::Winding,
+                    transform,
+                    None,
+                );
+            }
         }
 
         if let Some(path) = pb.finish() {

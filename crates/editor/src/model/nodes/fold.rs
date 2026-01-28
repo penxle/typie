@@ -68,6 +68,7 @@ impl FoldNode {
         content_layout: Option<Rc<LayoutNode>>,
         expanded: bool,
         max_width: f32,
+        fold_id: crate::model::NodeId,
     ) -> (Vec<PositionedNode>, f32, f32) {
         let mut children = Vec::new();
         let mut y = 0.0;
@@ -106,6 +107,7 @@ impl FoldNode {
                     element: Some(Element::FoldContent(FoldContentElement::new(
                         Size::new(max_width, wrapper_h),
                         SplitEdges::default(),
+                        fold_id,
                     ))),
                     children: Some(vec![
                         PositionedNode {
@@ -177,6 +179,7 @@ impl Layout for FoldNode {
             content_layout,
             expanded,
             constraints.max_width,
+            ctx.node.node_id(),
         );
 
         let total_size = Size::new(constraints.max_width, total_height);

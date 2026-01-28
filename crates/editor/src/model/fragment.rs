@@ -1,7 +1,7 @@
 use super::{Doc, Mark, Node, NodeId, TextNode};
 use crate::schema::Schema;
 use crate::state::position_helpers::find_child_at_offset;
-use crate::state::{CellSelectionInfo, Position, Selection, compute_cell_selection};
+use crate::state::{Position, Selection, compute_structure_selection, StructureSelectionInfo};
 use anyhow::{Context, Result};
 use indexmap::IndexMap;
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -231,20 +231,20 @@ impl Fragment {
             return Ok(Self::empty());
         }
 
-        let cell_info = compute_cell_selection(doc, selection);
-        if let CellSelectionInfo::Rectangular { table_id, range } = cell_info {
+        let cell_info = compute_structure_selection(doc, selection);
+        if let StructureSelectionInfo::Rectangular { table_id, range } = cell_info {
             return Self::extract_rectangular_cells(doc, table_id, range);
         }
 
-        if let CellSelectionInfo::FullTables(ref table_ids) = cell_info {
+        if let StructureSelectionInfo::Structural(ref block_ids) = cell_info {
             let (mut f, mut t) = selection.as_sorted(doc)?;
 
-            for &table_id in table_ids {
-                if let Some(table) = doc.node(table_id) {
-                    if let (Some(parent), Some(idx)) = (table.parent(), table.index()) {
+            for &block_id in block_ids {
+                if let Some(block) = doc.node(block_id) {
+                    if let (Some(parent), Some(idx)) = (block.parent(), block.index()) {
                         let from_node = doc.node(f.node_id).context("From node not found")?;
-                        if f.node_id == table_id
-                            || from_node.ancestors().any(|n| n.node_id() == table_id)
+                        if f.node_id == block_id
+                            || from_node.ancestors().any(|n| n.node_id() == block_id)
                         {
                             f = Position::new(
                                 parent.node_id(),
@@ -254,8 +254,8 @@ impl Fragment {
                         }
 
                         let to_node = doc.node(t.node_id).context("To node not found")?;
-                        if t.node_id == table_id
-                            || to_node.ancestors().any(|n| n.node_id() == table_id)
+                        if t.node_id == block_id
+                            || to_node.ancestors().any(|n| n.node_id() == block_id)
                         {
                             t = Position::new(
                                 parent.node_id(),

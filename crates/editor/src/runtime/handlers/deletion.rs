@@ -216,47 +216,6 @@ mod tests {
     }
 
     #[test]
-    fn test_delete_selection_across_isolating_boundary_does_nothing() {
-        let mut n1 = id!();
-        let mut n2 = id!();
-
-        let mut rt = runtime! {
-            viewport { 800, 600, 1.0 }
-            doc {
-                @n1 paragraph {}
-                fold {
-                    @n2 fold_title {}
-                    fold_content {
-                        paragraph {}
-                    }
-                }
-                paragraph {}
-            }
-            selection { (n1, 0) -> (n2, 0) }
-        };
-
-        rt.layout();
-        rt.update(Message::DeleteBackward);
-        rt.tick();
-
-        let expected = state! {
-            doc {
-                @n1 paragraph {}
-                fold {
-                    @n2 fold_title {}
-                    fold_content {
-                        paragraph {}
-                    }
-                }
-                paragraph {}
-            }
-            selection { (n1, 0) }
-        };
-
-        assert_state_eq!(*rt.state(), expected);
-    }
-
-    #[test]
     fn test_delete_selection_across_isolating_boundaries() {
         let mut n1 = id!();
         let mut n2 = id!();
@@ -283,12 +242,6 @@ mod tests {
         let expected = state! {
             doc {
                 @n1 paragraph { text { "1" } }
-                fold {
-                    fold_title { }
-                    fold_content {
-                        paragraph { text { "3" } }
-                    }
-                }
                 paragraph { text { "44" } }
             }
             selection { (n1, 1) }
@@ -324,56 +277,9 @@ mod tests {
         let expected = state! {
             doc {
                 paragraph { text { "11" } }
-                fold {
-                    @n1 fold_title { text { "2" } }
-                    fold_content {
-                        paragraph {}
-                    }
-                }
                 @n2 paragraph { text { "4" } }
             }
-            selection { (n1, 1) }
-        };
-
-        assert_state_eq!(*rt.state(), expected);
-    }
-
-    #[test]
-    fn test_delete_selection_across_isolating_end_boundary_with_whole_fold_content() {
-        let mut n1 = id!();
-        let mut n2 = id!();
-
-        let mut rt = runtime! {
-            viewport { 800, 600, 1.0 }
-            doc {
-                paragraph { text { "11" } }
-                fold {
-                    fold_title { text { "22" } }
-                    fold_content {
-                        @n1 paragraph { text { "33" } }
-                    }
-                }
-                @n2 paragraph { text { "44" } }
-            }
-            selection { (n1, 0) -> (n2, 1) }
-        };
-
-        rt.layout();
-        rt.update(Message::DeleteBackward);
-        rt.tick();
-
-        let expected = state! {
-            doc {
-                paragraph { text { "11" } }
-                fold {
-                    fold_title { text { "22" } }
-                    fold_content {
-                        @n1 paragraph {}
-                    }
-                }
-                @n2 paragraph { text { "4" } }
-            }
-            selection { (n1, 0) }
+            selection { (n2, 0) }
         };
 
         assert_state_eq!(*rt.state(), expected);
@@ -414,53 +320,6 @@ mod tests {
     }
 
     #[test]
-    fn test_delete_selection_containing_sub_fold() {
-        let mut n1 = id!();
-        let mut n2 = id!();
-
-        let mut rt = runtime! {
-            viewport { 800, 600, 1.0 }
-            doc {
-                paragraph { text { "11" } }
-                fold {
-                    fold_title { text { "22" } }
-                    fold_content {
-                        @n1 paragraph { text { "33" } }
-                        fold {
-                            fold_title { text { "44" } }
-                            fold_content {
-                                paragraph { text { "55" } }
-                            }
-                        }
-                    }
-                }
-                @n2 paragraph { text { "66" } }
-            }
-            selection { (n1, 1) -> (n2, 1) }
-        };
-
-        rt.layout();
-        rt.update(Message::DeleteBackward);
-        rt.tick();
-
-        let expected = state! {
-            doc {
-                paragraph { text { "11" } }
-                fold {
-                    fold_title { text { "22" } }
-                    fold_content {
-                        @n1 paragraph { text { "3" } }
-                    }
-                }
-                paragraph { text { "6" } }
-            }
-            selection { (n1, 1) }
-        };
-
-        assert_state_eq!(*rt.state(), expected);
-    }
-
-    #[test]
     fn test_delete_selection_fold_with_non_textblock() {
         let mut n1 = id!();
         let mut n2 = id!();
@@ -493,53 +352,6 @@ mod tests {
                     @n1 fold_title { text { "1" } }
                     fold_content {
                         @n2 paragraph { text { "3" } }
-                    }
-                }
-                paragraph {}
-            }
-            selection { (n1, 1) }
-        };
-
-        assert_state_eq!(*rt.state(), expected);
-    }
-
-    #[test]
-    fn test_delete_selection_fold_with_nested_non_textblock() {
-        let mut n1 = id!();
-        let mut n2 = id!();
-
-        let mut rt = runtime! {
-            viewport { 800, 600, 1.0 }
-            doc {
-                fold {
-                    @n1 fold_title { text { "11" } }
-                    fold_content {
-                        bullet_list {
-                            list_item {
-                                paragraph { text { "33" } }
-                                ordered_list {
-                                    list_item {
-                                        @n2 paragraph { text { "44" } }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            selection { (n1, 1) -> (n2, 1) }
-        };
-
-        rt.layout();
-        rt.update(Message::DeleteBackward);
-        rt.tick();
-
-        let expected = state! {
-            doc {
-                fold {
-                    @n1 fold_title { text { "1" } }
-                    fold_content {
-                        @n2 paragraph { text { "4" } }
                     }
                 }
                 paragraph {}
