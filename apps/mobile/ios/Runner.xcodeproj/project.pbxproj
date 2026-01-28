@@ -23,6 +23,8 @@
 		B6D0B1992DEDFC6800CC8EF8 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B6D0B1982DEDFC6800CC8EF8 /* LaunchScreen.storyboard */; };
 		B6FC503F2DD388C900F2B218 /* AppWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6FC503E2DD388C900F2B218 /* AppWebView.swift */; };
 		B6FC50412DD3890600F2B218 /* AppWebViewFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6FC50402DD3890000F2B218 /* AppWebViewFactory.swift */; };
+		C10A00012E1E000000000001 /* EditorInputFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10A00002E1E000000000001 /* EditorInputFactory.swift */; };
+		C10A00032E1E000000000002 /* EditorInputView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10A00022E1E000000000002 /* EditorInputView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -78,6 +80,8 @@
 		B6D0B1982DEDFC6800CC8EF8 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 		B6FC503E2DD388C900F2B218 /* AppWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppWebView.swift; sourceTree = "<group>"; };
 		B6FC50402DD3890000F2B218 /* AppWebViewFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppWebViewFactory.swift; sourceTree = "<group>"; };
+		C10A00002E1E000000000001 /* EditorInputFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorInputFactory.swift; sourceTree = "<group>"; };
+		C10A00022E1E000000000002 /* EditorInputView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorInputView.swift; sourceTree = "<group>"; };
 		B76A326C78E413C9D2E31BF6 /* Pods_RunnerTests.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_RunnerTests.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		F5ACF650D6281E78D67DD211 /* Pods-Runner.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -145,6 +149,7 @@
 		97C146F01CF9000F007C117D /* Runner */ = {
 			isa = PBXGroup;
 			children = (
+				C10A00042E1E000000000003 /* EditorInput */,
 				B60149352DD4C8E00055A06B /* Keyboard */,
 				B6FC503C2DD3882000F2B218 /* WebView */,
 				B625650C2DD0A1F500958764 /* Runner.entitlements */,
@@ -174,6 +179,15 @@
 				A2AF6EBD20ADEB24615D57C7 /* Pods-RunnerTests.profile.xcconfig */,
 			);
 			path = Pods;
+			sourceTree = "<group>";
+		};
+		C10A00042E1E000000000003 /* EditorInput */ = {
+			isa = PBXGroup;
+			children = (
+				C10A00002E1E000000000001 /* EditorInputFactory.swift */,
+				C10A00022E1E000000000002 /* EditorInputView.swift */,
+			);
+			path = EditorInput;
 			sourceTree = "<group>";
 		};
 		B60149352DD4C8E00055A06B /* Keyboard */ = {
@@ -442,6 +456,8 @@
 				B60149392DD4D5460055A06B /* AppWKWebView.swift in Sources */,
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 				B6FC503F2DD388C900F2B218 /* AppWebView.swift in Sources */,
+				C10A00012E1E000000000001 /* EditorInputFactory.swift in Sources */,
+				C10A00032E1E000000000002 /* EditorInputView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

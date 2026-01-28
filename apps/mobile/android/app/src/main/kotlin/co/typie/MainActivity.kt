@@ -3,6 +3,7 @@ package co.typie
 import android.content.Intent
 import android.os.Bundle
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import co.typie.editorinput.EditorInputFactory
 import co.typie.keyboard.KeyboardPlugin
 import co.typie.webview.AppWebViewFactory
 import io.flutter.embedding.android.FlutterActivity
@@ -22,6 +23,11 @@ class MainActivity : FlutterActivity() {
     flutterEngine.platformViewsController.registry.registerViewFactory(
       "co.typie.webview",
       AppWebViewFactory(flutterEngine.dartExecutor.binaryMessenger)
+    )
+
+    flutterEngine.platformViewsController.registry.registerViewFactory(
+      "co.typie.editor_input",
+      EditorInputFactory(flutterEngine.dartExecutor.binaryMessenger)
     )
 
     KeyboardPlugin(this, flutterEngine.dartExecutor.binaryMessenger)

@@ -15,6 +15,7 @@ import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/native/editor_native.dart';
 import 'package:typie/screens/native_editor/__generated__/native_editor_query.data.gql.dart';
 import 'package:typie/screens/native_editor/__generated__/native_editor_query.req.gql.dart';
+import 'package:typie/screens/native_editor/editor_input_view.dart';
 import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/screen.dart';
 
@@ -165,264 +166,6 @@ class _Content extends HookWidget {
 
 const _pageGap = 24.0;
 
-class _EditorInput extends StatefulWidget {
-  const _EditorInput({required this.editor, required this.focusNode, required this.child, super.key});
-
-  final NativeEditor editor;
-  final FocusNode focusNode;
-  final Widget child;
-
-  @override
-  State<_EditorInput> createState() => _EditorInputState();
-}
-
-class _EditorInputState extends State<_EditorInput> implements TextInputClient {
-  static const _sentinel = '\u200B';
-  static const _sentinelValue = TextEditingValue(text: _sentinel, selection: TextSelection.collapsed(offset: 1));
-
-  TextInputConnection? _connection;
-  TextEditingValue _currentValue = _sentinelValue;
-  bool _isComposing = false;
-  String _composingText = '';
-  int _committedLength = 1;
-  Timer? _deferTimer;
-
-  @override
-  void initState() {
-    super.initState();
-    widget.focusNode.addListener(_onFocusChanged);
-    HardwareKeyboard.instance.addHandler(_onKeyEvent);
-  }
-
-  @override
-  void dispose() {
-    HardwareKeyboard.instance.removeHandler(_onKeyEvent);
-    _deferTimer?.cancel();
-    widget.focusNode.removeListener(_onFocusChanged);
-    _closeConnection();
-    super.dispose();
-  }
-
-  bool _onKeyEvent(KeyEvent event) {
-    if (_connection == null || !_connection!.attached) {
-      return false;
-    }
-
-    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
-      return false;
-    }
-
-    final message = _getActionFromKeyEvent(event);
-    if (message == null) {
-      return false;
-    }
-
-    _commitComposing();
-    widget.editor.dispatch(message);
-    _resetState();
-    return true;
-  }
-
-  void _onFocusChanged() {
-    if (widget.focusNode.hasFocus) {
-      _openConnection();
-    } else {
-      _closeConnection();
-    }
-  }
-
-  void _openConnection() {
-    if (_connection != null && _connection!.attached) {
-      return;
-    }
-
-    _deferTimer?.cancel();
-    _connection = TextInput.attach(
-      this,
-      const TextInputConfiguration(inputType: TextInputType.multiline, inputAction: TextInputAction.newline),
-    );
-    _connection!.show();
-    _resetState();
-  }
-
-  void _closeConnection() {
-    _deferTimer?.cancel();
-    _connection?.close();
-    _connection = null;
-    _commitComposing();
-  }
-
-  void open() {
-    widget.focusNode.requestFocus();
-    _openConnection();
-  }
-
-  @override
-  void updateEditingValue(TextEditingValue value) {
-    _deferTimer?.cancel();
-    _deferTimer = null;
-    _currentValue = value;
-
-    final newText = value.text;
-
-    if (newText.isEmpty) {
-      if (_isComposing) {
-        _deferCancelComposing();
-      } else {
-        widget.editor.dispatch({'type': 'deleteBackward'});
-        _resetState();
-      }
-      return;
-    }
-
-    final uncommitted = newText.substring(_committedLength.clamp(0, newText.length));
-
-    if (uncommitted.isEmpty) {
-      if (_isComposing) {
-        _deferCancelComposing();
-      }
-      return;
-    }
-
-    if (uncommitted.contains('\n')) {
-      _commitComposing();
-      _resetState();
-      return;
-    }
-
-    final composing = _isComposingText(value, uncommitted);
-
-    if (uncommitted.length == 1 && composing) {
-      _composingText = uncommitted;
-      if (!_isComposing) {
-        _isComposing = true;
-        widget.editor.dispatch({'type': 'compositionStart', 'text': uncommitted});
-      } else {
-        widget.editor.dispatch({'type': 'compositionUpdate', 'text': uncommitted});
-      }
-      return;
-    }
-
-    if (_isComposing) {
-      final lastChar = uncommitted[uncommitted.length - 1];
-      final prefix = uncommitted.substring(0, uncommitted.length - 1);
-
-      if (_isComposingText(value, lastChar)) {
-        widget.editor.dispatch({'type': 'input', 'text': prefix});
-        widget.editor.dispatch({'type': 'compositionEnd'});
-        _committedLength += prefix.length;
-        _isComposing = true;
-        _composingText = lastChar;
-        widget.editor.dispatch({'type': 'compositionStart', 'text': lastChar});
-      } else {
-        widget.editor.dispatch({'type': 'input', 'text': uncommitted});
-        widget.editor.dispatch({'type': 'compositionEnd'});
-        _isComposing = false;
-        _composingText = '';
-        _resetState();
-      }
-      return;
-    }
-
-    widget.editor.dispatch({'type': 'input', 'text': uncommitted});
-    _resetState();
-  }
-
-  void _commitComposing() {
-    _deferTimer?.cancel();
-    _deferTimer = null;
-    if (_isComposing) {
-      widget.editor.dispatch({'type': 'input', 'text': _composingText});
-      widget.editor.dispatch({'type': 'compositionEnd'});
-      _isComposing = false;
-      _composingText = '';
-    }
-  }
-
-  void _deferCancelComposing() {
-    _deferTimer = Timer(Duration.zero, () {
-      if (_isComposing) {
-        widget.editor.dispatch({'type': 'compositionUpdate', 'text': ''});
-        widget.editor.dispatch({'type': 'compositionEnd'});
-        _isComposing = false;
-        _composingText = '';
-      }
-      _resetState();
-    });
-  }
-
-  void _resetState() {
-    _currentValue = _sentinelValue;
-    _isComposing = false;
-    _composingText = '';
-    _committedLength = 1;
-    _connection?.setEditingState(_sentinelValue);
-  }
-
-  bool _isComposingText(TextEditingValue value, String text) {
-    if (value.composing != TextRange.empty) {
-      return true;
-    }
-    if (text.isEmpty) {
-      return false;
-    }
-    return text.codeUnitAt(text.length - 1) > 0x7F;
-  }
-
-  @override
-  void performAction(TextInputAction action) {
-    if (action == TextInputAction.newline) {
-      _commitComposing();
-      widget.editor.dispatch({'type': 'insertNewline'});
-      _resetState();
-    }
-  }
-
-  @override
-  void performPrivateCommand(String action, Map<String, dynamic> data) {}
-
-  @override
-  void showAutocorrectionPromptRect(int start, int end) {}
-
-  @override
-  void updateFloatingCursor(RawFloatingCursorPoint point) {}
-
-  @override
-  void connectionClosed() {
-    _commitComposing();
-    _connection = null;
-  }
-
-  @override
-  AutofillScope? get currentAutofillScope => null;
-
-  @override
-  TextEditingValue? get currentTextEditingValue => _currentValue;
-
-  @override
-  void insertContent(KeyboardInsertedContent content) {}
-
-  @override
-  void didChangeInputControl(TextInputControl? oldControl, TextInputControl? newControl) {}
-
-  @override
-  void insertTextPlaceholder(Size size) {}
-
-  @override
-  void removeTextPlaceholder() {}
-
-  @override
-  void showToolbar() {}
-
-  @override
-  void performSelector(String selectorName) {}
-
-  @override
-  Widget build(BuildContext context) {
-    return widget.child;
-  }
-}
-
 class _EditorView extends HookWidget {
   const _EditorView({required this.editor, required this.width, required this.height});
 
@@ -438,8 +181,9 @@ class _EditorView extends HookWidget {
     final isFocused = useState(false);
     final lastSize = useRef<(double, double, double)?>(null);
     final tickerProvider = useSingleTickerProvider();
-    final focusNode = useFocusNode();
-    final inputKey = useMemoized(GlobalKey<_EditorInputState>.new);
+    final inputKey = useMemoized(GlobalKey<EditorInputViewState>.new);
+    final isActive = useRef(false);
+    final inputCausedCursorChange = useRef(false);
 
     useEffect(() {
       void onTick(Duration elapsed) {
@@ -495,21 +239,57 @@ class _EditorView extends HookWidget {
 
     final isSelecting = useState(false);
 
+    useEffect(() {
+      final cursor = cursorInfo.value;
+      if (cursor != null && cursor.show) {
+        inputKey.currentState?.updateCursor(cursor.x, cursor.y, cursor.height);
+      }
+      if (inputCausedCursorChange.value) {
+        inputCausedCursorChange.value = false;
+      } else {
+        inputKey.currentState?.resetInputContext();
+      }
+      return null;
+    }, [cursorInfo.value]);
+
+    useEffect(() {
+      bool onKeyEvent(KeyEvent event) {
+        if (!isActive.value) {
+          return false;
+        }
+        if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+          return false;
+        }
+        final message = _getActionFromKeyEvent(event);
+        if (message == null) {
+          return false;
+        }
+        editor.dispatch(message);
+        return true;
+      }
+
+      HardwareKeyboard.instance.addHandler(onKeyEvent);
+      return () => HardwareKeyboard.instance.removeHandler(onKeyEvent);
+    }, []);
+
     final currentLayout = layout.value;
     if (currentLayout == null) {
       return const Center(child: CircularProgressIndicator());
     }
 
-    return Focus(
-      focusNode: focusNode,
-      onFocusChange: (focused) => isFocused.value = focused,
-      child: _EditorInput(
-        key: inputKey,
-        editor: editor,
-        focusNode: focusNode,
-        child: GestureDetector(
+    void openInput() {
+      if (!isActive.value) {
+        isActive.value = true;
+        isFocused.value = true;
+        inputKey.currentState?.activateInput();
+      }
+    }
+
+    return Stack(
+      children: [
+        GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onTap: () => inputKey.currentState?.open(),
+          onTap: openInput,
           child: ListView.builder(
             itemCount: currentLayout.pageCount,
             cacheExtent: 1000,
@@ -530,12 +310,39 @@ class _EditorView extends HookWidget {
                 isFocused: isFocused.value,
                 onSelectionStart: () => isSelecting.value = true,
                 onSelectionEnd: () => isSelecting.value = false,
-                onTap: () => inputKey.currentState?.open(),
+                onTap: openInput,
               );
             },
           ),
         ),
-      ),
+        Positioned.fill(
+          child: EditorInputView(
+            key: inputKey,
+            onInsertText: (text) {
+              inputCausedCursorChange.value = true;
+              editor.dispatch({'type': 'input', 'text': text});
+            },
+            onDeleteBackward: () {
+              inputCausedCursorChange.value = true;
+              editor.dispatch({'type': 'deleteBackward'});
+            },
+            onSetMarkedText: (text) {
+              inputCausedCursorChange.value = true;
+            },
+            onUnmarkText: () {
+              inputCausedCursorChange.value = true;
+            },
+            onPerformAction: (action) {
+              if (action == 'newline') {
+                editor.dispatch({'type': 'insertNewline'});
+              }
+            },
+            onShortcut: (action) {
+              editor.dispatch({'type': action});
+            },
+          ),
+        ),
+      ],
     );
   }
 }
@@ -678,9 +485,10 @@ Map<String, dynamic>? _getActionFromKeyEvent(KeyEvent event) {
   final alt = HardwareKeyboard.instance.isAltPressed;
 
   final wordModifier = defaultTargetPlatform == TargetPlatform.iOS ? alt : ctrl;
-  final actionModifier = defaultTargetPlatform == TargetPlatform.iOS ? meta : ctrl;
 
-  if (key == LogicalKeyboardKey.arrowLeft) {
+  final physical = event.physicalKey;
+
+  if (key == LogicalKeyboardKey.arrowLeft || physical == PhysicalKeyboardKey.arrowLeft) {
     if (defaultTargetPlatform == TargetPlatform.iOS && meta) {
       return _nav('lineStart', shift);
     } else if (wordModifier) {
@@ -688,7 +496,7 @@ Map<String, dynamic>? _getActionFromKeyEvent(KeyEvent event) {
     } else {
       return _nav('left', shift);
     }
-  } else if (key == LogicalKeyboardKey.arrowRight) {
+  } else if (key == LogicalKeyboardKey.arrowRight || physical == PhysicalKeyboardKey.arrowRight) {
     if (defaultTargetPlatform == TargetPlatform.iOS && meta) {
       return _nav('lineEnd', shift);
     } else if (wordModifier) {
@@ -696,81 +504,41 @@ Map<String, dynamic>? _getActionFromKeyEvent(KeyEvent event) {
     } else {
       return _nav('right', shift);
     }
-  } else if (key == LogicalKeyboardKey.arrowUp) {
+  } else if (key == LogicalKeyboardKey.arrowUp || physical == PhysicalKeyboardKey.arrowUp) {
     if (defaultTargetPlatform == TargetPlatform.iOS && meta) {
       return _nav('documentStart', shift);
     } else {
       return _nav('up', shift);
     }
-  } else if (key == LogicalKeyboardKey.arrowDown) {
+  } else if (key == LogicalKeyboardKey.arrowDown || physical == PhysicalKeyboardKey.arrowDown) {
     if (defaultTargetPlatform == TargetPlatform.iOS && meta) {
       return _nav('documentEnd', shift);
     } else {
       return _nav('down', shift);
     }
-  } else if (key == LogicalKeyboardKey.home) {
+  } else if (key == LogicalKeyboardKey.home || physical == PhysicalKeyboardKey.home) {
     if (ctrl) {
       return _nav('documentStart', shift);
     } else {
       return _nav('lineStart', shift);
     }
-  } else if (key == LogicalKeyboardKey.end) {
+  } else if (key == LogicalKeyboardKey.end || physical == PhysicalKeyboardKey.end) {
     if (ctrl) {
       return _nav('documentEnd', shift);
     } else {
       return _nav('lineEnd', shift);
     }
-  } else if (key == LogicalKeyboardKey.pageUp) {
+  } else if (key == LogicalKeyboardKey.pageUp || physical == PhysicalKeyboardKey.pageUp) {
     return _nav('pageUp', shift);
-  } else if (key == LogicalKeyboardKey.pageDown) {
+  } else if (key == LogicalKeyboardKey.pageDown || physical == PhysicalKeyboardKey.pageDown) {
     return _nav('pageDown', shift);
-  } else if (key == LogicalKeyboardKey.backspace) {
-    if (defaultTargetPlatform == TargetPlatform.iOS && meta) {
-      return {'type': 'deleteToLineStart'};
-    } else if (wordModifier) {
-      return {'type': 'deleteWordBackward'};
-    } else {
-      return {'type': 'deleteBackward'};
-    }
-  } else if (key == LogicalKeyboardKey.delete) {
+  } else if (key == LogicalKeyboardKey.delete || physical == PhysicalKeyboardKey.delete) {
     if (wordModifier) {
       return {'type': 'deleteWordForward'};
     } else {
       return {'type': 'deleteForward'};
     }
-  } else if (key == LogicalKeyboardKey.enter || key == LogicalKeyboardKey.numpadEnter) {
-    if (actionModifier) {
-      return {'type': 'insertPageBreak'};
-    } else if (shift) {
-      return {'type': 'insertHardBreak'};
-    } else {
-      return {'type': 'insertNewline'};
-    }
-  } else if (key == LogicalKeyboardKey.keyA && actionModifier) {
-    return {'type': 'selectAll'};
-  } else if (key == LogicalKeyboardKey.keyB && actionModifier) {
-    return {'type': 'toggleBold'};
-  } else if (key == LogicalKeyboardKey.keyI && actionModifier) {
-    return {'type': 'toggleItalic'};
-  } else if (key == LogicalKeyboardKey.keyU && actionModifier) {
-    return {'type': 'toggleUnderline'};
-  } else if (key == LogicalKeyboardKey.keyS && shift && actionModifier) {
-    return {'type': 'toggleStrikethrough'};
-  } else if (key == LogicalKeyboardKey.keyZ && actionModifier) {
-    if (shift) {
-      return {'type': 'redo'};
-    } else {
-      return {'type': 'undo'};
-    }
-  } else if (key == LogicalKeyboardKey.backslash && actionModifier) {
-    return {'type': 'clearFormatting'};
-  } else if (key == LogicalKeyboardKey.tab) {
-    if (shift) {
-      return {'type': 'outdent'};
-    } else {
-      return {'type': 'indent'};
-    }
-  } else if (key == LogicalKeyboardKey.escape) {
+  } else if (key == LogicalKeyboardKey.escape || physical == PhysicalKeyboardKey.escape) {
     return {'type': 'escape'};
   }
 

@@ -15,6 +15,10 @@ import UIKit
     let factory = AppWebViewFactory(messenger: registrar!.messenger())
     registrar?.register(factory, withId: "co.typie.webview")
 
+    let editorInputRegistrar = self.registrar(forPlugin: "co.typie.editor_input")
+    let editorInputFactory = EditorInputFactory(messenger: editorInputRegistrar!.messenger())
+    editorInputRegistrar?.register(editorInputFactory, withId: "co.typie.editor_input")
+
     KeyboardPlugin.register(with: self.registrar(forPlugin: "co.typie.keyboard")!)
     
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
