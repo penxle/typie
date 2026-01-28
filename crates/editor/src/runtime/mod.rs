@@ -429,7 +429,7 @@ impl Runtime {
 
         if needs_rebuild {
             let cell_selection =
-                crate::state::selection_helpers::compute_cell_selection(self.doc(), selection);
+                crate::state::selection_helpers::compute_structure_selection(self.doc(), selection);
             let block_ids = crate::state::selection_helpers::collect_selected_block_ids(
                 self.doc(),
                 selection,
@@ -1102,10 +1102,10 @@ impl Runtime {
         }
 
         let cell_selection =
-            crate::state::selection_helpers::compute_cell_selection(self.doc(), &selection);
+            crate::state::selection_helpers::compute_structure_selection(self.doc(), &selection);
 
         match cell_selection {
-            crate::state::selection_helpers::CellSelectionInfo::Rectangular { table_id, range } => {
+            crate::state::selection_helpers::StructureSelectionInfo::Rectangular { table_id, range } => {
                 let Some(_table) = self.doc().node(table_id) else {
                     return position_in_selection(&self.state.doc, position, &selection);
                 };
@@ -1147,10 +1147,10 @@ impl Runtime {
 
                 false
             }
-            crate::state::selection_helpers::CellSelectionInfo::FullTables(table_ids) => {
+            crate::state::selection_helpers::StructureSelectionInfo::Structural(block_ids) => {
                 let mut current_id = Some(position.node_id);
                 while let Some(id) = current_id {
-                    if table_ids.contains(&id) {
+                    if block_ids.contains(&id) {
                         return true;
                     }
                     if let Some(node) = self.doc().node(id) {

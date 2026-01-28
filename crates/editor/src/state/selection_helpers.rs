@@ -173,18 +173,18 @@ pub fn build_selection_decorations(
         Err(_) => return Vec::new(),
     };
 
-    let cell_selection_info = compute_cell_selection(doc, selection);
-    let mut processed_cells = FxHashSet::default();
+    let structure_selection_info = compute_structure_selection(doc, selection);
+    let mut processed_structural_nodes = FxHashSet::default();
 
-    decorations.extend(collect_cell_decorations(
+    decorations.extend(collect_structure_decorations(
         doc,
-        &cell_selection_info,
-        &mut processed_cells,
+        &structure_selection_info,
+        &mut processed_structural_nodes,
     ));
 
     let block_ids = match block_ids {
         Some(ids) => ids.to_vec(),
-        None => collect_selected_block_ids(doc, selection, &cell_selection_info),
+        None => collect_selected_block_ids(doc, selection, &structure_selection_info),
     };
 
     let block_id_set: FxHashSet<NodeId> = block_ids.iter().cloned().collect();
@@ -198,7 +198,7 @@ pub fn build_selection_decorations(
             continue;
         }
 
-        if should_skip_block_decoration(doc, block, &processed_cells) {
+        if should_skip_block_decoration(doc, block, &processed_structural_nodes) {
             continue;
         }
 
@@ -216,7 +216,7 @@ pub fn build_selection_decorations(
         doc,
         from,
         to,
-        &cell_selection_info,
+        &structure_selection_info,
         &block_id_set,
         &mut decorations,
     );
@@ -224,14 +224,14 @@ pub fn build_selection_decorations(
     decorations
 }
 
-fn collect_cell_decorations(
+fn collect_structure_decorations(
     doc: &Doc,
-    cell_selection: &CellSelectionInfo,
-    processed_cells: &mut FxHashSet<NodeId>,
+    structure_selection: &StructureSelectionInfo,
+    processed_structural_nodes: &mut FxHashSet<NodeId>,
 ) -> Vec<SelectionDecor> {
     let mut decorations = Vec::new();
-    match cell_selection {
-        CellSelectionInfo::Rectangular { table_id, range } => {
+    match structure_selection {
+        StructureSelectionInfo::Rectangular { table_id, range } => {
             if let Some(table) = doc.node(*table_id) {
                 for (r_idx, row) in table.children().enumerate() {
                     if r_idx < range.0.0 || r_idx > range.0.1 {
@@ -244,28 +244,33 @@ fn collect_cell_decorations(
                         }
 
                         let cell_id = cell.node_id();
-                        if processed_cells.insert(cell_id) {
+                        if processed_structural_nodes.insert(cell_id) {
                             decorations.push(SelectionDecor::Cell { node_id: cell_id });
                         }
                     }
                 }
             }
         }
-        CellSelectionInfo::FullTables(table_ids) => {
-            for &table_id in table_ids {
-                if let Some(table) = doc.node(table_id) {
-                    for row in table.children() {
-                        for cell in row.children() {
-                            let cell_id = cell.node_id();
-                            if processed_cells.insert(cell_id) {
-                                decorations.push(SelectionDecor::Cell { node_id: cell_id });
+        StructureSelectionInfo::Structural(block_ids) => {
+            for &block_id in block_ids {
+                if let Some(node) = doc.node(block_id) {
+                    if matches!(node.node(), Node::Table(_)) {
+                        for row in node.children() {
+                            for cell in row.children() {
+                                let cell_id = cell.node_id();
+                                if processed_structural_nodes.insert(cell_id) {
+                                    decorations.push(SelectionDecor::Cell { node_id: cell_id });
+                                }
                             }
                         }
+                    } else if matches!(node.node(), Node::Fold(_)) {
+                        decorations.push(SelectionDecor::Fold { node_id: block_id });
+                        processed_structural_nodes.insert(block_id);
                     }
                 }
             }
         }
-        CellSelectionInfo::None => {}
+        StructureSelectionInfo::None => {}
     }
     decorations
 }
@@ -273,11 +278,11 @@ fn collect_cell_decorations(
 fn should_skip_block_decoration(
     doc: &Doc,
     block: NodeRef,
-    processed_cells: &FxHashSet<NodeId>,
+    processed_structural_nodes: &FxHashSet<NodeId>,
 ) -> bool {
     let mut current_id = Some(block.node_id());
     while let Some(id) = current_id {
-        if processed_cells.contains(&id) {
+        if processed_structural_nodes.contains(&id) {
             return true;
         }
 
@@ -294,7 +299,7 @@ fn add_ancestor_decorations(
     doc: &Doc,
     from: Position,
     to: Position,
-    cell_selection: &CellSelectionInfo,
+    structure_selection: &StructureSelectionInfo,
     processed_blocks: &FxHashSet<NodeId>,
     decorations: &mut Vec<SelectionDecor>,
 ) {
@@ -329,9 +334,13 @@ fn add_ancestor_decorations(
             break;
         };
 
-        match cell_selection {
-            CellSelectionInfo::Rectangular { table_id, .. } if *table_id == ancestor_id => break,
-            CellSelectionInfo::FullTables(table_ids) if table_ids.contains(&ancestor_id) => break,
+        match structure_selection {
+            StructureSelectionInfo::Rectangular { table_id, .. } if *table_id == ancestor_id => {
+                break;
+            }
+            StructureSelectionInfo::Structural(block_ids) if block_ids.contains(&ancestor_id) => {
+                break;
+            }
             _ => {}
         }
 
@@ -344,15 +353,12 @@ fn add_ancestor_decorations(
         let end_child_id = if to_idx > 0 {
             let direct_child_id = to_path[to_idx - 1];
             if to.offset == 0 {
-                // If to.offset is 0, the selection ends at the start of direct_child_id.
-                // We should stop at the previous sibling.
                 doc.node(direct_child_id)
                     .and_then(|node| node.prev_sibling().map(|n| n.node_id()))
             } else {
                 Some(direct_child_id)
             }
         } else {
-            // to_idx == 0 means 'to' is directly on ancestor.
             if to.offset == 0 {
                 None
             } else {
@@ -621,14 +627,14 @@ fn collect_all_blocks_in_subtree(doc: &Doc, root_id: NodeId) -> Vec<NodeId> {
 pub fn collect_selected_block_ids(
     doc: &Doc,
     selection: &Selection,
-    cell_selection: &CellSelectionInfo,
+    cell_selection: &StructureSelectionInfo,
 ) -> Vec<NodeId> {
     let Ok((from, to)) = selection.as_sorted(doc) else {
         return Vec::new();
     };
 
     match cell_selection {
-        CellSelectionInfo::Rectangular { table_id, range } => {
+        StructureSelectionInfo::Rectangular { table_id, range } => {
             let mut ids = Vec::new();
             if let Some(table) = doc.node(*table_id) {
                 for (r_idx, row) in table.children().enumerate() {
@@ -645,14 +651,14 @@ pub fn collect_selected_block_ids(
             }
             ids
         }
-        CellSelectionInfo::FullTables(table_ids) => {
+        StructureSelectionInfo::Structural(block_ids) => {
             let mut ids: FxHashSet<NodeId> = collect_blocks_in_range(doc, from, to)
                 .unwrap_or_default()
                 .into_iter()
                 .collect();
 
-            for &table_id in table_ids {
-                ids.extend(collect_all_blocks_in_subtree(doc, table_id));
+            for &block_id in block_ids {
+                ids.extend(collect_all_blocks_in_subtree(doc, block_id));
             }
 
             let mut result: Vec<NodeId> = ids.into_iter().collect();
@@ -663,84 +669,98 @@ pub fn collect_selected_block_ids(
             });
             result
         }
-        CellSelectionInfo::None => collect_blocks_in_range(doc, from, to).unwrap_or_default(),
+        StructureSelectionInfo::None => collect_blocks_in_range(doc, from, to).unwrap_or_default(),
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum CellSelectionInfo {
+pub enum StructureSelectionInfo {
     None,
     Rectangular {
         table_id: NodeId,
         range: ((usize, usize), (usize, usize)),
     },
-    FullTables(Vec<NodeId>),
+    Structural(Vec<NodeId>),
 }
 
-pub fn compute_cell_selection(doc: &Doc, selection: &Selection) -> CellSelectionInfo {
-    let anchor_info = find_table_cell(doc, selection.anchor.node_id);
-    let head_info = find_table_cell(doc, selection.head.node_id);
+pub fn compute_structure_selection(doc: &Doc, selection: &Selection) -> StructureSelectionInfo {
+    if let Some(info) = compute_table_selection_info(doc, selection) {
+        return info;
+    }
 
-    match (anchor_info, head_info) {
-        (Some((_, t1, r1, c1)), Some((_, t2, r2, c2))) if t1 == t2 => {
-            if r1 == r2 && c1 == c2 {
-                CellSelectionInfo::None
-            } else {
-                let start_row = min(r1, r2);
-                let end_row = max(r1, r2);
-                let start_col = min(c1, c2);
-                let end_col = max(c1, c2);
+    let blocks = collect_relevant_blocks(doc, selection).unwrap_or_default();
 
-                if let Some(table) = doc.node(t1) {
-                    let num_rows = table.children().count();
-                    let num_cols = table
-                        .children()
-                        .next()
-                        .map(|row| row.children().count())
-                        .unwrap_or(0);
-
-                    if start_row == 0
-                        && end_row == num_rows.saturating_sub(1)
-                        && start_col == 0
-                        && end_col == num_cols.saturating_sub(1)
-                    {
-                        return CellSelectionInfo::FullTables(vec![t1]);
-                    }
-                }
-
-                CellSelectionInfo::Rectangular {
-                    table_id: t1,
-                    range: ((start_row, end_row), (start_col, end_col)),
-                }
-            }
-        }
-        _ => {
-            let tables = collect_relevant_tables(doc, selection).unwrap_or_default();
-
-            if tables.is_empty() {
-                CellSelectionInfo::None
-            } else {
-                CellSelectionInfo::FullTables(tables)
-            }
-        }
+    if blocks.is_empty() {
+        StructureSelectionInfo::None
+    } else {
+        StructureSelectionInfo::Structural(blocks)
     }
 }
 
-fn collect_relevant_tables(doc: &Doc, selection: &Selection) -> Result<Vec<NodeId>> {
-    let mut table_ids = FxHashSet::default();
+fn compute_table_selection_info(
+    doc: &Doc,
+    selection: &Selection,
+) -> Option<StructureSelectionInfo> {
+    let anchor_info = find_table_cell(doc, selection.anchor.node_id);
+    let head_info = find_table_cell(doc, selection.head.node_id);
 
-    if let Ok(traversed) =
-        collect_nodes_in_selection(doc, selection, |node| matches!(node, Node::Table(_)))
-    {
-        table_ids.extend(traversed);
+    let (Some((_, t1, r1, c1)), Some((_, t2, r2, c2))) = (anchor_info, head_info) else {
+        return None;
+    };
+
+    if t1 != t2 {
+        return None;
+    }
+
+    if r1 == r2 && c1 == c2 {
+        Some(StructureSelectionInfo::None)
+    } else {
+        let start_row = min(r1, r2);
+        let end_row = max(r1, r2);
+        let start_col = min(c1, c2);
+        let end_col = max(c1, c2);
+
+        if let Some(table) = doc.node(t1) {
+            let num_rows = table.children().count();
+            let num_cols = table
+                .children()
+                .next()
+                .map(|row| row.children().count())
+                .unwrap_or(0);
+
+            if start_row == 0
+                && end_row == num_rows.saturating_sub(1)
+                && start_col == 0
+                && end_col == num_cols.saturating_sub(1)
+            {
+                return Some(StructureSelectionInfo::Structural(vec![t1]));
+            }
+        }
+
+        Some(StructureSelectionInfo::Rectangular {
+            table_id: t1,
+            range: ((start_row, end_row), (start_col, end_col)),
+        })
+    }
+}
+
+fn collect_relevant_blocks(doc: &Doc, selection: &Selection) -> Result<Vec<NodeId>> {
+    let mut block_ids = FxHashSet::default();
+
+    if let Ok(traversed) = collect_nodes_in_selection(doc, selection, |node| {
+        doc.schema()
+            .node_spec(node.as_type())
+            .is_structural_root(doc.schema())
+    }) {
+        block_ids.extend(traversed);
     }
 
     for &node_id in &[selection.anchor.node_id, selection.head.node_id] {
         let mut current_id = Some(node_id);
         while let Some(id) = current_id {
             if let Some(node) = doc.node(id) {
-                if node.node_type() == NodeType::Table {
-                    table_ids.insert(id);
+                if node.spec().is_structural_root(doc.schema()) {
+                    block_ids.insert(id);
                 }
                 current_id = node.parent().map(|n| n.node_id());
             } else {
@@ -749,16 +769,17 @@ fn collect_relevant_tables(doc: &Doc, selection: &Selection) -> Result<Vec<NodeI
         }
     }
 
-    let mut result: Vec<_> = table_ids
+    let mut result: Vec<_> = block_ids
         .into_iter()
         .filter(|&id| {
             let fully_selected = is_node_fully_selected(doc, selection, id).unwrap_or(false);
+
             let contains_anchor =
                 id == selection.anchor.node_id || is_ancestor(doc, id, selection.anchor.node_id);
             let contains_head =
                 id == selection.head.node_id || is_ancestor(doc, id, selection.head.node_id);
 
-            fully_selected || contains_anchor || contains_head
+            fully_selected || (contains_anchor != contains_head)
         })
         .collect();
 
@@ -795,6 +816,7 @@ fn find_table_cell(doc: &Doc, node_id: NodeId) -> Option<(NodeId, NodeId, usize,
 
             return Some((cell.node_id(), table.node_id(), row_idx, col_idx));
         }
+
         if node.node_type() == NodeType::Table {
             break;
         }
@@ -994,10 +1016,10 @@ mod tests {
             selection { (p_anchor, 0) -> (p_head, 0) }
         };
 
-        let cell_selection = compute_cell_selection(&state.doc, &state.selection);
+        let cell_selection = compute_structure_selection(&state.doc, &state.selection);
 
         match cell_selection {
-            CellSelectionInfo::Rectangular { table_id, range } => {
+            StructureSelectionInfo::Rectangular { table_id, range } => {
                 assert_eq!(table_id, t);
                 assert_eq!(range.0, (0, 1), "Row range mismatch");
                 assert_eq!(range.1, (0, 1), "Col range mismatch");
@@ -1025,10 +1047,10 @@ mod tests {
             selection { (p_before, 0) -> (p_after, 5) }
         };
 
-        let cell_selection = compute_cell_selection(&state.doc, &state.selection);
+        let cell_selection = compute_structure_selection(&state.doc, &state.selection);
 
         match cell_selection {
-            CellSelectionInfo::FullTables(tables) => {
+            StructureSelectionInfo::Structural(tables) => {
                 assert_eq!(tables.len(), 1);
                 assert_eq!(tables[0], t);
             }
@@ -1057,10 +1079,10 @@ mod tests {
             selection { (p1, 0) -> (p2, 2) }
         };
 
-        let cell_selection = compute_cell_selection(&state.doc, &state.selection);
+        let cell_selection = compute_structure_selection(&state.doc, &state.selection);
 
         match cell_selection {
-            CellSelectionInfo::FullTables(ids) => {
+            StructureSelectionInfo::Structural(ids) => {
                 assert_eq!(ids.len(), 1);
                 assert_eq!(ids[0], t1);
             }
@@ -1143,10 +1165,10 @@ mod tests {
             selection { (p_start, 0) -> (p_end, 1) }
         };
 
-        let cell_selection = compute_cell_selection(&state.doc, &state.selection);
+        let cell_selection = compute_structure_selection(&state.doc, &state.selection);
 
         match cell_selection {
-            CellSelectionInfo::FullTables(tables) => {
+            StructureSelectionInfo::Structural(tables) => {
                 assert_eq!(tables.len(), 1);
                 assert_eq!(tables[0], t);
             }
@@ -1184,5 +1206,85 @@ mod tests {
         let d = p1_decors[0];
         assert_eq!(d.start_offset(), 2, "Start offset mismatch");
         assert_eq!(d.end_offset(), 4, "End offset mismatch");
+    }
+
+    #[test]
+    fn test_fold_structure_selection_skips_inner_text() {
+        let mut fold_id = id!();
+        let mut p1 = id!();
+        let mut p_before = id!();
+        let mut p_after = id!();
+
+        let state = state! {
+            doc {
+                @p_before paragraph { text { "before" } }
+                @fold_id fold {
+                    fold_title { text { "Title" } }
+                    fold_content {
+                        @p1 paragraph { text { "Inside" } }
+                    }
+                }
+                @p_after paragraph { text { "after" } }
+            }
+            selection { (p_before, 0) -> (p_after, 5) }
+        };
+
+        let decorations = build_selection_decorations(&state.doc, &state.selection, None);
+
+        let fold_decor = decorations
+            .iter()
+            .find(|d| matches!(d, SelectionDecor::Fold { node_id } if *node_id == fold_id));
+        assert!(fold_decor.is_some(), "Fold should have Fold decoration");
+
+        let p1_decor = decorations.iter().find(|d| d.node_id() == p1);
+        assert!(
+            p1_decor.is_none(),
+            "Inner paragraph should NOT have text decoration when Fold is structurally selected"
+        );
+    }
+
+    #[test]
+    fn test_repro_outer_fold_selection_bug() {
+        let mut n1 = id!();
+        let mut n2 = id!();
+        let mut inner_fold = id!();
+        let mut outer_fold = id!();
+
+        let state = state! {
+            doc {
+                @outer_fold fold {
+                    fold_title { text { "Outer" } }
+                    fold_content {
+                        @n1 paragraph {
+                            text { "1" }
+                        }
+                        @inner_fold fold {
+                            @n2 fold_title {}
+                            fold_content {
+                                paragraph {
+                                    text { "2" }
+                                }
+                            }
+                        }
+                        paragraph {
+                            text { "3" }
+                        }
+                    }
+                }
+                paragraph {}
+            }
+            selection { (n1, 1) -> (n2, 0) }
+        };
+
+        let blocks = collect_relevant_blocks(&state.doc, &state.selection).unwrap();
+
+        assert!(
+            blocks.contains(&inner_fold),
+            "Inner Fold SHOULD be collected"
+        );
+        assert!(
+            !blocks.contains(&outer_fold),
+            "Outer Fold SHOULD NOT be collected"
+        );
     }
 }

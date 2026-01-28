@@ -18,6 +18,9 @@ pub enum SelectionDecor {
     Cell {
         node_id: NodeId,
     },
+    Fold {
+        node_id: NodeId,
+    },
 }
 
 impl SelectionDecor {
@@ -25,20 +28,21 @@ impl SelectionDecor {
         match self {
             SelectionDecor::Text { node_id, .. } => *node_id,
             SelectionDecor::Cell { node_id } => *node_id,
+            SelectionDecor::Fold { node_id } => *node_id,
         }
     }
 
     pub fn start_offset(&self) -> usize {
         match self {
             SelectionDecor::Text { start_offset, .. } => *start_offset,
-            SelectionDecor::Cell { .. } => 0,
+            SelectionDecor::Cell { .. } | SelectionDecor::Fold { .. } => 0,
         }
     }
 
     pub fn end_offset(&self) -> usize {
         match self {
             SelectionDecor::Text { end_offset, .. } => *end_offset,
-            SelectionDecor::Cell { .. } => usize::MAX,
+            SelectionDecor::Cell { .. } | SelectionDecor::Fold { .. } => usize::MAX,
         }
     }
 

@@ -110,20 +110,20 @@ impl Transaction {
         let fragment = prepare_fragment(fragment, self.doc().schema(), is_block_drop);
 
         let cell_selection =
-            crate::state::selection_helpers::compute_cell_selection(self.doc(), &source);
+            crate::state::selection_helpers::compute_structure_selection(self.doc(), &source);
 
         let delete_result = match cell_selection {
-            crate::state::selection_helpers::CellSelectionInfo::Rectangular { .. } => {
-                self.delete_cell_selection(&cell_selection)?;
+            crate::state::selection_helpers::StructureSelectionInfo::Rectangular { .. } => {
+                self.delete_structure_selection(&cell_selection)?;
                 DeleteResult::None
             }
-            crate::state::selection_helpers::CellSelectionInfo::FullTables(ref table_ids) => {
+            crate::state::selection_helpers::StructureSelectionInfo::Structural(ref block_ids) => {
                 let mut expanded_source = source;
                 if let Ok((mut from, mut to)) = source.as_sorted(self.doc()) {
-                    for &table_id in table_ids {
-                        if let Some(table) = self.node(table_id) {
-                            if let Some(parent) = table.parent() {
-                                let index = table.index().unwrap_or(0);
+                    for &block_id in block_ids {
+                        if let Some(block) = self.node(block_id) {
+                            if let Some(parent) = block.parent() {
+                                let index = block.index().unwrap_or(0);
                                 let start_pos =
                                     Position::new(parent.node_id(), index, Affinity::Downstream);
                                 let end_pos = Position::new(

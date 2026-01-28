@@ -1,6 +1,6 @@
 use crate::model::{Node, NodeId, ParagraphNode, TableCellNode, TableNode, TableRowNode};
 use crate::runtime::Effect;
-use crate::state::selection_helpers::CellSelectionInfo;
+use crate::state::selection_helpers::StructureSelectionInfo;
 use crate::state::{Position, Selection};
 use crate::transaction::Transaction;
 use crate::types::Affinity;
@@ -433,11 +433,11 @@ impl Transaction {
         Ok(true)
     }
 
-    pub fn delete_cell_selection(&mut self, info: &CellSelectionInfo) -> Result<bool> {
+    pub fn delete_structure_selection(&mut self, info: &StructureSelectionInfo) -> Result<bool> {
         match info {
-            CellSelectionInfo::None => Ok(false),
-            CellSelectionInfo::FullTables(_) => Ok(false),
-            CellSelectionInfo::Rectangular { table_id, range } => {
+            StructureSelectionInfo::None => Ok(false),
+            StructureSelectionInfo::Structural(_) => Ok(false),
+            StructureSelectionInfo::Rectangular { table_id, range } => {
                 let table_node = self.node(*table_id).context("Table not found")?;
                 let row_ids: Vec<_> = table_node.children().map(|c| c.node_id()).collect();
 

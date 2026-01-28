@@ -1034,6 +1034,7 @@ mod tests {
                 crate::layout::elements::FoldContentElement::new(
                     Size::new(80.0, 170.0),
                     SplitEdges::default(),
+                    crate::model::NodeId::new(),
                 ),
             )),
             children: Some(vec![PositionedNode {
@@ -1441,6 +1442,7 @@ mod tests {
         let parent_element = Element::FoldContent(FoldContentElement::new(
             Size::new(80.0, 150.0),
             SplitEdges::default(),
+            crate::model::NodeId::new(),
         ));
 
         let node1 = Rc::new(LayoutNode {
