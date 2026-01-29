@@ -529,8 +529,6 @@ impl Transaction {
             }
 
             self.set_selection(Selection::new(from, to));
-            self.delete_structural_range(from, to)?;
-            return Ok(true);
         }
 
         let deleted = self.delete_selection_with_merge()?.deleted();
