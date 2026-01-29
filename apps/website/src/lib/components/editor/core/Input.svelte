@@ -15,6 +15,9 @@
 
   let inputEl = $state<HTMLInputElement>();
 
+  let currentCompositionText = '';
+  let ignoreEventText = '';
+
   export function focus() {
     inputEl?.focus({ preventScroll: true });
   }
@@ -40,7 +43,19 @@
       return;
     }
 
-    if (e.isComposing) return;
+    const action = getActionFromKeyEvent(e);
+
+    const isShortcut = e.ctrlKey || e.metaKey || e.altKey;
+
+    if (e.isComposing) {
+      if (action !== null && isShortcut) {
+        // 조합 중 단축키 입력 시 preedit을 커밋
+        ignoreEventText = currentCompositionText;
+        editor.dispatch({ type: 'commitPreedit' });
+      } else {
+        return;
+      }
+    }
 
     if (IS_MAC && e.ctrlKey) {
       const key = e.key.toLowerCase();
@@ -60,8 +75,6 @@
         return;
       }
     }
-
-    const action = getActionFromKeyEvent(e);
 
     if (action !== null) {
       e.preventDefault();
@@ -107,6 +120,7 @@
   const handleCompositionStart = (e: CompositionEvent) => {
     if (editor.readOnly) return;
 
+    currentCompositionText = '';
     const text = e.data || '';
     editor.dispatch({ type: 'compositionStart', text });
   };
@@ -115,6 +129,12 @@
     if (editor.readOnly) return;
 
     const text = e.data || '';
+    currentCompositionText = text;
+
+    if (ignoreEventText && text === ignoreEventText) {
+      return;
+    }
+
     editor.dispatch({ type: 'compositionUpdate', text });
     editor.typewriter.needsScroll = true;
   };
@@ -123,7 +143,15 @@
     if (editor.readOnly) return;
 
     if (inputEl) inputEl.value = '';
-    editor.dispatch({ type: 'input', text: e.data || '' });
+
+    const text = e.data || '';
+    if (ignoreEventText && text === ignoreEventText) {
+      ignoreEventText = '';
+      editor.dispatch({ type: 'compositionEnd' });
+      return;
+    }
+
+    editor.dispatch({ type: 'input', text });
     editor.dispatch({ type: 'compositionEnd' });
   };
 
