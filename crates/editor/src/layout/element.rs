@@ -157,8 +157,8 @@ impl Element {
             Element::CalloutIcon(e) => Some(e.node_id),
             Element::ListMarker(_) => None,
             Element::FoldTitle(e) => Some(e.block_id),
-            Element::FoldTitleBackground(_) => None,
-            Element::FoldContent(_) => None,
+            Element::FoldTitleBackground(e) => Some(e.fold_id),
+            Element::FoldContent(e) => Some(e.fold_id),
             Element::TableBorder(e) => Some(e.node_id),
             Element::TableCell(e) => Some(e.node_id),
         }

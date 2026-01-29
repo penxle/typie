@@ -1,7 +1,7 @@
 use crate::layout::elements::LineElement;
 use crate::model::{FontFamilyMark, SelectionDecor, TextColorMark};
 use crate::render::glyph::Glyph;
-use crate::render::{GlyphRenderer, Render, RenderContext};
+use crate::render::{GlyphRenderer, Render, RenderContext, RenderPhase};
 use crate::types::Point;
 use macros::svg_icon_path;
 use tiny_skia::{Color, Paint, PixmapMut, Rect, Stroke, Transform};
@@ -60,10 +60,15 @@ impl LineElement {
         } else {
             ctx.theme.color_with_alpha("ui.surface.dark", 32)
         };
-        let paint = create_solid_paint(color);
+        if ctx.phase == RenderPhase::Selection {
+            let paint = create_solid_paint(color);
+            for rect in self.selection_rects(point, ctx.selections) {
+                pixmap.fill_rect(rect, &paint, transform, None);
+            }
+        }
 
-        for rect in self.selection_rects(point, ctx.selections) {
-            pixmap.fill_rect(rect, &paint, transform, None);
+        if ctx.phase != RenderPhase::Content {
+            return;
         }
 
         if self.has_page_break {
@@ -946,13 +951,15 @@ mod tests {
         let list_p2_decor = selections.iter().find(|s| s.node_id() == list_p2).unwrap();
 
         assert_eq!(
-            list_p1_decor.start_offset(), 0,
+            list_p1_decor.start_offset(),
+            0,
             "list_p1 start offset mismatch"
         );
         assert_eq!(list_p1_decor.end_offset(), 1, "list_p1 end offset mismatch");
 
         assert_eq!(
-            list_p2_decor.start_offset(), 0,
+            list_p2_decor.start_offset(),
+            0,
             "list_p2 start offset mismatch"
         );
         assert_eq!(list_p2_decor.end_offset(), 1, "list_p2 end offset mismatch");

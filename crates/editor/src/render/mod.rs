@@ -9,6 +9,13 @@ use crate::runtime::DropIndicator;
 use crate::types::{Point, Theme};
 use tiny_skia::{Color, Pixmap, PixmapMut, Rect, Transform};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RenderPhase {
+    Background,
+    Content,
+    Selection,
+}
+
 pub struct RenderContext<'a> {
     pub scale_factor: f64,
     pub selections: &'a [SelectionDecor],
@@ -16,6 +23,7 @@ pub struct RenderContext<'a> {
     pub doc: &'a Doc,
     pub default_text_color: Option<Color>,
     pub is_focused: bool,
+    pub phase: RenderPhase,
 }
 
 pub trait Render {
@@ -121,29 +129,40 @@ impl Renderer {
         let scale = self.scale_factor as f32;
         let transform = Transform::from_scale(scale, scale);
 
-        let ctx = RenderContext {
-            scale_factor: self.scale_factor,
-            selections,
-            theme: &self.theme,
-            doc,
-            default_text_color: None,
-            is_focused: self.is_focused,
-        };
+        let stages = [
+            RenderPhase::Background,
+            RenderPhase::Content,
+            RenderPhase::Selection,
+        ];
 
         let mut pixmap = self.pixmap.as_mut();
 
-        Self::render_node(
-            &mut pixmap,
-            &mut self.glyph_renderer,
-            &page.root,
-            Point::zero(),
-            transform,
-            &ctx,
-            &RenderHints::default(),
-        );
+        for phase in stages {
+            let ctx = RenderContext {
+                scale_factor: self.scale_factor,
+                selections,
+                theme: &self.theme,
+                doc,
+                default_text_color: None,
+                is_focused: self.is_focused,
+                phase,
+            };
 
-        if let Some(indicator) = drop_indicator {
-            Self::render_drop_indicator(&mut pixmap, indicator, page_idx, transform, &ctx);
+            Self::render_node(
+                &mut pixmap,
+                &mut self.glyph_renderer,
+                &page.root,
+                Point::zero(),
+                transform,
+                &ctx,
+                &RenderHints::default(),
+            );
+
+            if phase == RenderPhase::Content {
+                if let Some(indicator) = drop_indicator {
+                    Self::render_drop_indicator(&mut pixmap, indicator, page_idx, transform, &ctx);
+                }
+            }
         }
 
         let data = self.pixmap.data();
@@ -213,19 +232,21 @@ impl Renderer {
         );
 
         let merged_hints = positioned.node.render_hints.merge(inherited_hints);
-        let child_ctx = merged_hints
-            .default_text_color
-            .as_ref()
-            .map(|color_key| RenderContext {
-                default_text_color: Some(ctx.theme.color(color_key)),
-                ..*ctx
-            });
-        let render_ctx = child_ctx.as_ref().unwrap_or(ctx);
+
+        let child_ctx_data = RenderContext {
+            default_text_color: merged_hints
+                .default_text_color
+                .as_ref()
+                .map(|color_key| ctx.theme.color(color_key))
+                .or(ctx.default_text_color),
+            ..*ctx
+        };
+        let render_ctx = &child_ctx_data;
 
         if let Some(ref element) = positioned.node.element {
             if let Some(render) = element.as_render() {
                 let element_transform = transform.pre_translate(pos.x, pos.y);
-                render.render(pixmap, glyph_renderer, element_transform, render_ctx);
+                render.render(pixmap, glyph_renderer, element_transform, ctx);
             }
         }
 
@@ -283,6 +304,7 @@ impl Renderer {
                 doc,
                 default_text_color: None,
                 is_focused: true,
+                phase: RenderPhase::Content,
             };
 
             Self::render_page_part_inner(
