@@ -48,7 +48,7 @@ impl LineElement {
         rects
     }
 
-    fn render_selection(
+    fn render_line_selection(
         &self,
         pixmap: &mut PixmapMut,
         transform: Transform,
@@ -60,45 +60,49 @@ impl LineElement {
         } else {
             ctx.theme.color_with_alpha("ui.surface.dark", 32)
         };
-        if ctx.phase == RenderPhase::Selection {
-            let paint = create_solid_paint(color);
-            for rect in self.selection_rects(point, ctx.selections) {
-                pixmap.fill_rect(rect, &paint, transform, None);
-            }
+        let paint = create_solid_paint(color);
+        for rect in self.selection_rects(point, ctx.selections) {
+            pixmap.fill_rect(rect, &paint, transform, None);
         }
+    }
 
-        if ctx.phase != RenderPhase::Content {
+    fn render_page_break(
+        &self,
+        pixmap: &mut PixmapMut,
+        transform: Transform,
+        point: Point,
+        ctx: &RenderContext,
+    ) {
+        if !self.has_page_break {
             return;
         }
 
-        if self.has_page_break {
-            if let Some(rect) = self.page_break_indicator(point, ctx.selections) {
-                let accent_color = ctx.theme.color("ui.accent.brand.default");
-                let accent_paint = create_solid_paint(accent_color);
+        if let Some(rect) = self.page_break_indicator(point, ctx.selections) {
+            let accent_color = ctx.theme.color("ui.accent.brand.default");
+            let accent_paint = create_solid_paint(accent_color);
 
-                if let Some(line_rect) = Rect::from_xywh(
-                    rect.left(),
-                    rect.top() + rect.height() / 2.0 - 0.75,
-                    rect.width() - 20.0,
-                    1.5,
-                ) {
-                    pixmap.fill_rect(line_rect, &accent_paint, transform, None);
-                }
+            if let Some(line_rect) = Rect::from_xywh(
+                rect.left(),
+                rect.top() + rect.height() / 2.0 - 0.75,
+                rect.width() - 20.0,
+                1.5,
+            ) {
+                pixmap.fill_rect(line_rect, &accent_paint, transform, None);
+            }
 
-                let icon_size = 16.0;
-                let stroke = Stroke {
-                    width: 1.5,
-                    line_cap: tiny_skia::LineCap::Round,
-                    line_join: tiny_skia::LineJoin::Round,
-                    ..Stroke::default()
-                };
+            let icon_size = 16.0;
+            let stroke = Stroke {
+                width: 1.5,
+                line_cap: tiny_skia::LineCap::Round,
+                line_join: tiny_skia::LineJoin::Round,
+                ..Stroke::default()
+            };
 
-                let icon_x = rect.right() - icon_size / 2.0 - 2.0;
-                let icon_y = rect.top() + rect.height() / 2.0;
+            let icon_x = rect.right() - icon_size / 2.0 - 2.0;
+            let icon_y = rect.top() + rect.height() / 2.0;
 
-                if let Some(path) = svg_icon_path!("lucide/file", icon_size, icon_x, icon_y) {
-                    pixmap.stroke_path(&path, &accent_paint, &stroke, transform, None);
-                }
+            if let Some(path) = svg_icon_path!("lucide/file", icon_size, icon_x, icon_y) {
+                pixmap.stroke_path(&path, &accent_paint, &stroke, transform, None);
             }
         }
     }
@@ -422,109 +426,118 @@ impl Render for LineElement {
             return;
         };
 
+        let line_metrics = line.metrics();
         let point = Point::zero();
 
-        self.render_selection(pixmap, transform, point, ctx);
+        match ctx.phase {
+            RenderPhase::Background => {
+                self.render_background_segments(pixmap, transform, &line_metrics, ctx);
+            }
+            RenderPhase::Selection => {
+                self.render_line_selection(pixmap, transform, point, ctx);
+            }
+            RenderPhase::Content => {
+                self.render_page_break(pixmap, transform, point, ctx);
 
-        let line_metrics = line.metrics();
+                let scale = ctx.scale_factor as f32;
+                let run_y = self.metric.top + line_metrics.ascent;
 
-        self.render_background_segments(pixmap, transform, &line_metrics, ctx);
+                for item in line.items() {
+                    match item {
+                        parley::PositionedLayoutItem::InlineBox(_) => {}
+                        parley::PositionedLayoutItem::GlyphRun(glyph_run) => {
+                            let run = glyph_run.run();
+                            let style = glyph_run.style();
 
-        let scale = ctx.scale_factor as f32;
-        let run_y = self.metric.top + line_metrics.ascent;
+                            let color = if style.brush.is_empty()
+                                || style.brush == format!("text.{}", TextColorMark::default().key)
+                            {
+                                ctx.default_text_color.unwrap_or_else(|| {
+                                    ctx.theme
+                                        .color(&format!("text.{}", TextColorMark::default().key))
+                                })
+                            } else {
+                                ctx.theme.color(&style.brush)
+                            };
+                            let text_paint = create_solid_paint(color);
 
-        for item in line.items() {
-            match item {
-                parley::PositionedLayoutItem::InlineBox(_) => {}
-                parley::PositionedLayoutItem::GlyphRun(glyph_run) => {
-                    let run = glyph_run.run();
-                    let style = glyph_run.style();
+                            let run_x = glyph_run.offset();
 
-                    let color = if style.brush.is_empty()
-                        || style.brush == format!("text.{}", TextColorMark::default().key)
-                    {
-                        ctx.default_text_color.unwrap_or_else(|| {
-                            ctx.theme
-                                .color(&format!("text.{}", TextColorMark::default().key))
-                        })
-                    } else {
-                        ctx.theme.color(&style.brush)
-                    };
-                    let text_paint = create_solid_paint(color);
+                            let synthesis = run.synthesis();
+                            let skew_transform = if synthesis.skew() != Some(0.0) {
+                                synthesis.skew().map(|skew| {
+                                    Transform::from_row(
+                                        1.0,
+                                        0.0,
+                                        (skew as f64).to_radians().tan() as f32,
+                                        1.0,
+                                        0.0,
+                                        0.0,
+                                    )
+                                })
+                            } else {
+                                None
+                            };
 
-                    let run_x = glyph_run.offset();
+                            let mut x_advance = 0.0;
+                            let glyphs: Vec<_> = glyph_run
+                                .glyphs()
+                                .map(|g| {
+                                    let glyph_x = x_advance + g.x;
+                                    x_advance += g.advance;
+                                    Glyph {
+                                        id: g.id,
+                                        x: run_x + glyph_x,
+                                        y: run_y + g.y,
+                                    }
+                                })
+                                .collect();
 
-                    let synthesis = run.synthesis();
-                    let skew_transform = if synthesis.skew() != Some(0.0) {
-                        synthesis.skew().map(|skew| {
-                            Transform::from_row(
-                                1.0,
-                                0.0,
-                                (skew as f64).to_radians().tan() as f32,
-                                1.0,
-                                0.0,
-                                0.0,
-                            )
-                        })
-                    } else {
-                        None
-                    };
+                            glyph_renderer.draw_glyphs(
+                                pixmap,
+                                &run.font(),
+                                run.font_size() * scale,
+                                &text_paint,
+                                transform,
+                                skew_transform,
+                                &glyphs,
+                            );
 
-                    let mut x_advance = 0.0;
-                    let glyphs: Vec<_> = glyph_run
-                        .glyphs()
-                        .map(|g| {
-                            let glyph_x = x_advance + g.x;
-                            x_advance += g.advance;
-                            Glyph {
-                                id: g.id,
-                                x: run_x + glyph_x,
-                                y: run_y + g.y,
+                            let run_width = glyph_run.advance();
+
+                            if let Some(underline_style) = &style.underline {
+                                let metrics = line_metrics;
+                                let default_offset = metrics.descent * 0.5;
+                                let offset = underline_style.offset.unwrap_or(default_offset);
+                                let size = underline_style.size.unwrap_or(1.0);
+
+                                if let Some(rect) =
+                                    Rect::from_xywh(run_x, run_y + offset, run_width, size)
+                                {
+                                    pixmap.fill_rect(rect, &text_paint, transform, None);
+                                }
                             }
-                        })
-                        .collect();
 
-                    glyph_renderer.draw_glyphs(
-                        pixmap,
-                        &run.font(),
-                        run.font_size() * scale,
-                        &text_paint,
-                        transform,
-                        skew_transform,
-                        &glyphs,
-                    );
+                            if let Some(strikethrough_style) = &style.strikethrough {
+                                let metrics = line_metrics;
+                                let default_offset = -metrics.ascent * 0.3;
+                                let offset = strikethrough_style.offset.unwrap_or(default_offset);
+                                let size = strikethrough_style.size.unwrap_or(1.0);
 
-                    let run_width = glyph_run.advance();
-
-                    if let Some(underline_style) = &style.underline {
-                        let metrics = line_metrics;
-                        let default_offset = metrics.descent * 0.5;
-                        let offset = underline_style.offset.unwrap_or(default_offset);
-                        let size = underline_style.size.unwrap_or(1.0);
-
-                        if let Some(rect) = Rect::from_xywh(run_x, run_y + offset, run_width, size)
-                        {
-                            pixmap.fill_rect(rect, &text_paint, transform, None);
-                        }
-                    }
-
-                    if let Some(strikethrough_style) = &style.strikethrough {
-                        let metrics = line_metrics;
-                        let default_offset = -metrics.ascent * 0.3;
-                        let offset = strikethrough_style.offset.unwrap_or(default_offset);
-                        let size = strikethrough_style.size.unwrap_or(1.0);
-
-                        if let Some(rect) = Rect::from_xywh(run_x, run_y + offset, run_width, size)
-                        {
-                            pixmap.fill_rect(rect, &text_paint, transform, None);
+                                if let Some(rect) =
+                                    Rect::from_xywh(run_x, run_y + offset, run_width, size)
+                                {
+                                    pixmap.fill_rect(rect, &text_paint, transform, None);
+                                }
+                            }
                         }
                     }
                 }
+
+                self.render_preedit(pixmap, transform, point, ctx);
+                self.render_ruby_marks(pixmap, glyph_renderer, transform, &line_metrics, ctx);
             }
         }
-
-        self.render_preedit(pixmap, transform, point, ctx);
-        self.render_ruby_marks(pixmap, glyph_renderer, transform, &line_metrics, ctx);
     }
 }
 

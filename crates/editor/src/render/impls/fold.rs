@@ -15,33 +15,34 @@ impl Render for FoldTitleElement {
         transform: Transform,
         ctx: &RenderContext,
     ) {
-        if ctx.phase != RenderPhase::Content {
-            return;
-        }
+        match ctx.phase {
+            RenderPhase::Content => {
+                let color = ctx.theme.color("ui.text.subtle");
+                let mut paint = Paint::default();
+                paint.set_color(color);
+                paint.anti_alias = true;
 
-        let color = ctx.theme.color("ui.text.subtle");
-        let mut paint = Paint::default();
-        paint.set_color(color);
-        paint.anti_alias = true;
+                let stroke = Stroke {
+                    width: CHEVRON_STROKE_WIDTH,
+                    line_cap: tiny_skia::LineCap::Round,
+                    line_join: tiny_skia::LineJoin::Round,
+                    ..Stroke::default()
+                };
 
-        let stroke = Stroke {
-            width: CHEVRON_STROKE_WIDTH,
-            line_cap: tiny_skia::LineCap::Round,
-            line_join: tiny_skia::LineJoin::Round,
-            ..Stroke::default()
-        };
+                let cx = self.size.width / 2.0;
+                let cy = self.size.height / 2.0;
 
-        let cx = self.size.width / 2.0;
-        let cy = self.size.height / 2.0;
+                let path = if self.expanded {
+                    svg_icon_path!("lucide/chevron-down", CHEVRON_SIZE, cx, cy)
+                } else {
+                    svg_icon_path!("lucide/chevron-up", CHEVRON_SIZE, cx, cy)
+                };
 
-        let path = if self.expanded {
-            svg_icon_path!("lucide/chevron-down", CHEVRON_SIZE, cx, cy)
-        } else {
-            svg_icon_path!("lucide/chevron-up", CHEVRON_SIZE, cx, cy)
-        };
-
-        if let Some(path) = path {
-            pixmap.stroke_path(&path, &paint, &stroke, transform, None);
+                if let Some(path) = path {
+                    pixmap.stroke_path(&path, &paint, &stroke, transform, None);
+                }
+            }
+            _ => {}
         }
     }
 }

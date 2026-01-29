@@ -2,7 +2,7 @@ use crate::layout::elements::SplitEdges;
 use crate::layout::elements::{CalloutBackgroundElement, CalloutIconElement};
 use crate::model::CalloutVariant;
 use crate::model::{CALLOUT_BORDER_RADIUS, CALLOUT_BORDER_WIDTH};
-use crate::render::{GlyphRenderer, Render, RenderContext};
+use crate::render::{GlyphRenderer, Render, RenderContext, RenderPhase};
 use macros::svg_icon_path;
 use tiny_skia::{Paint, PathBuilder, PixmapMut, Stroke, Transform};
 
@@ -18,53 +18,67 @@ impl Render for CalloutBackgroundElement {
         ctx: &RenderContext,
     ) {
         let color_key = format!("ui.callout.{}", self.variant.as_str());
-        let border_color = ctx.theme.color(&color_key);
-        let bg_color = ctx.theme.color_with_alpha(&color_key, 8);
 
-        let mut bg_paint = Paint::default();
-        bg_paint.set_color(bg_color);
-        bg_paint.anti_alias = true;
+        match ctx.phase {
+            RenderPhase::Background => {
+                let bg_color = ctx.theme.color_with_alpha(&color_key, 8);
 
-        let (tl, tr, br, bl) = corner_radii(CALLOUT_BORDER_RADIUS, &self.split_edges);
+                let mut bg_paint = Paint::default();
+                bg_paint.set_color(bg_color);
+                bg_paint.anti_alias = true;
 
-        if let Some(path) =
-            build_rounded_rect_corners(0.0, 0.0, self.size.width, self.size.height, tl, tr, br, bl)
-        {
-            pixmap.fill_path(
-                &path,
-                &bg_paint,
-                tiny_skia::FillRule::Winding,
-                transform,
-                None,
-            );
-        }
+                let (tl, tr, br, bl) = corner_radii(CALLOUT_BORDER_RADIUS, &self.split_edges);
 
-        let mut border_paint = Paint::default();
-        border_paint.set_color(border_color);
-        border_paint.anti_alias = true;
+                if let Some(path) = build_rounded_rect_corners(
+                    0.0,
+                    0.0,
+                    self.size.width,
+                    self.size.height,
+                    tl,
+                    tr,
+                    br,
+                    bl,
+                ) {
+                    pixmap.fill_path(
+                        &path,
+                        &bg_paint,
+                        tiny_skia::FillRule::Winding,
+                        transform,
+                        None,
+                    );
+                }
+            }
+            RenderPhase::Content => {
+                let border_color = ctx.theme.color(&color_key);
+                let mut border_paint = Paint::default();
+                border_paint.set_color(border_color);
+                border_paint.anti_alias = true;
 
-        let stroke = Stroke {
-            width: CALLOUT_BORDER_WIDTH,
-            ..Stroke::default()
-        };
+                let stroke = Stroke {
+                    width: CALLOUT_BORDER_WIDTH,
+                    ..Stroke::default()
+                };
 
-        let mb = CALLOUT_BORDER_WIDTH / 2.0;
-        let inner_radius = (CALLOUT_BORDER_RADIUS - mb).max(0.0);
-        let (tl_inner, tr_inner, br_inner, bl_inner) =
-            corner_radii(inner_radius, &self.split_edges);
+                let mb = CALLOUT_BORDER_WIDTH / 2.0;
+                let inner_radius = (CALLOUT_BORDER_RADIUS - mb).max(0.0);
+                let (tl_inner, tr_inner, br_inner, bl_inner) =
+                    corner_radii(inner_radius, &self.split_edges);
 
-        if let Some(path) = build_partial_border(
-            mb,
-            mb,
-            self.size.width - CALLOUT_BORDER_WIDTH,
-            self.size.height - CALLOUT_BORDER_WIDTH,
-            tl_inner,
-            tr_inner,
-            br_inner,
-            bl_inner,
-            &self.split_edges,
-        ) {
-            pixmap.stroke_path(&path, &border_paint, &stroke, transform, None);
+                if let Some(path) = build_partial_border(
+                    mb,
+                    mb,
+                    self.size.width - CALLOUT_BORDER_WIDTH,
+                    self.size.height - CALLOUT_BORDER_WIDTH,
+                    tl_inner,
+                    tr_inner,
+                    br_inner,
+                    bl_inner,
+                    &self.split_edges,
+                ) {
+                    pixmap.stroke_path(&path, &border_paint, &stroke, transform, None);
+                }
+            }
+            _ => {}
         }
     }
 }
@@ -77,32 +91,43 @@ impl Render for CalloutIconElement {
         transform: Transform,
         ctx: &RenderContext,
     ) {
-        let color_key = format!("ui.callout.{}", self.variant.as_str());
-        let icon_color = ctx.theme.color(&color_key);
+        match ctx.phase {
+            RenderPhase::Content => {
+                let color_key = format!("ui.callout.{}", self.variant.as_str());
+                let icon_color = ctx.theme.color(&color_key);
 
-        let mut icon_paint = Paint::default();
-        icon_paint.set_color(icon_color);
-        icon_paint.anti_alias = true;
+                let mut icon_paint = Paint::default();
+                icon_paint.set_color(icon_color);
+                icon_paint.anti_alias = true;
 
-        let icon_stroke = Stroke {
-            width: ICON_STROKE_WIDTH,
-            line_cap: tiny_skia::LineCap::Round,
-            line_join: tiny_skia::LineJoin::Round,
-            ..Stroke::default()
-        };
+                let icon_stroke = Stroke {
+                    width: ICON_STROKE_WIDTH,
+                    line_cap: tiny_skia::LineCap::Round,
+                    line_join: tiny_skia::LineJoin::Round,
+                    ..Stroke::default()
+                };
 
-        let cx = self.size.width / 2.0;
-        let cy = self.size.height / 2.0;
+                let cx = self.size.width / 2.0;
+                let cy = self.size.height / 2.0;
 
-        let path = match self.variant {
-            CalloutVariant::Info => svg_icon_path!("lucide/info", ICON_SIZE, cx, cy),
-            CalloutVariant::Success => svg_icon_path!("lucide/circle-check", ICON_SIZE, cx, cy),
-            CalloutVariant::Warning => svg_icon_path!("lucide/circle-alert", ICON_SIZE, cx, cy),
-            CalloutVariant::Danger => svg_icon_path!("lucide/triangle-alert", ICON_SIZE, cx, cy),
-        };
+                let path = match self.variant {
+                    CalloutVariant::Info => svg_icon_path!("lucide/info", ICON_SIZE, cx, cy),
+                    CalloutVariant::Success => {
+                        svg_icon_path!("lucide/circle-check", ICON_SIZE, cx, cy)
+                    }
+                    CalloutVariant::Warning => {
+                        svg_icon_path!("lucide/circle-alert", ICON_SIZE, cx, cy)
+                    }
+                    CalloutVariant::Danger => {
+                        svg_icon_path!("lucide/triangle-alert", ICON_SIZE, cx, cy)
+                    }
+                };
 
-        if let Some(path) = path {
-            pixmap.stroke_path(&path, &icon_paint, &icon_stroke, transform, None);
+                if let Some(path) = path {
+                    pixmap.stroke_path(&path, &icon_paint, &icon_stroke, transform, None);
+                }
+            }
+            _ => {}
         }
     }
 }
