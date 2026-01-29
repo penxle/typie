@@ -114,6 +114,12 @@ pub(crate) fn end_boundary_node(doc: &Doc, pos: Position) -> Result<Option<NodeI
 
         let target_block = if child_is_inline { block_id } else { child_id };
 
+        if !child_is_inline && local_offset > 0 {
+            let mut traverser = BlockTraverser::new_after_subtree(doc, target_block)
+                .context("end_boundary_node: Traverser init failed")?;
+            return Ok(traverser.next());
+        }
+
         let mut traverser = BlockTraverser::new(doc, target_block)
             .context("end_boundary_node: Traverser init failed")?;
         return Ok(traverser.next());
@@ -949,19 +955,22 @@ mod tests {
 
         let fold_title_decor = decorations.iter().find(|d| d.node_id() == n2);
         assert!(
-            fold_title_decor.is_some(),
-            "FoldTitle should have a selection decoration"
+            fold_title_decor.is_none(),
+            "FoldTitle should NOT have a separate decoration when Fold is selected"
         );
-        assert_eq!(fold_title_decor.unwrap().start_offset(), 0);
-        assert_eq!(fold_title_decor.unwrap().end_offset(), 1);
 
-        let fold_content_decor = decorations.iter().find(|d| d.node_id() == n3);
+        let fold_decor = decorations
+            .iter()
+            .find(|d| matches!(d, SelectionDecor::Fold { .. }));
+        assert!(fold_decor.is_some(), "Fold should have a Fold decoration");
+
+        let para_3_decor = decorations.iter().find(|d| d.node_id() == n3);
         assert!(
-            fold_content_decor.is_some(),
-            "FoldContent should have a selection decoration"
+            para_3_decor.is_some(),
+            "Paragraph 3 should have a selection decoration"
         );
-        assert_eq!(fold_content_decor.unwrap().start_offset(), 0);
-        assert_eq!(fold_content_decor.unwrap().end_offset(), 1);
+        assert_eq!(para_3_decor.unwrap().start_offset(), 0);
+        assert_eq!(para_3_decor.unwrap().end_offset(), 1);
     }
 
     #[test]
@@ -1297,6 +1306,50 @@ mod tests {
         assert!(
             !blocks.contains(&outer_fold),
             "Outer Fold SHOULD NOT be collected"
+        );
+    }
+
+    #[test]
+    fn test_reproduce_fold_list_selection_bug() {
+        let mut n1 = id!();
+        let mut p_nested = id!();
+        let mut p_first = id!();
+
+        let state = state! {
+            doc {
+                fold {
+                    fold_title {}
+                    @n1 fold_content {
+                        @p_first paragraph {
+                            text { "1" }
+                        }
+                        bullet_list {
+                            list_item {
+                                @p_nested paragraph {
+                                    text { "2" }
+                                }
+                            }
+                        }
+                    }
+                }
+                paragraph {}
+            }
+            selection { (n1, 0) -> (n1, 2) }
+        };
+
+        let decorations = build_selection_decorations(&state.doc, &state.selection, None);
+
+        let p_first_decor = decorations.iter().find(|d| d.node_id() == p_first);
+        assert!(
+            p_first_decor.is_some(),
+            "First paragraph should have decoration"
+        );
+
+        let p_nested_decor = decorations.iter().find(|d| d.node_id() == p_nested);
+        assert!(
+            p_nested_decor.is_some(),
+            "Nested paragraph in list should have decoration, but found: {:?}",
+            decorations
         );
     }
 }
