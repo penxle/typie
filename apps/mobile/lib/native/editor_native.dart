@@ -5,7 +5,7 @@ import 'dart:io';
 import 'package:ffi/ffi.dart';
 import 'package:flutter/foundation.dart';
 
-import 'editor_bindings.dart' as ffi;
+import 'editor_bindings.dart';
 
 const _logLevelDebug = 0;
 const _logLevelInfo = 1;
@@ -27,6 +27,7 @@ void _nativeLogCallback(int level, Pointer<Char> messagePtr) {
   debugPrint('$prefix $message');
 }
 
+late EditorBindings _bindings;
 bool _initialized = false;
 
 void _ensureInitialized() {
@@ -35,12 +36,19 @@ void _ensureInitialized() {
   }
   _initialized = true;
 
+  final DynamicLibrary dylib;
   if (Platform.isAndroid) {
-    DynamicLibrary.open('libeditor.so');
+    dylib = DynamicLibrary.open('libeditor.so');
+  } else if (Platform.isIOS) {
+    dylib = DynamicLibrary.process();
+  } else {
+    throw UnsupportedError('Unsupported platform: ${Platform.operatingSystem}');
   }
 
+  _bindings = EditorBindings(dylib);
+
   final callbackPtr = Pointer.fromFunction<_LogCallbackFunc>(_nativeLogCallback);
-  ffi.editor_set_log_callback(callbackPtr);
+  _bindings.editor_set_log_callback(callbackPtr);
 }
 
 final class EditorException implements Exception {
@@ -53,40 +61,41 @@ final class EditorException implements Exception {
 }
 
 String? _getLastError() {
-  final ptr = ffi.editor_get_last_error();
+  final ptr = _bindings.editor_get_last_error();
   if (ptr == nullptr) {
     return null;
   }
 
   final error = ptr.cast<Utf8>().toDartString();
-  ffi.editor_free_string(ptr);
-  ffi.editor_clear_last_error();
+  _bindings
+    ..editor_free_string(ptr)
+    ..editor_clear_last_error();
   return error;
 }
 
 class NativeEditorApplication {
   NativeEditorApplication() : _handle = _createHandle();
 
-  static Pointer<ffi.EditorApplication> _createHandle() {
+  static Pointer<EditorApplication> _createHandle() {
     _ensureInitialized();
-    final handle = ffi.editor_application_new();
+    final handle = _bindings.editor_application_new();
     if (handle == nullptr) {
       throw EditorException(_getLastError() ?? 'Failed to create EditorApplication');
     }
     return handle;
   }
 
-  final Pointer<ffi.EditorApplication> _handle;
+  final Pointer<EditorApplication> _handle;
   bool _disposed = false;
 
   void loadIcuData(Uint8List data) {
     _checkDisposed();
 
-    final ptr = ffi.editor_alloc(data.length);
+    final ptr = _bindings.editor_alloc(data.length);
     ptr.asTypedList(data.length).setAll(0, data);
 
-    final result = ffi.editor_application_load_icu_data(_handle, ptr, data.length);
-    ffi.editor_free(ptr, data.length, data.length);
+    final result = _bindings.editor_application_load_icu_data(_handle, ptr, data.length);
+    _bindings.editor_free(ptr, data.length, data.length);
 
     if (result != 0) {
       throw EditorException(_getLastError() ?? 'Failed to load ICU data');
@@ -97,13 +106,13 @@ class NativeEditorApplication {
     _checkDisposed();
 
     final namePtr = name.toNativeUtf8();
-    final dataPtr = ffi.editor_alloc(data.length);
+    final dataPtr = _bindings.editor_alloc(data.length);
     dataPtr.asTypedList(data.length).setAll(0, data);
 
-    final result = ffi.editor_application_register_font(_handle, namePtr.cast(), weight, dataPtr, data.length);
+    final result = _bindings.editor_application_register_font(_handle, namePtr.cast(), weight, dataPtr, data.length);
 
     calloc.free(namePtr);
-    ffi.editor_free(dataPtr, data.length, data.length);
+    _bindings.editor_free(dataPtr, data.length, data.length);
 
     if (result != 0) {
       throw EditorException(_getLastError() ?? 'Failed to register font');
@@ -116,7 +125,7 @@ class NativeEditorApplication {
     final json = jsonEncode(fonts);
     final jsonPtr = json.toNativeUtf8();
 
-    final result = ffi.editor_application_set_available_fonts(_handle, jsonPtr.cast());
+    final result = _bindings.editor_application_set_available_fonts(_handle, jsonPtr.cast());
 
     calloc.free(jsonPtr);
 
@@ -129,16 +138,16 @@ class NativeEditorApplication {
     _checkDisposed();
 
     final snapshotLen = snapshot?.length ?? 0;
-    final snapshotPtr = snapshot != null ? ffi.editor_alloc(snapshotLen) : nullptr;
+    final snapshotPtr = snapshot != null ? _bindings.editor_alloc(snapshotLen) : nullptr;
 
     if (snapshot != null) {
       snapshotPtr.asTypedList(snapshotLen).setAll(0, snapshot);
     }
 
-    final editorHandle = ffi.editor_application_create_editor(_handle, scaleFactor, snapshotPtr, snapshotLen);
+    final editorHandle = _bindings.editor_application_create_editor(_handle, scaleFactor, snapshotPtr, snapshotLen);
 
     if (snapshot != null) {
-      ffi.editor_free(snapshotPtr, snapshotLen, snapshotLen);
+      _bindings.editor_free(snapshotPtr, snapshotLen, snapshotLen);
     }
 
     if (editorHandle == nullptr) {
@@ -150,7 +159,7 @@ class NativeEditorApplication {
 
   void dispose() {
     if (!_disposed) {
-      ffi.editor_application_free(_handle);
+      _bindings.editor_application_free(_handle);
       _disposed = true;
     }
   }
@@ -173,7 +182,7 @@ final class NativeEditorRenderResult {
 final class NativeEditor {
   NativeEditor._(this._handle);
 
-  final Pointer<ffi.EditorHandle> _handle;
+  final Pointer<EditorHandle> _handle;
   bool _disposed = false;
 
   bool get isDisposed => _disposed;
@@ -184,7 +193,7 @@ final class NativeEditor {
     final json = jsonEncode(message);
     final jsonPtr = json.toNativeUtf8();
 
-    final result = ffi.editor_dispatch(_handle, jsonPtr.cast());
+    final result = _bindings.editor_dispatch(_handle, jsonPtr.cast());
 
     calloc.free(jsonPtr);
 
@@ -196,7 +205,7 @@ final class NativeEditor {
   List<dynamic>? tick() {
     _checkDisposed();
 
-    final ptr = ffi.editor_tick(_handle);
+    final ptr = _bindings.editor_tick(_handle);
     if (ptr == nullptr) {
       final error = _getLastError();
       if (error != null) {
@@ -206,7 +215,7 @@ final class NativeEditor {
     }
 
     final json = ptr.cast<Utf8>().toDartString();
-    ffi.editor_free_string(ptr);
+    _bindings.editor_free_string(ptr);
 
     final result = jsonDecode(json) as List<dynamic>;
     return result.isEmpty ? null : result;
@@ -214,20 +223,20 @@ final class NativeEditor {
 
   void flush() {
     _checkDisposed();
-    ffi.editor_flush(_handle);
+    _bindings.editor_flush(_handle);
   }
 
   int getPageCount() {
     _checkDisposed();
-    return ffi.editor_get_page_count(_handle);
+    return _bindings.editor_get_page_count(_handle);
   }
 
   NativeEditorRenderResult renderPage(int pageIndex) {
     _checkDisposed();
 
-    final resultPtr = calloc<ffi.RenderResult>();
+    final resultPtr = calloc<RenderResult>();
     try {
-      final status = ffi.editor_render_page(_handle, pageIndex, resultPtr);
+      final status = _bindings.editor_render_page(_handle, pageIndex, resultPtr);
       if (status != 0) {
         throw EditorException(_getLastError() ?? 'Failed to render page $pageIndex');
       }
@@ -244,7 +253,7 @@ final class NativeEditor {
 
   void dispose() {
     if (!_disposed) {
-      ffi.editor_handle_free(_handle);
+      _bindings.editor_handle_free(_handle);
       _disposed = true;
     }
   }
