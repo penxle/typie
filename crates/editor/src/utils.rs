@@ -92,6 +92,23 @@ pub fn compute_word_boundaries(text: &str) -> Vec<usize> {
         .collect()
 }
 
+pub fn compute_sentence_boundaries(text: &str) -> Vec<usize> {
+    use icu_provider::buf::AsDeserializingBufferProvider;
+    use icu_segmenter::SentenceSegmenter;
+
+    let provider = crate::icu_data::get_icu_provider();
+    let deserializing_provider = provider.as_deserializing();
+    let segmenter =
+        SentenceSegmenter::try_new_unstable(&deserializing_provider, Default::default())
+            .expect("Failed to create SentenceSegmenter");
+
+    segmenter
+        .as_borrowed()
+        .segment_str(text)
+        .map(|byte_offset| byte_to_char_offset(text, byte_offset))
+        .collect()
+}
+
 pub fn compute_grapheme_boundaries(text: &str) -> Vec<usize> {
     use icu_provider::buf::AsDeserializingBufferProvider;
     use icu_segmenter::GraphemeClusterSegmenter;

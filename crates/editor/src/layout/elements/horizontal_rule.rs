@@ -127,6 +127,24 @@ impl CursorNavigable for HorizontalRuleElement {
         })
     }
 
+    fn navigate_sentence_up(
+        &self,
+        ctx: &NavigationContext,
+        position: Position,
+        preferred_y: f32,
+    ) -> Option<CursorNavigation> {
+        self.navigate_left(ctx, position, preferred_y)
+    }
+
+    fn navigate_sentence_down(
+        &self,
+        ctx: &NavigationContext,
+        position: Position,
+        preferred_y: f32,
+    ) -> Option<CursorNavigation> {
+        self.navigate_right(ctx, position, preferred_y)
+    }
+
     fn navigate_to_start(
         &self,
         ctx: &NavigationContext,

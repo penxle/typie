@@ -45,6 +45,8 @@ pub enum Direction {
     DocumentEnd,
     PageUp,
     PageDown,
+    SentenceUp,
+    SentenceDown,
 }
 
 macro_rules! define_messages {
