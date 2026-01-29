@@ -218,6 +218,7 @@ pub fn build_selection_decorations(
         to,
         &structure_selection_info,
         &block_id_set,
+        &processed_structural_nodes,
         &mut decorations,
     );
 
@@ -253,6 +254,14 @@ fn collect_structure_decorations(
         }
         StructureSelectionInfo::Structural(block_ids) => {
             for &block_id in block_ids {
+                if should_skip_block_decoration(
+                    doc,
+                    doc.node(block_id).unwrap(),
+                    processed_structural_nodes,
+                ) {
+                    continue;
+                }
+
                 if let Some(node) = doc.node(block_id) {
                     if matches!(node.node(), Node::Table(_)) {
                         for row in node.children() {
@@ -301,6 +310,7 @@ fn add_ancestor_decorations(
     to: Position,
     structure_selection: &StructureSelectionInfo,
     processed_blocks: &FxHashSet<NodeId>,
+    processed_structural_nodes: &FxHashSet<NodeId>,
     decorations: &mut Vec<SelectionDecor>,
 ) {
     let Some(from_node) = doc.node(from.node_id) else {
@@ -318,7 +328,9 @@ fn add_ancestor_decorations(
         .collect();
 
     for (from_idx, &ancestor_id) in from_path.iter().enumerate() {
-        if processed_blocks.contains(&ancestor_id) {
+        if processed_blocks.contains(&ancestor_id)
+            || processed_structural_nodes.contains(&ancestor_id)
+        {
             continue;
         }
 

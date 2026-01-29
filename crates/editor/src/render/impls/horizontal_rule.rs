@@ -1,6 +1,6 @@
 use crate::layout::elements::HorizontalRuleElement;
 use crate::model::HorizontalRuleVariant;
-use crate::render::{GlyphRenderer, Render, RenderContext};
+use crate::render::{GlyphRenderer, Render, RenderContext, RenderPhase};
 use crate::state::position_helpers::calculate_offset_before_child;
 use tiny_skia::{Paint, PathBuilder, PixmapMut, Rect, Stroke, Transform};
 
@@ -17,70 +17,74 @@ impl Render for HorizontalRuleElement {
         transform: Transform,
         ctx: &RenderContext,
     ) {
-        self.render_selection(pixmap, transform, ctx);
+        let is_selected = if let Some(selection) = ctx
+            .selections
+            .iter()
+            .find(|sel| sel.node_id() == self.parent_id)
+        {
+            if let Some(parent) = ctx.doc.node(self.parent_id) {
+                let offset = calculate_offset_before_child(&parent, self.node_id);
+                selection.start_offset() <= offset && offset < selection.end_offset()
+            } else {
+                false
+            }
+        } else {
+            false
+        };
 
-        let paint = Self::paint(ctx);
+        match ctx.phase {
+            RenderPhase::Background => {
+                let color = ctx.theme.color("ui.text.default");
+                let mut paint = Paint::default();
+                paint.set_color(color);
+                paint.anti_alias = true;
 
-        match self.variant {
-            HorizontalRuleVariant::Line => self.render_line(pixmap, transform, &paint),
-            HorizontalRuleVariant::DashedLine => self.render_dashed_line(pixmap, transform, &paint),
-            HorizontalRuleVariant::CircleLine => self.render_circle_line(pixmap, transform, &paint),
-            HorizontalRuleVariant::DiamondLine => {
-                self.render_diamond_line(pixmap, transform, &paint)
+                match self.variant {
+                    HorizontalRuleVariant::Line => self.render_line(pixmap, transform, &paint),
+                    HorizontalRuleVariant::DashedLine => {
+                        self.render_dashed_line(pixmap, transform, &paint)
+                    }
+                    HorizontalRuleVariant::CircleLine => {
+                        self.render_circle_line(pixmap, transform, &paint)
+                    }
+                    HorizontalRuleVariant::DiamondLine => {
+                        self.render_diamond_line(pixmap, transform, &paint)
+                    }
+                    HorizontalRuleVariant::Circle => self.render_circle(pixmap, transform, &paint),
+                    HorizontalRuleVariant::Diamond => {
+                        self.render_diamond(pixmap, transform, &paint)
+                    }
+                    HorizontalRuleVariant::ThreeCircles => {
+                        self.render_three_circles(pixmap, transform, &paint)
+                    }
+                    HorizontalRuleVariant::ThreeDiamonds => {
+                        self.render_three_diamonds(pixmap, transform, &paint)
+                    }
+                    HorizontalRuleVariant::Zigzag => self.render_zigzag(pixmap, transform, &paint),
+                }
             }
-            HorizontalRuleVariant::Circle => self.render_circle(pixmap, transform, &paint),
-            HorizontalRuleVariant::Diamond => self.render_diamond(pixmap, transform, &paint),
-            HorizontalRuleVariant::ThreeCircles => {
-                self.render_three_circles(pixmap, transform, &paint)
+            RenderPhase::Selection => {
+                if is_selected {
+                    let color = if ctx.is_focused {
+                        ctx.theme.color_with_alpha("selection", 77)
+                    } else {
+                        ctx.theme.color_with_alpha("ui.surface.dark", 32)
+                    };
+                    let mut paint = Paint::default();
+                    paint.set_color(color);
+
+                    if let Some(rect) = Rect::from_xywh(0.0, 0.0, self.size.width, self.size.height)
+                    {
+                        pixmap.fill_rect(rect, &paint, transform, None);
+                    }
+                }
             }
-            HorizontalRuleVariant::ThreeDiamonds => {
-                self.render_three_diamonds(pixmap, transform, &paint)
-            }
-            HorizontalRuleVariant::Zigzag => self.render_zigzag(pixmap, transform, &paint),
+            RenderPhase::Content => {}
         }
     }
 }
 
 impl HorizontalRuleElement {
-    fn paint(ctx: &RenderContext) -> Paint<'static> {
-        let color = ctx.theme.color("ui.text.default");
-        let mut paint = Paint::default();
-        paint.set_color(color);
-        paint.anti_alias = true;
-        paint
-    }
-
-    fn is_selected(&self, ctx: &RenderContext) -> bool {
-        let Some(selection) = ctx
-            .selections
-            .iter()
-            .find(|sel| sel.node_id() == self.parent_id)
-        else {
-            return false;
-        };
-
-        let Some(parent) = ctx.doc.node(self.parent_id) else {
-            return false;
-        };
-
-        let offset = calculate_offset_before_child(&parent, self.node_id);
-        selection.start_offset() <= offset && offset < selection.end_offset()
-    }
-
-    fn render_selection(&self, pixmap: &mut PixmapMut, transform: Transform, ctx: &RenderContext) {
-        if !self.is_selected(ctx) {
-            return;
-        }
-
-        let color = ctx.theme.color_with_alpha("selection", 77);
-        let mut paint = Paint::default();
-        paint.set_color(color);
-
-        if let Some(rect) = Rect::from_xywh(0.0, 0.0, self.size.width, self.size.height) {
-            pixmap.fill_rect(rect, &paint, transform, None);
-        }
-    }
-
     fn center(&self) -> (f32, f32) {
         (self.size.width / 2.0, self.size.height / 2.0)
     }

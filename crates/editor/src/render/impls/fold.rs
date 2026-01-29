@@ -1,6 +1,6 @@
 use crate::layout::elements::{FoldContentElement, FoldTitleBackgroundElement, FoldTitleElement};
 use crate::model::{FOLD_BORDER_RADIUS, FOLD_BORDER_WIDTH};
-use crate::render::{GlyphRenderer, Render, RenderContext};
+use crate::render::{GlyphRenderer, Render, RenderContext, RenderPhase};
 use macros::svg_icon_path;
 use tiny_skia::{Paint, Path, PathBuilder, PixmapMut, Stroke, Transform};
 
@@ -15,6 +15,10 @@ impl Render for FoldTitleElement {
         transform: Transform,
         ctx: &RenderContext,
     ) {
+        if ctx.phase != RenderPhase::Content {
+            return;
+        }
+
         let color = ctx.theme.color("ui.text.subtle");
         let mut paint = Paint::default();
         paint.set_color(color);
@@ -50,12 +54,7 @@ impl Render for FoldTitleBackgroundElement {
         transform: Transform,
         ctx: &RenderContext,
     ) {
-        let mut paint = Paint::default();
-        paint.set_color(ctx.theme.color("ui.surface.subtle"));
-        paint.anti_alias = true;
-
         let inner_radius = (FOLD_BORDER_RADIUS - FOLD_BORDER_WIDTH).max(0.0);
-
         let (top_left_radius, top_right_radius, bottom_right_radius, bottom_left_radius) =
             if self.expanded {
                 (inner_radius, inner_radius, 0.0, 0.0)
@@ -63,7 +62,7 @@ impl Render for FoldTitleBackgroundElement {
                 (inner_radius, inner_radius, inner_radius, inner_radius)
             };
 
-        if let Some(path) = build_rounded_rect(
+        let path = build_rounded_rect(
             0.0,
             0.0,
             self.size.width,
@@ -72,86 +71,93 @@ impl Render for FoldTitleBackgroundElement {
             top_right_radius,
             bottom_right_radius,
             bottom_left_radius,
-        ) {
-            pixmap.fill_path(&path, &paint, tiny_skia::FillRule::Winding, transform, None);
+        );
 
-            let is_selected = ctx.selections.iter().any(|s| {
-                if let crate::model::SelectionDecor::Fold { node_id } = s {
-                    *node_id == self.fold_id
-                } else {
-                    false
+        match ctx.phase {
+            RenderPhase::Background => {
+                if let Some(ref path) = path {
+                    let mut paint = Paint::default();
+                    paint.set_color(ctx.theme.color("ui.surface.subtle"));
+                    paint.anti_alias = true;
+                    pixmap.fill_path(&path, &paint, tiny_skia::FillRule::Winding, transform, None);
                 }
-            });
 
-            if is_selected {
-                let color = if ctx.is_focused {
-                    ctx.theme.color_with_alpha("selection", 77)
-                } else {
-                    ctx.theme.color_with_alpha("ui.surface.dark", 32)
+                let mut border_paint = Paint::default();
+                border_paint.set_color(ctx.theme.color("ui.border.default"));
+                border_paint.anti_alias = true;
+                let stroke = Stroke {
+                    width: FOLD_BORDER_WIDTH,
+                    ..Stroke::default()
                 };
-                let mut sel_paint = Paint::default();
-                sel_paint.set_color(color);
-                pixmap.fill_path(
-                    &path,
-                    &sel_paint,
-                    tiny_skia::FillRule::Winding,
-                    transform,
-                    None,
-                );
+
+                if !self.expanded {
+                    if let Some(ref path) = build_rounded_rect(
+                        FOLD_BORDER_WIDTH / 2.0,
+                        FOLD_BORDER_WIDTH / 2.0,
+                        self.size.width - FOLD_BORDER_WIDTH,
+                        self.size.height - FOLD_BORDER_WIDTH,
+                        top_left_radius,
+                        top_right_radius,
+                        bottom_right_radius,
+                        bottom_left_radius,
+                    ) {
+                        pixmap.stroke_path(&path, &border_paint, &stroke, transform, None);
+                    }
+                } else {
+                    let mut pb = PathBuilder::new();
+                    pb.move_to(FOLD_BORDER_WIDTH / 2.0, self.size.height);
+                    pb.line_to(FOLD_BORDER_WIDTH / 2.0, FOLD_BORDER_RADIUS);
+                    pb.quad_to(
+                        FOLD_BORDER_WIDTH / 2.0,
+                        FOLD_BORDER_WIDTH / 2.0,
+                        FOLD_BORDER_RADIUS,
+                        FOLD_BORDER_WIDTH / 2.0,
+                    );
+                    pb.line_to(
+                        self.size.width - FOLD_BORDER_RADIUS,
+                        FOLD_BORDER_WIDTH / 2.0,
+                    );
+                    pb.quad_to(
+                        self.size.width - FOLD_BORDER_WIDTH / 2.0,
+                        FOLD_BORDER_WIDTH / 2.0,
+                        self.size.width - FOLD_BORDER_WIDTH / 2.0,
+                        FOLD_BORDER_RADIUS,
+                    );
+                    pb.line_to(self.size.width - FOLD_BORDER_WIDTH / 2.0, self.size.height);
+                    if let Some(path) = pb.finish() {
+                        pixmap.stroke_path(&path, &border_paint, &stroke, transform, None);
+                    }
+                }
             }
-        }
+            RenderPhase::Selection => {
+                let is_selected = ctx.selections.iter().any(|s| {
+                    if let crate::model::SelectionDecor::Fold { node_id } = s {
+                        *node_id == self.fold_id
+                    } else {
+                        false
+                    }
+                });
 
-        let mut border_paint = Paint::default();
-        border_paint.set_color(ctx.theme.color("ui.border.default"));
-        border_paint.anti_alias = true;
-
-        let stroke = Stroke {
-            width: FOLD_BORDER_WIDTH,
-            ..Stroke::default()
-        };
-
-        let mut pb = PathBuilder::new();
-        pb.move_to(0.0 + FOLD_BORDER_WIDTH / 2.0, self.size.height);
-        pb.line_to(0.0 + FOLD_BORDER_WIDTH / 2.0, FOLD_BORDER_RADIUS);
-        pb.quad_to(
-            0.0 + FOLD_BORDER_WIDTH / 2.0,
-            0.0 + FOLD_BORDER_WIDTH / 2.0,
-            FOLD_BORDER_RADIUS,
-            0.0 + FOLD_BORDER_WIDTH / 2.0,
-        );
-        pb.line_to(
-            self.size.width - FOLD_BORDER_RADIUS,
-            0.0 + FOLD_BORDER_WIDTH / 2.0,
-        );
-        pb.quad_to(
-            self.size.width - FOLD_BORDER_WIDTH / 2.0,
-            0.0 + FOLD_BORDER_WIDTH / 2.0,
-            self.size.width - FOLD_BORDER_WIDTH / 2.0,
-            FOLD_BORDER_RADIUS,
-        );
-        pb.line_to(self.size.width - FOLD_BORDER_WIDTH / 2.0, self.size.height);
-
-        if !self.expanded {
-            pb.line_to(0.0 + FOLD_BORDER_WIDTH / 2.0, self.size.height);
-        }
-
-        if !self.expanded {
-            if let Some(path) = build_rounded_rect(
-                FOLD_BORDER_WIDTH / 2.0,
-                FOLD_BORDER_WIDTH / 2.0,
-                self.size.width - FOLD_BORDER_WIDTH,
-                self.size.height - FOLD_BORDER_WIDTH,
-                top_left_radius,
-                top_right_radius,
-                bottom_right_radius,
-                bottom_left_radius,
-            ) {
-                pixmap.stroke_path(&path, &border_paint, &stroke, transform, None);
+                if is_selected {
+                    if let Some(ref path) = path {
+                        let color = if ctx.is_focused {
+                            ctx.theme.color_with_alpha("selection", 77)
+                        } else {
+                            ctx.theme.color_with_alpha("ui.surface.dark", 32)
+                        };
+                        let mut sel_paint = Paint::default();
+                        sel_paint.set_color(color);
+                        pixmap.fill_path(
+                            &path,
+                            &sel_paint,
+                            tiny_skia::FillRule::Winding,
+                            transform,
+                            None,
+                        );
+                    }
+                }
             }
-        } else {
-            if let Some(path) = pb.finish() {
-                pixmap.stroke_path(&path, &border_paint, &stroke, transform, None);
-            }
+            RenderPhase::Content => {}
         }
     }
 }
@@ -164,111 +170,116 @@ impl Render for FoldContentElement {
         transform: Transform,
         ctx: &RenderContext,
     ) {
-        let mut paint = Paint::default();
-        paint.set_color(ctx.theme.color("ui.border.default"));
-        paint.anti_alias = true;
-
-        let stroke = Stroke {
-            width: FOLD_BORDER_WIDTH,
-            ..Stroke::default()
-        };
+        use crate::render::RenderPhase;
 
         let mb = FOLD_BORDER_WIDTH / 2.0;
-        let mut pb = PathBuilder::new();
 
-        if self.split_edges.top && self.split_edges.bottom {
-            pb.move_to(mb, 0.0);
-            pb.line_to(mb, self.size.height);
-            pb.move_to(self.size.width - mb, 0.0);
-            pb.line_to(self.size.width - mb, self.size.height);
-        } else if self.split_edges.bottom {
-            pb.move_to(mb, 0.0);
-            pb.line_to(mb, self.size.height);
-            pb.move_to(self.size.width - mb, 0.0);
-            pb.line_to(self.size.width - mb, self.size.height);
-        } else {
-            pb.move_to(mb, 0.0);
-            pb.line_to(mb, self.size.height - FOLD_BORDER_RADIUS);
-            pb.quad_to(
-                mb,
-                self.size.height - mb,
-                FOLD_BORDER_RADIUS,
-                self.size.height - mb,
-            );
-            pb.line_to(self.size.width - FOLD_BORDER_RADIUS, self.size.height - mb);
-            pb.quad_to(
-                self.size.width - mb,
-                self.size.height - mb,
-                self.size.width - mb,
-                self.size.height - FOLD_BORDER_RADIUS,
-            );
-            pb.line_to(self.size.width - mb, 0.0);
-        }
+        match ctx.phase {
+            RenderPhase::Background => {
+                let mut paint = Paint::default();
+                paint.set_color(ctx.theme.color("ui.border.default"));
+                paint.anti_alias = true;
+                let stroke = Stroke {
+                    width: FOLD_BORDER_WIDTH,
+                    ..Stroke::default()
+                };
 
-        let is_selected = ctx.selections.iter().any(|s| {
-            if let crate::model::SelectionDecor::Fold { node_id } = s {
-                *node_id == self.fold_id
-            } else {
-                false
+                let mut pb = PathBuilder::new();
+                if self.split_edges.top && self.split_edges.bottom {
+                    pb.move_to(mb, 0.0);
+                    pb.line_to(mb, self.size.height);
+                    pb.move_to(self.size.width - mb, 0.0);
+                    pb.line_to(self.size.width - mb, self.size.height);
+                } else if self.split_edges.bottom {
+                    pb.move_to(mb, 0.0);
+                    pb.line_to(mb, self.size.height);
+                    pb.move_to(self.size.width - mb, 0.0);
+                    pb.line_to(self.size.width - mb, self.size.height);
+                } else {
+                    pb.move_to(mb, 0.0);
+                    pb.line_to(mb, self.size.height - FOLD_BORDER_RADIUS);
+                    pb.quad_to(
+                        mb,
+                        self.size.height - mb,
+                        FOLD_BORDER_RADIUS,
+                        self.size.height - mb,
+                    );
+                    pb.line_to(self.size.width - FOLD_BORDER_RADIUS, self.size.height - mb);
+                    pb.quad_to(
+                        self.size.width - mb,
+                        self.size.height - mb,
+                        self.size.width - mb,
+                        self.size.height - FOLD_BORDER_RADIUS,
+                    );
+                    pb.line_to(self.size.width - mb, 0.0);
+                }
+
+                if let Some(path) = pb.finish() {
+                    pixmap.stroke_path(&path, &paint, &stroke, transform, None);
+                }
             }
-        });
+            RenderPhase::Selection => {
+                let is_selected = ctx.selections.iter().any(|s| {
+                    if let crate::model::SelectionDecor::Fold { node_id } = s {
+                        *node_id == self.fold_id
+                    } else {
+                        false
+                    }
+                });
 
-        if is_selected {
-            let color = if ctx.is_focused {
-                ctx.theme.color_with_alpha("selection", 77)
-            } else {
-                ctx.theme.color_with_alpha("ui.surface.dark", 32)
-            };
-            let mut sel_paint = Paint::default();
-            sel_paint.set_color(color);
+                if is_selected {
+                    let color = if ctx.is_focused {
+                        ctx.theme.color_with_alpha("selection", 77)
+                    } else {
+                        ctx.theme.color_with_alpha("ui.surface.dark", 32)
+                    };
+                    let mut sel_paint = Paint::default();
+                    sel_paint.set_color(color);
 
-            let mb = FOLD_BORDER_WIDTH / 2.0;
-            let mut pb = PathBuilder::new();
+                    let mut pb = PathBuilder::new();
+                    if self.split_edges.top && self.split_edges.bottom {
+                        pb.move_to(mb, 0.0);
+                        pb.line_to(mb, self.size.height);
+                        pb.line_to(self.size.width - mb, self.size.height);
+                        pb.line_to(self.size.width - mb, 0.0);
+                        pb.close();
+                    } else if self.split_edges.bottom {
+                        pb.move_to(mb, 0.0);
+                        pb.line_to(mb, self.size.height);
+                        pb.line_to(self.size.width - mb, self.size.height);
+                        pb.close();
+                    } else {
+                        pb.move_to(mb, 0.0);
+                        pb.line_to(mb, self.size.height - FOLD_BORDER_RADIUS);
+                        pb.quad_to(
+                            mb,
+                            self.size.height - mb,
+                            FOLD_BORDER_RADIUS,
+                            self.size.height - mb,
+                        );
+                        pb.line_to(self.size.width - FOLD_BORDER_RADIUS, self.size.height - mb);
+                        pb.quad_to(
+                            self.size.width - mb,
+                            self.size.height - mb,
+                            self.size.width - mb,
+                            self.size.height - FOLD_BORDER_RADIUS,
+                        );
+                        pb.line_to(self.size.width - mb, 0.0);
+                        pb.close();
+                    }
 
-            if self.split_edges.top && self.split_edges.bottom {
-                pb.move_to(mb, 0.0);
-                pb.line_to(mb, self.size.height);
-                pb.line_to(self.size.width - mb, self.size.height);
-                pb.line_to(self.size.width - mb, 0.0);
-                pb.close();
-            } else if self.split_edges.bottom {
-                pb.move_to(mb, 0.0);
-                pb.line_to(mb, self.size.height);
-                pb.line_to(self.size.width - mb, self.size.height);
-                pb.close();
-            } else {
-                pb.move_to(mb, 0.0);
-                pb.line_to(mb, self.size.height - FOLD_BORDER_RADIUS);
-                pb.quad_to(
-                    mb,
-                    self.size.height - mb,
-                    FOLD_BORDER_RADIUS,
-                    self.size.height - mb,
-                );
-                pb.line_to(self.size.width - FOLD_BORDER_RADIUS, self.size.height - mb);
-                pb.quad_to(
-                    self.size.width - mb,
-                    self.size.height - mb,
-                    self.size.width - mb,
-                    self.size.height - FOLD_BORDER_RADIUS,
-                );
-                pb.line_to(self.size.width - mb, 0.0);
-                pb.close();
+                    if let Some(path) = pb.finish() {
+                        pixmap.fill_path(
+                            &path,
+                            &sel_paint,
+                            tiny_skia::FillRule::Winding,
+                            transform,
+                            None,
+                        );
+                    }
+                }
             }
-
-            if let Some(path) = pb.finish() {
-                pixmap.fill_path(
-                    &path,
-                    &sel_paint,
-                    tiny_skia::FillRule::Winding,
-                    transform,
-                    None,
-                );
-            }
-        }
-
-        if let Some(path) = pb.finish() {
-            pixmap.stroke_path(&path, &paint, &stroke, transform, None);
+            RenderPhase::Content => {}
         }
     }
 }
