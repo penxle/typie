@@ -9,7 +9,6 @@ preamble: |
 comments:
   style: any
   length: full
-ffi-native:
 functions:
   include:
     - 'editor_.*'
