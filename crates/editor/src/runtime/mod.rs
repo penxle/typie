@@ -1105,7 +1105,10 @@ impl Runtime {
             crate::state::selection_helpers::compute_structure_selection(self.doc(), &selection);
 
         match cell_selection {
-            crate::state::selection_helpers::StructureSelectionInfo::Rectangular { table_id, range } => {
+            crate::state::selection_helpers::StructureSelectionInfo::Rectangular {
+                table_id,
+                range,
+            } => {
                 let Some(_table) = self.doc().node(table_id) else {
                     return position_in_selection(&self.state.doc, position, &selection);
                 };

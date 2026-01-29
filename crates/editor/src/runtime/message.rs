@@ -161,6 +161,10 @@ define_messages! {
         .and(When::key(ContextKey::InComposition))
     => handle(rt) { rt.handle_composition_end() },
 
+    CommitPreedit
+    => when When::key(ContextKey::CanEdit)
+    => handle(rt) { rt.handle_commit_preedit() },
+
     PointerDown {
         page_idx: usize,
         x: f32,

@@ -20,8 +20,34 @@ impl Transaction {
     }
 
     pub fn complete_preedit(&mut self) -> Result<bool> {
-        self.state.preedit = None;
-        self.state.pending_marks = None;
-        Ok(true)
+        if self.state.preedit.is_some() {
+            self.state.preedit = None;
+            self.state.pending_marks = None;
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+
+    pub fn commit_preedit(&mut self) -> Result<bool> {
+        if let Some(preedit) = self.state.preedit.take() {
+            let text = preedit.text.clone();
+            let marks = preedit.marks.clone();
+
+            self.set_selection(crate::state::Selection::collapsed(
+                crate::state::Position::new(
+                    preedit.node_id,
+                    preedit.offset,
+                    crate::types::Affinity::Downstream,
+                ),
+            ));
+
+            self.state.pending_marks = marks;
+            self.insert_text(&text)?;
+
+            Ok(true)
+        } else {
+            Ok(false)
+        }
     }
 }

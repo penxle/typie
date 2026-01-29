@@ -11,4 +11,8 @@ impl Runtime {
     pub(crate) fn handle_composition_end(&mut self) -> Vec<Effect> {
         self.transact(|tr| tr.complete_preedit())
     }
+
+    pub(crate) fn handle_commit_preedit(&mut self) -> Vec<Effect> {
+        self.transact(|tr| tr.commit_preedit())
+    }
 }
