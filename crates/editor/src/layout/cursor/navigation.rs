@@ -303,6 +303,63 @@ fn navigate_word(
     }
 }
 
+pub fn move_sentence_up(
+    ctx: &NavigationContext,
+    pages: &[Page],
+    position: Position,
+    preferred_y: f32,
+) -> Option<Selection> {
+    navigate_sentence(ctx, pages, position, preferred_y, SentenceDirection::Up)
+}
+
+pub fn move_sentence_down(
+    ctx: &NavigationContext,
+    pages: &[Page],
+    position: Position,
+    preferred_y: f32,
+) -> Option<Selection> {
+    navigate_sentence(ctx, pages, position, preferred_y, SentenceDirection::Down)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SentenceDirection {
+    Up,
+    Down,
+}
+
+fn navigate_sentence(
+    ctx: &NavigationContext,
+    pages: &[Page],
+    position: Position,
+    preferred_y: f32,
+    direction: SentenceDirection,
+) -> Option<Selection> {
+    let (_page_idx, _pos, element) = find_element_at_position(ctx, pages, &position)?;
+    let navigable = element.as_cursor_navigable()?;
+
+    let nav_result = match direction {
+        SentenceDirection::Up => navigable.navigate_sentence_up(ctx, position, preferred_y)?,
+        SentenceDirection::Down => navigable.navigate_sentence_down(ctx, position, preferred_y)?,
+    };
+
+    match nav_result {
+        CursorNavigation::Moved { selection } => Some(selection),
+        CursorNavigation::SoftWrap { .. } => None,
+        CursorNavigation::Exit { .. } => {
+            let step = match direction {
+                SentenceDirection::Up => move_up(ctx, pages, position, 1_000_000.0),
+                SentenceDirection::Down => move_down(ctx, pages, position, 0.0),
+            };
+
+            if let Some(sel) = step {
+                Some(sel)
+            } else {
+                Some(Selection::collapsed(position))
+            }
+        }
+    }
+}
+
 pub fn move_to_document_start(ctx: &NavigationContext, pages: &[Page]) -> Option<Selection> {
     for page in pages {
         if let Some((_, element)) = page.first_element() {

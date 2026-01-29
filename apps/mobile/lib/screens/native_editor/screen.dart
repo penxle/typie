@@ -526,12 +526,16 @@ Map<String, dynamic>? _getActionFromKeyEvent(KeyEvent event) {
   } else if (key == LogicalKeyboardKey.arrowUp || physical == PhysicalKeyboardKey.arrowUp) {
     if (defaultTargetPlatform == TargetPlatform.iOS && meta) {
       return _nav('documentStart', shift);
+    } else if (alt) {
+      return _nav('sentenceUp', shift);
     } else {
       return _nav('up', shift);
     }
   } else if (key == LogicalKeyboardKey.arrowDown || physical == PhysicalKeyboardKey.arrowDown) {
     if (defaultTargetPlatform == TargetPlatform.iOS && meta) {
       return _nav('documentEnd', shift);
+    } else if (alt) {
+      return _nav('sentenceDown', shift);
     } else {
       return _nav('down', shift);
     }

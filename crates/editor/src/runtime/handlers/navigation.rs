@@ -12,7 +12,10 @@ impl Runtime {
         direction: Direction,
         extend_selection: bool,
     ) -> Vec<Effect> {
-        let is_upward = matches!(direction, Direction::Up | Direction::PageUp);
+        let is_upward = matches!(
+            direction,
+            Direction::Up | Direction::PageUp | Direction::SentenceUp
+        );
 
         if is_upward && !extend_selection && self.is_at_document_start() {
             return vec![Effect::ExitedDocumentStart];
@@ -150,8 +153,10 @@ impl Runtime {
                         }
                     };
                     let (preferred_x, preferred_y) = match direction {
-                        Direction::Left | Direction::WordLeft => (rect.x, rect.y),
-                        Direction::Right | Direction::WordRight => {
+                        Direction::Left | Direction::WordLeft | Direction::SentenceUp => {
+                            (rect.x, rect.y)
+                        }
+                        Direction::Right | Direction::WordRight | Direction::SentenceDown => {
                             (rect.x + rect.width, rect.y + rect.height)
                         }
                         Direction::Up
@@ -193,6 +198,12 @@ impl Runtime {
                         Direction::WordRight => {
                             Cursor::move_word_right(ctx, pages, position, preferred_y)
                         }
+                        Direction::SentenceUp => {
+                            Cursor::move_sentence_up(ctx, pages, position, preferred_y)
+                        }
+                        Direction::SentenceDown => {
+                            Cursor::move_sentence_down(ctx, pages, position, preferred_y)
+                        }
                         Direction::DocumentStart | Direction::DocumentEnd => None,
                     }
                 }
@@ -208,6 +219,7 @@ impl Runtime {
             let (anchor, new_head) = match direction {
                 Direction::Up
                 | Direction::PageUp
+                | Direction::SentenceUp
                 | Direction::Left
                 | Direction::WordLeft
                 | Direction::LineStart
@@ -219,6 +231,7 @@ impl Runtime {
                 }
                 Direction::Down
                 | Direction::PageDown
+                | Direction::SentenceDown
                 | Direction::Right
                 | Direction::WordRight
                 | Direction::LineEnd
@@ -236,6 +249,7 @@ impl Runtime {
                 Direction::Left
                 | Direction::Up
                 | Direction::PageUp
+                | Direction::SentenceUp
                 | Direction::LineStart
                 | Direction::WordLeft
                 | Direction::DocumentStart => {
@@ -244,6 +258,7 @@ impl Runtime {
                 Direction::Right
                 | Direction::Down
                 | Direction::PageDown
+                | Direction::SentenceDown
                 | Direction::LineEnd
                 | Direction::WordRight
                 | Direction::DocumentEnd => {
@@ -802,5 +817,85 @@ mod tests {
         assert_eq!(selection.anchor.offset, 1);
         assert_eq!(selection.head.node_id, NodeId::ROOT);
         assert_eq!(selection.head.offset, 2);
+    }
+
+    #[test]
+    fn test_sentence_navigation_within_paragraph() {
+        let mut p1 = id!();
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p1 paragraph {
+                    text { "Sentence one. Sentence two. Sentence three." }
+                }
+            }
+            selection { (p1, 5) }
+        };
+
+        rt.layout();
+
+        rt.update(Message::Navigate {
+            direction: Direction::SentenceDown,
+            extend: false,
+        });
+        let selection = &rt.state().selection;
+        assert_eq!(selection.head.offset, 13); // After "Sentence one."
+
+        rt.update(Message::Navigate {
+            direction: Direction::SentenceDown,
+            extend: false,
+        });
+        let selection = &rt.state().selection;
+        assert_eq!(selection.head.offset, 27); // After "Sentence two."
+
+        rt.update(Message::Navigate {
+            direction: Direction::SentenceUp,
+            extend: false,
+        });
+        let selection = &rt.state().selection;
+        assert_eq!(selection.head.offset, 14); // Start of "Sentence two."
+
+        rt.update(Message::Navigate {
+            direction: Direction::SentenceUp,
+            extend: false,
+        });
+        let selection = &rt.state().selection;
+        assert_eq!(selection.head.offset, 0); // Start of "Sentence one."
+    }
+
+    #[test]
+    fn test_sentence_navigation_across_paragraphs() {
+        let mut p1 = id!();
+        let mut p2 = id!();
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p1 paragraph { text { "Sentence one." } }
+                @p2 paragraph { text { "Sentence two." } }
+            }
+            selection { (p1, 0) }
+        };
+
+        rt.layout();
+
+        rt.update(Message::Navigate {
+            direction: Direction::SentenceDown,
+            extend: false,
+        });
+        rt.update(Message::Navigate {
+            direction: Direction::SentenceDown,
+            extend: false,
+        });
+        let selection = &rt.state().selection;
+        assert_eq!(selection.head.node_id, p2);
+        assert_eq!(selection.head.offset, 0);
+
+        rt.update(Message::Navigate {
+            direction: Direction::SentenceUp,
+            extend: false,
+        });
+        let selection = &rt.state().selection;
+        assert_eq!(selection.head.node_id, p1);
+        assert_eq!(selection.head.offset, 13);
     }
 }

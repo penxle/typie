@@ -32,6 +32,8 @@ export const getActionFromKeyEvent = (e: KeyboardEvent): Message | null => {
     case 'ArrowUp': {
       if (IS_MAC && e.metaKey) {
         return nav('documentStart', e.shiftKey);
+      } else if (e.altKey) {
+        return nav('sentenceUp', e.shiftKey);
       } else {
         return nav('up', e.shiftKey);
       }
@@ -39,6 +41,8 @@ export const getActionFromKeyEvent = (e: KeyboardEvent): Message | null => {
     case 'ArrowDown': {
       if (IS_MAC && e.metaKey) {
         return nav('documentEnd', e.shiftKey);
+      } else if (e.altKey) {
+        return nav('sentenceDown', e.shiftKey);
       } else {
         return nav('down', e.shiftKey);
       }

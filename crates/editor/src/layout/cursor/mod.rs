@@ -130,6 +130,19 @@ pub trait CursorNavigable {
         position: Position,
     ) -> Option<CursorNavigation>;
 
+    fn navigate_sentence_up(
+        &self,
+        ctx: &NavigationContext,
+        position: Position,
+        preferred_y: f32,
+    ) -> Option<CursorNavigation>;
+    fn navigate_sentence_down(
+        &self,
+        ctx: &NavigationContext,
+        position: Position,
+        preferred_y: f32,
+    ) -> Option<CursorNavigation>;
+
     fn find_selection_at_point(&self, ctx: &NavigationContext, x: f32, y: f32)
     -> Option<Selection>;
     fn find_drag_target(&self, ctx: &NavigationContext, x: f32, y: f32) -> Option<Selection> {
@@ -258,6 +271,24 @@ impl Cursor {
         preferred_y: f32,
     ) -> Option<Selection> {
         navigation::move_word_right(ctx, pages, position, preferred_y)
+    }
+
+    pub fn move_sentence_up(
+        ctx: &NavigationContext,
+        pages: &[Page],
+        position: Position,
+        preferred_y: f32,
+    ) -> Option<Selection> {
+        navigation::move_sentence_up(ctx, pages, position, preferred_y)
+    }
+
+    pub fn move_sentence_down(
+        ctx: &NavigationContext,
+        pages: &[Page],
+        position: Position,
+        preferred_y: f32,
+    ) -> Option<Selection> {
+        navigation::move_sentence_down(ctx, pages, position, preferred_y)
     }
 
     pub fn move_to_document_start(ctx: &NavigationContext, pages: &[Page]) -> Option<Selection> {

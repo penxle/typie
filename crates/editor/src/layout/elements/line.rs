@@ -749,6 +749,121 @@ impl CursorNavigable for LineElement {
         })
     }
 
+    fn navigate_sentence_up(
+        &self,
+        _ctx: &NavigationContext,
+        position: Position,
+        _preferred_y: f32,
+    ) -> Option<CursorNavigation> {
+        let offset = self.position_to_offset(&position)?;
+
+        let exit = || {
+            let rect = self.cursor_bounds_internal(&position)?;
+            Some(CursorNavigation::Exit {
+                preferred_x: rect.x,
+                preferred_y: 0.0,
+            })
+        };
+
+        if self.is_empty {
+            return exit();
+        }
+
+        let mut boundaries = vec![0];
+        boundaries.extend(crate::utils::compute_sentence_boundaries(&self.text));
+
+        let idx = boundaries.partition_point(|&b| b < offset);
+        if idx == 0 {
+            // 첫 문장이면 이전 문단으로
+            return exit();
+        }
+
+        let mut target_idx = idx - 1;
+        if boundaries[target_idx] == offset {
+            if target_idx > 0 {
+                // 이전 문장의 시작으로 이동
+                target_idx -= 1;
+            } else {
+                // 첫 문장이면 이전 문단으로
+                return exit();
+            }
+        }
+        // else: 현재 문장의 시작으로 이동
+
+        let boundary = boundaries[target_idx];
+        let affinity = self.affinity_for_offset(boundary, Affinity::Downstream);
+
+        Some(CursorNavigation::Moved {
+            selection: Selection::collapsed(Position::new(self.block_id, boundary, affinity)),
+        })
+    }
+
+    fn navigate_sentence_down(
+        &self,
+        _ctx: &NavigationContext,
+        position: Position,
+        _preferred_y: f32,
+    ) -> Option<CursorNavigation> {
+        let offset = self.position_to_offset(&position)?;
+
+        let exit = || {
+            let rect = self.cursor_bounds_internal(&position)?;
+            Some(CursorNavigation::Exit {
+                preferred_x: rect.x,
+                preferred_y: self.size.height,
+            })
+        };
+
+        if self.is_empty {
+            return exit();
+        }
+
+        let boundaries = crate::utils::compute_sentence_boundaries(&self.text);
+        if boundaries.is_empty() {
+            return exit();
+        }
+
+        let idx = boundaries.partition_point(|&b| b <= offset);
+        if idx >= boundaries.len() {
+            // 마지막 문장이면 다음 문단으로
+            return exit();
+        }
+
+        let mut boundary_idx = idx;
+        let mut boundary = boundaries[boundary_idx];
+
+        // 뒤쪽 공백 제외한 문장 끝 위치 계산
+        let mut byte_offset = crate::utils::char_to_byte_offset(&self.text, boundary);
+        if byte_offset > self.text.len() {
+            return exit();
+        }
+        let mut trimmed_boundary = self.text[..byte_offset].trim_end().chars().count();
+
+        if trimmed_boundary <= offset {
+            if boundary_idx + 1 < boundaries.len() {
+                // 다음 문장의 끝으로 이동 (trimmed)
+                boundary_idx += 1;
+                boundary = boundaries[boundary_idx];
+                byte_offset = crate::utils::char_to_byte_offset(&self.text, boundary);
+                if byte_offset > self.text.len() {
+                    return exit();
+                }
+                trimmed_boundary = self.text[..byte_offset].trim_end().chars().count();
+            } else {
+                // 마지막 문장이면 다음 문단으로
+                return exit();
+            }
+        }
+        // else: 현재 문장의 끝으로 이동 (trimmed)
+
+        let final_boundary = trimmed_boundary;
+        let affinity = self.affinity_for_offset(final_boundary, Affinity::Upstream);
+
+        Some(CursorNavigation::Moved {
+            selection: Selection::collapsed(Position::new(self.block_id, final_boundary, affinity)),
+        })
+    }
+
     fn navigate_to_start(
         &self,
         _ctx: &NavigationContext,
