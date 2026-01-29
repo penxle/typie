@@ -3,7 +3,7 @@ use crate::layout::elements::blockquote::{
     BlockquoteLineElement, BlockquoteMessageElement, BlockquoteQuoteElement,
 };
 use crate::model::BlockquoteVariant;
-use crate::render::{GlyphRenderer, Render, RenderContext};
+use crate::render::{GlyphRenderer, Render, RenderContext, RenderPhase};
 use macros::svg_icon_path;
 use tiny_skia::{Paint, PathBuilder, PixmapMut, Rect, Transform};
 
@@ -19,16 +19,22 @@ impl Render for BlockquoteLineElement {
         transform: Transform,
         ctx: &RenderContext,
     ) {
-        let Some(rect) = Rect::from_xywh(0.0, 0.0, self.size.width, self.size.height) else {
-            return;
-        };
+        match ctx.phase {
+            RenderPhase::Content => {
+                let Some(rect) = Rect::from_xywh(0.0, 0.0, self.size.width, self.size.height)
+                else {
+                    return;
+                };
 
-        let color = ctx.theme.color("ui.border.default");
-        let mut paint = Paint::default();
-        paint.set_color(color);
-        paint.anti_alias = true;
+                let color = ctx.theme.color("ui.border.default");
+                let mut paint = Paint::default();
+                paint.set_color(color);
+                paint.anti_alias = true;
 
-        pixmap.fill_rect(rect, &paint, transform, None);
+                pixmap.fill_rect(rect, &paint, transform, None);
+            }
+            _ => {}
+        }
     }
 }
 
@@ -40,18 +46,23 @@ impl Render for BlockquoteQuoteElement {
         transform: Transform,
         ctx: &RenderContext,
     ) {
-        let color = ctx.theme.color("ui.text.muted");
-        let mut paint = Paint::default();
-        paint.set_color(color);
-        paint.anti_alias = true;
+        match ctx.phase {
+            RenderPhase::Content => {
+                let color = ctx.theme.color("ui.text.muted");
+                let mut paint = Paint::default();
+                paint.set_color(color);
+                paint.anti_alias = true;
 
-        let cx = self.size.width / 2.0;
-        let cy = self.size.height / 2.0;
+                let cx = self.size.width / 2.0;
+                let cy = self.size.height / 2.0;
 
-        let path = svg_icon_path!("typie/blockquote-quote", QUOTE_ICON_SIZE, cx, cy);
+                let path = svg_icon_path!("typie/blockquote-quote", QUOTE_ICON_SIZE, cx, cy);
 
-        if let Some(path) = path {
-            pixmap.fill_path(&path, &paint, tiny_skia::FillRule::Winding, transform, None);
+                if let Some(path) = path {
+                    pixmap.fill_path(&path, &paint, tiny_skia::FillRule::Winding, transform, None);
+                }
+            }
+            _ => {}
         }
     }
 }
@@ -64,46 +75,53 @@ impl Render for BlockquoteMessageElement {
         transform: Transform,
         ctx: &RenderContext,
     ) {
-        let is_sent = matches!(self.variant, BlockquoteVariant::MessageSent);
-        let has_tail = !self.split_edges.bottom;
+        match ctx.phase {
+            RenderPhase::Background => {
+                let is_sent = matches!(self.variant, BlockquoteVariant::MessageSent);
+                let has_tail = !self.split_edges.bottom;
 
-        let bg_color = if is_sent {
-            ctx.theme.color("ui.blockquote.message-sent")
-        } else {
-            ctx.theme.color("ui.blockquote.message-received")
-        };
+                let bg_color = if is_sent {
+                    ctx.theme.color("ui.blockquote.message-sent")
+                } else {
+                    ctx.theme.color("ui.blockquote.message-received")
+                };
 
-        let mut paint = Paint::default();
-        paint.set_color(bg_color);
-        paint.anti_alias = true;
+                let mut paint = Paint::default();
+                paint.set_color(bg_color);
+                paint.anti_alias = true;
 
-        let (tl, tr, mut br, mut bl) = corner_radii(MESSAGE_BORDER_RADIUS, &self.split_edges);
+                let (tl, tr, mut br, mut bl) =
+                    corner_radii(MESSAGE_BORDER_RADIUS, &self.split_edges);
 
-        if has_tail {
-            if is_sent {
-                br = 0.0;
-            } else {
-                bl = 0.0;
+                if has_tail {
+                    if is_sent {
+                        br = 0.0;
+                    } else {
+                        bl = 0.0;
+                    }
+                }
+
+                if let Some(path) =
+                    build_rounded_rect(0.0, 0.0, self.size.width, self.size.height, tl, tr, br, bl)
+                {
+                    pixmap.fill_path(&path, &paint, tiny_skia::FillRule::Winding, transform, None);
+                }
+
+                if has_tail {
+                    if let Some(tail_path) =
+                        build_message_tail(self.size.width, self.size.height, is_sent)
+                    {
+                        pixmap.fill_path(
+                            &tail_path,
+                            &paint,
+                            tiny_skia::FillRule::Winding,
+                            transform,
+                            None,
+                        );
+                    }
+                }
             }
-        }
-
-        if let Some(path) =
-            build_rounded_rect(0.0, 0.0, self.size.width, self.size.height, tl, tr, br, bl)
-        {
-            pixmap.fill_path(&path, &paint, tiny_skia::FillRule::Winding, transform, None);
-        }
-
-        if has_tail {
-            if let Some(tail_path) = build_message_tail(self.size.width, self.size.height, is_sent)
-            {
-                pixmap.fill_path(
-                    &tail_path,
-                    &paint,
-                    tiny_skia::FillRule::Winding,
-                    transform,
-                    None,
-                );
-            }
+            _ => {}
         }
     }
 }
