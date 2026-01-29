@@ -244,6 +244,22 @@ impl Runtime {
             };
             (anchor, new_head)
         } else {
+            if !selection.is_collapsed() {
+                match direction {
+                    Direction::Left => {
+                        let (from, _) = selection.as_sorted(&self.state.doc).unwrap();
+                        let resolved = move_from_block_position(&self.state.doc, from, true);
+                        return (resolved.clone(), resolved);
+                    }
+                    Direction::Right => {
+                        let (_, to) = selection.as_sorted(&self.state.doc).unwrap();
+                        let resolved = move_from_block_position(&self.state.doc, to, false);
+                        return (resolved.clone(), resolved);
+                    }
+                    _ => {}
+                }
+            }
+
             let (from, to) = selection.as_sorted(&self.state.doc).unwrap();
             let base = match direction {
                 Direction::Left
@@ -275,6 +291,7 @@ impl Runtime {
 mod tests {
     use crate::model::NodeId;
     use crate::runtime::{Direction, Message};
+    use crate::state::{Position, Selection};
     use crate::types::Affinity;
 
     #[test]
@@ -732,6 +749,7 @@ mod tests {
 
         assert_eq!(selection.head.node_id, p2);
         assert_eq!(selection.head.offset, 6);
+        assert!(selection.is_collapsed());
     }
 
     #[test]
@@ -746,10 +764,10 @@ mod tests {
                     fold_title {}
                     fold_content {
                         @p1 paragraph { text { "First" } }
-                        paragraph { text { "Second" } }
+                        @p2 paragraph { text { "Second" } }
                     }
                 }
-                @p2 paragraph { text { "Third" } }
+                paragraph { text { "Third" } }
             }
             selection { (p1, 0) }
         };
@@ -764,7 +782,8 @@ mod tests {
 
         let selection = &rt.state().selection;
         assert_eq!(selection.head.node_id, p2);
-        assert_eq!(selection.head.offset, 0);
+        assert_eq!(selection.head.offset, 6);
+        assert!(selection.is_collapsed());
     }
 
     #[test]
@@ -897,5 +916,79 @@ mod tests {
         let selection = &rt.state().selection;
         assert_eq!(selection.head.node_id, p1);
         assert_eq!(selection.head.offset, 13);
+    }
+
+    #[test]
+    fn test_navigate_without_shift_on_selection_collapses_without_movement() {
+        let mut p1 = id!();
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p1 paragraph { text { "abcdef" } }
+            }
+            selection { (p1, 2) -> (p1, 4) }
+        };
+
+        rt.layout();
+
+        rt.update(Message::Navigate {
+            direction: Direction::Right,
+            extend: false,
+        });
+        assert_eq!(rt.state().selection.head.offset, 4);
+        assert!(rt.state().selection.is_collapsed());
+
+        rt.transact(|tr| {
+            tr.set_selection(Selection::new(
+                Position::new(p1, 2, Affinity::Downstream),
+                Position::new(p1, 4, Affinity::Upstream),
+            ));
+            Ok(true)
+        });
+
+        rt.update(Message::Navigate {
+            direction: Direction::Left,
+            extend: false,
+        });
+        assert_eq!(rt.state().selection.head.offset, 2);
+        assert!(rt.state().selection.is_collapsed());
+    }
+
+    #[test]
+    fn test_vertical_navigate_without_shift_on_selection_moves_and_collapses() {
+        let mut p1 = id!();
+        let mut p2 = id!();
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p1 paragraph { text { "line 1" } }
+                @p2 paragraph { text { "line 2" } }
+                paragraph { text { "line 3" } }
+            }
+            selection { (p2, 0) -> (p2, 6) }
+        };
+
+        rt.layout();
+        rt.update(Message::Navigate {
+            direction: Direction::Up,
+            extend: false,
+        });
+        assert_eq!(rt.state().selection.head.node_id, p1);
+        assert!(rt.state().selection.is_collapsed());
+
+        rt.transact(|tr| {
+            tr.set_selection(Selection::new(
+                Position::new(p2, 0, Affinity::Downstream),
+                Position::new(p2, 6, Affinity::Upstream),
+            ));
+            Ok(true)
+        });
+
+        rt.update(Message::Navigate {
+            direction: Direction::Down,
+            extend: false,
+        });
+        assert_ne!(rt.state().selection.head.node_id, p2);
+        assert!(rt.state().selection.is_collapsed());
     }
 }
