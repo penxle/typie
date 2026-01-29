@@ -384,6 +384,8 @@ class _PageItem extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final image = useState<ui.Image?>(null);
+    final lastTapTime = useRef<DateTime?>(null);
+    final lastTapPosition = useRef<Offset?>(null);
 
     useEffect(() {
       Future<void> render() async {
@@ -400,12 +402,29 @@ class _PageItem extends HookWidget {
         child: GestureDetector(
           onTapDown: (details) {
             onTap();
+
+            final now = DateTime.now();
+            final prevTime = lastTapTime.value;
+            final prevPosition = lastTapPosition.value;
+
+            var clickCount = 1;
+            if (prevTime != null && prevPosition != null) {
+              final timeDiff = now.difference(prevTime).inMilliseconds;
+              final distance = (details.localPosition - prevPosition).distance;
+              if (timeDiff < 300 && distance < 20) {
+                clickCount = 2;
+              }
+            }
+
+            lastTapTime.value = now;
+            lastTapPosition.value = details.localPosition;
+
             editor.dispatch({
               'type': 'pointerDown',
               'pageIdx': pageIndex,
               'x': details.localPosition.dx,
               'y': details.localPosition.dy,
-              'clickCount': 1,
+              'clickCount': clickCount,
               'button': 'primary',
               'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
             });
