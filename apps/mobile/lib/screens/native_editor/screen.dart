@@ -328,9 +328,15 @@ class _EditorView extends HookWidget {
             },
             onSetMarkedText: (text) {
               inputCausedCursorChange.value = true;
+              editor.dispatch({'type': 'compositionUpdate', 'text': text});
             },
             onUnmarkText: () {
               inputCausedCursorChange.value = true;
+              editor.dispatch({'type': 'commitPreedit'});
+            },
+            onCancelMarkedText: () {
+              inputCausedCursorChange.value = true;
+              editor.dispatch({'type': 'compositionEnd'});
             },
             onPerformAction: (action) {
               if (action == 'newline') {

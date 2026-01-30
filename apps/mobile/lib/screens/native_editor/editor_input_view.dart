@@ -11,6 +11,7 @@ class EditorInputView extends StatefulWidget {
     required this.onDeleteBackward,
     required this.onSetMarkedText,
     required this.onUnmarkText,
+    required this.onCancelMarkedText,
     required this.onPerformAction,
     this.onShortcut,
     super.key,
@@ -20,6 +21,7 @@ class EditorInputView extends StatefulWidget {
   final VoidCallback onDeleteBackward;
   final void Function(String text) onSetMarkedText;
   final VoidCallback onUnmarkText;
+  final VoidCallback onCancelMarkedText;
   final void Function(String action) onPerformAction;
   final void Function(String action)? onShortcut;
 
@@ -59,6 +61,8 @@ class EditorInputViewState extends State<EditorInputView> {
             widget.onSetMarkedText(args!['text'] as String);
           case 'unmarkText':
             widget.onUnmarkText();
+          case 'cancelMarkedText':
+            widget.onCancelMarkedText();
           case 'performAction':
             widget.onPerformAction(args!['action'] as String);
           case 'shortcut':

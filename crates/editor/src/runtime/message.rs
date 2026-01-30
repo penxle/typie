@@ -158,7 +158,6 @@ define_messages! {
 
     CompositionEnd
     => when When::key(ContextKey::CanEdit)
-        .and(When::key(ContextKey::InComposition))
     => handle(rt) { rt.handle_composition_end() },
 
     CommitPreedit
