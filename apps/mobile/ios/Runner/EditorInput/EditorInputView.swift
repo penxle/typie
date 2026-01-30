@@ -13,19 +13,23 @@ class EditorInputView: NSObject, FlutterPlatformView {
     inputView.onInsertText = { [weak self] text in
       self?.channel.invokeMethod("insertText", arguments: ["text": text])
     }
-    
+
     inputView.onDeleteBackward = { [weak self] in
       self?.channel.invokeMethod("deleteBackward", arguments: [String: Any]())
     }
-    
+
     inputView.onSetMarkedText = { [weak self] text in
       self?.channel.invokeMethod("setMarkedText", arguments: ["text": text])
     }
-    
+
     inputView.onUnmarkText = { [weak self] in
       self?.channel.invokeMethod("unmarkText", arguments: [String: Any]())
     }
-    
+
+    inputView.onCancelMarkedText = { [weak self] in
+      self?.channel.invokeMethod("cancelMarkedText", arguments: [String: Any]())
+    }
+
     inputView.onPerformAction = { [weak self] action in
       self?.channel.invokeMethod("performAction", arguments: ["action": action])
     }
@@ -73,12 +77,12 @@ class EditorTextInputView: UIView, UITextInput {
   var onDeleteBackward: (() -> Void)?
   var onSetMarkedText: ((String) -> Void)?
   var onUnmarkText: (() -> Void)?
+  var onCancelMarkedText: (() -> Void)?
   var onPerformAction: ((String) -> Void)?
   var onShortcut: ((String) -> Void)?
 
   private var _markedText: String?
-  private var _markedTextRange: UITextRange?
-  private var _selectionOffset: Int = 0
+
   private var cursorX: Double = 0
   private var cursorY: Double = 0
   private var cursorHeight: Double = 20
@@ -116,8 +120,6 @@ class EditorTextInputView: UIView, UITextInput {
 
   func resetInputContext() {
     _markedText = nil
-    _markedTextRange = nil
-    _selectionOffset += 1
     inputDelegate?.selectionWillChange(self)
     inputDelegate?.selectionDidChange(self)
   }
@@ -167,7 +169,6 @@ class EditorTextInputView: UIView, UITextInput {
       if def.input == input && def.mods == mods {
         if _markedText != nil {
           _markedText = nil
-          _markedTextRange = nil
           onUnmarkText?()
         }
         onShortcut?(def.action)
@@ -181,25 +182,25 @@ class EditorTextInputView: UIView, UITextInput {
   var hasText: Bool { true }
 
   func insertText(_ text: String) {
+    print("[EditorInput] insertText: '\(text)', markedText: '\(_markedText ?? "nil")'")
+    if _markedText != nil {
+      _markedText = nil
+      onUnmarkText?()
+    }
+
     if text == "\n" {
       onPerformAction?("newline")
       return
     }
 
-    if _markedText != nil {
-      _markedText = nil
-      _markedTextRange = nil
-      onUnmarkText?()
-      return
-    }
     onInsertText?(text)
   }
 
   func deleteBackward() {
+    print("[EditorInput] deleteBackward, markedText: '\(_markedText ?? "nil")'")
     if _markedText != nil {
       _markedText = nil
-      _markedTextRange = nil
-      onUnmarkText?()
+      onCancelMarkedText?()
       return
     }
     onDeleteBackward?()
@@ -207,34 +208,42 @@ class EditorTextInputView: UIView, UITextInput {
 
   // MARK: - UITextInput (Marked Text)
 
-  var markedTextRange: UITextRange? { _markedTextRange }
+  var markedTextRange: UITextRange? {
+    guard let markedText = _markedText else { return nil }
+    return EditorTextRange(start: 0, end: markedText.count)
+  }
+
   var markedTextStyle: [NSAttributedString.Key: Any]?
 
   func setMarkedText(_ markedText: String?, selectedRange: NSRange) {
+    print("[EditorInput] setMarkedText: '\(markedText ?? "nil")', prev: '\(_markedText ?? "nil")'")
+
     if let text = markedText, !text.isEmpty {
       _markedText = text
-      _markedTextRange = EditorTextRange(start: 0, end: text.count)
       onSetMarkedText?(text)
     } else {
-      let hadMarked = _markedText != nil
-      _markedText = nil
-      _markedTextRange = nil
-      if hadMarked {
+      if _markedText != nil {
+        _markedText = nil
         onUnmarkText?()
       }
     }
   }
 
   func unmarkText() {
-    _markedText = nil
-    _markedTextRange = nil
-    onUnmarkText?()
+    print("[EditorInput] unmarkText, markedText: '\(_markedText ?? "nil")'")
+    if _markedText != nil {
+      _markedText = nil
+      onUnmarkText?()
+    }
   }
 
   // MARK: - UITextInput (Selection)
 
   var selectedTextRange: UITextRange? {
-    get { EditorTextRange(start: _selectionOffset, end: _selectionOffset) }
+    get {
+      let pos = _markedText?.count ?? 0
+      return EditorTextRange(start: pos, end: pos)
+    }
     set {}
   }
 
@@ -248,37 +257,66 @@ class EditorTextInputView: UIView, UITextInput {
     return CGRect(x: cursorX, y: cursorY, width: 1, height: cursorHeight)
   }
 
-  // MARK: - UITextInput (Required stubs)
+  // MARK: - UITextInput (Document)
 
   var beginningOfDocument: UITextPosition { EditorTextPosition(offset: 0) }
-  var endOfDocument: UITextPosition { EditorTextPosition(offset: 0) }
+  var endOfDocument: UITextPosition { EditorTextPosition(offset: _markedText?.count ?? 0) }
   var inputDelegate: (any UITextInputDelegate)?
   var tokenizer: any UITextInputTokenizer { UITextInputStringTokenizer(textInput: self) }
 
-  func text(in range: UITextRange) -> String? { nil }
+  func text(in range: UITextRange) -> String? {
+    return _markedText ?? ""
+  }
+
   func replace(_ range: UITextRange, withText text: String) {}
 
   func textRange(from fromPosition: UITextPosition, to toPosition: UITextPosition) -> UITextRange? {
-    return EditorTextRange(start: 0, end: 0)
+    guard let from = fromPosition as? EditorTextPosition,
+          let to = toPosition as? EditorTextPosition else { return nil }
+    return EditorTextRange(start: from.offset, end: to.offset)
   }
 
   func position(from position: UITextPosition, offset: Int) -> UITextPosition? {
-    return EditorTextPosition(offset: 0)
+    guard let pos = position as? EditorTextPosition else { return nil }
+    let newOffset = pos.offset + offset
+    let maxLen = _markedText?.count ?? 0
+    if newOffset < 0 || newOffset > maxLen { return nil }
+    return EditorTextPosition(offset: newOffset)
   }
 
   func position(from position: UITextPosition, in direction: UITextLayoutDirection, offset: Int) -> UITextPosition? {
-    return EditorTextPosition(offset: 0)
+    guard let pos = position as? EditorTextPosition else { return nil }
+    let delta = (direction == .left || direction == .up) ? -offset : offset
+    let newOffset = pos.offset + delta
+    let maxLen = _markedText?.count ?? 0
+    if newOffset < 0 || newOffset > maxLen { return nil }
+    return EditorTextPosition(offset: newOffset)
   }
 
   func compare(_ position: UITextPosition, to other: UITextPosition) -> ComparisonResult {
+    guard let pos1 = position as? EditorTextPosition,
+          let pos2 = other as? EditorTextPosition else { return .orderedSame }
+    if pos1.offset < pos2.offset { return .orderedAscending }
+    if pos1.offset > pos2.offset { return .orderedDescending }
     return .orderedSame
   }
 
-  func offset(from: UITextPosition, to toPosition: UITextPosition) -> Int { 0 }
+  func offset(from: UITextPosition, to toPosition: UITextPosition) -> Int {
+    guard let fromPos = from as? EditorTextPosition,
+          let toPos = toPosition as? EditorTextPosition else { return 0 }
+    return toPos.offset - fromPos.offset
+  }
 
   func selectionRects(for range: UITextRange) -> [UITextSelectionRect] { [] }
-  func closestPosition(to point: CGPoint) -> UITextPosition? { EditorTextPosition(offset: 0) }
-  func closestPosition(to point: CGPoint, within range: UITextRange) -> UITextPosition? { EditorTextPosition(offset: 0) }
+
+  func closestPosition(to point: CGPoint) -> UITextPosition? {
+    return EditorTextPosition(offset: _markedText?.count ?? 0)
+  }
+
+  func closestPosition(to point: CGPoint, within range: UITextRange) -> UITextPosition? {
+    return EditorTextPosition(offset: _markedText?.count ?? 0)
+  }
+
   func characterRange(at point: CGPoint) -> UITextRange? { nil }
 
   func baseWritingDirection(for position: UITextPosition, in direction: UITextStorageDirection) -> NSWritingDirection {
@@ -288,11 +326,22 @@ class EditorTextInputView: UIView, UITextInput {
   func setBaseWritingDirection(_ writingDirection: NSWritingDirection, for range: UITextRange) {}
 
   func position(within range: UITextRange, farthestIn direction: UITextLayoutDirection) -> UITextPosition? {
-    return EditorTextPosition(offset: 0)
+    guard let editorRange = range as? EditorTextRange else { return nil }
+    if direction == .left || direction == .up {
+      return EditorTextPosition(offset: editorRange.startOffset)
+    } else {
+      return EditorTextPosition(offset: editorRange.endOffset)
+    }
   }
 
   func characterRange(byExtending position: UITextPosition, in direction: UITextLayoutDirection) -> UITextRange? {
-    return EditorTextRange(start: 0, end: 0)
+    guard let pos = position as? EditorTextPosition else { return nil }
+    let maxLen = _markedText?.count ?? 0
+    if direction == .left || direction == .up {
+      return EditorTextRange(start: 0, end: pos.offset)
+    } else {
+      return EditorTextRange(start: pos.offset, end: maxLen)
+    }
   }
 
   var textInputView: UIView { self }
@@ -308,6 +357,9 @@ class EditorTextPosition: UITextPosition {
 class EditorTextRange: UITextRange {
   private let _start: EditorTextPosition
   private let _end: EditorTextPosition
+
+  var startOffset: Int { _start.offset }
+  var endOffset: Int { _end.offset }
 
   init(start: Int, end: Int) {
     _start = EditorTextPosition(offset: start)
