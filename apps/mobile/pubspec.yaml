@@ -33,6 +33,7 @@ dependencies:
   flutter_secure_storage: ^10.0.0
   flutter_sticky_header: ^0.8.0
   flutter_svg: ^2.1.0
+  flutter_thumbhash: ^0.1.0+1
   freezed_annotation: ^3.0.0
   gap: ^3.0.1
   get_it: ^9.1.1
@@ -59,6 +60,7 @@ dependencies:
   mixpanel_flutter: ^2.4.4
   naver_login_sdk: ^3.0.0
   package_info_plus: ^9.0.0
+  path_provider: ^2.1.5
   permission_handler: ^12.0.0+1
   pointer_interceptor: ^0.10.1+2
   sentry: ^9.0.0
@@ -69,7 +71,6 @@ dependencies:
   url_launcher: ^6.3.1
   uuid: ^4.5.1
   web_socket: ^1.0.1
-
 dev_dependencies:
   auto_route_generator: ^10.0.1
   build_runner: ^2.4.15

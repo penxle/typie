@@ -19,34 +19,34 @@ class _Node {
 class NativeEditorInsertBottomToolbar extends HookWidget {
   const NativeEditorInsertBottomToolbar({super.key});
 
-  static final _nodes = [
-    const _Node(icon: 'image', label: '이미지', type: 'insertImage'),
-    const _Node(icon: 'paperclip', label: '파일', type: 'insertFile'),
-    const _Node(icon: 'file-up', label: '임베드', type: 'insertEmbed'),
-    _Node(
-      icon: 'horizontal-rule',
-      label: '구분선',
-      type: 'horizontalRule',
-      attrs: {'type': editorDefaultValues['horizontalRule']},
-    ),
-    _Node(icon: 'quote', label: '인용구', type: 'blockquote', attrs: {'type': editorDefaultValues['blockquote']}),
-    const _Node(icon: 'gallery-vertical-end', label: '강조', type: 'toggleCallout'),
-    const _Node(icon: 'chevrons-down-up', label: '접기', type: 'insertFold'),
-    const _Node(icon: 'table', label: '표', type: 'insertTable', attrs: {'rows': 3, 'cols': 3}),
-    const _Node(icon: 'list', label: '목록', type: 'toggleBulletList'),
-  ];
-
   @override
   Widget build(BuildContext context) {
     final scope = NativeEditorToolbarScope.of(context);
     final keyboardType = useValueListenable(scope.keyboardType);
+
+    final nodes = [
+      const _Node(icon: 'image', label: '이미지', type: 'insertImage'),
+      const _Node(icon: 'paperclip', label: '파일', type: 'insertFile'),
+      const _Node(icon: 'file-up', label: '임베드', type: 'insertEmbed'),
+      _Node(
+        icon: 'horizontal-rule',
+        label: '구분선',
+        type: 'horizontalRule',
+        attrs: {'type': editorDefaultValues['horizontalRule']},
+      ),
+      _Node(icon: 'quote', label: '인용구', type: 'blockquote', attrs: {'type': editorDefaultValues['blockquote']}),
+      const _Node(icon: 'gallery-vertical-end', label: '강조', type: 'toggleCallout'),
+      const _Node(icon: 'chevrons-down-up', label: '접기', type: 'insertFold'),
+      const _Node(icon: 'table', label: '표', type: 'insertTable', attrs: {'rows': 3, 'cols': 3}),
+      const _Node(icon: 'list', label: '목록', type: 'toggleBulletList'),
+    ];
 
     return GridView.extent(
       maxCrossAxisExtent: 96,
       padding: Pad(all: 16, bottom: MediaQuery.paddingOf(context).bottom),
       mainAxisSpacing: 16,
       crossAxisSpacing: 16,
-      children: _nodes.map((node) {
+      children: nodes.map((node) {
         return ToolbarButton(
           onTap: () {
             if (node.type == 'horizontalRule') {
