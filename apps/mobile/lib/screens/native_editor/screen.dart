@@ -184,6 +184,7 @@ class _EditorView extends HookWidget {
     final inputKey = useMemoized(GlobalKey<EditorInputViewState>.new);
     final isActive = useRef(false);
     final inputCausedCursorChange = useRef(false);
+    final scrollController = useScrollController();
 
     useEffect(() {
       void onTick(Duration elapsed) {
@@ -239,10 +240,45 @@ class _EditorView extends HookWidget {
 
     final isSelecting = useState(false);
 
+    final keyboardHeight = MediaQuery.viewInsetsOf(context).bottom;
+
     useEffect(() {
       final cursor = cursorInfo.value;
       if (cursor != null && cursor.show) {
         inputKey.currentState?.updateCursor(cursor.x, cursor.y, cursor.height);
+
+        if (keyboardHeight > 0) {
+          final currentLayout = layout.value;
+          if (currentLayout != null) {
+            var cursorGlobalY = cursor.y;
+            for (var i = 0; i < cursor.pageIdx; i++) {
+              final pageHeight = currentLayout.pageHeights.elementAtOrNull(i) ?? 0;
+              cursorGlobalY += pageHeight + (currentLayout.isPaginated ? _pageGap : 0);
+            }
+
+            final viewportHeight = height - keyboardHeight;
+            final scrollOffset = scrollController.offset;
+            final cursorBottom = cursorGlobalY + cursor.height;
+
+            if (cursorBottom > scrollOffset + viewportHeight) {
+              unawaited(
+                scrollController.animateTo(
+                  cursorBottom - viewportHeight + 16,
+                  duration: const Duration(milliseconds: 100),
+                  curve: Curves.easeOut,
+                ),
+              );
+            } else if (cursorGlobalY < scrollOffset) {
+              unawaited(
+                scrollController.animateTo(
+                  cursorGlobalY - 16,
+                  duration: const Duration(milliseconds: 100),
+                  curve: Curves.easeOut,
+                ),
+              );
+            }
+          }
+        }
       }
       if (inputCausedCursorChange.value) {
         inputCausedCursorChange.value = false;
@@ -250,7 +286,7 @@ class _EditorView extends HookWidget {
         inputKey.currentState?.resetInputContext();
       }
       return null;
-    }, [cursorInfo.value]);
+    }, [cursorInfo.value, keyboardHeight]);
 
     useEffect(() {
       bool onKeyEvent(KeyEvent event) {
@@ -291,9 +327,11 @@ class _EditorView extends HookWidget {
           behavior: HitTestBehavior.opaque,
           onTap: openInput,
           child: ListView.builder(
+            controller: scrollController,
+            padding: EdgeInsets.only(bottom: keyboardHeight),
             itemCount: currentLayout.pageCount,
             cacheExtent: 1000,
-            physics: isSelecting.value ? const NeverScrollableScrollPhysics() : null,
+            physics: isSelecting.value ? const NeverScrollableScrollPhysics() : const AlwaysScrollableScrollPhysics(),
             itemBuilder: (context, index) {
               final isLast = index == currentLayout.pageCount - 1;
               final gap = currentLayout.isPaginated && !isLast ? _pageGap : 0.0;
