@@ -5,3 +5,4 @@ LIBRARY_SEARCH_PATHS[sdk=iphoneos*] = $(inherited) $(SRCROOT)/Frameworks/Editor/
 LIBRARY_SEARCH_PATHS[sdk=iphonesimulator*] = $(inherited) $(SRCROOT)/Frameworks/Editor/Editor.xcframework/ios-arm64-simulator
 OTHER_LDFLAGS[sdk=iphoneos*] = $(inherited) -force_load $(SRCROOT)/Frameworks/Editor/Editor.xcframework/ios-arm64/libeditor.a
 OTHER_LDFLAGS[sdk=iphonesimulator*] = $(inherited) -force_load $(SRCROOT)/Frameworks/Editor/Editor.xcframework/ios-arm64-simulator/libeditor.a
+DEAD_CODE_STRIPPING = NO
