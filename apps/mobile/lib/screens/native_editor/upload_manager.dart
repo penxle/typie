@@ -6,15 +6,19 @@ class UploadManager extends ChangeNotifier {
   final Map<String, InflightFile> _inflightFiles = {};
   final Map<String, ImageAsset> _imageAssets = {};
   final Map<String, FileAsset> _fileAssets = {};
+  final Map<String, EmbedAsset> _embedAssets = {};
   final Map<String, String> _localImageUploadIds = {};
   final Map<String, String> _localFileUploadIds = {};
+  final Map<String, bool> _inflightEmbeds = {};
 
   Map<String, InflightImage> get inflightImages => Map.unmodifiable(_inflightImages);
   Map<String, InflightFile> get inflightFiles => Map.unmodifiable(_inflightFiles);
   Map<String, ImageAsset> get imageAssets => Map.unmodifiable(_imageAssets);
   Map<String, FileAsset> get fileAssets => Map.unmodifiable(_fileAssets);
+  Map<String, EmbedAsset> get embedAssets => Map.unmodifiable(_embedAssets);
   Map<String, String> get localImageUploadIds => Map.unmodifiable(_localImageUploadIds);
   Map<String, String> get localFileUploadIds => Map.unmodifiable(_localFileUploadIds);
+  Map<String, bool> get inflightEmbeds => Map.unmodifiable(_inflightEmbeds);
 
   void addInflightImage(String uploadId, InflightImage image) {
     _inflightImages[uploadId] = image;
@@ -89,6 +93,32 @@ class UploadManager extends ChangeNotifier {
   void failFileUpload({required String uploadId, required String nodeId}) {
     _inflightFiles.remove(uploadId);
     _localFileUploadIds.remove(nodeId);
+    notifyListeners();
+  }
+
+  void setInflightEmbed(String nodeId, {required bool inflight}) {
+    _inflightEmbeds[nodeId] = inflight;
+    notifyListeners();
+  }
+
+  void removeInflightEmbed(String nodeId) {
+    _inflightEmbeds.remove(nodeId);
+    notifyListeners();
+  }
+
+  void addEmbedAsset(String id, EmbedAsset asset) {
+    _embedAssets[id] = asset;
+    notifyListeners();
+  }
+
+  void completeEmbedUnfurl({required String nodeId, required EmbedAsset asset}) {
+    _inflightEmbeds.remove(nodeId);
+    _embedAssets[asset.id] = asset;
+    notifyListeners();
+  }
+
+  void failEmbedUnfurl({required String nodeId}) {
+    _inflightEmbeds.remove(nodeId);
     notifyListeners();
   }
 }

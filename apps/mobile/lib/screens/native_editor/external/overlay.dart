@@ -3,6 +3,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/screens/native_editor/external/models.dart';
 import 'package:typie/screens/native_editor/toolbar/scope.dart';
 
+import 'embed_widget.dart';
 import 'file_widget.dart';
 import 'image_widget.dart';
 
@@ -79,6 +80,7 @@ class _ExternalElementWrapper extends HookWidget {
     return switch (element.data) {
       ImageElementData() => ExternalImageWidget(element: element),
       FileElementData() => ExternalFileWidget(element: element),
+      EmbedElementData() => ExternalEmbedWidget(element: element),
     };
   }
 }

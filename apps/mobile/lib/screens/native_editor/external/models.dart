@@ -12,6 +12,8 @@ sealed class ExternalElementData with _$ExternalElementData {
 
   const factory ExternalElementData.file({String? id, String? uploadId}) = FileElementData;
 
+  const factory ExternalElementData.embed({String? id}) = EmbedElementData;
+
   factory ExternalElementData.fromJson(Map<String, dynamic> json) => _$ExternalElementDataFromJson(json);
 }
 
@@ -76,4 +78,18 @@ abstract class FileAsset with _$FileAsset {
       _FileAsset;
 
   factory FileAsset.fromJson(Map<String, dynamic> json) => _$FileAssetFromJson(json);
+}
+
+@freezed
+abstract class EmbedAsset with _$EmbedAsset {
+  const factory EmbedAsset({
+    required String id,
+    required String url,
+    String? title,
+    String? description,
+    String? thumbnailUrl,
+    String? html,
+  }) = _EmbedAsset;
+
+  factory EmbedAsset.fromJson(Map<String, dynamic> json) => _$EmbedAssetFromJson(json);
 }
