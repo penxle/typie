@@ -93,9 +93,13 @@ impl Transaction {
         }
 
         if self.state.preedit != self.initial.preedit {
-            self.effects.push(Effect::PreeditChanged {
-                node_id: self.state.preedit.as_ref().map(|preedit| preedit.node_id),
-            });
+            let node_id = self
+                .state
+                .preedit
+                .as_ref()
+                .or(self.initial.preedit.as_ref())
+                .map(|preedit| preedit.node_id);
+            self.effects.push(Effect::PreeditChanged { node_id });
         }
 
         if defer_loro_commit {
