@@ -11,11 +11,15 @@ import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/context/theme.dart';
 import 'package:typie/graphql/widget.dart';
+import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/native/editor_native.dart';
 import 'package:typie/screens/native_editor/__generated__/native_editor_query.data.gql.dart';
 import 'package:typie/screens/native_editor/__generated__/native_editor_query.req.gql.dart';
 import 'package:typie/screens/native_editor/editor_input_view.dart';
+import 'package:typie/screens/native_editor/toolbar/scope.dart';
+import 'package:typie/screens/native_editor/toolbar/toolbar.dart';
+import 'package:typie/services/keyboard.dart';
 import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/screen.dart';
 
@@ -186,6 +190,36 @@ class _EditorView extends HookWidget {
     final inputCausedCursorChange = useRef(false);
     final scrollController = useScrollController();
 
+    final keyboardHeight = useValueNotifier<double>(0);
+    final isKeyboardVisible = useValueNotifier<bool>(false);
+    final keyboardType = useValueNotifier<KeyboardType>(KeyboardType.software);
+    final bottomToolbarMode = useValueNotifier<BottomToolbarMode>(BottomToolbarMode.hidden);
+    final secondaryToolbarMode = useValueNotifier<SecondaryToolbarMode>(SecondaryToolbarMode.hidden);
+
+    final uniformMarks = useValueNotifier<List<Map<String, dynamic>>>([]);
+    final mixedMarks = useValueNotifier<List<String>>([]);
+    final selectionStats = useValueNotifier<Map<String, dynamic>>({});
+
+    final keyboard = useService<Keyboard>();
+
+    useEffect(() {
+      final subscription = keyboard.onHeightChange.listen((double height) {
+        if (height > 0) {
+          keyboardHeight.value = height;
+          bottomToolbarMode.value = BottomToolbarMode.hidden;
+        }
+        isKeyboardVisible.value = height > 0;
+      });
+      return subscription.cancel;
+    }, []);
+
+    useEffect(() {
+      final subscription = keyboard.onTypeChange.listen((KeyboardType type) {
+        keyboardType.value = type;
+      });
+      return subscription.cancel;
+    }, []);
+
     useEffect(() {
       void onTick(Duration elapsed) {
         if (editor.isDisposed) {
@@ -219,6 +253,15 @@ class _EditorView extends HookWidget {
                 renderVersion.value = Object();
               case {'type': 'cursorChanged'}:
                 cursorInfo.value = CursorInfo.fromMap(cmd as Map<String, dynamic>);
+              case {
+                'type': 'activeMarksChanged',
+                'uniformMarks': final List<dynamic> uniform,
+                'mixedMarks': final List<dynamic> mixed,
+              }:
+                uniformMarks.value = uniform.cast<Map<String, dynamic>>();
+                mixedMarks.value = mixed.cast<String>();
+              case {'type': 'selectionChanged', 'stats': final Map<String, dynamic> stats}:
+                selectionStats.value = stats;
             }
           }
         }
@@ -240,14 +283,14 @@ class _EditorView extends HookWidget {
 
     final isSelecting = useState(false);
 
-    final keyboardHeight = MediaQuery.viewInsetsOf(context).bottom;
+    final viewKeyboardHeight = MediaQuery.viewInsetsOf(context).bottom;
 
     useEffect(() {
       final cursor = cursorInfo.value;
       if (cursor != null && cursor.show) {
         inputKey.currentState?.updateCursor(cursor.x, cursor.y, cursor.height);
 
-        if (keyboardHeight > 0) {
+        if (viewKeyboardHeight > 0) {
           final currentLayout = layout.value;
           if (currentLayout != null) {
             var cursorGlobalY = cursor.y;
@@ -256,7 +299,7 @@ class _EditorView extends HookWidget {
               cursorGlobalY += pageHeight + (currentLayout.isPaginated ? _pageGap : 0);
             }
 
-            final viewportHeight = height - keyboardHeight;
+            final viewportHeight = height - viewKeyboardHeight;
             final scrollOffset = scrollController.offset;
             final cursorBottom = cursorGlobalY + cursor.height;
 
@@ -286,7 +329,7 @@ class _EditorView extends HookWidget {
         inputKey.currentState?.resetInputContext();
       }
       return null;
-    }, [cursorInfo.value, keyboardHeight]);
+    }, [cursorInfo.value, viewKeyboardHeight]);
 
     useEffect(() {
       bool onKeyEvent(KeyEvent event) {
@@ -321,72 +364,106 @@ class _EditorView extends HookWidget {
       }
     }
 
-    return Stack(
-      children: [
-        GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: openInput,
-          child: ListView.builder(
-            controller: scrollController,
-            padding: EdgeInsets.only(bottom: keyboardHeight),
-            itemCount: currentLayout.pageCount,
-            cacheExtent: 1000,
-            physics: isSelecting.value ? const NeverScrollableScrollPhysics() : const AlwaysScrollableScrollPhysics(),
-            itemBuilder: (context, index) {
-              final isLast = index == currentLayout.pageCount - 1;
-              final gap = currentLayout.isPaginated && !isLast ? _pageGap : 0.0;
-              final pageHeight = currentLayout.pageHeights.elementAtOrNull(index);
-              final pageCursor = cursorInfo.value?.pageIdx == index ? cursorInfo.value : null;
-              return _PageItem(
-                key: ValueKey(index),
-                pageIndex: index,
-                editor: editor,
-                renderVersion: renderVersion.value,
-                bottomGap: gap,
-                placeholderHeight: pageHeight,
-                cursorInfo: pageCursor,
-                isFocused: isFocused.value,
-                onSelectionStart: () => isSelecting.value = true,
-                onSelectionEnd: () => isSelecting.value = false,
-                onTap: openInput,
-              );
-            },
+    void requestFocus() {
+      isActive.value = true;
+      isFocused.value = true;
+      inputKey.currentState?.activateInput();
+    }
+
+    void clearFocus() {
+      isActive.value = false;
+      isFocused.value = false;
+      inputKey.currentState?.deactivateInput();
+    }
+
+    return NativeEditorToolbarScope(
+      keyboardHeight: keyboardHeight,
+      isKeyboardVisible: isKeyboardVisible,
+      keyboardType: keyboardType,
+      bottomToolbarMode: bottomToolbarMode,
+      secondaryToolbarMode: secondaryToolbarMode,
+      uniformMarks: uniformMarks,
+      mixedMarks: mixedMarks,
+      selectionStats: selectionStats,
+      dispatch: editor.dispatch,
+      requestFocus: requestFocus,
+      clearFocus: clearFocus,
+      child: Column(
+        children: [
+          Expanded(
+            child: Stack(
+              children: [
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: openInput,
+                  child: ListView.builder(
+                    controller: scrollController,
+                    padding: EdgeInsets.only(bottom: viewKeyboardHeight),
+                    itemCount: currentLayout.pageCount,
+                    cacheExtent: 1000,
+                    physics: isSelecting.value
+                        ? const NeverScrollableScrollPhysics()
+                        : const AlwaysScrollableScrollPhysics(),
+                    itemBuilder: (context, index) {
+                      final isLast = index == currentLayout.pageCount - 1;
+                      final gap = currentLayout.isPaginated && !isLast ? _pageGap : 0.0;
+                      final pageHeight = currentLayout.pageHeights.elementAtOrNull(index);
+                      final pageCursor = cursorInfo.value?.pageIdx == index ? cursorInfo.value : null;
+                      return _PageItem(
+                        key: ValueKey(index),
+                        pageIndex: index,
+                        editor: editor,
+                        renderVersion: renderVersion.value,
+                        bottomGap: gap,
+                        placeholderHeight: pageHeight,
+                        cursorInfo: pageCursor,
+                        isFocused: isFocused.value,
+                        onSelectionStart: () => isSelecting.value = true,
+                        onSelectionEnd: () => isSelecting.value = false,
+                        onTap: openInput,
+                      );
+                    },
+                  ),
+                ),
+                Positioned.fill(
+                  child: EditorInputView(
+                    key: inputKey,
+                    onInsertText: (text) {
+                      inputCausedCursorChange.value = true;
+                      editor.dispatch({'type': 'input', 'text': text});
+                    },
+                    onDeleteBackward: () {
+                      inputCausedCursorChange.value = true;
+                      editor.dispatch({'type': 'deleteBackward'});
+                    },
+                    onSetMarkedText: (text) {
+                      inputCausedCursorChange.value = true;
+                      editor.dispatch({'type': 'compositionUpdate', 'text': text});
+                    },
+                    onUnmarkText: () {
+                      inputCausedCursorChange.value = true;
+                      editor.dispatch({'type': 'commitPreedit'});
+                    },
+                    onCancelMarkedText: () {
+                      inputCausedCursorChange.value = true;
+                      editor.dispatch({'type': 'compositionEnd'});
+                    },
+                    onPerformAction: (action) {
+                      if (action == 'newline') {
+                        editor.dispatch({'type': 'insertNewline'});
+                      }
+                    },
+                    onShortcut: (action) {
+                      editor.dispatch({'type': action});
+                    },
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
-        Positioned.fill(
-          child: EditorInputView(
-            key: inputKey,
-            onInsertText: (text) {
-              inputCausedCursorChange.value = true;
-              editor.dispatch({'type': 'input', 'text': text});
-            },
-            onDeleteBackward: () {
-              inputCausedCursorChange.value = true;
-              editor.dispatch({'type': 'deleteBackward'});
-            },
-            onSetMarkedText: (text) {
-              inputCausedCursorChange.value = true;
-              editor.dispatch({'type': 'compositionUpdate', 'text': text});
-            },
-            onUnmarkText: () {
-              inputCausedCursorChange.value = true;
-              editor.dispatch({'type': 'commitPreedit'});
-            },
-            onCancelMarkedText: () {
-              inputCausedCursorChange.value = true;
-              editor.dispatch({'type': 'compositionEnd'});
-            },
-            onPerformAction: (action) {
-              if (action == 'newline') {
-                editor.dispatch({'type': 'insertNewline'});
-              }
-            },
-            onShortcut: (action) {
-              editor.dispatch({'type': action});
-            },
-          ),
-        ),
-      ],
+          const NativeEditorToolbar(),
+        ],
+      ),
     );
   }
 }
