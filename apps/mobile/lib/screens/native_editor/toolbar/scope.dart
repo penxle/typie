@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:typie/screens/native_editor/external/models.dart';
+import 'package:typie/screens/native_editor/upload_manager.dart';
 import 'package:typie/services/keyboard.dart';
 
 enum SecondaryToolbarMode {
@@ -27,6 +29,8 @@ class NativeEditorToolbarScope extends InheritedWidget {
     required this.uniformMarks,
     required this.mixedMarks,
     required this.selectionStats,
+    required this.externalElements,
+    required this.uploadManager,
     required this.dispatch,
     required this.requestFocus,
     required this.clearFocus,
@@ -42,6 +46,9 @@ class NativeEditorToolbarScope extends InheritedWidget {
   final ValueNotifier<List<Map<String, dynamic>>> uniformMarks;
   final ValueNotifier<List<String>> mixedMarks;
   final ValueNotifier<Map<String, dynamic>> selectionStats;
+
+  final ValueNotifier<List<ExternalElement>> externalElements;
+  final UploadManager uploadManager;
 
   final void Function(Map<String, dynamic> message) dispatch;
   final void Function() requestFocus;

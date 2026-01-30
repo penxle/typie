@@ -24,7 +24,11 @@ import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/screen.dart';
 
 import 'cursor.dart';
+import 'external/models.dart';
+import 'external/overlay.dart';
 import 'theme.dart';
+import 'toolbar/floating/floating.dart';
+import 'upload_manager.dart';
 
 const _fontCdnBase = 'https://cdn.typie.net/fonts/editor';
 
@@ -200,6 +204,11 @@ class _EditorView extends HookWidget {
     final mixedMarks = useValueNotifier<List<String>>([]);
     final selectionStats = useValueNotifier<Map<String, dynamic>>({});
 
+    final externalElements = useValueNotifier<List<ExternalElement>>([]);
+    final uploadManager = useMemoized(UploadManager.new);
+
+    useEffect(() => uploadManager.dispose, []);
+
     final keyboard = useService<Keyboard>();
 
     useEffect(() {
@@ -262,6 +271,10 @@ class _EditorView extends HookWidget {
                 mixedMarks.value = mixed.cast<String>();
               case {'type': 'selectionChanged', 'stats': final Map<String, dynamic> stats}:
                 selectionStats.value = stats;
+              case {'type': 'externalElementChanged', 'elements': final List<dynamic> elements}:
+                externalElements.value = elements
+                    .map((e) => ExternalElement.fromJson(e as Map<String, dynamic>))
+                    .toList();
             }
           }
         }
@@ -385,6 +398,8 @@ class _EditorView extends HookWidget {
       uniformMarks: uniformMarks,
       mixedMarks: mixedMarks,
       selectionStats: selectionStats,
+      externalElements: externalElements,
+      uploadManager: uploadManager,
       dispatch: editor.dispatch,
       requestFocus: requestFocus,
       clearFocus: clearFocus,
@@ -458,6 +473,7 @@ class _EditorView extends HookWidget {
                     },
                   ),
                 ),
+                const Positioned(bottom: 20, right: 20, child: NativeEditorFloatingToolbar()),
               ],
             ),
           ),
@@ -597,6 +613,7 @@ class _PageItem extends HookWidget {
             children: [
               RawImage(image: image.value),
               EditorCursor(cursorInfo: cursorInfo, isFocused: isFocused),
+              ExternalElementOverlay(pageIndex: pageIndex),
             ],
           ),
         ),
