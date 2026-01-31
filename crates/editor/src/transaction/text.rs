@@ -899,8 +899,9 @@ impl Transaction {
 #[cfg(test)]
 mod tests {
     use crate::model::*;
+    use crate::runtime::Effect;
     use crate::state::{Position, Selection};
-    use crate::types::Affinity;
+    use crate::types::{Affinity, WritingSystem};
 
     #[test]
     fn insert_text_at_middle() {
@@ -3409,5 +3410,47 @@ mod tests {
         };
 
         assert_state_eq!(actual, expected);
+    }
+
+    #[test]
+    fn insert_text_emits_writing_systems_usage_changed() {
+        let mut p = id!();
+
+        let initial = state! {
+            doc {
+                @p paragraph {}
+            }
+            selection { (p, 0) }
+        };
+
+        let (_, effects) = transact_with_effect!(initial, |tr| tr
+            .insert_text("Hello 안녕 こんにちは 你好")
+            .unwrap());
+
+        let writing_systems: Vec<WritingSystem> = effects
+            .iter()
+            .filter_map(|e| match e {
+                Effect::WritingSystemsUsageChanged { systems } => Some(systems.clone()),
+                _ => None,
+            })
+            .flatten()
+            .collect();
+
+        assert!(
+            writing_systems.contains(&WritingSystem::Latin),
+            "insert_text should detect Latin"
+        );
+        assert!(
+            writing_systems.contains(&WritingSystem::Korean),
+            "insert_text should detect Korean"
+        );
+        assert!(
+            writing_systems.contains(&WritingSystem::Japanese),
+            "insert_text should detect Japanese"
+        );
+        assert!(
+            writing_systems.contains(&WritingSystem::Chinese),
+            "insert_text should detect Chinese"
+        );
     }
 }
