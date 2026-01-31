@@ -102,14 +102,26 @@ export const makeLoroDoc = () => {
 };
 
 const extractTextFromLoroDoc = (doc: LoroDoc): string => {
-  const nodes = doc.getMap('nodes').toJSON() as Record<string, { text?: string }>;
+  const ROOT_ID = '00000000000000000000000000000000';
+  const nodes = doc.getMap('nodes').toJSON() as Record<string, { text?: string; children?: string[] }>;
   const texts: string[] = [];
 
-  for (const node of Object.values(nodes)) {
+  const traverse = (nodeId: string) => {
+    const node = nodes[nodeId];
+    if (!node) return;
+
     if (node.text) {
       texts.push(node.text);
     }
-  }
+
+    if (node.children) {
+      for (const childId of node.children) {
+        traverse(childId);
+      }
+    }
+  };
+
+  traverse(ROOT_ID);
 
   return texts.join('');
 };
