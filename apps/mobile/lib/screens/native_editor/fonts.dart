@@ -72,6 +72,8 @@ Future<String> _getCacheBasePath() async {
   return _cacheBasePath!;
 }
 
+typedef NetworkCallbacks = ({void Function()? onStart, void Function()? onEnd});
+
 class EditorFontManager {
   EditorFontManager(this._app);
 
@@ -80,7 +82,7 @@ class EditorFontManager {
   final _loadingFonts = <String, Future<void>>{};
   bool pendingFontLoad = false;
 
-  Future<Uint8List> _fetchFont(String fileName) async {
+  Future<Uint8List> _fetchFont(String fileName, {NetworkCallbacks? callbacks}) async {
     final basePath = await _getCacheBasePath();
     final cacheFile = File('$basePath/$fileName');
 
@@ -88,18 +90,23 @@ class EditorFontManager {
       return cacheFile.readAsBytes();
     }
 
-    final response = await serviceLocator<Dio>().get<List<int>>(
-      '$_fontCdnBase/$fileName',
-      options: Options(responseType: ResponseType.bytes),
-    );
-    final data = Uint8List.fromList(response.data!);
+    callbacks?.onStart?.call();
+    try {
+      final response = await serviceLocator<Dio>().get<List<int>>(
+        '$_fontCdnBase/$fileName',
+        options: Options(responseType: ResponseType.bytes),
+      );
+      final data = Uint8List.fromList(response.data!);
 
-    unawaited(cacheFile.writeAsBytes(data));
+      unawaited(cacheFile.writeAsBytes(data));
 
-    return data;
+      return data;
+    } finally {
+      callbacks?.onEnd?.call();
+    }
   }
 
-  Future<void> _addFont(FontInfo font) async {
+  Future<void> _addFont(FontInfo font, {NetworkCallbacks? callbacks}) async {
     final key = '${font.family}-${font.weight}';
     if (_loadedFonts.contains(key)) return;
 
@@ -111,7 +118,7 @@ class EditorFontManager {
 
     final future = () async {
       try {
-        final data = await _fetchFont(font.file);
+        final data = await _fetchFont(font.file, callbacks: callbacks);
         if (_loadedFonts.contains(key)) return;
         _app.addFont(font.family, font.weight, data);
         _loadedFonts.add(key);
@@ -133,7 +140,7 @@ class EditorFontManager {
     }
   }
 
-  Future<bool> ensureRequiredFonts(List<(String, int)> fonts) async {
+  Future<bool> ensureRequiredFonts(List<(String, int)> fonts, {NetworkCallbacks? callbacks}) async {
     final toLoad = fonts
         .where((font) => !_loadedFonts.contains('${font.$1}-${font.$2}'))
         .map((font) => defaultFonts.where((f) => f.family == font.$1 && f.weight == font.$2).firstOrNull)
@@ -142,11 +149,11 @@ class EditorFontManager {
 
     if (toLoad.isEmpty) return false;
 
-    await Future.wait(toLoad.map(_addFont));
+    await Future.wait(toLoad.map((font) => _addFont(font, callbacks: callbacks)));
     return true;
   }
 
-  Future<bool> ensureRequiredWritingSystems(List<WritingSystem> systems) async {
+  Future<bool> ensureRequiredWritingSystems(List<WritingSystem> systems, {NetworkCallbacks? callbacks}) async {
     final toLoad = systems
         .expand((system) => _fallbackFonts[system] ?? <FontInfo>[])
         .where((font) => !_loadedFonts.contains('${font.family}-${font.weight}'))
@@ -154,7 +161,7 @@ class EditorFontManager {
 
     if (toLoad.isEmpty) return false;
 
-    await Future.wait(toLoad.map(_addFont));
+    await Future.wait(toLoad.map((font) => _addFont(font, callbacks: callbacks)));
 
     final families = toLoad.map((f) => f.family).toSet();
     for (final family in families) {

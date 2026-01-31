@@ -63,12 +63,17 @@ void handleFontsRequired(EditorController controller, Map<String, dynamic> cmd) 
   final fontList = fonts.cast<List<dynamic>>().map((f) => (f[0] as String, (f[1] as num).toInt())).toList();
 
   unawaited(
-    manager.ensureRequiredFonts(fontList).then((loaded) {
-      manager.pendingFontLoad = false;
-      if (loaded) {
-        controller.dispatch({'type': 'fontsLoaded'});
-      }
-    }),
+    manager
+        .ensureRequiredFonts(
+          fontList,
+          callbacks: (onStart: controller.incrementFontLoading, onEnd: controller.decrementFontLoading),
+        )
+        .then((loaded) {
+          manager.pendingFontLoad = false;
+          if (loaded) {
+            controller.dispatch({'type': 'fontsLoaded'});
+          }
+        }),
   );
 }
 
@@ -82,10 +87,15 @@ void handleWritingSystem(EditorController controller, Map<String, dynamic> cmd) 
   final systemList = systems.cast<String>().map((s) => WritingSystem.values.firstWhere((ws) => ws.name == s)).toList();
 
   unawaited(
-    manager.ensureRequiredWritingSystems(systemList).then((loaded) {
-      if (loaded) {
-        controller.dispatch({'type': 'fontsLoaded'});
-      }
-    }),
+    manager
+        .ensureRequiredWritingSystems(
+          systemList,
+          callbacks: (onStart: controller.incrementFontLoading, onEnd: controller.decrementFontLoading),
+        )
+        .then((loaded) {
+          if (loaded) {
+            controller.dispatch({'type': 'fontsLoaded'});
+          }
+        }),
   );
 }
