@@ -87,6 +87,8 @@ class EditorFontManager {
   final NativeEditorApplication _app;
   final _loadedFonts = <String>{};
   final _loadedSystems = <WritingSystem>{};
+  final _loadingFonts = <String, Future<void>>{};
+  final _loadingSystems = <WritingSystem, Future<void>>{};
   final _fetchingPromises = <String, Future<Uint8List>>{};
   bool pendingFontLoad = false;
 
@@ -121,23 +123,38 @@ class EditorFontManager {
       return;
     }
 
+    final existingFuture = _loadingFonts[key];
+    if (existingFuture != null) {
+      return existingFuture;
+    }
+
     final fontInfo = editorFonts.where((f) => f.name == name && f.weight == weight).firstOrNull;
     if (fontInfo == null) {
       return;
     }
 
-    try {
-      final url = '$_fontCdnBase/${fontInfo.file}';
-      final data = await _fetchFontData(url);
+    final future = () async {
+      try {
+        final url = '$_fontCdnBase/${fontInfo.file}';
+        final data = await _fetchFontData(url);
 
-      if (_loadedFonts.contains(key)) {
-        return;
+        if (_loadedFonts.contains(key)) {
+          return;
+        }
+
+        _app.registerFont(name, weight, data);
+        _loadedFonts.add(key);
+      } catch (err) {
+        // pass
       }
+    }();
 
-      _app.registerFont(name, weight, data);
-      _loadedFonts.add(key);
-    } catch (err) {
-      // pass
+    _loadingFonts[key] = future;
+
+    try {
+      await future;
+    } finally {
+      unawaited(_loadingFonts.remove(key));
     }
   }
 
@@ -163,16 +180,31 @@ class EditorFontManager {
       return;
     }
 
-    try {
-      final data = await _fetchFontData(_emojiFontUrl);
-      if (_loadedFonts.contains(key)) {
-        return;
-      }
+    final existingFuture = _loadingFonts[key];
+    if (existingFuture != null) {
+      return existingFuture;
+    }
 
-      _app.registerFallbackFont('NotoColorEmoji', 400, data);
-      _loadedFonts.add(key);
-    } catch (err) {
-      // pass
+    final future = () async {
+      try {
+        final data = await _fetchFontData(_emojiFontUrl);
+        if (_loadedFonts.contains(key)) {
+          return;
+        }
+
+        _app.registerFallbackFont('NotoColorEmoji', 400, data);
+        _loadedFonts.add(key);
+      } catch (err) {
+        // pass
+      }
+    }();
+
+    _loadingFonts[key] = future;
+
+    try {
+      await future;
+    } finally {
+      unawaited(_loadingFonts.remove(key));
     }
   }
 
@@ -186,6 +218,44 @@ class EditorFontManager {
     return true;
   }
 
+  Future<void> _loadSystemFonts(WritingSystem system) async {
+    if (_loadedSystems.contains(system)) {
+      return;
+    }
+
+    final existingFuture = _loadingSystems[system];
+    if (existingFuture != null) {
+      return existingFuture;
+    }
+
+    final fonts = _writingSystemFontMap[system] ?? [];
+    if (fonts.isEmpty) {
+      return;
+    }
+
+    final future = () async {
+      await Future.wait(
+        fonts.map((font) async {
+          try {
+            final data = await _fetchFontData(font.url);
+            _app.registerFallbackFont(font.family, font.weight, data);
+          } catch (err) {
+            // pass
+          }
+        }),
+      );
+      _loadedSystems.add(system);
+    }();
+
+    _loadingSystems[system] = future;
+
+    try {
+      await future;
+    } finally {
+      unawaited(_loadingSystems.remove(system));
+    }
+  }
+
   Future<bool> ensureRequiredScripts(List<WritingSystem> systems) async {
     final systemsToLoad = systems
         .where((s) => !_loadedSystems.contains(s) && (_writingSystemFontMap[s]?.isNotEmpty ?? false))
@@ -194,19 +264,7 @@ class EditorFontManager {
       return false;
     }
 
-    for (final system in systemsToLoad) {
-      final fonts = _writingSystemFontMap[system] ?? [];
-      for (final font in fonts) {
-        try {
-          final data = await _fetchFontData(font.url);
-          _app.registerFallbackFont(font.family, font.weight, data);
-        } catch (err) {
-          // pass
-        }
-      }
-      _loadedSystems.add(system);
-    }
-
+    await Future.wait(systemsToLoad.map(_loadSystemFonts));
     return true;
   }
 }
