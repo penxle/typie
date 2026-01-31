@@ -119,6 +119,29 @@ class NativeEditorApplication {
     }
   }
 
+  void registerFallbackFont(String name, int weight, Uint8List data) {
+    _checkDisposed();
+
+    final namePtr = name.toNativeUtf8();
+    final dataPtr = _bindings.editor_alloc(data.length);
+    dataPtr.asTypedList(data.length).setAll(0, data);
+
+    final result = _bindings.editor_application_register_fallback_font(
+      _handle,
+      namePtr.cast(),
+      weight,
+      dataPtr,
+      data.length,
+    );
+
+    calloc.free(namePtr);
+    _bindings.editor_free(dataPtr, data.length, data.length);
+
+    if (result != 0) {
+      throw EditorException(_getLastError() ?? 'Failed to register fallback font');
+    }
+  }
+
   void setAvailableFonts(Map<String, List<int>> fonts) {
     _checkDisposed();
 

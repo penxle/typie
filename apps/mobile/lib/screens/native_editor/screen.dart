@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:ui' as ui;
 
 import 'package:auto_route/auto_route.dart';
-import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -26,11 +25,10 @@ import 'package:typie/widgets/screen.dart';
 import 'cursor.dart';
 import 'external/models.dart';
 import 'external/overlay.dart';
+import 'fonts.dart';
 import 'theme.dart';
 import 'toolbar/floating/floating.dart';
 import 'upload_manager.dart';
-
-const _fontCdnBase = 'https://cdn.typie.net/fonts/editor';
 
 @RoutePage()
 class NativeEditorScreen extends StatelessWidget {
@@ -57,6 +55,7 @@ class _Content extends HookWidget {
   Widget build(BuildContext context) {
     final error = useState<String?>(null);
     final app = useRef<NativeEditorApplication?>(null);
+    final fontManager = useRef<EditorFontManager?>(null);
     final editor = useState<NativeEditor?>(null);
 
     final document = data.entity.node.when(document: (doc) => doc, orElse: () => null);
@@ -78,8 +77,10 @@ class _Content extends HookWidget {
           final snapshotBase64 = document.snapshot.value;
           final snapshot = snapshotBase64.isNotEmpty ? base64Decode(snapshotBase64) : null;
 
-          app.value = await _initApplication();
-          editor.value = app.value!.createEditor(scaleFactor, snapshot: snapshot)
+          final (application, manager) = await _initApplication();
+          app.value = application;
+          fontManager.value = manager;
+          editor.value = application.createEditor(scaleFactor, snapshot: snapshot)
             ..dispatch({
               'type': 'initialize',
               'theme': {'colors': theme},
@@ -121,7 +122,13 @@ class _Content extends HookWidget {
       backgroundColor: context.colors.surfaceDefault,
       keyboardDismiss: false,
       responsive: false,
-      child: _buildBody(context, isLoading: isLoading, error: error.value, editor: editor.value),
+      child: _buildBody(
+        context,
+        isLoading: isLoading,
+        error: error.value,
+        editor: editor.value,
+        fontManager: fontManager.value,
+      ),
     );
   }
 
@@ -130,6 +137,7 @@ class _Content extends HookWidget {
     required bool isLoading,
     required String? error,
     required NativeEditor? editor,
+    required EditorFontManager? fontManager,
   }) {
     if (isLoading) {
       return const Center(child: CircularProgressIndicator());
@@ -166,7 +174,12 @@ class _Content extends HookWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        return _EditorView(editor: editor, width: constraints.maxWidth, height: constraints.maxHeight);
+        return _EditorView(
+          editor: editor,
+          fontManager: fontManager,
+          width: constraints.maxWidth,
+          height: constraints.maxHeight,
+        );
       },
     );
   }
@@ -175,9 +188,10 @@ class _Content extends HookWidget {
 const _pageGap = 24.0;
 
 class _EditorView extends HookWidget {
-  const _EditorView({required this.editor, required this.width, required this.height});
+  const _EditorView({required this.editor, required this.fontManager, required this.width, required this.height});
 
   final NativeEditor editor;
+  final EditorFontManager? fontManager;
   final double width;
   final double height;
 
@@ -275,6 +289,38 @@ class _EditorView extends HookWidget {
                 externalElements.value = elements
                     .map((e) => ExternalElement.fromJson(e as Map<String, dynamic>))
                     .toList();
+              case {'type': 'fontsRequired', 'fonts': final List<dynamic> fonts}:
+                final manager = fontManager;
+                if (manager != null && !manager.pendingFontLoad) {
+                  manager.pendingFontLoad = true;
+                  final fontList = fonts
+                      .cast<List<dynamic>>()
+                      .map((f) => (f[0] as String, (f[1] as num).toInt()))
+                      .toList();
+                  unawaited(
+                    manager.ensureRequiredFonts(fontList).then((loaded) {
+                      manager.pendingFontLoad = false;
+                      if (loaded) {
+                        editor.dispatch({'type': 'fontsLoaded'});
+                      }
+                    }),
+                  );
+                }
+              case {'type': 'writingSystemRequired', 'systems': final List<dynamic> systems}:
+                final manager = fontManager;
+                if (manager != null) {
+                  final systemList = systems
+                      .cast<String>()
+                      .map((s) => WritingSystem.values.firstWhere((ws) => ws.name == s))
+                      .toList();
+                  unawaited(
+                    manager.ensureRequiredScripts(systemList).then((loaded) {
+                      if (loaded) {
+                        editor.dispatch({'type': 'fontsLoaded'});
+                      }
+                    }),
+                  );
+                }
             }
           }
         }
@@ -706,19 +752,22 @@ Map<String, dynamic>? _getActionFromKeyEvent(KeyEvent event) {
   return null;
 }
 
-Future<NativeEditorApplication> _initApplication() async {
-  final icuData = await rootBundle.load('assets/native/icu_data.postcard');
-  final fontResponse = await Dio().get<List<int>>(
-    '$_fontCdnBase/Pretendard-Regular.ttf',
-    options: Options(responseType: ResponseType.bytes),
-  );
+Future<(NativeEditorApplication, EditorFontManager)> _initApplication() async {
+  final (icuData, phantomFont) = await (
+    rootBundle.load('assets/native/icu_data.postcard'),
+    rootBundle.load('assets/native/Noto-Phantom.ttf'),
+  ).wait;
 
-  return NativeEditorApplication()
+  final app = NativeEditorApplication()
     ..loadIcuData(icuData.buffer.asUint8List())
-    ..registerFont('Pretendard', 400, Uint8List.fromList(fontResponse.data!))
-    ..setAvailableFonts({
-      'Pretendard': [400, 500, 600, 700],
-    });
+    ..setAvailableFonts(getAvailableFontsMap());
+
+  final fontManager = EditorFontManager(app);
+
+  await fontManager.loadPhantomFallback(phantomFont.buffer.asUint8List());
+  await Future.wait([fontManager.loadInitialFonts(), fontManager.loadEmojiFallback()]);
+
+  return (app, fontManager);
 }
 
 Future<ui.Image> _renderPage(NativeEditor editor, int pageIndex) async {
