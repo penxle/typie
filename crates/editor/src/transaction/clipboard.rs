@@ -1,11 +1,20 @@
 use crate::model::Fragment;
+use crate::runtime::Effect;
 use crate::transaction::Transaction;
+use crate::utils::detect_writing_systems;
 use anyhow::Result;
 
 impl Transaction {
     pub fn paste_text(&mut self, s: String) -> Result<bool> {
         if s.is_empty() {
             return Ok(false);
+        }
+
+        let writing_systems = detect_writing_systems(&s);
+        if !writing_systems.is_empty() {
+            self.push_effect(Effect::WritingSystemsUsageChanged {
+                systems: writing_systems,
+            });
         }
 
         let fragment = Fragment::from_text(&s);
@@ -21,6 +30,14 @@ impl Transaction {
             return Ok(false);
         }
 
+        let plain_text = fragment.to_plain_text();
+        let writing_systems = detect_writing_systems(&plain_text);
+        if !writing_systems.is_empty() {
+            self.push_effect(Effect::WritingSystemsUsageChanged {
+                systems: writing_systems,
+            });
+        }
+
         let fragment = fragment.with_fresh_ids();
         let result = self.insert_fragment(self.selection().head, fragment)?;
         if let Some(selection) = result.as_selection() {
@@ -33,7 +50,8 @@ impl Transaction {
 #[cfg(test)]
 mod tests {
     use crate::model::NodeId;
-    use crate::types::Affinity;
+    use crate::runtime::Effect;
+    use crate::types::{Affinity, WritingSystem};
 
     #[test]
     fn paste_text_keeps_following_paragraphs() {
@@ -937,5 +955,100 @@ mod tests {
         };
 
         assert_state_eq!(actual, expected);
+    }
+
+    #[test]
+    fn paste_text_emits_writing_systems_usage_changed() {
+        let mut p = id!();
+
+        let initial = state! {
+            doc {
+                @p paragraph {}
+            }
+            selection { (p, 0) }
+        };
+
+        let (_, effects) = transact_with_effect!(initial, |tr| tr
+            .paste_text("Hello 안녕 こんにちは 你好".to_string())
+            .unwrap());
+
+        let writing_systems: Vec<WritingSystem> = effects
+            .iter()
+            .filter_map(|e| match e {
+                Effect::WritingSystemsUsageChanged { systems } => Some(systems.clone()),
+                _ => None,
+            })
+            .flatten()
+            .collect();
+
+        assert!(
+            writing_systems.contains(&WritingSystem::Latin),
+            "paste_text should detect Latin"
+        );
+        assert!(
+            writing_systems.contains(&WritingSystem::Korean),
+            "paste_text should detect Korean"
+        );
+        assert!(
+            writing_systems.contains(&WritingSystem::Japanese),
+            "paste_text should detect Japanese"
+        );
+        assert!(
+            writing_systems.contains(&WritingSystem::Chinese),
+            "paste_text should detect Chinese"
+        );
+    }
+
+    #[test]
+    fn paste_fragment_emits_writing_systems_usage_changed() {
+        let mut p = id!();
+
+        let initial = state! {
+            doc {
+                @p paragraph {
+                    text { "Hello 안녕 こんにちは 你好" }
+                }
+            }
+            selection { (p, 0) -> (p, 18) }
+        };
+
+        let fragment = initial.selection.extract_fragment(&initial.doc).unwrap();
+
+        let paste_target = state! {
+            doc {
+                @p paragraph {}
+            }
+            selection { (p, 0) }
+        };
+
+        let (_, effects) = transact_with_effect!(paste_target, |tr| {
+            tr.paste_fragment(fragment).unwrap();
+        });
+
+        let writing_systems: Vec<WritingSystem> = effects
+            .iter()
+            .filter_map(|e| match e {
+                Effect::WritingSystemsUsageChanged { systems } => Some(systems.clone()),
+                _ => None,
+            })
+            .flatten()
+            .collect();
+
+        assert!(
+            writing_systems.contains(&WritingSystem::Latin),
+            "paste_fragment should detect Latin"
+        );
+        assert!(
+            writing_systems.contains(&WritingSystem::Korean),
+            "paste_fragment should detect Korean"
+        );
+        assert!(
+            writing_systems.contains(&WritingSystem::Japanese),
+            "paste_fragment should detect Japanese"
+        );
+        assert!(
+            writing_systems.contains(&WritingSystem::Chinese),
+            "paste_fragment should detect Chinese"
+        );
     }
 }
