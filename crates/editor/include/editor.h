@@ -19,6 +19,15 @@ typedef struct {
     uint32_t height;
 } RenderResult;
 
+typedef struct {
+    uint32_t doc_with_whitespace;
+    uint32_t doc_without_whitespace;
+    uint32_t doc_without_whitespace_and_punctuation;
+    uint32_t selection_with_whitespace;
+    uint32_t selection_without_whitespace;
+    uint32_t selection_without_whitespace_and_punctuation;
+} CharacterCounts;
+
 typedef void (*LogCallback)(int32_t level, const char* message);
 
 uint8_t* editor_alloc(size_t size);
@@ -44,6 +53,8 @@ char* editor_tick(EditorHandle* editor);
 void editor_flush(EditorHandle* editor);
 size_t editor_get_page_count(EditorHandle* editor);
 int32_t editor_render_page(EditorHandle* editor, size_t page_index, RenderResult* out_result);
+int32_t editor_can_drag_at(EditorHandle* editor, size_t page_idx, float x, float y);
+int32_t editor_get_character_counts(EditorHandle* editor, CharacterCounts* out_counts);
 
 #ifdef __cplusplus
 }

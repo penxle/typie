@@ -27,7 +27,7 @@ pub fn native_log(level: i32, message: &str) {
             LOG_LEVEL_ERROR => eprintln!("[ERROR] {message}"),
             LOG_LEVEL_WARN => eprintln!("[WARN] {message}"),
             LOG_LEVEL_INFO => println!("[INFO] {message}"),
-            _ => println!("[DEBUG] {message}"),
+            LOG_LEVEL_DEBUG | _ => println!("[DEBUG] {message}"),
         }
         return;
     }
@@ -119,6 +119,20 @@ impl IntoFfi for FfiResult<usize> {
             Err(e) => {
                 set_last_error(e);
                 0
+            }
+        }
+    }
+}
+
+impl IntoFfi for FfiResult<i32> {
+    type Output = i32;
+
+    fn into_ffi(self) -> i32 {
+        match self {
+            Ok(val) => val,
+            Err(e) => {
+                set_last_error(e);
+                -1
             }
         }
     }
@@ -472,4 +486,143 @@ pub extern "C" fn editor_render_page(
         },
         -1
     )
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn editor_can_drag_at(
+    editor: *mut EditorHandle,
+    page_idx: usize,
+    x: f32,
+    y: f32,
+) -> i32 {
+    ffi!(
+        {
+            if editor.is_null() {
+                return Err("Editor is null".into());
+            }
+
+            let editor = unsafe { &*(editor as *const EditorInner) };
+            Ok(if editor.runtime.can_drag_at(page_idx, x, y) {
+                1
+            } else {
+                0
+            })
+        },
+        -1
+    )
+}
+
+#[repr(C)]
+pub struct CharacterCounts {
+    pub doc_with_whitespace: u32,
+    pub doc_without_whitespace: u32,
+    pub doc_without_whitespace_and_punctuation: u32,
+    pub selection_with_whitespace: u32,
+    pub selection_without_whitespace: u32,
+    pub selection_without_whitespace_and_punctuation: u32,
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn editor_get_character_counts(
+    editor: *mut EditorHandle,
+    out_counts: *mut CharacterCounts,
+) -> i32 {
+    ffi!(
+        {
+            if editor.is_null() || out_counts.is_null() {
+                return Err("Invalid parameters".into());
+            }
+
+            let editor = unsafe { &mut *(editor as *mut EditorInner) };
+            let doc_text = editor.runtime.get_cached_plain_text();
+            let selection_text = {
+                let state = editor.runtime.state();
+                state.selection.to_plain_text(&state.doc)
+            };
+
+            let doc_counts = count_all(&doc_text);
+            let sel_counts = count_all(&selection_text);
+
+            unsafe {
+                (*out_counts).doc_with_whitespace = doc_counts.0;
+                (*out_counts).doc_without_whitespace = doc_counts.1;
+                (*out_counts).doc_without_whitespace_and_punctuation = doc_counts.2;
+                (*out_counts).selection_with_whitespace = sel_counts.0;
+                (*out_counts).selection_without_whitespace = sel_counts.1;
+                (*out_counts).selection_without_whitespace_and_punctuation = sel_counts.2;
+            }
+            Ok(())
+        },
+        -1
+    )
+}
+
+fn count_all(text: &str) -> (u32, u32, u32) {
+    use icu_properties::props::GeneralCategory;
+
+    let gc_data = crate::icu_data::get_general_category_map();
+    let gc_map = gc_data.as_borrowed();
+
+    let mut with_ws: u32 = 0;
+    let mut without_ws: u32 = 0;
+    let mut without_ws_punct: u32 = 0;
+    let mut prev_whitespace = false;
+
+    for c in text.chars() {
+        if c == '\u{200B}' {
+            continue;
+        }
+
+        if c.is_whitespace() {
+            if !prev_whitespace {
+                with_ws += 1;
+            }
+            prev_whitespace = true;
+        } else {
+            with_ws += 1;
+            without_ws += 1;
+            prev_whitespace = false;
+
+            let gc = gc_map.get(c);
+            if !matches!(
+                gc,
+                GeneralCategory::ConnectorPunctuation
+                    | GeneralCategory::DashPunctuation
+                    | GeneralCategory::ClosePunctuation
+                    | GeneralCategory::FinalPunctuation
+                    | GeneralCategory::InitialPunctuation
+                    | GeneralCategory::OtherPunctuation
+                    | GeneralCategory::OpenPunctuation
+            ) {
+                without_ws_punct += 1;
+            }
+        }
+    }
+
+    let first_non_ws = text
+        .chars()
+        .find(|&c| c != '\u{200B}' && !c.is_whitespace());
+
+    if first_non_ws.is_none() {
+        return (0, without_ws, without_ws_punct);
+    }
+
+    let starts_with_ws = text
+        .chars()
+        .find(|&c| c != '\u{200B}')
+        .map_or(false, |c| c.is_whitespace());
+    let ends_with_ws = text
+        .chars()
+        .rev()
+        .find(|&c| c != '\u{200B}')
+        .map_or(false, |c| c.is_whitespace());
+
+    if starts_with_ws && with_ws > 0 {
+        with_ws = with_ws.saturating_sub(1);
+    }
+    if ends_with_ws && with_ws > 0 {
+        with_ws = with_ws.saturating_sub(1);
+    }
+
+    (with_ws, without_ws, without_ws_punct)
 }
