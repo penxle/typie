@@ -82,7 +82,7 @@ void handleWritingSystem(EditorController controller, Map<String, dynamic> cmd) 
   final systemList = systems.cast<String>().map((s) => WritingSystem.values.firstWhere((ws) => ws.name == s)).toList();
 
   unawaited(
-    manager.ensureRequiredScripts(systemList).then((loaded) {
+    manager.ensureRequiredWritingSystems(systemList).then((loaded) {
       if (loaded) {
         controller.dispatch({'type': 'fontsLoaded'});
       }

@@ -1,4 +1,4 @@
-use crate::global::{register_fallback_font_family, register_font_family};
+use crate::global::{add_font, register_fallback_font};
 use crate::model::{Doc, LayoutMode, Node, NodeId, ParagraphNode};
 use crate::runtime::{Message, RawSpellcheckError, Runtime, State};
 use crate::state::{Position, Selection};
@@ -68,14 +68,14 @@ impl Application {
         crate::icu_data::load_icu_data(&icu_data)
     }
 
-    #[wasm_bindgen(js_name = registerFont)]
-    pub fn register_font(&self, name: &str, weight: u16, data: Vec<u8>) {
-        register_font_family(name, weight, &data);
+    #[wasm_bindgen(js_name = addFont)]
+    pub fn add_font(&self, name: &str, weight: u16, data: Vec<u8>) {
+        add_font(name, weight, &data);
     }
 
     #[wasm_bindgen(js_name = registerFallbackFont)]
-    pub fn register_fallback_font(&self, name: &str, weight: u16, data: Vec<u8>) {
-        register_fallback_font_family(name, weight, &data);
+    pub fn register_fallback_font(&self, name: &str) {
+        register_fallback_font(name);
     }
 
     #[wasm_bindgen(js_name = setAvailableFonts)]

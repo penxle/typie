@@ -33,8 +33,8 @@ void editor_set_log_callback(LogCallback callback);
 EditorApplication* editor_application_new(void);
 void editor_application_free(EditorApplication* app);
 int32_t editor_application_load_icu_data(EditorApplication* app, const uint8_t* data, size_t len);
-int32_t editor_application_register_font(EditorApplication* app, const char* name, uint16_t weight, const uint8_t* data, size_t data_len);
-int32_t editor_application_register_fallback_font(EditorApplication* app, const char* name, uint16_t weight, const uint8_t* data, size_t data_len);
+int32_t editor_application_add_font(EditorApplication* app, const char* name, uint16_t weight, const uint8_t* data, size_t data_len);
+int32_t editor_application_register_fallback_font(EditorApplication* app, const char* name);
 int32_t editor_application_set_available_fonts(EditorApplication* app, const char* fonts_json);
 EditorHandle* editor_application_create_editor(EditorApplication* app, double scale_factor, const uint8_t* snapshot, size_t snapshot_len);
 
