@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:typie/native/editor_native.dart';
+import 'package:typie/service.dart';
 
 class FontInfo {
   const FontInfo({required this.name, required this.weight, required this.file});
@@ -96,7 +97,10 @@ class EditorFontManager {
     }
 
     final future = () async {
-      final response = await Dio().get<List<int>>(url, options: Options(responseType: ResponseType.bytes));
+      final response = await serviceLocator<Dio>().get<List<int>>(
+        url,
+        options: Options(responseType: ResponseType.bytes),
+      );
       final data = response.data!;
       return Uint8List.fromList(data);
     }();
