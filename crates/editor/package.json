@@ -11,7 +11,7 @@
   "scripts": {
     "android:build": "scripts/build_android.sh debug",
     "android:release": "scripts/build_android.sh release",
-    "assets": "scripts/generate_icu_data.sh && scripts/copy_assets.sh",
+    "assets": "scripts/build_assets.sh",
     "ios:build": "scripts/build_ios.sh debug",
     "ios:release": "scripts/build_ios.sh release",
     "mobile:build": "scripts/build_mobile.sh all debug",
