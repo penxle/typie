@@ -25,7 +25,12 @@ abstract class EditorState with _$EditorState {
     @Default({}) Map<String, dynamic> selectionStats,
     @Default([]) List<ExternalElement> externalElements,
     Object? renderVersion,
+    @Default(0) int fontLoadingCount,
   }) = _EditorState;
+
+  const EditorState._();
+
+  bool get isLoadingFonts => fontLoadingCount > 0;
 }
 
 class EditorController extends ChangeNotifier {
@@ -60,5 +65,15 @@ class EditorController extends ChangeNotifier {
       _state = _state.copyWith(isSelecting: selecting);
       notifyListeners();
     }
+  }
+
+  void incrementFontLoading() {
+    _state = _state.copyWith(fontLoadingCount: _state.fontLoadingCount + 1);
+    notifyListeners();
+  }
+
+  void decrementFontLoading() {
+    _state = _state.copyWith(fontLoadingCount: _state.fontLoadingCount - 1);
+    notifyListeners();
   }
 }

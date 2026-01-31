@@ -66,6 +66,8 @@ export class Editor {
   }
 
   renderVersion = $state(0);
+  #fontLoadingCount = $state(0);
+  isLoadingFonts = $derived(this.#fontLoadingCount > 0);
 
   layout = $state({
     pageCount: 0,
@@ -434,7 +436,10 @@ export class Editor {
     if (fonts.length === 0 || !this.#application || this.#pendingFontLoad) return;
 
     this.#pendingFontLoad = true;
-    ensureRequiredFonts(this.#application, fonts).then((loaded) => {
+    ensureRequiredFonts(this.#application, fonts, {
+      onStart: () => this.#fontLoadingCount++,
+      onEnd: () => this.#fontLoadingCount--,
+    }).then((loaded) => {
       this.#pendingFontLoad = false;
       if (loaded) {
         this.dispatch({ type: 'fontsLoaded' });
@@ -445,7 +450,10 @@ export class Editor {
   #handleWritingSystemsRequired(systems: WritingSystem[]): void {
     if (systems.length === 0 || !this.#application) return;
 
-    ensureRequiredWritingSystems(this.#application, systems).then((loaded) => {
+    ensureRequiredWritingSystems(this.#application, systems, {
+      onStart: () => this.#fontLoadingCount++,
+      onEnd: () => this.#fontLoadingCount--,
+    }).then((loaded) => {
       if (loaded) {
         this.dispatch({ type: 'fontsLoaded' });
       }

@@ -73,19 +73,26 @@ function getLoadingMap(app: Application): Map<string, Promise<void>> {
   return map;
 }
 
-async function fetchFont(url: string): Promise<ArrayBuffer> {
+type NetworkCallbacks = { onStart?: () => void; onEnd?: () => void };
+
+async function fetchFont(url: string, callbacks?: NetworkCallbacks): Promise<ArrayBuffer> {
   const cache = await caches.open(FONT_CACHE_NAME);
   const cached = await cache.match(url);
   if (cached) return cached.arrayBuffer();
 
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`Failed to fetch font from ${url}`);
+  callbacks?.onStart?.();
+  try {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`Failed to fetch font from ${url}`);
 
-  await cache.put(url, response.clone());
-  return response.arrayBuffer();
+    await cache.put(url, response.clone());
+    return response.arrayBuffer();
+  } finally {
+    callbacks?.onEnd?.();
+  }
 }
 
-async function addFont(app: Application, font: FontInfo): Promise<void> {
+async function addFont(app: Application, font: FontInfo, callbacks?: NetworkCallbacks): Promise<void> {
   const key = `${font.family}-${font.weight}`;
   const loaded = getLoadedSet(app);
   if (loaded.has(key)) return;
@@ -99,7 +106,7 @@ async function addFont(app: Application, font: FontInfo): Promise<void> {
 
   const promise = (async () => {
     try {
-      const buffer = await fetchFont(`${FONT_CDN_BASE}/${font.file}`);
+      const buffer = await fetchFont(`${FONT_CDN_BASE}/${font.file}`, callbacks);
       if (loaded.has(key)) return;
       app.addFont(font.family, font.weight, new Uint8Array(buffer));
       loaded.add(key);
@@ -123,7 +130,7 @@ export async function ensurePhantomFonts(app: Application): Promise<void> {
   }
 }
 
-export async function ensureRequiredFonts(app: Application, fonts: [string, number][]): Promise<boolean> {
+export async function ensureRequiredFonts(app: Application, fonts: [string, number][], callbacks?: NetworkCallbacks): Promise<boolean> {
   const loaded = getLoadedSet(app);
   const toLoad = fonts
     .filter(([family, weight]) => !loaded.has(`${family}-${weight}`))
@@ -132,17 +139,21 @@ export async function ensureRequiredFonts(app: Application, fonts: [string, numb
 
   if (toLoad.length === 0) return false;
 
-  await Promise.all(toLoad.map((font) => addFont(app, font)));
+  await Promise.all(toLoad.map((font) => addFont(app, font, callbacks)));
   return true;
 }
 
-export async function ensureRequiredWritingSystems(app: Application, systems: WritingSystem[]): Promise<boolean> {
+export async function ensureRequiredWritingSystems(
+  app: Application,
+  systems: WritingSystem[],
+  callbacks?: NetworkCallbacks,
+): Promise<boolean> {
   const loaded = getLoadedSet(app);
   const toLoad = systems.flatMap((system) => FALLBACK_FONTS[system]).filter((font) => !loaded.has(`${font.family}-${font.weight}`));
 
   if (toLoad.length === 0) return false;
 
-  await Promise.all(toLoad.map((font) => addFont(app, font)));
+  await Promise.all(toLoad.map((font) => addFont(app, font, callbacks)));
 
   const families = new Set(toLoad.map((f) => f.family));
   for (const family of families) {
