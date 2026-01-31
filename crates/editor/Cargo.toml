@@ -25,8 +25,8 @@ macros = { path = "./macros" }
 tiny-skia = "0.11"
 skrifa = "0.40"
 image = { version = "0.25", default-features = false, features = ["png"] }
-parley = "0.7.0"
-fontique = { version = "0.7.0", features = ["icu_properties"] }
+parley = { version = "0.7.0", default-features = false, features = ["std"] }
+fontique = { version = "0.7.0", default-features = false, features = ["icu_properties"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 uuid = { version = "1.11", features = ["v4", "serde"] }
