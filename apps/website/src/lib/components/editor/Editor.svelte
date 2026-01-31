@@ -69,7 +69,13 @@
 
   $effect(() => {
     untrack(() => {
-      editor.initialize({ theme: getEditorTheme(theme.effectiveTheme), snapshot, readOnly, onDocChanged, onExitedDocumentStart });
+      editor.initialize({
+        theme: getEditorTheme(theme.effectiveTheme, theme.lightVariant, theme.darkVariant),
+        snapshot,
+        readOnly,
+        onDocChanged,
+        onExitedDocumentStart,
+      });
     });
 
     return () => {
@@ -90,7 +96,10 @@
 
   $effect(() => {
     if (initialized) {
-      editor.dispatch({ type: 'setTheme', theme: getEditorTheme(theme.effectiveTheme) });
+      editor.dispatch({
+        type: 'setTheme',
+        theme: getEditorTheme(theme.effectiveTheme, theme.lightVariant, theme.darkVariant),
+      });
     }
   });
 
