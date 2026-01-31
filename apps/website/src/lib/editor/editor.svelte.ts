@@ -1,10 +1,9 @@
 import { Application, getMemory, SyncVersion } from '@typie/editor';
 import icuPostcardUrl from '@typie/editor/pkg/icu_data.postcard?url';
-import notoPhantomUrl from '@typie/editor/pkg/Noto-Phantom.ttf?url';
 import { nanoid } from 'nanoid';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { FRAGMENT_MIME, PAGE_GAP } from './constants';
-import { ensureRequiredFonts, ensureRequiredScripts, getAvailableFontsMap, loadEmojiFallback, loadInitialFonts } from './fonts';
+import { ensurePhantomFonts, ensureRequiredFonts, ensureRequiredWritingSystems, getAvailableFontsMap } from './fonts';
 import { calculateImageDisplaySize, calculateRelativePosition, findNearestPageCoordinate, getPageElement, idleCallback } from './utils';
 import type { Editor as WasmEditor, ExportedUpdates, Modifier, PointerButton } from '@typie/editor';
 import type { ThemeColors } from './theme';
@@ -231,12 +230,10 @@ export class Editor {
     const app = new Application();
     this.#application = app;
 
-    const [icuPostcard, notoPhantom] = await Promise.all(
-      [icuPostcardUrl, notoPhantomUrl].map((url) => fetch(url).then((res) => res.arrayBuffer())),
-    );
+    const icuPostcard = await fetch(icuPostcardUrl).then((res) => res.arrayBuffer());
 
     app.loadIcuData(new Uint8Array(icuPostcard));
-    app.registerFallbackFont('Noto-Phantom', 400, new Uint8Array(notoPhantom));
+    await ensurePhantomFonts(app);
     app.setAvailableFonts(getAvailableFontsMap());
 
     const scaleFactor = window.devicePixelRatio * (window.visualViewport?.scale || 1);
@@ -256,10 +253,6 @@ export class Editor {
 
     this.#start();
     this.#readyResolve?.();
-
-    Promise.all([loadInitialFonts(app), loadEmojiFallback(app)]).then(() => {
-      this.dispatch({ type: 'fontsLoaded' });
-    });
   }
 
   #start(): void {
@@ -452,7 +445,7 @@ export class Editor {
   #handleWritingSystemsRequired(systems: WritingSystem[]): void {
     if (systems.length === 0 || !this.#application) return;
 
-    ensureRequiredScripts(this.#application, systems).then((loaded) => {
+    ensureRequiredWritingSystems(this.#application, systems).then((loaded) => {
       if (loaded) {
         this.dispatch({ type: 'fontsLoaded' });
       }

@@ -1,8 +1,8 @@
-import { ensureRequiredFonts, getAvailableFontsMap, loadInitialFonts } from './fonts';
+import { ensurePhantomFonts, ensureRequiredFonts, ensureRequiredWritingSystems, getAvailableFontsMap } from './fonts';
 import { createPdfFromPages } from './pdf';
 import { renderDocumentPages } from './render';
 import { createWasmApplication } from './wasm';
-import type { Cmd, Theme } from '@typie/editor';
+import type { Cmd, Theme, WritingSystem } from '@typie/editor';
 
 const SCALE_FACTOR = 2;
 const MAX_TICKS = 1000;
@@ -69,14 +69,13 @@ async function generateDocumentPdfInternal(
   author: string,
   pageLayout: PageLayout,
 ): Promise<Uint8Array> {
-  const { app, getMemory, icuData, phantomFont, cleanup } = await createWasmApplication();
+  const { app, getMemory, icuData, cleanup } = await createWasmApplication();
 
   try {
     app.loadIcuData(icuData);
-    app.registerFallbackFont('Noto-Phantom', 400, phantomFont);
     app.setAvailableFonts(getAvailableFontsMap());
 
-    await loadInitialFonts(app);
+    await ensurePhantomFonts(app);
 
     const editor = app.createEditor(SCALE_FACTOR, snapshot);
 
@@ -101,6 +100,7 @@ async function generateDocumentPdfInternal(
 
       let pageCount = 0;
       let pendingFonts: [string, number][] = [];
+      let pendingWritingSystems: WritingSystem[] = [];
       let needsRender = false;
 
       for (let tick = 0; tick < MAX_TICKS; tick++) {
@@ -124,6 +124,10 @@ async function generateDocumentPdfInternal(
               pendingFonts.push(...cmd.fonts);
               break;
             }
+            case 'writingSystemRequired': {
+              pendingWritingSystems.push(...cmd.systems);
+              break;
+            }
             case 'renderRequired': {
               needsRender = true;
               break;
@@ -131,9 +135,20 @@ async function generateDocumentPdfInternal(
           }
         }
 
+        let fontsLoaded = false;
+
         if (pendingFonts.length > 0) {
-          await ensureRequiredFonts(app, pendingFonts);
+          fontsLoaded = await ensureRequiredFonts(app, pendingFonts);
           pendingFonts = [];
+        }
+
+        if (pendingWritingSystems.length > 0) {
+          const scriptsLoaded = await ensureRequiredWritingSystems(app, pendingWritingSystems);
+          fontsLoaded = fontsLoaded || scriptsLoaded;
+          pendingWritingSystems = [];
+        }
+
+        if (fontsLoaded) {
           editor.dispatch({ type: 'fontsLoaded' });
         }
 

@@ -23,11 +23,20 @@ impl Globals {
 }
 
 #[allow(unused)]
-pub fn register_font_family(name: &str, weight: u16, data: &[u8]) -> fontique::FamilyId {
+pub fn add_font(name: &str, weight: u16, data: &[u8]) -> Option<fontique::FamilyId> {
     GLOBALS.with(|globals| {
         let globals = globals.borrow();
-
         let mut fcx = globals.parley_font_context.borrow_mut();
+
+        if let Some(family) = fcx.collection.family_by_name(name) {
+            let has_weight = family
+                .fonts()
+                .iter()
+                .any(|font| font.weight().value() as u16 == weight);
+            if has_weight {
+                return None;
+            }
+        }
 
         let families = fcx.collection.register_fonts(
             fontique::Blob::new(Arc::new(data.to_vec())),
@@ -38,18 +47,27 @@ pub fn register_font_family(name: &str, weight: u16, data: &[u8]) -> fontique::F
             }),
         );
 
-        families.into_iter().next().unwrap().0
+        families.into_iter().next().map(|(id, _)| id)
     })
 }
 
 #[allow(unused)]
-pub fn register_fallback_font_family(name: &str, weight: u16, data: &[u8]) -> fontique::FamilyId {
-    let family = register_font_family(name, weight, data);
-
+pub fn register_fallback_font(name: &str) {
     GLOBALS.with(|globals| {
         let globals = globals.borrow();
-
         let mut fcx = globals.parley_font_context.borrow_mut();
+
+        let Some(family) = fcx.collection.family_by_name(name).map(|f| f.id()) else {
+            return;
+        };
+
+        let already_registered = fcx
+            .collection
+            .fallback_families(fontique::Script::from(icu_properties::props::Script::Latin))
+            .any(|id| id == family);
+        if already_registered {
+            return;
+        }
 
         for script in icu_properties::props::Script::ALL_VALUES {
             let fallbacks = fcx
@@ -63,8 +81,6 @@ pub fn register_fallback_font_family(name: &str, weight: u16, data: &[u8]) -> fo
             );
         }
     });
-
-    family
 }
 
 pub fn set_available_fonts(fonts: HashMap<String, Vec<u16>>) {

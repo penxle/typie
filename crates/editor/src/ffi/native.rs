@@ -1,4 +1,4 @@
-use crate::global::{register_fallback_font_family, register_font_family};
+use crate::global::{add_font, register_fallback_font};
 use crate::model::{Doc, LayoutMode, Node, NodeId, ParagraphNode};
 use crate::runtime::{Runtime, State};
 use crate::state::{Position, Selection};
@@ -248,7 +248,7 @@ pub extern "C" fn editor_application_load_icu_data(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn editor_application_register_font(
+pub extern "C" fn editor_application_add_font(
     _app: *mut EditorApplication,
     name: *const c_char,
     weight: u16,
@@ -259,7 +259,7 @@ pub extern "C" fn editor_application_register_font(
         {
             let name = parse_cstr(name, "Font name")?;
             let data = unsafe { slice_from_raw(data, data_len, "Font data")? };
-            register_font_family(name, weight, data);
+            add_font(name, weight, data);
             Ok(())
         },
         -1
@@ -270,15 +270,11 @@ pub extern "C" fn editor_application_register_font(
 pub extern "C" fn editor_application_register_fallback_font(
     _app: *mut EditorApplication,
     name: *const c_char,
-    weight: u16,
-    data: *const u8,
-    data_len: usize,
 ) -> i32 {
     ffi!(
         {
             let name = parse_cstr(name, "Font name")?;
-            let data = unsafe { slice_from_raw(data, data_len, "Font data")? };
-            register_fallback_font_family(name, weight, data);
+            register_fallback_font(name);
             Ok(())
         },
         -1

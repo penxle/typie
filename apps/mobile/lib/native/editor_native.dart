@@ -102,40 +102,29 @@ class NativeEditorApplication {
     }
   }
 
-  void registerFont(String name, int weight, Uint8List data) {
+  void addFont(String name, int weight, Uint8List data) {
     _checkDisposed();
 
     final namePtr = name.toNativeUtf8();
     final dataPtr = _bindings.editor_alloc(data.length);
     dataPtr.asTypedList(data.length).setAll(0, data);
 
-    final result = _bindings.editor_application_register_font(_handle, namePtr.cast(), weight, dataPtr, data.length);
+    final result = _bindings.editor_application_add_font(_handle, namePtr.cast(), weight, dataPtr, data.length);
 
     calloc.free(namePtr);
     _bindings.editor_free(dataPtr, data.length, data.length);
 
     if (result != 0) {
-      throw EditorException(_getLastError() ?? 'Failed to register font');
+      throw EditorException(_getLastError() ?? 'Failed to add font');
     }
   }
 
-  void registerFallbackFont(String name, int weight, Uint8List data) {
+  void registerFallbackFont(String name) {
     _checkDisposed();
 
     final namePtr = name.toNativeUtf8();
-    final dataPtr = _bindings.editor_alloc(data.length);
-    dataPtr.asTypedList(data.length).setAll(0, data);
-
-    final result = _bindings.editor_application_register_fallback_font(
-      _handle,
-      namePtr.cast(),
-      weight,
-      dataPtr,
-      data.length,
-    );
-
+    final result = _bindings.editor_application_register_fallback_font(_handle, namePtr.cast());
     calloc.free(namePtr);
-    _bindings.editor_free(dataPtr, data.length, data.length);
 
     if (result != 0) {
       throw EditorException(_getLastError() ?? 'Failed to register fallback font');

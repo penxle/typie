@@ -7,16 +7,13 @@ const editorPkgDir = path.dirname(Bun.resolveSync('@typie/editor/pkg/editor.js',
 const WASM_PATH = path.join(editorPkgDir, 'editor_bg.wasm');
 const GLUE_PATH = path.join(editorPkgDir, 'editor_bg.js');
 const ICU_DATA_PATH = path.join(editorPkgDir, 'icu_data.postcard');
-const PHANTOM_FONT_PATH = path.join(editorPkgDir, 'Noto-Phantom.ttf');
 
 let wasmModule: WebAssembly.Module | null = null;
 let icuData: Uint8Array | null = null;
-let phantomFont: Uint8Array | null = null;
 
 async function loadResources(): Promise<{
   wasmModule: WebAssembly.Module;
   icuData: Uint8Array;
-  phantomFont: Uint8Array;
 }> {
   if (!wasmModule) {
     const wasmBuffer = await readFile(WASM_PATH);
@@ -25,11 +22,8 @@ async function loadResources(): Promise<{
   if (!icuData) {
     icuData = new Uint8Array(await readFile(ICU_DATA_PATH));
   }
-  if (!phantomFont) {
-    phantomFont = new Uint8Array(await readFile(PHANTOM_FONT_PATH));
-  }
 
-  return { wasmModule, icuData, phantomFont };
+  return { wasmModule, icuData };
 }
 
 type WasmExports = {
@@ -48,7 +42,6 @@ export async function createWasmApplication(): Promise<{
   app: Application;
   getMemory: () => WebAssembly.Memory;
   icuData: Uint8Array;
-  phantomFont: Uint8Array;
   cleanup: () => void;
 }> {
   const resources = await loadResources();
@@ -69,7 +62,6 @@ export async function createWasmApplication(): Promise<{
     app,
     getMemory: glue.getMemory,
     icuData: resources.icuData,
-    phantomFont: resources.phantomFont,
     cleanup: () => {
       app.free();
     },
