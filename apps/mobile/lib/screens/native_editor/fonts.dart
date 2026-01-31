@@ -65,7 +65,9 @@ const _fontCacheDir = 'fonts';
 String? _cacheBasePath;
 
 Future<String> _getCacheBasePath() async {
-  if (_cacheBasePath != null) return _cacheBasePath!;
+  if (_cacheBasePath != null) {
+    return _cacheBasePath!;
+  }
   final cacheDir = await getApplicationCacheDirectory();
   _cacheBasePath = '${cacheDir.path}/$_fontCacheDir';
   await Directory(_cacheBasePath!).create(recursive: true);
@@ -86,7 +88,7 @@ class EditorFontManager {
     final basePath = await _getCacheBasePath();
     final cacheFile = File('$basePath/$fileName');
 
-    if (await cacheFile.exists()) {
+    if (cacheFile.existsSync()) {
       return cacheFile.readAsBytes();
     }
 
@@ -108,7 +110,9 @@ class EditorFontManager {
 
   Future<void> _addFont(FontInfo font, {NetworkCallbacks? callbacks}) async {
     final key = '${font.family}-${font.weight}';
-    if (_loadedFonts.contains(key)) return;
+    if (_loadedFonts.contains(key)) {
+      return;
+    }
 
     final existing = _loadingFonts[key];
     if (existing != null) {
@@ -119,7 +123,9 @@ class EditorFontManager {
     final future = () async {
       try {
         final data = await _fetchFont(font.file, callbacks: callbacks);
-        if (_loadedFonts.contains(key)) return;
+        if (_loadedFonts.contains(key)) {
+          return;
+        }
         _app.addFont(font.family, font.weight, data);
         _loadedFonts.add(key);
       } catch (_) {}
@@ -147,7 +153,9 @@ class EditorFontManager {
         .whereType<FontInfo>()
         .toList();
 
-    if (toLoad.isEmpty) return false;
+    if (toLoad.isEmpty) {
+      return false;
+    }
 
     await Future.wait(toLoad.map((font) => _addFont(font, callbacks: callbacks)));
     return true;
@@ -159,14 +167,13 @@ class EditorFontManager {
         .where((font) => !_loadedFonts.contains('${font.family}-${font.weight}'))
         .toList();
 
-    if (toLoad.isEmpty) return false;
+    if (toLoad.isEmpty) {
+      return false;
+    }
 
     await Future.wait(toLoad.map((font) => _addFont(font, callbacks: callbacks)));
 
-    final families = toLoad.map((f) => f.family).toSet();
-    for (final family in families) {
-      _app.registerFallbackFont(family);
-    }
+    toLoad.map((f) => f.family).toSet().forEach(_app.registerFallbackFont);
 
     return true;
   }
