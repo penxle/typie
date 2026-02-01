@@ -17,9 +17,7 @@ pub fn load_icu_data(data: &[u8]) -> Result<(), JsValue> {
         BlobDataProvider::try_new_from_static_blob(Box::leak(data.to_vec().into_boxed_slice()))
             .map_err(|e| JsValue::from_str(&format!("Failed to initialize ICU data: {:?}", e)))?;
 
-    if let Err(_) = ICU_DATA_PROVIDER.set(provider) {
-        log!("ICU data already initialized");
-    }
+    let _ = ICU_DATA_PROVIDER.set(provider);
 
     Ok(())
 }
@@ -30,9 +28,7 @@ pub fn load_icu_data(data: &[u8]) -> Result<(), String> {
         BlobDataProvider::try_new_from_static_blob(Box::leak(data.to_vec().into_boxed_slice()))
             .map_err(|e| format!("Failed to initialize ICU data: {:?}", e))?;
 
-    if let Err(_) = ICU_DATA_PROVIDER.set(provider) {
-        log!("ICU data already initialized");
-    }
+    let _ = ICU_DATA_PROVIDER.set(provider);
 
     Ok(())
 }

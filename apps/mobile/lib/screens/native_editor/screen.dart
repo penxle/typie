@@ -65,7 +65,7 @@ class _Content extends HookWidget {
           final snapshotBase64 = document.snapshot.value;
           final snapshot = snapshotBase64.isNotEmpty ? base64Decode(snapshotBase64) : null;
 
-          final (application, manager) = await initApplication();
+          final (application, manager) = await getOrInitializeApplication();
           app.value = application;
           fontManager.value = manager;
           editor.value = application.createEditor(scaleFactor, snapshot: snapshot)
@@ -84,7 +84,6 @@ class _Content extends HookWidget {
 
       return () {
         editor.value?.dispose();
-        app.value?.dispose();
       };
     }, [document?.id]);
 

@@ -25,6 +25,33 @@ import type {
   WritingSystem,
 } from './types';
 
+let sharedApplication: Application | null = null;
+let applicationInitPromise: Promise<Application> | null = null;
+
+async function getOrInitializeApplication(): Promise<Application> {
+  if (sharedApplication) {
+    return sharedApplication;
+  }
+
+  if (applicationInitPromise) {
+    return applicationInitPromise;
+  }
+
+  applicationInitPromise = (async () => {
+    const app = new Application();
+
+    const icuPostcard = await fetch(icuPostcardUrl).then((res) => res.arrayBuffer());
+    app.loadIcuData(new Uint8Array(icuPostcard));
+    await ensurePhantomFonts(app);
+    app.setAvailableFonts(getAvailableFontsMap());
+
+    sharedApplication = app;
+    return app;
+  })();
+
+  return applicationInitPromise;
+}
+
 const CLICK_INTERVAL = 500;
 const CLICK_DISTANCE = 5;
 
@@ -229,14 +256,8 @@ export class Editor {
     this.#onDocChanged = options.onDocChanged;
     this.#onExitedDocumentStart = options.onExitedDocumentStart;
 
-    const app = new Application();
+    const app = await getOrInitializeApplication();
     this.#application = app;
-
-    const icuPostcard = await fetch(icuPostcardUrl).then((res) => res.arrayBuffer());
-
-    app.loadIcuData(new Uint8Array(icuPostcard));
-    await ensurePhantomFonts(app);
-    app.setAvailableFonts(getAvailableFontsMap());
 
     const scaleFactor = window.devicePixelRatio * (window.visualViewport?.scale || 1);
     const wasmEditor = app.createEditor(scaleFactor, options.snapshot);
@@ -1194,7 +1215,6 @@ export class Editor {
   destroy(): void {
     this.#stop();
     this.#wasmEditor = null;
-    this.#application = null;
   }
 
   #toPointerButton(button: number): PointerButton {
