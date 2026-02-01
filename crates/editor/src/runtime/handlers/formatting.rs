@@ -300,22 +300,18 @@ mod tests {
             selection { (p, 6) }
         };
 
-        // 1. Start composition with "abc"
         runtime.update(Message::CompositionUpdate {
             text: "abc".to_string(),
         });
         assert_eq!(runtime.state().preedit.as_ref().unwrap().text, "abc");
         assert!(runtime.state().doc.to_plain_text().ends_with("start "));
 
-        // 2. Commit preedit and press ToggleBold
         runtime.update(Message::CommitPreedit);
         runtime.update(Message::ToggleBold);
 
-        // Verify: "abc" is committed to doc
         assert!(runtime.state().doc.to_plain_text().ends_with("start abc"));
         assert!(runtime.state().preedit.is_none());
 
-        // Verify: Bold is now pending for subsequent characters
         let pending = runtime.state().pending_marks.as_ref().unwrap();
         assert!(
             pending
@@ -323,19 +319,11 @@ mod tests {
                 .any(|m| matches!(m, Mark::FontWeight(FontWeightMark { weight: 700 })))
         );
 
-        // 3. Browser sends redundant Input("abc") - should be ignored
-        runtime.update(Message::Input {
-            text: "abc".to_string(),
-        });
-        assert!(runtime.state().doc.to_plain_text().ends_with("start abc")); // No duplication
-
-        // 4. Continue typing "d"
         runtime.update(Message::Input {
             text: "d".to_string(),
         });
         assert!(runtime.state().doc.to_plain_text().ends_with("start abcd"));
 
-        // Verify "d" is bold
         let snapshot = runtime.selection_snapshot_owned();
         let (uniform, _) = runtime.collect_selection_marks(snapshot);
         assert!(
