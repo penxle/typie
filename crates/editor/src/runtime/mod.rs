@@ -1737,7 +1737,7 @@ mod tests {
                 image(id: Some("test-image-id".to_string()),)
                 paragraph {}
             }
-            selection { (NodeId::ROOT, 0) -> (NodeId::ROOT, 1) }
+            selection { (NodeId::ROOT, 0) -> (NodeId::ROOT, 1, Affinity::Upstream) }
         };
 
         let doc = rt.doc();
@@ -1777,7 +1777,7 @@ mod tests {
         let sel = rt.state().selection;
         let expected_sel = Selection::new(
             Position::new(NodeId::ROOT, 1, Affinity::default()),
-            Position::new(NodeId::ROOT, 2, Affinity::default()),
+            Position::new(NodeId::ROOT, 2, Affinity::Upstream),
         );
 
         assert_eq!(

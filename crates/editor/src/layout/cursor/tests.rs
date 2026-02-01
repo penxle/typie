@@ -2493,7 +2493,7 @@ fn test_hit_test_on_selected_image_preserves_selection() {
                 text { "Line 2" }
             }
         }
-        selection { (NodeId::ROOT, 1) -> (NodeId::ROOT, 2) }
+        selection { (NodeId::ROOT, 1) -> (NodeId::ROOT, 2, Affinity::Upstream) }
     };
 
     rt.layout();
@@ -2528,7 +2528,7 @@ fn test_hit_test_on_selected_image_preserves_selection() {
         rt.state().selection,
         Selection::new(
             Position::new(NodeId::ROOT, 1, Affinity::Downstream),
-            Position::new(NodeId::ROOT, 2, Affinity::Downstream)
+            Position::new(NodeId::ROOT, 2, Affinity::Upstream)
         ),
         "Selection should remain unchanged"
     );

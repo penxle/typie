@@ -687,7 +687,7 @@ mod tests {
                 @img image (id: Some("test-image-id".to_string()),) {}
                 @p2 paragraph { text { "After" } }
             }
-            selection { (NodeId::ROOT, 1) -> (NodeId::ROOT, 2) }
+            selection { (NodeId::ROOT, 1) -> (NodeId::ROOT, 2, Affinity::Upstream) }
         };
         assert_state_eq!(rt.state(), expected);
     }
