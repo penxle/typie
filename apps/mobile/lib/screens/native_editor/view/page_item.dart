@@ -39,8 +39,12 @@ class PageItem extends HookWidget {
   Widget build(BuildContext context) {
     final renderer = useRef<EditorTextureRenderer?>(null);
     final textureId = useState<int?>(null);
+    final textureSize = useState<Size?>(null);
     final lastTapTime = useRef<DateTime?>(null);
     final lastTapPosition = useRef<Offset?>(null);
+    final isMounted = useRef(true);
+
+    final devicePixelRatio = MediaQuery.devicePixelRatioOf(context);
 
     useEffect(() {
       Future<void> initRenderer() async {
@@ -51,9 +55,17 @@ class PageItem extends HookWidget {
           await r.create(pageIndex);
         }
 
+        if (!isMounted.value) {
+          return;
+        }
+
         if (r.textureId != null) {
           await r.render(pageIndex);
+          if (!isMounted.value) {
+            return;
+          }
           textureId.value = r.textureId;
+          textureSize.value = Size(r.width / devicePixelRatio, r.height / devicePixelRatio);
         }
       }
 
@@ -63,11 +75,12 @@ class PageItem extends HookWidget {
 
     useEffect(() {
       return () {
+        isMounted.value = false;
         unawaited(renderer.value?.dispose());
       };
     }, const []);
 
-    final hasTexture = textureId.value != null && pageHeight != null;
+    final hasTexture = textureId.value != null && textureSize.value != null;
 
     if (hasTexture) {
       return Padding(
@@ -145,9 +158,8 @@ class PageItem extends HookWidget {
             });
             onSelectionEnd();
           },
-          child: SizedBox(
-            width: pageWidth,
-            height: pageHeight,
+          child: SizedBox.fromSize(
+            size: textureSize.value,
             child: Stack(
               children: [
                 SizedBox.expand(child: Texture(textureId: textureId.value!)),
