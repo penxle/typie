@@ -2,10 +2,13 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:typie/context/theme.dart';
 import 'package:typie/native/editor_native.dart';
 import 'package:typie/native/editor_texture_renderer.dart';
 import 'package:typie/screens/native_editor/cursor.dart';
 import 'package:typie/screens/native_editor/external/overlay.dart';
+
+const _cropMarkerSize = 32.0;
 
 class PageItem extends HookWidget {
   const PageItem({
@@ -18,6 +21,11 @@ class PageItem extends HookWidget {
     required this.cursorInfo,
     required this.isFocused,
     required this.lineHighlightEnabled,
+    required this.isPaginated,
+    this.pageMarginTop = 0,
+    this.pageMarginBottom = 0,
+    this.pageMarginLeft = 0,
+    this.pageMarginRight = 0,
     super.key,
   });
 
@@ -30,6 +38,11 @@ class PageItem extends HookWidget {
   final CursorInfo? cursorInfo;
   final bool isFocused;
   final bool lineHighlightEnabled;
+  final bool isPaginated;
+  final double pageMarginTop;
+  final double pageMarginBottom;
+  final double pageMarginLeft;
+  final double pageMarginRight;
 
   @override
   Widget build(BuildContext context) {
@@ -76,18 +89,50 @@ class PageItem extends HookWidget {
 
     final hasTexture = textureId.value != null && textureSize.value != null;
 
+    final pageDecoration = isPaginated
+        ? BoxDecoration(
+            color: context.colors.surfaceDefault,
+            boxShadow: [
+              BoxShadow(
+                color: context.colors.shadowDefault.withValues(alpha: 0.1),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+            border: Border.all(color: context.colors.borderSubtle),
+          )
+        : null;
+
     if (hasTexture) {
       return Padding(
         padding: EdgeInsets.only(bottom: bottomGap),
-        child: SizedBox.fromSize(
-          size: textureSize.value,
-          child: Stack(
-            children: [
-              LineHighlight(cursorInfo: cursorInfo, isFocused: isFocused, enabled: lineHighlightEnabled),
-              SizedBox.expand(child: Texture(textureId: textureId.value!)),
-              EditorCursor(cursorInfo: cursorInfo, isFocused: isFocused),
-              ExternalElementOverlay(pageIndex: pageIndex),
-            ],
+        child: DecoratedBox(
+          decoration: pageDecoration ?? const BoxDecoration(),
+          child: SizedBox.fromSize(
+            size: textureSize.value,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                LineHighlight(cursorInfo: cursorInfo, isFocused: isFocused, enabled: lineHighlightEnabled),
+                SizedBox.expand(child: Texture(textureId: textureId.value!)),
+                EditorCursor(cursorInfo: cursorInfo, isFocused: isFocused),
+                ExternalElementOverlay(pageIndex: pageIndex),
+                if (isPaginated)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: CustomPaint(
+                        painter: _CropMarkerPainter(
+                          marginTop: pageMarginTop,
+                          marginBottom: pageMarginBottom,
+                          marginLeft: pageMarginLeft,
+                          marginRight: pageMarginRight,
+                          color: context.colors.textDefault.withValues(alpha: 0.15),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       );
@@ -96,7 +141,60 @@ class PageItem extends HookWidget {
     return Container(
       height: pageHeight,
       margin: EdgeInsets.only(bottom: bottomGap),
+      decoration: pageDecoration,
       child: const Center(child: CircularProgressIndicator()),
     );
+  }
+}
+
+class _CropMarkerPainter extends CustomPainter {
+  _CropMarkerPainter({
+    required this.marginTop,
+    required this.marginBottom,
+    required this.marginLeft,
+    required this.marginRight,
+    required this.color,
+  });
+
+  final double marginTop;
+  final double marginBottom;
+  final double marginLeft;
+  final double marginRight;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+
+    final pageWidth = size.width;
+    final pageHeight = size.height;
+
+    final path = Path()
+      ..moveTo(marginLeft, marginTop - _cropMarkerSize)
+      ..lineTo(marginLeft, marginTop)
+      ..lineTo(marginLeft - _cropMarkerSize, marginTop)
+      ..moveTo(pageWidth - marginRight, marginTop - _cropMarkerSize)
+      ..lineTo(pageWidth - marginRight, marginTop)
+      ..lineTo(pageWidth - marginRight + _cropMarkerSize, marginTop)
+      ..moveTo(marginLeft, pageHeight - marginBottom + _cropMarkerSize)
+      ..lineTo(marginLeft, pageHeight - marginBottom)
+      ..lineTo(marginLeft - _cropMarkerSize, pageHeight - marginBottom)
+      ..moveTo(pageWidth - marginRight, pageHeight - marginBottom + _cropMarkerSize)
+      ..lineTo(pageWidth - marginRight, pageHeight - marginBottom)
+      ..lineTo(pageWidth - marginRight + _cropMarkerSize, pageHeight - marginBottom);
+
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(_CropMarkerPainter oldDelegate) {
+    return marginTop != oldDelegate.marginTop ||
+        marginBottom != oldDelegate.marginBottom ||
+        marginLeft != oldDelegate.marginLeft ||
+        marginRight != oldDelegate.marginRight ||
+        color != oldDelegate.color;
   }
 }

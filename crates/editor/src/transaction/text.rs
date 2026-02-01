@@ -218,7 +218,7 @@ impl Transaction {
                 self.set_selection(Selection::collapsed(Position::new(
                     selection.head.node_id,
                     selection.head.offset + char_count,
-                    selection.head.affinity,
+                    Affinity::Upstream,
                 )));
 
                 self.state.pending_marks = None;
@@ -233,7 +233,7 @@ impl Transaction {
         let new_selection = Selection::collapsed(Position::new(
             selection.head.node_id,
             selection.head.offset + bytecount::num_chars(s.as_bytes()),
-            selection.head.affinity,
+            Affinity::Upstream,
         ));
 
         let text = Text::from(s);
