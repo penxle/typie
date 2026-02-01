@@ -3,11 +3,21 @@ pre-commit:
   parallel: true
   commands:
     eslint:
-      glob: '*'
+      glob: '*.{ts,tsx,js,jsx,svelte}'
       run: bunx eslint --fix --quiet {staged_files}
+      stage_fixed: true
     prettier:
-      glob: '*'
+      glob: '*.{ts,tsx,js,jsx,svelte,json,yaml,yml,md}'
       run: bunx prettier --write --ignore-unknown {staged_files}
+      stage_fixed: true
     cspell:
       glob: '*'
       run: bunx cspell --no-progress --relative --no-must-find-files {staged_files}
+    dart-fix:
+      glob: '*.dart'
+      run: dart fix --apply {staged_files}
+      stage_fixed: true
+    dart-format:
+      glob: '*.dart'
+      run: dart format {staged_files}
+      stage_fixed: true
