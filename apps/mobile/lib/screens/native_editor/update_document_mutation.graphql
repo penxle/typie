@@ -1,0 +1,8 @@
+mutation NativeEditor_UpdateDocument_Mutation($input: UpdateDocumentInput!) {
+  updateDocument(input: $input) {
+    id
+    title
+    nullableTitle
+    subtitle
+  }
+}

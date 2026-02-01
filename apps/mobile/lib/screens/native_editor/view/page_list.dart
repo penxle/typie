@@ -8,6 +8,7 @@ import 'package:typie/screens/native_editor/cursor.dart';
 import 'package:typie/screens/native_editor/state/editor_state.dart';
 import 'package:typie/screens/native_editor/view/magnifier.dart';
 import 'package:typie/screens/native_editor/view/page_item.dart';
+import 'package:typie/screens/native_editor/view/title_subtitle_fields.dart';
 
 class PageList extends HookWidget {
   const PageList({
@@ -23,6 +24,13 @@ class PageList extends HookWidget {
     required this.onOpenInput,
     required this.onSelectionStart,
     required this.onSelectionEnd,
+    required this.title,
+    required this.subtitle,
+    required this.onTitleChanged,
+    required this.onSubtitleChanged,
+    required this.titleFocusNode,
+    required this.subtitleFocusNode,
+    required this.onEnterDocument,
     super.key,
   });
 
@@ -38,9 +46,23 @@ class PageList extends HookWidget {
   final VoidCallback onOpenInput;
   final VoidCallback onSelectionStart;
   final VoidCallback onSelectionEnd;
+  final String title;
+  final String subtitle;
+  final ValueChanged<String> onTitleChanged;
+  final ValueChanged<String> onSubtitleChanged;
+  final FocusNode titleFocusNode;
+  final FocusNode subtitleFocusNode;
+  final VoidCallback onEnterDocument;
 
   @override
   Widget build(BuildContext context) {
+    final titleFieldsKey = useMemoized(GlobalKey.new);
+
+    double getTitleHeaderHeight() {
+      final renderBox = titleFieldsKey.currentContext?.findRenderObject() as RenderBox?;
+      return renderBox?.size.height ?? 0;
+    }
+
     final cumulativeHeights = useMemoized(() {
       final heights = <double>[0];
       for (var i = 0; i < layout.pageCount; i++) {
@@ -53,13 +75,20 @@ class PageList extends HookWidget {
     }, [layout.pageHeights, layout.pageCount, layout.isPaginated]);
 
     (int pageIdx, double localY) getPageAtPosition(double y) {
+      final titleHeight = getTitleHeaderHeight();
       final absoluteY = y + scrollController.offset;
+
+      if (absoluteY < titleHeight) {
+        return (-1, absoluteY);
+      }
+
+      final adjustedY = absoluteY - titleHeight;
 
       var low = 0;
       var high = cumulativeHeights.length - 1;
       while (low < high) {
         final mid = (low + high) ~/ 2;
-        if (cumulativeHeights[mid] <= absoluteY) {
+        if (cumulativeHeights[mid] <= adjustedY) {
           low = mid + 1;
         } else {
           high = mid;
@@ -67,7 +96,7 @@ class PageList extends HookWidget {
       }
 
       final pageIdx = (low - 1).clamp(0, layout.pageCount - 1);
-      final localY = absoluteY - cumulativeHeights[pageIdx];
+      final localY = adjustedY - cumulativeHeights[pageIdx];
       return (pageIdx, localY);
     }
 
@@ -143,9 +172,13 @@ class PageList extends HookWidget {
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTapDown: (details) {
-            onOpenInput();
-
             final (pageIdx, localY) = getPageAtPosition(details.localPosition.dy);
+
+            if (pageIdx < 0) {
+              return;
+            }
+
+            onOpenInput();
 
             final now = DateTime.now();
             final prevTime = lastTapTime.value;
@@ -175,6 +208,11 @@ class PageList extends HookWidget {
           },
           onTapUp: (details) {
             final (pageIdx, localY) = getPageAtPosition(details.localPosition.dy);
+
+            if (pageIdx < 0) {
+              return;
+            }
+
             editor.dispatch({
               'type': 'pointerUp',
               'pageIdx': pageIdx,
@@ -190,24 +228,27 @@ class PageList extends HookWidget {
           onLongPressMoveUpdate: (details) {
             final (pageIdx, localY) = getPageAtPosition(details.localPosition.dy);
             longPressPosition.value = details.localPosition;
-            editor
-              ..dispatch({
-                'type': 'pointerDown',
-                'pageIdx': pageIdx,
-                'x': details.localPosition.dx,
-                'y': localY,
-                'clickCount': 1,
-                'button': 'primary',
-                'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
-              })
-              ..dispatch({
-                'type': 'pointerUp',
-                'pageIdx': pageIdx,
-                'x': details.localPosition.dx,
-                'y': localY,
-                'button': 'primary',
-                'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
-              });
+
+            if (pageIdx >= 0) {
+              editor
+                ..dispatch({
+                  'type': 'pointerDown',
+                  'pageIdx': pageIdx,
+                  'x': details.localPosition.dx,
+                  'y': localY,
+                  'clickCount': 1,
+                  'button': 'primary',
+                  'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
+                })
+                ..dispatch({
+                  'type': 'pointerUp',
+                  'pageIdx': pageIdx,
+                  'x': details.localPosition.dx,
+                  'y': localY,
+                  'button': 'primary',
+                  'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
+                });
+            }
 
             final y = details.localPosition.dy;
             if (y < edgeThreshold) {
@@ -230,18 +271,33 @@ class PageList extends HookWidget {
               ListView.builder(
                 controller: scrollController,
                 padding: EdgeInsets.only(bottom: viewKeyboardHeight),
-                itemCount: layout.pageCount,
+                itemCount: layout.pageCount + 1,
                 cacheExtent: 1000,
                 physics: isSelecting ? const NeverScrollableScrollPhysics() : const AlwaysScrollableScrollPhysics(),
                 itemBuilder: (context, index) {
-                  final isLast = index == layout.pageCount - 1;
+                  if (index == 0) {
+                    return TitleSubtitleFields(
+                      key: titleFieldsKey,
+                      title: title,
+                      subtitle: subtitle,
+                      onTitleChanged: onTitleChanged,
+                      onSubtitleChanged: onSubtitleChanged,
+                      titleFocusNode: titleFocusNode,
+                      subtitleFocusNode: subtitleFocusNode,
+                      onEnterDocument: onEnterDocument,
+                      pageWidth: layout.pageWidth,
+                    );
+                  }
+
+                  final pageIndex = index - 1;
+                  final isLast = pageIndex == layout.pageCount - 1;
                   final gap = layout.isPaginated && !isLast ? pageGap : 0.0;
-                  final pageHeight = layout.pageHeights.elementAtOrNull(index);
-                  final pageCursor = cursor?.pageIdx == index ? cursor : null;
+                  final pageHeight = layout.pageHeights.elementAtOrNull(pageIndex);
+                  final pageCursor = cursor?.pageIdx == pageIndex ? cursor : null;
 
                   return PageItem(
-                    key: ValueKey(index),
-                    pageIndex: index,
+                    key: ValueKey(pageIndex),
+                    pageIndex: pageIndex,
                     editor: editor,
                     renderVersion: renderVersion,
                     bottomGap: gap,

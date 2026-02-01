@@ -9,6 +9,8 @@ query NativeEditorScreen_Query($slug: String!) {
       ... on Document {
         id
         title
+        nullableTitle
+        subtitle
         snapshot
       }
     }
