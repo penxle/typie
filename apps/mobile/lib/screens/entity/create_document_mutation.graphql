@@ -1,0 +1,10 @@
+mutation EntityScreen_CreateDocument_Mutation($input: CreateDocumentInput!) {
+  createDocument(input: $input) {
+    id
+
+    entity {
+      id
+      slug
+    }
+  }
+}

@@ -45,6 +45,7 @@ class SettingsScreen extends HookWidget {
     final packageInfo = useFuture(packageInfoFuture);
 
     final devModeTapCount = useState(0);
+    final devModeEnabled = useState(pref.devMode);
 
     return Screen(
       heading: const Heading(title: '설정'),
@@ -239,7 +240,7 @@ class SettingsScreen extends HookWidget {
                             )
                           : const SizedBox.square(dimension: 16, child: CircularProgressIndicator()),
                       onTap: () {
-                        if (pref.devMode) {
+                        if (devModeEnabled.value) {
                           context.toast(ToastType.success, '이미 개발자입니다.');
                           return;
                         }
@@ -248,6 +249,8 @@ class SettingsScreen extends HookWidget {
 
                         if (devModeTapCount.value >= 7) {
                           pref.devMode = true;
+                          devModeEnabled.value = true;
+                          devModeTapCount.value = 0;
                           context.toast(ToastType.success, '개발자가 되셨습니다.');
                           return;
                         }
@@ -260,7 +263,7 @@ class SettingsScreen extends HookWidget {
                     ),
                   ],
                 ),
-                if (pref.devMode)
+                if (devModeEnabled.value)
                   _Section(
                     title: '개발자',
                     children: [
@@ -269,10 +272,28 @@ class SettingsScreen extends HookWidget {
                         trailing: HookForm(
                           submitMode: HookFormSubmitMode.onChange,
                           onSubmit: (form) async {
-                            pref.devMode = form.data['devMode'] as bool;
+                            final value = form.data['devMode'] as bool;
+                            pref.devMode = value;
+                            devModeEnabled.value = value;
                           },
                           builder: (context, form) {
                             return HookFormSwitch(name: 'devMode', initialValue: pref.devMode);
+                          },
+                        ),
+                      ),
+                      const _Divider(),
+                      _Item(
+                        label: 'v2 에디터 활성화',
+                        trailing: HookForm(
+                          submitMode: HookFormSubmitMode.onChange,
+                          onSubmit: (form) async {
+                            pref.experimentalV2EditorEnabled = form.data['experimentalV2EditorEnabled'] as bool;
+                          },
+                          builder: (context, form) {
+                            return HookFormSwitch(
+                              name: 'experimentalV2EditorEnabled',
+                              initialValue: pref.experimentalV2EditorEnabled,
+                            );
                           },
                         ),
                       ),

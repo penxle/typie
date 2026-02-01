@@ -46,7 +46,7 @@ abstract class RegisterModule {
   @singleton
   FlutterLocalNotificationsPlugin get flutterLocalNotificationsPlugin => FlutterLocalNotificationsPlugin()
     ..initialize(
-      const InitializationSettings(
+      settings: const InitializationSettings(
         android: AndroidInitializationSettings('@drawable/ic_notification_foreground'),
         iOS: DarwinInitializationSettings(
           requestAlertPermission: false,
