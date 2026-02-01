@@ -5,6 +5,7 @@ typedef CommandExecutor = void Function(EditorController controller, Map<String,
 
 class EditorCommandHandler {
   static final Map<String, CommandExecutor> _handlers = {
+    'docChanged': handleDocChanged,
     'layoutChanged': handleLayoutChanged,
     'renderRequired': handleRenderRequired,
     'cursorChanged': handleCursorChanged,

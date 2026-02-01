@@ -265,6 +265,164 @@ final class NativeEditor {
 
   Pointer<EditorHandle> get handle => _handle;
 
+  Uint8List? getSnapshot() {
+    _checkDisposed();
+
+    final outLen = calloc<Size>();
+    try {
+      final ptr = _bindings.editor_get_snapshot(_handle, outLen);
+      if (ptr == nullptr) {
+        return null;
+      }
+
+      final len = outLen.value;
+      final data = Uint8List.fromList(ptr.asTypedList(len));
+      _bindings.editor_free(ptr, len, len);
+      return data;
+    } finally {
+      calloc.free(outLen);
+    }
+  }
+
+  Uint8List? getVersion() {
+    _checkDisposed();
+
+    final outLen = calloc<Size>();
+    try {
+      final ptr = _bindings.editor_get_version(_handle, outLen);
+      if (ptr == nullptr) {
+        return null;
+      }
+
+      final len = outLen.value;
+      final data = Uint8List.fromList(ptr.asTypedList(len));
+      _bindings.editor_free(ptr, len, len);
+      return data;
+    } finally {
+      calloc.free(outLen);
+    }
+  }
+
+  Uint8List? exportAllUpdates() {
+    _checkDisposed();
+
+    final outLen = calloc<Size>();
+    try {
+      final ptr = _bindings.editor_export_all_updates(_handle, outLen);
+      if (ptr == nullptr) {
+        return null;
+      }
+
+      final len = outLen.value;
+      final data = Uint8List.fromList(ptr.asTypedList(len));
+      _bindings.editor_free(ptr, len, len);
+      return data;
+    } finally {
+      calloc.free(outLen);
+    }
+  }
+
+  ({Uint8List updates, Uint8List version})? exportNewUpdates() {
+    _checkDisposed();
+
+    final outUpdates = calloc<Pointer<Uint8>>();
+    final outUpdatesLen = calloc<Size>();
+    final outVersion = calloc<Pointer<Uint8>>();
+    final outVersionLen = calloc<Size>();
+
+    try {
+      final result = _bindings.editor_export_new_updates(_handle, outUpdates, outUpdatesLen, outVersion, outVersionLen);
+
+      if (result != 0) {
+        return null;
+      }
+
+      final updatesPtr = outUpdates.value;
+      final updatesLen = outUpdatesLen.value;
+      final versionPtr = outVersion.value;
+      final versionLen = outVersionLen.value;
+
+      final updates = Uint8List.fromList(updatesPtr.asTypedList(updatesLen));
+      final version = Uint8List.fromList(versionPtr.asTypedList(versionLen));
+
+      _bindings
+        ..editor_free(updatesPtr, updatesLen, updatesLen)
+        ..editor_free(versionPtr, versionLen, versionLen);
+
+      return (updates: updates, version: version);
+    } finally {
+      calloc
+        ..free(outUpdates)
+        ..free(outUpdatesLen)
+        ..free(outVersion)
+        ..free(outVersionLen);
+    }
+  }
+
+  void importUpdates(Uint8List updates) {
+    _checkDisposed();
+
+    final ptr = _bindings.editor_alloc(updates.length);
+    ptr.asTypedList(updates.length).setAll(0, updates);
+
+    final result = _bindings.editor_import_updates(_handle, ptr, updates.length);
+    _bindings.editor_free(ptr, updates.length, updates.length);
+
+    if (result != 0) {
+      throw EditorException(_getLastError() ?? 'Failed to import updates');
+    }
+  }
+
+  void importUpdatesBatch(List<Uint8List> updatesBatch) {
+    _checkDisposed();
+
+    if (updatesBatch.isEmpty) {
+      return;
+    }
+
+    final count = updatesBatch.length;
+    final ptrsArray = calloc<Pointer<Uint8>>(count);
+    final lensArray = calloc<Size>(count);
+
+    try {
+      for (var i = 0; i < count; i++) {
+        final update = updatesBatch[i];
+        final ptr = _bindings.editor_alloc(update.length);
+        ptr.asTypedList(update.length).setAll(0, update);
+        ptrsArray[i] = ptr;
+        lensArray[i] = update.length;
+      }
+
+      final result = _bindings.editor_import_updates_batch(_handle, ptrsArray, lensArray, count);
+
+      for (var i = 0; i < count; i++) {
+        _bindings.editor_free(ptrsArray[i], lensArray[i], lensArray[i]);
+      }
+
+      if (result != 0) {
+        throw EditorException(_getLastError() ?? 'Failed to import updates batch');
+      }
+    } finally {
+      calloc
+        ..free(ptrsArray)
+        ..free(lensArray);
+    }
+  }
+
+  void commitSync(Uint8List version) {
+    _checkDisposed();
+
+    final ptr = _bindings.editor_alloc(version.length);
+    ptr.asTypedList(version.length).setAll(0, version);
+
+    final result = _bindings.editor_commit_sync(_handle, ptr, version.length);
+    _bindings.editor_free(ptr, version.length, version.length);
+
+    if (result != 0) {
+      throw EditorException(_getLastError() ?? 'Failed to commit sync');
+    }
+  }
+
   void dispose() {
     if (!_disposed) {
       _bindings.editor_handle_free(_handle);

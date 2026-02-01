@@ -27,6 +27,7 @@ class EditorView extends HookWidget {
     required this.fontManager,
     required this.width,
     required this.height,
+    this.onDocChanged,
     super.key,
   });
 
@@ -34,10 +35,14 @@ class EditorView extends HookWidget {
   final EditorFontManager? fontManager;
   final double width;
   final double height;
+  final void Function()? onDocChanged;
 
   @override
   Widget build(BuildContext context) {
-    final controller = useMemoized(() => EditorController(editor: editor, fontManager: fontManager), [editor]);
+    final controller = useMemoized(
+      () => EditorController(editor: editor, fontManager: fontManager, onDocChanged: onDocChanged),
+      [editor],
+    );
     useEffect(() => controller.dispose, [controller]);
 
     final tickerProvider = useSingleTickerProvider();

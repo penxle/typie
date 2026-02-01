@@ -5,6 +5,10 @@ import 'package:typie/screens/native_editor/external/models.dart';
 import 'package:typie/screens/native_editor/fonts.dart';
 import 'package:typie/screens/native_editor/state/editor_state.dart';
 
+void handleDocChanged(EditorController controller, Map<String, dynamic> cmd) {
+  controller.onDocChanged?.call();
+}
+
 void handleLayoutChanged(EditorController controller, Map<String, dynamic> cmd) {
   final pageCount = cmd['pageCount'] as int;
   final layoutMode = cmd['layoutMode'] as Map<String, dynamic>;
