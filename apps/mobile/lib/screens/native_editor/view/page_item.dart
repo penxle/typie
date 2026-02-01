@@ -18,9 +18,6 @@ class PageItem extends HookWidget {
     required this.cursorInfo,
     required this.isFocused,
     required this.lineHighlightEnabled,
-    required this.onSelectionStart,
-    required this.onSelectionEnd,
-    required this.onTap,
     super.key,
   });
 
@@ -33,17 +30,12 @@ class PageItem extends HookWidget {
   final CursorInfo? cursorInfo;
   final bool isFocused;
   final bool lineHighlightEnabled;
-  final VoidCallback onSelectionStart;
-  final VoidCallback onSelectionEnd;
-  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final renderer = useRef<EditorTextureRenderer?>(null);
     final textureId = useState<int?>(null);
     final textureSize = useState<Size?>(null);
-    final lastTapTime = useRef<DateTime?>(null);
-    final lastTapPosition = useRef<Offset?>(null);
     final isMounted = useRef(true);
 
     final devicePixelRatio = MediaQuery.devicePixelRatioOf(context);
@@ -87,89 +79,15 @@ class PageItem extends HookWidget {
     if (hasTexture) {
       return Padding(
         padding: EdgeInsets.only(bottom: bottomGap),
-        child: GestureDetector(
-          onTapDown: (details) {
-            onTap();
-
-            final now = DateTime.now();
-            final prevTime = lastTapTime.value;
-            final prevPosition = lastTapPosition.value;
-
-            var clickCount = 1;
-            if (prevTime != null && prevPosition != null) {
-              final timeDiff = now.difference(prevTime).inMilliseconds;
-              final distance = (details.localPosition - prevPosition).distance;
-              if (timeDiff < 300 && distance < 20) {
-                clickCount = 2;
-              }
-            }
-
-            lastTapTime.value = now;
-            lastTapPosition.value = details.localPosition;
-
-            editor.dispatch({
-              'type': 'pointerDown',
-              'pageIdx': pageIndex,
-              'x': details.localPosition.dx,
-              'y': details.localPosition.dy,
-              'clickCount': clickCount,
-              'button': 'primary',
-              'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
-            });
-          },
-          onTapUp: (details) {
-            editor.dispatch({
-              'type': 'pointerUp',
-              'pageIdx': pageIndex,
-              'x': details.localPosition.dx,
-              'y': details.localPosition.dy,
-              'button': 'primary',
-              'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
-            });
-          },
-          onLongPressStart: (details) {
-            onSelectionStart();
-            editor.dispatch({
-              'type': 'pointerDown',
-              'pageIdx': pageIndex,
-              'x': details.localPosition.dx,
-              'y': details.localPosition.dy,
-              'clickCount': 1,
-              'button': 'primary',
-              'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
-            });
-          },
-          onLongPressMoveUpdate: (details) {
-            editor.dispatch({
-              'type': 'pointerMove',
-              'pageIdx': pageIndex,
-              'x': details.localPosition.dx,
-              'y': details.localPosition.dy,
-              'buttons': 1,
-              'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
-            });
-          },
-          onLongPressEnd: (details) {
-            editor.dispatch({
-              'type': 'pointerUp',
-              'pageIdx': pageIndex,
-              'x': details.localPosition.dx,
-              'y': details.localPosition.dy,
-              'button': 'primary',
-              'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
-            });
-            onSelectionEnd();
-          },
-          child: SizedBox.fromSize(
-            size: textureSize.value,
-            child: Stack(
-              children: [
-                LineHighlight(cursorInfo: cursorInfo, isFocused: isFocused, enabled: lineHighlightEnabled),
-                SizedBox.expand(child: Texture(textureId: textureId.value!)),
-                EditorCursor(cursorInfo: cursorInfo, isFocused: isFocused),
-                ExternalElementOverlay(pageIndex: pageIndex),
-              ],
-            ),
+        child: SizedBox.fromSize(
+          size: textureSize.value,
+          child: Stack(
+            children: [
+              LineHighlight(cursorInfo: cursorInfo, isFocused: isFocused, enabled: lineHighlightEnabled),
+              SizedBox.expand(child: Texture(textureId: textureId.value!)),
+              EditorCursor(cursorInfo: cursorInfo, isFocused: isFocused),
+              ExternalElementOverlay(pageIndex: pageIndex),
+            ],
           ),
         ),
       );
