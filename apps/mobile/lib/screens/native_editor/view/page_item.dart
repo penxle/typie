@@ -1,9 +1,9 @@
 import 'dart:async';
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/native/editor_native.dart';
+import 'package:typie/native/editor_texture_renderer.dart';
 import 'package:typie/screens/native_editor/cursor.dart';
 import 'package:typie/screens/native_editor/external/overlay.dart';
 
@@ -13,7 +13,8 @@ class PageItem extends HookWidget {
     required this.editor,
     required this.renderVersion,
     required this.bottomGap,
-    required this.placeholderHeight,
+    required this.pageWidth,
+    required this.pageHeight,
     required this.cursorInfo,
     required this.isFocused,
     required this.onSelectionStart,
@@ -26,7 +27,8 @@ class PageItem extends HookWidget {
   final NativeEditor editor;
   final Object? renderVersion;
   final double bottomGap;
-  final double? placeholderHeight;
+  final double pageWidth;
+  final double? pageHeight;
   final CursorInfo? cursorInfo;
   final bool isFocused;
   final VoidCallback onSelectionStart;
@@ -35,20 +37,39 @@ class PageItem extends HookWidget {
 
   @override
   Widget build(BuildContext context) {
-    final image = useState<ui.Image?>(null);
+    final renderer = useRef<EditorTextureRenderer?>(null);
+    final textureId = useState<int?>(null);
     final lastTapTime = useRef<DateTime?>(null);
     final lastTapPosition = useRef<Offset?>(null);
 
     useEffect(() {
-      Future<void> render() async {
-        image.value = await _renderPage(editor, pageIndex);
+      Future<void> initRenderer() async {
+        renderer.value ??= EditorTextureRenderer(editor: editor);
+
+        final r = renderer.value!;
+        if (r.textureId == null) {
+          await r.create(pageIndex);
+        }
+
+        if (r.textureId != null) {
+          await r.render(pageIndex);
+          textureId.value = r.textureId;
+        }
       }
 
-      unawaited(render());
+      unawaited(initRenderer());
       return null;
     }, [pageIndex, renderVersion]);
 
-    if (image.value != null) {
+    useEffect(() {
+      return () {
+        unawaited(renderer.value?.dispose());
+      };
+    }, const []);
+
+    final hasTexture = textureId.value != null && pageHeight != null;
+
+    if (hasTexture) {
       return Padding(
         padding: EdgeInsets.only(bottom: bottomGap),
         child: GestureDetector(
@@ -124,35 +145,25 @@ class PageItem extends HookWidget {
             });
             onSelectionEnd();
           },
-          child: Stack(
-            children: [
-              RawImage(image: image.value),
-              EditorCursor(cursorInfo: cursorInfo, isFocused: isFocused),
-              ExternalElementOverlay(pageIndex: pageIndex),
-            ],
+          child: SizedBox(
+            width: pageWidth,
+            height: pageHeight,
+            child: Stack(
+              children: [
+                SizedBox.expand(child: Texture(textureId: textureId.value!)),
+                EditorCursor(cursorInfo: cursorInfo, isFocused: isFocused),
+                ExternalElementOverlay(pageIndex: pageIndex),
+              ],
+            ),
           ),
         ),
       );
     }
 
     return Container(
-      height: placeholderHeight,
+      height: pageHeight,
       margin: EdgeInsets.only(bottom: bottomGap),
       child: const Center(child: CircularProgressIndicator()),
     );
   }
-}
-
-Future<ui.Image> _renderPage(NativeEditor editor, int pageIndex) async {
-  final result = editor.renderPage(pageIndex);
-  final buffer = await ui.ImmutableBuffer.fromUint8List(result.data);
-  final descriptor = ui.ImageDescriptor.raw(
-    buffer,
-    width: result.width,
-    height: result.height,
-    pixelFormat: ui.PixelFormat.rgba8888,
-  );
-  final codec = await descriptor.instantiateCodec();
-  final frame = await codec.getNextFrame();
-  return frame.image;
 }

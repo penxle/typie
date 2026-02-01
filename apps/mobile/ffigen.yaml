@@ -16,6 +16,8 @@ structs:
   include:
     - 'ByteBuffer'
     - 'RenderResult'
+    - 'RenderInfo'
+    - 'CharacterCounts'
     - 'EditorApplication'
     - 'EditorHandle'
 typedefs:

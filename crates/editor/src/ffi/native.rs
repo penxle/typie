@@ -10,6 +10,13 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 
+#[cfg(target_os = "android")]
+use jni::objects::{JByteBuffer, JClass};
+#[cfg(target_os = "android")]
+use jni::sys::jlong;
+#[cfg(target_os = "android")]
+use jni::JNIEnv;
+
 static PANIC_HOOK_INSTALLED: AtomicBool = AtomicBool::new(false);
 
 pub type LogCallback = extern "C" fn(level: i32, message: *const c_char);
@@ -165,14 +172,6 @@ unsafe fn slice_from_raw<'a>(ptr: *const u8, len: usize, name: &str) -> FfiResul
         return Err(format!("{name} is null"));
     }
     Ok(unsafe { std::slice::from_raw_parts(ptr, len) })
-}
-
-#[repr(C)]
-pub struct RenderResult {
-    pub ptr: *mut u8,
-    pub len: usize,
-    pub width: u32,
-    pub height: u32,
 }
 
 #[unsafe(no_mangle)]
@@ -458,34 +457,175 @@ pub extern "C" fn editor_get_page_count(editor: *mut EditorHandle) -> usize {
     )
 }
 
+#[repr(C)]
+pub struct RenderInfo {
+    pub width: u32,
+    pub height: u32,
+    pub buffer_size: usize,
+}
+
 #[unsafe(no_mangle)]
-pub extern "C" fn editor_render_page(
+pub extern "C" fn editor_get_render_info(
     editor: *mut EditorHandle,
     page_index: usize,
-    out_result: *mut RenderResult,
+    out_info: *mut RenderInfo,
 ) -> i32 {
     ffi!(
         {
-            if editor.is_null() || out_result.is_null() {
+            if editor.is_null() || out_info.is_null() {
                 return Err("Invalid parameters".into());
             }
 
             let editor = unsafe { &mut *(editor as *mut EditorInner) };
-            let result = editor
+            let info = editor
                 .runtime
-                .render_page(page_index)
+                .get_render_info(page_index)
                 .ok_or("Page not found")?;
 
             unsafe {
-                (*out_result).ptr = result.ptr as *mut u8;
-                (*out_result).len = result.len;
-                (*out_result).width = result.width as u32;
-                (*out_result).height = result.height as u32;
+                (*out_info).width = info.width as u32;
+                (*out_info).height = info.height as u32;
+                (*out_info).buffer_size = info.buffer_size;
             }
             Ok(())
         },
         -1
     )
+}
+
+#[allow(dead_code)]
+pub const PIXEL_FORMAT_RGBA: i32 = 0;
+pub const PIXEL_FORMAT_BGRA: i32 = 1;
+
+thread_local! {
+    static RENDER_TEMP_BUFFER: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn editor_render_page_to(
+    editor: *mut EditorHandle,
+    page_index: usize,
+    dst: *mut u8,
+    dst_stride: usize,
+    dst_height: usize,
+    format: i32,
+) -> i32 {
+    ffi!(
+        {
+            if editor.is_null() || dst.is_null() {
+                return Err("Invalid parameters".into());
+            }
+
+            let editor = unsafe { &mut *(editor as *mut EditorInner) };
+            let info = editor
+                .runtime
+                .get_render_info(page_index)
+                .ok_or("Page not found")?;
+
+            let width = info.width as usize;
+            let height = info.height as usize;
+            let tight_stride = width * 4;
+
+            if dst_height < height || dst_stride < tight_stride {
+                return Err("Buffer too small".into());
+            }
+
+            let convert_to_bgra = format == PIXEL_FORMAT_BGRA;
+
+            if dst_stride == tight_stride {
+                let dst_slice =
+                    unsafe { std::slice::from_raw_parts_mut(dst, tight_stride * height) };
+                if !editor.runtime.render_page_to(page_index, dst_slice) {
+                    return Err("Render failed".into());
+                }
+                if convert_to_bgra {
+                    rgba_to_bgra_fast(dst_slice);
+                }
+            } else {
+                let render_success = RENDER_TEMP_BUFFER.with(|buf| {
+                    let mut temp_buf = buf.borrow_mut();
+                    let required_size = tight_stride * height;
+                    if temp_buf.len() < required_size {
+                        temp_buf.resize(required_size, 0);
+                    }
+
+                    if !editor.runtime.render_page_to(page_index, &mut temp_buf[..required_size]) {
+                        return false;
+                    }
+
+                    for row in 0..height {
+                        let src_offset = row * tight_stride;
+                        let dst_offset = row * dst_stride;
+                        let dst_row =
+                            unsafe { std::slice::from_raw_parts_mut(dst.add(dst_offset), tight_stride) };
+                        let src_row = &mut temp_buf[src_offset..src_offset + tight_stride];
+
+                        if convert_to_bgra {
+                            rgba_to_bgra_fast(src_row);
+                        }
+                        dst_row.copy_from_slice(src_row);
+                    }
+                    true
+                });
+                if !render_success {
+                    return Err("Render failed".into());
+                }
+            }
+            Ok(())
+        },
+        -1
+    )
+}
+
+#[inline]
+fn rgba_to_bgra_fast(data: &mut [u8]) {
+    #[cfg(target_arch = "aarch64")]
+    {
+        rgba_to_bgra_neon(data);
+    }
+
+    #[cfg(not(target_arch = "aarch64"))]
+    {
+        for chunk in data.chunks_exact_mut(4) {
+            chunk.swap(0, 2);
+        }
+    }
+}
+
+#[cfg(target_arch = "aarch64")]
+#[inline]
+fn rgba_to_bgra_neon(data: &mut [u8]) {
+    use std::arch::aarch64::*;
+
+    let len = data.len();
+    let mut i = 0;
+
+    unsafe {
+        while i + 64 <= len {
+            let ptr = data.as_mut_ptr().add(i);
+
+            let v0 = vld4q_u8(ptr);
+            let swapped = uint8x16x4_t(v0.2, v0.1, v0.0, v0.3);
+            vst4q_u8(ptr, swapped);
+
+            i += 64;
+        }
+
+        while i + 32 <= len {
+            let ptr = data.as_mut_ptr().add(i);
+
+            let v0 = vld4_u8(ptr);
+            let swapped = uint8x8x4_t(v0.2, v0.1, v0.0, v0.3);
+            vst4_u8(ptr, swapped);
+
+            i += 32;
+        }
+    }
+
+    while i + 4 <= len {
+        data.swap(i, i + 2);
+        i += 4;
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -625,4 +765,40 @@ fn count_all(text: &str) -> (u32, u32, u32) {
     }
 
     (with_ws, without_ws, without_ws_punct)
+}
+
+#[cfg(target_os = "android")]
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_co_typie_editortexture_EditorTexture_nativeGetDirectBufferAddress(
+    env: JNIEnv,
+    _class: JClass,
+    buffer: JByteBuffer,
+) -> jlong {
+    if let Ok(ptr) = env.get_direct_buffer_address(&buffer) {
+        ptr as jlong
+    } else {
+        0
+    }
+}
+
+#[cfg(target_os = "android")]
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_co_typie_editortexture_EditorTexture_nativeRenderPageTo(
+    _env: JNIEnv,
+    _class: JClass,
+    editor_ptr: jlong,
+    page_index: jlong,
+    dst_ptr: jlong,
+    dst_stride: jlong,
+    dst_height: jlong,
+    format: jlong,
+) -> jlong {
+    let editor = editor_ptr as *mut EditorHandle;
+    let page_index = page_index as usize;
+    let dst = dst_ptr as *mut u8;
+    let dst_stride = dst_stride as usize;
+    let dst_height = dst_height as usize;
+    let format = format as i32;
+
+    editor_render_page_to(editor, page_index, dst, dst_stride, dst_height, format) as jlong
 }

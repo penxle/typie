@@ -8,6 +8,7 @@ import 'package:typie/screens/native_editor/state/editor_state.dart';
 void handleLayoutChanged(EditorController controller, Map<String, dynamic> cmd) {
   final pageCount = cmd['pageCount'] as int;
   final layoutMode = cmd['layoutMode'] as Map<String, dynamic>;
+  final pageWidth = (cmd['pageWidth'] as num).toDouble();
   final pageHeights = cmd['pageHeights'] as List<dynamic>;
 
   controller.updateState(
@@ -15,6 +16,7 @@ void handleLayoutChanged(EditorController controller, Map<String, dynamic> cmd) 
       layout: LayoutInfo(
         pageCount: pageCount,
         isPaginated: layoutMode['type'] == 'paginated',
+        pageWidth: pageWidth,
         pageHeights: pageHeights.cast<num>().map((e) => e.toDouble()).toList(),
       ),
     ),
