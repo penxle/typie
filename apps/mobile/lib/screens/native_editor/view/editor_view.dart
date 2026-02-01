@@ -49,8 +49,10 @@ class EditorView extends HookWidget {
 
     final tickerProvider = useSingleTickerProvider();
     final scrollController = useScrollController();
+    final horizontalScrollController = useScrollController();
     final inputKey = useMemoized(GlobalKey<EditorInputViewState>.new);
     final inputCausedCursorChange = useRef(false);
+    final isLongPressing = useRef(false);
 
     final keyboardHeight = useValueNotifier<double>(0);
     final isKeyboardVisible = useValueNotifier<bool>(false);
@@ -73,15 +75,23 @@ class EditorView extends HookWidget {
     );
 
     useEffect(() {
+      void scrollToTop() {
+        if (scrollController.hasClients) {
+          scrollController.animateTo(0, duration: const Duration(milliseconds: 100), curve: Curves.easeOut);
+        }
+      }
+
       void onTitleFocusChange() {
         if (titleFocusNode.hasFocus) {
           focusController.clearFocus();
+          scrollToTop();
         }
       }
 
       void onSubtitleFocusChange() {
         if (subtitleFocusNode.hasFocus) {
           focusController.clearFocus();
+          scrollToTop();
         }
       }
 
@@ -162,17 +172,19 @@ class EditorView extends HookWidget {
       return null;
     }, [state.state.uniformMarks, state.state.mixedMarks, state.state.selectionStats, state.state.externalElements]);
 
-    final viewKeyboardHeight = MediaQuery.viewInsetsOf(context).bottom;
-    final editorVisibleHeight = useRef<double>(0);
+    final titleHeaderHeight = useRef<double>(0);
 
     useEffect(() {
       if (cursor != null && cursor.show) {
         focusController.updateCursor(cursor.x, cursor.y, cursor.height);
 
-        if (currentLayout != null && editorVisibleHeight.value > 0) {
+        if (currentLayout != null && !isLongPressing.value) {
+          final horizontalPadding = currentLayout.isPaginated ? 40.0 : 0.0;
           EditorScrollBehavior(
             scrollController: scrollController,
-            visibleHeight: editorVisibleHeight.value,
+            horizontalScrollController: horizontalScrollController,
+            horizontalPadding: horizontalPadding,
+            titleHeaderHeight: titleHeaderHeight.value,
           ).scrollToCursor(cursor, currentLayout);
         }
       }
@@ -183,7 +195,7 @@ class EditorView extends HookWidget {
         focusController.resetInputContext();
       }
       return null;
-    }, [cursor, editorVisibleHeight.value]);
+    }, [cursor]);
 
     if (currentLayout == null) {
       return const Center(child: CircularProgressIndicator());
@@ -206,78 +218,75 @@ class EditorView extends HookWidget {
       child: Column(
         children: [
           Expanded(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                editorVisibleHeight.value = constraints.maxHeight;
-                return Stack(
-                  children: [
-                    PageList(
-                      editor: editor,
-                      layout: currentLayout,
-                      cursor: cursor,
-                      isFocused: state.state.isFocused,
-                      isSelecting: state.state.isSelecting,
-                      lineHighlightEnabled: pref.lineHighlightEnabled,
-                      renderVersion: state.state.renderVersion,
-                      scrollController: scrollController,
-                      viewKeyboardHeight: viewKeyboardHeight,
-                      onOpenInput: focusController.openInput,
-                      onSelectionStart: () => controller.setSelecting(true),
-                      onSelectionEnd: () => controller.setSelecting(false),
-                      title: title,
-                      subtitle: subtitle,
-                      onTitleChanged: onTitleChanged,
-                      onSubtitleChanged: onSubtitleChanged,
-                      titleFocusNode: titleFocusNode,
-                      subtitleFocusNode: subtitleFocusNode,
-                      onEnterDocument: () {
-                        focusController.openInput();
-                        controller.dispatch({'type': 'navigate', 'direction': 'documentStart', 'extend': false});
-                      },
-                    ),
-                    Positioned.fill(
-                      child: EditorInputView(
-                        key: inputKey,
-                        onInsertText: (text) {
-                          inputCausedCursorChange.value = true;
-                          controller.dispatch({'type': 'input', 'text': text});
-                        },
-                        onDeleteBackward: () {
-                          inputCausedCursorChange.value = true;
-                          controller.dispatch({'type': 'deleteBackward'});
-                        },
-                        onSetMarkedText: (text) {
-                          inputCausedCursorChange.value = true;
-                          controller.dispatch({'type': 'compositionUpdate', 'text': text});
-                        },
-                        onUnmarkText: () {
-                          inputCausedCursorChange.value = true;
-                          controller.dispatch({'type': 'commitPreedit'});
-                        },
-                        onCancelMarkedText: () {
-                          inputCausedCursorChange.value = true;
-                          controller.dispatch({'type': 'compositionEnd'});
-                        },
-                        onPerformAction: (action) {
-                          if (action == 'newline') {
-                            controller.dispatch({'type': 'insertNewline'});
-                          }
-                        },
-                        onShortcut: (action) {
-                          controller.dispatch({'type': action});
-                        },
-                      ),
-                    ),
-                    const Positioned(bottom: 20, right: 20, child: NativeEditorFloatingToolbar()),
-                    Positioned(
-                      bottom: 20,
-                      left: 0,
-                      right: 0,
-                      child: Center(child: _FontLoadingIndicator(isLoading: state.state.isLoadingFonts)),
-                    ),
-                  ],
-                );
-              },
+            child: Stack(
+              children: [
+                PageList(
+                  editor: editor,
+                  layout: currentLayout,
+                  cursor: cursor,
+                  isFocused: state.state.isFocused,
+                  isSelecting: state.state.isSelecting,
+                  lineHighlightEnabled: pref.lineHighlightEnabled,
+                  renderVersion: state.state.renderVersion,
+                  scrollController: scrollController,
+                  horizontalScrollController: horizontalScrollController,
+                  onOpenInput: focusController.openInput,
+                  onSelectionStart: () => controller.setSelecting(true),
+                  onSelectionEnd: () => controller.setSelecting(false),
+                  onLongPressStateChanged: (value) => isLongPressing.value = value,
+                  title: title,
+                  subtitle: subtitle,
+                  onTitleChanged: onTitleChanged,
+                  onSubtitleChanged: onSubtitleChanged,
+                  titleFocusNode: titleFocusNode,
+                  subtitleFocusNode: subtitleFocusNode,
+                  onEnterDocument: () {
+                    focusController.openInput();
+                    controller.dispatch({'type': 'navigate', 'direction': 'documentStart', 'extend': false});
+                  },
+                  onTitleHeaderHeightChanged: (height) => titleHeaderHeight.value = height,
+                ),
+                Positioned.fill(
+                  child: EditorInputView(
+                    key: inputKey,
+                    onInsertText: (text) {
+                      inputCausedCursorChange.value = true;
+                      controller.dispatch({'type': 'input', 'text': text});
+                    },
+                    onDeleteBackward: () {
+                      inputCausedCursorChange.value = true;
+                      controller.dispatch({'type': 'deleteBackward'});
+                    },
+                    onSetMarkedText: (text) {
+                      inputCausedCursorChange.value = true;
+                      controller.dispatch({'type': 'compositionUpdate', 'text': text});
+                    },
+                    onUnmarkText: () {
+                      inputCausedCursorChange.value = true;
+                      controller.dispatch({'type': 'commitPreedit'});
+                    },
+                    onCancelMarkedText: () {
+                      inputCausedCursorChange.value = true;
+                      controller.dispatch({'type': 'compositionEnd'});
+                    },
+                    onPerformAction: (action) {
+                      if (action == 'newline') {
+                        controller.dispatch({'type': 'insertNewline'});
+                      }
+                    },
+                    onShortcut: (action) {
+                      controller.dispatch({'type': action});
+                    },
+                  ),
+                ),
+                const Positioned(bottom: 20, right: 20, child: NativeEditorFloatingToolbar()),
+                Positioned(
+                  bottom: 20,
+                  left: 0,
+                  right: 0,
+                  child: Center(child: _FontLoadingIndicator(isLoading: state.state.isLoadingFonts)),
+                ),
+              ],
             ),
           ),
           const NativeEditorToolbar(),
