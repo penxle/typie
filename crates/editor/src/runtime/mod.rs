@@ -582,6 +582,62 @@ impl Runtime {
         )
     }
 
+    pub fn get_render_info(&mut self, page_index: usize) -> Option<crate::render::RenderInfo> {
+        let doc = &self.state.doc;
+        let page = self.pages.get(page_index)?;
+
+        let layout_mode = doc.settings().layout_mode;
+        let page_height = match layout_mode {
+            LayoutMode::Paginated { page_height, .. } => page_height.ceil(),
+            LayoutMode::Continuous { .. } => page.root.node.size.height.ceil(),
+        };
+
+        self.renderer
+            .set_size(self.width.ceil(), page_height, self.scale_factor);
+
+        let width = self.renderer.width();
+        let height = self.renderer.height();
+        let buffer_size = width as usize * height as usize * 4;
+
+        Some(crate::render::RenderInfo {
+            width,
+            height,
+            buffer_size,
+        })
+    }
+
+    pub fn render_page_to(&mut self, page_index: usize, dst: &mut [u8]) -> bool {
+        let snapshot = self.selection_snapshot_owned();
+
+        let doc = &self.state.doc;
+        let selection = &self.state.selection;
+
+        let selections = if let Some(snapshot) = snapshot.as_ref() {
+            build_selection_decorations(doc, selection, Some(&snapshot.block_ids))
+        } else {
+            build_selection_decorations(doc, selection, None)
+        };
+
+        let Some(page) = self.pages.get(page_index) else {
+            return false;
+        };
+
+        let layout_mode = doc.settings().layout_mode;
+        let page_height = match layout_mode {
+            LayoutMode::Paginated { page_height, .. } => page_height.ceil(),
+            LayoutMode::Continuous { .. } => page.root.node.size.height.ceil(),
+        };
+
+        self.renderer
+            .set_size(self.width.ceil(), page_height, self.scale_factor);
+        self.renderer.set_focused(self.is_focused);
+
+        let drop_indicator = self.pending.drop_indicator.as_ref();
+
+        self.renderer
+            .render_to(page, page_index, &selections, drop_indicator, doc, dst)
+    }
+
     pub fn render_drag_image(
         &mut self,
         visible_pages: &[usize],

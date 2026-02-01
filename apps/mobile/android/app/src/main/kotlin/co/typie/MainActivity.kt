@@ -4,6 +4,7 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import co.typie.editorinput.EditorInputFactory
+import co.typie.editortexture.EditorTexturePlugin
 import co.typie.keyboard.KeyboardPlugin
 import co.typie.webview.AppWebViewFactory
 import io.flutter.embedding.android.FlutterActivity
@@ -31,6 +32,8 @@ class MainActivity : FlutterActivity() {
     )
 
     KeyboardPlugin(this, flutterEngine.dartExecutor.binaryMessenger)
+
+    flutterEngine.plugins.add(EditorTexturePlugin())
   }
 
   override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {

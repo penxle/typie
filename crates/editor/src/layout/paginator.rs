@@ -317,7 +317,7 @@ impl Paginator {
     fn content_height(&self) -> f32 {
         match self.layout_mode {
             LayoutMode::Paginated { .. } => self.page_height - self.margin_top - self.margin_bottom,
-            LayoutMode::Continuous { .. } => 4096.0 - self.margin_top - self.margin_bottom,
+            LayoutMode::Continuous { .. } => 1024.0 - self.margin_top - self.margin_bottom,
         }
     }
 

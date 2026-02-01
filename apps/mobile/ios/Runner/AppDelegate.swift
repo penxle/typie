@@ -20,7 +20,9 @@ import UIKit
     editorInputRegistrar?.register(editorInputFactory, withId: "co.typie.editor_input")
 
     KeyboardPlugin.register(with: self.registrar(forPlugin: "co.typie.keyboard")!)
-    
+
+    EditorTexturePlugin.register(with: self.registrar(forPlugin: "co.typie.editor_texture")!)
+
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 }

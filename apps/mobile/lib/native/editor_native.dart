@@ -183,12 +183,12 @@ class NativeEditorApplication {
   }
 }
 
-final class NativeEditorRenderResult {
-  const NativeEditorRenderResult({required this.data, required this.width, required this.height});
+final class NativeEditorRenderInfo {
+  const NativeEditorRenderInfo({required this.width, required this.height, required this.bufferSize});
 
-  final Uint8List data;
   final int width;
   final int height;
+  final int bufferSize;
 }
 
 final class NativeEditor {
@@ -243,25 +243,27 @@ final class NativeEditor {
     return _bindings.editor_get_page_count(_handle);
   }
 
-  NativeEditorRenderResult renderPage(int pageIndex) {
+  NativeEditorRenderInfo? getRenderInfo(int pageIndex) {
     _checkDisposed();
 
-    final resultPtr = calloc<RenderResult>();
+    final infoPtr = calloc<RenderInfo>();
     try {
-      final status = _bindings.editor_render_page(_handle, pageIndex, resultPtr);
+      final status = _bindings.editor_get_render_info(_handle, pageIndex, infoPtr);
       if (status != 0) {
-        throw EditorException(_getLastError() ?? 'Failed to render page $pageIndex');
+        return null;
       }
 
-      return NativeEditorRenderResult(
-        data: Uint8List.fromList(resultPtr.ref.ptr.asTypedList(resultPtr.ref.len)),
-        width: resultPtr.ref.width,
-        height: resultPtr.ref.height,
+      return NativeEditorRenderInfo(
+        width: infoPtr.ref.width,
+        height: infoPtr.ref.height,
+        bufferSize: infoPtr.ref.buffer_size,
       );
     } finally {
-      calloc.free(resultPtr);
+      calloc.free(infoPtr);
     }
   }
+
+  Pointer<EditorHandle> get handle => _handle;
 
   void dispose() {
     if (!_disposed) {

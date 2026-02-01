@@ -18,7 +18,10 @@ wasm = [
   "dep:js-sys",
   "uuid/js",
 ]
-native = []
+native = ["dep:jni"]
+
+[target.'cfg(target_os = "android")'.dependencies]
+jni = { version = "0.21", optional = true }
 
 [dependencies]
 macros = { path = "./macros" }

@@ -13,11 +13,10 @@ typedef struct EditorApplication EditorApplication;
 typedef struct EditorHandle EditorHandle;
 
 typedef struct {
-    uint8_t* ptr;
-    size_t len;
     uint32_t width;
     uint32_t height;
-} RenderResult;
+    size_t buffer_size;
+} RenderInfo;
 
 typedef struct {
     uint32_t doc_with_whitespace;
@@ -52,7 +51,11 @@ int32_t editor_dispatch(EditorHandle* editor, const char* message_json);
 char* editor_tick(EditorHandle* editor);
 void editor_flush(EditorHandle* editor);
 size_t editor_get_page_count(EditorHandle* editor);
-int32_t editor_render_page(EditorHandle* editor, size_t page_index, RenderResult* out_result);
+int32_t editor_get_render_info(EditorHandle* editor, size_t page_index, RenderInfo* out_info);
+
+#define PIXEL_FORMAT_RGBA 0
+#define PIXEL_FORMAT_BGRA 1
+int32_t editor_render_page_to(EditorHandle* editor, size_t page_index, uint8_t* dst, size_t dst_stride, size_t dst_height, int32_t format);
 int32_t editor_can_drag_at(EditorHandle* editor, size_t page_idx, float x, float y);
 int32_t editor_get_character_counts(EditorHandle* editor, CharacterCounts* out_counts);
 

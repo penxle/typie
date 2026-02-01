@@ -9,8 +9,12 @@ part 'editor_state.freezed.dart';
 
 @freezed
 abstract class LayoutInfo with _$LayoutInfo {
-  const factory LayoutInfo({required int pageCount, required bool isPaginated, required List<double> pageHeights}) =
-      _LayoutInfo;
+  const factory LayoutInfo({
+    required int pageCount,
+    required bool isPaginated,
+    required double pageWidth,
+    required List<double> pageHeights,
+  }) = _LayoutInfo;
 }
 
 @freezed

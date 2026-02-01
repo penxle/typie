@@ -48,6 +48,12 @@ pub struct RenderResult {
     pub height: u16,
 }
 
+pub struct RenderInfo {
+    pub width: u16,
+    pub height: u16,
+    pub buffer_size: usize,
+}
+
 pub struct DragImageResult {
     pixmap: Pixmap,
     pub width: u16,
@@ -172,6 +178,70 @@ impl Renderer {
             width: self.width(),
             height: self.height(),
         }
+    }
+
+    pub fn render_to(
+        &mut self,
+        page: &Page,
+        page_idx: usize,
+        selections: &[SelectionDecor],
+        drop_indicator: Option<&DropIndicator>,
+        doc: &Doc,
+        dst: &mut [u8],
+    ) -> bool {
+        let expected_size = self.pixmap.width() as usize * self.pixmap.height() as usize * 4;
+        if dst.len() < expected_size {
+            return false;
+        }
+
+        let Some(mut pixmap) = PixmapMut::from_bytes(
+            dst,
+            self.pixmap.width(),
+            self.pixmap.height(),
+        ) else {
+            return false;
+        };
+
+        pixmap.data_mut().fill(0);
+
+        let scale = self.scale_factor as f32;
+        let transform = Transform::from_scale(scale, scale);
+
+        let stages = [
+            RenderPhase::Background,
+            RenderPhase::Content,
+            RenderPhase::Selection,
+        ];
+
+        for phase in stages {
+            let ctx = RenderContext {
+                scale_factor: self.scale_factor,
+                selections,
+                theme: &self.theme,
+                doc,
+                default_text_color: None,
+                is_focused: self.is_focused,
+                phase,
+            };
+
+            Self::render_node(
+                &mut pixmap,
+                &mut self.glyph_renderer,
+                &page.root,
+                Point::zero(),
+                transform,
+                &ctx,
+                &RenderHints::default(),
+            );
+
+            if phase == RenderPhase::Content {
+                if let Some(indicator) = drop_indicator {
+                    Self::render_drop_indicator(&mut pixmap, indicator, page_idx, transform, &ctx);
+                }
+            }
+        }
+
+        true
     }
 
     fn render_drop_indicator(
