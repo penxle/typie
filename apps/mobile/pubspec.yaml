@@ -89,6 +89,11 @@ dev_dependencies:
   leancode_lint: ^18.0.0
 
 dependency_overrides:
+  ferry:
+    git:
+      url: https://github.com/devunt/ferry.git
+      ref: fix-error-typed-link-generic-type
+      path: packages/ferry
   gql_code_builder:
     git:
       url: https://github.com/devunt/gql.git

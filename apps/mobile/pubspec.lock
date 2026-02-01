@@ -428,10 +428,11 @@ packages:
   ferry:
     dependency: "direct main"
     description:
-      name: ferry
-      sha256: "76de355cc0cf07ba67b2ea9f21be0fc64b4b172687ce3895678c10ab0d456627"
-      url: "https://pub.dev"
-    source: hosted
+      path: "packages/ferry"
+      ref: fix-error-typed-link-generic-type
+      resolved-ref: "4ed92bc50d1d666ad8cb9e3ef8dc221a294dc87d"
+      url: "https://github.com/devunt/ferry.git"
+    source: git
     version: "0.16.2-dev.4"
   ferry_cache:
     dependency: transitive
