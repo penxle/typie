@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
@@ -16,6 +18,7 @@ import 'package:typie/screens/native_editor/toolbar/scope.dart';
 import 'package:typie/screens/native_editor/toolbar/toolbar.dart';
 import 'package:typie/screens/native_editor/upload_manager.dart';
 import 'package:typie/screens/native_editor/view/page_list.dart';
+import 'package:typie/screens/native_editor/view/scrollbar/editor_scrollbar.dart';
 import 'package:typie/services/keyboard.dart';
 import 'package:typie/services/preference.dart';
 
@@ -66,6 +69,8 @@ class EditorView extends HookWidget {
 
     final externalElements = useValueNotifier<List<ExternalElement>>([]);
     final uploadManager = useMemoized(UploadManager.new);
+    final suppressScrollbarShow = useValueNotifier(false);
+    final suppressScrollbarTimer = useRef<Timer?>(null);
 
     useEffect(() => uploadManager.dispose, []);
 
@@ -77,7 +82,12 @@ class EditorView extends HookWidget {
     useEffect(() {
       void scrollToTop() {
         if (scrollController.hasClients) {
-          scrollController.animateTo(0, duration: const Duration(milliseconds: 100), curve: Curves.easeOut);
+          suppressScrollbarTimer.value?.cancel();
+          suppressScrollbarShow.value = true;
+          unawaited(scrollController.animateTo(0, duration: const Duration(milliseconds: 100), curve: Curves.easeOut));
+          suppressScrollbarTimer.value = Timer(const Duration(milliseconds: 150), () {
+            suppressScrollbarShow.value = false;
+          });
         }
       }
 
@@ -180,12 +190,17 @@ class EditorView extends HookWidget {
 
         if (currentLayout != null && !isLongPressing.value) {
           final horizontalPadding = currentLayout.isPaginated ? 40.0 : 0.0;
+          suppressScrollbarTimer.value?.cancel();
+          suppressScrollbarShow.value = true;
           EditorScrollBehavior(
             scrollController: scrollController,
             horizontalScrollController: horizontalScrollController,
             horizontalPadding: horizontalPadding,
             titleHeaderHeight: titleHeaderHeight.value,
           ).scrollToCursor(cursor, currentLayout);
+          suppressScrollbarTimer.value = Timer(const Duration(milliseconds: 150), () {
+            suppressScrollbarShow.value = false;
+          });
         }
       }
 
@@ -285,6 +300,15 @@ class EditorView extends HookWidget {
                   left: 0,
                   right: 0,
                   child: Center(child: _FontLoadingIndicator(isLoading: state.state.isLoadingFonts)),
+                ),
+                EditorScrollbar(
+                  scrollController: scrollController,
+                  horizontalScrollController: horizontalScrollController,
+                  layout: currentLayout,
+                  viewHeight: height,
+                  viewWidth: width,
+                  titleHeaderHeight: titleHeaderHeight.value,
+                  suppressShowOnScroll: suppressScrollbarShow,
                 ),
               ],
             ),

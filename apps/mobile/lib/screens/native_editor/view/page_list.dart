@@ -238,56 +238,59 @@ class PageList extends HookWidget {
             ? const NeverScrollableScrollPhysics()
             : const BouncingScrollPhysics();
 
-        final listView = SingleChildScrollView(
-          controller: horizontalScrollController,
-          scrollDirection: Axis.horizontal,
-          physics: horizontalPhysics,
-          child: SizedBox(
-            width: contentWidth,
-            child: ListView.builder(
-              controller: scrollController,
-              padding: EdgeInsets.only(
-                left: horizontalPadding,
-                right: horizontalPadding,
-                bottom: layout.isPaginated ? _pagePadding : 200,
+        final listView = ScrollConfiguration(
+          behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+          child: SingleChildScrollView(
+            controller: horizontalScrollController,
+            scrollDirection: Axis.horizontal,
+            physics: horizontalPhysics,
+            child: SizedBox(
+              width: contentWidth,
+              child: ListView.builder(
+                controller: scrollController,
+                padding: EdgeInsets.only(
+                  left: horizontalPadding,
+                  right: horizontalPadding,
+                  bottom: layout.isPaginated ? _pagePadding : 200,
+                ),
+                itemCount: layout.pageCount + 1,
+                cacheExtent: 1000,
+                physics: isSelecting ? const NeverScrollableScrollPhysics() : const AlwaysScrollableScrollPhysics(),
+                itemBuilder: (context, index) {
+                  if (index == 0) {
+                    final topPadding = layout.isPaginated ? _pagePadding : 0.0;
+                    final bottomPadding = layout.isPaginated ? 0.0 : _pagePadding;
+                    return SizedBox(height: titleHeight.value + topPadding + bottomPadding);
+                  }
+
+                  final pageIndex = index - 1;
+                  final isLast = pageIndex == layout.pageCount - 1;
+                  final gap = layout.isPaginated && !isLast ? pageGap : 0.0;
+                  final pageHeight = layout.pageHeights.elementAtOrNull(pageIndex);
+                  final pageCursor = cursor?.pageIdx == pageIndex ? cursor : null;
+
+                  final layoutMode = layout.layoutMode;
+                  final margins = layoutMode is PaginatedLayoutMode ? layoutMode : null;
+
+                  return PageItem(
+                    key: ValueKey(pageIndex),
+                    pageIndex: pageIndex,
+                    editor: editor,
+                    renderVersion: renderVersion,
+                    bottomGap: gap,
+                    pageWidth: layout.pageWidth,
+                    pageHeight: pageHeight,
+                    cursorInfo: pageCursor,
+                    isFocused: isFocused,
+                    lineHighlightEnabled: lineHighlightEnabled,
+                    isPaginated: layout.isPaginated,
+                    pageMarginTop: margins?.pageMarginTop ?? 0,
+                    pageMarginBottom: margins?.pageMarginBottom ?? 0,
+                    pageMarginLeft: margins?.pageMarginLeft ?? 0,
+                    pageMarginRight: margins?.pageMarginRight ?? 0,
+                  );
+                },
               ),
-              itemCount: layout.pageCount + 1,
-              cacheExtent: 1000,
-              physics: isSelecting ? const NeverScrollableScrollPhysics() : const AlwaysScrollableScrollPhysics(),
-              itemBuilder: (context, index) {
-                if (index == 0) {
-                  final topPadding = layout.isPaginated ? _pagePadding : 0.0;
-                  final bottomPadding = layout.isPaginated ? 0.0 : _pagePadding;
-                  return SizedBox(height: titleHeight.value + topPadding + bottomPadding);
-                }
-
-                final pageIndex = index - 1;
-                final isLast = pageIndex == layout.pageCount - 1;
-                final gap = layout.isPaginated && !isLast ? pageGap : 0.0;
-                final pageHeight = layout.pageHeights.elementAtOrNull(pageIndex);
-                final pageCursor = cursor?.pageIdx == pageIndex ? cursor : null;
-
-                final layoutMode = layout.layoutMode;
-                final margins = layoutMode is PaginatedLayoutMode ? layoutMode : null;
-
-                return PageItem(
-                  key: ValueKey(pageIndex),
-                  pageIndex: pageIndex,
-                  editor: editor,
-                  renderVersion: renderVersion,
-                  bottomGap: gap,
-                  pageWidth: layout.pageWidth,
-                  pageHeight: pageHeight,
-                  cursorInfo: pageCursor,
-                  isFocused: isFocused,
-                  lineHighlightEnabled: lineHighlightEnabled,
-                  isPaginated: layout.isPaginated,
-                  pageMarginTop: margins?.pageMarginTop ?? 0,
-                  pageMarginBottom: margins?.pageMarginBottom ?? 0,
-                  pageMarginLeft: margins?.pageMarginLeft ?? 0,
-                  pageMarginRight: margins?.pageMarginRight ?? 0,
-                );
-              },
             ),
           ),
         );
