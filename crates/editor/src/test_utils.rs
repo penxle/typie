@@ -67,11 +67,24 @@ pub fn init_test_env() {
     thread_local! {
         static FONT_INIT: Cell<bool> = const { Cell::new(false) };
     }
+
     FONT_INIT.with(|init| {
         if !init.get() {
             init.set(true);
+
             let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
-            let font_path = std::path::Path::new(&manifest_dir).join("assets/Noto-Phantom.ttf");
+            let assets_dir = std::path::Path::new(&manifest_dir).join("assets");
+
+            let emoji_path = assets_dir.join("Noto-Phantom-Emoji.woff2");
+            if emoji_path.exists() {
+                let emoji_data = std::fs::read(&emoji_path).expect("Failed to read emoji font");
+                let _ = crate::global::add_font("Noto Emoji", 400, &emoji_data);
+                crate::global::register_fallback_font("Noto Emoji");
+            } else {
+                eprintln!("Warning: Emoji font not found at {:?}", emoji_path);
+            }
+
+            let font_path = assets_dir.join("Noto-Phantom.woff2");
             if font_path.exists() {
                 let font_data = std::fs::read(&font_path).expect("Failed to read test font");
                 let _ = crate::global::add_font("Noto Sans", 400, &font_data);

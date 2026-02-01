@@ -38,8 +38,10 @@ pub fn add_font(name: &str, weight: u16, data: &[u8]) -> Option<fontique::Family
             }
         }
 
+        let font_data = wuff::decompress_woff2(data).ok()?;
+
         let families = fcx.collection.register_fonts(
-            fontique::Blob::new(Arc::new(data.to_vec())),
+            fontique::Blob::new(Arc::new(font_data)),
             Some(fontique::FontInfoOverride {
                 family_name: Some(name),
                 weight: Some(fontique::FontWeight::new(weight as f32)),

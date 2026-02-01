@@ -3,14 +3,14 @@
 from fontTools.ttLib import TTFont
 from fontTools.pens.t2CharStringPen import T2CharStringPen
 import os
-import sys
 import urllib.request
 
 GONOTO_URL = "https://github.com/satbyy/go-noto-universal/releases/download/v7.0/GoNotoKurrent-Regular.ttf"
+NOTO_EMOJI_URL = "https://github.com/googlefonts/noto-emoji/raw/main/fonts/NotoColorEmoji.ttf"
 
-def download_gonoto(output_path):
-    print(f"Downloading GoNotoKurrent from {GONOTO_URL}")
-    urllib.request.urlretrieve(GONOTO_URL, output_path)
+def download_font(url, output_path):
+    print(f"Downloading from {url}")
+    urllib.request.urlretrieve(url, output_path)
     print(f"Downloaded to {output_path}")
 
 def create_phantom_font(input_path, output_path):
@@ -51,7 +51,7 @@ def create_phantom_font(input_path, output_path):
         print(f"  Total glyphs processed: {glyph_count}")
 
     tables_to_remove = [
-        'GPOS', 'GSUB', 'kern', 'GDEF', 'BASE', 'JSTF',
+        'GPOS', 'kern', 'BASE', 'JSTF',
         'DSIG', 'SVG ', 'sbix', 'CBDT', 'CBLC', 'COLR', 'CPAL',
         'VORG', 'VDMX', 'hdmx', 'LTSH', 'prep', 'fpgm', 'cvt ',
         'gasp'
@@ -67,6 +67,7 @@ def create_phantom_font(input_path, output_path):
         print(f"Removed tables: {', '.join(removed)}")
 
     print(f"Saving phantom font: {output_path}")
+    font.flavor = 'woff2'
     font.save(output_path)
     font.close()
 
@@ -74,10 +75,22 @@ def create_phantom_font(input_path, output_path):
 
 if __name__ == "__main__":
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    temp_font = os.path.join(script_dir, "GoNotoKurrent-Regular.ttf")
-    output_file = os.path.join(script_dir, "Noto-Phantom.ttf")
+    assets_dir = os.path.join(script_dir, "..", "assets")
 
-    download_gonoto(temp_font)
-    create_phantom_font(temp_font, output_file)
-    os.remove(temp_font)
-    print(f"Cleaned up temporary file: {temp_font}")
+    print("=== Creating Noto-Phantom.woff2 (Text) ===")
+    temp_text = os.path.join(script_dir, "GoNotoKurrent-Regular.ttf")
+    output_text = os.path.join(assets_dir, "Noto-Phantom.woff2")
+    download_font(GONOTO_URL, temp_text)
+    create_phantom_font(temp_text, output_text)
+    os.remove(temp_text)
+    print(f"Cleaned up: {temp_text}\n")
+
+    print("=== Creating Noto-Phantom-Emoji.woff2 (Emoji) ===")
+    temp_emoji = os.path.join(script_dir, "NotoColorEmoji.ttf")
+    output_emoji = os.path.join(assets_dir, "Noto-Phantom-Emoji.woff2")
+    download_font(NOTO_EMOJI_URL, temp_emoji)
+    create_phantom_font(temp_emoji, output_emoji)
+    os.remove(temp_emoji)
+    print(f"Cleaned up: {temp_emoji}\n")
+
+    print("=== All phantom fonts created ===")
