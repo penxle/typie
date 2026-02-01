@@ -105,3 +105,7 @@ void handleWritingSystem(EditorController controller, Map<String, dynamic> cmd) 
         }),
   );
 }
+
+void handleExitedDocumentStart(EditorController controller, Map<String, dynamic> cmd) {
+  controller.onExitedDocumentStart?.call();
+}

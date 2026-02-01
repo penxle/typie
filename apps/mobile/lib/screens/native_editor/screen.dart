@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:gql_tristate_value/gql_tristate_value.dart';
 import 'package:typie/context/theme.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/graphql/widget.dart';
@@ -12,6 +13,7 @@ import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/native/editor_native.dart';
 import 'package:typie/screens/native_editor/__generated__/native_editor_query.data.gql.dart';
 import 'package:typie/screens/native_editor/__generated__/native_editor_query.req.gql.dart';
+import 'package:typie/screens/native_editor/__generated__/update_document_mutation.req.gql.dart';
 import 'package:typie/screens/native_editor/fonts.dart';
 import 'package:typie/screens/native_editor/sync/document_sync_manager.dart';
 import 'package:typie/screens/native_editor/theme.dart';
@@ -50,8 +52,17 @@ class _Content extends HookWidget {
     final editor = useState<NativeEditor?>(null);
     final syncManager = useRef<DocumentSyncManager?>(null);
 
+    final localTitle = useState<String>('');
+    final localSubtitle = useState<String>('');
+    final titleDirty = useState<bool>(false);
+    final subtitleDirty = useState<bool>(false);
+    final titleFocusNode = useFocusNode();
+    final subtitleFocusNode = useFocusNode();
+    final titleDebounceTimer = useRef<Timer?>(null);
+    final subtitleDebounceTimer = useRef<Timer?>(null);
+
     final document = data.entity.node.when(document: (doc) => doc, orElse: () => null);
-    final title = document?.title ?? '(제목 없음)';
+    final headingTitle = document?.title ?? '(제목 없음)';
     final scaleFactor = ui.PlatformDispatcher.instance.views.first.devicePixelRatio;
 
     final brightness = MediaQuery.platformBrightnessOf(context);
@@ -87,6 +98,36 @@ class _Content extends HookWidget {
       unawaited(init());
 
       return () {
+        if (titleDebounceTimer.value != null) {
+          titleDebounceTimer.value!.cancel();
+          if (titleDirty.value) {
+            final value = localTitle.value;
+            unawaited(
+              client.request(
+                GNativeEditor_UpdateDocument_MutationReq(
+                  (b) => b.vars.input
+                    ..documentId = document.id
+                    ..title = Value.present(value.isEmpty ? null : value),
+                ),
+              ),
+            );
+          }
+        }
+        if (subtitleDebounceTimer.value != null) {
+          subtitleDebounceTimer.value!.cancel();
+          if (subtitleDirty.value) {
+            final value = localSubtitle.value;
+            unawaited(
+              client.request(
+                GNativeEditor_UpdateDocument_MutationReq(
+                  (b) => b.vars.input
+                    ..documentId = document.id
+                    ..subtitle = Value.present(value.isEmpty ? null : value),
+                ),
+              ),
+            );
+          }
+        }
         syncManager.value?.dispose();
         syncManager.value = null;
         editor.value?.dispose();
@@ -125,75 +166,139 @@ class _Content extends HookWidget {
       return null;
     }, [editor.value, document?.id]);
 
-    final isLoading = editor.value == null && error.value == null && document != null;
+    useEffect(() {
+      final serverTitle = document?.nullableTitle ?? '';
+      final serverSubtitle = document?.subtitle ?? '';
 
-    return Screen(
-      heading: Heading(title: title, backgroundColor: context.colors.surfaceDefault),
-      backgroundColor: context.colors.surfaceDefault,
-      keyboardDismiss: false,
-      responsive: false,
-      child: _buildBody(
-        context,
-        isLoading: isLoading,
-        error: error.value,
-        editor: editor.value,
-        fontManager: fontManager.value,
-        syncManager: syncManager.value,
-      ),
-    );
-  }
+      if (titleDirty.value && serverTitle == localTitle.value) {
+        titleDirty.value = false;
+      }
+      if (subtitleDirty.value && serverSubtitle == localSubtitle.value) {
+        subtitleDirty.value = false;
+      }
 
-  Widget _buildBody(
-    BuildContext context, {
-    required bool isLoading,
-    required String? error,
-    required NativeEditor? editor,
-    required EditorFontManager? fontManager,
-    required DocumentSyncManager? syncManager,
-  }) {
-    if (isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
+      if (!titleDirty.value) {
+        localTitle.value = serverTitle;
+      }
+      if (!subtitleDirty.value) {
+        localSubtitle.value = serverSubtitle;
+      }
+      return null;
+    }, [document?.nullableTitle, document?.subtitle]);
 
-    if (error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(LucideLightIcons.circle_alert, size: 48, color: context.colors.textSubtle),
-              const SizedBox(height: 16),
-              Text(
-                '에디터를 불러올 수 없습니다',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: context.colors.textDefault),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                error,
-                style: TextStyle(fontSize: 14, color: context.colors.textSubtle),
-                textAlign: TextAlign.center,
-              ),
-            ],
+    void saveTitle(String documentId, String value) {
+      unawaited(
+        client.request(
+          GNativeEditor_UpdateDocument_MutationReq(
+            (b) => b.vars.input
+              ..documentId = documentId
+              ..title = Value.present(value.isEmpty ? null : value),
           ),
         ),
       );
     }
 
-    if (editor == null) {
-      return const Center(child: CircularProgressIndicator());
+    void saveSubtitle(String documentId, String value) {
+      unawaited(
+        client.request(
+          GNativeEditor_UpdateDocument_MutationReq(
+            (b) => b.vars.input
+              ..documentId = documentId
+              ..subtitle = Value.present(value.isEmpty ? null : value),
+          ),
+        ),
+      );
     }
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return EditorView(
-          editor: editor,
-          fontManager: fontManager,
-          width: constraints.maxWidth,
-          height: constraints.maxHeight,
-          onDocChanged: syncManager?.handleDocChanged,
+    void handleTitleChanged(String value) {
+      final documentId = document?.id;
+      if (documentId == null) {
+        return;
+      }
+
+      localTitle.value = value;
+      titleDirty.value = true;
+      titleDebounceTimer.value?.cancel();
+      titleDebounceTimer.value = Timer(const Duration(milliseconds: 200), () {
+        saveTitle(documentId, value);
+      });
+    }
+
+    void handleSubtitleChanged(String value) {
+      final documentId = document?.id;
+      if (documentId == null) {
+        return;
+      }
+
+      localSubtitle.value = value;
+      subtitleDirty.value = true;
+      subtitleDebounceTimer.value?.cancel();
+      subtitleDebounceTimer.value = Timer(const Duration(milliseconds: 200), () {
+        saveSubtitle(documentId, value);
+      });
+    }
+
+    final isLoading = editor.value == null && error.value == null && document != null;
+
+    Widget buildBody() {
+      if (isLoading) {
+        return const Center(child: CircularProgressIndicator());
+      }
+
+      if (error.value != null) {
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(LucideLightIcons.circle_alert, size: 48, color: context.colors.textSubtle),
+                const SizedBox(height: 16),
+                Text(
+                  '에디터를 불러올 수 없습니다',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: context.colors.textDefault),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  error.value!,
+                  style: TextStyle(fontSize: 14, color: context.colors.textSubtle),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
         );
-      },
+      }
+
+      if (editor.value == null) {
+        return const Center(child: CircularProgressIndicator());
+      }
+
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          return EditorView(
+            editor: editor.value!,
+            fontManager: fontManager.value,
+            width: constraints.maxWidth,
+            height: constraints.maxHeight,
+            onDocChanged: syncManager.value?.handleDocChanged,
+            title: localTitle.value,
+            subtitle: localSubtitle.value,
+            onTitleChanged: handleTitleChanged,
+            onSubtitleChanged: handleSubtitleChanged,
+            titleFocusNode: titleFocusNode,
+            subtitleFocusNode: subtitleFocusNode,
+          );
+        },
+      );
+    }
+
+    return Screen(
+      heading: Heading(title: headingTitle, backgroundColor: context.colors.surfaceDefault),
+      backgroundColor: context.colors.surfaceDefault,
+      keyboardDismiss: false,
+      responsive: false,
+      child: buildBody(),
     );
   }
 }

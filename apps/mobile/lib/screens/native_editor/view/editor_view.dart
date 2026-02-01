@@ -27,6 +27,12 @@ class EditorView extends HookWidget {
     required this.fontManager,
     required this.width,
     required this.height,
+    required this.title,
+    required this.subtitle,
+    required this.onTitleChanged,
+    required this.onSubtitleChanged,
+    required this.titleFocusNode,
+    required this.subtitleFocusNode,
     this.onDocChanged,
     super.key,
   });
@@ -35,12 +41,23 @@ class EditorView extends HookWidget {
   final EditorFontManager? fontManager;
   final double width;
   final double height;
+  final String title;
+  final String subtitle;
+  final ValueChanged<String> onTitleChanged;
+  final ValueChanged<String> onSubtitleChanged;
+  final FocusNode titleFocusNode;
+  final FocusNode subtitleFocusNode;
   final void Function()? onDocChanged;
 
   @override
   Widget build(BuildContext context) {
     final controller = useMemoized(
-      () => EditorController(editor: editor, fontManager: fontManager, onDocChanged: onDocChanged),
+      () => EditorController(
+        editor: editor,
+        fontManager: fontManager,
+        onDocChanged: onDocChanged,
+        onExitedDocumentStart: subtitleFocusNode.requestFocus,
+      ),
       [editor],
     );
     useEffect(() => controller.dispose, [controller]);
@@ -69,6 +86,27 @@ class EditorView extends HookWidget {
       () => EditorFocusController(inputKey: inputKey, onFocusChanged: controller.setFocused),
       [controller],
     );
+
+    useEffect(() {
+      void onTitleFocusChange() {
+        if (titleFocusNode.hasFocus) {
+          focusController.clearFocus();
+        }
+      }
+
+      void onSubtitleFocusChange() {
+        if (subtitleFocusNode.hasFocus) {
+          focusController.clearFocus();
+        }
+      }
+
+      titleFocusNode.addListener(onTitleFocusChange);
+      subtitleFocusNode.addListener(onSubtitleFocusChange);
+      return () {
+        titleFocusNode.removeListener(onTitleFocusChange);
+        subtitleFocusNode.removeListener(onSubtitleFocusChange);
+      };
+    }, [focusController]);
 
     final keyboardHandler = useMemoized(() => EditorKeyboardHandler(dispatch: controller.dispatch), [controller]);
 
@@ -115,6 +153,9 @@ class EditorView extends HookWidget {
     useEffect(() {
       bool onKeyEvent(KeyEvent event) {
         if (!focusController.isActive) {
+          return false;
+        }
+        if (titleFocusNode.hasFocus || subtitleFocusNode.hasFocus) {
           return false;
         }
         return keyboardHandler.handleKeyEvent(event);
@@ -198,6 +239,16 @@ class EditorView extends HookWidget {
                       onOpenInput: focusController.openInput,
                       onSelectionStart: () => controller.setSelecting(true),
                       onSelectionEnd: () => controller.setSelecting(false),
+                      title: title,
+                      subtitle: subtitle,
+                      onTitleChanged: onTitleChanged,
+                      onSubtitleChanged: onSubtitleChanged,
+                      titleFocusNode: titleFocusNode,
+                      subtitleFocusNode: subtitleFocusNode,
+                      onEnterDocument: () {
+                        focusController.openInput();
+                        controller.dispatch({'type': 'navigate', 'direction': 'documentStart', 'extend': false});
+                      },
                     ),
                     Positioned.fill(
                       child: EditorInputView(

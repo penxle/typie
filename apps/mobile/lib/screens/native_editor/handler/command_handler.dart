@@ -14,6 +14,7 @@ class EditorCommandHandler {
     'externalElementChanged': handleExternalElements,
     'fontsRequired': handleFontsRequired,
     'writingSystemRequired': handleWritingSystem,
+    'exitedDocumentStart': handleExitedDocumentStart,
   };
 
   static void handleCommands(EditorController controller, List<dynamic>? commands) {

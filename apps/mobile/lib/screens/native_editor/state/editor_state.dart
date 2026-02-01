@@ -38,11 +38,12 @@ abstract class EditorState with _$EditorState {
 }
 
 class EditorController extends ChangeNotifier {
-  EditorController({required this.editor, required this.fontManager, this.onDocChanged});
+  EditorController({required this.editor, required this.fontManager, this.onDocChanged, this.onExitedDocumentStart});
 
   final NativeEditor editor;
   final EditorFontManager? fontManager;
   final void Function()? onDocChanged;
+  final void Function()? onExitedDocumentStart;
 
   EditorState _state = const EditorState();
   EditorState get state => _state;
