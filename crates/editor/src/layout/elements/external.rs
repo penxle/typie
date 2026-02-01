@@ -55,7 +55,7 @@ impl ExternalElement {
         let head = Position::new(
             self.parent_block_id,
             offset_in_block + 1,
-            Affinity::Downstream,
+            Affinity::Upstream,
         );
         Selection::new(anchor, head)
     }

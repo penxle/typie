@@ -3,7 +3,6 @@ use crate::layout::cursor::{Cursor, NavigationContext};
 use crate::model::{MarkType, NodeId};
 use crate::state::position_helpers::{compare_positions, move_from_block_position};
 use crate::state::{Position, Selection, block_content_len};
-use crate::types::Affinity;
 use std::cmp::Ordering;
 
 impl Runtime {
@@ -269,7 +268,7 @@ impl Runtime {
                 | Direction::LineStart
                 | Direction::WordLeft
                 | Direction::DocumentStart => {
-                    Position::new(from.node_id, from.offset, Affinity::Downstream)
+                    Position::new(from.node_id, from.offset, from.affinity)
                 }
                 Direction::Right
                 | Direction::Down
@@ -277,9 +276,7 @@ impl Runtime {
                 | Direction::SentenceDown
                 | Direction::LineEnd
                 | Direction::WordRight
-                | Direction::DocumentEnd => {
-                    Position::new(to.node_id, to.offset, Affinity::Upstream)
-                }
+                | Direction::DocumentEnd => Position::new(to.node_id, to.offset, to.affinity),
             };
             let span = move_from(base);
             (span.anchor, span.head)
@@ -796,7 +793,7 @@ mod tests {
                 image(id: Some("image2".to_string()), proportion: 1.0,) {}
                 paragraph {}
             }
-            selection { (NodeId::ROOT, 1) -> (NodeId::ROOT, 2) }
+            selection { (NodeId::ROOT, 1) -> (NodeId::ROOT, 2, Affinity::Upstream) }
         };
 
         rt.layout();
