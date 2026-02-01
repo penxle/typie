@@ -59,6 +59,25 @@ int32_t editor_render_page_to(EditorHandle* editor, size_t page_index, uint8_t* 
 int32_t editor_can_drag_at(EditorHandle* editor, size_t page_idx, float x, float y);
 int32_t editor_get_character_counts(EditorHandle* editor, CharacterCounts* out_counts);
 
+uint8_t* editor_get_snapshot(EditorHandle* editor, size_t* out_len);
+uint8_t* editor_get_version(EditorHandle* editor, size_t* out_len);
+uint8_t* editor_export_all_updates(EditorHandle* editor, size_t* out_len);
+int32_t editor_export_new_updates(
+    EditorHandle* editor,
+    uint8_t** out_updates,
+    size_t* out_updates_len,
+    uint8_t** out_version,
+    size_t* out_version_len
+);
+int32_t editor_import_updates(EditorHandle* editor, const uint8_t* updates, size_t len);
+int32_t editor_import_updates_batch(
+    EditorHandle* editor,
+    const uint8_t* const* updates_ptrs,
+    const size_t* updates_lens,
+    size_t count
+);
+int32_t editor_commit_sync(EditorHandle* editor, const uint8_t* version, size_t version_len);
+
 #ifdef __cplusplus
 }
 #endif

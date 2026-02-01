@@ -1,0 +1,7 @@
+subscription NativeEditor_DocumentSyncStream_Subscription($clientId: String!, $documentId: ID!) {
+  documentSyncStream(clientId: $clientId, documentId: $documentId) {
+    documentId
+    type
+    data
+  }
+}

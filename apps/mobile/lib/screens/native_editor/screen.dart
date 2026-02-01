@@ -6,12 +6,14 @@ import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/context/theme.dart';
+import 'package:typie/graphql/client.dart';
 import 'package:typie/graphql/widget.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/native/editor_native.dart';
 import 'package:typie/screens/native_editor/__generated__/native_editor_query.data.gql.dart';
 import 'package:typie/screens/native_editor/__generated__/native_editor_query.req.gql.dart';
 import 'package:typie/screens/native_editor/fonts.dart';
+import 'package:typie/screens/native_editor/sync/document_sync_manager.dart';
 import 'package:typie/screens/native_editor/theme.dart';
 import 'package:typie/screens/native_editor/util/initializer.dart';
 import 'package:typie/screens/native_editor/view/editor_view.dart';
@@ -29,15 +31,16 @@ class NativeEditorScreen extends StatelessWidget {
     return GraphQLOperation(
       initialBackgroundColor: context.colors.surfaceDefault,
       operation: GNativeEditorScreen_QueryReq((b) => b.vars.slug = slug),
-      builder: (context, client, data) => _Content(data: data),
+      builder: (context, client, data) => _Content(data: data, client: client),
     );
   }
 }
 
 class _Content extends HookWidget {
-  const _Content({required this.data});
+  const _Content({required this.data, required this.client});
 
   final GNativeEditorScreen_QueryData data;
+  final GraphQLClient client;
 
   @override
   Widget build(BuildContext context) {
@@ -45,6 +48,7 @@ class _Content extends HookWidget {
     final app = useRef<NativeEditorApplication?>(null);
     final fontManager = useRef<EditorFontManager?>(null);
     final editor = useState<NativeEditor?>(null);
+    final syncManager = useRef<DocumentSyncManager?>(null);
 
     final document = data.entity.node.when(document: (doc) => doc, orElse: () => null);
     final title = document?.title ?? '(제목 없음)';
@@ -83,6 +87,8 @@ class _Content extends HookWidget {
       unawaited(init());
 
       return () {
+        syncManager.value?.dispose();
+        syncManager.value = null;
         editor.value?.dispose();
       };
     }, [document?.id]);
@@ -102,6 +108,23 @@ class _Content extends HookWidget {
       return null;
     }, [editor.value, brightness]);
 
+    useEffect(() {
+      final currentEditor = editor.value;
+      final documentId = document?.id;
+      if (currentEditor == null || currentEditor.isDisposed || documentId == null) {
+        return null;
+      }
+
+      if (syncManager.value != null) {
+        return null;
+      }
+
+      syncManager.value = DocumentSyncManager(documentId: documentId, editor: currentEditor, client: client);
+      unawaited(syncManager.value!.start());
+
+      return null;
+    }, [editor.value, document?.id]);
+
     final isLoading = editor.value == null && error.value == null && document != null;
 
     return Screen(
@@ -115,6 +138,7 @@ class _Content extends HookWidget {
         error: error.value,
         editor: editor.value,
         fontManager: fontManager.value,
+        syncManager: syncManager.value,
       ),
     );
   }
@@ -125,6 +149,7 @@ class _Content extends HookWidget {
     required String? error,
     required NativeEditor? editor,
     required EditorFontManager? fontManager,
+    required DocumentSyncManager? syncManager,
   }) {
     if (isLoading) {
       return const Center(child: CircularProgressIndicator());
@@ -166,6 +191,7 @@ class _Content extends HookWidget {
           fontManager: fontManager,
           width: constraints.maxWidth,
           height: constraints.maxHeight,
+          onDocChanged: syncManager?.handleDocChanged,
         );
       },
     );

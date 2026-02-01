@@ -781,6 +781,214 @@ pub extern "system" fn Java_co_typie_editortexture_EditorTexture_nativeGetDirect
     }
 }
 
+#[unsafe(no_mangle)]
+pub extern "C" fn editor_get_snapshot(
+    editor: *mut EditorHandle,
+    out_len: *mut usize,
+) -> *mut u8 {
+    ffi!(
+        {
+            if editor.is_null() || out_len.is_null() {
+                return Err("Invalid parameters".into());
+            }
+
+            let editor = unsafe { &*(editor as *const EditorInner) };
+            let snapshot = editor
+                .runtime
+                .doc()
+                .snapshot()
+                .map_err(|e| format!("Failed to get snapshot: {e}"))?;
+
+            let len = snapshot.len();
+            let ptr = Box::into_raw(snapshot.into_boxed_slice()) as *mut u8;
+            unsafe { *out_len = len };
+            Ok(ptr)
+        },
+        std::ptr::null_mut()
+    )
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn editor_get_version(
+    editor: *mut EditorHandle,
+    out_len: *mut usize,
+) -> *mut u8 {
+    ffi!(
+        {
+            if editor.is_null() || out_len.is_null() {
+                return Err("Invalid parameters".into());
+            }
+
+            let editor = unsafe { &*(editor as *const EditorInner) };
+            let version = editor.runtime.doc().loro_doc().oplog_vv().encode();
+
+            let len = version.len();
+            let ptr = Box::into_raw(version.into_boxed_slice()) as *mut u8;
+            unsafe { *out_len = len };
+            Ok(ptr)
+        },
+        std::ptr::null_mut()
+    )
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn editor_export_all_updates(
+    editor: *mut EditorHandle,
+    out_len: *mut usize,
+) -> *mut u8 {
+    ffi!(
+        {
+            if editor.is_null() || out_len.is_null() {
+                return Err("Invalid parameters".into());
+            }
+
+            let editor = unsafe { &*(editor as *const EditorInner) };
+            let updates = editor
+                .runtime
+                .doc()
+                .export_all_updates()
+                .map_err(|e| format!("Failed to export updates: {e}"))?;
+
+            let len = updates.len();
+            let ptr = Box::into_raw(updates.into_boxed_slice()) as *mut u8;
+            unsafe { *out_len = len };
+            Ok(ptr)
+        },
+        std::ptr::null_mut()
+    )
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn editor_export_new_updates(
+    editor: *mut EditorHandle,
+    out_updates: *mut *mut u8,
+    out_updates_len: *mut usize,
+    out_version: *mut *mut u8,
+    out_version_len: *mut usize,
+) -> i32 {
+    ffi!(
+        {
+            if editor.is_null()
+                || out_updates.is_null()
+                || out_updates_len.is_null()
+                || out_version.is_null()
+                || out_version_len.is_null()
+            {
+                return Err("Invalid parameters".into());
+            }
+
+            let editor = unsafe { &*(editor as *const EditorInner) };
+            let (updates, version) = editor
+                .runtime
+                .export_new_updates()
+                .map_err(|e| format!("Failed to export new updates: {e}"))?;
+
+            let updates_len = updates.len();
+            let updates_ptr = Box::into_raw(updates.into_boxed_slice()) as *mut u8;
+
+            let version_bytes = version.encode();
+            let version_len = version_bytes.len();
+            let version_ptr = Box::into_raw(version_bytes.into_boxed_slice()) as *mut u8;
+
+            unsafe {
+                *out_updates = updates_ptr;
+                *out_updates_len = updates_len;
+                *out_version = version_ptr;
+                *out_version_len = version_len;
+            }
+
+            Ok(())
+        },
+        -1
+    )
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn editor_import_updates(
+    editor: *mut EditorHandle,
+    updates: *const u8,
+    len: usize,
+) -> i32 {
+    ffi!(
+        {
+            if editor.is_null() || updates.is_null() {
+                return Err("Invalid parameters".into());
+            }
+
+            let editor = unsafe { &mut *(editor as *mut EditorInner) };
+            let data = unsafe { std::slice::from_raw_parts(updates, len) };
+
+            editor
+                .runtime
+                .import_updates(data)
+                .map_err(|e| format!("Failed to import updates: {e}"))?;
+
+            Ok(())
+        },
+        -1
+    )
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn editor_import_updates_batch(
+    editor: *mut EditorHandle,
+    updates_ptrs: *const *const u8,
+    updates_lens: *const usize,
+    count: usize,
+) -> i32 {
+    ffi!(
+        {
+            if editor.is_null() || updates_ptrs.is_null() || updates_lens.is_null() {
+                return Err("Invalid parameters".into());
+            }
+
+            let editor = unsafe { &mut *(editor as *mut EditorInner) };
+            let ptrs = unsafe { std::slice::from_raw_parts(updates_ptrs, count) };
+            let lens = unsafe { std::slice::from_raw_parts(updates_lens, count) };
+
+            let batch: Vec<Vec<u8>> = ptrs
+                .iter()
+                .zip(lens.iter())
+                .map(|(&ptr, &len)| unsafe { std::slice::from_raw_parts(ptr, len).to_vec() })
+                .collect();
+
+            editor
+                .runtime
+                .import_updates_batch(&batch)
+                .map_err(|e| format!("Failed to import updates batch: {e}"))?;
+
+            Ok(())
+        },
+        -1
+    )
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn editor_commit_sync(
+    editor: *mut EditorHandle,
+    version: *const u8,
+    version_len: usize,
+) -> i32 {
+    ffi!(
+        {
+            if editor.is_null() || version.is_null() {
+                return Err("Invalid parameters".into());
+            }
+
+            let editor = unsafe { &mut *(editor as *mut EditorInner) };
+            let version_data = unsafe { std::slice::from_raw_parts(version, version_len) };
+
+            let vv = loro::VersionVector::decode(version_data)
+                .map_err(|e| format!("Failed to decode version: {e}"))?;
+
+            editor.runtime.commit_sync(vv);
+
+            Ok(())
+        },
+        -1
+    )
+}
+
 #[cfg(target_os = "android")]
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_co_typie_editortexture_EditorTexture_nativeRenderPageTo(

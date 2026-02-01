@@ -1,0 +1,3 @@
+mutation NativeEditor_SyncDocument_Mutation($input: SyncDocumentInput!) {
+  syncDocument(input: $input)
+}
