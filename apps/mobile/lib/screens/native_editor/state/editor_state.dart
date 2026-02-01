@@ -8,13 +8,34 @@ import 'package:typie/screens/native_editor/fonts.dart';
 part 'editor_state.freezed.dart';
 
 @freezed
+abstract class LayoutModeInfo with _$LayoutModeInfo {
+  const factory LayoutModeInfo.paginated({
+    required double pageWidth,
+    required double pageHeight,
+    required double pageMarginTop,
+    required double pageMarginBottom,
+    required double pageMarginLeft,
+    required double pageMarginRight,
+  }) = PaginatedLayoutMode;
+
+  const factory LayoutModeInfo.continuous({required double maxWidth}) = ContinuousLayoutMode;
+}
+
+@freezed
 abstract class LayoutInfo with _$LayoutInfo {
   const factory LayoutInfo({
     required int pageCount,
     required bool isPaginated,
     required double pageWidth,
     required List<double> pageHeights,
+    LayoutModeInfo? layoutMode,
   }) = _LayoutInfo;
+}
+
+@freezed
+abstract class DocumentSettings with _$DocumentSettings {
+  const factory DocumentSettings({@Default(1.0) double paragraphIndent, @Default(1.0) double blockGap}) =
+      _DocumentSettings;
 }
 
 @freezed
@@ -30,6 +51,7 @@ abstract class EditorState with _$EditorState {
     @Default([]) List<ExternalElement> externalElements,
     Object? renderVersion,
     @Default(0) int fontLoadingCount,
+    @Default(DocumentSettings()) DocumentSettings settings,
   }) = _EditorState;
 
   const EditorState._();

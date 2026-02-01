@@ -191,6 +191,24 @@ final class NativeEditorRenderInfo {
   final int bufferSize;
 }
 
+final class NativeEditorCharacterCounts {
+  const NativeEditorCharacterCounts({
+    required this.docWithWhitespace,
+    required this.docWithoutWhitespace,
+    required this.docWithoutWhitespaceAndPunctuation,
+    required this.selectionWithWhitespace,
+    required this.selectionWithoutWhitespace,
+    required this.selectionWithoutWhitespaceAndPunctuation,
+  });
+
+  final int docWithWhitespace;
+  final int docWithoutWhitespace;
+  final int docWithoutWhitespaceAndPunctuation;
+  final int selectionWithWhitespace;
+  final int selectionWithoutWhitespace;
+  final int selectionWithoutWhitespaceAndPunctuation;
+}
+
 final class NativeEditor {
   NativeEditor._(this._handle);
 
@@ -420,6 +438,29 @@ final class NativeEditor {
 
     if (result != 0) {
       throw EditorException(_getLastError() ?? 'Failed to commit sync');
+    }
+  }
+
+  NativeEditorCharacterCounts getCharacterCounts() {
+    _checkDisposed();
+
+    final countsPtr = calloc<CharacterCounts>();
+    try {
+      final result = _bindings.editor_get_character_counts(_handle, countsPtr);
+      if (result != 0) {
+        throw EditorException(_getLastError() ?? 'Failed to get character counts');
+      }
+
+      return NativeEditorCharacterCounts(
+        docWithWhitespace: countsPtr.ref.doc_with_whitespace,
+        docWithoutWhitespace: countsPtr.ref.doc_without_whitespace,
+        docWithoutWhitespaceAndPunctuation: countsPtr.ref.doc_without_whitespace_and_punctuation,
+        selectionWithWhitespace: countsPtr.ref.selection_with_whitespace,
+        selectionWithoutWhitespace: countsPtr.ref.selection_without_whitespace,
+        selectionWithoutWhitespaceAndPunctuation: countsPtr.ref.selection_without_whitespace_and_punctuation,
+      );
+    } finally {
+      calloc.free(countsPtr);
     }
   }
 

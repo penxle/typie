@@ -4,13 +4,11 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
 import 'package:typie/context/theme.dart';
 import 'package:typie/hooks/service.dart';
-import 'package:typie/native/editor_native.dart';
 import 'package:typie/screens/native_editor/controller/focus_controller.dart';
 import 'package:typie/screens/native_editor/controller/scroll_behavior.dart';
 import 'package:typie/screens/native_editor/controller/ticker_loop.dart';
 import 'package:typie/screens/native_editor/editor_input_view.dart';
 import 'package:typie/screens/native_editor/external/models.dart';
-import 'package:typie/screens/native_editor/fonts.dart';
 import 'package:typie/screens/native_editor/handler/keyboard_handler.dart';
 import 'package:typie/screens/native_editor/state/editor_state.dart';
 import 'package:typie/screens/native_editor/toolbar/floating/floating.dart';
@@ -23,8 +21,7 @@ import 'package:typie/services/preference.dart';
 
 class EditorView extends HookWidget {
   const EditorView({
-    required this.editor,
-    required this.fontManager,
+    required this.controller,
     required this.width,
     required this.height,
     required this.title,
@@ -33,12 +30,10 @@ class EditorView extends HookWidget {
     required this.onSubtitleChanged,
     required this.titleFocusNode,
     required this.subtitleFocusNode,
-    this.onDocChanged,
     super.key,
   });
 
-  final NativeEditor editor;
-  final EditorFontManager? fontManager;
+  final EditorController controller;
   final double width;
   final double height;
   final String title;
@@ -47,20 +42,10 @@ class EditorView extends HookWidget {
   final ValueChanged<String> onSubtitleChanged;
   final FocusNode titleFocusNode;
   final FocusNode subtitleFocusNode;
-  final void Function()? onDocChanged;
 
   @override
   Widget build(BuildContext context) {
-    final controller = useMemoized(
-      () => EditorController(
-        editor: editor,
-        fontManager: fontManager,
-        onDocChanged: onDocChanged,
-        onExitedDocumentStart: subtitleFocusNode.requestFocus,
-      ),
-      [editor],
-    );
-    useEffect(() => controller.dispose, [controller]);
+    final editor = controller.editor;
 
     final tickerProvider = useSingleTickerProvider();
     final scrollController = useScrollController();

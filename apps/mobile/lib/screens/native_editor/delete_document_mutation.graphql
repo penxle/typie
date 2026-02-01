@@ -1,0 +1,5 @@
+mutation NativeEditor_DeleteDocument_Mutation($input: DeleteDocumentInput!) {
+  deleteDocument(input: $input) {
+    id
+  }
+}
