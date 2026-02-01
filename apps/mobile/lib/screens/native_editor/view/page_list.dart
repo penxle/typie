@@ -12,6 +12,7 @@ class PageList extends StatelessWidget {
     required this.cursor,
     required this.isFocused,
     required this.isSelecting,
+    required this.lineHighlightEnabled,
     required this.renderVersion,
     required this.scrollController,
     required this.viewKeyboardHeight,
@@ -26,6 +27,7 @@ class PageList extends StatelessWidget {
   final CursorInfo? cursor;
   final bool isFocused;
   final bool isSelecting;
+  final bool lineHighlightEnabled;
   final Object? renderVersion;
   final ScrollController scrollController;
   final double viewKeyboardHeight;
@@ -60,6 +62,7 @@ class PageList extends StatelessWidget {
             pageHeight: pageHeight,
             cursorInfo: pageCursor,
             isFocused: isFocused,
+            lineHighlightEnabled: lineHighlightEnabled,
             onSelectionStart: onSelectionStart,
             onSelectionEnd: onSelectionEnd,
             onTap: onOpenInput,
