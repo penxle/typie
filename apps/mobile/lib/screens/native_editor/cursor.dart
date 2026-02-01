@@ -57,6 +57,32 @@ class CursorInfo {
   }
 }
 
+class LineHighlight extends StatelessWidget {
+  const LineHighlight({required this.cursorInfo, required this.isFocused, required this.enabled, super.key});
+
+  final CursorInfo? cursorInfo;
+  final bool isFocused;
+  final bool enabled;
+
+  static const double _padding = 4;
+
+  @override
+  Widget build(BuildContext context) {
+    final cursor = cursorInfo;
+    if (!enabled || cursor == null || !cursor.show || !isFocused) {
+      return const SizedBox.shrink();
+    }
+
+    return Positioned(
+      left: 0,
+      right: 0,
+      top: cursor.y - _padding,
+      height: cursor.height + _padding * 2,
+      child: Container(color: context.colors.surfaceMuted),
+    );
+  }
+}
+
 class EditorCursor extends HookWidget {
   const EditorCursor({required this.cursorInfo, required this.isFocused, super.key});
 

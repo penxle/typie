@@ -19,6 +19,7 @@ import 'package:typie/screens/native_editor/toolbar/toolbar.dart';
 import 'package:typie/screens/native_editor/upload_manager.dart';
 import 'package:typie/screens/native_editor/view/page_list.dart';
 import 'package:typie/services/keyboard.dart';
+import 'package:typie/services/preference.dart';
 
 class EditorView extends HookWidget {
   const EditorView({
@@ -86,6 +87,7 @@ class EditorView extends HookWidget {
     }, [tickerLoop]);
 
     final keyboard = useService<Keyboard>();
+    final pref = useService<Pref>();
 
     useEffect(() {
       final subscription = keyboard.onHeightChange.listen((double height) {
@@ -136,7 +138,7 @@ class EditorView extends HookWidget {
       if (cursor != null && cursor.show) {
         focusController.updateCursor(cursor.x, cursor.y, cursor.height);
 
-        if (viewKeyboardHeight > 0 && currentLayout != null && editorVisibleHeight.value > 0) {
+        if (currentLayout != null && editorVisibleHeight.value > 0) {
           EditorScrollBehavior(
             scrollController: scrollController,
             visibleHeight: editorVisibleHeight.value,
@@ -150,7 +152,7 @@ class EditorView extends HookWidget {
         focusController.resetInputContext();
       }
       return null;
-    }, [cursor, viewKeyboardHeight]);
+    }, [cursor, editorVisibleHeight.value]);
 
     if (currentLayout == null) {
       return const Center(child: CircularProgressIndicator());
@@ -184,6 +186,7 @@ class EditorView extends HookWidget {
                       cursor: cursor,
                       isFocused: state.state.isFocused,
                       isSelecting: state.state.isSelecting,
+                      lineHighlightEnabled: pref.lineHighlightEnabled,
                       renderVersion: state.state.renderVersion,
                       scrollController: scrollController,
                       viewKeyboardHeight: viewKeyboardHeight,

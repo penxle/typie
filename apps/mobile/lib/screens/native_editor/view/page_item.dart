@@ -17,6 +17,7 @@ class PageItem extends HookWidget {
     required this.pageHeight,
     required this.cursorInfo,
     required this.isFocused,
+    required this.lineHighlightEnabled,
     required this.onSelectionStart,
     required this.onSelectionEnd,
     required this.onTap,
@@ -31,6 +32,7 @@ class PageItem extends HookWidget {
   final double? pageHeight;
   final CursorInfo? cursorInfo;
   final bool isFocused;
+  final bool lineHighlightEnabled;
   final VoidCallback onSelectionStart;
   final VoidCallback onSelectionEnd;
   final VoidCallback onTap;
@@ -162,6 +164,7 @@ class PageItem extends HookWidget {
             size: textureSize.value,
             child: Stack(
               children: [
+                LineHighlight(cursorInfo: cursorInfo, isFocused: isFocused, enabled: lineHighlightEnabled),
                 SizedBox.expand(child: Texture(textureId: textureId.value!)),
                 EditorCursor(cursorInfo: cursorInfo, isFocused: isFocused),
                 ExternalElementOverlay(pageIndex: pageIndex),
