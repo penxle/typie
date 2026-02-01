@@ -2,6 +2,11 @@ query NativeEditorScreen_Query($slug: String!) {
   entity(slug: $slug) {
     id
     slug
+    url
+
+    site {
+      id
+    }
 
     node {
       __typename
@@ -12,6 +17,12 @@ query NativeEditorScreen_Query($slug: String!) {
         nullableTitle
         subtitle
         snapshot
+        createdAt
+        updatedAt
+        characterCountChange {
+          additions
+          deletions
+        }
       }
     }
   }

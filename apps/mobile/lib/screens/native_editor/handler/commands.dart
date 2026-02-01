@@ -11,18 +11,46 @@ void handleDocChanged(EditorController controller, Map<String, dynamic> cmd) {
 
 void handleLayoutChanged(EditorController controller, Map<String, dynamic> cmd) {
   final pageCount = cmd['pageCount'] as int;
-  final layoutMode = cmd['layoutMode'] as Map<String, dynamic>;
+  final layoutModeMap = cmd['layoutMode'] as Map<String, dynamic>;
   final pageWidth = (cmd['pageWidth'] as num).toDouble();
   final pageHeights = cmd['pageHeights'] as List<dynamic>;
+
+  final isPaginated = layoutModeMap['type'] == 'paginated';
+  final LayoutModeInfo layoutMode;
+
+  if (isPaginated) {
+    layoutMode = LayoutModeInfo.paginated(
+      pageWidth: (layoutModeMap['pageWidth'] as num).toDouble(),
+      pageHeight: (layoutModeMap['pageHeight'] as num).toDouble(),
+      pageMarginTop: (layoutModeMap['pageMarginTop'] as num).toDouble(),
+      pageMarginBottom: (layoutModeMap['pageMarginBottom'] as num).toDouble(),
+      pageMarginLeft: (layoutModeMap['pageMarginLeft'] as num).toDouble(),
+      pageMarginRight: (layoutModeMap['pageMarginRight'] as num).toDouble(),
+    );
+  } else {
+    layoutMode = LayoutModeInfo.continuous(maxWidth: (layoutModeMap['maxWidth'] as num).toDouble());
+  }
 
   controller.updateState(
     (state) => state.copyWith(
       layout: LayoutInfo(
         pageCount: pageCount,
-        isPaginated: layoutMode['type'] == 'paginated',
+        isPaginated: isPaginated,
         pageWidth: pageWidth,
         pageHeights: pageHeights.cast<num>().map((e) => e.toDouble()).toList(),
+        layoutMode: layoutMode,
       ),
+    ),
+  );
+}
+
+void handleSettingsChanged(EditorController controller, Map<String, dynamic> cmd) {
+  final paragraphIndent = (cmd['paragraphIndent'] as num).toDouble();
+  final blockGap = (cmd['blockGap'] as num).toDouble();
+
+  controller.updateState(
+    (state) => state.copyWith(
+      settings: state.settings.copyWith(paragraphIndent: paragraphIndent, blockGap: blockGap),
     ),
   );
 }

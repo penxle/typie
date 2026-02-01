@@ -7,6 +7,7 @@ class EditorCommandHandler {
   static final Map<String, CommandExecutor> _handlers = {
     'docChanged': handleDocChanged,
     'layoutChanged': handleLayoutChanged,
+    'settingsChanged': handleSettingsChanged,
     'renderRequired': handleRenderRequired,
     'cursorChanged': handleCursorChanged,
     'activeMarksChanged': handleMarksChanged,
