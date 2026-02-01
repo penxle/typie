@@ -15,7 +15,10 @@ pre-commit:
       run: bunx cspell --no-progress --relative --no-must-find-files {staged_files}
     dart-fix:
       glob: '*.dart'
-      run: dart fix --apply {staged_files}
+      run: |
+        for file in {staged_files}; do
+          dart fix --apply "$file"
+        done
       stage_fixed: true
     dart-format:
       glob: '*.dart'
