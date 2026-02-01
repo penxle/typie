@@ -49,16 +49,36 @@ macro_rules! try_transact {
 }
 
 #[allow(unused)]
-pub fn init_test_icu() {
-    static INIT: std::sync::Once = std::sync::Once::new();
-    INIT.call_once(|| {
+pub fn init_test_env() {
+    use std::cell::Cell;
+
+    static ICU_INIT: std::sync::Once = std::sync::Once::new();
+    ICU_INIT.call_once(|| {
         let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
         let icu_path = std::path::Path::new(&manifest_dir).join("pkg/icu_data.postcard");
         if icu_path.exists() {
-            let data = std::fs::read(icu_path).expect("Failed to read ICU data");
+            let data = std::fs::read(&icu_path).expect("Failed to read ICU data");
             let _ = crate::icu_data::load_icu_data(&data);
         } else {
             eprintln!("Warning: ICU data not found at {:?}", icu_path);
+        }
+    });
+
+    thread_local! {
+        static FONT_INIT: Cell<bool> = const { Cell::new(false) };
+    }
+    FONT_INIT.with(|init| {
+        if !init.get() {
+            init.set(true);
+            let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+            let font_path = std::path::Path::new(&manifest_dir).join("assets/Noto-Phantom.ttf");
+            if font_path.exists() {
+                let font_data = std::fs::read(&font_path).expect("Failed to read test font");
+                let _ = crate::global::add_font("Noto Sans", 400, &font_data);
+                crate::global::register_fallback_font("Noto Sans");
+            } else {
+                eprintln!("Warning: Test font not found at {:?}", font_path);
+            }
         }
     });
 }
@@ -68,7 +88,7 @@ pub fn init_test_icu() {
 macro_rules! doc {
     ($($items:tt)*) => {
         {
-            $crate::test_utils::init_test_icu();
+            $crate::test_utils::init_test_env();
             let doc = std::rc::Rc::new($crate::model::Doc::new());
             let state = $crate::runtime::State::new(
                 doc,
@@ -96,7 +116,7 @@ macro_rules! state {
         selection { $($sel:tt)* }
     ) => {
         {
-            $crate::test_utils::init_test_icu();
+            $crate::test_utils::init_test_env();
             let doc = std::rc::Rc::new($crate::model::Doc::new());
             let state = $crate::runtime::State::new(
                 doc,
@@ -122,7 +142,7 @@ macro_rules! state {
         doc { $($items:tt)* }
     ) => {
         {
-            $crate::test_utils::init_test_icu();
+            $crate::test_utils::init_test_env();
             let doc = std::rc::Rc::new($crate::model::Doc::new());
             let state = $crate::runtime::State::new(
                 doc,
@@ -1065,7 +1085,7 @@ macro_rules! fragment {
 #[allow(unused)]
 macro_rules! __fragment_impl {
     ($open_start:expr, $open_end:expr; $($items:tt)+) => {{
-        $crate::test_utils::init_test_icu();
+        $crate::test_utils::init_test_env();
         let mut nodes: Vec<($crate::model::NodeId, $crate::model::FragmentNode)> = Vec::new();
         let mut _prev: Option<$crate::model::NodeId> = None;
 
