@@ -15,48 +15,51 @@ class FontInfo {
   final String file;
 }
 
-const _phantomFonts = <FontInfo>[FontInfo(family: 'Noto-Phantom', weight: 400, file: 'Noto-Phantom.ttf')];
+const _phantomFonts = <FontInfo>[
+  FontInfo(family: 'Noto-Phantom-Emoji', weight: 400, file: 'Noto-Phantom-Emoji.woff2'),
+  FontInfo(family: 'Noto-Phantom', weight: 400, file: 'Noto-Phantom.woff2'),
+];
 
 const defaultFonts = <FontInfo>[
-  FontInfo(family: 'Pretendard', weight: 100, file: 'Pretendard-Thin.ttf'),
-  FontInfo(family: 'Pretendard', weight: 200, file: 'Pretendard-ExtraLight.ttf'),
-  FontInfo(family: 'Pretendard', weight: 300, file: 'Pretendard-Light.ttf'),
-  FontInfo(family: 'Pretendard', weight: 400, file: 'Pretendard-Regular.ttf'),
-  FontInfo(family: 'Pretendard', weight: 500, file: 'Pretendard-Medium.ttf'),
-  FontInfo(family: 'Pretendard', weight: 600, file: 'Pretendard-SemiBold.ttf'),
-  FontInfo(family: 'Pretendard', weight: 700, file: 'Pretendard-Bold.ttf'),
-  FontInfo(family: 'Pretendard', weight: 800, file: 'Pretendard-ExtraBold.ttf'),
-  FontInfo(family: 'Pretendard', weight: 900, file: 'Pretendard-Black.ttf'),
-  FontInfo(family: 'KoPubWorldDotum', weight: 300, file: 'KoPubWorld Dotum Light.ttf'),
-  FontInfo(family: 'KoPubWorldDotum', weight: 500, file: 'KoPubWorld Dotum Medium.ttf'),
-  FontInfo(family: 'KoPubWorldDotum', weight: 700, file: 'KoPubWorld Dotum Bold.ttf'),
-  FontInfo(family: 'NanumBarunGothic', weight: 200, file: 'NanumBarunGothicUltraLight.ttf'),
-  FontInfo(family: 'NanumBarunGothic', weight: 300, file: 'NanumBarunGothicLight.ttf'),
-  FontInfo(family: 'NanumBarunGothic', weight: 400, file: 'NanumBarunGothic.ttf'),
-  FontInfo(family: 'NanumBarunGothic', weight: 700, file: 'NanumBarunGothicBold.ttf'),
-  FontInfo(family: 'RIDIBatang', weight: 400, file: 'RIDIBatang-Regular.ttf'),
-  FontInfo(family: 'KoPubWorldBatang', weight: 300, file: 'KoPubWorld Batang Light.ttf'),
-  FontInfo(family: 'KoPubWorldBatang', weight: 500, file: 'KoPubWorld Batang Medium.ttf'),
-  FontInfo(family: 'KoPubWorldBatang', weight: 700, file: 'KoPubWorld Batang Bold.ttf'),
-  FontInfo(family: 'NanumMyeongjo', weight: 400, file: 'NanumMyeongjo.ttf'),
-  FontInfo(family: 'NanumMyeongjo', weight: 700, file: 'NanumMyeongjoBold.ttf'),
-  FontInfo(family: 'NanumMyeongjo', weight: 800, file: 'NanumMyeongjoExtraBold.ttf'),
+  FontInfo(family: 'Pretendard', weight: 100, file: 'Pretendard-Thin.woff2'),
+  FontInfo(family: 'Pretendard', weight: 200, file: 'Pretendard-ExtraLight.woff2'),
+  FontInfo(family: 'Pretendard', weight: 300, file: 'Pretendard-Light.woff2'),
+  FontInfo(family: 'Pretendard', weight: 400, file: 'Pretendard-Regular.woff2'),
+  FontInfo(family: 'Pretendard', weight: 500, file: 'Pretendard-Medium.woff2'),
+  FontInfo(family: 'Pretendard', weight: 600, file: 'Pretendard-SemiBold.woff2'),
+  FontInfo(family: 'Pretendard', weight: 700, file: 'Pretendard-Bold.woff2'),
+  FontInfo(family: 'Pretendard', weight: 800, file: 'Pretendard-ExtraBold.woff2'),
+  FontInfo(family: 'Pretendard', weight: 900, file: 'Pretendard-Black.woff2'),
+  FontInfo(family: 'KoPubWorldDotum', weight: 300, file: 'KoPubWorld Dotum Light.woff2'),
+  FontInfo(family: 'KoPubWorldDotum', weight: 500, file: 'KoPubWorld Dotum Medium.woff2'),
+  FontInfo(family: 'KoPubWorldDotum', weight: 700, file: 'KoPubWorld Dotum Bold.woff2'),
+  FontInfo(family: 'NanumBarunGothic', weight: 200, file: 'NanumBarunGothicUltraLight.woff2'),
+  FontInfo(family: 'NanumBarunGothic', weight: 300, file: 'NanumBarunGothicLight.woff2'),
+  FontInfo(family: 'NanumBarunGothic', weight: 400, file: 'NanumBarunGothic.woff2'),
+  FontInfo(family: 'NanumBarunGothic', weight: 700, file: 'NanumBarunGothicBold.woff2'),
+  FontInfo(family: 'RIDIBatang', weight: 400, file: 'RIDIBatang-Regular.woff2'),
+  FontInfo(family: 'KoPubWorldBatang', weight: 300, file: 'KoPubWorld Batang Light.woff2'),
+  FontInfo(family: 'KoPubWorldBatang', weight: 500, file: 'KoPubWorld Batang Medium.woff2'),
+  FontInfo(family: 'KoPubWorldBatang', weight: 700, file: 'KoPubWorld Batang Bold.woff2'),
+  FontInfo(family: 'NanumMyeongjo', weight: 400, file: 'NanumMyeongjo.woff2'),
+  FontInfo(family: 'NanumMyeongjo', weight: 700, file: 'NanumMyeongjoBold.woff2'),
+  FontInfo(family: 'NanumMyeongjo', weight: 800, file: 'NanumMyeongjoExtraBold.woff2'),
 ];
 
 enum WritingSystem { latin, korean, japanese, chinese, emoji }
 
 const _fallbackFonts = <WritingSystem, List<FontInfo>>{
-  WritingSystem.latin: [FontInfo(family: 'Pretendard', weight: 400, file: 'Pretendard-Regular.ttf')],
-  WritingSystem.korean: [FontInfo(family: 'Pretendard', weight: 400, file: 'Pretendard-Regular.ttf')],
+  WritingSystem.latin: [FontInfo(family: 'Pretendard', weight: 400, file: 'Pretendard-Regular.woff2')],
+  WritingSystem.korean: [FontInfo(family: 'Pretendard', weight: 400, file: 'Pretendard-Regular.woff2')],
   WritingSystem.japanese: [
-    FontInfo(family: 'Noto Sans JP', weight: 400, file: 'NotoSansJP-Regular.ttf'),
-    FontInfo(family: 'Noto Sans JP', weight: 700, file: 'NotoSansJP-Bold.ttf'),
+    FontInfo(family: 'Noto Sans JP', weight: 400, file: 'NotoSansJP-Regular.woff2'),
+    FontInfo(family: 'Noto Sans JP', weight: 700, file: 'NotoSansJP-Bold.woff2'),
   ],
   WritingSystem.chinese: [
-    FontInfo(family: 'Noto Sans SC', weight: 400, file: 'NotoSansSC-Regular.ttf'),
-    FontInfo(family: 'Noto Sans SC', weight: 700, file: 'NotoSansSC-Bold.ttf'),
+    FontInfo(family: 'Noto Sans SC', weight: 400, file: 'NotoSansSC-Regular.woff2'),
+    FontInfo(family: 'Noto Sans SC', weight: 700, file: 'NotoSansSC-Bold.woff2'),
   ],
-  WritingSystem.emoji: [FontInfo(family: 'NotoColorEmoji', weight: 400, file: 'NotoColorEmoji.ttf')],
+  WritingSystem.emoji: [FontInfo(family: 'NotoColorEmoji', weight: 400, file: 'NotoColorEmoji.woff2')],
 };
 
 const _fontCdnBase = 'https://cdn.typie.net/fonts/editor';
