@@ -7,18 +7,13 @@ import 'package:typie/screens/native_editor/state/editor_state.dart';
 const pageGap = 24.0;
 
 class EditorScrollBehavior {
-  const EditorScrollBehavior({
-    required this.scrollController,
-    required this.viewportHeight,
-    required this.viewKeyboardHeight,
-  });
+  const EditorScrollBehavior({required this.scrollController, required this.visibleHeight});
 
   final ScrollController scrollController;
-  final double viewportHeight;
-  final double viewKeyboardHeight;
+  final double visibleHeight;
 
   void scrollToCursor(CursorInfo cursor, LayoutInfo layout) {
-    if (!cursor.show || viewKeyboardHeight <= 0) {
+    if (!cursor.show) {
       return;
     }
 
@@ -28,14 +23,13 @@ class EditorScrollBehavior {
       cursorGlobalY += pageHeight + (layout.isPaginated ? pageGap : 0);
     }
 
-    final effectiveViewportHeight = viewportHeight - viewKeyboardHeight;
     final scrollOffset = scrollController.offset;
     final cursorBottom = cursorGlobalY + cursor.height;
 
-    if (cursorBottom > scrollOffset + effectiveViewportHeight) {
+    if (cursorBottom > scrollOffset + visibleHeight) {
       unawaited(
         scrollController.animateTo(
-          cursorBottom - effectiveViewportHeight + 16,
+          cursorBottom - visibleHeight + 16,
           duration: const Duration(milliseconds: 100),
           curve: Curves.easeOut,
         ),
