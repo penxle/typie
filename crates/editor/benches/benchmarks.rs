@@ -9,7 +9,7 @@ use std::rc::Rc;
 use std::time::Duration;
 
 fn runtime_with_paragraphs(count: usize) -> Runtime {
-    editor::test_utils::init_test_icu();
+    editor::test_utils::init_test_env();
 
     let doc = Rc::new(editor::model::Doc::new());
     let initial_state = State::new(
@@ -151,7 +151,7 @@ fn bench_paste(c: &mut Criterion) {
 
         b.iter_with_setup(
             || {
-                editor::test_utils::init_test_icu();
+                editor::test_utils::init_test_env();
 
                 let doc = Rc::new(editor::model::Doc::new());
                 let initial_state = State::new(
