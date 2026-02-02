@@ -53,39 +53,46 @@ class PageItem extends HookWidget {
 
     final devicePixelRatio = MediaQuery.devicePixelRatioOf(context);
 
-    useEffect(() {
-      Future<void> initRenderer() async {
-        renderer.value ??= EditorTextureRenderer(editor: editor);
+    Future<void> render() async {
+      renderer.value ??= EditorTextureRenderer(editor: editor);
+      final r = renderer.value!;
 
-        final r = renderer.value!;
-        if (r.textureId == null) {
-          await r.create(pageIndex);
-        }
-
+      if (r.textureId == null) {
+        await r.create(pageIndex);
         if (!isMounted.value) {
           return;
         }
-
-        if (r.textureId != null) {
-          await r.render(pageIndex);
-          if (!isMounted.value) {
-            return;
-          }
-          textureId.value = r.textureId;
-          textureSize.value = Size(r.width / devicePixelRatio, r.height / devicePixelRatio);
-        }
+      }
+      if (r.textureId == null) {
+        return;
       }
 
-      unawaited(initRenderer());
-      return null;
-    }, [pageIndex, renderVersion]);
+      await r.render(pageIndex);
+      if (!isMounted.value) {
+        return;
+      }
+
+      textureId.value = r.textureId;
+      textureSize.value = Size(r.width / devicePixelRatio, r.height / devicePixelRatio);
+    }
 
     useEffect(() {
+      final timer = Timer(const Duration(milliseconds: 150), () {
+        unawaited(render());
+      });
       return () {
+        timer.cancel();
         isMounted.value = false;
         unawaited(renderer.value?.dispose());
       };
     }, const []);
+
+    useEffect(() {
+      if (renderer.value?.textureId != null) {
+        unawaited(render());
+      }
+      return null;
+    }, [renderVersion]);
 
     final hasTexture = textureId.value != null && textureSize.value != null;
 

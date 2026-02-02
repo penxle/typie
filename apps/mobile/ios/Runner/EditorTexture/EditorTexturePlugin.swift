@@ -4,6 +4,7 @@ import UIKit
 class EditorTexturePlugin: NSObject, FlutterPlugin {
   private let textureRegistry: FlutterTextureRegistry
   private var textures: [Int64: EditorTexture] = [:]
+  private static let maxTextures = 5
 
   init(registrar: FlutterPluginRegistrar) {
     self.textureRegistry = registrar.textures()
@@ -38,6 +39,17 @@ class EditorTexturePlugin: NSObject, FlutterPlugin {
           let height = args["height"] as? Int else {
       result(FlutterError(code: "INVALID_ARGS", message: "Missing width or height", details: nil))
       return
+    }
+
+    while textures.count >= Self.maxTextures {
+      if let oldestId = textures.keys.min() {
+        if let oldTexture = textures.removeValue(forKey: oldestId) {
+          oldTexture.dispose()
+          textureRegistry.unregisterTexture(oldestId)
+        }
+      } else {
+        break
+      }
     }
 
     let texture = EditorTexture(width: width, height: height)
@@ -79,8 +91,8 @@ class EditorTexturePlugin: NSObject, FlutterPlugin {
     }
 
     if let texture = textures.removeValue(forKey: textureId) {
-      textureRegistry.unregisterTexture(textureId)
       texture.dispose()
+      textureRegistry.unregisterTexture(textureId)
     }
 
     result(nil)
@@ -103,6 +115,9 @@ class EditorTexture: NSObject, FlutterTexture {
   }
 
   private func createBuffer(width: Int, height: Int) {
+    frontBuffer = nil
+    backBuffer = nil
+
     let attrs: [String: Any] = [
       kCVPixelBufferIOSurfacePropertiesKey as String: [:] as [String: Any],
       kCVPixelBufferMetalCompatibilityKey as String: true
