@@ -17,7 +17,7 @@ impl Render for CalloutBackgroundElement {
         transform: Transform,
         ctx: &RenderContext,
     ) {
-        let color_key = format!("ui.callout.{}", self.variant.as_str());
+        let color_key = format!("ui.callout.{}", self.variant);
 
         match ctx.phase {
             RenderPhase::Background => {
@@ -93,7 +93,7 @@ impl Render for CalloutIconElement {
     ) {
         match ctx.phase {
             RenderPhase::Content => {
-                let color_key = format!("ui.callout.{}", self.variant.as_str());
+                let color_key = format!("ui.callout.{}", self.variant);
                 let icon_color = ctx.theme.color(&color_key);
 
                 let mut icon_paint = Paint::default();
