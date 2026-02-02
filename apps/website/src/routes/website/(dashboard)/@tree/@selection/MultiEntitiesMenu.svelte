@@ -5,7 +5,6 @@
   import { getAppContext } from '@typie/ui/context';
   import { Dialog, Toast } from '@typie/ui/notification';
   import mixpanel from 'mixpanel-browser';
-  import { onMount } from 'svelte';
   import BlendIcon from '~icons/lucide/blend';
   import FileIcon from '~icons/lucide/file';
   import FolderIcon from '~icons/lucide/folder';
@@ -33,27 +32,34 @@
     }
   `);
 
-  let folderIds = $state<string[]>([]);
-  let postIds = $state<string[]>([]);
+  const { folderIds, postIds, documentIds } = $derived.by(() => {
+    const folderIds: string[] = [];
+    const postIds: string[] = [];
+    const documentIds: string[] = [];
 
-  onMount(async () => {
-    const entityIds = new Set(tree.selectedEntityIds);
+    const entityIds = tree.selectedEntityIds;
 
     const collect = (entities: TreeEntity[]) => {
       entities.forEach((entity) => {
-        if (entity.type === 'Folder') {
-          if (entityIds.has(entity.id)) {
+        if (entityIds.has(entity.id)) {
+          if (entity.type === 'Folder') {
             folderIds.push(entity.id);
+          } else if (entity.type === 'Post') {
+            postIds.push(entity.id);
+          } else if (entity.type === 'Document') {
+            documentIds.push(entity.id);
           }
+        }
 
-          collect(entity.children ?? []);
-        } else if (entityIds.has(entity.id) && entity.type === 'Post') {
-          postIds.push(entity.id);
+        if (entity.children) {
+          collect(entity.children);
         }
       });
     };
 
     collect(tree.entities);
+
+    return { folderIds, postIds, documentIds };
   });
 </script>
 
@@ -69,6 +75,12 @@
       <div class={center({ gap: '2px' })}>
         <Icon style={css.raw({ color: 'text.disabled' })} icon={FileIcon} size={14} />
         {postIds.length}개
+      </div>
+    {/if}
+    {#if documentIds.length > 0}
+      <div class={center({ gap: '2px' })}>
+        <Icon style={css.raw({ color: 'text.disabled' })} icon={FileIcon} size={14} />
+        {documentIds.length}개
       </div>
     {/if}
   </div>
@@ -148,7 +160,11 @@
   >
     <Icon style={css.raw({ color: 'text.danger' })} icon={TriangleAlertIcon} size={14} />
     <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.danger' })}>
-      {[folderIds.length > 0 && `${folderIds.length}개의 폴더`, postIds.length > 0 && `${postIds.length}개의 포스트`]
+      {[
+        folderIds.length > 0 && `${folderIds.length}개의 폴더`,
+        postIds.length > 0 && `${postIds.length}개의 포스트`,
+        documentIds.length > 0 && `${documentIds.length}개의 문서`,
+      ]
         .filter(Boolean)
         .join(', ')}가 삭제돼요
     </span>
