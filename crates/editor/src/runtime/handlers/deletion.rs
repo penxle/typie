@@ -93,6 +93,31 @@ impl Runtime {
         })
     }
 
+    pub(crate) fn handle_delete_sentence_backward(&mut self) -> Vec<Effect> {
+        if !self.state.selection.is_collapsed() {
+            return self.transact(|tr| tr.delete_selection());
+        }
+
+        let ctx = NavigationContext::new(&self.state.doc);
+        let Some((_, rect)) = Cursor::bounds(&ctx, &self.pages, self.state.selection.head) else {
+            return vec![];
+        };
+        let preferred_y = rect.y;
+
+        let Some(end_selection) =
+            Cursor::move_sentence_up(&ctx, &self.pages, self.state.selection.head, preferred_y)
+        else {
+            return vec![];
+        };
+        let end_position = end_selection.head;
+
+        let selection = self.state.selection;
+        self.transact(move |tr| {
+            tr.set_selection(Selection::new(end_position, selection.head));
+            tr.delete_selection()
+        })
+    }
+
     pub(crate) fn handle_delete_to_line_start(&mut self) -> Vec<Effect> {
         if !self.state.selection.is_collapsed() {
             return self.transact(|tr| tr.delete_selection());

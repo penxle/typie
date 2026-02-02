@@ -84,6 +84,7 @@ class EditorTextInputView: UIView, UITextInput {
   var onShortcut: ((String) -> Void)?
 
   private var _markedText: String?
+  private var _cursor: Int = 10000
 
   private var cursorX: Double = 0
   private var cursorY: Double = 0
@@ -122,8 +123,6 @@ class EditorTextInputView: UIView, UITextInput {
 
   func resetInputContext() {
     _markedText = nil
-    inputDelegate?.selectionWillChange(self)
-    inputDelegate?.selectionDidChange(self)
   }
 
   override var canBecomeFirstResponder: Bool { true }
@@ -184,7 +183,6 @@ class EditorTextInputView: UIView, UITextInput {
   var hasText: Bool { true }
 
   func insertText(_ text: String) {
-    print("[EditorInput] insertText: '\(text)', markedText: '\(_markedText ?? "nil")'")
     if _markedText != nil {
       _markedText = nil
       onUnmarkText?()
@@ -195,15 +193,20 @@ class EditorTextInputView: UIView, UITextInput {
       return
     }
 
+    _cursor += text.count
     onInsertText?(text)
   }
 
   func deleteBackward() {
-    print("[EditorInput] deleteBackward, markedText: '\(_markedText ?? "nil")'")
     if _markedText != nil {
       _markedText = nil
       onCancelMarkedText?()
       return
+    }
+
+    _cursor -= 1
+    if _cursor < 1 {
+      _cursor = 10000
     }
     onDeleteBackward?()
   }
@@ -218,8 +221,6 @@ class EditorTextInputView: UIView, UITextInput {
   var markedTextStyle: [NSAttributedString.Key: Any]?
 
   func setMarkedText(_ markedText: String?, selectedRange: NSRange) {
-    print("[EditorInput] setMarkedText: '\(markedText ?? "nil")', prev: '\(_markedText ?? "nil")'")
-
     if let text = markedText, !text.isEmpty {
       _markedText = text
       onSetMarkedText?(text)
@@ -232,7 +233,6 @@ class EditorTextInputView: UIView, UITextInput {
   }
 
   func unmarkText() {
-    print("[EditorInput] unmarkText, markedText: '\(_markedText ?? "nil")'")
     if _markedText != nil {
       _markedText = nil
       onUnmarkText?()
@@ -243,7 +243,7 @@ class EditorTextInputView: UIView, UITextInput {
 
   var selectedTextRange: UITextRange? {
     get {
-      let pos = _markedText?.count ?? 0
+      let pos = _markedText?.count ?? _cursor
       return EditorTextRange(start: pos, end: pos)
     }
     set {}
@@ -262,7 +262,7 @@ class EditorTextInputView: UIView, UITextInput {
   // MARK: - UITextInput (Document)
 
   var beginningOfDocument: UITextPosition { EditorTextPosition(offset: 0) }
-  var endOfDocument: UITextPosition { EditorTextPosition(offset: _markedText?.count ?? 0) }
+  var endOfDocument: UITextPosition { EditorTextPosition(offset: _markedText?.count ?? _cursor) }
   var inputDelegate: (any UITextInputDelegate)?
   var tokenizer: any UITextInputTokenizer { UITextInputStringTokenizer(textInput: self) }
 
