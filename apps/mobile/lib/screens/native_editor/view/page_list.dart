@@ -5,9 +5,11 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/native/editor_native.dart';
 import 'package:typie/screens/native_editor/controller/scroll_behavior.dart';
 import 'package:typie/screens/native_editor/cursor.dart';
+import 'package:typie/screens/native_editor/selection_handle.dart';
 import 'package:typie/screens/native_editor/state/editor_state.dart';
 import 'package:typie/screens/native_editor/view/magnifier.dart';
 import 'package:typie/screens/native_editor/view/page_item.dart';
+import 'package:typie/screens/native_editor/view/selection_handle.dart';
 import 'package:typie/screens/native_editor/view/title_subtitle_fields.dart';
 
 const _pagePadding = 40.0;
@@ -37,6 +39,8 @@ class PageList extends HookWidget {
     required this.subtitleFocusNode,
     required this.onEnterDocument,
     required this.onTitleHeaderHeightChanged,
+    this.fromHandle,
+    this.toHandle,
     super.key,
   });
 
@@ -63,6 +67,8 @@ class PageList extends HookWidget {
   final FocusNode subtitleFocusNode;
   final VoidCallback onEnterDocument;
   final ValueChanged<double> onTitleHeaderHeightChanged;
+  final SelectionHandleInfo? fromHandle;
+  final SelectionHandleInfo? toHandle;
 
   @override
   Widget build(BuildContext context) {
@@ -113,6 +119,11 @@ class PageList extends HookWidget {
     }
 
     final longPressPosition = useState<Offset?>(null);
+    final handleDragPosition = useState<Offset?>(null);
+    final draggingHandleType = useState<SelectionHandleType?>(null);
+    final dragStartTouchPosition = useRef<Offset?>(null);
+    final dragStartHandleScreenPosition = useRef<Offset?>(null);
+    final dragAnchorHandle = useRef<SelectionHandleInfo?>(null);
     final lastTapTime = useRef<DateTime?>(null);
     final lastTapPosition = useRef<Offset?>(null);
     final autoScrollTimer = useRef<Timer?>(null);
@@ -142,8 +153,9 @@ class PageList extends HookWidget {
       autoScrollTimer.value = Timer.periodic(const Duration(milliseconds: 16), (_) {
         final viewHeight = autoScrollViewSize.value.height;
         final viewWidth = autoScrollViewSize.value.width;
-        var scrolledY = longPressPosition.value?.dy ?? 0;
-        var scrolledX = longPressPosition.value?.dx ?? 0;
+        final activePosition = handleDragPosition.value ?? longPressPosition.value;
+        var scrolledY = activePosition?.dy ?? 0;
+        var scrolledX = activePosition?.dx ?? 0;
 
         if (verticalDirection.value != 0) {
           final proximity = 1.0 - (verticalEdgeDistance.value / edgeThreshold).clamp(0.0, 1.0);
@@ -190,8 +202,7 @@ class PageList extends HookWidget {
           return;
         }
 
-        final pos = longPressPosition.value;
-        if (pos != null) {
+        if (activePosition != null) {
           final (pageIdx, localY) = getPageAtPosition(scrolledY);
 
           if (pageIdx < 0) {
@@ -207,29 +218,53 @@ class PageList extends HookWidget {
           }
           lastDispatchedPosition.value = currentPosition;
 
-          editor
-            ..dispatch({
-              'type': 'pointerDown',
-              'pageIdx': pageIdx,
-              'x': pointerX,
-              'y': localY,
-              'clickCount': 1,
-              'button': 'primary',
-              'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
-            })
-            ..dispatch({
-              'type': 'pointerUp',
-              'pageIdx': pageIdx,
-              'x': pointerX,
-              'y': localY,
-              'button': 'primary',
-              'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
+          final handleType = draggingHandleType.value;
+          final anchorHandle = dragAnchorHandle.value;
+          if (handleType != null && anchorHandle != null) {
+            editor.dispatch({
+              'type': 'extendSelectionTo',
+              'anchorPageIdx': anchorHandle.pageIdx,
+              'anchorX': anchorHandle.x,
+              'anchorY': anchorHandle.y + anchorHandle.height / 2,
+              'headPageIdx': pageIdx,
+              'headX': pointerX,
+              'headY': localY,
             });
+          } else if (handleType == null) {
+            editor
+              ..dispatch({
+                'type': 'pointerDown',
+                'pageIdx': pageIdx,
+                'x': pointerX,
+                'y': localY,
+                'clickCount': 1,
+                'button': 'primary',
+                'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
+              })
+              ..dispatch({
+                'type': 'pointerUp',
+                'pageIdx': pageIdx,
+                'x': pointerX,
+                'y': localY,
+                'button': 'primary',
+                'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
+              });
+          }
         }
       });
     }
 
     useEffect(() => stopAutoScroll, const []);
+
+    useEffect(() {
+      if (fromHandle == null && toHandle == null) {
+        handleDragPosition.value = null;
+        draggingHandleType.value = null;
+        dragAnchorHandle.value = null;
+        stopAutoScroll();
+      }
+      return null;
+    }, [fromHandle, toHandle]);
 
     final titleHeight = useState<double>(0);
 
@@ -242,6 +277,119 @@ class PageList extends HookWidget {
 
         double getPointerX(double localX) {
           return localX + horizontalScrollController.offset - horizontalPadding;
+        }
+
+        void handleAutoScroll(double y, double x) {
+          autoScrollViewSize.value = Size(viewWidth, viewHeight);
+
+          if (y < edgeThreshold) {
+            verticalEdgeDistance.value = y;
+            verticalDirection.value = -1;
+          } else if (y > viewHeight - edgeThreshold) {
+            verticalEdgeDistance.value = viewHeight - y;
+            verticalDirection.value = 1;
+          } else {
+            verticalDirection.value = 0;
+          }
+
+          if (x < edgeThreshold) {
+            horizontalEdgeDistance.value = x;
+            horizontalDirection.value = -1;
+          } else if (x > viewWidth - edgeThreshold) {
+            horizontalEdgeDistance.value = viewWidth - x;
+            horizontalDirection.value = 1;
+          } else {
+            horizontalDirection.value = 0;
+          }
+
+          if (verticalDirection.value != 0 || horizontalDirection.value != 0) {
+            startAutoScroll();
+          } else {
+            stopAutoScroll();
+          }
+        }
+
+        Offset? getHandlePosition(SelectionHandleInfo? handle) {
+          if (handle == null) {
+            return null;
+          }
+          final scrollOffset = scrollController.hasClients ? scrollController.offset : 0.0;
+          final hScrollOffset = horizontalScrollController.hasClients ? horizontalScrollController.offset : 0.0;
+          final topPadding = layout.isPaginated ? _pagePadding : 0.0;
+          final bottomPadding = layout.isPaginated ? 0.0 : _pagePadding;
+          final titleHeaderHeight = getTitleHeaderHeight() + topPadding + bottomPadding;
+          final pageTopOffset = titleHeaderHeight + cumulativeHeights[handle.pageIdx];
+          final y = pageTopOffset + handle.y - scrollOffset;
+          final x = horizontalPadding + handle.x - hScrollOffset;
+          return Offset(x, y);
+        }
+
+        Offset? getHandleStemCenter(SelectionHandleInfo? handle) {
+          final pos = getHandlePosition(handle);
+          if (pos == null || handle == null) {
+            return null;
+          }
+          return Offset(pos.dx, pos.dy + handle.height / 2);
+        }
+
+        void onHandleDragStart(SelectionHandleType type, DragStartDetails details) {
+          draggingHandleType.value = type;
+          onSelectionStart();
+
+          final renderBox = context.findRenderObject() as RenderBox?;
+          if (renderBox == null) {
+            return;
+          }
+          final touchPosition = renderBox.globalToLocal(details.globalPosition);
+          dragStartTouchPosition.value = touchPosition;
+
+          final handle = type == SelectionHandleType.from ? fromHandle : toHandle;
+          dragStartHandleScreenPosition.value = getHandleStemCenter(handle) ?? touchPosition;
+
+          dragAnchorHandle.value = type == SelectionHandleType.from ? toHandle : fromHandle;
+        }
+
+        void onHandleDragUpdate(SelectionHandleType type, DragUpdateDetails details) {
+          final renderBox = context.findRenderObject() as RenderBox?;
+          if (renderBox == null) {
+            return;
+          }
+          final touchPosition = renderBox.globalToLocal(details.globalPosition);
+          final startTouch = dragStartTouchPosition.value;
+          final startHandleScreen = dragStartHandleScreenPosition.value;
+          final anchorHandle = dragAnchorHandle.value;
+          if (startTouch == null || startHandleScreen == null || anchorHandle == null) {
+            return;
+          }
+
+          final delta = touchPosition - startTouch;
+          final selectionScreenPosition = startHandleScreen + delta;
+
+          handleDragPosition.value = selectionScreenPosition;
+
+          final (pageIdx, localY) = getPageAtPosition(selectionScreenPosition.dy);
+          if (pageIdx >= 0) {
+            final pointerX = getPointerX(selectionScreenPosition.dx);
+            editor.dispatch({
+              'type': 'extendSelectionTo',
+              'anchorPageIdx': anchorHandle.pageIdx,
+              'anchorX': anchorHandle.x,
+              'anchorY': anchorHandle.y + anchorHandle.height / 2,
+              'headPageIdx': pageIdx,
+              'headX': pointerX,
+              'headY': localY,
+            });
+          }
+
+          handleAutoScroll(touchPosition.dy, touchPosition.dx);
+        }
+
+        void onHandleDragEnd(SelectionHandleType type, DragEndDetails details) {
+          draggingHandleType.value = null;
+          handleDragPosition.value = null;
+          dragAnchorHandle.value = null;
+          stopAutoScroll();
+          onSelectionEnd();
         }
 
         final contentWidth = layout.pageWidth + horizontalPadding * 2;
@@ -328,7 +476,17 @@ class PageList extends HookWidget {
           onFieldTap: onClearFocus,
         );
 
-        return GestureDetector(
+        Widget buildSelectionHandle(SelectionHandleInfo handle, SelectionHandleType type) {
+          return SelectionHandle(
+            handleInfo: handle,
+            type: type,
+            onDragStart: onHandleDragStart,
+            onDragUpdate: onHandleDragUpdate,
+            onDragEnd: onHandleDragEnd,
+          );
+        }
+
+        final gestureDetector = GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTapDown: (details) {
             final (pageIdx, localY) = getPageAtPosition(details.localPosition.dy);
@@ -467,14 +625,46 @@ class PageList extends HookWidget {
                   child: titleFields,
                 ),
               ),
-              if (longPressPosition.value != null)
+              if (longPressPosition.value != null || handleDragPosition.value != null)
                 EditorMagnifier(
-                  position: longPressPosition.value!,
-                  focalPoint: longPressPosition.value!,
+                  position: handleDragPosition.value ?? longPressPosition.value!,
+                  focalPoint: handleDragPosition.value ?? longPressPosition.value!,
                   pageSize: Size(layout.pageWidth, viewHeight),
                 ),
             ],
           ),
+        );
+
+        return Stack(
+          clipBehavior: Clip.none,
+          children: [
+            gestureDetector,
+            ListenableBuilder(
+              listenable: Listenable.merge([scrollController, horizontalScrollController]),
+              builder: (context, _) {
+                final fromPos = getHandlePosition(fromHandle);
+                final toPos = getHandlePosition(toHandle);
+
+                return Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    if (isFocused && fromHandle != null && fromPos != null)
+                      Positioned(
+                        left: fromPos.dx,
+                        top: fromPos.dy,
+                        child: buildSelectionHandle(fromHandle!, SelectionHandleType.from),
+                      ),
+                    if (isFocused && toHandle != null && toPos != null)
+                      Positioned(
+                        left: toPos.dx,
+                        top: toPos.dy,
+                        child: buildSelectionHandle(toHandle!, SelectionHandleType.to),
+                      ),
+                  ],
+                );
+              },
+            ),
+          ],
         );
       },
     );

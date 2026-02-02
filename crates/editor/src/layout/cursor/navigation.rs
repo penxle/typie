@@ -30,6 +30,26 @@ pub fn bounds(
         })
 }
 
+pub fn selection_handle_bounds(
+    ctx: &NavigationContext,
+    pages: &[Page],
+    position: Position,
+) -> Option<(usize, Rect)> {
+    let (page_idx, pos, element) = find_element_at_position(ctx, pages, &position)?;
+    let navigable = element.as_cursor_navigable()?;
+    navigable
+        .selection_handle_bounds(ctx, &position)
+        .map(|relative_bounds| {
+            let absolute_bounds = Rect::new(
+                pos.x + relative_bounds.x,
+                pos.y + relative_bounds.y,
+                relative_bounds.width,
+                relative_bounds.height,
+            );
+            (page_idx, absolute_bounds)
+        })
+}
+
 fn navigate_horizontal<F>(
     ctx: &NavigationContext,
     pages: &[Page],

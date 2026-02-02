@@ -4,6 +4,7 @@ import 'package:typie/native/editor_native.dart';
 import 'package:typie/screens/native_editor/cursor.dart';
 import 'package:typie/screens/native_editor/external/models.dart';
 import 'package:typie/screens/native_editor/fonts.dart';
+import 'package:typie/screens/native_editor/selection_handle.dart';
 
 part 'editor_state.freezed.dart';
 
@@ -52,6 +53,9 @@ abstract class EditorState with _$EditorState {
     Object? renderVersion,
     @Default(0) int fontLoadingCount,
     @Default(DocumentSettings()) DocumentSettings settings,
+    SelectionHandleInfo? fromHandle,
+    SelectionHandleInfo? toHandle,
+    SelectionHandleType? draggingHandle,
   }) = _EditorState;
 
   const EditorState._();

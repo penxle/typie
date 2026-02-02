@@ -46,6 +46,14 @@ pub struct SpellcheckOverlay {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 #[serde(rename_all = "camelCase")]
+pub struct SelectionHandleBounds {
+    pub page_idx: usize,
+    pub bounds: Rect,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[serde(rename_all = "camelCase")]
 pub struct SearchOverlay {
     pub page_idx: usize,
     pub bounds: Vec<TextBound>,
@@ -110,6 +118,8 @@ pub enum Cmd {
     SelectionChanged {
         stats: SelectionStats,
         collapsed: bool,
+        from_handle: Option<SelectionHandleBounds>,
+        to_handle: Option<SelectionHandleBounds>,
     },
 
     #[serde(rename_all = "camelCase")]

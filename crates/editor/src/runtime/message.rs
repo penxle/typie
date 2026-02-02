@@ -569,4 +569,15 @@ define_messages! {
     ReplaceAll { replacement: String }
     => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_replace_all(replacement) },
+
+    ExtendSelectionTo {
+        anchor_page_idx: usize,
+        anchor_x: f32,
+        anchor_y: f32,
+        head_page_idx: usize,
+        head_x: f32,
+        head_y: f32,
+    }
+    => when When::True
+    => handle(rt) { rt.handle_extend_selection_to(anchor_page_idx, anchor_x, anchor_y, head_page_idx, head_x, head_y) },
 }

@@ -82,6 +82,10 @@ pub enum CursorNavigation {
 pub trait CursorNavigable {
     fn cursor_bounds(&self, ctx: &NavigationContext, position: &Position) -> Option<Rect>;
 
+    fn selection_handle_bounds(&self, _ctx: &NavigationContext, _position: &Position) -> Option<Rect> {
+        None
+    }
+
     fn navigate_left(
         &self,
         ctx: &NavigationContext,
@@ -184,6 +188,14 @@ impl Cursor {
         position: Position,
     ) -> Option<(usize, Rect)> {
         navigation::bounds(ctx, pages, position)
+    }
+
+    pub fn selection_handle_bounds(
+        ctx: &NavigationContext,
+        pages: &[Page],
+        position: Position,
+    ) -> Option<(usize, Rect)> {
+        navigation::selection_handle_bounds(ctx, pages, position)
     }
 
     pub fn hit_test(ctx: &NavigationContext, page: &Page, x: f32, y: f32) -> Option<Selection> {
