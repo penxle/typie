@@ -55,7 +55,10 @@ class EditorView extends HookWidget {
     final horizontalScrollController = useScrollController();
     final inputKey = useMemoized(GlobalKey<EditorInputViewState>.new);
     final inputCausedCursorChange = useRef(false);
+    final isComposing = useRef(false);
     final isLongPressing = useRef(false);
+    final deleteStartTime = useRef<DateTime?>(null);
+    final lastDeleteTime = useRef<DateTime?>(null);
 
     final keyboardHeight = useValueNotifier<double>(0);
     final isKeyboardVisible = useValueNotifier<bool>(false);
@@ -153,7 +156,7 @@ class EditorView extends HookWidget {
           keyboardHeight.value = height;
           bottomToolbarMode.value = BottomToolbarMode.hidden;
         } else {
-          if (!titleFocusNode.hasFocus && !subtitleFocusNode.hasFocus) {
+          if (!titleFocusNode.hasFocus && !subtitleFocusNode.hasFocus && keyboardType.value != KeyboardType.hardware) {
             focusController.onKeyboardHidden();
           }
         }
@@ -230,7 +233,7 @@ class EditorView extends HookWidget {
 
       if (inputCausedCursorChange.value) {
         inputCausedCursorChange.value = false;
-      } else {
+      } else if (!isComposing.value) {
         focusController.resetInputContext();
       }
       return null;
@@ -292,22 +295,46 @@ class EditorView extends HookWidget {
                     key: inputKey,
                     onInsertText: (text) {
                       inputCausedCursorChange.value = true;
+                      deleteStartTime.value = null;
+                      lastDeleteTime.value = null;
                       controller.dispatch({'type': 'input', 'text': text});
                     },
                     onDeleteBackward: () {
                       inputCausedCursorChange.value = true;
-                      controller.dispatch({'type': 'deleteBackward'});
+
+                      final now = DateTime.now();
+                      final last = lastDeleteTime.value;
+
+                      if (last != null && now.difference(last).inMilliseconds >= 500) {
+                        deleteStartTime.value = null;
+                      }
+
+                      deleteStartTime.value ??= now;
+                      lastDeleteTime.value = now;
+
+                      final duration = now.difference(deleteStartTime.value!).inMilliseconds / 1000.0;
+
+                      if (duration > 3.0) {
+                        controller.dispatch({'type': 'deleteSentenceBackward'});
+                      } else if (duration > 1.5) {
+                        controller.dispatch({'type': 'deleteWordBackward'});
+                      } else {
+                        controller.dispatch({'type': 'deleteBackward'});
+                      }
                     },
                     onSetMarkedText: (text) {
                       inputCausedCursorChange.value = true;
+                      isComposing.value = true;
                       controller.dispatch({'type': 'compositionUpdate', 'text': text});
                     },
                     onUnmarkText: () {
                       inputCausedCursorChange.value = true;
+                      isComposing.value = false;
                       controller.dispatch({'type': 'commitPreedit'});
                     },
                     onCancelMarkedText: () {
                       inputCausedCursorChange.value = true;
+                      isComposing.value = false;
                       controller.dispatch({'type': 'compositionEnd'});
                     },
                     onPerformAction: (action) {

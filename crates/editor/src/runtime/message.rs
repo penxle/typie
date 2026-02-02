@@ -281,6 +281,10 @@ define_messages! {
     => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_delete_word_forward() },
 
+    DeleteSentenceBackward
+    => when When::key(ContextKey::CanEdit)
+    => handle(rt) { rt.handle_delete_sentence_backward() },
+
     DeleteToLineStart
     => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_delete_to_line_start() },

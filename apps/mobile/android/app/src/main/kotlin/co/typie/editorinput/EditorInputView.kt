@@ -71,6 +71,7 @@ class EditorInputNativeView(
   private var cursorY = 0.0
   private var cursorHeight = 20.0
 
+
   private val inputMethodManager: InputMethodManager
     get() = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
 
@@ -103,6 +104,10 @@ class EditorInputNativeView(
     }
   }
 
+  private fun performDelete() {
+    channel.invokeMethod("deleteBackward", emptyMap<String, Any>())
+  }
+
   private fun insertTextOrNewline(text: String) {
     if (text == "\n") {
       channel.invokeMethod("performAction", mapOf("action" to "newline"))
@@ -122,7 +127,6 @@ class EditorInputNativeView(
   }
 
   fun releaseFocus() {
-    clearFocus()
   }
 
   fun updateCursor(x: Double, y: Double, height: Double) {
@@ -230,7 +234,7 @@ class EditorInputNativeView(
           return true
         }
         repeat(beforeLength) {
-          channel.invokeMethod("deleteBackward", emptyMap<String, Any>())
+          performDelete()
         }
         return true
       }
@@ -259,7 +263,7 @@ class EditorInputNativeView(
                 channel.invokeMethod("cancelMarkedText", emptyMap<String, Any>())
               }
               else -> {
-                channel.invokeMethod("deleteBackward", emptyMap<String, Any>())
+                performDelete()
               }
             }
             true
