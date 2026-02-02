@@ -8,9 +8,10 @@ Map<String, dynamic> _nav(String direction, bool extend) => {
 };
 
 class EditorKeyboardHandler {
-  EditorKeyboardHandler({required this.dispatch});
+  EditorKeyboardHandler({required this.dispatch, required this.commitComposing});
 
   final void Function(Map<String, dynamic> message) dispatch;
+  final void Function() commitComposing;
 
   bool handleKeyEvent(KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
@@ -22,6 +23,9 @@ class EditorKeyboardHandler {
       return false;
     }
 
+    if (message['type'] == 'navigate') {
+      commitComposing();
+    }
     dispatch(message);
     return true;
   }
