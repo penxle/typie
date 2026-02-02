@@ -183,15 +183,13 @@ impl PaginationState {
                 bottom: true,
             };
 
-            let Some(new_element) = element.with_adjusted_bounds(new_height, split_edges) else {
-                continue;
-            };
+            let new_element = element.with_adjusted_bounds(new_height, split_edges);
 
             let new_node = PositionedNode {
                 position: old_node.position,
                 node: Rc::new(LayoutNode {
                     size: Size::new(old_node.node.size.width, new_height),
-                    element: Some(new_element),
+                    element: new_element,
                     children: None,
                     page_break_policy: old_node.node.page_break_policy,
                     render_hints: old_node.node.render_hints.clone(),

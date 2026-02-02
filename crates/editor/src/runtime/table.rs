@@ -68,7 +68,7 @@ fn collect_table_overlays_from_tree(
                 page_idx,
                 table_id: table_border.node_id.to_string(),
                 bounds: Rect {
-                    x: abs_pos.x,
+                    x: abs_pos.x + table_border.x_offset,
                     y: abs_pos.y,
                     width: table_border.size.width,
                     height: table_border.size.height,
@@ -83,6 +83,8 @@ fn collect_table_overlays_from_tree(
                 col_positions,
                 row_heights: table_border.row_heights.clone(),
                 row_positions,
+                start_row_index: table_border.start_row_index,
+                total_rows: table_border.total_rows,
                 is_focused,
             });
         }

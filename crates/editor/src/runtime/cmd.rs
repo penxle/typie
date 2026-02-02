@@ -65,6 +65,8 @@ pub struct TableOverlay {
     pub col_positions: Vec<f32>,
     pub row_heights: Vec<f32>,
     pub row_positions: Vec<f32>,
+    pub start_row_index: usize,
+    pub total_rows: usize,
     pub is_focused: bool,
 }
 

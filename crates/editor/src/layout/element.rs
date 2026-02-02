@@ -2,6 +2,7 @@ use crate::layout::context::LayoutContext;
 use crate::layout::cursor::CursorNavigable;
 use crate::layout::elements::*;
 use crate::layout::interactive::Interactive;
+use crate::model::TABLE_BORDER_WIDTH;
 use crate::render::Render;
 use crate::types::{BoxConstraints, Point, PointerStyle, Size};
 use std::rc::Rc;
@@ -178,6 +179,7 @@ impl Element {
             Element::CalloutBackground(e) => Some(e),
             Element::BlockquoteMessage(e) => Some(e),
             Element::FoldContent(e) => Some(e),
+            Element::TableBorder(e) => Some(e),
             _ => None,
         }
     }
@@ -209,6 +211,66 @@ impl Element {
                 split_edges,
                 e.fold_id,
             ))),
+            Element::TableBorder(e) => {
+                let offset = if split_edges.top {
+                    e.size.height - new_height
+                } else {
+                    e.offset
+                };
+
+                let mut accumulated_height = if split_edges.top {
+                    0.0
+                } else {
+                    TABLE_BORDER_WIDTH
+                };
+                let mut start_idx = 0;
+                let mut _end_idx = 0;
+                let mut current_offset = 0.0;
+
+                for (i, &h) in e.row_heights.iter().enumerate() {
+                    if current_offset + h > offset {
+                        start_idx = i;
+                        break;
+                    }
+                    current_offset += h;
+                }
+
+                let mut sliced_heights = Vec::new();
+                for &h in e.row_heights.iter().skip(start_idx) {
+                    if accumulated_height + h <= new_height + 0.1 {
+                        sliced_heights.push(h);
+                        accumulated_height += h;
+                    } else {
+                        break;
+                    }
+                }
+
+                let new_start_row_index = e.start_row_index + start_idx;
+
+                if !split_edges.bottom {
+                    accumulated_height += TABLE_BORDER_WIDTH;
+                }
+
+                if sliced_heights.is_empty() && !e.row_heights.is_empty() {
+                    return None;
+                }
+
+                Some(Element::TableBorder(TableBorderElement::new(
+                    Size::new(e.size.width, accumulated_height),
+                    e.node_id,
+                    e.border_style,
+                    e.align,
+                    sliced_heights.len(),
+                    e.cols,
+                    sliced_heights,
+                    e.col_widths.clone(),
+                    split_edges,
+                    offset,
+                    e.x_offset,
+                    new_start_row_index,
+                    e.total_rows,
+                )))
+            }
             _ => None,
         }
     }

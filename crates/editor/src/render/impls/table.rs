@@ -39,22 +39,26 @@ impl Render for TableBorderElement {
                 let mut pb = PathBuilder::new();
 
                 let half = TABLE_BORDER_WIDTH / 2.0;
-                pb.move_to(half, half);
-                pb.line_to(self.size.width - half, half);
-                pb.line_to(self.size.width - half, self.size.height - half);
-                pb.line_to(half, self.size.height - half);
+                pb.move_to(self.x_offset + half, half);
+                pb.line_to(self.x_offset + self.size.width - half, half);
+                pb.line_to(
+                    self.x_offset + self.size.width - half,
+                    self.size.height - half,
+                );
+                pb.line_to(self.x_offset + half, self.size.height - half);
                 pb.close();
 
                 let mut y = TABLE_BORDER_WIDTH;
                 for (idx, row_height) in self.row_heights.iter().enumerate() {
                     y += *row_height;
+
                     if idx < self.row_heights.len() - 1 {
-                        pb.move_to(0.0, y);
-                        pb.line_to(self.size.width, y);
+                        pb.move_to(self.x_offset, y);
+                        pb.line_to(self.x_offset + self.size.width, y);
                     }
                 }
 
-                let mut x = TABLE_BORDER_WIDTH;
+                let mut x = TABLE_BORDER_WIDTH + self.x_offset;
                 for (idx, col_width) in self.col_widths.iter().enumerate() {
                     x += *col_width;
                     if idx < self.col_widths.len() - 1 {

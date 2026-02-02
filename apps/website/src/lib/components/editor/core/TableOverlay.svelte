@@ -51,7 +51,11 @@
   let addRowButtonHovered = $state(false);
   let addBothButtonHovered = $state(false);
 
-  const isLastRowHovered = $derived(hoveredRowIndex === overlay.rowHeights.length - 1 || addRowButtonHovered || addBothButtonHovered);
+  const isLastRowHovered = $derived(
+    (hoveredRowIndex !== null && (overlay.startRowIndex ?? 0) + hoveredRowIndex === (overlay.totalRows ?? overlay.rowHeights.length) - 1) ||
+      addRowButtonHovered ||
+      addBothButtonHovered,
+  );
   const isLastColumnHovered = $derived(hoveredColIndex === overlay.colWidths.length - 1 || addColButtonHovered || addBothButtonHovered);
 
   function getVisualColX(colIndex: number, baseX: number): number {
@@ -141,6 +145,7 @@
         class={css({
           position: 'absolute',
           pointerEvents: 'auto',
+          cursor: 'text',
         })}
         onpointerenter={() => handleCellHover(rowIndex, colIndex)}
         onpointerleave={handleCellLeave}
@@ -162,6 +167,7 @@
         translateY: '-1/2',
         height: '18px',
         pointerEvents: 'auto',
+        cursor: 'text',
       })}
       onpointerenter={() => (hoveredColIndex = i)}
       onpointerleave={() => (hoveredColIndex = null)}
@@ -286,8 +292,9 @@
       <Menu
         offset={4}
         onopen={() => {
+          const globalRowIndex = (overlay.startRowIndex ?? 0) + i;
           menuOpenRowIndex = i;
-          editor.dispatch({ type: 'selectTableRow', tableId: overlay.tableId, row: i });
+          editor.dispatch({ type: 'selectTableRow', tableId: overlay.tableId, row: globalRowIndex });
         }}
         ontransitionend={() => {
           menuOpenRowIndex = null;
@@ -320,11 +327,12 @@
         {/snippet}
 
         {#snippet children({ close })}
-          {#if i > 0}
+          {#if (overlay.startRowIndex ?? 0) + i > 0}
             <MenuItem
               onclick={() => {
                 close();
-                editor.dispatch({ type: 'moveTableRow', tableId: overlay.tableId, fromRow: i, toRow: i - 1 });
+                const globalRowIndex = (overlay.startRowIndex ?? 0) + i;
+                editor.dispatch({ type: 'moveTableRow', tableId: overlay.tableId, fromRow: globalRowIndex, toRow: globalRowIndex - 1 });
                 editor.focus();
               }}
             >
@@ -332,11 +340,12 @@
               <span>위로 이동</span>
             </MenuItem>
           {/if}
-          {#if i < overlay.rowHeights.length - 1}
+          {#if (overlay.startRowIndex ?? 0) + i < (overlay.totalRows ?? overlay.rowHeights.length) - 1}
             <MenuItem
               onclick={() => {
                 close();
-                editor.dispatch({ type: 'moveTableRow', tableId: overlay.tableId, fromRow: i, toRow: i + 1 });
+                const globalRowIndex = (overlay.startRowIndex ?? 0) + i;
+                editor.dispatch({ type: 'moveTableRow', tableId: overlay.tableId, fromRow: globalRowIndex, toRow: globalRowIndex + 1 });
                 editor.focus();
               }}
             >
@@ -344,11 +353,11 @@
               <span>아래로 이동</span>
             </MenuItem>
           {/if}
-          {#if i > 0}
+          {#if (overlay.startRowIndex ?? 0) + i > 0}
             <MenuItem
               onclick={() => {
                 close();
-                editor.dispatch({ type: 'addTableRow', tableId: overlay.tableId, afterRow: i - 1 });
+                editor.dispatch({ type: 'addTableRow', tableId: overlay.tableId, afterRow: (overlay.startRowIndex ?? 0) + i - 1 });
                 editor.focus();
               }}
             >
@@ -359,7 +368,7 @@
           <MenuItem
             onclick={() => {
               close();
-              editor.dispatch({ type: 'addTableRow', tableId: overlay.tableId, afterRow: i });
+              editor.dispatch({ type: 'addTableRow', tableId: overlay.tableId, afterRow: (overlay.startRowIndex ?? 0) + i });
               editor.focus();
             }}
           >
@@ -369,7 +378,7 @@
           <MenuItem
             onclick={() => {
               close();
-              editor.dispatch({ type: 'deleteTableRow', tableId: overlay.tableId, row: i });
+              editor.dispatch({ type: 'deleteTableRow', tableId: overlay.tableId, row: (overlay.startRowIndex ?? 0) + i });
               editor.focus();
             }}
             variant="danger"
@@ -523,35 +532,37 @@
   onpointerenter={() => (addRowButtonHovered = true)}
   onpointerleave={() => (addRowButtonHovered = false)}
 >
-  <button
-    class={center({
-      width: 'full',
-      height: '18px',
-      borderRadius: '4px',
-      fontSize: '14px',
-      fontWeight: 'medium',
-      color: 'text.disabled',
-      backgroundColor: 'surface.muted',
-      display: isLastRowHovered ? 'flex' : 'none',
-      opacity: '90',
-      _hover: {
-        display: 'flex',
-        backgroundColor: 'interactive.hover',
-      },
-      _active: {
-        color: 'text.bright',
-        backgroundColor: 'accent.brand.default',
-      },
-    })}
-    aria-label="행 추가"
-    onclick={() => {
-      editor.dispatch({ type: 'addTableRow', tableId: overlay.tableId, afterRow: overlay.rowHeights.length - 1 });
-      editor.focus();
-    }}
-    type="button"
-  >
-    <Icon icon={PlusIcon} size={14} />
-  </button>
+  {#if (overlay.startRowIndex ?? 0) + overlay.rowHeights.length === (overlay.totalRows ?? overlay.rowHeights.length)}
+    <button
+      class={center({
+        width: 'full',
+        height: '18px',
+        borderRadius: '4px',
+        fontSize: '14px',
+        fontWeight: 'medium',
+        color: 'text.disabled',
+        backgroundColor: 'surface.muted',
+        display: isLastRowHovered ? 'flex' : 'none',
+        opacity: '90',
+        _hover: {
+          display: 'flex',
+          backgroundColor: 'interactive.hover',
+        },
+        _active: {
+          color: 'text.bright',
+          backgroundColor: 'accent.brand.default',
+        },
+      })}
+      aria-label="행 추가"
+      onclick={() => {
+        editor.dispatch({ type: 'addTableRow', tableId: overlay.tableId, afterRow: (overlay.totalRows ?? overlay.rowHeights.length) - 1 });
+        editor.focus();
+      }}
+      type="button"
+    >
+      <Icon icon={PlusIcon} size={14} />
+    </button>
+  {/if}
 </div>
 
 <div
@@ -570,36 +581,38 @@
   onpointerenter={() => (addBothButtonHovered = true)}
   onpointerleave={() => (addBothButtonHovered = false)}
 >
-  <button
-    class={center({
-      width: '18px',
-      height: '18px',
-      borderRadius: 'full',
-      fontSize: '14px',
-      fontWeight: 'medium',
-      color: 'text.disabled',
-      backgroundColor: 'surface.muted',
-      display: isLastRowHovered && isLastColumnHovered ? 'flex' : 'none',
-      opacity: '90',
-      _hover: {
-        display: 'flex',
-        backgroundColor: 'interactive.hover',
-      },
-      _active: {
-        color: 'text.bright',
-        backgroundColor: 'accent.brand.default',
-      },
-    })}
-    aria-label="행 및 열 추가"
-    onclick={() => {
-      editor.dispatch({ type: 'addTableRow', tableId: overlay.tableId, afterRow: overlay.rowHeights.length - 1 });
-      editor.dispatch({ type: 'addTableColumn', tableId: overlay.tableId, afterCol: overlay.colWidths.length - 1 });
-      editor.focus();
-    }}
-    type="button"
-  >
-    <Icon icon={PlusIcon} size={14} />
-  </button>
+  {#if (overlay.startRowIndex ?? 0) + overlay.rowHeights.length === (overlay.totalRows ?? overlay.rowHeights.length)}
+    <button
+      class={center({
+        width: '18px',
+        height: '18px',
+        borderRadius: 'full',
+        fontSize: '14px',
+        fontWeight: 'medium',
+        color: 'text.disabled',
+        backgroundColor: 'surface.muted',
+        display: isLastRowHovered && isLastColumnHovered ? 'flex' : 'none',
+        opacity: '90',
+        _hover: {
+          display: 'flex',
+          backgroundColor: 'interactive.hover',
+        },
+        _active: {
+          color: 'text.bright',
+          backgroundColor: 'accent.brand.default',
+        },
+      })}
+      aria-label="행 및 열 추가"
+      onclick={() => {
+        editor.dispatch({ type: 'addTableRow', tableId: overlay.tableId, afterRow: (overlay.totalRows ?? overlay.rowHeights.length) - 1 });
+        editor.dispatch({ type: 'addTableColumn', tableId: overlay.tableId, afterCol: overlay.colWidths.length - 1 });
+        editor.focus();
+      }}
+      type="button"
+    >
+      <Icon icon={PlusIcon} size={14} />
+    </button>
+  {/if}
 </div>
 
 <div

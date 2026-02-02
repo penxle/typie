@@ -5,7 +5,7 @@ import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { FRAGMENT_MIME, PAGE_GAP } from './constants';
 import { ensurePhantomFonts, ensureRequiredFonts, ensureRequiredWritingSystems, getAvailableFontsMap } from './fonts';
 import { calculateImageDisplaySize, calculateRelativePosition, findNearestPageCoordinate, getPageElement, idleCallback } from './utils';
-import type { Editor as WasmEditor, ExportedUpdates, Modifier, PointerButton } from '@typie/editor';
+import type { Editor as WasmEditor, ExportedUpdates, Modifier, PointerButton, TableOverlay } from '@typie/editor';
 import type { ThemeColors } from './theme';
 import type {
   Cmd,
@@ -194,20 +194,7 @@ export class Editor {
     currentIndex: 0,
   });
 
-  tableOverlays = $state<
-    {
-      pageIdx: number;
-      tableId: string;
-      bounds: Rect;
-      borderStyle: string;
-      colWidths: number[];
-      colPositions: number[];
-      rowHeights: number[];
-      rowPositions: number[];
-      isFocused: boolean;
-      align: string;
-    }[]
-  >([]);
+  tableOverlays = $state<TableOverlay[]>([]);
 
   typewriter = $state({
     needsScroll: false,
