@@ -385,7 +385,7 @@ fn derive_enum_codec(input: &DeriveInput, data: &syn::DataEnum) -> TokenStream {
                     match map.get(key) {
                         Some(value_or_container) => {
                             if let Ok(value) = value_or_container.into_value() {
-                                return Self::from_value(value);
+                                return Ok(Self::from_value(value).unwrap_or(#name::#variant_name));
                             }
                             Ok(#name::#variant_name)
                         }
