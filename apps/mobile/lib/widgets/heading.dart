@@ -20,6 +20,7 @@ class Heading extends StatelessWidget implements PreferredSizeWidget {
     this.backgroundColor,
     this.fallbackSystemUiOverlayStyle,
     this.banner,
+    this.onTap,
     super.key,
   }) : assert(title != null || titleWidget != null, 'title or titleWidget must be provided');
 
@@ -32,6 +33,7 @@ class Heading extends StatelessWidget implements PreferredSizeWidget {
   final Color? backgroundColor;
   final SystemUiOverlayStyle? fallbackSystemUiOverlayStyle;
   final Widget? banner;
+  final VoidCallback? onTap;
 
   static const _headingHeight = 52.0;
   static const _bannerHeight = 32.0;
@@ -61,68 +63,72 @@ class Heading extends StatelessWidget implements PreferredSizeWidget {
         systemNavigationBarContrastEnforced: false,
         systemStatusBarContrastEnforced: false,
       ),
-      child: DecoratedBox(
-        decoration: BoxDecoration(color: backgroundColor ?? context.colors.surfaceSubtle),
-        child: SafeArea(
-          bottom: false,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                height: const Size.fromHeight(_headingHeight).height,
-                margin: const Pad(horizontal: 20),
-                decoration: BoxDecoration(
-                  border: Border.symmetric(horizontal: BorderSide(color: context.colors.borderStrong)),
-                ),
-                child: Row(
-                  children: [
-                    if (leadingWidget != null) ...[
-                      leadingWidget!,
-                      AppVerticalDivider(color: context.colors.borderStrong),
-                      const Gap(20),
-                    ] else if (route?.canPop ?? false) ...[
-                      Tappable(
-                        onTap: () => context.router.maybePop(),
-                        padding: const Pad(vertical: 4),
-                        child: SizedBox(
-                          width: 52,
-                          child: Icon(
-                            route?.settings is AutoRoutePage && (route!.settings as AutoRoutePage).fullscreenDialog
-                                ? LucideLightIcons.x
-                                : LucideLightIcons.chevron_left,
-                            color: context.colors.textDefault,
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.translucent,
+        child: DecoratedBox(
+          decoration: BoxDecoration(color: backgroundColor ?? context.colors.surfaceSubtle),
+          child: SafeArea(
+            bottom: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  height: const Size.fromHeight(_headingHeight).height,
+                  margin: const Pad(horizontal: 20),
+                  decoration: BoxDecoration(
+                    border: Border.symmetric(horizontal: BorderSide(color: context.colors.borderStrong)),
+                  ),
+                  child: Row(
+                    children: [
+                      if (leadingWidget != null) ...[
+                        leadingWidget!,
+                        AppVerticalDivider(color: context.colors.borderStrong),
+                        const Gap(20),
+                      ] else if (route?.canPop ?? false) ...[
+                        Tappable(
+                          onTap: () => context.router.maybePop(),
+                          padding: const Pad(vertical: 4),
+                          child: SizedBox(
+                            width: 52,
+                            child: Icon(
+                              route?.settings is AutoRoutePage && (route!.settings as AutoRoutePage).fullscreenDialog
+                                  ? LucideLightIcons.x
+                                  : LucideLightIcons.chevron_left,
+                              color: context.colors.textDefault,
+                            ),
                           ),
                         ),
+                        AppVerticalDivider(color: context.colors.borderStrong),
+                        const Gap(20),
+                      ],
+                      if (titleIcon != null) ...[Icon(titleIcon, size: 20), const Gap(8)],
+                      Expanded(
+                        child:
+                            titleWidget ??
+                            Text(
+                              title!,
+                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                              overflow: TextOverflow.ellipsis,
+                            ),
                       ),
-                      AppVerticalDivider(color: context.colors.borderStrong),
-                      const Gap(20),
+                      if (suffix != null) ...[const Gap(8), suffix!],
+                      if (actions != null) ...[
+                        const Gap(20),
+                        AppVerticalDivider(color: context.colors.borderStrong),
+                        ...actions!,
+                      ],
                     ],
-                    if (titleIcon != null) ...[Icon(titleIcon, size: 20), const Gap(8)],
-                    Expanded(
-                      child:
-                          titleWidget ??
-                          Text(
-                            title!,
-                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                    ),
-                    if (suffix != null) ...[const Gap(8), suffix!],
-                    if (actions != null) ...[
-                      const Gap(20),
-                      AppVerticalDivider(color: context.colors.borderStrong),
-                      ...actions!,
-                    ],
-                  ],
+                  ),
                 ),
-              ),
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                curve: Curves.easeInOut,
-                height: banner != null ? _bannerHeight : 0,
-                child: banner,
-              ),
-            ],
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeInOut,
+                  height: banner != null ? _bannerHeight : 0,
+                  child: banner,
+                ),
+              ],
+            ),
           ),
         ),
       ),

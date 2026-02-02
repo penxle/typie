@@ -60,6 +60,7 @@ class EditorView extends HookWidget {
     final keyboardHeight = useValueNotifier<double>(0);
     final isKeyboardVisible = useValueNotifier<bool>(false);
     final keyboardType = useValueNotifier<KeyboardType>(KeyboardType.software);
+    final isEditorFocused = useValueNotifier<bool>(false);
     final bottomToolbarMode = useValueNotifier<BottomToolbarMode>(BottomToolbarMode.hidden);
     final secondaryToolbarMode = useValueNotifier<SecondaryToolbarMode>(SecondaryToolbarMode.hidden);
 
@@ -80,6 +81,11 @@ class EditorView extends HookWidget {
     );
 
     useEffect(() {
+      controller.setClearFocusCallback(focusController.clearFocus);
+      return null;
+    }, [focusController]);
+
+    useEffect(() {
       void scrollToTop() {
         if (scrollController.hasClients) {
           suppressScrollbarTimer.value?.cancel();
@@ -93,14 +99,18 @@ class EditorView extends HookWidget {
 
       void onTitleFocusChange() {
         if (titleFocusNode.hasFocus) {
-          focusController.clearFocus();
+          if (focusController.isActive) {
+            focusController.clearFocus();
+          }
           scrollToTop();
         }
       }
 
       void onSubtitleFocusChange() {
         if (subtitleFocusNode.hasFocus) {
-          focusController.clearFocus();
+          if (focusController.isActive) {
+            focusController.clearFocus();
+          }
           scrollToTop();
         }
       }
@@ -142,6 +152,10 @@ class EditorView extends HookWidget {
         if (height > 0) {
           keyboardHeight.value = height;
           bottomToolbarMode.value = BottomToolbarMode.hidden;
+        } else {
+          if (!titleFocusNode.hasFocus && !subtitleFocusNode.hasFocus) {
+            focusController.onKeyboardHidden();
+          }
         }
         isKeyboardVisible.value = height > 0;
       });
@@ -174,13 +188,23 @@ class EditorView extends HookWidget {
     final currentLayout = state.state.layout;
     final cursor = state.state.cursor;
 
-    useEffect(() {
-      uniformMarks.value = state.state.uniformMarks;
-      mixedMarks.value = state.state.mixedMarks;
-      selectionStats.value = state.state.selectionStats;
-      externalElements.value = state.state.externalElements;
-      return null;
-    }, [state.state.uniformMarks, state.state.mixedMarks, state.state.selectionStats, state.state.externalElements]);
+    useEffect(
+      () {
+        uniformMarks.value = state.state.uniformMarks;
+        mixedMarks.value = state.state.mixedMarks;
+        selectionStats.value = state.state.selectionStats;
+        externalElements.value = state.state.externalElements;
+        isEditorFocused.value = state.state.isFocused;
+        return null;
+      },
+      [
+        state.state.uniformMarks,
+        state.state.mixedMarks,
+        state.state.selectionStats,
+        state.state.externalElements,
+        state.state.isFocused,
+      ],
+    );
 
     final titleHeaderHeight = useRef<double>(0);
 
@@ -220,6 +244,7 @@ class EditorView extends HookWidget {
       keyboardHeight: keyboardHeight,
       isKeyboardVisible: isKeyboardVisible,
       keyboardType: keyboardType,
+      isEditorFocused: isEditorFocused,
       bottomToolbarMode: bottomToolbarMode,
       secondaryToolbarMode: secondaryToolbarMode,
       uniformMarks: uniformMarks,
@@ -246,6 +271,7 @@ class EditorView extends HookWidget {
                   scrollController: scrollController,
                   horizontalScrollController: horizontalScrollController,
                   onOpenInput: focusController.openInput,
+                  onTransferFocus: focusController.transferFocus,
                   onSelectionStart: () => controller.setSelecting(true),
                   onSelectionEnd: () => controller.setSelecting(false),
                   onLongPressStateChanged: (value) => isLongPressing.value = value,
@@ -292,6 +318,7 @@ class EditorView extends HookWidget {
                     onShortcut: (action) {
                       controller.dispatch({'type': action});
                     },
+                    onFocusLost: focusController.clearFocus,
                   ),
                 ),
                 const Positioned(bottom: 20, right: 20, child: NativeEditorFloatingToolbar()),

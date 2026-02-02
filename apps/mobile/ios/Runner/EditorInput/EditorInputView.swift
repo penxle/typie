@@ -50,6 +50,8 @@ class EditorInputView: NSObject, FlutterPlatformView {
       case "deactivate":
         self.inputView.deactivate()
         result(nil)
+      case "releaseFocus":
+        result(nil)
       case "resetInputContext":
         self.inputView.resetInputContext()
         result(nil)

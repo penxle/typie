@@ -245,6 +245,33 @@ class EditorTexture(
     currentWidth = width
     currentHeight = height
     entry.surfaceTexture().setDefaultBufferSize(width, height)
+    recreateEGLSurface()
+  }
+
+  private fun recreateEGLSurface() {
+    eglSurface?.let {
+      EGL14.eglDestroySurface(eglDisplay, it)
+    }
+    surface?.release()
+
+    val surfaceTexture = entry.surfaceTexture()
+    surface = Surface(surfaceTexture)
+
+    val configAttribs = intArrayOf(
+      EGL14.EGL_RED_SIZE, 8,
+      EGL14.EGL_GREEN_SIZE, 8,
+      EGL14.EGL_BLUE_SIZE, 8,
+      EGL14.EGL_ALPHA_SIZE, 8,
+      EGL14.EGL_RENDERABLE_TYPE, EGL14.EGL_OPENGL_ES2_BIT,
+      EGL14.EGL_NONE
+    )
+    val configs = arrayOfNulls<EGLConfig>(1)
+    val numConfigs = IntArray(1)
+    EGL14.eglChooseConfig(eglDisplay, configAttribs, 0, configs, 0, 1, numConfigs, 0)
+
+    val surfaceAttribs = intArrayOf(EGL14.EGL_NONE)
+    eglSurface = EGL14.eglCreateWindowSurface(eglDisplay, configs[0], surface, surfaceAttribs, 0)
+    EGL14.eglMakeCurrent(eglDisplay, eglSurface, eglSurface, eglContext)
   }
 
   fun render(editorPtr: Long, pageIndex: Int, width: Int, height: Int): Boolean {

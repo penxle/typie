@@ -24,6 +24,7 @@ class NativeEditorToolbarScope extends InheritedWidget {
     required this.keyboardHeight,
     required this.isKeyboardVisible,
     required this.keyboardType,
+    required this.isEditorFocused,
     required this.bottomToolbarMode,
     required this.secondaryToolbarMode,
     required this.uniformMarks,
@@ -40,6 +41,7 @@ class NativeEditorToolbarScope extends InheritedWidget {
   final ValueNotifier<double> keyboardHeight;
   final ValueNotifier<bool> isKeyboardVisible;
   final ValueNotifier<KeyboardType> keyboardType;
+  final ValueNotifier<bool> isEditorFocused;
   final ValueNotifier<BottomToolbarMode> bottomToolbarMode;
   final ValueNotifier<SecondaryToolbarMode> secondaryToolbarMode;
 

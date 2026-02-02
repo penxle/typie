@@ -119,15 +119,18 @@ class EditorScrollbar extends HookWidget {
       return total + bottomPadding;
     }
 
-    final totalContentHeight = calculateTotalContentHeight();
-    final calculatedMaxScrollExtent = math.max<double>(0, totalContentHeight - viewHeight);
-
     final hasVerticalClients = scrollController.hasClients && scrollController.position.hasContentDimensions;
-    final hasVerticalScroll = calculatedMaxScrollExtent > 0;
     final hasHorizontalScroll =
         horizontalScrollController.hasClients &&
         horizontalScrollController.position.hasContentDimensions &&
         horizontalScrollController.position.maxScrollExtent > 0;
+
+    final actualViewHeight = hasVerticalClients ? scrollController.position.viewportDimension : viewHeight;
+    final actualViewWidth = hasHorizontalScroll ? horizontalScrollController.position.viewportDimension : viewWidth;
+
+    final totalContentHeight = calculateTotalContentHeight();
+    final calculatedMaxScrollExtent = math.max<double>(0, totalContentHeight - actualViewHeight);
+    final hasVerticalScroll = calculatedMaxScrollExtent > 0;
 
     if (!hasVerticalScroll && !hasHorizontalScroll) {
       return const SizedBox.shrink();
@@ -135,7 +138,7 @@ class EditorScrollbar extends HookWidget {
 
     final scrollOffset = hasVerticalClients ? scrollController.offset.clamp(0.0, calculatedMaxScrollExtent) : 0.0;
     final maxScrollExtent = calculatedMaxScrollExtent;
-    final viewportDimension = viewHeight;
+    final viewportDimension = actualViewHeight;
 
     final horizontalScrollOffset = hasHorizontalScroll ? horizontalScrollController.offset : 0.0;
     final horizontalMaxScrollExtent = hasHorizontalScroll ? horizontalScrollController.position.maxScrollExtent : 0.0;
@@ -145,7 +148,8 @@ class EditorScrollbar extends HookWidget {
 
     final safeTop = safePadding.top;
     final safeBottom = safePadding.bottom;
-    final trackHeight = viewHeight - _trackPadding * 2 - safeTop - safeBottom - (hasHorizontalScroll ? _trackWidth : 0);
+    final trackHeight =
+        actualViewHeight - _trackPadding * 2 - safeTop - safeBottom - (hasHorizontalScroll ? _trackWidth : 0);
     final thumbRatio = viewportDimension > 0 ? viewportDimension / (viewportDimension + maxScrollExtent) : 1.0;
     final thumbHeight = math.max(_minThumbSize, thumbRatio * trackHeight);
     final scrollRatioV = maxScrollExtent > 0 ? (scrollOffset / maxScrollExtent).clamp(0.0, 1.0) : 0.0;
@@ -157,7 +161,12 @@ class EditorScrollbar extends HookWidget {
     final safeLeft = safePadding.left;
     final safeRight = safePadding.right;
     final trackWidthH =
-        viewWidth - _trackPadding * 2 - safeLeft - safeRight - safeBottom * 2 - (hasVerticalScroll ? _trackWidth : 0);
+        actualViewWidth -
+        _trackPadding * 2 -
+        safeLeft -
+        safeRight -
+        safeBottom * 2 -
+        (hasVerticalScroll ? _trackWidth : 0);
     final horizontalThumbRatio = horizontalViewportDimension > 0
         ? horizontalViewportDimension / (horizontalViewportDimension + horizontalMaxScrollExtent)
         : 1.0;

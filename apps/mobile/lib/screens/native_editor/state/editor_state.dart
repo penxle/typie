@@ -67,6 +67,16 @@ class EditorController extends ChangeNotifier {
   final void Function()? onDocChanged;
   final void Function()? onExitedDocumentStart;
 
+  VoidCallback? _clearFocusCallback;
+
+  void setClearFocusCallback(VoidCallback callback) {
+    _clearFocusCallback = callback;
+  }
+
+  void clearFocus() {
+    _clearFocusCallback?.call();
+  }
+
   EditorState _state = const EditorState();
   EditorState get state => _state;
 
@@ -84,6 +94,7 @@ class EditorController extends ChangeNotifier {
   void setFocused(bool focused) {
     if (_state.isFocused != focused) {
       _state = _state.copyWith(isFocused: focused);
+      dispatch({'type': 'setFocused', 'focused': focused});
       notifyListeners();
     }
   }

@@ -14,7 +14,12 @@ class NativeEditorToolbar extends HookWidget {
     final scope = NativeEditorToolbarScope.of(context);
     final isKeyboardVisible = useValueListenable(scope.isKeyboardVisible);
     final keyboardType = useValueListenable(scope.keyboardType);
+    final isEditorFocused = useValueListenable(scope.isEditorFocused);
     final bottomToolbarMode = useValueListenable(scope.bottomToolbarMode);
+
+    if (!isEditorFocused) {
+      return const SizedBox.shrink();
+    }
 
     if (keyboardType == KeyboardType.software && !isKeyboardVisible && bottomToolbarMode == BottomToolbarMode.hidden) {
       return const SizedBox.shrink();

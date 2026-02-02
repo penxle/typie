@@ -13,6 +13,7 @@ class TitleSubtitleFields extends HookWidget {
     required this.subtitleFocusNode,
     required this.onEnterDocument,
     required this.pageWidth,
+    this.onFieldTap,
     super.key,
   });
 
@@ -24,6 +25,7 @@ class TitleSubtitleFields extends HookWidget {
   final FocusNode subtitleFocusNode;
   final VoidCallback onEnterDocument;
   final double pageWidth;
+  final VoidCallback? onFieldTap;
 
   @override
   Widget build(BuildContext context) {
@@ -31,14 +33,14 @@ class TitleSubtitleFields extends HookWidget {
     final subtitleController = useTextEditingController(text: subtitle);
 
     useEffect(() {
-      if (titleController.text != title) {
+      if (titleController.text != title && !titleFocusNode.hasFocus) {
         titleController.text = title;
       }
       return null;
     }, [title]);
 
     useEffect(() {
-      if (subtitleController.text != subtitle) {
+      if (subtitleController.text != subtitle && !subtitleFocusNode.hasFocus) {
         subtitleController.text = subtitle;
       }
       return null;
@@ -68,8 +70,7 @@ class TitleSubtitleFields extends HookWidget {
           return KeyEventResult.handled;
         } else if (event.logicalKey == LogicalKeyboardKey.arrowDown ||
             (event.logicalKey == LogicalKeyboardKey.tab && !isShiftPressed)) {
-          subtitleFocusNode.unfocus();
-          WidgetsBinding.instance.addPostFrameCallback((_) => onEnterDocument());
+          onEnterDocument();
           return KeyEventResult.handled;
         } else if (event.logicalKey == LogicalKeyboardKey.backspace && subtitleController.text.isEmpty) {
           titleFocusNode.requestFocus();
@@ -86,54 +87,65 @@ class TitleSubtitleFields extends HookWidget {
         padding: const EdgeInsets.only(top: 40, left: 20, right: 20),
         child: Column(
           children: [
-            Focus(
-              onKeyEvent: handleTitleKeyEvent,
-              child: TextField(
-                controller: titleController,
-                focusNode: titleFocusNode,
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: context.colors.textDefault),
-                textAlign: TextAlign.center,
-                decoration: InputDecoration(
-                  hintText: '제목',
-                  hintStyle: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: context.colors.textDisabled),
-                  border: InputBorder.none,
-                  contentPadding: EdgeInsets.zero,
-                  isDense: true,
+            GestureDetector(
+              onTapDown: (_) {
+                onFieldTap?.call();
+                titleFocusNode.requestFocus();
+              },
+              child: Focus(
+                onKeyEvent: handleTitleKeyEvent,
+                child: TextField(
+                  controller: titleController,
+                  focusNode: titleFocusNode,
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: context.colors.textDefault),
+                  textAlign: TextAlign.center,
+                  decoration: InputDecoration(
+                    hintText: '제목',
+                    hintStyle: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: context.colors.textDisabled),
+                    border: InputBorder.none,
+                    contentPadding: EdgeInsets.zero,
+                    isDense: true,
+                  ),
+                  autocorrect: false,
+                  maxLength: 100,
+                  maxLines: null,
+                  minLines: 1,
+                  textInputAction: TextInputAction.next,
+                  buildCounter: (context, {required currentLength, required isFocused, required maxLength}) => null,
+                  onChanged: onTitleChanged,
+                  onSubmitted: (_) => subtitleFocusNode.requestFocus(),
                 ),
-                maxLength: 100,
-                maxLines: null,
-                minLines: 1,
-                textInputAction: TextInputAction.next,
-                buildCounter: (context, {required currentLength, required isFocused, required maxLength}) => null,
-                onChanged: onTitleChanged,
-                onSubmitted: (_) => subtitleFocusNode.requestFocus(),
               ),
             ),
             const SizedBox(height: 4),
-            Focus(
-              onKeyEvent: handleSubtitleKeyEvent,
-              child: TextField(
-                controller: subtitleController,
-                focusNode: subtitleFocusNode,
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: context.colors.textDefault),
-                textAlign: TextAlign.center,
-                decoration: InputDecoration(
-                  hintText: '부제목',
-                  hintStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: context.colors.textDisabled),
-                  border: InputBorder.none,
-                  contentPadding: EdgeInsets.zero,
-                  isDense: true,
+            GestureDetector(
+              onTapDown: (_) {
+                onFieldTap?.call();
+                subtitleFocusNode.requestFocus();
+              },
+              child: Focus(
+                onKeyEvent: handleSubtitleKeyEvent,
+                child: TextField(
+                  controller: subtitleController,
+                  focusNode: subtitleFocusNode,
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: context.colors.textDefault),
+                  textAlign: TextAlign.center,
+                  decoration: InputDecoration(
+                    hintText: '부제목',
+                    hintStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: context.colors.textDisabled),
+                    border: InputBorder.none,
+                    contentPadding: EdgeInsets.zero,
+                    isDense: true,
+                  ),
+                  autocorrect: false,
+                  maxLength: 100,
+                  maxLines: null,
+                  minLines: 1,
+                  textInputAction: TextInputAction.next,
+                  buildCounter: (context, {required currentLength, required isFocused, required maxLength}) => null,
+                  onChanged: onSubtitleChanged,
+                  onSubmitted: (_) => onEnterDocument(),
                 ),
-                maxLength: 100,
-                maxLines: null,
-                minLines: 1,
-                textInputAction: TextInputAction.next,
-                buildCounter: (context, {required currentLength, required isFocused, required maxLength}) => null,
-                onChanged: onSubtitleChanged,
-                onSubmitted: (_) {
-                  subtitleFocusNode.unfocus();
-                  WidgetsBinding.instance.addPostFrameCallback((_) => onEnterDocument());
-                },
               ),
             ),
             const SizedBox(height: 40),
