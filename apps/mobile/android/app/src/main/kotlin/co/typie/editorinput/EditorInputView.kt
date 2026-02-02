@@ -39,7 +39,6 @@ class EditorInputView(
     when (call.method) {
       "activate" -> inputView.activate()
       "deactivate" -> inputView.deactivate()
-      "releaseFocus" -> inputView.releaseFocus()
       "resetInputContext" -> inputView.resetInputContext()
       "updateCursor" -> {
         (call.arguments as? Map<*, *>)?.let { args ->
@@ -66,11 +65,10 @@ class EditorInputNativeView(
 
   private var isComposing = false
   private var composingText = ""
-  private var finishedComposingText: String? = null
   private var cursorX = 0.0
   private var cursorY = 0.0
   private var cursorHeight = 20.0
-
+  private var lastDeleteTime = 0L
 
   private val inputMethodManager: InputMethodManager
     get() = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
@@ -83,23 +81,18 @@ class EditorInputNativeView(
     }
   }
 
-  private val hasComposingState: Boolean
-    get() = isComposing || finishedComposingText != null
-
   private fun commitComposingState() {
-    if (hasComposingState) {
+    if (isComposing) {
       isComposing = false
       composingText = ""
-      finishedComposingText = null
       channel.invokeMethod("unmarkText", emptyMap<String, Any>())
     }
   }
 
   private fun cancelComposingState() {
-    if (hasComposingState) {
+    if (isComposing) {
       isComposing = false
       composingText = ""
-      finishedComposingText = null
       channel.invokeMethod("cancelMarkedText", emptyMap<String, Any>())
     }
   }
@@ -124,9 +117,6 @@ class EditorInputNativeView(
   fun deactivate() {
     inputMethodManager.hideSoftInputFromWindow(windowToken, 0)
     clearFocus()
-  }
-
-  fun releaseFocus() {
   }
 
   fun updateCursor(x: Double, y: Double, height: Double) {
@@ -162,28 +152,13 @@ class EditorInputNativeView(
     return object : BaseInputConnection(this, false) {
       override fun commitText(text: CharSequence?, newCursorPosition: Int): Boolean {
         val str = text?.toString().orEmpty()
-        val prevComposing = finishedComposingText ?: composingText
-        val wasComposing = hasComposingState
 
-        if (wasComposing) {
+        if (isComposing) {
           isComposing = false
-          finishedComposingText = null
-          channel.invokeMethod("unmarkText", emptyMap<String, Any>())
-
-          val remaining = if (str.startsWith(prevComposing)) {
-            str.substring(prevComposing.length)
-          } else {
-            str
-          }
           composingText = ""
-
-          if (remaining.isNotEmpty()) {
-            insertTextOrNewline(remaining)
-          }
-          return true
+          channel.invokeMethod("cancelMarkedText", emptyMap<String, Any>())
         }
 
-        composingText = ""
         if (str.isNotEmpty()) {
           insertTextOrNewline(str)
         }
@@ -192,11 +167,6 @@ class EditorInputNativeView(
 
       override fun setComposingText(text: CharSequence?, newCursorPosition: Int): Boolean {
         val str = text?.toString().orEmpty()
-
-        if (finishedComposingText != null) {
-          channel.invokeMethod("unmarkText", emptyMap<String, Any>())
-          finishedComposingText = null
-        }
 
         if (str.isEmpty()) {
           if (isComposing) {
@@ -215,28 +185,23 @@ class EditorInputNativeView(
       override fun finishComposingText(): Boolean {
         if (isComposing) {
           isComposing = false
-          finishedComposingText = composingText
           composingText = ""
+          channel.invokeMethod("unmarkText", emptyMap<String, Any>())
         }
         return true
       }
 
       override fun deleteSurroundingText(beforeLength: Int, afterLength: Int): Boolean {
-        if (finishedComposingText != null) {
-          channel.invokeMethod("cancelMarkedText", emptyMap<String, Any>())
-          finishedComposingText = null
-          return true
-        }
         if (isComposing) {
           isComposing = false
           composingText = ""
           channel.invokeMethod("cancelMarkedText", emptyMap<String, Any>())
-          return true
-        }
-        repeat(beforeLength) {
-          performDelete()
         }
         return true
+      }
+
+      override fun deleteSurroundingTextInCodePoints(beforeLength: Int, afterLength: Int): Boolean {
+        return deleteSurroundingText(beforeLength, afterLength)
       }
 
       override fun getTextBeforeCursor(maxChars: Int, flags: Int): CharSequence = " "
@@ -252,19 +217,17 @@ class EditorInputNativeView(
 
         return when (event.keyCode) {
           KeyEvent.KEYCODE_DEL -> {
-            when {
-              finishedComposingText != null -> {
-                channel.invokeMethod("cancelMarkedText", emptyMap<String, Any>())
-                finishedComposingText = null
+            if (isComposing) {
+              cancelComposingState()
+            } else {
+              if (event.repeatCount > 0) {
+                val now = System.currentTimeMillis()
+                if (now - lastDeleteTime < 300) {
+                  return true
+                }
+                lastDeleteTime = now
               }
-              isComposing -> {
-                isComposing = false
-                composingText = ""
-                channel.invokeMethod("cancelMarkedText", emptyMap<String, Any>())
-              }
-              else -> {
-                performDelete()
-              }
+              performDelete()
             }
             true
           }

@@ -42,10 +42,6 @@ class EditorInputViewState extends State<EditorInputView> {
     unawaited(_channel?.invokeMethod('deactivate', <String, dynamic>{}));
   }
 
-  void releaseFocus() {
-    unawaited(_channel?.invokeMethod('releaseFocus', <String, dynamic>{}));
-  }
-
   void resetInputContext() {
     unawaited(_channel?.invokeMethod('resetInputContext', <String, dynamic>{}));
   }
