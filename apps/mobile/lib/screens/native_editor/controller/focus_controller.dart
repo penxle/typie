@@ -14,8 +14,8 @@ class EditorFocusController {
     if (!_isActive) {
       _isActive = true;
       onFocusChanged(true);
-      inputKey.currentState?.activateInput();
     }
+    inputKey.currentState?.activateInput();
   }
 
   void requestFocus() {
@@ -25,9 +25,28 @@ class EditorFocusController {
   }
 
   void clearFocus() {
+    if (!_isActive) {
+      return;
+    }
     _isActive = false;
     onFocusChanged(false);
     inputKey.currentState?.deactivateInput();
+  }
+
+  void transferFocus() {
+    if (!_isActive) {
+      return;
+    }
+    _isActive = false;
+    onFocusChanged(false);
+    inputKey.currentState?.releaseFocus();
+  }
+
+  void onKeyboardHidden() {
+    if (_isActive) {
+      _isActive = false;
+      onFocusChanged(false);
+    }
   }
 
   void updateCursor(double x, double y, double height) {

@@ -1,5 +1,7 @@
+use crate::runtime::Effect;
 use crate::state::Preedit;
 use crate::transaction::Transaction;
+use crate::utils::detect_writing_systems;
 use anyhow::Result;
 
 impl Transaction {
@@ -7,6 +9,13 @@ impl Transaction {
         let selection = self.selection().clone();
         if !selection.is_collapsed() {
             return Ok(false);
+        }
+
+        let writing_systems = detect_writing_systems(&text);
+        if !writing_systems.is_empty() {
+            self.push_effect(Effect::WritingSystemsUsageChanged {
+                systems: writing_systems,
+            });
         }
 
         self.state.preedit = Some(Preedit {

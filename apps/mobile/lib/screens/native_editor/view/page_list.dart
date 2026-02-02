@@ -24,6 +24,7 @@ class PageList extends HookWidget {
     required this.scrollController,
     required this.horizontalScrollController,
     required this.onOpenInput,
+    required this.onTransferFocus,
     required this.onSelectionStart,
     required this.onSelectionEnd,
     required this.onLongPressStateChanged,
@@ -48,6 +49,7 @@ class PageList extends HookWidget {
   final ScrollController scrollController;
   final ScrollController horizontalScrollController;
   final VoidCallback onOpenInput;
+  final VoidCallback onTransferFocus;
   final VoidCallback onSelectionStart;
   final VoidCallback onSelectionEnd;
   final ValueChanged<bool> onLongPressStateChanged;
@@ -321,6 +323,7 @@ class PageList extends HookWidget {
               onTitleHeaderHeightChanged(height + topPadding + bottomPadding);
             }
           },
+          onFieldTap: onTransferFocus,
         );
 
         return GestureDetector(
@@ -485,6 +488,7 @@ class _MeasuredTitleFields extends StatefulWidget {
     required this.onEnterDocument,
     required this.pageWidth,
     required this.onHeightChanged,
+    this.onFieldTap,
     super.key,
   });
 
@@ -497,6 +501,7 @@ class _MeasuredTitleFields extends StatefulWidget {
   final VoidCallback onEnterDocument;
   final double pageWidth;
   final ValueChanged<double> onHeightChanged;
+  final VoidCallback? onFieldTap;
 
   @override
   State<_MeasuredTitleFields> createState() => _MeasuredTitleFieldsState();
@@ -533,6 +538,7 @@ class _MeasuredTitleFieldsState extends State<_MeasuredTitleFields> {
       subtitleFocusNode: widget.subtitleFocusNode,
       onEnterDocument: widget.onEnterDocument,
       pageWidth: widget.pageWidth,
+      onFieldTap: widget.onFieldTap,
     );
   }
 }

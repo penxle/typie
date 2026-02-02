@@ -40,6 +40,7 @@ void handleLayoutChanged(EditorController controller, Map<String, dynamic> cmd) 
         pageHeights: pageHeights.cast<num>().map((e) => e.toDouble()).toList(),
         layoutMode: layoutMode,
       ),
+      renderVersion: Object(),
     ),
   );
 }

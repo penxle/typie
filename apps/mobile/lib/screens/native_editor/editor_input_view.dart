@@ -14,6 +14,7 @@ class EditorInputView extends StatefulWidget {
     required this.onCancelMarkedText,
     required this.onPerformAction,
     this.onShortcut,
+    this.onFocusLost,
     super.key,
   });
 
@@ -24,6 +25,7 @@ class EditorInputView extends StatefulWidget {
   final VoidCallback onCancelMarkedText;
   final void Function(String action) onPerformAction;
   final void Function(String action)? onShortcut;
+  final VoidCallback? onFocusLost;
 
   @override
   State<EditorInputView> createState() => EditorInputViewState();
@@ -38,6 +40,10 @@ class EditorInputViewState extends State<EditorInputView> {
 
   void deactivateInput() {
     unawaited(_channel?.invokeMethod('deactivate', <String, dynamic>{}));
+  }
+
+  void releaseFocus() {
+    unawaited(_channel?.invokeMethod('releaseFocus', <String, dynamic>{}));
   }
 
   void resetInputContext() {
@@ -67,6 +73,8 @@ class EditorInputViewState extends State<EditorInputView> {
             widget.onPerformAction(args!['action'] as String);
           case 'shortcut':
             widget.onShortcut?.call(args!['action'] as String);
+          case 'focusLost':
+            widget.onFocusLost?.call();
           default:
             throw MissingPluginException('Method ${call.method} not implemented');
         }

@@ -39,6 +39,7 @@ class EditorInputView(
     when (call.method) {
       "activate" -> inputView.activate()
       "deactivate" -> inputView.deactivate()
+      "releaseFocus" -> inputView.releaseFocus()
       "resetInputContext" -> inputView.resetInputContext()
       "updateCursor" -> {
         (call.arguments as? Map<*, *>)?.let { args ->
@@ -72,6 +73,14 @@ class EditorInputNativeView(
 
   private val inputMethodManager: InputMethodManager
     get() = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+
+  init {
+    setOnFocusChangeListener { _, hasFocus ->
+      if (!hasFocus) {
+        channel.invokeMethod("focusLost", emptyMap<String, Any>())
+      }
+    }
+  }
 
   private val hasComposingState: Boolean
     get() = isComposing || finishedComposingText != null
@@ -109,6 +118,10 @@ class EditorInputNativeView(
 
   fun deactivate() {
     inputMethodManager.hideSoftInputFromWindow(windowToken, 0)
+    clearFocus()
+  }
+
+  fun releaseFocus() {
     clearFocus()
   }
 

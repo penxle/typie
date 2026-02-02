@@ -334,10 +334,12 @@ class _Content extends HookWidget {
       heading: Heading(
         title: headingTitle,
         backgroundColor: context.colors.surfaceDefault,
+        onTap: () => editorController.value?.clearFocus(),
         actions: [
           HeadingAction(
             icon: LucideLightIcons.ellipsis,
             onTap: () async {
+              editorController.value?.clearFocus();
               await context.showBottomSheet(
                 intercept: true,
                 child: AppBottomSheet(
