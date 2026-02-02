@@ -54,8 +54,6 @@ class EditorInputView: NSObject, FlutterPlatformView {
       case "deactivate":
         self.inputView.deactivate()
         result(nil)
-      case "releaseFocus":
-        result(nil)
       case "resetInputContext":
         self.inputView.resetInputContext()
         result(nil)
@@ -140,6 +138,8 @@ class EditorTextInputView: UIView, UITextInput {
 
   func resetInputContext() {
     _markedText = nil
+    inputDelegate?.textWillChange(self)
+    inputDelegate?.textDidChange(self)
   }
 
   override var canBecomeFirstResponder: Bool { true }
@@ -244,7 +244,7 @@ class EditorTextInputView: UIView, UITextInput {
     } else {
       if _markedText != nil {
         _markedText = nil
-        onUnmarkText?()
+        onCancelMarkedText?()
       }
     }
   }

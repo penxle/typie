@@ -2,10 +2,11 @@ import 'package:flutter/widgets.dart';
 import 'package:typie/screens/native_editor/editor_input_view.dart';
 
 class EditorFocusController {
-  EditorFocusController({required this.inputKey, required this.onFocusChanged});
+  EditorFocusController({required this.inputKey, required this.onFocusChanged, required this.onCommitComposing});
 
   final GlobalKey<EditorInputViewState> inputKey;
   final void Function(bool focused) onFocusChanged;
+  final VoidCallback onCommitComposing;
 
   bool _isActive = false;
   bool get isActive => _isActive;
@@ -28,18 +29,10 @@ class EditorFocusController {
     if (!_isActive) {
       return;
     }
+    onCommitComposing();
     _isActive = false;
     onFocusChanged(false);
     inputKey.currentState?.deactivateInput();
-  }
-
-  void transferFocus() {
-    if (!_isActive) {
-      return;
-    }
-    _isActive = false;
-    onFocusChanged(false);
-    inputKey.currentState?.releaseFocus();
   }
 
   void onKeyboardHidden() {
