@@ -38,6 +38,10 @@ class EditorInputView: NSObject, FlutterPlatformView {
       self?.channel.invokeMethod("shortcut", arguments: ["action": action])
     }
 
+    inputView.onFocusLost = { [weak self] in
+      self?.channel.invokeMethod("focusLost", arguments: [String: Any]())
+    }
+
     channel.setMethodCallHandler { [weak self] call, result in
       guard let self = self else {
         result(FlutterMethodNotImplemented)
@@ -82,9 +86,11 @@ class EditorTextInputView: UIView, UITextInput {
   var onCancelMarkedText: (() -> Void)?
   var onPerformAction: ((String) -> Void)?
   var onShortcut: ((String) -> Void)?
+  var onFocusLost: (() -> Void)?
 
   private var _markedText: String?
   private var _cursor: Int = 10000
+  private var _isDeactivating: Bool = false
 
   private var cursorX: Double = 0
   private var cursorY: Double = 0
@@ -111,8 +117,19 @@ class EditorTextInputView: UIView, UITextInput {
 
   func deactivate() {
     DispatchQueue.main.async { [weak self] in
+      self?._isDeactivating = true
       self?.resignFirstResponder()
+      self?._isDeactivating = false
     }
+  }
+
+  @discardableResult
+  override func resignFirstResponder() -> Bool {
+    let result = super.resignFirstResponder()
+    if result && !_isDeactivating {
+      onFocusLost?()
+    }
+    return result
   }
 
   func updateCursor(x: Double, y: Double, height: Double) {

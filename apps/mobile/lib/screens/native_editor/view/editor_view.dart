@@ -75,6 +75,7 @@ class EditorView extends HookWidget {
     final uploadManager = useMemoized(UploadManager.new);
     final suppressScrollbarShow = useValueNotifier(false);
     final suppressScrollbarTimer = useRef<Timer?>(null);
+    final titleHeaderHeight = useRef<double>(0);
 
     useEffect(() => uploadManager.dispose, []);
 
@@ -152,15 +153,32 @@ class EditorView extends HookWidget {
 
     useEffect(() {
       final subscription = keyboard.onHeightChange.listen((double height) {
+        final wasVisible = isKeyboardVisible.value;
         if (height > 0) {
           keyboardHeight.value = height;
           bottomToolbarMode.value = BottomToolbarMode.hidden;
-        } else {
-          if (!titleFocusNode.hasFocus && !subtitleFocusNode.hasFocus && keyboardType.value != KeyboardType.hardware) {
-            focusController.onKeyboardHidden();
-          }
         }
         isKeyboardVisible.value = height > 0;
+
+        if (!wasVisible && height > 0) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!scrollController.hasClients) {
+              return;
+            }
+            final layout = controller.state.layout;
+            final cursor = controller.state.cursor;
+            if (layout == null || cursor == null || !cursor.show || isLongPressing.value) {
+              return;
+            }
+            final horizontalPadding = layout.isPaginated ? 40.0 : 0.0;
+            EditorScrollBehavior(
+              scrollController: scrollController,
+              horizontalScrollController: horizontalScrollController,
+              horizontalPadding: horizontalPadding,
+              titleHeaderHeight: titleHeaderHeight.value,
+            ).scrollToCursor(cursor, layout);
+          });
+        }
       });
       return subscription.cancel;
     }, []);
@@ -208,8 +226,6 @@ class EditorView extends HookWidget {
         state.state.isFocused,
       ],
     );
-
-    final titleHeaderHeight = useRef<double>(0);
 
     useEffect(() {
       if (cursor != null && cursor.show) {
