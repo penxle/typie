@@ -916,9 +916,29 @@ impl Runtime {
                 .map(|s| s.stats.clone())
                 .unwrap_or_default();
 
+            let selection = self.selection();
+            let collapsed = selection.is_collapsed();
+
+            let (from_handle, to_handle) = if collapsed {
+                (None, None)
+            } else {
+                let ctx = NavigationContext::new(&self.state.doc);
+                let (from, to) = selection
+                    .as_sorted(&self.state.doc)
+                    .map(|(f, t)| (f, t))
+                    .unwrap_or((selection.anchor, selection.head));
+                let from_handle = Cursor::selection_handle_bounds(&ctx, &self.pages, from)
+                    .map(|(page_idx, bounds)| SelectionHandleBounds { page_idx, bounds });
+                let to_handle = Cursor::selection_handle_bounds(&ctx, &self.pages, to)
+                    .map(|(page_idx, bounds)| SelectionHandleBounds { page_idx, bounds });
+                (from_handle, to_handle)
+            };
+
             cmds.push(Cmd::SelectionChanged {
                 stats,
-                collapsed: self.selection().is_collapsed(),
+                collapsed,
+                from_handle,
+                to_handle,
             });
             self.pending.selection = false;
         }

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:typie/screens/native_editor/cursor.dart';
 import 'package:typie/screens/native_editor/external/models.dart';
 import 'package:typie/screens/native_editor/fonts.dart';
+import 'package:typie/screens/native_editor/selection_handle.dart';
 import 'package:typie/screens/native_editor/state/editor_state.dart';
 
 void handleDocChanged(EditorController controller, Map<String, dynamic> cmd) {
@@ -75,7 +76,13 @@ void handleMarksChanged(EditorController controller, Map<String, dynamic> cmd) {
 
 void handleSelectionChanged(EditorController controller, Map<String, dynamic> cmd) {
   final stats = cmd['stats'] as Map<String, dynamic>;
-  controller.updateState((state) => state.copyWith(selectionStats: stats));
+  final fromHandleMap = cmd['fromHandle'] as Map<String, dynamic>?;
+  final toHandleMap = cmd['toHandle'] as Map<String, dynamic>?;
+
+  final fromHandle = fromHandleMap != null ? SelectionHandleInfo.fromMap(fromHandleMap) : null;
+  final toHandle = toHandleMap != null ? SelectionHandleInfo.fromMap(toHandleMap) : null;
+
+  controller.updateState((state) => state.copyWith(selectionStats: stats, fromHandle: fromHandle, toHandle: toHandle));
 }
 
 void handleExternalElements(EditorController controller, Map<String, dynamic> cmd) {

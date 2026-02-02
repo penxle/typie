@@ -488,6 +488,14 @@ impl LineElement {
     }
 
     fn cursor_bounds_internal(&self, position: &Position) -> Option<Rect> {
+        self.bounds_internal(position, self.metric.top, self.metric.height)
+    }
+
+    fn selection_handle_bounds_internal(&self, position: &Position) -> Option<Rect> {
+        self.bounds_internal(position, 0.0, self.metric.height + self.metric.leading)
+    }
+
+    fn bounds_internal(&self, position: &Position, top: f32, height: f32) -> Option<Rect> {
         let position = if let Some(preedit) = &self.preedit
             && preedit.node_id == self.block_id
         {
@@ -505,9 +513,9 @@ impl LineElement {
         if self.metric.clusters.is_empty() {
             return Some(Rect::new(
                 self.metric.left,
-                self.metric.top,
+                top,
                 0.0,
-                self.metric.height,
+                height,
             ));
         }
 
@@ -518,9 +526,9 @@ impl LineElement {
             {
                 Some(Rect::new(
                     self.metric.left + last.x + last.width,
-                    self.metric.top,
+                    top,
                     0.0,
-                    self.metric.height,
+                    height,
                 ))
             } else {
                 None
@@ -531,9 +539,9 @@ impl LineElement {
             if offset >= cluster.start_offset && offset < cluster.end_offset {
                 return Some(Rect::new(
                     self.metric.left + cluster.x,
-                    self.metric.top,
+                    top,
                     0.0,
-                    self.metric.height,
+                    height,
                 ));
             }
         }
@@ -571,6 +579,10 @@ impl LineElement {
 impl CursorNavigable for LineElement {
     fn cursor_bounds(&self, _ctx: &NavigationContext, position: &Position) -> Option<Rect> {
         self.cursor_bounds_internal(position)
+    }
+
+    fn selection_handle_bounds(&self, _ctx: &NavigationContext, position: &Position) -> Option<Rect> {
+        self.selection_handle_bounds_internal(position)
     }
 
     fn navigate_left(

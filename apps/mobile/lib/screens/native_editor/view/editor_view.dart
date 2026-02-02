@@ -313,6 +313,8 @@ class EditorView extends HookWidget {
                     controller.dispatch({'type': 'navigate', 'direction': 'documentStart', 'extend': false});
                   },
                   onTitleHeaderHeightChanged: (height) => titleHeaderHeight.value = height,
+                  fromHandle: state.state.fromHandle,
+                  toHandle: state.state.toHandle,
                 ),
                 Positioned.fill(
                   child: EditorInputView(

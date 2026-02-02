@@ -347,4 +347,51 @@ impl Runtime {
         self.reset_pointer();
         effects
     }
+
+    pub(crate) fn handle_extend_selection_to(
+        &mut self,
+        anchor_page_idx: usize,
+        anchor_x: f32,
+        anchor_y: f32,
+        head_page_idx: usize,
+        head_x: f32,
+        head_y: f32,
+    ) -> Vec<Effect> {
+        let Some(anchor_page) = self.pages.get(anchor_page_idx) else {
+            return vec![];
+        };
+        let Some(head_page) = self.pages.get(head_page_idx) else {
+            return vec![];
+        };
+
+        let ctx = NavigationContext::new(&self.state.doc);
+
+        let Some(anchor_hit) = Cursor::hit_test_drag(&ctx, anchor_page, anchor_x, anchor_y) else {
+            return vec![];
+        };
+        let Some(head_hit) = Cursor::hit_test_drag(&ctx, head_page, head_x, head_y) else {
+            return vec![];
+        };
+
+        if !head_hit.is_collapsed() {
+            return vec![];
+        }
+
+        let selection = self.state.selection;
+        let new_selection = Selection::new(anchor_hit.head, head_hit.head);
+
+        if new_selection.is_collapsed() {
+            return vec![];
+        }
+
+        if selection != new_selection {
+            self.transact(move |tr| {
+                tr.set_selection(new_selection);
+                tr.set_preferred_x(None);
+                Ok(true)
+            })
+        } else {
+            vec![]
+        }
+    }
 }
