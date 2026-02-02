@@ -66,10 +66,10 @@
   ];
 
   const blockquoteVariants = [
-    { label: '왼쪽 선', value: 'left-line' as const },
-    { label: '왼쪽 따옴표', value: 'left-quote' as const },
-    { label: '보낸 메시지', value: 'message-sent' as const },
-    { label: '받은 메시지', value: 'message-received' as const },
+    { label: '왼쪽 선', value: 'left_line' as const },
+    { label: '왼쪽 따옴표', value: 'left_quote' as const },
+    { label: '보낸 메시지', value: 'message_sent' as const },
+    { label: '받은 메시지', value: 'message_received' as const },
   ];
 </script>
 

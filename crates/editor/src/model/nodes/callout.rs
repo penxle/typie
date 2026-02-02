@@ -16,7 +16,7 @@ const PADDING_Y: f32 = 16.0;
 pub const CALLOUT_BORDER_RADIUS: f32 = 8.0;
 pub const CALLOUT_BORDER_WIDTH: f32 = 1.0;
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, Codec)]
 #[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 #[serde(rename_all = "snake_case")]
 pub enum CalloutVariant {
@@ -27,44 +27,38 @@ pub enum CalloutVariant {
     Danger,
 }
 
-impl CalloutVariant {
-    pub fn from_str(s: &str) -> Self {
-        match s {
-            "success" => CalloutVariant::Success,
-            "warning" => CalloutVariant::Warning,
-            "danger" => CalloutVariant::Danger,
-            _ => CalloutVariant::Info,
-        }
-    }
-
-    pub fn as_str(&self) -> &'static str {
-        match self {
+impl std::fmt::Display for CalloutVariant {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
             CalloutVariant::Info => "info",
             CalloutVariant::Success => "success",
             CalloutVariant::Warning => "warning",
             CalloutVariant::Danger => "danger",
-        }
+        };
+        f.write_str(s)
     }
+}
 
+impl std::str::FromStr for CalloutVariant {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
+            "success" => CalloutVariant::Success,
+            "warning" => CalloutVariant::Warning,
+            "danger" => CalloutVariant::Danger,
+            _ => CalloutVariant::Info,
+        })
+    }
+}
+
+impl CalloutVariant {
     pub fn next(&self) -> Self {
         match self {
             CalloutVariant::Info => CalloutVariant::Success,
             CalloutVariant::Success => CalloutVariant::Warning,
             CalloutVariant::Warning => CalloutVariant::Danger,
             CalloutVariant::Danger => CalloutVariant::Info,
-        }
-    }
-}
-
-impl crate::model::Codec for CalloutVariant {
-    fn to_value(&self) -> Option<loro::LoroValue> {
-        Some(loro::LoroValue::String(self.as_str().to_string().into()))
-    }
-
-    fn from_value(value: loro::LoroValue) -> anyhow::Result<Self> {
-        match value {
-            loro::LoroValue::String(s) => Ok(CalloutVariant::from_str(&s)),
-            _ => anyhow::bail!("value not string"),
         }
     }
 }
@@ -81,7 +75,7 @@ impl NodeHtmlCodec for CalloutNode {
         Some(
             DomSpec::el("div")
                 .attr("class", "callout")
-                .attr("data-variant", self.variant.as_str())
+                .attr("data-variant", self.variant.to_string())
                 .hole(),
         )
     }
@@ -95,7 +89,7 @@ impl NodeHtmlCodec for CalloutNode {
                 let variant = elem
                     .value()
                     .attr("data-variant")
-                    .map(CalloutVariant::from_str)
+                    .and_then(|s| s.parse().ok())
                     .unwrap_or_default();
                 Some(Node::Callout(CalloutNode { variant }))
             },

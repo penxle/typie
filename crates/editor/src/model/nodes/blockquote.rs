@@ -23,9 +23,9 @@ const MESSAGE_PADDING_Y: f32 = 8.0;
 const MESSAGE_MAX_WIDTH_RATIO: f32 = 0.8;
 const MESSAGE_MIN_WIDTH: f32 = 40.0;
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, Codec)]
 #[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "snake_case")]
 pub enum BlockquoteVariant {
     #[default]
     LeftLine,
@@ -34,36 +34,28 @@ pub enum BlockquoteVariant {
     MessageReceived,
 }
 
-impl BlockquoteVariant {
-    pub fn from_str(s: &str) -> Self {
-        match s {
-            "left-quote" => BlockquoteVariant::LeftQuote,
-            "message-sent" => BlockquoteVariant::MessageSent,
-            "message-received" => BlockquoteVariant::MessageReceived,
-            _ => BlockquoteVariant::LeftLine,
-        }
-    }
-
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            BlockquoteVariant::LeftLine => "left-line",
-            BlockquoteVariant::LeftQuote => "left-quote",
-            BlockquoteVariant::MessageSent => "message-sent",
-            BlockquoteVariant::MessageReceived => "message-received",
-        }
+impl std::fmt::Display for BlockquoteVariant {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            BlockquoteVariant::LeftLine => "left_line",
+            BlockquoteVariant::LeftQuote => "left_quote",
+            BlockquoteVariant::MessageSent => "message_sent",
+            BlockquoteVariant::MessageReceived => "message_received",
+        };
+        f.write_str(s)
     }
 }
 
-impl crate::model::Codec for BlockquoteVariant {
-    fn to_value(&self) -> Option<loro::LoroValue> {
-        Some(loro::LoroValue::String(self.as_str().to_string().into()))
-    }
+impl std::str::FromStr for BlockquoteVariant {
+    type Err = ();
 
-    fn from_value(value: loro::LoroValue) -> anyhow::Result<Self> {
-        match value {
-            loro::LoroValue::String(s) => Ok(BlockquoteVariant::from_str(&s)),
-            _ => anyhow::bail!("value not string"),
-        }
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
+            "left_quote" => BlockquoteVariant::LeftQuote,
+            "message_sent" => BlockquoteVariant::MessageSent,
+            "message_received" => BlockquoteVariant::MessageReceived,
+            _ => BlockquoteVariant::LeftLine,
+        })
     }
 }
 
@@ -78,7 +70,7 @@ impl NodeHtmlCodec for BlockquoteNode {
     fn to_dom(&self) -> Option<DomSpec> {
         Some(
             DomSpec::el("blockquote")
-                .attr("data-variant", self.variant.as_str())
+                .attr("data-variant", self.variant.to_string())
                 .hole(),
         )
     }
@@ -92,7 +84,7 @@ impl NodeHtmlCodec for BlockquoteNode {
                 let variant = elem
                     .value()
                     .attr("data-variant")
-                    .map(BlockquoteVariant::from_str)
+                    .and_then(|s| s.parse().ok())
                     .unwrap_or_default();
                 Some(Node::Blockquote(BlockquoteNode { variant }))
             },
