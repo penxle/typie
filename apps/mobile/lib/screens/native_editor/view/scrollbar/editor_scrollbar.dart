@@ -44,7 +44,7 @@ class EditorScrollbar extends HookWidget {
 
     final rebuildTrigger = useState(0);
 
-    final safePadding = MediaQuery.of(context).padding;
+    final safePadding = MediaQuery.paddingOf(context);
 
     final dragStartThumbTop = useRef<double>(0);
     final dragStartY = useRef<double>(0);
@@ -72,14 +72,10 @@ class EditorScrollbar extends HookWidget {
       }
     }
 
-    void triggerRebuild() {
-      rebuildTrigger.value++;
-    }
-
     useEffect(() {
       void onScroll() {
         if (!isDraggingV.value) {
-          triggerRebuild();
+          rebuildTrigger.value++;
         }
         if (suppressShowOnScroll?.value != true) {
           showTemporarily();
@@ -88,7 +84,7 @@ class EditorScrollbar extends HookWidget {
 
       void onHorizontalScroll() {
         if (!isDraggingH.value) {
-          triggerRebuild();
+          rebuildTrigger.value++;
         }
         if (suppressShowOnScroll?.value != true) {
           showTemporarily();
@@ -99,7 +95,7 @@ class EditorScrollbar extends HookWidget {
       horizontalScrollController.addListener(onHorizontalScroll);
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        triggerRebuild();
+        rebuildTrigger.value++;
       });
 
       return () {
@@ -296,7 +292,7 @@ class EditorScrollbar extends HookWidget {
                   final newThumbTop = dragStartThumbTop.value + deltaY;
                   final ratio = ((newThumbTop - _trackPadding) / (trackHeight - thumbHeight)).clamp(0.0, 1.0);
                   scrollController.jumpTo(ratio * currentMaxExtent);
-                  triggerRebuild();
+                  rebuildTrigger.value++;
                 },
                 onPanEnd: (_) {
                   isDraggingV.value = false;
@@ -392,7 +388,7 @@ class EditorScrollbar extends HookWidget {
                   final newThumbLeft = dragStartThumbLeft.value + deltaX;
                   final ratio = ((newThumbLeft - _trackPadding) / (trackWidthH - thumbWidthH)).clamp(0.0, 1.0);
                   horizontalScrollController.jumpTo(ratio * currentMaxExtent);
-                  triggerRebuild();
+                  rebuildTrigger.value++;
                 },
                 onPanEnd: (_) {
                   isDraggingH.value = false;

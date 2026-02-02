@@ -91,46 +91,51 @@ class EditorCursor extends HookWidget {
 
   @override
   Widget build(BuildContext context) {
-    final controller = useAnimationController(duration: const Duration(milliseconds: 1000));
-    final prevPosition = useRef<(double, double)?>(null);
+    final isVisible = useState(true);
+    final blinkTimer = useRef<Timer?>(null);
+
+    final cursor = cursorInfo;
+    final shouldAnimate = cursor != null && cursor.show && isFocused;
+
+    void startBlinkTimer() {
+      blinkTimer.value?.cancel();
+      isVisible.value = true;
+      blinkTimer.value = Timer.periodic(const Duration(milliseconds: 500), (_) {
+        isVisible.value = !isVisible.value;
+      });
+    }
 
     useEffect(() {
-      unawaited(controller.repeat());
-      return null;
-    }, []);
-
-    useEffect(() {
-      final cursor = cursorInfo;
-      if (cursor == null) {
+      if (!shouldAnimate) {
+        blinkTimer.value?.cancel();
         return null;
       }
 
-      final currentPos = (cursor.x, cursor.y);
-      if (prevPosition.value != currentPos) {
-        prevPosition.value = currentPos;
-        controller.value = 0;
-        unawaited(controller.repeat());
+      startBlinkTimer();
+
+      return () {
+        blinkTimer.value?.cancel();
+      };
+    }, [shouldAnimate]);
+
+    useEffect(() {
+      if (cursor == null || !shouldAnimate) {
+        return null;
       }
+
+      startBlinkTimer();
 
       return null;
     }, [cursorInfo?.x, cursorInfo?.y]);
 
-    final cursor = cursorInfo;
-    if (cursor == null || !cursor.show || !isFocused) {
+    if (!shouldAnimate || !isVisible.value) {
       return const SizedBox.shrink();
     }
 
     return Positioned(
       left: cursor.x,
       top: cursor.y,
-      child: AnimatedBuilder(
-        animation: controller,
-        builder: (context, child) {
-          final opacity = controller.value < 0.5 ? 1.0 : 0.0;
-          return Opacity(opacity: opacity, child: child);
-        },
-        child: Container(width: 1, height: cursor.height, color: context.colors.textDefault),
-      ),
+      child: Container(width: 1, height: cursor.height, color: context.colors.textDefault),
     );
   }
 }

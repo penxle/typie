@@ -121,12 +121,14 @@ class PageList extends HookWidget {
     final verticalDirection = useRef<double>(0);
     final horizontalDirection = useRef<double>(0);
     final autoScrollViewSize = useRef<Size>(Size.zero);
+    final lastDispatchedPosition = useRef<(int, double, double)?>(null);
 
     void stopAutoScroll() {
       autoScrollTimer.value?.cancel();
       autoScrollTimer.value = null;
       verticalDirection.value = 0;
       horizontalDirection.value = 0;
+      lastDispatchedPosition.value = null;
     }
 
     void startAutoScroll() {
@@ -195,6 +197,12 @@ class PageList extends HookWidget {
           final horizontalPadding = layout.isPaginated ? _pagePadding : 0.0;
           final pointerX = scrolledX + horizontalScrollController.offset - horizontalPadding;
 
+          final currentPosition = (pageIdx, pointerX, localY);
+          if (lastDispatchedPosition.value == currentPosition) {
+            return;
+          }
+          lastDispatchedPosition.value = currentPosition;
+
           editor
             ..dispatch({
               'type': 'pointerDown',
@@ -254,7 +262,7 @@ class PageList extends HookWidget {
                   bottom: layout.isPaginated ? _pagePadding : 200,
                 ),
                 itemCount: layout.pageCount + 1,
-                cacheExtent: 1000,
+                cacheExtent: 200,
                 physics: isSelecting ? const NeverScrollableScrollPhysics() : const AlwaysScrollableScrollPhysics(),
                 itemBuilder: (context, index) {
                   if (index == 0) {

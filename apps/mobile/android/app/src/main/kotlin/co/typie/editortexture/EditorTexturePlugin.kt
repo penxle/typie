@@ -15,6 +15,10 @@ class EditorTexturePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
   private lateinit var textureRegistry: TextureRegistry
   private val textures = mutableMapOf<Long, EditorTexture>()
 
+  companion object {
+    private const val MAX_TEXTURES = 5
+  }
+
   override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
     channel = MethodChannel(binding.binaryMessenger, "co.typie.editor_texture")
     channel.setMethodCallHandler(this)
@@ -44,6 +48,11 @@ class EditorTexturePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     val height = call.argument<Int>("height") ?: run {
       result.error("INVALID_ARGS", "Missing height", null)
       return
+    }
+
+    while (textures.size >= MAX_TEXTURES) {
+      val oldestId = textures.keys.minOrNull() ?: break
+      textures.remove(oldestId)?.dispose()
     }
 
     val entry = textureRegistry.createSurfaceTexture()
@@ -227,6 +236,8 @@ class EditorTexture(
   private fun createBuffer(width: Int, height: Int) {
     val size = width * height * 4
     if (size > bufferCapacity) {
+      frontBuffer = null
+      backBuffer = null
       frontBuffer = ByteBuffer.allocateDirect(size).order(ByteOrder.nativeOrder())
       backBuffer = ByteBuffer.allocateDirect(size).order(ByteOrder.nativeOrder())
       bufferCapacity = size
