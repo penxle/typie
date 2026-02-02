@@ -54,7 +54,6 @@ class EditorView extends HookWidget {
     final scrollController = useScrollController();
     final horizontalScrollController = useScrollController();
     final inputKey = useMemoized(GlobalKey<EditorInputViewState>.new);
-    final inputCausedCursorChange = useRef(false);
     final isComposing = useRef(false);
     final isLongPressing = useRef(false);
     final deleteStartTime = useRef<DateTime?>(null);
@@ -88,6 +87,7 @@ class EditorView extends HookWidget {
             isComposing.value = false;
             controller.dispatch({'type': 'commitPreedit'});
           }
+          inputKey.currentState?.resetInputContext();
         },
       ),
       [controller],
@@ -136,7 +136,10 @@ class EditorView extends HookWidget {
       };
     }, [focusController]);
 
-    final keyboardHandler = useMemoized(() => EditorKeyboardHandler(dispatch: controller.dispatch), [controller]);
+    final keyboardHandler = useMemoized(
+      () => EditorKeyboardHandler(dispatch: controller.dispatch, commitComposing: focusController.onCommitComposing),
+      [controller, focusController],
+    );
 
     final widthRef = useRef(width);
     final heightRef = useRef(height);
@@ -255,12 +258,6 @@ class EditorView extends HookWidget {
           });
         }
       }
-
-      if (inputCausedCursorChange.value) {
-        inputCausedCursorChange.value = false;
-      } else if (!isComposing.value) {
-        focusController.resetInputContext();
-      }
       return null;
     }, [cursor]);
 
@@ -283,6 +280,7 @@ class EditorView extends HookWidget {
       dispatch: controller.dispatch,
       requestFocus: focusController.requestFocus,
       clearFocus: focusController.clearFocus,
+      commitComposing: focusController.onCommitComposing,
       child: Column(
         children: [
           Expanded(
@@ -320,12 +318,10 @@ class EditorView extends HookWidget {
                   child: EditorInputView(
                     key: inputKey,
                     onInsertText: (text) {
-                      inputCausedCursorChange.value = true;
                       deleteStartTime.value = null;
                       controller.dispatch({'type': 'input', 'text': text});
                     },
                     onDeleteBackward: () {
-                      inputCausedCursorChange.value = true;
                       final now = DateTime.now();
                       final lastSignal = lastDeleteSignal.value;
                       lastDeleteSignal.value = now;
@@ -348,19 +344,16 @@ class EditorView extends HookWidget {
                       }
                     },
                     onSetMarkedText: (text) {
-                      inputCausedCursorChange.value = true;
                       isComposing.value = true;
                       controller.dispatch({'type': 'compositionUpdate', 'text': text});
                     },
                     onUnmarkText: () {
-                      inputCausedCursorChange.value = true;
                       if (isComposing.value) {
                         isComposing.value = false;
                         controller.dispatch({'type': 'commitPreedit'});
                       }
                     },
                     onCancelMarkedText: () {
-                      inputCausedCursorChange.value = true;
                       isComposing.value = false;
                       controller.dispatch({'type': 'compositionEnd'});
                     },

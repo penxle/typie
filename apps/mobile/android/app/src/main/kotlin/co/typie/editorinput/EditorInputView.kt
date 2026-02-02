@@ -69,6 +69,8 @@ class EditorInputNativeView(
   private var cursorY = 0.0
   private var cursorHeight = 20.0
   private var lastDeleteTime = 0L
+  private var batchEditDepth = 0
+  private var pendingRestartInput = false
 
   private val inputMethodManager: InputMethodManager
     get() = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
@@ -86,6 +88,7 @@ class EditorInputNativeView(
       isComposing = false
       composingText = ""
       channel.invokeMethod("unmarkText", emptyMap<String, Any>())
+      scheduleRestartInput()
     }
   }
 
@@ -94,6 +97,14 @@ class EditorInputNativeView(
       isComposing = false
       composingText = ""
       channel.invokeMethod("cancelMarkedText", emptyMap<String, Any>())
+    }
+  }
+
+  private fun scheduleRestartInput() {
+    if (batchEditDepth > 0) {
+      pendingRestartInput = true
+    } else {
+      inputMethodManager.restartInput(this)
     }
   }
 
@@ -127,7 +138,6 @@ class EditorInputNativeView(
 
   fun resetInputContext() {
     commitComposingState()
-    inputMethodManager.restartInput(this)
   }
 
   override fun onCheckIsTextEditor(): Boolean = true
@@ -150,8 +160,23 @@ class EditorInputNativeView(
     outAttrs.imeOptions = EditorInfo.IME_FLAG_NO_FULLSCREEN or EditorInfo.IME_ACTION_NONE
 
     return object : BaseInputConnection(this, false) {
+      override fun beginBatchEdit(): Boolean {
+        batchEditDepth++
+        return true
+      }
+
+      override fun endBatchEdit(): Boolean {
+        batchEditDepth--
+        if (batchEditDepth == 0 && pendingRestartInput) {
+          pendingRestartInput = false
+          inputMethodManager.restartInput(this@EditorInputNativeView)
+        }
+        return true
+      }
+
       override fun commitText(text: CharSequence?, newCursorPosition: Int): Boolean {
         val str = text?.toString().orEmpty()
+        val wasComposing = isComposing
 
         if (isComposing) {
           isComposing = false
@@ -162,6 +187,11 @@ class EditorInputNativeView(
         if (str.isNotEmpty()) {
           insertTextOrNewline(str)
         }
+
+        if (wasComposing) {
+          scheduleRestartInput()
+        }
+
         return true
       }
 
@@ -187,6 +217,7 @@ class EditorInputNativeView(
           isComposing = false
           composingText = ""
           channel.invokeMethod("unmarkText", emptyMap<String, Any>())
+          scheduleRestartInput()
         }
         return true
       }

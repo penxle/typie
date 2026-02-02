@@ -137,7 +137,10 @@ class EditorTextInputView: UIView, UITextInput {
   }
 
   func resetInputContext() {
-    _markedText = nil
+    if _markedText != nil {
+      _markedText = nil
+      onUnmarkText?()
+    }
     inputDelegate?.textWillChange(self)
     inputDelegate?.textDidChange(self)
   }

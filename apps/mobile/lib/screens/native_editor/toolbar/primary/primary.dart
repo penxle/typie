@@ -91,6 +91,7 @@ class NativeEditorPrimaryToolbar extends HookWidget {
             icon: LucideLightIcons.chevron_left,
             isRepeatable: true,
             onTap: () {
+              scope.commitComposing();
               scope.requestFocus();
               scope.dispatch({'type': 'navigate', 'direction': 'left', 'extend': false});
             },
@@ -99,6 +100,7 @@ class NativeEditorPrimaryToolbar extends HookWidget {
             icon: LucideLightIcons.chevron_right,
             isRepeatable: true,
             onTap: () {
+              scope.commitComposing();
               scope.requestFocus();
               scope.dispatch({'type': 'navigate', 'direction': 'right', 'extend': false});
             },
