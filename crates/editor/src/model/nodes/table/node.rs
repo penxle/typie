@@ -1,4 +1,4 @@
-use crate::layout::elements::TableBorderElement;
+use crate::layout::elements::{SplitEdges, TableBorderElement};
 use crate::layout::{Element, Layout, LayoutContext, LayoutNode, PageBreakPolicy, PositionedNode};
 use crate::model::Node;
 use crate::model::html::{DomSpec, NodeHtmlCodec, NodeParseRule};
@@ -6,7 +6,6 @@ use crate::types::{BoxConstraints, Point, Size};
 use macros::Codec;
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;
-use std::rc::Rc;
 
 use super::{TABLE_BORDER_WIDTH, calculate_col_widths};
 
@@ -229,28 +228,16 @@ impl Layout for TableNode {
             col_count,
             row_heights,
             col_widths,
-        );
-
-        let border_node = LayoutNode {
-            size: table_size,
-            element: Some(Element::TableBorder(border_element)),
-            children: None,
-            page_break_policy: PageBreakPolicy::Auto,
-            render_hints: Default::default(),
-            scope_id: None,
-        };
-
-        children.insert(
+            SplitEdges::default(),
+            0.0,
+            x_offset,
             0,
-            PositionedNode {
-                position: Point::new(x_offset, 0.0),
-                node: Rc::new(border_node),
-            },
+            rows.len(),
         );
 
         LayoutNode {
             size: Size::new(max_width, y),
-            element: None,
+            element: Some(Element::TableBorder(border_element)),
             children: Some(children),
             page_break_policy: PageBreakPolicy::Auto,
             render_hints: Default::default(),
