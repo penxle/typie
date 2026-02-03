@@ -50,6 +50,7 @@ impl Runtime {
 #[cfg(test)]
 mod tests {
     use crate::runtime::Message;
+    use crate::types::Affinity;
 
     #[test]
     fn auto_surround_parentheses_single_block() {
@@ -145,7 +146,7 @@ mod tests {
                 }
                 paragraph {}
             }
-            selection { (p, 3) }
+            selection { (p, 3, Affinity::Upstream) }
         };
 
         assert_state_eq!(rt.state(), expected);
@@ -176,7 +177,7 @@ mod tests {
                 }
                 paragraph {}
             }
-            selection { (p, 7) }
+            selection { (p, 7, Affinity::Upstream) }
         };
 
         assert_state_eq!(rt.state(), expected);

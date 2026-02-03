@@ -561,6 +561,7 @@ mod tests {
     use crate::{
         model::*,
         runtime::{Effect, Message},
+        types::Affinity,
     };
 
     #[test]
@@ -1969,7 +1970,7 @@ mod tests {
                     }
                 }
             }
-            selection { (p, 4) }
+            selection { (p, 4, Affinity::Upstream) }
         };
 
         assert_state_eq!(actual, expected);
