@@ -264,7 +264,11 @@ class EditorInputNativeView(
           }
           KeyEvent.KEYCODE_ENTER -> {
             commitComposingState()
-            channel.invokeMethod("performAction", mapOf("action" to "newline"))
+            if (event.isShiftPressed) {
+              channel.invokeMethod("shortcut", mapOf("action" to "insertHardBreak"))
+            } else {
+              channel.invokeMethod("performAction", mapOf("action" to "newline"))
+            }
             true
           }
           else -> super.sendKeyEvent(event)

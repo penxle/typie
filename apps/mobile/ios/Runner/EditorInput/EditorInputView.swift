@@ -202,6 +202,14 @@ class EditorTextInputView: UIView, UITextInput {
 
   var hasText: Bool { true }
 
+  private var isSoftKeyboardShiftActive: Bool {
+    guard let cls = NSClassFromString("UIKeyboardImpl") as? NSObject.Type,
+          let instance = cls.perform(NSSelectorFromString("activeInstance"))?.takeUnretainedValue() as? NSObject else {
+      return false
+    }
+    return instance.perform(NSSelectorFromString("isShifted")) != nil
+  }
+
   func insertText(_ text: String) {
     if _markedText != nil {
       _markedText = nil
@@ -209,7 +217,11 @@ class EditorTextInputView: UIView, UITextInput {
     }
 
     if text == "\n" {
-      onPerformAction?("newline")
+      if isSoftKeyboardShiftActive {
+        onShortcut?("insertHardBreak")
+      } else {
+        onPerformAction?("newline")
+      }
       return
     }
 
