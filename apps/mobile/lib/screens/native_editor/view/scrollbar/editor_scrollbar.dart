@@ -13,7 +13,8 @@ const _trackWidth = 12.0;
 const _thumbWidth = 8.0;
 const _indicatorHeight = 24.0;
 const _indicatorGap = 14.0;
-const _thumbHitPadding = 8.0;
+const _thumbHitPadding = 20.0;
+const _thumbHitWidth = 44.0;
 
 class EditorScrollbar extends HookWidget {
   const EditorScrollbar({
@@ -214,42 +215,6 @@ class EditorScrollbar extends HookWidget {
       return '${(scrollRatioV * 100).round()}%';
     }
 
-    bool isInThumbAreaV(double localY) {
-      final hitTop = thumbTop - _thumbHitPadding;
-      final hitBottom = thumbTop + thumbHeight + _thumbHitPadding;
-      return localY >= hitTop && localY <= hitBottom;
-    }
-
-    bool isInThumbAreaH(double localX) {
-      final hitLeft = thumbLeft - _thumbHitPadding;
-      final hitRight = thumbLeft + thumbWidthH + _thumbHitPadding;
-      return localX >= hitLeft && localX <= hitRight;
-    }
-
-    void handleTrackTapV(double localY) {
-      if (!scrollController.hasClients) {
-        return;
-      }
-      if (isInThumbAreaV(localY)) {
-        return;
-      }
-      final clickY = localY - _trackPadding;
-      final ratio = ((clickY - thumbHeight / 2) / (trackHeight - thumbHeight)).clamp(0.0, 1.0);
-      scrollController.jumpTo(ratio * maxScrollExtent);
-    }
-
-    void handleTrackTapH(double localX) {
-      if (!horizontalScrollController.hasClients) {
-        return;
-      }
-      if (isInThumbAreaH(localX)) {
-        return;
-      }
-      final clickX = localX - _trackPadding;
-      final ratio = ((clickX - thumbWidthH / 2) / (trackWidthH - thumbWidthH)).clamp(0.0, 1.0);
-      horizontalScrollController.jumpTo(ratio * horizontalMaxScrollExtent);
-    }
-
     return Stack(
       children: [
         if (hasVerticalScroll)
@@ -261,43 +226,50 @@ class EditorScrollbar extends HookWidget {
             child: AnimatedOpacity(
               opacity: isVisible.value || isDraggingV.value ? 1.0 : 0.0,
               duration: const Duration(milliseconds: 300),
+              child: IgnorePointer(
+                child: _VerticalScrollbarThumb(
+                  thumbTop: thumbTop,
+                  thumbHeight: thumbHeight,
+                  isDragging: isDraggingV.value,
+                ),
+              ),
+            ),
+          ),
+        if (hasVerticalScroll)
+          Positioned(
+            right: 0,
+            top: safeTop + thumbTop - _thumbHitPadding,
+            width: _thumbHitWidth,
+            height: thumbHeight + _thumbHitPadding * 2,
+            child: IgnorePointer(
+              ignoring: !isVisible.value && !isDraggingV.value,
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTapDown: (details) {
-                  if (isInThumbAreaV(details.localPosition.dy)) {
-                    isDraggingV.value = true;
-                    dragStartThumbTop.value = thumbTop;
-                    dragStartY.value = details.localPosition.dy;
-                    cancelHideTimer();
-                    isVisible.value = true;
-                  }
+                  isDraggingV.value = true;
+                  dragStartThumbTop.value = thumbTop;
+                  dragStartY.value = details.globalPosition.dy;
+                  cancelHideTimer();
+                  isVisible.value = true;
                 },
-                onTapUp: (details) {
-                  if (isDraggingV.value) {
-                    isDraggingV.value = false;
-                    scheduleHide();
-                  } else {
-                    handleTrackTapV(details.localPosition.dy);
-                  }
+                onTapUp: (_) {
+                  isDraggingV.value = false;
+                  scheduleHide();
                 },
-                onTapCancel: () {
-                  // Tap cancelled - likely transitioning to pan, keep state
-                },
+                onTapCancel: () {},
                 onPanStart: (details) {
-                  if (!isDraggingV.value && isInThumbAreaV(details.localPosition.dy)) {
-                    isDraggingV.value = true;
-                    dragStartThumbTop.value = thumbTop;
-                    dragStartY.value = details.localPosition.dy;
-                    cancelHideTimer();
-                    isVisible.value = true;
-                  }
+                  isDraggingV.value = true;
+                  dragStartThumbTop.value = thumbTop;
+                  dragStartY.value = details.globalPosition.dy;
+                  cancelHideTimer();
+                  isVisible.value = true;
                 },
                 onPanUpdate: (details) {
                   if (!isDraggingV.value || !scrollController.hasClients) {
                     return;
                   }
                   final currentMaxExtent = scrollController.position.maxScrollExtent;
-                  final deltaY = details.localPosition.dy - dragStartY.value;
+                  final deltaY = details.globalPosition.dy - dragStartY.value;
                   final newThumbTop = dragStartThumbTop.value + deltaY;
                   final ratio = ((newThumbTop - _trackPadding) / (trackHeight - thumbHeight)).clamp(0.0, 1.0);
                   scrollController.jumpTo(ratio * currentMaxExtent);
@@ -311,11 +283,6 @@ class EditorScrollbar extends HookWidget {
                   isDraggingV.value = false;
                   scheduleHide();
                 },
-                child: _VerticalScrollbarThumb(
-                  thumbTop: thumbTop,
-                  thumbHeight: thumbHeight,
-                  isDragging: isDraggingV.value,
-                ),
               ),
             ),
           ),
@@ -357,43 +324,50 @@ class EditorScrollbar extends HookWidget {
             child: AnimatedOpacity(
               opacity: isVisible.value || isDraggingH.value ? 1.0 : 0.0,
               duration: const Duration(milliseconds: 300),
+              child: IgnorePointer(
+                child: _HorizontalScrollbarThumb(
+                  thumbLeft: thumbLeft,
+                  thumbWidth: thumbWidthH,
+                  isDragging: isDraggingH.value,
+                ),
+              ),
+            ),
+          ),
+        if (hasHorizontalScroll)
+          Positioned(
+            left: safeLeft + safeBottom + thumbLeft - _thumbHitPadding,
+            bottom: 0,
+            width: thumbWidthH + _thumbHitPadding * 2,
+            height: _thumbHitWidth,
+            child: IgnorePointer(
+              ignoring: !isVisible.value && !isDraggingH.value,
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTapDown: (details) {
-                  if (isInThumbAreaH(details.localPosition.dx)) {
-                    isDraggingH.value = true;
-                    dragStartThumbLeft.value = thumbLeft;
-                    dragStartX.value = details.localPosition.dx;
-                    cancelHideTimer();
-                    isVisible.value = true;
-                  }
+                  isDraggingH.value = true;
+                  dragStartThumbLeft.value = thumbLeft;
+                  dragStartX.value = details.globalPosition.dx;
+                  cancelHideTimer();
+                  isVisible.value = true;
                 },
-                onTapUp: (details) {
-                  if (isDraggingH.value) {
-                    isDraggingH.value = false;
-                    scheduleHide();
-                  } else {
-                    handleTrackTapH(details.localPosition.dx);
-                  }
+                onTapUp: (_) {
+                  isDraggingH.value = false;
+                  scheduleHide();
                 },
-                onTapCancel: () {
-                  // Tap cancelled - likely transitioning to pan, keep state
-                },
+                onTapCancel: () {},
                 onPanStart: (details) {
-                  if (!isDraggingH.value && isInThumbAreaH(details.localPosition.dx)) {
-                    isDraggingH.value = true;
-                    dragStartThumbLeft.value = thumbLeft;
-                    dragStartX.value = details.localPosition.dx;
-                    cancelHideTimer();
-                    isVisible.value = true;
-                  }
+                  isDraggingH.value = true;
+                  dragStartThumbLeft.value = thumbLeft;
+                  dragStartX.value = details.globalPosition.dx;
+                  cancelHideTimer();
+                  isVisible.value = true;
                 },
                 onPanUpdate: (details) {
                   if (!isDraggingH.value || !horizontalScrollController.hasClients) {
                     return;
                   }
                   final currentMaxExtent = horizontalScrollController.position.maxScrollExtent;
-                  final deltaX = details.localPosition.dx - dragStartX.value;
+                  final deltaX = details.globalPosition.dx - dragStartX.value;
                   final newThumbLeft = dragStartThumbLeft.value + deltaX;
                   final ratio = ((newThumbLeft - _trackPadding) / (trackWidthH - thumbWidthH)).clamp(0.0, 1.0);
                   horizontalScrollController.jumpTo(ratio * currentMaxExtent);
@@ -407,11 +381,6 @@ class EditorScrollbar extends HookWidget {
                   isDraggingH.value = false;
                   scheduleHide();
                 },
-                child: _HorizontalScrollbarThumb(
-                  thumbLeft: thumbLeft,
-                  thumbWidth: thumbWidthH,
-                  isDragging: isDraggingH.value,
-                ),
               ),
             ),
           ),
