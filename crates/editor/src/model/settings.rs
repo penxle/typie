@@ -23,14 +23,7 @@ pub enum LayoutMode {
 
 impl Default for LayoutMode {
     fn default() -> Self {
-        Self::Paginated {
-            page_width: 794.0,
-            page_height: 1123.0,
-            page_margin_top: 96.0,
-            page_margin_bottom: 96.0,
-            page_margin_left: 96.0,
-            page_margin_right: 96.0,
-        }
+        Self::Continuous { max_width: 600.0 }
     }
 }
 
