@@ -39,7 +39,6 @@ export class Lock {
       const remainingTime = Math.ceil((deadline - Date.now()) / 1000);
       if (remainingTime <= 0) break;
 
-      await redis.del(this.#waitKey);
       await redis.blpop(this.#waitKey, Math.min(remainingTime, 1));
     }
 
@@ -66,6 +65,7 @@ export class Lock {
       if redis.call("get", KEYS[1]) == ARGV[1] then
         redis.call("del", KEYS[1])
         redis.call("rpush", KEYS[2], "1")
+        redis.call("expire", KEYS[2], 30)
         return 1
       else
         return 0
