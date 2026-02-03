@@ -45,7 +45,6 @@ class PageList extends HookWidget {
     this.fromHandle,
     this.toHandle,
     this.onRenderComplete,
-    this.syncCursorWithRender = false,
     super.key,
   });
 
@@ -77,7 +76,6 @@ class PageList extends HookWidget {
   final SelectionHandleInfo? fromHandle;
   final SelectionHandleInfo? toHandle;
   final VoidCallback? onRenderComplete;
-  final bool syncCursorWithRender;
 
   @override
   Widget build(BuildContext context) {
@@ -481,7 +479,6 @@ class PageList extends HookWidget {
                         isFocused: isFocused,
                         lineHighlightEnabled: lineHighlightEnabled,
                         onRenderComplete: onRenderComplete,
-                        syncCursorWithRender: syncCursorWithRender,
                       ),
                   ],
                 ),
@@ -837,7 +834,6 @@ class _PageSlot extends HookWidget {
     required this.isFocused,
     required this.lineHighlightEnabled,
     this.onRenderComplete,
-    this.syncCursorWithRender = false,
     super.key,
   });
 
@@ -853,7 +849,6 @@ class _PageSlot extends HookWidget {
   final bool isFocused;
   final bool lineHighlightEnabled;
   final VoidCallback? onRenderComplete;
-  final bool syncCursorWithRender;
 
   bool _computeVisibility() {
     if (!scrollController.hasClients) {
@@ -912,7 +907,6 @@ class _PageSlot extends HookWidget {
       pageMarginLeft: margins?.pageMarginLeft ?? 0,
       pageMarginRight: margins?.pageMarginRight ?? 0,
       onRenderComplete: onRenderComplete,
-      syncCursorWithRender: syncCursorWithRender,
     );
   }
 }
