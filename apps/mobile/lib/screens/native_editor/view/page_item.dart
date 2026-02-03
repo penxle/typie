@@ -27,7 +27,6 @@ class PageItem extends HookWidget {
     this.pageMarginLeft = 0,
     this.pageMarginRight = 0,
     this.onRenderComplete,
-    this.syncCursorWithRender = false,
     super.key,
   });
 
@@ -46,7 +45,6 @@ class PageItem extends HookWidget {
   final double pageMarginLeft;
   final double pageMarginRight;
   final VoidCallback? onRenderComplete;
-  final bool syncCursorWithRender;
 
   @override
   Widget build(BuildContext context) {
@@ -105,11 +103,11 @@ class PageItem extends HookWidget {
     }, [renderVersion]);
 
     useEffect(() {
-      if (!syncCursorWithRender || !renderInProgress.value) {
+      if (!renderInProgress.value) {
         displayCursor.value = cursorInfo;
       }
       return null;
-    }, [cursorInfo, syncCursorWithRender]);
+    }, [cursorInfo]);
 
     final hasTexture = textureId.value != null && textureSize.value != null;
 
@@ -128,37 +126,40 @@ class PageItem extends HookWidget {
         : null;
 
     if (hasTexture) {
-      return Padding(
-        padding: EdgeInsets.only(bottom: bottomGap),
-        child: DecoratedBox(
-          decoration: pageDecoration ?? const BoxDecoration(),
-          child: SizedBox.fromSize(
-            size: textureSize.value,
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                LineHighlight(cursorInfo: displayCursor.value, isFocused: isFocused, enabled: lineHighlightEnabled),
-                SizedBox.expand(child: Texture(textureId: textureId.value!)),
-                EditorCursor(cursorInfo: displayCursor.value, isFocused: isFocused),
-                ExternalElementOverlay(pageIndex: pageIndex),
-                if (isPaginated)
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: CustomPaint(
-                        painter: _CropMarkerPainter(
-                          marginTop: pageMarginTop,
-                          marginBottom: pageMarginBottom,
-                          marginLeft: pageMarginLeft,
-                          marginRight: pageMarginRight,
-                          color: context.colors.textDefault.withValues(alpha: 0.15),
-                        ),
-                      ),
+      Widget content = SizedBox.fromSize(
+        size: textureSize.value,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            LineHighlight(cursorInfo: displayCursor.value, isFocused: isFocused, enabled: lineHighlightEnabled),
+            SizedBox.expand(child: Texture(textureId: textureId.value!)),
+            EditorCursor(cursorInfo: displayCursor.value, isFocused: isFocused),
+            ExternalElementOverlay(pageIndex: pageIndex),
+            if (isPaginated)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: CustomPaint(
+                    painter: _CropMarkerPainter(
+                      marginTop: pageMarginTop,
+                      marginBottom: pageMarginBottom,
+                      marginLeft: pageMarginLeft,
+                      marginRight: pageMarginRight,
+                      color: context.colors.textDefault.withValues(alpha: 0.15),
                     ),
                   ),
-              ],
-            ),
-          ),
+                ),
+              ),
+          ],
         ),
+      );
+
+      if (pageDecoration != null) {
+        content = DecoratedBox(decoration: pageDecoration, child: content);
+      }
+
+      return Padding(
+        padding: EdgeInsets.only(bottom: bottomGap),
+        child: content,
       );
     }
 

@@ -8,13 +8,10 @@ import 'package:typie/screens/native_editor/state/editor_state.dart';
 
 void handleDocChanged(EditorController controller, Map<String, dynamic> cmd) {
   controller.onDocChanged?.call();
-  controller
-    ..typewriterNeedsScroll = true
-    ..typewriterPendingLayout = true;
+  controller.typewriterNeedsScroll = true;
 }
 
 void handleLayoutChanged(EditorController controller, Map<String, dynamic> cmd) {
-  controller.typewriterPendingLayout = false;
   final pageCount = cmd['pageCount'] as int;
   final layoutModeMap = cmd['layoutMode'] as Map<String, dynamic>;
   final pageWidth = (cmd['pageWidth'] as num).toDouble();

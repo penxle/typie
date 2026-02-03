@@ -245,22 +245,8 @@ class EditorView extends HookWidget {
       ],
     );
 
-    final pendingTypewriterScroll = useRef<VoidCallback?>(null);
-    final typewriterScrollPending = useRef(false);
-
-    final freshTypewriterScroll =
-        cursor != null &&
-        cursor.show &&
-        currentLayout != null &&
-        !isLongPressing.value &&
-        pref.typewriterEnabled &&
-        controller.typewriterNeedsScroll &&
-        !controller.typewriterPendingLayout;
-
-    if (freshTypewriterScroll) {
-      controller.typewriterNeedsScroll = false;
-      typewriterScrollPending.value = true;
-    }
+    final pendingScroll = useRef<VoidCallback?>(null);
+    final lastScrollRenderVersion = useRef<Object?>(state.state.renderVersion);
 
     useEffect(() {
       if (cursor != null && cursor.show) {
@@ -268,11 +254,15 @@ class EditorView extends HookWidget {
 
         if (currentLayout != null && !isLongPressing.value && state.state.isFocused) {
           final horizontalPadding = currentLayout.isPaginated ? 40.0 : 0.0;
-          if (freshTypewriterScroll) {
+          if (lastScrollRenderVersion.value != state.state.renderVersion) {
+            lastScrollRenderVersion.value = state.state.renderVersion;
             final capturedCursor = cursor;
             final capturedLayout = currentLayout;
-            pendingTypewriterScroll.value = () {
-              typewriterScrollPending.value = false;
+            final useTypewriter = pref.typewriterEnabled && controller.typewriterNeedsScroll;
+            if (useTypewriter) {
+              controller.typewriterNeedsScroll = false;
+            }
+            pendingScroll.value = () {
               suppressScrollbarTimer.value?.cancel();
               suppressScrollbarShow.value = true;
               EditorScrollBehavior(
@@ -280,7 +270,7 @@ class EditorView extends HookWidget {
                 horizontalScrollController: horizontalScrollController,
                 horizontalPadding: horizontalPadding,
                 titleHeaderHeight: titleHeaderHeight.value,
-                typewriterEnabled: true,
+                typewriterEnabled: useTypewriter,
                 typewriterPosition: pref.typewriterPosition,
               ).scrollToCursor(capturedCursor, capturedLayout);
               suppressScrollbarTimer.value = Timer(const Duration(milliseconds: 150), () {
@@ -362,11 +352,10 @@ class EditorView extends HookWidget {
                   typewriterPosition: pref.typewriterPosition,
                   fromHandle: state.state.fromHandle,
                   toHandle: state.state.toHandle,
-                  syncCursorWithRender: typewriterScrollPending.value,
                   onRenderComplete: () {
-                    final pending = pendingTypewriterScroll.value;
+                    final pending = pendingScroll.value;
                     if (pending != null) {
-                      pendingTypewriterScroll.value = null;
+                      pendingScroll.value = null;
                       pending();
                     }
                   },
