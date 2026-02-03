@@ -123,6 +123,7 @@ class PageList extends HookWidget {
     final longPressPosition = useState<Offset?>(null);
     final handleDragPosition = useState<Offset?>(null);
     final draggingHandleType = useState<SelectionHandleType?>(null);
+    final pointerDownTouchPosition = useRef<Offset?>(null);
     final dragStartTouchPosition = useRef<Offset?>(null);
     final dragStartHandleScreenPosition = useRef<Offset?>(null);
     final dragAnchorHandle = useRef<SelectionHandleInfo?>(null);
@@ -332,6 +333,14 @@ class PageList extends HookWidget {
           return Offset(pos.dx, pos.dy + handle.height / 2);
         }
 
+        void onHandleDragDown(SelectionHandleType type, DragDownDetails details) {
+          final renderBox = context.findRenderObject() as RenderBox?;
+          if (renderBox == null) {
+            return;
+          }
+          pointerDownTouchPosition.value = renderBox.globalToLocal(details.globalPosition);
+        }
+
         void onHandleDragStart(SelectionHandleType type, DragStartDetails details) {
           draggingHandleType.value = type;
           onSelectionStart();
@@ -340,7 +349,7 @@ class PageList extends HookWidget {
           if (renderBox == null) {
             return;
           }
-          final touchPosition = renderBox.globalToLocal(details.globalPosition);
+          final touchPosition = pointerDownTouchPosition.value ?? renderBox.globalToLocal(details.globalPosition);
           dragStartTouchPosition.value = touchPosition;
 
           final handle = type == SelectionHandleType.from ? fromHandle : toHandle;
@@ -469,6 +478,7 @@ class PageList extends HookWidget {
           return SelectionHandle(
             handleInfo: handle,
             type: type,
+            onDragDown: onHandleDragDown,
             onDragStart: onHandleDragStart,
             onDragUpdate: onHandleDragUpdate,
             onDragEnd: onHandleDragEnd,

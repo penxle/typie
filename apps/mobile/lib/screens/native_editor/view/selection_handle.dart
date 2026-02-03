@@ -6,6 +6,7 @@ class SelectionHandle extends StatelessWidget {
   const SelectionHandle({
     required this.handleInfo,
     required this.type,
+    required this.onDragDown,
     required this.onDragStart,
     required this.onDragUpdate,
     required this.onDragEnd,
@@ -14,6 +15,7 @@ class SelectionHandle extends StatelessWidget {
 
   final SelectionHandleInfo handleInfo;
   final SelectionHandleType type;
+  final void Function(SelectionHandleType, DragDownDetails) onDragDown;
   final void Function(SelectionHandleType, DragStartDetails) onDragStart;
   final void Function(SelectionHandleType, DragUpdateDetails) onDragUpdate;
   final void Function(SelectionHandleType, DragEndDetails) onDragEnd;
@@ -42,6 +44,7 @@ class SelectionHandle extends StatelessWidget {
       offset: offset,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
+        onPanDown: (details) => onDragDown(type, details),
         onPanStart: (details) => onDragStart(type, details),
         onPanUpdate: (details) => onDragUpdate(type, details),
         onPanEnd: (details) => onDragEnd(type, details),
