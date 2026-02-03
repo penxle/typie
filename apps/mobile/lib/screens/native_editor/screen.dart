@@ -281,7 +281,7 @@ class _Content extends HookWidget {
 
     Widget buildBody() {
       if (isLoading) {
-        return const Center(child: CircularProgressIndicator());
+        return const SizedBox.shrink();
       }
 
       if (error.value != null) {
@@ -310,7 +310,7 @@ class _Content extends HookWidget {
       }
 
       if (editor.value == null || !editorControllerReady.value || editorController.value == null) {
-        return const Center(child: CircularProgressIndicator());
+        return const SizedBox.shrink();
       }
 
       return LayoutBuilder(
