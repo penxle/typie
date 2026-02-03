@@ -179,7 +179,11 @@ class EditorView extends HookWidget {
             }
             final layout = controller.state.layout;
             final cursor = controller.state.cursor;
-            if (layout == null || cursor == null || !cursor.show || isLongPressing.value) {
+            if (layout == null ||
+                cursor == null ||
+                !cursor.show ||
+                isLongPressing.value ||
+                !controller.state.isFocused) {
               return;
             }
             final horizontalPadding = layout.isPaginated ? 40.0 : 0.0;
@@ -188,6 +192,8 @@ class EditorView extends HookWidget {
               horizontalScrollController: horizontalScrollController,
               horizontalPadding: horizontalPadding,
               titleHeaderHeight: titleHeaderHeight.value,
+              typewriterEnabled: pref.typewriterEnabled,
+              typewriterPosition: pref.typewriterPosition,
             ).scrollToCursor(cursor, layout);
           });
         }
@@ -239,27 +245,65 @@ class EditorView extends HookWidget {
       ],
     );
 
+    final pendingTypewriterScroll = useRef<VoidCallback?>(null);
+    final typewriterScrollPending = useRef(false);
+
+    final freshTypewriterScroll =
+        cursor != null &&
+        cursor.show &&
+        currentLayout != null &&
+        !isLongPressing.value &&
+        pref.typewriterEnabled &&
+        controller.typewriterNeedsScroll &&
+        !controller.typewriterPendingLayout;
+
+    if (freshTypewriterScroll) {
+      controller.typewriterNeedsScroll = false;
+      typewriterScrollPending.value = true;
+    }
+
     useEffect(() {
       if (cursor != null && cursor.show) {
         focusController.updateCursor(cursor.x, cursor.y, cursor.height);
 
-        if (currentLayout != null && !isLongPressing.value) {
+        if (currentLayout != null && !isLongPressing.value && state.state.isFocused) {
           final horizontalPadding = currentLayout.isPaginated ? 40.0 : 0.0;
-          suppressScrollbarTimer.value?.cancel();
-          suppressScrollbarShow.value = true;
-          EditorScrollBehavior(
-            scrollController: scrollController,
-            horizontalScrollController: horizontalScrollController,
-            horizontalPadding: horizontalPadding,
-            titleHeaderHeight: titleHeaderHeight.value,
-          ).scrollToCursor(cursor, currentLayout);
-          suppressScrollbarTimer.value = Timer(const Duration(milliseconds: 150), () {
-            suppressScrollbarShow.value = false;
-          });
+          if (freshTypewriterScroll) {
+            final capturedCursor = cursor;
+            final capturedLayout = currentLayout;
+            pendingTypewriterScroll.value = () {
+              typewriterScrollPending.value = false;
+              suppressScrollbarTimer.value?.cancel();
+              suppressScrollbarShow.value = true;
+              EditorScrollBehavior(
+                scrollController: scrollController,
+                horizontalScrollController: horizontalScrollController,
+                horizontalPadding: horizontalPadding,
+                titleHeaderHeight: titleHeaderHeight.value,
+                typewriterEnabled: true,
+                typewriterPosition: pref.typewriterPosition,
+              ).scrollToCursor(capturedCursor, capturedLayout);
+              suppressScrollbarTimer.value = Timer(const Duration(milliseconds: 150), () {
+                suppressScrollbarShow.value = false;
+              });
+            };
+          } else {
+            suppressScrollbarTimer.value?.cancel();
+            suppressScrollbarShow.value = true;
+            EditorScrollBehavior(
+              scrollController: scrollController,
+              horizontalScrollController: horizontalScrollController,
+              horizontalPadding: horizontalPadding,
+              titleHeaderHeight: titleHeaderHeight.value,
+            ).scrollToCursor(cursor, currentLayout);
+            suppressScrollbarTimer.value = Timer(const Duration(milliseconds: 150), () {
+              suppressScrollbarShow.value = false;
+            });
+          }
         }
       }
       return null;
-    }, [cursor]);
+    }, [cursor, state.state.renderVersion]);
 
     if (currentLayout == null) {
       return const Center(child: CircularProgressIndicator());
@@ -314,8 +358,18 @@ class EditorView extends HookWidget {
                     controller.dispatch({'type': 'navigate', 'direction': 'documentStart', 'extend': false});
                   },
                   onTitleHeaderHeightChanged: (height) => titleHeaderHeight.value = height,
+                  typewriterEnabled: pref.typewriterEnabled,
+                  typewriterPosition: pref.typewriterPosition,
                   fromHandle: state.state.fromHandle,
                   toHandle: state.state.toHandle,
+                  syncCursorWithRender: typewriterScrollPending.value,
+                  onRenderComplete: () {
+                    final pending = pendingTypewriterScroll.value;
+                    if (pending != null) {
+                      pendingTypewriterScroll.value = null;
+                      pending();
+                    }
+                  },
                 ),
                 Positioned.fill(
                   child: EditorInputView(
@@ -390,6 +444,9 @@ class EditorView extends HookWidget {
                   viewHeight: height,
                   viewWidth: width,
                   titleHeaderHeight: titleHeaderHeight.value,
+                  typewriterEnabled: pref.typewriterEnabled,
+                  typewriterPosition: pref.typewriterPosition,
+                  cursor: cursor,
                   suppressShowOnScroll: suppressScrollbarShow,
                 ),
               ],
