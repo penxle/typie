@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/native/editor_native.dart';
@@ -142,6 +143,8 @@ class PageList extends HookWidget {
     final horizontalDirection = useRef<double>(0);
     final autoScrollViewSize = useRef<Size>(Size.zero);
     final lastDispatchedPosition = useRef<(int, double, double)?>(null);
+    final verticalDrag = useRef<Drag?>(null);
+    final horizontalDrag = useRef<Drag?>(null);
 
     void stopAutoScroll() {
       autoScrollTimer.value?.cancel();
@@ -265,6 +268,13 @@ class PageList extends HookWidget {
       return () {
         tapTimer.value?.cancel();
         tapTimer.value = null;
+      };
+    }, const []);
+
+    useEffect(() {
+      return () {
+        verticalDrag.value?.cancel();
+        horizontalDrag.value?.cancel();
       };
     }, const []);
 
@@ -414,7 +424,7 @@ class PageList extends HookWidget {
         final needsHorizontalScroll = contentWidth > viewWidth;
         final horizontalPhysics = isSelecting || !needsHorizontalScroll
             ? const NeverScrollableScrollPhysics()
-            : const BouncingScrollPhysics();
+            : const _NonGestureBouncingScrollPhysics();
 
         final topPadding = layout.isPaginated ? _pagePadding : 0.0;
         final bottomPadding = layout.isPaginated ? 0.0 : _pagePadding;
@@ -431,7 +441,7 @@ class PageList extends HookWidget {
               width: contentWidth,
               child: SingleChildScrollView(
                 controller: scrollController,
-                physics: isSelecting ? const NeverScrollableScrollPhysics() : const AlwaysScrollableScrollPhysics(),
+                physics: isSelecting ? const NeverScrollableScrollPhysics() : const _NonGestureBouncingScrollPhysics(),
                 padding: EdgeInsets.only(
                   left: horizontalPadding,
                   right: horizontalPadding,
@@ -599,6 +609,72 @@ class PageList extends HookWidget {
             longPressPosition.value = null;
             stopAutoScroll();
             onLongPressStateChanged(false);
+          },
+          onPanDown: (details) {
+            if (isSelecting) {
+              return;
+            }
+            if (scrollController.hasClients) {
+              scrollController.position.hold(() {});
+            }
+            if (horizontalScrollController.hasClients) {
+              horizontalScrollController.position.hold(() {});
+            }
+          },
+          onPanStart: (details) {
+            if (isSelecting) {
+              return;
+            }
+            if (scrollController.hasClients) {
+              verticalDrag.value = scrollController.position.drag(details, () {
+                verticalDrag.value = null;
+              });
+            }
+            if (needsHorizontalScroll && horizontalScrollController.hasClients) {
+              horizontalDrag.value = horizontalScrollController.position.drag(details, () {
+                horizontalDrag.value = null;
+              });
+            }
+          },
+          onPanUpdate: (details) {
+            verticalDrag.value?.update(
+              DragUpdateDetails(
+                globalPosition: details.globalPosition,
+                delta: Offset(0, details.delta.dy),
+                primaryDelta: details.delta.dy,
+                sourceTimeStamp: details.sourceTimeStamp,
+              ),
+            );
+            horizontalDrag.value?.update(
+              DragUpdateDetails(
+                globalPosition: details.globalPosition,
+                delta: Offset(details.delta.dx, 0),
+                primaryDelta: details.delta.dx,
+                sourceTimeStamp: details.sourceTimeStamp,
+              ),
+            );
+          },
+          onPanEnd: (details) {
+            verticalDrag.value?.end(
+              DragEndDetails(
+                velocity: Velocity(pixelsPerSecond: Offset(0, details.velocity.pixelsPerSecond.dy)),
+                primaryVelocity: details.velocity.pixelsPerSecond.dy,
+              ),
+            );
+            horizontalDrag.value?.end(
+              DragEndDetails(
+                velocity: Velocity(pixelsPerSecond: Offset(details.velocity.pixelsPerSecond.dx, 0)),
+                primaryVelocity: details.velocity.pixelsPerSecond.dx,
+              ),
+            );
+            verticalDrag.value = null;
+            horizontalDrag.value = null;
+          },
+          onPanCancel: () {
+            verticalDrag.value?.cancel();
+            horizontalDrag.value?.cancel();
+            verticalDrag.value = null;
+            horizontalDrag.value = null;
           },
           child: Stack(
             clipBehavior: Clip.none,
@@ -815,4 +891,16 @@ class _PageSlot extends HookWidget {
       pageMarginRight: margins?.pageMarginRight ?? 0,
     );
   }
+}
+
+class _NonGestureBouncingScrollPhysics extends BouncingScrollPhysics {
+  const _NonGestureBouncingScrollPhysics({super.parent});
+
+  @override
+  _NonGestureBouncingScrollPhysics applyTo(ScrollPhysics? ancestor) {
+    return _NonGestureBouncingScrollPhysics(parent: buildParent(ancestor));
+  }
+
+  @override
+  bool shouldAcceptUserOffset(ScrollMetrics position) => false;
 }
