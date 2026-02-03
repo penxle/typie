@@ -15,6 +15,8 @@
 
   let inputEl = $state<HTMLInputElement>();
 
+  let lastInputValue = '';
+
   let currentCompositionText = '';
   let ignoreEventText = '';
 
@@ -29,11 +31,32 @@
   const handleInput = (e: Event) => {
     if (editor.readOnly) return;
 
-    const value = inputEl?.value;
-    if (!inputEl || !value || (e as InputEvent).isComposing) return;
+    const inputEvent = e as InputEvent;
+    if (inputEvent.isComposing) return;
 
-    inputEl.value = '';
-    editor.dispatch({ type: 'input', text: value });
+    const value = inputEl?.value || '';
+
+    if (!inputEl) return;
+
+    if (!value) {
+      lastInputValue = '';
+      return;
+    }
+
+    if (value.startsWith(lastInputValue) && value.length > lastInputValue.length) {
+      // Append
+      const newText = value.slice(lastInputValue.length);
+      editor.dispatch({ type: 'input', text: newText });
+    } else if (lastInputValue.length > 0) {
+      // Replace (macOS accent popup)
+      editor.dispatch({ type: 'deleteBackward' });
+      editor.dispatch({ type: 'input', text: value });
+    }
+
+    // 마지막 글자만 남겨둠
+    const lastChar = value.slice(-1);
+    inputEl.value = lastChar;
+    lastInputValue = lastChar;
   };
 
   const handleKeyDown = (e: KeyboardEvent) => {
@@ -79,6 +102,11 @@
     if (action !== null) {
       e.preventDefault();
       editor.dispatch(action);
+
+      if (inputEl) {
+        inputEl.value = '';
+        lastInputValue = '';
+      }
     }
   };
 
@@ -142,7 +170,10 @@
   const handleCompositionEnd = (e: CompositionEvent) => {
     if (editor.readOnly) return;
 
-    if (inputEl) inputEl.value = '';
+    if (inputEl) {
+      inputEl.value = '';
+      lastInputValue = '';
+    }
 
     const text = e.data || '';
     if (ignoreEventText && text === ignoreEventText) {
