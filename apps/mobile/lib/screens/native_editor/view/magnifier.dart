@@ -10,7 +10,7 @@ class EditorMagnifier extends StatelessWidget {
 
   static const Size _size = Size(144, 80);
   static const double _magnification = 1.3;
-  static const double _verticalOffset = 80;
+  static const double _verticalOffset = 60;
 
   @override
   Widget build(BuildContext context) {
