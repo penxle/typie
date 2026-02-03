@@ -35,6 +35,11 @@ class EditorFocusController {
     inputKey.currentState?.deactivateInput();
   }
 
+  void dismissKeyboard() {
+    onCommitComposing();
+    inputKey.currentState?.deactivateInput();
+  }
+
   void onKeyboardHidden() {
     if (_isActive) {
       _isActive = false;

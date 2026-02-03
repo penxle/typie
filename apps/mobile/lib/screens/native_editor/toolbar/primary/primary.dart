@@ -50,7 +50,7 @@ class NativeEditorPrimaryToolbar extends HookWidget {
                       } else {
                         scope.bottomToolbarMode.value = BottomToolbarMode.insert;
                         if (keyboardType == KeyboardType.software) {
-                          scope.clearFocus();
+                          scope.dismissKeyboard();
                         }
                       }
                     },

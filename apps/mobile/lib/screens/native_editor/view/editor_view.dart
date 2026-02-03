@@ -280,6 +280,7 @@ class EditorView extends HookWidget {
       dispatch: controller.dispatch,
       requestFocus: focusController.requestFocus,
       clearFocus: focusController.clearFocus,
+      dismissKeyboard: focusController.dismissKeyboard,
       commitComposing: focusController.onCommitComposing,
       child: Column(
         children: [
@@ -367,7 +368,12 @@ class EditorView extends HookWidget {
                     onShortcut: (action) {
                       controller.dispatch({'type': action});
                     },
-                    onFocusLost: focusController.clearFocus,
+                    onFocusLost: () {
+                      if (bottomToolbarMode.value != BottomToolbarMode.hidden) {
+                        return;
+                      }
+                      focusController.clearFocus();
+                    },
                   ),
                 ),
                 const Positioned(bottom: 20, right: 20, child: NativeEditorFloatingToolbar()),
