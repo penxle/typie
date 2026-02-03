@@ -26,6 +26,8 @@ class PageItem extends HookWidget {
     this.pageMarginBottom = 0,
     this.pageMarginLeft = 0,
     this.pageMarginRight = 0,
+    this.onRenderComplete,
+    this.syncCursorWithRender = false,
     super.key,
   });
 
@@ -43,6 +45,8 @@ class PageItem extends HookWidget {
   final double pageMarginBottom;
   final double pageMarginLeft;
   final double pageMarginRight;
+  final VoidCallback? onRenderComplete;
+  final bool syncCursorWithRender;
 
   @override
   Widget build(BuildContext context) {
@@ -50,6 +54,8 @@ class PageItem extends HookWidget {
     final textureId = useState<int?>(null);
     final textureSize = useState<Size?>(null);
     final isMounted = useRef(true);
+    final displayCursor = useState<CursorInfo?>(cursorInfo);
+    final renderInProgress = useRef(false);
 
     final devicePixelRatio = MediaQuery.devicePixelRatioOf(context);
 
@@ -74,6 +80,9 @@ class PageItem extends HookWidget {
 
       textureId.value = r.textureId;
       textureSize.value = Size(r.width / devicePixelRatio, r.height / devicePixelRatio);
+      renderInProgress.value = false;
+      displayCursor.value = cursorInfo;
+      onRenderComplete?.call();
     }
 
     useEffect(() {
@@ -89,10 +98,18 @@ class PageItem extends HookWidget {
 
     useEffect(() {
       if (renderer.value?.textureId != null) {
+        renderInProgress.value = true;
         unawaited(render());
       }
       return null;
     }, [renderVersion]);
+
+    useEffect(() {
+      if (!syncCursorWithRender || !renderInProgress.value) {
+        displayCursor.value = cursorInfo;
+      }
+      return null;
+    }, [cursorInfo, syncCursorWithRender]);
 
     final hasTexture = textureId.value != null && textureSize.value != null;
 
@@ -120,9 +137,9 @@ class PageItem extends HookWidget {
             child: Stack(
               clipBehavior: Clip.none,
               children: [
-                LineHighlight(cursorInfo: cursorInfo, isFocused: isFocused, enabled: lineHighlightEnabled),
+                LineHighlight(cursorInfo: displayCursor.value, isFocused: isFocused, enabled: lineHighlightEnabled),
                 SizedBox.expand(child: Texture(textureId: textureId.value!)),
-                EditorCursor(cursorInfo: cursorInfo, isFocused: isFocused),
+                EditorCursor(cursorInfo: displayCursor.value, isFocused: isFocused),
                 ExternalElementOverlay(pageIndex: pageIndex),
                 if (isPaginated)
                   Positioned.fill(

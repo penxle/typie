@@ -71,6 +71,9 @@ class EditorController extends ChangeNotifier {
   final void Function()? onDocChanged;
   final void Function()? onExitedDocumentStart;
 
+  bool typewriterNeedsScroll = false;
+  bool typewriterPendingLayout = false;
+
   VoidCallback? _clearFocusCallback;
 
   void setClearFocusCallback(VoidCallback callback) {

@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/screens/native_editor/controller/scroll_behavior.dart';
+import 'package:typie/screens/native_editor/cursor.dart';
 import 'package:typie/screens/native_editor/state/editor_state.dart';
 
 const _hideDelay = Duration(milliseconds: 1000);
@@ -24,6 +25,9 @@ class EditorScrollbar extends HookWidget {
     required this.viewHeight,
     required this.viewWidth,
     required this.titleHeaderHeight,
+    required this.typewriterEnabled,
+    required this.typewriterPosition,
+    required this.cursor,
     this.suppressShowOnScroll,
     super.key,
   });
@@ -34,6 +38,9 @@ class EditorScrollbar extends HookWidget {
   final double viewHeight;
   final double viewWidth;
   final double titleHeaderHeight;
+  final bool typewriterEnabled;
+  final double typewriterPosition;
+  final CursorInfo? cursor;
   final ValueNotifier<bool>? suppressShowOnScroll;
 
   @override
@@ -108,6 +115,8 @@ class EditorScrollbar extends HookWidget {
 
     final _ = rebuildTrigger.value;
 
+    final hasVerticalClients = scrollController.hasClients && scrollController.position.hasContentDimensions;
+
     double calculateTotalContentHeight() {
       var total = titleHeaderHeight;
       for (var i = 0; i < layout.pageCount; i++) {
@@ -116,11 +125,19 @@ class EditorScrollbar extends HookWidget {
           total += pageGap;
         }
       }
-      final bottomPadding = layout.isPaginated ? 40.0 : 200.0;
+      final defaultBottomPadding = layout.isPaginated ? 40.0 : 200.0;
+      final viewportHeight = hasVerticalClients ? scrollController.position.viewportDimension : viewHeight;
+      final bottomPadding = EditorScrollBehavior.calculateTypewriterBottomPadding(
+        defaultPadding: defaultBottomPadding,
+        typewriterEnabled: typewriterEnabled,
+        typewriterPosition: typewriterPosition,
+        viewportHeight: viewportHeight,
+        layout: layout,
+        cursor: cursor,
+      );
       return total + bottomPadding;
     }
 
-    final hasVerticalClients = scrollController.hasClients && scrollController.position.hasContentDimensions;
     final hasHorizontalScroll =
         horizontalScrollController.hasClients &&
         horizontalScrollController.position.hasContentDimensions &&

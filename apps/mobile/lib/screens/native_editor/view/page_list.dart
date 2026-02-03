@@ -40,8 +40,12 @@ class PageList extends HookWidget {
     required this.subtitleFocusNode,
     required this.onEnterDocument,
     required this.onTitleHeaderHeightChanged,
+    required this.typewriterEnabled,
+    required this.typewriterPosition,
     this.fromHandle,
     this.toHandle,
+    this.onRenderComplete,
+    this.syncCursorWithRender = false,
     super.key,
   });
 
@@ -68,8 +72,12 @@ class PageList extends HookWidget {
   final FocusNode subtitleFocusNode;
   final VoidCallback onEnterDocument;
   final ValueChanged<double> onTitleHeaderHeightChanged;
+  final bool typewriterEnabled;
+  final double typewriterPosition;
   final SelectionHandleInfo? fromHandle;
   final SelectionHandleInfo? toHandle;
+  final VoidCallback? onRenderComplete;
+  final bool syncCursorWithRender;
 
   @override
   Widget build(BuildContext context) {
@@ -429,7 +437,15 @@ class PageList extends HookWidget {
         final topPadding = layout.isPaginated ? _pagePadding : 0.0;
         final bottomPadding = layout.isPaginated ? 0.0 : _pagePadding;
         final titleAreaHeight = titleHeight.value + topPadding + bottomPadding;
-        final contentBottomPadding = layout.isPaginated ? _pagePadding : 200.0;
+        final defaultBottomPadding = layout.isPaginated ? _pagePadding : 200.0;
+        final contentBottomPadding = EditorScrollBehavior.calculateTypewriterBottomPadding(
+          defaultPadding: defaultBottomPadding,
+          typewriterEnabled: typewriterEnabled,
+          typewriterPosition: typewriterPosition,
+          viewportHeight: scrollController.hasClients ? scrollController.position.viewportDimension : viewHeight,
+          layout: layout,
+          cursor: cursor,
+        );
 
         final listView = ScrollConfiguration(
           behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
@@ -464,6 +480,8 @@ class PageList extends HookWidget {
                         cursor: cursor,
                         isFocused: isFocused,
                         lineHighlightEnabled: lineHighlightEnabled,
+                        onRenderComplete: onRenderComplete,
+                        syncCursorWithRender: syncCursorWithRender,
                       ),
                   ],
                 ),
@@ -818,6 +836,8 @@ class _PageSlot extends HookWidget {
     required this.cursor,
     required this.isFocused,
     required this.lineHighlightEnabled,
+    this.onRenderComplete,
+    this.syncCursorWithRender = false,
     super.key,
   });
 
@@ -832,6 +852,8 @@ class _PageSlot extends HookWidget {
   final CursorInfo? cursor;
   final bool isFocused;
   final bool lineHighlightEnabled;
+  final VoidCallback? onRenderComplete;
+  final bool syncCursorWithRender;
 
   bool _computeVisibility() {
     if (!scrollController.hasClients) {
@@ -889,6 +911,8 @@ class _PageSlot extends HookWidget {
       pageMarginBottom: margins?.pageMarginBottom ?? 0,
       pageMarginLeft: margins?.pageMarginLeft ?? 0,
       pageMarginRight: margins?.pageMarginRight ?? 0,
+      onRenderComplete: onRenderComplete,
+      syncCursorWithRender: syncCursorWithRender,
     );
   }
 }
