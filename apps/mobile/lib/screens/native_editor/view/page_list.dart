@@ -73,12 +73,9 @@ class PageList extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final titleFieldsKey = useMemoized(GlobalKey.new);
-
-    double getTitleHeaderHeight() {
-      final renderBox = titleFieldsKey.currentContext?.findRenderObject() as RenderBox?;
-      return renderBox?.size.height ?? 0;
-    }
-
+    final titleHeight = useState<double>(0);
+    final cumulativeHeightsRef = useRef<List<double>>([0]);
+    final layoutRef = useRef(layout);
     final cumulativeHeights = useMemoized(() {
       final heights = <double>[0];
       for (var i = 0; i < layout.pageCount; i++) {
@@ -90,31 +87,36 @@ class PageList extends HookWidget {
       return heights;
     }, [layout.pageHeights, layout.pageCount, layout.isPaginated]);
 
+    cumulativeHeightsRef.value = cumulativeHeights;
+    layoutRef.value = layout;
+
     (int pageIdx, double localY) getPageAtPosition(double y) {
-      final topPadding = layout.isPaginated ? _pagePadding : 0.0;
-      final bottomPadding = layout.isPaginated ? 0.0 : _pagePadding;
-      final titleHeight = getTitleHeaderHeight() + topPadding + bottomPadding;
+      final currentLayout = layoutRef.value;
+      final currentHeights = cumulativeHeightsRef.value;
+      final topPadding = currentLayout.isPaginated ? _pagePadding : 0.0;
+      final bottomPadding = currentLayout.isPaginated ? 0.0 : _pagePadding;
+      final headerHeight = titleHeight.value + topPadding + bottomPadding;
       final absoluteY = y + scrollController.offset;
 
-      if (absoluteY < titleHeight) {
+      if (absoluteY < headerHeight) {
         return (-1, absoluteY);
       }
 
-      final adjustedY = absoluteY - titleHeight;
+      final adjustedY = absoluteY - headerHeight;
 
       var low = 0;
-      var high = cumulativeHeights.length - 1;
+      var high = currentHeights.length - 1;
       while (low < high) {
         final mid = (low + high) ~/ 2;
-        if (cumulativeHeights[mid] <= adjustedY) {
+        if (currentHeights[mid] <= adjustedY) {
           low = mid + 1;
         } else {
           high = mid;
         }
       }
 
-      final pageIdx = (low - 1).clamp(0, layout.pageCount - 1);
-      final localY = adjustedY - cumulativeHeights[pageIdx];
+      final pageIdx = (low - 1).clamp(0, currentLayout.pageCount - 1);
+      final localY = adjustedY - currentHeights[pageIdx];
       return (pageIdx, localY);
     }
 
@@ -209,7 +211,7 @@ class PageList extends HookWidget {
             return;
           }
 
-          final horizontalPadding = layout.isPaginated ? _pagePadding : 0.0;
+          final horizontalPadding = layoutRef.value.isPaginated ? _pagePadding : 0.0;
           final pointerX = scrolledX + horizontalScrollController.offset - horizontalPadding;
 
           final currentPosition = (pageIdx, pointerX, localY);
@@ -266,8 +268,6 @@ class PageList extends HookWidget {
       return null;
     }, [fromHandle, toHandle]);
 
-    final titleHeight = useState<double>(0);
-
     return LayoutBuilder(
       builder: (context, constraints) {
         final viewWidth = constraints.maxWidth;
@@ -317,7 +317,7 @@ class PageList extends HookWidget {
           final hScrollOffset = horizontalScrollController.hasClients ? horizontalScrollController.offset : 0.0;
           final topPadding = layout.isPaginated ? _pagePadding : 0.0;
           final bottomPadding = layout.isPaginated ? 0.0 : _pagePadding;
-          final titleHeaderHeight = getTitleHeaderHeight() + topPadding + bottomPadding;
+          final titleHeaderHeight = titleHeight.value + topPadding + bottomPadding;
           final pageTopOffset = titleHeaderHeight + cumulativeHeights[handle.pageIdx];
           final y = pageTopOffset + handle.y - scrollOffset;
           final x = horizontalPadding + handle.x - hScrollOffset;
@@ -398,6 +398,11 @@ class PageList extends HookWidget {
             ? const NeverScrollableScrollPhysics()
             : const BouncingScrollPhysics();
 
+        final topPadding = layout.isPaginated ? _pagePadding : 0.0;
+        final bottomPadding = layout.isPaginated ? 0.0 : _pagePadding;
+        final titleAreaHeight = titleHeight.value + topPadding + bottomPadding;
+        final contentBottomPadding = layout.isPaginated ? _pagePadding : 200.0;
+
         final listView = ScrollConfiguration(
           behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
           child: SingleChildScrollView(
@@ -406,50 +411,34 @@ class PageList extends HookWidget {
             physics: horizontalPhysics,
             child: SizedBox(
               width: contentWidth,
-              child: ListView.builder(
+              child: SingleChildScrollView(
                 controller: scrollController,
+                physics: isSelecting ? const NeverScrollableScrollPhysics() : const AlwaysScrollableScrollPhysics(),
                 padding: EdgeInsets.only(
                   left: horizontalPadding,
                   right: horizontalPadding,
-                  bottom: layout.isPaginated ? _pagePadding : 200,
+                  bottom: contentBottomPadding,
                 ),
-                itemCount: layout.pageCount + 1,
-                cacheExtent: 200,
-                physics: isSelecting ? const NeverScrollableScrollPhysics() : const AlwaysScrollableScrollPhysics(),
-                itemBuilder: (context, index) {
-                  if (index == 0) {
-                    final topPadding = layout.isPaginated ? _pagePadding : 0.0;
-                    final bottomPadding = layout.isPaginated ? 0.0 : _pagePadding;
-                    return SizedBox(height: titleHeight.value + topPadding + bottomPadding);
-                  }
-
-                  final pageIndex = index - 1;
-                  final isLast = pageIndex == layout.pageCount - 1;
-                  final gap = layout.isPaginated && !isLast ? pageGap : 0.0;
-                  final pageHeight = layout.pageHeights.elementAtOrNull(pageIndex);
-                  final pageCursor = cursor?.pageIdx == pageIndex ? cursor : null;
-
-                  final layoutMode = layout.layoutMode;
-                  final margins = layoutMode is PaginatedLayoutMode ? layoutMode : null;
-
-                  return PageItem(
-                    key: ValueKey(pageIndex),
-                    pageIndex: pageIndex,
-                    editor: editor,
-                    renderVersion: renderVersion,
-                    bottomGap: gap,
-                    pageWidth: layout.pageWidth,
-                    pageHeight: pageHeight,
-                    cursorInfo: pageCursor,
-                    isFocused: isFocused,
-                    lineHighlightEnabled: lineHighlightEnabled,
-                    isPaginated: layout.isPaginated,
-                    pageMarginTop: margins?.pageMarginTop ?? 0,
-                    pageMarginBottom: margins?.pageMarginBottom ?? 0,
-                    pageMarginLeft: margins?.pageMarginLeft ?? 0,
-                    pageMarginRight: margins?.pageMarginRight ?? 0,
-                  );
-                },
+                child: Column(
+                  children: [
+                    SizedBox(height: titleAreaHeight),
+                    for (var i = 0; i < layout.pageCount; i++)
+                      _PageSlot(
+                        key: ValueKey(i),
+                        scrollController: scrollController,
+                        viewHeight: viewHeight,
+                        pageTop: titleAreaHeight + cumulativeHeights[i],
+                        pageBottom: titleAreaHeight + cumulativeHeights[i + 1],
+                        pageIndex: i,
+                        editor: editor,
+                        renderVersion: renderVersion,
+                        layout: layout,
+                        cursor: cursor,
+                        isFocused: isFocused,
+                        lineHighlightEnabled: lineHighlightEnabled,
+                      ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -550,7 +539,6 @@ class PageList extends HookWidget {
           onLongPressMoveUpdate: (details) {
             final (pageIdx, localY) = getPageAtPosition(details.localPosition.dy);
             longPressPosition.value = details.localPosition;
-            autoScrollViewSize.value = Size(viewWidth, viewHeight);
 
             if (pageIdx >= 0) {
               final pointerX = getPointerX(details.localPosition.dx);
@@ -574,34 +562,7 @@ class PageList extends HookWidget {
                 });
             }
 
-            final y = details.localPosition.dy;
-            final x = details.localPosition.dx;
-
-            if (y < edgeThreshold) {
-              verticalEdgeDistance.value = y;
-              verticalDirection.value = -1;
-            } else if (y > viewHeight - edgeThreshold) {
-              verticalEdgeDistance.value = viewHeight - y;
-              verticalDirection.value = 1;
-            } else {
-              verticalDirection.value = 0;
-            }
-
-            if (x < edgeThreshold) {
-              horizontalEdgeDistance.value = x;
-              horizontalDirection.value = -1;
-            } else if (x > viewWidth - edgeThreshold) {
-              horizontalEdgeDistance.value = viewWidth - x;
-              horizontalDirection.value = 1;
-            } else {
-              horizontalDirection.value = 0;
-            }
-
-            if (verticalDirection.value != 0 || horizontalDirection.value != 0) {
-              startAutoScroll();
-            } else {
-              stopAutoScroll();
-            }
+            handleAutoScroll(details.localPosition.dy, details.localPosition.dx);
           },
           onLongPressEnd: (details) {
             longPressPosition.value = null;
@@ -733,6 +694,94 @@ class _MeasuredTitleFieldsState extends State<_MeasuredTitleFields> {
       onEnterDocument: widget.onEnterDocument,
       pageWidth: widget.pageWidth,
       onFieldTap: widget.onFieldTap,
+    );
+  }
+}
+
+class _PageSlot extends HookWidget {
+  const _PageSlot({
+    required this.scrollController,
+    required this.viewHeight,
+    required this.pageTop,
+    required this.pageBottom,
+    required this.pageIndex,
+    required this.editor,
+    required this.renderVersion,
+    required this.layout,
+    required this.cursor,
+    required this.isFocused,
+    required this.lineHighlightEnabled,
+    super.key,
+  });
+
+  final ScrollController scrollController;
+  final double viewHeight;
+  final double pageTop;
+  final double pageBottom;
+  final int pageIndex;
+  final NativeEditor editor;
+  final Object? renderVersion;
+  final LayoutInfo layout;
+  final CursorInfo? cursor;
+  final bool isFocused;
+  final bool lineHighlightEnabled;
+
+  bool _computeVisibility() {
+    if (!scrollController.hasClients) {
+      return true;
+    }
+    final scrollOffset = scrollController.offset;
+    const cacheExtent = 200.0;
+    final viewTop = scrollOffset - cacheExtent;
+    final viewBottom = scrollOffset + viewHeight + cacheExtent;
+    return pageBottom >= viewTop && pageTop <= viewBottom;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final visible = useState(_computeVisibility());
+
+    useEffect(() {
+      void updateVisibility() {
+        final nowVisible = _computeVisibility();
+        if (nowVisible != visible.value) {
+          visible.value = nowVisible;
+        }
+      }
+
+      scrollController.addListener(updateVisibility);
+      updateVisibility();
+      return () => scrollController.removeListener(updateVisibility);
+    }, [scrollController, pageTop, pageBottom, viewHeight]);
+
+    final slotHeight = pageBottom - pageTop;
+
+    if (!visible.value) {
+      return SizedBox(height: slotHeight);
+    }
+
+    final isLast = pageIndex == layout.pageCount - 1;
+    final gap = layout.isPaginated && !isLast ? pageGap : 0.0;
+    final pageHeight = layout.pageHeights.elementAtOrNull(pageIndex);
+    final pageCursor = cursor?.pageIdx == pageIndex ? cursor : null;
+    final layoutMode = layout.layoutMode;
+    final margins = layoutMode is PaginatedLayoutMode ? layoutMode : null;
+
+    return PageItem(
+      pageIndex: pageIndex,
+      editor: editor,
+      renderVersion: renderVersion,
+      bottomGap: gap,
+      pageWidth: layout.pageWidth,
+      pageHeight: pageHeight,
+      cursorInfo: pageCursor,
+      isFocused: isFocused,
+      lineHighlightEnabled: lineHighlightEnabled,
+      isPaginated: layout.isPaginated,
+      pageMarginTop: margins?.pageMarginTop ?? 0,
+      pageMarginBottom: margins?.pageMarginBottom ?? 0,
+      pageMarginLeft: margins?.pageMarginLeft ?? 0,
+      pageMarginRight: margins?.pageMarginRight ?? 0,
     );
   }
 }
