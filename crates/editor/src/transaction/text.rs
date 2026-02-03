@@ -926,7 +926,7 @@ mod tests {
                 }
             }
 
-            selection { (p, 6) }
+            selection { (p, 6, Affinity::Upstream) }
         };
 
         assert_state_eq!(actual, expected);
@@ -953,7 +953,7 @@ mod tests {
                 }
             }
 
-            selection { (p, 1) }
+            selection { (p, 1, Affinity::Upstream) }
         };
 
         assert_state_eq!(actual, expected);
@@ -983,7 +983,7 @@ mod tests {
                     hard_break { }
                 }
             }
-            selection { (p, 2) }
+            selection { (p, 2, Affinity::Upstream) }
         };
 
         assert_state_eq!(actual, expected);
@@ -1010,7 +1010,7 @@ mod tests {
                     text { "hello world" }
                 }
             }
-            selection { (p, 6) }
+            selection { (p, 6, Affinity::Upstream) }
         };
 
         assert_state_eq!(actual, expected);
@@ -1037,7 +1037,7 @@ mod tests {
                     text { "hello world" }
                 }
             }
-            selection { (p, 11) }
+            selection { (p, 11, Affinity::Upstream) }
         };
 
         assert_state_eq!(actual, expected);
@@ -1072,7 +1072,7 @@ mod tests {
                     text { "asz" => [italic()], "df" }
                 }
             }
-            selection { (p, 3) }
+            selection { (p, 3, Affinity::Upstream) }
         };
 
         assert_state_eq!(actual, expected);
@@ -1099,7 +1099,7 @@ mod tests {
                     text { "axyzb" }
                 }
             }
-            selection { (p, 4) }
+            selection { (p, 4, Affinity::Upstream) }
         };
 
         assert_state_eq!(actual, expected);
@@ -1128,7 +1128,7 @@ mod tests {
                     hard_break { }
                 }
             }
-            selection { (p, 6) }
+            selection { (p, 6, Affinity::Upstream) }
         };
 
         assert_state_eq!(actual, expected);
@@ -1157,7 +1157,7 @@ mod tests {
                     text { "hello world" }
                 }
             }
-            selection { (p, 7) }
+            selection { (p, 7, Affinity::Upstream) }
         };
 
         assert_state_eq!(actual, expected);
@@ -1184,7 +1184,7 @@ mod tests {
                     text { "hello world" }
                 }
             }
-            selection { (p, 6) }
+            selection { (p, 6, Affinity::Upstream) }
         };
 
         assert_state_eq!(actual, expected);
@@ -1211,7 +1211,7 @@ mod tests {
                     text { "안하세요 녕" }
                 }
             }
-            selection { (p, 5) }
+            selection { (p, 5, Affinity::Upstream) }
         };
 
         assert_state_eq!(actual, expected);
@@ -1238,7 +1238,7 @@ mod tests {
                     text { "hello👋🌍" }
                 }
             }
-            selection { (p, 7) }
+            selection { (p, 7, Affinity::Upstream) }
         };
 
         assert_state_eq!(actual, expected);
@@ -1265,7 +1265,7 @@ mod tests {
                     text { "The quick brown fox red jumps over the lazy dog" }
                 }
             }
-            selection { (p, 23) }
+            selection { (p, 23, Affinity::Upstream) }
         };
 
         assert_state_eq!(actual, expected);
@@ -1298,7 +1298,7 @@ mod tests {
                     text { "secxond" }
                 }
             }
-            selection { (p, 4) }
+            selection { (p, 4, Affinity::Upstream) }
         };
 
         assert_state_eq!(actual, expected);
@@ -1325,7 +1325,7 @@ mod tests {
                     text { "abXc" }
                 }
             }
-            selection { (p, 3) }
+            selection { (p, 3, Affinity::Upstream) }
         };
 
         assert_state_eq!(actual, expected);
@@ -1356,7 +1356,7 @@ mod tests {
                     text { "cc" }
                 }
             }
-            selection { (p, 5) }
+            selection { (p, 5, Affinity::Upstream) }
         };
 
         assert_state_eq!(actual, expected);
