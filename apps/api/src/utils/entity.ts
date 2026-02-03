@@ -73,13 +73,8 @@ export const makeLoroDoc = () => {
   settings.set('paragraph_indent', 1);
 
   const layoutMode = settings.setContainer('layout_mode', new LoroMap());
-  layoutMode.set('type', 'paginated');
-  layoutMode.set('page_width', 794);
-  layoutMode.set('page_height', 1123);
-  layoutMode.set('page_margin_top', 96);
-  layoutMode.set('page_margin_bottom', 96);
-  layoutMode.set('page_margin_left', 96);
-  layoutMode.set('page_margin_right', 96);
+  layoutMode.set('type', 'continuous');
+  layoutMode.set('max_width', 600);
 
   const ROOT_ID = '00000000000000000000000000000000';
   const paragraphId = faker.string.uuid().replaceAll('-', '');

@@ -101,13 +101,8 @@ export class Editor {
     pageWidth: 0,
     pageHeights: [] as number[],
     layoutMode: {
-      type: 'paginated',
-      pageWidth: 794,
-      pageHeight: 1123,
-      pageMarginTop: 96,
-      pageMarginBottom: 96,
-      pageMarginLeft: 96,
-      pageMarginRight: 96,
+      type: 'continuous',
+      maxWidth: 600,
     } as LayoutMode,
   });
 
