@@ -1,10 +1,32 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:typie/native/editor_native.dart';
+
+class _BatchRenderItem {
+  _BatchRenderItem({
+    required this.textureId,
+    required this.editorPtr,
+    required this.pageIndex,
+    required this.width,
+    required this.height,
+    required this.completer,
+  });
+
+  final int textureId;
+  final int editorPtr;
+  final int pageIndex;
+  final int width;
+  final int height;
+  final Completer<bool> completer;
+}
 
 class EditorTextureRenderer {
   EditorTextureRenderer({required this.editor});
 
   static const _channel = MethodChannel('co.typie.editor_texture');
+  static final _pendingRenders = <_BatchRenderItem>[];
+  static bool _flushScheduled = false;
 
   final NativeEditor editor;
   int? _textureId;
@@ -40,14 +62,58 @@ class EditorTextureRenderer {
     _currentWidth = info.width;
     _currentHeight = info.height;
 
-    final result = await _channel.invokeMethod<bool>('render', {
-      'textureId': _textureId,
-      'editorPtr': editor.handle.address,
-      'pageIndex': pageIndex,
-      'width': info.width,
-      'height': info.height,
-    });
-    return result ?? false;
+    final completer = Completer<bool>();
+    _pendingRenders.add(
+      _BatchRenderItem(
+        textureId: _textureId!,
+        editorPtr: editor.handle.address,
+        pageIndex: pageIndex,
+        width: info.width,
+        height: info.height,
+        completer: completer,
+      ),
+    );
+
+    if (!_flushScheduled) {
+      _flushScheduled = true;
+      scheduleMicrotask(_flushBatch);
+    }
+
+    return completer.future;
+  }
+
+  static Future<void> _flushBatch() async {
+    _flushScheduled = false;
+
+    final batch = List.of(_pendingRenders);
+    _pendingRenders.clear();
+
+    if (batch.isEmpty) {
+      return;
+    }
+
+    try {
+      await _channel.invokeMethod<void>('render', {
+        'items': batch
+            .map(
+              (r) => <String, dynamic>{
+                'textureId': r.textureId,
+                'editorPtr': r.editorPtr,
+                'pageIndex': r.pageIndex,
+                'width': r.width,
+                'height': r.height,
+              },
+            )
+            .toList(),
+      });
+      for (final item in batch) {
+        item.completer.complete(true);
+      }
+    } catch (_) {
+      for (final item in batch) {
+        item.completer.complete(false);
+      }
+    }
   }
 
   Future<void> dispose() async {
