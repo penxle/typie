@@ -129,6 +129,8 @@ class PageList extends HookWidget {
     final dragAnchorHandle = useRef<SelectionHandleInfo?>(null);
     final lastTapTime = useRef<DateTime?>(null);
     final lastTapPosition = useRef<Offset?>(null);
+    final tapTimer = useRef<Timer?>(null);
+    final tapDispatched = useRef(false);
     final autoScrollTimer = useRef<Timer?>(null);
 
     const edgeThreshold = 60.0;
@@ -258,6 +260,13 @@ class PageList extends HookWidget {
     }
 
     useEffect(() => stopAutoScroll, const []);
+
+    useEffect(() {
+      return () {
+        tapTimer.value?.cancel();
+        tapTimer.value = null;
+      };
+    }, const []);
 
     useEffect(() {
       if (fromHandle == null && toHandle == null) {
@@ -485,36 +494,35 @@ class PageList extends HookWidget {
           );
         }
 
-        final gestureDetector = GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTapDown: (details) {
-            final (pageIdx, localY) = getPageAtPosition(details.localPosition.dy);
+        void dispatchTap(Offset localPosition) {
+          final (pageIdx, localY) = getPageAtPosition(localPosition.dy);
 
-            if (pageIdx < 0) {
-              return;
+          if (pageIdx < 0) {
+            return;
+          }
+
+          onCommitComposing();
+          onOpenInput();
+
+          final now = DateTime.now();
+          final prevTime = lastTapTime.value;
+          final prevPosition = lastTapPosition.value;
+
+          var clickCount = 1;
+          if (prevTime != null && prevPosition != null) {
+            final timeDiff = now.difference(prevTime).inMilliseconds;
+            final distance = (localPosition - prevPosition).distance;
+            if (timeDiff < 300 && distance < 20) {
+              clickCount = 2;
             }
+          }
 
-            onCommitComposing();
-            onOpenInput();
+          lastTapTime.value = now;
+          lastTapPosition.value = localPosition;
 
-            final now = DateTime.now();
-            final prevTime = lastTapTime.value;
-            final prevPosition = lastTapPosition.value;
-
-            var clickCount = 1;
-            if (prevTime != null && prevPosition != null) {
-              final timeDiff = now.difference(prevTime).inMilliseconds;
-              final distance = (details.localPosition - prevPosition).distance;
-              if (timeDiff < 300 && distance < 20) {
-                clickCount = 2;
-              }
-            }
-
-            lastTapTime.value = now;
-            lastTapPosition.value = details.localPosition;
-
-            final pointerX = getPointerX(details.localPosition.dx);
-            editor.dispatch({
+          final pointerX = getPointerX(localPosition.dx);
+          editor
+            ..dispatch({
               'type': 'pointerDown',
               'pageIdx': pageIdx,
               'x': pointerX,
@@ -522,17 +530,8 @@ class PageList extends HookWidget {
               'clickCount': clickCount,
               'button': 'primary',
               'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
-            });
-          },
-          onTapUp: (details) {
-            final (pageIdx, localY) = getPageAtPosition(details.localPosition.dy);
-
-            if (pageIdx < 0) {
-              return;
-            }
-
-            final pointerX = getPointerX(details.localPosition.dx);
-            editor.dispatch({
+            })
+            ..dispatch({
               'type': 'pointerUp',
               'pageIdx': pageIdx,
               'x': pointerX,
@@ -540,6 +539,28 @@ class PageList extends HookWidget {
               'button': 'primary',
               'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
             });
+        }
+
+        final gestureDetector = GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapDown: (details) {
+            tapDispatched.value = false;
+            tapTimer.value?.cancel();
+            tapTimer.value = Timer(const Duration(milliseconds: 150), () {
+              tapDispatched.value = true;
+              dispatchTap(details.localPosition);
+            });
+          },
+          onTapUp: (details) {
+            tapTimer.value?.cancel();
+            tapTimer.value = null;
+            if (!tapDispatched.value) {
+              dispatchTap(details.localPosition);
+            }
+          },
+          onTapCancel: () {
+            tapTimer.value?.cancel();
+            tapTimer.value = null;
           },
           onLongPressStart: (details) {
             onCommitComposing();
