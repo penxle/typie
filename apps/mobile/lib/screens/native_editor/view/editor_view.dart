@@ -296,7 +296,7 @@ class EditorView extends HookWidget {
     }, [cursor, state.state.renderVersion]);
 
     if (currentLayout == null) {
-      return const Center(child: CircularProgressIndicator());
+      return const SizedBox.shrink();
     }
 
     return NativeEditorToolbarScope(

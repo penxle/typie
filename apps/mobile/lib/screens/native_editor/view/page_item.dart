@@ -167,7 +167,7 @@ class PageItem extends HookWidget {
       height: pageHeight,
       margin: EdgeInsets.only(bottom: bottomGap),
       decoration: pageDecoration,
-      child: const Center(child: CircularProgressIndicator()),
+      child: const SizedBox.shrink(),
     );
   }
 }
