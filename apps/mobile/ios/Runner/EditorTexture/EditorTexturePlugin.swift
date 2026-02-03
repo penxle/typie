@@ -61,26 +61,28 @@ class EditorTexturePlugin: NSObject, FlutterPlugin {
 
   private func handleRender(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     guard let args = call.arguments as? [String: Any],
-          let textureId = args["textureId"] as? Int64,
-          let editorPtr = args["editorPtr"] as? Int64,
-          let pageIndex = args["pageIndex"] as? Int,
-          let width = args["width"] as? Int,
-          let height = args["height"] as? Int else {
-      result(FlutterError(code: "INVALID_ARGS", message: "Missing arguments", details: nil))
+          let items = args["items"] as? [[String: Any]] else {
+      result(FlutterError(code: "INVALID_ARGS", message: "Missing items", details: nil))
       return
     }
 
-    guard let texture = textures[textureId] else {
-      result(FlutterError(code: "NOT_FOUND", message: "Texture not found", details: nil))
-      return
+    for item in items {
+      guard let textureId = item["textureId"] as? Int64,
+            let editorPtr = item["editorPtr"] as? Int64,
+            let pageIndex = item["pageIndex"] as? Int,
+            let width = item["width"] as? Int,
+            let height = item["height"] as? Int else {
+        continue
+      }
+
+      guard let texture = textures[textureId] else { continue }
+
+      if texture.render(editorPtr: editorPtr, pageIndex: pageIndex, width: width, height: height) {
+        textureRegistry.textureFrameAvailable(textureId)
+      }
     }
 
-    if texture.render(editorPtr: editorPtr, pageIndex: pageIndex, width: width, height: height) {
-      textureRegistry.textureFrameAvailable(textureId)
-      result(true)
-    } else {
-      result(FlutterError(code: "RENDER_FAILED", message: "Render failed", details: nil))
-    }
+    result(true)
   }
 
   private func handleDispose(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
@@ -104,7 +106,6 @@ class EditorTexture: NSObject, FlutterTexture {
   private var backBuffer: CVPixelBuffer?
   private(set) var currentWidth: Int
   private(set) var currentHeight: Int
-  private(set) var currentStride: Int = 0
   private let bufferLock = NSLock()
 
   init(width: Int, height: Int) {
@@ -148,9 +149,6 @@ class EditorTexture: NSObject, FlutterTexture {
     self.backBuffer = back
     self.currentWidth = width
     self.currentHeight = height
-    if let back = back {
-      self.currentStride = CVPixelBufferGetBytesPerRow(back)
-    }
   }
 
   func render(editorPtr: Int64, pageIndex: Int, width: Int, height: Int) -> Bool {
@@ -171,7 +169,6 @@ class EditorTexture: NSObject, FlutterTexture {
     }
 
     let stride = CVPixelBufferGetBytesPerRow(buffer)
-    currentStride = stride
 
     let editorHandle = UnsafeMutableRawPointer(bitPattern: Int(editorPtr))
     let result = editor_render_page_to(

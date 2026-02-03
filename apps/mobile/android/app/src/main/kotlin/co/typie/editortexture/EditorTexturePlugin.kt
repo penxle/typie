@@ -1,13 +1,14 @@
 package co.typie.editortexture
 
-import android.opengl.*
-import android.view.Surface
+import android.graphics.PixelFormat
+import android.hardware.HardwareBuffer
+import android.media.ImageReader
+import android.media.ImageWriter
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.view.TextureRegistry
 import java.nio.ByteBuffer
-import java.nio.ByteOrder
 import java.util.concurrent.locks.ReentrantLock
 
 class EditorTexturePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
@@ -55,7 +56,7 @@ class EditorTexturePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
       textures.remove(oldestId)?.dispose()
     }
 
-    val entry = textureRegistry.createSurfaceTexture()
+    val entry = textureRegistry.createImageTexture()
     val texture = EditorTexture(entry, width, height)
     val textureId = entry.id()
     textures[textureId] = texture
@@ -63,38 +64,25 @@ class EditorTexturePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     result.success(textureId)
   }
 
+  @Suppress("UNCHECKED_CAST")
   private fun handleRender(call: MethodCall, result: MethodChannel.Result) {
-    val textureId = call.argument<Number>("textureId")?.toLong() ?: run {
-      result.error("INVALID_ARGS", "Missing textureId", null)
-      return
-    }
-    val editorPtr = call.argument<Number>("editorPtr")?.toLong() ?: run {
-      result.error("INVALID_ARGS", "Missing editorPtr", null)
-      return
-    }
-    val pageIndex = call.argument<Int>("pageIndex") ?: run {
-      result.error("INVALID_ARGS", "Missing pageIndex", null)
-      return
-    }
-    val width = call.argument<Int>("width") ?: run {
-      result.error("INVALID_ARGS", "Missing width", null)
-      return
-    }
-    val height = call.argument<Int>("height") ?: run {
-      result.error("INVALID_ARGS", "Missing height", null)
+    val items = call.argument<List<Map<String, Any>>>("items") ?: run {
+      result.error("INVALID_ARGS", "Missing items", null)
       return
     }
 
-    val texture = textures[textureId] ?: run {
-      result.error("NOT_FOUND", "Texture not found", null)
-      return
+    for (item in items) {
+      val textureId = (item["textureId"] as Number).toLong()
+      val editorPtr = (item["editorPtr"] as Number).toLong()
+      val pageIndex = item["pageIndex"] as Int
+      val width = item["width"] as Int
+      val height = item["height"] as Int
+
+      val texture = textures[textureId] ?: continue
+      texture.render(editorPtr, pageIndex, width, height)
     }
 
-    if (texture.render(editorPtr, pageIndex, width, height)) {
-      result.success(true)
-    } else {
-      result.error("RENDER_FAILED", "Render failed", null)
-    }
+    result.success(true)
   }
 
   private fun handleDispose(call: MethodCall, result: MethodChannel.Result) {
@@ -109,169 +97,37 @@ class EditorTexturePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
 }
 
 class EditorTexture(
-  private val entry: TextureRegistry.SurfaceTextureEntry,
+  private val entry: TextureRegistry.ImageTextureEntry,
   initialWidth: Int,
   initialHeight: Int
 ) {
-  private var eglDisplay: EGLDisplay? = null
-  private var eglContext: EGLContext? = null
-  private var eglSurface: EGLSurface? = null
-  private var glTexture: Int = 0
-  private var surface: Surface? = null
-  var currentWidth = initialWidth
-    private set
-  var currentHeight = initialHeight
-    private set
-  private var program: Int = 0
-  private var vertexBuffer: java.nio.FloatBuffer? = null
-
-  private var frontBuffer: ByteBuffer? = null
-  private var backBuffer: ByteBuffer? = null
-  private var bufferCapacity: Int = 0
+  private var imageReader: ImageReader? = null
+  private var imageWriter: ImageWriter? = null
+  private var currentWidth = initialWidth
+  private var currentHeight = initialHeight
   private val bufferLock = ReentrantLock()
+  private var acquiredImage: android.media.Image? = null
 
   init {
-    initEGL()
-    initShaders()
-    createBuffer(initialWidth, initialHeight)
+    createPipeline(initialWidth, initialHeight)
   }
 
-  private fun initEGL() {
-    eglDisplay = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY)
-    if (eglDisplay == EGL14.EGL_NO_DISPLAY) {
-      throw RuntimeException("Unable to get EGL display")
-    }
+  private fun createPipeline(width: Int, height: Int) {
+    imageWriter?.close()
+    acquiredImage?.close()
+    acquiredImage = null
+    imageReader?.close()
 
-    val version = IntArray(2)
-    if (!EGL14.eglInitialize(eglDisplay, version, 0, version, 1)) {
-      throw RuntimeException("Unable to initialize EGL")
-    }
-
-    val configAttribs = intArrayOf(
-      EGL14.EGL_RED_SIZE, 8,
-      EGL14.EGL_GREEN_SIZE, 8,
-      EGL14.EGL_BLUE_SIZE, 8,
-      EGL14.EGL_ALPHA_SIZE, 8,
-      EGL14.EGL_RENDERABLE_TYPE, EGL14.EGL_OPENGL_ES2_BIT,
-      EGL14.EGL_NONE
+    val reader = ImageReader.newInstance(
+      width, height, PixelFormat.RGBA_8888, 2,
+      HardwareBuffer.USAGE_CPU_WRITE_OFTEN or HardwareBuffer.USAGE_GPU_SAMPLED_IMAGE
     )
+    val writer = ImageWriter.newInstance(reader.surface, 2)
 
-    val configs = arrayOfNulls<EGLConfig>(1)
-    val numConfigs = IntArray(1)
-    if (!EGL14.eglChooseConfig(eglDisplay, configAttribs, 0, configs, 0, 1, numConfigs, 0)) {
-      throw RuntimeException("Unable to choose EGL config")
-    }
-
-    val contextAttribs = intArrayOf(
-      EGL14.EGL_CONTEXT_CLIENT_VERSION, 2,
-      EGL14.EGL_NONE
-    )
-    eglContext = EGL14.eglCreateContext(eglDisplay, configs[0], EGL14.EGL_NO_CONTEXT, contextAttribs, 0)
-
-    val surfaceTexture = entry.surfaceTexture()
-    surfaceTexture.setDefaultBufferSize(currentWidth, currentHeight)
-    surface = Surface(surfaceTexture)
-
-    val surfaceAttribs = intArrayOf(EGL14.EGL_NONE)
-    eglSurface = EGL14.eglCreateWindowSurface(eglDisplay, configs[0], surface, surfaceAttribs, 0)
-
-    EGL14.eglMakeCurrent(eglDisplay, eglSurface, eglSurface, eglContext)
-
-    val textures = IntArray(1)
-    GLES20.glGenTextures(1, textures, 0)
-    glTexture = textures[0]
-
-    GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, glTexture)
-    GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_NEAREST)
-    GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_NEAREST)
-    GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE)
-    GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE)
-  }
-
-  private fun initShaders() {
-    val vertexShaderCode = """
-      attribute vec4 aPosition;
-      attribute vec2 aTexCoord;
-      varying vec2 vTexCoord;
-      void main() {
-        gl_Position = aPosition;
-        vTexCoord = aTexCoord;
-      }
-    """.trimIndent()
-
-    val fragmentShaderCode = """
-      precision mediump float;
-      varying vec2 vTexCoord;
-      uniform sampler2D uTexture;
-      void main() {
-        gl_FragColor = texture2D(uTexture, vTexCoord);
-      }
-    """.trimIndent()
-
-    val vertexShader = loadShader(GLES20.GL_VERTEX_SHADER, vertexShaderCode)
-    val fragmentShader = loadShader(GLES20.GL_FRAGMENT_SHADER, fragmentShaderCode)
-
-    program = GLES20.glCreateProgram()
-    GLES20.glAttachShader(program, vertexShader)
-    GLES20.glAttachShader(program, fragmentShader)
-    GLES20.glLinkProgram(program)
-
-    GLES20.glDeleteShader(vertexShader)
-    GLES20.glDeleteShader(fragmentShader)
-
-    val vertices = floatArrayOf(
-      -1f, -1f, 0f, 1f,
-       1f, -1f, 1f, 1f,
-      -1f,  1f, 0f, 0f,
-       1f,  1f, 1f, 0f
-    )
-
-    vertexBuffer = ByteBuffer.allocateDirect(vertices.size * 4)
-      .order(ByteOrder.nativeOrder())
-      .asFloatBuffer()
-      .put(vertices)
-    vertexBuffer?.position(0)
-  }
-
-  private fun createBuffer(width: Int, height: Int) {
-    val size = width * height * 4
-    if (size > bufferCapacity) {
-      frontBuffer = null
-      backBuffer = null
-      frontBuffer = ByteBuffer.allocateDirect(size).order(ByteOrder.nativeOrder())
-      backBuffer = ByteBuffer.allocateDirect(size).order(ByteOrder.nativeOrder())
-      bufferCapacity = size
-    }
+    imageReader = reader
+    imageWriter = writer
     currentWidth = width
     currentHeight = height
-    entry.surfaceTexture().setDefaultBufferSize(width, height)
-    recreateEGLSurface()
-  }
-
-  private fun recreateEGLSurface() {
-    eglSurface?.let {
-      EGL14.eglDestroySurface(eglDisplay, it)
-    }
-    surface?.release()
-
-    val surfaceTexture = entry.surfaceTexture()
-    surface = Surface(surfaceTexture)
-
-    val configAttribs = intArrayOf(
-      EGL14.EGL_RED_SIZE, 8,
-      EGL14.EGL_GREEN_SIZE, 8,
-      EGL14.EGL_BLUE_SIZE, 8,
-      EGL14.EGL_ALPHA_SIZE, 8,
-      EGL14.EGL_RENDERABLE_TYPE, EGL14.EGL_OPENGL_ES2_BIT,
-      EGL14.EGL_NONE
-    )
-    val configs = arrayOfNulls<EGLConfig>(1)
-    val numConfigs = IntArray(1)
-    EGL14.eglChooseConfig(eglDisplay, configAttribs, 0, configs, 0, 1, numConfigs, 0)
-
-    val surfaceAttribs = intArrayOf(EGL14.EGL_NONE)
-    eglSurface = EGL14.eglCreateWindowSurface(eglDisplay, configs[0], surface, surfaceAttribs, 0)
-    EGL14.eglMakeCurrent(eglDisplay, eglSurface, eglSurface, eglContext)
   }
 
   fun render(editorPtr: Long, pageIndex: Int, width: Int, height: Int): Boolean {
@@ -279,40 +135,36 @@ class EditorTexture(
 
     try {
       if (width != currentWidth || height != currentHeight) {
-        createBuffer(width, height)
+        createPipeline(width, height)
       }
 
-      val buffer = backBuffer ?: return false
+      val writer = imageWriter ?: return false
+      val reader = imageReader ?: return false
 
-      val ptr = nativeGetDirectBufferAddress(buffer)
-      if (ptr == 0L) {
+      acquiredImage?.close()
+      acquiredImage = null
+
+      val inputImage = try {
+        writer.dequeueInputImage()
+      } catch (_: IllegalStateException) {
         return false
       }
 
-      val stride = currentWidth * 4L
-      val result = nativeRenderPageTo(editorPtr, pageIndex.toLong(), ptr, stride, currentHeight.toLong(), PIXEL_FORMAT_RGBA)
+      val plane = inputImage.planes[0]
+      val buffer = plane.buffer
+      val ptr = nativeGetDirectBufferAddress(buffer)
+      if (ptr == 0L) {
+        inputImage.close()
+        return false
+      }
 
-      val temp = frontBuffer
-      frontBuffer = backBuffer
-      backBuffer = temp
+      val result = nativeRenderPageTo(editorPtr, pageIndex.toLong(), ptr, plane.rowStride.toLong(), currentHeight.toLong(), PIXEL_FORMAT_RGBA)
 
-      frontBuffer?.position(0)
+      writer.queueInputImage(inputImage)
 
-      EGL14.eglMakeCurrent(eglDisplay, eglSurface, eglSurface, eglContext)
-
-      GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, glTexture)
-      GLES20.glTexImage2D(
-        GLES20.GL_TEXTURE_2D, 0, GLES20.GL_RGBA,
-        currentWidth, currentHeight, 0, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, frontBuffer
-      )
-
-      GLES20.glViewport(0, 0, currentWidth, currentHeight)
-      GLES20.glClearColor(0f, 0f, 0f, 0f)
-      GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
-
-      drawTexture()
-
-      EGL14.eglSwapBuffers(eglDisplay, eglSurface)
+      val outputImage = reader.acquireLatestImage() ?: return false
+      entry.pushImage(outputImage)
+      acquiredImage = outputImage
 
       return result == 0L
     } finally {
@@ -320,76 +172,23 @@ class EditorTexture(
     }
   }
 
-  private fun drawTexture() {
-    GLES20.glUseProgram(program)
-
-    vertexBuffer?.position(0)
-    val positionHandle = GLES20.glGetAttribLocation(program, "aPosition")
-    GLES20.glEnableVertexAttribArray(positionHandle)
-    GLES20.glVertexAttribPointer(positionHandle, 2, GLES20.GL_FLOAT, false, 16, vertexBuffer)
-
-    vertexBuffer?.position(2)
-    val texCoordHandle = GLES20.glGetAttribLocation(program, "aTexCoord")
-    GLES20.glEnableVertexAttribArray(texCoordHandle)
-    GLES20.glVertexAttribPointer(texCoordHandle, 2, GLES20.GL_FLOAT, false, 16, vertexBuffer)
-
-    val textureHandle = GLES20.glGetUniformLocation(program, "uTexture")
-    GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
-    GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, glTexture)
-    GLES20.glUniform1i(textureHandle, 0)
-
-    GLES20.glEnable(GLES20.GL_BLEND)
-    GLES20.glBlendFunc(GLES20.GL_ONE, GLES20.GL_ONE_MINUS_SRC_ALPHA)
-
-    GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
-
-    GLES20.glDisableVertexAttribArray(positionHandle)
-    GLES20.glDisableVertexAttribArray(texCoordHandle)
-  }
-
-  private fun loadShader(type: Int, shaderCode: String): Int {
-    val shader = GLES20.glCreateShader(type)
-    GLES20.glShaderSource(shader, shaderCode)
-    GLES20.glCompileShader(shader)
-    return shader
-  }
-
-  private external fun nativeGetDirectBufferAddress(buffer: ByteBuffer): Long
-  private external fun nativeRenderPageTo(editorPtr: Long, pageIndex: Long, dstPtr: Long, dstStride: Long, dstHeight: Long, format: Long): Long
-
   fun dispose() {
     bufferLock.lock()
     try {
-      EGL14.eglMakeCurrent(eglDisplay, eglSurface, eglSurface, eglContext)
-
-      if (program != 0) {
-        GLES20.glDeleteProgram(program)
-        program = 0
-      }
-      if (glTexture != 0) {
-        GLES20.glDeleteTextures(1, intArrayOf(glTexture), 0)
-        glTexture = 0
-      }
-
-      EGL14.eglMakeCurrent(eglDisplay, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_CONTEXT)
-
-      eglSurface?.let {
-        EGL14.eglDestroySurface(eglDisplay, it)
-        eglSurface = null
-      }
-      eglContext?.let {
-        EGL14.eglDestroyContext(eglDisplay, it)
-        eglContext = null
-      }
-      surface?.release()
-      surface = null
+      imageWriter?.close()
+      imageWriter = null
+      acquiredImage?.close()
+      acquiredImage = null
+      imageReader?.close()
+      imageReader = null
       entry.release()
-      frontBuffer = null
-      backBuffer = null
     } finally {
       bufferLock.unlock()
     }
   }
+
+  private external fun nativeGetDirectBufferAddress(buffer: ByteBuffer): Long
+  private external fun nativeRenderPageTo(editorPtr: Long, pageIndex: Long, dstPtr: Long, dstStride: Long, dstHeight: Long, format: Long): Long
 
   companion object {
     private const val PIXEL_FORMAT_RGBA = 0L
