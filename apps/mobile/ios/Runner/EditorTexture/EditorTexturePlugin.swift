@@ -180,9 +180,12 @@ class EditorTexture: NSObject, FlutterTexture {
       PIXEL_FORMAT_BGRA
     )
 
-    swap(&frontBuffer, &backBuffer)
+    if result == 0 {
+      swap(&frontBuffer, &backBuffer)
+      return true
+    }
 
-    return result == 0
+    return false
   }
 
   func copyPixelBuffer() -> Unmanaged<CVPixelBuffer>? {
