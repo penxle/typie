@@ -103,6 +103,20 @@ impl IntoFfi for FfiResult<()> {
     }
 }
 
+impl IntoFfi for FfiResult<i32> {
+    type Output = i32;
+
+    fn into_ffi(self) -> i32 {
+        match self {
+            Ok(code) => code,
+            Err(e) => {
+                set_last_error(e);
+                -1
+            }
+        }
+    }
+}
+
 impl<T> IntoFfi for FfiResult<*mut T> {
     type Output = *mut T;
 
@@ -126,20 +140,6 @@ impl IntoFfi for FfiResult<usize> {
             Err(e) => {
                 set_last_error(e);
                 0
-            }
-        }
-    }
-}
-
-impl IntoFfi for FfiResult<i32> {
-    type Output = i32;
-
-    fn into_ffi(self) -> i32 {
-        match self {
-            Ok(val) => val,
-            Err(e) => {
-                set_last_error(e);
-                -1
             }
         }
     }
@@ -527,7 +527,7 @@ pub extern "C" fn editor_render_page_to(
             let tight_stride = width * 4;
 
             if dst_height < height || dst_stride < tight_stride {
-                return Err("Buffer too small".into());
+                return Ok(1);
             }
 
             let convert_to_bgra = format == PIXEL_FORMAT_BGRA;
@@ -571,7 +571,7 @@ pub extern "C" fn editor_render_page_to(
                     return Err("Render failed".into());
                 }
             }
-            Ok(())
+            Ok(0)
         },
         -1
     )
