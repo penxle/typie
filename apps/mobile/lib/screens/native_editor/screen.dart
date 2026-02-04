@@ -12,6 +12,7 @@ import 'package:typie/context/theme.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/graphql/widget.dart';
 import 'package:typie/hooks/service.dart';
+import 'package:typie/icons/lucide_lab.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/native/editor_native.dart';
 import 'package:typie/screens/native_editor/__generated__/native_editor_query.data.gql.dart';
@@ -383,6 +384,8 @@ class _Content extends HookWidget {
 
     return Screen(
       heading: Heading(
+        titleIcon: LucideLabIcons.text_square,
+        titleIconColor: context.colors.accentBrand,
         title: headingTitle,
         backgroundColor: context.colors.surfaceDefault,
         onTap: () => editorController.value?.clearFocus(),
