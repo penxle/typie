@@ -37,6 +37,7 @@ import 'package:typie/screens/entity/__generated__/create_post_mutation.req.gql.
 import 'package:typie/screens/entity/__generated__/delete_document_mutation.req.gql.dart';
 import 'package:typie/screens/entity/__generated__/delete_folder_mutation.req.gql.dart';
 import 'package:typie/screens/entity/__generated__/delete_post_mutation.req.gql.dart';
+import 'package:typie/screens/entity/__generated__/duplicate_document_mutation.req.gql.dart';
 import 'package:typie/screens/entity/__generated__/duplicate_post_mutation.req.gql.dart';
 import 'package:typie/screens/entity/__generated__/entity_fragment.data.gql.dart';
 import 'package:typie/screens/entity/__generated__/move_entity_mutation.req.gql.dart';
@@ -996,6 +997,74 @@ class _EntityList extends HookWidget {
                               child: BottomMenu(
                                 header: _BottomMenuHeader(entity: entities[index], siteName: currentSiteName.value),
                                 items: [
+                                  BottomMenuItem(
+                                    icon: LucideLightIcons.file_symlink,
+                                    label: '다른 폴더로 옮기기',
+                                    onTap: () async {
+                                      unawaited(
+                                        mixpanel.track('move_entity_try', properties: {'via': 'entity_document_menu'}),
+                                      );
+
+                                      await context.showBottomSheet(
+                                        intercept: true,
+                                        child: MoveEntityModal.single(
+                                          entity: entities[index],
+                                          via: 'entity_document_menu',
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                  BottomMenuItem(
+                                    icon: LucideLightIcons.external_link,
+                                    label: '스페이스에서 열기',
+                                    onTap: () async {
+                                      unawaited(
+                                        mixpanel.track(
+                                          'open_document_in_browser',
+                                          properties: {'via': 'entity_document_menu'},
+                                        ),
+                                      );
+
+                                      final url = Uri.parse(entities[index].url);
+                                      await launchUrl(url, mode: LaunchMode.externalApplication);
+                                    },
+                                  ),
+                                  BottomMenuItem(
+                                    icon: LucideLightIcons.blend,
+                                    label: '공유하기',
+                                    onTap: () async {
+                                      unawaited(
+                                        mixpanel.track(
+                                          'open_document_share_modal',
+                                          properties: {'via': 'entity_document_menu'},
+                                        ),
+                                      );
+
+                                      await context.showBottomSheet(
+                                        intercept: true,
+                                        child: ShareBottomSheet(entityIds: [entities[index].id]),
+                                      );
+                                    },
+                                  ),
+                                  BottomMenuItem(
+                                    icon: LucideLightIcons.copy,
+                                    label: '복제하기',
+                                    onTap: () async {
+                                      await client.request(
+                                        GEntityScreen_DuplicateDocument_MutationReq(
+                                          (b) => b..vars.input.documentId = document.id,
+                                        ),
+                                      );
+
+                                      unawaited(
+                                        mixpanel.track(
+                                          'duplicate_document',
+                                          properties: {'via': 'entity_document_menu'},
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                  const BottomMenuSeparator(),
                                   if (!isSelecting.value && !isReordering.value) ...[
                                     BottomMenuItem(
                                       icon: LucideLightIcons.square_check,
@@ -1406,6 +1475,7 @@ class _BottomMenuHeader extends StatelessWidget {
                             return parts.join(' · ');
                           },
                           post: (post) => '총 ${post.characterCount.comma}자',
+                          document: (document) => '총 ${document.characterCount.comma}자',
                           orElse: () => '',
                         ),
                         style: TextStyle(fontSize: 14, color: context.colors.textFaint),

@@ -36,6 +36,7 @@ fragment EntityScreen_Entity_entity on Entity {
       title
       excerpt
       updatedAt
+      characterCount
 
       characterCountChange {
         additions
