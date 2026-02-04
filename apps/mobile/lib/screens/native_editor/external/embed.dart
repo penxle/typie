@@ -6,8 +6,8 @@ import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/screens/native_editor/external/models.dart';
 import 'package:typie/screens/native_editor/toolbar/scope.dart';
 
-class ExternalEmbedWidget extends HookWidget {
-  const ExternalEmbedWidget({required this.element, super.key});
+class EmbedWidget extends HookWidget {
+  const EmbedWidget({required this.element, super.key});
 
   final ExternalElement element;
 

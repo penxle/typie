@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:typie/context/theme.dart';
-import 'package:typie/screens/native_editor/selection_handle.dart';
+import 'package:typie/screens/native_editor/state/state.dart';
 
 class SelectionHandle extends StatelessWidget {
   const SelectionHandle({

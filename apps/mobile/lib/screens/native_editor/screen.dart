@@ -3,37 +3,27 @@ import 'dart:convert';
 import 'dart:ui' as ui;
 
 import 'package:auto_route/auto_route.dart';
-import 'package:ferry/ferry.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
-import 'package:gap/gap.dart';
 import 'package:gql_tristate_value/gql_tristate_value.dart';
 import 'package:typie/context/bottom_sheet.dart';
-import 'package:typie/context/modal.dart';
 import 'package:typie/context/theme.dart';
-import 'package:typie/extensions/jiffy.dart';
-import 'package:typie/extensions/num.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/graphql/widget.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/native/editor_native.dart';
-import 'package:typie/routers/app.gr.dart';
-import 'package:typie/screens/native_editor/__generated__/delete_document_mutation.req.gql.dart';
-import 'package:typie/screens/native_editor/__generated__/duplicate_document_mutation.req.gql.dart';
 import 'package:typie/screens/native_editor/__generated__/native_editor_query.data.gql.dart';
 import 'package:typie/screens/native_editor/__generated__/native_editor_query.req.gql.dart';
 import 'package:typie/screens/native_editor/__generated__/update_document_mutation.req.gql.dart';
-import 'package:typie/screens/native_editor/body_setting_bottom_sheet.dart';
-import 'package:typie/screens/native_editor/fonts.dart';
-import 'package:typie/screens/native_editor/state/editor_state.dart';
-import 'package:typie/screens/native_editor/sync/document_sync_manager.dart';
-import 'package:typie/screens/native_editor/theme.dart';
-import 'package:typie/screens/native_editor/util/initializer.dart';
-import 'package:typie/screens/native_editor/view/editor_view.dart';
+import 'package:typie/screens/native_editor/init.dart';
+import 'package:typie/screens/native_editor/sheet/menu.dart';
+import 'package:typie/screens/native_editor/state/fonts.dart';
+import 'package:typie/screens/native_editor/state/state.dart';
+import 'package:typie/screens/native_editor/state/theme.dart';
+import 'package:typie/screens/native_editor/sync/manager.dart';
+import 'package:typie/screens/native_editor/view/editor.dart';
 import 'package:typie/widgets/heading.dart';
-import 'package:typie/widgets/horizontal_divider.dart';
 import 'package:typie/widgets/screen.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 @RoutePage()
 class NativeEditorScreen extends StatelessWidget {
@@ -61,11 +51,11 @@ class _Content extends HookWidget {
   Widget build(BuildContext context) {
     final error = useState<String?>(null);
     final app = useRef<NativeEditorApplication?>(null);
-    final fontManager = useRef<EditorFontManager?>(null);
+    final fontManager = useRef<FontManager?>(null);
     final editor = useState<NativeEditor?>(null);
     final editorController = useRef<EditorController?>(null);
     final editorControllerReady = useState(false);
-    final syncManager = useRef<DocumentSyncManager?>(null);
+    final syncManager = useRef<SyncManager?>(null);
 
     final localTitle = useState<String>('');
     final localSubtitle = useState<String>('');
@@ -199,7 +189,7 @@ class _Content extends HookWidget {
         return null;
       }
 
-      syncManager.value = DocumentSyncManager(documentId: documentId, editor: currentEditor, client: client);
+      syncManager.value = SyncManager(documentId: documentId, editor: currentEditor, client: client);
       unawaited(syncManager.value!.start());
 
       return null;
@@ -313,20 +303,14 @@ class _Content extends HookWidget {
         return const SizedBox.shrink();
       }
 
-      return LayoutBuilder(
-        builder: (context, constraints) {
-          return EditorView(
-            controller: editorController.value!,
-            width: constraints.maxWidth,
-            height: constraints.maxHeight,
-            title: localTitle.value,
-            subtitle: localSubtitle.value,
-            onTitleChanged: handleTitleChanged,
-            onSubtitleChanged: handleSubtitleChanged,
-            titleFocusNode: titleFocusNode,
-            subtitleFocusNode: subtitleFocusNode,
-          );
-        },
+      return EditorView(
+        controller: editorController.value!,
+        title: localTitle.value,
+        subtitle: localSubtitle.value,
+        onTitleChanged: handleTitleChanged,
+        onSubtitleChanged: handleSubtitleChanged,
+        titleFocusNode: titleFocusNode,
+        subtitleFocusNode: subtitleFocusNode,
       );
     }
 
@@ -340,106 +324,17 @@ class _Content extends HookWidget {
             icon: LucideLightIcons.ellipsis,
             onTap: () async {
               editorController.value?.clearFocus();
+              if (document == null) {
+                return;
+              }
               await context.showBottomSheet(
                 intercept: true,
-                child: AppBottomSheet(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      BottomMenuItem(icon: LucideLightIcons.search, label: '찾기', onTap: () {}),
-                      BottomMenuItem(icon: LucideLightIcons.bookmark, label: '북마크', onTap: () {}),
-                      BottomMenuItem(icon: LucideLightIcons.spell_check, label: '맞춤법 검사', onTap: () {}),
-                      BottomMenuItem(icon: LucideLightIcons.lightbulb, label: 'AI 피드백', onTap: () {}),
-                      const Gap(16),
-                      HorizontalDivider(color: context.colors.borderDefault),
-                      const Gap(16),
-                      BottomMenuItem(
-                        icon: LucideLightIcons.info,
-                        label: '정보',
-                        onTap: () async {
-                          if (document == null) {
-                            return;
-                          }
-                          final characterCounts = editor.value?.getCharacterCounts();
-                          await context.showBottomSheet(
-                            intercept: true,
-                            child: _DocumentInfoBottomSheet(
-                              slug: data.entity.slug,
-                              client: client,
-                              characterCounts: characterCounts,
-                            ),
-                          );
-                        },
-                      ),
-                      BottomMenuItem(
-                        icon: LucideLightIcons.settings,
-                        label: '본문 설정',
-                        onTap: () async {
-                          final controller = editorController.value;
-                          if (controller == null) {
-                            return;
-                          }
-                          await context.showBottomSheet(
-                            intercept: true,
-                            child: NativeEditorBodySettingBottomSheet(controller: controller),
-                          );
-                        },
-                      ),
-                      BottomMenuItem(
-                        icon: LucideLightIcons.external_link,
-                        label: '스페이스에서 열기',
-                        onTap: () async {
-                          final url = Uri.parse(data.entity.url);
-                          await launchUrl(url, mode: LaunchMode.externalApplication);
-                        },
-                      ),
-                      BottomMenuItem(icon: LucideLightIcons.blend, label: '공유하기', onTap: () {}),
-                      BottomMenuItem(
-                        icon: LucideLightIcons.copy,
-                        label: '복제하기',
-                        onTap: () async {
-                          if (document == null) {
-                            return;
-                          }
-                          final res = await client.request(
-                            GNativeEditor_DuplicateDocument_MutationReq((b) => b..vars.input.documentId = document.id),
-                          );
-                          if (context.mounted) {
-                            await context.router.popAndPush(NativeEditorRoute(slug: res.duplicateDocument.entity.slug));
-                          }
-                        },
-                      ),
-                      BottomMenuItem(
-                        icon: LucideLightIcons.trash_2,
-                        label: '삭제하기',
-                        onTap: () async {
-                          if (document == null) {
-                            return;
-                          }
-                          await context.showModal(
-                            intercept: true,
-                            child: ConfirmModal(
-                              title: '문서 삭제',
-                              message: '"${document.title}" 문서를 삭제하시겠어요? 삭제 후 30일 동안 휴지통에 보관돼요.',
-                              confirmText: '삭제하기',
-                              confirmTextColor: context.colors.textBright,
-                              confirmBackgroundColor: context.colors.accentDanger,
-                              onConfirm: () async {
-                                await client.request(
-                                  GNativeEditor_DeleteDocument_MutationReq(
-                                    (b) => b..vars.input.documentId = document.id,
-                                  ),
-                                );
-                                if (context.mounted) {
-                                  await context.router.maybePop();
-                                }
-                              },
-                            ),
-                          );
-                        },
-                      ),
-                    ],
-                  ),
+                child: MenuSheet(
+                  data: data,
+                  document: document,
+                  client: client,
+                  editor: editor.value,
+                  editorController: editorController.value,
                 ),
               );
             },
@@ -450,182 +345,6 @@ class _Content extends HookWidget {
       keyboardDismiss: false,
       responsive: false,
       child: buildBody(),
-    );
-  }
-}
-
-class _DocumentInfoBottomSheet extends HookWidget {
-  const _DocumentInfoBottomSheet({required this.slug, required this.client, this.characterCounts});
-
-  final String slug;
-  final GraphQLClient client;
-  final NativeEditorCharacterCounts? characterCounts;
-
-  @override
-  Widget build(BuildContext context) {
-    final stream = useMemoized(
-      () => client.raw
-          .request(
-            GNativeEditorScreen_QueryReq(
-              (b) => b
-                ..vars.slug = slug
-                ..fetchPolicy = FetchPolicy.CacheOnly,
-            ),
-          )
-          .where((response) => response.data != null)
-          .map((response) => response.data!),
-      [slug],
-    );
-    final snapshot = useStream(stream);
-
-    final document = snapshot.data?.entity.node.when(document: (doc) => doc, orElse: () => null);
-    if (document == null) {
-      return const SizedBox.shrink();
-    }
-
-    final difference = document.characterCountChange.additions - document.characterCountChange.deletions;
-
-    return AppBottomSheet(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            '문서 정보',
-            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: context.colors.textSubtle),
-          ),
-          const Gap(12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('최초 생성 시각', style: TextStyle(fontSize: 14, color: context.colors.textFaint)),
-              Text(
-                '${document.createdAt.toLocal().yyyyMMdd} ${document.createdAt.toLocal().Hm}',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: context.colors.textSubtle),
-              ),
-            ],
-          ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('마지막 수정 시각', style: TextStyle(fontSize: 14, color: context.colors.textFaint)),
-              Text(
-                '${document.updatedAt.toLocal().yyyyMMdd} ${document.updatedAt.toLocal().Hm}',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: context.colors.textSubtle),
-              ),
-            ],
-          ),
-          const Gap(32),
-          Text(
-            '본문 정보',
-            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: context.colors.textSubtle),
-          ),
-          const Gap(12),
-          Row(
-            spacing: 4,
-            children: [
-              Icon(LucideLightIcons.type_, size: 15, color: context.colors.textSubtle),
-              Text(
-                '글자 수',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: context.colors.textSubtle),
-              ),
-            ],
-          ),
-          const Gap(8),
-          _CharacterCountRow(
-            label: '공백 포함',
-            docCount: characterCounts?.docWithWhitespace ?? 0,
-            selectionCount: characterCounts?.selectionWithWhitespace ?? 0,
-          ),
-          _CharacterCountRow(
-            label: '공백 미포함',
-            docCount: characterCounts?.docWithoutWhitespace ?? 0,
-            selectionCount: characterCounts?.selectionWithoutWhitespace ?? 0,
-          ),
-          _CharacterCountRow(
-            label: '공백/부호 미포함',
-            docCount: characterCounts?.docWithoutWhitespaceAndPunctuation ?? 0,
-            selectionCount: characterCounts?.selectionWithoutWhitespaceAndPunctuation ?? 0,
-          ),
-          const Gap(12),
-          Row(
-            spacing: 4,
-            children: [
-              Icon(LucideLightIcons.goal, size: 15, color: context.colors.textSubtle),
-              Text(
-                '오늘의 기록',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: context.colors.textSubtle),
-              ),
-            ],
-          ),
-          const Gap(8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Text('변화량', style: TextStyle(fontSize: 14, color: context.colors.textFaint)),
-              ),
-              if (difference == 0)
-                Text(
-                  '없음',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: context.colors.textSubtle),
-                )
-              else ...[
-                Icon(difference >= 0 ? LucideLightIcons.trending_up : LucideLightIcons.trending_down, size: 14),
-                const Gap(4),
-                Text(
-                  '${difference >= 0 ? '+' : '-'}${difference.abs().comma}자',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: context.colors.textSubtle),
-                ),
-              ],
-            ],
-          ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('입력한 글자', style: TextStyle(fontSize: 14, color: context.colors.textFaint)),
-              Text(
-                '${document.characterCountChange.additions.comma}자',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: context.colors.textSubtle),
-              ),
-            ],
-          ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('지운 글자', style: TextStyle(fontSize: 14, color: context.colors.textFaint)),
-              Text(
-                '${document.characterCountChange.deletions.comma}자',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: context.colors.textSubtle),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CharacterCountRow extends StatelessWidget {
-  const _CharacterCountRow({required this.label, required this.docCount, required this.selectionCount});
-
-  final String label;
-  final int docCount;
-  final int selectionCount;
-
-  @override
-  Widget build(BuildContext context) {
-    final hasSelection = selectionCount > 0;
-
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(label, style: TextStyle(fontSize: 14, color: context.colors.textFaint)),
-        Text(
-          hasSelection ? '${selectionCount.comma}자 / ${docCount.comma}자' : '${docCount.comma}자',
-          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: context.colors.textSubtle),
-        ),
-      ],
     );
   }
 }

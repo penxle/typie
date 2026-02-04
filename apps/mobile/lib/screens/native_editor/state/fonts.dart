@@ -79,8 +79,8 @@ Future<String> _getCacheBasePath() async {
 
 typedef NetworkCallbacks = ({void Function()? onStart, void Function()? onEnd});
 
-class EditorFontManager {
-  EditorFontManager(this._app);
+class FontManager {
+  FontManager(this._app);
 
   final NativeEditorApplication _app;
   final _loadedFonts = <String>{};

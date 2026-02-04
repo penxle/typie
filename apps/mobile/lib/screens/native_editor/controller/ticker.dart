@@ -2,11 +2,11 @@ import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/scheduler.dart';
-import 'package:typie/screens/native_editor/handler/command_handler.dart';
-import 'package:typie/screens/native_editor/state/editor_state.dart';
+import 'package:typie/screens/native_editor/handler/command.dart';
+import 'package:typie/screens/native_editor/state/state.dart';
 
-class EditorTickerLoop {
-  EditorTickerLoop({required this.controller, required this.tickerProvider, required this.getSize});
+class TickerLoop {
+  TickerLoop({required this.controller, required this.tickerProvider, required this.getSize});
 
   static const _tickInterval = Duration(milliseconds: 16);
 
@@ -45,7 +45,7 @@ class EditorTickerLoop {
     }
 
     final cmds = editor.tick();
-    EditorCommandHandler.handleCommands(controller, cmds);
+    CommandHandler.handleCommands(controller, cmds);
 
     if (!editor.isDisposed) {
       editor.flush();

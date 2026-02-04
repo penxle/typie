@@ -3,127 +3,60 @@ import 'dart:async';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
-import 'package:typie/native/editor_native.dart';
-import 'package:typie/screens/native_editor/controller/scroll_behavior.dart';
-import 'package:typie/screens/native_editor/cursor.dart';
-import 'package:typie/screens/native_editor/selection_handle.dart';
-import 'package:typie/screens/native_editor/state/editor_state.dart';
+import 'package:typie/hooks/service.dart';
+import 'package:typie/screens/native_editor/state/state.dart';
 import 'package:typie/screens/native_editor/view/magnifier.dart';
-import 'package:typie/screens/native_editor/view/page_item.dart';
-import 'package:typie/screens/native_editor/view/selection_handle.dart';
-import 'package:typie/screens/native_editor/view/title_subtitle_fields.dart';
-
-const _pagePadding = 40.0;
+import 'package:typie/screens/native_editor/view/page.dart';
+import 'package:typie/screens/native_editor/view/scope.dart';
+import 'package:typie/screens/native_editor/view/selection.dart';
+import 'package:typie/services/preference.dart';
 
 class PageList extends HookWidget {
-  const PageList({
-    required this.editor,
-    required this.layout,
-    required this.cursor,
-    required this.isFocused,
-    required this.isSelecting,
-    required this.lineHighlightEnabled,
-    required this.renderVersion,
-    required this.scrollController,
-    required this.horizontalScrollController,
-    required this.onOpenInput,
-    required this.onClearFocus,
-    required this.onCommitComposing,
-    required this.onSelectionStart,
-    required this.onSelectionEnd,
-    required this.onLongPressStateChanged,
-    required this.title,
-    required this.subtitle,
-    required this.onTitleChanged,
-    required this.onSubtitleChanged,
-    required this.titleFocusNode,
-    required this.subtitleFocusNode,
-    required this.onEnterDocument,
-    required this.onTitleHeaderHeightChanged,
-    required this.typewriterEnabled,
-    required this.typewriterPosition,
-    this.fromHandle,
-    this.toHandle,
-    this.onRenderComplete,
-    super.key,
-  });
-
-  final NativeEditor editor;
-  final LayoutInfo layout;
-  final CursorInfo? cursor;
-  final bool isFocused;
-  final bool isSelecting;
-  final bool lineHighlightEnabled;
-  final Object? renderVersion;
-  final ScrollController scrollController;
-  final ScrollController horizontalScrollController;
-  final VoidCallback onOpenInput;
-  final VoidCallback onClearFocus;
-  final VoidCallback onCommitComposing;
-  final VoidCallback onSelectionStart;
-  final VoidCallback onSelectionEnd;
-  final ValueChanged<bool> onLongPressStateChanged;
-  final String title;
-  final String subtitle;
-  final ValueChanged<String> onTitleChanged;
-  final ValueChanged<String> onSubtitleChanged;
-  final FocusNode titleFocusNode;
-  final FocusNode subtitleFocusNode;
-  final VoidCallback onEnterDocument;
-  final ValueChanged<double> onTitleHeaderHeightChanged;
-  final bool typewriterEnabled;
-  final double typewriterPosition;
-  final SelectionHandleInfo? fromHandle;
-  final SelectionHandleInfo? toHandle;
-  final VoidCallback? onRenderComplete;
+  const PageList({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final titleFieldsKey = useMemoized(GlobalKey.new);
-    final titleHeight = useState<double>(0);
-    final cumulativeHeightsRef = useRef<List<double>>([0]);
-    final layoutRef = useRef(layout);
-    final cumulativeHeights = useMemoized(() {
-      final heights = <double>[0];
-      for (var i = 0; i < layout.pageCount; i++) {
-        final pageHeight = layout.pageHeights.elementAtOrNull(i) ?? 0.0;
-        final isLast = i == layout.pageCount - 1;
-        final gap = layout.isPaginated && !isLast ? pageGap : 0.0;
-        heights.add(heights.last + pageHeight + gap);
-      }
-      return heights;
-    }, [layout.pageHeights, layout.pageCount, layout.isPaginated]);
+    final scope = ContentScope.of(context);
+    final pref = useService<Pref>();
+    final state = useListenable(scope.controller);
 
-    cumulativeHeightsRef.value = cumulativeHeights;
-    layoutRef.value = layout;
+    final layout = state.state.layout!;
+    final cursor = state.state.cursor;
+    final isFocused = state.state.isFocused;
+    final isSelecting = state.state.isSelecting;
+    final fromHandle = state.state.fromHandle;
+    final toHandle = state.state.toHandle;
+
+    final verticalScrollController = scope.verticalScrollController;
+    final horizontalScrollController = scope.horizontalScrollController;
+    final editor = scope.editor;
+
+    useValueListenable(scope.titleAreaHeight);
 
     (int pageIdx, double localY) getPageAtPosition(double y) {
-      final currentLayout = layoutRef.value;
-      final currentHeights = cumulativeHeightsRef.value;
-      final topPadding = currentLayout.isPaginated ? _pagePadding : 0.0;
-      final bottomPadding = currentLayout.isPaginated ? 0.0 : _pagePadding;
-      final headerHeight = titleHeight.value + topPadding + bottomPadding;
-      final absoluteY = y + scrollController.offset;
+      final geo = scope.geometry;
+      final offsets = geo.computeCumulativePageOffsets();
+      final absoluteY = y + verticalScrollController.offset;
 
-      if (absoluteY < headerHeight) {
+      if (absoluteY < geo.titleAreaHeight) {
         return (-1, absoluteY);
       }
 
-      final adjustedY = absoluteY - headerHeight;
+      final adjustedY = absoluteY - geo.titleAreaHeight;
 
       var low = 0;
-      var high = currentHeights.length - 1;
+      var high = offsets.length - 1;
       while (low < high) {
         final mid = (low + high) ~/ 2;
-        if (currentHeights[mid] <= adjustedY) {
+        if (offsets[mid] <= adjustedY) {
           low = mid + 1;
         } else {
           high = mid;
         }
       }
 
-      final pageIdx = (low - 1).clamp(0, currentLayout.pageCount - 1);
-      final localY = adjustedY - currentHeights[pageIdx];
+      final pageIdx = (low - 1).clamp(0, geo.layout.pageCount - 1);
+      final localY = adjustedY - offsets[pageIdx];
       return (pageIdx, localY);
     }
 
@@ -175,18 +108,18 @@ class PageList extends HookWidget {
           final proximity = 1.0 - (verticalEdgeDistance.value / edgeThreshold).clamp(0.0, 1.0);
           final scrollSpeed = minScrollSpeed + proximity * (maxScrollSpeed - minScrollSpeed);
 
-          final currentOffset = scrollController.offset;
+          final currentOffset = verticalScrollController.offset;
           final newOffset = (currentOffset + verticalDirection.value * scrollSpeed).clamp(
             0.0,
-            scrollController.position.maxScrollExtent,
+            verticalScrollController.position.maxScrollExtent,
           );
 
           if (newOffset != currentOffset) {
-            scrollController.jumpTo(newOffset);
+            verticalScrollController.jumpTo(newOffset);
             scrolledY = verticalDirection.value > 0
                 ? viewHeight -
                       edgeThreshold +
-                      (newOffset >= scrollController.position.maxScrollExtent ? edgeThreshold : 0)
+                      (newOffset >= verticalScrollController.position.maxScrollExtent ? edgeThreshold : 0)
                 : newOffset.clamp(0.0, edgeThreshold);
           }
         }
@@ -223,8 +156,7 @@ class PageList extends HookWidget {
             return;
           }
 
-          final horizontalPadding = layoutRef.value.isPaginated ? _pagePadding : 0.0;
-          final pointerX = scrolledX + horizontalScrollController.offset - horizontalPadding;
+          final pointerX = scrolledX + horizontalScrollController.offset - scope.geometry.horizontalPadding;
 
           final currentPosition = (pageIdx, pointerX, localY);
           if (lastDispatchedPosition.value == currentPosition) {
@@ -299,10 +231,8 @@ class PageList extends HookWidget {
         final viewWidth = constraints.maxWidth;
         final viewHeight = constraints.maxHeight;
 
-        final horizontalPadding = layout.isPaginated ? _pagePadding : 0.0;
-
         double getPointerX(double localX) {
-          return localX + horizontalScrollController.offset - horizontalPadding;
+          return localX + horizontalScrollController.offset - scope.geometry.horizontalPadding;
         }
 
         void handleAutoScroll(double y, double x) {
@@ -339,14 +269,13 @@ class PageList extends HookWidget {
           if (handle == null) {
             return null;
           }
-          final scrollOffset = scrollController.hasClients ? scrollController.offset : 0.0;
+          final geo = scope.geometry;
+          final offsets = geo.computeCumulativePageOffsets();
+          final scrollOffset = verticalScrollController.hasClients ? verticalScrollController.offset : 0.0;
           final hScrollOffset = horizontalScrollController.hasClients ? horizontalScrollController.offset : 0.0;
-          final topPadding = layout.isPaginated ? _pagePadding : 0.0;
-          final bottomPadding = layout.isPaginated ? 0.0 : _pagePadding;
-          final titleHeaderHeight = titleHeight.value + topPadding + bottomPadding;
-          final pageTopOffset = titleHeaderHeight + cumulativeHeights[handle.pageIdx];
+          final pageTopOffset = geo.titleAreaHeight + offsets[handle.pageIdx];
           final y = pageTopOffset + handle.y - scrollOffset;
-          final x = horizontalPadding + handle.x - hScrollOffset;
+          final x = geo.horizontalPadding + handle.x - hScrollOffset;
           return Offset(x, y);
         }
 
@@ -368,7 +297,7 @@ class PageList extends HookWidget {
 
         void onHandleDragStart(SelectionHandleType type, DragStartDetails details) {
           draggingHandleType.value = type;
-          onSelectionStart();
+          scope.controller.setSelecting(true);
 
           final renderBox = context.findRenderObject() as RenderBox?;
           if (renderBox == null) {
@@ -423,26 +352,24 @@ class PageList extends HookWidget {
           handleDragPosition.value = null;
           dragAnchorHandle.value = null;
           stopAutoScroll();
-          onSelectionEnd();
+          scope.controller.setSelecting(false);
         }
 
-        final contentWidth = layout.pageWidth + horizontalPadding * 2;
+        final geo = scope.geometry;
+        final offsets = geo.computeCumulativePageOffsets();
+        final contentWidth = layout.pageWidth + geo.horizontalPadding * 2;
         final needsHorizontalScroll = contentWidth > viewWidth;
         final horizontalPhysics = isSelecting || !needsHorizontalScroll
             ? const NeverScrollableScrollPhysics()
             : const _NonGestureBouncingScrollPhysics();
 
-        final topPadding = layout.isPaginated ? _pagePadding : 0.0;
-        final bottomPadding = layout.isPaginated ? 0.0 : _pagePadding;
-        final titleAreaHeight = titleHeight.value + topPadding + bottomPadding;
-        final defaultBottomPadding = layout.isPaginated ? _pagePadding : 200.0;
-        final contentBottomPadding = EditorScrollBehavior.calculateTypewriterBottomPadding(
-          defaultPadding: defaultBottomPadding,
-          typewriterEnabled: typewriterEnabled,
-          typewriterPosition: typewriterPosition,
-          viewportHeight: scrollController.hasClients ? scrollController.position.viewportDimension : viewHeight,
-          layout: layout,
+        final contentBottomPadding = geo.bottomPadding(
+          viewportHeight: verticalScrollController.hasClients
+              ? verticalScrollController.position.viewportDimension
+              : viewHeight,
           cursor: cursor,
+          typewriterEnabled: pref.typewriterEnabled,
+          typewriterPosition: pref.typewriterPosition,
         );
 
         final listView = ScrollConfiguration(
@@ -454,31 +381,22 @@ class PageList extends HookWidget {
             child: SizedBox(
               width: contentWidth,
               child: SingleChildScrollView(
-                controller: scrollController,
+                controller: verticalScrollController,
                 physics: isSelecting ? const NeverScrollableScrollPhysics() : const _NonGestureBouncingScrollPhysics(),
                 padding: EdgeInsets.only(
-                  left: horizontalPadding,
-                  right: horizontalPadding,
+                  left: geo.horizontalPadding,
+                  right: geo.horizontalPadding,
                   bottom: contentBottomPadding,
                 ),
                 child: Column(
                   children: [
-                    SizedBox(height: titleAreaHeight),
+                    SizedBox(height: geo.titleAreaHeight),
                     for (var i = 0; i < layout.pageCount; i++)
                       _PageSlot(
                         key: ValueKey(i),
-                        scrollController: scrollController,
-                        viewHeight: viewHeight,
-                        pageTop: titleAreaHeight + cumulativeHeights[i],
-                        pageBottom: titleAreaHeight + cumulativeHeights[i + 1],
                         pageIndex: i,
-                        editor: editor,
-                        renderVersion: renderVersion,
-                        layout: layout,
-                        cursor: cursor,
-                        isFocused: isFocused,
-                        lineHighlightEnabled: lineHighlightEnabled,
-                        onRenderComplete: onRenderComplete,
+                        pageTop: geo.titleAreaHeight + offsets[i],
+                        pageBottom: geo.titleAreaHeight + offsets[i + 1],
                       ),
                   ],
                 ),
@@ -487,38 +405,6 @@ class PageList extends HookWidget {
           ),
         );
 
-        final titleFields = _MeasuredTitleFields(
-          key: titleFieldsKey,
-          title: title,
-          subtitle: subtitle,
-          onTitleChanged: onTitleChanged,
-          onSubtitleChanged: onSubtitleChanged,
-          titleFocusNode: titleFocusNode,
-          subtitleFocusNode: subtitleFocusNode,
-          onEnterDocument: onEnterDocument,
-          pageWidth: viewWidth,
-          onHeightChanged: (height) {
-            if (titleHeight.value != height) {
-              titleHeight.value = height;
-              final topPadding = layout.isPaginated ? _pagePadding : 0.0;
-              final bottomPadding = layout.isPaginated ? 0.0 : _pagePadding;
-              onTitleHeaderHeightChanged(height + topPadding + bottomPadding);
-            }
-          },
-          onFieldTap: onClearFocus,
-        );
-
-        Widget buildSelectionHandle(SelectionHandleInfo handle, SelectionHandleType type) {
-          return SelectionHandle(
-            handleInfo: handle,
-            type: type,
-            onDragDown: onHandleDragDown,
-            onDragStart: onHandleDragStart,
-            onDragUpdate: onHandleDragUpdate,
-            onDragEnd: onHandleDragEnd,
-          );
-        }
-
         void dispatchTap(Offset localPosition) {
           final (pageIdx, localY) = getPageAtPosition(localPosition.dy);
 
@@ -526,8 +412,8 @@ class PageList extends HookWidget {
             return;
           }
 
-          onCommitComposing();
-          onOpenInput();
+          scope.inputController.commitComposing();
+          scope.inputController.openInput();
 
           final now = DateTime.now();
           final prevTime = lastTapTime.value;
@@ -566,6 +452,17 @@ class PageList extends HookWidget {
             });
         }
 
+        Widget buildSelectionHandle(SelectionHandleInfo handle, SelectionHandleType type) {
+          return SelectionHandle(
+            handleInfo: handle,
+            type: type,
+            onDragDown: onHandleDragDown,
+            onDragStart: onHandleDragStart,
+            onDragUpdate: onHandleDragUpdate,
+            onDragEnd: onHandleDragEnd,
+          );
+        }
+
         final gestureDetector = GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTapDown: (details) {
@@ -588,9 +485,9 @@ class PageList extends HookWidget {
             tapTimer.value = null;
           },
           onLongPressStart: (details) {
-            onCommitComposing();
+            scope.inputController.commitComposing();
             longPressPosition.value = details.localPosition;
-            onLongPressStateChanged(true);
+            scope.isLongPressing.value = true;
           },
           onLongPressMoveUpdate: (details) {
             final (pageIdx, localY) = getPageAtPosition(details.localPosition.dy);
@@ -623,14 +520,14 @@ class PageList extends HookWidget {
           onLongPressEnd: (details) {
             longPressPosition.value = null;
             stopAutoScroll();
-            onLongPressStateChanged(false);
+            scope.isLongPressing.value = false;
           },
           onPanDown: (details) {
             if (isSelecting) {
               return;
             }
-            if (scrollController.hasClients) {
-              scrollController.position.hold(() {});
+            if (verticalScrollController.hasClients) {
+              verticalScrollController.position.hold(() {});
             }
             if (horizontalScrollController.hasClients) {
               horizontalScrollController.position.hold(() {});
@@ -640,8 +537,8 @@ class PageList extends HookWidget {
             if (isSelecting) {
               return;
             }
-            if (scrollController.hasClients) {
-              verticalDrag.value = scrollController.position.drag(details, () {
+            if (verticalScrollController.hasClients) {
+              verticalDrag.value = verticalScrollController.position.drag(details, () {
                 verticalDrag.value = null;
               });
             }
@@ -695,19 +592,6 @@ class PageList extends HookWidget {
             clipBehavior: Clip.none,
             children: [
               listView,
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                child: AnimatedBuilder(
-                  animation: scrollController,
-                  builder: (context, child) {
-                    final offset = scrollController.hasClients ? scrollController.offset : 0.0;
-                    return Transform.translate(offset: Offset(0, -offset), child: child);
-                  },
-                  child: titleFields,
-                ),
-              ),
               if (longPressPosition.value != null || handleDragPosition.value != null)
                 EditorMagnifier(
                   position: handleDragPosition.value ?? longPressPosition.value!,
@@ -723,7 +607,7 @@ class PageList extends HookWidget {
           children: [
             gestureDetector,
             ListenableBuilder(
-              listenable: Listenable.merge([scrollController, horizontalScrollController]),
+              listenable: Listenable.merge([verticalScrollController, horizontalScrollController]),
               builder: (context, _) {
                 final fromPos = getHandlePosition(fromHandle);
                 final toPos = getHandlePosition(toHandle);
@@ -735,13 +619,13 @@ class PageList extends HookWidget {
                       Positioned(
                         left: fromPos.dx,
                         top: fromPos.dy,
-                        child: buildSelectionHandle(fromHandle!, SelectionHandleType.from),
+                        child: buildSelectionHandle(fromHandle, SelectionHandleType.from),
                       ),
                     if (isFocused && toHandle != null && toPos != null)
                       Positioned(
                         left: toPos.dx,
                         top: toPos.dy,
-                        child: buildSelectionHandle(toHandle!, SelectionHandleType.to),
+                        child: buildSelectionHandle(toHandle, SelectionHandleType.to),
                       ),
                   ],
                 );
@@ -754,129 +638,46 @@ class PageList extends HookWidget {
   }
 }
 
-class _MeasuredTitleFields extends StatefulWidget {
-  const _MeasuredTitleFields({
-    required this.title,
-    required this.subtitle,
-    required this.onTitleChanged,
-    required this.onSubtitleChanged,
-    required this.titleFocusNode,
-    required this.subtitleFocusNode,
-    required this.onEnterDocument,
-    required this.pageWidth,
-    required this.onHeightChanged,
-    this.onFieldTap,
-    super.key,
-  });
-
-  final String title;
-  final String subtitle;
-  final ValueChanged<String> onTitleChanged;
-  final ValueChanged<String> onSubtitleChanged;
-  final FocusNode titleFocusNode;
-  final FocusNode subtitleFocusNode;
-  final VoidCallback onEnterDocument;
-  final double pageWidth;
-  final ValueChanged<double> onHeightChanged;
-  final VoidCallback? onFieldTap;
-
-  @override
-  State<_MeasuredTitleFields> createState() => _MeasuredTitleFieldsState();
-}
-
-class _MeasuredTitleFieldsState extends State<_MeasuredTitleFields> {
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _measureHeight());
-  }
-
-  @override
-  void didUpdateWidget(_MeasuredTitleFields oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _measureHeight());
-  }
-
-  void _measureHeight() {
-    final renderBox = context.findRenderObject() as RenderBox?;
-    if (renderBox != null && renderBox.hasSize) {
-      widget.onHeightChanged(renderBox.size.height);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return TitleSubtitleFields(
-      title: widget.title,
-      subtitle: widget.subtitle,
-      onTitleChanged: widget.onTitleChanged,
-      onSubtitleChanged: widget.onSubtitleChanged,
-      titleFocusNode: widget.titleFocusNode,
-      subtitleFocusNode: widget.subtitleFocusNode,
-      onEnterDocument: widget.onEnterDocument,
-      pageWidth: widget.pageWidth,
-      onFieldTap: widget.onFieldTap,
-    );
-  }
-}
-
 class _PageSlot extends HookWidget {
-  const _PageSlot({
-    required this.scrollController,
-    required this.viewHeight,
-    required this.pageTop,
-    required this.pageBottom,
-    required this.pageIndex,
-    required this.editor,
-    required this.renderVersion,
-    required this.layout,
-    required this.cursor,
-    required this.isFocused,
-    required this.lineHighlightEnabled,
-    this.onRenderComplete,
-    super.key,
-  });
+  const _PageSlot({required this.pageIndex, required this.pageTop, required this.pageBottom, super.key});
 
-  final ScrollController scrollController;
-  final double viewHeight;
+  final int pageIndex;
   final double pageTop;
   final double pageBottom;
-  final int pageIndex;
-  final NativeEditor editor;
-  final Object? renderVersion;
-  final LayoutInfo layout;
-  final CursorInfo? cursor;
-  final bool isFocused;
-  final bool lineHighlightEnabled;
-  final VoidCallback? onRenderComplete;
-
-  bool _computeVisibility() {
-    if (!scrollController.hasClients) {
-      return true;
-    }
-    final scrollOffset = scrollController.offset;
-    const cacheExtent = 200.0;
-    final viewTop = scrollOffset - cacheExtent;
-    final viewBottom = scrollOffset + viewHeight + cacheExtent;
-    return pageBottom >= viewTop && pageTop <= viewBottom;
-  }
 
   @override
   Widget build(BuildContext context) {
-    final visible = useState(_computeVisibility());
+    final scope = ContentScope.of(context);
+    final verticalScrollController = scope.verticalScrollController;
+    final viewHeight = verticalScrollController.hasClients && verticalScrollController.position.hasContentDimensions
+        ? verticalScrollController.position.viewportDimension
+        : 0.0;
+
+    bool computeVisibility() {
+      if (!verticalScrollController.hasClients) {
+        return true;
+      }
+      final scrollOffset = verticalScrollController.offset;
+      const cacheExtent = 200.0;
+      final viewTop = scrollOffset - cacheExtent;
+      final viewBottom = scrollOffset + viewHeight + cacheExtent;
+      return pageBottom >= viewTop && pageTop <= viewBottom;
+    }
+
+    final visible = useState(computeVisibility());
 
     useEffect(() {
       void updateVisibility() {
-        final nowVisible = _computeVisibility();
+        final nowVisible = computeVisibility();
         if (nowVisible != visible.value) {
           visible.value = nowVisible;
         }
       }
 
-      scrollController.addListener(updateVisibility);
+      verticalScrollController.addListener(updateVisibility);
       updateVisibility();
-      return () => scrollController.removeListener(updateVisibility);
-    }, [scrollController, pageTop, pageBottom, viewHeight]);
+      return () => verticalScrollController.removeListener(updateVisibility);
+    }, [verticalScrollController, pageTop, pageBottom]);
 
     final slotHeight = pageBottom - pageTop;
 
@@ -884,30 +685,7 @@ class _PageSlot extends HookWidget {
       return SizedBox(height: slotHeight);
     }
 
-    final isLast = pageIndex == layout.pageCount - 1;
-    final gap = layout.isPaginated && !isLast ? pageGap : 0.0;
-    final pageHeight = layout.pageHeights.elementAtOrNull(pageIndex);
-    final pageCursor = cursor?.pageIdx == pageIndex ? cursor : null;
-    final layoutMode = layout.layoutMode;
-    final margins = layoutMode is PaginatedLayoutMode ? layoutMode : null;
-
-    return PageItem(
-      pageIndex: pageIndex,
-      editor: editor,
-      renderVersion: renderVersion,
-      bottomGap: gap,
-      pageWidth: layout.pageWidth,
-      pageHeight: pageHeight,
-      cursorInfo: pageCursor,
-      isFocused: isFocused,
-      lineHighlightEnabled: lineHighlightEnabled,
-      isPaginated: layout.isPaginated,
-      pageMarginTop: margins?.pageMarginTop ?? 0,
-      pageMarginBottom: margins?.pageMarginBottom ?? 0,
-      pageMarginLeft: margins?.pageMarginLeft ?? 0,
-      pageMarginRight: margins?.pageMarginRight ?? 0,
-      onRenderComplete: onRenderComplete,
-    );
+    return PageItem(pageIndex: pageIndex);
   }
 }
 

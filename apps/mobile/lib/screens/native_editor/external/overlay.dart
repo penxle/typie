@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:typie/screens/native_editor/external/embed.dart';
+import 'package:typie/screens/native_editor/external/file.dart';
+import 'package:typie/screens/native_editor/external/image.dart';
 import 'package:typie/screens/native_editor/external/models.dart';
 import 'package:typie/screens/native_editor/toolbar/scope.dart';
 
-import 'embed_widget.dart';
-import 'file_widget.dart';
-import 'image_widget.dart';
-
-class ExternalElementOverlay extends HookWidget {
-  const ExternalElementOverlay({required this.pageIndex, super.key});
+class ElementOverlay extends HookWidget {
+  const ElementOverlay({required this.pageIndex, super.key});
 
   final int pageIndex;
 
@@ -78,9 +77,9 @@ class _ExternalElementWrapper extends HookWidget {
 
   Widget _buildElementWidget() {
     return switch (element.data) {
-      ImageElementData() => ExternalImageWidget(element: element),
-      FileElementData() => ExternalFileWidget(element: element),
-      EmbedElementData() => ExternalEmbedWidget(element: element),
+      ImageElementData() => ImageWidget(element: element),
+      FileElementData() => FileWidget(element: element),
+      EmbedElementData() => EmbedWidget(element: element),
     };
   }
 }

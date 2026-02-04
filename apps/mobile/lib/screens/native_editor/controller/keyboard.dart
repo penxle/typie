@@ -7,8 +7,8 @@ Map<String, dynamic> _nav(String direction, bool extend) => {
   'extend': extend,
 };
 
-class EditorKeyboardHandler {
-  EditorKeyboardHandler({required this.dispatch, required this.commitComposing});
+class KeyboardHandler {
+  KeyboardHandler({required this.dispatch, required this.commitComposing});
 
   final void Function(Map<String, dynamic> message) dispatch;
   final void Function() commitComposing;
