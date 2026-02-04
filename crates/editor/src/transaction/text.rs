@@ -74,6 +74,33 @@ fn apply_pending_marks_to_text(text: &Text, range: std::ops::Range<usize>, marks
     }
 }
 
+fn persist_marks_after_deletion(tr: &mut Transaction, marks_before: Vec<Mark>, cursor: &Position) {
+    if marks_before.is_empty() {
+        return;
+    }
+
+    let marks_after = super::mark::get_marks_at_cursor(tr, cursor);
+    let schema = tr.doc().schema();
+
+    let persisted: Vec<Mark> = marks_before
+        .into_iter()
+        .filter(|mark| {
+            let spec = schema.mark_spec(mark.as_type());
+            spec.persist && !marks_after.iter().any(|m| m.as_type() == mark.as_type())
+        })
+        .collect();
+
+    if !persisted.is_empty() {
+        let mut pending = tr.state.pending_marks.clone().unwrap_or(marks_after);
+        for mark in persisted {
+            if !pending.iter().any(|m| m.as_type() == mark.as_type()) {
+                pending.push(mark);
+            }
+        }
+        tr.state.pending_marks = Some(pending);
+    }
+}
+
 fn resolve_affinity_after_edit(
     tr: &Transaction,
     block_id: NodeId,
@@ -398,6 +425,8 @@ impl Transaction {
         let from = Position::new(head.node_id, from_global_offset, head.affinity);
         let to = Position::new(head.node_id, to_global_offset, head.affinity);
 
+        let marks_before = super::mark::get_marks_at_cursor(self, &head);
+
         self.delete_range(from, to)?;
 
         let new_affinity =
@@ -408,6 +437,8 @@ impl Transaction {
             from_global_offset,
             new_affinity,
         )));
+
+        persist_marks_after_deletion(self, marks_before, &Position::new(head.node_id, from_global_offset, new_affinity));
 
         self.push_effect(Effect::NodeChanged {
             node_id: head.node_id,
@@ -475,6 +506,8 @@ impl Transaction {
         let from = Position::new(head.node_id, from_global_offset, head.affinity);
         let to = Position::new(head.node_id, to_global_offset, head.affinity);
 
+        let marks_before = super::mark::get_marks_at_cursor(self, &head);
+
         self.delete_range(from, to)?;
 
         let new_affinity =
@@ -485,6 +518,8 @@ impl Transaction {
             from_global_offset,
             new_affinity,
         )));
+
+        persist_marks_after_deletion(self, marks_before, &Position::new(head.node_id, from_global_offset, new_affinity));
 
         self.push_effect(Effect::NodeChanged {
             node_id: head.node_id,
@@ -548,6 +583,8 @@ impl Transaction {
             return self.delete_across_isolating_boundary(from, to);
         }
 
+        let marks_before = super::mark::get_marks_at_cursor(self, &from);
+
         self.push_effect(Effect::NodeChanged {
             node_id: from.node_id,
         });
@@ -558,6 +595,8 @@ impl Transaction {
         }
 
         self.delete_range(from, to)?;
+
+        persist_marks_after_deletion(self, marks_before, &from);
 
         if from.node_id != to.node_id {
             Ok(DeleteResult::Merged {
@@ -3451,6 +3490,113 @@ mod tests {
         assert!(
             writing_systems.contains(&WritingSystem::Chinese),
             "insert_text should detect Chinese"
+        );
+    }
+
+    #[test]
+    fn persist_marks_after_backspace_deletes_all_bold_text() {
+        let mut p = id!();
+
+        let state = state! {
+            doc {
+                @p paragraph {
+                    text(marks: [font_weight(700)]) { "a" }
+                }
+            }
+            selection { (p, 1) }
+        };
+
+        let mut tr = crate::transaction::Transaction::new(&state);
+        tr.delete_text_backward().unwrap();
+        let (view, _) = tr.commit().unwrap();
+
+        let pending = view.pending_marks.as_ref().expect("pending_marks should be set");
+        assert!(
+            pending.iter().any(|m| matches!(m, Mark::FontWeight(fw) if fw.weight == 700)),
+            "FontWeight(700) should persist after deleting all bold text, got: {:?}",
+            pending
+        );
+    }
+
+    #[test]
+    fn no_persist_for_ruby_mark_after_deletion() {
+        let mut p = id!();
+
+        let state = state! {
+            doc {
+                @p paragraph {
+                    text(marks: [ruby("ルビ")]) { "字" }
+                }
+            }
+            selection { (p, 1) }
+        };
+
+        let mut tr = crate::transaction::Transaction::new(&state);
+        tr.delete_text_backward().unwrap();
+        let (view, _) = tr.commit().unwrap();
+
+        if let Some(pending) = &view.pending_marks {
+            assert!(
+                !pending.iter().any(|m| matches!(m, Mark::Ruby(_))),
+                "Ruby mark should NOT persist (persist: false), got: {:?}",
+                pending
+            );
+        }
+    }
+
+    #[test]
+    fn no_persist_when_mark_still_exists_after_partial_deletion() {
+        let mut p = id!();
+
+        let state = state! {
+            doc {
+                @p paragraph {
+                    text(marks: [font_weight(700)]) { "ab" }
+                }
+            }
+            selection { (p, 2) }
+        };
+
+        let mut tr = crate::transaction::Transaction::new(&state);
+        tr.delete_text_backward().unwrap();
+        let (view, _) = tr.commit().unwrap();
+
+        assert!(
+            view.pending_marks.is_none(),
+            "pending_marks should be None when bold text still remains, got: {:?}",
+            view.pending_marks
+        );
+    }
+
+    #[test]
+    fn persist_merges_with_existing_pending_marks() {
+        let mut p = id!();
+
+        let mut state = state! {
+            doc {
+                @p paragraph {
+                    text(marks: [font_family("Arial")]) { "a" }
+                }
+            }
+            selection { (p, 1) }
+        };
+
+        state.pending_marks = Some(vec![Mark::FontWeight(FontWeightMark { weight: 700 })]);
+
+        let mut tr = crate::transaction::Transaction::new(&state);
+        tr.delete_text_backward().unwrap();
+        let (view, _) = tr.commit().unwrap();
+
+        let pending = view.pending_marks.as_ref().expect("pending_marks should be set");
+        assert!(
+            pending.iter().any(|m| matches!(m, Mark::FontWeight(fw) if fw.weight == 700)),
+            "Existing FontWeight(700) should be preserved, got: {:?}",
+            pending
+        );
+        assert!(
+            pending.iter().any(|m| matches!(m, Mark::FontFamily(ff) if ff.family == "Arial")),
+            "FontFamily(Arial) should be merged into pending, got: {:?}",
+            pending
         );
     }
 }

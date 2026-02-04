@@ -5,7 +5,7 @@ use crate::transaction::Transaction;
 use crate::{model::*, state::Selection};
 use anyhow::{Context, Result};
 
-fn get_marks_at_cursor(tr: &Transaction, position: &Position) -> Vec<Mark> {
+pub(crate) fn get_marks_at_cursor(tr: &Transaction, position: &Position) -> Vec<Mark> {
     let Some(node) = tr.node(position.node_id) else {
         return Vec::new();
     };

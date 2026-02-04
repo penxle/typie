@@ -54,12 +54,14 @@ impl Default for NodeSpec {
 #[derive(Debug, Clone)]
 pub struct MarkSpec {
     pub expand: Expand,
+    pub persist: bool,
 }
 
 impl Default for MarkSpec {
     fn default() -> Self {
         Self {
             expand: Expand::After,
+            persist: true,
         }
     }
 }
