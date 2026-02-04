@@ -649,15 +649,15 @@ class _PageSlot extends HookWidget {
   Widget build(BuildContext context) {
     final scope = ContentScope.of(context);
     final verticalScrollController = scope.verticalScrollController;
-    final viewHeight = verticalScrollController.hasClients && verticalScrollController.position.hasContentDimensions
-        ? verticalScrollController.position.viewportDimension
-        : 0.0;
 
     bool computeVisibility() {
       if (!verticalScrollController.hasClients) {
         return true;
       }
       final scrollOffset = verticalScrollController.offset;
+      final viewHeight = verticalScrollController.position.hasContentDimensions
+          ? verticalScrollController.position.viewportDimension
+          : 0.0;
       const cacheExtent = 200.0;
       final viewTop = scrollOffset - cacheExtent;
       final viewBottom = scrollOffset + viewHeight + cacheExtent;
