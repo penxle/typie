@@ -1266,6 +1266,7 @@ class _Document extends StatelessWidget {
         Row(
           spacing: 8,
           children: [
+            Icon(LucideLightIcons.file_text, size: 18, color: context.colors.accentBrand),
             Expanded(
               child: Text(
                 document.title,
@@ -1311,6 +1312,12 @@ class _BottomMenuHeader extends StatelessWidget {
                   ) ??
                   LucideLightIcons.folder_open,
               size: 20,
+              color: entity?.node.when(
+                folder: (_) => null,
+                post: (_) => null,
+                document: (_) => context.colors.accentBrand,
+                orElse: () => null,
+              ),
             ),
             Expanded(
               child: Text(

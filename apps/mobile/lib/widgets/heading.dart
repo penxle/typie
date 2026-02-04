@@ -13,6 +13,7 @@ class Heading extends StatelessWidget implements PreferredSizeWidget {
   const Heading({
     this.leadingWidget,
     this.titleIcon,
+    this.titleIconColor,
     this.title,
     this.titleWidget,
     this.suffix,
@@ -26,6 +27,7 @@ class Heading extends StatelessWidget implements PreferredSizeWidget {
 
   final Widget? leadingWidget;
   final IconData? titleIcon;
+  final Color? titleIconColor;
   final String? title;
   final Widget? titleWidget;
   final Widget? suffix;
@@ -102,7 +104,7 @@ class Heading extends StatelessWidget implements PreferredSizeWidget {
                         AppVerticalDivider(color: context.colors.borderStrong),
                         const Gap(20),
                       ],
-                      if (titleIcon != null) ...[Icon(titleIcon, size: 20), const Gap(8)],
+                      if (titleIcon != null) ...[Icon(titleIcon, size: 20, color: titleIconColor), const Gap(8)],
                       Expanded(
                         child:
                             titleWidget ??
