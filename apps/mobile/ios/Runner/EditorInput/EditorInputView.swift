@@ -42,6 +42,10 @@ class EditorInputView: NSObject, FlutterPlatformView {
       self?.channel.invokeMethod("focusLost", arguments: [String: Any]())
     }
 
+    inputView.onReplaceBackward = { [weak self] length, text in
+      self?.channel.invokeMethod("replaceBackward", arguments: ["length": length, "text": text])
+    }
+
     channel.setMethodCallHandler { [weak self] call, result in
       guard let self = self else {
         result(FlutterMethodNotImplemented)
@@ -62,7 +66,8 @@ class EditorInputView: NSObject, FlutterPlatformView {
            let x = args["x"] as? Double,
            let y = args["y"] as? Double,
            let height = args["height"] as? Double {
-          self.inputView.updateCursor(x: x, y: y, height: height)
+          let precedingCharWidths = args["precedingCharWidths"] as? [Double]
+          self.inputView.updateCursor(x: x, y: y, height: height, precedingCharWidths: precedingCharWidths)
         }
         result(nil)
       default:
@@ -85,14 +90,18 @@ class EditorTextInputView: UIView, UITextInput {
   var onPerformAction: ((String) -> Void)?
   var onShortcut: ((String) -> Void)?
   var onFocusLost: (() -> Void)?
+  var onReplaceBackward: ((Int, String) -> Void)?
 
   private var _markedText: String?
-  private var _cursor: Int = 10000
+  private var _cursor: Int = 0
   private var _isDeactivating: Bool = false
+  private var _shadowText: String = ""
+  private var _precedingCharWidths: [Double] = []
 
   private var cursorX: Double = 0
   private var cursorY: Double = 0
   private var cursorHeight: Double = 20
+
 
   override init(frame: CGRect) {
     super.init(frame: frame)
@@ -130,10 +139,13 @@ class EditorTextInputView: UIView, UITextInput {
     return result
   }
 
-  func updateCursor(x: Double, y: Double, height: Double) {
+  func updateCursor(x: Double, y: Double, height: Double, precedingCharWidths: [Double]? = nil) {
     cursorX = x
     cursorY = y
     cursorHeight = height
+    if let widths = precedingCharWidths {
+      _precedingCharWidths = widths
+    }
   }
 
   func resetInputContext() {
@@ -141,6 +153,7 @@ class EditorTextInputView: UIView, UITextInput {
       _markedText = nil
       onUnmarkText?()
     }
+    _shadowText = ""
     inputDelegate?.textWillChange(self)
     inputDelegate?.textDidChange(self)
   }
@@ -155,6 +168,7 @@ class EditorTextInputView: UIView, UITextInput {
   var smartQuotesType: UITextSmartQuotesType = .no
   var smartDashesType: UITextSmartDashesType = .no
   var smartInsertDeleteType: UITextSmartInsertDeleteType = .no
+
 
   // MARK: - Key Commands (shortcuts only)
 
@@ -213,7 +227,6 @@ class EditorTextInputView: UIView, UITextInput {
   func insertText(_ text: String) {
     if _markedText != nil {
       _markedText = nil
-      onUnmarkText?()
     }
 
     if text == "\n" {
@@ -222,10 +235,20 @@ class EditorTextInputView: UIView, UITextInput {
       } else {
         onPerformAction?("newline")
       }
+      _shadowText = ""
+      _cursor = 0
       return
     }
 
+    _shadowText.append(text)
+    if _shadowText.count > 64 {
+      _shadowText = String(_shadowText.suffix(64))
+    }
     _cursor += text.count
+    
+    inputDelegate?.textWillChange(self)
+    inputDelegate?.textDidChange(self)
+    
     onInsertText?(text)
   }
 
@@ -236,10 +259,17 @@ class EditorTextInputView: UIView, UITextInput {
       return
     }
 
+    _shadowText = ""
+    
     _cursor -= 1
-    if _cursor < 1 {
-      _cursor = 10000
+    if _cursor < 0 {
+      _cursor = 0
     }
+
+    if !_shadowText.isEmpty {
+      _shadowText.removeLast()
+    }
+
     onDeleteBackward?()
   }
 
@@ -275,7 +305,11 @@ class EditorTextInputView: UIView, UITextInput {
 
   var selectedTextRange: UITextRange? {
     get {
-      let pos = _markedText?.count ?? _cursor
+      if let markedText = _markedText {
+        let pos = markedText.count
+        return EditorTextRange(start: pos, end: pos)
+      }
+      let pos = _shadowText.count
       return EditorTextRange(start: pos, end: pos)
     }
     set {}
@@ -284,8 +318,43 @@ class EditorTextInputView: UIView, UITextInput {
   // MARK: - UITextInput (Text Geometry)
 
   func firstRect(for range: UITextRange) -> CGRect {
-    return CGRect(x: cursorX, y: cursorY, width: 1, height: cursorHeight)
+    guard let editorRange = range as? EditorTextRange else {
+      return CGRect(x: cursorX, y: cursorY, width: 1, height: cursorHeight)
+    }
+    
+    let shadowLen = _shadowText.count
+    let rangeStart = editorRange.startOffset
+    let rangeEnd = editorRange.endOffset
+    
+    if shadowLen == 0 || rangeStart >= shadowLen {
+      return CGRect(x: cursorX, y: cursorY, width: 1, height: cursorHeight)
+    }
+    
+    let availableWidths = min(_precedingCharWidths.count, shadowLen)
+    
+    if availableWidths == 0 {
+      return CGRect(x: cursorX, y: cursorY, width: 1, height: cursorHeight)
+    }
+    
+    var startX = cursorX
+    for i in stride(from: shadowLen - 1, through: rangeStart, by: -1) {
+      if i < availableWidths {
+        startX -= _precedingCharWidths[i]
+      }
+    }
+    
+    var width: Double = 0
+    for i in rangeStart..<min(rangeEnd, availableWidths) {
+      width += _precedingCharWidths[i]
+    }
+    
+    if width < 1 {
+      width = 1
+    }
+    
+    return CGRect(x: startX, y: cursorY, width: width, height: cursorHeight)
   }
+
 
   func caretRect(for position: UITextPosition) -> CGRect {
     return CGRect(x: cursorX, y: cursorY, width: 1, height: cursorHeight)
@@ -294,15 +363,62 @@ class EditorTextInputView: UIView, UITextInput {
   // MARK: - UITextInput (Document)
 
   var beginningOfDocument: UITextPosition { EditorTextPosition(offset: 0) }
-  var endOfDocument: UITextPosition { EditorTextPosition(offset: _markedText?.count ?? _cursor) }
+  var endOfDocument: UITextPosition { 
+    if let markedText = _markedText {
+      return EditorTextPosition(offset: markedText.count)
+    }
+    return EditorTextPosition(offset: _shadowText.count)
+  }
+
   var inputDelegate: (any UITextInputDelegate)?
   var tokenizer: any UITextInputTokenizer { UITextInputStringTokenizer(textInput: self) }
 
   func text(in range: UITextRange) -> String? {
-    return _markedText ?? ""
+    guard let editorRange = range as? EditorTextRange else { return nil }
+    
+    if let markedText = _markedText {
+      let start = max(0, min(editorRange.startOffset, markedText.count))
+      let end = max(start, min(editorRange.endOffset, markedText.count))
+      if start >= markedText.count { return "" }
+      let startIndex = markedText.index(markedText.startIndex, offsetBy: start)
+      let endIndex = markedText.index(markedText.startIndex, offsetBy: end)
+      return String(markedText[startIndex..<endIndex])
+    }
+    
+    let text = _shadowText
+    let start = max(0, min(editorRange.startOffset, text.count))
+    let end = max(start, min(editorRange.endOffset, text.count))
+    
+    if start >= text.count {
+      return ""
+    }
+    
+    let startIndex = text.index(text.startIndex, offsetBy: start)
+    let endIndex = text.index(text.startIndex, offsetBy: end)
+    return String(text[startIndex..<endIndex])
   }
 
-  func replace(_ range: UITextRange, withText text: String) {}
+  func replace(_ range: UITextRange, withText text: String) {
+    guard let editorRange = range as? EditorTextRange else { return }
+    
+    let shadowLen = _shadowText.count
+
+    guard editorRange.startOffset >= 0 && editorRange.startOffset <= shadowLen else {
+      onInsertText?(text)
+      _shadowText = ""
+      return
+    }
+
+    let deleteLength = shadowLen - editorRange.startOffset
+
+    if deleteLength > 0 {
+      onReplaceBackward?(deleteLength, text)
+    } else {
+      onInsertText?(text)
+    }
+    
+    _shadowText = ""
+  }
 
   func textRange(from fromPosition: UITextPosition, to toPosition: UITextPosition) -> UITextRange? {
     guard let from = fromPosition as? EditorTextPosition,

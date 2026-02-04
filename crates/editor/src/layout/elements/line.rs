@@ -511,12 +511,7 @@ impl LineElement {
         let offset = self.position_to_offset(&position)?;
 
         if self.metric.clusters.is_empty() {
-            return Some(Rect::new(
-                self.metric.left,
-                top,
-                0.0,
-                height,
-            ));
+            return Some(Rect::new(self.metric.left, top, 0.0, height));
         }
 
         let last = self.metric.clusters.last().unwrap();
@@ -537,12 +532,7 @@ impl LineElement {
 
         for cluster in &self.metric.clusters {
             if offset >= cluster.start_offset && offset < cluster.end_offset {
-                return Some(Rect::new(
-                    self.metric.left + cluster.x,
-                    top,
-                    0.0,
-                    height,
-                ));
+                return Some(Rect::new(self.metric.left + cluster.x, top, 0.0, height));
             }
         }
 
@@ -581,8 +571,53 @@ impl CursorNavigable for LineElement {
         self.cursor_bounds_internal(position)
     }
 
-    fn selection_handle_bounds(&self, _ctx: &NavigationContext, position: &Position) -> Option<Rect> {
+    fn selection_handle_bounds(
+        &self,
+        _ctx: &NavigationContext,
+        position: &Position,
+    ) -> Option<Rect> {
         self.selection_handle_bounds_internal(position)
+    }
+
+    fn preceding_char_widths(
+        &self,
+        _ctx: &NavigationContext,
+        position: &Position,
+        count: usize,
+    ) -> Option<Vec<f32>> {
+        let offset = self.position_to_offset(position)?;
+
+        let clusters = &self.metric.clusters;
+        if clusters.is_empty() {
+            return Some(Vec::new());
+        }
+
+        let mut result = Vec::with_capacity(count);
+        let mut curr = offset;
+
+        let i = clusters.partition_point(|c| c.end_offset < curr);
+
+        for j in (0..=i.min(clusters.len().saturating_sub(1))).rev() {
+            if result.len() >= count {
+                break;
+            }
+            let cluster = &clusters[j];
+
+            if cluster.end_offset == curr {
+                result.push(cluster.width);
+                curr = cluster.start_offset;
+            } else if cluster.end_offset > curr && cluster.start_offset < curr {
+                let len = cluster.end_offset - cluster.start_offset;
+                let sub_len = curr - cluster.start_offset;
+                if len > 0 {
+                    let ratio = sub_len as f32 / len as f32;
+                    result.push(cluster.width * ratio);
+                }
+                curr = cluster.start_offset;
+            }
+        }
+
+        Some(result)
     }
 
     fn navigate_left(

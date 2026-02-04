@@ -11,4 +11,13 @@ impl Runtime {
             tr.insert_text(text)
         })
     }
+
+    pub(crate) fn handle_replace_backward(&mut self, length: usize, text: &str) -> Vec<Effect> {
+        self.transact(|tr| {
+            for _ in 0..length {
+                tr.delete_text_backward()?;
+            }
+            tr.insert_text(text)
+        })
+    }
 }

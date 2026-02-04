@@ -245,7 +245,9 @@ class EditorView extends HookWidget {
       }
 
       if (cursor.show) {
-        inputController.updateCursor(cursor.x, cursor.y, cursor.height);
+        final scrollOffset = verticalScrollController.hasClients ? verticalScrollController.offset : 0.0;
+        final screenY = cursor.y - scrollOffset;
+        inputController.updateCursor(cursor.x, screenY, cursor.height, cursor.precedingCharWidths);
       }
 
       final shouldScroll =
@@ -327,7 +329,11 @@ class EditorView extends HookWidget {
                     children: [
                       const PageList(),
                       const _TitleOverlay(),
-                      Positioned.fill(
+                      Positioned(
+                        top: titleAreaHeight.value,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
                         child: InputView(
                           key: inputKey,
                           onInsertText: inputController.onInsertText,
@@ -339,6 +345,7 @@ class EditorView extends HookWidget {
                           onShortcut: inputController.onShortcut,
                           onFocusLost: inputController.onFocusLost,
                           onReady: inputController.onInputReady,
+                          onReplaceBackward: inputController.onReplaceBackward,
                         ),
                       ),
                       const Positioned(bottom: 20, right: 20, child: NativeEditorFloatingToolbar()),

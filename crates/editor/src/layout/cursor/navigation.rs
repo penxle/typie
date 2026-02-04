@@ -30,6 +30,17 @@ pub fn bounds(
         })
 }
 
+pub fn preceding_char_widths(
+    ctx: &NavigationContext,
+    pages: &[Page],
+    position: Position,
+    count: usize,
+) -> Option<Vec<f32>> {
+    let (_page_idx, _pos, element) = find_element_at_position(ctx, pages, &position)?;
+    let navigable = element.as_cursor_navigable()?;
+    navigable.preceding_char_widths(ctx, &position, count)
+}
+
 pub fn selection_handle_bounds(
     ctx: &NavigationContext,
     pages: &[Page],

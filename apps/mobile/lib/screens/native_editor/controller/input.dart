@@ -66,8 +66,8 @@ class InputController {
     inputKey.currentState?.deactivateInput();
   }
 
-  void updateCursor(double x, double y, double height) {
-    inputKey.currentState?.updateCursor(x, y, height);
+  void updateCursor(double x, double y, double height, [List<double>? precedingCharWidths]) {
+    inputKey.currentState?.updateCursor(x, y, height, precedingCharWidths);
   }
 
   void commitComposing() {
@@ -138,6 +138,10 @@ class InputController {
       return;
     }
     clearFocus();
+  }
+
+  void onReplaceBackward(int length, String text) {
+    dispatch({'type': 'replaceBackward', 'length': length, 'text': text});
   }
 
   void onKeyboardHidden() {

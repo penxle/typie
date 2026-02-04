@@ -82,7 +82,20 @@ pub enum CursorNavigation {
 pub trait CursorNavigable {
     fn cursor_bounds(&self, ctx: &NavigationContext, position: &Position) -> Option<Rect>;
 
-    fn selection_handle_bounds(&self, _ctx: &NavigationContext, _position: &Position) -> Option<Rect> {
+    fn selection_handle_bounds(
+        &self,
+        _ctx: &NavigationContext,
+        _position: &Position,
+    ) -> Option<Rect> {
+        None
+    }
+
+    fn preceding_char_widths(
+        &self,
+        _ctx: &NavigationContext,
+        _position: &Position,
+        _count: usize,
+    ) -> Option<Vec<f32>> {
         None
     }
 
@@ -196,6 +209,15 @@ impl Cursor {
         position: Position,
     ) -> Option<(usize, Rect)> {
         navigation::selection_handle_bounds(ctx, pages, position)
+    }
+
+    pub fn preceding_char_widths(
+        ctx: &NavigationContext,
+        pages: &[Page],
+        position: Position,
+        count: usize,
+    ) -> Option<Vec<f32>> {
+        navigation::preceding_char_widths(ctx, pages, position, count)
     }
 
     pub fn hit_test(ctx: &NavigationContext, page: &Page, x: f32, y: f32) -> Option<Selection> {

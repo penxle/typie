@@ -105,6 +105,7 @@ pub enum Cmd {
         bounds: Option<Rect>,
         show: bool,
         scroll_to_cursor: bool,
+        preceding_char_widths: Option<Vec<f32>>,
     },
 
     ExternalElementChanged {

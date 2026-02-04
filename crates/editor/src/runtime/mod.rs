@@ -899,11 +899,18 @@ impl Runtime {
                 .map(|(idx, rect)| (Some(idx), Some(rect), selection.is_collapsed()))
                 .unwrap_or((None, None, false));
 
+            let preceding_char_widths = if selection.is_collapsed() {
+                Cursor::preceding_char_widths(&ctx, &self.pages, selection.head, 64)
+            } else {
+                None
+            };
+
             cmds.push(Cmd::CursorChanged {
                 page_idx,
                 bounds,
                 show,
                 scroll_to_cursor: self.pending.scroll_to_cursor,
+                preceding_char_widths,
             });
             self.pending.cursor = false;
             self.pending.scroll_to_cursor = false;
