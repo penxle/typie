@@ -17,6 +17,7 @@ import type {
   Mark,
   MarkType,
   Message,
+  Position,
   Rect,
   SearchOverlay,
   SelectionStats,
@@ -70,6 +71,7 @@ export type EditorOptions = {
   readOnly?: boolean;
   onDocChanged?: () => void;
   onExitedDocumentStart?: () => void;
+  onSelectionChanged?: (anchor: Position, head: Position) => void;
 };
 
 export class Editor {
@@ -83,6 +85,7 @@ export class Editor {
   #pendingFontLoad = false;
   #onDocChanged?: () => void;
   #onExitedDocumentStart?: () => void;
+  #onSelectionChanged?: (anchor: Position, head: Position) => void;
   #readyResolve?: () => void;
   ready: Promise<void>;
 
@@ -237,6 +240,7 @@ export class Editor {
 
     this.#onDocChanged = options.onDocChanged;
     this.#onExitedDocumentStart = options.onExitedDocumentStart;
+    this.#onSelectionChanged = options.onSelectionChanged;
 
     const app = await getOrInitializeApplication();
     this.#application = app;
@@ -249,8 +253,6 @@ export class Editor {
       type: 'initialize',
       theme: options.theme,
     });
-
-    this.dispatch({ type: 'navigate', direction: 'documentStart', extend: false });
 
     if (options.readOnly) {
       this.setReadOnly(true);
@@ -332,6 +334,7 @@ export class Editor {
           this.selection.stats = cmd.stats;
           this.selection.collapsed = cmd.collapsed;
           this.characterCountsVersion++;
+          this.#onSelectionChanged?.(cmd.anchor, cmd.head);
           break;
         }
 

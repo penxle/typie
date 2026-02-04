@@ -1,7 +1,7 @@
 use super::effect::Effect;
 use super::{Context, ContextKey, Runtime, When};
 use crate::model::{BlockquoteVariant, HorizontalRuleVariant, LayoutMode, MarkType, TextAlign};
-use crate::types::Theme;
+use crate::types::{Affinity, Theme};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -545,6 +545,17 @@ define_messages! {
     SetFocused { focused: bool }
     => when When::True
     => handle(rt) { rt.handle_set_focused(focused) },
+
+    SetSelection {
+        anchor_node_id: String,
+        anchor_offset: usize,
+        anchor_affinity: Affinity,
+        head_node_id: String,
+        head_offset: usize,
+        head_affinity: Affinity,
+    }
+    => when When::True
+    => handle(rt) { rt.handle_set_selection(anchor_node_id, anchor_offset, anchor_affinity, head_node_id, head_offset, head_affinity) },
 
     Search { query: String, match_whole_word: bool }
     => when When::True

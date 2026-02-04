@@ -1,5 +1,6 @@
 use crate::layout::elements::ExternalElementData;
 use crate::model::{LayoutMode, Mark, MarkType, TextAlign};
+use crate::state::Position;
 use crate::types::{PointerStyle, Rect, TextBound, WritingSystem};
 use serde::Serialize;
 
@@ -118,6 +119,8 @@ pub enum Cmd {
     SelectionChanged {
         stats: SelectionStats,
         collapsed: bool,
+        anchor: Position,
+        head: Position,
         from_handle: Option<SelectionHandleBounds>,
         to_handle: Option<SelectionHandleBounds>,
     },

@@ -44,6 +44,54 @@
     if (!visible || !renderer) return;
     render();
   });
+
+  $effect(() => {
+    const scrollEl = editor.scrollContainerEl;
+    const node = containerEl;
+    if (!scrollEl || !node) return;
+
+    let rafId: number | null = null;
+
+    const checkVisibility = () => {
+      const scrollRect = scrollEl.getBoundingClientRect();
+      const pageRect = node.getBoundingClientRect();
+      const marginPx = scrollRect.height * 2;
+      const isIntersecting = pageRect.bottom > scrollRect.top - marginPx && pageRect.top < scrollRect.bottom + marginPx;
+
+      if (isIntersecting !== visible) {
+        visible = isIntersecting;
+      }
+
+      if (isIntersecting) {
+        const top = Math.max(scrollRect.top, pageRect.top);
+        const bottom = Math.min(scrollRect.bottom, pageRect.bottom);
+        const ratio = pageRect.height > 0 ? Math.max(0, bottom - top) / pageRect.height : 0;
+        editor.updatePageVisibility(page, ratio);
+      } else {
+        editor.updatePageVisibility(page, 0);
+      }
+    };
+
+    const scheduleCheck = () => {
+      if (rafId === null) {
+        rafId = requestAnimationFrame(() => {
+          rafId = null;
+          checkVisibility();
+        });
+      }
+    };
+
+    scrollEl.addEventListener('scroll', scheduleCheck);
+    checkVisibility();
+
+    return () => {
+      scrollEl.removeEventListener('scroll', scheduleCheck);
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
+      editor.updatePageVisibility(page, 0);
+    };
+  });
 </script>
 
 <div class={css({ position: 'relative', maxWidth: 'full' })}>
@@ -61,20 +109,6 @@
       }),
       isolation: 'isolate',
     })}
-    {@attach (node) => {
-      const observer = new IntersectionObserver(
-        ([entry]) => {
-          visible = entry.isIntersecting;
-          editor.updatePageVisibility(page, entry.intersectionRatio);
-        },
-        { rootMargin: '200% 0px', threshold: [0, 0.25, 0.5, 0.75, 1] },
-      );
-      observer.observe(node);
-      return () => {
-        observer.disconnect();
-        editor.updatePageVisibility(page, 0);
-      };
-    }}
     data-page-index={page}
   >
     {#if visible}

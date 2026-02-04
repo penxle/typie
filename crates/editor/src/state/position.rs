@@ -1,7 +1,10 @@
 use crate::model::NodeId;
 use crate::types::Affinity;
+use serde::Serialize;
 
-#[derive(Debug, Clone, Copy, Eq)]
+#[derive(Debug, Clone, Copy, Eq, Serialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[serde(rename_all = "camelCase")]
 pub struct Position {
     pub node_id: NodeId,
     pub offset: usize,
