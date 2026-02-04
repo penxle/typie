@@ -247,6 +247,14 @@ class EditorTextInputView: UIView, UITextInput {
           onUnmarkText?()
         }
         onShortcut?(def.action)
+
+        _shadowText = ""
+        _cursor = 0
+        inputDelegate?.textWillChange(self)
+        inputDelegate?.selectionWillChange(self)
+        inputDelegate?.textDidChange(self)
+        inputDelegate?.selectionDidChange(self)
+        
         return
       }
     }
