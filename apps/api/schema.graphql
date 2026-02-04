@@ -136,6 +136,7 @@ input DeleteWidgetInput {
 
 type Document implements IDocument {
   assets: [DocumentAsset!]!
+  characterCount: Int!
   characterCountChange: CharacterCountChange!
   createdAt: DateTime!
   entity: Entity!

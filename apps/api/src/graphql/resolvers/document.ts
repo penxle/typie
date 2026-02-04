@@ -152,6 +152,24 @@ Document.implement({
       },
     }),
 
+    characterCount: t.int({
+      resolve: async (self, _, ctx) => {
+        const loader = ctx.loader({
+          name: 'Document.characterCount',
+          load: async (ids) => {
+            return await db
+              .select({ documentId: DocumentContents.documentId, characterCount: DocumentContents.characterCount })
+              .from(DocumentContents)
+              .where(inArray(DocumentContents.documentId, ids));
+          },
+          key: ({ documentId }) => documentId,
+        });
+
+        const content = await loader.load(self.id);
+        return content.characterCount;
+      },
+    }),
+
     characterCountChange: t.withAuth({ session: true }).field({
       type: CharacterCountChange,
       resolve: async (document, _, ctx) => {

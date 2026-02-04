@@ -1,0 +1,10 @@
+mutation EntityScreen_DuplicateDocument_Mutation($input: DuplicateDocumentInput!) {
+  duplicateDocument(input: $input) {
+    id
+
+    entity {
+      id
+      slug
+    }
+  }
+}
