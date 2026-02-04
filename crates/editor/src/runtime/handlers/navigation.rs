@@ -102,18 +102,21 @@ impl Runtime {
             }
         }
 
-        let root = self.state.doc.node(NodeId::ROOT).unwrap();
-        let start = Position::new(root.node_id(), 0, crate::types::Affinity::Downstream);
-        let end = Position::new(
-            root.node_id(),
-            block_content_len(&root),
-            crate::types::Affinity::Downstream,
-        );
+        let ctx = NavigationContext::new(&self.state.doc);
+        let doc_start = Cursor::move_to_document_start(&ctx, &self.pages);
+        let doc_end = Cursor::move_to_document_end(&ctx, &self.pages);
 
-        self.transact(move |tr| {
-            tr.set_selection(Selection::new(start, end));
-            Ok(true)
-        })
+        if let (Some(start_sel), Some(end_sel)) = (doc_start, doc_end) {
+            let start = start_sel.head;
+            let end = end_sel.head;
+
+            self.transact(move |tr| {
+                tr.set_selection(Selection::new(start, end));
+                Ok(true)
+            })
+        } else {
+            vec![]
+        }
     }
 
     pub(crate) fn handle_extend_mark_range(&mut self, mark_type: MarkType) -> Vec<Effect> {
@@ -714,10 +717,10 @@ mod tests {
         rt.update(Message::SelectAll);
 
         let selection = &rt.state().selection;
-        assert_eq!(selection.anchor.node_id, NodeId::ROOT);
+        assert_eq!(selection.anchor.node_id, p1);
         assert_eq!(selection.anchor.offset, 0);
-        assert_eq!(selection.head.node_id, NodeId::ROOT);
-        assert_eq!(selection.head.offset, 2);
+        assert_eq!(selection.head.node_id, p2);
+        assert_eq!(selection.head.offset, 6);
     }
 
     #[test]

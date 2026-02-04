@@ -77,6 +77,7 @@ int32_t editor_import_updates_batch(
     size_t count
 );
 int32_t editor_commit_sync(EditorHandle* editor, const uint8_t* version, size_t version_len);
+char* editor_get_clipboard_data(EditorHandle* editor);
 
 #ifdef __cplusplus
 }

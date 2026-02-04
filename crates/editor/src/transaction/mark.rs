@@ -2163,24 +2163,28 @@ mod tests {
 
     #[test]
     fn select_all_and_toggle_italic() {
-        let mut p = id!();
+        let mut p1 = id!();
         let mut rt = runtime! {
+          viewport { 800, 600, 1.0 }
           doc {
-            @p paragraph { text { "hello" } }
+            @p1 paragraph { text { "hello" } }
             paragraph { text { "world" } }
           }
-          selection { (p, 0) }
+          selection { (p1, 0) }
         };
 
+        rt.layout();
         rt.update(Message::SelectAll);
         rt.update(Message::ToggleItalic);
 
+        let mut ep1 = id!();
+        let mut ep2 = id!();
         let expected = state! {
           doc {
-            paragraph { text(marks: [italic()]) { "hello" } }
-            paragraph { text(marks: [italic()]) { "world" } }
+            @ep1 paragraph { text(marks: [italic()]) { "hello" } }
+            @ep2 paragraph { text(marks: [italic()]) { "world" } }
           }
-          selection { (NodeId::ROOT, 0) -> (NodeId::ROOT, 2) }
+          selection { (ep1, 0) -> (ep2, 5, Affinity::Upstream) }
         };
 
         assert_state_eq!(rt.state(), expected);
