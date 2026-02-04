@@ -130,7 +130,19 @@ class InputController {
   }
 
   void onShortcut(String action) {
-    dispatch({'type': action});
+    final direction = switch (action) {
+      'navigateLeft' => 'left',
+      'navigateRight' => 'right',
+      'navigateUp' => 'up',
+      'navigateDown' => 'down',
+      _ => null,
+    };
+
+    if (direction != null) {
+      dispatch({'type': 'navigate', 'direction': direction, 'extend': false});
+    } else {
+      dispatch({'type': action});
+    }
   }
 
   void onFocusLost() {

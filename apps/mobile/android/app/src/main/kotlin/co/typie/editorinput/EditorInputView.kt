@@ -237,7 +237,7 @@ class EditorInputNativeView(
 
       override fun getTextBeforeCursor(maxChars: Int, flags: Int): CharSequence = " "
 
-      override fun getTextAfterCursor(maxChars: Int, flags: Int): CharSequence = ""
+      override fun getTextAfterCursor(maxChars: Int, flags: Int): CharSequence = " "
 
       override fun getSelectedText(flags: Int): CharSequence? = null
 
@@ -269,6 +269,26 @@ class EditorInputNativeView(
             } else {
               channel.invokeMethod("performAction", mapOf("action" to "newline"))
             }
+            true
+          }
+          KeyEvent.KEYCODE_DPAD_LEFT -> {
+            commitComposingState()
+            channel.invokeMethod("shortcut", mapOf("action" to "navigateLeft"))
+            true
+          }
+          KeyEvent.KEYCODE_DPAD_RIGHT -> {
+            commitComposingState()
+            channel.invokeMethod("shortcut", mapOf("action" to "navigateRight"))
+            true
+          }
+          KeyEvent.KEYCODE_DPAD_UP -> {
+            commitComposingState()
+            channel.invokeMethod("shortcut", mapOf("action" to "navigateUp"))
+            true
+          }
+          KeyEvent.KEYCODE_DPAD_DOWN -> {
+            commitComposingState()
+            channel.invokeMethod("shortcut", mapOf("action" to "navigateDown"))
             true
           }
           else -> super.sendKeyEvent(event)
