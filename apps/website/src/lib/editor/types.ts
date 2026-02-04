@@ -1,4 +1,5 @@
 export type {
+  Affinity,
   Cmd,
   Direction,
   ExternalElement,
@@ -11,6 +12,7 @@ export type {
   Node,
   NodeType,
   PointerStyle,
+  Position,
   Rect,
   SearchOverlay,
   SelectionStats,

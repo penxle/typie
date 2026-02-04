@@ -3,7 +3,7 @@
   import { flex, grid } from '@typie/styled-system/patterns';
   import { getThemeContext } from '@typie/ui/context';
   import { handleDragScroll } from '@typie/ui/utils';
-  import { untrack } from 'svelte';
+  import { tick, untrack } from 'svelte';
   import {
     CONTINUOUS_MIN_WIDTH,
     CONTINUOUS_PAGE_MARGIN,
@@ -19,7 +19,7 @@
   import Scrollbar from './ui/Scrollbar.svelte';
   import VerticalRuler from './ui/VerticalRuler.svelte';
   import type { Snippet } from 'svelte';
-  import type { LayoutMode } from '$lib/editor/types';
+  import type { LayoutMode, Position } from '$lib/editor/types';
 
   type Props = {
     unit?: 'px' | 'cm';
@@ -28,6 +28,7 @@
     readOnly?: boolean;
     editor?: Editor;
     onDocChanged?: () => void;
+    onSelectionChanged?: (anchor: Position, head: Position) => void;
     onExitedDocumentStart?: () => void;
     onEditorReady?: (editor: Editor) => void;
     header?: Snippet;
@@ -41,6 +42,7 @@
     readOnly = false,
     editor: externalEditor,
     onDocChanged,
+    onSelectionChanged,
     onExitedDocumentStart,
     onEditorReady,
     header,
@@ -74,6 +76,7 @@
         snapshot,
         readOnly,
         onDocChanged,
+        onSelectionChanged,
         onExitedDocumentStart,
       });
     });
@@ -86,7 +89,7 @@
   $effect(() => {
     if (editor.layout.pageCount > 0) {
       initialized = true;
-      onEditorReady?.(editor);
+      tick().then(() => onEditorReady?.(editor));
     }
   });
 

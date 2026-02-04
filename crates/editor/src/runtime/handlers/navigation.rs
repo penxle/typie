@@ -3,6 +3,7 @@ use crate::layout::cursor::{Cursor, NavigationContext};
 use crate::model::{MarkType, NodeId};
 use crate::state::position_helpers::{compare_positions, move_from_block_position};
 use crate::state::{Position, Selection, block_content_len};
+use crate::types::Affinity;
 use std::cmp::Ordering;
 
 impl Runtime {
@@ -117,6 +118,32 @@ impl Runtime {
 
     pub(crate) fn handle_extend_mark_range(&mut self, mark_type: MarkType) -> Vec<Effect> {
         self.transact(|tr| tr.extend_mark_range(mark_type))
+    }
+
+    pub(crate) fn handle_set_selection(
+        &mut self,
+        anchor_node_id: String,
+        anchor_offset: usize,
+        anchor_affinity: Affinity,
+        head_node_id: String,
+        head_offset: usize,
+        head_affinity: Affinity,
+    ) -> Vec<Effect> {
+        let Some(anchor_id) = NodeId::from_string(&anchor_node_id) else {
+            return Vec::new();
+        };
+        let Some(head_id) = NodeId::from_string(&head_node_id) else {
+            return Vec::new();
+        };
+
+        let anchor = Position::new(anchor_id, anchor_offset, anchor_affinity);
+        let head = Position::new(head_id, head_offset, head_affinity);
+        let selection = Selection::new(anchor, head);
+
+        self.state.selection = self.validate_selection(selection);
+        self.state.preferred_x = None;
+
+        vec![Effect::SelectionChanged]
     }
 
     fn compute_navigation(

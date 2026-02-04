@@ -5,6 +5,8 @@
   import { Helmet, HorizontalDivider, Icon, Menu, RingSpinner } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { Tip } from '@typie/ui/notification';
+  import { LocalStore } from '@typie/ui/state';
+  import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
   import { nanoid } from 'nanoid';
   import { fly } from 'svelte/transition';
@@ -33,6 +35,7 @@
   import DocumentTemplateModal from './DocumentTemplateModal.svelte';
   import SpellcheckPopover from './SpellcheckPopover.svelte';
   import type { Document_query } from '$graphql';
+  import type { Affinity, Position } from '$lib/editor/types';
 
   type Props = {
     $query: Document_query;
@@ -216,6 +219,11 @@
   let syncStatus = $state<'syncing' | 'synced' | 'error'>('synced');
   let planUpgradeModalOpen = $state(false);
   let showFindReplace = $state(false);
+
+  const selectionsStore = new LocalStore<Record<string, { selection?: unknown; type?: string; element?: string; timestamp: number }>>(
+    'typie:selections',
+    {},
+  );
 
   let titleEl = $state<HTMLTextAreaElement>();
   let subtitleEl = $state<HTMLTextAreaElement>();
@@ -451,6 +459,45 @@
     }, 1000);
   }
 
+  let editorReady = false;
+
+  function handleSelectionChanged(anchor: Position, head: Position) {
+    if (!documentId || !editorReady || !editor.isFocused) return;
+    selectionsStore.current = {
+      ...selectionsStore.current,
+      [documentId]: { selection: { anchor, head }, timestamp: dayjs().valueOf() },
+    };
+  }
+
+  function handleEditorReady() {
+    if (!documentId) return;
+    const saved = selectionsStore.current[documentId];
+    if (!saved) {
+      titleEl?.focus();
+      return;
+    }
+    if (saved.type === 'element') {
+      if (saved.element === 'title') titleEl?.focus();
+      else if (saved.element === 'subtitle') subtitleEl?.focus();
+    } else if (saved.selection) {
+      const sel = saved.selection as {
+        anchor: { nodeId: string; offset: number; affinity: Affinity };
+        head: { nodeId: string; offset: number; affinity: Affinity };
+      };
+      editor.dispatch({
+        type: 'setSelection',
+        anchorNodeId: sel.anchor.nodeId,
+        anchorOffset: sel.anchor.offset,
+        anchorAffinity: sel.anchor.affinity,
+        headNodeId: sel.head.nodeId,
+        headOffset: sel.head.offset,
+        headAffinity: sel.head.affinity,
+      });
+      editor.focus();
+    }
+    editorReady = true;
+  }
+
   function handleGlobalKeydown(e: KeyboardEvent) {
     if ((e.ctrlKey || e.metaKey) && e.code === 'KeyF' && focused) {
       e.preventDefault();
@@ -654,7 +701,9 @@
             <EditorComponent
               {editor}
               onDocChanged={handleDocChanged}
+              onEditorReady={handleEditorReady}
               onExitedDocumentStart={() => subtitleEl?.focus()}
+              onSelectionChanged={handleSelectionChanged}
               {snapshot}
               unit="cm"
             >
@@ -681,6 +730,14 @@
                       autocapitalize="off"
                       autocomplete="off"
                       maxlength={100}
+                      onfocus={() => {
+                        if (documentId) {
+                          selectionsStore.current = {
+                            ...selectionsStore.current,
+                            [documentId]: { type: 'element', element: 'title', timestamp: dayjs().valueOf() },
+                          };
+                        }
+                      }}
                       oninput={handleTitleChanged}
                       onkeydown={(e) => {
                         if (e.isComposing) {
@@ -712,6 +769,14 @@
                       autocapitalize="off"
                       autocomplete="off"
                       maxlength={100}
+                      onfocus={() => {
+                        if (documentId) {
+                          selectionsStore.current = {
+                            ...selectionsStore.current,
+                            [documentId]: { type: 'element', element: 'subtitle', timestamp: dayjs().valueOf() },
+                          };
+                        }
+                      }}
                       oninput={handleSubtitleChanged}
                       onkeydown={(e) => {
                         if (e.isComposing) {

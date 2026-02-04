@@ -937,6 +937,8 @@ impl Runtime {
             cmds.push(Cmd::SelectionChanged {
                 stats,
                 collapsed,
+                anchor: selection.anchor,
+                head: selection.head,
                 from_handle,
                 to_handle,
             });
