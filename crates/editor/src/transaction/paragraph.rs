@@ -9,8 +9,11 @@ use crate::types::Affinity;
 use anyhow::{Context, Result};
 
 pub(crate) fn clone_block_type(node: &Node) -> Option<Node> {
-    match node.as_type() {
-        NodeType::Paragraph => Some(Node::Paragraph(ParagraphNode::default())),
+    match node {
+        Node::Paragraph(p) => Some(Node::Paragraph(ParagraphNode {
+            align: p.align,
+            line_height: p.line_height,
+        })),
         _ => None,
     }
 }

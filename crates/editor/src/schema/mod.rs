@@ -304,12 +304,14 @@ impl Default for Schema {
             MarkType::Link,
             MarkSpec {
                 expand: Expand::None,
+                persist: false,
             },
         );
         schema.add_mark(
             MarkType::Ruby,
             MarkSpec {
                 expand: Expand::None,
+                persist: false,
             },
         );
 
