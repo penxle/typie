@@ -16,9 +16,7 @@ final lightTheme = ThemeData(
   scaffoldBackgroundColor: AppColors.white,
   primaryColor: AppColors.gray_950,
   fontFamily: 'Interop',
-  colorScheme: ColorScheme.fromSeed(
-    seedColor: AppColors.brand_600,
-  ),
+  colorScheme: ColorScheme.fromSeed(seedColor: AppColors.brand_600),
   extensions: const [SemanticColors.light],
   appBarTheme: const AppBarTheme(
     backgroundColor: AppColors.white,
@@ -56,10 +54,7 @@ final lightTheme = ThemeData(
   iconTheme: const IconThemeData(size: 24, color: AppColors.gray_950),
   progressIndicatorTheme: const ProgressIndicatorThemeData(strokeWidth: 1, color: AppColors.gray_950),
   cupertinoOverrideTheme: const CupertinoThemeData(primaryColor: AppColors.gray_950),
-  dividerTheme: const DividerThemeData(
-    color: AppColors.gray_200,
-    thickness: 1,
-  ),
+  dividerTheme: const DividerThemeData(color: AppColors.gray_200, thickness: 1),
 );
 
 final _darkDefaultTextStyle = TextStyle(
@@ -75,10 +70,7 @@ final darkTheme = ThemeData(
   scaffoldBackgroundColor: AppColors.dark.gray_900,
   primaryColor: AppColors.dark.gray_50,
   fontFamily: 'Interop',
-  colorScheme: ColorScheme.fromSeed(
-    seedColor: AppColors.dark.brand_600,
-    brightness: Brightness.dark,
-  ),
+  colorScheme: ColorScheme.fromSeed(seedColor: AppColors.dark.brand_600, brightness: Brightness.dark),
   extensions: [SemanticColors.dark],
   appBarTheme: AppBarTheme(
     backgroundColor: AppColors.dark.gray_800,
@@ -116,8 +108,5 @@ final darkTheme = ThemeData(
   iconTheme: IconThemeData(size: 24, color: AppColors.dark.gray_50),
   progressIndicatorTheme: ProgressIndicatorThemeData(strokeWidth: 1, color: AppColors.dark.gray_50),
   cupertinoOverrideTheme: CupertinoThemeData(primaryColor: AppColors.dark.gray_50),
-  dividerTheme: DividerThemeData(
-    color: AppColors.dark.gray_700,
-    thickness: 1,
-  ),
+  dividerTheme: DividerThemeData(color: AppColors.dark.gray_700, thickness: 1),
 );

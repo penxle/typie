@@ -6,11 +6,7 @@ impl Runtime {
         self.transact(|tr| tr.insert_node(Node::Embed(EmbedNode { id: None })))
     }
 
-    pub(crate) fn handle_set_embed_id(
-        &mut self,
-        node_id: String,
-        embed_id: String,
-    ) -> Vec<Effect> {
+    pub(crate) fn handle_set_embed_id(&mut self, node_id: String, embed_id: String) -> Vec<Effect> {
         let Some(node_id) = NodeId::from_string(&node_id) else {
             return vec![];
         };

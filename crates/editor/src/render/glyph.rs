@@ -208,7 +208,11 @@ impl GlyphRenderer {
                     None => match FontRef::new(font_data) {
                         Ok(f) => font_ref_lazy.insert(f),
                         Err(e) => {
-                            error!("[GlyphRenderer] FontRef::new failed: {:?}, font_data.len={}", e, font_data.len());
+                            error!(
+                                "[GlyphRenderer] FontRef::new failed: {:?}, font_data.len={}",
+                                e,
+                                font_data.len()
+                            );
                             continue;
                         }
                     },

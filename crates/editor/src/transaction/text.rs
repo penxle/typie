@@ -438,7 +438,11 @@ impl Transaction {
             new_affinity,
         )));
 
-        persist_marks_after_deletion(self, marks_before, &Position::new(head.node_id, from_global_offset, new_affinity));
+        persist_marks_after_deletion(
+            self,
+            marks_before,
+            &Position::new(head.node_id, from_global_offset, new_affinity),
+        );
 
         self.push_effect(Effect::NodeChanged {
             node_id: head.node_id,
@@ -519,7 +523,11 @@ impl Transaction {
             new_affinity,
         )));
 
-        persist_marks_after_deletion(self, marks_before, &Position::new(head.node_id, from_global_offset, new_affinity));
+        persist_marks_after_deletion(
+            self,
+            marks_before,
+            &Position::new(head.node_id, from_global_offset, new_affinity),
+        );
 
         self.push_effect(Effect::NodeChanged {
             node_id: head.node_id,
@@ -3510,9 +3518,14 @@ mod tests {
         tr.delete_text_backward().unwrap();
         let (view, _) = tr.commit().unwrap();
 
-        let pending = view.pending_marks.as_ref().expect("pending_marks should be set");
+        let pending = view
+            .pending_marks
+            .as_ref()
+            .expect("pending_marks should be set");
         assert!(
-            pending.iter().any(|m| matches!(m, Mark::FontWeight(fw) if fw.weight == 700)),
+            pending
+                .iter()
+                .any(|m| matches!(m, Mark::FontWeight(fw) if fw.weight == 700)),
             "FontWeight(700) should persist after deleting all bold text, got: {:?}",
             pending
         );
@@ -3587,14 +3600,21 @@ mod tests {
         tr.delete_text_backward().unwrap();
         let (view, _) = tr.commit().unwrap();
 
-        let pending = view.pending_marks.as_ref().expect("pending_marks should be set");
+        let pending = view
+            .pending_marks
+            .as_ref()
+            .expect("pending_marks should be set");
         assert!(
-            pending.iter().any(|m| matches!(m, Mark::FontWeight(fw) if fw.weight == 700)),
+            pending
+                .iter()
+                .any(|m| matches!(m, Mark::FontWeight(fw) if fw.weight == 700)),
             "Existing FontWeight(700) should be preserved, got: {:?}",
             pending
         );
         assert!(
-            pending.iter().any(|m| matches!(m, Mark::FontFamily(ff) if ff.family == "Arial")),
+            pending
+                .iter()
+                .any(|m| matches!(m, Mark::FontFamily(ff) if ff.family == "Arial")),
             "FontFamily(Arial) should be merged into pending, got: {:?}",
             pending
         );

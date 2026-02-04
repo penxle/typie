@@ -1,7 +1,7 @@
 use super::{Doc, Mark, Node, NodeId, TextNode};
 use crate::schema::Schema;
 use crate::state::position_helpers::find_child_at_offset;
-use crate::state::{Position, Selection, compute_structure_selection, StructureSelectionInfo};
+use crate::state::{Position, Selection, StructureSelectionInfo, compute_structure_selection};
 use anyhow::{Context, Result};
 use indexmap::IndexMap;
 use rustc_hash::{FxHashMap, FxHashSet};
