@@ -202,20 +202,20 @@ final editorValues = <String, List<Map<String, dynamic>>>{
   'blockquote': [
     {
       'label': '왼쪽 선',
-      'type': 'left-line',
+      'type': 'left_line',
       'widget': Builder(
         builder: (context) => AppVerticalDivider(color: context.colors.borderDefault, width: 4, height: 24),
       ),
     },
     {
       'label': '왼쪽 따옴표',
-      'type': 'left-quote',
+      'type': 'left_quote',
       'widget': Builder(
         builder: (context) => SvgImage('icons/left-quote', height: 16, color: context.colors.textDefault),
       ),
     },
-    {'label': '보낸 메시지', 'type': 'message-sent'},
-    {'label': '받은 메시지', 'type': 'message-received'},
+    {'label': '보낸 메시지', 'type': 'message_sent'},
+    {'label': '받은 메시지', 'type': 'message_received'},
   ],
 
   'horizontalRule': [
@@ -419,7 +419,7 @@ const editorDefaultValues = <String, dynamic>{
   'lineHeight': 1.6,
   'letterSpacing': 0.0,
   'textAlign': 'left',
-  'blockquote': 'left-line',
+  'blockquote': 'left_line',
   'horizontalRule': 'line',
   'callout': 'info',
   'paragraphIndent': 1.0,
