@@ -20,6 +20,19 @@
   let currentCompositionText = '';
   let ignoreEventText = '';
 
+  const resetInputState = () => {
+    if (inputEl) {
+      inputEl.value = '';
+      lastInputValue = '';
+    }
+  };
+
+  const setClipboardData = (clipboardData: DataTransfer | null, data: { fragment: string; html: string; text: string }) => {
+    clipboardData?.setData(FRAGMENT_MIME, data.fragment);
+    clipboardData?.setData('text/html', data.html);
+    clipboardData?.setData('text/plain', data.text);
+  };
+
   export function focus() {
     inputEl?.focus({ preventScroll: true });
   }
@@ -36,6 +49,12 @@
 
     const value = inputEl?.value || '';
 
+    if (ignoreEventText && value === ignoreEventText) {
+      ignoreEventText = '';
+      resetInputState();
+      return;
+    }
+
     if (!inputEl) return;
 
     if (!value) {
@@ -47,16 +66,16 @@
       // Append
       const newText = value.slice(lastInputValue.length);
       editor.dispatch({ type: 'input', text: newText });
-    } else if (lastInputValue.length > 0) {
-      // Replace (macOS accent popup)
-      editor.dispatch({ type: 'deleteBackward' });
-      editor.dispatch({ type: 'input', text: value });
+    } else if (lastInputValue.length > 0 && value !== lastInputValue) {
+      // Replace (macOS accent popup / text replacement)
+      const deleteLength = lastInputValue.length;
+      editor.dispatch({ type: 'replaceBackward', length: deleteLength, text: value });
     }
 
-    // 마지막 글자만 남겨둠
-    const lastChar = value.slice(-1);
-    inputEl.value = lastChar;
-    lastInputValue = lastChar;
+    if (value.length > 64) {
+      inputEl.value = value.slice(-64);
+    }
+    lastInputValue = inputEl.value;
   };
 
   const handleKeyDown = (e: KeyboardEvent) => {
@@ -103,10 +122,7 @@
       e.preventDefault();
       editor.dispatch(action);
 
-      if (inputEl) {
-        inputEl.value = '';
-        lastInputValue = '';
-      }
+      resetInputState();
     }
   };
 
@@ -115,9 +131,7 @@
     if (!data) return;
 
     e.preventDefault();
-    e.clipboardData?.setData(FRAGMENT_MIME, data.fragment);
-    e.clipboardData?.setData('text/html', data.html);
-    e.clipboardData?.setData('text/plain', data.text);
+    setClipboardData(e.clipboardData, data);
   };
 
   const handleCut = (e: ClipboardEvent) => {
@@ -127,9 +141,7 @@
     if (!data) return;
 
     e.preventDefault();
-    e.clipboardData?.setData(FRAGMENT_MIME, data.fragment);
-    e.clipboardData?.setData('text/html', data.html);
-    e.clipboardData?.setData('text/plain', data.text);
+    setClipboardData(e.clipboardData, data);
     editor.dispatch({ type: 'deleteBackward' });
   };
 
@@ -170,20 +182,26 @@
   const handleCompositionEnd = (e: CompositionEvent) => {
     if (editor.readOnly) return;
 
-    if (inputEl) {
-      inputEl.value = '';
-      lastInputValue = '';
-    }
-
     const text = e.data || '';
     if (ignoreEventText && text === ignoreEventText) {
       ignoreEventText = '';
       editor.dispatch({ type: 'compositionEnd' });
+      resetInputState();
       return;
     }
 
     editor.dispatch({ type: 'input', text });
     editor.dispatch({ type: 'compositionEnd' });
+
+    if (inputEl) {
+      const newValue = lastInputValue + text;
+      if (newValue.length > 64) {
+        inputEl.value = newValue.slice(-64);
+      } else {
+        inputEl.value = newValue;
+      }
+      lastInputValue = inputEl.value;
+    }
   };
 
   $effect(() => {
