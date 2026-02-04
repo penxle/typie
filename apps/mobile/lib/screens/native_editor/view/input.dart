@@ -15,6 +15,9 @@ class InputView extends StatefulWidget {
     required this.onPerformAction,
     this.onReplaceBackward,
     this.onShortcut,
+    this.onFloatingCursorBegin,
+    this.onFloatingCursorUpdate,
+    this.onFloatingCursorEnd,
     this.onFocusLost,
     this.onReady,
     super.key,
@@ -28,6 +31,9 @@ class InputView extends StatefulWidget {
   final void Function(int length, String text)? onReplaceBackward;
   final void Function(String action) onPerformAction;
   final void Function(String action)? onShortcut;
+  final VoidCallback? onFloatingCursorBegin;
+  final void Function(double dx, double dy)? onFloatingCursorUpdate;
+  final VoidCallback? onFloatingCursorEnd;
   final VoidCallback? onFocusLost;
   final VoidCallback? onReady;
 
@@ -82,6 +88,12 @@ class InputViewState extends State<InputView> {
             widget.onPerformAction(args!['action'] as String);
           case 'shortcut':
             widget.onShortcut?.call(args!['action'] as String);
+          case 'floatingCursorBegin':
+            widget.onFloatingCursorBegin?.call();
+          case 'floatingCursorUpdate':
+            widget.onFloatingCursorUpdate?.call(args!['dx'] as double, args['dy'] as double);
+          case 'floatingCursorEnd':
+            widget.onFloatingCursorEnd?.call();
           case 'focusLost':
             widget.onFocusLost?.call();
           default:

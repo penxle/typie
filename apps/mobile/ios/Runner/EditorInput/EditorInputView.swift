@@ -46,6 +46,18 @@ class EditorInputView: NSObject, FlutterPlatformView {
       self?.channel.invokeMethod("replaceBackward", arguments: ["length": length, "text": text])
     }
 
+    inputView.onFloatingCursorBegin = { [weak self] in
+      self?.channel.invokeMethod("floatingCursorBegin", arguments: [String: Any]())
+    }
+
+    inputView.onFloatingCursorUpdate = { [weak self] dx, dy in
+      self?.channel.invokeMethod("floatingCursorUpdate", arguments: ["dx": dx, "dy": dy])
+    }
+
+    inputView.onFloatingCursorEnd = { [weak self] in
+      self?.channel.invokeMethod("floatingCursorEnd", arguments: [String: Any]())
+    }
+
     channel.setMethodCallHandler { [weak self] call, result in
       guard let self = self else {
         result(FlutterMethodNotImplemented)
@@ -91,6 +103,9 @@ class EditorTextInputView: UIView, UITextInput {
   var onShortcut: ((String) -> Void)?
   var onFocusLost: (() -> Void)?
   var onReplaceBackward: ((Int, String) -> Void)?
+  var onFloatingCursorBegin: (() -> Void)?
+  var onFloatingCursorUpdate: ((Double, Double) -> Void)?
+  var onFloatingCursorEnd: (() -> Void)?
 
   private var _markedText: String?
   private var _cursor: Int = 0
@@ -101,6 +116,8 @@ class EditorTextInputView: UIView, UITextInput {
   private var cursorX: Double = 0
   private var cursorY: Double = 0
   private var cursorHeight: Double = 20
+  private var _floatingCursorStart: CGPoint?
+
 
 
   override init(frame: CGRect) {
@@ -159,6 +176,29 @@ class EditorTextInputView: UIView, UITextInput {
   }
 
   override var canBecomeFirstResponder: Bool { true }
+
+  // MARK: - Floating Cursor (keyboard trackpad mode)
+
+  func beginFloatingCursor(at point: CGPoint) {
+    if _markedText != nil {
+      _markedText = nil
+      onUnmarkText?()
+    }
+    _floatingCursorStart = point
+    onFloatingCursorBegin?()
+  }
+
+  func updateFloatingCursor(at point: CGPoint) {
+    guard let start = _floatingCursorStart else { return }
+    let dx = Double(point.x - start.x)
+    let dy = Double(point.y - start.y)
+    onFloatingCursorUpdate?(dx, dy)
+  }
+
+  func endFloatingCursor() {
+    _floatingCursorStart = nil
+    onFloatingCursorEnd?()
+  }
 
   // MARK: - UITextInputTraits
 

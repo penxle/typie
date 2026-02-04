@@ -145,6 +145,23 @@ class InputController {
     }
   }
 
+  VoidCallback? floatingCursorBeginHandler;
+  void Function(double dx, double dy)? floatingCursorUpdateHandler;
+  VoidCallback? floatingCursorEndHandler;
+
+  void onFloatingCursorBegin() {
+    commitComposing();
+    floatingCursorBeginHandler?.call();
+  }
+
+  void onFloatingCursorUpdate(double dx, double dy) {
+    floatingCursorUpdateHandler?.call(dx, dy);
+  }
+
+  void onFloatingCursorEnd() {
+    floatingCursorEndHandler?.call();
+  }
+
   void onFocusLost() {
     if (_getBottomToolbarMode() != BottomToolbarMode.hidden) {
       return;
