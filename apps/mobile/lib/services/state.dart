@@ -21,4 +21,12 @@ class AppState {
   Future<void> setSerializedPostSelection(String slug, String selection) async {
     await _box.put('post_selection_$slug', selection);
   }
+
+  String? getSerializedDocumentSelection(String slug) {
+    return _box.get('document_selection_$slug') as String?;
+  }
+
+  Future<void> setSerializedDocumentSelection(String slug, String selection) async {
+    await _box.put('document_selection_$slug', selection);
+  }
 }

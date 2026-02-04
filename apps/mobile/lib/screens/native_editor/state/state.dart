@@ -114,23 +114,41 @@ abstract class EditorState with _$EditorState {
 }
 
 class EditorController extends ChangeNotifier {
-  EditorController({required this.editor, required this.fontManager, this.onDocChanged, this.onExitedDocumentStart});
+  EditorController({
+    required this.editor,
+    required this.fontManager,
+    this.onDocChanged,
+    this.onExitedDocumentStart,
+    this.onSelectionChanged,
+    this.onEditorReady,
+  });
 
   final NativeEditor editor;
   final FontManager? fontManager;
   final void Function()? onDocChanged;
   final void Function()? onExitedDocumentStart;
+  final void Function(Map<String, dynamic> anchor, Map<String, dynamic> head)? onSelectionChanged;
+  final void Function()? onEditorReady;
 
   bool typewriterNeedsScroll = false;
 
   VoidCallback? _clearFocusCallback;
+  VoidCallback? _requestFocusCallback;
 
   void setClearFocusCallback(VoidCallback callback) {
     _clearFocusCallback = callback;
   }
 
+  void setRequestFocusCallback(VoidCallback callback) {
+    _requestFocusCallback = callback;
+  }
+
   void clearFocus() {
     _clearFocusCallback?.call();
+  }
+
+  void requestFocus() {
+    _requestFocusCallback?.call();
   }
 
   EditorState _state = const EditorState();

@@ -13,10 +13,6 @@ void scrollToCursor({
   bool typewriterEnabled = false,
   double typewriterPosition = 0.5,
 }) {
-  if (!cursor.show) {
-    return;
-  }
-
   _scrollVertical(
     controller: verticalController,
     geometry: geometry,

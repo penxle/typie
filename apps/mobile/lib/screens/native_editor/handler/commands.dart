@@ -31,6 +31,8 @@ void handleLayoutChanged(EditorController controller, Map<String, dynamic> cmd) 
     layoutMode = LayoutModeInfo.continuous(maxWidth: (layoutModeMap['maxWidth'] as num).toDouble());
   }
 
+  final hadLayout = controller.state.layout != null;
+
   controller.updateState(
     (state) => state.copyWith(
       layout: LayoutInfo(
@@ -43,6 +45,10 @@ void handleLayoutChanged(EditorController controller, Map<String, dynamic> cmd) 
       renderVersion: Object(),
     ),
   );
+
+  if (!hadLayout && pageCount > 0) {
+    controller.onEditorReady?.call();
+  }
 }
 
 void handleSettingsChanged(EditorController controller, Map<String, dynamic> cmd) {
@@ -61,7 +67,8 @@ void handleRenderRequired(EditorController controller, Map<String, dynamic> cmd)
 }
 
 void handleCursorChanged(EditorController controller, Map<String, dynamic> cmd) {
-  controller.updateState((state) => state.copyWith(cursor: CursorInfo.fromMap(cmd)));
+  final cursor = CursorInfo.fromMap(cmd);
+  controller.updateState((state) => state.copyWith(cursor: cursor));
 }
 
 void handleMarksChanged(EditorController controller, Map<String, dynamic> cmd) {
@@ -82,6 +89,12 @@ void handleSelectionChanged(EditorController controller, Map<String, dynamic> cm
   final toHandle = toHandleMap != null ? SelectionHandleInfo.fromMap(toHandleMap) : null;
 
   controller.updateState((state) => state.copyWith(selectionStats: stats, fromHandle: fromHandle, toHandle: toHandle));
+
+  final anchor = cmd['anchor'] as Map<String, dynamic>?;
+  final head = cmd['head'] as Map<String, dynamic>?;
+  if (anchor != null && head != null) {
+    controller.onSelectionChanged?.call(anchor, head);
+  }
 }
 
 void handleExternalElements(EditorController controller, Map<String, dynamic> cmd) {
