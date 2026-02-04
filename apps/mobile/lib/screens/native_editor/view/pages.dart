@@ -4,7 +4,9 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/hooks/service.dart';
+import 'package:typie/screens/native_editor/controller/clipboard.dart';
 import 'package:typie/screens/native_editor/state/state.dart';
+import 'package:typie/screens/native_editor/view/context_menu.dart';
 import 'package:typie/screens/native_editor/view/magnifier.dart';
 import 'package:typie/screens/native_editor/view/page.dart';
 import 'package:typie/screens/native_editor/view/scope.dart';
@@ -59,6 +61,10 @@ class PageList extends HookWidget {
       final localY = adjustedY - offsets[pageIdx];
       return (pageIdx, localY);
     }
+
+    final showContextMenu = useState(false);
+    final clipboard = useMemoized(EditorClipboard.new);
+    final pendingContextMenu = useRef(false);
 
     final longPressPosition = useState<Offset?>(null);
     final handleDragPosition = useState<Offset?>(null);
@@ -217,11 +223,30 @@ class PageList extends HookWidget {
     }, const []);
 
     useEffect(() {
+      void onScroll() {
+        if (showContextMenu.value) {
+          showContextMenu.value = false;
+        }
+      }
+
+      verticalScrollController.addListener(onScroll);
+      horizontalScrollController.addListener(onScroll);
+      return () {
+        verticalScrollController.removeListener(onScroll);
+        horizontalScrollController.removeListener(onScroll);
+      };
+    }, [verticalScrollController, horizontalScrollController]);
+
+    useEffect(() {
       if (fromHandle == null && toHandle == null) {
         handleDragPosition.value = null;
         draggingHandleType.value = null;
         dragAnchorHandle.value = null;
+        showContextMenu.value = false;
         stopAutoScroll();
+      } else if (pendingContextMenu.value) {
+        pendingContextMenu.value = false;
+        showContextMenu.value = true;
       }
       return null;
     }, [fromHandle, toHandle]);
@@ -297,6 +322,7 @@ class PageList extends HookWidget {
 
         void onHandleDragStart(SelectionHandleType type, DragStartDetails details) {
           draggingHandleType.value = type;
+          showContextMenu.value = false;
           scope.controller.setSelecting(true);
 
           final renderBox = context.findRenderObject() as RenderBox?;
@@ -353,6 +379,7 @@ class PageList extends HookWidget {
           dragAnchorHandle.value = null;
           stopAutoScroll();
           scope.controller.setSelecting(false);
+          showContextMenu.value = true;
         }
 
         final geo = scope.geometry;
@@ -406,6 +433,8 @@ class PageList extends HookWidget {
         );
 
         void dispatchTap(Offset localPosition) {
+          showContextMenu.value = false;
+
           final (pageIdx, localY) = getPageAtPosition(localPosition.dy);
 
           if (pageIdx < 0) {
@@ -426,6 +455,28 @@ class PageList extends HookWidget {
             if (timeDiff < 300 && distance < 20) {
               clickCount = 2;
             }
+          }
+
+          if (clickCount == 1 && fromHandle == null && toHandle == null && cursor != null) {
+            final geo = scope.geometry;
+            final cOffsets = geo.computeCumulativePageOffsets();
+            final scrollY = verticalScrollController.hasClients ? verticalScrollController.offset : 0.0;
+            final scrollX = horizontalScrollController.hasClients ? horizontalScrollController.offset : 0.0;
+            final cursorPageTop = geo.titleAreaHeight + cOffsets[cursor.pageIdx];
+            final cursorScreenPos = Offset(
+              geo.horizontalPadding + cursor.x - scrollX,
+              cursorPageTop + cursor.y + cursor.height / 2 - scrollY,
+            );
+            if ((localPosition - cursorScreenPos).distance < 20) {
+              showContextMenu.value = true;
+              lastTapTime.value = now;
+              lastTapPosition.value = localPosition;
+              return;
+            }
+          }
+
+          if (clickCount == 2) {
+            pendingContextMenu.value = true;
           }
 
           lastTapTime.value = now;
@@ -521,6 +572,9 @@ class PageList extends HookWidget {
             longPressPosition.value = null;
             stopAutoScroll();
             scope.isLongPressing.value = false;
+            if (fromHandle != null && toHandle != null) {
+              showContextMenu.value = true;
+            }
           },
           onPanDown: (details) {
             if (isSelecting) {
@@ -631,6 +685,12 @@ class PageList extends HookWidget {
                 );
               },
             ),
+            if (showContextMenu.value)
+              SelectionContextMenu(
+                clipboard: clipboard,
+                onDismiss: () => showContextMenu.value = false,
+                onBeforeSelectAll: () => pendingContextMenu.value = true,
+              ),
           ],
         );
       },

@@ -23,6 +23,8 @@ import UIKit
 
     EditorTexturePlugin.register(with: self.registrar(forPlugin: "co.typie.editor_texture")!)
 
+    ClipboardPlugin.register(with: self.registrar(forPlugin: "co.typie.clipboard")!)
+
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 }

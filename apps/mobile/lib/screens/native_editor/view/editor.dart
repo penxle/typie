@@ -95,59 +95,63 @@ class EditorView extends HookWidget {
         ..setClearFocusCallback(inputController.clearFocus)
         ..setRequestFocusCallback(inputController.requestFocus);
 
-      inputController.floatingCursorBeginHandler = () {
-        floatingCursorOrigin.value = controller.state.cursor;
-      };
-
-      inputController.floatingCursorUpdateHandler = (double dx, double dy) {
-        final origin = floatingCursorOrigin.value;
-        if (origin == null) return;
-        final layout = controller.state.layout;
-        if (layout == null) return;
-
-        final geo = ContentGeometry(layout: layout, titleAreaHeight: titleAreaHeight.value);
-
-        final newContentX = origin.x + dx;
-        final originAbsoluteY = geo.cursorTopInPages(origin);
-        final newAbsoluteY = (originAbsoluteY + dy).clamp(0.0, geo.pagesContentHeight);
-
-        final offsets = geo.computeCumulativePageOffsets();
-        var low = 0;
-        var high = offsets.length - 1;
-        while (low < high) {
-          final mid = (low + high) ~/ 2;
-          if (offsets[mid] <= newAbsoluteY) {
-            low = mid + 1;
-          } else {
-            high = mid;
-          }
+      inputController
+        ..floatingCursorBeginHandler = () {
+          floatingCursorOrigin.value = controller.state.cursor;
         }
+        ..floatingCursorUpdateHandler = (double dx, double dy) {
+          final origin = floatingCursorOrigin.value;
+          if (origin == null) {
+            return;
+          }
+          final layout = controller.state.layout;
+          if (layout == null) {
+            return;
+          }
 
-        final pageIdx = (low - 1).clamp(0, layout.pageCount - 1);
-        final localY = newAbsoluteY - offsets[pageIdx];
+          final geo = ContentGeometry(layout: layout, titleAreaHeight: titleAreaHeight.value);
 
-        final pointerEvent = <String, dynamic>{
-          'pageIdx': pageIdx,
-          'x': newContentX,
-          'y': localY,
-          'clickCount': 1,
-          'button': 'primary',
-          'modifier': <String, bool>{'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
+          final newContentX = origin.x + dx;
+          final originAbsoluteY = geo.cursorTopInPages(origin);
+          final newAbsoluteY = (originAbsoluteY + dy).clamp(0.0, geo.pagesContentHeight);
+
+          final offsets = geo.computeCumulativePageOffsets();
+          var low = 0;
+          var high = offsets.length - 1;
+          while (low < high) {
+            final mid = (low + high) ~/ 2;
+            if (offsets[mid] <= newAbsoluteY) {
+              low = mid + 1;
+            } else {
+              high = mid;
+            }
+          }
+
+          final pageIdx = (low - 1).clamp(0, layout.pageCount - 1);
+          final localY = newAbsoluteY - offsets[pageIdx];
+
+          final pointerEvent = <String, dynamic>{
+            'pageIdx': pageIdx,
+            'x': newContentX,
+            'y': localY,
+            'clickCount': 1,
+            'button': 'primary',
+            'modifier': <String, bool>{'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
+          };
+
+          controller
+            ..dispatch({...pointerEvent, 'type': 'pointerDown'})
+            ..dispatch({...pointerEvent, 'type': 'pointerUp'});
+        }
+        ..floatingCursorEndHandler = () {
+          floatingCursorOrigin.value = null;
         };
 
-        controller
-          ..dispatch({...pointerEvent, 'type': 'pointerDown'})
-          ..dispatch({...pointerEvent, 'type': 'pointerUp'});
-      };
-
-      inputController.floatingCursorEndHandler = () {
-        floatingCursorOrigin.value = null;
-      };
-
       return () {
-        inputController.floatingCursorBeginHandler = null;
-        inputController.floatingCursorUpdateHandler = null;
-        inputController.floatingCursorEndHandler = null;
+        inputController
+          ..floatingCursorBeginHandler = null
+          ..floatingCursorUpdateHandler = null
+          ..floatingCursorEndHandler = null;
       };
     }, [inputController]);
 

@@ -441,6 +441,24 @@ final class NativeEditor {
     }
   }
 
+  Map<String, dynamic>? getClipboardData() {
+    _checkDisposed();
+
+    final ptr = _bindings.editor_get_clipboard_data(_handle);
+    if (ptr == nullptr) {
+      final error = _getLastError();
+      if (error != null) {
+        throw EditorException(error);
+      }
+      return null;
+    }
+
+    final json = ptr.cast<Utf8>().toDartString();
+    _bindings.editor_free_string(ptr);
+
+    return jsonDecode(json) as Map<String, dynamic>;
+  }
+
   NativeEditorCharacterCounts getCharacterCounts() {
     _checkDisposed();
 

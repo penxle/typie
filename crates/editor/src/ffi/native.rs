@@ -767,6 +767,44 @@ fn count_all(text: &str) -> (u32, u32, u32) {
     (with_ws, without_ws, without_ws_punct)
 }
 
+#[unsafe(no_mangle)]
+pub extern "C" fn editor_get_clipboard_data(editor: *mut EditorHandle) -> *mut c_char {
+    ffi!(
+        {
+            if editor.is_null() {
+                return Err("Editor is null".into());
+            }
+
+            let editor = unsafe { &*(editor as *const EditorInner) };
+            let state = editor.runtime.state();
+            if state.selection.is_collapsed() {
+                return Ok(std::ptr::null_mut());
+            }
+
+            let fragment = match state.selection.extract_fragment(&state.doc) {
+                Ok(f) => f,
+                Err(_) => return Ok(std::ptr::null_mut()),
+            };
+
+            if fragment.is_empty() {
+                return Ok(std::ptr::null_mut());
+            }
+
+            let html = fragment.to_html();
+            let text = fragment.to_plain_text();
+
+            let json = serde_json::json!({
+                "html": html,
+                "text": text,
+            });
+            let json_str = serde_json::to_string(&json).map_err(|e| format!("Failed to serialize: {e}"))?;
+            let c_str = CString::new(json_str).map_err(|_| "Invalid string")?;
+            Ok(c_str.into_raw())
+        },
+        std::ptr::null_mut()
+    )
+}
+
 #[cfg(target_os = "android")]
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_co_typie_editortexture_EditorTexture_nativeGetDirectBufferAddress(
