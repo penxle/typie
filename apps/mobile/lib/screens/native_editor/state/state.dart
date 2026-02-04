@@ -40,6 +40,7 @@ abstract class CursorInfo with _$CursorInfo {
     required bool show,
     required bool scrollToCursor,
     required bool animate,
+    required List<double> precedingCharWidths,
   }) = _CursorInfo;
 
   const CursorInfo._();
@@ -54,6 +55,7 @@ abstract class CursorInfo with _$CursorInfo {
       show: map['show'] as bool? ?? false,
       scrollToCursor: map['scrollToCursor'] as bool? ?? false,
       animate: map['animate'] as bool? ?? false,
+      precedingCharWidths: (map['precedingCharWidths'] as List?)?.map((e) => (e as num).toDouble()).toList() ?? [],
     );
   }
 }

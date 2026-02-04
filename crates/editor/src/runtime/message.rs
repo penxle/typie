@@ -140,6 +140,10 @@ define_messages! {
     => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_input(&text) },
 
+    ReplaceBackward { length: usize, text: String }
+    => when When::key(ContextKey::CanEdit)
+    => handle(rt) { rt.handle_replace_backward(length, &text) },
+
     Paste {
         fragment: Option<String>,
         html: Option<String>,

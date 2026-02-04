@@ -13,6 +13,7 @@ class InputView extends StatefulWidget {
     required this.onUnmarkText,
     required this.onCancelMarkedText,
     required this.onPerformAction,
+    this.onReplaceBackward,
     this.onShortcut,
     this.onFocusLost,
     this.onReady,
@@ -24,6 +25,7 @@ class InputView extends StatefulWidget {
   final void Function(String text) onSetMarkedText;
   final VoidCallback onUnmarkText;
   final VoidCallback onCancelMarkedText;
+  final void Function(int length, String text)? onReplaceBackward;
   final void Function(String action) onPerformAction;
   final void Function(String action)? onShortcut;
   final VoidCallback? onFocusLost;
@@ -48,8 +50,15 @@ class InputViewState extends State<InputView> {
     unawaited(_channel?.invokeMethod('resetInputContext', <String, dynamic>{}));
   }
 
-  void updateCursor(double x, double y, double height) {
-    unawaited(_channel?.invokeMethod('updateCursor', <String, dynamic>{'x': x, 'y': y, 'height': height}));
+  void updateCursor(double x, double y, double height, [List<double>? precedingCharWidths]) {
+    unawaited(
+      _channel?.invokeMethod('updateCursor', <String, dynamic>{
+        'x': x,
+        'y': y,
+        'height': height,
+        'precedingCharWidths': precedingCharWidths,
+      }),
+    );
   }
 
   void _onPlatformViewCreated(int id) {
@@ -67,6 +76,8 @@ class InputViewState extends State<InputView> {
             widget.onUnmarkText();
           case 'cancelMarkedText':
             widget.onCancelMarkedText();
+          case 'replaceBackward':
+            widget.onReplaceBackward?.call(args!['length'] as int, args['text'] as String);
           case 'performAction':
             widget.onPerformAction(args!['action'] as String);
           case 'shortcut':
