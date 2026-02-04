@@ -8,13 +8,13 @@ import 'package:typie/native/editor_native.dart';
 import 'package:typie/screens/native_editor/__generated__/document_sync_stream.data.gql.dart';
 import 'package:typie/screens/native_editor/__generated__/document_sync_stream.req.gql.dart';
 import 'package:typie/screens/native_editor/__generated__/sync_document.req.gql.dart';
-import 'package:typie/screens/native_editor/sync/local_persistence.dart';
+import 'package:typie/screens/native_editor/sync/persistence.dart';
 import 'package:uuid/uuid.dart';
 
 enum SyncStatus { syncing, synced, error }
 
-class DocumentSyncManager {
-  DocumentSyncManager({required this.documentId, required this.editor, required this.client});
+class SyncManager {
+  SyncManager({required this.documentId, required this.editor, required this.client});
 
   final String documentId;
   final NativeEditor editor;
@@ -27,12 +27,12 @@ class DocumentSyncManager {
   Timer? _forceSyncTimer;
   Timer? _fullSyncTimer;
   StreamSubscription<dynamic>? _subscription;
-  DocumentLocalPersistence? _persistence;
+  LocalPersistence? _persistence;
 
   bool _disposed = false;
 
   Future<void> start() async {
-    _persistence = DocumentLocalPersistence(documentId);
+    _persistence = LocalPersistence(documentId);
 
     final local = await _persistence!.load();
     if (local != null) {

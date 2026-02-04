@@ -1,10 +1,8 @@
 import 'dart:async';
 
-import 'package:typie/screens/native_editor/cursor.dart';
 import 'package:typie/screens/native_editor/external/models.dart';
-import 'package:typie/screens/native_editor/fonts.dart';
-import 'package:typie/screens/native_editor/selection_handle.dart';
-import 'package:typie/screens/native_editor/state/editor_state.dart';
+import 'package:typie/screens/native_editor/state/fonts.dart';
+import 'package:typie/screens/native_editor/state/state.dart';
 
 void handleDocChanged(EditorController controller, Map<String, dynamic> cmd) {
   controller.onDocChanged?.call();

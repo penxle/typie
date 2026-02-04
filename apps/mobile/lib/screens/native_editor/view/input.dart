@@ -5,8 +5,8 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
-class EditorInputView extends StatefulWidget {
-  const EditorInputView({
+class InputView extends StatefulWidget {
+  const InputView({
     required this.onInsertText,
     required this.onDeleteBackward,
     required this.onSetMarkedText,
@@ -28,10 +28,10 @@ class EditorInputView extends StatefulWidget {
   final VoidCallback? onFocusLost;
 
   @override
-  State<EditorInputView> createState() => EditorInputViewState();
+  State<InputView> createState() => InputViewState();
 }
 
-class EditorInputViewState extends State<EditorInputView> {
+class InputViewState extends State<InputView> {
   MethodChannel? _channel;
 
   void activateInput() {

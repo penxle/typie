@@ -2,15 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/context/theme.dart';
+import 'package:typie/screens/native_editor/view/geometry.dart';
+import 'package:typie/screens/native_editor/view/scope.dart';
 
-class TitleSubtitleFields extends HookWidget {
-  const TitleSubtitleFields({
+class TitleFields extends HookWidget {
+  const TitleFields({
     required this.title,
     required this.subtitle,
-    required this.onTitleChanged,
-    required this.onSubtitleChanged,
-    required this.titleFocusNode,
-    required this.subtitleFocusNode,
     required this.onEnterDocument,
     required this.pageWidth,
     this.onFieldTap,
@@ -19,16 +17,18 @@ class TitleSubtitleFields extends HookWidget {
 
   final String title;
   final String subtitle;
-  final ValueChanged<String> onTitleChanged;
-  final ValueChanged<String> onSubtitleChanged;
-  final FocusNode titleFocusNode;
-  final FocusNode subtitleFocusNode;
   final VoidCallback onEnterDocument;
   final double pageWidth;
   final VoidCallback? onFieldTap;
 
   @override
   Widget build(BuildContext context) {
+    final scope = ContentScope.of(context);
+    final onTitleChanged = scope.onTitleChanged;
+    final onSubtitleChanged = scope.onSubtitleChanged;
+    final titleFocusNode = scope.titleFocusNode;
+    final subtitleFocusNode = scope.subtitleFocusNode;
+
     final titleController = useTextEditingController(text: title);
     final subtitleController = useTextEditingController(text: subtitle);
 
@@ -84,7 +84,7 @@ class TitleSubtitleFields extends HookWidget {
       descendantsAreTraversable: false,
       child: Container(
         width: pageWidth,
-        padding: const EdgeInsets.only(top: 40, left: 20, right: 20),
+        padding: const EdgeInsets.only(top: ContentGeometry.pagePadding, left: 20, right: 20),
         child: Column(
           children: [
             GestureDetector(
@@ -148,8 +148,9 @@ class TitleSubtitleFields extends HookWidget {
                 ),
               ),
             ),
-            const SizedBox(height: 40),
+            const SizedBox(height: ContentGeometry.pagePadding),
             Container(width: 120, height: 1, color: context.colors.borderDefault),
+            const SizedBox(height: ContentGeometry.pagePadding),
           ],
         ),
       ),

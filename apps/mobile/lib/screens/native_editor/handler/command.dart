@@ -1,9 +1,9 @@
 import 'package:typie/screens/native_editor/handler/commands.dart';
-import 'package:typie/screens/native_editor/state/editor_state.dart';
+import 'package:typie/screens/native_editor/state/state.dart';
 
 typedef CommandExecutor = void Function(EditorController controller, Map<String, dynamic> cmd);
 
-class EditorCommandHandler {
+class CommandHandler {
   static final Map<String, CommandExecutor> _handlers = {
     'docChanged': handleDocChanged,
     'layoutChanged': handleLayoutChanged,

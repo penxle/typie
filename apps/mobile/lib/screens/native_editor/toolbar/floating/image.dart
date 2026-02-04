@@ -6,9 +6,9 @@ import 'package:flutter/material.dart';
 import 'package:typie/context/toast.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/screens/editor/toolbar/buttons/floating.dart';
+import 'package:typie/screens/native_editor/controller/upload.dart';
 import 'package:typie/screens/native_editor/external/models.dart';
 import 'package:typie/screens/native_editor/toolbar/scope.dart';
-import 'package:typie/screens/native_editor/upload_manager.dart';
 import 'package:uuid/uuid.dart';
 
 class NativeEditorImageFloatingToolbar extends StatelessWidget {

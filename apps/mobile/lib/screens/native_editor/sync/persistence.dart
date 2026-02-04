@@ -30,8 +30,8 @@ class _StoredDocument {
   }
 }
 
-class DocumentLocalPersistence {
-  DocumentLocalPersistence(this.documentId);
+class LocalPersistence {
+  LocalPersistence(this.documentId);
 
   final String documentId;
   Box<dynamic>? _box;

@@ -7,7 +7,7 @@ import 'package:typie/context/bottom_sheet.dart';
 import 'package:typie/context/modal.dart';
 import 'package:typie/context/theme.dart';
 import 'package:typie/icons/lucide_light.dart';
-import 'package:typie/screens/native_editor/state/editor_state.dart';
+import 'package:typie/screens/native_editor/state/state.dart';
 import 'package:typie/widgets/forms/form.dart';
 import 'package:typie/widgets/forms/select.dart';
 import 'package:typie/widgets/forms/text_field.dart';
@@ -38,8 +38,8 @@ const Map<String, Map<String, double>> _defaultPageMargins = {
   'b6': {'top': 10, 'bottom': 10, 'left': 10, 'right': 10},
 };
 
-class NativeEditorBodySettingBottomSheet extends HookWidget {
-  const NativeEditorBodySettingBottomSheet({required this.controller, super.key});
+class SettingsSheet extends HookWidget {
+  const SettingsSheet({required this.controller, super.key});
 
   final EditorController controller;
 

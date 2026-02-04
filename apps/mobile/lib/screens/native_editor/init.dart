@@ -1,12 +1,12 @@
 import 'package:flutter/services.dart';
 import 'package:typie/native/editor_native.dart';
-import 'package:typie/screens/native_editor/fonts.dart';
+import 'package:typie/screens/native_editor/state/fonts.dart';
 
 NativeEditorApplication? _sharedApplication;
-EditorFontManager? _sharedFontManager;
-Future<(NativeEditorApplication, EditorFontManager)>? _initPromise;
+FontManager? _sharedFontManager;
+Future<(NativeEditorApplication, FontManager)>? _initPromise;
 
-Future<(NativeEditorApplication, EditorFontManager)> getOrInitializeApplication() async {
+Future<(NativeEditorApplication, FontManager)> getOrInitializeApplication() async {
   if (_sharedApplication != null && _sharedFontManager != null) {
     return (_sharedApplication!, _sharedFontManager!);
   }
@@ -19,14 +19,14 @@ Future<(NativeEditorApplication, EditorFontManager)> getOrInitializeApplication(
   return _initPromise!;
 }
 
-Future<(NativeEditorApplication, EditorFontManager)> _initApplication() async {
+Future<(NativeEditorApplication, FontManager)> _initApplication() async {
   final icuData = await rootBundle.load('assets/native/icu_data.postcard');
 
   final app = NativeEditorApplication()
     ..loadIcuData(icuData.buffer.asUint8List())
     ..setAvailableFonts(getAvailableFontsMap());
 
-  final fontManager = EditorFontManager(app);
+  final fontManager = FontManager(app);
 
   await fontManager.ensurePhantomFonts();
 

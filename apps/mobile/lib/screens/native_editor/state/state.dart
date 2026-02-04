@@ -1,12 +1,62 @@
 import 'package:flutter/foundation.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 import 'package:typie/native/editor_native.dart';
-import 'package:typie/screens/native_editor/cursor.dart';
 import 'package:typie/screens/native_editor/external/models.dart';
-import 'package:typie/screens/native_editor/fonts.dart';
-import 'package:typie/screens/native_editor/selection_handle.dart';
+import 'package:typie/screens/native_editor/state/fonts.dart';
 
-part 'editor_state.freezed.dart';
+part 'state.freezed.dart';
+
+enum SelectionHandleType { from, to }
+
+@freezed
+abstract class SelectionHandleInfo with _$SelectionHandleInfo {
+  const factory SelectionHandleInfo({
+    required int pageIdx,
+    required double x,
+    required double y,
+    required double height,
+  }) = _SelectionHandleInfo;
+
+  const SelectionHandleInfo._();
+
+  factory SelectionHandleInfo.fromMap(Map<String, dynamic> map) {
+    final bounds = map['bounds'] as Map<String, dynamic>?;
+    return SelectionHandleInfo(
+      pageIdx: map['pageIdx'] as int,
+      x: (bounds?['x'] as num?)?.toDouble() ?? 0,
+      y: (bounds?['y'] as num?)?.toDouble() ?? 0,
+      height: (bounds?['height'] as num?)?.toDouble() ?? 0,
+    );
+  }
+}
+
+@freezed
+abstract class CursorInfo with _$CursorInfo {
+  const factory CursorInfo({
+    required int pageIdx,
+    required double x,
+    required double y,
+    required double height,
+    required bool show,
+    required bool scrollToCursor,
+    required bool animate,
+  }) = _CursorInfo;
+
+  const CursorInfo._();
+
+  factory CursorInfo.fromMap(Map<String, dynamic> map) {
+    final bounds = map['bounds'] as Map<String, dynamic>?;
+    return CursorInfo(
+      pageIdx: map['pageIdx'] as int? ?? 0,
+      x: (bounds?['x'] as num?)?.toDouble() ?? 0,
+      y: (bounds?['y'] as num?)?.toDouble() ?? 0,
+      height: (bounds?['height'] as num?)?.toDouble() ?? 0,
+      show: map['show'] as bool? ?? false,
+      scrollToCursor: map['scrollToCursor'] as bool? ?? false,
+      animate: map['animate'] as bool? ?? false,
+    );
+  }
+}
 
 @freezed
 abstract class LayoutModeInfo with _$LayoutModeInfo {
@@ -67,7 +117,7 @@ class EditorController extends ChangeNotifier {
   EditorController({required this.editor, required this.fontManager, this.onDocChanged, this.onExitedDocumentStart});
 
   final NativeEditor editor;
-  final EditorFontManager? fontManager;
+  final FontManager? fontManager;
   final void Function()? onDocChanged;
   final void Function()? onExitedDocumentStart;
 

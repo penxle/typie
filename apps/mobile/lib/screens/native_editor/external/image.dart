@@ -12,13 +12,13 @@ import 'package:typie/graphql/client.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/screens/native_editor/__generated__/persist_blob_as_image.req.gql.dart';
+import 'package:typie/screens/native_editor/controller/upload.dart';
 import 'package:typie/screens/native_editor/external/models.dart';
 import 'package:typie/screens/native_editor/toolbar/scope.dart';
-import 'package:typie/screens/native_editor/upload_manager.dart';
 import 'package:typie/services/blob.dart';
 
-class ExternalImageWidget extends HookWidget {
-  const ExternalImageWidget({required this.element, super.key});
+class ImageWidget extends HookWidget {
+  const ImageWidget({required this.element, super.key});
 
   final ExternalElement element;
 
