@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:auto_route/auto_route.dart';
@@ -10,6 +11,7 @@ import 'package:typie/context/bottom_sheet.dart';
 import 'package:typie/context/theme.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/graphql/widget.dart';
+import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/native/editor_native.dart';
 import 'package:typie/screens/native_editor/__generated__/native_editor_query.data.gql.dart';
@@ -22,6 +24,7 @@ import 'package:typie/screens/native_editor/state/state.dart';
 import 'package:typie/screens/native_editor/state/theme.dart';
 import 'package:typie/screens/native_editor/sync/manager.dart';
 import 'package:typie/screens/native_editor/view/editor.dart';
+import 'package:typie/services/state.dart';
 import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/screen.dart';
 
@@ -36,14 +39,15 @@ class NativeEditorScreen extends StatelessWidget {
     return GraphQLOperation(
       initialBackgroundColor: context.colors.surfaceDefault,
       operation: GNativeEditorScreen_QueryReq((b) => b.vars.slug = slug),
-      builder: (context, client, data) => _Content(data: data, client: client),
+      builder: (context, client, data) => _Content(slug: slug, data: data, client: client),
     );
   }
 }
 
 class _Content extends HookWidget {
-  const _Content({required this.data, required this.client});
+  const _Content({required this.slug, required this.data, required this.client});
 
+  final String slug;
   final GNativeEditorScreen_QueryData data;
   final GraphQLClient client;
 
@@ -65,6 +69,10 @@ class _Content extends HookWidget {
     final subtitleFocusNode = useFocusNode();
     final titleDebounceTimer = useRef<Timer?>(null);
     final subtitleDebounceTimer = useRef<Timer?>(null);
+    final selectionDebounceTimer = useRef<Timer?>(null);
+    final editorReady = useRef(false);
+
+    final appState = useService<AppState>();
 
     final document = data.entity.node.when(document: (doc) => doc, orElse: () => null);
     final headingTitle = document?.title ?? '(제목 없음)';
@@ -133,6 +141,7 @@ class _Content extends HookWidget {
             );
           }
         }
+        selectionDebounceTimer.value?.cancel();
         syncManager.value?.dispose();
         syncManager.value = null;
         editor.value?.dispose();
@@ -169,6 +178,37 @@ class _Content extends HookWidget {
         fontManager: fontManager.value,
         onDocChanged: () => syncManager.value?.handleDocChanged(),
         onExitedDocumentStart: subtitleFocusNode.requestFocus,
+        onSelectionChanged: (anchor, head) {
+          if (!editorReady.value || editorController.value?.state.isFocused != true) {
+            return;
+          }
+          selectionDebounceTimer.value?.cancel();
+          selectionDebounceTimer.value = Timer(const Duration(milliseconds: 150), () {
+            if (!editorReady.value || editorController.value?.state.isFocused != true) {
+              return;
+            }
+            _saveSelectionData(
+              appState: appState,
+              slug: slug,
+              data: jsonEncode({
+                'selection': {
+                  'anchor': {'nodeId': anchor['nodeId'], 'offset': anchor['offset'], 'affinity': anchor['affinity']},
+                  'head': {'nodeId': head['nodeId'], 'offset': head['offset'], 'affinity': head['affinity']},
+                },
+              }),
+            );
+          });
+        },
+        onEditorReady: () {
+          _restoreSelection(
+            appState: appState,
+            slug: slug,
+            controller: editorController.value,
+            titleFocusNode: titleFocusNode,
+            subtitleFocusNode: subtitleFocusNode,
+          );
+          editorReady.value = true;
+        },
       );
       editorControllerReady.value = true;
 
@@ -194,6 +234,33 @@ class _Content extends HookWidget {
 
       return null;
     }, [editor.value, document?.id]);
+
+    useEffect(() {
+      void onTitleFocusChange() {
+        if (titleFocusNode.hasFocus && editorReady.value) {
+          selectionDebounceTimer.value?.cancel();
+          _saveSelectionData(appState: appState, slug: slug, data: jsonEncode({'type': 'element', 'element': 'title'}));
+        }
+      }
+
+      void onSubtitleFocusChange() {
+        if (subtitleFocusNode.hasFocus && editorReady.value) {
+          selectionDebounceTimer.value?.cancel();
+          _saveSelectionData(
+            appState: appState,
+            slug: slug,
+            data: jsonEncode({'type': 'element', 'element': 'subtitle'}),
+          );
+        }
+      }
+
+      titleFocusNode.addListener(onTitleFocusChange);
+      subtitleFocusNode.addListener(onSubtitleFocusChange);
+      return () {
+        titleFocusNode.removeListener(onTitleFocusChange);
+        subtitleFocusNode.removeListener(onSubtitleFocusChange);
+      };
+    }, []);
 
     useEffect(() {
       final serverTitle = document?.nullableTitle ?? '';
@@ -346,5 +413,63 @@ class _Content extends HookWidget {
       responsive: false,
       child: buildBody(),
     );
+  }
+}
+
+void _saveSelectionData({required AppState appState, required String slug, required String data}) {
+  unawaited(
+    appState.setSerializedDocumentSelection(slug, data).catchError((Object e) {
+      if (e is FileSystemException && e.osError?.errorCode == 28) {
+        return null;
+      }
+      return Future<void>.error(e);
+    }),
+  );
+}
+
+void _restoreSelection({
+  required AppState appState,
+  required String slug,
+  required EditorController? controller,
+  required FocusNode titleFocusNode,
+  required FocusNode subtitleFocusNode,
+}) {
+  final saved = appState.getSerializedDocumentSelection(slug);
+  if (saved == null) {
+    titleFocusNode.requestFocus();
+    return;
+  }
+
+  try {
+    final data = jsonDecode(saved) as Map<String, dynamic>;
+
+    if (data['type'] == 'element') {
+      final element = data['element'] as String;
+      if (element == 'title') {
+        titleFocusNode.requestFocus();
+      } else if (element == 'subtitle') {
+        subtitleFocusNode.requestFocus();
+      }
+      return;
+    }
+
+    final selection = data['selection'] as Map<String, dynamic>?;
+    if (selection != null && controller != null) {
+      final savedAnchor = selection['anchor'] as Map<String, dynamic>;
+      final savedHead = selection['head'] as Map<String, dynamic>;
+      controller
+        ..dispatch({
+          'type': 'setSelection',
+          'anchorNodeId': savedAnchor['nodeId'],
+          'anchorOffset': savedAnchor['offset'],
+          'anchorAffinity': savedAnchor['affinity'],
+          'headNodeId': savedHead['nodeId'],
+          'headOffset': savedHead['offset'],
+          'headAffinity': savedHead['affinity'],
+        })
+        ..requestFocus();
+    }
+  } catch (err) {
+    titleFocusNode.requestFocus();
   }
 }

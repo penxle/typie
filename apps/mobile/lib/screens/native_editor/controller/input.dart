@@ -18,9 +18,19 @@ class InputController {
   bool _isActive = false;
   bool get isActive => _isActive;
   bool isComposing = false;
+  bool _pendingFocus = false;
+  bool _inputReady = false;
 
   DateTime? _deleteStartTime;
   DateTime? _lastDeleteSignal;
+
+  void onInputReady() {
+    _inputReady = true;
+    if (_pendingFocus) {
+      _pendingFocus = false;
+      inputKey.currentState?.activateInput();
+    }
+  }
 
   void openInput() {
     if (!_isActive) {
@@ -33,13 +43,18 @@ class InputController {
   void requestFocus() {
     _isActive = true;
     onFocusChanged(true);
-    inputKey.currentState?.activateInput();
+    if (_inputReady) {
+      inputKey.currentState?.activateInput();
+    } else {
+      _pendingFocus = true;
+    }
   }
 
   void clearFocus() {
     if (!_isActive) {
       return;
     }
+    _pendingFocus = false;
     commitComposing();
     _isActive = false;
     onFocusChanged(false);

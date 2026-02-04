@@ -89,7 +89,9 @@ class EditorView extends HookWidget {
     );
 
     useEffect(() {
-      controller.setClearFocusCallback(inputController.clearFocus);
+      controller
+        ..setClearFocusCallback(inputController.clearFocus)
+        ..setRequestFocusCallback(inputController.requestFocus);
       return null;
     }, [inputController]);
 
@@ -238,33 +240,43 @@ class EditorView extends HookWidget {
     final lastScrollRenderVersion = useRef<Object?>(state.state.renderVersion);
 
     useEffect(() {
-      if (cursor != null && cursor.show) {
-        inputController.updateCursor(cursor.x, cursor.y, cursor.height);
+      if (cursor == null) {
+        return null;
+      }
 
-        if (currentLayout != null && !isLongPressing.value && state.state.isFocused) {
-          if (lastScrollRenderVersion.value != state.state.renderVersion) {
-            lastScrollRenderVersion.value = state.state.renderVersion;
-            final capturedCursor = cursor;
-            final useTypewriter = pref.typewriterEnabled && controller.typewriterNeedsScroll;
-            if (useTypewriter) {
-              controller.typewriterNeedsScroll = false;
-            }
-            pendingScroll.value = () {
-              suppressScrollbarTimer.value?.cancel();
-              suppressScrollbarShow.value = true;
-              scrollToCursorWith(capturedCursor, typewriter: useTypewriter);
-              suppressScrollbarTimer.value = Timer(const Duration(milliseconds: 150), () {
-                suppressScrollbarShow.value = false;
-              });
-            };
-          } else {
+      if (cursor.show) {
+        inputController.updateCursor(cursor.x, cursor.y, cursor.height);
+      }
+
+      final shouldScroll =
+          (cursor.show || cursor.scrollToCursor) &&
+          currentLayout != null &&
+          !isLongPressing.value &&
+          state.state.isFocused;
+
+      if (shouldScroll) {
+        if (lastScrollRenderVersion.value != state.state.renderVersion) {
+          lastScrollRenderVersion.value = state.state.renderVersion;
+          final capturedCursor = cursor;
+          final useTypewriter = cursor.show && pref.typewriterEnabled && controller.typewriterNeedsScroll;
+          if (useTypewriter) {
+            controller.typewriterNeedsScroll = false;
+          }
+          pendingScroll.value = () {
             suppressScrollbarTimer.value?.cancel();
             suppressScrollbarShow.value = true;
-            scrollToCursorWith(cursor);
+            scrollToCursorWith(capturedCursor, typewriter: useTypewriter);
             suppressScrollbarTimer.value = Timer(const Duration(milliseconds: 150), () {
               suppressScrollbarShow.value = false;
             });
-          }
+          };
+        } else if (cursor.show) {
+          suppressScrollbarTimer.value?.cancel();
+          suppressScrollbarShow.value = true;
+          scrollToCursorWith(cursor);
+          suppressScrollbarTimer.value = Timer(const Duration(milliseconds: 150), () {
+            suppressScrollbarShow.value = false;
+          });
         }
       }
       return null;
@@ -326,6 +338,7 @@ class EditorView extends HookWidget {
                           onPerformAction: inputController.onPerformAction,
                           onShortcut: inputController.onShortcut,
                           onFocusLost: inputController.onFocusLost,
+                          onReady: inputController.onInputReady,
                         ),
                       ),
                       const Positioned(bottom: 20, right: 20, child: NativeEditorFloatingToolbar()),

@@ -15,6 +15,7 @@ class InputView extends StatefulWidget {
     required this.onPerformAction,
     this.onShortcut,
     this.onFocusLost,
+    this.onReady,
     super.key,
   });
 
@@ -26,6 +27,7 @@ class InputView extends StatefulWidget {
   final void Function(String action) onPerformAction;
   final void Function(String action)? onShortcut;
   final VoidCallback? onFocusLost;
+  final VoidCallback? onReady;
 
   @override
   State<InputView> createState() => InputViewState();
@@ -75,6 +77,7 @@ class InputViewState extends State<InputView> {
             throw MissingPluginException('Method ${call.method} not implemented');
         }
       });
+    widget.onReady?.call();
   }
 
   @override

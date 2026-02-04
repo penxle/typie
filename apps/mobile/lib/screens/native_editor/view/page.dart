@@ -45,6 +45,7 @@ class PageItem extends HookWidget {
     final isMounted = useRef(true);
     final displayCursor = useState<CursorInfo?>(pageCursor);
     final renderInProgress = useRef(false);
+    final pageCursorRef = useRef(pageCursor)..value = pageCursor;
 
     final devicePixelRatio = MediaQuery.devicePixelRatioOf(context);
 
@@ -70,7 +71,7 @@ class PageItem extends HookWidget {
       textureId.value = r.textureId;
       textureSize.value = Size(r.width / devicePixelRatio, r.height / devicePixelRatio);
       renderInProgress.value = false;
-      displayCursor.value = pageCursor;
+      displayCursor.value = pageCursorRef.value;
 
       final pending = scope.pendingScroll.value;
       if (pending != null) {
