@@ -194,11 +194,9 @@ impl Renderer {
             return false;
         }
 
-        let Some(mut pixmap) = PixmapMut::from_bytes(
-            dst,
-            self.pixmap.width(),
-            self.pixmap.height(),
-        ) else {
+        let Some(mut pixmap) =
+            PixmapMut::from_bytes(dst, self.pixmap.width(), self.pixmap.height())
+        else {
             return false;
         };
 

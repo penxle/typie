@@ -1,7 +1,5 @@
 use crate::layout::elements::TableCellElement;
-use crate::layout::{
-    Element, Layout, LayoutContext, LayoutNode, PageBreakPolicy, PositionedNode,
-};
+use crate::layout::{Element, Layout, LayoutContext, LayoutNode, PageBreakPolicy, PositionedNode};
 use crate::model::Node;
 use crate::model::html::{DomSpec, NodeHtmlCodec, NodeParseRule};
 use crate::types::{BoxConstraints, Point, Size};

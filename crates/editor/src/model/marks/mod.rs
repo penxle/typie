@@ -21,4 +21,3 @@ pub use ruby::*;
 pub use strikethrough::*;
 pub use text_color::*;
 pub use underline::*;
-

@@ -43,11 +43,7 @@ impl Runtime {
         })
     }
 
-    pub(crate) fn handle_set_image_id(
-        &mut self,
-        node_id: String,
-        image_id: String,
-    ) -> Vec<Effect> {
+    pub(crate) fn handle_set_image_id(&mut self, node_id: String, image_id: String) -> Vec<Effect> {
         let Some(node_id) = NodeId::from_string(&node_id) else {
             return vec![];
         };

@@ -201,9 +201,10 @@ pub fn detect_writing_systems(s: &str) -> Vec<crate::types::WritingSystem> {
             .expect("Failed to load Script data");
     let script_map = script_data.as_borrowed();
 
-    let emoji_data =
-        icu_properties::CodePointSetData::try_new_unstable::<ExtendedPictographic>(&deserializing_provider)
-            .expect("Failed to load ExtendedPictographic data");
+    let emoji_data = icu_properties::CodePointSetData::try_new_unstable::<ExtendedPictographic>(
+        &deserializing_provider,
+    )
+    .expect("Failed to load ExtendedPictographic data");
     let emoji_set = emoji_data.as_borrowed();
 
     let mut writing_systems = FxHashSet::default();

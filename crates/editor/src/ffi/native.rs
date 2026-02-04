@@ -5,17 +5,17 @@ use crate::state::{Position, Selection};
 use crate::types::Affinity;
 use std::backtrace::Backtrace;
 use std::cell::RefCell;
-use std::ffi::{c_char, CStr, CString};
-use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::ffi::{CStr, CString, c_char};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 
 #[cfg(target_os = "android")]
+use jni::JNIEnv;
+#[cfg(target_os = "android")]
 use jni::objects::{JByteBuffer, JClass};
 #[cfg(target_os = "android")]
 use jni::sys::jlong;
-#[cfg(target_os = "android")]
-use jni::JNIEnv;
 
 static PANIC_HOOK_INSTALLED: AtomicBool = AtomicBool::new(false);
 
@@ -419,7 +419,8 @@ pub extern "C" fn editor_tick(editor: *mut EditorHandle) -> *mut c_char {
             if cmds.is_empty() {
                 return Ok(std::ptr::null_mut());
             }
-            let json = serde_json::to_string(&cmds).map_err(|e| format!("Failed to serialize: {e}"))?;
+            let json =
+                serde_json::to_string(&cmds).map_err(|e| format!("Failed to serialize: {e}"))?;
             let c_str = CString::new(json).map_err(|_| "Invalid string")?;
             Ok(c_str.into_raw())
         },
@@ -549,15 +550,19 @@ pub extern "C" fn editor_render_page_to(
                         temp_buf.resize(required_size, 0);
                     }
 
-                    if !editor.runtime.render_page_to(page_index, &mut temp_buf[..required_size]) {
+                    if !editor
+                        .runtime
+                        .render_page_to(page_index, &mut temp_buf[..required_size])
+                    {
                         return false;
                     }
 
                     for row in 0..height {
                         let src_offset = row * tight_stride;
                         let dst_offset = row * dst_stride;
-                        let dst_row =
-                            unsafe { std::slice::from_raw_parts_mut(dst.add(dst_offset), tight_stride) };
+                        let dst_row = unsafe {
+                            std::slice::from_raw_parts_mut(dst.add(dst_offset), tight_stride)
+                        };
                         let src_row = &mut temp_buf[src_offset..src_offset + tight_stride];
 
                         if convert_to_bgra {
@@ -797,7 +802,8 @@ pub extern "C" fn editor_get_clipboard_data(editor: *mut EditorHandle) -> *mut c
                 "html": html,
                 "text": text,
             });
-            let json_str = serde_json::to_string(&json).map_err(|e| format!("Failed to serialize: {e}"))?;
+            let json_str =
+                serde_json::to_string(&json).map_err(|e| format!("Failed to serialize: {e}"))?;
             let c_str = CString::new(json_str).map_err(|_| "Invalid string")?;
             Ok(c_str.into_raw())
         },
@@ -820,10 +826,7 @@ pub extern "system" fn Java_co_typie_editortexture_EditorTexture_nativeGetDirect
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn editor_get_snapshot(
-    editor: *mut EditorHandle,
-    out_len: *mut usize,
-) -> *mut u8 {
+pub extern "C" fn editor_get_snapshot(editor: *mut EditorHandle, out_len: *mut usize) -> *mut u8 {
     ffi!(
         {
             if editor.is_null() || out_len.is_null() {
@@ -847,10 +850,7 @@ pub extern "C" fn editor_get_snapshot(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn editor_get_version(
-    editor: *mut EditorHandle,
-    out_len: *mut usize,
-) -> *mut u8 {
+pub extern "C" fn editor_get_version(editor: *mut EditorHandle, out_len: *mut usize) -> *mut u8 {
     ffi!(
         {
             if editor.is_null() || out_len.is_null() {
