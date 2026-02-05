@@ -132,6 +132,7 @@ class PageItem extends HookWidget {
             SizedBox.expand(child: Texture(textureId: textureId.value!)),
             _SearchHighlightOverlay(pageIndex: pageIndex, overlays: state.state.searchOverlays),
             _SpellcheckOverlay(pageIndex: pageIndex, overlays: state.state.spellcheckOverlays),
+            _AiFeedbackOverlay(pageIndex: pageIndex, overlays: state.state.aiFeedbackOverlays),
             Cursor(cursorInfo: displayCursor.value, isFocused: isFocused),
             ElementOverlay(pageIndex: pageIndex),
             if (layout.isPaginated && margins != null)
@@ -320,6 +321,42 @@ class _SearchHighlightOverlay extends StatelessWidget {
                 child: DecoratedBox(
                   decoration: BoxDecoration(
                     color: overlay.isCurrent ? _currentColor : _matchColor,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AiFeedbackOverlay extends StatelessWidget {
+  const _AiFeedbackOverlay({required this.pageIndex, required this.overlays});
+
+  final int pageIndex;
+  final List<AiFeedbackOverlayInfo> overlays;
+
+  @override
+  Widget build(BuildContext context) {
+    final pageOverlays = overlays.where((o) => o.pageIdx == pageIndex && o.isActive);
+    if (pageOverlays.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return IgnorePointer(
+      child: Stack(
+        children: [
+          for (final overlay in pageOverlays)
+            for (final bound in overlay.bounds)
+              Positioned(
+                left: bound.x,
+                top: bound.y,
+                width: bound.width,
+                height: bound.height,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: context.colors.accentBrand.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),

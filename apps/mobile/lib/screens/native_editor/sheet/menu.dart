@@ -26,6 +26,7 @@ class MenuSheet extends StatelessWidget {
     required this.editorController,
     required this.onOpenFindReplace,
     required this.onOpenSpellcheck,
+    required this.onOpenAiFeedback,
     super.key,
   });
 
@@ -36,6 +37,7 @@ class MenuSheet extends StatelessWidget {
   final EditorController? editorController;
   final VoidCallback onOpenFindReplace;
   final VoidCallback onOpenSpellcheck;
+  final VoidCallback onOpenAiFeedback;
 
   @override
   Widget build(BuildContext context) {
@@ -46,7 +48,7 @@ class MenuSheet extends StatelessWidget {
           BottomMenuItem(icon: LucideLightIcons.search, label: '찾기', onTap: onOpenFindReplace),
           BottomMenuItem(icon: LucideLightIcons.bookmark, label: '북마크', onTap: () {}),
           BottomMenuItem(icon: LucideLightIcons.spell_check, label: '맞춤법 검사', onTap: onOpenSpellcheck),
-          BottomMenuItem(icon: LucideLightIcons.lightbulb, label: 'AI 피드백', onTap: () {}),
+          BottomMenuItem(icon: LucideLightIcons.lightbulb, label: 'AI 피드백', onTap: onOpenAiFeedback),
           const Gap(16),
           HorizontalDivider(color: context.colors.borderDefault),
           const Gap(16),

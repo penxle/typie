@@ -18,6 +18,7 @@ class CommandHandler {
     'exitedDocumentStart': handleExitedDocumentStart,
     'searchResultsChanged': handleSearchResultsChanged,
     'spellcheckOverlaysChanged': handleSpellcheckOverlaysChanged,
+    'aiFeedbackOverlaysChanged': handleAiFeedbackOverlaysChanged,
   };
 
   static void handleCommands(EditorController controller, List<dynamic>? commands) {

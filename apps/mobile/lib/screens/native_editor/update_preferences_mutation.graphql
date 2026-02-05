@@ -1,0 +1,6 @@
+mutation NativeEditor_UpdatePreferences_Mutation($input: UpdatePreferencesInput!) {
+  updatePreferences(input: $input) {
+    id
+    preferences
+  }
+}

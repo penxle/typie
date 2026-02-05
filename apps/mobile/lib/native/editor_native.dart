@@ -550,6 +550,49 @@ final class NativeEditor {
     }
   }
 
+  void setAiFeedbackItems(List<Map<String, dynamic>> items) {
+    _checkDisposed();
+
+    final json = jsonEncode(items);
+    final jsonPtr = json.toNativeUtf8().cast<Char>();
+
+    try {
+      final result = _bindings.editor_set_ai_feedback_items(_handle, jsonPtr);
+      if (result < 0) {
+        throw EditorException(_getLastError() ?? 'Failed to set ai feedback items');
+      }
+    } finally {
+      calloc.free(jsonPtr);
+    }
+  }
+
+  void clearAiFeedbackItems() {
+    _checkDisposed();
+
+    final result = _bindings.editor_clear_ai_feedback_items(_handle);
+    if (result < 0) {
+      throw EditorException(_getLastError() ?? 'Failed to clear ai feedback items');
+    }
+  }
+
+  List<dynamic> getAiFeedbackItems() {
+    _checkDisposed();
+
+    final ptr = _bindings.editor_get_ai_feedback_items(_handle);
+    if (ptr == nullptr) {
+      final error = _getLastError();
+      if (error != null) {
+        throw EditorException(error);
+      }
+      return [];
+    }
+
+    final json = ptr.cast<Utf8>().toDartString();
+    _bindings.editor_free_string(ptr);
+
+    return jsonDecode(json) as List<dynamic>;
+  }
+
   void dispose() {
     if (!_disposed) {
       _bindings.editor_handle_free(_handle);

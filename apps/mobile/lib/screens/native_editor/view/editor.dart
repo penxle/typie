@@ -457,6 +457,63 @@ class EditorView extends HookWidget {
       return null;
     }, [state.state.spellcheckScrollTarget, state.state.spellcheckScrollTargetPageIdx]);
 
+    useEffect(() {
+      final target = state.state.aiFeedbackScrollTarget;
+      final targetPageIdx = state.state.aiFeedbackScrollTargetPageIdx;
+      if (target == null || targetPageIdx == null || currentLayout == null) {
+        return null;
+      }
+
+      final geo = ContentGeometry(titleAreaHeight: titleAreaHeight.value, layout: currentLayout);
+      final offsets = geo.computeCumulativePageOffsets();
+      final absoluteY = geo.titleAreaHeight + offsets[targetPageIdx] + target.y;
+
+      if (verticalScrollController.hasClients) {
+        final viewportHeight = verticalScrollController.position.viewportDimension;
+        final targetOffset = (absoluteY - viewportHeight / 3).clamp(
+          0.0,
+          verticalScrollController.position.maxScrollExtent,
+        );
+        unawaited(
+          verticalScrollController.animateTo(
+            targetOffset,
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOut,
+          ),
+        );
+      }
+
+      if (horizontalScrollController.hasClients && horizontalScrollController.position.maxScrollExtent > 0) {
+        const scrollMargin = 60.0;
+        final matchX = target.x + geo.horizontalPadding;
+        final matchRight = matchX + target.width;
+        final scrollOffset = horizontalScrollController.offset;
+        final viewportWidth = horizontalScrollController.position.viewportDimension;
+
+        if (matchRight > scrollOffset + viewportWidth - scrollMargin) {
+          unawaited(
+            horizontalScrollController.animateTo(
+              (matchRight - viewportWidth + scrollMargin).clamp(
+                0.0,
+                horizontalScrollController.position.maxScrollExtent,
+              ),
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOut,
+            ),
+          );
+        } else if (matchX < scrollOffset + scrollMargin) {
+          unawaited(
+            horizontalScrollController.animateTo(
+              (matchX - scrollMargin).clamp(0.0, horizontalScrollController.position.maxScrollExtent),
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOut,
+            ),
+          );
+        }
+      }
+      return null;
+    }, [state.state.aiFeedbackScrollTarget, state.state.aiFeedbackScrollTargetPageIdx]);
+
     if (currentLayout == null) {
       return const SizedBox.shrink();
     }

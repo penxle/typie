@@ -143,6 +143,26 @@ abstract class SpellcheckOverlayInfo with _$SpellcheckOverlayInfo {
 }
 
 @freezed
+abstract class AiFeedbackOverlayBound with _$AiFeedbackOverlayBound {
+  const factory AiFeedbackOverlayBound({
+    required double x,
+    required double y,
+    required double width,
+    required double height,
+  }) = _AiFeedbackOverlayBound;
+}
+
+@freezed
+abstract class AiFeedbackOverlayInfo with _$AiFeedbackOverlayInfo {
+  const factory AiFeedbackOverlayInfo({
+    required int pageIdx,
+    required String id,
+    required bool isActive,
+    required List<AiFeedbackOverlayBound> bounds,
+  }) = _AiFeedbackOverlayInfo;
+}
+
+@freezed
 abstract class EditorState with _$EditorState {
   const factory EditorState({
     LayoutInfo? layout,
@@ -167,6 +187,10 @@ abstract class EditorState with _$EditorState {
     String? activeSpellcheckErrorId,
     SpellcheckOverlayBound? spellcheckScrollTarget,
     int? spellcheckScrollTargetPageIdx,
+    @Default([]) List<AiFeedbackOverlayInfo> aiFeedbackOverlays,
+    String? activeAiFeedbackItemId,
+    AiFeedbackOverlayBound? aiFeedbackScrollTarget,
+    int? aiFeedbackScrollTargetPageIdx,
   }) = _EditorState;
 
   const EditorState._();

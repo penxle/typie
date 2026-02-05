@@ -87,6 +87,10 @@ int32_t editor_apply_spellcheck_correction(
 );
 int32_t editor_clear_spellcheck_errors(EditorHandle* editor);
 
+int32_t editor_set_ai_feedback_items(EditorHandle* editor, const char* items_json);
+int32_t editor_clear_ai_feedback_items(EditorHandle* editor);
+char* editor_get_ai_feedback_items(EditorHandle* editor);
+
 #ifdef __cplusplus
 }
 #endif

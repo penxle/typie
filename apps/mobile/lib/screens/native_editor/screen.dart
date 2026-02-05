@@ -19,6 +19,7 @@ import 'package:typie/screens/native_editor/__generated__/native_editor_query.da
 import 'package:typie/screens/native_editor/__generated__/native_editor_query.req.gql.dart';
 import 'package:typie/screens/native_editor/__generated__/update_document_mutation.req.gql.dart';
 import 'package:typie/screens/native_editor/init.dart';
+import 'package:typie/screens/native_editor/sheet/ai_feedback.dart';
 import 'package:typie/screens/native_editor/sheet/find_replace.dart';
 import 'package:typie/screens/native_editor/sheet/menu.dart';
 import 'package:typie/screens/native_editor/sheet/spellcheck.dart';
@@ -432,6 +433,32 @@ class _Content extends HookWidget {
                         editor: currentEditor,
                         documentId: document.id,
                         client: client,
+                      ),
+                    );
+                  },
+                  onOpenAiFeedback: () async {
+                    final controller = editorController.value;
+                    final currentEditor = editor.value;
+                    if (controller == null || currentEditor == null) {
+                      return;
+                    }
+
+                    final me = data.me;
+                    if (me?.subscription == null) {
+                      return;
+                    }
+
+                    final aiOptIn = (me!.preferences.asMap['aiOptIn'] as bool?) ?? false;
+
+                    await context.showBottomSheet(
+                      intercept: true,
+                      overlayOpacity: 0.05,
+                      child: AiFeedbackSheet(
+                        controller: controller,
+                        editor: currentEditor,
+                        documentId: document.id,
+                        client: client,
+                        aiOptIn: aiOptIn,
                       ),
                     );
                   },
