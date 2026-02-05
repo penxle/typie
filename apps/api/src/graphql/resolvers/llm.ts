@@ -481,3 +481,197 @@ builder.subscriptionFields((t) => ({
     },
   }),
 }));
+
+const DocumentLiteraryFeedbackResult = builder.simpleObject('DocumentLiteraryFeedbackResult', {
+  fields: (t) => ({
+    nodeId: t.string(),
+    startOffset: t.int(),
+    endOffset: t.int(),
+    startText: t.string(),
+    endText: t.string(),
+    feedback: t.string(),
+  }),
+});
+
+type DocumentAnalysisPayload =
+  | {
+      type: 'feedback';
+      data: { nodeId: string; startOffset: number; endOffset: number; startText: string; endText: string; feedback: string };
+    }
+  | { type: 'progress'; data: { current: number; total: number; phase: 'summarizing' | 'analyzing' } }
+  | { type: 'complete' }
+  | { type: 'error' };
+
+const DocumentTextMappingInput = builder.inputType('DocumentTextMappingInput', {
+  fields: (t) => ({
+    nodeId: t.string(),
+    textStart: t.int(),
+    textEnd: t.int(),
+    blockOffset: t.int(),
+  }),
+});
+
+const createMapRangeForDocument = (
+  text: string,
+  mappings: { nodeId: string; textStart: number; textEnd: number; blockOffset: number }[],
+) => {
+  const findMapping = (position: number) => {
+    let left = 0;
+    let right = mappings.length - 1;
+
+    while (left <= right) {
+      const mid = (left + right) >> 1;
+      const m = mappings[mid];
+
+      if (position >= m.textStart && position < m.textEnd) {
+        return m;
+      }
+
+      if (position < m.textStart) {
+        right = mid - 1;
+      } else {
+        left = mid + 1;
+      }
+    }
+
+    return;
+  };
+
+  return (startText: string, endText: string, searchStart = 0) => {
+    const rangeStart = text.indexOf(startText, searchStart);
+    if (rangeStart === -1) {
+      return null;
+    }
+
+    const endSearchStart = startText === endText ? rangeStart : rangeStart + startText.length;
+    const endIndex = text.indexOf(endText, endSearchStart);
+    if (endIndex === -1) {
+      return null;
+    }
+    const rangeEnd = endIndex + endText.length;
+
+    const startMapping = findMapping(rangeStart);
+    const endMapping = findMapping(rangeEnd - 1);
+
+    if (!startMapping || !endMapping || startMapping.nodeId !== endMapping.nodeId) {
+      return null;
+    }
+
+    return {
+      nodeId: startMapping.nodeId,
+      startOffset: startMapping.blockOffset + (rangeStart - startMapping.textStart),
+      endOffset: startMapping.blockOffset + (rangeEnd - startMapping.textStart),
+    };
+  };
+};
+
+builder.subscriptionFields((t) => ({
+  literaryAnalysisDocumentStream: t.withAuth({ session: true }).field({
+    type: builder.simpleObject('DocumentLiteraryAnalysisPayload', {
+      fields: (t) => ({
+        type: t.string(),
+        feedback: t.field({ type: DocumentLiteraryFeedbackResult, nullable: true }),
+        progress: t.field({ type: LiteraryAnalysisProgress, nullable: true }),
+      }),
+    }),
+    args: {
+      text: t.arg.string(),
+      mappings: t.arg({ type: [DocumentTextMappingInput] }),
+    },
+    subscribe: (_, args, ctx) => {
+      const text = args.text;
+      const mappings = args.mappings;
+
+      return new Repeater<DocumentAnalysisPayload>(async (push, stop) => {
+        ctx.c.req.raw.signal.addEventListener('abort', () => {
+          stop();
+        });
+
+        if (!text.trim()) {
+          push({ type: 'complete' });
+          stop();
+          return;
+        }
+
+        const chunks = createChunks(text);
+        const mapRange = createMapRangeForDocument(text, mappings);
+
+        try {
+          const summaries: string[] = [];
+          await pMap(
+            chunks,
+            async (chunk, index) => {
+              const summary = await summarizeChunk(chunk.text);
+              summaries[index] = summary;
+              push({
+                type: 'progress',
+                data: { current: summaries.filter(Boolean).length, total: chunks.length, phase: 'summarizing' },
+              });
+            },
+            { concurrency: SUMMARIZE_CONCURRENCY },
+          );
+
+          let analyzedCount = 0;
+          push({
+            type: 'progress',
+            data: { current: 0, total: chunks.length, phase: 'analyzing' },
+          });
+          await pMap(
+            chunks,
+            async (chunk, i) => {
+              const precedingSummary = summaries.slice(0, i).join('\n\n');
+              const followingSummary = summaries.slice(i + 1).join('\n\n');
+
+              await analyzeChunkWithContext(
+                {
+                  precedingSummary,
+                  followingSummary,
+                  currentText: chunk.text,
+                },
+                (feedback) => {
+                  const range = mapRange(feedback.start, feedback.end, chunk.start);
+
+                  if (range) {
+                    push({
+                      type: 'feedback',
+                      data: {
+                        nodeId: range.nodeId,
+                        startOffset: range.startOffset,
+                        endOffset: range.endOffset,
+                        startText: feedback.start,
+                        endText: feedback.end,
+                        feedback: feedback.feedback,
+                      },
+                    });
+                  }
+                },
+              );
+
+              analyzedCount++;
+              push({
+                type: 'progress',
+                data: { current: analyzedCount, total: chunks.length, phase: 'analyzing' },
+              });
+            },
+            { concurrency: ANALYZE_CONCURRENCY },
+          );
+
+          push({ type: 'complete' });
+        } catch (err) {
+          Sentry.captureException(err);
+          console.error(err);
+          push({ type: 'error' });
+        }
+
+        stop();
+      });
+    },
+    resolve: (payload: DocumentAnalysisPayload) => {
+      return {
+        type: payload.type,
+        feedback: payload.type === 'feedback' ? payload.data : null,
+        progress: payload.type === 'progress' ? payload.data : null,
+      };
+    },
+  }),
+}));

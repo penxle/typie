@@ -1,3 +1,4 @@
+mod ai_feedback;
 mod auto_surround;
 mod callout;
 mod clipboard;

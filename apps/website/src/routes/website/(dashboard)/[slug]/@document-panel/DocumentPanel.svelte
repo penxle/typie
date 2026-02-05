@@ -7,6 +7,7 @@
   import ConstructionIcon from '~icons/lucide/construction';
   import { fragment, graphql } from '$graphql';
   import { getViewContext } from '../@split-view/context.svelte';
+  import DocumentPanelAi from './DocumentPanelAi.svelte';
   import DocumentPanelInfo from './DocumentPanelInfo.svelte';
   import DocumentPanelNote from './DocumentPanelNote.svelte';
   import DocumentPanelSettings from './DocumentPanelSettings.svelte';
@@ -37,6 +38,7 @@
           ...DocumentPanel_Note_entity
         }
 
+        ...DocumentPanel_Ai_document
         ...DocumentPanel_Info_document
         ...DocumentPanel_Spellcheck_document
         ...DocumentPanelTimeline_document
@@ -49,6 +51,7 @@
     graphql(`
       fragment DocumentPanel_user on User {
         id
+        ...DocumentPanel_Ai_user
         ...DocumentPanel_Info_user
         ...DocumentPanel_Spellcheck_user
       }
@@ -158,6 +161,8 @@
       <DocumentPanelTimeline {$document} {editor} />
     {:else if app.preference.current.panelTabByViewId[splitViewId] === 'spellcheck'}
       <DocumentPanelSpellcheck {$document} {$user} {editor} />
+    {:else if app.preference.current.panelTabByViewId[splitViewId] === 'ai'}
+      <DocumentPanelAi {$document} {$user} {editor} />
     {:else}
       <div
         class={flex({

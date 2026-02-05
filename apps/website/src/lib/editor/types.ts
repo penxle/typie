@@ -1,5 +1,6 @@
 export type {
   Affinity,
+  AiFeedbackOverlay,
   Cmd,
   Direction,
   ExternalElement,
@@ -22,6 +23,16 @@ export type {
   Theme,
   WritingSystem,
 } from '@typie/editor';
+
+export type AiFeedbackData = {
+  id: string;
+  nodeId: string;
+  startOffset: number;
+  endOffset: number;
+  startText: string;
+  endText: string;
+  feedback: string;
+};
 
 export type SpellcheckErrorData = {
   id: string;

@@ -8,6 +8,8 @@ import { calculateImageDisplaySize, calculateRelativePosition, findNearestPageCo
 import type { Editor as WasmEditor, ExportedUpdates, Modifier, PointerButton, TableOverlay } from '@typie/editor';
 import type { ThemeColors } from './theme';
 import type {
+  AiFeedbackData,
+  AiFeedbackOverlay,
   Cmd,
   EmbedAsset,
   ExternalElement,
@@ -185,6 +187,10 @@ export class Editor {
   spellcheckOverlays = $state<SpellcheckOverlay[]>([]);
   activeSpellcheckErrorId = $state<string | null>(null);
   fullSpellcheckErrors = $state<SpellcheckErrorData[]>([]);
+
+  aiFeedbackOverlays = $state<AiFeedbackOverlay[]>([]);
+  activeAiFeedbackItemId = $state<string | null>(null);
+  fullAiFeedbackItems = $state<AiFeedbackData[]>([]);
 
   searchResults = $state({
     overlays: [] as SearchOverlay[],
@@ -404,6 +410,32 @@ export class Editor {
           const validIds = new SvelteSet(cmd.overlays.map((o) => o.id));
           if (this.fullSpellcheckErrors.length > 0) {
             this.fullSpellcheckErrors = this.fullSpellcheckErrors.filter((e) => validIds.has(e.id));
+          }
+          break;
+        }
+
+        case 'aiFeedbackOverlaysChanged': {
+          this.aiFeedbackOverlays = cmd.overlays;
+          this.activeAiFeedbackItemId = cmd.overlays.find((o: AiFeedbackOverlay) => o.isActive)?.id ?? null;
+
+          const validFeedbackIds = new SvelteSet(cmd.overlays.map((o: AiFeedbackOverlay) => o.id));
+          if (this.fullAiFeedbackItems.length > 0) {
+            this.fullAiFeedbackItems = this.fullAiFeedbackItems.filter((e: AiFeedbackData) => validFeedbackIds.has(e.id));
+          }
+
+          const activeOverlay = cmd.overlays.find((o: AiFeedbackOverlay) => o.isActive);
+          if (activeOverlay && activeOverlay.bounds.length > 0) {
+            const pageEl = this.pageContainerEls[activeOverlay.pageIdx];
+            const scroller = this.scrollContainerEl;
+            if (pageEl && scroller) {
+              const pageRect = pageEl.getBoundingClientRect();
+              const scrollerRect = scroller.getBoundingClientRect();
+              const bound = activeOverlay.bounds[0];
+              const targetY = pageRect.top + bound.y - scrollerRect.top + scroller.scrollTop;
+              const viewportCenter = scroller.clientHeight / 2;
+              const targetScroll = targetY - viewportCenter + bound.height / 2;
+              scroller.scrollTo({ top: Math.max(0, targetScroll), behavior: 'smooth' });
+            }
           }
           break;
         }
@@ -1129,6 +1161,22 @@ export class Editor {
     if (focusEditor) {
       this.focus();
     }
+  }
+
+  setAiFeedbackItems(items: { id: string; nodeId: string; startOffset: number; endOffset: number }[]): void {
+    this.ready.then(() => {
+      this.#wasmEditor?.setAiFeedbackItems(items);
+    });
+  }
+
+  clearAiFeedbackItems(): void {
+    this.ready.then(() => {
+      this.#wasmEditor?.clearAiFeedbackItems();
+    });
+  }
+
+  selectAiFeedbackItem(itemId: string): void {
+    this.dispatch({ type: 'selectAiFeedbackItem', itemId });
   }
 
   canDragAt(pageIdx: number, x: number, y: number): boolean {

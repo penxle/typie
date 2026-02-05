@@ -11,6 +11,7 @@
   import GalleryVerticalEndIcon from '~icons/lucide/gallery-vertical-end';
   import ImageIcon from '~icons/lucide/image';
   import InfoIcon from '~icons/lucide/info';
+  import LightbulbIcon from '~icons/lucide/lightbulb';
   import ListIcon from '~icons/lucide/list';
   import ListOrderedIcon from '~icons/lucide/list-ordered';
   import PaperclipIcon from '~icons/lucide/paperclip';
@@ -266,6 +267,7 @@
     <ToolbarPanelTabButton {$user} icon={StickyNoteIcon} label="노트" tab="note" />
     <ToolbarPanelTabButton {$user} icon={BookmarkIcon} label="북마크" tab="anchors" />
     <ToolbarPanelTabButton {$user} icon={SpellCheckIcon} label="맞춤법" needSubscription tab="spellcheck" />
+    <ToolbarPanelTabButton {$user} icon={LightbulbIcon} label="AI 피드백" needSubscription tab="ai" />
     <ToolbarPanelTabButton {$user} icon={ClockFadingIcon} label="타임라인" tab="timeline" />
     <ToolbarPanelTabButton {$user} icon={SettingsIcon} label="본문 설정" tab="settings" />
   </div>
