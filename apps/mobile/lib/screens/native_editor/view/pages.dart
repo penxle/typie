@@ -7,7 +7,6 @@ import 'package:typie/hooks/service.dart';
 import 'package:typie/screens/native_editor/controller/clipboard.dart';
 import 'package:typie/screens/native_editor/state/state.dart';
 import 'package:typie/screens/native_editor/view/context_menu.dart';
-import 'package:typie/screens/native_editor/view/magnifier.dart';
 import 'package:typie/screens/native_editor/view/page.dart';
 import 'package:typie/screens/native_editor/view/scope.dart';
 import 'package:typie/screens/native_editor/view/selection.dart';
@@ -66,8 +65,8 @@ class PageList extends HookWidget {
     final clipboard = useMemoized(EditorClipboard.new);
     final pendingContextMenu = useRef(false);
 
-    final longPressPosition = useState<Offset?>(null);
-    final handleDragPosition = useState<Offset?>(null);
+    final longPressPosition = scope.longPressPosition;
+    final handleDragPosition = scope.handleDragPosition;
     final draggingHandleType = useState<SelectionHandleType?>(null);
     final pointerDownTouchPosition = useRef<Offset?>(null);
     final dragStartTouchPosition = useRef<Offset?>(null);
@@ -641,18 +640,7 @@ class PageList extends HookWidget {
             verticalDrag.value = null;
             horizontalDrag.value = null;
           },
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              listView,
-              if (longPressPosition.value != null || handleDragPosition.value != null)
-                EditorMagnifier(
-                  position: handleDragPosition.value ?? longPressPosition.value!,
-                  focalPoint: handleDragPosition.value ?? longPressPosition.value!,
-                  pageSize: Size(layout.pageWidth, viewHeight),
-                ),
-            ],
-          ),
+          child: listView,
         );
 
         return Stack(
@@ -684,7 +672,7 @@ class PageList extends HookWidget {
                 );
               },
             ),
-            if (showContextMenu.value)
+            if (showContextMenu.value && longPressPosition.value == null && handleDragPosition.value == null)
               SelectionContextMenu(
                 clipboard: clipboard,
                 onDismiss: () => showContextMenu.value = false,

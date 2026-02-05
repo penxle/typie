@@ -26,28 +26,30 @@ class EditorMagnifier extends StatelessWidget {
     return Positioned(
       left: magnifierPosition.dx,
       top: magnifierPosition.dy,
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: borderRadius,
-          boxShadow: [
-            BoxShadow(
-              color: context.colors.shadowDefault.withValues(alpha: 0.26),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: RawMagnifier(
-          size: _size,
-          magnificationScale: _magnification,
-          focalPointOffset: Offset(
-            focalPoint.dx - magnifierPosition.dx - _size.width / 2,
-            focalPoint.dy - magnifierPosition.dy - _size.height / 2,
+      child: IgnorePointer(
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: borderRadius,
+            boxShadow: [
+              BoxShadow(
+                color: context.colors.shadowDefault.withValues(alpha: 0.26),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
-          decoration: MagnifierDecoration(
-            shape: RoundedRectangleBorder(
-              borderRadius: borderRadius,
-              side: BorderSide(color: context.colors.borderDefault),
+          child: RawMagnifier(
+            size: _size,
+            magnificationScale: _magnification,
+            focalPointOffset: Offset(
+              focalPoint.dx - magnifierPosition.dx - _size.width / 2,
+              focalPoint.dy - magnifierPosition.dy - _size.height / 2,
+            ),
+            decoration: MagnifierDecoration(
+              shape: RoundedRectangleBorder(
+                borderRadius: borderRadius,
+                side: BorderSide(color: context.colors.borderDefault),
+              ),
             ),
           ),
         ),

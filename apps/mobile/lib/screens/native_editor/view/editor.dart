@@ -17,6 +17,7 @@ import 'package:typie/screens/native_editor/toolbar/scope.dart';
 import 'package:typie/screens/native_editor/toolbar/toolbar.dart';
 import 'package:typie/screens/native_editor/view/geometry.dart';
 import 'package:typie/screens/native_editor/view/input.dart';
+import 'package:typie/screens/native_editor/view/magnifier.dart';
 import 'package:typie/screens/native_editor/view/pages.dart';
 import 'package:typie/screens/native_editor/view/scope.dart';
 import 'package:typie/screens/native_editor/view/scroll.dart';
@@ -69,6 +70,8 @@ class EditorView extends HookWidget {
     final suppressScrollbarTimer = useRef<Timer?>(null);
     final titleAreaHeight = useValueNotifier<double>(0);
     final isLongPressing = useValueNotifier(false);
+    final longPressPosition = useValueNotifier<Offset?>(null);
+    final handleDragPosition = useValueNotifier<Offset?>(null);
     final pendingScroll = useValueNotifier<VoidCallback?>(null);
 
     final sizeRef = useRef<(double, double)>((0, 0));
@@ -541,6 +544,8 @@ class EditorView extends HookWidget {
         horizontalScrollController: horizontalScrollController,
         inputController: inputController,
         isLongPressing: isLongPressing,
+        longPressPosition: longPressPosition,
+        handleDragPosition: handleDragPosition,
         titleAreaHeight: titleAreaHeight,
         title: titleNotifier,
         subtitle: subtitleNotifier,
@@ -559,6 +564,25 @@ class EditorView extends HookWidget {
                     children: [
                       const PageList(),
                       const _TitleOverlay(),
+                      ValueListenableBuilder<Offset?>(
+                        valueListenable: longPressPosition,
+                        builder: (context, longPress, _) {
+                          return ValueListenableBuilder<Offset?>(
+                            valueListenable: handleDragPosition,
+                            builder: (context, handleDrag, _) {
+                              final pos = handleDrag ?? longPress;
+                              if (pos == null) {
+                                return const SizedBox.shrink();
+                              }
+                              return EditorMagnifier(
+                                position: pos,
+                                focalPoint: pos,
+                                pageSize: Size(currentLayout.pageWidth, constraints.maxHeight),
+                              );
+                            },
+                          );
+                        },
+                      ),
                       Positioned(
                         top: titleAreaHeight.value,
                         left: 0,

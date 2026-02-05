@@ -12,6 +12,8 @@ class ContentScope extends InheritedWidget {
     required this.horizontalScrollController,
     required this.inputController,
     required this.isLongPressing,
+    required this.longPressPosition,
+    required this.handleDragPosition,
     required this.titleAreaHeight,
     required this.title,
     required this.subtitle,
@@ -29,6 +31,8 @@ class ContentScope extends InheritedWidget {
   final InputController inputController;
 
   final ValueNotifier<bool> isLongPressing;
+  final ValueNotifier<Offset?> longPressPosition;
+  final ValueNotifier<Offset?> handleDragPosition;
   final ValueNotifier<double> titleAreaHeight;
   final ValueNotifier<String> title;
   final ValueNotifier<String> subtitle;
