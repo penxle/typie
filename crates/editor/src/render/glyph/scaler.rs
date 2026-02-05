@@ -4,7 +4,6 @@ use skrifa::instance::Size;
 use skrifa::outline::OutlineGlyphCollection;
 use tiny_skia::{ColorU8, FillRule, FilterQuality, Paint, Pixmap, PixmapPaint, Transform};
 
-use super::mask_gamma::PreBlend;
 use super::pen::TinySkiaPen;
 
 pub(crate) struct MaskImage {
@@ -28,7 +27,6 @@ pub(crate) fn rasterize_outline(
     skew_transform: Option<Transform>,
     subpixel_x: f32,
     subpixel_y: f32,
-    pre_blend: &PreBlend<'_>,
     darken_x: f32,
     darken_y: f32,
 ) -> Option<MaskImage> {
@@ -88,8 +86,7 @@ pub(crate) fn rasterize_outline(
     let mut alpha_data = Vec::with_capacity(pixel_count);
 
     for i in 0..pixel_count {
-        let raw_alpha = pixmap_data[i * 4 + 3];
-        alpha_data.push(pre_blend.apply(raw_alpha));
+        alpha_data.push(pixmap_data[i * 4 + 3]);
     }
 
     Some(MaskImage {
