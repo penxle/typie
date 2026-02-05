@@ -157,3 +157,50 @@ void handleWritingSystem(EditorController controller, Map<String, dynamic> cmd) 
 void handleExitedDocumentStart(EditorController controller, Map<String, dynamic> cmd) {
   controller.onExitedDocumentStart?.call();
 }
+
+void handleSearchResultsChanged(EditorController controller, Map<String, dynamic> cmd) {
+  final totalCount = cmd['totalCount'] as int;
+  final currentIndex = cmd['currentIndex'] as int;
+  final overlays = cmd['overlays'] as List<dynamic>;
+
+  SearchScrollTarget? scrollTarget;
+  final searchOverlays = <SearchOverlayInfo>[];
+
+  for (final overlay in overlays) {
+    final map = overlay as Map<String, dynamic>;
+    final pageIdx = map['pageIdx'] as int;
+    final isCurrent = map['isCurrent'] as bool? ?? false;
+    final bounds = map['bounds'] as List<dynamic>;
+
+    final rects = bounds.map((b) {
+      final m = b as Map<String, dynamic>;
+      return SearchHighlightRect(
+        x: (m['x'] as num).toDouble(),
+        y: (m['y'] as num).toDouble(),
+        width: (m['width'] as num).toDouble(),
+        height: (m['height'] as num).toDouble(),
+      );
+    }).toList();
+
+    searchOverlays.add(SearchOverlayInfo(pageIdx: pageIdx, isCurrent: isCurrent, bounds: rects));
+
+    if (isCurrent && rects.isNotEmpty) {
+      scrollTarget = SearchScrollTarget(
+        pageIdx: pageIdx,
+        x: rects[0].x,
+        y: rects[0].y,
+        width: rects[0].width,
+        height: rects[0].height,
+      );
+    }
+  }
+
+  controller.updateState(
+    (state) => state.copyWith(
+      searchTotalCount: totalCount,
+      searchCurrentIndex: currentIndex,
+      searchScrollTarget: scrollTarget,
+      searchOverlays: searchOverlays,
+    ),
+  );
+}

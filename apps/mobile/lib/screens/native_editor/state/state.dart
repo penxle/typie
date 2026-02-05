@@ -9,6 +9,36 @@ part 'state.freezed.dart';
 enum SelectionHandleType { from, to }
 
 @freezed
+abstract class SearchScrollTarget with _$SearchScrollTarget {
+  const factory SearchScrollTarget({
+    required int pageIdx,
+    required double x,
+    required double y,
+    required double width,
+    required double height,
+  }) = _SearchScrollTarget;
+}
+
+@freezed
+abstract class SearchHighlightRect with _$SearchHighlightRect {
+  const factory SearchHighlightRect({
+    required double x,
+    required double y,
+    required double width,
+    required double height,
+  }) = _SearchHighlightRect;
+}
+
+@freezed
+abstract class SearchOverlayInfo with _$SearchOverlayInfo {
+  const factory SearchOverlayInfo({
+    required int pageIdx,
+    required bool isCurrent,
+    required List<SearchHighlightRect> bounds,
+  }) = _SearchOverlayInfo;
+}
+
+@freezed
 abstract class SelectionHandleInfo with _$SelectionHandleInfo {
   const factory SelectionHandleInfo({
     required int pageIdx,
@@ -108,6 +138,10 @@ abstract class EditorState with _$EditorState {
     SelectionHandleInfo? fromHandle,
     SelectionHandleInfo? toHandle,
     SelectionHandleType? draggingHandle,
+    @Default(0) int searchTotalCount,
+    @Default(0) int searchCurrentIndex,
+    SearchScrollTarget? searchScrollTarget,
+    @Default([]) List<SearchOverlayInfo> searchOverlays,
   }) = _EditorState;
 
   const EditorState._();
