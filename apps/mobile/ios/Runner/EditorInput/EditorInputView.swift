@@ -58,6 +58,10 @@ class EditorInputView: NSObject, FlutterPlatformView {
       self?.channel.invokeMethod("floatingCursorEnd", arguments: [String: Any]())
     }
 
+    inputView.onNavigate = { [weak self] direction, extend in
+      self?.channel.invokeMethod("navigate", arguments: ["direction": direction, "extend": extend])
+    }
+
     channel.setMethodCallHandler { [weak self] call, result in
       guard let self = self else {
         result(FlutterMethodNotImplemented)
@@ -106,6 +110,7 @@ class EditorTextInputView: UIView, UITextInput {
   var onFloatingCursorBegin: (() -> Void)?
   var onFloatingCursorUpdate: ((Double, Double) -> Void)?
   var onFloatingCursorEnd: (() -> Void)?
+  var onNavigate: ((String, Bool) -> Void)?
 
   private var _markedText: String?
   private var _cursor: Int = 0
@@ -123,6 +128,10 @@ class EditorTextInputView: UIView, UITextInput {
   override init(frame: CGRect) {
     super.init(frame: frame)
     backgroundColor = .clear
+  }
+
+  deinit {
+    _keyRepeatTimer?.invalidate()
   }
 
   override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
@@ -198,6 +207,118 @@ class EditorTextInputView: UIView, UITextInput {
   func endFloatingCursor() {
     _floatingCursorStart = nil
     onFloatingCursorEnd?()
+  }
+
+  private var _keyRepeatTimer: Timer?
+  private var _currentArrowDirection: String?
+  private var _currentExtend: Bool = false
+  private static let keyRepeatInitialDelay: TimeInterval = 0.4
+  private static let keyRepeatInterval: TimeInterval = 0.05
+
+  private func startKeyRepeat(direction: String, extend: Bool) {
+    _currentArrowDirection = direction
+    _currentExtend = extend
+    _keyRepeatTimer?.invalidate()
+
+    onNavigate?(direction, extend)
+
+    _keyRepeatTimer = Timer.scheduledTimer(withTimeInterval: Self.keyRepeatInitialDelay, repeats: false) { [weak self] initialTimer in
+      initialTimer.invalidate()
+      guard let self = self, let dir = self._currentArrowDirection else { return }
+
+      self._keyRepeatTimer = Timer.scheduledTimer(withTimeInterval: Self.keyRepeatInterval, repeats: true) { [weak self] _ in
+        guard let self = self, let dir = self._currentArrowDirection else { return }
+        self.onNavigate?(dir, self._currentExtend)
+      }
+    }
+  }
+
+  private func stopKeyRepeat() {
+    _keyRepeatTimer?.invalidate()
+    _keyRepeatTimer = nil
+    _currentArrowDirection = nil
+  }
+
+  override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+    var handled = false
+    for press in presses {
+      if let (direction, extend) = getArrowKeyDirection(press) {
+        if _markedText != nil {
+          _markedText = nil
+          onUnmarkText?()
+        }
+        startKeyRepeat(direction: direction, extend: extend)
+        handled = true
+        break
+      }
+    }
+    if !handled {
+      super.pressesBegan(presses, with: event)
+    }
+  }
+
+  override func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+    var handled = false
+    for press in presses {
+      if let _ = getArrowKeyDirection(press) {
+        stopKeyRepeat()
+        handled = true
+      }
+    }
+    if !handled {
+      super.pressesEnded(presses, with: event)
+    }
+  }
+
+  override func pressesCancelled(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+    stopKeyRepeat()
+    super.pressesCancelled(presses, with: event)
+  }
+
+  private func getArrowKeyDirection(_ press: UIPress) -> (String, Bool)? {
+    guard let key = press.key else { return nil }
+    
+    let direction: String?
+    switch key.keyCode {
+    case .keyboardLeftArrow:
+      if key.modifierFlags.contains(.command) {
+        direction = "lineStart"
+      } else if key.modifierFlags.contains(.alternate) {
+        direction = "wordLeft"
+      } else {
+        direction = "left"
+      }
+    case .keyboardRightArrow:
+      if key.modifierFlags.contains(.command) {
+        direction = "lineEnd"
+      } else if key.modifierFlags.contains(.alternate) {
+        direction = "wordRight"
+      } else {
+        direction = "right"
+      }
+    case .keyboardUpArrow:
+      if key.modifierFlags.contains(.command) {
+        direction = "documentStart"
+      } else if key.modifierFlags.contains(.alternate) {
+        direction = "sentenceUp"
+      } else {
+        direction = "up"
+      }
+    case .keyboardDownArrow:
+      if key.modifierFlags.contains(.command) {
+        direction = "documentEnd"
+      } else if key.modifierFlags.contains(.alternate) {
+        direction = "sentenceDown"
+      } else {
+        direction = "down"
+      }
+    default:
+      direction = nil
+    }
+    
+    guard let dir = direction else { return nil }
+    let extend = key.modifierFlags.contains(.shift)
+    return (dir, extend)
   }
 
   // MARK: - UITextInputTraits
