@@ -49,6 +49,7 @@
   const errors = $derived(editor.fullSpellcheckErrors);
   let hasChecked = $state(false);
   let checkFailed = $state(false);
+  let listContainer = $state<HTMLElement>();
 
   const activeError = $derived(editor.activeSpellcheckErrorId ? errors.find((e) => e.id === editor.activeSpellcheckErrorId) : undefined);
   let anchor: ReturnType<typeof createFloatingActions>['anchor'] | undefined = $state();
@@ -148,9 +149,9 @@
     }
   };
 
-  const scrollToError = (error: SpellcheckErrorData, options?: { focusEditor?: boolean; animate?: boolean }) => {
+  const scrollToError = (error: SpellcheckErrorData) => {
     if (!editor) return;
-    editor.selectSpellcheckError(error.id, { animate: true, ...options });
+    editor.selectSpellcheckError(error.id);
   };
 
   const selectErrorRange = (error: SpellcheckErrorData) => {
@@ -162,14 +163,14 @@
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       if (activeError?.id !== error.id) {
-        scrollToError(error, { focusEditor: false });
+        scrollToError(error);
       }
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       const currentIndex = errors.findIndex((err) => err.id === error.id);
       const prevError = errors[currentIndex - 1];
       if (prevError) {
-        scrollToError(prevError, { focusEditor: false });
+        scrollToError(prevError);
         const prevElement = globalThis.document.querySelector(`[data-panel-spellcheck-error="${prevError.id}"]`) as HTMLElement;
         prevElement?.focus();
       }
@@ -178,7 +179,7 @@
       const currentIndex = errors.findIndex((err) => err.id === error.id);
       const nextError = errors[currentIndex + 1];
       if (nextError) {
-        scrollToError(nextError, { focusEditor: false });
+        scrollToError(nextError);
         const nextElement = globalThis.document.querySelector(`[data-panel-spellcheck-error="${nextError.id}"]`) as HTMLElement;
         nextElement?.focus();
       }
@@ -196,6 +197,13 @@
       tick().then(() => {
         runSpellcheck();
       });
+    }
+  });
+
+  $effect(() => {
+    if (editor.activeSpellcheckErrorId) {
+      const el = listContainer?.querySelector(`[data-panel-spellcheck-error="${editor.activeSpellcheckErrorId}"]`) as HTMLElement | null;
+      el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     }
   });
 
@@ -319,6 +327,7 @@
     </div>
   {:else if hasChecked}
     <div
+      bind:this={listContainer}
       class={flex({
         flexDirection: 'column',
         gap: '12px',
@@ -350,7 +359,7 @@
           data-panel-spellcheck-error={error.id}
           onclick={(e) => {
             if (activeError?.id !== error.id) {
-              scrollToError(error, { focusEditor: false });
+              scrollToError(error);
             }
             (e.currentTarget as HTMLElement).focus();
           }}
