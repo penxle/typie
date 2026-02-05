@@ -1,3 +1,4 @@
+pub mod ai_feedback;
 mod cmd;
 mod context;
 mod dnd;
@@ -6,19 +7,18 @@ mod handlers;
 mod message;
 mod pointer;
 pub mod search;
-pub mod ai_feedback;
 pub mod spellcheck;
 mod state;
 mod table;
 mod view_state;
 
+pub use ai_feedback::{AiFeedbackItem, RawAiFeedbackItem};
 pub use cmd::*;
 pub use context::*;
 pub use dnd::*;
 pub use effect::*;
 pub use message::*;
 pub use pointer::*;
-pub use ai_feedback::{AiFeedbackItem, RawAiFeedbackItem};
 pub use spellcheck::{RawSpellcheckError, SpellcheckError};
 pub use state::*;
 pub use view_state::*;

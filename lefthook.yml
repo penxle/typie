@@ -7,7 +7,7 @@ pre-commit:
       run: bunx eslint --fix --quiet {staged_files}
       stage_fixed: true
     prettier:
-      glob: '*.{ts,tsx,js,jsx,svelte,json,yaml,yml,md}'
+      glob: '*.{ts,tsx,js,jsx,svelte,json,yaml,yml,md,graphql}'
       run: bunx prettier --write --ignore-unknown {staged_files}
       stage_fixed: true
     cspell:
@@ -23,4 +23,8 @@ pre-commit:
     dart-format:
       glob: '*.dart'
       run: dart format {staged_files}
+      stage_fixed: true
+    rust-fmt:
+      glob: '*.rs'
+      run: cargo fmt -- {staged_files}
       stage_fixed: true
