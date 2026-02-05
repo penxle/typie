@@ -15,6 +15,7 @@ import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_lab.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/native/editor_native.dart';
+import 'package:typie/screens/editor/limit.dart';
 import 'package:typie/screens/native_editor/__generated__/native_editor_query.data.gql.dart';
 import 'package:typie/screens/native_editor/__generated__/native_editor_query.req.gql.dart';
 import 'package:typie/screens/native_editor/__generated__/update_document_mutation.req.gql.dart';
@@ -425,6 +426,20 @@ class _Content extends HookWidget {
                     if (controller == null || currentEditor == null) {
                       return;
                     }
+
+                    if (data.me!.subscription == null) {
+                      final trialStarted = await context.showBottomSheet<bool>(
+                        intercept: true,
+                        child: const LimitBottomSheet(type: LimitBottomSheetType.spellCheck),
+                      );
+
+                      if (trialStarted ?? false) {
+                        unawaited(client.refetch(GNativeEditorScreen_QueryReq((b) => b.vars.slug = slug)));
+                      }
+
+                      return;
+                    }
+
                     await context.showBottomSheet(
                       intercept: true,
                       overlayOpacity: 0.05,
@@ -443,12 +458,20 @@ class _Content extends HookWidget {
                       return;
                     }
 
-                    final me = data.me;
-                    if (me?.subscription == null) {
+                    if (data.me!.subscription == null) {
+                      final trialStarted = await context.showBottomSheet<bool>(
+                        intercept: true,
+                        child: const LimitBottomSheet(type: LimitBottomSheetType.aiFeedback),
+                      );
+
+                      if (trialStarted ?? false) {
+                        unawaited(client.refetch(GNativeEditorScreen_QueryReq((b) => b.vars.slug = slug)));
+                      }
+
                       return;
                     }
 
-                    final aiOptIn = (me!.preferences.asMap['aiOptIn'] as bool?) ?? false;
+                    final aiOptIn = (data.me!.preferences.asMap['aiOptIn'] as bool?) ?? false;
 
                     await context.showBottomSheet(
                       intercept: true,
