@@ -1,5 +1,4 @@
 mod blit;
-mod mask_gamma;
 mod pen;
 mod scaler;
 
@@ -11,16 +10,12 @@ use skrifa::{FontRef, GlyphId, MetadataProvider};
 use std::hash::{Hash, Hasher};
 use tiny_skia::{Paint, PixmapMut, Transform};
 
-use mask_gamma::{MaskGamma, compute_luminance};
 use scaler::{ColorImage, MaskImage};
 
 const SUBPIXEL_POS_BITS: u32 = 2;
 const SUBPIXEL_POS_COUNT: u32 = 1 << SUBPIXEL_POS_BITS;
 const SUBPIXEL_ROUND: f32 = 1.0 / ((SUBPIXEL_POS_COUNT << 1) as f32);
 const SUBPIXEL_MASK: u32 = SUBPIXEL_POS_COUNT - 1;
-
-const DEFAULT_CONTRAST: f32 = 0.0;
-const DEFAULT_DEVICE_GAMMA: f32 = 0.0;
 
 const DARKEN_PARAMS: [(f32, f32); 4] = [
     (500.0, 400.0),
@@ -30,6 +25,7 @@ const DARKEN_PARAMS: [(f32, f32); 4] = [
 ];
 
 const DEFAULT_STEM_WIDTH_PER_1000: f32 = 75.0;
+const DARKEN_STRENGTH: f32 = 0.25;
 
 #[derive(Clone, Copy)]
 pub struct Glyph {
@@ -46,7 +42,6 @@ struct GlyphCacheKey {
     has_skew: bool,
     subpixel_x: u8,
     subpixel_y: u8,
-    luminance: u8,
 }
 
 enum CachedGlyph {
@@ -57,14 +52,12 @@ enum CachedGlyph {
 
 pub struct GlyphRenderer {
     cache: FxHashMap<GlyphCacheKey, CachedGlyph>,
-    mask_gamma: MaskGamma,
 }
 
 impl GlyphRenderer {
     pub fn new() -> Self {
         Self {
             cache: FxHashMap::default(),
-            mask_gamma: MaskGamma::new(DEFAULT_CONTRAST, DEFAULT_DEVICE_GAMMA),
         }
     }
 
@@ -96,9 +89,6 @@ impl GlyphRenderer {
         let color_b = (color.blue() * 255.0) as u8;
         let color_a = (color.alpha() * 255.0) as u8;
 
-        let luminance = compute_luminance(color_r, color_g, color_b);
-        let pre_blend = self.mask_gamma.pre_blend(luminance);
-
         let mut darken_xy: Option<(f32, f32)> = None;
 
         for glyph in glyphs {
@@ -120,7 +110,6 @@ impl GlyphRenderer {
                 has_skew,
                 subpixel_x,
                 subpixel_y,
-                luminance,
             };
 
             if !self.cache.contains_key(&cache_key) {
@@ -144,10 +133,12 @@ impl GlyphRenderer {
                     let dpi_scale = transform.sx;
                     let logical_ppem = quantized_size / dpi_scale;
                     let (stdvw, stdhw) = get_stem_widths(font_ref, units_per_em);
-                    let darken_x =
-                        compute_stem_darkening(logical_ppem, units_per_em, stdvw) * dpi_scale;
-                    let darken_y =
-                        compute_stem_darkening(logical_ppem, units_per_em, stdhw) * dpi_scale;
+                    let darken_x = compute_stem_darkening(logical_ppem, units_per_em, stdvw)
+                        * dpi_scale
+                        * DARKEN_STRENGTH;
+                    let darken_y = compute_stem_darkening(logical_ppem, units_per_em, stdhw)
+                        * dpi_scale
+                        * DARKEN_STRENGTH;
                     (darken_x, darken_y)
                 });
 
@@ -166,7 +157,6 @@ impl GlyphRenderer {
                     glyph_transform,
                     subpixel_offset_x,
                     subpixel_offset_y,
-                    &pre_blend,
                     dx,
                     dy,
                 ) {
