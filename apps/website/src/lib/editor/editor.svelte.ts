@@ -405,11 +405,26 @@ export class Editor {
 
         case 'spellcheckOverlaysChanged': {
           this.spellcheckOverlays = cmd.overlays;
-          this.activeSpellcheckErrorId = cmd.overlays.find((o) => o.isActive)?.id ?? null;
+          this.activeSpellcheckErrorId = cmd.overlays.find((o: SpellcheckOverlay) => o.isActive)?.id ?? null;
 
-          const validIds = new SvelteSet(cmd.overlays.map((o) => o.id));
+          const validIds = new SvelteSet(cmd.overlays.map((o: SpellcheckOverlay) => o.id));
           if (this.fullSpellcheckErrors.length > 0) {
-            this.fullSpellcheckErrors = this.fullSpellcheckErrors.filter((e) => validIds.has(e.id));
+            this.fullSpellcheckErrors = this.fullSpellcheckErrors.filter((e: SpellcheckErrorData) => validIds.has(e.id));
+          }
+
+          const activeSpellcheckOverlay = cmd.overlays.find((o: SpellcheckOverlay) => o.isActive);
+          if (activeSpellcheckOverlay && activeSpellcheckOverlay.bounds.length > 0) {
+            const pageEl = this.pageContainerEls[activeSpellcheckOverlay.pageIdx];
+            const scroller = this.scrollContainerEl;
+            if (pageEl && scroller) {
+              const pageRect = pageEl.getBoundingClientRect();
+              const scrollerRect = scroller.getBoundingClientRect();
+              const bound = activeSpellcheckOverlay.bounds[0];
+              const targetY = pageRect.top + bound.y - scrollerRect.top + scroller.scrollTop;
+              const viewportCenter = scroller.clientHeight / 2;
+              const targetScroll = targetY - viewportCenter + bound.height / 2;
+              scroller.scrollTo({ top: Math.max(0, targetScroll), behavior: 'smooth' });
+            }
           }
           break;
         }
@@ -1149,18 +1164,8 @@ export class Editor {
     return this.#wasmEditor?.getSpellcheckText() ?? null;
   }
 
-  selectSpellcheckError(errorId: string, options?: { focusEditor?: boolean; animate?: boolean }): void {
-    const focusEditor = options?.focusEditor ?? true;
-    const animate = options?.animate ?? false;
-
-    if (animate) {
-      this.cursor.animate = true;
-    }
-
+  selectSpellcheckError(errorId: string): void {
     this.dispatch({ type: 'selectSpellcheckError', errorId });
-    if (focusEditor) {
-      this.focus();
-    }
   }
 
   setAiFeedbackItems(items: { id: string; nodeId: string; startOffset: number; endOffset: number }[]): void {
