@@ -79,6 +79,14 @@ int32_t editor_import_updates_batch(
 int32_t editor_commit_sync(EditorHandle* editor, const uint8_t* version, size_t version_len);
 char* editor_get_clipboard_data(EditorHandle* editor);
 
+char* editor_get_spellcheck_text(EditorHandle* editor);
+int32_t editor_set_spellcheck_errors(EditorHandle* editor, const char* errors_json);
+int32_t editor_apply_spellcheck_correction(
+    EditorHandle* editor, const char* block_id,
+    size_t start_offset, size_t end_offset, const char* correction
+);
+int32_t editor_clear_spellcheck_errors(EditorHandle* editor);
+
 #ifdef __cplusplus
 }
 #endif

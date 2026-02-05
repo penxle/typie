@@ -131,6 +131,7 @@ class PageItem extends HookWidget {
             LineHighlight(cursorInfo: displayCursor.value, isFocused: isFocused, enabled: lineHighlightEnabled),
             SizedBox.expand(child: Texture(textureId: textureId.value!)),
             _SearchHighlightOverlay(pageIndex: pageIndex, overlays: state.state.searchOverlays),
+            _SpellcheckOverlay(pageIndex: pageIndex, overlays: state.state.spellcheckOverlays),
             Cursor(cursorInfo: displayCursor.value, isFocused: isFocused),
             ElementOverlay(pageIndex: pageIndex),
             if (layout.isPaginated && margins != null)
@@ -220,6 +221,74 @@ class _CropMarkerPainter extends CustomPainter {
         marginRight != oldDelegate.marginRight ||
         color != oldDelegate.color;
   }
+}
+
+class _SpellcheckOverlay extends StatelessWidget {
+  const _SpellcheckOverlay({required this.pageIndex, required this.overlays});
+
+  final int pageIndex;
+  final List<SpellcheckOverlayInfo> overlays;
+
+  static const _wavyColor = Color(0xFFDC2626);
+
+  @override
+  Widget build(BuildContext context) {
+    final pageOverlays = overlays.where((o) => o.pageIdx == pageIndex);
+    if (pageOverlays.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return IgnorePointer(
+      child: Stack(
+        children: [
+          for (final overlay in pageOverlays)
+            for (final bound in overlay.bounds)
+              Positioned(
+                left: bound.x,
+                top: bound.y + bound.ascent + 2,
+                width: bound.width,
+                height: 4,
+                child: CustomPaint(painter: _WavyUnderlinePainter(color: _wavyColor)),
+              ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WavyUnderlinePainter extends CustomPainter {
+  _WavyUnderlinePainter({required this.color});
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+
+    const waveLength = 6.0;
+    const amplitude = 1.5;
+
+    final path = Path()..moveTo(0, amplitude);
+
+    var x = 0.0;
+    var i = 0;
+    while (x < size.width) {
+      final nextX = (x + waveLength / 2).clamp(0.0, size.width);
+      final controlY = i.isEven ? 0.0 : amplitude * 2;
+      final endY = i.isEven ? amplitude * 2 : 0.0;
+      path.quadraticBezierTo((x + nextX) / 2, controlY, nextX, endY);
+      x = nextX;
+      i++;
+    }
+
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(_WavyUnderlinePainter oldDelegate) => color != oldDelegate.color;
 }
 
 class _SearchHighlightOverlay extends StatelessWidget {

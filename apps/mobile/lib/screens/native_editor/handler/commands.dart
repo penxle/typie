@@ -204,3 +204,50 @@ void handleSearchResultsChanged(EditorController controller, Map<String, dynamic
     ),
   );
 }
+
+void handleSpellcheckOverlaysChanged(EditorController controller, Map<String, dynamic> cmd) {
+  final overlays = cmd['overlays'] as List<dynamic>;
+
+  String? activeErrorId;
+  SpellcheckOverlayBound? scrollTarget;
+  int? scrollTargetPageIdx;
+  final spellcheckOverlays = <SpellcheckOverlayInfo>[];
+
+  for (final overlay in overlays) {
+    final map = overlay as Map<String, dynamic>;
+    final pageIdx = map['pageIdx'] as int;
+    final id = map['id'] as String;
+    final isActive = map['isActive'] as bool? ?? false;
+    final bounds = map['bounds'] as List<dynamic>;
+
+    final parsedBounds = bounds.map((b) {
+      final m = b as Map<String, dynamic>;
+      return SpellcheckOverlayBound(
+        x: (m['x'] as num).toDouble(),
+        y: (m['y'] as num).toDouble(),
+        width: (m['width'] as num).toDouble(),
+        height: (m['height'] as num).toDouble(),
+        ascent: (m['ascent'] as num).toDouble(),
+      );
+    }).toList();
+
+    spellcheckOverlays.add(SpellcheckOverlayInfo(pageIdx: pageIdx, id: id, isActive: isActive, bounds: parsedBounds));
+
+    if (isActive) {
+      activeErrorId = id;
+      if (parsedBounds.isNotEmpty) {
+        scrollTarget = parsedBounds[0];
+        scrollTargetPageIdx = pageIdx;
+      }
+    }
+  }
+
+  controller.updateState(
+    (state) => state.copyWith(
+      spellcheckOverlays: spellcheckOverlays,
+      activeSpellcheckErrorId: activeErrorId,
+      spellcheckScrollTarget: scrollTarget,
+      spellcheckScrollTargetPageIdx: scrollTargetPageIdx,
+    ),
+  );
+}

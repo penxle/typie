@@ -1,5 +1,6 @@
 use crate::global::{add_font, register_fallback_font};
 use crate::model::{Doc, LayoutMode, Node, NodeId, ParagraphNode};
+use crate::runtime::spellcheck::RawSpellcheckError;
 use crate::runtime::{Runtime, State};
 use crate::state::{Position, Selection};
 use crate::types::Affinity;
@@ -1020,6 +1021,106 @@ pub extern "C" fn editor_commit_sync(
                 .map_err(|e| format!("Failed to decode version: {e}"))?;
 
             editor.runtime.commit_sync(vv);
+
+            Ok(())
+        },
+        -1
+    )
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn editor_get_spellcheck_text(editor: *mut EditorHandle) -> *mut c_char {
+    ffi!(
+        {
+            if editor.is_null() {
+                return Err("Editor is null".into());
+            }
+
+            let editor = unsafe { &*(editor as *const EditorInner) };
+
+            #[derive(serde::Serialize)]
+            #[serde(rename_all = "camelCase")]
+            struct SpellcheckTextResult {
+                text: String,
+                mappings: Vec<crate::model::SpellcheckTextMapping>,
+            }
+
+            let (text, mappings) = editor.runtime.doc().to_spellcheck_text();
+            let result = SpellcheckTextResult { text, mappings };
+            let json_str =
+                serde_json::to_string(&result).map_err(|e| format!("Failed to serialize: {e}"))?;
+            let c_str = CString::new(json_str).map_err(|_| "Invalid string")?;
+            Ok(c_str.into_raw())
+        },
+        std::ptr::null_mut()
+    )
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn editor_set_spellcheck_errors(
+    editor: *mut EditorHandle,
+    errors_json: *const c_char,
+) -> i32 {
+    ffi!(
+        {
+            if editor.is_null() {
+                return Err("Editor is null".into());
+            }
+
+            let json_str = parse_cstr(errors_json, "errors_json")?;
+            let errors: Vec<RawSpellcheckError> = serde_json::from_str(json_str)
+                .map_err(|e| format!("Failed to parse errors: {e}"))?;
+
+            let editor = unsafe { &mut *(editor as *mut EditorInner) };
+            editor.runtime.set_spellcheck_errors(errors);
+
+            Ok(())
+        },
+        -1
+    )
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn editor_apply_spellcheck_correction(
+    editor: *mut EditorHandle,
+    block_id: *const c_char,
+    start_offset: usize,
+    end_offset: usize,
+    correction: *const c_char,
+) -> i32 {
+    ffi!(
+        {
+            if editor.is_null() {
+                return Err("Editor is null".into());
+            }
+
+            let block_id_str = parse_cstr(block_id, "block_id")?;
+            let correction_str = parse_cstr(correction, "correction")?;
+
+            let node_id = NodeId::from_string(block_id_str)
+                .ok_or_else(|| "Invalid block_id".to_string())?;
+
+            let editor = unsafe { &mut *(editor as *mut EditorInner) };
+            let success = editor
+                .runtime
+                .apply_spellcheck_correction(node_id, start_offset, end_offset, correction_str);
+
+            Ok(if success { 1 } else { 0 })
+        },
+        -1
+    )
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn editor_clear_spellcheck_errors(editor: *mut EditorHandle) -> i32 {
+    ffi!(
+        {
+            if editor.is_null() {
+                return Err("Editor is null".into());
+            }
+
+            let editor = unsafe { &mut *(editor as *mut EditorInner) };
+            editor.runtime.clear_spellcheck_errors();
 
             Ok(())
         },

@@ -1,0 +1,11 @@
+mutation NativeEditor_CheckSpellingDocument_Mutation($input: CheckSpellingDocumentInput!) {
+  checkSpellingDocument(input: $input) {
+    id
+    nodeId
+    startOffset
+    endOffset
+    context
+    corrections
+    explanation
+  }
+}
