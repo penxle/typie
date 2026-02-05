@@ -130,6 +130,7 @@ class PageItem extends HookWidget {
           children: [
             LineHighlight(cursorInfo: displayCursor.value, isFocused: isFocused, enabled: lineHighlightEnabled),
             SizedBox.expand(child: Texture(textureId: textureId.value!)),
+            _SearchHighlightOverlay(pageIndex: pageIndex, overlays: state.state.searchOverlays),
             Cursor(cursorInfo: displayCursor.value, isFocused: isFocused),
             ElementOverlay(pageIndex: pageIndex),
             if (layout.isPaginated && margins != null)
@@ -218,5 +219,44 @@ class _CropMarkerPainter extends CustomPainter {
         marginLeft != oldDelegate.marginLeft ||
         marginRight != oldDelegate.marginRight ||
         color != oldDelegate.color;
+  }
+}
+
+class _SearchHighlightOverlay extends StatelessWidget {
+  const _SearchHighlightOverlay({required this.pageIndex, required this.overlays});
+
+  final int pageIndex;
+  final List<SearchOverlayInfo> overlays;
+
+  static const _currentColor = Color.fromRGBO(255, 165, 0, 0.5);
+  static const _matchColor = Color.fromRGBO(255, 255, 0, 0.5);
+
+  @override
+  Widget build(BuildContext context) {
+    final pageOverlays = overlays.where((o) => o.pageIdx == pageIndex);
+    if (pageOverlays.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return IgnorePointer(
+      child: Stack(
+        children: [
+          for (final overlay in pageOverlays)
+            for (final bound in overlay.bounds)
+              Positioned(
+                left: bound.x,
+                top: bound.y,
+                width: bound.width,
+                height: bound.height,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: overlay.isCurrent ? _currentColor : _matchColor,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+        ],
+      ),
+    );
   }
 }

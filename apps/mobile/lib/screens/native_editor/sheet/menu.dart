@@ -24,6 +24,7 @@ class MenuSheet extends StatelessWidget {
     required this.client,
     required this.editor,
     required this.editorController,
+    required this.onOpenFindReplace,
     super.key,
   });
 
@@ -32,6 +33,7 @@ class MenuSheet extends StatelessWidget {
   final GraphQLClient client;
   final NativeEditor? editor;
   final EditorController? editorController;
+  final VoidCallback onOpenFindReplace;
 
   @override
   Widget build(BuildContext context) {
@@ -39,7 +41,7 @@ class MenuSheet extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          BottomMenuItem(icon: LucideLightIcons.search, label: '찾기', onTap: () {}),
+          BottomMenuItem(icon: LucideLightIcons.search, label: '찾기', onTap: onOpenFindReplace),
           BottomMenuItem(icon: LucideLightIcons.bookmark, label: '북마크', onTap: () {}),
           BottomMenuItem(icon: LucideLightIcons.spell_check, label: '맞춤법 검사', onTap: () {}),
           BottomMenuItem(icon: LucideLightIcons.lightbulb, label: 'AI 피드백', onTap: () {}),

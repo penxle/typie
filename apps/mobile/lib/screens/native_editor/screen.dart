@@ -19,6 +19,7 @@ import 'package:typie/screens/native_editor/__generated__/native_editor_query.da
 import 'package:typie/screens/native_editor/__generated__/native_editor_query.req.gql.dart';
 import 'package:typie/screens/native_editor/__generated__/update_document_mutation.req.gql.dart';
 import 'package:typie/screens/native_editor/init.dart';
+import 'package:typie/screens/native_editor/sheet/find_replace.dart';
 import 'package:typie/screens/native_editor/sheet/menu.dart';
 import 'package:typie/screens/native_editor/state/fonts.dart';
 import 'package:typie/screens/native_editor/state/state.dart';
@@ -405,6 +406,17 @@ class _Content extends HookWidget {
                   client: client,
                   editor: editor.value,
                   editorController: editorController.value,
+                  onOpenFindReplace: () async {
+                    final controller = editorController.value;
+                    if (controller == null) {
+                      return;
+                    }
+                    await context.showBottomSheet(
+                      intercept: true,
+                      overlayOpacity: 0.05,
+                      child: FindReplaceSheet(controller: controller),
+                    );
+                  },
                 ),
               );
             },
