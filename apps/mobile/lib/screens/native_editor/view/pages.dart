@@ -10,6 +10,7 @@ import 'package:typie/screens/native_editor/view/context_menu.dart';
 import 'package:typie/screens/native_editor/view/page.dart';
 import 'package:typie/screens/native_editor/view/scope.dart';
 import 'package:typie/screens/native_editor/view/selection.dart';
+import 'package:typie/screens/native_editor/view/title.dart';
 import 'package:typie/services/preference.dart';
 
 class PageList extends HookWidget {
@@ -401,32 +402,37 @@ class PageList extends HookWidget {
         final listView = ScrollConfiguration(
           behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
           child: SingleChildScrollView(
-            controller: horizontalScrollController,
-            scrollDirection: Axis.horizontal,
-            physics: horizontalPhysics,
-            child: SizedBox(
-              width: contentWidth,
-              child: SingleChildScrollView(
-                controller: verticalScrollController,
-                physics: isSelecting ? const NeverScrollableScrollPhysics() : const _NonGestureBouncingScrollPhysics(),
-                padding: EdgeInsets.only(
-                  left: geo.horizontalPadding,
-                  right: geo.horizontalPadding,
-                  bottom: contentBottomPadding,
+            controller: verticalScrollController,
+            physics: isSelecting ? const NeverScrollableScrollPhysics() : const _NonGestureBouncingScrollPhysics(),
+            child: Column(
+              children: [
+                _MeasuredTitleFields(scope: scope),
+                SingleChildScrollView(
+                  controller: horizontalScrollController,
+                  scrollDirection: Axis.horizontal,
+                  physics: horizontalPhysics,
+                  child: Container(
+                    width: geo.layout.pageWidth + geo.horizontalPadding * 2,
+                    padding: EdgeInsets.only(
+                      left: geo.horizontalPadding,
+                      right: geo.horizontalPadding,
+                      bottom: contentBottomPadding,
+                    ),
+                    child: Column(
+                      children: [
+                        for (var i = 0; i < layout.pageCount; i++) ...[
+                          _PageSlot(
+                            key: ValueKey(i),
+                            pageIndex: i,
+                            pageTop: geo.titleAreaHeight + offsets[i],
+                            pageBottom: geo.titleAreaHeight + offsets[i] + layout.pageHeights[i],
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
                 ),
-                child: Column(
-                  children: [
-                    SizedBox(height: geo.titleAreaHeight),
-                    for (var i = 0; i < layout.pageCount; i++)
-                      _PageSlot(
-                        key: ValueKey(i),
-                        pageIndex: i,
-                        pageTop: geo.titleAreaHeight + offsets[i],
-                        pageBottom: geo.titleAreaHeight + offsets[i + 1],
-                      ),
-                  ],
-                ),
-              ),
+              ],
             ),
           ),
         );
@@ -746,4 +752,55 @@ class _NonGestureBouncingScrollPhysics extends BouncingScrollPhysics {
 
   @override
   bool shouldAcceptUserOffset(ScrollMetrics position) => false;
+}
+
+class _MeasuredTitleFields extends HookWidget {
+  const _MeasuredTitleFields({required this.scope});
+
+  final ContentScope scope;
+
+  @override
+  Widget build(BuildContext context) {
+    void measureHeight() {
+      final renderBox = context.findRenderObject() as RenderBox?;
+      if (renderBox != null && renderBox.hasSize) {
+        final height = renderBox.size.height;
+        if (scope.titleAreaHeight.value != height) {
+          scope.titleAreaHeight.value = height;
+        }
+      }
+    }
+
+    useEffect(() {
+      WidgetsBinding.instance.addPostFrameCallback((_) => measureHeight());
+      return null;
+    });
+
+    return ValueListenableBuilder<String>(
+      valueListenable: scope.title,
+      builder: (context, title, _) {
+        return ValueListenableBuilder<String>(
+          valueListenable: scope.subtitle,
+          builder: (context, subtitle, _) {
+            WidgetsBinding.instance.addPostFrameCallback((_) => measureHeight());
+
+            return LayoutBuilder(
+              builder: (context, constraints) {
+                return TitleFields(
+                  title: title,
+                  subtitle: subtitle,
+                  onEnterDocument: () {
+                    scope.inputController.openInput();
+                    scope.controller.dispatch({'type': 'navigate', 'direction': 'documentStart', 'extend': false});
+                  },
+                  pageWidth: constraints.maxWidth,
+                  onFieldTap: scope.inputController.clearFocus,
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
 }
