@@ -28,11 +28,39 @@ class SelectionHandle extends StatelessWidget {
     final isFrom = type == SelectionHandleType.from;
     final stemHeight = handleInfo.height;
     final totalHeight = handleRadius * 2 + stemHeight;
+    final effectiveTouchHeight = totalHeight > touchTargetSize ? totalHeight : touchTargetSize;
 
-    final yOffset = isFrom ? -(handleRadius * 2) : 0.0;
-    final xOffset = isFrom ? -stemWidth / 2 : stemWidth / 2;
+    final customPaintTop = isFrom ? -(handleRadius * 2) : 0.0;
 
-    return Offset(xOffset - touchTargetSize / 2, yOffset - (touchTargetSize - totalHeight) / 2);
+    final handleCenterY = customPaintTop + totalHeight / 2;
+    final touchTargetTop = handleCenterY - effectiveTouchHeight / 2;
+
+    final handleXOffset = isFrom ? -stemWidth / 2 : stemWidth / 2;
+    final touchTargetLeft = handleXOffset - touchTargetSize / 2;
+
+    return Offset(touchTargetLeft, touchTargetTop);
+  }
+
+  Offset get _customPaintOffset {
+    final isFrom = type == SelectionHandleType.from;
+    final stemHeight = handleInfo.height;
+    final totalHeight = handleRadius * 2 + stemHeight;
+    final effectiveTouchHeight = totalHeight > touchTargetSize ? totalHeight : touchTargetSize;
+
+    final customPaintTop = isFrom ? -(handleRadius * 2) : 0.0;
+    final handleCenterY = customPaintTop + totalHeight / 2;
+    final touchTargetTop = handleCenterY - effectiveTouchHeight / 2;
+
+    final relativeTop = customPaintTop - touchTargetTop;
+    const relativeLeft = (touchTargetSize - handleRadius * 2) / 2;
+
+    return Offset(relativeLeft, relativeTop);
+  }
+
+  double get _effectiveTouchHeight {
+    final stemHeight = handleInfo.height;
+    final totalHeight = handleRadius * 2 + stemHeight;
+    return totalHeight > touchTargetSize ? totalHeight : touchTargetSize;
   }
 
   @override
@@ -62,12 +90,23 @@ class SelectionHandle extends StatelessWidget {
         ),
         child: SizedBox(
           width: touchTargetSize,
-          height: touchTargetSize,
-          child: Center(
-            child: CustomPaint(
-              size: Size(handleRadius * 2, totalHeight),
-              painter: _SelectionHandlePainter(type: type, stemHeight: stemHeight, color: context.colors.textDefault),
-            ),
+          height: _effectiveTouchHeight,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Positioned(
+                left: _customPaintOffset.dx,
+                top: _customPaintOffset.dy,
+                child: CustomPaint(
+                  size: Size(handleRadius * 2, totalHeight),
+                  painter: _SelectionHandlePainter(
+                    type: type,
+                    stemHeight: stemHeight,
+                    color: context.colors.textDefault,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
