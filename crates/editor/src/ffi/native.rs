@@ -1098,13 +1098,16 @@ pub extern "C" fn editor_apply_spellcheck_correction(
             let block_id_str = parse_cstr(block_id, "block_id")?;
             let correction_str = parse_cstr(correction, "correction")?;
 
-            let node_id = NodeId::from_string(block_id_str)
-                .ok_or_else(|| "Invalid block_id".to_string())?;
+            let node_id =
+                NodeId::from_string(block_id_str).ok_or_else(|| "Invalid block_id".to_string())?;
 
             let editor = unsafe { &mut *(editor as *mut EditorInner) };
-            let success = editor
-                .runtime
-                .apply_spellcheck_correction(node_id, start_offset, end_offset, correction_str);
+            let success = editor.runtime.apply_spellcheck_correction(
+                node_id,
+                start_offset,
+                end_offset,
+                correction_str,
+            );
 
             Ok(if success { 1 } else { 0 })
         },
