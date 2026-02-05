@@ -457,30 +457,14 @@ class PageList extends HookWidget {
             }
           }
 
-          if (clickCount == 1 && fromHandle == null && toHandle == null && cursor != null) {
-            final geo = scope.geometry;
-            final cOffsets = geo.computeCumulativePageOffsets();
-            final scrollY = verticalScrollController.hasClients ? verticalScrollController.offset : 0.0;
-            final scrollX = horizontalScrollController.hasClients ? horizontalScrollController.offset : 0.0;
-            final cursorPageTop = geo.titleAreaHeight + cOffsets[cursor.pageIdx];
-            final cursorScreenPos = Offset(
-              geo.horizontalPadding + cursor.x - scrollX,
-              cursorPageTop + cursor.y + cursor.height / 2 - scrollY,
-            );
-            if ((localPosition - cursorScreenPos).distance < 20) {
-              showContextMenu.value = true;
-              lastTapTime.value = now;
-              lastTapPosition.value = localPosition;
-              return;
-            }
-          }
-
           if (clickCount == 2) {
             pendingContextMenu.value = true;
           }
 
           lastTapTime.value = now;
           lastTapPosition.value = localPosition;
+
+          final prevCursor = cursor;
 
           final pointerX = getPointerX(localPosition.dx);
           editor
@@ -501,6 +485,21 @@ class PageList extends HookWidget {
               'button': 'primary',
               'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
             });
+
+          // 터치 후 커서 위치가 그대로면 컨텍스트 메뉴 표시
+          if (clickCount == 1 && prevCursor != null) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              final newState = scope.controller.state;
+              if (newState.fromHandle == null &&
+                  newState.toHandle == null &&
+                  newState.cursor != null &&
+                  prevCursor.pageIdx == newState.cursor!.pageIdx &&
+                  prevCursor.x == newState.cursor!.x &&
+                  prevCursor.y == newState.cursor!.y) {
+                showContextMenu.value = true;
+              }
+            });
+          }
         }
 
         Widget buildSelectionHandle(SelectionHandleInfo handle, SelectionHandleType type) {
