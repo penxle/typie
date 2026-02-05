@@ -22,7 +22,6 @@ import 'package:typie/screens/native_editor/view/pages.dart';
 import 'package:typie/screens/native_editor/view/scope.dart';
 import 'package:typie/screens/native_editor/view/scroll.dart';
 import 'package:typie/screens/native_editor/view/scrollbar.dart';
-import 'package:typie/screens/native_editor/view/title.dart';
 import 'package:typie/services/keyboard.dart';
 import 'package:typie/services/preference.dart';
 
@@ -69,6 +68,7 @@ class EditorView extends HookWidget {
     final suppressScrollbarShow = useValueNotifier(false);
     final suppressScrollbarTimer = useRef<Timer?>(null);
     final titleAreaHeight = useValueNotifier<double>(0);
+    useValueListenable(titleAreaHeight);
     final isLongPressing = useValueNotifier(false);
     final longPressPosition = useValueNotifier<Offset?>(null);
     final handleDragPosition = useValueNotifier<Offset?>(null);
@@ -308,9 +308,11 @@ class EditorView extends HookWidget {
       }
 
       if (cursor.show) {
-        final scrollOffset = verticalScrollController.hasClients ? verticalScrollController.offset : 0.0;
-        final screenY = cursor.y - scrollOffset;
-        inputController.updateCursor(cursor.x, screenY, cursor.height, cursor.precedingCharWidths);
+        final horizontalScrollOffset = horizontalScrollController.hasClients ? horizontalScrollController.offset : 0.0;
+        final geo = ContentGeometry(layout: currentLayout!, titleAreaHeight: titleAreaHeight.value);
+        final screenY = geo.cursorTopInPages(cursor);
+        final screenX = cursor.x - horizontalScrollOffset;
+        inputController.updateCursor(screenX, screenY, cursor.height, cursor.precedingCharWidths);
       }
 
       final shouldScroll =
@@ -563,7 +565,6 @@ class EditorView extends HookWidget {
                   child: Stack(
                     children: [
                       const PageList(),
-                      const _TitleOverlay(),
                       ValueListenableBuilder<Offset?>(
                         valueListenable: longPressPosition,
                         builder: (context, longPress, _) {
@@ -626,92 +627,6 @@ class EditorView extends HookWidget {
           },
         ),
       ),
-    );
-  }
-}
-
-class _TitleOverlay extends HookWidget {
-  const _TitleOverlay();
-
-  @override
-  Widget build(BuildContext context) {
-    final scope = ContentScope.of(context);
-    final titleFieldsKey = useMemoized(GlobalKey.new);
-
-    return Positioned(
-      top: 0,
-      left: 0,
-      right: 0,
-      child: AnimatedBuilder(
-        animation: scope.verticalScrollController,
-        builder: (context, child) {
-          final offset = scope.verticalScrollController.hasClients ? scope.verticalScrollController.offset : 0.0;
-          return Transform.translate(offset: Offset(0, -offset), child: child);
-        },
-        child: _MeasuredTitleFields(key: titleFieldsKey, scope: scope),
-      ),
-    );
-  }
-}
-
-class _MeasuredTitleFields extends StatefulWidget {
-  const _MeasuredTitleFields({required this.scope, super.key});
-
-  final ContentScope scope;
-
-  @override
-  State<_MeasuredTitleFields> createState() => _MeasuredTitleFieldsState();
-}
-
-class _MeasuredTitleFieldsState extends State<_MeasuredTitleFields> {
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _measureHeight());
-  }
-
-  @override
-  void didUpdateWidget(_MeasuredTitleFields oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _measureHeight());
-  }
-
-  void _measureHeight() {
-    final renderBox = context.findRenderObject() as RenderBox?;
-    if (renderBox != null && renderBox.hasSize) {
-      final height = renderBox.size.height;
-      if (widget.scope.titleAreaHeight.value != height) {
-        widget.scope.titleAreaHeight.value = height;
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final scope = widget.scope;
-    return ValueListenableBuilder<String>(
-      valueListenable: scope.title,
-      builder: (context, title, _) {
-        return ValueListenableBuilder<String>(
-          valueListenable: scope.subtitle,
-          builder: (context, subtitle, _) {
-            return LayoutBuilder(
-              builder: (context, constraints) {
-                return TitleFields(
-                  title: title,
-                  subtitle: subtitle,
-                  onEnterDocument: () {
-                    scope.inputController.openInput();
-                    scope.controller.dispatch({'type': 'navigate', 'direction': 'documentStart', 'extend': false});
-                  },
-                  pageWidth: constraints.maxWidth,
-                  onFieldTap: scope.inputController.clearFocus,
-                );
-              },
-            );
-          },
-        );
-      },
     );
   }
 }
