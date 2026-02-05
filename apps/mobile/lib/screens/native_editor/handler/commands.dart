@@ -251,3 +251,49 @@ void handleSpellcheckOverlaysChanged(EditorController controller, Map<String, dy
     ),
   );
 }
+
+void handleAiFeedbackOverlaysChanged(EditorController controller, Map<String, dynamic> cmd) {
+  final overlays = cmd['overlays'] as List<dynamic>;
+
+  String? activeItemId;
+  AiFeedbackOverlayBound? scrollTarget;
+  int? scrollTargetPageIdx;
+  final aiFeedbackOverlays = <AiFeedbackOverlayInfo>[];
+
+  for (final overlay in overlays) {
+    final map = overlay as Map<String, dynamic>;
+    final pageIdx = map['pageIdx'] as int;
+    final id = map['id'] as String;
+    final isActive = map['isActive'] as bool? ?? false;
+    final bounds = map['bounds'] as List<dynamic>;
+
+    final parsedBounds = bounds.map((b) {
+      final m = b as Map<String, dynamic>;
+      return AiFeedbackOverlayBound(
+        x: (m['x'] as num).toDouble(),
+        y: (m['y'] as num).toDouble(),
+        width: (m['width'] as num).toDouble(),
+        height: (m['height'] as num).toDouble(),
+      );
+    }).toList();
+
+    aiFeedbackOverlays.add(AiFeedbackOverlayInfo(pageIdx: pageIdx, id: id, isActive: isActive, bounds: parsedBounds));
+
+    if (isActive) {
+      activeItemId = id;
+      if (parsedBounds.isNotEmpty) {
+        scrollTarget = parsedBounds[0];
+        scrollTargetPageIdx = pageIdx;
+      }
+    }
+  }
+
+  controller.updateState(
+    (state) => state.copyWith(
+      aiFeedbackOverlays: aiFeedbackOverlays,
+      activeAiFeedbackItemId: activeItemId,
+      aiFeedbackScrollTarget: scrollTarget,
+      aiFeedbackScrollTargetPageIdx: scrollTargetPageIdx,
+    ),
+  );
+}

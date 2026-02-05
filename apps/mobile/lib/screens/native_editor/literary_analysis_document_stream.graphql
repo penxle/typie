@@ -1,0 +1,18 @@
+subscription NativeEditor_LiteraryAnalysisDocumentStream_Subscription($text: String!, $mappings: [DocumentTextMappingInput!]!) {
+  literaryAnalysisDocumentStream(text: $text, mappings: $mappings) {
+    type
+    feedback {
+      nodeId
+      startOffset
+      endOffset
+      startText
+      endText
+      feedback
+    }
+    progress {
+      current
+      total
+      phase
+    }
+  }
+}

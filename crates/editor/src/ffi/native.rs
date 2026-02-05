@@ -1,5 +1,6 @@
 use crate::global::{add_font, register_fallback_font};
 use crate::model::{Doc, LayoutMode, Node, NodeId, ParagraphNode};
+use crate::runtime::ai_feedback::RawAiFeedbackItem;
 use crate::runtime::spellcheck::RawSpellcheckError;
 use crate::runtime::{Runtime, State};
 use crate::state::{Position, Selection};
@@ -1125,6 +1126,66 @@ pub extern "C" fn editor_clear_spellcheck_errors(editor: *mut EditorHandle) -> i
             Ok(())
         },
         -1
+    )
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn editor_set_ai_feedback_items(
+    editor: *mut EditorHandle,
+    items_json: *const c_char,
+) -> i32 {
+    ffi!(
+        {
+            if editor.is_null() {
+                return Err("Editor is null".into());
+            }
+
+            let json_str = parse_cstr(items_json, "items_json")?;
+            let items: Vec<RawAiFeedbackItem> = serde_json::from_str(json_str)
+                .map_err(|e| format!("Failed to parse items: {e}"))?;
+
+            let editor = unsafe { &mut *(editor as *mut EditorInner) };
+            editor.runtime.set_ai_feedback_items(items);
+
+            Ok(())
+        },
+        -1
+    )
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn editor_clear_ai_feedback_items(editor: *mut EditorHandle) -> i32 {
+    ffi!(
+        {
+            if editor.is_null() {
+                return Err("Editor is null".into());
+            }
+
+            let editor = unsafe { &mut *(editor as *mut EditorInner) };
+            editor.runtime.clear_ai_feedback_items();
+
+            Ok(())
+        },
+        -1
+    )
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn editor_get_ai_feedback_items(editor: *mut EditorHandle) -> *mut c_char {
+    ffi!(
+        {
+            if editor.is_null() {
+                return Err("Editor is null".into());
+            }
+
+            let editor = unsafe { &mut *(editor as *mut EditorInner) };
+            let items = editor.runtime.get_ai_feedback_items();
+            let json_str =
+                serde_json::to_string(&items).map_err(|e| format!("Failed to serialize: {e}"))?;
+            let c_str = CString::new(json_str).map_err(|_| "Invalid string")?;
+            Ok(c_str.into_raw())
+        },
+        std::ptr::null_mut()
     )
 }
 
