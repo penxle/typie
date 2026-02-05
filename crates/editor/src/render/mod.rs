@@ -137,8 +137,8 @@ impl Renderer {
 
         let stages = [
             RenderPhase::Background,
-            RenderPhase::Content,
             RenderPhase::Selection,
+            RenderPhase::Content,
         ];
 
         let mut pixmap = self.pixmap.as_mut();
@@ -207,8 +207,8 @@ impl Renderer {
 
         let stages = [
             RenderPhase::Background,
-            RenderPhase::Content,
             RenderPhase::Selection,
+            RenderPhase::Content,
         ];
 
         for phase in stages {
