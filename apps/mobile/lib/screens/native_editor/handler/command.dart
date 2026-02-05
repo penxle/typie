@@ -17,6 +17,7 @@ class CommandHandler {
     'writingSystemRequired': handleWritingSystem,
     'exitedDocumentStart': handleExitedDocumentStart,
     'searchResultsChanged': handleSearchResultsChanged,
+    'spellcheckOverlaysChanged': handleSpellcheckOverlaysChanged,
   };
 
   static void handleCommands(EditorController controller, List<dynamic>? commands) {

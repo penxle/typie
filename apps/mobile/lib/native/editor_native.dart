@@ -482,6 +482,74 @@ final class NativeEditor {
     }
   }
 
+  Map<String, dynamic>? getSpellcheckText() {
+    _checkDisposed();
+
+    final ptr = _bindings.editor_get_spellcheck_text(_handle);
+    if (ptr == nullptr) {
+      final error = _getLastError();
+      if (error != null) {
+        throw EditorException(error);
+      }
+      return null;
+    }
+
+    final json = ptr.cast<Utf8>().toDartString();
+    _bindings.editor_free_string(ptr);
+
+    return jsonDecode(json) as Map<String, dynamic>;
+  }
+
+  void setSpellcheckErrors(List<Map<String, dynamic>> errors) {
+    _checkDisposed();
+
+    final json = jsonEncode(errors);
+    final jsonPtr = json.toNativeUtf8().cast<Char>();
+
+    try {
+      final result = _bindings.editor_set_spellcheck_errors(_handle, jsonPtr);
+      if (result < 0) {
+        throw EditorException(_getLastError() ?? 'Failed to set spellcheck errors');
+      }
+    } finally {
+      calloc.free(jsonPtr);
+    }
+  }
+
+  bool applySpellcheckCorrection(String blockId, int startOffset, int endOffset, String correction) {
+    _checkDisposed();
+
+    final blockIdPtr = blockId.toNativeUtf8().cast<Char>();
+    final correctionPtr = correction.toNativeUtf8().cast<Char>();
+
+    try {
+      final result = _bindings.editor_apply_spellcheck_correction(
+        _handle,
+        blockIdPtr,
+        startOffset,
+        endOffset,
+        correctionPtr,
+      );
+      if (result < 0) {
+        throw EditorException(_getLastError() ?? 'Failed to apply spellcheck correction');
+      }
+      return result == 1;
+    } finally {
+      calloc
+        ..free(blockIdPtr)
+        ..free(correctionPtr);
+    }
+  }
+
+  void clearSpellcheckErrors() {
+    _checkDisposed();
+
+    final result = _bindings.editor_clear_spellcheck_errors(_handle);
+    if (result < 0) {
+      throw EditorException(_getLastError() ?? 'Failed to clear spellcheck errors');
+    }
+  }
+
   void dispose() {
     if (!_disposed) {
       _bindings.editor_handle_free(_handle);

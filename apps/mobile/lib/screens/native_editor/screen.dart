@@ -21,6 +21,7 @@ import 'package:typie/screens/native_editor/__generated__/update_document_mutati
 import 'package:typie/screens/native_editor/init.dart';
 import 'package:typie/screens/native_editor/sheet/find_replace.dart';
 import 'package:typie/screens/native_editor/sheet/menu.dart';
+import 'package:typie/screens/native_editor/sheet/spellcheck.dart';
 import 'package:typie/screens/native_editor/state/fonts.dart';
 import 'package:typie/screens/native_editor/state/state.dart';
 import 'package:typie/screens/native_editor/state/theme.dart';
@@ -415,6 +416,23 @@ class _Content extends HookWidget {
                       intercept: true,
                       overlayOpacity: 0.05,
                       child: FindReplaceSheet(controller: controller),
+                    );
+                  },
+                  onOpenSpellcheck: () async {
+                    final controller = editorController.value;
+                    final currentEditor = editor.value;
+                    if (controller == null || currentEditor == null) {
+                      return;
+                    }
+                    await context.showBottomSheet(
+                      intercept: true,
+                      overlayOpacity: 0.05,
+                      child: SpellcheckSheet(
+                        controller: controller,
+                        editor: currentEditor,
+                        documentId: document.id,
+                        client: client,
+                      ),
                     );
                   },
                 ),

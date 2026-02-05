@@ -122,6 +122,27 @@ abstract class DocumentSettings with _$DocumentSettings {
 }
 
 @freezed
+abstract class SpellcheckOverlayBound with _$SpellcheckOverlayBound {
+  const factory SpellcheckOverlayBound({
+    required double x,
+    required double y,
+    required double width,
+    required double height,
+    required double ascent,
+  }) = _SpellcheckOverlayBound;
+}
+
+@freezed
+abstract class SpellcheckOverlayInfo with _$SpellcheckOverlayInfo {
+  const factory SpellcheckOverlayInfo({
+    required int pageIdx,
+    required String id,
+    required bool isActive,
+    required List<SpellcheckOverlayBound> bounds,
+  }) = _SpellcheckOverlayInfo;
+}
+
+@freezed
 abstract class EditorState with _$EditorState {
   const factory EditorState({
     LayoutInfo? layout,
@@ -142,6 +163,10 @@ abstract class EditorState with _$EditorState {
     @Default(0) int searchCurrentIndex,
     SearchScrollTarget? searchScrollTarget,
     @Default([]) List<SearchOverlayInfo> searchOverlays,
+    @Default([]) List<SpellcheckOverlayInfo> spellcheckOverlays,
+    String? activeSpellcheckErrorId,
+    SpellcheckOverlayBound? spellcheckScrollTarget,
+    int? spellcheckScrollTargetPageIdx,
   }) = _EditorState;
 
   const EditorState._();
