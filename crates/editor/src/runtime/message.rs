@@ -546,6 +546,10 @@ define_messages! {
     => when When::True
     => handle(rt) { rt.handle_select_spellcheck_error(error_id) },
 
+    SelectAiFeedbackItem { item_id: String }
+    => when When::True
+    => handle(rt) { rt.handle_select_ai_feedback_item(item_id) },
+
     SetFocused { focused: bool }
     => when When::True
     => handle(rt) { rt.handle_set_focused(focused) },

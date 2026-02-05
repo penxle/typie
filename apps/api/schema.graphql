@@ -156,6 +156,21 @@ type Document implements IDocument {
 
 union DocumentAsset = Embed | File | Image
 
+type DocumentLiteraryAnalysisPayload {
+  feedback: DocumentLiteraryFeedbackResult
+  progress: LiteraryAnalysisProgress
+  type: String!
+}
+
+type DocumentLiteraryFeedbackResult {
+  endOffset: Int!
+  endText: String!
+  feedback: String!
+  nodeId: String!
+  startOffset: Int!
+  startText: String!
+}
+
 type DocumentSpellingError {
   context: String!
   corrections: [String!]!
@@ -178,6 +193,13 @@ enum DocumentSyncType {
   PRESENCE
   UPDATE
   VECTOR
+}
+
+input DocumentTextMappingInput {
+  blockOffset: Int!
+  nodeId: String!
+  textEnd: Int!
+  textStart: Int!
 }
 
 enum DocumentType {
@@ -1053,6 +1075,7 @@ input SubscribePlanWithBillingKeyInput {
 
 type Subscription {
   documentSyncStream(clientId: String!, documentId: ID!): DocumentSyncStreamPayload!
+  literaryAnalysisDocumentStream(mappings: [DocumentTextMappingInput!]!, text: String!): DocumentLiteraryAnalysisPayload!
   literaryAnalysisStream(body: JSON!): LiteraryAnalysisPayload!
   postSyncStream(clientId: String!, postId: ID!): PostSyncStreamPayload!
   siteUpdateStream(siteId: ID!): SiteUpdateStreamPayload!

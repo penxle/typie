@@ -189,6 +189,26 @@
         {/each}
       {/each}
 
+      {#each editor.aiFeedbackOverlays.filter((o) => o.pageIdx === page) as overlay, i (`ai-${i}-${overlay.id}`)}
+        {#if overlay.isActive}
+          {#each overlay.bounds as bound, j (`ai-bound-${j}-${overlay.id}`)}
+            <div
+              style:left={`${bound.x}px`}
+              style:top={`${bound.y}px`}
+              style:width={`${bound.width}px`}
+              style:height={`${bound.height}px`}
+              class={css({
+                position: 'absolute',
+                pointerEvents: 'none',
+                backgroundColor: 'accent.brand.subtle',
+                borderRadius: '2px',
+                mixBlendMode: 'multiply',
+              })}
+            ></div>
+          {/each}
+        {/if}
+      {/each}
+
       {#each editor.searchResults.overlays.filter((o) => o.pageIdx === page) as overlay, i (`search-${i}`)}
         {#each overlay.bounds as bound, j (`search-${i}-${j}`)}
           <div

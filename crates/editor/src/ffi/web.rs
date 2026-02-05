@@ -1,6 +1,6 @@
 use crate::global::{add_font, register_fallback_font};
 use crate::model::{Doc, LayoutMode, Node, NodeId, ParagraphNode};
-use crate::runtime::{Message, RawSpellcheckError, Runtime, State};
+use crate::runtime::{Message, RawAiFeedbackItem, RawSpellcheckError, Runtime, State};
 use crate::state::{Position, Selection};
 use crate::types::Affinity;
 use serde::Serialize;
@@ -508,6 +508,22 @@ impl Editor {
         };
         self.runtime
             .apply_spellcheck_correction(block_id, start_offset, end_offset, correction)
+    }
+
+    #[wasm_bindgen(js_name = setAiFeedbackItems)]
+    pub fn set_ai_feedback_items(&mut self, raw_items: Vec<RawAiFeedbackItem>) {
+        self.runtime.set_ai_feedback_items(raw_items);
+    }
+
+    #[wasm_bindgen(js_name = getAiFeedbackItems)]
+    pub fn get_ai_feedback_items(&mut self) -> Result<JsValue, JsValue> {
+        let items = self.runtime.get_ai_feedback_items();
+        Ok(serde_wasm_bindgen::to_value(&items).map_err(|e| e.to_string())?)
+    }
+
+    #[wasm_bindgen(js_name = clearAiFeedbackItems)]
+    pub fn clear_ai_feedback_items(&mut self) {
+        self.runtime.clear_ai_feedback_items();
     }
 }
 

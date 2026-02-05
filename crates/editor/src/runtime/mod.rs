@@ -6,6 +6,7 @@ mod handlers;
 mod message;
 mod pointer;
 pub mod search;
+pub mod ai_feedback;
 pub mod spellcheck;
 mod state;
 mod table;
@@ -17,6 +18,7 @@ pub use dnd::*;
 pub use effect::*;
 pub use message::*;
 pub use pointer::*;
+pub use ai_feedback::{AiFeedbackItem, RawAiFeedbackItem};
 pub use spellcheck::{RawSpellcheckError, SpellcheckError};
 pub use state::*;
 pub use view_state::*;
@@ -61,6 +63,7 @@ struct PendingUpdates {
     placeholder: bool,
     link_overlays: bool,
     spellcheck_overlays: bool,
+    ai_feedback_overlays: bool,
     search_overlays: bool,
     table_overlays: bool,
 }
@@ -107,6 +110,8 @@ pub struct Runtime {
     auto_surround_enabled: bool,
     spellcheck_errors: Vec<SpellcheckError>,
     active_spellcheck_error_id: Option<String>,
+    ai_feedback_items: Vec<AiFeedbackItem>,
+    active_ai_feedback_item_id: Option<String>,
     search_state: search::SearchState,
     is_focused: bool,
     last_table_overlays: Vec<TableOverlay>,
@@ -156,6 +161,7 @@ impl Runtime {
                 placeholder: true,
                 link_overlays: false,
                 spellcheck_overlays: false,
+                ai_feedback_overlays: false,
                 search_overlays: false,
                 table_overlays: true,
             },
@@ -168,6 +174,8 @@ impl Runtime {
             auto_surround_enabled: true,
             spellcheck_errors: Vec::new(),
             active_spellcheck_error_id: None,
+            ai_feedback_items: Vec::new(),
+            active_ai_feedback_item_id: None,
             search_state: search::SearchState::default(),
             is_focused: true,
             last_table_overlays: Vec::new(),
@@ -889,6 +897,10 @@ impl Runtime {
                 self.pending.spellcheck_overlays = true;
             }
 
+            if self.has_ai_feedback_items() {
+                self.pending.ai_feedback_overlays = true;
+            }
+
             self.pending.table_overlays = true;
         }
 
@@ -1030,6 +1042,12 @@ impl Runtime {
             self.pending.spellcheck_overlays = false;
         }
 
+        if self.pending.ai_feedback_overlays {
+            let overlays = self.build_ai_feedback_overlays();
+            cmds.push(Cmd::AiFeedbackOverlaysChanged { overlays });
+            self.pending.ai_feedback_overlays = false;
+        }
+
         if self.pending.search_overlays {
             let overlays = search::build_search_overlays(
                 &self.pages,
@@ -1122,6 +1140,15 @@ impl Runtime {
             &self.spellcheck_errors,
             &self.state.doc,
             self.active_spellcheck_error_id.as_ref(),
+        )
+    }
+
+    fn build_ai_feedback_overlays(&self) -> Vec<cmd::AiFeedbackOverlay> {
+        ai_feedback::build_ai_feedback_overlays(
+            &self.pages,
+            &self.ai_feedback_items,
+            &self.state.doc,
+            self.active_ai_feedback_item_id.as_ref(),
         )
     }
 
@@ -1499,11 +1526,17 @@ impl Runtime {
                     if self.clean_invalidated_spellcheck_errors() {
                         self.pending.spellcheck_overlays = true;
                     }
+                    if self.clean_invalidated_ai_feedback_items() {
+                        self.pending.ai_feedback_overlays = true;
+                    }
                 }
 
                 if doc_changed || selection_changed {
                     if self.update_active_spellcheck_error() {
                         self.pending.spellcheck_overlays = true;
+                    }
+                    if self.update_active_ai_feedback_item() {
+                        self.pending.ai_feedback_overlays = true;
                     }
                 }
 
