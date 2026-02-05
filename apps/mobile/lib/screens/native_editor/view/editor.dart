@@ -556,7 +556,7 @@ class EditorView extends HookWidget {
         pendingScroll: pendingScroll,
         child: LayoutBuilder(
           builder: (context, constraints) {
-            sizeRef.value = (constraints.maxWidth, constraints.maxHeight);
+            sizeRef.value = (constraints.maxWidth.floorToDouble(), constraints.maxHeight);
             return Column(
               children: [
                 Expanded(
