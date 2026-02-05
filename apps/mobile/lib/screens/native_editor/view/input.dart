@@ -20,6 +20,7 @@ class InputView extends StatefulWidget {
     this.onFloatingCursorEnd,
     this.onFocusLost,
     this.onReady,
+    this.onNavigate,
     super.key,
   });
 
@@ -36,6 +37,7 @@ class InputView extends StatefulWidget {
   final VoidCallback? onFloatingCursorEnd;
   final VoidCallback? onFocusLost;
   final VoidCallback? onReady;
+  final void Function(String direction, bool extend)? onNavigate;
 
   @override
   State<InputView> createState() => InputViewState();
@@ -96,6 +98,8 @@ class InputViewState extends State<InputView> {
             widget.onFloatingCursorEnd?.call();
           case 'focusLost':
             widget.onFocusLost?.call();
+          case 'navigate':
+            widget.onNavigate?.call(args!['direction'] as String, args['extend'] as bool);
           default:
             throw MissingPluginException('Method ${call.method} not implemented');
         }

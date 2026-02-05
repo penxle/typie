@@ -604,6 +604,10 @@ class EditorView extends HookWidget {
                           onFocusLost: inputController.onFocusLost,
                           onReady: inputController.onInputReady,
                           onReplaceBackward: inputController.onReplaceBackward,
+                          onNavigate: (direction, extend) {
+                            inputController.commitComposing();
+                            controller.dispatch({'type': 'navigate', 'direction': direction, 'extend': extend});
+                          },
                         ),
                       ),
                       const Positioned(bottom: 20, right: 20, child: NativeEditorFloatingToolbar()),
