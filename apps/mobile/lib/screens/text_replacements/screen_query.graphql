@@ -1,0 +1,31 @@
+query TextReplacementsScreen_Query {
+  me {
+    id
+    textReplacements {
+      __typename
+      ... on TextReplacement {
+        id
+        match
+        substitute
+        regex
+        preset
+        note
+        order
+      }
+      ... on TextReplacementPreference {
+        id
+        state
+        order
+        textReplacement {
+          id
+          match
+          substitute
+          regex
+          preset
+          note
+          order
+        }
+      }
+    }
+  }
+}

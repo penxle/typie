@@ -1,0 +1,11 @@
+mutation TextReplacementsScreen_DeleteTextReplacement_Mutation($input: DeleteTextReplacementInput!) {
+  deleteTextReplacement(input: $input) {
+    __typename
+    ... on TextReplacement {
+      id
+    }
+    ... on TextReplacementPreference {
+      id
+    }
+  }
+}
