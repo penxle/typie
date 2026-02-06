@@ -2,7 +2,7 @@
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { DropdownMenu, DropdownMenuItem, VerticalDivider } from '@typie/ui/components';
-  import { getAppContext } from '@typie/ui/context';
+  import { getAppContext, getThemeContext } from '@typie/ui/context';
   import AlignCenterIcon from '~icons/lucide/align-center';
   import AlignJustifyIcon from '~icons/lucide/align-justify';
   import AlignLeftIcon from '~icons/lucide/align-left';
@@ -20,6 +20,7 @@
   import LineHeightIcon from '~icons/typie/line-height';
   import RubyIcon from '~icons/typie/ruby';
   import { getEditor } from '$lib/editor/context';
+  import { THEME_COLORS } from '$lib/editor/theme';
   import ToolbarButton from './ToolbarButton.svelte';
   import ToolbarColorGrid from './ToolbarColorGrid.svelte';
   import ToolbarDropdownButton from './ToolbarDropdownButton.svelte';
@@ -30,6 +31,7 @@
   import ToolbarLink from './ToolbarLink.svelte';
   import ToolbarRuby from './ToolbarRuby.svelte';
   import type { SystemStyleObject } from '@typie/styled-system/types';
+  import type { ThemeVariant } from '$lib/editor/theme';
   import type { Mark, MarkType, TextAlign } from '$lib/editor/types';
 
   type Props = {
@@ -40,7 +42,12 @@
   let { style, onSearchClick }: Props = $props();
 
   const app = getAppContext();
+  const theme = getThemeContext();
   const editor = getEditor();
+
+  const themeVariant = $derived(
+    (theme.effectiveTheme === 'light' ? `light-${theme.lightVariant}` : `dark-${theme.darkVariant}`) as ThemeVariant,
+  );
 
   const activeMarks = $derived(editor.activeMarks);
   const selection = $derived(editor.selection);
@@ -55,41 +62,43 @@
   const defaultLetterSpacing = 0;
   const defaultTextAlign: TextAlign = 'left';
 
-  const textColors = [
-    { label: '블랙', value: 'black', color: '#18181b' },
-    { label: '다크 그레이', value: 'darkgray', color: '#52525c' },
-    { label: '그레이', value: 'gray', color: '#71717a' },
-    { label: '라이트 그레이', value: 'lightgray', color: '#d4d4d8' },
-    { label: '화이트', value: 'white', color: '#ffffff' },
-    { label: '레드', value: 'red', color: '#ef4444' },
-    { label: '오렌지', value: 'orange', color: '#f97316' },
-    { label: '앰버', value: 'amber', color: '#f59e0b' },
-    { label: '옐로', value: 'yellow', color: '#eab308' },
-    { label: '라임', value: 'lime', color: '#84cc16' },
-    { label: '그린', value: 'green', color: '#22c55e' },
-    { label: '에메랄드', value: 'emerald', color: '#10b981' },
-    { label: '틸', value: 'teal', color: '#14b8a6' },
-    { label: '시안', value: 'cyan', color: '#06b6d4' },
-    { label: '스카이', value: 'sky', color: '#0ea5e9' },
-    { label: '블루', value: 'blue', color: '#3b82f6' },
-    { label: '인디고', value: 'indigo', color: '#6366f1' },
-    { label: '바이올렛', value: 'violet', color: '#8b5cf6' },
-    { label: '퍼플', value: 'purple', color: '#a855f7' },
-    { label: '마젠타', value: 'fuchsia', color: '#d946ef' },
-    { label: '핑크', value: 'pink', color: '#ec4899' },
-    { label: '로즈', value: 'rose', color: '#f43f5e' },
-  ];
+  const tc = $derived(THEME_COLORS[themeVariant]);
 
-  const textBackgroundColors = [
+  const textColors = $derived([
+    { label: '블랙', value: 'black', color: tc['text.black'] },
+    { label: '다크 그레이', value: 'darkgray', color: tc['text.darkgray'] },
+    { label: '그레이', value: 'gray', color: tc['text.gray'] },
+    { label: '라이트 그레이', value: 'lightgray', color: tc['text.lightgray'] },
+    { label: '화이트', value: 'white', color: tc['text.white'] },
+    { label: '레드', value: 'red', color: tc['text.red'] },
+    { label: '오렌지', value: 'orange', color: tc['text.orange'] },
+    { label: '앰버', value: 'amber', color: tc['text.amber'] },
+    { label: '옐로', value: 'yellow', color: tc['text.yellow'] },
+    { label: '라임', value: 'lime', color: tc['text.lime'] },
+    { label: '그린', value: 'green', color: tc['text.green'] },
+    { label: '에메랄드', value: 'emerald', color: tc['text.emerald'] },
+    { label: '틸', value: 'teal', color: tc['text.teal'] },
+    { label: '시안', value: 'cyan', color: tc['text.cyan'] },
+    { label: '스카이', value: 'sky', color: tc['text.sky'] },
+    { label: '블루', value: 'blue', color: tc['text.blue'] },
+    { label: '인디고', value: 'indigo', color: tc['text.indigo'] },
+    { label: '바이올렛', value: 'violet', color: tc['text.violet'] },
+    { label: '퍼플', value: 'purple', color: tc['text.purple'] },
+    { label: '마젠타', value: 'fuchsia', color: tc['text.fuchsia'] },
+    { label: '핑크', value: 'pink', color: tc['text.pink'] },
+    { label: '로즈', value: 'rose', color: tc['text.rose'] },
+  ]);
+
+  const textBackgroundColors = $derived([
     { label: '배경 없음', value: null, color: null },
-    { label: '그레이', value: 'gray', color: '#f1f1f2' },
-    { label: '레드', value: 'red', color: '#fdebec' },
-    { label: '오렌지', value: 'orange', color: '#ffecd5' },
-    { label: '옐로', value: 'yellow', color: '#fef3c7' },
-    { label: '그린', value: 'green', color: '#dff3e3' },
-    { label: '블루', value: 'blue', color: '#e7f3f8' },
-    { label: '퍼플', value: 'purple', color: '#f0e7fe' },
-  ];
+    { label: '그레이', value: 'gray', color: tc['bg.gray'] },
+    { label: '레드', value: 'red', color: tc['bg.red'] },
+    { label: '오렌지', value: 'orange', color: tc['bg.orange'] },
+    { label: '옐로', value: 'yellow', color: tc['bg.yellow'] },
+    { label: '그린', value: 'green', color: tc['bg.green'] },
+    { label: '블루', value: 'blue', color: tc['bg.blue'] },
+    { label: '퍼플', value: 'purple', color: tc['bg.purple'] },
+  ]);
 
   const lineHeights = [
     { label: '80%', value: 0.8 },

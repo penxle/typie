@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:typie/context/theme.dart';
+import 'package:typie/screens/native_editor/state/theme.dart';
 import 'package:typie/widgets/horizontal_divider.dart';
 import 'package:typie/widgets/svg_image.dart';
 import 'package:typie/widgets/vertical_divider.dart';
@@ -73,28 +74,116 @@ final editorValues = <String, List<Map<String, dynamic>>>{
   ],
 
   'textColor': [
-    {'label': '블랙', 'value': 'black', 'color': (BuildContext context) => context.colors.prosemirrorBlack},
-    {'label': '다크 그레이', 'value': 'darkgray', 'color': (BuildContext context) => context.colors.prosemirrorDarkgray},
-    {'label': '그레이', 'value': 'gray', 'color': (BuildContext context) => const Color(0xFF71717A)},
-    {'label': '라이트 그레이', 'value': 'lightgray', 'color': (BuildContext context) => context.colors.prosemirrorLightgray},
-    {'label': '화이트', 'value': 'white', 'color': (BuildContext context) => context.colors.prosemirrorWhite},
-    {'label': '레드', 'value': 'red', 'color': (BuildContext context) => const Color(0xFFEF4444)},
-    {'label': '오렌지', 'value': 'orange', 'color': (BuildContext context) => const Color(0xFFF97316)},
-    {'label': '앰버', 'value': 'amber', 'color': (BuildContext context) => const Color(0xFFF59E0B)},
-    {'label': '옐로', 'value': 'yellow', 'color': (BuildContext context) => const Color(0xFFEAB308)},
-    {'label': '라임', 'value': 'lime', 'color': (BuildContext context) => const Color(0xFF84CC16)},
-    {'label': '그린', 'value': 'green', 'color': (BuildContext context) => const Color(0xFF22C55E)},
-    {'label': '에메랄드', 'value': 'emerald', 'color': (BuildContext context) => const Color(0xFF10B981)},
-    {'label': '틸', 'value': 'teal', 'color': (BuildContext context) => const Color(0xFF14B8A6)},
-    {'label': '시안', 'value': 'cyan', 'color': (BuildContext context) => const Color(0xFF06B6D4)},
-    {'label': '스카이', 'value': 'sky', 'color': (BuildContext context) => const Color(0xFF0EA5E9)},
-    {'label': '블루', 'value': 'blue', 'color': (BuildContext context) => const Color(0xFF3B82F6)},
-    {'label': '인디고', 'value': 'indigo', 'color': (BuildContext context) => const Color(0xFF6366F1)},
-    {'label': '바이올렛', 'value': 'violet', 'color': (BuildContext context) => const Color(0xFF8B5CF6)},
-    {'label': '퍼플', 'value': 'purple', 'color': (BuildContext context) => const Color(0xFFA855F7)},
-    {'label': '마젠타', 'value': 'fuchsia', 'color': (BuildContext context) => const Color(0xFFD946EF)},
-    {'label': '핑크', 'value': 'pink', 'color': (BuildContext context) => const Color(0xFFEC4899)},
-    {'label': '로즈', 'value': 'rose', 'color': (BuildContext context) => const Color(0xFFF43F5E)},
+    {
+      'label': '블랙',
+      'value': 'black',
+      'color': (BuildContext context) => getEditorColor(context.theme.brightness, 'text.black'),
+    },
+    {
+      'label': '다크 그레이',
+      'value': 'darkgray',
+      'color': (BuildContext context) => getEditorColor(context.theme.brightness, 'text.darkgray'),
+    },
+    {
+      'label': '그레이',
+      'value': 'gray',
+      'color': (BuildContext context) => getEditorColor(context.theme.brightness, 'text.gray'),
+    },
+    {
+      'label': '라이트 그레이',
+      'value': 'lightgray',
+      'color': (BuildContext context) => getEditorColor(context.theme.brightness, 'text.lightgray'),
+    },
+    {
+      'label': '화이트',
+      'value': 'white',
+      'color': (BuildContext context) => getEditorColor(context.theme.brightness, 'text.white'),
+    },
+    {
+      'label': '레드',
+      'value': 'red',
+      'color': (BuildContext context) => getEditorColor(context.theme.brightness, 'text.red'),
+    },
+    {
+      'label': '오렌지',
+      'value': 'orange',
+      'color': (BuildContext context) => getEditorColor(context.theme.brightness, 'text.orange'),
+    },
+    {
+      'label': '앰버',
+      'value': 'amber',
+      'color': (BuildContext context) => getEditorColor(context.theme.brightness, 'text.amber'),
+    },
+    {
+      'label': '옐로',
+      'value': 'yellow',
+      'color': (BuildContext context) => getEditorColor(context.theme.brightness, 'text.yellow'),
+    },
+    {
+      'label': '라임',
+      'value': 'lime',
+      'color': (BuildContext context) => getEditorColor(context.theme.brightness, 'text.lime'),
+    },
+    {
+      'label': '그린',
+      'value': 'green',
+      'color': (BuildContext context) => getEditorColor(context.theme.brightness, 'text.green'),
+    },
+    {
+      'label': '에메랄드',
+      'value': 'emerald',
+      'color': (BuildContext context) => getEditorColor(context.theme.brightness, 'text.emerald'),
+    },
+    {
+      'label': '틸',
+      'value': 'teal',
+      'color': (BuildContext context) => getEditorColor(context.theme.brightness, 'text.teal'),
+    },
+    {
+      'label': '시안',
+      'value': 'cyan',
+      'color': (BuildContext context) => getEditorColor(context.theme.brightness, 'text.cyan'),
+    },
+    {
+      'label': '스카이',
+      'value': 'sky',
+      'color': (BuildContext context) => getEditorColor(context.theme.brightness, 'text.sky'),
+    },
+    {
+      'label': '블루',
+      'value': 'blue',
+      'color': (BuildContext context) => getEditorColor(context.theme.brightness, 'text.blue'),
+    },
+    {
+      'label': '인디고',
+      'value': 'indigo',
+      'color': (BuildContext context) => getEditorColor(context.theme.brightness, 'text.indigo'),
+    },
+    {
+      'label': '바이올렛',
+      'value': 'violet',
+      'color': (BuildContext context) => getEditorColor(context.theme.brightness, 'text.violet'),
+    },
+    {
+      'label': '퍼플',
+      'value': 'purple',
+      'color': (BuildContext context) => getEditorColor(context.theme.brightness, 'text.purple'),
+    },
+    {
+      'label': '마젠타',
+      'value': 'fuchsia',
+      'color': (BuildContext context) => getEditorColor(context.theme.brightness, 'text.fuchsia'),
+    },
+    {
+      'label': '핑크',
+      'value': 'pink',
+      'color': (BuildContext context) => getEditorColor(context.theme.brightness, 'text.pink'),
+    },
+    {
+      'label': '로즈',
+      'value': 'rose',
+      'color': (BuildContext context) => getEditorColor(context.theme.brightness, 'text.rose'),
+    },
   ],
 
   'textBackgroundColor': [
@@ -102,72 +191,37 @@ final editorValues = <String, List<Map<String, dynamic>>>{
     {
       'label': '그레이',
       'value': 'gray',
-      'color': (BuildContext context) {
-        return switch (context.theme.brightness) {
-          Brightness.dark => const Color(0xFF38393B),
-          Brightness.light => const Color(0xFFF1F1F2),
-        };
-      },
+      'color': (BuildContext context) => getEditorColor(context.theme.brightness, 'bg.gray'),
     },
     {
       'label': '레드',
       'value': 'red',
-      'color': (BuildContext context) {
-        return switch (context.theme.brightness) {
-          Brightness.dark => const Color(0xFF532F2B),
-          Brightness.light => const Color(0xFFFDEBEC),
-        };
-      },
+      'color': (BuildContext context) => getEditorColor(context.theme.brightness, 'bg.red'),
     },
     {
       'label': '오렌지',
       'value': 'orange',
-      'color': (BuildContext context) {
-        return switch (context.theme.brightness) {
-          Brightness.dark => const Color(0xFF54341A),
-          Brightness.light => const Color(0xFFFFECD5),
-        };
-      },
+      'color': (BuildContext context) => getEditorColor(context.theme.brightness, 'bg.orange'),
     },
     {
       'label': '옐로',
       'value': 'yellow',
-      'color': (BuildContext context) {
-        return switch (context.theme.brightness) {
-          Brightness.dark => const Color(0xFF4E3E1B),
-          Brightness.light => const Color(0xFFFEF3C7),
-        };
-      },
+      'color': (BuildContext context) => getEditorColor(context.theme.brightness, 'bg.yellow'),
     },
     {
       'label': '그린',
       'value': 'green',
-      'color': (BuildContext context) {
-        return switch (context.theme.brightness) {
-          Brightness.dark => const Color(0xFF2C4331),
-          Brightness.light => const Color(0xFFDFF3E3),
-        };
-      },
+      'color': (BuildContext context) => getEditorColor(context.theme.brightness, 'bg.green'),
     },
     {
       'label': '블루',
       'value': 'blue',
-      'color': (BuildContext context) {
-        return switch (context.theme.brightness) {
-          Brightness.dark => const Color(0xFF153B4F),
-          Brightness.light => const Color(0xFFE7F3F8),
-        };
-      },
+      'color': (BuildContext context) => getEditorColor(context.theme.brightness, 'bg.blue'),
     },
     {
       'label': '퍼플',
       'value': 'purple',
-      'color': (BuildContext context) {
-        return switch (context.theme.brightness) {
-          Brightness.dark => const Color(0xFF3F2E50),
-          Brightness.light => const Color(0xFFF0E7FE),
-        };
-      },
+      'color': (BuildContext context) => getEditorColor(context.theme.brightness, 'bg.purple'),
     },
   ],
 

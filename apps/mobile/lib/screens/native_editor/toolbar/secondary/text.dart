@@ -5,6 +5,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/context/theme.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/icons/typie.dart';
+import 'package:typie/screens/native_editor/state/theme.dart';
 import 'package:typie/screens/native_editor/toolbar/buttons/background_color.dart';
 import 'package:typie/screens/native_editor/toolbar/buttons/color.dart';
 import 'package:typie/screens/native_editor/toolbar/buttons/icon.dart';
@@ -78,7 +79,7 @@ class NativeEditorTextToolbar extends HookWidget {
                 (editorValues['textColor']?.firstWhereOrNull((e) => e['value'] == activeTextColor)?['color']
                         as Color Function(BuildContext)?)
                     ?.call(context) ??
-                context.colors.prosemirrorBlack,
+                getEditorColor(context.theme.brightness, 'text.black'),
             value: activeTextColor ?? 'black',
             onTap: () {
               scope.secondaryToolbarMode.value = SecondaryToolbarMode.textColor;

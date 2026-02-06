@@ -18,7 +18,7 @@ const colorToU32 = (color: string, alpha = 0xff): number => {
   return ((r << 24) | (g << 16) | (b << 8) | alpha) >>> 0;
 };
 
-const THEME_COLORS: Record<ThemeVariant, Record<string, string>> = {
+export const THEME_COLORS: Record<ThemeVariant, Record<string, string>> = {
   'light-white': {
     'ui.surface.default': '#ffffff',
     'ui.surface.subtle': '#fafafa',
