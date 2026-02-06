@@ -46,25 +46,28 @@
   });
 
   $effect(() => {
-    const scrollEl = editor.scrollContainerEl;
+    const viewport = editor.scrollViewport;
     const node = containerEl;
-    if (!scrollEl || !node) return;
+
+    if (!node || !viewport) return;
 
     let rafId: number | null = null;
 
     const checkVisibility = () => {
-      const scrollRect = scrollEl.getBoundingClientRect();
+      const rect = viewport.getRect();
+      const viewportHeight = rect.bottom - rect.top;
+
       const pageRect = node.getBoundingClientRect();
-      const marginPx = scrollRect.height * 2;
-      const isIntersecting = pageRect.bottom > scrollRect.top - marginPx && pageRect.top < scrollRect.bottom + marginPx;
+      const marginPx = viewportHeight * 2;
+      const isIntersecting = pageRect.bottom > rect.top - marginPx && pageRect.top < rect.bottom + marginPx;
 
       if (isIntersecting !== visible) {
         visible = isIntersecting;
       }
 
       if (isIntersecting) {
-        const top = Math.max(scrollRect.top, pageRect.top);
-        const bottom = Math.min(scrollRect.bottom, pageRect.bottom);
+        const top = Math.max(rect.top, pageRect.top);
+        const bottom = Math.min(rect.bottom, pageRect.bottom);
         const ratio = pageRect.height > 0 ? Math.max(0, bottom - top) / pageRect.height : 0;
         editor.updatePageVisibility(page, ratio);
       } else {
@@ -81,11 +84,11 @@
       }
     };
 
-    scrollEl.addEventListener('scroll', scheduleCheck);
+    viewport.target.addEventListener('scroll', scheduleCheck);
     checkVisibility();
 
     return () => {
-      scrollEl.removeEventListener('scroll', scheduleCheck);
+      viewport.target.removeEventListener('scroll', scheduleCheck);
       if (rafId !== null) {
         cancelAnimationFrame(rafId);
       }

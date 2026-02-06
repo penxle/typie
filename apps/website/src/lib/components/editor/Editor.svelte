@@ -2,7 +2,7 @@
   import { css } from '@typie/styled-system/css';
   import { flex, grid } from '@typie/styled-system/patterns';
   import { getThemeContext } from '@typie/ui/context';
-  import { handleDragScroll } from '@typie/ui/utils';
+  import { elementScrollViewport, handleDragScroll, windowScrollViewport } from '@typie/ui/utils';
   import { tick, untrack } from 'svelte';
   import {
     CONTINUOUS_MIN_WIDTH,
@@ -26,6 +26,7 @@
     rulerThickness?: number;
     snapshot?: Uint8Array;
     readOnly?: boolean;
+    useWindowScroll?: boolean;
     editor?: Editor;
     onDocChanged?: () => void;
     onSelectionChanged?: (anchor: Position, head: Position) => void;
@@ -40,6 +41,7 @@
     rulerThickness = 24,
     snapshot,
     readOnly = false,
+    useWindowScroll = false,
     editor: externalEditor,
     onDocChanged,
     onSelectionChanged,
@@ -67,6 +69,16 @@
 
   $effect(() => {
     editor.scrollContainerEl = scrollContainerEl;
+  });
+
+  $effect(() => {
+    if (useWindowScroll) {
+      editor.scrollViewport = windowScrollViewport();
+    } else if (scrollContainerEl) {
+      editor.scrollViewport = elementScrollViewport(scrollContainerEl);
+    } else {
+      editor.scrollViewport = null;
+    }
   });
 
   $effect(() => {
@@ -137,7 +149,7 @@
   );
 
   $effect(() => {
-    return handleDragScroll(scrollContainerEl, !editor.isPointerModeIdle, {
+    return handleDragScroll(editor.scrollViewport, !editor.isPointerModeIdle, {
       onScroll: (clientX, clientY) => {
         editor.handlePointerMoveFromCoordinate(clientX, clientY);
       },
@@ -273,7 +285,9 @@
           {/if}
         </div>
       </div>
-      <Scrollbar scrollContainer={scrollContainerEl} />
+      {#if !useWindowScroll}
+        <Scrollbar scrollContainer={scrollContainerEl} />
+      {/if}
     </div>
   {/if}
 </div>

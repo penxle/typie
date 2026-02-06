@@ -6,6 +6,7 @@ import { FRAGMENT_MIME, PAGE_GAP } from './constants';
 import { ensurePhantomFonts, ensureRequiredFonts, ensureRequiredWritingSystems, getAvailableFontsMap } from './fonts';
 import { calculateImageDisplaySize, calculateRelativePosition, findNearestPageCoordinate, getPageElement, idleCallback } from './utils';
 import type { Editor as WasmEditor, ExportedUpdates, Modifier, PointerButton, TableOverlay } from '@typie/editor';
+import type { ScrollViewport } from '@typie/ui/utils';
 import type { ThemeColors } from './theme';
 import type {
   AiFeedbackData,
@@ -212,6 +213,8 @@ export class Editor {
   });
 
   scrollContainerEl = $state<HTMLElement | null>(null);
+
+  scrollViewport = $state<ScrollViewport | null>(null);
 
   pageContainerEls = $state<HTMLDivElement[]>([]);
 

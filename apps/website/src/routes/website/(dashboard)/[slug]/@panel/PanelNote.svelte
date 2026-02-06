@@ -6,7 +6,7 @@
   import { autosize, tooltip } from '@typie/ui/actions';
   import { Button, Icon, Popover } from '@typie/ui/components';
   import { Toast } from '@typie/ui/notification';
-  import { animateFlip, debounce, getNoteColors, getRandomNoteColor, handleDragScroll } from '@typie/ui/utils';
+  import { animateFlip, debounce, elementScrollViewport, getNoteColors, getRandomNoteColor, handleDragScroll } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import GripVerticalIcon from '~icons/lucide/grip-vertical';
   import PlusIcon from '~icons/lucide/plus';
@@ -215,7 +215,7 @@
   });
 
   $effect(() => {
-    return handleDragScroll(scrollContainer, !!dragging);
+    return handleDragScroll(scrollContainer ? elementScrollViewport(scrollContainer) : null, !!dragging);
   });
 
   $effect.pre(() => {
