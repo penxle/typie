@@ -1,46 +1,6 @@
-use std::sync::OnceLock;
-
 use tiny_skia::PixmapMut;
 
 use super::scaler::{ColorImage, MaskImage};
-
-const LIN_BITS: u32 = 13;
-const LIN_SCALE: u32 = 1 << LIN_BITS;
-const LIN_TABLE_SIZE: usize = LIN_SCALE as usize + 1;
-
-struct LinearTables {
-    s2l: [u16; 256],
-    l2s: [u8; LIN_TABLE_SIZE],
-}
-
-fn linear_tables() -> &'static LinearTables {
-    static TABLES: OnceLock<LinearTables> = OnceLock::new();
-    TABLES.get_or_init(|| {
-        let mut s2l = [0u16; 256];
-        for i in 0..256 {
-            let s = i as f64 / 255.0;
-            let lin = if s <= 0.04045 {
-                s / 12.92
-            } else {
-                ((s + 0.055) / 1.055).powf(2.4)
-            };
-            s2l[i] = (lin * LIN_SCALE as f64 + 0.5) as u16;
-        }
-
-        let mut l2s = [0u8; LIN_TABLE_SIZE];
-        for i in 0..LIN_TABLE_SIZE {
-            let lin = i as f64 / LIN_SCALE as f64;
-            let s = if lin <= 0.0031308 {
-                lin * 12.92
-            } else {
-                1.055 * lin.powf(1.0 / 2.4) - 0.055
-            };
-            l2s[i] = (s * 255.0 + 0.5).min(255.0) as u8;
-        }
-
-        LinearTables { s2l, l2s }
-    })
-}
 
 #[inline(always)]
 fn alpha_mul(value: u32, scale256: u32) -> u32 {
@@ -61,19 +21,15 @@ pub(crate) fn blit_mask_d32_a8(
         return;
     }
 
-    let tables = linear_tables();
-
     if color_r == 0 && color_g == 0 && color_b == 0 && color_a == 255 {
-        blit_mask_black(dst, mask, dst_x, dst_y, tables);
+        blit_mask_black(dst, mask, dst_x, dst_y);
         return;
     }
 
     if color_a == 255 {
-        blit_mask_opaque(dst, mask, dst_x, dst_y, color_r, color_g, color_b, tables);
+        blit_mask_opaque(dst, mask, dst_x, dst_y, color_r, color_g, color_b);
     } else {
-        blit_mask_general(
-            dst, mask, dst_x, dst_y, color_r, color_g, color_b, color_a, tables,
-        );
+        blit_mask_general(dst, mask, dst_x, dst_y, color_r, color_g, color_b, color_a);
     }
 }
 
@@ -85,7 +41,6 @@ fn blit_mask_opaque(
     color_r: u8,
     color_g: u8,
     color_b: u8,
-    tables: &LinearTables,
 ) {
     let (src_x_start, src_y_start, dst_x_start, dst_y_start, copy_width, copy_height) =
         compute_clip(dst, mask, dst_x, dst_y);
@@ -98,9 +53,9 @@ fn blit_mask_opaque(
     let dst_stride = (dst.width() as usize) * 4;
     let dst_data = dst.data_mut();
 
-    let src_lin_r = tables.s2l[color_r as usize] as u32;
-    let src_lin_g = tables.s2l[color_g as usize] as u32;
-    let src_lin_b = tables.s2l[color_b as usize] as u32;
+    let sr = color_r as u32;
+    let sg = color_g as u32;
+    let sb = color_b as u32;
 
     for row in 0..copy_height as usize {
         let mask_row_start = (src_y_start as usize + row) * mask_stride + src_x_start as usize;
@@ -123,21 +78,13 @@ fn blit_mask_opaque(
             }
 
             let scale = vmask + 1;
-            let inv_scale = 256 - vmask;
+            let inv_scale = 256 - scale;
 
-            let dst_lin_r = tables.s2l[dst_data[idx] as usize] as u32;
-            let dst_lin_g = tables.s2l[dst_data[idx + 1] as usize] as u32;
-            let dst_lin_b = tables.s2l[dst_data[idx + 2] as usize] as u32;
-
-            let r = ((src_lin_r * scale + dst_lin_r * inv_scale) >> 8).min(LIN_SCALE);
-            let g = ((src_lin_g * scale + dst_lin_g * inv_scale) >> 8).min(LIN_SCALE);
-            let b = ((src_lin_b * scale + dst_lin_b * inv_scale) >> 8).min(LIN_SCALE);
-
-            dst_data[idx] = tables.l2s[r as usize];
-            dst_data[idx + 1] = tables.l2s[g as usize];
-            dst_data[idx + 2] = tables.l2s[b as usize];
+            dst_data[idx] = ((sr * scale + dst_data[idx] as u32 * inv_scale) >> 8) as u8;
+            dst_data[idx + 1] = ((sg * scale + dst_data[idx + 1] as u32 * inv_scale) >> 8) as u8;
+            dst_data[idx + 2] = ((sb * scale + dst_data[idx + 2] as u32 * inv_scale) >> 8) as u8;
             dst_data[idx + 3] =
-                (alpha_mul(255, scale) + alpha_mul(dst_data[idx + 3] as u32, inv_scale)) as u8;
+                ((255u32 * scale + dst_data[idx + 3] as u32 * inv_scale) >> 8) as u8;
         }
     }
 }
@@ -151,7 +98,6 @@ fn blit_mask_general(
     color_g: u8,
     color_b: u8,
     color_a: u8,
-    tables: &LinearTables,
 ) {
     let (src_x_start, src_y_start, dst_x_start, dst_y_start, copy_width, copy_height) =
         compute_clip(dst, mask, dst_x, dst_y);
@@ -164,13 +110,10 @@ fn blit_mask_general(
     let dst_stride = (dst.width() as usize) * 4;
     let dst_data = dst.data_mut();
 
-    let src_lin_r = tables.s2l[color_r as usize] as u32;
-    let src_lin_g = tables.s2l[color_g as usize] as u32;
-    let src_lin_b = tables.s2l[color_b as usize] as u32;
     let a256 = color_a as u32 + 1;
-    let pm_lin_r = (src_lin_r * a256) >> 8;
-    let pm_lin_g = (src_lin_g * a256) >> 8;
-    let pm_lin_b = (src_lin_b * a256) >> 8;
+    let pm_r = alpha_mul(color_r as u32, a256);
+    let pm_g = alpha_mul(color_g as u32, a256);
+    let pm_b = alpha_mul(color_b as u32, a256);
     let pm_a = color_a as u32;
 
     for row in 0..copy_height as usize {
@@ -185,32 +128,25 @@ fn blit_mask_general(
 
             let idx = dst_row_start + col * 4;
             let vmask256 = vmask + 1;
-            let inv_scale = 256 - alpha_mul(pm_a, vmask256);
+            let eff_a = alpha_mul(pm_a, vmask256);
+            let inv_scale = 256 - eff_a;
 
-            let dst_lin_r = tables.s2l[dst_data[idx] as usize] as u32;
-            let dst_lin_g = tables.s2l[dst_data[idx + 1] as usize] as u32;
-            let dst_lin_b = tables.s2l[dst_data[idx + 2] as usize] as u32;
+            let src_r = alpha_mul(pm_r, vmask256);
+            let src_g = alpha_mul(pm_g, vmask256);
+            let src_b = alpha_mul(pm_b, vmask256);
 
-            let r = ((pm_lin_r * vmask256 + dst_lin_r * inv_scale) >> 8).min(LIN_SCALE);
-            let g = ((pm_lin_g * vmask256 + dst_lin_g * inv_scale) >> 8).min(LIN_SCALE);
-            let b = ((pm_lin_b * vmask256 + dst_lin_b * inv_scale) >> 8).min(LIN_SCALE);
-
-            dst_data[idx] = tables.l2s[r as usize];
-            dst_data[idx + 1] = tables.l2s[g as usize];
-            dst_data[idx + 2] = tables.l2s[b as usize];
+            dst_data[idx] = (src_r + alpha_mul(dst_data[idx] as u32, inv_scale)).min(255) as u8;
+            dst_data[idx + 1] =
+                (src_g + alpha_mul(dst_data[idx + 1] as u32, inv_scale)).min(255) as u8;
+            dst_data[idx + 2] =
+                (src_b + alpha_mul(dst_data[idx + 2] as u32, inv_scale)).min(255) as u8;
             dst_data[idx + 3] =
-                (alpha_mul(pm_a, vmask256) + alpha_mul(dst_data[idx + 3] as u32, inv_scale)) as u8;
+                (eff_a + alpha_mul(dst_data[idx + 3] as u32, inv_scale)).min(255) as u8;
         }
     }
 }
 
-fn blit_mask_black(
-    dst: &mut PixmapMut,
-    mask: &MaskImage,
-    dst_x: i32,
-    dst_y: i32,
-    tables: &LinearTables,
-) {
+fn blit_mask_black(dst: &mut PixmapMut, mask: &MaskImage, dst_x: i32, dst_y: i32) {
     let (src_x_start, src_y_start, dst_x_start, dst_y_start, copy_width, copy_height) =
         compute_clip(dst, mask, dst_x, dst_y);
     if copy_width <= 0 || copy_height <= 0 {
@@ -242,16 +178,13 @@ fn blit_mask_black(
                 continue;
             }
 
-            let inv_scale = 256 - vmask;
+            let inv_scale = 256 - (vmask + 1);
 
-            let dst_lin_r = tables.s2l[dst_data[idx] as usize] as u32;
-            let dst_lin_g = tables.s2l[dst_data[idx + 1] as usize] as u32;
-            let dst_lin_b = tables.s2l[dst_data[idx + 2] as usize] as u32;
-
-            dst_data[idx] = tables.l2s[((dst_lin_r * inv_scale) >> 8) as usize];
-            dst_data[idx + 1] = tables.l2s[((dst_lin_g * inv_scale) >> 8) as usize];
-            dst_data[idx + 2] = tables.l2s[((dst_lin_b * inv_scale) >> 8) as usize];
-            dst_data[idx + 3] = (vmask + alpha_mul(dst_data[idx + 3] as u32, inv_scale)) as u8;
+            dst_data[idx] = alpha_mul(dst_data[idx] as u32, inv_scale) as u8;
+            dst_data[idx + 1] = alpha_mul(dst_data[idx + 1] as u32, inv_scale) as u8;
+            dst_data[idx + 2] = alpha_mul(dst_data[idx + 2] as u32, inv_scale) as u8;
+            dst_data[idx + 3] =
+                ((255u32 * (vmask + 1) + dst_data[idx + 3] as u32 * inv_scale) >> 8) as u8;
         }
     }
 }
