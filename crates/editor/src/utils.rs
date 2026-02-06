@@ -217,7 +217,7 @@ pub fn detect_writing_systems(s: &str) -> Vec<crate::types::WritingSystem> {
 
         let script = script_map.get(ch);
         match script {
-            Script::Latin => {
+            Script::Latin | Script::Common | Script::Inherited => {
                 writing_systems.insert(WritingSystem::Latin);
             }
             Script::Hangul => {
