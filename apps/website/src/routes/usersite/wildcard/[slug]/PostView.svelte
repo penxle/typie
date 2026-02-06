@@ -22,9 +22,9 @@
   import { env } from '$env/dynamic/public';
   import { fragment, graphql } from '$graphql';
   import { Img } from '$lib/components';
+  import ContentNavigation from './ContentNavigation.svelte';
   import EmojiReaction from './EmojiReaction.svelte';
   import PostActionMenu from './PostActionMenu.svelte';
-  import PostNavigation from './PostNavigation.svelte';
   import PostViewBodyUnavailable from './PostViewBodyUnavailable.svelte';
   import ShareLinkPopover from './ShareLinkPopover.svelte';
   import type { Optional, UsersiteWildcardSlugPage_PostView_entityView, UsersiteWildcardSlugPage_PostView_user } from '$graphql';
@@ -118,7 +118,7 @@
         }
 
         ...UsersiteWildcardSlugPage_PostActionMenu_entityView
-        ...UsersiteWildcardSlugPage_PostNavigation_entityView
+        ...UsersiteWildcardSlugPage_ContentNavigation_entityView
       }
     `),
   );
@@ -551,7 +551,7 @@
           </div>
         {/if}
 
-        <PostNavigation {$entityView} />
+        <ContentNavigation {$entityView} />
       </div>
     </div>
   </div>
