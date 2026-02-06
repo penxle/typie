@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/context/bottom_sheet.dart';
 import 'package:typie/context/theme.dart';
+import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/graphql/widget.dart';
 import 'package:typie/hooks/service.dart';
@@ -99,6 +100,30 @@ class _Content extends HookWidget {
       selectionSync.value!.setupFocusListeners(titleFocusNode, subtitleFocusNode, () => editorReady.value);
 
       final theme = getEditorTheme(brightness);
+
+      final rules = data.me!.textReplacements
+          .map(
+            (item) => item.when(
+              textReplacement: (tr) => {
+                'id': tr.id,
+                'matchPattern': tr.match,
+                'substitute': tr.substitute,
+                'regex': tr.regex,
+              },
+              textReplacementPreference: (pref) => pref.state == GTextReplacementState.ACTIVE
+                  ? {
+                      'id': pref.textReplacement.id,
+                      'matchPattern': pref.textReplacement.match,
+                      'substitute': pref.textReplacement.substitute,
+                      'regex': pref.textReplacement.regex,
+                    }
+                  : null,
+              orElse: () => null,
+            ),
+          )
+          .whereType<Map<String, dynamic>>()
+          .toList();
+      setTextReplacementRules(rules);
 
       Future<void> init() async {
         try {

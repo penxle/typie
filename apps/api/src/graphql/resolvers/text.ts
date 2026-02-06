@@ -26,7 +26,7 @@ TextReplacementPreference.implement({
   isTypeOf: isTypeOf(TableCode.TEXT_REPLACEMENT_PREFERENCES),
   fields: (t) => ({
     id: t.exposeID('id'),
-    state: t.exposeString('state'),
+    state: t.expose('state', { type: TextReplacementState }),
     order: t.exposeString('order', { nullable: true }),
     createdAt: t.expose('createdAt', { type: 'DateTime' }),
 

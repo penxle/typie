@@ -34,5 +34,25 @@ query NativeEditorScreen_Query($slug: String!) {
     subscription {
       id
     }
+
+    textReplacements {
+      __typename
+      ... on TextReplacement {
+        id
+        match
+        substitute
+        regex
+      }
+      ... on TextReplacementPreference {
+        id
+        state
+        textReplacement {
+          id
+          match
+          substitute
+          regex
+        }
+      }
+    }
   }
 }

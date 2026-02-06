@@ -146,6 +146,21 @@ class NativeEditorApplication {
     }
   }
 
+  void setTextReplacementRules(List<Map<String, dynamic>> rules) {
+    _checkDisposed();
+
+    final json = jsonEncode(rules);
+    final jsonPtr = json.toNativeUtf8();
+
+    final result = _bindings.editor_application_set_text_replacement_rules(_handle, jsonPtr.cast());
+
+    calloc.free(jsonPtr);
+
+    if (result != 0) {
+      throw EditorException(_getLastError() ?? 'Failed to set text replacement rules');
+    }
+  }
+
   NativeEditor createEditor(double scaleFactor, {Uint8List? snapshot}) {
     _checkDisposed();
 

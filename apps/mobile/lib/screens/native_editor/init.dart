@@ -5,6 +5,7 @@ import 'package:typie/screens/native_editor/state/fonts.dart';
 NativeEditorApplication? _sharedApplication;
 FontManager? _sharedFontManager;
 Future<(NativeEditorApplication, FontManager)>? _initPromise;
+List<Map<String, dynamic>>? _pendingTextReplacementRules;
 
 Future<(NativeEditorApplication, FontManager)> getOrInitializeApplication() async {
   if (_sharedApplication != null && _sharedFontManager != null) {
@@ -19,6 +20,11 @@ Future<(NativeEditorApplication, FontManager)> getOrInitializeApplication() asyn
   return _initPromise!;
 }
 
+void setTextReplacementRules(List<Map<String, dynamic>> rules) {
+  _pendingTextReplacementRules = rules;
+  _sharedApplication?.setTextReplacementRules(rules);
+}
+
 Future<(NativeEditorApplication, FontManager)> _initApplication() async {
   final icuData = await rootBundle.load('assets/native/icu_data.postcard');
 
@@ -29,6 +35,10 @@ Future<(NativeEditorApplication, FontManager)> _initApplication() async {
   final fontManager = FontManager(app);
 
   await fontManager.ensurePhantomFonts();
+
+  if (_pendingTextReplacementRules != null) {
+    app.setTextReplacementRules(_pendingTextReplacementRules!);
+  }
 
   _sharedApplication = app;
   _sharedFontManager = fontManager;
