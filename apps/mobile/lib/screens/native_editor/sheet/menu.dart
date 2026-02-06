@@ -13,7 +13,7 @@ import 'package:typie/screens/native_editor/__generated__/duplicate_document_mut
 import 'package:typie/screens/native_editor/__generated__/native_editor_query.data.gql.dart';
 import 'package:typie/screens/native_editor/sheet/info.dart';
 import 'package:typie/screens/native_editor/sheet/settings.dart';
-import 'package:typie/screens/native_editor/state/state.dart';
+import 'package:typie/screens/native_editor/state/controller.dart';
 import 'package:typie/widgets/horizontal_divider.dart';
 import 'package:url_launcher/url_launcher.dart';
 

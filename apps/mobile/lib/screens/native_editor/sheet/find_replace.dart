@@ -6,7 +6,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/context/bottom_sheet.dart';
 import 'package:typie/context/theme.dart';
 import 'package:typie/icons/lucide_light.dart';
-import 'package:typie/screens/native_editor/state/state.dart';
+import 'package:typie/screens/native_editor/state/controller.dart';
 import 'package:typie/widgets/tappable.dart';
 
 class FindReplaceSheet extends HookWidget {
@@ -66,8 +66,8 @@ class FindReplaceSheet extends HookWidget {
       controller.dispatch({'type': 'replaceAll', 'replacement': replaceTextController.text});
     }
 
-    final totalCount = state.state.searchTotalCount;
-    final currentIndex = state.state.searchCurrentIndex;
+    final totalCount = state.state.search.totalCount;
+    final currentIndex = state.state.search.currentIndex;
 
     final mediaQuery = MediaQuery.of(context);
 
@@ -170,46 +170,8 @@ class FindReplaceSheet extends HookWidget {
                   child: Row(
                     spacing: 8,
                     children: [
-                      Tappable(
-                        onTap: findPrevious,
-                        child: Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            border: Border.all(
-                              color: findText.isNotEmpty ? context.colors.borderStrong : context.colors.borderDefault,
-                            ),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Center(
-                            child: Icon(
-                              LucideLightIcons.arrow_up,
-                              size: 18,
-                              color: findText.isNotEmpty ? context.colors.textDefault : context.colors.textFaint,
-                            ),
-                          ),
-                        ),
-                      ),
-                      Tappable(
-                        onTap: findNext,
-                        child: Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            border: Border.all(
-                              color: findText.isNotEmpty ? context.colors.borderStrong : context.colors.borderDefault,
-                            ),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Center(
-                            child: Icon(
-                              LucideLightIcons.arrow_down,
-                              size: 18,
-                              color: findText.isNotEmpty ? context.colors.textDefault : context.colors.textFaint,
-                            ),
-                          ),
-                        ),
-                      ),
+                      _ActionButton(icon: LucideLightIcons.arrow_up, enabled: findText.isNotEmpty, onTap: findPrevious),
+                      _ActionButton(icon: LucideLightIcons.arrow_down, enabled: findText.isNotEmpty, onTap: findNext),
                     ],
                   ),
                 ),
@@ -218,45 +180,11 @@ class FindReplaceSheet extends HookWidget {
                   child: Row(
                     spacing: 8,
                     children: [
-                      Tappable(
-                        onTap: replace,
-                        child: Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            border: Border.all(
-                              color: findText.isNotEmpty ? context.colors.borderStrong : context.colors.borderDefault,
-                            ),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Center(
-                            child: Icon(
-                              LucideLightIcons.replace,
-                              size: 18,
-                              color: findText.isNotEmpty ? context.colors.textDefault : context.colors.textFaint,
-                            ),
-                          ),
-                        ),
-                      ),
-                      Tappable(
+                      _ActionButton(icon: LucideLightIcons.replace, enabled: findText.isNotEmpty, onTap: replace),
+                      _ActionButton(
+                        icon: LucideLightIcons.replace_all,
+                        enabled: findText.isNotEmpty,
                         onTap: replaceAll,
-                        child: Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            border: Border.all(
-                              color: findText.isNotEmpty ? context.colors.borderStrong : context.colors.borderDefault,
-                            ),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Center(
-                            child: Icon(
-                              LucideLightIcons.replace_all,
-                              size: 18,
-                              color: findText.isNotEmpty ? context.colors.textDefault : context.colors.textFaint,
-                            ),
-                          ),
-                        ),
                       ),
                     ],
                   ),
@@ -264,6 +192,32 @@ class FindReplaceSheet extends HookWidget {
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ActionButton extends StatelessWidget {
+  const _ActionButton({required this.icon, required this.enabled, required this.onTap});
+
+  final IconData icon;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tappable(
+      onTap: onTap,
+      child: Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          border: Border.all(color: enabled ? context.colors.borderStrong : context.colors.borderDefault),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Center(
+          child: Icon(icon, size: 18, color: enabled ? context.colors.textDefault : context.colors.textFaint),
         ),
       ),
     );

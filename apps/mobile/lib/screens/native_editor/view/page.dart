@@ -130,9 +130,9 @@ class PageItem extends HookWidget {
           children: [
             LineHighlight(cursorInfo: displayCursor.value, isFocused: isFocused, enabled: lineHighlightEnabled),
             SizedBox.expand(child: Texture(textureId: textureId.value!)),
-            _SearchHighlightOverlay(pageIndex: pageIndex, overlays: state.state.searchOverlays),
-            _SpellcheckOverlay(pageIndex: pageIndex, overlays: state.state.spellcheckOverlays),
-            _AiFeedbackOverlay(pageIndex: pageIndex, overlays: state.state.aiFeedbackOverlays),
+            _SearchHighlightOverlay(pageIndex: pageIndex, overlays: state.state.search.overlays),
+            _SpellcheckOverlay(pageIndex: pageIndex, overlays: state.state.spellcheck.overlays),
+            _AiFeedbackOverlay(pageIndex: pageIndex, overlays: state.state.aiFeedback.overlays),
             Cursor(cursorInfo: displayCursor.value, isFocused: isFocused),
             ElementOverlay(pageIndex: pageIndex),
             if (layout.isPaginated && margins != null)

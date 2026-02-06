@@ -14,9 +14,17 @@ import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/native/editor_native.dart';
 import 'package:typie/screens/native_editor/__generated__/literary_analysis_document_stream.req.gql.dart';
 import 'package:typie/screens/native_editor/__generated__/update_preferences_mutation.req.gql.dart';
-import 'package:typie/screens/native_editor/state/state.dart';
+import 'package:typie/screens/native_editor/state/controller.dart';
 import 'package:typie/widgets/tappable.dart';
 import 'package:uuid/uuid.dart';
+
+String _progressText(Map<String, dynamic>? p) {
+  if (p == null) {
+    return '준비 중...';
+  }
+  final label = (p['phase'] as String) == 'summarizing' ? '분석' : '피드백';
+  return '$label 중... (${p['current']}/${p['total']})';
+}
 
 class AiFeedbackSheet extends HookWidget {
   const AiFeedbackSheet({
@@ -366,11 +374,7 @@ class AiFeedbackSheet extends HookWidget {
                               ),
                               const Gap(8),
                               Text(
-                                progress.value != null
-                                    ? (progress.value!['phase'] as String) == 'summarizing'
-                                          ? '분석 중... (${progress.value!['current']}/${progress.value!['total']})'
-                                          : '피드백 중... (${progress.value!['current']}/${progress.value!['total']})'
-                                    : '준비 중...',
+                                _progressText(progress.value),
                                 style: TextStyle(fontSize: 13, color: context.colors.textFaint),
                               ),
                             ],

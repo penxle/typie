@@ -7,6 +7,7 @@ import 'package:typie/context/bottom_sheet.dart';
 import 'package:typie/context/modal.dart';
 import 'package:typie/context/theme.dart';
 import 'package:typie/icons/lucide_light.dart';
+import 'package:typie/screens/native_editor/state/controller.dart';
 import 'package:typie/screens/native_editor/state/state.dart';
 import 'package:typie/widgets/forms/form.dart';
 import 'package:typie/widgets/forms/select.dart';
@@ -410,33 +411,19 @@ class _PageSizeSection extends StatelessWidget {
     );
 
     if (newValue != null && newValue != currentValue) {
-      if (dimension == 'width') {
-        dispatch({
-          'type': 'setLayoutMode',
-          'mode': {
-            'type': 'paginated',
-            'pageWidth': _mmToPx(newValue!.toDouble()),
-            'pageHeight': layoutMode.pageHeight,
-            'pageMarginTop': layoutMode.pageMarginTop,
-            'pageMarginBottom': layoutMode.pageMarginBottom,
-            'pageMarginLeft': layoutMode.pageMarginLeft,
-            'pageMarginRight': layoutMode.pageMarginRight,
-          },
-        });
-      } else {
-        dispatch({
-          'type': 'setLayoutMode',
-          'mode': {
-            'type': 'paginated',
-            'pageWidth': layoutMode.pageWidth,
-            'pageHeight': _mmToPx(newValue!.toDouble()),
-            'pageMarginTop': layoutMode.pageMarginTop,
-            'pageMarginBottom': layoutMode.pageMarginBottom,
-            'pageMarginLeft': layoutMode.pageMarginLeft,
-            'pageMarginRight': layoutMode.pageMarginRight,
-          },
-        });
-      }
+      final newPx = _mmToPx(newValue!.toDouble());
+      dispatch({
+        'type': 'setLayoutMode',
+        'mode': {
+          'type': 'paginated',
+          'pageWidth': dimension == 'width' ? newPx : layoutMode.pageWidth,
+          'pageHeight': dimension == 'height' ? newPx : layoutMode.pageHeight,
+          'pageMarginTop': layoutMode.pageMarginTop,
+          'pageMarginBottom': layoutMode.pageMarginBottom,
+          'pageMarginLeft': layoutMode.pageMarginLeft,
+          'pageMarginRight': layoutMode.pageMarginRight,
+        },
+      });
     }
   }
 }
@@ -447,13 +434,25 @@ class _PageMarginSection extends StatelessWidget {
   final PaginatedLayoutMode layoutMode;
   final void Function(Map<String, dynamic>) dispatch;
 
+  Widget _marginButton(BuildContext context, String side, String label, double valueMm) {
+    return Tappable(
+      onTap: () => _editPageMargin(context, side),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          border: Border.all(color: context.colors.borderStrong, width: 0.5),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Text(
+          '$label: ${valueMm.toStringAsFixed(0)}',
+          style: TextStyle(fontSize: 14, color: context.colors.textSubtle),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final marginTopMm = _pxToMm(layoutMode.pageMarginTop);
-    final marginBottomMm = _pxToMm(layoutMode.pageMarginBottom);
-    final marginLeftMm = _pxToMm(layoutMode.pageMarginLeft);
-    final marginRightMm = _pxToMm(layoutMode.pageMarginRight);
-
     return Column(
       spacing: 8,
       children: [
@@ -461,62 +460,10 @@ class _PageMarginSection extends StatelessWidget {
         Row(
           spacing: 8,
           children: [
-            Tappable(
-              onTap: () => _editPageMargin(context, 'top'),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  border: Border.all(color: context.colors.borderStrong, width: 0.5),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  '위: ${marginTopMm.toStringAsFixed(0)}',
-                  style: TextStyle(fontSize: 14, color: context.colors.textSubtle),
-                ),
-              ),
-            ),
-            Tappable(
-              onTap: () => _editPageMargin(context, 'bottom'),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  border: Border.all(color: context.colors.borderStrong, width: 0.5),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  '아래: ${marginBottomMm.toStringAsFixed(0)}',
-                  style: TextStyle(fontSize: 14, color: context.colors.textSubtle),
-                ),
-              ),
-            ),
-            Tappable(
-              onTap: () => _editPageMargin(context, 'left'),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  border: Border.all(color: context.colors.borderStrong, width: 0.5),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  '왼쪽: ${marginLeftMm.toStringAsFixed(0)}',
-                  style: TextStyle(fontSize: 14, color: context.colors.textSubtle),
-                ),
-              ),
-            ),
-            Tappable(
-              onTap: () => _editPageMargin(context, 'right'),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  border: Border.all(color: context.colors.borderStrong, width: 0.5),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  '오른쪽: ${marginRightMm.toStringAsFixed(0)}',
-                  style: TextStyle(fontSize: 14, color: context.colors.textSubtle),
-                ),
-              ),
-            ),
+            _marginButton(context, 'top', '위', _pxToMm(layoutMode.pageMarginTop)),
+            _marginButton(context, 'bottom', '아래', _pxToMm(layoutMode.pageMarginBottom)),
+            _marginButton(context, 'left', '왼쪽', _pxToMm(layoutMode.pageMarginLeft)),
+            _marginButton(context, 'right', '오른쪽', _pxToMm(layoutMode.pageMarginRight)),
           ],
         ),
       ],

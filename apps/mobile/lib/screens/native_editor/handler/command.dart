@@ -1,5 +1,10 @@
-import 'package:typie/screens/native_editor/handler/commands.dart';
-import 'package:typie/screens/native_editor/state/state.dart';
+import 'package:typie/screens/native_editor/handler/commands/cursor.dart';
+import 'package:typie/screens/native_editor/handler/commands/document.dart';
+import 'package:typie/screens/native_editor/handler/commands/font.dart';
+import 'package:typie/screens/native_editor/handler/commands/layout.dart';
+import 'package:typie/screens/native_editor/handler/commands/overlay.dart';
+import 'package:typie/screens/native_editor/handler/commands/selection.dart';
+import 'package:typie/screens/native_editor/state/controller.dart';
 
 typedef CommandExecutor = void Function(EditorController controller, Map<String, dynamic> cmd);
 
