@@ -212,6 +212,12 @@ export const UserRole = {
   USER: 'USER',
 } as const;
 
+export type TextReplacementState = keyof typeof TextReplacementState;
+export const TextReplacementState = {
+  ACTIVE: 'ACTIVE',
+  DISABLED: 'DISABLED',
+} as const;
+
 export type UserState = keyof typeof UserState;
 export const UserState = {
   ACTIVE: 'ACTIVE',

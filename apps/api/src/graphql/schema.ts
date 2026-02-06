@@ -15,6 +15,7 @@ import './resolvers/payment';
 import './resolvers/post';
 import './resolvers/search';
 import './resolvers/site';
+import './resolvers/text';
 import './resolvers/unfurl';
 import './resolvers/user';
 import './resolvers/widget';

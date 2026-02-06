@@ -14,6 +14,7 @@
   import ShieldIcon from '~icons/lucide/shield';
   import SlidersHorizontalIcon from '~icons/lucide/sliders-horizontal';
   import SparklesIcon from '~icons/lucide/sparkles';
+  import TextCursorInputIcon from '~icons/lucide/text-cursor-input';
   import TypeIcon from '~icons/lucide/type';
   import UserIcon from '~icons/lucide/user';
   import { replaceState } from '$app/navigation';
@@ -32,6 +33,7 @@
   import RevenueTab from './RevenueTab.svelte';
   import SecurityTab from './SecurityTab.svelte';
   import ShortcutsTab from './ShortcutsTab.svelte';
+  import TextReplacementTab from './TextReplacementTab.svelte';
   import ThemeTab from './ThemeTab.svelte';
   import type { Component } from 'svelte';
   import type { DashboardLayout_PreferenceModal_user } from '$graphql';
@@ -73,6 +75,7 @@
         ...DashboardLayout_PreferenceModal_LaboratoryTab_user
         ...DashboardLayout_PreferenceModal_ShortcutsTab_user
         ...DashboardLayout_PreferenceModal_AiTab_user
+        ...DashboardLayout_PreferenceModal_TextReplacementTab_user
       }
     `),
   );
@@ -132,6 +135,12 @@
           label: '프리셋',
           icon: SlidersHorizontalIcon,
           component: PresetTab,
+        },
+        {
+          path: '/preference/text-replacement',
+          label: '텍스트 대치',
+          icon: TextCursorInputIcon,
+          component: TextReplacementTab,
         },
       ],
     },

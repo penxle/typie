@@ -95,6 +95,15 @@ input CreatePostReactionInput {
   postId: ID!
 }
 
+input CreateTextReplacementInput {
+  lowerOrder: String
+  match: String!
+  note: String
+  regex: Boolean
+  substitute: String!
+  upperOrder: String
+}
+
 input CreateWidgetInput {
   data: JSON!
   lowerOrder: String
@@ -133,6 +142,10 @@ input DeleteNoteInput {
 
 input DeletePostInput {
   postId: ID!
+}
+
+input DeleteTextReplacementInput {
+  textReplacementId: ID!
 }
 
 input DeleteWidgetInput {
@@ -618,6 +631,12 @@ input MoveNoteInput {
   upperOrder: String
 }
 
+input MoveTextReplacementInput {
+  lowerOrder: String
+  textReplacementId: ID!
+  upperOrder: String
+}
+
 input MoveWidgetInput {
   lowerOrder: String
   upperOrder: String
@@ -642,6 +661,7 @@ type Mutation {
   createNote(input: CreateNoteInput!): Note!
   createPost(input: CreatePostInput!): Post!
   createPostReaction(input: CreatePostReactionInput!): PostReaction!
+  createTextReplacement(input: CreateTextReplacementInput!): TextReplacementNode!
   createWidget(input: CreateWidgetInput!): Widget!
   createWsSession: String!
   deleteBillingKey: Boolean!
@@ -650,6 +670,7 @@ type Mutation {
   deleteFolder(input: DeleteFolderInput!): Folder!
   deleteNote(input: DeleteNoteInput!): Note!
   deletePost(input: DeletePostInput!): Post!
+  deleteTextReplacement(input: DeleteTextReplacementInput!): TextReplacementNode!
   deleteUser: Boolean!
   deleteWidget(input: DeleteWidgetInput!): Widget!
   dumpLocalStorage(input: DumpLocalStorageInput!): User!
@@ -667,6 +688,7 @@ type Mutation {
   moveEntities(input: MoveEntitiesInput!): [Entity!]!
   moveEntity(input: MoveEntityInput!): Entity!
   moveNote(input: MoveNoteInput!): Note!
+  moveTextReplacement(input: MoveTextReplacementInput!): TextReplacementNode!
   moveWidget(input: MoveWidgetInput!): Widget!
   persistBlobAsFile(input: PersistBlobAsFileInput!): File!
   persistBlobAsFont(input: PersistBlobAsFontInput!): Font!
@@ -712,6 +734,7 @@ type Mutation {
   updatePreferences(input: UpdatePreferencesInput!): User!
   updateSite(input: UpdateSiteInput!): Site!
   updateSiteSlug(input: UpdateSiteSlugInput!): Site!
+  updateTextReplacement(input: UpdateTextReplacementInput!): TextReplacementNode!
   updateUser(input: UpdateUserInput!): User!
   updateWidget(input: UpdateWidgetInput!): Widget!
   verifyPersonalIdentity(input: VerifyPersonalIdentityInput!): User!
@@ -1171,6 +1194,34 @@ input SyncPostInput {
   type: PostSyncType!
 }
 
+type TextReplacement {
+  createdAt: DateTime!
+  id: ID!
+  match: String!
+  note: String
+  order: String
+  preset: Boolean!
+  regex: Boolean!
+  substitute: String!
+  updatedAt: DateTime!
+}
+
+union TextReplacementNode = TextReplacement | TextReplacementPreference
+
+type TextReplacementPreference {
+  createdAt: DateTime!
+  id: ID!
+  order: String
+  state: String!
+  textReplacement: TextReplacement!
+  user: User!
+}
+
+enum TextReplacementState {
+  ACTIVE
+  DISABLED
+}
+
 input UnfurlEmbedInput {
   url: String!
 }
@@ -1294,6 +1345,15 @@ input UpdateSiteSlugInput {
   slug: String!
 }
 
+input UpdateTextReplacementInput {
+  match: String
+  note: String
+  regex: Boolean
+  state: TextReplacementState
+  substitute: String
+  textReplacementId: ID!
+}
+
 input UpdateUserInput {
   avatarId: ID!
   name: String!
@@ -1333,6 +1393,7 @@ type User {
   state: UserState!
   subscription: Subscription_
   surveys: [String!]!
+  textReplacements: [TextReplacementNode!]!
   totalCharacterCount: Int!
   trial: UserTrial
   usage: UserUsage!
