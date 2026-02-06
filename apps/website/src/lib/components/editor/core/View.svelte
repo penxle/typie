@@ -156,20 +156,22 @@
   <Cursor />
 {/if}
 
-<Input
-  bind:this={inputComponent}
-  onBlur={(e) => {
-    if (editor.pointer.isPressed) {
-      return;
-    }
-    if (extensionAreaEl?.contains(e.relatedTarget as Node) || e.relatedTarget === extensionAreaEl) {
-      return;
-    }
-    editor.isFocused = false;
-  }}
-  onFocus={() => {
-    editor.isFocused = true;
-  }}
-/>
+{#if !editor.readOnly}
+  <Input
+    bind:this={inputComponent}
+    onBlur={(e) => {
+      if (editor.pointer.isPressed) {
+        return;
+      }
+      if (extensionAreaEl?.contains(e.relatedTarget as Node) || e.relatedTarget === extensionAreaEl) {
+        return;
+      }
+      editor.isFocused = false;
+    }}
+    onFocus={() => {
+      editor.isFocused = true;
+    }}
+  />
+{/if}
 
 <ContextMenu />

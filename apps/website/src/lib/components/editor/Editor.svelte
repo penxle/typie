@@ -33,6 +33,7 @@
     onExitedDocumentStart?: () => void;
     onEditorReady?: (editor: Editor) => void;
     header?: Snippet;
+    footer?: Snippet;
     children?: Snippet;
   };
 
@@ -48,6 +49,7 @@
     onExitedDocumentStart,
     onEditorReady,
     header,
+    footer,
     children,
   }: Props = $props();
 
@@ -280,6 +282,23 @@
             </div>
           {/if}
           <View />
+          {#if footer}
+            <div
+              style:width={layoutMode.type === 'paginated' ? `${pageWidth + viewPadding * 2}px` : '100%'}
+              style:max-width={layoutMode.type === 'paginated'
+                ? 'none'
+                : `${layoutMode.maxWidth + (viewPadding + continuousPageMargin) * 2}px`}
+              style:padding-inline={`${viewPadding + continuousPageMargin}px`}
+              class={flex({
+                flexDirection: 'column',
+                flexShrink: '0',
+                width: 'full',
+                marginX: 'auto',
+              })}
+            >
+              {@render footer()}
+            </div>
+          {/if}
           {#if children}
             {@render children()}
           {/if}

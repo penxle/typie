@@ -167,6 +167,10 @@ type Document implements IDocument {
 
 union DocumentAsset = Embed | File | Image
 
+enum DocumentAvailableAction {
+  EDIT
+}
+
 enum DocumentContentRating {
   ALL
   R15
@@ -244,6 +248,7 @@ type DocumentVersionMeta {
 type DocumentView implements IDocument {
   allowReaction: Boolean!
   assets: [DocumentAsset!]!
+  availableActions: [DocumentAvailableAction!]!
   body: DocumentViewBody!
   createdAt: DateTime!
   entity: EntityView!
@@ -255,6 +260,7 @@ type DocumentView implements IDocument {
   reactions: [DocumentReaction!]!
   snapshot: Binary
   subtitle: String
+  thumbnail: Image
   title: String!
   type: DocumentType!
   updatedAt: DateTime!
@@ -345,11 +351,11 @@ type EntityView implements IEntity {
   children: [EntityView!]!
   depth: Int!
   id: ID!
-  nextPost: EntityView
+  next: EntityView
   node: EntityViewNode!
   order: String!
   permalink: String!
-  prevPost: EntityView
+  prev: EntityView
   site: SiteView!
   slug: String!
   state: EntityState!
@@ -672,6 +678,7 @@ type Mutation {
   redeemCreditCode(input: RedeemCreditCodeInput!): User!
   registerPushNotificationToken(input: RegisterPushNotificationTokenInput!): Boolean!
   renameFolder(input: RenameFolderInput!): Folder!
+  reportDocument(input: ReportDocumentInput!): Boolean!
   reportPost(input: ReportPostInput!): Boolean!
   resetPassword(input: ResetPasswordInput!): Boolean!
   resetPreferences: User!
@@ -987,6 +994,11 @@ input RegisterPushNotificationTokenInput {
 input RenameFolderInput {
   folderId: ID!
   name: String!
+}
+
+input ReportDocumentInput {
+  documentId: ID!
+  reason: String
 }
 
 input ReportPostInput {

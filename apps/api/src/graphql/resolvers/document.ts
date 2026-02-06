@@ -23,9 +23,11 @@ import {
   Notes,
   TableCode,
   UserPersonalIdentities,
+  Users,
   validateDbId,
 } from '@/db';
 import {
+  DocumentAvailableAction,
   DocumentContentRating,
   DocumentSyncType,
   DocumentType,
@@ -36,7 +38,9 @@ import {
   EntityVisibility,
   NoteState,
 } from '@/enums';
+import { env } from '@/env';
 import { NotFoundError, TypieError } from '@/errors';
+import * as slack from '@/external/slack';
 import * as spellcheck from '@/external/spellcheck';
 import { enqueueJob } from '@/mq';
 import { pubsub } from '@/pubsub';
@@ -333,6 +337,38 @@ DocumentView.implement({
     hasPassword: t.boolean({ resolve: (self) => !!self.password }),
     protectContent: t.exposeBoolean('protectContent'),
     allowReaction: t.exposeBoolean('allowReaction'),
+
+    thumbnail: t.field({
+      type: Image,
+      nullable: true,
+      resolve: (self) => self.thumbnailId,
+    }),
+
+    availableActions: t.field({
+      type: [DocumentAvailableAction],
+      resolve: async (self, _, ctx) => {
+        const loader = ctx.loader({
+          name: 'DocumentView.availableActions',
+          load: async (ids: string[]) => {
+            return await db
+              .select({ documentId: Documents.id, entityId: Entities.id, siteId: Entities.siteId })
+              .from(Documents)
+              .innerJoin(Entities, eq(Documents.entityId, Entities.id))
+              .where(inArray(Documents.id, ids));
+          },
+          key: ({ documentId }: { documentId: string }) => documentId,
+        });
+
+        const document = await loader.load(self.id);
+
+        return await Promise.allSettled([
+          assertSitePermission({
+            userId: ctx.session?.userId,
+            siteId: document.siteId,
+          }).then(() => DocumentAvailableAction.EDIT),
+        ]).then((results) => results.filter((result) => result.status === 'fulfilled').flatMap((result) => result.value));
+      },
+    }),
 
     excerpt: t.string({
       resolve: async (self, _, ctx) => {
@@ -1214,6 +1250,44 @@ builder.mutationFields((t) => ({
         })
         .returning()
         .then(firstOrThrow);
+    },
+  }),
+
+  reportDocument: t.withAuth({ session: true }).fieldWithInput({
+    type: 'Boolean',
+    input: {
+      documentId: t.input.id({ validate: validateDbId(TableCode.DOCUMENTS) }),
+      reason: t.input.string({ required: false }),
+    },
+    resolve: async (_, { input }, ctx) => {
+      const document = await db
+        .select({
+          id: Documents.id,
+          title: Documents.title,
+          permalink: Entities.permalink,
+        })
+        .from(Documents)
+        .innerJoin(Entities, eq(Documents.entityId, Entities.id))
+        .where(eq(Documents.id, input.documentId))
+        .then(firstOrThrow);
+
+      const user = await db
+        .select({ id: Users.id, name: Users.name, email: Users.email })
+        .from(Users)
+        .where(eq(Users.id, ctx.session.userId))
+        .then(firstOrThrow);
+
+      await slack.sendMessage({
+        channel: '#cs',
+        username: '타이피 신고 알림',
+        iconEmoji: ':rotating_light:',
+        message: `${document.title} (${document.id}) 문서 신고
+        신고자: ${user.name}(${user.id}, ${user.email})
+        이유: ${input.reason}
+        ${env.USERSITE_URL.replace('*.', '')}/${document.permalink}`,
+      });
+
+      return true;
     },
   }),
 }));

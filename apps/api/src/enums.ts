@@ -98,6 +98,10 @@ export const PlanInterval = {
   LIFETIME: 'LIFETIME',
 } as const;
 
+export const DocumentAvailableAction = {
+  EDIT: 'EDIT',
+} as const;
+
 export const PostAvailableAction = {
   EDIT: 'EDIT',
 } as const;

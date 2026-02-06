@@ -6,10 +6,10 @@
   import ChevronRightIcon from '~icons/lucide/chevron-right';
   import { fragment, graphql } from '$graphql';
   import { Img } from '$lib/components';
-  import type { UsersiteWildcardSlugPage_PostNavigation_entityView } from '$graphql';
+  import type { UsersiteWildcardSlugPage_ContentNavigation_entityView } from '$graphql';
 
   type Props = {
-    $entityView: UsersiteWildcardSlugPage_PostNavigation_entityView;
+    $entityView: UsersiteWildcardSlugPage_ContentNavigation_entityView;
   };
 
   let { $entityView: _entityView }: Props = $props();
@@ -17,10 +17,10 @@
   const entityView = fragment(
     _entityView,
     graphql(`
-      fragment UsersiteWildcardSlugPage_PostNavigation_entityView on EntityView {
+      fragment UsersiteWildcardSlugPage_ContentNavigation_entityView on EntityView {
         id
 
-        prevPost {
+        prev {
           id
           slug
 
@@ -35,10 +35,19 @@
                 ...Img_image
               }
             }
+
+            ... on DocumentView {
+              id
+              title
+              thumbnail {
+                id
+                ...Img_image
+              }
+            }
           }
         }
 
-        nextPost {
+        next {
           id
           slug
 
@@ -46,6 +55,15 @@
             __typename
 
             ... on PostView {
+              id
+              title
+              thumbnail {
+                id
+                ...Img_image
+              }
+            }
+
+            ... on DocumentView {
               id
               title
               thumbnail {
@@ -59,11 +77,15 @@
     `),
   );
 
-  const hasPrev = $derived($entityView.prevPost !== null);
-  const hasNext = $derived($entityView.nextPost !== null);
+  const prevNode = $derived(
+    $entityView.prev?.node.__typename === 'PostView' || $entityView.prev?.node.__typename === 'DocumentView' ? $entityView.prev.node : null,
+  );
+  const nextNode = $derived(
+    $entityView.next?.node.__typename === 'PostView' || $entityView.next?.node.__typename === 'DocumentView' ? $entityView.next.node : null,
+  );
 </script>
 
-{#if hasPrev || hasNext}
+{#if prevNode || nextNode}
   <nav
     class={flex({
       gap: '16px',
@@ -75,7 +97,7 @@
       maxWidth: 'var(--prosemirror-max-width)',
     })}
   >
-    {#if hasPrev && $entityView.prevPost?.node.__typename === 'PostView'}
+    {#if prevNode && $entityView.prev}
       <a
         class={flex({
           flex: '1',
@@ -87,9 +109,9 @@
           transition: 'background',
           _hover: { backgroundColor: 'surface.muted' },
         })}
-        href={`/${$entityView.prevPost.slug}`}
+        href={`/${$entityView.prev.slug}`}
       >
-        {#if $entityView.prevPost.node.thumbnail}
+        {#if prevNode.thumbnail}
           <div
             class={css({
               flexShrink: '0',
@@ -101,8 +123,8 @@
           >
             <Img
               style={css.raw({ width: 'full', height: 'full', objectFit: 'cover' })}
-              $image={$entityView.prevPost.node.thumbnail}
-              alt={$entityView.prevPost.node.title}
+              $image={prevNode.thumbnail}
+              alt={prevNode.title}
               size={48}
             />
           </div>
@@ -114,7 +136,7 @@
             <span>이전 글</span>
           </div>
           <p class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.default', lineClamp: '2' })}>
-            {$entityView.prevPost.node.title}
+            {prevNode.title}
           </p>
         </div>
       </a>
@@ -122,7 +144,7 @@
       <div class={css({ flex: '1' })}></div>
     {/if}
 
-    {#if hasNext && $entityView.nextPost?.node.__typename === 'PostView'}
+    {#if nextNode && $entityView.next}
       <a
         class={flex({
           flex: '1',
@@ -135,9 +157,9 @@
           transition: 'background',
           _hover: { backgroundColor: 'surface.muted' },
         })}
-        href={`/${$entityView.nextPost.slug}`}
+        href={`/${$entityView.next.slug}`}
       >
-        {#if $entityView.nextPost.node.thumbnail}
+        {#if nextNode.thumbnail}
           <div
             class={css({
               flexShrink: '0',
@@ -149,8 +171,8 @@
           >
             <Img
               style={css.raw({ width: 'full', height: 'full', objectFit: 'cover' })}
-              $image={$entityView.nextPost.node.thumbnail}
-              alt={$entityView.nextPost.node.title}
+              $image={nextNode.thumbnail}
+              alt={nextNode.title}
               size={48}
             />
           </div>
@@ -171,7 +193,7 @@
             <Icon icon={ChevronRightIcon} size={14} />
           </div>
           <p class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.default', lineClamp: '2', textAlign: 'right' })}>
-            {$entityView.nextPost.node.title}
+            {nextNode.title}
           </p>
         </div>
       </a>

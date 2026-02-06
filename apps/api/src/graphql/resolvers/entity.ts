@@ -273,11 +273,11 @@ EntityView.implement({
       },
     }),
 
-    prevPost: t.field({
+    prev: t.field({
       type: EntityView,
       nullable: true,
       resolve: async (self) => {
-        if (self.type !== EntityType.POST) return null;
+        if (self.type !== EntityType.POST && self.type !== EntityType.DOCUMENT) return null;
 
         let visibilities: EntityVisibility[] = [EntityVisibility.PUBLIC];
 
@@ -301,7 +301,7 @@ EntityView.implement({
               eq(Entities.siteId, self.siteId),
               self.parentId ? eq(Entities.parentId, self.parentId) : isNull(Entities.parentId),
               eq(Entities.state, EntityState.ACTIVE),
-              eq(Entities.type, EntityType.POST),
+              inArray(Entities.type, [EntityType.POST, EntityType.DOCUMENT]),
               inArray(Entities.visibility, visibilities),
               lt(Entities.order, self.order),
             ),
@@ -312,11 +312,11 @@ EntityView.implement({
       },
     }),
 
-    nextPost: t.field({
+    next: t.field({
       type: EntityView,
       nullable: true,
       resolve: async (self) => {
-        if (self.type !== EntityType.POST) return null;
+        if (self.type !== EntityType.POST && self.type !== EntityType.DOCUMENT) return null;
 
         let visibilities: EntityVisibility[] = [EntityVisibility.PUBLIC];
 
@@ -340,7 +340,7 @@ EntityView.implement({
               eq(Entities.siteId, self.siteId),
               self.parentId ? eq(Entities.parentId, self.parentId) : isNull(Entities.parentId),
               eq(Entities.state, EntityState.ACTIVE),
-              eq(Entities.type, EntityType.POST),
+              inArray(Entities.type, [EntityType.POST, EntityType.DOCUMENT]),
               inArray(Entities.visibility, visibilities),
               gt(Entities.order, self.order),
             ),

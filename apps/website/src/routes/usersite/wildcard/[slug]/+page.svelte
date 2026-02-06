@@ -10,6 +10,7 @@
         id
 
         ...UsersiteWildcardSlugPage_PostView_user
+        ...UsersiteWildcardSlugPage_DocumentView_user
       }
 
       entityView(origin: $origin, slug: $slug) {
@@ -30,7 +31,7 @@
 {#if $query.entityView.node.__typename === 'PostView'}
   <PostView $entityView={$query.entityView} $user={$query.me} />
 {:else if $query.entityView.node.__typename === 'DocumentView'}
-  <DocumentView $entityView={$query.entityView} />
+  <DocumentView $entityView={$query.entityView} $user={$query.me} />
 {:else}
   <FolderView $entityView={$query.entityView} />
 {/if}
