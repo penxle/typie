@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:ui' as ui;
 
 import 'package:auto_route/auto_route.dart';
+import 'package:ferry/ferry.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/context/bottom_sheet.dart';
@@ -42,7 +43,11 @@ class NativeEditorScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return GraphQLOperation(
       initialBackgroundColor: context.colors.surfaceDefault,
-      operation: GNativeEditorScreen_QueryReq((b) => b.vars.slug = slug),
+      operation: GNativeEditorScreen_QueryReq(
+        (b) => b
+          ..vars.slug = slug
+          ..fetchPolicy = FetchPolicy.NetworkOnly,
+      ),
       builder: (context, client, data) => _Content(slug: slug, data: data, client: client),
     );
   }
