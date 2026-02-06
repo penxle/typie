@@ -81,13 +81,8 @@ pub(crate) fn rasterize_outline(
         None,
     );
 
-    let pixel_count = (width * height) as usize;
     let pixmap_data = glyph_pixmap.data();
-    let mut alpha_data = Vec::with_capacity(pixel_count);
-
-    for i in 0..pixel_count {
-        alpha_data.push(pixmap_data[i * 4 + 3]);
-    }
+    let alpha_data: Vec<u8> = pixmap_data.chunks_exact(4).map(|c| c[3]).collect();
 
     Some(MaskImage {
         data: alpha_data,

@@ -89,6 +89,11 @@ impl GlyphRenderer {
         let color_b = (color.blue() * 255.0) as u8;
         let color_a = (color.alpha() * 255.0) as u8;
 
+        let tx = transform.tx;
+        let ty = transform.ty;
+        let sx = transform.sx;
+        let sy = transform.sy;
+
         let mut darken_xy: Option<(f32, f32)> = None;
 
         for glyph in glyphs {
@@ -96,8 +101,8 @@ impl GlyphRenderer {
                 continue;
             }
 
-            let glyph_x = transform.tx + glyph.x * transform.sx;
-            let glyph_y = transform.ty + glyph.y * transform.sy;
+            let glyph_x = tx + glyph.x * sx;
+            let glyph_y = ty + glyph.y * sy;
 
             let fract_x = glyph_x - glyph_x.floor();
             let subpixel_x = quantize_subpixel(fract_x.abs());
@@ -130,7 +135,7 @@ impl GlyphRenderer {
 
                 let (dx, dy) = *darken_xy.get_or_insert_with(|| {
                     let units_per_em = font_ref.head().unwrap().units_per_em();
-                    let dpi_scale = transform.sx;
+                    let dpi_scale = sx;
                     let logical_ppem = quantized_size / dpi_scale;
                     let (stdvw, stdhw) = get_stem_widths(font_ref, units_per_em);
                     let darken_x = compute_stem_darkening(logical_ppem, units_per_em, stdvw)
