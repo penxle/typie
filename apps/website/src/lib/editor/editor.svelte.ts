@@ -31,6 +31,7 @@ import type {
 
 let sharedApplication: Application | null = null;
 let applicationInitPromise: Promise<Application> | null = null;
+let pendingTextReplacementRules: { id: string; matchPattern: string; substitute: string; regex: boolean }[] | null = null;
 
 async function getOrInitializeApplication(): Promise<Application> {
   if (sharedApplication) {
@@ -49,11 +50,22 @@ async function getOrInitializeApplication(): Promise<Application> {
     await ensurePhantomFonts(app);
     app.setAvailableFonts(getAvailableFontsMap());
 
+    if (pendingTextReplacementRules) {
+      app.setTextReplacementRules(pendingTextReplacementRules);
+    }
+
     sharedApplication = app;
     return app;
   })();
 
   return applicationInitPromise;
+}
+
+export function setTextReplacementRules(rules: { id: string; matchPattern: string; substitute: string; regex: boolean }[]): void {
+  pendingTextReplacementRules = rules;
+  if (sharedApplication) {
+    sharedApplication.setTextReplacementRules(rules);
+  }
 }
 
 const CLICK_INTERVAL = 500;

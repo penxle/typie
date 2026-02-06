@@ -47,7 +47,7 @@ class _NormalizedItem {
   final String substitute;
   final bool regex;
   final bool preset;
-  final String state;
+  final GTextReplacementState state;
   final String? order;
   final String? note;
 }
@@ -65,7 +65,7 @@ _NormalizedItem _normalize(GTextReplacementsScreen_QueryData_me_textReplacements
       substitute: tr.substitute,
       regex: tr.regex,
       preset: tr.preset,
-      state: 'ACTIVE',
+      state: GTextReplacementState.ACTIVE,
       order: tr.order,
       note: tr.note,
     ),
@@ -87,7 +87,7 @@ _NormalizedItem _normalize(GTextReplacementsScreen_QueryData_me_textReplacements
       substitute: '',
       regex: false,
       preset: false,
-      state: 'ACTIVE',
+      state: GTextReplacementState.ACTIVE,
       order: null,
       note: null,
     ),
@@ -132,7 +132,7 @@ class TextReplacementsScreen extends HookWidget {
             ..sort((a, b) => (a.order ?? '').compareTo(b.order ?? ''));
           final smartQuoteItems = allPresets.where((item) => _smartQuoteIds.contains(item.textReplacementId)).toList();
           final presets = allPresets.where((item) => !_smartQuoteIds.contains(item.textReplacementId)).toList();
-          final smartQuoteAllActive = smartQuoteItems.every((item) => item.state == 'ACTIVE');
+          final smartQuoteAllActive = smartQuoteItems.every((item) => item.state == GTextReplacementState.ACTIVE);
           final customItems = items.where((item) => !item.preset).toList()
             ..sort((a, b) => (a.order ?? '').compareTo(b.order ?? ''));
           customItemsRef.value = customItems;
@@ -334,7 +334,9 @@ class _PresetItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Future<void> toggle() async {
-      final newState = item.state == 'ACTIVE' ? GTextReplacementState.DISABLED : GTextReplacementState.ACTIVE;
+      final newState = item.state == GTextReplacementState.ACTIVE
+          ? GTextReplacementState.DISABLED
+          : GTextReplacementState.ACTIVE;
       await client.request(
         GTextReplacementsScreen_UpdateTextReplacement_MutationReq(
           (b) => b
@@ -353,7 +355,7 @@ class _PresetItem extends StatelessWidget {
       child: Row(
         children: [
           Expanded(child: _PresetItemLabel(item: item)),
-          _CustomSwitch(value: item.state == 'ACTIVE', onTap: toggle),
+          _CustomSwitch(value: item.state == GTextReplacementState.ACTIVE, onTap: toggle),
         ],
       ),
     );
@@ -558,7 +560,9 @@ class _CustomItemsList extends HookWidget {
         final item = displayItems[index];
 
         Future<void> toggle() async {
-          final newState = item.state == 'ACTIVE' ? GTextReplacementState.DISABLED : GTextReplacementState.ACTIVE;
+          final newState = item.state == GTextReplacementState.ACTIVE
+              ? GTextReplacementState.DISABLED
+              : GTextReplacementState.ACTIVE;
           await client.request(
             GTextReplacementsScreen_UpdateTextReplacement_MutationReq(
               (b) => b
@@ -605,7 +609,7 @@ class _CustomItemsList extends HookWidget {
                   const Gap(8),
                   Expanded(child: _PresetItemLabel(item: item)),
                   const Gap(8),
-                  _CustomSwitch(value: item.state == 'ACTIVE', onTap: toggle),
+                  _CustomSwitch(value: item.state == GTextReplacementState.ACTIVE, onTap: toggle),
                   Tappable(
                     onTap: () async {
                       await context.showBottomSheet(
