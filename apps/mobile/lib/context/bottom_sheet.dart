@@ -55,13 +55,18 @@ extension BottomSheetExtension on BuildContext {
             ),
             SafeArea(
               bottom: false,
-              child: Align(
-                alignment: Alignment.bottomCenter,
-                child: ResponsiveContainer(
+              child: AnimatedPadding(
+                duration: const Duration(milliseconds: 100),
+                curve: Curves.easeOut,
+                padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+                child: Align(
                   alignment: Alignment.bottomCenter,
-                  child: SlideTransition(
-                    position: tweenedSlide,
-                    child: _BottomSheet(onHeightCalculated: onHeightCalculated, child: child),
+                  child: ResponsiveContainer(
+                    alignment: Alignment.bottomCenter,
+                    child: SlideTransition(
+                      position: tweenedSlide,
+                      child: _BottomSheet(onHeightCalculated: onHeightCalculated, child: child),
+                    ),
                   ),
                 ),
               ),

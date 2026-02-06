@@ -1,0 +1,11 @@
+mutation TextReplacementsScreen_UpdateTextReplacement_Mutation($input: UpdateTextReplacementInput!) {
+  updateTextReplacement(input: $input) {
+    __typename
+    ... on TextReplacement {
+      id
+    }
+    ... on TextReplacementPreference {
+      id
+    }
+  }
+}

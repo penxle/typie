@@ -56,6 +56,7 @@ class AppRouter extends RootStackRouter {
             AutoRoute(page: EditorRoute.page, fullscreenDialog: true),
             AutoRoute(page: NativeEditorRoute.page, fullscreenDialog: true),
             AutoRoute(page: TrashRoute.page),
+            AutoRoute(page: TextReplacementsRoute.page),
           ],
         ),
       ],

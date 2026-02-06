@@ -138,6 +138,13 @@ class SettingsScreen extends HookWidget {
                         await context.router.push(const EditorSettingsRoute());
                       },
                     ),
+                    const _Divider(),
+                    _Item(
+                      label: '텍스트 대치',
+                      onTap: () async {
+                        await context.router.push(const TextReplacementsRoute());
+                      },
+                    ),
                   ],
                 ),
                 _Section(
