@@ -2,6 +2,7 @@ use crate::global::{add_font, register_fallback_font};
 use crate::model::{Doc, LayoutMode, Node, NodeId, ParagraphNode};
 use crate::runtime::ai_feedback::RawAiFeedbackItem;
 use crate::runtime::spellcheck::RawSpellcheckError;
+use crate::runtime::text_replacement::RawTextReplacementRule;
 use crate::runtime::{Runtime, State};
 use crate::state::{Position, Selection};
 use crate::types::Affinity;
@@ -307,6 +308,36 @@ pub extern "C" fn editor_application_set_available_fonts(
             let fonts =
                 serde_json::from_str(json).map_err(|e| format!("Failed to parse JSON: {e}"))?;
             crate::global::set_available_fonts(fonts);
+            Ok(())
+        },
+        -1
+    )
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn editor_application_set_text_replacement_rules(
+    _app: *mut EditorApplication,
+    rules_json: *const c_char,
+) -> i32 {
+    ffi!(
+        {
+            let json = parse_cstr(rules_json, "Rules JSON")?;
+            let rules: Vec<RawTextReplacementRule> =
+                serde_json::from_str(json).map_err(|e| format!("Failed to parse JSON: {e}"))?;
+            crate::global::set_text_replacement_rules(rules);
+            Ok(())
+        },
+        -1
+    )
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn editor_application_clear_text_replacement_rules(
+    _app: *mut EditorApplication,
+) -> i32 {
+    ffi!(
+        {
+            crate::global::clear_text_replacement_rules();
             Ok(())
         },
         -1

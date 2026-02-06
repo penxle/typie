@@ -21,3 +21,4 @@ mod pointer;
 mod search;
 mod spellcheck;
 mod table;
+mod text_replacement;
