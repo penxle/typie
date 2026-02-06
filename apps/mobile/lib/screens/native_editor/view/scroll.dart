@@ -99,3 +99,54 @@ void _scrollHorizontal({
     );
   }
 }
+
+void scrollToOverlayTarget({
+  required ScrollController verticalScrollController,
+  required ScrollController horizontalScrollController,
+  required ContentGeometry geometry,
+  required int pageIdx,
+  required double targetX,
+  required double targetY,
+  required double targetWidth,
+}) {
+  final offsets = geometry.computeCumulativePageOffsets();
+  final absoluteY = geometry.titleAreaHeight + offsets[pageIdx] + targetY;
+
+  if (verticalScrollController.hasClients) {
+    final viewportHeight = verticalScrollController.position.viewportDimension;
+    final targetOffset = (absoluteY - viewportHeight / 3).clamp(0.0, verticalScrollController.position.maxScrollExtent);
+    unawaited(
+      verticalScrollController.animateTo(
+        targetOffset,
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+      ),
+    );
+  }
+
+  if (horizontalScrollController.hasClients && horizontalScrollController.position.maxScrollExtent > 0) {
+    const scrollMargin = 60.0;
+    final matchX = targetX + geometry.horizontalPadding;
+    final matchRight = matchX + targetWidth;
+    final scrollOffset = horizontalScrollController.offset;
+    final viewportWidth = horizontalScrollController.position.viewportDimension;
+
+    if (matchRight > scrollOffset + viewportWidth - scrollMargin) {
+      unawaited(
+        horizontalScrollController.animateTo(
+          (matchRight - viewportWidth + scrollMargin).clamp(0.0, horizontalScrollController.position.maxScrollExtent),
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+        ),
+      );
+    } else if (matchX < scrollOffset + scrollMargin) {
+      unawaited(
+        horizontalScrollController.animateTo(
+          (matchX - scrollMargin).clamp(0.0, horizontalScrollController.position.maxScrollExtent),
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+        ),
+      );
+    }
+  }
+}

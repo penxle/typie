@@ -1,8 +1,5 @@
-import 'package:flutter/foundation.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
-import 'package:typie/native/editor_native.dart';
 import 'package:typie/screens/native_editor/external/models.dart';
-import 'package:typie/screens/native_editor/state/fonts.dart';
 
 part 'state.freezed.dart';
 
@@ -163,6 +160,36 @@ abstract class AiFeedbackOverlayInfo with _$AiFeedbackOverlayInfo {
 }
 
 @freezed
+abstract class SearchState with _$SearchState {
+  const factory SearchState({
+    @Default(0) int totalCount,
+    @Default(0) int currentIndex,
+    SearchScrollTarget? scrollTarget,
+    @Default([]) List<SearchOverlayInfo> overlays,
+  }) = _SearchState;
+}
+
+@freezed
+abstract class SpellcheckState with _$SpellcheckState {
+  const factory SpellcheckState({
+    @Default([]) List<SpellcheckOverlayInfo> overlays,
+    String? activeErrorId,
+    SpellcheckOverlayBound? scrollTarget,
+    int? scrollTargetPageIdx,
+  }) = _SpellcheckState;
+}
+
+@freezed
+abstract class AiFeedbackState with _$AiFeedbackState {
+  const factory AiFeedbackState({
+    @Default([]) List<AiFeedbackOverlayInfo> overlays,
+    String? activeItemId,
+    AiFeedbackOverlayBound? scrollTarget,
+    int? scrollTargetPageIdx,
+  }) = _AiFeedbackState;
+}
+
+@freezed
 abstract class EditorState with _$EditorState {
   const factory EditorState({
     LayoutInfo? layout,
@@ -179,99 +206,12 @@ abstract class EditorState with _$EditorState {
     SelectionHandleInfo? fromHandle,
     SelectionHandleInfo? toHandle,
     SelectionHandleType? draggingHandle,
-    @Default(0) int searchTotalCount,
-    @Default(0) int searchCurrentIndex,
-    SearchScrollTarget? searchScrollTarget,
-    @Default([]) List<SearchOverlayInfo> searchOverlays,
-    @Default([]) List<SpellcheckOverlayInfo> spellcheckOverlays,
-    String? activeSpellcheckErrorId,
-    SpellcheckOverlayBound? spellcheckScrollTarget,
-    int? spellcheckScrollTargetPageIdx,
-    @Default([]) List<AiFeedbackOverlayInfo> aiFeedbackOverlays,
-    String? activeAiFeedbackItemId,
-    AiFeedbackOverlayBound? aiFeedbackScrollTarget,
-    int? aiFeedbackScrollTargetPageIdx,
+    @Default(SearchState()) SearchState search,
+    @Default(SpellcheckState()) SpellcheckState spellcheck,
+    @Default(AiFeedbackState()) AiFeedbackState aiFeedback,
   }) = _EditorState;
 
   const EditorState._();
 
   bool get isLoadingFonts => fontLoadingCount > 0;
-}
-
-class EditorController extends ChangeNotifier {
-  EditorController({
-    required this.editor,
-    required this.fontManager,
-    this.onDocChanged,
-    this.onExitedDocumentStart,
-    this.onSelectionChanged,
-    this.onEditorReady,
-  });
-
-  final NativeEditor editor;
-  final FontManager? fontManager;
-  final void Function()? onDocChanged;
-  final void Function()? onExitedDocumentStart;
-  final void Function(Map<String, dynamic> anchor, Map<String, dynamic> head)? onSelectionChanged;
-  final void Function()? onEditorReady;
-
-  bool typewriterNeedsScroll = false;
-
-  VoidCallback? _clearFocusCallback;
-  VoidCallback? _requestFocusCallback;
-
-  void setClearFocusCallback(VoidCallback callback) {
-    _clearFocusCallback = callback;
-  }
-
-  void setRequestFocusCallback(VoidCallback callback) {
-    _requestFocusCallback = callback;
-  }
-
-  void clearFocus() {
-    _clearFocusCallback?.call();
-  }
-
-  void requestFocus() {
-    _requestFocusCallback?.call();
-  }
-
-  EditorState _state = const EditorState();
-  EditorState get state => _state;
-
-  void updateState(EditorState Function(EditorState) updater) {
-    _state = updater(_state);
-    notifyListeners();
-  }
-
-  void dispatch(Map<String, dynamic> message) {
-    if (!editor.isDisposed) {
-      editor.dispatch(message);
-    }
-  }
-
-  void setFocused(bool focused) {
-    if (_state.isFocused != focused) {
-      _state = _state.copyWith(isFocused: focused);
-      dispatch({'type': 'setFocused', 'focused': focused});
-      notifyListeners();
-    }
-  }
-
-  void setSelecting(bool selecting) {
-    if (_state.isSelecting != selecting) {
-      _state = _state.copyWith(isSelecting: selecting);
-      notifyListeners();
-    }
-  }
-
-  void incrementFontLoading() {
-    _state = _state.copyWith(fontLoadingCount: _state.fontLoadingCount + 1);
-    notifyListeners();
-  }
-
-  void decrementFontLoading() {
-    _state = _state.copyWith(fontLoadingCount: _state.fontLoadingCount - 1);
-    notifyListeners();
-  }
 }

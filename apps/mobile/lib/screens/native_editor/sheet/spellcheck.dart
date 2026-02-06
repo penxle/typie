@@ -13,7 +13,7 @@ import 'package:typie/graphql/client.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/native/editor_native.dart';
 import 'package:typie/screens/native_editor/__generated__/check_spelling_document.req.gql.dart';
-import 'package:typie/screens/native_editor/state/state.dart';
+import 'package:typie/screens/native_editor/state/controller.dart';
 import 'package:typie/widgets/tappable.dart';
 
 class SpellcheckSheet extends HookWidget {

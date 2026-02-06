@@ -1,7 +1,7 @@
 import 'package:flutter/widgets.dart';
 import 'package:typie/native/editor_native.dart';
 import 'package:typie/screens/native_editor/controller/input.dart';
-import 'package:typie/screens/native_editor/state/state.dart';
+import 'package:typie/screens/native_editor/state/controller.dart';
 import 'package:typie/screens/native_editor/view/geometry.dart';
 
 class ContentScope extends InheritedWidget {

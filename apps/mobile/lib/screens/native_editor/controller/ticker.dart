@@ -3,7 +3,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/scheduler.dart';
 import 'package:typie/screens/native_editor/handler/command.dart';
-import 'package:typie/screens/native_editor/state/state.dart';
+import 'package:typie/screens/native_editor/state/controller.dart';
 
 class TickerLoop {
   TickerLoop({required this.controller, required this.tickerProvider, required this.getSize});

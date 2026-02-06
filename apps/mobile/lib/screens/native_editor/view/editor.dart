@@ -11,6 +11,7 @@ import 'package:typie/screens/native_editor/controller/keyboard.dart';
 import 'package:typie/screens/native_editor/controller/ticker.dart';
 import 'package:typie/screens/native_editor/controller/upload.dart';
 import 'package:typie/screens/native_editor/external/models.dart';
+import 'package:typie/screens/native_editor/state/controller.dart';
 import 'package:typie/screens/native_editor/state/state.dart';
 import 'package:typie/screens/native_editor/toolbar/floating/floating.dart';
 import 'package:typie/screens/native_editor/toolbar/scope.dart';
@@ -349,175 +350,46 @@ class EditorView extends HookWidget {
       return null;
     }, [cursor, state.state.renderVersion]);
 
-    useEffect(() {
-      final target = state.state.searchScrollTarget;
-      if (target == null || currentLayout == null) {
-        return null;
+    void scrollToOverlay({required int pageIdx, required double x, required double y, required double width}) {
+      if (currentLayout == null) {
+        return;
       }
-
-      final geo = ContentGeometry(titleAreaHeight: titleAreaHeight.value, layout: currentLayout);
-      final offsets = geo.computeCumulativePageOffsets();
-      final absoluteY = geo.titleAreaHeight + offsets[target.pageIdx] + target.y;
-
-      if (verticalScrollController.hasClients) {
-        final viewportHeight = verticalScrollController.position.viewportDimension;
-        final targetOffset = (absoluteY - viewportHeight / 3).clamp(
-          0.0,
-          verticalScrollController.position.maxScrollExtent,
-        );
-        unawaited(
-          verticalScrollController.animateTo(
-            targetOffset,
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeOut,
-          ),
-        );
-      }
-
-      if (horizontalScrollController.hasClients && horizontalScrollController.position.maxScrollExtent > 0) {
-        const scrollMargin = 60.0;
-        final matchX = target.x + geo.horizontalPadding;
-        final matchRight = matchX + target.width;
-        final scrollOffset = horizontalScrollController.offset;
-        final viewportWidth = horizontalScrollController.position.viewportDimension;
-
-        if (matchRight > scrollOffset + viewportWidth - scrollMargin) {
-          unawaited(
-            horizontalScrollController.animateTo(
-              (matchRight - viewportWidth + scrollMargin).clamp(
-                0.0,
-                horizontalScrollController.position.maxScrollExtent,
-              ),
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeOut,
-            ),
-          );
-        } else if (matchX < scrollOffset + scrollMargin) {
-          unawaited(
-            horizontalScrollController.animateTo(
-              (matchX - scrollMargin).clamp(0.0, horizontalScrollController.position.maxScrollExtent),
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeOut,
-            ),
-          );
-        }
-      }
-      return null;
-    }, [state.state.searchScrollTarget]);
+      scrollToOverlayTarget(
+        verticalScrollController: verticalScrollController,
+        horizontalScrollController: horizontalScrollController,
+        geometry: ContentGeometry(titleAreaHeight: titleAreaHeight.value, layout: currentLayout),
+        pageIdx: pageIdx,
+        targetX: x,
+        targetY: y,
+        targetWidth: width,
+      );
+    }
 
     useEffect(() {
-      final target = state.state.spellcheckScrollTarget;
-      final targetPageIdx = state.state.spellcheckScrollTargetPageIdx;
-      if (target == null || targetPageIdx == null || currentLayout == null) {
-        return null;
-      }
-
-      final geo = ContentGeometry(titleAreaHeight: titleAreaHeight.value, layout: currentLayout);
-      final offsets = geo.computeCumulativePageOffsets();
-      final absoluteY = geo.titleAreaHeight + offsets[targetPageIdx] + target.y;
-
-      if (verticalScrollController.hasClients) {
-        final viewportHeight = verticalScrollController.position.viewportDimension;
-        final targetOffset = (absoluteY - viewportHeight / 3).clamp(
-          0.0,
-          verticalScrollController.position.maxScrollExtent,
-        );
-        unawaited(
-          verticalScrollController.animateTo(
-            targetOffset,
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeOut,
-          ),
-        );
-      }
-
-      if (horizontalScrollController.hasClients && horizontalScrollController.position.maxScrollExtent > 0) {
-        const scrollMargin = 60.0;
-        final matchX = target.x + geo.horizontalPadding;
-        final matchRight = matchX + target.width;
-        final scrollOffset = horizontalScrollController.offset;
-        final viewportWidth = horizontalScrollController.position.viewportDimension;
-
-        if (matchRight > scrollOffset + viewportWidth - scrollMargin) {
-          unawaited(
-            horizontalScrollController.animateTo(
-              (matchRight - viewportWidth + scrollMargin).clamp(
-                0.0,
-                horizontalScrollController.position.maxScrollExtent,
-              ),
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeOut,
-            ),
-          );
-        } else if (matchX < scrollOffset + scrollMargin) {
-          unawaited(
-            horizontalScrollController.animateTo(
-              (matchX - scrollMargin).clamp(0.0, horizontalScrollController.position.maxScrollExtent),
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeOut,
-            ),
-          );
-        }
+      final target = state.state.search.scrollTarget;
+      if (target != null) {
+        scrollToOverlay(pageIdx: target.pageIdx, x: target.x, y: target.y, width: target.width);
       }
       return null;
-    }, [state.state.spellcheckScrollTarget, state.state.spellcheckScrollTargetPageIdx]);
+    }, [state.state.search.scrollTarget]);
 
     useEffect(() {
-      final target = state.state.aiFeedbackScrollTarget;
-      final targetPageIdx = state.state.aiFeedbackScrollTargetPageIdx;
-      if (target == null || targetPageIdx == null || currentLayout == null) {
-        return null;
-      }
-
-      final geo = ContentGeometry(titleAreaHeight: titleAreaHeight.value, layout: currentLayout);
-      final offsets = geo.computeCumulativePageOffsets();
-      final absoluteY = geo.titleAreaHeight + offsets[targetPageIdx] + target.y;
-
-      if (verticalScrollController.hasClients) {
-        final viewportHeight = verticalScrollController.position.viewportDimension;
-        final targetOffset = (absoluteY - viewportHeight / 3).clamp(
-          0.0,
-          verticalScrollController.position.maxScrollExtent,
-        );
-        unawaited(
-          verticalScrollController.animateTo(
-            targetOffset,
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeOut,
-          ),
-        );
-      }
-
-      if (horizontalScrollController.hasClients && horizontalScrollController.position.maxScrollExtent > 0) {
-        const scrollMargin = 60.0;
-        final matchX = target.x + geo.horizontalPadding;
-        final matchRight = matchX + target.width;
-        final scrollOffset = horizontalScrollController.offset;
-        final viewportWidth = horizontalScrollController.position.viewportDimension;
-
-        if (matchRight > scrollOffset + viewportWidth - scrollMargin) {
-          unawaited(
-            horizontalScrollController.animateTo(
-              (matchRight - viewportWidth + scrollMargin).clamp(
-                0.0,
-                horizontalScrollController.position.maxScrollExtent,
-              ),
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeOut,
-            ),
-          );
-        } else if (matchX < scrollOffset + scrollMargin) {
-          unawaited(
-            horizontalScrollController.animateTo(
-              (matchX - scrollMargin).clamp(0.0, horizontalScrollController.position.maxScrollExtent),
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeOut,
-            ),
-          );
-        }
+      final target = state.state.spellcheck.scrollTarget;
+      final pageIdx = state.state.spellcheck.scrollTargetPageIdx;
+      if (target != null && pageIdx != null) {
+        scrollToOverlay(pageIdx: pageIdx, x: target.x, y: target.y, width: target.width);
       }
       return null;
-    }, [state.state.aiFeedbackScrollTarget, state.state.aiFeedbackScrollTargetPageIdx]);
+    }, [state.state.spellcheck.scrollTarget, state.state.spellcheck.scrollTargetPageIdx]);
+
+    useEffect(() {
+      final target = state.state.aiFeedback.scrollTarget;
+      final pageIdx = state.state.aiFeedback.scrollTargetPageIdx;
+      if (target != null && pageIdx != null) {
+        scrollToOverlay(pageIdx: pageIdx, x: target.x, y: target.y, width: target.width);
+      }
+      return null;
+    }, [state.state.aiFeedback.scrollTarget, state.state.aiFeedback.scrollTargetPageIdx]);
 
     if (currentLayout == null) {
       return const SizedBox.shrink();
