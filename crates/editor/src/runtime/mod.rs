@@ -10,6 +10,7 @@ pub mod search;
 pub mod spellcheck;
 mod state;
 mod table;
+pub mod text_replacement;
 mod view_state;
 
 pub use ai_feedback::{AiFeedbackItem, RawAiFeedbackItem};
@@ -21,6 +22,7 @@ pub use message::*;
 pub use pointer::*;
 pub use spellcheck::{RawSpellcheckError, SpellcheckError};
 pub use state::*;
+pub use text_replacement::RawTextReplacementRule;
 pub use view_state::*;
 
 use crate::inspect::inspect_page_element;
@@ -115,6 +117,7 @@ pub struct Runtime {
     search_state: search::SearchState,
     is_focused: bool,
     last_table_overlays: Vec<TableOverlay>,
+    text_replacement_undo: Option<text_replacement::ReplacementUndoState>,
 }
 
 #[allow(dead_code)]
@@ -179,6 +182,7 @@ impl Runtime {
             search_state: search::SearchState::default(),
             is_focused: true,
             last_table_overlays: Vec::new(),
+            text_replacement_undo: None,
         }
     }
 
@@ -342,6 +346,7 @@ impl Runtime {
         self.layout_cache.borrow_mut().invalidate_all();
         self.selection_cache = None;
         self.cached_plain_text = None;
+        self.text_replacement_undo = None;
         self.pending.layout = true;
         self.pending.render = true;
         self.pending.selection = true;
@@ -1327,6 +1332,7 @@ impl Runtime {
                 Effect::DocChanged => {
                     self.selection_cache = None;
                     self.cached_plain_text = None;
+                    self.text_replacement_undo = None;
                     self.pending.doc = true;
                     self.pending.layout = true;
                     self.pending.render = true;
@@ -1386,6 +1392,7 @@ impl Runtime {
                 }
                 Effect::SelectionChanged => {
                     self.selection_cache = None;
+                    self.text_replacement_undo = None;
                     self.pending.cursor = true;
                     self.pending.scroll_to_cursor = true;
                     self.pending.selection = true;
@@ -1461,6 +1468,9 @@ impl Runtime {
                 Effect::SearchStateChanged => {
                     self.pending.search_overlays = true;
                     self.pending.render = true;
+                }
+                Effect::TextReplacementApplied { undo_state } => {
+                    self.text_replacement_undo = Some(undo_state);
                 }
             }
         }

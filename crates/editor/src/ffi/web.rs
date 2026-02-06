@@ -1,6 +1,8 @@
 use crate::global::{add_font, register_fallback_font};
 use crate::model::{Doc, LayoutMode, Node, NodeId, ParagraphNode};
-use crate::runtime::{Message, RawAiFeedbackItem, RawSpellcheckError, Runtime, State};
+use crate::runtime::{
+    Message, RawAiFeedbackItem, RawSpellcheckError, RawTextReplacementRule, Runtime, State,
+};
 use crate::state::{Position, Selection};
 use crate::types::Affinity;
 use serde::Serialize;
@@ -83,6 +85,19 @@ impl Application {
         if let Ok(fonts) = serde_wasm_bindgen::from_value(fonts) {
             crate::global::set_available_fonts(fonts);
         }
+    }
+
+    #[wasm_bindgen(js_name = setTextReplacementRules)]
+    pub fn set_text_replacement_rules(&self, rules: JsValue) {
+        if let Ok(raw_rules) = serde_wasm_bindgen::from_value::<Vec<RawTextReplacementRule>>(rules)
+        {
+            crate::global::set_text_replacement_rules(raw_rules);
+        }
+    }
+
+    #[wasm_bindgen(js_name = clearTextReplacementRules)]
+    pub fn clear_text_replacement_rules(&self) {
+        crate::global::clear_text_replacement_rules();
     }
 
     #[wasm_bindgen(js_name = createEditor)]
