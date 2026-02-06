@@ -175,3 +175,9 @@ final darkTheme = _buildTheme(_darkRawColors);
 Map<String, int> getEditorTheme(Brightness brightness) {
   return brightness == Brightness.dark ? darkTheme : lightTheme;
 }
+
+Color getEditorColor(Brightness brightness, String key) {
+  final hex = (brightness == Brightness.dark ? _darkRawColors : _lightRawColors)[key]!;
+  final value = int.parse(hex.substring(1), radix: 16);
+  return Color(0xFF000000 | value);
+}
