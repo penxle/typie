@@ -730,6 +730,45 @@ export const Subscriptions = pgTable(
   ],
 );
 
+export const TextReplacements = pgTable('text_replacements', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => createDbId(TableCode.TEXT_REPLACEMENTS)),
+  match: text('match').notNull(),
+  substitute: text('substitute').notNull(),
+  regex: boolean('regex').notNull().default(false),
+  preset: boolean('preset').notNull().default(false),
+  note: text('note'),
+  order: text('order'),
+  createdAt: datetime('created_at')
+    .notNull()
+    .default(sql`now()`),
+  updatedAt: datetime('updated_at')
+    .notNull()
+    .default(sql`now()`),
+});
+
+export const TextReplacementPreferences = pgTable(
+  'text_replacement_preferences',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.TEXT_REPLACEMENT_PREFERENCES)),
+    userId: text('user_id')
+      .notNull()
+      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    textReplacementId: text('text_replacement_id')
+      .notNull()
+      .references(() => TextReplacements.id, { onUpdate: 'cascade', onDelete: 'cascade' }),
+    state: E._TextReplacementState('state').notNull(),
+    order: text('order'),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [unique().on(t.userId, t.textReplacementId), unique().on(t.userId, t.order), index().on(t.userId)],
+);
+
 export const Users = pgTable(
   'users',
   {
