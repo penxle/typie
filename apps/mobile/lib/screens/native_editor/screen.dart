@@ -80,7 +80,7 @@ class _Content extends HookWidget {
     final headingTitle = document?.title ?? '(제목 없음)';
     final scaleFactor = ui.PlatformDispatcher.instance.views.first.devicePixelRatio;
 
-    final brightness = MediaQuery.platformBrightnessOf(context);
+    final brightness = context.theme.brightness;
 
     useEffect(() {
       if (document == null) {
