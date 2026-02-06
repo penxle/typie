@@ -160,7 +160,7 @@
   />
 
   {#if snapshot}
-    <EditorComponent {editor} readOnly {snapshot}>
+    <EditorComponent {editor} readOnly {snapshot} useWindowScroll>
       {#snippet header()}
         <div class={css({ paddingTop: { base: '24px', md: '48px' } })}>
           <div class={flex({ alignItems: 'center', gap: '4px', wrap: 'wrap', marginBottom: { base: '4px', lg: '8px' } })}>

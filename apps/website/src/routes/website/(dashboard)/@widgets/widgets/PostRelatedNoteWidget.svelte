@@ -6,7 +6,7 @@
   import { autosize, tooltip } from '@typie/ui/actions';
   import { Icon, Popover } from '@typie/ui/components';
   import { Toast } from '@typie/ui/notification';
-  import { animateFlip, debounce, getNoteColors, getRandomNoteColor, handleDragScroll } from '@typie/ui/utils';
+  import { animateFlip, debounce, elementScrollViewport, getNoteColors, getRandomNoteColor, handleDragScroll } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import ChevronUpIcon from '~icons/lucide/chevron-up';
@@ -249,7 +249,7 @@
 
   $effect(() => {
     if (!palette) {
-      return handleDragScroll(scrollContainer, !!dragging);
+      return handleDragScroll(scrollContainer ? elementScrollViewport(scrollContainer) : null, !!dragging);
     }
   });
 

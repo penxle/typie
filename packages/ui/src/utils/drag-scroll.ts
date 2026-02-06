@@ -1,3 +1,5 @@
+import type { ScrollViewport } from './scroll-viewport';
+
 export type DragScrollOptions = {
   scrollZoneSize?: number;
   maxScrollSpeed?: number;
@@ -7,11 +9,11 @@ export type DragScrollOptions = {
 
 // NOTE: 드래그 중 위, 아래 끝에서 자동 스크롤
 export function handleDragScroll(
-  scrollContainer: HTMLElement | null,
+  viewport: ScrollViewport | null,
   isDragging: boolean,
   options: DragScrollOptions = {},
 ): (() => void) | undefined {
-  if (!isDragging || !scrollContainer) return;
+  if (!isDragging || !viewport) return;
 
   const { scrollZoneSize = 50, maxScrollSpeed = 15, onScroll, onScrollThrottleMs = 50 } = options;
 
@@ -24,16 +26,13 @@ export function handleDragScroll(
     lastPointerX = clientX;
     lastPointerY = clientY;
 
-    const containerRect = scrollContainer.getBoundingClientRect();
+    const rect = viewport.getRect();
 
-    if (lastPointerX < containerRect.left || lastPointerX > containerRect.right) {
+    if (lastPointerX < rect.left || lastPointerX > rect.right) {
       return;
     }
 
-    if (
-      (lastPointerY < containerRect.top + scrollZoneSize || lastPointerY > containerRect.bottom - scrollZoneSize) &&
-      animationId === null
-    ) {
+    if ((lastPointerY < rect.top + scrollZoneSize || lastPointerY > rect.bottom - scrollZoneSize) && animationId === null) {
       animationId = requestAnimationFrame(scroll);
     }
   };
@@ -47,9 +46,9 @@ export function handleDragScroll(
   };
 
   const scroll = () => {
-    const containerRect = scrollContainer.getBoundingClientRect();
+    const rect = viewport.getRect();
 
-    if (lastPointerX < containerRect.left || lastPointerX > containerRect.right) {
+    if (lastPointerX < rect.left || lastPointerX > rect.right) {
       animationId = null;
       return;
     }
@@ -57,22 +56,22 @@ export function handleDragScroll(
     const now = performance.now();
     const shouldCallOnScroll = now - lastOnScrollTime >= onScrollThrottleMs;
 
-    if (lastPointerY < containerRect.top + scrollZoneSize) {
-      const distance = containerRect.top + scrollZoneSize - lastPointerY;
+    if (lastPointerY < rect.top + scrollZoneSize) {
+      const distance = rect.top + scrollZoneSize - lastPointerY;
       const scrollSpeed = Math.min(maxScrollSpeed, Math.max(1, distance / 3));
-      const prevScrollTop = scrollContainer.scrollTop;
-      scrollContainer.scrollBy(0, -scrollSpeed);
-      if (shouldCallOnScroll && scrollContainer.scrollTop !== prevScrollTop) {
+      const prevScrollTop = viewport.getScrollTop();
+      viewport.scrollBy(0, -scrollSpeed);
+      if (shouldCallOnScroll && viewport.getScrollTop() !== prevScrollTop) {
         lastOnScrollTime = now;
         onScroll?.(lastPointerX, lastPointerY);
       }
       animationId = requestAnimationFrame(scroll);
-    } else if (lastPointerY > containerRect.bottom - scrollZoneSize) {
-      const distance = lastPointerY - (containerRect.bottom - scrollZoneSize);
+    } else if (lastPointerY > rect.bottom - scrollZoneSize) {
+      const distance = lastPointerY - (rect.bottom - scrollZoneSize);
       const scrollSpeed = Math.min(maxScrollSpeed, Math.max(1, distance / 3));
-      const prevScrollTop = scrollContainer.scrollTop;
-      scrollContainer.scrollBy(0, scrollSpeed);
-      if (shouldCallOnScroll && scrollContainer.scrollTop !== prevScrollTop) {
+      const prevScrollTop = viewport.getScrollTop();
+      viewport.scrollBy(0, scrollSpeed);
+      if (shouldCallOnScroll && viewport.getScrollTop() !== prevScrollTop) {
         lastOnScrollTime = now;
         onScroll?.(lastPointerX, lastPointerY);
       }
@@ -82,12 +81,12 @@ export function handleDragScroll(
     }
   };
 
-  scrollContainer.addEventListener('dragover', handleDragOver);
-  scrollContainer.addEventListener('pointermove', handlePointerMove);
+  viewport.target.addEventListener('dragover', handleDragOver as EventListener);
+  viewport.target.addEventListener('pointermove', handlePointerMove as EventListener);
 
   return () => {
-    scrollContainer.removeEventListener('dragover', handleDragOver);
-    scrollContainer.removeEventListener('pointermove', handlePointerMove);
+    viewport.target.removeEventListener('dragover', handleDragOver as EventListener);
+    viewport.target.removeEventListener('pointermove', handlePointerMove as EventListener);
     if (animationId !== null) {
       cancelAnimationFrame(animationId);
     }

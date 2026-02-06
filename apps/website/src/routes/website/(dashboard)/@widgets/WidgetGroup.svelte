@@ -6,7 +6,7 @@
   import { Button, Icon } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { Tip } from '@typie/ui/notification';
-  import { animateFlip, createDndHandler, handleDragScroll } from '@typie/ui/utils';
+  import { animateFlip, createDndHandler, elementScrollViewport, handleDragScroll } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import { on } from 'svelte/events';
   import LayoutDashboardIcon from '~icons/lucide/layout-dashboard';
@@ -617,7 +617,7 @@
 
   $effect(() => {
     if (!scrollContainerElement) return;
-    return handleDragScroll(scrollContainerElement, !!dragging);
+    return handleDragScroll(scrollContainerElement ? elementScrollViewport(scrollContainerElement) : null, !!dragging);
   });
 
   $effect(() => {

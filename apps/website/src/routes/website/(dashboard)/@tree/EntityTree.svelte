@@ -5,7 +5,7 @@
   import { Icon } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { Toast } from '@typie/ui/notification';
-  import { handleDragScroll } from '@typie/ui/utils';
+  import { elementScrollViewport, handleDragScroll } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import { tick } from 'svelte';
   import { on } from 'svelte/events';
@@ -506,7 +506,7 @@
     const scrollContainer = tree.parentElement;
     if (!scrollContainer) return;
 
-    return handleDragScroll(scrollContainer, true, {
+    return handleDragScroll(elementScrollViewport(scrollContainer), true, {
       onScroll: () => updateDropTarget(lastPointerX, lastPointerY),
     });
   });
