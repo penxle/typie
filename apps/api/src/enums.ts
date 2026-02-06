@@ -145,6 +145,20 @@ export const DocumentType = {
   TEMPLATE: 'TEMPLATE',
 } as const;
 
+export type DocumentContentRating = keyof typeof DocumentContentRating;
+export const DocumentContentRating = {
+  ALL: 'ALL',
+  R15: 'R15',
+  R19: 'R19',
+} as const;
+
+export type DocumentViewBodyUnavailableReason = keyof typeof DocumentViewBodyUnavailableReason;
+export const DocumentViewBodyUnavailableReason = {
+  REQUIRE_PASSWORD: 'REQUIRE_PASSWORD',
+  REQUIRE_IDENTITY_VERIFICATION: 'REQUIRE_IDENTITY_VERIFICATION',
+  REQUIRE_MINIMUM_AGE: 'REQUIRE_MINIMUM_AGE',
+} as const;
+
 export type PostViewBodyUnavailableReason = keyof typeof PostViewBodyUnavailableReason;
 export const PostViewBodyUnavailableReason = {
   REQUIRE_PASSWORD: 'REQUIRE_PASSWORD',

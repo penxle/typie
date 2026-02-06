@@ -33,6 +33,20 @@ query ShareEntities_Query($entityIds: [ID!]!) {
           url
         }
       }
+
+      ... on Document {
+        id
+        title
+        password
+        documentContentRating: contentRating
+        allowReaction
+        protectContent
+
+        thumbnail {
+          id
+          url
+        }
+      }
     }
   }
 }

@@ -19,6 +19,11 @@ export const Documents = pgTable(
       .references(() => Entities.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     title: text('title'),
     subtitle: text('subtitle'),
+    password: text('password'),
+    contentRating: E._DocumentContentRating('content_rating').notNull().default('ALL'),
+    allowReaction: boolean('allow_reaction').notNull().default(true),
+    protectContent: boolean('protect_content').notNull().default(true),
+    thumbnailId: text('thumbnail_id').references(() => Images.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     type: E._DocumentType('type').notNull().default('NORMAL'),
     createdAt: datetime('created_at')
       .notNull()
@@ -591,6 +596,25 @@ export const PostReactions = pgTable(
       .default(sql`now()`),
   },
   (t) => [index().on(t.postId, t.createdAt)],
+);
+
+export const DocumentReactions = pgTable(
+  'document_reactions',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.DOCUMENT_REACTIONS)),
+    documentId: text('document_id')
+      .notNull()
+      .references(() => Documents.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    userId: text('user_id').references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    deviceId: text('device_id').notNull(),
+    emoji: text('emoji').notNull(),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [index().on(t.documentId, t.createdAt)],
 );
 
 export const PreorderPayments = pgTable('preorder_payments', {

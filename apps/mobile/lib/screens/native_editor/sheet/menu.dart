@@ -1,11 +1,14 @@
+import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:typie/context/bottom_sheet.dart';
 import 'package:typie/context/modal.dart';
 import 'package:typie/context/theme.dart';
+import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/icons/lucide_light.dart';
+import 'package:typie/modals/share.dart';
 import 'package:typie/native/editor_native.dart';
 import 'package:typie/routers/app.gr.dart';
 import 'package:typie/screens/native_editor/__generated__/delete_document_mutation.req.gql.dart';
@@ -82,7 +85,28 @@ class MenuSheet extends StatelessWidget {
               await launchUrl(url, mode: LaunchMode.externalApplication);
             },
           ),
-          BottomMenuItem(icon: LucideLightIcons.blend, label: '공유하기', onTap: () {}),
+          BottomMenuItem(
+            icon: LucideLightIcons.blend,
+            label: '공유하기',
+            trailing:
+                data.entity.visibility == GEntityVisibility.PUBLIC ||
+                    data.entity.visibility == GEntityVisibility.UNLISTED
+                ? Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(color: context.colors.borderStrong),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    padding: const Pad(horizontal: 8, vertical: 4),
+                    child: Text(
+                      data.entity.visibility == GEntityVisibility.PUBLIC ? '공개 중' : '링크 공개 중',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: context.colors.textDefault),
+                    ),
+                  )
+                : null,
+            onTap: () async {
+              await context.showBottomSheet(intercept: true, child: ShareBottomSheet(entityIds: [data.entity.id]));
+            },
+          ),
           BottomMenuItem(
             icon: LucideLightIcons.copy,
             label: '복제하기',
