@@ -34,7 +34,8 @@
     "apps/mobile/ios",
     "apps/infrastructure/scripts",
     "packages/styled-system/styled-system",
-    ".claude/**"
+    ".claude/**",
+    "CLAUDE.md"
   ],
   "dictionaries": ["cspell.txt"],
   "dictionaryDefinitions": [

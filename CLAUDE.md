@@ -2,136 +2,90 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Language Guidelines
-
-- All chat responses should be written in Korean (한국어).
-- When adding memories to this file, always use English language.
-
 ## Project Overview
 
-Typie is a Korean writing platform that aims to be a "space for writing thoughts" and provides real-time collaboration, canvas drawing, and rich text editing features, supporting both web and mobile.
+Typie (타이피) is a cross-platform writing tool. Monorepo with Bun workspaces + Turbo orchestration, Cargo workspace for Rust crates.
 
-## Development Commands
+**Stack**: SvelteKit (web/desktop), Flutter (mobile), Tauri (desktop shell), Bun + Hono + GraphQL-Yoga (API), Rust/WASM (editor core)
 
-### Root Level
+## Commands
 
 ```bash
-bun install             # Install dependencies
-bun run build           # Build all packages
-bun run dev             # Run all dev servers
-bun run test            # Run all tests
-bun run lint:eslint     # ESLint check
+# Development
+bun run dev   # All dev servers via turbo
+bun run build # Build all apps via turbo
+
+# Linting (all run from root)
+bun run lint:eslint     # ESLint (--max-warnings 0)
 bun run lint:prettier   # Prettier check
-bun run lint:typecheck  # TypeScript check
-bun run lint:svelte     # Svelte check
-bun run lint:spellcheck # CSpell check
+bun run lint:spellcheck # CSpell
+bun run lint:svelte     # svelte-check --fail-on-warnings
+bun run lint:typecheck  # TypeScript type checking
+bun run lint:syncpack   # Package version consistency
+
+# Testing
+bun run test # All tests via turbo
+
+# Code generation (usually handled by turbo deps, but can run manually)
+# Per-app: svelte-kit sync && panda codegen && sark codegen
+
+# Rust / WASM
+cargo test -p editor  # Editor crate tests
+cargo bench -p editor # Editor benchmarks
+# wasm:build task in turbo for WASM compilation (uses wasm-pack)
+
+# Mobile (apps/mobile/)
+bun run codegen:build # Dart FFI bindings generation
+bun run codegen:watch # Watch FFI changes
+
+# API-specific
+# Dev uses doppler for secrets: doppler run -- bun run --watch src/main.ts
+bun run dev:email # Email template preview (port 3001)
 ```
 
-### Backend (apps/api)
+## Architecture
 
-```bash
-cd apps/api
-bun run dev               # Run API server (with doppler)
-bun run dev:email         # Preview email templates
-bunx drizzle-kit generate # Generate DB migration
-bunx drizzle-kit migrate  # Run DB migration
-bunx drizzle-kit studio   # Open Drizzle Studio
-```
+### Apps
 
-### Frontend (apps/website)
+- **`apps/api/`** — Backend server. Bun runtime, Hono HTTP framework, GraphQL-Yoga with Pothos schema builder. PostgreSQL via Drizzle ORM. WebSocket subscriptions via `graphql-ws`. Redis pub/sub, BullMQ job queue, Meilisearch. Entry: `src/main.ts` (port 3000). Secrets managed by Doppler.
+- **`apps/website/`** — Main web app. SvelteKit + Vite, Panda CSS for styling, Sark for GraphQL client. SSR with `@typie/adapter-node`.
+- **`apps/desktop/`** — Desktop app. Tauri 2 wrapping SvelteKit (static adapter). Same UI packages as website.
+- **`apps/mobile/`** — Flutter app. Uses `ferry` for GraphQL, FFI bindings to Rust editor crate (via `native` feature flag).
+- **`apps/literoom/`** — AWS Lambda image processing (Sharp).
 
-```bash
-cd apps/website
-bun run dev     # Run dev server (with doppler)
-bun run build   # Build for production
-bun run codegen # Generate PandaCSS + Sark (GraphQL)
-```
+### Crates (Rust)
 
-### Mobile (apps/mobile)
+- **`crates/editor/`** — Core editor engine. Text layout (`parley`), rendering (`tiny-skia`, `skrifa`), document model, CRDT collaboration (`loro`). Compiles to WASM (default `wasm` feature) or native Android (`native` feature with JNI). Key modules: `layout/`, `render/`, `model/`, `state/`, `transaction/`, `runtime/`, `schema/`.
+- **`crates/fondue/`** — Font rendering native Node.js addon (NAPI-RS). Rust + C++ via CXX, includes WOFF2/Brotli submodules.
 
-```bash
-cd apps/mobile
-bun run codegen:build # Generate GraphQL + Freezed (one-time)
-bun run codegen:watch # Watch mode for codegen
-bun run clean         # Clean all generated files
-flutter run           # Run app
-```
+### Packages (shared)
 
-### Rust Crates
+- **`packages/sark/`** — Custom GraphQL client + code generator. Runtime uses exchanges pattern (fetch, websocket, cache with normalization). Vite plugin for codegen integration. SvelteKit load helpers.
+- **`packages/ui/`** — Shared Svelte component library. Heavy Tiptap integration: custom marks (ruby, color), nodes (table, code block, embed, callout, fold), extensions (collaboration, clipboard, typewriter). Also: actions (focus-trap, portal), state helpers, notification system.
+- **`packages/styled-system/`** — Panda CSS design system output.
+- **`packages/lib/`** — Core utilities (logging via LogTape, helpers via Remeda/ts-pattern).
+- **`packages/lintconfig/`** — Shared ESLint/Prettier configuration.
+- **`packages/tsconfig/`** — Shared TypeScript config (strict, ESNext, bundler resolution).
+- **`packages/adapter-node/`** — Custom SvelteKit Node.js adapter.
 
-```bash
-cd crates/editor
-bun run wasm:build   # Dev build (with SIMD)
-bun run wasm:release # Release build
-bun run assets       # Generate ICU data + copy assets
-```
+### Key Patterns
 
-### Tests
+- **Codegen pipeline**: Turbo `codegen` task runs `svelte-kit sync`, `panda codegen`, `sark codegen` before build/dev. Many tasks depend on this.
+- **GraphQL schema**: Pothos builder with plugins (dataloader, scope-auth, zod). Resolvers organized by domain in `apps/api/src/graphql/resolvers/`. Schema auto-written to file in dev.
+- **Database**: Drizzle ORM schemas in `apps/api/src/db/schemas/`. Custom ID generation with table prefixes. JSONB columns for flexible data.
+- **Collaborative editing**: Loro CRDT for conflict-free sync, Yjs + y-prosemirror for browser-side integration, transaction-based edit system.
+- **Cross-platform editor**: Rust core compiled to WASM for web, native FFI for mobile (JNI on Android), Tiptap/ProseMirror as the rich-text editing layer on the frontend.
 
-```bash
-bun run test                   # All tests via turbo
-cd packages/sark && bun test   # Run sark tests with vitest
-cd crates/editor && cargo test # Run Rust tests
-```
+## Code Style
 
-## Tech Stack & Architecture
+- Do not write comments in code.
+- TypeScript strict mode everywhere.
+- `workspace:*` for internal package dependencies.
+- Bun as package manager and API runtime.
+- Korean UI/commit messages are common.
 
-### Monorepo Structure
+## Environment
 
-- **Package Manager**: bun with workspaces
-- **Build System**: Turbo
-- **Main directories**:
-  - `apps/` - Applications (api, website, mobile, desktop, literoom)
-  - `packages/` - Shared packages (ui, lib, styled-system, sark)
-  - `crates/` - Rust crates (editor)
-
-### Backend (apps/api)
-
-- **Framework**: Hono
-- **GraphQL**: GraphQL Yoga + Pothos
-- **Database**: PostgreSQL with Drizzle ORM (schemas in `src/db/schemas/`)
-- **Real-time**: Yjs, Redis PubSub, WebSocket
-- **Queue**: BullMQ
-- **Search**: Meilisearch
-- **Auth**: Custom OIDC provider with JWT
-- **Environment**: Managed by Doppler
-
-### Frontend (apps/website)
-
-- **Framework**: SvelteKit + Svelte 5
-- **Styling**: PandaCSS
-- **Editor**: TipTap (ProseMirror)
-- **GraphQL Client**: Sark (custom, in-house client at `packages/sark`)
-
-### Mobile (apps/mobile)
-
-- **Framework**: Flutter/Dart (SDK ^3.8.0)
-- **GraphQL**: Ferry client with code generation
-
-### Rust Crates
-
-- **crates/editor**: WASM-based editor logic (uses wasm-pack, Loro CRDT)
-
-## Guidelines
-
-### Dart/Flutter
-
-- **Import Order**: NEVER add import statements before writing the code that uses them. The linter automatically removes unused imports, so imports added before their usage will be deleted immediately. Always follow this order: (1) write the code that needs the import, (2) then add the import statement.
-
-### PandaCSS Token Usage
-
-```typescript
-// Correct usage
-css({ paddingX: '16px', paddingY: '8px', color: 'text.default', backgroundColor: 'surface.default', lineHeight: '[1.6]' });
-
-// Incorrect usage (hardcoded values, value without unit, shorthands, multiple values, arbitrary values without brackets)
-css({ p: '16 8', color: '#000000', bg: 'white', lineHeight: '1.6' });
-```
-
-### Color Tokens
-
-- **Web (PandaCSS)**: Always use semantic color tokens defined in `packages/styled-system/src/colors.ts`
-  - Examples: `text.default`, `surface.default`, `border.subtle`, `accent.brand.default`
-- **Mobile (Flutter)**: Use semantic colors from `apps/mobile/lib/styles/semantic_colors.dart`
-  - Access via `context.colors.textDefault` (using BuildContext extension from `lib/context/theme.dart`)
-  - Example: `Icon(Icons.check, color: context.colors.textDefault)`
+- **Secrets**: Doppler CLI (`doppler run --` prefix for dev commands).
+- **Local env**: `.envrc` with direnv, loads `.env.local`.
+- **Git hooks**: Lefthook — pre-commit runs ESLint, Prettier, CSpell, dart fix/format, rustfmt in parallel.
