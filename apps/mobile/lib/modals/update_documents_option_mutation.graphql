@@ -1,0 +1,20 @@
+mutation ShareDocument_UpdateDocumentsOption_Mutation($input: UpdateDocumentsOptionInput!) {
+  updateDocumentsOption(input: $input) {
+    id
+    password
+    documentContentRating: contentRating
+    allowReaction
+    protectContent
+
+    thumbnail {
+      id
+      url
+    }
+
+    entity {
+      id
+      visibility
+      availability
+    }
+  }
+}

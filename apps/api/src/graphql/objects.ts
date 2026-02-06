@@ -62,6 +62,7 @@ export const Note = createObjectRef('Note', T.Notes);
 export const PaymentInvoice = createObjectRef('PaymentInvoice', T.PaymentInvoices);
 export const Plan = createObjectRef('Plan', T.Plans);
 export const Post = createObjectRef('Post', T.Posts);
+export const DocumentReaction = createObjectRef('DocumentReaction', T.DocumentReactions);
 export const PostReaction = createObjectRef('PostReaction', T.PostReactions);
 export const PostSnapshot = createObjectRef('PostSnapshot', T.PostSnapshots);
 export const DocumentVersion = createObjectRef('DocumentVersion', T.DocumentVersions);

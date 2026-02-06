@@ -1,19 +1,32 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
-  import { flex } from '@typie/styled-system/patterns';
+  import { center, flex } from '@typie/styled-system/patterns';
   import { tooltip } from '@typie/ui/actions';
-  import { HorizontalDivider, Icon, Select } from '@typie/ui/components';
+  import { HorizontalDivider, Icon, Select, Switch } from '@typie/ui/components';
   import { createForm } from '@typie/ui/form';
   import mixpanel from 'mixpanel-browser';
   import { z } from 'zod';
-  import { EntityAvailability, EntityVisibility } from '@/enums';
+  import { DocumentContentRating, EntityAvailability, EntityVisibility } from '@/enums';
+  import BanIcon from '~icons/lucide/ban';
   import BlendIcon from '~icons/lucide/blend';
   import CheckIcon from '~icons/lucide/check';
+  import Dice5Icon from '~icons/lucide/dice-5';
+  import EyeIcon from '~icons/lucide/eye';
+  import EyeOffIcon from '~icons/lucide/eye-off';
   import GlobeIcon from '~icons/lucide/globe';
+  import IdCardIcon from '~icons/lucide/id-card';
+  import ImageIcon from '~icons/lucide/image';
   import LinkIcon from '~icons/lucide/link';
   import LockIcon from '~icons/lucide/lock';
+  import LockKeyholeIcon from '~icons/lucide/lock-keyhole';
+  import ShieldIcon from '~icons/lucide/shield';
+  import SmileIcon from '~icons/lucide/smile';
+  import Trash2Icon from '~icons/lucide/trash-2';
+  import UsersRoundIcon from '~icons/lucide/users-round';
   import { env } from '$env/dynamic/public';
   import { fragment, graphql } from '$graphql';
+  import { Img } from '$lib/components';
+  import { uploadBlobAsImage } from '$lib/utils';
   import type { DashboardLayout_Share_Document_document } from '$graphql';
 
   type Props = {
@@ -28,6 +41,15 @@
       fragment DashboardLayout_Share_Document_document on Document {
         id
         title
+        password
+        documentContentRating: contentRating
+        allowReaction
+        protectContent
+
+        thumbnail {
+          id
+          ...Img_image
+        }
 
         entity {
           id
@@ -49,6 +71,15 @@
     mutation DashboardLayout_Share_Document_UpdateDocumentsOption_Mutation($input: UpdateDocumentsOptionInput!) {
       updateDocumentsOption(input: $input) {
         id
+        password
+        documentContentRating: contentRating
+        allowReaction
+        protectContent
+
+        thumbnail {
+          id
+          ...Img_image
+        }
 
         entity {
           id
@@ -62,17 +93,27 @@
   let copied = $state(false);
   let timer: NodeJS.Timeout | undefined;
 
+  let showPassword = $state(false);
+  let isRolling = $state(false);
+  let thumbnailUploading = $state(false);
+
   const visibilityIndeterminate = $derived(
     $documents.length > 1 && $documents.some((d) => d.entity.visibility !== $documents[0].entity.visibility),
   );
   const availabilityIndeterminate = $derived(
     $documents.length > 1 && $documents.some((d) => d.entity.availability !== $documents[0].entity.availability),
   );
+  const thumbnailIndeterminate = $derived($documents.length > 1 && $documents.some((d) => d.thumbnail?.id !== $documents[0].thumbnail?.id));
 
   const form = createForm({
     schema: z.object({
       availability: z.nativeEnum(EntityAvailability),
       visibility: z.nativeEnum(EntityVisibility),
+      hasPassword: z.boolean(),
+      password: z.string().nullish(),
+      documentContentRating: z.nativeEnum(DocumentContentRating),
+      allowReaction: z.boolean(),
+      protectContent: z.boolean(),
     }),
     submitOn: 'change',
     onSubmit: async (data) => {
@@ -83,16 +124,25 @@
         documentIds: string[];
         availability?: EntityAvailability;
         visibility?: EntityVisibility;
+        contentRating?: DocumentContentRating;
+        allowReaction?: boolean;
+        protectContent?: boolean;
+        password?: string | null;
       } = { documentIds };
 
       if ('availability' in dirtyFields) updateData.availability = data.availability;
       if ('visibility' in dirtyFields) updateData.visibility = data.visibility;
+      if ('documentContentRating' in dirtyFields) updateData.contentRating = data.documentContentRating;
+      if ('allowReaction' in dirtyFields) updateData.allowReaction = data.allowReaction;
+      if ('protectContent' in dirtyFields) updateData.protectContent = data.protectContent;
+      if ('hasPassword' in dirtyFields || 'password' in dirtyFields) updateData.password = data.hasPassword ? data.password : null;
 
       if (Object.keys(updateData).length > 1) {
         await updateDocumentsOption(updateData);
 
         mixpanel.track('update_document_option', {
           ...updateData,
+          hasPassword: data.hasPassword,
           count: $documents.length,
         });
       }
@@ -100,6 +150,11 @@
     defaultValues: {
       availability: $documents[0].entity.availability,
       visibility: $documents[0].entity.visibility,
+      hasPassword: $documents[0].password !== null,
+      password: $documents.length > 1 && $documents.some((d) => d.password !== $documents[0].password) ? null : $documents[0].password,
+      documentContentRating: $documents[0].documentContentRating,
+      allowReaction: $documents[0].allowReaction,
+      protectContent: $documents[0].protectContent,
     },
   });
 
@@ -115,6 +170,22 @@
     };
   });
 
+  const generateRandomPassword = () => {
+    isRolling = true;
+
+    const digits = '0123456789';
+    let password = '';
+    for (let i = 0; i < 4; i++) {
+      password += digits.charAt(Math.floor(Math.random() * digits.length));
+    }
+    form.fields.password = password;
+    showPassword = true;
+
+    setTimeout(() => {
+      isRolling = false;
+    }, 500);
+  };
+
   const handleCopyLink = () => {
     if ($documents.length === 0) return;
 
@@ -128,6 +199,33 @@
 
     copied = true;
     timer = setTimeout(() => (copied = false), 2000);
+  };
+
+  const handleThumbnailUpload = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+
+    input.addEventListener('change', async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+
+      thumbnailUploading = true;
+      try {
+        const image = await uploadBlobAsImage(file);
+        await updateDocumentsOption({ documentIds, thumbnailId: image.id });
+        mixpanel.track('update_document_thumbnail', { count: $documents.length });
+      } finally {
+        thumbnailUploading = false;
+      }
+    });
+
+    input.click();
+  };
+
+  const handleThumbnailRemove = async () => {
+    await updateDocumentsOption({ documentIds, thumbnailId: null });
+    mixpanel.track('remove_document_thumbnail', { count: $documents.length });
   };
 </script>
 
@@ -276,6 +374,226 @@
           values={$documents.map((d) => d.entity.visibility)}
           bind:value={form.fields.visibility}
         />
+      </div>
+
+      <div class={flex({ flexDirection: 'column', gap: '8px' })}>
+        <div class={flex({ alignItems: 'center', justifyContent: 'space-between', height: '24px' })}>
+          <div class={flex({ alignItems: 'center', gap: '8px' })}>
+            <Icon style={css.raw({ color: 'text.faint' })} icon={LockKeyholeIcon} />
+            <div class={css({ fontSize: '12px', color: 'text.subtle' })}>비밀번호 보호</div>
+          </div>
+
+          <Switch values={$documents.map((d) => d.password !== null)} bind:checked={form.fields.hasPassword} />
+        </div>
+
+        {#if form.fields.hasPassword}
+          <div class={flex({ position: 'relative' })}>
+            <input
+              class={css({
+                borderWidth: '1px',
+                borderRadius: '6px',
+                paddingLeft: '12px',
+                paddingRight: '56px',
+                width: 'full',
+                height: '32px',
+                fontFamily: 'mono',
+                fontSize: '12px',
+                color: 'text.subtle',
+              })}
+              autocomplete="off"
+              data-1p-ignore
+              placeholder="비밀번호 입력"
+              type={showPassword ? 'text' : 'password'}
+              bind:value={form.fields.password}
+            />
+
+            <button
+              class={center({
+                position: 'absolute',
+                top: '1/2',
+                right: '32px',
+                size: '20px',
+                color: 'text.disabled',
+                userSelect: 'none',
+                translate: 'auto',
+                translateY: '-1/2',
+                _hover: { color: 'text.disabled' },
+              })}
+              onclick={generateRandomPassword}
+              type="button"
+              use:tooltip={{
+                message: '4자리 랜덤 비밀번호 생성',
+                placement: 'bottom',
+              }}
+            >
+              <Icon
+                class={css({
+                  animation: isRolling ? 'diceRoll 0.5s cubic-bezier(0.4, 0.0, 0.2, 1)' : 'none',
+                  transformOrigin: 'center',
+                })}
+                icon={Dice5Icon}
+                size={16}
+              />
+            </button>
+
+            <button
+              class={center({
+                position: 'absolute',
+                top: '1/2',
+                right: '8px',
+                size: '20px',
+                color: 'text.disabled',
+                userSelect: 'none',
+                translate: 'auto',
+                translateY: '-1/2',
+                _hover: { color: 'text.disabled' },
+              })}
+              onclick={() => (showPassword = !showPassword)}
+              type="button"
+            >
+              <Icon icon={showPassword ? EyeOffIcon : EyeIcon} size={16} />
+            </button>
+          </div>
+        {/if}
+      </div>
+
+      <div class={flex({ alignItems: 'center', justifyContent: 'space-between', height: '24px' })}>
+        <div class={flex({ alignItems: 'center', gap: '8px' })}>
+          <Icon style={css.raw({ color: 'text.faint' })} icon={IdCardIcon} />
+          <div class={css({ fontSize: '12px', color: 'text.subtle' })}>연령 제한</div>
+        </div>
+
+        <Select
+          items={[
+            { label: '없음', value: DocumentContentRating.ALL },
+            { label: '15세', value: DocumentContentRating.R15 },
+            { label: '성인', value: DocumentContentRating.R19 },
+          ]}
+          values={$documents.map((d) => d.documentContentRating)}
+          bind:value={form.fields.documentContentRating}
+        />
+      </div>
+    </div>
+
+    <div class={flex({ flexDirection: 'column', gap: '12px' })}>
+      <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>썸네일</div>
+
+      <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
+        <div class={flex({ alignItems: 'center', gap: '8px' })}>
+          <Icon style={css.raw({ color: 'text.faint' })} icon={ImageIcon} />
+          <div class={css({ fontSize: '12px', color: 'text.subtle' })}>미리보기 이미지</div>
+        </div>
+
+        <div class={flex({ gap: '8px', alignItems: 'center' })}>
+          {#if thumbnailIndeterminate}
+            <button
+              class={center({
+                width: '64px',
+                height: '36px',
+                borderRadius: '6px',
+                backgroundColor: 'surface.muted',
+                fontSize: '10px',
+                color: 'text.faint',
+              })}
+              disabled={thumbnailUploading}
+              onclick={handleThumbnailUpload}
+              type="button"
+            >
+              {thumbnailUploading ? '...' : '다름'}
+            </button>
+          {:else if $documents[0].thumbnail}
+            <div class={flex({ alignItems: 'center', gap: '4px' })}>
+              <button
+                class={css({ position: 'relative', cursor: 'pointer' })}
+                disabled={thumbnailUploading}
+                onclick={handleThumbnailUpload}
+                type="button"
+              >
+                <Img
+                  style={css.raw({
+                    width: '64px',
+                    height: '36px',
+                    borderRadius: '6px',
+                    objectFit: 'cover',
+                  })}
+                  $image={$documents[0].thumbnail}
+                  alt="썸네일"
+                  size={128}
+                />
+              </button>
+              <button
+                class={center({
+                  size: '24px',
+                  borderRadius: '4px',
+                  color: 'text.faint',
+                  _hover: { backgroundColor: 'surface.muted', color: 'text.danger' },
+                })}
+                onclick={handleThumbnailRemove}
+                type="button"
+                use:tooltip={{ message: '삭제', placement: 'top' }}
+              >
+                <Icon icon={Trash2Icon} size={14} />
+              </button>
+            </div>
+          {:else}
+            <button
+              class={center({
+                width: '64px',
+                height: '36px',
+                borderWidth: '1px',
+                borderStyle: 'dashed',
+                borderRadius: '6px',
+                color: 'text.faint',
+                _hover: { backgroundColor: 'surface.muted' },
+              })}
+              disabled={thumbnailUploading}
+              onclick={handleThumbnailUpload}
+              type="button"
+            >
+              {#if thumbnailUploading}
+                <span class={css({ fontSize: '10px' })}>...</span>
+              {:else}
+                <Icon icon={ImageIcon} size={14} />
+              {/if}
+            </button>
+          {/if}
+        </div>
+      </div>
+    </div>
+
+    <div class={flex({ flexDirection: 'column', gap: '12px' })}>
+      <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>문서 상호작용</div>
+
+      <div class={flex({ alignItems: 'center', justifyContent: 'space-between', height: '24px' })}>
+        <div class={flex({ alignItems: 'center', gap: '8px' })}>
+          <Icon style={css.raw({ color: 'text.faint' })} icon={SmileIcon} />
+          <div class={css({ fontSize: '12px', color: 'text.subtle' })}>이모지 반응</div>
+        </div>
+
+        <Select
+          items={[
+            { icon: UsersRoundIcon, label: '누구나', value: true },
+            { icon: BanIcon, label: '비허용', value: false },
+          ]}
+          values={$documents.map((d) => d.allowReaction)}
+          bind:value={form.fields.allowReaction}
+        />
+      </div>
+    </div>
+
+    <div class={flex({ flexDirection: 'column', gap: '12px' })}>
+      <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>문서 보호</div>
+
+      <div class={flex({ alignItems: 'center', justifyContent: 'space-between', height: '24px' })}>
+        <div class={flex({ alignItems: 'center', gap: '8px' })}>
+          <Icon style={css.raw({ color: 'text.faint' })} icon={ShieldIcon} />
+          <div class={flex({ flexDirection: 'column' })}>
+            <div class={css({ fontSize: '12px', color: 'text.subtle' })}>내용 보호</div>
+            <p class={css({ fontSize: '10px', color: 'text.faint' })}>우클릭, 복사 및 다운로드 제한</p>
+          </div>
+        </div>
+
+        <Switch values={$documents.map((d) => d.protectContent)} bind:checked={form.fields.protectContent} />
       </div>
     </div>
   </div>

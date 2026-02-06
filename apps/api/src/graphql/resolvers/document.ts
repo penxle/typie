@@ -1,13 +1,15 @@
 import dayjs from 'dayjs';
-import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, sum } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gt, gte, inArray, isNull, lt, sum } from 'drizzle-orm';
 import { filter, pipe, Repeater } from 'graphql-yoga';
 import { LoroDoc } from 'loro-crdt';
+import { match } from 'ts-pattern';
 import { redis } from '@/cache';
 import {
   db,
   decodeDbId,
   DocumentCharacterCountChanges,
   DocumentContents,
+  DocumentReactions,
   Documents,
   DocumentVersionContributors,
   DocumentVersions,
@@ -20,9 +22,20 @@ import {
   Images,
   Notes,
   TableCode,
+  UserPersonalIdentities,
   validateDbId,
 } from '@/db';
-import { DocumentSyncType, DocumentType, EntityAvailability, EntityState, EntityType, EntityVisibility, NoteState } from '@/enums';
+import {
+  DocumentContentRating,
+  DocumentSyncType,
+  DocumentType,
+  DocumentViewBodyUnavailableReason,
+  EntityAvailability,
+  EntityState,
+  EntityType,
+  EntityVisibility,
+  NoteState,
+} from '@/enums';
 import { NotFoundError, TypieError } from '@/errors';
 import * as spellcheck from '@/external/spellcheck';
 import { enqueueJob } from '@/mq';
@@ -34,6 +47,7 @@ import {
   generateFractionalOrder,
   generatePermalink,
   generateSlug,
+  getKoreanAge,
   makeLoroDoc,
 } from '@/utils';
 import { assertSitePermission } from '@/utils/permission';
@@ -42,6 +56,7 @@ import { builder } from '../builder';
 import {
   CharacterCountChange,
   Document,
+  DocumentReaction,
   DocumentVersion,
   DocumentView,
   Embed,
@@ -52,6 +67,7 @@ import {
   Image,
   isTypeOf,
 } from '../objects';
+import type { Context } from '@/context';
 
 const DocumentAsset = builder.loadableUnion('DocumentAsset', {
   types: [Image, File, Embed],
@@ -125,6 +141,27 @@ Document.implement({
   interfaces: [IDocument],
   fields: (t) => ({
     view: t.expose('id', { type: DocumentView }),
+    password: t.exposeString('password', { nullable: true }),
+    contentRating: t.expose('contentRating', { type: DocumentContentRating }),
+    allowReaction: t.exposeBoolean('allowReaction'),
+    protectContent: t.exposeBoolean('protectContent'),
+
+    thumbnail: t.field({
+      type: Image,
+      nullable: true,
+      resolve: (self) => self.thumbnailId,
+    }),
+
+    reactionCount: t.int({
+      resolve: async (self) => {
+        const r = await db
+          .select({ count: count() })
+          .from(DocumentReactions)
+          .where(eq(DocumentReactions.documentId, self.id))
+          .then(firstOrThrow);
+        return r.count;
+      },
+    }),
 
     snapshot: t.field({
       type: 'Binary',
@@ -241,16 +278,96 @@ Document.implement({
   }),
 });
 
+async function checkDocumentViewAccess(
+  document: Pick<typeof Documents.$inferSelect, 'id' | 'contentRating' | 'password'>,
+  ctx: Context,
+): Promise<{ accessible: true } | { accessible: false; reason: DocumentViewBodyUnavailableReason }> {
+  if (document.contentRating !== DocumentContentRating.ALL) {
+    if (!ctx.session) {
+      return { accessible: false, reason: DocumentViewBodyUnavailableReason.REQUIRE_IDENTITY_VERIFICATION };
+    }
+
+    const identity = await db
+      .select({
+        birthday: UserPersonalIdentities.birthDate,
+        expiresAt: UserPersonalIdentities.expiresAt,
+      })
+      .from(UserPersonalIdentities)
+      .where(eq(UserPersonalIdentities.userId, ctx.session.userId))
+      .then(first);
+
+    if (!identity) {
+      return { accessible: false, reason: DocumentViewBodyUnavailableReason.REQUIRE_IDENTITY_VERIFICATION };
+    }
+
+    if (identity.expiresAt.isBefore(dayjs())) {
+      return { accessible: false, reason: DocumentViewBodyUnavailableReason.REQUIRE_IDENTITY_VERIFICATION };
+    }
+
+    const minAge = match(document.contentRating)
+      .with(DocumentContentRating.R15, () => 15)
+      .with(DocumentContentRating.R19, () => 19)
+      .exhaustive();
+
+    if (getKoreanAge(identity.birthday) < minAge) {
+      return { accessible: false, reason: DocumentViewBodyUnavailableReason.REQUIRE_MINIMUM_AGE };
+    }
+  }
+
+  if (document.password !== null) {
+    const passwordUnlock = await redis.get(`documentview:unlock:${document.id}:${ctx.deviceId}`);
+
+    if (passwordUnlock !== 'true') {
+      return { accessible: false, reason: DocumentViewBodyUnavailableReason.REQUIRE_PASSWORD };
+    }
+  }
+
+  return { accessible: true };
+}
+
 DocumentView.implement({
   isTypeOf: isTypeOf(TableCode.DOCUMENTS),
   interfaces: [IDocument],
   fields: (t) => ({
     entity: t.expose('entityId', { type: EntityView }),
+    hasPassword: t.boolean({ resolve: (self) => !!self.password }),
+    protectContent: t.exposeBoolean('protectContent'),
+    allowReaction: t.exposeBoolean('allowReaction'),
+
+    excerpt: t.string({
+      resolve: async (self, _, ctx) => {
+        const access = await checkDocumentViewAccess(self, ctx);
+        if (!access.accessible) {
+          return '(미리보기가 제한된 문서입니다)';
+        }
+
+        const loader = ctx.loader({
+          name: 'DocumentView.excerpt',
+          load: async (ids: string[]) => {
+            return await db
+              .select({ documentId: DocumentContents.documentId, text: DocumentContents.text })
+              .from(DocumentContents)
+              .where(inArray(DocumentContents.documentId, ids));
+          },
+          key: ({ documentId }: { documentId: string }) => documentId,
+        });
+
+        const content = await loader.load(self.id);
+        const text = content.text.replaceAll(/\s+/g, ' ').trim();
+
+        return text.length <= 200 ? text : text.slice(0, 200) + '...';
+      },
+    }),
 
     snapshot: t.field({
       type: 'Binary',
       nullable: true,
       resolve: async (self, _, ctx) => {
+        const access = await checkDocumentViewAccess(self, ctx);
+        if (!access.accessible) {
+          return null;
+        }
+
         const loader = ctx.loader({
           name: 'DocumentView.snapshot',
           load: async (ids: string[]) => {
@@ -272,6 +389,85 @@ DocumentView.implement({
         return new Uint8Array(doc.export({ mode: 'shallow-snapshot', frontiers: doc.oplogFrontiers() }));
       },
     }),
+
+    body: t.field({
+      type: t.builder.unionType('DocumentViewBody', {
+        types: [
+          t.builder.simpleObject('DocumentViewBodyAvailable', {
+            fields: (t) => ({ snapshot: t.field({ type: 'Binary' }) }),
+          }),
+          t.builder.simpleObject('DocumentViewBodyUnavailable', {
+            fields: (t) => ({ reason: t.field({ type: DocumentViewBodyUnavailableReason }) }),
+          }),
+        ],
+      }),
+      resolve: async (self, _, ctx) => {
+        const access = await checkDocumentViewAccess(self, ctx);
+        if (!access.accessible) {
+          return {
+            __typename: 'DocumentViewBodyUnavailable' as const,
+            reason: access.reason,
+          };
+        }
+
+        const loader = ctx.loader({
+          name: 'DocumentView.body',
+          load: async (ids: string[]) => {
+            return await db
+              .select({ documentId: DocumentContents.documentId, snapshot: DocumentContents.snapshot })
+              .from(DocumentContents)
+              .where(inArray(DocumentContents.documentId, ids));
+          },
+          key: ({ documentId }: { documentId: string }) => documentId,
+        });
+
+        const content = await loader.load(self.id);
+        if (!content?.snapshot) {
+          return {
+            __typename: 'DocumentViewBodyUnavailable' as const,
+            reason: DocumentViewBodyUnavailableReason.REQUIRE_PASSWORD,
+          };
+        }
+
+        const doc = new LoroDoc();
+        doc.import(content.snapshot);
+        const snapshot = new Uint8Array(doc.export({ mode: 'shallow-snapshot', frontiers: doc.oplogFrontiers() }));
+
+        return {
+          __typename: 'DocumentViewBodyAvailable' as const,
+          snapshot,
+        };
+      },
+    }),
+
+    reactions: t.field({
+      type: [DocumentReaction],
+      resolve: async (self, _, ctx) => {
+        const loader = ctx.loader({
+          name: 'DocumentView.reactions',
+          many: true,
+          load: async (ids: string[]) => {
+            return await db
+              .select()
+              .from(DocumentReactions)
+              .where(inArray(DocumentReactions.documentId, ids))
+              .orderBy(desc(DocumentReactions.createdAt));
+          },
+          key: ({ documentId }: { documentId: string }) => documentId,
+        });
+
+        return await loader.load(self.id);
+      },
+    }),
+  }),
+});
+
+DocumentReaction.implement({
+  isTypeOf: isTypeOf(TableCode.DOCUMENT_REACTIONS),
+  fields: (t) => ({
+    id: t.exposeID('id'),
+    emoji: t.expose('emoji', { type: 'String' }),
+    document: t.expose('documentId', { type: DocumentView }),
   }),
 });
 
@@ -699,6 +895,11 @@ builder.mutationFields((t) => ({
       documentIds: t.input.idList({ validate: { items: validateDbId(TableCode.DOCUMENTS) } }),
       availability: t.input.field({ type: EntityAvailability, required: false }),
       visibility: t.input.field({ type: EntityVisibility, required: false }),
+      password: t.input.string({ required: false }),
+      thumbnailId: t.input.id({ required: false, validate: validateDbId(TableCode.IMAGES) }),
+      contentRating: t.input.field({ type: DocumentContentRating, required: false }),
+      allowReaction: t.input.boolean({ required: false }),
+      protectContent: t.input.boolean({ required: false }),
     },
     resolve: async (_, { input }, ctx) => {
       const documents = await db
@@ -741,9 +942,36 @@ builder.mutationFields((t) => ({
               ),
             );
         }
+
+        if (
+          input.contentRating ||
+          typeof input.allowReaction === 'boolean' ||
+          typeof input.protectContent === 'boolean' ||
+          input.password !== undefined ||
+          input.thumbnailId !== undefined
+        ) {
+          await tx
+            .update(Documents)
+            .set({
+              contentRating: input.contentRating ?? undefined,
+              allowReaction: input.allowReaction ?? undefined,
+              protectContent: input.protectContent ?? undefined,
+              password: input.password,
+              thumbnailId: input.thumbnailId,
+            })
+            .where(
+              inArray(
+                Documents.id,
+                documents.map((doc) => doc.id),
+              ),
+            );
+        }
       });
 
       pubsub.publish('site:update', siteId, { scope: 'site' });
+      for (const doc of documents) {
+        pubsub.publish('site:update', siteId, { scope: 'entity', entityId: doc.entityId });
+      }
 
       return documents.map((doc) => doc.id);
     },
@@ -925,6 +1153,67 @@ builder.mutationFields((t) => ({
           };
         })
         .filter((error): error is NonNullable<typeof error> => error !== null);
+    },
+  }),
+
+  unlockDocumentView: t.fieldWithInput({
+    type: DocumentView,
+    input: {
+      documentId: t.input.id({ validate: validateDbId(TableCode.DOCUMENTS) }),
+      password: t.input.string(),
+    },
+    resolve: async (_, { input }, ctx) => {
+      const document = await db
+        .select({ password: Documents.password })
+        .from(Documents)
+        .where(eq(Documents.id, input.documentId))
+        .then(firstOrThrow);
+
+      if (document.password !== input.password) {
+        throw new TypieError({ code: 'invalid_password' });
+      }
+
+      await redis.setex(`documentview:unlock:${input.documentId}:${ctx.deviceId}`, 60 * 60 * 24, 'true');
+
+      return input.documentId;
+    },
+  }),
+
+  createDocumentReaction: t.fieldWithInput({
+    type: DocumentReaction,
+    input: {
+      documentId: t.input.id({ validate: validateDbId(TableCode.DOCUMENTS) }),
+      emoji: t.input.string(),
+    },
+    resolve: async (_, { input }, ctx) => {
+      const document = await db
+        .select({
+          state: Entities.state,
+          allowReaction: Documents.allowReaction,
+        })
+        .from(Documents)
+        .innerJoin(Entities, eq(Documents.entityId, Entities.id))
+        .where(eq(Documents.id, input.documentId))
+        .then(first);
+
+      if (document?.state !== EntityState.ACTIVE) {
+        throw new TypieError({ code: 'not_found' });
+      }
+
+      if (!document.allowReaction) {
+        throw new TypieError({ code: 'reaction_disallowed' });
+      }
+
+      return await db
+        .insert(DocumentReactions)
+        .values({
+          documentId: input.documentId,
+          userId: ctx.session?.userId,
+          emoji: input.emoji,
+          deviceId: ctx.deviceId,
+        })
+        .returning()
+        .then(firstOrThrow);
     },
   }),
 }));

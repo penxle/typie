@@ -68,6 +68,11 @@ input CreateDocumentInput {
   siteId: ID!
 }
 
+input CreateDocumentReactionInput {
+  documentId: ID!
+  emoji: String!
+}
+
 input CreateFolderInput {
   name: String!
   parentEntityId: ID
@@ -135,17 +140,23 @@ input DeleteWidgetInput {
 }
 
 type Document implements IDocument {
+  allowReaction: Boolean!
   assets: [DocumentAsset!]!
   characterCount: Int!
   characterCountChange: CharacterCountChange!
+  contentRating: DocumentContentRating!
   createdAt: DateTime!
   entity: Entity!
   excerpt: String!
   id: ID!
   layoutMode: JSON!
   nullableTitle: String
+  password: String
+  protectContent: Boolean!
+  reactionCount: Int!
   snapshot: Binary!
   subtitle: String
+  thumbnail: Image
   title: String!
   type: DocumentType!
   updatedAt: DateTime!
@@ -155,6 +166,12 @@ type Document implements IDocument {
 }
 
 union DocumentAsset = Embed | File | Image
+
+enum DocumentContentRating {
+  ALL
+  R15
+  R19
+}
 
 type DocumentLiteraryAnalysisPayload {
   feedback: DocumentLiteraryFeedbackResult
@@ -169,6 +186,12 @@ type DocumentLiteraryFeedbackResult {
   nodeId: String!
   startOffset: Int!
   startText: String!
+}
+
+type DocumentReaction {
+  document: DocumentView!
+  emoji: String!
+  id: ID!
 }
 
 type DocumentSpellingError {
@@ -219,17 +242,38 @@ type DocumentVersionMeta {
 }
 
 type DocumentView implements IDocument {
+  allowReaction: Boolean!
   assets: [DocumentAsset!]!
+  body: DocumentViewBody!
   createdAt: DateTime!
   entity: EntityView!
   excerpt: String!
+  hasPassword: Boolean!
   id: ID!
   nullableTitle: String
+  protectContent: Boolean!
+  reactions: [DocumentReaction!]!
   snapshot: Binary
   subtitle: String
   title: String!
   type: DocumentType!
   updatedAt: DateTime!
+}
+
+union DocumentViewBody = DocumentViewBodyAvailable | DocumentViewBodyUnavailable
+
+type DocumentViewBodyAvailable {
+  snapshot: Binary!
+}
+
+type DocumentViewBodyUnavailable {
+  reason: DocumentViewBodyUnavailableReason!
+}
+
+enum DocumentViewBodyUnavailableReason {
+  REQUIRE_IDENTITY_VERIFICATION
+  REQUIRE_MINIMUM_AGE
+  REQUIRE_PASSWORD
 }
 
 input DumpLocalStorageInput {
@@ -587,6 +631,7 @@ type Mutation {
   checkSpelling(input: CheckSpellingInput!): [SpellingError!]!
   checkSpellingDocument(input: CheckSpellingDocumentInput!): [DocumentSpellingError!]!
   createDocument(input: CreateDocumentInput!): Document!
+  createDocumentReaction(input: CreateDocumentReactionInput!): DocumentReaction!
   createFolder(input: CreateFolderInput!): Folder!
   createNote(input: CreateNoteInput!): Note!
   createPost(input: CreatePostInput!): Post!
@@ -641,6 +686,7 @@ type Mutation {
   syncDocument(input: SyncDocumentInput!): Boolean!
   syncPost(input: SyncPostInput!): Boolean!
   unfurlEmbed(input: UnfurlEmbedInput!): Embed!
+  unlockDocumentView(input: UnlockDocumentViewInput!): DocumentView!
   unlockPostView(input: UnlockPostViewInput!): PostView!
   updateBillingKey(input: UpdateBillingKeyInput!): UserBillingKey!
   updateBootstrap(input: UpdateBootstrapInput!): JSON!
@@ -1117,6 +1163,11 @@ input UnfurlEmbedInput {
   url: String!
 }
 
+input UnlockDocumentViewInput {
+  documentId: ID!
+  password: String!
+}
+
 input UnlockPostViewInput {
   password: String!
   postId: ID!
@@ -1145,8 +1196,13 @@ input UpdateDocumentTypeInput {
 }
 
 input UpdateDocumentsOptionInput {
+  allowReaction: Boolean
   availability: EntityAvailability
+  contentRating: DocumentContentRating
   documentIds: [ID!]!
+  password: String
+  protectContent: Boolean
+  thumbnailId: ID
   visibility: EntityVisibility
 }
 
