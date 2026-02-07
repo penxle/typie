@@ -67,6 +67,7 @@ class PageList extends HookWidget {
     }
 
     final showContextMenu = useState(false);
+    final wasContextMenuOpen = useRef(false);
     final clipboard = useMemoized(EditorClipboard.new);
     final pendingContextMenu = useRef(false);
 
@@ -446,17 +447,25 @@ class PageList extends HookWidget {
             });
 
           if (clickCount == 1 && prevCursor != null) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              final newState = scope.controller.state;
-              if (newState.fromHandle == null &&
-                  newState.toHandle == null &&
-                  newState.cursor != null &&
-                  prevCursor.pageIdx == newState.cursor!.pageIdx &&
-                  prevCursor.x == newState.cursor!.x &&
-                  prevCursor.y == newState.cursor!.y) {
-                showContextMenu.value = true;
-              }
-            });
+            unawaited(
+              scope.controller.waitForNextTick().then((_) {
+                if (!context.mounted) {
+                  return;
+                }
+
+                final newState = scope.controller.state;
+                if (newState.fromHandle == null &&
+                    newState.toHandle == null &&
+                    newState.cursor != null &&
+                    prevCursor.pageIdx == newState.cursor!.pageIdx &&
+                    prevCursor.x == newState.cursor!.x &&
+                    prevCursor.y == newState.cursor!.y) {
+                  if (!wasContextMenuOpen.value) {
+                    showContextMenu.value = true;
+                  }
+                }
+              }),
+            );
           }
         }
 
@@ -475,6 +484,7 @@ class PageList extends HookWidget {
           behavior: HitTestBehavior.opaque,
           onTapDown: (details) {
             gesture.tapDispatched = false;
+            wasContextMenuOpen.value = showContextMenu.value;
             if (showContextMenu.value) {
               showContextMenu.value = false;
             }
