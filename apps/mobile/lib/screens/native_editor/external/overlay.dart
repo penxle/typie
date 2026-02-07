@@ -26,6 +26,7 @@ class ElementOverlay extends HookWidget {
       child: Stack(
         children: pageElements.map((element) {
           return Positioned(
+            key: ValueKey(element.nodeId),
             left: element.bounds.x,
             top: element.bounds.y,
             width: element.bounds.width,
