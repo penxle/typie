@@ -691,6 +691,61 @@ pub extern "C" fn editor_can_drag_at(
 }
 
 #[repr(C)]
+pub struct DragImageResult {
+    pub width: u32,
+    pub height: u32,
+    pub offset_x: f32,
+    pub offset_y: f32,
+    pub scale_factor: f32,
+    pub pixels: *mut u8,
+    pub len: usize,
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn editor_render_drag_image(
+    editor: *mut EditorHandle,
+    visible_pages: *const usize,
+    visible_pages_len: usize,
+    page_idx: usize,
+    out_result: *mut DragImageResult,
+) -> i32 {
+    ffi!(
+        {
+            if editor.is_null() || visible_pages.is_null() || out_result.is_null() {
+                return Err("Invalid parameters".into());
+            }
+
+            let editor = unsafe { &mut *(editor as *mut EditorInner) };
+            let visible_pages =
+                unsafe { std::slice::from_raw_parts(visible_pages, visible_pages_len) };
+            let result = editor
+                .runtime
+                .render_drag_image(visible_pages, page_idx)
+                .ok_or("Failed to render drag image")?;
+
+            let data_slice = unsafe { std::slice::from_raw_parts(result.ptr(), result.len()) };
+            let mut pixels = data_slice.to_vec();
+            pixels.shrink_to_fit();
+            let len = pixels.len();
+            let ptr = pixels.as_mut_ptr();
+            std::mem::forget(pixels);
+
+            unsafe {
+                (*out_result).width = result.width as u32;
+                (*out_result).height = result.height as u32;
+                (*out_result).offset_x = result.offset_x;
+                (*out_result).offset_y = result.offset_y;
+                (*out_result).scale_factor = result.scale_factor;
+                (*out_result).pixels = ptr;
+                (*out_result).len = len;
+            }
+            Ok(())
+        },
+        -1
+    )
+}
+
+#[repr(C)]
 pub struct CharacterCounts {
     pub doc_with_whitespace: u32,
     pub doc_without_whitespace: u32,

@@ -26,6 +26,7 @@ class CommandHandler {
     'spellcheckOverlaysChanged': handleSpellcheckOverlaysChanged,
     'aiFeedbackOverlaysChanged': handleAiFeedbackOverlaysChanged,
     'placeholderChanged': handlePlaceholderChanged,
+    'dropIndicatorChanged': handleDropIndicatorChanged,
   };
 
   static void handleCommands(EditorController controller, List<dynamic>? commands) {

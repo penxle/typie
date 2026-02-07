@@ -134,3 +134,9 @@ void handleAiFeedbackOverlaysChanged(EditorController controller, Map<String, dy
     ),
   );
 }
+
+void handleDropIndicatorChanged(EditorController controller, Map<String, dynamic> cmd) {
+  final indicator = cmd['indicator'] as Map<String, dynamic>?;
+  final info = indicator != null ? DropIndicatorInfo.fromMap(indicator) : null;
+  controller.updateState((state) => state.copyWith(dropIndicator: info));
+}

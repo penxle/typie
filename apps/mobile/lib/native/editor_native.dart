@@ -488,6 +488,11 @@ final class NativeEditor {
     return jsonDecode(json) as Map<String, dynamic>;
   }
 
+  bool canDragAt(int pageIdx, double x, double y) {
+    _checkDisposed();
+    return _bindings.editor_can_drag_at(_handle, pageIdx, x, y) == 1;
+  }
+
   NativeEditorCharacterCounts getCharacterCounts() {
     _checkDisposed();
 
@@ -640,6 +645,54 @@ final class NativeEditor {
     return jsonDecode(json) as List<dynamic>;
   }
 
+  NativeDragImageResult? renderDragImage(List<int> visiblePages, int pageIdx) {
+    _checkDisposed();
+
+    final visiblePagesPtr = _bindings.editor_alloc(visiblePages.length * sizeOf<Size>());
+    final visiblePagesTyped = visiblePagesPtr.cast<Size>();
+    for (var i = 0; i < visiblePages.length; i++) {
+      visiblePagesTyped[i] = visiblePages[i];
+    }
+
+    final resultPtr = calloc<DragImageResult>();
+
+    try {
+      final status = _bindings.editor_render_drag_image(
+        _handle,
+        visiblePagesPtr.cast(),
+        visiblePages.length,
+        pageIdx,
+        resultPtr,
+      );
+
+      if (status != 0) {
+        throw EditorException(_getLastError() ?? 'Failed to render drag image');
+      }
+
+      final result = resultPtr.ref;
+      final len = result.len;
+      final pixels = Uint8List.fromList(result.pixels.asTypedList(len));
+
+      _bindings.editor_free(result.pixels, len, len);
+
+      return NativeDragImageResult(
+        width: result.width,
+        height: result.height,
+        offsetX: result.offset_x,
+        offsetY: result.offset_y,
+        scaleFactor: result.scale_factor,
+        pixels: pixels,
+      );
+    } finally {
+      _bindings.editor_free(
+        visiblePagesPtr,
+        visiblePages.length * sizeOf<Size>(),
+        visiblePages.length * sizeOf<Size>(),
+      );
+      calloc.free(resultPtr);
+    }
+  }
+
   void dispose() {
     if (!_disposed) {
       _bindings.editor_handle_free(_handle);
@@ -652,4 +705,22 @@ final class NativeEditor {
       throw const EditorException('Editor has been disposed');
     }
   }
+}
+
+final class NativeDragImageResult {
+  const NativeDragImageResult({
+    required this.width,
+    required this.height,
+    required this.offsetX,
+    required this.offsetY,
+    required this.scaleFactor,
+    required this.pixels,
+  });
+
+  final int width;
+  final int height;
+  final double offsetX;
+  final double offsetY;
+  final double scaleFactor;
+  final Uint8List pixels;
 }

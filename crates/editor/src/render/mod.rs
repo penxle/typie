@@ -581,10 +581,10 @@ impl Renderer {
                     let line_rects = line.compute_selection_rects(pos, selections);
                     for rect in line_rects {
                         if let Some(translated) = Rect::from_xywh(
-                            (rect.x() - bounds_origin.x) * scale,
-                            (rect.y() - bounds_origin.y) * scale,
-                            rect.width() * scale,
-                            rect.height() * scale,
+                            (rect.x - bounds_origin.x) * scale,
+                            (rect.y - bounds_origin.y) * scale,
+                            rect.width * scale,
+                            rect.height * scale,
                         ) {
                             out.push(translated);
                         }
