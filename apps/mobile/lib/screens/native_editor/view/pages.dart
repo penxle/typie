@@ -2,10 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:super_drag_and_drop/super_drag_and_drop.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/screens/native_editor/controller/clipboard.dart';
 import 'package:typie/screens/native_editor/state/state.dart';
 import 'package:typie/screens/native_editor/view/context_menu.dart';
+import 'package:typie/screens/native_editor/view/editor_draggable.dart';
 import 'package:typie/screens/native_editor/view/gesture.dart';
 import 'package:typie/screens/native_editor/view/page.dart';
 import 'package:typie/screens/native_editor/view/scope.dart';
@@ -38,7 +40,8 @@ class PageList extends HookWidget {
     (int pageIdx, double localY) getPageAtPosition(double y) {
       final geo = scope.geometry;
       final offsets = geo.computeCumulativePageOffsets();
-      final absoluteY = y + verticalScrollController.offset;
+      final scrollOffset = scope.verticalScrollController.hasClients ? scope.verticalScrollController.offset : 0.0;
+      final absoluteY = y + scrollOffset;
 
       if (absoluteY < geo.titleAreaHeight) {
         return (-1, absoluteY);
@@ -75,7 +78,10 @@ class PageList extends HookWidget {
         horizontalScrollController: horizontalScrollController,
         editor: editor,
         getPageAtPosition: getPageAtPosition,
-        getPointerX: (localX) => localX + horizontalScrollController.offset - scope.geometry.horizontalPadding,
+        getPointerX: (localX) {
+          final offset = horizontalScrollController.hasClients ? horizontalScrollController.offset : 0.0;
+          return localX + offset - scope.geometry.horizontalPadding;
+        },
         getHorizontalPadding: () => scope.geometry.horizontalPadding,
       ),
     );
@@ -212,39 +218,169 @@ class PageList extends HookWidget {
         );
 
         final listView = ScrollConfiguration(
-          behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+          behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false, dragDevices: isSelecting ? {} : null),
           child: SingleChildScrollView(
             controller: verticalScrollController,
             physics: isSelecting ? const NeverScrollableScrollPhysics() : const _NonGestureBouncingScrollPhysics(),
-            child: Column(
-              children: [
-                _MeasuredTitleFields(scope: scope),
-                SingleChildScrollView(
-                  controller: horizontalScrollController,
-                  scrollDirection: Axis.horizontal,
-                  physics: horizontalPhysics,
-                  child: Container(
-                    width: geo.layout.pageWidth + geo.horizontalPadding * 2,
-                    padding: EdgeInsets.only(
-                      left: geo.horizontalPadding,
-                      right: geo.horizontalPadding,
-                      bottom: contentBottomPadding,
-                    ),
-                    child: Column(
-                      children: [
-                        for (var i = 0; i < layout.pageCount; i++) ...[
-                          _PageSlot(
-                            key: ValueKey(i),
-                            pageIndex: i,
-                            pageTop: geo.titleAreaHeight + offsets[i],
-                            pageBottom: geo.titleAreaHeight + offsets[i] + layout.pageHeights[i],
+            child: EditorDraggable(
+              gesture: gesture,
+              child: RawGestureDetector(
+                gestures: {
+                  ConditionalLongPressGestureRecognizer:
+                      GestureRecognizerFactoryWithHandlers<ConditionalLongPressGestureRecognizer>(
+                        () => ConditionalLongPressGestureRecognizer(
+                          condition: (globalPosition) {
+                            final renderBox = context.findRenderObject() as RenderBox?;
+                            if (renderBox == null) {
+                              return true;
+                            }
+                            final localPosition = renderBox.globalToLocal(globalPosition);
+                            final scrollOffset = verticalScrollController.hasClients
+                                ? verticalScrollController.offset
+                                : 0.0;
+                            final viewportY = localPosition.dy - scrollOffset;
+                            final (pageIdx, localY) = getPageAtPosition(viewportY);
+                            final pointerX = gesture.getPointerX(localPosition.dx);
+                            return scope.dndController.canDragAt(pageIdx, pointerX, localY);
+                          },
+                          duration: const Duration(milliseconds: 500),
+                        ),
+                        (ConditionalLongPressGestureRecognizer instance) {
+                          instance
+                            ..onLongPressStart = (details) {
+                              scope.inputController.commitComposing();
+                              final scrollOffset = verticalScrollController.hasClients
+                                  ? verticalScrollController.offset
+                                  : 0.0;
+                              final viewportPosition = Offset(
+                                details.localPosition.dx,
+                                details.localPosition.dy - scrollOffset,
+                              );
+
+                              longPressPosition.value = viewportPosition;
+                              scope.isLongPressing.value = true;
+
+                              final draggingHandle = state.state.draggingHandle;
+                              final anchorHandle = draggingHandle == SelectionHandleType.from
+                                  ? state.state.toHandle
+                                  : state.state.fromHandle;
+
+                              gesture
+                                ..dragStartTouchPosition = details.globalPosition
+                                ..dragStartHandleScreenPosition = gesture.getHandleStemCenter(
+                                  fromHandle ?? toHandle,
+                                  scope.geometry,
+                                )
+                                ..dragAnchorHandle = anchorHandle
+                                ..lastTapTime = null;
+                            }
+                            ..onLongPressMoveUpdate = (details) {
+                              final scrollOffset = verticalScrollController.hasClients
+                                  ? verticalScrollController.offset
+                                  : 0.0;
+                              final viewportPosition = Offset(
+                                details.localPosition.dx,
+                                details.localPosition.dy - scrollOffset,
+                              );
+
+                              final (pageIdx, localY) = getPageAtPosition(viewportPosition.dy);
+                              longPressPosition.value = viewportPosition;
+
+                              if (pageIdx >= 0) {
+                                final pointerX = gesture.getPointerX(details.localPosition.dx);
+                                editor
+                                  ..dispatch({
+                                    'type': 'pointerDown',
+                                    'pageIdx': pageIdx,
+                                    'x': pointerX,
+                                    'y': localY,
+                                    'clickCount': 1,
+                                    'button': 'primary',
+                                    'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
+                                  })
+                                  ..dispatch({
+                                    'type': 'pointerUp',
+                                    'pageIdx': pageIdx,
+                                    'x': pointerX,
+                                    'y': localY,
+                                    'button': 'primary',
+                                    'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
+                                  });
+                              }
+
+                              gesture.handleAutoScroll(
+                                y: viewportPosition.dy,
+                                x: viewportPosition.dx,
+                                viewWidth: viewWidth,
+                                viewHeight: viewHeight,
+                                handleDragPosition: handleDragPosition,
+                                longPressPosition: longPressPosition,
+                              );
+                            }
+                            ..onLongPressEnd = (details) {
+                              longPressPosition.value = null;
+                              gesture.stopAutoScroll();
+                              scope.isLongPressing.value = false;
+                              if (fromHandle != null && toHandle != null) {
+                                showContextMenu.value = true;
+                              }
+                            };
+                        },
+                      ),
+                },
+                child: Column(
+                  children: [
+                    _MeasuredTitleFields(scope: scope),
+                    if (needsHorizontalScroll)
+                      SingleChildScrollView(
+                        controller: horizontalScrollController,
+                        scrollDirection: Axis.horizontal,
+                        physics: horizontalPhysics,
+                        child: Container(
+                          width: geo.layout.pageWidth + geo.horizontalPadding * 2,
+                          padding: EdgeInsets.only(
+                            left: geo.horizontalPadding,
+                            right: geo.horizontalPadding,
+                            bottom: contentBottomPadding,
                           ),
-                        ],
-                      ],
-                    ),
-                  ),
+                          child: Column(
+                            children: [
+                              for (var i = 0; i < layout.pageCount; i++) ...[
+                                _PageSlot(
+                                  key: ValueKey(i),
+                                  pageIndex: i,
+                                  pageTop: geo.titleAreaHeight + offsets[i],
+                                  pageBottom: geo.titleAreaHeight + offsets[i] + layout.pageHeights[i],
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      )
+                    else
+                      Container(
+                        width: geo.layout.pageWidth + geo.horizontalPadding * 2,
+                        padding: EdgeInsets.only(
+                          left: geo.horizontalPadding,
+                          right: geo.horizontalPadding,
+                          bottom: contentBottomPadding,
+                        ),
+                        child: Column(
+                          children: [
+                            for (var i = 0; i < layout.pageCount; i++) ...[
+                              _PageSlot(
+                                key: ValueKey(i),
+                                pageIndex: i,
+                                pageTop: geo.titleAreaHeight + offsets[i],
+                                pageBottom: geo.titleAreaHeight + offsets[i] + layout.pageHeights[i],
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
         );
@@ -334,10 +470,22 @@ class PageList extends HookWidget {
           behavior: HitTestBehavior.opaque,
           onTapDown: (details) {
             gesture.tapDispatched = false;
+            if (showContextMenu.value) {
+              showContextMenu.value = false;
+            }
+
             gesture.tapTimer?.cancel();
             gesture.tapTimer = Timer(const Duration(milliseconds: 150), () {
               gesture.tapDispatched = true;
-              dispatchTap(details.localPosition);
+
+              final pointerX = gesture.getPointerX(details.localPosition.dx);
+              final (pageIdx, localY) = getPageAtPosition(details.localPosition.dy);
+
+              final canDrag = scope.dndController.canDragAt(pageIdx, pointerX, localY);
+
+              if (!canDrag) {
+                dispatchTap(details.localPosition);
+              }
             });
           },
           onTapUp: (details) {
@@ -351,54 +499,7 @@ class PageList extends HookWidget {
             gesture.tapTimer?.cancel();
             gesture.tapTimer = null;
           },
-          onLongPressStart: (details) {
-            scope.inputController.commitComposing();
-            longPressPosition.value = details.localPosition;
-            scope.isLongPressing.value = true;
-          },
-          onLongPressMoveUpdate: (details) {
-            final (pageIdx, localY) = getPageAtPosition(details.localPosition.dy);
-            longPressPosition.value = details.localPosition;
 
-            if (pageIdx >= 0) {
-              final pointerX = gesture.getPointerX(details.localPosition.dx);
-              editor
-                ..dispatch({
-                  'type': 'pointerDown',
-                  'pageIdx': pageIdx,
-                  'x': pointerX,
-                  'y': localY,
-                  'clickCount': 1,
-                  'button': 'primary',
-                  'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
-                })
-                ..dispatch({
-                  'type': 'pointerUp',
-                  'pageIdx': pageIdx,
-                  'x': pointerX,
-                  'y': localY,
-                  'button': 'primary',
-                  'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
-                });
-            }
-
-            gesture.handleAutoScroll(
-              y: details.localPosition.dy,
-              x: details.localPosition.dx,
-              viewWidth: viewWidth,
-              viewHeight: viewHeight,
-              handleDragPosition: handleDragPosition,
-              longPressPosition: longPressPosition,
-            );
-          },
-          onLongPressEnd: (details) {
-            longPressPosition.value = null;
-            gesture.stopAutoScroll();
-            scope.isLongPressing.value = false;
-            if (fromHandle != null && toHandle != null) {
-              showContextMenu.value = true;
-            }
-          },
           onPanDown: (details) {
             if (isSelecting) {
               return;
@@ -411,9 +512,6 @@ class PageList extends HookWidget {
             }
           },
           onPanStart: (details) {
-            if (isSelecting) {
-              return;
-            }
             if (verticalScrollController.hasClients) {
               gesture.verticalDrag = verticalScrollController.position.drag(details, () {
                 gesture.verticalDrag = null;
@@ -470,42 +568,82 @@ class PageList extends HookWidget {
           child: listView,
         );
 
-        return Stack(
-          clipBehavior: Clip.none,
-          children: [
-            gestureDetector,
-            ListenableBuilder(
-              listenable: Listenable.merge([verticalScrollController, horizontalScrollController]),
-              builder: (context, _) {
-                final fromPos = gesture.getHandlePosition(fromHandle, geo);
-                final toPos = gesture.getHandlePosition(toHandle, geo);
+        return DropRegion(
+          formats: Formats.standardFormats,
+          hitTestBehavior: HitTestBehavior.translucent,
+          onDropOver: (event) {
+            final item = event.session.items.firstOrNull;
+            if (item == null) {
+              return DropOperation.none;
+            }
 
-                return Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    if (isFocused && fromHandle != null && fromPos != null)
-                      Positioned(
-                        left: fromPos.dx,
-                        top: fromPos.dy,
-                        child: buildSelectionHandle(fromHandle, SelectionHandleType.from),
-                      ),
-                    if (isFocused && toHandle != null && toPos != null)
-                      Positioned(
-                        left: toPos.dx,
-                        top: toPos.dy,
-                        child: buildSelectionHandle(toHandle, SelectionHandleType.to),
-                      ),
-                  ],
-                );
-              },
-            ),
-            if (showContextMenu.value && longPressPosition.value == null && handleDragPosition.value == null)
-              SelectionContextMenu(
-                clipboard: clipboard,
-                onDismiss: () => showContextMenu.value = false,
-                onBeforeSelectAll: () => pendingContextMenu.value = true,
+            final position = event.position.local;
+            final (pIdx, localY) = getPageAtPosition(position.dy);
+
+            if (pIdx < 0) {
+              return DropOperation.none;
+            }
+
+            final pointerX = gesture.getPointerX(position.dx);
+
+            scope.dndController.handleDragOver(pIdx, pointerX, localY);
+            return DropOperation.copy;
+          },
+          onDropEnter: (event) {
+            scope.dndController.handleDragEnter();
+          },
+          onDropLeave: (event) {
+            scope.dndController.handleDragLeave();
+          },
+          onPerformDrop: (event) async {
+            final position = event.position.local;
+            final (pageIdx, localY) = getPageAtPosition(position.dy);
+
+            if (pageIdx < 0) {
+              return;
+            }
+
+            final pointerX = gesture.getPointerX(position.dx);
+
+            await scope.dndController.handleDrop(pageIdx: pageIdx, x: pointerX, y: localY, session: event.session);
+          },
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              gestureDetector,
+              ListenableBuilder(
+                listenable: Listenable.merge([verticalScrollController, horizontalScrollController]),
+                builder: (context, _) {
+                  final fromPos = gesture.getHandlePosition(fromHandle, geo);
+                  final toPos = gesture.getHandlePosition(toHandle, geo);
+
+                  return Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      if (isFocused && fromHandle != null && fromPos != null)
+                        Positioned(
+                          left: fromPos.dx,
+                          top: fromPos.dy,
+                          child: buildSelectionHandle(fromHandle, SelectionHandleType.from),
+                        ),
+                      if (isFocused && toHandle != null && toPos != null)
+                        Positioned(
+                          left: toPos.dx,
+                          top: toPos.dy,
+                          child: buildSelectionHandle(toHandle, SelectionHandleType.to),
+                        ),
+                    ],
+                  );
+                },
               ),
-          ],
+              if (showContextMenu.value && longPressPosition.value == null && handleDragPosition.value == null)
+                SelectionContextMenu(
+                  clipboard: clipboard,
+                  onDismiss: () => showContextMenu.value = false,
+                  onBeforeSelectAll: () => pendingContextMenu.value = true,
+                ),
+            ],
+          ),
         );
       },
     );

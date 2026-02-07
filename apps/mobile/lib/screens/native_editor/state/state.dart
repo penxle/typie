@@ -196,6 +196,30 @@ abstract class PlaceholderInfo with _$PlaceholderInfo {
 }
 
 @freezed
+abstract class DropIndicatorInfo with _$DropIndicatorInfo {
+  const factory DropIndicatorInfo({
+    required int pageIdx,
+    required double x,
+    required double y,
+    required double width,
+    required double height,
+  }) = _DropIndicatorInfo;
+
+  const DropIndicatorInfo._();
+
+  factory DropIndicatorInfo.fromMap(Map<String, dynamic> map) {
+    final bounds = map['bounds'] as Map<String, dynamic>?;
+    return DropIndicatorInfo(
+      pageIdx: map['pageIdx'] as int? ?? 0,
+      x: (bounds?['x'] as num?)?.toDouble() ?? 0,
+      y: (bounds?['y'] as num?)?.toDouble() ?? 0,
+      width: (bounds?['width'] as num?)?.toDouble() ?? 0,
+      height: (bounds?['height'] as num?)?.toDouble() ?? 0,
+    );
+  }
+}
+
+@freezed
 abstract class EditorState with _$EditorState {
   const factory EditorState({
     LayoutInfo? layout,
@@ -216,6 +240,7 @@ abstract class EditorState with _$EditorState {
     @Default(SpellcheckState()) SpellcheckState spellcheck,
     @Default(AiFeedbackState()) AiFeedbackState aiFeedback,
     @Default(PlaceholderInfo()) PlaceholderInfo placeholder,
+    DropIndicatorInfo? dropIndicator,
   }) = _EditorState;
 
   const EditorState._();

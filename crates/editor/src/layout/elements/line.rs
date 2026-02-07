@@ -564,6 +564,155 @@ impl LineElement {
 
         self.metric.left
     }
+
+    pub fn compute_selection_rects(
+        &self,
+        point: crate::types::Point,
+        selections: &[crate::model::SelectionDecor],
+    ) -> Vec<crate::types::Rect> {
+        const MIN_WIDTH: f32 = 4.0;
+        let mut rects = Vec::new();
+
+        let Some(selection) = self.selection_for_node(selections) else {
+            return rects;
+        };
+
+        if let Some(rect) = self.selection_highlight(selection, MIN_WIDTH, point) {
+            rects.push(rect);
+        }
+
+        if let Some(rect) = self.explicit_break_marker(selection, MIN_WIDTH, point) {
+            rects.push(rect);
+        }
+
+        if self.has_page_break {
+            if let Some(rect) = self.page_break_indicator(point, selections) {
+                rects.push(rect);
+            }
+        }
+
+        rects
+    }
+
+    fn selection_for_node<'a>(
+        &self,
+        selections: &'a [crate::model::SelectionDecor],
+    ) -> Option<&'a crate::model::SelectionDecor> {
+        selections.iter().find(|s| s.node_id() == self.block_id)
+    }
+
+    fn selection_highlight(
+        &self,
+        selection: &crate::model::SelectionDecor,
+        min_width: f32,
+        point: crate::types::Point,
+    ) -> Option<crate::types::Rect> {
+        let (local_start, local_end) = self.intersect_selection_segment(selection)?;
+        let line_is_blank = self.metric.clusters.is_empty();
+
+        if self.is_empty {
+            if self.has_page_break {
+                return None;
+            }
+            return Some(self.empty_paragraph_rect(point, min_width));
+        }
+
+        if line_is_blank {
+            return None;
+        }
+
+        let start_x = self.offset_to_x(local_start);
+        let end_x = self.offset_to_x(local_end);
+        let width = end_x - start_x;
+
+        if width <= 0.0 {
+            return None;
+        }
+
+        Some(crate::types::Rect::new(
+            point.x + start_x,
+            point.y,
+            width,
+            self.metric.height + self.metric.leading,
+        ))
+    }
+
+    fn empty_paragraph_rect(
+        &self,
+        point: crate::types::Point,
+        min_width: f32,
+    ) -> crate::types::Rect {
+        crate::types::Rect::new(
+            point.x + self.metric.left,
+            point.y,
+            min_width,
+            self.metric.height + self.metric.leading,
+        )
+    }
+
+    fn explicit_break_marker(
+        &self,
+        selection: &crate::model::SelectionDecor,
+        marker_width: f32,
+        point: crate::types::Point,
+    ) -> Option<crate::types::Rect> {
+        let (local_start, _) = self.intersect_selection_segment(selection)?;
+        let selection_covers_explicit_break = self.metric.break_reason
+            == parley::layout::BreakReason::Explicit
+            && self.line_idx + 1 < self.layout.len()
+            && local_start <= self.metric.end_offset
+            && selection.end_offset() >= self.metric.end_offset;
+
+        if !selection_covers_explicit_break {
+            return None;
+        }
+
+        let break_x = self.offset_to_x(self.metric.end_offset);
+        Some(crate::types::Rect::new(
+            point.x + break_x,
+            point.y,
+            marker_width,
+            self.metric.height + self.metric.leading,
+        ))
+    }
+
+    fn intersect_selection_segment(
+        &self,
+        selection: &crate::model::SelectionDecor,
+    ) -> Option<(usize, usize)> {
+        if selection.start_offset() >= self.metric.end_offset
+            || selection.end_offset() <= self.metric.start_offset
+        {
+            return None;
+        }
+
+        Some((
+            selection.start_offset().max(self.metric.start_offset),
+            selection.end_offset().min(self.metric.end_offset),
+        ))
+    }
+
+    pub fn page_break_indicator(
+        &self,
+        point: crate::types::Point,
+        selections: &[crate::model::SelectionDecor],
+    ) -> Option<crate::types::Rect> {
+        let Some(selection) = self.selection_for_node(selections) else {
+            return None;
+        };
+
+        if !self.is_empty && selection.end_offset() <= self.metric.end_offset {
+            return None;
+        }
+
+        let end_x = self.offset_to_x(self.metric.end_offset);
+        Some(crate::types::Rect::new(
+            point.x + end_x,
+            point.y,
+            self.size.width - end_x + 20.0,
+            self.metric.height + self.metric.leading,
+        ))
+    }
 }
 
 impl CursorNavigable for LineElement {

@@ -1,5 +1,5 @@
 use crate::layout::elements::LineElement;
-use crate::model::{FontFamilyMark, SelectionDecor, TextColorMark};
+use crate::model::{FontFamilyMark, TextColorMark};
 use crate::render::glyph::Glyph;
 use crate::render::{GlyphRenderer, Render, RenderContext, RenderPhase};
 use crate::types::Point;
@@ -14,40 +14,6 @@ fn create_solid_paint(color: Color) -> Paint<'static> {
 }
 
 impl LineElement {
-    // drag image 만드는 데 사용함
-    pub fn compute_selection_rects(
-        &self,
-        point: Point,
-        selections: &[SelectionDecor],
-    ) -> Vec<Rect> {
-        self.selection_rects(point, selections)
-    }
-
-    fn selection_rects(&self, point: Point, selections: &[SelectionDecor]) -> Vec<Rect> {
-        const MIN_WIDTH: f32 = 4.0;
-        let mut rects = Vec::new();
-
-        let Some(selection) = self.selection_for_node(selections) else {
-            return rects;
-        };
-
-        if let Some(rect) = self.selection_highlight(selection, MIN_WIDTH, point) {
-            rects.push(rect);
-        }
-
-        if let Some(rect) = self.explicit_break_marker(selection, MIN_WIDTH, point) {
-            rects.push(rect);
-        }
-
-        if self.has_page_break {
-            if let Some(rect) = self.page_break_indicator(point, selections) {
-                rects.push(rect);
-            }
-        }
-
-        rects
-    }
-
     fn render_line_selection(
         &self,
         pixmap: &mut PixmapMut,
@@ -61,8 +27,10 @@ impl LineElement {
             ctx.theme.color_with_alpha("ui.surface.dark", 32)
         };
         let paint = create_solid_paint(color);
-        for rect in self.selection_rects(point, ctx.selections) {
-            pixmap.fill_rect(rect, &paint, transform, None);
+        for rect in self.compute_selection_rects(point, ctx.selections) {
+            if let Some(rect) = Rect::from_xywh(rect.x, rect.y, rect.width, rect.height) {
+                pixmap.fill_rect(rect, &paint, transform, None);
+            }
         }
     }
 
@@ -77,7 +45,16 @@ impl LineElement {
             return;
         }
 
-        if let Some(rect) = self.page_break_indicator(point, ctx.selections) {
+        if let Some(layout_rect) = self.page_break_indicator(point, ctx.selections) {
+            let Some(rect) = Rect::from_xywh(
+                layout_rect.x,
+                layout_rect.y,
+                layout_rect.width,
+                layout_rect.height,
+            ) else {
+                return;
+            };
+
             let accent_color = ctx.theme.color("ui.accent.brand.default");
             let accent_paint = create_solid_paint(accent_color);
 
@@ -105,116 +82,6 @@ impl LineElement {
                 pixmap.stroke_path(&path, &accent_paint, &stroke, transform, None);
             }
         }
-    }
-
-    fn selection_for_node<'a>(
-        &self,
-        selections: &'a [SelectionDecor],
-    ) -> Option<&'a SelectionDecor> {
-        selections.iter().find(|s| s.node_id() == self.block_id)
-    }
-
-    fn selection_highlight(
-        &self,
-        selection: &SelectionDecor,
-        min_width: f32,
-        point: Point,
-    ) -> Option<Rect> {
-        let (local_start, local_end) = self.intersect_selection_segment(selection)?;
-        let line_is_blank = self.metric.clusters.is_empty();
-
-        if self.is_empty {
-            if self.has_page_break {
-                return None;
-            }
-            return Some(self.empty_paragraph_rect(point, min_width));
-        }
-
-        if line_is_blank {
-            return None;
-        }
-
-        let start_x = self.offset_to_x(local_start);
-        let end_x = self.offset_to_x(local_end);
-        let width = end_x - start_x;
-
-        if width <= 0.0 {
-            return None;
-        }
-
-        Rect::from_xywh(
-            point.x + start_x,
-            point.y,
-            width,
-            self.metric.height + self.metric.leading,
-        )
-    }
-
-    fn empty_paragraph_rect(&self, point: Point, min_width: f32) -> Rect {
-        Rect::from_xywh(
-            point.x + self.metric.left,
-            point.y,
-            min_width,
-            self.metric.height + self.metric.leading,
-        )
-        .unwrap()
-    }
-
-    fn explicit_break_marker(
-        &self,
-        selection: &SelectionDecor,
-        marker_width: f32,
-        point: Point,
-    ) -> Option<Rect> {
-        let (local_start, _) = self.intersect_selection_segment(selection)?;
-        let selection_covers_explicit_break = self.metric.break_reason
-            == parley::layout::BreakReason::Explicit
-            && self.line_idx + 1 < self.layout.len()
-            && local_start <= self.metric.end_offset
-            && selection.end_offset() >= self.metric.end_offset;
-
-        if !selection_covers_explicit_break {
-            return None;
-        }
-
-        let break_x = self.offset_to_x(self.metric.end_offset);
-        Rect::from_xywh(
-            point.x + break_x,
-            point.y,
-            marker_width,
-            self.metric.height + self.metric.leading,
-        )
-    }
-
-    fn intersect_selection_segment(&self, selection: &SelectionDecor) -> Option<(usize, usize)> {
-        if selection.start_offset() >= self.metric.end_offset
-            || selection.end_offset() <= self.metric.start_offset
-        {
-            return None;
-        }
-
-        Some((
-            selection.start_offset().max(self.metric.start_offset),
-            selection.end_offset().min(self.metric.end_offset),
-        ))
-    }
-
-    fn page_break_indicator(&self, point: Point, selections: &[SelectionDecor]) -> Option<Rect> {
-        let Some(selection) = self.selection_for_node(selections) else {
-            return None;
-        };
-
-        if !self.is_empty && selection.end_offset() <= self.metric.end_offset {
-            return None;
-        }
-
-        let end_x = self.offset_to_x(self.metric.end_offset);
-        Rect::from_xywh(
-            point.x + end_x,
-            point.y,
-            self.size.width - end_x + 20.0,
-            self.metric.height + self.metric.leading,
-        )
     }
 
     fn render_preedit(
@@ -545,7 +412,7 @@ impl Render for LineElement {
 mod tests {
     use super::*;
     use crate::layout::{Element, Layout, LayoutCache, LayoutContext};
-    use crate::model::Decorations;
+    use crate::model::{Decorations, SelectionDecor};
     use crate::state::build_selection_decorations;
     use crate::types::{Affinity, BoxConstraints};
     use std::cell::RefCell;
@@ -579,8 +446,11 @@ mod tests {
         paragraph.node().layout(&ctx, constraints)
     }
 
-    fn selection_rects(line: &LineElement, selections: &[SelectionDecor]) -> Vec<Rect> {
-        line.selection_rects(Point::zero(), selections)
+    fn selection_rects(
+        line: &LineElement,
+        selections: &[SelectionDecor],
+    ) -> Vec<crate::types::Rect> {
+        line.compute_selection_rects(Point::zero(), selections)
     }
 
     #[test]
@@ -631,7 +501,7 @@ mod tests {
             "hard break selection은 최소한 하나의 사각형을 그려야 함"
         );
         assert!(
-            rects.iter().any(|r| r.width() > 0.0),
+            rects.iter().any(|r| r.width > 0.0),
             "hard break 선택 영역의 너비는 0보다 커야 함"
         );
     }
@@ -740,7 +610,7 @@ mod tests {
 
         let rects = selection_rects(line, &selections);
         assert!(
-            rects.iter().any(|r| r.width() >= 4.0),
+            rects.iter().any(|r| r.width >= 4.0),
             "빈 문단 선택은 최소 너비 4의 사각형을 첫 문단에서만 그려야 함"
         );
     }
@@ -785,7 +655,7 @@ mod tests {
             .expect("두 번째 줄이 존재해야 함");
 
         assert!(
-            second.1.len() == 1 && (second.1[0].width() - 4.0).abs() < f32::EPSILON,
+            second.1.len() == 1 && (second.1[0].width - 4.0).abs() < f32::EPSILON,
             "두 번째 빈 줄에는 최소 너비의 마커만 하나 그려져야 함"
         );
     }
@@ -823,9 +693,7 @@ mod tests {
             .expect("첫 번째 줄 선택이 렌더링되어야 함");
 
         assert!(
-            first_line_rects
-                .iter()
-                .any(|r| (r.width() - 4.0).abs() < 0.1),
+            first_line_rects.iter().any(|r| (r.width - 4.0).abs() < 0.1),
             "전체 선택 시 hard break 마커(작은 사각형)가 포함되어야 함"
         );
     }
@@ -862,7 +730,7 @@ mod tests {
         let rects = selection_rects(blank_line, &selections);
         assert_eq!(rects.len(), 1, "빈 줄에는 단일 마커만 그려져야 함");
         assert!(
-            (rects[0].width() - 4.0).abs() < 0.001,
+            (rects[0].width - 4.0).abs() < 0.001,
             "빈 줄 마커 너비는 최소값과 동일해야 함"
         );
     }
@@ -905,7 +773,7 @@ mod tests {
         };
 
         let selections = [selection];
-        let rects = line.selection_rects(Point::zero(), &selections);
+        let rects = line.compute_selection_rects(Point::zero(), &selections);
         let page_break_rect = line.page_break_indicator(Point::zero(), &selections);
 
         assert_eq!(

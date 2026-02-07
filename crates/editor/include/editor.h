@@ -61,6 +61,24 @@ int32_t editor_render_page_to(EditorHandle* editor, size_t page_index, uint8_t* 
 int32_t editor_can_drag_at(EditorHandle* editor, size_t page_idx, float x, float y);
 int32_t editor_get_character_counts(EditorHandle* editor, CharacterCounts* out_counts);
 
+typedef struct {
+    uint32_t width;
+    uint32_t height;
+    float offset_x;
+    float offset_y;
+    float scale_factor;
+    uint8_t* pixels;
+    size_t len;
+} DragImageResult;
+
+int32_t editor_render_drag_image(
+    EditorHandle* editor,
+    const size_t* visible_pages,
+    size_t visible_pages_len,
+    size_t page_idx,
+    DragImageResult* out_result
+);
+
 uint8_t* editor_get_snapshot(EditorHandle* editor, size_t* out_len);
 uint8_t* editor_get_version(EditorHandle* editor, size_t* out_len);
 uint8_t* editor_export_all_updates(EditorHandle* editor, size_t* out_len);

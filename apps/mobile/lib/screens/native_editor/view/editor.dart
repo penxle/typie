@@ -10,6 +10,7 @@ import 'package:typie/graphql/client.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/screens/native_editor/__generated__/native_editor_query.data.gql.dart';
+import 'package:typie/screens/native_editor/controller/dnd_controller.dart';
 import 'package:typie/screens/native_editor/controller/input.dart';
 import 'package:typie/screens/native_editor/controller/keyboard.dart';
 import 'package:typie/screens/native_editor/controller/ticker.dart';
@@ -100,6 +101,10 @@ class EditorView extends HookWidget {
       ),
       [controller],
     );
+
+    final dndController = useMemoized(() => DndController(editor: controller.editor, controller: controller), [
+      controller,
+    ]);
 
     final floatingCursorOrigin = useRef<CursorInfo?>(null);
 
@@ -423,6 +428,7 @@ class EditorView extends HookWidget {
       commitComposing: inputController.commitComposing,
       child: ContentScope(
         controller: controller,
+        dndController: dndController,
         verticalScrollController: verticalScrollController,
         horizontalScrollController: horizontalScrollController,
         inputController: inputController,
@@ -444,6 +450,7 @@ class EditorView extends HookWidget {
               children: [
                 Expanded(
                   child: Stack(
+                    fit: StackFit.expand,
                     children: [
                       const PageList(),
                       _DocumentPlaceholder(
@@ -474,29 +481,31 @@ class EditorView extends HookWidget {
                         },
                       ),
                       Positioned(
-                        top: titleAreaHeight.value,
+                        top: 0,
                         left: 0,
-                        right: 0,
-                        bottom: 0,
-                        child: InputView(
-                          key: inputKey,
-                          onInsertText: inputController.onInsertText,
-                          onDeleteBackward: inputController.onDeleteBackward,
-                          onSetMarkedText: inputController.onSetMarkedText,
-                          onUnmarkText: inputController.onUnmarkText,
-                          onCancelMarkedText: inputController.onCancelMarkedText,
-                          onPerformAction: inputController.onPerformAction,
-                          onShortcut: inputController.onShortcut,
-                          onFloatingCursorBegin: inputController.onFloatingCursorBegin,
-                          onFloatingCursorUpdate: inputController.onFloatingCursorUpdate,
-                          onFloatingCursorEnd: inputController.onFloatingCursorEnd,
-                          onFocusLost: inputController.onFocusLost,
-                          onReady: inputController.onInputReady,
-                          onReplaceBackward: inputController.onReplaceBackward,
-                          onNavigate: (direction, extend) {
-                            inputController.commitComposing();
-                            controller.dispatch({'type': 'navigate', 'direction': direction, 'extend': extend});
-                          },
+                        width: 1,
+                        height: 1,
+                        child: IgnorePointer(
+                          child: InputView(
+                            key: inputKey,
+                            onInsertText: inputController.onInsertText,
+                            onDeleteBackward: inputController.onDeleteBackward,
+                            onSetMarkedText: inputController.onSetMarkedText,
+                            onUnmarkText: inputController.onUnmarkText,
+                            onCancelMarkedText: inputController.onCancelMarkedText,
+                            onPerformAction: inputController.onPerformAction,
+                            onShortcut: inputController.onShortcut,
+                            onFloatingCursorBegin: inputController.onFloatingCursorBegin,
+                            onFloatingCursorUpdate: inputController.onFloatingCursorUpdate,
+                            onFloatingCursorEnd: inputController.onFloatingCursorEnd,
+                            onFocusLost: inputController.onFocusLost,
+                            onReady: inputController.onInputReady,
+                            onReplaceBackward: inputController.onReplaceBackward,
+                            onNavigate: (direction, extend) {
+                              inputController.commitComposing();
+                              controller.dispatch({'type': 'navigate', 'direction': direction, 'extend': extend});
+                            },
+                          ),
                         ),
                       ),
                       const Positioned(bottom: 20, right: 20, child: NativeEditorFloatingToolbar()),

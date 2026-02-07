@@ -69,7 +69,7 @@ class GestureController {
       var scrolledY = activePosition?.dy ?? 0;
       var scrolledX = activePosition?.dx ?? 0;
 
-      if (_verticalDirection != 0) {
+      if (_verticalDirection != 0 && verticalScrollController.hasClients) {
         final proximity = 1.0 - (_verticalEdgeDistance / _edgeThreshold).clamp(0.0, 1.0);
         final scrollSpeed = _minScrollSpeed + proximity * (_maxScrollSpeed - _minScrollSpeed);
 
@@ -123,7 +123,8 @@ class GestureController {
           return;
         }
 
-        final pointerX = scrolledX + horizontalScrollController.offset - getHorizontalPadding();
+        final hOffset = horizontalScrollController.hasClients ? horizontalScrollController.offset : 0.0;
+        final pointerX = scrolledX + hOffset - getHorizontalPadding();
 
         final currentPosition = (pageIdx, pointerX, localY);
         if (_lastDispatchedPosition == currentPosition) {
@@ -230,5 +231,27 @@ class GestureController {
     tapTimer = null;
     verticalDrag?.cancel();
     horizontalDrag?.cancel();
+  }
+}
+
+class ConditionalLongPressGestureRecognizer extends LongPressGestureRecognizer {
+  ConditionalLongPressGestureRecognizer({required this.condition, super.duration, super.postAcceptSlopTolerance});
+
+  final bool Function(Offset globalPosition) condition;
+
+  @override
+  void didExceedDeadline() {
+    if (initialPosition == null) {
+      super.didExceedDeadline();
+      return;
+    }
+
+    final globalPosition = initialPosition!.global;
+    if (condition(globalPosition)) {
+      resolve(GestureDisposition.rejected);
+      stopTrackingPointer(primaryPointer!);
+    } else {
+      super.didExceedDeadline();
+    }
   }
 }

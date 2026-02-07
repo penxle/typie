@@ -1,8 +1,9 @@
 use std::collections::HashSet;
 
-use crate::layout::{Page, PositionedNode};
-use crate::model::{Doc, NodeId};
-use crate::types::Point;
+use crate::layout::{Element, Page, PositionedNode};
+use crate::model::{Doc, NodeId, SelectionDecor};
+use crate::state::selection_helpers::build_selection_decorations;
+use crate::types::{Point, Rect};
 
 #[derive(Debug, Clone, Copy)]
 pub struct NodeBounds {
@@ -163,9 +164,16 @@ pub fn find_drag_image_bounds(
     selection: &crate::state::Selection,
     pages: &[Page],
 ) -> Option<DragImageBounds> {
-    let block_ids = collect_selected_block_ids(doc, selection)?;
-    let all_ids = collect_all_descendant_ids(doc, &block_ids);
-    let drag_pages = collect_page_bounds(doc, pages, &block_ids, &all_ids);
+    if selection.is_collapsed() {
+        return None;
+    }
+
+    let decorations = build_selection_decorations(doc, selection, None);
+    if decorations.is_empty() {
+        return None;
+    }
+
+    let drag_pages = collect_page_bounds_from_decorations(pages, &decorations);
 
     if drag_pages.is_empty() {
         None
@@ -174,43 +182,14 @@ pub fn find_drag_image_bounds(
     }
 }
 
-fn collect_selected_block_ids(
-    doc: &Doc,
-    selection: &crate::state::Selection,
-) -> Option<Vec<NodeId>> {
-    if selection.is_collapsed() {
-        return None;
-    }
-
-    let (from, to) = selection.as_sorted(doc).ok()?;
-    let block_ids = crate::state::collect_blocks_in_range(doc, from, to).ok()?;
-
-    if block_ids.is_empty() {
-        None
-    } else {
-        Some(block_ids)
-    }
-}
-
-fn collect_all_descendant_ids(doc: &Doc, block_ids: &[NodeId]) -> HashSet<NodeId> {
-    let mut all_ids = HashSet::new();
-    for &block_id in block_ids {
-        collect_recursive(doc, block_id, &mut all_ids);
-    }
-    all_ids
-}
-
-fn collect_page_bounds(
-    doc: &Doc,
+fn collect_page_bounds_from_decorations(
     pages: &[Page],
-    block_ids: &[NodeId],
-    all_ids: &HashSet<NodeId>,
+    decorations: &[SelectionDecor],
 ) -> Vec<DragImagePageBounds> {
     let mut drag_pages = Vec::new();
 
     for (page_idx, page) in pages.iter().enumerate() {
-        if let Some(page_bounds) =
-            collect_single_page_bounds(doc, page, page_idx, block_ids, all_ids)
+        if let Some(page_bounds) = collect_single_page_selection_bounds(page, page_idx, decorations)
         {
             drag_pages.push(page_bounds);
         }
@@ -219,31 +198,64 @@ fn collect_page_bounds(
     drag_pages
 }
 
-fn collect_single_page_bounds(
-    doc: &Doc,
+fn collect_single_page_selection_bounds(
     page: &Page,
     page_idx: usize,
-    block_ids: &[NodeId],
-    all_ids: &HashSet<NodeId>,
+    decorations: &[SelectionDecor],
 ) -> Option<DragImagePageBounds> {
+    let mut clip_rects = Vec::new();
+    scan_for_selection_bounds(&page.root, Point::zero(), decorations, &mut clip_rects);
+
+    if clip_rects.is_empty() {
+        return None;
+    }
+
     let mut acc = BoundsAccumulator::new();
-    scan_layout_node(&page.root, all_ids, Point::zero(), &mut acc);
+    for rect in &clip_rects {
+        acc.add_rect(rect.x, rect.y, rect.width, rect.height);
+    }
 
     let overall_bounds = acc.to_bounds(page_idx)?;
-
-    let clip_rects: Vec<_> = block_ids
-        .iter()
-        .filter_map(|&block_id| {
-            let block_ids_set = collect_leaf_ids(doc, block_id);
-            let mut block_acc = BoundsAccumulator::new();
-            scan_layout_node(&page.root, &block_ids_set, Point::zero(), &mut block_acc);
-            block_acc.to_bounds(page_idx).map(|b| b.to_rect())
-        })
-        .collect();
 
     Some(DragImagePageBounds {
         page_idx,
         bounds: overall_bounds.to_rect(),
         clip_rects,
     })
+}
+
+fn scan_for_selection_bounds(
+    node: &PositionedNode,
+    offset: Point,
+    decorations: &[SelectionDecor],
+    out: &mut Vec<Rect>,
+) {
+    let pos = Point::new(offset.x + node.position.x, offset.y + node.position.y);
+
+    if let Some(ref element) = node.node.element {
+        match element {
+            Element::Line(line) => {
+                let rects = line.compute_selection_rects(pos, decorations);
+                out.extend(rects);
+            }
+            _ => {
+                if let Some(block_id) = element.block_id() {
+                    if decorations.iter().any(|d| d.node_id() == block_id) {
+                        out.push(Rect::new(
+                            pos.x,
+                            pos.y,
+                            node.node.size.width,
+                            node.node.size.height,
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
+    if let Some(children) = &node.node.children {
+        for child in children {
+            scan_for_selection_bounds(child, pos, decorations, out);
+        }
+    }
 }

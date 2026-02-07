@@ -65,6 +65,12 @@
       </intent-filter>
     </activity>
 
+    <provider
+      android:name="com.superlist.super_native_extensions.DataProvider"
+      android:authorities="co.typie.SuperClipboardDataProvider"
+      android:exported="true"
+      android:grantUriPermissions="true" />
+
     <meta-data
       android:name="flutterEmbedding"
       android:value="2" />
