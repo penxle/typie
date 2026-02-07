@@ -36,19 +36,24 @@ impl NodeHtmlCodec for ImageNode {
     }
 
     fn parse_rules() -> Vec<NodeParseRule> {
-        vec![NodeParseRule::simple("img[data-image-id]", |elem| {
-            let id = elem.value().attr("data-image-id").map(|s| s.to_string());
-            let proportion = elem
-                .value()
-                .attr("data-proportion")
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(1.0);
-            Some(Node::Image(ImageNode {
-                id,
-                proportion,
-                upload_id: None,
-            }))
-        })]
+        vec![NodeParseRule::new(
+            "img",
+            50,
+            |elem| elem.value().attr("data-image-id").is_some(),
+            |elem| {
+                let id = elem.value().attr("data-image-id").map(|s| s.to_string());
+                let proportion = elem
+                    .value()
+                    .attr("data-proportion")
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(1.0);
+                Some(Node::Image(ImageNode {
+                    id,
+                    proportion,
+                    upload_id: None,
+                }))
+            },
+        )]
     }
 }
 

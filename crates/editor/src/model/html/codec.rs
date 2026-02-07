@@ -100,6 +100,13 @@ impl NodeParseRule {
     }
 
     pub fn simple(tag: &'static str, parse: fn(&ElementRef) -> Option<Node>) -> Self {
+        if tag.contains('[') || tag.contains('.') || tag.contains('#') {
+            panic!(
+                "NodeParseRule::simple expects a simple tag name, not a selector: {}",
+                tag
+            );
+        }
+
         Self {
             tag,
             priority: 50,

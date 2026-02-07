@@ -335,4 +335,23 @@ mod tests {
             panic!("Expected text node");
         }
     }
+
+    #[test]
+    fn test_image_paste() {
+        let html = r#"<img data-image-id="test-id" data-proportion="1.5">"#;
+        let parsed = Fragment::from_html(html).unwrap();
+
+        let top_levels = parsed.top_level_node_ids();
+        assert_eq!(top_levels.len(), 1);
+
+        let img_id = top_levels[0];
+        let img_node = parsed.node(img_id).unwrap();
+
+        if let Node::Image(img) = img_node.data() {
+            assert_eq!(img.id.as_deref(), Some("test-id"));
+            assert_eq!(img.proportion, 1.5);
+        } else {
+            panic!("Expected Image node");
+        }
+    }
 }
