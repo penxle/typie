@@ -102,21 +102,18 @@ impl Runtime {
             }
         }
 
-        let ctx = NavigationContext::new(&self.state.doc);
-        let doc_start = Cursor::move_to_document_start(&ctx, &self.pages);
-        let doc_end = Cursor::move_to_document_end(&ctx, &self.pages);
+        let root = self.state.doc.node(NodeId::ROOT).unwrap();
+        let start = Position::new(root.node_id(), 0, crate::types::Affinity::Downstream);
+        let end = Position::new(
+            root.node_id(),
+            block_content_len(&root),
+            crate::types::Affinity::Downstream,
+        );
 
-        if let (Some(start_sel), Some(end_sel)) = (doc_start, doc_end) {
-            let start = start_sel.head;
-            let end = end_sel.head;
-
-            self.transact(move |tr| {
-                tr.set_selection(Selection::new(start, end));
-                Ok(true)
-            })
-        } else {
-            vec![]
-        }
+        self.transact(move |tr| {
+            tr.set_selection(Selection::new(start, end));
+            Ok(true)
+        })
     }
 
     pub(crate) fn handle_extend_mark_range(&mut self, mark_type: MarkType) -> Vec<Effect> {
@@ -1017,5 +1014,33 @@ mod tests {
         });
         assert_ne!(rt.state().selection.head.node_id, p2);
         assert!(rt.state().selection.is_collapsed());
+    }
+
+    #[test]
+    fn test_select_all_with_horizontal_rule_at_start() {
+        let mut p1 = id!();
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                horizontal_rule {}
+                @p1 paragraph { text { "Hello" } }
+            }
+            selection { (p1, 0) }
+        };
+
+        rt.layout();
+        rt.update(Message::SelectAll);
+
+        let selection = &rt.state().selection;
+
+        assert_eq!(
+            selection.anchor.node_id,
+            NodeId::ROOT,
+            "Anchor should be at ROOT"
+        );
+        assert_eq!(
+            selection.anchor.offset, 0,
+            "Select All should include the first element (HR) at offset 0"
+        );
     }
 }
