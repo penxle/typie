@@ -69,7 +69,6 @@ class PageList extends HookWidget {
     final showContextMenu = useState(false);
     final wasContextMenuOpen = useRef(false);
     final clipboard = useMemoized(EditorClipboard.new);
-    final pendingContextMenu = useRef(false);
 
     final longPressPosition = scope.longPressPosition;
     final handleDragPosition = scope.handleDragPosition;
@@ -105,20 +104,39 @@ class PageList extends HookWidget {
       };
     }, [verticalScrollController, horizontalScrollController]);
 
+    final prevFromHandle = useRef<SelectionHandleInfo?>(null);
+    final prevToHandle = useRef<SelectionHandleInfo?>(null);
+    final wasSelecting = useRef(false);
+
     useEffect(() {
-      if (fromHandle == null && toHandle == null) {
+      final isCollapsed = fromHandle == null || toHandle == null;
+      final justFinishedSelecting = wasSelecting.value && !isSelecting;
+      final selectionChanged = fromHandle != prevFromHandle.value || toHandle != prevToHandle.value;
+
+      if (isCollapsed) {
         handleDragPosition.value = null;
         gesture
           ..draggingHandleType = null
           ..dragAnchorHandle = null
           ..stopAutoScroll();
         showContextMenu.value = false;
-      } else if (pendingContextMenu.value) {
-        pendingContextMenu.value = false;
-        showContextMenu.value = true;
+      } else if (!isSelecting) {
+        if (justFinishedSelecting) {
+          showContextMenu.value = true;
+        } else if (selectionChanged) {
+          showContextMenu.value = true;
+        }
       }
+
+      if (isSelecting) {
+        showContextMenu.value = false;
+      }
+
+      wasSelecting.value = isSelecting;
+      prevFromHandle.value = fromHandle;
+      prevToHandle.value = toHandle;
       return null;
-    }, [fromHandle, toHandle]);
+    }, [fromHandle, toHandle, isSelecting]);
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -135,7 +153,6 @@ class PageList extends HookWidget {
 
         void onHandleDragStart(SelectionHandleType type, DragStartDetails details) {
           gesture.draggingHandleType = type;
-          showContextMenu.value = false;
           scope.controller.setSelecting(true);
 
           final renderBox = context.findRenderObject() as RenderBox?;
@@ -199,7 +216,6 @@ class PageList extends HookWidget {
             ..stopAutoScroll();
           handleDragPosition.value = null;
           scope.controller.setSelecting(false);
-          showContextMenu.value = true;
         }
 
         final geo = scope.geometry;
@@ -323,9 +339,6 @@ class PageList extends HookWidget {
                               longPressPosition.value = null;
                               gesture.stopAutoScroll();
                               scope.isLongPressing.value = false;
-                              if (fromHandle != null && toHandle != null) {
-                                showContextMenu.value = true;
-                              }
                             };
                         },
                       ),
@@ -412,13 +425,15 @@ class PageList extends HookWidget {
             }
           }
 
+          gesture
+            ..lastTapTime = now
+            ..lastTapPosition = localPosition;
+
           final pointerX = gesture.getPointerX(localPosition.dx);
 
           if (clickCount == 1) {
-            if (scope.editor.isSelectionHit(pageIdx, pointerX, localY)) {
-              gesture
-                ..lastTapTime = now
-                ..lastTapPosition = localPosition;
+            final isSelectionHit = scope.editor.isSelectionHit(pageIdx, pointerX, localY);
+            if (isSelectionHit) {
               if (!wasContextMenuOpen.value) {
                 showContextMenu.value = true;
               }
@@ -426,19 +441,13 @@ class PageList extends HookWidget {
             }
           }
 
-          if (clickCount == 2) {
-            pendingContextMenu.value = true;
-          }
-
-          gesture
-            ..lastTapTime = now
-            ..lastTapPosition = localPosition;
-
-          final prevCursor = cursor;
-
           final keysPressed = HardwareKeyboard.instance.logicalKeysPressed;
           final isShiftHeader =
               keysPressed.contains(LogicalKeyboardKey.shiftLeft) || keysPressed.contains(LogicalKeyboardKey.shiftRight);
+
+          final prevCursor = cursor;
+          final prevFromHandle = fromHandle;
+          final prevToHandle = toHandle;
 
           editor
             ..dispatch({
@@ -459,7 +468,7 @@ class PageList extends HookWidget {
               'modifier': {'shift': isShiftHeader, 'ctrl': false, 'alt': false, 'meta': false},
             });
 
-          if (clickCount == 1 && prevCursor != null) {
+          if (clickCount == 1) {
             unawaited(
               scope.controller.waitForNextTick().then((_) {
                 if (!context.mounted) {
@@ -467,12 +476,15 @@ class PageList extends HookWidget {
                 }
 
                 final newState = scope.controller.state;
-                if (newState.fromHandle == null &&
-                    newState.toHandle == null &&
+                final isCollapsed = newState.fromHandle == null || newState.toHandle == null;
+
+                final isSameCursor =
+                    isCollapsed &&
                     newState.cursor != null &&
-                    prevCursor.pageIdx == newState.cursor!.pageIdx &&
-                    prevCursor.x == newState.cursor!.x &&
-                    prevCursor.y == newState.cursor!.y) {
+                    prevCursor != null &&
+                    newState.cursor!.isSamePosition(prevCursor);
+
+                if (isSameCursor) {
                   if (!wasContextMenuOpen.value) {
                     showContextMenu.value = true;
                   }
@@ -665,11 +677,7 @@ class PageList extends HookWidget {
                 },
               ),
               if (showContextMenu.value && longPressPosition.value == null && handleDragPosition.value == null)
-                SelectionContextMenu(
-                  clipboard: clipboard,
-                  onDismiss: () => showContextMenu.value = false,
-                  onBeforeSelectAll: () => pendingContextMenu.value = true,
-                ),
+                SelectionContextMenu(clipboard: clipboard, onDismiss: () => showContextMenu.value = false),
             ],
           ),
         );

@@ -4,11 +4,10 @@ import 'package:typie/screens/native_editor/controller/clipboard.dart';
 import 'package:typie/screens/native_editor/view/scope.dart';
 
 class SelectionContextMenu extends StatelessWidget {
-  const SelectionContextMenu({required this.clipboard, required this.onDismiss, this.onBeforeSelectAll, super.key});
+  const SelectionContextMenu({required this.clipboard, required this.onDismiss, super.key});
 
   final EditorClipboard clipboard;
   final VoidCallback onDismiss;
-  final VoidCallback? onBeforeSelectAll;
 
   @override
   Widget build(BuildContext context) {
@@ -35,7 +34,7 @@ class SelectionContextMenu extends StatelessWidget {
                   child: Transform.scale(scale: 0.8 + 0.2 * value, child: child),
                 );
               },
-              child: _MenuBubble(clipboard: clipboard, onDismiss: onDismiss, onBeforeSelectAll: onBeforeSelectAll),
+              child: _MenuBubble(clipboard: clipboard, onDismiss: onDismiss),
             ),
           ),
         );
@@ -133,11 +132,10 @@ class _MenuPositionDelegate extends SingleChildLayoutDelegate {
 }
 
 class _MenuBubble extends StatelessWidget {
-  const _MenuBubble({required this.clipboard, required this.onDismiss, this.onBeforeSelectAll});
+  const _MenuBubble({required this.clipboard, required this.onDismiss});
 
   final EditorClipboard clipboard;
   final VoidCallback onDismiss;
-  final VoidCallback? onBeforeSelectAll;
 
   @override
   Widget build(BuildContext context) {
@@ -180,9 +178,8 @@ class _MenuBubble extends StatelessWidget {
             },
           ),
           _MenuButton(
-            label: '전체선택',
+            label: '전체 선택',
             onTap: () {
-              onBeforeSelectAll?.call();
               scope.editor.dispatch({'type': 'selectAll'});
               onDismiss();
             },

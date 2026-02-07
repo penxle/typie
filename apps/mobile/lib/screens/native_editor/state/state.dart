@@ -85,6 +85,10 @@ abstract class CursorInfo with _$CursorInfo {
       precedingCharWidths: (map['precedingCharWidths'] as List?)?.map((e) => (e as num).toDouble()).toList() ?? [],
     );
   }
+
+  bool isSamePosition(CursorInfo other) {
+    return pageIdx == other.pageIdx && x == other.x && y == other.y;
+  }
 }
 
 @freezed
