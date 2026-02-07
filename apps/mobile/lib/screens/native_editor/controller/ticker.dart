@@ -18,6 +18,7 @@ class TickerLoop {
   (double, double, double)? _lastSize;
   double _cachedScaleFactor = 0;
   Duration _lastTickTime = Duration.zero;
+  bool _flushPending = false;
 
   void start() {
     _cachedScaleFactor = ui.PlatformDispatcher.instance.views.first.devicePixelRatio;
@@ -48,8 +49,20 @@ class TickerLoop {
     CommandHandler.handleCommands(controller, cmds);
 
     if (!editor.isDisposed) {
-      editor.flush();
       controller.notifyTick();
+
+      if (!_flushPending) {
+        _flushPending = true;
+        unawaited(
+          SchedulerBinding.instance.scheduleTask(() {
+            _flushPending = false;
+            if (editor.isDisposed) {
+              return;
+            }
+            editor.flush();
+          }, Priority.idle),
+        );
+      }
     }
   }
 
