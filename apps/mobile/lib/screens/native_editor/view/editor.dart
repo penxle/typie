@@ -96,6 +96,7 @@ class EditorView extends HookWidget {
       () => InputController(
         inputKey: inputKey,
         dispatch: controller.dispatch,
+        editor: controller.editor,
         onFocusChanged: controller.setFocused,
         getBottomToolbarMode: () => bottomToolbarMode.value,
       ),

@@ -326,6 +326,9 @@ class EditorInputNativeView(
       Shortcut(KeyEvent.KEYCODE_ENTER, META_SHIFT, "insertHardBreak"),
       Shortcut(KeyEvent.KEYCODE_DEL, META_CTRL, "deleteToLineStart"),
       Shortcut(KeyEvent.KEYCODE_DEL, META_ALT, "deleteWordBackward"),
+      Shortcut(KeyEvent.KEYCODE_C, META_CTRL, "copy"),
+      Shortcut(KeyEvent.KEYCODE_X, META_CTRL, "cut"),
+      Shortcut(KeyEvent.KEYCODE_V, META_CTRL, "paste"),
     )
   }
 }
