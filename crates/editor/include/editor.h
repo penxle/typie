@@ -51,7 +51,7 @@ EditorHandle* editor_application_create_editor(EditorApplication* app, double sc
 void editor_handle_free(EditorHandle* editor);
 int32_t editor_dispatch(EditorHandle* editor, const char* message_json);
 char* editor_tick(EditorHandle* editor);
-void editor_flush(EditorHandle* editor);
+int32_t editor_flush(EditorHandle* editor);
 size_t editor_get_page_count(EditorHandle* editor);
 int32_t editor_get_render_info(EditorHandle* editor, size_t page_index, RenderInfo* out_info);
 

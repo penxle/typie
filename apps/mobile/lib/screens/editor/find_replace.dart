@@ -138,7 +138,7 @@ class FindReplaceBottomSheet extends HookWidget {
                       ),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Align(
+                    child: Center(
                       child: Padding(
                         padding: const Pad(horizontal: 16),
                         child: TextField(
