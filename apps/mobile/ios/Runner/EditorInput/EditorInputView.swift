@@ -352,6 +352,9 @@ class EditorTextInputView: UIView, UITextInput {
     ("\r", .shift, "insertHardBreak"),
     ("\u{8}", .command, "deleteToLineStart"),
     ("\u{8}", .alternate, "deleteWordBackward"),
+    ("c", .command, "copy"),
+    ("x", .command, "cut"),
+    ("v", .command, "paste"),
   ]
 
   private static let cachedKeyCommands: [UIKeyCommand] = shortcutDefs.map { def in

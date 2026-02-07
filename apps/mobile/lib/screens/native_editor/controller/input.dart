@@ -1,4 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/widgets.dart';
+import 'package:typie/native/editor_native.dart';
+import 'package:typie/screens/native_editor/controller/clipboard.dart';
 import 'package:typie/screens/native_editor/toolbar/scope.dart';
 import 'package:typie/screens/native_editor/view/input.dart';
 
@@ -6,12 +10,14 @@ class InputController {
   InputController({
     required this.inputKey,
     required this.dispatch,
+    required this.editor,
     required this.onFocusChanged,
     required ValueGetter<BottomToolbarMode> getBottomToolbarMode,
   }) : _getBottomToolbarMode = getBottomToolbarMode;
 
   final GlobalKey<InputViewState> inputKey;
   final void Function(Map<String, dynamic>) dispatch;
+  final NativeEditor editor;
   final void Function(bool focused) onFocusChanged;
   final ValueGetter<BottomToolbarMode> _getBottomToolbarMode;
 
@@ -140,6 +146,12 @@ class InputController {
 
     if (direction != null) {
       dispatch({'type': 'navigate', 'direction': direction, 'extend': false});
+    } else if (action == 'copy') {
+      unawaited(EditorClipboard().copy(editor));
+    } else if (action == 'cut') {
+      unawaited(EditorClipboard().cut(editor, dispatch));
+    } else if (action == 'paste') {
+      unawaited(EditorClipboard().getPastePayload().then(dispatch));
     } else {
       dispatch({'type': action});
     }
