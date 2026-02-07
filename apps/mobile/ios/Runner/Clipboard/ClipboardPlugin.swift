@@ -44,8 +44,11 @@ class ClipboardPlugin: NSObject, FlutterPlugin {
     let pasteboard = UIPasteboard.general
     var data: [String: String?] = [:]
 
-    if let html = pasteboard.value(forPasteboardType: UTType.html.identifier) as? String {
-      data["html"] = html
+
+
+    if let htmlData = pasteboard.data(forPasteboardType: UTType.html.identifier),
+       let htmlString = String(data: htmlData, encoding: .utf8) {
+      data["html"] = htmlString
     }
 
     if let text = pasteboard.string {
