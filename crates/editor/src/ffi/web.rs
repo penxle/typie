@@ -332,9 +332,19 @@ impl Editor {
         Ok(())
     }
 
-    #[wasm_bindgen(js_name = canDragAt)]
-    pub fn can_drag_at(&self, page_idx: usize, x: f32, y: f32) -> bool {
-        self.runtime.can_drag_at(page_idx, x, y)
+    #[wasm_bindgen(js_name = isSelectionHit)]
+    pub fn is_selection_hit(&self, page_idx: usize, x: f32, y: f32) -> bool {
+        if let Some(page) = self.runtime.pages().get(page_idx) {
+            crate::layout::query::is_selection_hit(
+                self.runtime.doc(),
+                page,
+                self.runtime.selection(),
+                x,
+                y,
+            )
+        } else {
+            false
+        }
     }
 
     #[wasm_bindgen(js_name = renderDragImage)]

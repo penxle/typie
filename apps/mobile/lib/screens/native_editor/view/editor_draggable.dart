@@ -53,7 +53,7 @@ class EditorDraggable extends StatelessWidget {
           localY = localDocumentY;
         }
 
-        final canDrag = scope.dndController.canDragAt(pageIdx, pointerX, localY);
+        final canDrag = scope.editor.isSelectionHit(pageIdx, pointerX, localY);
 
         if (!canDrag) {
           return null;

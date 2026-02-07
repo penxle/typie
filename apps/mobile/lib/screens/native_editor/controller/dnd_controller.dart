@@ -22,10 +22,6 @@ class DndController {
   >
   dragUiImage = ValueNotifier(null);
 
-  bool canDragAt(int pageIdx, double x, double y) {
-    return editor.canDragAt(pageIdx, x, y);
-  }
-
   Future<void> prepareDragImage(int pageIdx, ui.Offset initialPoint) async {
     dragUiImage.value = null;
     _imageCompleter = Completer<void>();

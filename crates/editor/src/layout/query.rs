@@ -1,8 +1,11 @@
+use std::cmp::Ordering;
 use std::collections::HashSet;
 
+use crate::layout::cursor::{Cursor, NavigationContext};
 use crate::layout::{Element, Page, PositionedNode};
 use crate::model::{Doc, NodeId, SelectionDecor};
 use crate::state::selection_helpers::build_selection_decorations;
+use crate::state::{compare_positions, position_in_selection};
 use crate::types::{Point, Rect};
 
 #[derive(Debug, Clone, Copy)]
@@ -258,4 +261,114 @@ fn scan_for_selection_bounds(
             scan_for_selection_bounds(child, pos, decorations, out);
         }
     }
+}
+
+pub fn is_point_in_selection_bounds(
+    doc: &Doc,
+    page: &Page,
+    selection: &crate::state::Selection,
+    point: Point,
+) -> bool {
+    if selection.is_collapsed() {
+        return false;
+    }
+
+    let decorations = build_selection_decorations(doc, selection, None);
+    if decorations.is_empty() {
+        return false;
+    }
+
+    let mut clip_rects = Vec::new();
+    scan_for_selection_bounds(&page.root, Point::zero(), &decorations, &mut clip_rects);
+
+    for rect in clip_rects {
+        if point.x >= rect.x
+            && point.x <= rect.x + rect.width
+            && point.y >= rect.y
+            && point.y <= rect.y + rect.height
+        {
+            return true;
+        }
+    }
+
+    false
+}
+
+pub fn is_selection_hit(
+    doc: &Doc,
+    page: &Page,
+    selection: &crate::state::Selection,
+    x: f32,
+    y: f32,
+) -> bool {
+    if selection.is_collapsed() {
+        return false;
+    }
+
+    let ctx = NavigationContext::new(doc);
+    let Some(hit_selection) = Cursor::hit_test(&ctx, page, x, y) else {
+        return false;
+    };
+
+    let position = hit_selection.head;
+
+    if position_in_selection(doc, position, selection) {
+        // position이 selection의 경계에 있는 경우 좌표가 selection bounds 안에 있는지 확인
+        if let Ok((from, to)) = selection.as_sorted(doc) {
+            let is_at_start = matches!(compare_positions(doc, from, position), Ok(Ordering::Equal));
+            let is_at_end = matches!(compare_positions(doc, to, position), Ok(Ordering::Equal));
+
+            if is_at_start || is_at_end {
+                return is_point_in_selection_bounds(
+                    doc,
+                    page,
+                    selection,
+                    crate::types::Point::new(x, y),
+                );
+            }
+        }
+        return true;
+    }
+
+    if is_selectable_block_hit(doc, &hit_selection) {
+        if let (Ok((sel_from, sel_to)), Ok((hit_from, hit_to))) =
+            (selection.as_sorted(doc), hit_selection.as_sorted(doc))
+        {
+            let start_ok = matches!(
+                compare_positions(doc, sel_from, hit_from),
+                Ok(Ordering::Less | Ordering::Equal)
+            );
+            let end_ok = matches!(
+                compare_positions(doc, hit_to, sel_to),
+                Ok(Ordering::Less | Ordering::Equal)
+            );
+
+            if start_ok && end_ok {
+                return true;
+            }
+        }
+    }
+
+    false
+}
+
+pub fn is_selectable_block_hit(doc: &Doc, hit_selection: &crate::state::Selection) -> bool {
+    use crate::state::position_helpers::find_child_at_offset;
+
+    if hit_selection.is_collapsed() {
+        return false;
+    }
+
+    let anchor = hit_selection.anchor;
+    let Some(parent) = doc.node(anchor.node_id) else {
+        return false;
+    };
+
+    let Some((child_id, _)) = find_child_at_offset(&parent, anchor.offset) else {
+        return false;
+    };
+
+    doc.node(child_id)
+        .map(|child| child.spec().selectable)
+        .unwrap_or(false)
 }

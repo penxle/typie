@@ -667,7 +667,7 @@ fn rgba_to_bgra_neon(data: &mut [u8]) {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn editor_can_drag_at(
+pub extern "C" fn editor_is_selection_hit(
     editor: *mut EditorHandle,
     page_idx: usize,
     x: f32,
@@ -680,8 +680,18 @@ pub extern "C" fn editor_can_drag_at(
             }
 
             let editor = unsafe { &*(editor as *const EditorInner) };
-            Ok(if editor.runtime.can_drag_at(page_idx, x, y) {
-                1
+            Ok(if let Some(page) = editor.runtime.pages().get(page_idx) {
+                if crate::layout::query::is_selection_hit(
+                    editor.runtime.doc(),
+                    page,
+                    editor.runtime.selection(),
+                    x,
+                    y,
+                ) {
+                    1
+                } else {
+                    0
+                }
             } else {
                 0
             })
