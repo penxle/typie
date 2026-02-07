@@ -1242,6 +1242,32 @@ pub extern "C" fn editor_get_ai_feedback_items(editor: *mut EditorHandle) -> *mu
     )
 }
 
+#[unsafe(no_mangle)]
+pub extern "C" fn editor_insert_template_fragment(
+    editor: *mut EditorHandle,
+    snapshot: *const u8,
+    snapshot_len: usize,
+) -> i32 {
+    ffi!(
+        {
+            if editor.is_null() || snapshot.is_null() {
+                return Err("Invalid parameters".into());
+            }
+
+            let editor = unsafe { &mut *(editor as *mut EditorInner) };
+            let data = unsafe { std::slice::from_raw_parts(snapshot, snapshot_len) };
+
+            editor
+                .runtime
+                .insert_template_fragment(data.to_vec())
+                .map_err(|e| format!("Failed to insert template: {e}"))?;
+
+            Ok(())
+        },
+        -1
+    )
+}
+
 #[cfg(target_os = "android")]
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_co_typie_editortexture_EditorTexture_nativeRenderPageTo(

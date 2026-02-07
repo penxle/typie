@@ -406,6 +406,20 @@ final class NativeEditor {
     }
   }
 
+  void insertTemplateFragment(Uint8List snapshot) {
+    _checkDisposed();
+
+    final ptr = _bindings.editor_alloc(snapshot.length);
+    ptr.asTypedList(snapshot.length).setAll(0, snapshot);
+
+    final result = _bindings.editor_insert_template_fragment(_handle, ptr, snapshot.length);
+    _bindings.editor_free(ptr, snapshot.length, snapshot.length);
+
+    if (result != 0) {
+      throw EditorException(_getLastError() ?? 'Failed to insert template fragment');
+    }
+  }
+
   void importUpdatesBatch(List<Uint8List> updatesBatch) {
     _checkDisposed();
 

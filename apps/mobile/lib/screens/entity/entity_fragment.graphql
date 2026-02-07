@@ -20,7 +20,7 @@ fragment EntityScreen_Entity_entity on Entity {
     ... on Post {
       id
       title
-      type
+      postType: type
       excerpt
       updatedAt
       characterCount
@@ -34,6 +34,7 @@ fragment EntityScreen_Entity_entity on Entity {
     ... on Document {
       id
       title
+      documentType: type
       excerpt
       updatedAt
       characterCount

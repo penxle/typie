@@ -294,12 +294,16 @@ class _Content extends HookWidget {
         onSubtitleChanged: handleSubtitleChanged,
         titleFocusNode: titleFocusNode,
         subtitleFocusNode: subtitleFocusNode,
+        documentTemplates: data.entity.site.documentTemplates.toList(),
+        client: client,
       );
     }
 
     return Screen(
       heading: Heading(
-        titleIcon: LucideLabIcons.text_square,
+        titleIcon: document?.type == GDocumentType.TEMPLATE
+            ? LucideLightIcons.layout_template
+            : LucideLabIcons.text_square,
         titleIconColor: context.colors.accentBrand,
         title: headingTitle,
         backgroundColor: context.colors.surfaceDefault,

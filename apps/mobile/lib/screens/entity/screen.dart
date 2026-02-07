@@ -1295,7 +1295,7 @@ class _Post extends StatelessWidget {
         Row(
           spacing: 8,
           children: [
-            if (post.type == GPostType.TEMPLATE) const Icon(LucideLightIcons.shapes, size: 18),
+            if (post.postType == GPostType.TEMPLATE) const Icon(LucideLightIcons.shapes, size: 18),
             Expanded(
               child: Text(
                 post.title,
@@ -1304,7 +1304,7 @@ class _Post extends StatelessWidget {
                 maxLines: 1,
               ),
             ),
-            if (post.type == GPostType.NORMAL)
+            if (post.postType == GPostType.NORMAL)
               Text(post.updatedAt.ago, style: TextStyle(fontSize: 14, color: context.colors.textSubtle)),
           ],
         ),
@@ -1335,7 +1335,13 @@ class _Document extends StatelessWidget {
         Row(
           spacing: 8,
           children: [
-            Icon(LucideLightIcons.file_text, size: 18, color: context.colors.accentBrand),
+            Icon(
+              document.documentType == GDocumentType.TEMPLATE
+                  ? LucideLightIcons.layout_template
+                  : LucideLightIcons.file_text,
+              size: 18,
+              color: context.colors.accentBrand,
+            ),
             Expanded(
               child: Text(
                 document.title,
@@ -1376,7 +1382,9 @@ class _BottomMenuHeader extends StatelessWidget {
               entity?.node.when(
                     folder: (_) => LucideLightIcons.folder,
                     post: (_) => LucideLightIcons.file,
-                    document: (_) => LucideLightIcons.file_text,
+                    document: (doc) => doc.documentType == GDocumentType.TEMPLATE
+                        ? LucideLightIcons.layout_template
+                        : LucideLightIcons.file_text,
                     orElse: () => throw UnimplementedError(),
                   ) ??
                   LucideLightIcons.folder_open,

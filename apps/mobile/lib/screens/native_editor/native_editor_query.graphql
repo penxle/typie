@@ -7,6 +7,14 @@ query NativeEditorScreen_Query($slug: String!) {
 
     site {
       id
+      documentTemplates {
+        id
+        title
+        entity {
+          id
+          slug
+        }
+      }
     }
 
     node {
@@ -17,6 +25,7 @@ query NativeEditorScreen_Query($slug: String!) {
         title
         nullableTitle
         subtitle
+        type
         snapshot
         createdAt
         updatedAt

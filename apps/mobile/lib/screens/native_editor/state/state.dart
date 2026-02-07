@@ -190,6 +190,12 @@ abstract class AiFeedbackState with _$AiFeedbackState {
 }
 
 @freezed
+abstract class PlaceholderInfo with _$PlaceholderInfo {
+  const factory PlaceholderInfo({@Default(false) bool visible, double? x, double? y, double? width, double? height}) =
+      _PlaceholderInfo;
+}
+
+@freezed
 abstract class EditorState with _$EditorState {
   const factory EditorState({
     LayoutInfo? layout,
@@ -209,6 +215,7 @@ abstract class EditorState with _$EditorState {
     @Default(SearchState()) SearchState search,
     @Default(SpellcheckState()) SpellcheckState spellcheck,
     @Default(AiFeedbackState()) AiFeedbackState aiFeedback,
+    @Default(PlaceholderInfo()) PlaceholderInfo placeholder,
   }) = _EditorState;
 
   const EditorState._();
