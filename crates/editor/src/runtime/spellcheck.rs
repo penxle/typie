@@ -228,27 +228,26 @@ impl Runtime {
         end_offset: usize,
         correction: &str,
     ) -> bool {
-        if self
-            .replace_text_in_block(node_id, start_offset, end_offset, correction)
-            .is_err()
-        {
-            return false;
-        }
-
-        let doc_handle = self.state.doc.clone();
         let mut to_remove = Vec::new();
         for e in &self.spellcheck_errors {
             if e.node_id != node_id {
                 continue;
             }
 
-            if let Some((_, e_start_flat, e_end_flat)) = e.resolve_range(&doc_handle) {
+            if let Some((_, e_start_flat, e_end_flat)) = e.resolve_range(&self.state.doc) {
                 if e_start_flat == start_offset && e_end_flat == end_offset {
                     to_remove.push(e.id.clone());
                 }
             } else {
                 to_remove.push(e.id.clone());
             }
+        }
+
+        if self
+            .replace_text_in_block(node_id, start_offset, end_offset, correction)
+            .is_err()
+        {
+            return false;
         }
 
         self.spellcheck_errors

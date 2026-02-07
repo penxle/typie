@@ -556,6 +556,24 @@ final class NativeEditor {
     }
   }
 
+  List<dynamic> getSpellcheckErrors() {
+    _checkDisposed();
+
+    final ptr = _bindings.editor_get_spellcheck_errors(_handle);
+    if (ptr == nullptr) {
+      final error = _getLastError();
+      if (error != null) {
+        throw EditorException(error);
+      }
+      return [];
+    }
+
+    final json = ptr.cast<Utf8>().toDartString();
+    _bindings.editor_free_string(ptr);
+
+    return jsonDecode(json) as List<dynamic>;
+  }
+
   void clearSpellcheckErrors() {
     _checkDisposed();
 

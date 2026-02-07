@@ -144,7 +144,17 @@
     if (active) {
       const success = editor.applySpellcheckCorrection(active.nodeId, active.startOffset, active.endOffset, correction);
       if (success) {
-        removeError(errorId);
+        editor.fullSpellcheckErrors = editor.fullSpellcheckErrors.filter((e) => e.id !== errorId);
+
+        const freshErrors = editor.getSpellcheckErrors();
+        const freshMap = new Map(freshErrors.map((e) => [e.id, e]));
+        editor.fullSpellcheckErrors = editor.fullSpellcheckErrors.map((e) => {
+          const fresh = freshMap.get(e.id);
+          if (fresh) {
+            return { ...e, startOffset: fresh.startOffset, endOffset: fresh.endOffset };
+          }
+          return e;
+        });
       }
     }
   };
@@ -156,6 +166,21 @@
 
   const selectErrorRange = (error: SpellcheckErrorData) => {
     scrollToError(error);
+
+    const currentErrors = editor.getSpellcheckErrors();
+    const active = currentErrors.find((e) => e.id === error.id);
+    if (active) {
+      editor.dispatch({
+        type: 'setSelection',
+        anchorNodeId: active.nodeId,
+        anchorOffset: active.startOffset,
+        anchorAffinity: 'downstream',
+        headNodeId: active.nodeId,
+        headOffset: active.endOffset,
+        headAffinity: 'downstream',
+      });
+    }
+
     editor.focus();
   };
 
