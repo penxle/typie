@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:typie/native/editor_native.dart';
 import 'package:typie/screens/native_editor/state/fonts.dart';
@@ -78,5 +80,20 @@ class EditorController extends ChangeNotifier {
   void decrementFontLoading() {
     _state = _state.copyWith(fontLoadingCount: _state.fontLoadingCount - 1);
     notifyListeners();
+  }
+
+  final List<Completer<void>> _tickCompleters = [];
+
+  Future<void> waitForNextTick() {
+    final completer = Completer<void>();
+    _tickCompleters.add(completer);
+    return completer.future;
+  }
+
+  void notifyTick() {
+    for (final completer in _tickCompleters) {
+      completer.complete();
+    }
+    _tickCompleters.clear();
   }
 }

@@ -49,6 +49,7 @@ class TickerLoop {
 
     if (!editor.isDisposed) {
       editor.flush();
+      controller.notifyTick();
     }
   }
 
