@@ -263,6 +263,7 @@ fn scan_for_selection_bounds(
     }
 }
 
+// TODO: selection decoration 뿐만 아니라 selected external element도 고려해야 함
 pub fn is_point_in_selection_bounds(
     doc: &Doc,
     page: &Page,
@@ -312,24 +313,6 @@ pub fn is_selection_hit(
 
     let position = hit_selection.head;
 
-    if position_in_selection(doc, position, selection) {
-        // position이 selection의 경계에 있는 경우 좌표가 selection bounds 안에 있는지 확인
-        if let Ok((from, to)) = selection.as_sorted(doc) {
-            let is_at_start = matches!(compare_positions(doc, from, position), Ok(Ordering::Equal));
-            let is_at_end = matches!(compare_positions(doc, to, position), Ok(Ordering::Equal));
-
-            if is_at_start || is_at_end {
-                return is_point_in_selection_bounds(
-                    doc,
-                    page,
-                    selection,
-                    crate::types::Point::new(x, y),
-                );
-            }
-        }
-        return true;
-    }
-
     if is_selectable_block_hit(doc, &hit_selection) {
         if let (Ok((sel_from, sel_to)), Ok((hit_from, hit_to))) =
             (selection.as_sorted(doc), hit_selection.as_sorted(doc))
@@ -347,6 +330,24 @@ pub fn is_selection_hit(
                 return true;
             }
         }
+    }
+
+    if position_in_selection(doc, position, selection) {
+        // position이 selection의 경계에 있는 경우 좌표가 selection bounds 안에 있는지 확인
+        if let Ok((from, to)) = selection.as_sorted(doc) {
+            let is_at_start = matches!(compare_positions(doc, from, position), Ok(Ordering::Equal));
+            let is_at_end = matches!(compare_positions(doc, to, position), Ok(Ordering::Equal));
+
+            if is_at_start || is_at_end {
+                return is_point_in_selection_bounds(
+                    doc,
+                    page,
+                    selection,
+                    crate::types::Point::new(x, y),
+                );
+            }
+        }
+        return true;
     }
 
     false
