@@ -112,6 +112,7 @@ class TextReplacementsScreen extends HookWidget {
             icon: LucideLightIcons.plus,
             onTap: () async {
               await context.showBottomSheet(
+                resizeToAvoidBottomInset: true,
                 child: _FormBottomSheet(
                   client: client,
                   refreshNotifier: refreshNotifier,
@@ -613,6 +614,7 @@ class _CustomItemsList extends HookWidget {
                   Tappable(
                     onTap: () async {
                       await context.showBottomSheet(
+                        resizeToAvoidBottomInset: true,
                         child: _FormBottomSheet(
                           client: client,
                           refreshNotifier: refreshNotifier,
