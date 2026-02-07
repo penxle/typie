@@ -70,6 +70,37 @@ impl Transaction {
         self.effects.push(effect);
     }
 
+    fn selection_codepoints(&self) -> Vec<u32> {
+        self.selection()
+            .to_plain_text(self.doc())
+            .chars()
+            .map(|c| c as u32)
+            .collect()
+    }
+
+    pub(crate) fn current_font(&self) -> (String, u16) {
+        use crate::model::{FontFamilyMark, FontWeightMark, Mark};
+
+        let marks = self
+            .state
+            .pending_marks
+            .clone()
+            .unwrap_or_else(|| mark::get_marks_at_cursor(self, &self.selection().head));
+
+        let mut family = FontFamilyMark::default().family;
+        let mut weight = FontWeightMark::default().weight;
+
+        for mark in &marks {
+            match mark {
+                Mark::FontFamily(f) => family = f.family.clone(),
+                Mark::FontWeight(w) => weight = w.weight,
+                _ => {}
+            }
+        }
+
+        (family, weight)
+    }
+
     pub fn commit(self) -> Result<(State, Vec<Effect>)> {
         self.commit_internal(true)
     }

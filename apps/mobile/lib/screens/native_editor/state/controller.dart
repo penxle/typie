@@ -72,16 +72,6 @@ class EditorController extends ChangeNotifier {
     }
   }
 
-  void incrementFontLoading() {
-    _state = _state.copyWith(fontLoadingCount: _state.fontLoadingCount + 1);
-    notifyListeners();
-  }
-
-  void decrementFontLoading() {
-    _state = _state.copyWith(fontLoadingCount: _state.fontLoadingCount - 1);
-    notifyListeners();
-  }
-
   final List<Completer<void>> _tickCompleters = [];
 
   Future<void> waitForNextTick() {

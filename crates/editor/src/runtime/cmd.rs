@@ -1,7 +1,7 @@
 use crate::layout::elements::ExternalElementData;
 use crate::model::{LayoutMode, Mark, MarkType, TextAlign};
 use crate::state::Position;
-use crate::types::{PointerStyle, Rect, TextBound, WritingSystem};
+use crate::types::{PointerStyle, Rect, TextBound};
 use serde::Serialize;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -142,12 +142,14 @@ pub enum Cmd {
         mixed_marks: Vec<MarkType>,
     },
 
-    FontsRequired {
-        fonts: Vec<(String, u16)>,
+    FontRequired {
+        family: String,
+        weight: u16,
+        codepoints: Vec<u32>,
     },
 
-    WritingSystemRequired {
-        systems: Vec<WritingSystem>,
+    FallbackFontRequired {
+        codepoints: Vec<u32>,
     },
 
     RenderRequired,

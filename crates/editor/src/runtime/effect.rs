@@ -1,8 +1,4 @@
-use crate::{
-    model::NodeId,
-    state::Position,
-    types::{PointerStyle, WritingSystem},
-};
+use crate::{model::NodeId, state::Position, types::PointerStyle};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Effect {
@@ -20,12 +16,13 @@ pub enum Effect {
     PreeditChanged {
         node_id: Option<NodeId>,
     },
-    FontUsageChanged {
+    FontDetected {
         family: String,
         weight: u16,
+        codepoints: Vec<u32>,
     },
-    WritingSystemsUsageChanged {
-        systems: Vec<WritingSystem>,
+    CodepointDetected {
+        codepoints: Vec<u32>,
     },
     ExternalElementChanged,
     PointerStyleChanged {

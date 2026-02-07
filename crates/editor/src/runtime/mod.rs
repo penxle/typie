@@ -38,10 +38,10 @@ use crate::state::{
     Position, Preedit, Selection, find_child_at_offset, find_text_at_offset, position_in_selection,
 };
 use crate::transaction::Transaction;
-use crate::types::{Affinity, BoxConstraints, PointerStyle, Rect, Size, WritingSystem};
+use crate::types::{Affinity, BoxConstraints, PointerStyle, Rect, Size};
 use anyhow::Result;
 use loro::UndoManager;
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 use std::cell::RefCell;
 
 #[derive(Default)]
@@ -55,8 +55,8 @@ struct PendingUpdates {
     layout: bool,
     external_elements: bool,
     pointer_style: Option<PointerStyle>,
-    fonts: Vec<(String, u16)>,
-    writing_systems: Vec<WritingSystem>,
+    fonts: FxHashMap<(String, u16), Vec<u32>>,
+    codepoints: Vec<u32>,
     render: bool,
     drop_indicator: Option<DropIndicator>,
     enabled_actions: bool,
@@ -95,8 +95,8 @@ pub struct Runtime {
     layout_cache: RefCell<LayoutCache>,
     view_states: ViewStates,
 
-    loaded_fonts: FxHashSet<(String, u16)>,
-    loaded_scripts: FxHashSet<WritingSystem>,
+    loaded_font_codepoints: FxHashMap<(String, u16), FxHashSet<u32>>,
+    loaded_codepoints: FxHashSet<u32>,
 
     selection_cache: Option<SelectionSnapshot>,
     pending: PendingUpdates,
@@ -141,8 +141,8 @@ impl Runtime {
             undo_manager,
             layout_cache: RefCell::new(LayoutCache::new()),
             view_states: ViewStates::default(),
-            loaded_fonts: FxHashSet::default(),
-            loaded_scripts: FxHashSet::default(),
+            loaded_font_codepoints: FxHashMap::default(),
+            loaded_codepoints: FxHashSet::default(),
             selection_cache: None,
             pending: PendingUpdates {
                 doc: true,
@@ -154,8 +154,8 @@ impl Runtime {
                 layout: true,
                 external_elements: true,
                 pointer_style: None,
-                fonts: Vec::new(),
-                writing_systems: Vec::new(),
+                fonts: FxHashMap::default(),
+                codepoints: Vec::new(),
                 render: true,
                 drop_indicator: None,
                 enabled_actions: true,
@@ -990,14 +990,19 @@ impl Runtime {
             cmds.push(Cmd::PointerStyleChanged { style });
         }
 
-        let fonts = std::mem::take(&mut self.pending.fonts);
-        if !fonts.is_empty() {
-            cmds.push(Cmd::FontsRequired { fonts });
+        for ((family, weight), codepoints) in std::mem::take(&mut self.pending.fonts) {
+            if !codepoints.is_empty() {
+                cmds.push(Cmd::FontRequired {
+                    family,
+                    weight,
+                    codepoints,
+                });
+            }
         }
 
-        let systems = std::mem::take(&mut self.pending.writing_systems);
-        if !systems.is_empty() {
-            cmds.push(Cmd::WritingSystemRequired { systems });
+        let codepoints = std::mem::take(&mut self.pending.codepoints);
+        if !codepoints.is_empty() {
+            cmds.push(Cmd::FallbackFontRequired { codepoints });
         }
 
         if cmds.iter().any(|c| matches!(c, Cmd::LayoutChanged { .. })) {
@@ -1297,18 +1302,27 @@ impl Runtime {
     fn process_effects(&mut self, effects: Vec<Effect>) {
         for effect in effects {
             match effect {
-                Effect::FontUsageChanged { family, weight } => {
-                    let font = (family.clone(), weight);
-                    if !self.loaded_fonts.contains(&font) {
-                        self.loaded_fonts.insert(font.clone());
-                        self.pending.fonts.push(font);
+                Effect::FontDetected {
+                    family,
+                    weight,
+                    codepoints,
+                } => {
+                    let loaded = self
+                        .loaded_font_codepoints
+                        .entry((family.clone(), weight))
+                        .or_default();
+                    let pending = self.pending.fonts.entry((family, weight)).or_default();
+                    for cp in codepoints {
+                        if loaded.insert(cp) {
+                            pending.push(cp);
+                        }
                     }
                 }
-                Effect::WritingSystemsUsageChanged { systems: scripts } => {
-                    for s in scripts {
-                        if !self.loaded_scripts.contains(&s) {
-                            self.loaded_scripts.insert(s);
-                            self.pending.writing_systems.push(s);
+                Effect::CodepointDetected { codepoints } => {
+                    for cp in codepoints {
+                        if !self.loaded_codepoints.contains(&cp) {
+                            self.loaded_codepoints.insert(cp);
+                            self.pending.codepoints.push(cp);
                         }
                     }
                 }

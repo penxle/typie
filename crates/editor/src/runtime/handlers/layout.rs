@@ -1,7 +1,6 @@
-use crate::model::{LayoutMode, Mark, Node, NodeId};
+use crate::model::{FontFamilyMark, FontWeightMark, LayoutMode, Mark, Node, NodeId};
 use crate::runtime::{Effect, Runtime};
-use crate::types::{Theme, WritingSystem};
-use crate::utils::detect_writing_systems;
+use crate::types::Theme;
 use rustc_hash::FxHashSet;
 
 impl Runtime {
@@ -16,51 +15,57 @@ impl Runtime {
             Effect::LayoutChanged,
         ];
 
-        let (fonts, writing_systems) = self.collect_doc_fonts_and_writing_systems();
+        let (fonts, codepoints) = self.collect_doc_fonts_and_codepoints();
 
-        for (family, weight) in fonts {
-            effects.push(Effect::FontUsageChanged { family, weight });
-        }
-
-        if !writing_systems.is_empty() {
-            effects.push(Effect::WritingSystemsUsageChanged {
-                systems: writing_systems.into_iter().collect(),
+        for (family, weight, font_codepoints) in fonts {
+            effects.push(Effect::FontDetected {
+                family,
+                weight,
+                // codepoints: std::iter::chain(font_codepoints.into_iter(), std::iter::once(0x200B))
+                //     .collect(),
+                codepoints: font_codepoints.into_iter().collect(),
             });
         }
+
+        effects.push(Effect::CodepointDetected {
+            // codepoints: std::iter::chain(codepoints.into_iter(), std::iter::once(0x200B)).collect(),
+            codepoints: codepoints.into_iter().collect(),
+        });
 
         effects
     }
 
-    fn collect_doc_fonts_and_writing_systems(
+    fn collect_doc_fonts_and_codepoints(
         &self,
-    ) -> (Vec<(String, u16)>, FxHashSet<WritingSystem>) {
-        let mut fonts: FxHashSet<(String, u16)> = FxHashSet::default();
-        let mut writing_systems: FxHashSet<WritingSystem> = FxHashSet::default();
+    ) -> (Vec<(String, u16, FxHashSet<u32>)>, FxHashSet<u32>) {
+        let mut fonts: rustc_hash::FxHashMap<(String, u16), FxHashSet<u32>> =
+            rustc_hash::FxHashMap::default();
+        let mut codepoints: FxHashSet<u32> = FxHashSet::default();
 
-        self.collect_from_node(NodeId::ROOT, &mut fonts, &mut writing_systems);
+        self.collect_from_node(NodeId::ROOT, &mut fonts, &mut codepoints);
 
-        (fonts.into_iter().collect(), writing_systems)
+        let fonts = fonts
+            .into_iter()
+            .map(|((family, weight), cps)| (family, weight, cps))
+            .collect();
+
+        (fonts, codepoints)
     }
 
     fn collect_from_node(
         &self,
         node_id: NodeId,
-        fonts: &mut FxHashSet<(String, u16)>,
-        writing_systems: &mut FxHashSet<WritingSystem>,
+        fonts: &mut rustc_hash::FxHashMap<(String, u16), FxHashSet<u32>>,
+        codepoints: &mut FxHashSet<u32>,
     ) {
         let Some(node_ref) = self.doc().node(node_id) else {
             return;
         };
 
         if let Node::Text(text_node) = node_ref.node() {
-            let text_content = text_node.text.to_string();
-            for ws in detect_writing_systems(&text_content) {
-                writing_systems.insert(ws);
-            }
-
-            for (_, marks) in text_node.text.get_rich_text_segments() {
-                let mut family = String::from("Pretendard");
-                let mut weight = 400u16;
+            for (text, marks) in text_node.text.get_rich_text_segments() {
+                let mut family = FontFamilyMark::default().family;
+                let mut weight = FontWeightMark::default().weight;
 
                 for mark in &marks {
                     match mark {
@@ -70,12 +75,16 @@ impl Runtime {
                     }
                 }
 
-                fonts.insert((family, weight));
+                let font_cps = fonts.entry((family, weight)).or_default();
+                for ch in text.chars() {
+                    codepoints.insert(ch as u32);
+                    font_cps.insert(ch as u32);
+                }
             }
         }
 
         for child in node_ref.children() {
-            self.collect_from_node(child.node_id(), fonts, writing_systems);
+            self.collect_from_node(child.node_id(), fonts, codepoints);
         }
     }
 

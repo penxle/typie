@@ -75,23 +75,24 @@ pub fn init_test_env() {
             let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
             let assets_dir = std::path::Path::new(&manifest_dir).join("assets");
 
-            let emoji_path = assets_dir.join("Noto-Phantom-Emoji.woff2");
-            if emoji_path.exists() {
-                let emoji_data = std::fs::read(&emoji_path).expect("Failed to read emoji font");
-                let _ = crate::global::add_font("Noto Emoji", 400, &emoji_data);
-                crate::global::register_fallback_font("Noto Emoji");
-            } else {
-                eprintln!("Warning: Emoji font not found at {:?}", emoji_path);
-            }
+            crate::global::GLOBALS.with(|globals| {
+                let globals = globals.borrow();
+                let mut fcx = globals.parley_font_context.borrow_mut();
 
-            let font_path = assets_dir.join("Noto-Phantom.woff2");
-            if font_path.exists() {
-                let font_data = std::fs::read(&font_path).expect("Failed to read test font");
-                let _ = crate::global::add_font("Noto Sans", 400, &font_data);
-                crate::global::register_fallback_font("Noto Sans");
-            } else {
-                eprintln!("Warning: Test font not found at {:?}", font_path);
-            }
+                let emoji_path = assets_dir.join("Noto-Phantom-Emoji.ttf");
+                if emoji_path.exists() {
+                    let data = std::fs::read(&emoji_path).expect("Failed to read emoji font");
+                    crate::font::register_font(&mut fcx, "Noto Emoji", 400, data);
+                }
+
+                let font_path = assets_dir.join("Noto-Phantom.ttf");
+                if font_path.exists() {
+                    let data = std::fs::read(&font_path).expect("Failed to read test font");
+                    crate::font::register_font(&mut fcx, "Noto Sans", 400, data);
+                }
+            });
+
+            crate::font::set_fallback_fonts(&["Noto Sans", "Noto Emoji"]);
         }
     });
 }
@@ -1732,20 +1733,47 @@ macro_rules! assert_fragment_eq {
 }
 
 pub struct ScopedFontRegistration {
-    original: std::collections::HashMap<String, Vec<u16>>,
+    keys: Vec<(String, u16)>,
 }
 
 impl ScopedFontRegistration {
     pub fn new(fonts: std::collections::HashMap<String, Vec<u16>>) -> Self {
-        let original = crate::global::get_available_fonts();
-        crate::global::set_available_fonts(fonts);
-        Self { original }
+        let mut keys = Vec::new();
+        crate::global::GLOBALS.with(|globals| {
+            let globals = globals.borrow();
+            let mut lazy_fonts = globals.lazy_fonts.borrow_mut();
+            for (family, weights) in &fonts {
+                for &weight in weights {
+                    let key = (family.clone(), weight);
+                    if !lazy_fonts.contains_key(&key) {
+                        lazy_fonts.insert(
+                            key.clone(),
+                            crate::font::LazyFont {
+                                family_id: fontique::FamilyId::new(),
+                                data: std::sync::Arc::new(crate::font::SharedFontData::new(
+                                    Vec::new(),
+                                )),
+                                split_offset: 0,
+                            },
+                        );
+                        keys.push(key);
+                    }
+                }
+            }
+        });
+        Self { keys }
     }
 }
 
 impl Drop for ScopedFontRegistration {
     fn drop(&mut self) {
-        crate::global::set_available_fonts(self.original.clone());
+        crate::global::GLOBALS.with(|globals| {
+            let globals = globals.borrow();
+            let mut lazy_fonts = globals.lazy_fonts.borrow_mut();
+            for key in &self.keys {
+                lazy_fonts.remove(key);
+            }
+        });
     }
 }
 

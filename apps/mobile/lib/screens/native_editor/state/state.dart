@@ -235,7 +235,6 @@ abstract class EditorState with _$EditorState {
     @Default({}) Map<String, dynamic> selectionStats,
     @Default([]) List<ExternalElement> externalElements,
     Object? renderVersion,
-    @Default(0) int fontLoadingCount,
     @Default(DocumentSettings()) DocumentSettings settings,
     SelectionHandleInfo? fromHandle,
     SelectionHandleInfo? toHandle,
@@ -248,6 +247,4 @@ abstract class EditorState with _$EditorState {
   }) = _EditorState;
 
   const EditorState._();
-
-  bool get isLoadingFonts => fontLoadingCount > 0;
 }

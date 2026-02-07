@@ -61,7 +61,9 @@ generate_icu_data
 echo ""
 echo "Copying assets to pkg..."
 copy_if_changed "$ASSETS_DIR/icu_data.postcard" "$PKG_DIR/icu_data.postcard"
+copy_if_changed "$ASSETS_DIR/fonts.json" "$PKG_DIR/fonts.json"
 
 echo ""
 echo "Copying assets to mobile..."
 copy_if_changed "$ASSETS_DIR/icu_data.postcard" "$MOBILE_ASSETS_DIR/icu_data.postcard"
+copy_if_changed "$ASSETS_DIR/fonts.json" "$MOBILE_ASSETS_DIR/fonts.json"

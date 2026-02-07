@@ -2,14 +2,13 @@
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { autosize, tooltip } from '@typie/ui/actions';
-  import { Helmet, HorizontalDivider, Icon, Menu, RingSpinner } from '@typie/ui/components';
+  import { Helmet, HorizontalDivider, Icon, Menu } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { Tip } from '@typie/ui/notification';
   import { LocalStore } from '@typie/ui/state';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
   import { nanoid } from 'nanoid';
-  import { fly } from 'svelte/transition';
   import { match } from 'ts-pattern';
   import { DocumentSyncType } from '@/enums';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
@@ -808,30 +807,6 @@
             </EditorComponent>
             {#if showFindReplace}
               <DocumentFindReplace close={() => (showFindReplace = false)} {editor} />
-            {/if}
-            {#if editor.isLoadingFonts}
-              <div
-                class={flex({
-                  position: 'absolute',
-                  left: '1/2',
-                  bottom: '20px',
-                  transform: 'translateX(-50%)',
-                  alignItems: 'center',
-                  gap: '8px',
-                  paddingX: '12px',
-                  paddingY: '8px',
-                  backgroundColor: 'surface.subtle',
-                  borderWidth: '1px',
-                  borderColor: 'border.strong',
-                  borderRadius: '8px',
-                  fontSize: '12px',
-                  color: 'text.default',
-                })}
-                transition:fly={{ y: 10, duration: 150 }}
-              >
-                <RingSpinner style={css.raw({ size: '14px', color: 'text.subtle' })} />
-                <span>폰트 로드 중...</span>
-              </div>
             {/if}
           </div>
         </div>

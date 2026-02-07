@@ -1,4 +1,4 @@
-use crate::global::get_available_fonts;
+use crate::font::get_available_fonts;
 use crate::model::Mark;
 use crate::model::html::{DomSpec, MarkHtmlCodec, MarkParseRule, parse_styles};
 use macros::Codec;

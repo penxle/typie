@@ -28,13 +28,11 @@ void setTextReplacementRules(List<Map<String, dynamic>> rules) {
 Future<(NativeEditorApplication, FontManager)> _initApplication() async {
   final icuData = await rootBundle.load('assets/native/icu_data.postcard');
 
-  final app = NativeEditorApplication()
-    ..loadIcuData(icuData.buffer.asUint8List())
-    ..setAvailableFonts(getAvailableFontsMap());
+  final app = NativeEditorApplication()..loadIcuData(icuData.buffer.asUint8List());
 
   final fontManager = FontManager(app);
 
-  await fontManager.ensurePhantomFonts();
+  await fontManager.ensureAllFontBases();
 
   if (_pendingTextReplacementRules != null) {
     app.setTextReplacementRules(_pendingTextReplacementRules!);

@@ -5,6 +5,7 @@ mod utils;
 pub mod test_utils;
 
 mod ffi;
+mod font;
 mod global;
 mod icu_data;
 mod inspect;

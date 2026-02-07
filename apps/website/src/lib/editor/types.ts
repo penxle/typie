@@ -21,7 +21,6 @@ export type {
   TextAlign,
   TextBound,
   Theme,
-  WritingSystem,
 } from '@typie/editor';
 
 export type AiFeedbackData = {

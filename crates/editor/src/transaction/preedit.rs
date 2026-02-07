@@ -1,7 +1,7 @@
 use crate::runtime::Effect;
 use crate::state::Preedit;
 use crate::transaction::Transaction;
-use crate::utils::detect_writing_systems;
+use crate::utils::collect_codepoints;
 use anyhow::Result;
 
 impl Transaction {
@@ -11,11 +11,15 @@ impl Transaction {
             return Ok(false);
         }
 
-        let writing_systems = detect_writing_systems(&text);
-        if !writing_systems.is_empty() {
-            self.push_effect(Effect::WritingSystemsUsageChanged {
-                systems: writing_systems,
+        let codepoints = collect_codepoints(&text);
+        if !codepoints.is_empty() {
+            let (family, weight) = self.current_font();
+            self.push_effect(Effect::FontDetected {
+                family,
+                weight,
+                codepoints: codepoints.clone(),
             });
+            self.push_effect(Effect::CodepointDetected { codepoints });
         }
 
         self.state.preedit = Some(Preedit {

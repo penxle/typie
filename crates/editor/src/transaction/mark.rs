@@ -291,7 +291,8 @@ impl Transaction {
 
         match &mark {
             Mark::FontFamily(fm) => {
-                let weights = crate::global::get_available_font_weights(&fm.family);
+                let available = crate::font::get_available_fonts();
+                let weights = available.get(&fm.family).cloned().unwrap_or_default();
                 let weight = if let Some(&first) = weights.first() {
                     weights.iter().fold(first, |prev, &curr| {
                         if (curr as i32 - 400).abs() < (prev as i32 - 400).abs() {
@@ -304,9 +305,11 @@ impl Transaction {
                     400
                 };
 
-                self.push_effect(Effect::FontUsageChanged {
+                let codepoints = self.selection_codepoints();
+                self.push_effect(Effect::FontDetected {
                     family: fm.family.clone(),
                     weight,
+                    codepoints,
                 });
             }
             Mark::FontWeight(fw) => {
@@ -314,9 +317,11 @@ impl Transaction {
                     Some(Mark::FontFamily(fm)) => fm.family,
                     _ => FontFamilyMark::default().family,
                 };
-                self.push_effect(Effect::FontUsageChanged {
+                let codepoints = self.selection_codepoints();
+                self.push_effect(Effect::FontDetected {
                     family,
                     weight: fw.weight,
+                    codepoints,
                 });
             }
             _ => {}
@@ -495,7 +500,8 @@ impl Transaction {
             _ => FontFamilyMark::default().family,
         };
 
-        let weights = crate::global::get_available_font_weights(&family_name);
+        let available = crate::font::get_available_fonts();
+        let weights = available.get(&family_name).cloned().unwrap_or_default();
 
         if weights.is_empty() {
             return Ok(false);
@@ -527,9 +533,11 @@ impl Transaction {
         let mark = Mark::FontWeight(FontWeightMark {
             weight: target_weight,
         });
-        self.push_effect(Effect::FontUsageChanged {
+        let codepoints = self.selection_codepoints();
+        self.push_effect(Effect::FontDetected {
             family: family_name,
             weight: target_weight,
+            codepoints,
         });
         self.add_mark(mark)
     }
@@ -1877,10 +1885,7 @@ mod tests {
 
         let (bold_state, effects) = transact_with_effect!(initial, |tr| tr.toggle_bold().unwrap());
 
-        assert!(effects.contains(&Effect::FontUsageChanged {
-            family: font_family.clone(),
-            weight: 700,
-        }));
+        assert!(effects.iter().any(|e| matches!(e, Effect::FontDetected { family, weight: 700, .. } if family == &font_family)));
 
         let expected_bold = state! {
             doc {
@@ -1895,10 +1900,7 @@ mod tests {
         let (normal_state, effects) =
             transact_with_effect!(bold_state, |tr| tr.toggle_bold().unwrap());
 
-        assert!(effects.contains(&Effect::FontUsageChanged {
-            family: font_family.clone(),
-            weight: 400,
-        }));
+        assert!(effects.iter().any(|e| matches!(e, Effect::FontDetected { family, weight: 400, .. } if family == &font_family)));
 
         let expected_normal = state! {
             doc {
@@ -2085,10 +2087,10 @@ mod tests {
 
         let effect = effects
             .iter()
-            .find(|e| matches!(e, Effect::FontUsageChanged { .. }))
+            .find(|e| matches!(e, Effect::FontDetected { .. }))
             .expect("Effect::FontUsageChanged not found");
 
-        if let Effect::FontUsageChanged { family, weight } = effect {
+        if let Effect::FontDetected { family, weight, .. } = effect {
             assert_eq!(family, "ThinFont");
             assert_eq!(*weight, 100);
         } else {

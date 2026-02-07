@@ -6,7 +6,7 @@ use crate::state::{Position, Selection, block_content_len};
 use crate::transaction::Transaction;
 use crate::types::Affinity;
 use crate::utils::{
-    detect_writing_systems, find_next_grapheme_boundary, find_prev_grapheme_boundary,
+    collect_codepoints, find_next_grapheme_boundary, find_prev_grapheme_boundary,
     resolve_affinity_boundary,
 };
 use anyhow::{Context, Result};
@@ -202,11 +202,15 @@ impl Transaction {
             return Ok(false);
         }
 
-        let writing_systems = detect_writing_systems(s);
-        if !writing_systems.is_empty() {
-            self.push_effect(Effect::WritingSystemsUsageChanged {
-                systems: writing_systems,
+        let codepoints = collect_codepoints(s);
+        if !codepoints.is_empty() {
+            let (family, weight) = self.current_font();
+            self.push_effect(Effect::FontDetected {
+                family,
+                weight,
+                codepoints: codepoints.clone(),
             });
+            self.push_effect(Effect::CodepointDetected { codepoints });
         }
 
         let selection = self.selection().clone();
@@ -948,7 +952,7 @@ mod tests {
     use crate::model::*;
     use crate::runtime::Effect;
     use crate::state::{Position, Selection};
-    use crate::types::{Affinity, WritingSystem};
+    use crate::types::Affinity;
 
     #[test]
     fn insert_text_at_middle() {
@@ -3460,7 +3464,7 @@ mod tests {
     }
 
     #[test]
-    fn insert_text_emits_writing_systems_usage_changed() {
+    fn insert_text_emits_codepoints_detected() {
         let mut p = id!();
 
         let initial = state! {
@@ -3474,30 +3478,30 @@ mod tests {
             .insert_text("Hello 안녕 こんにちは 你好")
             .unwrap());
 
-        let writing_systems: Vec<WritingSystem> = effects
+        let codepoints: Vec<u32> = effects
             .iter()
             .filter_map(|e| match e {
-                Effect::WritingSystemsUsageChanged { systems } => Some(systems.clone()),
+                Effect::CodepointDetected { codepoints } => Some(codepoints.clone()),
                 _ => None,
             })
             .flatten()
             .collect();
 
         assert!(
-            writing_systems.contains(&WritingSystem::Latin),
-            "insert_text should detect Latin"
+            codepoints.contains(&('H' as u32)),
+            "insert_text should detect Latin codepoints"
         );
         assert!(
-            writing_systems.contains(&WritingSystem::Korean),
-            "insert_text should detect Korean"
+            codepoints.contains(&('안' as u32)),
+            "insert_text should detect Korean codepoints"
         );
         assert!(
-            writing_systems.contains(&WritingSystem::Japanese),
-            "insert_text should detect Japanese"
+            codepoints.contains(&('こ' as u32)),
+            "insert_text should detect Japanese codepoints"
         );
         assert!(
-            writing_systems.contains(&WritingSystem::Chinese),
-            "insert_text should detect Chinese"
+            codepoints.contains(&('你' as u32)),
+            "insert_text should detect Chinese codepoints"
         );
     }
 
