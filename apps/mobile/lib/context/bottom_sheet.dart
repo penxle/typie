@@ -18,6 +18,7 @@ extension BottomSheetExtension on BuildContext {
     required Widget child,
     bool intercept = false,
     double overlayOpacity = 0.5,
+    bool resizeToAvoidBottomInset = false,
     void Function(double)? onHeightCalculated,
   }) {
     return router.root.pushWidget(
@@ -58,7 +59,9 @@ extension BottomSheetExtension on BuildContext {
               child: AnimatedPadding(
                 duration: const Duration(milliseconds: 100),
                 curve: Curves.easeOut,
-                padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+                padding: EdgeInsets.only(
+                  bottom: resizeToAvoidBottomInset ? MediaQuery.viewInsetsOf(context).bottom : 0,
+                ),
                 child: Align(
                   alignment: Alignment.bottomCenter,
                   child: ResponsiveContainer(

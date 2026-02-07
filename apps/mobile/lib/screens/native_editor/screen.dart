@@ -47,7 +47,7 @@ class NativeEditorScreen extends StatelessWidget {
       operation: GNativeEditorScreen_QueryReq(
         (b) => b
           ..vars.slug = slug
-          ..fetchPolicy = FetchPolicy.NetworkOnly,
+          ..fetchPolicy = FetchPolicy.CacheAndNetwork,
       ),
       builder: (context, client, data) => _Content(slug: slug, data: data, client: client),
     );
@@ -155,6 +155,23 @@ class _Content extends HookWidget {
         editor.value?.dispose();
       };
     }, [document?.id]);
+
+    final loadedSnapshot = useRef<String?>(null);
+
+    useEffect(() {
+      final currentEditor = editor.value;
+      final snapshotValue = document?.snapshot.value;
+      if (currentEditor == null || currentEditor.isDisposed || snapshotValue == null || snapshotValue.isEmpty) {
+        return null;
+      }
+
+      if (loadedSnapshot.value != null && loadedSnapshot.value != snapshotValue) {
+        currentEditor.importUpdates(base64Decode(snapshotValue));
+      }
+      loadedSnapshot.value = snapshotValue;
+
+      return null;
+    }, [editor.value, document?.snapshot.value]);
 
     useEffect(() {
       final currentEditor = editor.value;
