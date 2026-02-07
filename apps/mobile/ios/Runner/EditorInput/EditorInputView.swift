@@ -185,6 +185,8 @@ class EditorTextInputView: UIView, UITextInput {
   }
 
   override var canBecomeFirstResponder: Bool { true }
+  
+  override var undoManager: UndoManager? { nil }
 
   // MARK: - Floating Cursor (keyboard trackpad mode)
 
