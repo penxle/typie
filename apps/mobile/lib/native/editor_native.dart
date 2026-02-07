@@ -488,9 +488,9 @@ final class NativeEditor {
     return jsonDecode(json) as Map<String, dynamic>;
   }
 
-  bool canDragAt(int pageIdx, double x, double y) {
+  bool isSelectionHit(int pageIdx, double x, double y) {
     _checkDisposed();
-    return _bindings.editor_can_drag_at(_handle, pageIdx, x, y) == 1;
+    return _bindings.editor_is_selection_hit(_handle, pageIdx, x, y) == 1;
   }
 
   NativeEditorCharacterCounts getCharacterCounts() {

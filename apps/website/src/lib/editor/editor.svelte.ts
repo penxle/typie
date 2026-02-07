@@ -702,7 +702,7 @@ export class Editor {
     const rect = pageElement.getBoundingClientRect();
     const relX = e.clientX - rect.left;
     const relY = e.clientY - rect.top;
-    this.isDraggable = !this.readOnly && this.canDragAt(pageIdx, relX, relY);
+    this.isDraggable = !this.readOnly && this.isSelectionHit(pageIdx, relX, relY);
 
     if (e.button === 0) {
       if (!this.isDraggable) {
@@ -917,7 +917,7 @@ export class Editor {
 
     const rect = pageElement.getBoundingClientRect();
 
-    if (this.readOnly || !this.canDragAt(pageIdx, x, y)) {
+    if (this.readOnly || !this.isSelectionHit(pageIdx, x, y)) {
       e.preventDefault();
       return;
     }
@@ -1204,8 +1204,8 @@ export class Editor {
     this.dispatch({ type: 'selectAiFeedbackItem', itemId });
   }
 
-  canDragAt(pageIdx: number, x: number, y: number): boolean {
-    return this.#wasmEditor?.canDragAt(pageIdx, x, y) ?? false;
+  isSelectionHit(pageIdx: number, x: number, y: number): boolean {
+    return this.#wasmEditor?.isSelectionHit(pageIdx, x, y) ?? false;
   }
 
   getClipboardData(): { fragment: string; html: string; text: string } | null {

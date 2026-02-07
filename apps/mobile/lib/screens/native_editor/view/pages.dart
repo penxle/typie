@@ -243,7 +243,7 @@ class PageList extends HookWidget {
                             final viewportY = localPosition.dy - scrollOffset;
                             final (pageIdx, localY) = getPageAtPosition(viewportY);
                             final pointerX = gesture.getPointerX(localPosition.dx);
-                            return scope.dndController.canDragAt(pageIdx, pointerX, localY);
+                            return scope.editor.isSelectionHit(pageIdx, pointerX, localY);
                           },
                           duration: const Duration(milliseconds: 500),
                         ),
@@ -412,6 +412,20 @@ class PageList extends HookWidget {
             }
           }
 
+          final pointerX = gesture.getPointerX(localPosition.dx);
+
+          if (clickCount == 1) {
+            if (scope.editor.isSelectionHit(pageIdx, pointerX, localY)) {
+              gesture
+                ..lastTapTime = now
+                ..lastTapPosition = localPosition;
+              if (!wasContextMenuOpen.value) {
+                showContextMenu.value = true;
+              }
+              return;
+            }
+          }
+
           if (clickCount == 2) {
             pendingContextMenu.value = true;
           }
@@ -426,7 +440,6 @@ class PageList extends HookWidget {
           final isShiftHeader =
               keysPressed.contains(LogicalKeyboardKey.shiftLeft) || keysPressed.contains(LogicalKeyboardKey.shiftRight);
 
-          final pointerX = gesture.getPointerX(localPosition.dx);
           editor
             ..dispatch({
               'type': 'pointerDown',
@@ -496,7 +509,7 @@ class PageList extends HookWidget {
               final pointerX = gesture.getPointerX(details.localPosition.dx);
               final (pageIdx, localY) = getPageAtPosition(details.localPosition.dy);
 
-              final canDrag = scope.dndController.canDragAt(pageIdx, pointerX, localY);
+              final canDrag = scope.editor.isSelectionHit(pageIdx, pointerX, localY);
 
               if (!canDrag) {
                 dispatchTap(details.localPosition);

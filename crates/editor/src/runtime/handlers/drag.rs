@@ -7,52 +7,6 @@ use crate::state::{Position, Selection};
 use crate::transaction::Transaction;
 
 impl Runtime {
-    pub(crate) fn can_drag_at(&self, page_idx: usize, x: f32, y: f32) -> bool {
-        if self.state.selection.is_collapsed() {
-            return false;
-        }
-
-        let Some(page) = self.pages.get(page_idx) else {
-            return false;
-        };
-
-        let ctx = NavigationContext::new(&self.state.doc);
-        let Some(hit_selection) = Cursor::hit_test(&ctx, page, x, y) else {
-            return false;
-        };
-
-        let position = hit_selection.head;
-
-        if self.is_position_in_selection(position) {
-            return true;
-        }
-
-        if self.is_block_selectable_hit(&hit_selection) {
-            if let (Ok((sel_from, sel_to)), Ok((hit_from, hit_to))) = (
-                self.state.selection.as_sorted(&self.state.doc),
-                hit_selection.as_sorted(&self.state.doc),
-            ) {
-                use crate::state::position_helpers::compare_positions;
-                use std::cmp::Ordering;
-
-                let start_ok = matches!(
-                    compare_positions(&self.state.doc, sel_from, hit_from),
-                    Ok(Ordering::Less | Ordering::Equal)
-                );
-                let end_ok = matches!(
-                    compare_positions(&self.state.doc, hit_to, sel_to),
-                    Ok(Ordering::Less | Ordering::Equal)
-                );
-
-                if start_ok && end_ok {
-                    return true;
-                }
-            }
-        }
-
-        false
-    }
-
     pub(crate) fn handle_drag_start(&mut self, _page_idx: usize, _x: f32, _y: f32) -> Vec<Effect> {
         self.set_pointer_mode(PointerMode::DraggingContent);
         vec![]

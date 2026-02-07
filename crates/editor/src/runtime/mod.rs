@@ -1286,24 +1286,7 @@ impl Runtime {
     }
 
     pub(crate) fn is_block_selectable_hit(&self, hit_selection: &Selection) -> bool {
-        if hit_selection.is_collapsed() {
-            return false;
-        }
-
-        let anchor = hit_selection.anchor;
-        let Some(parent) = self.state.doc.node(anchor.node_id) else {
-            return false;
-        };
-
-        let Some((child_id, _)) = find_child_at_offset(&parent, anchor.offset) else {
-            return false;
-        };
-
-        self.state
-            .doc
-            .node(child_id)
-            .map(|child| child.spec().selectable)
-            .unwrap_or(false)
+        crate::layout::query::is_selectable_block_hit(&self.state.doc, hit_selection)
     }
 
     pub fn update(&mut self, msg: Message) {
