@@ -160,26 +160,38 @@ class SpellcheckSheet extends HookWidget {
                         (error) => _SpellcheckErrorItem(
                           error: error,
                           onCorrect: (correction) {
-                            final nodeId = error['nodeId'] as String;
-                            final startOffset = error['startOffset'] as int;
-                            final endOffset = error['endOffset'] as int;
+                            final freshErrors = editor.getSpellcheckErrors();
+                            final active = freshErrors
+                                .cast<Map<String, dynamic>>()
+                                .where((e) => e['id'] == error['id'])
+                                .firstOrNull;
 
-                            editor.applySpellcheckCorrection(nodeId, startOffset, endOffset, correction);
+                            if (active != null) {
+                              editor.applySpellcheckCorrection(
+                                active['nodeId'] as String,
+                                active['startOffset'] as int,
+                                active['endOffset'] as int,
+                                correction,
+                              );
+                            }
 
                             final remaining = errors.value.where((e) => e['id'] != error['id']).toList();
-                            errors.value = remaining;
 
-                            final rawErrors = remaining
-                                .map(
-                                  (e) => <String, dynamic>{
-                                    'id': e['id'],
-                                    'nodeId': e['nodeId'],
-                                    'startOffset': e['startOffset'],
-                                    'endOffset': e['endOffset'],
-                                  },
-                                )
-                                .toList();
-                            editor.setSpellcheckErrors(rawErrors);
+                            final updatedErrors = editor.getSpellcheckErrors();
+                            final updatedMap = <String, Map<String, dynamic>>{
+                              for (final e in updatedErrors.cast<Map<String, dynamic>>()) e['id'] as String: e,
+                            };
+                            errors.value = remaining.map((e) {
+                              final updated = updatedMap[e['id']];
+                              if (updated != null) {
+                                return <String, dynamic>{
+                                  ...e,
+                                  'startOffset': updated['startOffset'],
+                                  'endOffset': updated['endOffset'],
+                                };
+                              }
+                              return e;
+                            }).toList();
                           },
                           onTap: () {
                             controller.dispatch({'type': 'selectSpellcheckError', 'errorId': error['id']});

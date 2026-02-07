@@ -101,14 +101,16 @@
       const success = editor.applySpellcheckCorrection(active.nodeId, active.startOffset, active.endOffset, correction);
       if (success) {
         editor.fullSpellcheckErrors = editor.fullSpellcheckErrors.filter((e) => e.id !== activeError.id);
-        editor.setSpellcheckErrors(
-          editor.fullSpellcheckErrors.map((e) => ({
-            id: e.id,
-            nodeId: e.nodeId,
-            startOffset: e.startOffset,
-            endOffset: e.endOffset,
-          })),
-        );
+
+        const freshErrors = editor.getSpellcheckErrors();
+        const freshMap = new Map(freshErrors.map((e) => [e.id, e]));
+        editor.fullSpellcheckErrors = editor.fullSpellcheckErrors.map((e) => {
+          const fresh = freshMap.get(e.id);
+          if (fresh) {
+            return { ...e, startOffset: fresh.startOffset, endOffset: fresh.endOffset };
+          }
+          return e;
+        });
       }
     }
     editor.focus();

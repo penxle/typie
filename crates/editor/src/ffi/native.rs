@@ -1147,6 +1147,25 @@ pub extern "C" fn editor_apply_spellcheck_correction(
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn editor_get_spellcheck_errors(editor: *mut EditorHandle) -> *mut c_char {
+    ffi!(
+        {
+            if editor.is_null() {
+                return Err("Editor is null".into());
+            }
+
+            let editor = unsafe { &mut *(editor as *mut EditorInner) };
+            let errors = editor.runtime.get_spellcheck_errors();
+            let json_str =
+                serde_json::to_string(&errors).map_err(|e| format!("Failed to serialize: {e}"))?;
+            let c_str = CString::new(json_str).map_err(|_| "Invalid string")?;
+            Ok(c_str.into_raw())
+        },
+        std::ptr::null_mut()
+    )
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn editor_clear_spellcheck_errors(editor: *mut EditorHandle) -> i32 {
     ffi!(
         {
