@@ -97,6 +97,7 @@ export class Editor {
   #wasmEditor: WasmEditor | null = null;
   #running = false;
   #rafId: number | null = null;
+  #flushPending = false;
   #pendingFontLoad = false;
   #onDocChanged?: () => void;
   #onExitedDocumentStart?: () => void;
@@ -305,9 +306,13 @@ export class Editor {
       this.#processCommands(cmds);
     }
 
-    idleCallback(() => {
-      this.#wasmEditor?.flush();
-    });
+    if (!this.#flushPending) {
+      this.#flushPending = true;
+      idleCallback(() => {
+        this.#flushPending = false;
+        this.#wasmEditor?.flush();
+      });
+    }
 
     this.#rafId = requestAnimationFrame(this.#tick);
   };
