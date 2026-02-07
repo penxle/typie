@@ -14,6 +14,7 @@ import 'package:typie/routers/app.gr.dart';
 import 'package:typie/screens/native_editor/__generated__/delete_document_mutation.req.gql.dart';
 import 'package:typie/screens/native_editor/__generated__/duplicate_document_mutation.req.gql.dart';
 import 'package:typie/screens/native_editor/__generated__/native_editor_query.data.gql.dart';
+import 'package:typie/screens/native_editor/__generated__/update_document_type_mutation.req.gql.dart';
 import 'package:typie/screens/native_editor/sheet/info.dart';
 import 'package:typie/screens/native_editor/sheet/settings.dart';
 import 'package:typie/screens/native_editor/state/controller.dart';
@@ -105,6 +106,35 @@ class MenuSheet extends StatelessWidget {
                 : null,
             onTap: () async {
               await context.showBottomSheet(intercept: true, child: ShareBottomSheet(entityIds: [data.entity.id]));
+            },
+          ),
+          BottomMenuItem(
+            icon: LucideLightIcons.layout_template,
+            label: document.type == GDocumentType.TEMPLATE ? '문서로 전환' : '템플릿으로 전환',
+            onTap: () async {
+              final isToTemplate = document.type != GDocumentType.TEMPLATE;
+              await context.showModal(
+                intercept: true,
+                child: ConfirmModal(
+                  title: isToTemplate ? '템플릿으로 전환' : '문서로 전환',
+                  message: isToTemplate
+                      ? '이 문서를 템플릿으로 전환하시겠어요?\n앞으로 새 문서를 생성할 때 이 문서의 내용을 쉽게 이용할 수 있어요.'
+                      : '이 템플릿을 다시 일반 문서로 전환하시겠어요?',
+                  confirmText: '전환',
+                  onConfirm: () async {
+                    await client.request(
+                      GNativeEditor_UpdateDocumentType_MutationReq(
+                        (b) => b
+                          ..vars.input.documentId = document.id
+                          ..vars.input.type = isToTemplate ? GDocumentType.TEMPLATE : GDocumentType.NORMAL,
+                      ),
+                    );
+                    if (context.mounted) {
+                      await context.router.maybePop();
+                    }
+                  },
+                ),
+              );
             },
           ),
           BottomMenuItem(

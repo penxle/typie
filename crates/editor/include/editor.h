@@ -94,6 +94,8 @@ int32_t editor_set_ai_feedback_items(EditorHandle* editor, const char* items_jso
 int32_t editor_clear_ai_feedback_items(EditorHandle* editor);
 char* editor_get_ai_feedback_items(EditorHandle* editor);
 
+int32_t editor_insert_template_fragment(EditorHandle* editor, const uint8_t* snapshot, size_t snapshot_len);
+
 #ifdef __cplusplus
 }
 #endif

@@ -1,0 +1,15 @@
+mutation NativeEditor_UpdateDocumentType_Mutation($input: UpdateDocumentTypeInput!) {
+  updateDocumentType(input: $input) {
+    id
+    type
+    entity {
+      id
+      site {
+        id
+        documentTemplates {
+          id
+        }
+      }
+    }
+  }
+}

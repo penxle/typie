@@ -1,0 +1,6 @@
+query NativeEditor_LoadTemplateDocument_Query($slug: String!) {
+  document(slug: $slug) {
+    id
+    snapshot
+  }
+}

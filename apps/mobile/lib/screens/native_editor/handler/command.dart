@@ -3,6 +3,7 @@ import 'package:typie/screens/native_editor/handler/commands/document.dart';
 import 'package:typie/screens/native_editor/handler/commands/font.dart';
 import 'package:typie/screens/native_editor/handler/commands/layout.dart';
 import 'package:typie/screens/native_editor/handler/commands/overlay.dart';
+import 'package:typie/screens/native_editor/handler/commands/placeholder.dart';
 import 'package:typie/screens/native_editor/handler/commands/selection.dart';
 import 'package:typie/screens/native_editor/state/controller.dart';
 
@@ -24,6 +25,7 @@ class CommandHandler {
     'searchResultsChanged': handleSearchResultsChanged,
     'spellcheckOverlaysChanged': handleSpellcheckOverlaysChanged,
     'aiFeedbackOverlaysChanged': handleAiFeedbackOverlaysChanged,
+    'placeholderChanged': handlePlaceholderChanged,
   };
 
   static void handleCommands(EditorController controller, List<dynamic>? commands) {

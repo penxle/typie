@@ -4,13 +4,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
+import 'package:typie/context/bottom_sheet.dart';
 import 'package:typie/context/theme.dart';
+import 'package:typie/graphql/client.dart';
 import 'package:typie/hooks/service.dart';
+import 'package:typie/icons/lucide_light.dart';
+import 'package:typie/screens/native_editor/__generated__/native_editor_query.data.gql.dart';
 import 'package:typie/screens/native_editor/controller/input.dart';
 import 'package:typie/screens/native_editor/controller/keyboard.dart';
 import 'package:typie/screens/native_editor/controller/ticker.dart';
 import 'package:typie/screens/native_editor/controller/upload.dart';
 import 'package:typie/screens/native_editor/external/models.dart';
+import 'package:typie/screens/native_editor/sheet/template.dart';
 import 'package:typie/screens/native_editor/state/controller.dart';
 import 'package:typie/screens/native_editor/state/state.dart';
 import 'package:typie/screens/native_editor/toolbar/floating/floating.dart';
@@ -35,6 +40,8 @@ class EditorView extends HookWidget {
     required this.onSubtitleChanged,
     required this.titleFocusNode,
     required this.subtitleFocusNode,
+    required this.documentTemplates,
+    required this.client,
     super.key,
   });
 
@@ -45,6 +52,8 @@ class EditorView extends HookWidget {
   final ValueChanged<String> onSubtitleChanged;
   final FocusNode titleFocusNode;
   final FocusNode subtitleFocusNode;
+  final List<GNativeEditorScreen_QueryData_entity_site_documentTemplates> documentTemplates;
+  final GraphQLClient client;
 
   @override
   Widget build(BuildContext context) {
@@ -437,6 +446,14 @@ class EditorView extends HookWidget {
                   child: Stack(
                     children: [
                       const PageList(),
+                      _DocumentPlaceholder(
+                        controller: controller,
+                        verticalScrollController: verticalScrollController,
+                        horizontalScrollController: horizontalScrollController,
+                        titleAreaHeight: titleAreaHeight,
+                        documentTemplates: documentTemplates,
+                        client: client,
+                      ),
                       ValueListenableBuilder<Offset?>(
                         valueListenable: longPressPosition,
                         builder: (context, longPress, _) {
@@ -503,6 +520,86 @@ class EditorView extends HookWidget {
           },
         ),
       ),
+    );
+  }
+}
+
+class _DocumentPlaceholder extends StatelessWidget {
+  const _DocumentPlaceholder({
+    required this.controller,
+    required this.verticalScrollController,
+    required this.horizontalScrollController,
+    required this.titleAreaHeight,
+    required this.documentTemplates,
+    required this.client,
+  });
+
+  final EditorController controller;
+  final ScrollController verticalScrollController;
+  final ScrollController horizontalScrollController;
+  final ValueNotifier<double> titleAreaHeight;
+  final List<GNativeEditorScreen_QueryData_entity_site_documentTemplates> documentTemplates;
+  final GraphQLClient client;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: controller,
+      builder: (context, _) {
+        final placeholder = controller.state.placeholder;
+        if (!placeholder.visible ||
+            placeholder.x == null ||
+            placeholder.y == null ||
+            placeholder.width == null ||
+            placeholder.width! <= 0) {
+          return const SizedBox.shrink();
+        }
+
+        final layout = controller.state.layout;
+        if (layout == null) {
+          return const SizedBox.shrink();
+        }
+
+        final geo = ContentGeometry(layout: layout, titleAreaHeight: titleAreaHeight.value);
+
+        return AnimatedBuilder(
+          animation: Listenable.merge([verticalScrollController, horizontalScrollController]),
+          builder: (context, child) {
+            final verticalScroll = verticalScrollController.hasClients ? verticalScrollController.offset : 0.0;
+            final horizontalScroll = horizontalScrollController.hasClients ? horizontalScrollController.offset : 0.0;
+
+            final top = placeholder.y! + titleAreaHeight.value - verticalScroll;
+            final left = placeholder.x! + geo.horizontalPadding - horizontalScroll;
+
+            return Positioned(top: top, left: left, width: placeholder.width, child: child!);
+          },
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              IgnorePointer(
+                child: Text('내용을 입력하거나', style: TextStyle(color: context.colors.textDisabled)),
+              ),
+              const Gap(4),
+              GestureDetector(
+                onTap: () async {
+                  await context.showBottomSheet(
+                    intercept: true,
+                    child: TemplateSheet(templates: documentTemplates, editor: controller.editor, client: client),
+                  );
+                },
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(LucideLightIcons.layout_template, size: 16, color: context.colors.textDisabled),
+                    const Gap(4),
+                    Text('템플릿 불러오기', style: TextStyle(color: context.colors.textDisabled)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
