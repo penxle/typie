@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:super_drag_and_drop/super_drag_and_drop.dart';
 import 'package:typie/hooks/service.dart';
@@ -420,6 +421,10 @@ class PageList extends HookWidget {
 
           final prevCursor = cursor;
 
+          final keysPressed = HardwareKeyboard.instance.logicalKeysPressed;
+          final isShiftHeader =
+              keysPressed.contains(LogicalKeyboardKey.shiftLeft) || keysPressed.contains(LogicalKeyboardKey.shiftRight);
+
           final pointerX = gesture.getPointerX(localPosition.dx);
           editor
             ..dispatch({
@@ -429,7 +434,7 @@ class PageList extends HookWidget {
               'y': localY,
               'clickCount': clickCount,
               'button': 'primary',
-              'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
+              'modifier': {'shift': isShiftHeader, 'ctrl': false, 'alt': false, 'meta': false},
             })
             ..dispatch({
               'type': 'pointerUp',
@@ -437,7 +442,7 @@ class PageList extends HookWidget {
               'x': pointerX,
               'y': localY,
               'button': 'primary',
-              'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
+              'modifier': {'shift': isShiftHeader, 'ctrl': false, 'alt': false, 'meta': false},
             });
 
           if (clickCount == 1 && prevCursor != null) {
