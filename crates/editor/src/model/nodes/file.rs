@@ -29,13 +29,18 @@ impl NodeHtmlCodec for FileNode {
     }
 
     fn parse_rules() -> Vec<NodeParseRule> {
-        vec![NodeParseRule::simple("a[data-file-id]", |elem| {
-            let id = elem.value().attr("data-file-id").map(|s| s.to_string());
-            Some(Node::File(FileNode {
-                id,
-                upload_id: None,
-            }))
-        })]
+        vec![NodeParseRule::new(
+            "a",
+            50,
+            |elem| elem.value().attr("data-file-id").is_some(),
+            |elem| {
+                let id = elem.value().attr("data-file-id").map(|s| s.to_string());
+                Some(Node::File(FileNode {
+                    id,
+                    upload_id: None,
+                }))
+            },
+        )]
     }
 }
 

@@ -27,10 +27,15 @@ impl NodeHtmlCodec for EmbedNode {
     }
 
     fn parse_rules() -> Vec<NodeParseRule> {
-        vec![NodeParseRule::simple("div[data-embed-id]", |elem| {
-            let id = elem.value().attr("data-embed-id").map(|s| s.to_string());
-            Some(Node::Embed(EmbedNode { id }))
-        })]
+        vec![NodeParseRule::new(
+            "div",
+            50,
+            |elem| elem.value().attr("data-embed-id").is_some(),
+            |elem| {
+                let id = elem.value().attr("data-embed-id").map(|s| s.to_string());
+                Some(Node::Embed(EmbedNode { id }))
+            },
+        )]
     }
 }
 
