@@ -446,8 +446,6 @@ class PageList extends HookWidget {
               keysPressed.contains(LogicalKeyboardKey.shiftLeft) || keysPressed.contains(LogicalKeyboardKey.shiftRight);
 
           final prevCursor = cursor;
-          final prevFromHandle = fromHandle;
-          final prevToHandle = toHandle;
 
           editor
             ..dispatch({
