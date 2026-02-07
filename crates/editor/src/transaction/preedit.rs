@@ -29,9 +29,8 @@ impl Transaction {
     }
 
     pub fn complete_preedit(&mut self) -> Result<bool> {
-        if self.state.preedit.is_some() {
-            self.state.preedit = None;
-            self.state.pending_marks = None;
+        if let Some(preedit) = self.state.preedit.take() {
+            self.state.pending_marks = preedit.marks;
             Ok(true)
         } else {
             Ok(false)

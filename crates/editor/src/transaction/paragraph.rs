@@ -1802,4 +1802,57 @@ mod tests {
 
         assert_state_eq!(actual, expected);
     }
+
+    #[test]
+    fn split_paragraph_marks_preserved_through_complete_preedit() {
+        let mut p = id!();
+
+        let initial = state! {
+            doc {
+                @p paragraph {
+                    text(marks: [font_weight(700)]) { "안녕하세요" }
+                }
+            }
+            selection { (p, 5) }
+        };
+
+        let after_split = transact!(initial, |tr| tr.split_paragraph().unwrap());
+
+        let pending = after_split
+            .pending_marks
+            .as_ref()
+            .expect("pending_marks should be set after split_paragraph");
+        assert!(pending.iter().any(|m| matches!(m, Mark::FontWeight(_))));
+
+        let after_preedit = transact!(after_split, |tr| {
+            tr.set_preedit("ㅎ".to_string()).unwrap()
+        });
+
+        let after_complete = transact!(after_preedit, |tr| tr.complete_preedit().unwrap());
+
+        let restored = after_complete
+            .pending_marks
+            .as_ref()
+            .expect("pending_marks should be restored from preedit after complete_preedit");
+        assert!(restored.iter().any(|m| matches!(m, Mark::FontWeight(_))));
+
+        let after_insert = transact!(after_complete, |tr| tr.insert_text("ㅎ").unwrap());
+
+        let root = after_insert.doc.node(NodeId::ROOT).unwrap();
+        let second_para = root.children().nth(1).unwrap();
+        let text_node = second_para.children().next().unwrap();
+
+        if let Node::Text(t) = text_node.node() {
+            let segments = t.text.get_rich_text_segments();
+            assert_eq!(segments.len(), 1);
+            let (text, marks) = &segments[0];
+            assert_eq!(text, "ㅎ");
+            assert!(
+                marks.iter().any(|m| matches!(m, Mark::FontWeight(_))),
+                "Text on new line should have FontWeight mark"
+            );
+        } else {
+            panic!("Expected text node");
+        }
+    }
 }
