@@ -102,47 +102,52 @@ class NativeEditorApplication {
     }
   }
 
-  void addFont(String name, int weight, Uint8List data) {
+  void addFontBase(String family, int weight, Uint8List data) {
     _checkDisposed();
 
-    final namePtr = name.toNativeUtf8();
+    final familyPtr = family.toNativeUtf8();
     final dataPtr = _bindings.editor_alloc(data.length);
     dataPtr.asTypedList(data.length).setAll(0, data);
 
-    final result = _bindings.editor_application_add_font(_handle, namePtr.cast(), weight, dataPtr, data.length);
+    final result = _bindings.editor_application_add_font_base(_handle, familyPtr.cast(), weight, dataPtr, data.length);
 
-    calloc.free(namePtr);
+    calloc.free(familyPtr);
     _bindings.editor_free(dataPtr, data.length, data.length);
 
     if (result != 0) {
-      throw EditorException(_getLastError() ?? 'Failed to add font');
+      throw EditorException(_getLastError() ?? 'Failed to add font base');
     }
   }
 
-  void registerFallbackFont(String name) {
+  void addFontChunk(String family, int weight, Uint8List data) {
     _checkDisposed();
 
-    final namePtr = name.toNativeUtf8();
-    final result = _bindings.editor_application_register_fallback_font(_handle, namePtr.cast());
-    calloc.free(namePtr);
+    final familyPtr = family.toNativeUtf8();
+    final dataPtr = _bindings.editor_alloc(data.length);
+    dataPtr.asTypedList(data.length).setAll(0, data);
+
+    final result = _bindings.editor_application_add_font_chunk(_handle, familyPtr.cast(), weight, dataPtr, data.length);
+
+    calloc.free(familyPtr);
+    _bindings.editor_free(dataPtr, data.length, data.length);
 
     if (result != 0) {
-      throw EditorException(_getLastError() ?? 'Failed to register fallback font');
+      throw EditorException(_getLastError() ?? 'Failed to add font chunk');
     }
   }
 
-  void setAvailableFonts(Map<String, List<int>> fonts) {
+  void setFallbackFonts(List<String> names) {
     _checkDisposed();
 
-    final json = jsonEncode(fonts);
+    final json = jsonEncode(names);
     final jsonPtr = json.toNativeUtf8();
 
-    final result = _bindings.editor_application_set_available_fonts(_handle, jsonPtr.cast());
+    final result = _bindings.editor_application_set_fallback_fonts(_handle, jsonPtr.cast());
 
     calloc.free(jsonPtr);
 
     if (result != 0) {
-      throw EditorException(_getLastError() ?? 'Failed to set available fonts');
+      throw EditorException(_getLastError() ?? 'Failed to set fallback fonts');
     }
   }
 

@@ -1,8 +1,8 @@
-import { ensurePhantomFonts, ensureRequiredFonts, ensureRequiredWritingSystems, getAvailableFontsMap } from './fonts';
+import { ensureAllFontBases, ensureRequiredFallbackFont, ensureRequiredFont } from './fonts';
 import { createPdfFromPages } from './pdf';
 import { renderDocumentPages } from './render';
 import { createWasmApplication } from './wasm';
-import type { Cmd, Theme, WritingSystem } from '@typie/editor';
+import type { Cmd, Theme } from '@typie/editor';
 
 const SCALE_FACTOR = 2;
 const MAX_TICKS = 1000;
@@ -73,9 +73,7 @@ async function generateDocumentPdfInternal(
 
   try {
     app.loadIcuData(icuData);
-    app.setAvailableFonts(getAvailableFontsMap());
-
-    await ensurePhantomFonts(app);
+    await ensureAllFontBases(app);
 
     const editor = app.createEditor(SCALE_FACTOR, snapshot);
 
@@ -99,8 +97,6 @@ async function generateDocumentPdfInternal(
       });
 
       let pageCount = 0;
-      let pendingFonts: [string, number][] = [];
-      let pendingWritingSystems: WritingSystem[] = [];
       let needsRender = false;
 
       for (let tick = 0; tick < MAX_TICKS; tick++) {
@@ -114,18 +110,20 @@ async function generateDocumentPdfInternal(
           continue;
         }
 
+        const fontPromises: Promise<void>[] = [];
+
         for (const cmd of cmds) {
           switch (cmd.type) {
             case 'layoutChanged': {
               pageCount = cmd.pageCount;
               break;
             }
-            case 'fontsRequired': {
-              pendingFonts.push(...cmd.fonts);
+            case 'fontRequired': {
+              fontPromises.push(ensureRequiredFont(app, cmd.family, cmd.weight, cmd.codepoints));
               break;
             }
-            case 'writingSystemRequired': {
-              pendingWritingSystems.push(...cmd.systems);
+            case 'fallbackFontRequired': {
+              fontPromises.push(ensureRequiredFallbackFont(app, cmd.codepoints));
               break;
             }
             case 'renderRequired': {
@@ -135,20 +133,8 @@ async function generateDocumentPdfInternal(
           }
         }
 
-        let fontsLoaded = false;
-
-        if (pendingFonts.length > 0) {
-          fontsLoaded = await ensureRequiredFonts(app, pendingFonts);
-          pendingFonts = [];
-        }
-
-        if (pendingWritingSystems.length > 0) {
-          const scriptsLoaded = await ensureRequiredWritingSystems(app, pendingWritingSystems);
-          fontsLoaded = fontsLoaded || scriptsLoaded;
-          pendingWritingSystems = [];
-        }
-
-        if (fontsLoaded) {
+        if (fontPromises.length > 0) {
+          await Promise.all(fontPromises);
           editor.dispatch({ type: 'fontsLoaded' });
         }
 

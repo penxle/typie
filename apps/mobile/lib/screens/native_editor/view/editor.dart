@@ -510,12 +510,6 @@ class EditorView extends HookWidget {
                         ),
                       ),
                       const Positioned(bottom: 20, right: 20, child: NativeEditorFloatingToolbar()),
-                      Positioned(
-                        bottom: 20,
-                        left: 0,
-                        right: 0,
-                        child: Center(child: _FontLoadingIndicator(isLoading: state.state.isLoadingFonts)),
-                      ),
                       EditorScrollbar(
                         viewHeight: constraints.maxHeight,
                         viewWidth: constraints.maxWidth,
@@ -610,47 +604,6 @@ class _DocumentPlaceholder extends StatelessWidget {
           ),
         );
       },
-    );
-  }
-}
-
-class _FontLoadingIndicator extends StatelessWidget {
-  const _FontLoadingIndicator({required this.isLoading});
-
-  final bool isLoading;
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedSlide(
-      offset: isLoading ? Offset.zero : const Offset(0, 0.5),
-      duration: const Duration(milliseconds: 150),
-      child: AnimatedOpacity(
-        opacity: isLoading ? 1.0 : 0.0,
-        duration: const Duration(milliseconds: 150),
-        child: IgnorePointer(
-          ignoring: !isLoading,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: context.colors.surfaceSubtle,
-              border: Border.all(color: context.colors.borderStrong),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SizedBox(
-                  width: 12,
-                  height: 12,
-                  child: CircularProgressIndicator(strokeWidth: 1, color: context.colors.textSubtle),
-                ),
-                const Gap(8),
-                Text('폰트 로드 중...', style: TextStyle(fontSize: 13, color: context.colors.textDefault)),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 }

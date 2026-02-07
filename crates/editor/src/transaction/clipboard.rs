@@ -1,7 +1,7 @@
 use crate::model::Fragment;
 use crate::runtime::Effect;
 use crate::transaction::Transaction;
-use crate::utils::detect_writing_systems;
+use crate::utils::collect_codepoints;
 use anyhow::Result;
 
 impl Transaction {
@@ -10,11 +10,15 @@ impl Transaction {
             return Ok(false);
         }
 
-        let writing_systems = detect_writing_systems(&s);
-        if !writing_systems.is_empty() {
-            self.push_effect(Effect::WritingSystemsUsageChanged {
-                systems: writing_systems,
+        let codepoints = collect_codepoints(&s);
+        if !codepoints.is_empty() {
+            let (family, weight) = self.current_font();
+            self.push_effect(Effect::FontDetected {
+                family,
+                weight,
+                codepoints: codepoints.clone(),
             });
+            self.push_effect(Effect::CodepointDetected { codepoints });
         }
 
         let fragment = Fragment::from_text(&s);
@@ -31,11 +35,15 @@ impl Transaction {
         }
 
         let plain_text = fragment.to_plain_text();
-        let writing_systems = detect_writing_systems(&plain_text);
-        if !writing_systems.is_empty() {
-            self.push_effect(Effect::WritingSystemsUsageChanged {
-                systems: writing_systems,
+        let codepoints = collect_codepoints(&plain_text);
+        if !codepoints.is_empty() {
+            let (family, weight) = self.current_font();
+            self.push_effect(Effect::FontDetected {
+                family,
+                weight,
+                codepoints: codepoints.clone(),
             });
+            self.push_effect(Effect::CodepointDetected { codepoints });
         }
 
         let fragment = fragment.with_fresh_ids();
@@ -51,7 +59,7 @@ impl Transaction {
 mod tests {
     use crate::model::NodeId;
     use crate::runtime::Effect;
-    use crate::types::{Affinity, WritingSystem};
+    use crate::types::Affinity;
 
     #[test]
     fn paste_text_keeps_following_paragraphs() {
@@ -958,7 +966,7 @@ mod tests {
     }
 
     #[test]
-    fn paste_text_emits_writing_systems_usage_changed() {
+    fn paste_text_emits_codepoints_detected() {
         let mut p = id!();
 
         let initial = state! {
@@ -972,35 +980,35 @@ mod tests {
             .paste_text("Hello 안녕 こんにちは 你好".to_string())
             .unwrap());
 
-        let writing_systems: Vec<WritingSystem> = effects
+        let codepoints: Vec<u32> = effects
             .iter()
             .filter_map(|e| match e {
-                Effect::WritingSystemsUsageChanged { systems } => Some(systems.clone()),
+                Effect::CodepointDetected { codepoints } => Some(codepoints.clone()),
                 _ => None,
             })
             .flatten()
             .collect();
 
         assert!(
-            writing_systems.contains(&WritingSystem::Latin),
-            "paste_text should detect Latin"
+            codepoints.contains(&('H' as u32)),
+            "paste_text should detect Latin codepoints"
         );
         assert!(
-            writing_systems.contains(&WritingSystem::Korean),
-            "paste_text should detect Korean"
+            codepoints.contains(&('안' as u32)),
+            "paste_text should detect Korean codepoints"
         );
         assert!(
-            writing_systems.contains(&WritingSystem::Japanese),
-            "paste_text should detect Japanese"
+            codepoints.contains(&('こ' as u32)),
+            "paste_text should detect Japanese codepoints"
         );
         assert!(
-            writing_systems.contains(&WritingSystem::Chinese),
-            "paste_text should detect Chinese"
+            codepoints.contains(&('你' as u32)),
+            "paste_text should detect Chinese codepoints"
         );
     }
 
     #[test]
-    fn paste_fragment_emits_writing_systems_usage_changed() {
+    fn paste_fragment_emits_codepoints_detected() {
         let mut p = id!();
 
         let initial = state! {
@@ -1025,30 +1033,30 @@ mod tests {
             tr.paste_fragment(fragment).unwrap();
         });
 
-        let writing_systems: Vec<WritingSystem> = effects
+        let codepoints: Vec<u32> = effects
             .iter()
             .filter_map(|e| match e {
-                Effect::WritingSystemsUsageChanged { systems } => Some(systems.clone()),
+                Effect::CodepointDetected { codepoints } => Some(codepoints.clone()),
                 _ => None,
             })
             .flatten()
             .collect();
 
         assert!(
-            writing_systems.contains(&WritingSystem::Latin),
-            "paste_fragment should detect Latin"
+            codepoints.contains(&('H' as u32)),
+            "paste_fragment should detect Latin codepoints"
         );
         assert!(
-            writing_systems.contains(&WritingSystem::Korean),
-            "paste_fragment should detect Korean"
+            codepoints.contains(&('안' as u32)),
+            "paste_fragment should detect Korean codepoints"
         );
         assert!(
-            writing_systems.contains(&WritingSystem::Japanese),
-            "paste_fragment should detect Japanese"
+            codepoints.contains(&('こ' as u32)),
+            "paste_fragment should detect Japanese codepoints"
         );
         assert!(
-            writing_systems.contains(&WritingSystem::Chinese),
-            "paste_fragment should detect Chinese"
+            codepoints.contains(&('你' as u32)),
+            "paste_fragment should detect Chinese codepoints"
         );
     }
 }

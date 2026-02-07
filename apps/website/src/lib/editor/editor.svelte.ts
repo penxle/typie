@@ -3,7 +3,7 @@ import icuPostcardUrl from '@typie/editor/pkg/icu_data.postcard?url';
 import { nanoid } from 'nanoid';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { FRAGMENT_MIME, PAGE_GAP } from './constants';
-import { ensurePhantomFonts, ensureRequiredFonts, ensureRequiredWritingSystems, getAvailableFontsMap } from './fonts';
+import { ensureAllFontBases, ensureRequiredFallbackFont, ensureRequiredFont } from './fonts';
 import { calculateImageDisplaySize, calculateRelativePosition, findNearestPageCoordinate, getPageElement, idleCallback } from './utils';
 import type { Editor as WasmEditor, ExportedUpdates, Modifier, PointerButton, TableOverlay } from '@typie/editor';
 import type { ScrollViewport } from '@typie/ui/utils';
@@ -26,7 +26,6 @@ import type {
   SelectionStats,
   SpellcheckErrorData,
   SpellcheckOverlay,
-  WritingSystem,
 } from './types';
 
 let sharedApplication: Application | null = null;
@@ -47,8 +46,7 @@ async function getOrInitializeApplication(): Promise<Application> {
 
     const icuPostcard = await fetch(icuPostcardUrl).then((res) => res.arrayBuffer());
     app.loadIcuData(new Uint8Array(icuPostcard));
-    await ensurePhantomFonts(app);
-    app.setAvailableFonts(getAvailableFontsMap());
+    await ensureAllFontBases(app);
 
     if (pendingTextReplacementRules) {
       app.setTextReplacementRules(pendingTextReplacementRules);
@@ -98,7 +96,6 @@ export class Editor {
   #running = false;
   #rafId: number | null = null;
   #flushPending = false;
-  #pendingFontLoad = false;
   #onDocChanged?: () => void;
   #onExitedDocumentStart?: () => void;
   #onSelectionChanged?: (anchor: Position, head: Position) => void;
@@ -112,8 +109,6 @@ export class Editor {
   }
 
   renderVersion = $state(0);
-  #fontLoadingCount = $state(0);
-  isLoadingFonts = $derived(this.#fontLoadingCount > 0);
 
   layout = $state({
     pageCount: 0,
@@ -382,13 +377,13 @@ export class Editor {
           break;
         }
 
-        case 'fontsRequired': {
-          this.#handleFontsRequired(cmd.fonts);
+        case 'fontRequired': {
+          this.#handleFontRequired(cmd.family, cmd.weight, cmd.codepoints);
           break;
         }
 
-        case 'writingSystemRequired': {
-          this.#handleWritingSystemsRequired(cmd.systems);
+        case 'fallbackFontRequired': {
+          this.#handleFallbackFontRequired(cmd.codepoints);
           break;
         }
 
@@ -505,31 +500,19 @@ export class Editor {
     }
   }
 
-  #handleFontsRequired(fonts: [string, number][]): void {
-    if (fonts.length === 0 || !this.#application || this.#pendingFontLoad) return;
+  #handleFontRequired(family: string, weight: number, codepoints: number[]): void {
+    if (!this.#application) return;
 
-    this.#pendingFontLoad = true;
-    ensureRequiredFonts(this.#application, fonts, {
-      onStart: () => this.#fontLoadingCount++,
-      onEnd: () => this.#fontLoadingCount--,
-    }).then((loaded) => {
-      this.#pendingFontLoad = false;
-      if (loaded) {
-        this.dispatch({ type: 'fontsLoaded' });
-      }
+    ensureRequiredFont(this.#application, family, weight, codepoints).then(() => {
+      this.dispatch({ type: 'fontsLoaded' });
     });
   }
 
-  #handleWritingSystemsRequired(systems: WritingSystem[]): void {
-    if (systems.length === 0 || !this.#application) return;
+  #handleFallbackFontRequired(codepoints: number[]): void {
+    if (codepoints.length === 0 || !this.#application) return;
 
-    ensureRequiredWritingSystems(this.#application, systems, {
-      onStart: () => this.#fontLoadingCount++,
-      onEnd: () => this.#fontLoadingCount--,
-    }).then((loaded) => {
-      if (loaded) {
-        this.dispatch({ type: 'fontsLoaded' });
-      }
+    ensureRequiredFallbackFont(this.#application, codepoints).then(() => {
+      this.dispatch({ type: 'fontsLoaded' });
     });
   }
 

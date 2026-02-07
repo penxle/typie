@@ -67,7 +67,7 @@ def create_phantom_font(input_path, output_path):
         print(f"Removed tables: {', '.join(removed)}")
 
     print(f"Saving phantom font: {output_path}")
-    font.flavor = 'woff2'
+    font.flavor = None
     font.save(output_path)
     font.close()
 
@@ -77,17 +77,17 @@ if __name__ == "__main__":
     script_dir = os.path.dirname(os.path.abspath(__file__))
     assets_dir = os.path.join(script_dir, "..", "assets")
 
-    print("=== Creating Noto-Phantom.woff2 (Text) ===")
+    print("=== Creating Noto-Phantom.ttf (Text) ===")
     temp_text = os.path.join(script_dir, "GoNotoKurrent-Regular.ttf")
-    output_text = os.path.join(assets_dir, "Noto-Phantom.woff2")
+    output_text = os.path.join(assets_dir, "Noto-Phantom.ttf")
     download_font(GONOTO_URL, temp_text)
     create_phantom_font(temp_text, output_text)
     os.remove(temp_text)
     print(f"Cleaned up: {temp_text}\n")
 
-    print("=== Creating Noto-Phantom-Emoji.woff2 (Emoji) ===")
+    print("=== Creating Noto-Phantom-Emoji.ttf (Emoji) ===")
     temp_emoji = os.path.join(script_dir, "NotoColorEmoji.ttf")
-    output_emoji = os.path.join(assets_dir, "Noto-Phantom-Emoji.woff2")
+    output_emoji = os.path.join(assets_dir, "Noto-Phantom-Emoji.ttf")
     download_font(NOTO_EMOJI_URL, temp_emoji)
     create_phantom_font(temp_emoji, output_emoji)
     os.remove(temp_emoji)

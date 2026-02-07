@@ -52,8 +52,8 @@ icu_properties = { version = "2.1.1", default-features = false, features = [
 icu_provider = { version = "2.1.1", features = ["serde"] }
 icu_provider_blob = "2.1.1"
 scraper = "0.25"
-wuff = "0.2"
 fancy-regex = "0.17"
+ruzstd = "0.8"
 
 web-sys = { version = "0.3", features = ["console"], optional = true }
 serde-wasm-bindgen = { version = "0.6", optional = true }

@@ -1,4 +1,4 @@
-use crate::global::{add_font, register_fallback_font};
+use crate::font::{add_font_base, add_font_chunk, set_fallback_fonts};
 use crate::model::{Doc, LayoutMode, Node, NodeId, ParagraphNode};
 use crate::runtime::{
     Message, RawAiFeedbackItem, RawSpellcheckError, RawTextReplacementRule, Runtime, State,
@@ -70,20 +70,21 @@ impl Application {
         crate::icu_data::load_icu_data(&icu_data)
     }
 
-    #[wasm_bindgen(js_name = addFont)]
-    pub fn add_font(&self, name: &str, weight: u16, data: Vec<u8>) {
-        add_font(name, weight, &data);
+    #[wasm_bindgen(js_name = addFontBase)]
+    pub fn add_font_base(&self, family: &str, weight: u16, data: Vec<u8>) {
+        add_font_base(family, weight, &data);
     }
 
-    #[wasm_bindgen(js_name = registerFallbackFont)]
-    pub fn register_fallback_font(&self, name: &str) {
-        register_fallback_font(name);
+    #[wasm_bindgen(js_name = addFontChunk)]
+    pub fn add_font_chunk(&self, family: &str, weight: u16, data: Vec<u8>) {
+        add_font_chunk(family, weight, &data);
     }
 
-    #[wasm_bindgen(js_name = setAvailableFonts)]
-    pub fn set_available_fonts(&self, fonts: JsValue) {
-        if let Ok(fonts) = serde_wasm_bindgen::from_value(fonts) {
-            crate::global::set_available_fonts(fonts);
+    #[wasm_bindgen(js_name = setFallbackFonts)]
+    pub fn set_fallback_fonts(&self, names: JsValue) {
+        if let Ok(names) = serde_wasm_bindgen::from_value::<Vec<String>>(names) {
+            let name_refs: Vec<&str> = names.iter().map(|s| s.as_str()).collect();
+            set_fallback_fonts(&name_refs);
         }
     }
 

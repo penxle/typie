@@ -35,7 +35,8 @@
     "apps/infrastructure/scripts",
     "packages/styled-system/styled-system",
     ".claude/**",
-    "CLAUDE.md"
+    "CLAUDE.md",
+    "crates/editor/assets/**"
   ],
   "dictionaries": ["cspell.txt"],
   "dictionaryDefinitions": [

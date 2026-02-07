@@ -1,4 +1,4 @@
-use crate::global::{add_font, register_fallback_font};
+use crate::font::{add_font_base, add_font_chunk, set_fallback_fonts};
 use crate::model::{Doc, LayoutMode, Node, NodeId, ParagraphNode};
 use crate::runtime::ai_feedback::RawAiFeedbackItem;
 use crate::runtime::spellcheck::RawSpellcheckError;
@@ -264,18 +264,18 @@ pub extern "C" fn editor_application_load_icu_data(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn editor_application_add_font(
+pub extern "C" fn editor_application_add_font_base(
     _app: *mut EditorApplication,
-    name: *const c_char,
+    family: *const c_char,
     weight: u16,
     data: *const u8,
     data_len: usize,
 ) -> i32 {
     ffi!(
         {
-            let name = parse_cstr(name, "Font name")?;
+            let family = parse_cstr(family, "Font family")?;
             let data = unsafe { slice_from_raw(data, data_len, "Font data")? };
-            add_font(name, weight, data);
+            add_font_base(family, weight, data);
             Ok(())
         },
         -1
@@ -283,14 +283,18 @@ pub extern "C" fn editor_application_add_font(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn editor_application_register_fallback_font(
+pub extern "C" fn editor_application_add_font_chunk(
     _app: *mut EditorApplication,
-    name: *const c_char,
+    family: *const c_char,
+    weight: u16,
+    data: *const u8,
+    data_len: usize,
 ) -> i32 {
     ffi!(
         {
-            let name = parse_cstr(name, "Font name")?;
-            register_fallback_font(name);
+            let family = parse_cstr(family, "Font family")?;
+            let data = unsafe { slice_from_raw(data, data_len, "Font data")? };
+            add_font_chunk(family, weight, data);
             Ok(())
         },
         -1
@@ -298,16 +302,17 @@ pub extern "C" fn editor_application_register_fallback_font(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn editor_application_set_available_fonts(
+pub extern "C" fn editor_application_set_fallback_fonts(
     _app: *mut EditorApplication,
-    fonts_json: *const c_char,
+    names_json: *const c_char,
 ) -> i32 {
     ffi!(
         {
-            let json = parse_cstr(fonts_json, "Fonts JSON")?;
-            let fonts =
+            let json = parse_cstr(names_json, "Names JSON")?;
+            let names: Vec<String> =
                 serde_json::from_str(json).map_err(|e| format!("Failed to parse JSON: {e}"))?;
-            crate::global::set_available_fonts(fonts);
+            let name_refs: Vec<&str> = names.iter().map(|s| s.as_str()).collect();
+            set_fallback_fonts(&name_refs);
             Ok(())
         },
         -1

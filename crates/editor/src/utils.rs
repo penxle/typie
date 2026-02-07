@@ -188,53 +188,8 @@ pub fn rgba_from_u32(color_u32: u32) -> [u8; 4] {
     [r, g, b, a]
 }
 
-pub fn detect_writing_systems(s: &str) -> Vec<crate::types::WritingSystem> {
-    use crate::types::WritingSystem;
-    use icu_properties::props::{ExtendedPictographic, Script};
-    use icu_provider::buf::AsDeserializingBufferProvider;
-    use rustc_hash::FxHashSet;
-
-    let provider = crate::icu_data::get_icu_provider();
-    let deserializing_provider = provider.as_deserializing();
-    let script_data =
-        icu_properties::CodePointMapData::<Script>::try_new_unstable(&deserializing_provider)
-            .expect("Failed to load Script data");
-    let script_map = script_data.as_borrowed();
-
-    let emoji_data = icu_properties::CodePointSetData::try_new_unstable::<ExtendedPictographic>(
-        &deserializing_provider,
-    )
-    .expect("Failed to load ExtendedPictographic data");
-    let emoji_set = emoji_data.as_borrowed();
-
-    let mut writing_systems = FxHashSet::default();
-
-    for ch in s.chars() {
-        if emoji_set.contains(ch) {
-            writing_systems.insert(WritingSystem::Emoji);
-            continue;
-        }
-
-        let script = script_map.get(ch);
-        match script {
-            Script::Latin | Script::Common | Script::Inherited => {
-                writing_systems.insert(WritingSystem::Latin);
-            }
-            Script::Hangul => {
-                writing_systems.insert(WritingSystem::Korean);
-            }
-            Script::Hiragana | Script::Katakana => {
-                writing_systems.insert(WritingSystem::Japanese);
-            }
-            Script::Han => {
-                writing_systems.insert(WritingSystem::Japanese);
-                writing_systems.insert(WritingSystem::Chinese);
-            }
-            _ => {}
-        }
-    }
-
-    writing_systems.into_iter().collect()
+pub fn collect_codepoints(s: &str) -> Vec<u32> {
+    s.chars().map(|c| c as u32).collect()
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
