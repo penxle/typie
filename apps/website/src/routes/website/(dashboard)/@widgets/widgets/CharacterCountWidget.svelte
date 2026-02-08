@@ -22,7 +22,7 @@
   let { widgetId, data = {} }: Props = $props();
 
   const widgetContext = getWidgetContext();
-  const { editor, penxleEditor } = $derived(widgetContext.env);
+  const { editor, nativeEditor } = $derived(widgetContext.env);
   let isCollapsed = $state((data.isCollapsed as boolean) ?? false);
 
   const toggleCollapse = () => {
@@ -37,34 +37,34 @@
   const cleanSelection = $derived(selection.replaceAll('\u200B', ''));
 
   $effect(() => {
-    if (penxleEditor) {
-      void penxleEditor.characterCountsVersion;
-      penxleEditor.updateCharacterCounts();
+    if (nativeEditor) {
+      void nativeEditor.characterCountsVersion;
+      nativeEditor.updateCharacterCounts();
     }
   });
 
-  const penxleCounts = $derived(penxleEditor?.characterCounts);
-  const isPenxle = $derived(!!penxleEditor);
+  const nativeCounts = $derived(nativeEditor?.characterCounts);
+  const isNative = $derived(!!nativeEditor);
 
   const docCountWithWhitespace = $derived(
-    isPenxle ? (penxleCounts?.docWithWhitespace ?? 0) : [...cleanDoc.replaceAll(/\s+/g, ' ').trim()].length,
+    isNative ? (nativeCounts?.docWithWhitespace ?? 0) : [...cleanDoc.replaceAll(/\s+/g, ' ').trim()].length,
   );
   const docCountWithoutWhitespace = $derived(
-    isPenxle ? (penxleCounts?.docWithoutWhitespace ?? 0) : [...cleanDoc.replaceAll(/\s/g, '').trim()].length,
+    isNative ? (nativeCounts?.docWithoutWhitespace ?? 0) : [...cleanDoc.replaceAll(/\s/g, '').trim()].length,
   );
   const docCountWithoutWhitespaceAndPunctuation = $derived(
-    isPenxle ? (penxleCounts?.docWithoutWhitespaceAndPunctuation ?? 0) : [...cleanDoc.replaceAll(/[\s\p{P}]/gu, '').trim()].length,
+    isNative ? (nativeCounts?.docWithoutWhitespaceAndPunctuation ?? 0) : [...cleanDoc.replaceAll(/[\s\p{P}]/gu, '').trim()].length,
   );
 
   const selectionCountWithWhitespace = $derived(
-    isPenxle ? (penxleCounts?.selectionWithWhitespace ?? 0) : [...cleanSelection.replaceAll(/\s+/g, ' ').trim()].length,
+    isNative ? (nativeCounts?.selectionWithWhitespace ?? 0) : [...cleanSelection.replaceAll(/\s+/g, ' ').trim()].length,
   );
   const selectionCountWithoutWhitespace = $derived(
-    isPenxle ? (penxleCounts?.selectionWithoutWhitespace ?? 0) : [...cleanSelection.replaceAll(/\s/g, '').trim()].length,
+    isNative ? (nativeCounts?.selectionWithoutWhitespace ?? 0) : [...cleanSelection.replaceAll(/\s/g, '').trim()].length,
   );
   const selectionCountWithoutWhitespaceAndPunctuation = $derived(
-    isPenxle
-      ? (penxleCounts?.selectionWithoutWhitespaceAndPunctuation ?? 0)
+    isNative
+      ? (nativeCounts?.selectionWithoutWhitespaceAndPunctuation ?? 0)
       : [...cleanSelection.replaceAll(/[\s\p{P}]/gu, '').trim()].length,
   );
 
@@ -147,7 +147,7 @@
     <dl class={flex({ justifyContent: 'space-between', gap: '8px', fontSize: '13px' })}>
       <dt class={css({ color: 'text.faint' })}>공백 포함</dt>
       <dd class={css({ fontWeight: 'medium', color: 'text.subtle' })}>
-        {#if isPenxle ? selectionCountWithWhitespace > 0 : selection}
+        {#if isNative ? selectionCountWithWhitespace > 0 : selection}
           {comma(selectionCountWithWhitespace)}자 /
         {/if}
         {comma(docCountWithWhitespace)}자
@@ -157,7 +157,7 @@
     <dl class={flex({ justifyContent: 'space-between', gap: '8px', fontSize: '13px' })}>
       <dt class={css({ color: 'text.faint' })}>공백 미포함</dt>
       <dd class={css({ fontWeight: 'medium', color: 'text.subtle' })}>
-        {#if isPenxle ? selectionCountWithWhitespace > 0 : selection}
+        {#if isNative ? selectionCountWithWhitespace > 0 : selection}
           {comma(selectionCountWithoutWhitespace)}자 /
         {/if}
         {comma(docCountWithoutWhitespace)}자
@@ -167,7 +167,7 @@
     <dl class={flex({ justifyContent: 'space-between', gap: '8px', fontSize: '13px' })}>
       <dt class={css({ color: 'text.faint' })}>공백/부호 미포함</dt>
       <dd class={css({ fontWeight: 'medium', color: 'text.subtle' })}>
-        {#if isPenxle ? selectionCountWithWhitespace > 0 : selection}
+        {#if isNative ? selectionCountWithWhitespace > 0 : selection}
           {comma(selectionCountWithoutWhitespaceAndPunctuation)}자 /
         {/if}
         {comma(docCountWithoutWhitespaceAndPunctuation)}자

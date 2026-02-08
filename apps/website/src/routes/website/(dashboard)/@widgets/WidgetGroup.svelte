@@ -116,7 +116,7 @@
 
   const focusedViewSlug = $derived(focusedView?.type === 'item' ? focusedView.slug : null);
   const editor = $derived(focusedViewId && focusedViewSlug ? editorRegistry.getTipTap(focusedViewId, focusedViewSlug) : undefined);
-  const penxleEditor = $derived(focusedViewId && focusedViewSlug ? editorRegistry.getPenxle(focusedViewId, focusedViewSlug) : undefined);
+  const nativeEditor = $derived(focusedViewId && focusedViewSlug ? editorRegistry.getNative(focusedViewId, focusedViewSlug) : undefined);
   const _post = $derived(focusedViewSlug && $postQuery?.entity?.node?.__typename === 'Post' ? $postQuery.entity.node : undefined);
   const _document = $derived(focusedViewSlug && $postQuery?.entity?.node?.__typename === 'Document' ? $postQuery.entity.node : undefined);
 
@@ -533,7 +533,7 @@
   $effect(() => {
     widgetContext.env.editMode = editMode;
     widgetContext.env.editor = editor;
-    widgetContext.env.penxleEditor = penxleEditor;
+    widgetContext.env.nativeEditor = nativeEditor;
     widgetContext.env.$post = _post;
     widgetContext.env.$document = _document;
   });
@@ -1004,6 +1004,7 @@
     ...freePositionWidgets.map((w) => w.name as WidgetType),
   ]}
   {editor}
+  {nativeEditor}
   onDragCancel={() => {
     dragging = null;
   }}
@@ -1061,7 +1062,6 @@
       offsetY: e.clientY - rect.top,
     };
   }}
-  {penxleEditor}
   bind:open={editMode}
 />
 

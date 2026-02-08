@@ -2,11 +2,11 @@ import { getContext, setContext } from 'svelte';
 import { SvelteMap } from 'svelte/reactivity';
 import type { Editor as TipTapEditor } from '@tiptap/core';
 import type { Ref } from '@typie/ui/utils';
-import type { Editor as PenxleEditor } from '$lib/editor/editor.svelte';
+import type { Editor as NativeEditor } from '$lib/editor/editor.svelte';
 
 const key: unique symbol = Symbol('EditorRegistry');
 
-export type EditorEntry = { type: 'tiptap'; editor: Ref<TipTapEditor> } | { type: 'penxle'; editor: PenxleEditor };
+export type EditorEntry = { type: 'tiptap'; editor: Ref<TipTapEditor> } | { type: 'native'; editor: NativeEditor };
 
 class EditorRegistry {
   #entries = new SvelteMap<string, EditorEntry>();
@@ -18,10 +18,10 @@ class EditorRegistry {
     }
   }
 
-  registerPenxle(viewId: string, slug: string, editor: PenxleEditor | undefined) {
+  registerNative(viewId: string, slug: string, editor: NativeEditor | undefined) {
     if (editor) {
       const key = `${viewId}-${slug}`;
-      this.#entries.set(key, { type: 'penxle', editor });
+      this.#entries.set(key, { type: 'native', editor });
     }
   }
 
@@ -43,9 +43,9 @@ class EditorRegistry {
     return undefined;
   }
 
-  getPenxle(viewId: string, slug: string): PenxleEditor | undefined {
+  getNative(viewId: string, slug: string): NativeEditor | undefined {
     const entry = this.get(viewId, slug);
-    if (entry?.type === 'penxle') {
+    if (entry?.type === 'native') {
       return entry.editor;
     }
     return undefined;

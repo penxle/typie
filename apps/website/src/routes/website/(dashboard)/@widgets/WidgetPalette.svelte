@@ -14,13 +14,13 @@
     Editor_Widget_CharacterCountChangeWidget_post,
     Editor_Widget_PostRelatedNoteWidget_post,
   } from '$graphql';
-  import type { Editor as PenxleEditor } from '$lib/editor/editor.svelte';
+  import type { Editor as NativeEditor } from '$lib/editor/editor.svelte';
   import type { WidgetType } from './widget-context.svelte';
 
   type Props = {
     open: boolean;
     editor?: Ref<Editor>;
-    penxleEditor?: PenxleEditor;
+    nativeEditor?: NativeEditor;
     $post?: Editor_Widget_CharacterCountChangeWidget_post & Editor_Widget_PostRelatedNoteWidget_post;
     $document?: Editor_Widget_CharacterCountChangeWidget_document;
     addedWidgets?: WidgetType[];
@@ -33,7 +33,7 @@
   let {
     open = $bindable(false),
     editor,
-    penxleEditor,
+    nativeEditor,
     $post: _post,
     $document: _document,
     addedWidgets = [],
@@ -56,7 +56,7 @@
 
   $effect(() => {
     widgetContext.env.editor = editor;
-    widgetContext.env.penxleEditor = penxleEditor;
+    widgetContext.env.nativeEditor = nativeEditor;
     widgetContext.env.$post = _post;
     widgetContext.env.$document = _document;
     widgetContext.env.editMode = false;

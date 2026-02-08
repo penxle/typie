@@ -299,7 +299,7 @@
 
   $effect(() => {
     const _slug = slug;
-    editorRegistry.registerPenxle(viewContext.id, slug, editor);
+    editorRegistry.registerNative(viewContext.id, slug, editor);
 
     return () => {
       editorRegistry.unregister(viewContext.id, _slug);
