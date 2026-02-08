@@ -53,6 +53,8 @@ RUN cd apps/api && npx playwright install-deps && npx playwright install chromiu
 
 FROM runtime-deps AS runtime
 
+RUN npm install -g @anthropic-ai/claude-code
+
 COPY --from=build /app/ .
 COPY vendor/sharp-debian.tar.xz ./vendor/
 
