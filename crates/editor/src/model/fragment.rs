@@ -602,6 +602,19 @@ impl Fragment {
         self.remap_ids(&id_map)
     }
 
+    pub fn with_fresh_ids_for_doc(&self, doc: &Doc) -> Self {
+        let mut id_map = FxHashMap::default();
+        for old_id in self.collect_all_ids() {
+            if doc.node(old_id).is_some() {
+                id_map.insert(old_id, NodeId::new());
+            }
+        }
+        if id_map.is_empty() {
+            return self.clone();
+        }
+        self.remap_ids(&id_map)
+    }
+
     fn is_top_level(&self, node: &FragmentNode, all_ids: &FxHashSet<NodeId>) -> bool {
         node.parent().map_or(true, |pid| !all_ids.contains(&pid))
     }
@@ -1945,5 +1958,102 @@ mod tests {
         let (r0_id, _) = rows[0];
         let r0_cells = fragment.children_of_node(r0_id);
         assert_eq!(r0_cells.len(), 2, "Row 0 should have all cells");
+    }
+
+    #[test]
+    fn with_fresh_ids_for_doc_preserves_ids_without_conflict() {
+        let mut p = id!();
+
+        let doc_state = state! {
+            doc {
+                @p paragraph { text { "Existing" } }
+            }
+            selection { (p, 0) }
+        };
+
+        let mut frag_p = id!();
+        let fragment = fragment! {
+            open_start: 1, open_end: 1,
+            @frag_p paragraph { text { "New" } }
+        };
+
+        let result = fragment.with_fresh_ids_for_doc(&doc_state.doc);
+
+        assert!(
+            result.node(frag_p).is_some(),
+            "Non-conflicting ID should be preserved"
+        );
+    }
+
+    #[test]
+    fn with_fresh_ids_for_doc_remaps_conflicting_ids() {
+        let mut p = id!();
+
+        let doc_state = state! {
+            doc {
+                @p paragraph { text { "Existing" } }
+            }
+            selection { (p, 0) }
+        };
+
+        let fragment = Fragment::new_from_selection(
+            &doc_state.doc,
+            &Selection::new(
+                Position::new(p, 0, Affinity::Downstream),
+                Position::new(p, 8, Affinity::Downstream),
+            ),
+        )
+        .unwrap();
+
+        let original_ids: Vec<NodeId> = fragment.nodes.keys().copied().collect();
+
+        let result = fragment.with_fresh_ids_for_doc(&doc_state.doc);
+
+        for old_id in &original_ids {
+            if doc_state.doc.node(*old_id).is_some() {
+                assert!(
+                    result.node(*old_id).is_none(),
+                    "Conflicting ID {old_id:?} should be remapped"
+                );
+            }
+        }
+        assert_eq!(result.nodes.len(), fragment.nodes.len());
+    }
+
+    #[test]
+    fn with_fresh_ids_for_doc_remaps_only_conflicting_ids() {
+        let mut p1 = id!();
+        let mut p2 = id!();
+
+        let source = state! {
+            doc {
+                @p1 paragraph { text { "First" } }
+                @p2 paragraph { text { "Second" } }
+            }
+            selection { (p1, 0) -> (p2, 6) }
+        };
+
+        let fragment = source.selection.extract_fragment(&source.doc).unwrap();
+        let fragment_ids = fragment.collect_all_ids();
+
+        let mut target_p = id!();
+        let target = state! {
+            doc {
+                @target_p paragraph { text { "Target" } }
+            }
+            selection { (target_p, 0) }
+        };
+
+        let has_conflict = fragment_ids.iter().any(|id| target.doc.node(*id).is_some());
+        assert!(!has_conflict, "No fragment IDs should exist in target doc");
+
+        let result = fragment.with_fresh_ids_for_doc(&target.doc);
+
+        for id in &fragment_ids {
+            assert!(
+                result.node(*id).is_some(),
+                "Non-conflicting ID {id:?} should be preserved"
+            );
+        }
     }
 }
