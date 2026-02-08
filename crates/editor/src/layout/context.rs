@@ -120,6 +120,7 @@ mod tests {
                 text: "가".into(),
                 marks: None,
             }),
+            pending_marks: None,
         };
 
         let p_node = doc.node(p).unwrap();

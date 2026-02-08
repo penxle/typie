@@ -531,6 +531,15 @@ impl Runtime {
 
         let preedit = self.preedit();
 
+        let pending_marks_decor =
+            self.state
+                .pending_marks
+                .as_ref()
+                .map(|marks| PendingMarksDecor {
+                    node_id: self.state.selection.head.node_id,
+                    marks: marks.clone(),
+                });
+
         let decorations = Decorations {
             preedit: preedit.map(|preedit| PreeditDecor {
                 node_id: preedit.node_id,
@@ -538,6 +547,7 @@ impl Runtime {
                 text: preedit.text.clone(),
                 marks: preedit.marks.clone(),
             }),
+            pending_marks: pending_marks_decor,
         };
 
         let root_ref = self.doc().node(NodeId::ROOT).unwrap();
@@ -1402,6 +1412,18 @@ impl Runtime {
                 }
                 Effect::PendingMarksChanged => {
                     self.pending.active_marks = true;
+                    let nid = self.state.selection.head.node_id;
+                    if let Some(node) = self.doc().node(nid) {
+                        let ancestors: Vec<_> = node.ancestors().map(|n| n.node_id()).collect();
+                        self.layout_cache
+                            .borrow_mut()
+                            .invalidate_with_ancestors(nid, ancestors.into_iter());
+                    } else {
+                        self.layout_cache.borrow_mut().invalidate(nid);
+                    }
+                    self.pending.layout = true;
+                    self.pending.render = true;
+                    self.pending.cursor = true;
                 }
                 Effect::ExternalElementChanged => {
                     self.pending.external_elements = true;

@@ -55,7 +55,14 @@ impl SelectionDecor {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct PendingMarksDecor {
+    pub node_id: NodeId,
+    pub marks: Vec<Mark>,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct Decorations {
     pub preedit: Option<PreeditDecor>,
+    pub pending_marks: Option<PendingMarksDecor>,
 }
