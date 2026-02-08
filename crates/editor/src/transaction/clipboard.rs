@@ -1168,4 +1168,92 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn select_all_then_paste_text() {
+        use crate::runtime::{Message, PasteMode};
+
+        let mut p1 = id!();
+        let mut p2 = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p1 paragraph { text { "Hello" } }
+                @p2 paragraph { text { "World" } }
+            }
+            selection { (p1, 0) }
+        };
+
+        rt.layout();
+        rt.update(Message::SelectAll);
+        rt.update(Message::Paste {
+            html: None,
+            text: "New text".to_string(),
+            mode: PasteMode::Auto,
+        });
+
+        let doc = &rt.state().doc;
+        let root = doc.node(crate::model::NodeId::ROOT).unwrap();
+        let children: Vec<_> = root.children().collect();
+        assert_eq!(children.len(), 1, "should have exactly one paragraph");
+
+        let para = &children[0];
+        assert!(
+            matches!(para.node(), crate::model::Node::Paragraph(_)),
+            "child should be a paragraph"
+        );
+
+        let text_child = para.first_child();
+        assert!(text_child.is_some(), "paragraph should have a text child");
+
+        if let crate::model::Node::Text(t) = text_child.unwrap().node() {
+            assert_eq!(t.text.to_string(), "New text");
+        } else {
+            panic!("Expected text node");
+        }
+    }
+
+    #[test]
+    fn select_all_then_paste_multiline_text() {
+        use crate::runtime::{Message, PasteMode};
+
+        let mut p = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph { text { "Hello" } }
+            }
+            selection { (p, 0) }
+        };
+
+        rt.layout();
+        rt.update(Message::SelectAll);
+        rt.update(Message::Paste {
+            html: None,
+            text: "Line1\nLine2\nLine3".to_string(),
+            mode: PasteMode::Auto,
+        });
+
+        let doc = &rt.state().doc;
+        let root = doc.node(crate::model::NodeId::ROOT).unwrap();
+        let children: Vec<_> = root.children().collect();
+        assert_eq!(children.len(), 3);
+
+        let texts: Vec<String> = children
+            .iter()
+            .filter_map(|child| {
+                child.first_child().and_then(|tc| {
+                    if let crate::model::Node::Text(t) = tc.node() {
+                        Some(t.text.to_string())
+                    } else {
+                        None
+                    }
+                })
+            })
+            .collect();
+
+        assert_eq!(texts, vec!["Line1", "Line2", "Line3"]);
+    }
 }
