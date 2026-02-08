@@ -121,7 +121,7 @@ impl Transaction {
                 Position::new(
                     insert_pos.node_id,
                     insert_pos.offset + 1,
-                    Affinity::Downstream,
+                    Affinity::Upstream,
                 ),
             );
 
@@ -144,7 +144,7 @@ impl Transaction {
 
                 self.set_selection(Selection::new(
                     Position::new(grandparent_id, parent_index, Affinity::Downstream),
-                    Position::new(grandparent_id, parent_index + 1, Affinity::Downstream),
+                    Position::new(grandparent_id, parent_index + 1, Affinity::Upstream),
                 ));
             } else if insert_pos.offset == parent_size {
                 let parent_index = parent_index.context("Parent has no index")?;
@@ -155,7 +155,7 @@ impl Transaction {
 
                 self.set_selection(Selection::new(
                     Position::new(grandparent_id, parent_index + 1, Affinity::Downstream),
-                    Position::new(grandparent_id, parent_index + 2, Affinity::Downstream),
+                    Position::new(grandparent_id, parent_index + 2, Affinity::Upstream),
                 ));
             } else if let Some((child_id, head, tail, next_id, _, parent_last_child_id)) =
                 child_info
@@ -208,7 +208,7 @@ impl Transaction {
 
                 self.set_selection(Selection::new(
                     Position::new(grandparent_id, parent_index + 1, Affinity::Downstream),
-                    Position::new(grandparent_id, parent_index + 2, Affinity::Downstream),
+                    Position::new(grandparent_id, parent_index + 2, Affinity::Upstream),
                 ));
             } else {
                 return Ok(false);
@@ -625,6 +625,7 @@ impl Transaction {
 #[cfg(test)]
 mod tests {
     use crate::model::*;
+    use crate::types::Affinity;
 
     #[test]
     fn insert_node_after() {
@@ -652,7 +653,7 @@ mod tests {
                 }
             }
 
-            selection { (t, 5) -> (t, 6) }
+            selection { (t, 5) -> (t, 6, Affinity::Upstream) }
         };
 
         assert_state_eq!(actual, expected);
@@ -685,7 +686,7 @@ mod tests {
                 }
             }
 
-            selection { (t, 3) -> (t, 4) }
+            selection { (t, 3) -> (t, 4, Affinity::Upstream) }
         };
 
         assert_state_eq!(actual, expected);
@@ -717,7 +718,7 @@ mod tests {
                 }
             }
 
-            selection { (t, 0) -> (t, 1) }
+            selection { (t, 0) -> (t, 1, Affinity::Upstream) }
         };
 
         assert_state_eq!(actual, expected);
@@ -749,7 +750,7 @@ mod tests {
                 }
             }
 
-            selection { (NodeId::ROOT, 0) -> (NodeId::ROOT, 1) }
+            selection { (NodeId::ROOT, 0) -> (NodeId::ROOT, 1, Affinity::Upstream) }
         };
 
         assert_state_eq!(actual, expected);
@@ -784,7 +785,7 @@ mod tests {
                 }
             }
 
-            selection { (NodeId::ROOT, 1) -> (NodeId::ROOT, 2) }
+            selection { (NodeId::ROOT, 1) -> (NodeId::ROOT, 2, Affinity::Upstream) }
         };
 
         assert_state_eq!(actual, expected);
@@ -817,7 +818,7 @@ mod tests {
                 paragraph {}
             }
 
-            selection { (NodeId::ROOT, 1) -> (NodeId::ROOT, 2) }
+            selection { (NodeId::ROOT, 1) -> (NodeId::ROOT, 2, Affinity::Upstream) }
         };
 
         assert_state_eq!(actual, expected);
@@ -853,7 +854,7 @@ mod tests {
                 }
             }
 
-            selection { (t, 6) -> (t, 7) }
+            selection { (t, 6) -> (t, 7, Affinity::Upstream) }
         };
 
         assert_state_eq!(actual, expected);
@@ -889,7 +890,7 @@ mod tests {
                 }
             }
 
-            selection { (t, 1) -> (t, 2) }
+            selection { (t, 1) -> (t, 2, Affinity::Upstream) }
         };
 
         assert_state_eq!(actual, expected);
@@ -926,7 +927,7 @@ mod tests {
                 }
             }
 
-            selection { (t, 6) -> (t, 7) }
+            selection { (t, 6) -> (t, 7, Affinity::Upstream) }
         };
 
         assert_state_eq!(actual, expected);
@@ -959,7 +960,7 @@ mod tests {
                 }
             }
 
-            selection { (t, 13) -> (t, 14) }
+            selection { (t, 13) -> (t, 14, Affinity::Upstream) }
         };
 
         assert_state_eq!(actual, expected);
@@ -995,7 +996,7 @@ mod tests {
                 }
             }
 
-            selection { (t, 6) -> (t, 7) }
+            selection { (t, 6) -> (t, 7, Affinity::Upstream) }
         };
 
         assert_state_eq!(actual, expected);
@@ -1033,7 +1034,7 @@ mod tests {
                 }
             }
 
-            selection { (t, 2) -> (t, 3) }
+            selection { (t, 2) -> (t, 3, Affinity::Upstream) }
         };
 
         assert_state_eq!(actual, expected);
@@ -1067,7 +1068,7 @@ mod tests {
                 }
             }
 
-            selection { (t, 1) -> (t, 2) }
+            selection { (t, 1) -> (t, 2, Affinity::Upstream) }
         };
 
         assert_state_eq!(actual, expected);
@@ -1107,7 +1108,7 @@ mod tests {
                 }
             }
 
-            selection { (t, 3) -> (t, 4) }
+            selection { (t, 3) -> (t, 4, Affinity::Upstream) }
         };
 
         assert_state_eq!(actual, expected);
@@ -1144,7 +1145,7 @@ mod tests {
                 }
             }
 
-            selection { (t, 7) -> (t, 8) }
+            selection { (t, 7) -> (t, 8, Affinity::Upstream) }
         };
 
         assert_state_eq!(actual, expected);
@@ -1178,7 +1179,7 @@ mod tests {
                 }
             }
 
-            selection { (t, 3) -> (t, 4) }
+            selection { (t, 3) -> (t, 4, Affinity::Upstream) }
         };
 
         assert_state_eq!(actual, expected);

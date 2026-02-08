@@ -714,10 +714,10 @@ mod tests {
         rt.update(Message::SelectAll);
 
         let selection = &rt.state().selection;
-        assert_eq!(selection.anchor.node_id, p1);
+        assert_eq!(selection.anchor.node_id, NodeId::ROOT);
         assert_eq!(selection.anchor.offset, 0);
-        assert_eq!(selection.head.node_id, p2);
-        assert_eq!(selection.head.offset, 6);
+        assert_eq!(selection.head.node_id, NodeId::ROOT);
+        assert_eq!(selection.head.offset, 2);
     }
 
     #[test]
