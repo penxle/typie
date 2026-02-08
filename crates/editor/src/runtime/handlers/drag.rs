@@ -84,8 +84,7 @@ impl Runtime {
         x: f32,
         y: f32,
         text: Option<String>,
-        _html: Option<String>,
-        fragment: Option<String>,
+        html: Option<String>,
         modifier: Modifier,
     ) -> Vec<Effect> {
         let Some(drop_position) = self.resolve_drop_position(page_idx, x, y) else {
@@ -105,12 +104,9 @@ impl Runtime {
             }
         } else if let Some(text) = text {
             self.transact(move |tr| {
-                let fragment = if let Some(json) = fragment {
-                    Fragment::from_json(&json).ok()
-                } else {
-                    None
-                };
-                let fragment = fragment.unwrap_or_else(|| Fragment::from_text(&text));
+                let fragment = html
+                    .and_then(|h| Fragment::from_html(&h).ok())
+                    .unwrap_or_else(|| Fragment::from_text(&text));
                 tr.drop_external(drop_position, fragment)
             })
         } else {
@@ -304,7 +300,7 @@ mod tests {
             y: to_y,
             text: None,
             html: None,
-            fragment: None,
+
             modifier,
         });
     }
@@ -350,7 +346,7 @@ mod tests {
             y: to_y,
             text: None,
             html: None,
-            fragment: None,
+
             modifier: Modifier::default(),
         });
     }
@@ -360,7 +356,6 @@ mod tests {
         to: Position,
         text: Option<String>,
         html: Option<String>,
-        fragment: Option<String>,
     ) {
         let (to_page, to_x, to_y) = find_gap_coordinates(rt, to);
 
@@ -377,7 +372,6 @@ mod tests {
             y: to_y,
             text,
             html,
-            fragment,
             modifier: Modifier::default(),
         });
     }
@@ -935,7 +929,6 @@ mod tests {
             &mut rt,
             Position::new(NodeId::ROOT, 1, Affinity::default()),
             Some("New".to_string()),
-            None,
             None,
         );
 

@@ -127,7 +127,6 @@ pub struct RenderInfo {
 
 #[wasm_bindgen(getter_with_clone)]
 pub struct ClipboardData {
-    pub fragment: String,
     pub html: String,
     pub text: String,
 }
@@ -428,15 +427,10 @@ impl Editor {
             return None;
         }
 
-        let fragment_json = fragment.to_json().ok()?;
         let text = fragment.to_plain_text();
         let html = fragment.to_html();
 
-        Some(ClipboardData {
-            fragment: fragment_json,
-            html,
-            text,
-        })
+        Some(ClipboardData { html, text })
     }
 
     #[wasm_bindgen(js_name = getCharacterCounts)]

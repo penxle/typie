@@ -2,7 +2,7 @@ import { Application, getMemory, SyncVersion } from '@typie/editor';
 import icuPostcardUrl from '@typie/editor/pkg/icu_data.postcard?url';
 import { nanoid } from 'nanoid';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
-import { FRAGMENT_MIME, PAGE_GAP } from './constants';
+import { PAGE_GAP } from './constants';
 import { ensureAllFontBases, ensureRequiredFallbackFont, ensureRequiredFont } from './fonts';
 import { calculateImageDisplaySize, calculateRelativePosition, findNearestPageCoordinate, getPageElement, idleCallback } from './utils';
 import type { Editor as WasmEditor, ExportedUpdates, Modifier, PointerButton, TableOverlay } from '@typie/editor';
@@ -820,7 +820,7 @@ export class Editor {
   async handleCopy(): Promise<void> {
     const data = this.getClipboardData();
     if (data) {
-      await this.#writeToClipboard(data.fragment, data.html, data.text);
+      await this.#writeToClipboard(data.html, data.text);
     }
     this.closeContextMenu();
   }
@@ -828,45 +828,31 @@ export class Editor {
   async handleCut(): Promise<void> {
     const data = this.getClipboardData();
     if (data) {
-      await this.#writeToClipboard(data.fragment, data.html, data.text);
+      await this.#writeToClipboard(data.html, data.text);
       this.dispatch({ type: 'deleteSelection' });
     }
     this.closeContextMenu();
   }
 
-  async #writeToClipboard(fragment: string, html: string, text: string): Promise<void> {
+  async #writeToClipboard(html: string, text: string): Promise<void> {
     try {
       const items = new ClipboardItem({
-        [FRAGMENT_MIME]: new Blob([fragment], { type: FRAGMENT_MIME }),
         'text/html': new Blob([html], { type: 'text/html' }),
         'text/plain': new Blob([text], { type: 'text/plain' }),
       });
       await navigator.clipboard.write([items]);
     } catch {
-      try {
-        const items = new ClipboardItem({
-          'text/html': new Blob([html], { type: 'text/html' }),
-          'text/plain': new Blob([text], { type: 'text/plain' }),
-        });
-        await navigator.clipboard.write([items]);
-      } catch {
-        await navigator.clipboard.writeText(text);
-      }
+      await navigator.clipboard.writeText(text);
     }
   }
 
   async handlePaste(): Promise<void> {
     try {
       const items = await navigator.clipboard.read();
-      let fragment: string | undefined = undefined;
       let html: string | undefined = undefined;
       let text = '';
 
       for (const item of items) {
-        if (item.types.includes(FRAGMENT_MIME)) {
-          const blob = await item.getType(FRAGMENT_MIME);
-          fragment = await blob.text();
-        }
         if (item.types.includes('text/html')) {
           const blob = await item.getType('text/html');
           html = await blob.text();
@@ -877,10 +863,10 @@ export class Editor {
         }
       }
 
-      this.dispatch({ type: 'paste', fragment, html, text });
+      this.dispatch({ type: 'paste', html, text });
     } catch {
       const text = await navigator.clipboard.readText();
-      this.dispatch({ type: 'paste', fragment: undefined, html: undefined, text });
+      this.dispatch({ type: 'paste', html: undefined, text });
     }
     this.closeContextMenu();
   }
@@ -907,7 +893,6 @@ export class Editor {
 
     const data = this.getClipboardData();
     if (e.dataTransfer && data) {
-      e.dataTransfer.setData(FRAGMENT_MIME, data.fragment);
       e.dataTransfer.setData('text/html', data.html);
       e.dataTransfer.setData('text/plain', data.text);
       e.dataTransfer.effectAllowed = 'copyMove';
@@ -1091,14 +1076,10 @@ export class Editor {
       }
     }
 
-    let fragment: string | undefined;
     let html: string | undefined;
     let text: string | undefined;
 
     if (e.dataTransfer) {
-      if (e.dataTransfer.types.includes(FRAGMENT_MIME)) {
-        fragment = e.dataTransfer.getData(FRAGMENT_MIME);
-      }
       if (e.dataTransfer.types.includes('text/html')) {
         html = e.dataTransfer.getData('text/html');
       }
@@ -1114,7 +1095,6 @@ export class Editor {
       y,
       text,
       html,
-      fragment,
       modifier: this.#toModifier(e),
     });
   }
@@ -1191,7 +1171,7 @@ export class Editor {
     return this.#wasmEditor?.isSelectionHit(pageIdx, x, y) ?? false;
   }
 
-  getClipboardData(): { fragment: string; html: string; text: string } | null {
+  getClipboardData(): { html: string; text: string } | null {
     return this.#wasmEditor?.getClipboardData() ?? null;
   }
 
