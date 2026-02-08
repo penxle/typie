@@ -466,6 +466,7 @@ impl Transaction {
     pub fn clear_pending_marks(&mut self) -> Result<bool> {
         if self.state.pending_marks.is_some() {
             self.state.pending_marks = None;
+            self.push_effect(Effect::PendingMarksChanged);
             Ok(true)
         } else {
             Ok(false)
