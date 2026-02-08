@@ -33,6 +33,34 @@ query NativeEditorScreen_Query($slug: String!) {
           additions
           deletions
         }
+        assets {
+          __typename
+
+          ... on Image {
+            id
+            url
+            width
+            height
+            ratio
+            placeholder
+          }
+
+          ... on File {
+            id
+            url
+            name
+            size
+          }
+
+          ... on Embed {
+            id
+            url
+            title
+            description
+            thumbnailUrl
+            html
+          }
+        }
       }
     }
   }
