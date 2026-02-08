@@ -54,6 +54,7 @@ icu_provider_blob = "2.1.1"
 scraper = "0.25"
 fancy-regex = "0.17"
 ruzstd = "0.8"
+csscolorparser = "0.8"
 
 web-sys = { version = "0.3", features = ["console"], optional = true }
 serde-wasm-bindgen = { version = "0.6", optional = true }

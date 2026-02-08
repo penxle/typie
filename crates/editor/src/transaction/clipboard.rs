@@ -1,8 +1,9 @@
-use crate::model::Fragment;
+use crate::model::{FontFamilyMark, FontWeightMark, Fragment, Mark, Node};
 use crate::runtime::Effect;
 use crate::transaction::Transaction;
 use crate::utils::collect_codepoints;
 use anyhow::Result;
+use rustc_hash::FxHashMap;
 
 impl Transaction {
     pub fn paste_text(&mut self, s: String) -> Result<bool> {
@@ -34,16 +35,49 @@ impl Transaction {
             return Ok(false);
         }
 
-        let plain_text = fragment.to_plain_text();
-        let codepoints = collect_codepoints(&plain_text);
-        if !codepoints.is_empty() {
-            let (family, weight) = self.current_font();
+        let default_family = FontFamilyMark::default().family;
+        let default_weight = FontWeightMark::default().weight;
+        let mut font_codepoints: FxHashMap<(String, u16), Vec<u32>> = FxHashMap::default();
+        let mut all_codepoints = Vec::new();
+
+        for (_, node) in fragment.iter() {
+            if let Node::Text(text_node) = node.data() {
+                for (text, marks) in text_node.text.get_rich_text_segments() {
+                    let codepoints = collect_codepoints(&text);
+                    if codepoints.is_empty() {
+                        continue;
+                    }
+
+                    let mut family = default_family.clone();
+                    let mut weight = default_weight;
+                    for mark in &marks {
+                        match mark {
+                            Mark::FontFamily(f) => family = f.family.clone(),
+                            Mark::FontWeight(w) => weight = w.weight,
+                            _ => {}
+                        }
+                    }
+
+                    all_codepoints.extend_from_slice(&codepoints);
+                    font_codepoints
+                        .entry((family, weight))
+                        .or_default()
+                        .extend(codepoints);
+                }
+            }
+        }
+
+        for ((family, weight), codepoints) in font_codepoints {
             self.push_effect(Effect::FontDetected {
                 family,
                 weight,
-                codepoints: codepoints.clone(),
+                codepoints,
             });
-            self.push_effect(Effect::CodepointDetected { codepoints });
+        }
+        if !all_codepoints.is_empty() {
+            self.push_effect(Effect::CodepointDetected {
+                codepoints: all_codepoints,
+            });
         }
 
         let fragment = fragment.with_fresh_ids_for_doc(self.doc());

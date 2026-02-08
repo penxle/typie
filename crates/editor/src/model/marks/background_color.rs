@@ -1,5 +1,7 @@
 use crate::model::Mark;
 use crate::model::html::{DomSpec, MarkHtmlCodec, MarkParseRule, parse_styles};
+use crate::types::Theme;
+use crate::utils::rgba_from_u32;
 use macros::Codec;
 use serde::{Deserialize, Serialize};
 
@@ -19,8 +21,9 @@ impl Default for BackgroundColorMark {
 
 impl MarkHtmlCodec for BackgroundColorMark {
     fn to_dom(&self) -> DomSpec {
+        let [r, g, b, _] = rgba_from_u32(Theme::bg_color_rgba(&self.key).unwrap());
         DomSpec::el("span")
-            .style(format!("background-color:var(--color-{})", &self.key))
+            .style(format!("background-color:#{:02x}{:02x}{:02x}", r, g, b))
             .data("bg-color-key", &self.key)
             .hole()
     }
@@ -30,6 +33,7 @@ impl MarkHtmlCodec for BackgroundColorMark {
             MarkParseRule::from_data("data-bg-color-key", |elem| {
                 elem.value()
                     .attr("data-bg-color-key")
+                    .filter(|k| Theme::is_valid_bg_color_key(k))
                     .map(|k| Mark::BackgroundColor(BackgroundColorMark { key: k.into() }))
             }),
             MarkParseRule::from_style("background-color", |elem| {
@@ -39,7 +43,14 @@ impl MarkHtmlCodec for BackgroundColorMark {
                 elem.value().attr("style").and_then(|s| {
                     let m = parse_styles(s);
                     m.get("background-color")
-                        .map(|bg| Mark::BackgroundColor(BackgroundColorMark { key: bg.clone() }))
+                        .and_then(|bg| {
+                            if Theme::is_valid_bg_color_key(bg) {
+                                Some(bg.clone())
+                            } else {
+                                Theme::nearest_bg_color(bg).map(String::from)
+                            }
+                        })
+                        .map(|key| Mark::BackgroundColor(BackgroundColorMark { key }))
                 })
             }),
         ]

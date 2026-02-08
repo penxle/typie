@@ -14,7 +14,7 @@ impl<'a> HtmlContext<'a> {
     pub fn write_children(&self, id: NodeId, b: &mut HtmlBuilder) {
         for (child_id, child) in self.fragment.children_of_node(id) {
             if let Some(spec) = child.data().to_dom() {
-                render_node_spec(&spec, self, child_id, b);
+                render_node(&spec, self, child_id, b);
             }
         }
     }
@@ -30,6 +30,41 @@ pub trait NodeHtmlCodec {
         Self: Sized,
     {
         vec![]
+    }
+}
+
+pub fn render_node(spec: &DomSpec, ctx: &HtmlContext, id: NodeId, b: &mut HtmlBuilder) {
+    let id_str = id.to_string();
+    match spec {
+        DomSpec::Element {
+            tag,
+            attrs,
+            children,
+        } => {
+            let mut tb = b.open(tag);
+            tb = tb.attr("data-node-id", &id_str);
+            for (k, v) in attrs {
+                tb = tb.attr(k, v);
+            }
+            tb.children(|b| {
+                for child in children {
+                    render_node_spec(child, ctx, id, b);
+                }
+            });
+        }
+        DomSpec::Void { tag, attrs } => {
+            let mut tb = b.open(tag);
+            tb = tb.attr("data-node-id", &id_str);
+            for (k, v) in attrs {
+                tb = tb.attr(k, v);
+            }
+            tb.void();
+        }
+        _ => {
+            b.open("span").attr("data-node-id", &id_str).children(|b| {
+                render_node_spec(spec, ctx, id, b);
+            });
+        }
     }
 }
 
@@ -193,6 +228,11 @@ pub fn collect_node_parse_rules() -> Vec<NodeParseRule> {
     rules.extend(HorizontalRuleNode::parse_rules());
     rules.extend(HardBreakNode::parse_rules());
     rules.extend(PageBreakNode::parse_rules());
+    rules.extend(CalloutNode::parse_rules());
+    rules.extend(TableNode::parse_rules());
+    rules.extend(TableRowNode::parse_rules());
+    rules.extend(TableCellNode::parse_rules());
+    rules.extend(FileNode::parse_rules());
     rules.sort_by(|a, b| b.priority.cmp(&a.priority));
     rules
 }

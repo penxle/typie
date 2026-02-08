@@ -17,13 +17,9 @@ impl Default for FontWeightMark {
 
 impl MarkHtmlCodec for FontWeightMark {
     fn to_dom(&self) -> DomSpec {
-        if self.weight >= 700 {
-            DomSpec::el("b").hole()
-        } else {
-            DomSpec::el("span")
-                .style(format!("font-weight:{}", self.weight))
-                .hole()
-        }
+        DomSpec::el("span")
+            .style(format!("font-weight:{}", self.weight))
+            .hole()
     }
 
     fn parse_rules() -> Vec<MarkParseRule> {

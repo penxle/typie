@@ -8,7 +8,7 @@ pub use utils::{LengthUnit, parse_as, parse_font_size, parse_styles};
 
 use builder::HtmlBuilder;
 use codec::{
-    collect_mark_parse_rules, collect_node_parse_rules, render_node_spec, try_parse_marks,
+    collect_mark_parse_rules, collect_node_parse_rules, render_node, try_parse_marks,
     try_parse_node,
 };
 
@@ -16,6 +16,7 @@ use crate::model::*;
 use crate::schema::Schema;
 use anyhow::Result;
 use scraper::{ElementRef, Html as HtmlDoc, Node as ScraperNode, Selector};
+use std::cell::Cell;
 
 impl Fragment {
     pub fn to_html(&self) -> String {
@@ -31,7 +32,7 @@ impl Fragment {
         for id in self.top_level_node_ids() {
             if let Some(node) = self.node(id) {
                 if let Some(spec) = node.data().to_dom() {
-                    render_node_spec(&spec, &ctx, id, &mut b);
+                    render_node(&spec, &ctx, id, &mut b);
                 }
             }
         }
@@ -50,6 +51,7 @@ impl Fragment {
         let mark_rules = collect_mark_parse_rules();
 
         let root = doc.root_element();
+        let pending_text_id = Cell::new(None);
         parse_children(
             &root,
             None,
@@ -59,12 +61,15 @@ impl Fragment {
             &schema,
             &node_rules,
             &mark_rules,
+            &pending_text_id,
         )?;
 
         let mut fragment = builder.build();
         fragment.open_start = open_start;
         fragment.open_end = open_end;
-        Ok(fragment.merge_adjacent_text_nodes())
+        Ok(fragment
+            .normalize_font_weights()
+            .merge_adjacent_text_nodes())
     }
 }
 
@@ -88,6 +93,12 @@ fn parse_meta(doc: &HtmlDoc) -> (usize, usize) {
         .unwrap_or((0, 0))
 }
 
+fn read_node_id(elem: &ElementRef) -> Option<NodeId> {
+    elem.value()
+        .attr("data-node-id")
+        .and_then(NodeId::from_string)
+}
+
 fn parse_children(
     parent: &ElementRef,
     parent_id: Option<NodeId>,
@@ -97,6 +108,7 @@ fn parse_children(
     schema: &Schema,
     node_rules: &[NodeParseRule],
     mark_rules: &[MarkParseRule],
+    pending_text_id: &Cell<Option<NodeId>>,
 ) -> Result<()> {
     for child in parent.children() {
         match child.value() {
@@ -111,12 +123,14 @@ fn parse_children(
                     schema,
                     node_rules,
                     mark_rules,
+                    pending_text_id,
                 )?;
             }
             ScraperNode::Text(t) => {
                 let s = t.text.to_string();
                 if !s.is_empty() {
-                    add_text(&s, parent_id, builder, marks.to_vec());
+                    let id = pending_text_id.take();
+                    add_text(&s, parent_id, builder, marks.to_vec(), id);
                 }
             }
             _ => {}
@@ -134,6 +148,7 @@ fn parse_element(
     schema: &Schema,
     node_rules: &[NodeParseRule],
     mark_rules: &[MarkParseRule],
+    pending_text_id: &Cell<Option<NodeId>>,
 ) -> Result<()> {
     let tag = elem.value().name();
 
@@ -148,11 +163,12 @@ fn parse_element(
             .unwrap_or(true);
 
         if allowed {
-            let id = NodeId::new();
+            let id = read_node_id(elem).unwrap_or_else(NodeId::new);
             let has_content = !schema.node_spec(node_type).content.is_leaf();
             *builder = std::mem::take(builder).add((id, FragmentNode::new(node, parent_id)));
 
             if has_content {
+                let child_text_id = Cell::new(None);
                 parse_children(
                     elem,
                     Some(id),
@@ -162,6 +178,7 @@ fn parse_element(
                     schema,
                     node_rules,
                     mark_rules,
+                    &child_text_id,
                 )?;
             }
 
@@ -170,6 +187,11 @@ fn parse_element(
     }
 
     let parsed = try_parse_marks(elem, mark_rules);
+    if parsed.marks.is_empty() {
+        if let Some(id) = read_node_id(elem) {
+            pending_text_id.set(Some(id));
+        }
+    }
     let mut combined_marks = marks.to_vec();
     for mark in parsed.marks {
         if !combined_marks.iter().any(|m| m.as_type() == mark.as_type()) {
@@ -179,7 +201,8 @@ fn parse_element(
 
     if let Some(content) = parsed.custom_content {
         if !content.is_empty() {
-            add_text(&content, parent_id, builder, combined_marks);
+            let id = pending_text_id.take();
+            add_text(&content, parent_id, builder, combined_marks, id);
         }
     } else {
         parse_children(
@@ -191,14 +214,20 @@ fn parse_element(
             schema,
             node_rules,
             mark_rules,
+            pending_text_id,
         )?;
     }
 
     Ok(())
 }
 
-fn add_node(parent_id: Option<NodeId>, builder: &mut FragmentBuilder, node: Node) {
-    let id = NodeId::new();
+fn add_node(
+    parent_id: Option<NodeId>,
+    builder: &mut FragmentBuilder,
+    node: Node,
+    node_id: Option<NodeId>,
+) {
+    let id = node_id.unwrap_or_else(NodeId::new);
     *builder = std::mem::take(builder).add((id, FragmentNode::new(node, parent_id)));
 }
 
@@ -207,13 +236,14 @@ fn add_text(
     parent_id: Option<NodeId>,
     builder: &mut FragmentBuilder,
     marks: Vec<Mark>,
+    node_id: Option<NodeId>,
 ) {
     let text = Text::from(content);
     let len = text.char_len();
     for m in &marks {
         let _ = text.mark(0..len, m);
     }
-    add_node(parent_id, builder, Node::Text(TextNode { text }));
+    add_node(parent_id, builder, Node::Text(TextNode { text }), node_id);
 }
 
 #[cfg(test)]
@@ -259,7 +289,7 @@ mod tests {
             .build();
 
         let html = frag.to_html();
-        assert!(html.contains("<p>"));
+        assert!(html.contains("<p "));
         assert!(html.contains("Hello World"));
         assert!(html.contains("</p>"));
     }
@@ -329,11 +359,484 @@ mod tests {
             assert_eq!(segments[0].0, "Red");
             assert_eq!(segments[1].0, "Blue");
 
-            assert_eq!(segments[0].1.len(), 1);
-            assert_eq!(segments[1].1.len(), 1);
+            assert!(matches!(&segments[0].1[0], Mark::TextColor(tc) if tc.key == "red"));
+            assert!(matches!(&segments[1].1[0], Mark::TextColor(tc) if tc.key == "indigo"));
         } else {
             panic!("Expected text node");
         }
+    }
+
+    fn assert_node_type(frag: &Fragment, id: NodeId, expected: &str) {
+        let node = frag.node(id).unwrap();
+        let actual = format!("{:?}", std::mem::discriminant(node.data()));
+        assert!(
+            match expected {
+                "Paragraph" => matches!(node.data(), Node::Paragraph(_)),
+                "Blockquote" => matches!(node.data(), Node::Blockquote(_)),
+                "BulletList" => matches!(node.data(), Node::BulletList(_)),
+                "OrderedList" => matches!(node.data(), Node::OrderedList(_)),
+                "ListItem" => matches!(node.data(), Node::ListItem(_)),
+                "Image" => matches!(node.data(), Node::Image(_)),
+                "Embed" => matches!(node.data(), Node::Embed(_)),
+                "File" => matches!(node.data(), Node::File(_)),
+                "HorizontalRule" => matches!(node.data(), Node::HorizontalRule(_)),
+                "HardBreak" => matches!(node.data(), Node::HardBreak(_)),
+                "PageBreak" => matches!(node.data(), Node::PageBreak(_)),
+                "Callout" => matches!(node.data(), Node::Callout(_)),
+                "Fold" => matches!(node.data(), Node::Fold(_)),
+                "FoldTitle" => matches!(node.data(), Node::FoldTitle(_)),
+                "FoldContent" => matches!(node.data(), Node::FoldContent(_)),
+                "Table" => matches!(node.data(), Node::Table(_)),
+                "TableRow" => matches!(node.data(), Node::TableRow(_)),
+                "TableCell" => matches!(node.data(), Node::TableCell(_)),
+                "Text" => matches!(node.data(), Node::Text(_)),
+                _ => false,
+            },
+            "Expected {expected}, got {actual}"
+        );
+    }
+
+    #[test]
+    fn test_roundtrip_paragraph_attrs() {
+        use crate::model::nodes::ParagraphNode;
+
+        let para_id = NodeId::new();
+        let text_id = NodeId::new();
+        let frag = Fragment::builder()
+            .add((
+                para_id,
+                FragmentNode::new(
+                    Node::Paragraph(ParagraphNode {
+                        align: crate::model::nodes::TextAlign::Center,
+                        line_height: 2.0,
+                    }),
+                    None,
+                ),
+            ))
+            .add((
+                text_id,
+                FragmentNode::new(
+                    Node::Text(TextNode {
+                        text: Text::from("Centered"),
+                    }),
+                    Some(para_id),
+                ),
+            ))
+            .build();
+
+        let html = frag.to_html();
+        let parsed = Fragment::from_html(&html).unwrap();
+        let top = parsed.top_level_node_ids();
+        assert_eq!(top.len(), 1);
+
+        if let Node::Paragraph(p) = parsed.node(top[0]).unwrap().data() {
+            assert_eq!(p.align, crate::model::nodes::TextAlign::Center);
+            assert!((p.line_height - 2.0).abs() < 0.01);
+        } else {
+            panic!("Expected Paragraph");
+        }
+    }
+
+    #[test]
+    fn test_roundtrip_blockquote() {
+        use crate::model::nodes::{BlockquoteNode, BlockquoteVariant, ParagraphNode};
+
+        let bq_id = NodeId::new();
+        let para_id = NodeId::new();
+        let text_id = NodeId::new();
+        let frag = Fragment::builder()
+            .add((
+                bq_id,
+                FragmentNode::new(
+                    Node::Blockquote(BlockquoteNode {
+                        variant: BlockquoteVariant::LeftQuote,
+                    }),
+                    None,
+                ),
+            ))
+            .add((
+                para_id,
+                FragmentNode::new(Node::Paragraph(ParagraphNode::default()), Some(bq_id)),
+            ))
+            .add((
+                text_id,
+                FragmentNode::new(
+                    Node::Text(TextNode {
+                        text: Text::from("Quoted"),
+                    }),
+                    Some(para_id),
+                ),
+            ))
+            .build();
+
+        let html = frag.to_html();
+        let parsed = Fragment::from_html(&html).unwrap();
+        let top = parsed.top_level_node_ids();
+        assert_eq!(top.len(), 1);
+        assert_node_type(&parsed, top[0], "Blockquote");
+
+        if let Node::Blockquote(bq) = parsed.node(top[0]).unwrap().data() {
+            assert_eq!(bq.variant, BlockquoteVariant::LeftQuote);
+        }
+    }
+
+    #[test]
+    fn test_roundtrip_callout() {
+        use crate::model::nodes::{CalloutNode, CalloutVariant, ParagraphNode};
+
+        let callout_id = NodeId::new();
+        let para_id = NodeId::new();
+        let text_id = NodeId::new();
+        let frag = Fragment::builder()
+            .add((
+                callout_id,
+                FragmentNode::new(
+                    Node::Callout(CalloutNode {
+                        variant: CalloutVariant::Info,
+                    }),
+                    None,
+                ),
+            ))
+            .add((
+                para_id,
+                FragmentNode::new(Node::Paragraph(ParagraphNode::default()), Some(callout_id)),
+            ))
+            .add((
+                text_id,
+                FragmentNode::new(
+                    Node::Text(TextNode {
+                        text: Text::from("Info"),
+                    }),
+                    Some(para_id),
+                ),
+            ))
+            .build();
+
+        let html = frag.to_html();
+        let parsed = Fragment::from_html(&html).unwrap();
+        let top = parsed.top_level_node_ids();
+        assert_eq!(top.len(), 1);
+        assert_node_type(&parsed, top[0], "Callout");
+    }
+
+    #[test]
+    fn test_roundtrip_table() {
+        use crate::model::nodes::ParagraphNode;
+        use crate::model::nodes::{
+            TableAlign, TableBorderStyle, TableCellNode, TableNode, TableRowNode,
+        };
+
+        let table_id = NodeId::new();
+        let row_id = NodeId::new();
+        let cell_id = NodeId::new();
+        let para_id = NodeId::new();
+        let text_id = NodeId::new();
+
+        let frag = Fragment::builder()
+            .add((
+                table_id,
+                FragmentNode::new(
+                    Node::Table(TableNode {
+                        border_style: TableBorderStyle::Solid,
+                        align: TableAlign::Center,
+                    }),
+                    None,
+                ),
+            ))
+            .add((
+                row_id,
+                FragmentNode::new(Node::TableRow(TableRowNode {}), Some(table_id)),
+            ))
+            .add((
+                cell_id,
+                FragmentNode::new(
+                    Node::TableCell(TableCellNode {
+                        col_width: Some(200.0),
+                    }),
+                    Some(row_id),
+                ),
+            ))
+            .add((
+                para_id,
+                FragmentNode::new(Node::Paragraph(ParagraphNode::default()), Some(cell_id)),
+            ))
+            .add((
+                text_id,
+                FragmentNode::new(
+                    Node::Text(TextNode {
+                        text: Text::from("Cell"),
+                    }),
+                    Some(para_id),
+                ),
+            ))
+            .build();
+
+        let html = frag.to_html();
+        let parsed = Fragment::from_html(&html).unwrap();
+        let top = parsed.top_level_node_ids();
+        assert_eq!(top.len(), 1);
+        assert_node_type(&parsed, top[0], "Table");
+
+        if let Node::Table(t) = parsed.node(top[0]).unwrap().data() {
+            assert_eq!(t.border_style, TableBorderStyle::Solid);
+            assert_eq!(t.align, TableAlign::Center);
+        } else {
+            panic!("Expected Table");
+        }
+    }
+
+    #[test]
+    fn test_roundtrip_file() {
+        use crate::model::nodes::FileNode;
+
+        let file_id = NodeId::new();
+        let frag = Fragment::builder()
+            .add((
+                file_id,
+                FragmentNode::new(
+                    Node::File(FileNode {
+                        id: Some("file-123".to_string()),
+                        upload_id: None,
+                    }),
+                    None,
+                ),
+            ))
+            .build();
+
+        let html = frag.to_html();
+        let parsed = Fragment::from_html(&html).unwrap();
+        let top = parsed.top_level_node_ids();
+        assert_eq!(top.len(), 1);
+        assert_node_type(&parsed, top[0], "File");
+
+        if let Node::File(f) = parsed.node(top[0]).unwrap().data() {
+            assert_eq!(f.id.as_deref(), Some("file-123"));
+        } else {
+            panic!("Expected File");
+        }
+    }
+
+    #[test]
+    fn test_roundtrip_marks() {
+        use crate::model::marks::*;
+        use crate::model::nodes::ParagraphNode;
+
+        let para_id = NodeId::new();
+        let text_id = NodeId::new();
+        let text = Text::from("BoldItalicLinked");
+        let _ = text.mark(0..4, &Mark::FontWeight(FontWeightMark { weight: 700 }));
+        let _ = text.mark(4..10, &Mark::Italic(ItalicMark));
+        let _ = text.mark(
+            10..16,
+            &Mark::Link(LinkMark {
+                href: "https://example.com".to_string(),
+            }),
+        );
+
+        let frag = Fragment::builder()
+            .add((
+                para_id,
+                FragmentNode::new(Node::Paragraph(ParagraphNode::default()), None),
+            ))
+            .add((
+                text_id,
+                FragmentNode::new(Node::Text(TextNode { text }), Some(para_id)),
+            ))
+            .build();
+
+        let html = frag.to_html();
+        let parsed = Fragment::from_html(&html).unwrap();
+
+        let top = parsed.top_level_node_ids();
+        let children = parsed.children_of_node(top[0]);
+        assert_eq!(children.len(), 1);
+
+        if let Node::Text(t) = children[0].1.data() {
+            let segments = t.text.get_rich_text_segments();
+            assert_eq!(segments.len(), 3);
+            assert_eq!(segments[0].0, "Bold");
+            assert!(
+                segments[0]
+                    .1
+                    .iter()
+                    .any(|m| matches!(m, Mark::FontWeight(_)))
+            );
+            assert_eq!(segments[1].0, "Italic");
+            assert!(segments[1].1.iter().any(|m| matches!(m, Mark::Italic(_))));
+            assert_eq!(segments[2].0, "Linked");
+            assert!(
+                segments[2]
+                    .1
+                    .iter()
+                    .any(|m| matches!(m, Mark::Link(l) if l.href == "https://example.com"))
+            );
+        } else {
+            panic!("Expected Text");
+        }
+    }
+
+    #[test]
+    fn test_roundtrip_font_weight_precision() {
+        use crate::model::marks::*;
+        use crate::model::nodes::ParagraphNode;
+
+        let para_id = NodeId::new();
+        let text_id = NodeId::new();
+        let text = Text::from("W800");
+        let _ = text.mark(0..4, &Mark::FontWeight(FontWeightMark { weight: 800 }));
+
+        let frag = Fragment::builder()
+            .add((
+                para_id,
+                FragmentNode::new(Node::Paragraph(ParagraphNode::default()), None),
+            ))
+            .add((
+                text_id,
+                FragmentNode::new(Node::Text(TextNode { text }), Some(para_id)),
+            ))
+            .build();
+
+        let html = frag.to_html();
+        let parsed = Fragment::from_html(&html).unwrap();
+
+        let top = parsed.top_level_node_ids();
+        let children = parsed.children_of_node(top[0]);
+        if let Node::Text(t) = children[0].1.data() {
+            let segments = t.text.get_rich_text_segments();
+            if let Some(Mark::FontWeight(fw)) = segments[0].1.first() {
+                assert_eq!(fw.weight, 800, "FontWeight 800 lost: got {}", fw.weight);
+            }
+        }
+    }
+
+    #[test]
+    fn test_roundtrip_node_ids_preserved() {
+        use crate::model::nodes::ParagraphNode;
+
+        let para_id = NodeId::new();
+        let text_id = NodeId::new();
+        let frag = Fragment::builder()
+            .add((
+                para_id,
+                FragmentNode::new(Node::Paragraph(ParagraphNode::default()), None),
+            ))
+            .add((
+                text_id,
+                FragmentNode::new(
+                    Node::Text(TextNode {
+                        text: Text::from("Keep my ID"),
+                    }),
+                    Some(para_id),
+                ),
+            ))
+            .build();
+
+        let html = frag.to_html();
+        let parsed = Fragment::from_html(&html).unwrap();
+
+        let top = parsed.top_level_node_ids();
+        assert_eq!(top.len(), 1);
+        assert_eq!(top[0], para_id);
+
+        let children = parsed.children_of_node(para_id);
+        assert_eq!(children.len(), 1);
+        assert_eq!(children[0].0, text_id);
+    }
+
+    #[test]
+    fn test_roundtrip_node_ids_complex() {
+        use crate::model::marks::*;
+        use crate::model::nodes::{BlockquoteNode, ParagraphNode};
+
+        let bq_id = NodeId::new();
+        let p1_id = NodeId::new();
+        let t1_id = NodeId::new();
+        let p2_id = NodeId::new();
+        let t2_id = NodeId::new();
+
+        let text2 = Text::from("Linked");
+        let _ = text2.mark(
+            0..6,
+            &Mark::Link(LinkMark {
+                href: "https://example.com".to_string(),
+            }),
+        );
+
+        let frag = Fragment::builder()
+            .add((
+                bq_id,
+                FragmentNode::new(Node::Blockquote(BlockquoteNode::default()), None),
+            ))
+            .add((
+                p1_id,
+                FragmentNode::new(Node::Paragraph(ParagraphNode::default()), Some(bq_id)),
+            ))
+            .add((
+                t1_id,
+                FragmentNode::new(
+                    Node::Text(TextNode {
+                        text: Text::from("Hello"),
+                    }),
+                    Some(p1_id),
+                ),
+            ))
+            .add((
+                p2_id,
+                FragmentNode::new(Node::Paragraph(ParagraphNode::default()), Some(bq_id)),
+            ))
+            .add((
+                t2_id,
+                FragmentNode::new(Node::Text(TextNode { text: text2 }), Some(p2_id)),
+            ))
+            .build();
+
+        let html = frag.to_html();
+        let parsed = Fragment::from_html(&html).unwrap();
+
+        assert_eq!(parsed.top_level_node_ids(), vec![bq_id]);
+
+        let bq_children = parsed.children_of_node(bq_id);
+        assert_eq!(bq_children.len(), 2);
+        assert_eq!(bq_children[0].0, p1_id);
+        assert_eq!(bq_children[1].0, p2_id);
+
+        let t1_children = parsed.children_of_node(p1_id);
+        assert_eq!(t1_children.len(), 1);
+        assert_eq!(t1_children[0].0, t1_id);
+
+        let t2_children = parsed.children_of_node(p2_id);
+        assert_eq!(t2_children.len(), 1);
+        assert_eq!(t2_children[0].0, t2_id);
+    }
+
+    #[test]
+    fn test_roundtrip_open_fragment() {
+        use crate::model::nodes::ParagraphNode;
+
+        let para_id = NodeId::new();
+        let text_id = NodeId::new();
+        let mut frag = Fragment::builder()
+            .add((
+                para_id,
+                FragmentNode::new(Node::Paragraph(ParagraphNode::default()), None),
+            ))
+            .add((
+                text_id,
+                FragmentNode::new(
+                    Node::Text(TextNode {
+                        text: Text::from("Open"),
+                    }),
+                    Some(para_id),
+                ),
+            ))
+            .build();
+        frag.open_start = 1;
+        frag.open_end = 1;
+
+        let html = frag.to_html();
+        let parsed = Fragment::from_html(&html).unwrap();
+        assert_eq!(parsed.open_start, 1);
+        assert_eq!(parsed.open_end, 1);
     }
 
     #[test]
