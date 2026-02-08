@@ -580,6 +580,25 @@ impl Transaction {
 
         let deleted = self.delete_selection_with_merge()?.deleted();
 
+        if deleted {
+            let head = self.selection().head;
+            if head.node_id == NodeId::ROOT {
+                let root = self.node(NodeId::ROOT).context("Root not found")?;
+                if root.first_child().is_none() {
+                    let root_mut = self.node_mut(NodeId::ROOT).context("Root not found")?;
+                    let para_id = root_mut
+                        .as_mut()
+                        .insert_child(0, Node::Paragraph(ParagraphNode::default()))?;
+                    self.set_selection(Selection::collapsed(Position::new(
+                        para_id,
+                        0,
+                        Affinity::default(),
+                    )));
+                    self.push_effect(Effect::StructureChanged);
+                }
+            }
+        }
+
         Ok(deleted)
     }
 
