@@ -145,12 +145,11 @@ define_messages! {
     => handle(rt) { rt.handle_replace_backward(length, &text) },
 
     Paste {
-        fragment: Option<String>,
         html: Option<String>,
         text: String,
     }
     => when When::key(ContextKey::CanEdit)
-    => handle(rt) { rt.handle_paste(fragment, html, text) },
+    => handle(rt) { rt.handle_paste(html, text) },
 
     CompositionStart { text: String }
     => when When::key(ContextKey::CanEdit)
@@ -225,11 +224,10 @@ define_messages! {
         y: f32,
         text: Option<String>,
         html: Option<String>,
-        fragment: Option<String>,
         modifier: Modifier,
     }
     => when When::key(ContextKey::CanEdit)
-    => handle(rt) { rt.handle_drop(page_idx, x, y, text, html, fragment, modifier) },
+    => handle(rt) { rt.handle_drop(page_idx, x, y, text, html, modifier) },
 
     DropImages {
         page_idx: usize,

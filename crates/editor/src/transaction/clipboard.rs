@@ -377,7 +377,6 @@ mod tests {
         runtime.layout();
 
         runtime.update(Message::Paste {
-            fragment: None,
             html: None,
             text: "Hello".to_string(),
         });

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
-  import { FRAGMENT_MIME, IS_MAC } from '$lib/editor/constants';
+  import { IS_MAC } from '$lib/editor/constants';
   import { getEditor } from '$lib/editor/context';
   import { getActionFromKeyEvent } from '$lib/editor/keyboard';
 
@@ -27,8 +27,7 @@
     }
   };
 
-  const setClipboardData = (clipboardData: DataTransfer | null, data: { fragment: string; html: string; text: string }) => {
-    clipboardData?.setData(FRAGMENT_MIME, data.fragment);
+  const setClipboardData = (clipboardData: DataTransfer | null, data: { html: string; text: string }) => {
     clipboardData?.setData('text/html', data.html);
     clipboardData?.setData('text/plain', data.text);
   };
@@ -150,11 +149,10 @@
 
     e.preventDefault();
 
-    const fragment = e.clipboardData?.getData(FRAGMENT_MIME) || undefined;
     const html = e.clipboardData?.getData('text/html') || undefined;
     const text = e.clipboardData?.getData('text/plain') ?? '';
 
-    editor.dispatch({ type: 'paste', fragment, html, text });
+    editor.dispatch({ type: 'paste', html, text });
   };
 
   const handleCompositionStart = (e: CompositionEvent) => {
