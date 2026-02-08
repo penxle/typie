@@ -124,6 +124,15 @@ impl Runtime {
 
                 if tr.unset_all_marks()? {
                     changed = true;
+
+                    let codepoints = tr.selection_codepoints();
+                    let family = FontFamilyMark::default().family;
+                    let weight = FontWeightMark::default().weight;
+                    tr.push_effect(Effect::FontDetected {
+                        family,
+                        weight,
+                        codepoints,
+                    });
                 }
 
                 if tr.reset_fully_selected_paragraphs()? {
