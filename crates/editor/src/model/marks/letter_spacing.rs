@@ -24,6 +24,21 @@ impl Default for LetterSpacingMark {
     }
 }
 
+const LETTER_SPACINGS: &[f32] = &[-0.1, -0.05, 0.0, 0.05, 0.1, 0.2, 0.4];
+
+fn snap_letter_spacing(v: f32) -> f32 {
+    let mut best = LETTER_SPACINGS[0];
+    let mut best_dist = f32::MAX;
+    for &ls in LETTER_SPACINGS {
+        let d = (v - ls).abs();
+        if d < best_dist {
+            best_dist = d;
+            best = ls;
+        }
+    }
+    best
+}
+
 impl MarkHtmlCodec for LetterSpacingMark {
     fn to_dom(&self) -> DomSpec {
         DomSpec::el("span")
@@ -37,7 +52,11 @@ impl MarkHtmlCodec for LetterSpacingMark {
                 let m = parse_styles(s);
                 m.get("letter-spacing")
                     .and_then(|ls| parse_as(ls, LengthUnit::Em))
-                    .map(|spacing| Mark::LetterSpacing(LetterSpacingMark { spacing }))
+                    .map(|spacing| {
+                        Mark::LetterSpacing(LetterSpacingMark {
+                            spacing: snap_letter_spacing(spacing),
+                        })
+                    })
             })
         })]
     }

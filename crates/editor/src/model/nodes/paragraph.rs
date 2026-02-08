@@ -249,6 +249,21 @@ fn default_line_height() -> f32 {
     1.6
 }
 
+const LINE_HEIGHTS: &[f32] = &[0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0, 2.2];
+
+fn snap_line_height(v: f32) -> f32 {
+    let mut best = LINE_HEIGHTS[0];
+    let mut best_dist = f32::MAX;
+    for &lh in LINE_HEIGHTS {
+        let d = (v - lh).abs();
+        if d < best_dist {
+            best_dist = d;
+            best = lh;
+        }
+    }
+    best
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Codec)]
 #[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 pub struct ParagraphNode {
@@ -322,7 +337,7 @@ impl NodeHtmlCodec for ParagraphNode {
                         n.align = a.parse().unwrap_or_default();
                     }
                     if let Some(lh) = m.get("line-height") {
-                        n.line_height = lh.parse().unwrap_or(1.6);
+                        n.line_height = snap_line_height(lh.parse().unwrap_or(1.6));
                     }
                 }
                 Some(Node::Paragraph(n))
@@ -361,7 +376,7 @@ impl NodeHtmlCodec for ParagraphNode {
                             n.align = a.parse().unwrap_or_default();
                         }
                         if let Some(lh) = m.get("line-height") {
-                            n.line_height = lh.parse().unwrap_or(1.6);
+                            n.line_height = snap_line_height(lh.parse().unwrap_or(1.6));
                         }
                     }
                     Some(Node::Paragraph(n))
