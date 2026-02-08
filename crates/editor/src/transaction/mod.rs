@@ -70,7 +70,7 @@ impl Transaction {
         self.effects.push(effect);
     }
 
-    fn selection_codepoints(&self) -> Vec<u32> {
+    pub(crate) fn selection_codepoints(&self) -> Vec<u32> {
         self.selection()
             .to_plain_text(self.doc())
             .chars()
