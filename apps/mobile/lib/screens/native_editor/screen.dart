@@ -312,6 +312,7 @@ class _Content extends HookWidget {
         titleFocusNode: titleFocusNode,
         subtitleFocusNode: subtitleFocusNode,
         documentTemplates: data.entity.site.documentTemplates.toList(),
+        assets: document?.assets.toList(),
         client: client,
       );
     }

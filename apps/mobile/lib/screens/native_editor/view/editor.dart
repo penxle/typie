@@ -43,6 +43,7 @@ class EditorView extends HookWidget {
     required this.subtitleFocusNode,
     required this.documentTemplates,
     required this.client,
+    this.assets,
     super.key,
   });
 
@@ -54,6 +55,7 @@ class EditorView extends HookWidget {
   final FocusNode titleFocusNode;
   final FocusNode subtitleFocusNode;
   final List<GNativeEditorScreen_QueryData_entity_site_documentTemplates> documentTemplates;
+  final List<GNativeEditorScreen_QueryData_entity_node__asDocument_assets>? assets;
   final GraphQLClient client;
 
   @override
@@ -91,6 +93,40 @@ class EditorView extends HookWidget {
     final subtitleNotifier = useValueNotifier(subtitle)..value = subtitle;
 
     useEffect(() => uploadManager.dispose, []);
+
+    useEffect(() {
+      if (assets != null) {
+        for (final asset in assets!) {
+          asset.when(
+            image: (img) => uploadManager.addImageAsset(
+              img.id,
+              ImageAsset(
+                id: img.id,
+                url: img.url,
+                width: img.width,
+                height: img.height,
+                ratio: img.ratio,
+                placeholder: img.placeholder,
+              ),
+            ),
+            file: (f) => uploadManager.addFileAsset(f.id, FileAsset(id: f.id, url: f.url, name: f.name, size: f.size)),
+            embed: (e) => uploadManager.addEmbedAsset(
+              e.id,
+              EmbedAsset(
+                id: e.id,
+                url: e.url,
+                title: e.title,
+                description: e.description,
+                thumbnailUrl: e.thumbnailUrl,
+                html: e.html,
+              ),
+            ),
+            orElse: () {},
+          );
+        }
+      }
+      return null;
+    }, [assets]);
 
     final inputController = useMemoized(
       () => InputController(
