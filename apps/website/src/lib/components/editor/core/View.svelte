@@ -71,6 +71,10 @@
   };
 
   const handleContextMenu = (e: MouseEvent) => {
+    if (!extensionAreaEl?.contains(e.target as Node)) {
+      return;
+    }
+
     editor.handleContextMenu(e);
   };
 
