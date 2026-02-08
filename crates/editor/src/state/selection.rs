@@ -80,7 +80,25 @@ impl Selection {
         };
 
         if from.node_id == to.node_id {
-            return extract_block_text_range(doc, from.node_id, from.offset, to.offset);
+            let is_textblock = doc
+                .node(from.node_id)
+                .map_or(false, |n| n.spec().is_textblock(doc.schema()));
+
+            if is_textblock {
+                return extract_block_text_range(doc, from.node_id, from.offset, to.offset);
+            }
+
+            let Ok(blocks) = crate::state::collect_blocks_in_range(doc, from, to) else {
+                return String::new();
+            };
+            let mut result = String::new();
+            for block_id in blocks {
+                if !result.is_empty() {
+                    result.push('\n');
+                }
+                result.push_str(&extract_block_text_full(doc, block_id));
+            }
+            return result;
         }
 
         let mut result = String::new();
