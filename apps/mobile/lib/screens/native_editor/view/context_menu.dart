@@ -1,7 +1,11 @@
 import 'package:flutter/widgets.dart';
+import 'package:typie/context/bottom_sheet.dart';
 import 'package:typie/context/theme.dart';
 import 'package:typie/screens/native_editor/controller/clipboard.dart';
+import 'package:typie/screens/native_editor/sheet/paste_option.dart';
 import 'package:typie/screens/native_editor/view/scope.dart';
+import 'package:typie/service.dart';
+import 'package:typie/services/preference.dart';
 
 class SelectionContextMenu extends StatelessWidget {
   const SelectionContextMenu({required this.clipboard, required this.onDismiss, super.key});
@@ -172,8 +176,27 @@ class _MenuBubble extends StatelessWidget {
           _MenuButton(
             label: '붙여넣기',
             onTap: () async {
+              final pref = serviceLocator<Pref>();
               final payload = await clipboard.getPastePayload();
-              scope.editor.dispatch(payload);
+              final html = payload['html'] as String?;
+
+              if (html != null && pref.pasteMode == 'ask') {
+                onDismiss();
+                if (!context.mounted) {
+                  return;
+                }
+                await context.showBottomSheet(
+                  intercept: true,
+                  child: PasteOptionBottomSheet(
+                    onConfirm: (selectedMode) async {
+                      scope.editor.dispatch({...payload, 'mode': selectedMode == 'text' ? 'text' : 'auto'});
+                    },
+                  ),
+                );
+                return;
+              }
+
+              scope.editor.dispatch({...payload, 'mode': pref.pasteMode == 'text' ? 'text' : 'auto'});
               onDismiss();
             },
           ),

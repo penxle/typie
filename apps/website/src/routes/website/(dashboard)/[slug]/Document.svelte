@@ -32,6 +32,7 @@
   import { getEditorRegistry } from './@split-view/editor-registry.svelte';
   import DocumentFindReplace from './DocumentFindReplace.svelte';
   import DocumentTemplateModal from './DocumentTemplateModal.svelte';
+  import PasteModal from './PasteModal.svelte';
   import SpellcheckPopover from './SpellcheckPopover.svelte';
   import type { Document_query } from '$graphql';
   import type { Affinity, Position } from '$lib/editor/types';
@@ -182,6 +183,34 @@
   const editor = new Editor();
   setEditor(editor);
 
+  editor.onPaste = (html, text) => {
+    if (app.preference.current.pasteMode === 'ask') {
+      clipboardData = { html, text };
+      openPasteModal = true;
+      return true;
+    }
+
+    if (app.preference.current.pasteMode === 'text') {
+      editor.dispatch({ type: 'paste', html, text, mode: 'text' });
+      return true;
+    }
+
+    return false;
+  };
+
+  function onPasteConfirm(mode: 'html' | 'text') {
+    if (!clipboardData) return;
+
+    editor.dispatch({
+      type: 'paste',
+      html: clipboardData.html,
+      text: clipboardData.text,
+      mode: mode === 'text' ? 'text' : 'auto',
+    });
+
+    clipboardData = undefined;
+  }
+
   $effect(() => {
     if (assets) {
       for (const asset of assets) {
@@ -220,6 +249,8 @@
   let syncStatus = $state<'syncing' | 'synced' | 'error'>('synced');
   let planUpgradeModalOpen = $state(false);
   let showFindReplace = $state(false);
+  let clipboardData = $state<{ html: string; text: string }>();
+  let openPasteModal = $state(false);
 
   const selectionsStore = new LocalStore<Record<string, { selection?: unknown; type?: string; element?: string; timestamp: number }>>(
     'typie:selections',
@@ -889,6 +920,22 @@
   <br />
   모든 프리미엄 기능을 무제한으로 사용할 수 있어요.
 </PlanUpgradeModal>
+
+<PasteModal
+  onconfirm={(mode) => {
+    onPasteConfirm(mode);
+    openPasteModal = false;
+  }}
+  bind:open={
+    () => openPasteModal,
+    (v) => {
+      if (!v) {
+        clipboardData = undefined;
+        openPasteModal = false;
+      }
+    }
+  }
+/>
 
 {#if $query.me.sites[0]}
   <DocumentTemplateModal $site={$query.me.sites[0]} {editor} {focused} />

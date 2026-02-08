@@ -11,23 +11,22 @@ impl Transaction {
             return Ok(false);
         }
 
-        let codepoints = collect_codepoints(&s);
-        if !codepoints.is_empty() {
-            let (family, weight) = self.current_font();
-            self.push_effect(Effect::FontDetected {
-                family,
-                weight,
-                codepoints: codepoints.clone(),
-            });
-            self.push_effect(Effect::CodepointDetected { codepoints });
+        let mut changed = false;
+        let lines: Vec<&str> = s.split('\n').collect();
+
+        for (i, line) in lines.iter().enumerate() {
+            if i > 0 {
+                self.split_paragraph()?;
+                changed = true;
+            }
+            if !line.is_empty() {
+                if self.insert_text(line)? {
+                    changed = true;
+                }
+            }
         }
 
-        let fragment = Fragment::from_text(&s);
-        let result = self.insert_fragment(self.selection().head, fragment)?;
-        if let Some(selection) = result.as_selection() {
-            self.set_selection(selection);
-        }
-        Ok(result.inserted())
+        Ok(changed)
     }
 
     pub fn paste_fragment(&mut self, fragment: Fragment) -> Result<bool> {
@@ -122,7 +121,7 @@ mod tests {
                     text { "FooWorld" }
                 }
             }
-            selection { (p, 3) }
+            selection { (p, 3, Affinity::Upstream) }
         };
 
         assert_state_eq!(actual, expected);
@@ -154,7 +153,7 @@ mod tests {
                     text { "BarWorld" }
                 }
             }
-            selection { (p, 3) }
+            selection { (p, 3, Affinity::Upstream) }
         };
 
         assert_state_eq!(actual, expected);
@@ -185,7 +184,7 @@ mod tests {
                     text { "Line2End" }
                 }
             }
-            selection { (p, 5) }
+            selection { (p, 5, Affinity::Upstream) }
         };
 
         assert_state_eq!(actual, expected);
@@ -218,7 +217,7 @@ mod tests {
                     text { "Line2End" }
                 }
             }
-            selection { (p, 5) }
+            selection { (p, 5, Affinity::Upstream) }
         };
 
         assert_state_eq!(actual, expected);
@@ -250,7 +249,7 @@ mod tests {
                     text { "Line2" }
                 }
             }
-            selection { (p, 5) }
+            selection { (p, 5, Affinity::Upstream) }
         };
 
         assert_state_eq!(actual, expected);
@@ -282,7 +281,7 @@ mod tests {
                     text { "Line2End" }
                 }
             }
-            selection { (p, 5) }
+            selection { (p, 5, Affinity::Upstream) }
         };
 
         assert_state_eq!(actual, expected);
@@ -312,7 +311,7 @@ mod tests {
                     text { "Line2" }
                 }
             }
-            selection { (p, 5) }
+            selection { (p, 5, Affinity::Upstream) }
         };
 
         assert_state_eq!(actual, expected);
@@ -336,7 +335,7 @@ mod tests {
                     text { "Hello" }
                 }
             }
-            selection { (p, 5) }
+            selection { (p, 5, Affinity::Upstream) }
         };
 
         assert_state_eq!(actual, expected);
@@ -363,7 +362,7 @@ mod tests {
                     text { "HelloWorld" }
                 }
             }
-            selection { (p, 10) }
+            selection { (p, 10, Affinity::Upstream) }
         };
 
         assert_state_eq!(actual, expected);
@@ -389,7 +388,7 @@ mod tests {
                     text { "StartMiddleEnd" }
                 }
             }
-            selection { (p, 11) }
+            selection { (p, 11, Affinity::Upstream) }
         };
 
         assert_state_eq!(actual, expected);
@@ -397,7 +396,7 @@ mod tests {
 
     #[test]
     fn test_paste_single_line_rendering() {
-        use crate::runtime::{Cmd, Message};
+        use crate::runtime::{Cmd, Message, PasteMode};
 
         let mut p = id!();
         let mut runtime = runtime! {
@@ -413,6 +412,7 @@ mod tests {
         runtime.update(Message::Paste {
             html: None,
             text: "Hello".to_string(),
+            mode: PasteMode::Auto,
         });
 
         let cmds = runtime.tick();

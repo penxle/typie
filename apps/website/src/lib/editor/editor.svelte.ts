@@ -102,6 +102,8 @@ export class Editor {
   #readyResolve?: () => void;
   ready: Promise<void>;
 
+  onPaste?: (html: string, text: string) => boolean;
+
   constructor() {
     this.ready = new Promise((resolve) => {
       this.#readyResolve = resolve;
@@ -863,10 +865,15 @@ export class Editor {
         }
       }
 
-      this.dispatch({ type: 'paste', html, text });
+      if (html && this.onPaste?.(html, text)) {
+        this.closeContextMenu();
+        return;
+      }
+
+      this.dispatch({ type: 'paste', html, text, mode: 'auto' });
     } catch {
       const text = await navigator.clipboard.readText();
-      this.dispatch({ type: 'paste', html: undefined, text });
+      this.dispatch({ type: 'paste', html: undefined, text, mode: 'auto' });
     }
     this.closeContextMenu();
   }

@@ -151,11 +151,17 @@ class InputController {
     } else if (action == 'cut') {
       unawaited(EditorClipboard().cut(editor, dispatch));
     } else if (action == 'paste') {
-      unawaited(EditorClipboard().getPastePayload().then(dispatch));
+      if (onPasteHandler != null) {
+        unawaited(onPasteHandler!());
+      } else {
+        unawaited(EditorClipboard().getPastePayload().then(dispatch));
+      }
     } else {
       dispatch({'type': action});
     }
   }
+
+  Future<void> Function()? onPasteHandler;
 
   VoidCallback? floatingCursorBeginHandler;
   void Function(double dx, double dy)? floatingCursorUpdateHandler;
