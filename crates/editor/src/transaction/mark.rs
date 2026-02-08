@@ -2191,4 +2191,34 @@ mod tests {
 
         assert_state_eq!(rt.state(), expected);
     }
+
+    #[test]
+    fn set_font_weight_emits_font_detected_with_codepoints() {
+        let initial = state! {
+            doc {
+                paragraph {
+                    text { "aazz" }
+                }
+            }
+            selection { (NodeId::ROOT, 0) -> (NodeId::ROOT, 1) }
+        };
+
+        let (_, effects) = transact_with_effect!(initial, |tr| {
+            tr.toggle_mark(Mark::FontWeight(FontWeightMark { weight: 700 }))
+                .unwrap()
+        });
+
+        let font_detected = effects
+            .iter()
+            .find(|e| matches!(e, Effect::FontDetected { weight: 700, .. }))
+            .expect("FontDetected effect should be emitted when setting font weight");
+
+        if let Effect::FontDetected { codepoints, .. } = font_detected {
+            let expected: Vec<u32> = "aazz".chars().map(|c| c as u32).collect();
+            assert_eq!(
+                *codepoints, expected,
+                "FontDetected should contain codepoints of selected text"
+            );
+        }
+    }
 }
