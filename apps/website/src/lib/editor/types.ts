@@ -1,6 +1,7 @@
 export type {
   Affinity,
   AiFeedbackOverlay,
+  BlockquoteVariant,
   Cmd,
   Direction,
   ExternalElement,
