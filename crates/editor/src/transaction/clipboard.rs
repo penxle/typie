@@ -46,7 +46,7 @@ impl Transaction {
             self.push_effect(Effect::CodepointDetected { codepoints });
         }
 
-        let fragment = fragment.with_fresh_ids();
+        let fragment = fragment.with_fresh_ids_for_doc(self.doc());
         let result = self.insert_fragment(self.selection().head, fragment)?;
         if let Some(selection) = result.as_selection() {
             self.set_selection(selection);
@@ -1058,5 +1058,81 @@ mod tests {
             codepoints.contains(&('你' as u32)),
             "paste_fragment should detect Chinese codepoints"
         );
+    }
+
+    #[test]
+    fn paste_fragment_preserves_ids_when_no_conflict() {
+        let mut target_p = id!();
+
+        let mut frag_p = id!();
+        let fragment = fragment! {
+            open_start: 0, open_end: 0,
+            @frag_p paragraph { text { "Pasted" } }
+        };
+
+        let initial = state! {
+            doc {
+                @target_p paragraph { text { "Target" } }
+            }
+            selection { (target_p, 0) }
+        };
+
+        let actual = transact!(initial, |tr| {
+            tr.paste_fragment(fragment).unwrap();
+        });
+
+        assert!(
+            actual.doc.node(frag_p).is_some(),
+            "Non-conflicting pasted node ID should be preserved in the document"
+        );
+    }
+
+    #[test]
+    fn paste_fragment_remaps_ids_when_conflict_exists() {
+        let mut p = id!();
+
+        let initial = state! {
+            doc {
+                @p paragraph { text { "Hello" } }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+
+        let fragment = initial.selection.extract_fragment(&initial.doc).unwrap();
+        let fragment_ids: Vec<NodeId> = fragment.collect_all_ids().into_iter().collect();
+
+        let paste_target = state! {
+            doc {
+                @p paragraph { text { "Hello" } }
+            }
+            selection { (p, 5) }
+        };
+
+        let actual = transact!(paste_target, |tr| {
+            tr.paste_fragment(fragment).unwrap();
+        });
+
+        assert!(
+            actual.doc.node(p).is_some(),
+            "Original document node should still exist"
+        );
+
+        let doc_ids: Vec<NodeId> = actual
+            .doc
+            .node(NodeId::ROOT)
+            .unwrap()
+            .descendants()
+            .map(|n| n.node_id())
+            .collect();
+
+        for fid in &fragment_ids {
+            if initial.doc.node(*fid).is_some() {
+                let count = doc_ids.iter().filter(|id| *id == fid).count();
+                assert!(
+                    count <= 1,
+                    "Conflicting ID {fid:?} should not be duplicated (found {count} times)"
+                );
+            }
+        }
     }
 }
