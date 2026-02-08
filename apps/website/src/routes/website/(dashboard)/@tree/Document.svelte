@@ -28,6 +28,7 @@
         id
         title
         documentType: type
+        characterCount
         createdAt
         updatedAt
 
