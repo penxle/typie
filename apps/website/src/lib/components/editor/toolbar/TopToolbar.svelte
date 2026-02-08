@@ -22,6 +22,7 @@
   import TableIcon from '~icons/lucide/table';
   import HorizontalRuleIcon from '~icons/typie/horizontal-rule';
   import { fragment, graphql } from '$graphql';
+  import { blockquoteVariants, horizontalRuleVariants } from '$lib/components/editor/values';
   import { getEditor } from '$lib/editor/context';
   import TableSizeSelector from './TableSizeSelector.svelte';
   import ToolbarButton from './ToolbarButton.svelte';
@@ -53,25 +54,6 @@
 
   const toolbarSize = $derived(app.preference.current.toolbarStyle === 'compact' ? 'medium' : 'large');
   const layoutMode = $derived(editor.layout.layoutMode);
-
-  const horizontalRuleVariants = [
-    { label: '선', value: 'line' as const },
-    { label: '점선', value: 'dashed_line' as const },
-    { label: '동그라미가 있는 선', value: 'circle_line' as const },
-    { label: '마름모가 있는 선', value: 'diamond_line' as const },
-    { label: '동그라미', value: 'circle' as const },
-    { label: '마름모', value: 'diamond' as const },
-    { label: '세 개의 동그라미', value: 'three_circles' as const },
-    { label: '세 개의 마름모', value: 'three_diamonds' as const },
-    { label: '지그재그', value: 'zigzag' as const },
-  ];
-
-  const blockquoteVariants = [
-    { label: '왼쪽 선', value: 'left_line' as const },
-    { label: '왼쪽 따옴표', value: 'left_quote' as const },
-    { label: '보낸 메시지', value: 'message_sent' as const },
-    { label: '받은 메시지', value: 'message_received' as const },
-  ];
 </script>
 
 <div
@@ -139,15 +121,15 @@
 
       {#snippet floating({ close })}
         <DropdownMenu style={css.raw({ maxWidth: '200px' })}>
-          {#each horizontalRuleVariants as { label, value } (value)}
+          {#each horizontalRuleVariants as { variant, component: Component } (variant)}
             <DropdownMenuItem
               style={css.raw({ justifyContent: 'center', height: '48px' })}
               onclick={() => {
-                editor.focus().dispatch({ type: 'insertHorizontalRule', variant: value });
+                editor.focus().dispatch({ type: 'insertHorizontalRule', variant });
                 close();
               }}
             >
-              {label}
+              <Component />
             </DropdownMenuItem>
           {/each}
         </DropdownMenu>
@@ -161,15 +143,15 @@
 
       {#snippet floating({ close })}
         <DropdownMenu style={css.raw({ maxWidth: '200px' })}>
-          {#each blockquoteVariants as { label, value } (value)}
+          {#each blockquoteVariants as { variant, component: Component } (variant)}
             <DropdownMenuItem
               style={css.raw({ height: '48px' })}
               onclick={() => {
-                editor.focus().dispatch({ type: 'toggleBlockquote', variant: value });
+                editor.focus().dispatch({ type: 'toggleBlockquote', variant });
                 close();
               }}
             >
-              {label}
+              <Component />
             </DropdownMenuItem>
           {/each}
         </DropdownMenu>
