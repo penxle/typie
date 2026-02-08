@@ -1,7 +1,12 @@
 import { getContext, setContext } from 'svelte';
 import type { Editor } from '@tiptap/core';
 import type { Ref } from '@typie/ui/utils';
-import type { Editor_Widget_CharacterCountChangeWidget_post, Editor_Widget_PostRelatedNoteWidget_post } from '$graphql';
+import type {
+  Editor_Widget_CharacterCountChangeWidget_document,
+  Editor_Widget_CharacterCountChangeWidget_post,
+  Editor_Widget_PostRelatedNoteWidget_post,
+} from '$graphql';
+import type { Editor as PenxleEditor } from '$lib/editor/editor.svelte';
 
 export type WidgetType = 'characterCount' | 'characterCountChange' | 'postRelatedNote' | 'onboarding' | 'timer';
 
@@ -16,7 +21,9 @@ type WidgetEnvironment = {
   editMode: boolean;
   palette: boolean;
   editor?: Ref<Editor>;
+  penxleEditor?: PenxleEditor;
   $post?: (Editor_Widget_CharacterCountChangeWidget_post & Editor_Widget_PostRelatedNoteWidget_post) | undefined;
+  $document?: Editor_Widget_CharacterCountChangeWidget_document | undefined;
 };
 
 const key: unique symbol = Symbol('WidgetContext');
@@ -26,7 +33,9 @@ export class WidgetContext {
     editMode: false,
     palette: false,
     editor: undefined,
+    penxleEditor: undefined,
     $post: undefined,
+    $document: undefined,
   });
 
   createWidget?: (type: WidgetType, via: string, index?: number) => Promise<void>;
