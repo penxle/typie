@@ -54,6 +54,12 @@ pub fn get_memory() -> JsValue {
     wasm_bindgen::memory()
 }
 
+#[wasm_bindgen(js_name = validateRegex)]
+pub fn validate_regex(pattern: &str) -> bool {
+    let anchored = format!("(?:{pattern})$");
+    fancy_regex::Regex::new(&anchored).is_ok()
+}
+
 #[wasm_bindgen]
 pub struct Application;
 

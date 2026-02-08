@@ -234,6 +234,22 @@ pub struct EditorApplication {
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn editor_validate_regex(pattern: *const c_char) -> i32 {
+    ffi!(
+        {
+            let pattern = parse_cstr(pattern, "pattern")?;
+            let anchored = format!("(?:{pattern})$");
+            Ok(if fancy_regex::Regex::new(&anchored).is_ok() {
+                1
+            } else {
+                0
+            })
+        },
+        -1
+    )
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn editor_application_new() -> *mut EditorApplication {
     ffi!(
         Ok(Box::into_raw(Box::new(ApplicationInner)) as *mut EditorApplication),

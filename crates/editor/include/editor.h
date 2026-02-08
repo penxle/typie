@@ -38,6 +38,8 @@ void editor_clear_last_error(void);
 
 void editor_set_log_callback(LogCallback callback);
 
+int32_t editor_validate_regex(const char* pattern);
+
 EditorApplication* editor_application_new(void);
 void editor_application_free(EditorApplication* app);
 int32_t editor_application_load_icu_data(EditorApplication* app, const uint8_t* data, size_t len);

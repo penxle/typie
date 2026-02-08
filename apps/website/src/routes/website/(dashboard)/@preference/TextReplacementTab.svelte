@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { validateRegex } from '@typie/editor';
   import { cache } from '@typie/sark/internal';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
@@ -243,13 +244,9 @@
       formError = '찾을 텍스트와 삽입할 텍스트가 같아요.';
       return false;
     }
-    if (formRegex) {
-      try {
-        new RegExp(formMatch);
-      } catch {
-        formError = '유효하지 않은 정규식이에요.';
-        return false;
-      }
+    if (formRegex && !validateRegex(formMatch)) {
+      formError = '유효하지 않은 정규식이에요.';
+      return false;
     }
     formError = '';
     return true;
