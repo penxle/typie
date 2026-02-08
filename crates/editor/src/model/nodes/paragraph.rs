@@ -3,8 +3,8 @@ use crate::layout::elements::{LineElement, build_metrics};
 use crate::layout::{Element, Layout, LayoutContext, LayoutNode, PageBreakPolicy, PositionedNode};
 use crate::model::html::{DomSpec, NodeHtmlCodec, NodeParseRule, parse_styles};
 use crate::model::{
-    FontFamilyMark, FontSizeMark, FontWeightMark, LetterSpacingMark, Mark, Node, PreeditDecor,
-    TextColorMark,
+    FontFamilyMark, FontSizeMark, FontWeightMark, LetterSpacingMark, Mark, Node, PendingMarksDecor,
+    PreeditDecor, TextColorMark,
 };
 use crate::schema::Expand;
 use crate::types::{BoxConstraints, Point, Size};
@@ -47,6 +47,13 @@ fn preedit_for_node<'a>(ctx: &'a LayoutContext<'a>) -> Option<&'a PreeditDecor> 
         .preedit
         .as_ref()
         .filter(|preedit| preedit.node_id == ctx.node.node_id())
+}
+
+fn pending_marks_for_node<'a>(ctx: &'a LayoutContext<'a>) -> Option<&'a PendingMarksDecor> {
+    ctx.decorations
+        .pending_marks
+        .as_ref()
+        .filter(|pm| pm.node_id == ctx.node.node_id())
 }
 
 fn extract_ruby_segments(ctx: &LayoutContext) -> Vec<crate::layout::elements::RubySegment> {
@@ -412,6 +419,8 @@ impl Layout for ParagraphNode {
             text = "\u{200B}".to_string();
         }
 
+        let pending_marks = pending_marks_for_node(ctx);
+
         let line_height = self.line_height;
         let layout = GLOBALS.with(|globals| {
             use parley::style::*;
@@ -614,6 +623,26 @@ impl Layout for ParagraphNode {
                 }
             }
 
+            if is_text_empty {
+                if let Some(pm) = pending_marks {
+                    let range = 0..text.len();
+                    let font_size = pm
+                        .marks
+                        .iter()
+                        .find_map(|m| {
+                            if let Mark::FontSize(fs) = m {
+                                Some(fs.size)
+                            } else {
+                                None
+                            }
+                        })
+                        .unwrap_or(12.0);
+                    for mark in &pm.marks {
+                        apply_mark(&mut builder, mark, range.clone(), font_size);
+                    }
+                }
+            }
+
             let mut layout = builder.build(&text);
             layout.break_all_lines(Some(constraints.max_width));
             layout.align(
@@ -629,6 +658,24 @@ impl Layout for ParagraphNode {
 
             let mut dummy_builder = lcx.ranged_builder(&mut fcx, "\u{200B}", 1.0, false);
             setup_defaults(&mut dummy_builder);
+
+            if let Some(pm) = pending_marks {
+                let range = 0.."\u{200B}".len();
+                let font_size = pm
+                    .marks
+                    .iter()
+                    .find_map(|m| {
+                        if let Mark::FontSize(fs) = m {
+                            Some(fs.size)
+                        } else {
+                            None
+                        }
+                    })
+                    .unwrap_or(12.0);
+                for mark in &pm.marks {
+                    apply_mark(&mut dummy_builder, mark, range.clone(), font_size);
+                }
+            }
 
             let mut dummy_layout = dummy_builder.build("\u{200B}");
             dummy_layout.break_all_lines(None);

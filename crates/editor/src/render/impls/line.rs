@@ -422,7 +422,10 @@ mod tests {
     }
 
     fn decorations_from_state(_state: &crate::runtime::State) -> Decorations {
-        Decorations { preedit: None }
+        Decorations {
+            preedit: None,
+            pending_marks: None,
+        }
     }
 
     fn layout_for_paragraph(
