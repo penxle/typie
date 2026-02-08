@@ -23,7 +23,7 @@
       ruby: z.string().min(1),
     }),
     onSubmit: (data) => {
-      editor.dispatch({ type: 'toggleRuby', text: data.ruby });
+      editor.focus().dispatch({ type: 'toggleRuby', text: data.ruby });
       close();
     },
     defaultValues: {
@@ -44,7 +44,7 @@
   {#if isRubyActive}
     <Button
       onclick={() => {
-        editor.dispatch({ type: 'toggleRuby', text: '' });
+        editor.focus().dispatch({ type: 'toggleRuby', text: '' });
         close();
       }}
       size="sm"

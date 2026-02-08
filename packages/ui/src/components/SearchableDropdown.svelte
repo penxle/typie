@@ -50,6 +50,7 @@
         return;
       }
       close();
+      onEscape?.();
     },
   });
 
@@ -225,6 +226,7 @@
     onclick={() => {
       inputElement?.blur();
       close();
+      onEscape?.();
     }}
     type="button"
   >

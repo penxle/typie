@@ -216,6 +216,7 @@
         applyFontSize(true);
         inputElement?.blur();
         close();
+        editor.focus();
       }}
       type="button"
     >
@@ -262,7 +263,7 @@
           <DropdownMenuItem
             active={currentFontSize === value}
             onclick={() => {
-              editor.dispatch({ type: 'setFontSize', size: value });
+              editor.focus().dispatch({ type: 'setFontSize', size: value });
               close();
             }}
           >
