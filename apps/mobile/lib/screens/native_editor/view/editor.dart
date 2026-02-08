@@ -586,6 +586,7 @@ class _DocumentPlaceholder extends StatelessWidget {
               const Gap(4),
               GestureDetector(
                 onTap: () async {
+                  controller.clearFocus();
                   await context.showBottomSheet(
                     intercept: true,
                     child: TemplateSheet(templates: documentTemplates, editor: controller.editor, client: client),
