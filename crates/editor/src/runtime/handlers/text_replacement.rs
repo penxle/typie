@@ -591,4 +591,46 @@ mod tests {
         assert_state_eq!(actual, expected);
         clear_rules();
     }
+
+    #[test]
+    fn commit_preedit_triggers_replacement() {
+        set_rules(vec![RawTextReplacementRule {
+            id: "1".into(),
+            match_pattern: "(c)".into(),
+            substitute: "\u{00A9}".into(),
+            regex: false,
+        }]);
+
+        let mut p = id!();
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {
+                    text { "(c" }
+                }
+            }
+            selection { (p, 2) }
+        };
+
+        rt.update(Message::CompositionStart {
+            text: String::new(),
+        });
+        rt.update(Message::CompositionUpdate {
+            text: ")".to_string(),
+        });
+        rt.update(Message::CommitPreedit);
+
+        let actual = rt.state();
+        let expected = state! {
+            doc {
+                @p paragraph {
+                    text { "\u{00A9}" }
+                }
+            }
+            selection { (p, 1, Affinity::Upstream) }
+        };
+
+        assert_state_eq!(actual, expected);
+        clear_rules();
+    }
 }
