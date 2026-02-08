@@ -20,7 +20,7 @@
   let { widgetId, data = {} }: Props = $props();
 
   const widgetContext = getWidgetContext();
-  const { $post: _post } = $derived(widgetContext.env);
+  const { $post: _post, $document: _document } = $derived(widgetContext.env);
   let isCollapsed = $state((data.isCollapsed as boolean) ?? false);
 
   const toggleCollapse = () => {
@@ -44,9 +44,26 @@
     `),
   );
 
-  const difference = $derived($post ? $post.characterCountChange.additions - $post.characterCountChange.deletions : 0);
-  const additions = $derived($post ? $post.characterCountChange.additions : 0);
-  const deletions = $derived($post ? $post.characterCountChange.deletions : 0);
+  const document = fragment(
+    // eslint-disable-next-line svelte/no-unused-svelte-ignore
+    // svelte-ignore state_referenced_locally
+    _document,
+    graphql(`
+      fragment Editor_Widget_CharacterCountChangeWidget_document on Document {
+        id
+
+        characterCountChange {
+          additions
+          deletions
+        }
+      }
+    `),
+  );
+
+  const characterCountChange = $derived($post?.characterCountChange ?? $document?.characterCountChange);
+  const difference = $derived(characterCountChange ? characterCountChange.additions - characterCountChange.deletions : 0);
+  const additions = $derived(characterCountChange ? characterCountChange.additions : 0);
+  const deletions = $derived(characterCountChange ? characterCountChange.deletions : 0);
 </script>
 
 <Widget collapsed={isCollapsed} icon={GoalIcon} title="오늘의 기록">

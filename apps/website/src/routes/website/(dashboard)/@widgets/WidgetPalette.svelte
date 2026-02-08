@@ -9,13 +9,20 @@
   import { WIDGET_CATEGORIES, WIDGET_COMPONENTS, WIDGET_METADATA } from './widgets';
   import type { Editor } from '@tiptap/core';
   import type { Ref } from '@typie/ui/utils';
-  import type { Editor_Widget_CharacterCountChangeWidget_post, Editor_Widget_PostRelatedNoteWidget_post } from '$graphql';
+  import type {
+    Editor_Widget_CharacterCountChangeWidget_document,
+    Editor_Widget_CharacterCountChangeWidget_post,
+    Editor_Widget_PostRelatedNoteWidget_post,
+  } from '$graphql';
+  import type { Editor as PenxleEditor } from '$lib/editor/editor.svelte';
   import type { WidgetType } from './widget-context.svelte';
 
   type Props = {
     open: boolean;
     editor?: Ref<Editor>;
+    penxleEditor?: PenxleEditor;
     $post?: Editor_Widget_CharacterCountChangeWidget_post & Editor_Widget_PostRelatedNoteWidget_post;
+    $document?: Editor_Widget_CharacterCountChangeWidget_document;
     addedWidgets?: WidgetType[];
     onDragStart: (e: PointerEvent, widgetType: WidgetType, target: HTMLElement) => void;
     onDragMove: (e: PointerEvent) => void;
@@ -26,7 +33,9 @@
   let {
     open = $bindable(false),
     editor,
+    penxleEditor,
     $post: _post,
+    $document: _document,
     addedWidgets = [],
     onDragStart,
     onDragMove,
@@ -47,7 +56,9 @@
 
   $effect(() => {
     widgetContext.env.editor = editor;
+    widgetContext.env.penxleEditor = penxleEditor;
     widgetContext.env.$post = _post;
+    widgetContext.env.$document = _document;
     widgetContext.env.editMode = false;
     widgetContext.env.palette = true;
   });
