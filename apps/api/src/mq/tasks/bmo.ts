@@ -378,10 +378,10 @@ export const ProcessBmoMentionJob = defineJob('bmo:process-mention', async (even
       model: 'claude-sonnet-4-5-20250929',
       maxThinkingTokens: 20_000,
       includePartialMessages: true,
-      permissionMode: 'bypassPermissions',
-      allowDangerouslySkipPermissions: true,
+      permissionMode: 'dontAsk',
       betas: ['context-1m-2025-08-07'],
       env: { ...process.env, ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY, CLAUDE_CODE_STREAM_CLOSE_TIMEOUT: '300' },
+      stderr: (data) => console.error('[bmo:claude]', data),
     };
 
     if (existingSessionId) {
