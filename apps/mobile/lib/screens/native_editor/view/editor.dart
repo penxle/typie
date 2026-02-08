@@ -10,12 +10,14 @@ import 'package:typie/graphql/client.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/screens/native_editor/__generated__/native_editor_query.data.gql.dart';
+import 'package:typie/screens/native_editor/controller/clipboard.dart';
 import 'package:typie/screens/native_editor/controller/dnd_controller.dart';
 import 'package:typie/screens/native_editor/controller/input.dart';
 import 'package:typie/screens/native_editor/controller/keyboard.dart';
 import 'package:typie/screens/native_editor/controller/ticker.dart';
 import 'package:typie/screens/native_editor/controller/upload.dart';
 import 'package:typie/screens/native_editor/external/models.dart';
+import 'package:typie/screens/native_editor/sheet/paste_option.dart';
 import 'package:typie/screens/native_editor/sheet/template.dart';
 import 'package:typie/screens/native_editor/state/controller.dart';
 import 'package:typie/screens/native_editor/state/state.dart';
@@ -143,6 +145,7 @@ class EditorView extends HookWidget {
       controller,
     ]);
 
+    final pref = useService<Pref>();
     final floatingCursorOrigin = useRef<CursorInfo?>(null);
 
     useEffect(() {
@@ -151,6 +154,28 @@ class EditorView extends HookWidget {
         ..setRequestFocusCallback(inputController.requestFocus);
 
       inputController
+        ..onPasteHandler = () async {
+          final payload = await EditorClipboard().getPastePayload();
+          final html = payload['html'] as String?;
+          final mode = pref.pasteMode;
+
+          if (html != null && mode == 'ask') {
+            if (!context.mounted) {
+              return;
+            }
+            await context.showBottomSheet(
+              intercept: true,
+              child: PasteOptionBottomSheet(
+                onConfirm: (selectedMode) async {
+                  controller.dispatch({...payload, 'mode': selectedMode == 'text' ? 'text' : 'auto'});
+                },
+              ),
+            );
+            return;
+          }
+
+          controller.dispatch({...payload, 'mode': mode == 'text' ? 'text' : 'auto'});
+        }
         ..floatingCursorBeginHandler = () {
           floatingCursorOrigin.value = controller.state.cursor;
         }
@@ -204,6 +229,7 @@ class EditorView extends HookWidget {
 
       return () {
         inputController
+          ..onPasteHandler = null
           ..floatingCursorBeginHandler = null
           ..floatingCursorUpdateHandler = null
           ..floatingCursorEndHandler = null;
@@ -266,7 +292,6 @@ class EditorView extends HookWidget {
     }, [tickerLoop]);
 
     final keyboard = useService<Keyboard>();
-    final pref = useService<Pref>();
 
     void scrollToCursorWith(CursorInfo c, {bool typewriter = false}) {
       scrollToCursor(

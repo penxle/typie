@@ -1,6 +1,6 @@
 use criterion::{Criterion, criterion_group, criterion_main};
 use editor::model::{Node, NodeId, Text, TextNode};
-use editor::runtime::{Direction, Message, Runtime, State};
+use editor::runtime::{Direction, Message, PasteMode, Runtime, State};
 use editor::state::{Position, Selection};
 use editor::transact;
 use editor::transaction::Transaction;
@@ -183,9 +183,9 @@ fn bench_paste(c: &mut Criterion) {
             },
             |mut runtime| {
                 runtime.update(Message::Paste {
-                    fragment: None,
                     html: None,
                     text: paste_text.clone(),
+                    mode: PasteMode::Auto,
                 });
                 runtime.tick();
                 runtime.render_page(0);

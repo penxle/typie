@@ -32,6 +32,14 @@ pub struct Modifier {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 #[serde(rename_all = "camelCase")]
+pub enum PasteMode {
+    Auto,
+    Text,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[serde(rename_all = "camelCase")]
 pub enum Direction {
     Left,
     Right,
@@ -147,9 +155,10 @@ define_messages! {
     Paste {
         html: Option<String>,
         text: String,
+        mode: PasteMode,
     }
     => when When::key(ContextKey::CanEdit)
-    => handle(rt) { rt.handle_paste(html, text) },
+    => handle(rt) { rt.handle_paste(html, text, mode) },
 
     CompositionStart { text: String }
     => when When::key(ContextKey::CanEdit)

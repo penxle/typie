@@ -17,10 +17,10 @@ class EditorClipboard {
     dispatch({'type': 'deleteSelection'});
   }
 
-  Future<Map<String, dynamic>> getPastePayload() async {
+  Future<Map<String, dynamic>> getPastePayload({String mode = 'auto'}) async {
     final data = await _channel.invokeMapMethod<String, String?>('getData') ?? {};
     final text = data['text'] ?? '';
     final html = data['html'];
-    return {'type': 'paste', 'html': ?html, 'text': text};
+    return {'type': 'paste', 'html': ?html, 'text': text, 'mode': mode};
   }
 }
