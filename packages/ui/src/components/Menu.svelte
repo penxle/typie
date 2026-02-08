@@ -200,6 +200,20 @@
   <div
     class={css({ position: 'fixed', inset: '0', zIndex: 'menu', pointerEvents: open ? 'auto' : 'none' })}
     onclick={close}
+    oncontextmenu={(e) => {
+      e.preventDefault();
+      const { clientX, clientY } = e;
+      const overlay = e.currentTarget;
+      close();
+      tick().then(() => {
+        overlay.style.visibility = 'hidden';
+        const el = document.elementFromPoint(clientX, clientY);
+        overlay.style.visibility = '';
+        if (el) {
+          el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX, clientY }));
+        }
+      });
+    }}
     role="none"
     use:portal
   ></div>
