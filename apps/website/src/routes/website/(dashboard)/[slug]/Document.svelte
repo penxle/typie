@@ -62,6 +62,7 @@
         entities(slugs: $slugs) {
           id
           slug
+          url
           visibility
           availability
 
@@ -96,6 +97,7 @@
               nullableTitle
               subtitle
               documentType: type
+              characterCount
               snapshot
               createdAt
               updatedAt

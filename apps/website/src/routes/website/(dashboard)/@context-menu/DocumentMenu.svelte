@@ -4,14 +4,17 @@
   import { HorizontalDivider, Icon, MenuItem } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { Dialog, Toast } from '@typie/ui/notification';
+  import { comma } from '@typie/ui/utils';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
   import { DocumentType, EntityAvailability, EntityVisibility } from '@/enums';
   import { TypieError } from '@/errors';
+  import BlendIcon from '~icons/lucide/blend';
   import Columns2Icon from '~icons/lucide/columns-2';
   import CopyIcon from '~icons/lucide/copy';
   import DotIcon from '~icons/lucide/dot';
-  import FileDownIcon from '~icons/lucide/file-down';
+  import DownloadIcon from '~icons/lucide/download';
+  import GlobeIcon from '~icons/lucide/globe';
   import InfoIcon from '~icons/lucide/info';
   import LayoutTemplateIcon from '~icons/lucide/layout-template';
   import Rows2Icon from '~icons/lucide/rows-2';
@@ -20,24 +23,29 @@
   import { graphql } from '$graphql';
   import { getSplitViewContext, getViewContext } from '../[slug]/@split-view/context.svelte';
   import DocumentPdfExportModal from './DocumentPdfExportModal.svelte';
+  import type { Snippet } from 'svelte';
 
   type Props = {
     document: {
       id: string;
       title: string;
       documentType: DocumentType;
+      characterCount?: number;
       createdAt: string;
       updatedAt: string;
     };
     entity: {
+      id: string;
       slug: string;
+      url: string;
       visibility: EntityVisibility;
       availability: EntityAvailability;
     };
     via: 'tree' | 'editor';
+    children?: Snippet;
   };
 
-  let { document, entity, via }: Props = $props();
+  let { document, entity, via, children }: Props = $props();
 
   const app = getAppContext();
   const splitView = getSplitViewContext();
@@ -184,7 +192,21 @@
 <MenuItem icon={Columns2Icon} onclick={() => handleAddSplitView('horizontal')}>오른쪽에 열기</MenuItem>
 <MenuItem icon={Rows2Icon} onclick={() => handleAddSplitView('vertical')}>아래에 열기</MenuItem>
 
+<MenuItem external href={entity.url} icon={GlobeIcon} type="link">스페이스에서 열기</MenuItem>
+
 <HorizontalDivider color="secondary" />
+
+<MenuItem
+  icon={BlendIcon}
+  onclick={() => {
+    app.state.shareOpen = [entity.id];
+    if (via === 'editor') {
+      mixpanel.track('open_document_share_modal', { via: 'editor' });
+    }
+  }}
+>
+  공유 및 게시
+</MenuItem>
 
 <MenuItem icon={CopyIcon} onclick={handleDuplicate}>복제</MenuItem>
 
@@ -194,12 +216,14 @@
   <MenuItem icon={LayoutTemplateIcon} onclick={() => handleTypeChange(DocumentType.NORMAL)}>문서로 전환</MenuItem>
 {/if}
 
+{@render children?.()}
+
 {#if app.preference.current.experimental_pdfExportEnabled}
   <HorizontalDivider color="secondary" />
 {/if}
 
 {#if app.preference.current.experimental_pdfExportEnabled}
-  <MenuItem icon={FileDownIcon} noCloseOnClick onclick={() => (pdfExportModalOpen = true)}>PDF로 내보내기</MenuItem>
+  <MenuItem icon={DownloadIcon} noCloseOnClick onclick={() => (pdfExportModalOpen = true)}>PDF로 내보내기</MenuItem>
 {/if}
 
 <DocumentPdfExportModal
@@ -248,6 +272,10 @@
       {/if}
     </div>
   </div>
+
+  {#if document.characterCount !== undefined}
+    <div>총 {comma(document.characterCount)}자</div>
+  {/if}
 
   <div>
     <div>생성: {dayjs(document.createdAt).formatAsDateTime()}</div>
