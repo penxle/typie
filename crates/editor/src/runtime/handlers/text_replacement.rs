@@ -2,7 +2,7 @@ use crate::runtime::text_replacement::{ReplacementUndoState, offset_len_for_text
 use crate::runtime::{Effect, Runtime};
 
 impl Runtime {
-    pub(crate) fn try_text_replacement(&mut self) -> Option<Vec<Effect>> {
+    pub(crate) fn try_text_replacement(&mut self, input_byte_len: usize) -> Option<Vec<Effect>> {
         if self.state.preedit.is_some() {
             return None;
         }
@@ -17,23 +17,32 @@ impl Runtime {
             return None;
         }
 
+        let input_start_byte = text_before.len().saturating_sub(input_byte_len);
+
         let matched = crate::global::with_text_replacement_rules(|rules| {
             for rule in rules {
                 match &rule.pattern {
                     crate::runtime::text_replacement::CompiledPattern::Plain(pattern) => {
-                        if text_before.ends_with(pattern.as_str()) {
-                            return Some((pattern.clone(), rule.substitute.clone(), pattern.len()));
+                        for (pos, _) in text_before.match_indices(pattern.as_str()) {
+                            let match_end = pos + pattern.len();
+                            if match_end > input_start_byte {
+                                let suffix = text_before[match_end..].to_string();
+                                return Some((pattern.clone(), rule.substitute.clone(), suffix));
+                            }
                         }
                     }
                     crate::runtime::text_replacement::CompiledPattern::Regex(regex) => {
-                        if let Ok(Some(m)) = regex.find(&text_before) {
-                            if m.end() == text_before.len() {
-                                let matched_str = m.as_str().to_string();
-                                return Some((
-                                    matched_str.clone(),
-                                    rule.substitute.clone(),
-                                    matched_str.len(),
-                                ));
+                        for try_end in (input_start_byte + 1)..=text_before.len() {
+                            if !text_before.is_char_boundary(try_end) {
+                                continue;
+                            }
+                            let truncated = &text_before[..try_end];
+                            if let Ok(Some(m)) = regex.find(truncated) {
+                                if m.end() == truncated.len() {
+                                    let matched_str = m.as_str().to_string();
+                                    let suffix = text_before[try_end..].to_string();
+                                    return Some((matched_str, rule.substitute.clone(), suffix));
+                                }
                             }
                         }
                     }
@@ -42,12 +51,13 @@ impl Runtime {
             None
         });
 
-        let (matched_text, substitute, _matched_byte_len) = matched?;
+        let (matched_text, substitute, suffix) = matched?;
 
         let original_offset_len = offset_len_for_text(&matched_text);
         let replaced_offset_len = offset_len_for_text(&substitute);
+        let suffix_offset_len = offset_len_for_text(&suffix);
 
-        let delete_count = original_offset_len;
+        let delete_count = original_offset_len + suffix_offset_len;
 
         let mut effects = self.transact(|tr| {
             for _ in 0..delete_count {
@@ -56,7 +66,13 @@ impl Runtime {
             Ok(true)
         });
 
-        let parts: Vec<&str> = substitute.split('\n').collect();
+        let full_insert = if suffix.is_empty() {
+            substitute.clone()
+        } else {
+            format!("{}{}", substitute, suffix)
+        };
+
+        let parts: Vec<&str> = full_insert.split('\n').collect();
         let insert_effects = self.transact(|tr| {
             for (i, part) in parts.iter().enumerate() {
                 if i > 0 {
@@ -71,7 +87,8 @@ impl Runtime {
 
         effects.extend(insert_effects);
 
-        let new_offset = cursor_offset - original_offset_len + replaced_offset_len;
+        let new_offset =
+            cursor_offset - original_offset_len - suffix_offset_len + replaced_offset_len;
 
         let undo_state = ReplacementUndoState {
             node_id: block_id,
@@ -417,6 +434,158 @@ mod tests {
                 }
             }
             selection { (p, 3, Affinity::Upstream) }
+        };
+
+        assert_state_eq!(actual, expected);
+        clear_rules();
+    }
+
+    #[test]
+    fn batched_input_plain_replacement() {
+        set_rules(vec![RawTextReplacementRule {
+            id: "1".into(),
+            match_pattern: "(c)".into(),
+            substitute: "\u{00A9}".into(),
+            regex: false,
+        }]);
+
+        let mut p = id!();
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {
+                    text { "" }
+                }
+            }
+            selection { (p, 0) }
+        };
+
+        rt.update(Message::Input {
+            text: "(c)def".to_string(),
+        });
+
+        let actual = rt.state();
+        let expected = state! {
+            doc {
+                @p paragraph {
+                    text { "\u{00A9}def" }
+                }
+            }
+            selection { (p, 4, Affinity::Upstream) }
+        };
+
+        assert_state_eq!(actual, expected);
+        clear_rules();
+    }
+
+    #[test]
+    fn batched_input_with_existing_text() {
+        set_rules(vec![RawTextReplacementRule {
+            id: "1".into(),
+            match_pattern: "-->".into(),
+            substitute: "\u{2192}".into(),
+            regex: false,
+        }]);
+
+        let mut p = id!();
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {
+                    text { "a-" }
+                }
+            }
+            selection { (p, 2) }
+        };
+
+        rt.update(Message::Input {
+            text: "->bc".to_string(),
+        });
+
+        let actual = rt.state();
+        let expected = state! {
+            doc {
+                @p paragraph {
+                    text { "a\u{2192}bc" }
+                }
+            }
+            selection { (p, 4, Affinity::Upstream) }
+        };
+
+        assert_state_eq!(actual, expected);
+        clear_rules();
+    }
+
+    #[test]
+    fn batched_input_no_false_match_on_old_text() {
+        set_rules(vec![RawTextReplacementRule {
+            id: "1".into(),
+            match_pattern: "abc".into(),
+            substitute: "X".into(),
+            regex: false,
+        }]);
+
+        let mut p = id!();
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {
+                    text { "abc" }
+                }
+            }
+            selection { (p, 3) }
+        };
+
+        rt.update(Message::Input {
+            text: "def".to_string(),
+        });
+
+        let actual = rt.state();
+        let expected = state! {
+            doc {
+                @p paragraph {
+                    text { "abcdef" }
+                }
+            }
+            selection { (p, 6, Affinity::Upstream) }
+        };
+
+        assert_state_eq!(actual, expected);
+        clear_rules();
+    }
+
+    #[test]
+    fn batched_input_regex_replacement() {
+        set_rules(vec![RawTextReplacementRule {
+            id: "1".into(),
+            match_pattern: "-->".into(),
+            substitute: "\u{2192}".into(),
+            regex: true,
+        }]);
+
+        let mut p = id!();
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {
+                    text { "-" }
+                }
+            }
+            selection { (p, 1) }
+        };
+
+        rt.update(Message::Input {
+            text: "->xyz".to_string(),
+        });
+
+        let actual = rt.state();
+        let expected = state! {
+            doc {
+                @p paragraph {
+                    text { "\u{2192}xyz" }
+                }
+            }
+            selection { (p, 4, Affinity::Upstream) }
         };
 
         assert_state_eq!(actual, expected);
