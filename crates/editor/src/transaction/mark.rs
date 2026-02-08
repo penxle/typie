@@ -2186,7 +2186,7 @@ mod tests {
             @ep1 paragraph { text(marks: [italic()]) { "hello" } }
             @ep2 paragraph { text(marks: [italic()]) { "world" } }
           }
-          selection { (ep1, 0) -> (ep2, 5, Affinity::Upstream) }
+          selection { (NodeId::ROOT, 0) -> (NodeId::ROOT, 2) }
         };
 
         assert_state_eq!(rt.state(), expected);
