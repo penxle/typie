@@ -2,6 +2,77 @@ use crate::model::{Node, NodeId};
 use crate::runtime::{Effect, Runtime};
 use serde::{Deserialize, Serialize};
 
+pub fn expand_substitute(caps: &fancy_regex::Captures<'_>, template: &str) -> String {
+    let mut result = String::new();
+    let mut chars = template.chars().peekable();
+
+    while let Some(c) = chars.next() {
+        if c != '$' {
+            result.push(c);
+            continue;
+        }
+
+        match chars.peek() {
+            Some(&'$') => {
+                chars.next();
+                result.push('$');
+            }
+            Some(&'{') => {
+                chars.next();
+                let mut name = String::new();
+                for c in chars.by_ref() {
+                    if c == '}' {
+                        break;
+                    }
+                    name.push(c);
+                }
+                if let Some(m) = caps
+                    .name(&name)
+                    .or_else(|| name.parse::<usize>().ok().and_then(|n| caps.get(n)))
+                {
+                    result.push_str(m.as_str());
+                }
+            }
+            Some(&c) if c.is_ascii_digit() => {
+                let mut num_str = String::new();
+                while let Some(&c) = chars.peek() {
+                    if c.is_ascii_digit() {
+                        num_str.push(c);
+                        chars.next();
+                    } else {
+                        break;
+                    }
+                }
+                if let Some(m) = num_str.parse::<usize>().ok().and_then(|n| caps.get(n)) {
+                    result.push_str(m.as_str());
+                }
+            }
+            Some(&c) if c.is_ascii_alphabetic() || c == '_' => {
+                let mut name = String::new();
+                while let Some(&c) = chars.peek() {
+                    if c.is_ascii_alphanumeric() || c == '_' {
+                        name.push(c);
+                        chars.next();
+                    } else {
+                        break;
+                    }
+                }
+                if let Some(m) = caps
+                    .name(&name)
+                    .or_else(|| name.parse::<usize>().ok().and_then(|n| caps.get(n)))
+                {
+                    result.push_str(m.as_str());
+                }
+            }
+            _ => {
+                result.push('$');
+            }
+        }
+    }
+
+    result
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RawTextReplacementRule {

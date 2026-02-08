@@ -37,11 +37,18 @@ impl Runtime {
                                 continue;
                             }
                             let truncated = &text_before[..try_end];
-                            if let Ok(Some(m)) = regex.find(truncated) {
-                                if m.end() == truncated.len() {
-                                    let matched_str = m.as_str().to_string();
-                                    let suffix = text_before[try_end..].to_string();
-                                    return Some((matched_str, rule.substitute.clone(), suffix));
+                            if let Ok(Some(caps)) = regex.captures(truncated) {
+                                if let Some(m) = caps.get(0) {
+                                    if m.end() == truncated.len() {
+                                        let matched_str = m.as_str().to_string();
+                                        let expanded =
+                                            crate::runtime::text_replacement::expand_substitute(
+                                                &caps,
+                                                &rule.substitute,
+                                            );
+                                        let suffix = text_before[try_end..].to_string();
+                                        return Some((matched_str, expanded, suffix));
+                                    }
                                 }
                             }
                         }
@@ -628,6 +635,120 @@ mod tests {
                 }
             }
             selection { (p, 1, Affinity::Upstream) }
+        };
+
+        assert_state_eq!(actual, expected);
+        clear_rules();
+    }
+
+    #[test]
+    fn regex_capture_group_substitute() {
+        set_rules(vec![RawTextReplacementRule {
+            id: "1".into(),
+            match_pattern: r#""([^"]*)"$"#.into(),
+            substitute: "\u{201C}$1\u{201D}".into(),
+            regex: true,
+        }]);
+
+        let mut p = id!();
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {
+                    text { "\"hello" }
+                }
+            }
+            selection { (p, 6) }
+        };
+
+        rt.update(Message::Input {
+            text: "\"".to_string(),
+        });
+
+        let actual = rt.state();
+        let expected = state! {
+            doc {
+                @p paragraph {
+                    text { "\u{201C}hello\u{201D}" }
+                }
+            }
+            selection { (p, 7, Affinity::Upstream) }
+        };
+
+        assert_state_eq!(actual, expected);
+        clear_rules();
+    }
+
+    #[test]
+    fn regex_named_capture_group_substitute() {
+        set_rules(vec![RawTextReplacementRule {
+            id: "1".into(),
+            match_pattern: r#"(?P<num>\d+)/(?P<den>\d+)"#.into(),
+            substitute: "$num\u{2044}$den".into(),
+            regex: true,
+        }]);
+
+        let mut p = id!();
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {
+                    text { "1/" }
+                }
+            }
+            selection { (p, 2) }
+        };
+
+        rt.update(Message::Input {
+            text: "2".to_string(),
+        });
+
+        let actual = rt.state();
+        let expected = state! {
+            doc {
+                @p paragraph {
+                    text { "1\u{2044}2" }
+                }
+            }
+            selection { (p, 3, Affinity::Upstream) }
+        };
+
+        assert_state_eq!(actual, expected);
+        clear_rules();
+    }
+
+    #[test]
+    fn regex_capture_group_with_unicode_substitute() {
+        set_rules(vec![RawTextReplacementRule {
+            id: "1".into(),
+            match_pattern: r"asd(.+)f".into(),
+            substitute: "안녕$1하세요".into(),
+            regex: true,
+        }]);
+
+        let mut p = id!();
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {
+                    text { "asd1" }
+                }
+            }
+            selection { (p, 4) }
+        };
+
+        rt.update(Message::Input {
+            text: "f".to_string(),
+        });
+
+        let actual = rt.state();
+        let expected = state! {
+            doc {
+                @p paragraph {
+                    text { "안녕1하세요" }
+                }
+            }
+            selection { (p, 6, Affinity::Upstream) }
         };
 
         assert_state_eq!(actual, expected);
