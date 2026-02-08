@@ -78,7 +78,7 @@
   label="폰트 굵기"
   onEscape={() => editor.focus()}
   onchange={(weight) => {
-    editor.dispatch({ type: 'setFontWeight', weight });
+    editor.focus().dispatch({ type: 'setFontWeight', weight });
   }}
   placeholder="-"
   value={currentWeight}

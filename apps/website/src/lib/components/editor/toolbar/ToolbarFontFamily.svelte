@@ -68,7 +68,7 @@
     const currentWeight = (findMark('font_weight') as { weight?: number })?.weight ?? defaultFontWeight;
     const defaultWeight = getDefaultWeight(fontFamilyValue, currentWeight);
 
-    editor.dispatch({ type: 'setFontFamily', family: fontFamilyValue });
+    editor.focus().dispatch({ type: 'setFontFamily', family: fontFamilyValue });
     editor.dispatch({ type: 'setFontWeight', weight: defaultWeight });
   }}
   placeholder="-"

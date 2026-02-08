@@ -24,7 +24,7 @@
     }),
     onSubmit: (data) => {
       const url = /^[^:]+:\/\//.test(data.url) ? data.url : `https://${data.url}`;
-      editor.dispatch({ type: 'toggleLink', href: url });
+      editor.focus().dispatch({ type: 'toggleLink', href: url });
       close();
     },
     defaultValues: {
@@ -45,7 +45,7 @@
   {#if isLinkActive}
     <Button
       onclick={() => {
-        editor.dispatch({ type: 'toggleLink', href: '' });
+        editor.focus().dispatch({ type: 'toggleLink', href: '' });
         close();
       }}
       size="sm"
