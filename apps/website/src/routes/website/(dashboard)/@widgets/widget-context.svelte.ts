@@ -6,7 +6,7 @@ import type {
   Editor_Widget_CharacterCountChangeWidget_post,
   Editor_Widget_PostRelatedNoteWidget_post,
 } from '$graphql';
-import type { Editor as PenxleEditor } from '$lib/editor/editor.svelte';
+import type { Editor as NativeEditor } from '$lib/editor/editor.svelte';
 
 export type WidgetType = 'characterCount' | 'characterCountChange' | 'postRelatedNote' | 'onboarding' | 'timer';
 
@@ -21,7 +21,7 @@ type WidgetEnvironment = {
   editMode: boolean;
   palette: boolean;
   editor?: Ref<Editor>;
-  penxleEditor?: PenxleEditor;
+  nativeEditor?: NativeEditor;
   $post?: (Editor_Widget_CharacterCountChangeWidget_post & Editor_Widget_PostRelatedNoteWidget_post) | undefined;
   $document?: Editor_Widget_CharacterCountChangeWidget_document | undefined;
 };
@@ -33,7 +33,7 @@ export class WidgetContext {
     editMode: false,
     palette: false,
     editor: undefined,
-    penxleEditor: undefined,
+    nativeEditor: undefined,
     $post: undefined,
     $document: undefined,
   });
