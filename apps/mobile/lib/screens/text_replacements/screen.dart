@@ -14,6 +14,7 @@ import 'package:typie/graphql/client.dart';
 import 'package:typie/graphql/widget.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_light.dart';
+import 'package:typie/native/editor_native.dart' show validateRegex;
 import 'package:typie/screens/text_replacements/__generated__/create_text_replacement_mutation.req.gql.dart';
 import 'package:typie/screens/text_replacements/__generated__/delete_text_replacement_mutation.req.gql.dart';
 import 'package:typie/screens/text_replacements/__generated__/move_text_replacement_mutation.req.gql.dart';
@@ -675,9 +676,7 @@ class _FormBottomSheet extends HookWidget {
         return false;
       }
       if (regex) {
-        try {
-          RegExp(match);
-        } catch (_) {
+        if (!validateRegex(match)) {
           errorText.value = '유효하지 않은 정규식이에요.';
           return false;
         }

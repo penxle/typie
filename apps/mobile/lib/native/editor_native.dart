@@ -73,6 +73,16 @@ String? _getLastError() {
   return error;
 }
 
+bool validateRegex(String pattern) {
+  _ensureInitialized();
+
+  final patternPtr = pattern.toNativeUtf8();
+  final result = _bindings.editor_validate_regex(patternPtr.cast());
+  calloc.free(patternPtr);
+
+  return result == 1;
+}
+
 class NativeEditorApplication {
   NativeEditorApplication() : _handle = _createHandle();
 
