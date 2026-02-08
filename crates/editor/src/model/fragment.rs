@@ -1,4 +1,4 @@
-use super::{Doc, Mark, Node, NodeId, TextNode};
+use super::{Doc, FontFamilyMark, FontWeightMark, Mark, Node, NodeId, TextNode};
 use crate::schema::Schema;
 use crate::state::position_helpers::find_child_at_offset;
 use crate::state::{Position, Selection, StructureSelectionInfo, compute_structure_selection};
@@ -720,6 +720,88 @@ impl Fragment {
         (left, right)
     }
 
+    pub fn normalize_font_weights(self) -> Self {
+        let available = crate::font::get_available_fonts();
+        if available.is_empty() {
+            return self;
+        }
+
+        let mut new_nodes = IndexMap::with_capacity(self.nodes.len());
+
+        for (id, node) in &self.nodes {
+            match node.data() {
+                Node::Text(text_node) => {
+                    let segments = text_node.text.get_rich_text_segments();
+                    let mut modified = false;
+                    let mut new_segments = Vec::with_capacity(segments.len());
+
+                    let default_family = FontFamilyMark::default().family;
+
+                    for (text, marks) in &segments {
+                        let family = marks
+                            .iter()
+                            .find_map(|m| {
+                                if let Mark::FontFamily(ff) = m {
+                                    Some(ff.family.as_str())
+                                } else {
+                                    None
+                                }
+                            })
+                            .unwrap_or(&default_family);
+
+                        let weight_idx =
+                            marks.iter().position(|m| matches!(m, Mark::FontWeight(_)));
+
+                        if let Some(idx) = weight_idx {
+                            if let Mark::FontWeight(fw) = &marks[idx] {
+                                if let Some(weights) = available.get(family) {
+                                    if !weights.contains(&fw.weight) {
+                                        let nearest = nearest_weight(fw.weight, weights);
+                                        let mut new_marks = marks.clone();
+                                        if nearest == FontWeightMark::default().weight {
+                                            new_marks.remove(idx);
+                                        } else {
+                                            new_marks[idx] = Mark::FontWeight(FontWeightMark {
+                                                weight: nearest,
+                                            });
+                                        }
+                                        new_segments.push((text.clone(), new_marks));
+                                        modified = true;
+                                        continue;
+                                    }
+                                }
+                            }
+                        }
+
+                        new_segments.push((text.clone(), marks.clone()));
+                    }
+
+                    if modified {
+                        let new_text = crate::model::Text::from_segments(&new_segments);
+                        new_nodes.insert(
+                            *id,
+                            FragmentNode::new(
+                                Node::Text(TextNode { text: new_text }),
+                                node.parent(),
+                            ),
+                        );
+                    } else {
+                        new_nodes.insert(*id, node.clone());
+                    }
+                }
+                _ => {
+                    new_nodes.insert(*id, node.clone());
+                }
+            }
+        }
+
+        Self {
+            nodes: new_nodes,
+            open_start: self.open_start,
+            open_end: self.open_end,
+        }
+    }
+
     pub fn merge_adjacent_text_nodes(self) -> Self {
         let mut parent_to_children: rustc_hash::FxHashMap<Option<NodeId>, Vec<NodeId>> =
             rustc_hash::FxHashMap::default();
@@ -1126,6 +1208,14 @@ impl Fragment {
 
         ancestors
     }
+}
+
+fn nearest_weight(target: u16, weights: &[u16]) -> u16 {
+    weights
+        .iter()
+        .copied()
+        .min_by_key(|&w| (w as i32 - target as i32).abs())
+        .unwrap_or(target)
 }
 
 #[cfg(test)]
