@@ -108,6 +108,10 @@ pub fn calculate_offset_before_child(block: &NodeRef, target_child_id: NodeId) -
     offset
 }
 
+pub fn eq_positions_ignoring_affinity(a: Position, b: Position) -> bool {
+    a.node_id == b.node_id && a.offset == b.offset
+}
+
 pub fn compare_positions(doc: &Doc, a: Position, b: Position) -> Result<Ordering> {
     if a == b {
         return Ok(Ordering::Equal);
@@ -172,9 +176,7 @@ pub fn leaf_block_start(node: &NodeRef<'_>) -> Position {
 }
 
 pub fn leaf_block_end(node: &NodeRef<'_>) -> Position {
-    if node.spec().is_textblock(node.schema())
-        || node.node_type() == crate::model::NodeType::FoldTitle
-    {
+    if node.spec().is_textblock(node.schema()) {
         return Position::new(
             node.node_id(),
             block_content_len(node),
@@ -191,6 +193,7 @@ pub fn leaf_block_end(node: &NodeRef<'_>) -> Position {
             .index()
             .context("leaf_block_end: node has no index")
             .unwrap();
+        // TODO: Upstream으로 바꿔야 함
         return Position::new(parent_id, idx + 1, Affinity::Downstream);
     }
 
@@ -206,9 +209,7 @@ pub fn move_from_block_position(doc: &Doc, position: Position, go_forward: bool)
         return position;
     };
 
-    if node.spec().is_textblock(node.schema())
-        || node.node_type() == crate::model::NodeType::FoldTitle
-    {
+    if node.spec().is_textblock(node.schema()) {
         return position;
     }
 

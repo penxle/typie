@@ -162,7 +162,7 @@ impl Transaction {
     fn normalize_selection(&mut self) {
         let selection = &self.state.selection;
 
-        if !selection.is_collapsed() {
+        if !(selection.is_collapsed() || selection.is_collapsed_block_selection(self.doc())) {
             return;
         }
 
