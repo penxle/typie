@@ -51,12 +51,38 @@ impl<'a> LayoutContext<'a> {
             return cached;
         }
 
+        let prev = self.cache.borrow_mut().take_prev(node_id);
+
         let child_ctx = self.with_node(child);
         let layout = child.node().layout(&child_ctx, constraints);
         let rc = Rc::new(layout);
 
-        self.cache.borrow_mut().insert(node_id, Rc::clone(&rc));
-        rc
+        let result = if let Some(prev_layout) = prev {
+            if children_equal(&rc, &prev_layout) {
+                prev_layout
+            } else {
+                rc
+            }
+        } else {
+            rc
+        };
+
+        self.cache.borrow_mut().insert(node_id, Rc::clone(&result));
+        result
+    }
+}
+
+fn children_equal(new: &LayoutNode, old: &LayoutNode) -> bool {
+    match (&new.children, &old.children) {
+        (Some(new_children), Some(old_children)) => {
+            new_children.len() == old_children.len()
+                && new_children
+                    .iter()
+                    .zip(old_children.iter())
+                    .all(|(n, o)| Rc::ptr_eq(&n.node, &o.node))
+        }
+        (None, None) => false,
+        _ => false,
     }
 }
 

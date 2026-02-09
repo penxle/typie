@@ -258,7 +258,7 @@ impl Transaction {
             modified |= self.repair_node_children(node_id, &schema)?;
 
             let children = self.doc().get_children_ids(node_id);
-            for child_id in children {
+            for &child_id in children.iter() {
                 if let Some(node_type) = self.doc().get_node_type(child_id) {
                     let spec = schema.node_spec(node_type);
 

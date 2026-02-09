@@ -320,6 +320,10 @@ impl Paginator {
     }
 
     pub fn paginate(&self, root: LayoutNode) -> Vec<Page> {
+        self.paginate_rc(Rc::new(root))
+    }
+
+    pub fn paginate_rc(&self, root: Rc<LayoutNode>) -> Vec<Page> {
         let content_height = self.content_height();
         let mut state = PaginationState::new(
             self.page_width,
@@ -332,7 +336,7 @@ impl Paginator {
 
         let root_positioned = PositionedNode {
             position: Point::zero(),
-            node: Rc::new(root),
+            node: root,
         };
         self.collect_nodes(&root_positioned, Point::zero(), &mut state);
 

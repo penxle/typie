@@ -2,6 +2,7 @@ use crate::model::tree::{DocInner, NodeMut};
 use crate::model::*;
 use crate::schema::{NodeSpec, Schema};
 use std::cell::OnceCell;
+use std::rc::Rc;
 
 #[derive(Debug)]
 pub struct NodeRef<'a> {
@@ -43,20 +44,9 @@ impl<'a> NodeRef<'a> {
     }
 
     pub fn index(&self) -> Option<usize> {
-        let Some(parent_id) = self.parent_id() else {
-            return None;
-        };
-
-        let children = self.inner.get_children_list(parent_id)?;
-
-        for i in 0..children.len() {
-            let child = children.get(i)?;
-            if self.node_id == *child.as_value()?.as_string()? {
-                return Some(i);
-            }
-        }
-
-        None
+        let parent_id = self.parent_id()?;
+        let children = self.inner.get_children_ids_cached(parent_id);
+        children.iter().position(|&id| id == self.node_id)
     }
 
     pub fn parent_id(&self) -> Option<NodeId> {
@@ -75,62 +65,24 @@ impl<'a> NodeRef<'a> {
 
     pub fn prev_sibling(&self) -> Option<NodeRef<'_>> {
         let parent_id = self.parent_id()?;
-        let children = self.inner.get_children_list(parent_id)?;
-
-        for i in 0..children.len() {
-            let child = children.get(i)?;
-            let child_id = child
-                .into_value()
-                .ok()
-                .and_then(|v| v.into_string().ok())
-                .and_then(|s| NodeId::from_string(&s))?;
-
-            if self.node_id == child_id {
-                let prev_index = i.checked_sub(1)?;
-                let prev_child = children.get(prev_index)?;
-                let prev_id = prev_child
-                    .into_value()
-                    .ok()
-                    .and_then(|v| v.into_string().ok())
-                    .and_then(|s| NodeId::from_string(&s))?;
-                return Self::new(self.inner, prev_id);
-            }
-        }
-
-        None
+        let children = self.inner.get_children_ids_cached(parent_id);
+        let idx = children.iter().position(|&id| id == self.node_id)?;
+        let prev_id = *children.get(idx.checked_sub(1)?)?;
+        Self::new(self.inner, prev_id)
     }
 
     pub fn next_sibling(&self) -> Option<NodeRef<'_>> {
         let parent_id = self.parent_id()?;
-        let children = self.inner.get_children_list(parent_id)?;
-
-        for i in 0..children.len() {
-            let child = children.get(i)?;
-            let child_id = child
-                .into_value()
-                .ok()
-                .and_then(|v| v.into_string().ok())
-                .and_then(|s| NodeId::from_string(&s))?;
-
-            if self.node_id == child_id {
-                let next_index = i.checked_add(1)?;
-                let next_child = children.get(next_index)?;
-                let next_id = next_child
-                    .into_value()
-                    .ok()
-                    .and_then(|v| v.into_string().ok())
-                    .and_then(|s| NodeId::from_string(&s))?;
-                return Self::new(self.inner, next_id);
-            }
-        }
-
-        None
+        let children = self.inner.get_children_ids_cached(parent_id);
+        let idx = children.iter().position(|&id| id == self.node_id)?;
+        let next_id = *children.get(idx + 1)?;
+        Self::new(self.inner, next_id)
     }
 
     pub fn child(&self, index: usize) -> Option<NodeRef<'_>> {
-        let children = self.inner.get_children_list(self.node_id)?;
-        let node_id = NodeId::from_string(&children.get(index)?.as_value()?.as_string()?)?;
-        Some(Self::new_unchecked(self.inner, node_id))
+        let children = self.inner.get_children_ids_cached(self.node_id);
+        let &child_id = children.get(index)?;
+        Some(Self::new_unchecked(self.inner, child_id))
     }
 
     pub fn first_child(&self) -> Option<NodeRef<'_>> {
@@ -138,9 +90,9 @@ impl<'a> NodeRef<'a> {
     }
 
     pub fn last_child(&self) -> Option<NodeRef<'_>> {
-        let children = self.inner.get_children_list(self.node_id)?;
-        let len = children.len();
-        self.child(len.checked_sub(1)?)
+        let children = self.inner.get_children_ids_cached(self.node_id);
+        let &child_id = children.last()?;
+        Some(Self::new_unchecked(self.inner, child_id))
     }
 
     pub fn node(&self) -> &Node {
@@ -154,24 +106,11 @@ impl<'a> NodeRef<'a> {
     }
 
     pub fn children(&self) -> NodeRefIter<'_> {
-        let mut node_ids = Vec::new();
-
-        if let Some(children) = self.inner.get_children_list(self.node_id) {
-            if let loro::LoroValue::List(values) = children.get_value() {
-                node_ids.reserve(values.len());
-                for i in 0..values.len() {
-                    if let Some(loro::LoroValue::String(s)) = values.get(i) {
-                        if let Some(node_id) = NodeId::from_string(s) {
-                            node_ids.push(node_id);
-                        }
-                    }
-                }
-            }
-        };
+        let node_ids = self.inner.get_children_ids_cached(self.node_id);
 
         NodeRefIter {
             inner: self.inner,
-            node_ids,
+            node_ids: NodeRefIterIds::Shared(node_ids),
             index: 0,
         }
     }
@@ -201,7 +140,7 @@ impl<'a> NodeRef<'a> {
 
         NodeRefIter {
             inner: self.inner,
-            node_ids,
+            node_ids: NodeRefIterIds::Owned(node_ids),
             index: 0,
         }
     }
@@ -211,23 +150,16 @@ impl<'a> NodeRef<'a> {
         let mut queue = vec![self.node_id];
 
         while let Some(current_id) = queue.pop() {
-            if let Some(children) = self.inner.get_children_list(current_id) {
-                if let loro::LoroValue::List(values) = children.get_value() {
-                    for i in 0..values.len() {
-                        if let Some(loro::LoroValue::String(s)) = values.get(i) {
-                            if let Some(child_id) = NodeId::from_string(s) {
-                                node_ids.push(child_id);
-                                queue.push(child_id);
-                            }
-                        }
-                    }
-                }
+            let children = self.inner.get_children_ids_cached(current_id);
+            for &child_id in children.iter() {
+                node_ids.push(child_id);
+                queue.push(child_id);
             }
         }
 
         NodeRefIter {
             inner: self.inner,
-            node_ids,
+            node_ids: NodeRefIterIds::Owned(node_ids),
             index: 0,
         }
     }
@@ -269,21 +201,9 @@ impl<'a> NodeRef<'a> {
             let node_id = node_ids[i];
             let parent_id = node_ids[i + 1];
 
-            if let Some(children) = self.inner.get_children_list(parent_id) {
-                for j in 0..children.len() {
-                    let found = children
-                        .get(j)
-                        .and_then(|child| child.into_value().ok())
-                        .and_then(|value| value.into_string().ok())
-                        .and_then(|child_id| NodeId::from_string(&child_id))
-                        .map(|child_id_str| node_id == child_id_str)
-                        .unwrap_or(false);
-
-                    if found {
-                        path.push(j);
-                        break;
-                    }
-                }
+            let children = self.inner.get_children_ids_cached(parent_id);
+            if let Some(idx) = children.iter().position(|&id| id == node_id) {
+                path.push(idx);
             }
         }
 
@@ -311,9 +231,30 @@ impl<'a> NodeRef<'a> {
     }
 }
 
+enum NodeRefIterIds {
+    Shared(Rc<Vec<NodeId>>),
+    Owned(Vec<NodeId>),
+}
+
+impl NodeRefIterIds {
+    fn get(&self, index: usize) -> Option<&NodeId> {
+        match self {
+            Self::Shared(rc) => rc.get(index),
+            Self::Owned(vec) => vec.get(index),
+        }
+    }
+
+    fn len(&self) -> usize {
+        match self {
+            Self::Shared(rc) => rc.len(),
+            Self::Owned(vec) => vec.len(),
+        }
+    }
+}
+
 pub struct NodeRefIter<'a> {
     inner: &'a DocInner,
-    node_ids: Vec<NodeId>,
+    node_ids: NodeRefIterIds,
     index: usize,
 }
 
@@ -321,9 +262,9 @@ impl<'a> Iterator for NodeRefIter<'a> {
     type Item = NodeRef<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let node_id = self.node_ids.get(self.index)?;
+        let &node_id = self.node_ids.get(self.index)?;
         self.index += 1;
-        Some(NodeRef::new_unchecked(self.inner, *node_id))
+        Some(NodeRef::new_unchecked(self.inner, node_id))
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {

@@ -1,9 +1,10 @@
 use crate::model::{Doc, NodeId};
 use anyhow::Result;
+use std::rc::Rc;
 
 pub struct BlockTraverser<'a> {
     doc: &'a Doc,
-    stack: Vec<(NodeId, Vec<NodeId>, usize)>,
+    stack: Vec<(NodeId, Rc<Vec<NodeId>>, usize)>,
 }
 
 #[derive(Clone, Copy)]
@@ -113,8 +114,8 @@ impl<'a> BlockTraverser<'a> {
                 let spec = self.doc.schema().node_spec(node_type);
                 if !spec.inline {
                     let grandchildren = self.doc.get_children_ids(child_id);
-                    self.stack
-                        .push((child_id, grandchildren.clone(), grandchildren.len()));
+                    let len = grandchildren.len();
+                    self.stack.push((child_id, grandchildren, len));
                     return Some(child_id);
                 }
             }

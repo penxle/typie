@@ -409,9 +409,11 @@ impl Transaction {
 
         let node_ids = children[from_index..=to_index].to_vec();
 
-        if let Some(children_list) = self.doc().get_children_list(parent.node_id()) {
+        let parent_id = parent.node_id();
+        if let Some(children_list) = self.doc().get_children_list(parent_id) {
             children_list.delete(from_index, node_ids.len())?;
         }
+        self.doc().invalidate_children_cache_for(parent_id);
 
         self.state.garbage_ids.extend(node_ids);
         self.push_effect(Effect::StructureChanged);

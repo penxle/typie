@@ -656,32 +656,57 @@ impl Layout for ParagraphNode {
                 parley::AlignmentOptions::default(),
             );
 
-            let mut dummy_builder = lcx.ranged_builder(&mut fcx, "\u{200B}", 1.0, false);
-            setup_defaults(&mut dummy_builder);
+            let default_height = if pending_marks.is_some() {
+                let mut dummy_builder = lcx.ranged_builder(&mut fcx, "\u{200B}", 1.0, false);
+                setup_defaults(&mut dummy_builder);
 
-            if let Some(pm) = pending_marks {
-                let range = 0.."\u{200B}".len();
-                let font_size = pm
-                    .marks
-                    .iter()
-                    .find_map(|m| {
-                        if let Mark::FontSize(fs) = m {
-                            Some(fs.size)
-                        } else {
-                            None
-                        }
-                    })
-                    .unwrap_or(12.0);
-                for mark in &pm.marks {
-                    apply_mark(&mut dummy_builder, mark, range.clone(), font_size);
+                if let Some(pm) = pending_marks {
+                    let range = 0.."\u{200B}".len();
+                    let font_size = pm
+                        .marks
+                        .iter()
+                        .find_map(|m| {
+                            if let Mark::FontSize(fs) = m {
+                                Some(fs.size)
+                            } else {
+                                None
+                            }
+                        })
+                        .unwrap_or(12.0);
+                    for mark in &pm.marks {
+                        apply_mark(&mut dummy_builder, mark, range.clone(), font_size);
+                    }
                 }
-            }
 
-            let mut dummy_layout = dummy_builder.build("\u{200B}");
-            dummy_layout.break_all_lines(None);
-            let dummy_line = dummy_layout.lines().next().unwrap();
-            let dummy_metrics = dummy_line.metrics();
-            let default_height = dummy_metrics.ascent + dummy_metrics.descent;
+                let mut dummy_layout = dummy_builder.build("\u{200B}");
+                dummy_layout.break_all_lines(None);
+                let dummy_line = dummy_layout.lines().next().unwrap();
+                let dummy_metrics = dummy_line.metrics();
+                dummy_metrics.ascent + dummy_metrics.descent
+            } else {
+                let cache_key = line_height.to_bits();
+                let cached = globals
+                    .dummy_line_height_cache
+                    .borrow()
+                    .get(&cache_key)
+                    .copied();
+                if let Some(h) = cached {
+                    h
+                } else {
+                    let mut dummy_builder = lcx.ranged_builder(&mut fcx, "\u{200B}", 1.0, false);
+                    setup_defaults(&mut dummy_builder);
+                    let mut dummy_layout = dummy_builder.build("\u{200B}");
+                    dummy_layout.break_all_lines(None);
+                    let dummy_line = dummy_layout.lines().next().unwrap();
+                    let dummy_metrics = dummy_line.metrics();
+                    let h = dummy_metrics.ascent + dummy_metrics.descent;
+                    globals
+                        .dummy_line_height_cache
+                        .borrow_mut()
+                        .insert(cache_key, h);
+                    h
+                }
+            };
 
             (layout, default_height)
         });
