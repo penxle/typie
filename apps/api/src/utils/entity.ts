@@ -65,6 +65,23 @@ export const makeText = (body: JSONContent) => {
 export const generateSlug = () => faker.string.hexadecimal({ length: 32, casing: 'lower', prefix: '' });
 export const generatePermalink = () => faker.string.alphanumeric({ length: 6, casing: 'mixed' });
 
+const ROOT_ID = '00000000000000000000000000000000';
+
+const collectReachableNodeIds = (nodes: Record<string, { children?: string[] }>): Set<string> => {
+  const reachable = new Set<string>();
+  const traverse = (nodeId: string) => {
+    if (reachable.has(nodeId)) return;
+    reachable.add(nodeId);
+    const node = nodes[nodeId];
+    if (!node?.children) return;
+    for (const childId of node.children) {
+      traverse(childId);
+    }
+  };
+  traverse(ROOT_ID);
+  return reachable;
+};
+
 export const makeLoroDoc = () => {
   const doc = new LoroDoc();
 
@@ -75,8 +92,6 @@ export const makeLoroDoc = () => {
   const layoutMode = settings.setContainer('layout_mode', new LoroMap());
   layoutMode.set('type', 'continuous');
   layoutMode.set('max_width', 600);
-
-  const ROOT_ID = '00000000000000000000000000000000';
   const paragraphId = faker.string.uuid().replaceAll('-', '');
 
   const nodes = doc.getMap('nodes');
@@ -97,39 +112,30 @@ export const makeLoroDoc = () => {
 };
 
 const extractTextFromLoroDoc = (doc: LoroDoc): string => {
-  const ROOT_ID = '00000000000000000000000000000000';
   const nodes = doc.getMap('nodes').toJSON() as Record<string, { text?: string; children?: string[] }>;
+  const reachable = collectReachableNodeIds(nodes);
   const texts: string[] = [];
 
-  const traverse = (nodeId: string) => {
+  for (const nodeId of reachable) {
     const node = nodes[nodeId];
-    if (!node) return;
-
-    if (node.text) {
+    if (node?.text) {
       texts.push(node.text);
     }
-
-    if (node.children) {
-      for (const childId of node.children) {
-        traverse(childId);
-      }
-    }
-  };
-
-  traverse(ROOT_ID);
+  }
 
   return texts.join('');
 };
 
 export const extractAssetIdsFromLoroDoc = (doc: LoroDoc): { imageIds: string[]; fileIds: string[]; embedIds: string[] } => {
-  const nodes = doc.getMap('nodes').toJSON() as Record<string, unknown>;
+  const allNodes = doc.getMap('nodes').toJSON() as Record<string, unknown>;
+  const reachable = collectReachableNodeIds(allNodes as Record<string, { children?: string[] }>);
 
   const imageIds: string[] = [];
   const fileIds: string[] = [];
   const embedIds: string[] = [];
 
-  for (const node of Object.values(nodes)) {
-    const typedNode = node as { type?: string; id?: string };
+  for (const nodeId of reachable) {
+    const typedNode = allNodes[nodeId] as { type?: string; id?: string };
     if (typedNode.type === 'image' && typedNode.id) {
       imageIds.push(typedNode.id);
     } else if (typedNode.type === 'file' && typedNode.id) {
@@ -156,6 +162,20 @@ export const calculateBlobSizeFromAssetIds = async (imageIds: string[], fileIds:
   }
 
   return totalSize;
+};
+
+export const garbageCollectLoroDoc = (doc: LoroDoc): number => {
+  const nodes = doc.getMap('nodes');
+  const reachable = collectReachableNodeIds(nodes.toJSON() as Record<string, { children?: string[] }>);
+
+  let deleted = 0;
+  for (const key of nodes.keys()) {
+    if (!reachable.has(key)) {
+      nodes.delete(key);
+      deleted++;
+    }
+  }
+  return deleted;
 };
 
 export const getLoroDocCharacterCount = (text: string) => {
