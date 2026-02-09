@@ -13,6 +13,7 @@ use std::rc::Rc;
 const TOGGLE_ICON_WIDTH: f32 = 20.0;
 const TOGGLE_ICON_PADDING: f32 = 8.0;
 const CONTENT_OFFSET: f32 = TOGGLE_ICON_WIDTH + TOGGLE_ICON_PADDING;
+pub const FOLD_TITLE_FONT_WEIGHT: u16 = 500;
 
 fn default_line_height() -> f32 {
     1.6
@@ -80,7 +81,9 @@ impl Layout for FoldTitleNode {
                     FontFamily::Named(FontFamilyMark::default().family.into()),
                 )));
                 builder.push_default(StyleProperty::FontSize(14.0));
-                builder.push_default(StyleProperty::FontWeight(FontWeight::new(500.0)));
+                builder.push_default(StyleProperty::FontWeight(FontWeight::new(
+                    FOLD_TITLE_FONT_WEIGHT as f32,
+                )));
                 builder.push_default(StyleProperty::LineHeight(LineHeight::FontSizeRelative(
                     line_height,
                 )));

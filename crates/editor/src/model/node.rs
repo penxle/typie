@@ -61,7 +61,25 @@ pub enum Node {
     TableCell(TableCellNode),
 }
 
+pub struct FontOverrides {
+    pub family: Option<String>,
+    pub weight: Option<u16>,
+}
+
 impl Node {
+    pub fn font_overrides(&self) -> FontOverrides {
+        match self {
+            Node::FoldTitle(_) => FontOverrides {
+                family: None,
+                weight: Some(FOLD_TITLE_FONT_WEIGHT),
+            },
+            _ => FontOverrides {
+                family: None,
+                weight: None,
+            },
+        }
+    }
+
     pub fn as_type(&self) -> NodeType {
         match self {
             Node::Root(_) => NodeType::Root,

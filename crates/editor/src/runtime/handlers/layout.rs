@@ -42,7 +42,13 @@ impl Runtime {
             rustc_hash::FxHashMap::default();
         let mut codepoints: FxHashSet<u32> = FxHashSet::default();
 
-        self.collect_from_node(NodeId::ROOT, &mut fonts, &mut codepoints);
+        self.collect_from_node(
+            NodeId::ROOT,
+            &mut fonts,
+            &mut codepoints,
+            FontFamilyMark::default().family,
+            FontWeightMark::default().weight,
+        );
 
         let fonts = fonts
             .into_iter()
@@ -57,15 +63,21 @@ impl Runtime {
         node_id: NodeId,
         fonts: &mut rustc_hash::FxHashMap<(String, u16), FxHashSet<u32>>,
         codepoints: &mut FxHashSet<u32>,
+        default_family: String,
+        default_weight: u16,
     ) {
         let Some(node_ref) = self.doc().node(node_id) else {
             return;
         };
 
+        let overrides = node_ref.node().font_overrides();
+        let child_family = overrides.family.unwrap_or(default_family.clone());
+        let child_weight = overrides.weight.unwrap_or(default_weight);
+
         if let Node::Text(text_node) = node_ref.node() {
             for (text, marks) in text_node.text.get_rich_text_segments() {
-                let mut family = FontFamilyMark::default().family;
-                let mut weight = FontWeightMark::default().weight;
+                let mut family = default_family.clone();
+                let mut weight = default_weight;
 
                 for mark in &marks {
                     match mark {
@@ -84,7 +96,13 @@ impl Runtime {
         }
 
         for child in node_ref.children() {
-            self.collect_from_node(child.node_id(), fonts, codepoints);
+            self.collect_from_node(
+                child.node_id(),
+                fonts,
+                codepoints,
+                child_family.clone(),
+                child_weight,
+            );
         }
     }
 

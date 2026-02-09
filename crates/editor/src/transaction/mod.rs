@@ -90,6 +90,16 @@ impl Transaction {
         let mut family = FontFamilyMark::default().family;
         let mut weight = FontWeightMark::default().weight;
 
+        if let Some(node_ref) = self.doc().node(self.selection().head.node_id) {
+            let overrides = node_ref.node().font_overrides();
+            if let Some(f) = overrides.family {
+                family = f;
+            }
+            if let Some(w) = overrides.weight {
+                weight = w;
+            }
+        }
+
         for mark in &marks {
             match mark {
                 Mark::FontFamily(f) => family = f.family.clone(),
