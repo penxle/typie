@@ -24,6 +24,15 @@
     if (inputEl) {
       inputEl.value = '';
       lastInputValue = '';
+
+      // 강제로 일본어 조합을 끝냄
+      inputEl.blur();
+      inputEl.focus({ preventScroll: true });
+
+      // 한글 조합 강제로 끝낸 직후 중복으로 들어오는 입력을 방지하되 그 이후의 입력(일본어 변환 포함)은 정상적으로 처리
+      setTimeout(() => {
+        ignoreEventText = '';
+      });
     }
   };
 
@@ -93,6 +102,7 @@
         // 조합 중 단축키 입력 시 preedit을 커밋
         ignoreEventText = currentCompositionText;
         editor.dispatch({ type: 'commitPreedit' });
+        resetInputState();
       } else {
         return;
       }
