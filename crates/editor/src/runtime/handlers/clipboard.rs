@@ -15,12 +15,14 @@ impl Runtime {
                         let plain = frag.to_plain_text();
                         return self.transact(|tr| {
                             tr.delete_selection()?;
+                            tr.normalize()?;
                             tr.paste_text(plain)
                         });
                     }
 
                     return self.transact(|tr| {
                         tr.delete_selection()?;
+                        tr.normalize()?;
                         tr.paste_fragment(frag)
                     });
                 }
@@ -32,6 +34,7 @@ impl Runtime {
 
         self.transact(|tr| {
             tr.delete_selection()?;
+            tr.normalize()?;
             tr.paste_text(text)
         })
     }
