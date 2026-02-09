@@ -1480,6 +1480,82 @@ macro_rules! __fragment_create_node_with_id {
             __fragment_items!($nodes, Some($id), _child_prev; $($children)*);
         }
     };
+
+    ($nodes:ident, $id:expr, $parent:expr, fold, [$($attrs:tt)*], [$($children:tt)*]) => {
+        {
+            $nodes.push((
+                $id,
+                $crate::model::FragmentNode::new(
+                    $crate::model::Node::Fold($crate::model::FoldNode {
+                        $($attrs)*
+                        ..Default::default()
+                    }),
+                    $parent,
+                ),
+            ));
+
+            #[allow(unused_mut)]
+            let mut _child_prev: Option<$crate::model::NodeId> = None;
+            __fragment_items!($nodes, Some($id), _child_prev; $($children)*);
+        }
+    };
+
+    ($nodes:ident, $id:expr, $parent:expr, fold_title, [$($attrs:tt)*], [$($children:tt)*]) => {
+        {
+            $nodes.push((
+                $id,
+                $crate::model::FragmentNode::new(
+                    $crate::model::Node::FoldTitle($crate::model::FoldTitleNode {
+                        $($attrs)*
+                        ..Default::default()
+                    }),
+                    $parent,
+                ),
+            ));
+
+            #[allow(unused_mut)]
+            let mut _child_prev: Option<$crate::model::NodeId> = None;
+            __fragment_items!($nodes, Some($id), _child_prev; $($children)*);
+        }
+    };
+
+    ($nodes:ident, $id:expr, $parent:expr, fold_content, [$($attrs:tt)*], [$($children:tt)*]) => {
+        {
+            $nodes.push((
+                $id,
+                $crate::model::FragmentNode::new(
+                    $crate::model::Node::FoldContent($crate::model::FoldContentNode {
+                        $($attrs)*
+                        ..Default::default()
+                    }),
+                    $parent,
+                ),
+            ));
+
+            #[allow(unused_mut)]
+            let mut _child_prev: Option<$crate::model::NodeId> = None;
+            __fragment_items!($nodes, Some($id), _child_prev; $($children)*);
+        }
+    };
+
+    ($nodes:ident, $id:expr, $parent:expr, callout, [$($attrs:tt)*], [$($children:tt)*]) => {
+        {
+            $nodes.push((
+                $id,
+                $crate::model::FragmentNode::new(
+                    $crate::model::Node::Callout($crate::model::CalloutNode {
+                        $($attrs)*
+                        ..Default::default()
+                    }),
+                    $parent,
+                ),
+            ));
+
+            #[allow(unused_mut)]
+            let mut _child_prev: Option<$crate::model::NodeId> = None;
+            __fragment_items!($nodes, Some($id), _child_prev; $($children)*);
+        }
+    };
 }
 
 #[macro_export]
