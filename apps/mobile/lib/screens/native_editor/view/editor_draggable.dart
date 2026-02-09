@@ -101,33 +101,12 @@ class EditorDraggable extends StatelessWidget {
     final geo = scope.geometry;
     final offsets = geo.computeCumulativePageOffsets();
 
-    final textRect = Rect.fromLTWH(
+    final unionRect = Rect.fromLTWH(
       imageRecord.offsetX,
       imageRecord.offsetY,
       imageRecord.image.width / imageRecord.scale,
       imageRecord.image.height / imageRecord.scale,
     );
-
-    var unionRect = textRect;
-    final elements = scope.controller.state.externalElements;
-
-    for (final element in elements) {
-      if (!element.isSelected || element.pageIdx != imageRecord.pageIdx) {
-        continue;
-      }
-
-      final widget = element.data.mapOrNull(
-        image: (imageData) {
-          final displayWidth = element.bounds.width * imageData.proportion;
-          final xOffset = (element.bounds.width - displayWidth) / 2;
-          return Rect.fromLTWH(element.bounds.x + xOffset, element.bounds.y, displayWidth, element.bounds.height);
-        },
-      );
-
-      if (widget != null) {
-        unionRect = unionRect.expandToInclude(widget);
-      }
-    }
 
     return SnapshotSettings(
       translation: (rect, point) {
@@ -147,10 +126,10 @@ class EditorDraggable extends StatelessWidget {
         clipBehavior: Clip.none,
         children: [
           Positioned(
-            left: textRect.left - unionRect.left,
-            top: textRect.top - unionRect.top,
-            width: textRect.width,
-            height: textRect.height,
+            left: 0,
+            top: 0,
+            width: unionRect.width,
+            height: unionRect.height,
             child: RawImage(image: imageRecord.image, scale: imageRecord.scale),
           ),
           ..._buildExternalElements(context, scope, imageRecord, unionRect),
