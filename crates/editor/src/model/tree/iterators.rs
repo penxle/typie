@@ -37,7 +37,8 @@ pub struct TextSegmentIterator<'a> {
     doc: &'a Doc,
     block_iter: BlockTextIterator<'a>,
     current_block_id: Option<NodeId>,
-    current_child_ids: std::vec::IntoIter<NodeId>,
+    current_child_ids: std::rc::Rc<Vec<NodeId>>,
+    current_child_index: usize,
     current_segments: std::vec::IntoIter<(String, Vec<Mark>)>,
     current_offset: usize,
 }
@@ -48,7 +49,8 @@ impl<'a> TextSegmentIterator<'a> {
             doc,
             block_iter: BlockTextIterator::new(doc),
             current_block_id: None,
-            current_child_ids: Vec::new().into_iter(),
+            current_child_ids: std::rc::Rc::new(Vec::new()),
+            current_child_index: 0,
             current_segments: Vec::new().into_iter(),
             current_offset: 0,
         }
@@ -57,7 +59,8 @@ impl<'a> TextSegmentIterator<'a> {
     fn advance_block(&mut self) -> bool {
         while let Some((block_id, _)) = self.block_iter.next() {
             self.current_block_id = Some(block_id);
-            self.current_child_ids = self.doc.get_children_ids(block_id).into_iter();
+            self.current_child_ids = self.doc.get_children_ids(block_id);
+            self.current_child_index = 0;
             self.current_offset = 0;
             return true;
         }
@@ -82,7 +85,8 @@ impl<'a> Iterator for TextSegmentIterator<'a> {
                 return Some(params);
             }
 
-            if let Some(child_id) = self.current_child_ids.next() {
+            if let Some(&child_id) = self.current_child_ids.get(self.current_child_index) {
+                self.current_child_index += 1;
                 if self.doc.get_node_type(child_id) != Some(NodeType::Text) {
                     continue;
                 }

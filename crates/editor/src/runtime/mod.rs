@@ -28,7 +28,7 @@ pub use view_state::*;
 use crate::inspect::inspect_page_element;
 use crate::layout::cursor::{Cursor, NavigationContext};
 use crate::layout::query::find_drag_image_bounds;
-use crate::layout::{Layout, LayoutCache, LayoutContext, Page, Paginator};
+use crate::layout::{LayoutCache, LayoutContext, Page, Paginator};
 use crate::model::*;
 use crate::render::{RenderResult, Renderer};
 
@@ -343,6 +343,7 @@ impl Runtime {
 
     fn handle_external_doc_change(&mut self) {
         // TODO: 최적화?
+        self.state.doc.clear_children_cache();
         self.layout_cache.borrow_mut().invalidate_all();
         self.selection_cache = None;
         self.cached_plain_text = None;
@@ -560,7 +561,9 @@ impl Runtime {
             &self.layout_cache,
         );
 
-        let root_node = root_ref.node().layout(&ctx, constraints);
+        let root_layout = ctx.layout(&root_ref, constraints);
+
+        self.layout_cache.borrow_mut().clear_prev();
 
         let paginator = Paginator::new(
             page_width,
@@ -570,7 +573,7 @@ impl Runtime {
             margin_left,
             settings.layout_mode,
         );
-        self.pages = paginator.paginate(root_node);
+        self.pages = paginator.paginate_rc(root_layout);
     }
 
     pub fn render_page(&mut self, page_index: usize) -> Option<RenderResult> {
@@ -807,6 +810,15 @@ impl Runtime {
 
         let candidates: Vec<NodeId> = self.state.garbage_ids.drain(0..drain_count).collect();
 
+        let mut reachable: FxHashSet<NodeId> = FxHashSet::default();
+        let mut stack = vec![NodeId::ROOT];
+        while let Some(id) = stack.pop() {
+            if reachable.insert(id) {
+                let children = self.doc().get_children_ids(id);
+                stack.extend(children.iter().copied());
+            }
+        }
+
         let mut ids_to_delete = Vec::with_capacity(candidates.len());
 
         for &id in &candidates {
@@ -814,28 +826,13 @@ impl Runtime {
                 continue;
             }
 
-            let mut curr = id;
-            let is_reachable = loop {
-                if let Some(parent_id) = self.doc().get_parent_id(curr) {
-                    let siblings = self.doc().get_children_ids(parent_id);
-                    if !siblings.contains(&curr) {
-                        break false;
-                    }
-
-                    if parent_id == NodeId::ROOT {
-                        break true;
-                    }
-                    curr = parent_id;
-                } else {
-                    break false;
+            if !reachable.contains(&id) {
+                let mut subtree = vec![id];
+                while let Some(node_id) = subtree.pop() {
+                    ids_to_delete.push(node_id);
+                    let children = self.doc().get_children_ids(node_id);
+                    subtree.extend(children.iter().copied());
                 }
-            };
-
-            if !is_reachable {
-                let children = self.doc().get_children_ids(id);
-                self.state.garbage_ids.extend(children);
-
-                ids_to_delete.push(id);
             }
         }
 

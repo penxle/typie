@@ -15,6 +15,7 @@ pub struct Globals {
     pub parley_font_context: RefCell<parley::FontContext>,
     pub text_replacement_rules: RefCell<Vec<TextReplacementRule>>,
     pub lazy_fonts: RefCell<HashMap<(String, u16), LazyFont>>,
+    pub dummy_line_height_cache: RefCell<HashMap<u32, f32>>,
 }
 
 impl Globals {
@@ -24,6 +25,7 @@ impl Globals {
             parley_font_context: RefCell::new(parley::FontContext::new()),
             lazy_fonts: RefCell::new(HashMap::new()),
             text_replacement_rules: RefCell::new(Vec::new()),
+            dummy_line_height_cache: RefCell::new(HashMap::new()),
         }
     }
 }

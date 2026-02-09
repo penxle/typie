@@ -192,7 +192,7 @@ impl Doc {
         for (block_id, _) in self.iter_blocks() {
             let mut block_offset = 0;
 
-            for child_id in self.get_children_ids(block_id) {
+            for &child_id in self.get_children_ids(block_id).iter() {
                 match self.get_node_type(child_id) {
                     Some(NodeType::Text) => {
                         if let Some(segments) = self.get_text_segments(child_id) {
@@ -396,25 +396,18 @@ impl Doc {
         serde_json::from_value(serde_json::Value::String(type_str.to_string())).ok()
     }
 
-    pub fn get_children_ids(&self, node_id: NodeId) -> Vec<NodeId> {
-        if let Some(children) = self.inner.get_children_list(node_id) {
-            let mut ids = Vec::with_capacity(children.len());
-            for i in 0..children.len() {
-                if let Some(child) = children.get(i) {
-                    if let Ok(value) = child.into_value() {
-                        if let Ok(s) = value.into_string() {
-                            if let Some(id) = NodeId::from_string(&s) {
-                                ids.push(id);
-                            }
-                        }
-                    }
-                }
-            }
-            ids
-        } else {
-            Vec::new()
-        }
+    pub fn get_children_ids(&self, node_id: NodeId) -> Rc<Vec<NodeId>> {
+        self.inner.get_children_ids_cached(node_id)
     }
+
+    pub fn invalidate_children_cache_for(&self, node_id: NodeId) {
+        self.inner.invalidate_children_cache_for(node_id);
+    }
+
+    pub fn clear_children_cache(&self) {
+        self.inner.clear_children_cache();
+    }
+
     pub fn get_children_list(&self, node_id: NodeId) -> Option<loro::LoroList> {
         self.inner.get_children_list(node_id)
     }
@@ -437,7 +430,7 @@ impl Doc {
             let key = id.to_string();
             if reachable.insert(key) {
                 let children = self.get_children_ids(id);
-                stack.extend(children);
+                stack.extend(children.iter().copied());
             }
         }
 
@@ -466,7 +459,7 @@ impl Doc {
     pub fn get_block_text(&self, block_id: NodeId) -> String {
         let mut result = String::new();
 
-        for child_id in self.get_children_ids(block_id) {
+        for &child_id in self.get_children_ids(block_id).iter() {
             match self.get_node_type(child_id) {
                 Some(NodeType::Text) => {
                     if let Some(segments) = self.get_text_segments(child_id) {

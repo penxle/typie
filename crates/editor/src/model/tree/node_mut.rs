@@ -37,6 +37,8 @@ impl<'a> NodeMut<'a> {
             .context("Failed to get or create children list")?;
 
         children.insert(index, node_id.to_string())?;
+        self.inner
+            .invalidate_children_cache_for(self.node_ref.node_id());
 
         Ok(node_id)
     }
@@ -81,6 +83,7 @@ impl<'a> NodeMut<'a> {
                     break;
                 }
             }
+            self.inner.invalidate_children_cache_for(current_parent_id);
         }
 
         let new_children = self
@@ -89,6 +92,7 @@ impl<'a> NodeMut<'a> {
             .context("Failed to get or create new parent's children list")?;
 
         new_children.insert(index, node_id.to_string())?;
+        self.inner.invalidate_children_cache_for(parent_id);
 
         let map = self
             .inner
@@ -101,9 +105,10 @@ impl<'a> NodeMut<'a> {
     }
 
     pub fn delete(&mut self) -> Result<()> {
+        let parent_id = self.node_ref.parent_id().context("Node has no parent")?;
         let children = self
             .inner
-            .get_children_list(self.node_ref.parent_id().context("Node has no parent")?)
+            .get_children_list(parent_id)
             .context("Failed to get children list")?;
 
         for i in 0..children.len() {
@@ -120,6 +125,8 @@ impl<'a> NodeMut<'a> {
                 break;
             }
         }
+
+        self.inner.invalidate_children_cache_for(parent_id);
 
         let nodes = self.inner.loro.get_map("nodes");
         nodes.delete(&self.node_ref.node_id().to_string())?;

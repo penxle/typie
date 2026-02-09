@@ -9,6 +9,7 @@ impl Runtime {
         self.redo_selections.push(self.state.selection);
 
         let _ = self.undo_manager.undo();
+        self.state.doc.clear_children_cache();
         self.layout_cache.borrow_mut().invalidate_all();
 
         if let Some(selection) = self.undo_selections.pop() {
@@ -26,6 +27,7 @@ impl Runtime {
         self.undo_selections.push(self.state.selection);
 
         let _ = self.undo_manager.redo();
+        self.state.doc.clear_children_cache();
         self.layout_cache.borrow_mut().invalidate_all();
 
         if let Some(selection) = self.redo_selections.pop() {
