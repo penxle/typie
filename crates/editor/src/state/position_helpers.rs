@@ -113,6 +113,25 @@ pub fn eq_positions_ignoring_affinity(a: Position, b: Position) -> bool {
 }
 
 pub fn compare_positions(doc: &Doc, a: Position, b: Position) -> Result<Ordering> {
+    if eq_positions_ignoring_affinity(a, b) {
+        return Ok(Ordering::Equal);
+    }
+
+    let path_a = position_path(doc, a)?;
+    let path_b = position_path(doc, b)?;
+
+    for (segment_a, segment_b) in path_a.iter().zip(path_b.iter()) {
+        match segment_a.cmp(segment_b) {
+            Ordering::Equal => continue,
+            other => return Ok(other),
+        }
+    }
+
+    Ok(path_a.len().cmp(&path_b.len()))
+}
+
+#[allow(unused)]
+pub fn compare_positions_strict(doc: &Doc, a: Position, b: Position) -> Result<Ordering> {
     if a == b {
         return Ok(Ordering::Equal);
     }

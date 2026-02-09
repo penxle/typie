@@ -27,4 +27,12 @@ impl Position {
             affinity,
         }
     }
+
+    pub fn with_affinity(&self, affinity: Affinity) -> Self {
+        Self {
+            node_id: self.node_id,
+            offset: self.offset,
+            affinity,
+        }
+    }
 }
