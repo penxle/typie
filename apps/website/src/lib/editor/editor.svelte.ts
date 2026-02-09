@@ -941,16 +941,10 @@ export class Editor {
     const buffer = new Uint8ClampedArray(wasmMemory.buffer, ptr, len);
     const imageData = new ImageData(new Uint8ClampedArray(buffer), width, height);
 
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = width;
-    tempCanvas.height = height;
-    const tempCtx = tempCanvas.getContext('2d');
-    if (!tempCtx) return null;
-    tempCtx.putImageData(imageData, 0, 0);
-
     const canvas = document.createElement('canvas');
     canvas.width = width;
     canvas.height = height;
+
     const cssWidth = Math.ceil(width / scaleFactor);
     const cssHeight = Math.ceil(height / scaleFactor);
     canvas.style.width = `${cssWidth}px`;
@@ -960,9 +954,29 @@ export class Editor {
     if (!ctx) return null;
 
     ctx.save();
-    ctx.globalAlpha = 0.7;
+    ctx.globalAlpha = 0.5;
 
-    ctx.drawImage(tempCanvas, 0, 0);
+    ctx.putImageData(imageData, 0, 0);
+
+    const selectedImages = this.#getSelectedDragImages(visiblePages, pageIdx);
+    for (const { image, rect } of selectedImages) {
+      const destX = (rect.x - offsetX) * scaleFactor;
+      const destY = (rect.y - offsetY) * scaleFactor;
+      const destW = rect.width * scaleFactor;
+      const destH = rect.height * scaleFactor;
+      ctx.drawImage(image, destX, destY, destW, destH);
+    }
+
+    ctx.restore();
+
+    return { element: canvas, offsetX, offsetY };
+  }
+
+  #getSelectedDragImages(
+    visiblePages: number[],
+    pageIdx: number,
+  ): { image: HTMLImageElement; rect: { x: number; y: number; width: number; height: number } }[] {
+    const selectedImages: { image: HTMLImageElement; rect: { x: number; y: number; width: number; height: number } }[] = [];
 
     for (const el of this.externalElements) {
       if (!el.isSelected || el.data.type !== 'image' || !visiblePages.includes(el.pageIdx)) {
@@ -980,8 +994,12 @@ export class Editor {
         relativePageY = el.pageIdx < pageIdx ? -dist : dist;
       }
 
-      const imgElement = document.querySelector(`div[data-node-id="${el.nodeId}"] img`);
-      if (imgElement instanceof HTMLImageElement && el.data.type === 'image') {
+      let imgElement = document.querySelector(`div[data-node-id="${el.nodeId}"] img:not([loading="lazy"])`);
+      if (!imgElement) {
+        imgElement = document.querySelector(`div[data-node-id="${el.nodeId}"] img`);
+      }
+
+      if (imgElement instanceof HTMLImageElement) {
         const imageId = el.data.id;
         const uploadId = el.data.uploadId;
         const asset = imageId ? this.imageAssets.get(imageId) : undefined;
@@ -991,20 +1009,19 @@ export class Editor {
         const { displayWidth, xOffset } = calculateImageDisplaySize(el.bounds, originalWidth, originalHeight);
 
         const globalX = el.bounds.x + xOffset;
-        const globalY = el.bounds.y;
+        const globalY = relativePageY + el.bounds.y;
 
-        const destX = (globalX - offsetX) * scaleFactor;
-        const destY = (relativePageY + globalY - offsetY) * scaleFactor;
-        const destW = displayWidth * scaleFactor;
-        const destH = el.bounds.height * scaleFactor;
+        const rect = {
+          x: globalX,
+          y: globalY,
+          width: displayWidth,
+          height: el.bounds.height,
+        };
 
-        ctx.drawImage(imgElement, destX, destY, destW, destH);
+        selectedImages.push({ image: imgElement, rect });
       }
     }
-
-    ctx.restore();
-
-    return { element: canvas, offsetX, offsetY };
+    return selectedImages;
   }
 
   handleDragOver(e: DragEvent): void {

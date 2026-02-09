@@ -42,6 +42,16 @@ pub fn find_node_bounds_on_page(
     node_id: NodeId,
     page_idx: usize,
 ) -> Option<NodeBounds> {
+    find_node_rect_on_page(doc, page, node_id).map(|rect| NodeBounds {
+        page_idx,
+        x: rect.x,
+        y: rect.y,
+        width: rect.width,
+        height: rect.height,
+    })
+}
+
+pub fn find_node_rect_on_page(doc: &Doc, page: &Page, node_id: NodeId) -> Option<Rect> {
     let targets = collect_leaf_ids(doc, node_id);
     if targets.is_empty() {
         return None;
@@ -49,7 +59,17 @@ pub fn find_node_bounds_on_page(
 
     let mut acc = BoundsAccumulator::new();
     scan_layout_node(&page.root, &targets, Point::zero(), &mut acc);
-    acc.to_bounds(page_idx)
+
+    if acc.found {
+        Some(Rect::new(
+            acc.min_x,
+            acc.min_y,
+            acc.max_x - acc.min_x,
+            acc.max_y - acc.min_y,
+        ))
+    } else {
+        None
+    }
 }
 
 fn collect_leaf_ids(doc: &Doc, root_id: NodeId) -> HashSet<NodeId> {
@@ -172,11 +192,33 @@ pub fn find_drag_image_bounds(
     }
 
     let decorations = build_selection_decorations(doc, selection, None);
-    if decorations.is_empty() {
+    let non_text_blocks = collect_selected_non_text_blocks(doc, selection);
+
+    if decorations.is_empty() && non_text_blocks.is_empty() {
         return None;
     }
 
-    let drag_pages = collect_page_bounds_from_decorations(pages, &decorations);
+    let mut drag_pages = Vec::new();
+
+    for (page_idx, page) in pages.iter().enumerate() {
+        let rects =
+            collect_page_selection_bounds(doc, page, selection, &decorations, &non_text_blocks);
+
+        if !rects.is_empty() {
+            let mut acc = BoundsAccumulator::new();
+            for rect in &rects {
+                acc.add_rect(rect.x, rect.y, rect.width, rect.height);
+            }
+
+            if let Some(overall_bounds) = acc.to_bounds(page_idx) {
+                drag_pages.push(DragImagePageBounds {
+                    page_idx,
+                    bounds: overall_bounds.to_rect(),
+                    clip_rects: rects,
+                });
+            }
+        }
+    }
 
     if drag_pages.is_empty() {
         None
@@ -185,46 +227,43 @@ pub fn find_drag_image_bounds(
     }
 }
 
-fn collect_page_bounds_from_decorations(
-    pages: &[Page],
-    decorations: &[SelectionDecor],
-) -> Vec<DragImagePageBounds> {
-    let mut drag_pages = Vec::new();
-
-    for (page_idx, page) in pages.iter().enumerate() {
-        if let Some(page_bounds) = collect_single_page_selection_bounds(page, page_idx, decorations)
+fn collect_selected_non_text_blocks(doc: &Doc, selection: &crate::state::Selection) -> Vec<NodeId> {
+    if let Ok((from, to)) = selection.as_sorted(doc) {
+        if let Ok(blocks) = crate::state::selection_helpers::collect_blocks_in_range(doc, from, to)
         {
-            drag_pages.push(page_bounds);
+            return blocks
+                .into_iter()
+                .filter(|&id| {
+                    doc.node(id)
+                        .map(|n| !n.spec().is_textblock(doc.schema()))
+                        .unwrap_or(false)
+                })
+                .collect();
+        }
+    }
+    Vec::new()
+}
+
+fn collect_page_selection_bounds(
+    doc: &Doc,
+    page: &Page,
+    _selection: &crate::state::Selection,
+    decorations: &[SelectionDecor],
+    non_text_blocks: &[NodeId],
+) -> Vec<Rect> {
+    let mut rects = Vec::new();
+
+    if !decorations.is_empty() {
+        scan_for_selection_bounds(&page.root, Point::zero(), decorations, &mut rects);
+    }
+
+    for &block_id in non_text_blocks {
+        if let Some(rect) = find_node_rect_on_page(doc, page, block_id) {
+            rects.push(rect);
         }
     }
 
-    drag_pages
-}
-
-fn collect_single_page_selection_bounds(
-    page: &Page,
-    page_idx: usize,
-    decorations: &[SelectionDecor],
-) -> Option<DragImagePageBounds> {
-    let mut clip_rects = Vec::new();
-    scan_for_selection_bounds(&page.root, Point::zero(), decorations, &mut clip_rects);
-
-    if clip_rects.is_empty() {
-        return None;
-    }
-
-    let mut acc = BoundsAccumulator::new();
-    for rect in &clip_rects {
-        acc.add_rect(rect.x, rect.y, rect.width, rect.height);
-    }
-
-    let overall_bounds = acc.to_bounds(page_idx)?;
-
-    Some(DragImagePageBounds {
-        page_idx,
-        bounds: overall_bounds.to_rect(),
-        clip_rects,
-    })
+    rects
 }
 
 fn scan_for_selection_bounds(
@@ -263,7 +302,6 @@ fn scan_for_selection_bounds(
     }
 }
 
-// TODO: selection decoration 뿐만 아니라 selected external element도 고려해야 함
 pub fn is_point_in_selection_bounds(
     doc: &Doc,
     page: &Page,
@@ -275,14 +313,15 @@ pub fn is_point_in_selection_bounds(
     }
 
     let decorations = build_selection_decorations(doc, selection, None);
-    if decorations.is_empty() {
+    let non_text_blocks = collect_selected_non_text_blocks(doc, selection);
+
+    if decorations.is_empty() && non_text_blocks.is_empty() {
         return false;
     }
 
-    let mut clip_rects = Vec::new();
-    scan_for_selection_bounds(&page.root, Point::zero(), &decorations, &mut clip_rects);
+    let rects = collect_page_selection_bounds(doc, page, selection, &decorations, &non_text_blocks);
 
-    for rect in clip_rects {
+    for rect in rects {
         if point.x >= rect.x
             && point.x <= rect.x + rect.width
             && point.y >= rect.y
