@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { hide } from '@floating-ui/dom';
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { createFloatingActions } from '@typie/ui/actions';
@@ -45,6 +46,7 @@
   const { anchor, floating } = createFloatingActions({
     placement: 'bottom',
     offset: 4,
+    middleware: [hide()],
   });
 
   $effect(() => {
