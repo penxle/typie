@@ -54,6 +54,7 @@ import {
   getKoreanAge,
   makeLoroDoc,
 } from '@/utils';
+import { compressZstd, decompressZstd } from '@/utils/compression';
 import { assertSitePermission } from '@/utils/permission';
 import { assertPlanRule } from '@/utils/plan';
 import { builder } from '../builder';
@@ -511,7 +512,7 @@ DocumentVersion.implement({
   isTypeOf: isTypeOf(TableCode.DOCUMENT_VERSIONS),
   fields: (t) => ({
     id: t.exposeID('id'),
-    version: t.field({ type: 'Binary', resolve: (self) => self.version }),
+    version: t.field({ type: 'Binary', resolve: async (self) => decompressZstd(self.version) }),
     createdAt: t.expose('createdAt', { type: 'DateTime' }),
   }),
 });
@@ -624,6 +625,20 @@ builder.mutationFields((t) => ({
           blobSize,
           snapshot,
           version,
+        });
+
+        const documentVersion = await tx
+          .insert(DocumentVersions)
+          .values({
+            documentId: document.id,
+            version: await compressZstd(version),
+          })
+          .returning({ id: DocumentVersions.id })
+          .then(firstOrThrow);
+
+        await tx.insert(DocumentVersionContributors).values({
+          versionId: documentVersion.id,
+          userId: ctx.session.userId,
         });
 
         return document;
@@ -791,14 +806,23 @@ builder.mutationFields((t) => ({
           .returning()
           .then(firstOrThrow);
 
+        const sourceDoc = new LoroDoc();
+        sourceDoc.import(document.content.snapshot);
+
+        const freshDoc = new LoroDoc();
+        freshDoc.import(sourceDoc.export({ mode: 'shallow-snapshot', frontiers: sourceDoc.oplogFrontiers() }));
+
+        const freshSnapshot = freshDoc.export({ mode: 'snapshot' });
+        const freshVersion = freshDoc.version().encode();
+
         await tx.insert(DocumentContents).values({
           documentId: newDocument.id,
           json: document.content.json,
           text: document.content.text,
           characterCount: document.content.characterCount,
           blobSize: document.content.blobSize,
-          snapshot: document.content.snapshot,
-          version: document.content.version,
+          snapshot: freshSnapshot,
+          version: freshVersion,
         });
 
         // TODO: anchors
@@ -807,7 +831,7 @@ builder.mutationFields((t) => ({
           .insert(DocumentVersions)
           .values({
             documentId: newDocument.id,
-            version: document.content.version,
+            version: await compressZstd(freshVersion),
           })
           .returning({ id: DocumentVersions.id })
           .then(firstOrThrow);
