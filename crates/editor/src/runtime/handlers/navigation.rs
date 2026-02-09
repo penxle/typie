@@ -274,12 +274,12 @@ impl Runtime {
                 match direction {
                     Direction::Left => {
                         let (from, _) = selection.as_sorted(&self.state.doc).unwrap();
-                        let resolved = move_from_block_position(&self.state.doc, from, true);
+                        let resolved = move_from_block_position(&self.state.doc, from, false);
                         return (resolved.clone(), resolved);
                     }
                     Direction::Right => {
                         let (_, to) = selection.as_sorted(&self.state.doc).unwrap();
-                        let resolved = move_from_block_position(&self.state.doc, to, false);
+                        let resolved = move_from_block_position(&self.state.doc, to, true);
                         return (resolved.clone(), resolved);
                     }
                     _ => {}
@@ -745,6 +745,30 @@ mod tests {
         let selection = &rt.state().selection;
         assert_eq!(selection.head.node_id, p1);
         assert_eq!(selection.head.offset, 0);
+    }
+
+    #[test]
+    fn test_arrow_left_from_image_selection() {
+        let mut p1 = id!();
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p1 paragraph { text { "First" } }
+                image(id: Some("image".to_string()), proportion: 1.0,) {}
+            }
+            selection { (NodeId::ROOT, 1) -> (NodeId::ROOT, 2, Affinity::Upstream) }
+        };
+
+        rt.layout();
+        rt.update(Message::Navigate {
+            direction: Direction::Left,
+            extend: false,
+        });
+
+        let selection = &rt.state().selection;
+        assert_eq!(selection.anchor, selection.head);
+        assert_eq!(selection.head.node_id, p1);
+        assert_eq!(selection.head.offset, 5);
     }
 
     #[test]
