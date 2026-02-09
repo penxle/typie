@@ -3,7 +3,7 @@ use super::super::{Effect, Runtime};
 impl Runtime {
     pub(crate) fn handle_insert_newline(&mut self) -> Vec<Effect> {
         self.transact(|tr| {
-            if tr.insert_paragraph_on_block()? {
+            if tr.insert_paragraph_on_nontextblock_selection()? {
                 return Ok(true);
             }
             tr.delete_selection()?;
@@ -28,7 +28,7 @@ impl Runtime {
 
     pub(crate) fn handle_insert_page_break(&mut self) -> Vec<Effect> {
         self.transact(|tr| {
-            tr.insert_paragraph_on_block()?;
+            tr.insert_paragraph_on_nontextblock_selection()?;
             tr.delete_selection()?;
             tr.insert_page_break()
         })

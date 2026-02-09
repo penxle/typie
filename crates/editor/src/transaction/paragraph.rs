@@ -336,7 +336,7 @@ impl Transaction {
         }
     }
 
-    pub fn insert_paragraph_on_block(&mut self) -> Result<bool> {
+    pub fn insert_paragraph_on_nontextblock_selection(&mut self) -> Result<bool> {
         let selection = self.selection().clone();
         if selection.is_collapsed() {
             return Ok(false);
@@ -353,6 +353,10 @@ impl Transaction {
         }
 
         let block = self.node(block_id).context("Block not found")?;
+        if block.spec().is_textblock(self.doc().schema()) {
+            return Ok(false);
+        }
+
         let parent = block.parent().context("Parent not found")?;
         let parent_id = parent.node_id();
 
@@ -1083,7 +1087,9 @@ mod tests {
             selection { (NodeId::ROOT, 0) -> (NodeId::ROOT, 1) }
         };
 
-        let actual = transact!(initial, |tr| tr.insert_paragraph_on_block().unwrap());
+        let actual = transact!(initial, |tr| tr
+            .insert_paragraph_on_nontextblock_selection()
+            .unwrap());
 
         let expected = state! {
             doc {
@@ -1116,7 +1122,9 @@ mod tests {
             selection { (NodeId::ROOT, 1) -> (NodeId::ROOT, 2) }
         };
 
-        let actual = transact!(initial, |tr| tr.insert_paragraph_on_block().unwrap());
+        let actual = transact!(initial, |tr| tr
+            .insert_paragraph_on_nontextblock_selection()
+            .unwrap());
 
         let expected = state! {
             doc {
