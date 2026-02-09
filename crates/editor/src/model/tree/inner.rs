@@ -1,7 +1,7 @@
 use crate::model::NodeId;
 use crate::schema::Schema;
 use loro::{LoroDoc, LoroList, LoroMap};
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -10,6 +10,7 @@ pub struct DocInner {
     pub loro: LoroDoc,
     pub schema: Rc<Schema>,
     children_cache: RefCell<FxHashMap<NodeId, Rc<Vec<NodeId>>>>,
+    reachable: RefCell<Option<FxHashSet<NodeId>>>,
 }
 
 impl DocInner {
@@ -18,6 +19,7 @@ impl DocInner {
             loro,
             schema,
             children_cache: RefCell::new(FxHashMap::default()),
+            reachable: RefCell::new(None),
         }
     }
 
@@ -26,6 +28,45 @@ impl DocInner {
             loro: self.loro.fork(),
             schema: self.schema.clone(),
             children_cache: RefCell::new(FxHashMap::default()),
+            reachable: RefCell::new(None),
+        }
+    }
+
+    pub fn is_reachable(&self, node_id: NodeId) -> bool {
+        let needs_build = self.reachable.borrow().is_none();
+        if needs_build {
+            self.build_reachable_set();
+        }
+        self.reachable.borrow().as_ref().unwrap().contains(&node_id)
+    }
+
+    fn build_reachable_set(&self) {
+        let mut set = FxHashSet::default();
+        let mut stack = vec![NodeId::ROOT];
+        while let Some(id) = stack.pop() {
+            if set.insert(id) {
+                let children = self.get_children_ids_cached(id);
+                stack.extend(children.iter().copied());
+            }
+        }
+        *self.reachable.borrow_mut() = Some(set);
+    }
+
+    pub fn mark_reachable(&self, node_id: NodeId) {
+        if let Some(set) = self.reachable.borrow_mut().as_mut() {
+            set.insert(node_id);
+        }
+    }
+
+    pub fn mark_unreachable_subtree(&self, node_id: NodeId) {
+        if let Some(set) = self.reachable.borrow_mut().as_mut() {
+            let mut stack = vec![node_id];
+            while let Some(id) = stack.pop() {
+                if set.remove(&id) {
+                    let children = self.get_children_ids_cached(id);
+                    stack.extend(children.iter().copied());
+                }
+            }
         }
     }
 
@@ -42,6 +83,15 @@ impl DocInner {
         nodes
             .get_or_create_container(&node_id.to_string(), LoroMap::new())
             .ok()
+    }
+
+    pub fn create_node_map(&self, node_id: NodeId) -> Option<LoroMap> {
+        let nodes = self.loro.get_map("nodes");
+        let key = node_id.to_string();
+        if nodes.get(&key).is_some() {
+            let _ = nodes.delete(&key);
+        }
+        nodes.get_or_create_container(&key, LoroMap::new()).ok()
     }
 
     pub fn get_children_list(&self, node_id: NodeId) -> Option<LoroList> {
@@ -93,5 +143,6 @@ impl DocInner {
 
     pub fn clear_children_cache(&self) {
         self.children_cache.borrow_mut().clear();
+        *self.reachable.borrow_mut() = None;
     }
 }

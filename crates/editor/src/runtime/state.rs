@@ -11,7 +11,6 @@ pub struct State {
     pub preferred_x: Option<f32>,
     pub pending_marks: Option<Vec<Mark>>,
     pub frontiers: Frontiers,
-    pub garbage_ids: Vec<NodeId>,
     pub pending_loro_commit: bool,
     pub read_only: bool,
 }
@@ -26,7 +25,6 @@ impl State {
             preferred_x: None,
             pending_marks: None,
             frontiers,
-            garbage_ids: Vec::new(),
             pending_loro_commit: false,
             read_only: false,
         }

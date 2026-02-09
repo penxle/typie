@@ -122,12 +122,9 @@ pub struct Runtime {
 
 #[allow(dead_code)]
 impl Runtime {
-    pub fn new(width: f32, scale_factor: f64, mut state: State) -> Self {
+    pub fn new(width: f32, scale_factor: f64, state: State) -> Self {
         let mut undo_manager = UndoManager::new(&state.doc.loro_doc());
         undo_manager.set_merge_interval(1000);
-
-        let orphans = state.doc.find_orphan_nodes();
-        state.garbage_ids.extend(orphans);
 
         let last_synced_version = state.doc.loro_doc().state_vv();
         Self {
@@ -791,56 +788,10 @@ impl Runtime {
     }
 
     pub fn flush(&mut self) {
-        self.collect_garbage();
-
         if self.state.pending_loro_commit {
             self.state.doc.loro_doc().commit();
             self.state.pending_loro_commit = false;
         }
-    }
-
-    fn collect_garbage(&mut self) {
-        if self.state.garbage_ids.is_empty() {
-            return;
-        }
-
-        let chunk_size = 500;
-        let len = self.state.garbage_ids.len();
-        let drain_count = chunk_size.min(len);
-
-        let candidates: Vec<NodeId> = self.state.garbage_ids.drain(0..drain_count).collect();
-
-        let mut reachable: FxHashSet<NodeId> = FxHashSet::default();
-        let mut stack = vec![NodeId::ROOT];
-        while let Some(id) = stack.pop() {
-            if reachable.insert(id) {
-                let children = self.doc().get_children_ids(id);
-                stack.extend(children.iter().copied());
-            }
-        }
-
-        let mut ids_to_delete = Vec::with_capacity(candidates.len());
-
-        for &id in &candidates {
-            if id == NodeId::ROOT {
-                continue;
-            }
-
-            if !reachable.contains(&id) {
-                let mut subtree = vec![id];
-                while let Some(node_id) = subtree.pop() {
-                    ids_to_delete.push(node_id);
-                    let children = self.doc().get_children_ids(node_id);
-                    subtree.extend(children.iter().copied());
-                }
-            }
-        }
-
-        if let Err(e) = self.doc().delete_nodes_batch(&ids_to_delete) {
-            eprintln!("Failed to delete garbage nodes: {:?}", e);
-        }
-
-        self.state.pending_loro_commit = true;
     }
 
     fn process_message(&mut self, msg: Message) {

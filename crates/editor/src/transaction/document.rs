@@ -258,7 +258,6 @@ impl Transaction {
         let node = self.node_mut(node_id).context("Node not found")?;
         node.as_mut().delete().context("Failed to delete node")?;
 
-        self.state.garbage_ids.push(node_id);
         self.push_effect(Effect::StructureChanged);
 
         if let Some(pid) = parent_id {
@@ -414,8 +413,10 @@ impl Transaction {
             children_list.delete(from_index, node_ids.len())?;
         }
         self.doc().invalidate_children_cache_for(parent_id);
+        for &node_id in &node_ids {
+            self.doc().mark_unreachable_subtree(node_id);
+        }
 
-        self.state.garbage_ids.extend(node_ids);
         self.push_effect(Effect::StructureChanged);
 
         Ok(())

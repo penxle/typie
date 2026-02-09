@@ -412,33 +412,8 @@ impl Doc {
         self.inner.get_children_list(node_id)
     }
 
-    pub fn delete_nodes_batch(&self, node_ids: &[NodeId]) -> anyhow::Result<()> {
-        let nodes = self.inner.loro.get_map("nodes");
-        for node_id in node_ids {
-            nodes.delete(&node_id.to_string())?;
-        }
-        Ok(())
-    }
-
-    pub fn find_orphan_nodes(&self) -> Vec<NodeId> {
-        let nodes = self.inner.loro.get_map("nodes");
-        let all_keys: Vec<String> = nodes.keys().map(|s| s.to_string()).collect();
-
-        let mut reachable: FxHashSet<String> = FxHashSet::default();
-        let mut stack = vec![NodeId::ROOT];
-        while let Some(id) = stack.pop() {
-            let key = id.to_string();
-            if reachable.insert(key) {
-                let children = self.get_children_ids(id);
-                stack.extend(children.iter().copied());
-            }
-        }
-
-        all_keys
-            .into_iter()
-            .filter(|key| !reachable.contains(key))
-            .filter_map(|key| NodeId::from_string(&key))
-            .collect()
+    pub fn mark_unreachable_subtree(&self, node_id: NodeId) {
+        self.inner.mark_unreachable_subtree(node_id);
     }
 
     pub fn is_empty(&self) -> bool {

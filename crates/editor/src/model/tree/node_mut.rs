@@ -25,8 +25,8 @@ impl<'a> NodeMut<'a> {
     ) -> Result<NodeId> {
         let child_map = self
             .inner
-            .get_or_create_node_map(node_id)
-            .context("Failed to get or create child node map")?;
+            .create_node_map(node_id)
+            .context("Failed to create child node map")?;
 
         node.encode(&child_map)?;
         child_map.insert("parent", self.node_ref.node_id().to_string())?;
@@ -39,6 +39,7 @@ impl<'a> NodeMut<'a> {
         children.insert(index, node_id.to_string())?;
         self.inner
             .invalidate_children_cache_for(self.node_ref.node_id());
+        self.inner.mark_reachable(node_id);
 
         Ok(node_id)
     }
@@ -127,9 +128,7 @@ impl<'a> NodeMut<'a> {
         }
 
         self.inner.invalidate_children_cache_for(parent_id);
-
-        let nodes = self.inner.loro.get_map("nodes");
-        nodes.delete(&self.node_ref.node_id().to_string())?;
+        self.inner.mark_unreachable_subtree(self.node_ref.node_id());
 
         Ok(())
     }
