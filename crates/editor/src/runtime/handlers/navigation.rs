@@ -1,7 +1,9 @@
 use super::super::{Direction, Effect, Runtime};
 use crate::layout::cursor::{Cursor, NavigationContext};
 use crate::model::{MarkType, NodeId};
-use crate::state::position_helpers::{compare_positions, move_from_block_position};
+use crate::state::position_helpers::{
+    compare_positions, eq_positions_ignoring_affinity, move_from_block_position,
+};
 use crate::state::{Position, Selection, block_content_len};
 use crate::types::Affinity;
 use std::cmp::Ordering;
@@ -241,34 +243,44 @@ impl Runtime {
         if extend_selection {
             let new_span = move_from(selection.head);
             let (sorted_from, sorted_to) = selection.as_sorted(&self.state.doc).unwrap();
+            let (span_from, span_to) = new_span.as_sorted(&self.state.doc).unwrap();
 
-            let (anchor, new_head) = match direction {
-                Direction::Up
-                | Direction::PageUp
-                | Direction::SentenceUp
-                | Direction::Left
-                | Direction::WordLeft
-                | Direction::LineStart
-                | Direction::DocumentStart => {
-                    match compare_positions(&self.state.doc, sorted_from, new_span.head) {
-                        Ok(Ordering::Greater) => (sorted_to, new_span.anchor),
-                        _ => (selection.anchor, new_span.head),
-                    }
-                }
-                Direction::Down
-                | Direction::PageDown
-                | Direction::SentenceDown
-                | Direction::Right
-                | Direction::WordRight
-                | Direction::LineEnd
-                | Direction::DocumentEnd => {
-                    match compare_positions(&self.state.doc, sorted_to, new_span.anchor) {
-                        Ok(Ordering::Less) => (sorted_from, new_span.head),
-                        _ => (selection.anchor, new_span.anchor),
-                    }
-                }
+            let was_forward = selection.anchor_before_head(&self.state.doc);
+
+            let crossed = if was_forward {
+                matches!(
+                    compare_positions(&self.state.doc, span_from.clone(), selection.anchor.clone()),
+                    Ok(Ordering::Less)
+                )
+            } else {
+                matches!(
+                    compare_positions(&self.state.doc, span_to.clone(), selection.anchor.clone()),
+                    Ok(Ordering::Greater)
+                )
             };
-            (anchor, new_head)
+
+            let anchor = if crossed {
+                if was_forward { sorted_to } else { sorted_from }
+            } else {
+                selection.anchor.clone()
+            };
+
+            let head = {
+                let is_new_forward = matches!(
+                    compare_positions(&self.state.doc, anchor.clone(), new_span.head.clone()),
+                    Ok(Ordering::Less) | Ok(Ordering::Equal)
+                );
+
+                if is_new_forward { span_to } else { span_from }
+            };
+
+            let head = if eq_positions_ignoring_affinity(anchor, head) {
+                head.with_affinity(anchor.affinity)
+            } else {
+                head
+            };
+
+            (anchor, head)
         } else {
             if !selection.is_collapsed() {
                 match direction {
@@ -677,25 +689,89 @@ mod tests {
 
         let final_selection = &rt.state().selection;
 
-        assert_eq!(
-            final_selection.anchor.node_id,
-            initial_selection.anchor.node_id
-        );
-        assert_eq!(
-            final_selection.anchor.offset,
-            initial_selection.anchor.offset
-        );
-        assert_eq!(
-            final_selection.anchor.affinity,
-            initial_selection.anchor.affinity
-        );
-        assert_eq!(final_selection.head.node_id, initial_selection.head.node_id);
-        assert_eq!(final_selection.head.offset, initial_selection.head.offset);
-        assert_eq!(
-            final_selection.head.affinity,
-            initial_selection.head.affinity
-        );
+        assert_eq!(final_selection, &initial_selection);
     }
+
+    #[test]
+    fn shift_arrow_up_then_shift_arrow_down_restores_selection_at_upstream() {
+        let mut n1 = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                paragraph {
+                    text { "Subnecto advenio atrox ducimus ventus cometes. Aegrus capitulus iusto quasi. Rem arbustum valeo arcus advoco." }
+                }
+                @n1 paragraph {
+                    text { "Vulnus conspergo attollo torrens aureus amor vulnus dolorum tot. Tutis curatio pel vitium territo. Conduco deleniti accendo avaritia sufficio uxor." }
+                }
+                paragraph {
+                    text { "Tunc patruus decretum aliqua comparo bellum. Sublime succedo cui tutamen textilis. Conservo averto pecto coepi." }
+                }
+                paragraph {}
+            }
+            selection { (n1, 32, Affinity::Upstream) }
+        };
+
+        rt.layout();
+
+        let initial_selection = rt.state().selection.clone();
+
+        rt.update(Message::Navigate {
+            direction: Direction::Up,
+            extend: true,
+        });
+
+        rt.update(Message::Navigate {
+            direction: Direction::Down,
+            extend: true,
+        });
+
+        let final_selection = &rt.state().selection;
+
+        assert_eq!(final_selection, &initial_selection);
+    }
+
+    #[test]
+    fn shift_arrow_down_then_shift_arrow_up_restores_selection_at_upstream() {
+        let mut n1 = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                paragraph {
+                    text { "Subnecto advenio atrox ducimus ventus cometes. Aegrus capitulus iusto quasi. Rem arbustum valeo arcus advoco." }
+                }
+                @n1 paragraph {
+                    text { "Vulnus conspergo attollo torrens aureus amor vulnus dolorum tot. Tutis curatio pel vitium territo. Conduco deleniti accendo avaritia sufficio uxor." }
+                }
+                paragraph {
+                    text { "Tunc patruus decretum aliqua comparo bellum. Sublime succedo cui tutamen textilis. Conservo averto pecto coepi." }
+                }
+                paragraph {}
+            }
+            selection { (n1, 32, Affinity::Upstream) }
+        };
+
+        rt.layout();
+
+        let initial_selection = rt.state().selection.clone();
+
+        rt.update(Message::Navigate {
+            direction: Direction::Down,
+            extend: true,
+        });
+
+        rt.update(Message::Navigate {
+            direction: Direction::Up,
+            extend: true,
+        });
+
+        let final_selection = &rt.state().selection;
+
+        assert_eq!(final_selection, &initial_selection);
+    }
+
     #[test]
     fn test_select_all_root_block_selection() {
         let mut p1 = id!();
