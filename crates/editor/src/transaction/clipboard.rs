@@ -1256,4 +1256,38 @@ mod tests {
 
         assert_eq!(texts, vec!["Line1", "Line2", "Line3"]);
     }
+
+    #[test]
+    fn paste_non_paragraph_fragment_at_empty_paragraph() {
+        let mut p = id!();
+
+        let initial = state! {
+            doc {
+                @p paragraph {}
+            }
+            selection { (p, 0) }
+        };
+
+        let fragment = fragment! {
+            open_start: 2, open_end: 0,
+
+            blockquote {
+                paragraph {
+                    text { "asd" }
+                }
+            }
+            fold {
+                fold_title {}
+                fold_content {
+                    paragraph {
+                        text { "asdasd" }
+                    }
+                }
+            }
+        };
+
+        let _ = transact!(initial, |tr| {
+            tr.paste_fragment(fragment).unwrap();
+        });
+    }
 }
