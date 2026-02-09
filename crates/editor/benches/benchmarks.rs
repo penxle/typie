@@ -74,6 +74,7 @@ fn runtime_with_paragraphs(count: usize) -> Runtime {
         theme: test_theme(),
     });
     runtime.tick();
+    runtime.flush();
     runtime
 }
 
@@ -125,9 +126,7 @@ fn bench_editing(c: &mut Criterion) {
                 runtime.update(Message::DeleteBackward);
                 runtime.tick();
                 runtime.render_page(0);
-                while !runtime.state().garbage_ids.is_empty() {
-                    runtime.flush();
-                }
+                runtime.flush();
             },
             BATCH,
         );
@@ -176,6 +175,7 @@ fn bench_editing(c: &mut Criterion) {
                     theme: test_theme(),
                 });
                 runtime.tick();
+                runtime.flush();
                 runtime.layout();
                 runtime
             },
@@ -219,9 +219,7 @@ fn bench_editing(c: &mut Criterion) {
                 runtime.tick();
                 runtime.update(Message::DeleteBackward);
                 runtime.tick();
-                while !runtime.state().garbage_ids.is_empty() {
-                    runtime.flush();
-                }
+                runtime.flush();
                 runtime
             },
             |runtime| {
@@ -335,40 +333,11 @@ fn bench_data_access(c: &mut Criterion) {
     group.finish();
 }
 
-fn bench_garbage_collection(c: &mut Criterion) {
-    let mut group = c.benchmark_group("garbage_collection");
-    group
-        .sample_size(10)
-        .measurement_time(Duration::from_secs(10));
-
-    group.bench_function("flush_after_delete_all", |b| {
-        b.iter_batched_ref(
-            || {
-                let mut runtime = prepared_runtime(1_000);
-                runtime.update(Message::SelectAll);
-                runtime.tick();
-                runtime.update(Message::DeleteBackward);
-                runtime.tick();
-                runtime
-            },
-            |runtime| {
-                while !runtime.state().garbage_ids.is_empty() {
-                    runtime.flush();
-                }
-            },
-            BATCH,
-        );
-    });
-
-    group.finish();
-}
-
 criterion_group!(
     benches,
     bench_editing,
     bench_commit,
     bench_render,
     bench_data_access,
-    bench_garbage_collection,
 );
 criterion_main!(benches);

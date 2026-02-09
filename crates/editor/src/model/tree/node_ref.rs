@@ -14,7 +14,7 @@ pub struct NodeRef<'a> {
 
 impl<'a> NodeRef<'a> {
     pub fn new(inner: &'a DocInner, node_id: NodeId) -> Option<Self> {
-        if inner.get_node_map(node_id).is_none() {
+        if !inner.is_reachable(node_id) {
             return None;
         }
 
