@@ -1210,7 +1210,7 @@ impl Transaction {
 
         self.delete_node_recursive(node_id)?;
 
-        // TODO: 삭제되는 노드 내부에 selection이 있는 경우 삭제되는 노드 start position으로 selection을 이동시키기
+        // TODO: 삭제되는 노드 내부에 selection이 있는 경우 삭제되는 노드 start position으로 selection을 이동시키기. 지금은 이 함수를 쓰는 경우가 external element 삭제 케이스밖에 없어서 노드 내부에 selection이 있을 수 없음.
         if let (Some(parent_id), Some(node_index)) = (parent_id, node_index) {
             let mut selection = *self.selection();
             let mut changed = false;

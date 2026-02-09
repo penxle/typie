@@ -1,7 +1,7 @@
 use crate::model::{Doc, Fragment, Node, NodeId};
-use crate::state::BlockTraverser;
 use crate::state::position::Position;
 use crate::state::position_helpers::{compare_positions, is_block_position};
+use crate::state::{BlockTraverser, eq_positions_ignoring_affinity};
 use anyhow::{Context, Result};
 use std::cmp::Ordering;
 
@@ -25,6 +25,11 @@ impl Selection {
 
     pub fn is_collapsed(&self) -> bool {
         self.anchor == self.head
+    }
+
+    pub fn is_collapsed_block_selection(&self, doc: &Doc) -> bool {
+        eq_positions_ignoring_affinity(self.anchor, self.head)
+            && is_block_position(doc, self.anchor)
     }
 
     pub fn as_sorted(&self, doc: &Doc) -> Result<(Position, Position)> {
