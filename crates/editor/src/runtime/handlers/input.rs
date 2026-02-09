@@ -13,9 +13,11 @@ impl Runtime {
             return effects;
         }
 
-        // NOTE: delete 후 transaction commit 단계에서 trailing paragraph 생성 후 normalize_selection이 되어야 하기 때문에 transact 나눠서 실행
-        effects.extend(self.transact(|tr| tr.delete_selection()));
-        effects.extend(self.transact(|tr| tr.insert_text(text)));
+        effects.extend(self.transact(|tr| {
+            tr.delete_selection()?;
+            tr.normalize()?;
+            tr.insert_text(text)
+        }));
 
         if let Some(replacement_effects) = self.try_text_replacement(text.len()) {
             effects.extend(replacement_effects);

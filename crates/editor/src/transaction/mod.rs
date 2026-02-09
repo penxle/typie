@@ -110,9 +110,14 @@ impl Transaction {
         self.commit_internal(false)
     }
 
-    fn commit_internal(mut self, defer_loro_commit: bool) -> Result<(State, Vec<Effect>)> {
+    pub fn normalize(&mut self) -> Result<()> {
         self.normalize_to_schema()?;
         self.normalize_selection();
+        Ok(())
+    }
+
+    fn commit_internal(mut self, defer_loro_commit: bool) -> Result<(State, Vec<Effect>)> {
+        self.normalize()?;
         self.validate()?;
 
         if self.state.doc.frontiers() != self.initial.frontiers {
