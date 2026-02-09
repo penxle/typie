@@ -215,6 +215,9 @@
   bind:this={inputEl}
   name="input"
   class={css({ pointerEvents: 'none', position: 'fixed', top: '0', left: '0', height: '1px', width: '1px', opacity: '0' })}
+  autocapitalize="off"
+  autocomplete="off"
+  autocorrect="off"
   onblur={onBlur}
   oncompositionend={handleCompositionEnd}
   oncompositionstart={handleCompositionStart}
@@ -225,4 +228,5 @@
   oninput={handleInput}
   onkeydown={handleKeyDown}
   onpaste={handlePaste}
+  spellcheck={false}
 />
