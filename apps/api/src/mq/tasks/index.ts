@@ -1,5 +1,5 @@
 import { ProcessBmoMentionJob } from './bmo';
-import { DocumentCompactJob, DocumentCompactScanCron, DocumentIndexJob, DocumentSyncCollectJob, DocumentSyncScanCron } from './document';
+import { DocumentGCJob, DocumentGCScanCron, DocumentIndexJob, DocumentSyncCollectJob, DocumentSyncScanCron } from './document';
 import { SendSubscriptionExpiredEmailJob, SendSubscriptionExpiringEmailJob, SendSubscriptionGracePeriodEmailJob } from './email';
 import { PostCompactJob, PostCompactScanCron, PostIndexJob, PostSyncCollectJob, PostSyncScanCron } from './post';
 import {
@@ -16,7 +16,7 @@ export const jobs = [
   PostCompactJob,
   DocumentSyncCollectJob,
   DocumentIndexJob,
-  DocumentCompactJob,
+  DocumentGCJob,
   SubscriptionRenewalInitialJob,
   SubscriptionRenewalRetryJob,
   SubscriptionRenewalPlanChangeJob,
@@ -27,7 +27,7 @@ export const jobs = [
   ProcessBmoMentionJob,
 ];
 
-export const crons = [PostSyncScanCron, PostCompactScanCron, DocumentSyncScanCron, DocumentCompactScanCron, SubscriptionRenewalCron];
+export const crons = [PostSyncScanCron, PostCompactScanCron, DocumentSyncScanCron, DocumentGCScanCron, SubscriptionRenewalCron];
 
 export type Jobs = typeof jobs;
 export type JobName = Jobs[number]['name'];

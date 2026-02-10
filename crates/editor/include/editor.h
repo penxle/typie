@@ -81,16 +81,11 @@ int32_t editor_render_drag_image(
     DragImageResult* out_result
 );
 
-uint8_t* editor_get_snapshot(EditorHandle* editor, size_t* out_len);
-uint8_t* editor_get_version(EditorHandle* editor, size_t* out_len);
-uint8_t* editor_export_all_updates(EditorHandle* editor, size_t* out_len);
-int32_t editor_export_new_updates(
-    EditorHandle* editor,
-    uint8_t** out_updates,
-    size_t* out_updates_len,
-    uint8_t** out_version,
-    size_t* out_version_len
-);
+#define EDITOR_EXPORT_SNAPSHOT 0
+#define EDITOR_EXPORT_VERSION 1
+#define EDITOR_EXPORT_ALL_UPDATES 2
+#define EDITOR_EXPORT_UPDATES_FROM 3
+uint8_t* editor_export(EditorHandle* editor, int32_t mode, const uint8_t* version, size_t version_len, size_t* out_len);
 int32_t editor_import_updates(EditorHandle* editor, const uint8_t* updates, size_t len);
 int32_t editor_import_updates_batch(
     EditorHandle* editor,
@@ -98,7 +93,6 @@ int32_t editor_import_updates_batch(
     const size_t* updates_lens,
     size_t count
 );
-int32_t editor_commit_sync(EditorHandle* editor, const uint8_t* version, size_t version_len);
 char* editor_get_clipboard_data(EditorHandle* editor);
 
 char* editor_get_spellcheck_text(EditorHandle* editor);

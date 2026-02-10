@@ -1,5 +1,5 @@
 use crate::font::{add_font_base, add_font_chunk, set_fallback_fonts};
-use crate::model::{Doc, LayoutMode, Node, NodeId, ParagraphNode};
+use crate::model::{Doc, DocExportMode, LayoutMode, Node, NodeId, ParagraphNode};
 use crate::runtime::ai_feedback::RawAiFeedbackItem;
 use crate::runtime::spellcheck::RawSpellcheckError;
 use crate::runtime::text_replacement::RawTextReplacementRule;
@@ -945,52 +945,11 @@ pub extern "system" fn Java_co_typie_editortexture_EditorTexture_nativeGetDirect
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn editor_get_snapshot(editor: *mut EditorHandle, out_len: *mut usize) -> *mut u8 {
-    ffi!(
-        {
-            if editor.is_null() || out_len.is_null() {
-                return Err("Invalid parameters".into());
-            }
-
-            let editor = unsafe { &*(editor as *const EditorInner) };
-            let snapshot = editor
-                .runtime
-                .doc()
-                .snapshot()
-                .map_err(|e| format!("Failed to get snapshot: {e}"))?;
-
-            let len = snapshot.len();
-            let ptr = Box::into_raw(snapshot.into_boxed_slice()) as *mut u8;
-            unsafe { *out_len = len };
-            Ok(ptr)
-        },
-        std::ptr::null_mut()
-    )
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn editor_get_version(editor: *mut EditorHandle, out_len: *mut usize) -> *mut u8 {
-    ffi!(
-        {
-            if editor.is_null() || out_len.is_null() {
-                return Err("Invalid parameters".into());
-            }
-
-            let editor = unsafe { &*(editor as *const EditorInner) };
-            let version = editor.runtime.doc().loro_doc().oplog_vv().encode();
-
-            let len = version.len();
-            let ptr = Box::into_raw(version.into_boxed_slice()) as *mut u8;
-            unsafe { *out_len = len };
-            Ok(ptr)
-        },
-        std::ptr::null_mut()
-    )
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn editor_export_all_updates(
+pub extern "C" fn editor_export(
     editor: *mut EditorHandle,
+    mode: i32,
+    version: *const u8,
+    version_len: usize,
     out_len: *mut usize,
 ) -> *mut u8 {
     ffi!(
@@ -999,64 +958,32 @@ pub extern "C" fn editor_export_all_updates(
                 return Err("Invalid parameters".into());
             }
 
+            let export_mode = match mode {
+                0 => DocExportMode::Snapshot,
+                1 => DocExportMode::Version,
+                2 => DocExportMode::AllUpdates,
+                3 => {
+                    let ver = unsafe { slice_from_raw(version, version_len, "version")? };
+                    DocExportMode::UpdatesFrom {
+                        version: ver.to_vec(),
+                    }
+                }
+                _ => return Err(format!("Invalid export mode: {mode}")),
+            };
+
             let editor = unsafe { &*(editor as *const EditorInner) };
-            let updates = editor
+            let data = editor
                 .runtime
                 .doc()
-                .export_all_updates()
-                .map_err(|e| format!("Failed to export updates: {e}"))?;
+                .export(export_mode)
+                .map_err(|e| format!("Failed to export: {e}"))?;
 
-            let len = updates.len();
-            let ptr = Box::into_raw(updates.into_boxed_slice()) as *mut u8;
+            let len = data.len();
+            let ptr = Box::into_raw(data.into_boxed_slice()) as *mut u8;
             unsafe { *out_len = len };
             Ok(ptr)
         },
         std::ptr::null_mut()
-    )
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn editor_export_new_updates(
-    editor: *mut EditorHandle,
-    out_updates: *mut *mut u8,
-    out_updates_len: *mut usize,
-    out_version: *mut *mut u8,
-    out_version_len: *mut usize,
-) -> i32 {
-    ffi!(
-        {
-            if editor.is_null()
-                || out_updates.is_null()
-                || out_updates_len.is_null()
-                || out_version.is_null()
-                || out_version_len.is_null()
-            {
-                return Err("Invalid parameters".into());
-            }
-
-            let editor = unsafe { &*(editor as *const EditorInner) };
-            let (updates, version) = editor
-                .runtime
-                .export_new_updates()
-                .map_err(|e| format!("Failed to export new updates: {e}"))?;
-
-            let updates_len = updates.len();
-            let updates_ptr = Box::into_raw(updates.into_boxed_slice()) as *mut u8;
-
-            let version_bytes = version.encode();
-            let version_len = version_bytes.len();
-            let version_ptr = Box::into_raw(version_bytes.into_boxed_slice()) as *mut u8;
-
-            unsafe {
-                *out_updates = updates_ptr;
-                *out_updates_len = updates_len;
-                *out_version = version_ptr;
-                *out_version_len = version_len;
-            }
-
-            Ok(())
-        },
-        -1
     )
 }
 
@@ -1113,32 +1040,6 @@ pub extern "C" fn editor_import_updates_batch(
                 .runtime
                 .import_updates_batch(&batch)
                 .map_err(|e| format!("Failed to import updates batch: {e}"))?;
-
-            Ok(())
-        },
-        -1
-    )
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn editor_commit_sync(
-    editor: *mut EditorHandle,
-    version: *const u8,
-    version_len: usize,
-) -> i32 {
-    ffi!(
-        {
-            if editor.is_null() || version.is_null() {
-                return Err("Invalid parameters".into());
-            }
-
-            let editor = unsafe { &mut *(editor as *mut EditorInner) };
-            let version_data = unsafe { std::slice::from_raw_parts(version, version_len) };
-
-            let vv = loro::VersionVector::decode(version_data)
-                .map_err(|e| format!("Failed to decode version: {e}"))?;
-
-            editor.runtime.commit_sync(vv);
 
             Ok(())
         },

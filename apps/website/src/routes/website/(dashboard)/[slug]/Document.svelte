@@ -100,6 +100,7 @@
               documentType: type
               characterCount
               snapshot
+              version
               createdAt
               updatedAt
 
@@ -141,7 +142,10 @@
 
   const syncDocument = graphql(`
     mutation Document_SyncDocument_Mutation($input: SyncDocumentInput!) {
-      syncDocument(input: $input)
+      syncDocument(input: $input) {
+        type
+        data
+      }
     }
   `);
 
@@ -176,9 +180,10 @@
   const entity = $derived($query.entities.find((e) => e.slug === slug));
   const documentId = $derived(entity?.node.__typename === 'Document' ? entity.node.id : null);
   const title = $derived(entity?.node.__typename === 'Document' ? entity.node.title : '');
-  const snapshot = $derived(
+  const serverSnapshot = $derived(
     entity?.node.__typename === 'Document' && entity.node.snapshot ? Uint8Array.fromBase64(entity.node.snapshot) : undefined,
   );
+  const serverVersion = $derived(entity?.node.__typename === 'Document' ? entity.node.version : null);
   const assets = $derived(entity?.node.__typename === 'Document' ? entity.node.assets : undefined);
   const editor = new Editor();
   setEditor(editor);
@@ -243,10 +248,12 @@
     }
   });
 
+  const DISCONNECT_THRESHOLD = 3;
   const clientId = nanoid();
   let syncUpdateTimeout: ReturnType<typeof setTimeout> | null = null;
   let persistence: IndexeddbPersistence | null = null;
-  let syncStatus = $state<'syncing' | 'synced' | 'error'>('synced');
+  let connectionStatus = $state<'connecting' | 'connected' | 'disconnected'>('connecting');
+  let lastHeartbeatAt = $state(dayjs());
   let planUpgradeModalOpen = $state(false);
   let showFindReplace = $state(false);
   let clipboardData = $state<{ html: string; text: string }>();
@@ -337,11 +344,65 @@
     };
   });
 
+  async function handleSyncPayload(payload: { type: DocumentSyncType; data: string }) {
+    switch (payload.type) {
+      case DocumentSyncType.HEARTBEAT: {
+        lastHeartbeatAt = dayjs(payload.data);
+        connectionStatus = 'connected';
+        break;
+      }
+      case DocumentSyncType.UPDATE: {
+        editor.importUpdates(Uint8Array.fromBase64(payload.data));
+        break;
+      }
+      case DocumentSyncType.VECTOR: {
+        if (persistence) await persistence.saveCheckpoint(Uint8Array.fromBase64(payload.data));
+        break;
+      }
+    }
+  }
+
+  async function doSync(
+    input: { clientId: string; documentId: string; type: DocumentSyncType; data: string },
+    options?: { transport?: 'fetch' | 'sse' | 'ws' },
+  ) {
+    const results = await syncDocument(input, options);
+    for (const payload of results) {
+      await handleSyncPayload(payload);
+    }
+  }
+
   $effect(() => {
     const currentDocumentId = documentId;
     if (!currentDocumentId) return;
 
     persistence = new IndexeddbPersistence(currentDocumentId);
+
+    const handleOnline = () => {
+      const isFresh = dayjs().diff(lastHeartbeatAt, 'seconds') <= DISCONNECT_THRESHOLD;
+      if (isFresh) {
+        connectionStatus = 'connected';
+      } else {
+        connectionStatus = 'connecting';
+      }
+    };
+
+    const handleOffline = () => {
+      connectionStatus = 'disconnected';
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    if (!navigator.onLine) {
+      connectionStatus = 'disconnected';
+    }
+
+    const heartbeatInterval = setInterval(() => {
+      if (dayjs().diff(lastHeartbeatAt, 'seconds') > DISCONNECT_THRESHOLD) {
+        connectionStatus = 'disconnected';
+      }
+    }, 1000);
 
     let fullSyncInterval: ReturnType<typeof setInterval> | null = null;
     let forceSyncInterval: ReturnType<typeof setInterval> | null = null;
@@ -352,9 +413,14 @@
 
       const local = await persistence?.load();
       if (local) {
-        const updates = local.snapshot ? [local.snapshot, ...local.pendingUpdates] : local.pendingUpdates;
-        if (updates.length > 0) {
-          editor.importUpdatesBatch(updates);
+        editor.importUpdatesBatch([local.snapshot, ...local.updates]);
+      } else if (persistence) {
+        await persistence.clear();
+        const snapshot = editor.export({ type: 'snapshot' });
+        const version = editor.export({ type: 'version' });
+        if (snapshot && version && serverVersion) {
+          await persistence.saveSnapshot(snapshot, version);
+          await persistence.saveCheckpoint(Uint8Array.fromBase64(serverVersion));
         }
       }
 
@@ -368,14 +434,7 @@
           return;
         }
 
-        if (payload.type === DocumentSyncType.HEARTBEAT) {
-          syncStatus = 'synced';
-        } else if (payload.type === DocumentSyncType.UPDATE) {
-          editor.importUpdates(Uint8Array.fromBase64(payload.data));
-        } else if (payload.type === DocumentSyncType.VECTOR) {
-          const version = Editor.SyncVersion.decode(Uint8Array.fromBase64(payload.data));
-          editor.commitSync(version);
-        }
+        await handleSyncPayload(payload);
       });
     });
 
@@ -383,15 +442,17 @@
       unsubscribe?.();
       if (fullSyncInterval) clearInterval(fullSyncInterval);
       if (forceSyncInterval) clearInterval(forceSyncInterval);
+      clearInterval(heartbeatInterval);
       if (syncUpdateTimeout) {
         clearTimeout(syncUpdateTimeout);
         syncUpdateTimeout = null;
       }
-      if (currentDocumentId) {
-        const result = editor.exportNewUpdates();
-        if (result && result.updates.length > 0) {
-          const { updates } = result;
-          syncDocument({
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      if (currentDocumentId && persistence && persistence.checkpoint.length > 0) {
+        const updates = editor.export({ type: 'updates-from', version: persistence.checkpoint });
+        if (updates?.length) {
+          doSync({
             clientId,
             documentId: currentDocumentId,
             type: DocumentSyncType.UPDATE,
@@ -407,35 +468,30 @@
   async function fullSync() {
     if (!documentId) return;
 
-    const update = editor.exportAllUpdates();
-    if (!update) return;
-
-    const snapshot = editor.getSnapshot();
-    const version = editor.getVersion();
-
-    if (persistence && snapshot) {
-      await persistence.saveSnapshot(snapshot);
+    const snapshot = editor.export({ type: 'snapshot' });
+    const version = editor.export({ type: 'version' });
+    if (persistence && snapshot && version) {
+      await persistence.saveSnapshot(snapshot, version);
     }
 
-    await syncDocument({
-      clientId,
-      documentId,
-      type: DocumentSyncType.UPDATE,
-      data: update.toBase64(),
-    });
-
-    if (version) {
-      editor.commitSync(Editor.SyncVersion.decode(version));
+    const update = editor.export({ type: 'all-updates' });
+    if (update?.length) {
+      await doSync({
+        clientId,
+        documentId,
+        type: DocumentSyncType.UPDATE,
+        data: update.toBase64(),
+      });
     }
   }
 
   async function forceSync() {
     if (!documentId) return;
 
-    const version = editor.getVersion();
+    const version = editor.export({ type: 'version' });
     if (!version) return;
 
-    await syncDocument(
+    await doSync(
       {
         clientId,
         documentId,
@@ -449,13 +505,10 @@
   function handleDocChanged() {
     if (!documentId) return;
 
-    syncStatus = 'syncing';
-
-    const result = editor.exportNewUpdates();
-    if (result) {
-      const { updates } = result;
-      if (updates.length > 0 && persistence) {
-        persistence.storeUpdate(updates);
+    if (persistence && persistence.version.length > 0) {
+      const update = editor.export({ type: 'updates-from', version: persistence.version });
+      if (update?.length) {
+        persistence.saveUpdate(update);
       }
     }
 
@@ -466,27 +519,21 @@
     syncUpdateTimeout = setTimeout(async () => {
       if (!documentId) return;
 
-      const res = editor.exportNewUpdates();
+      const update =
+        persistence && persistence.checkpoint.length > 0
+          ? editor.export({ type: 'updates-from', version: persistence.checkpoint })
+          : undefined;
 
-      if (res && res.updates.length > 0) {
-        const { updates, version } = res;
-        try {
-          await syncDocument(
-            {
-              clientId,
-              documentId,
-              type: DocumentSyncType.UPDATE,
-              data: updates.toBase64(),
-            },
-            { transport: 'ws' },
-          );
-          editor.commitSync(version);
-          syncStatus = 'synced';
-        } catch {
-          syncStatus = 'error';
-        }
-      } else {
-        syncStatus = 'synced';
+      if (update?.length) {
+        await doSync(
+          {
+            clientId,
+            documentId,
+            type: DocumentSyncType.UPDATE,
+            data: update.toBase64(),
+          },
+          { transport: 'ws' },
+        );
       }
     }, 1000);
   }
@@ -629,17 +676,17 @@
 
           <div class={center({ size: '24px' })}>
             <div
-              style:background-color={match(syncStatus)
-                .with('syncing', () => '#eab308')
-                .with('synced', () => '#22c55e')
-                .with('error', () => '#ef4444')
+              style:background-color={match(connectionStatus)
+                .with('connecting', () => '#eab308')
+                .with('connected', () => '#22c55e')
+                .with('disconnected', () => '#ef4444')
                 .exhaustive()}
               class={css({ size: '8px', borderRadius: 'full' })}
               use:tooltip={{
-                message: match(syncStatus)
-                  .with('syncing', () => '저장 중...')
-                  .with('synced', () => '저장됨')
-                  .with('error', () => '저장 실패')
+                message: match(connectionStatus)
+                  .with('connecting', () => '서버 연결 중...')
+                  .with('connected', () => '실시간 저장 중')
+                  .with('disconnected', () => '서버 연결 끊김')
                   .exhaustive(),
                 placement: 'left',
                 offset: 12,
@@ -736,7 +783,7 @@
               onEditorReady={handleEditorReady}
               onExitedDocumentStart={() => subtitleEl?.focus()}
               onSelectionChanged={handleSelectionChanged}
-              {snapshot}
+              snapshot={serverSnapshot}
               unit="cm"
             >
               {#snippet header()}

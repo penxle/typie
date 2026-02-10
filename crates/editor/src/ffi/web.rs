@@ -1,5 +1,5 @@
 use crate::font::{add_font_base, add_font_chunk, set_fallback_fonts};
-use crate::model::{Doc, LayoutMode, Node, NodeId, ParagraphNode};
+use crate::model::{Doc, DocExportMode, LayoutMode, Node, NodeId, ParagraphNode};
 use crate::runtime::{
     Message, RawAiFeedbackItem, RawSpellcheckError, RawTextReplacementRule, Runtime, State,
 };
@@ -13,40 +13,6 @@ use wasm_bindgen::prelude::*;
 fn to_js_value<T: Serialize>(value: &T) -> JsValue {
     let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
     value.serialize(&serializer).unwrap()
-}
-
-#[wasm_bindgen]
-#[derive(Clone)]
-pub struct SyncVersion {
-    inner: loro::VersionVector,
-}
-
-#[wasm_bindgen]
-impl SyncVersion {
-    #[wasm_bindgen(constructor)]
-    pub fn new() -> Self {
-        Self {
-            inner: loro::VersionVector::new(),
-        }
-    }
-
-    #[wasm_bindgen(js_name = encode)]
-    pub fn encode(&self) -> Vec<u8> {
-        self.inner.encode()
-    }
-
-    #[wasm_bindgen(js_name = decode)]
-    pub fn decode(data: Vec<u8>) -> Self {
-        Self {
-            inner: loro::VersionVector::decode(&data).unwrap(),
-        }
-    }
-}
-
-#[wasm_bindgen(getter_with_clone)]
-pub struct ExportedUpdates {
-    pub updates: Vec<u8>,
-    pub version: SyncVersion,
 }
 
 #[wasm_bindgen(js_name = getMemory)]
@@ -252,25 +218,9 @@ impl Editor {
         })
     }
 
-    #[wasm_bindgen(js_name = getSnapshot)]
-    pub fn get_snapshot(&self) -> Vec<u8> {
-        self.runtime.doc().snapshot().unwrap()
-    }
-
-    #[wasm_bindgen(js_name = getVersion)]
-    pub fn get_version(&self) -> Vec<u8> {
-        self.runtime.doc().loro_doc().oplog_vv().encode()
-    }
-
-    #[wasm_bindgen(js_name = exportAllUpdates)]
-    pub fn export_all_updates(&self) -> Vec<u8> {
-        self.runtime.doc().export_all_updates().unwrap()
-    }
-
-    #[wasm_bindgen(js_name = exportUpdatesFrom)]
-    pub fn export_updates_from(&self, version: Vec<u8>) -> Vec<u8> {
-        let vv = loro::VersionVector::decode(&version).unwrap();
-        self.runtime.doc().export_updates_from(&vv).unwrap()
+    #[wasm_bindgen(js_name = export)]
+    pub fn export(&self, mode: DocExportMode) -> Vec<u8> {
+        self.runtime.doc().export(mode).unwrap()
     }
 
     #[wasm_bindgen(js_name = importUpdates)]
@@ -291,24 +241,6 @@ impl Editor {
             .map(|arr| arr.to_vec())
             .collect();
         self.runtime.import_updates_batch(&batch).unwrap()
-    }
-
-    #[wasm_bindgen(js_name = exportNewUpdates)]
-    pub fn export_new_updates(&self) -> Result<ExportedUpdates, JsValue> {
-        let (updates, version) = self
-            .runtime
-            .export_new_updates()
-            .map_err(|e| e.to_string())?;
-
-        Ok(ExportedUpdates {
-            updates,
-            version: SyncVersion { inner: version },
-        })
-    }
-
-    #[wasm_bindgen(js_name = commitSync)]
-    pub fn commit_sync(&mut self, version: SyncVersion) {
-        self.runtime.commit_sync(version.inner);
     }
 
     #[wasm_bindgen(js_name = checkout)]

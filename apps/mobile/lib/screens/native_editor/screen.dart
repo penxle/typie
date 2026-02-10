@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:auto_route/auto_route.dart';
@@ -27,6 +28,7 @@ import 'package:typie/screens/native_editor/state/controller.dart';
 import 'package:typie/screens/native_editor/state/fonts.dart';
 import 'package:typie/screens/native_editor/state/theme.dart';
 import 'package:typie/screens/native_editor/sync/manager.dart';
+import 'package:typie/screens/native_editor/sync/persistence.dart';
 import 'package:typie/screens/native_editor/sync/selection.dart';
 import 'package:typie/screens/native_editor/sync/title.dart';
 import 'package:typie/screens/native_editor/view/editor.dart';
@@ -239,8 +241,35 @@ class _Content extends HookWidget {
         return null;
       }
 
-      syncManager.value = SyncManager(documentId: documentId, editor: currentEditor, client: client);
-      unawaited(syncManager.value!.start());
+      final persistence = LocalPersistence(documentId);
+
+      syncManager.value = SyncManager(
+        documentId: documentId,
+        editor: currentEditor,
+        client: client,
+        persistence: persistence,
+      );
+
+      Future<void> init() async {
+        final local = await persistence.load();
+
+        if (local != null && local.snapshot != null) {
+          currentEditor.importUpdatesBatch([local.snapshot!, ...local.updates]);
+        } else {
+          await persistence.clear();
+          final snap = currentEditor.export(DocExportMode.snapshot);
+          final version = currentEditor.export(DocExportMode.version);
+          final serverVersion = document?.version.value ?? '';
+          if (snap != null && version != null && serverVersion.isNotEmpty) {
+            await persistence.saveSnapshot(snap, Uint8List.fromList(version));
+            await persistence.saveCheckpoint(Uint8List.fromList(base64Decode(serverVersion)));
+          }
+        }
+
+        await syncManager.value!.start();
+      }
+
+      unawaited(init());
 
       return null;
     }, [editor.value, document?.id]);

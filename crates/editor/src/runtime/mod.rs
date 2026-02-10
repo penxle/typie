@@ -107,7 +107,6 @@ pub struct Runtime {
     redo_selections: Vec<Selection>,
 
     cached_plain_text: Option<String>,
-    last_synced_version: loro::VersionVector,
 
     auto_surround_enabled: bool,
     spellcheck_errors: Vec<SpellcheckError>,
@@ -126,7 +125,6 @@ impl Runtime {
         let mut undo_manager = UndoManager::new(&state.doc.loro_doc());
         undo_manager.set_merge_interval(1000);
 
-        let last_synced_version = state.doc.loro_doc().state_vv();
         Self {
             viewport_width: width,
             viewport_height: 0.0,
@@ -170,7 +168,6 @@ impl Runtime {
             undo_selections: Vec::new(),
             redo_selections: Vec::new(),
             cached_plain_text: None,
-            last_synced_version,
             auto_surround_enabled: true,
             spellcheck_errors: Vec::new(),
             active_spellcheck_error_id: None,
@@ -252,7 +249,6 @@ impl Runtime {
 
         if old_frontiers != new_frontiers {
             self.state.frontiers = new_frontiers;
-            self.last_synced_version = self.state.doc.loro_doc().state_vv();
             self.handle_external_doc_change();
         }
         Ok(())
@@ -265,23 +261,13 @@ impl Runtime {
 
         if old_frontiers != new_frontiers {
             self.state.frontiers = new_frontiers;
-            self.last_synced_version = self.state.doc.loro_doc().state_vv();
             self.handle_external_doc_change();
         }
         Ok(())
     }
 
-    pub fn export_new_updates(&self) -> Result<(Vec<u8>, loro::VersionVector)> {
-        let new_version = self.state.doc.loro_doc().state_vv();
-        let updates = self
-            .state
-            .doc
-            .export_updates_from(&self.last_synced_version)?;
-        Ok((updates, new_version))
-    }
-
-    pub fn commit_sync(&mut self, new_version: loro::VersionVector) {
-        self.last_synced_version = new_version;
+    pub fn export(&self, mode: DocExportMode) -> Result<Vec<u8>> {
+        self.state.doc.export(mode)
     }
 
     pub fn checkout(&mut self, version: &[u8]) -> Result<()> {

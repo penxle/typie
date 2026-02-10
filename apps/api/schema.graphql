@@ -173,6 +173,7 @@ type Document implements IDocument {
   title: String!
   type: DocumentType!
   updatedAt: DateTime!
+  version: Binary!
   versionMetas: [DocumentVersionMeta!]!
   versions(before: DateTime, first: Int! = 20): [DocumentVersion!]!
   view: DocumentView!
@@ -712,7 +713,7 @@ type Mutation {
   subscribeOrChangePlanWithInAppPurchase(input: SubscribeOrChangePlanWithInAppPurchaseInput!): Subscription_!
   subscribePlanWithBillingKey(input: SubscribePlanWithBillingKeyInput!): Subscription_!
   subscribePlanWithTrial: Subscription_!
-  syncDocument(input: SyncDocumentInput!): Boolean!
+  syncDocument(input: SyncDocumentInput!): [SyncDocumentPayload!]!
   syncPost(input: SyncPostInput!): Boolean!
   unfurlEmbed(input: UnfurlEmbedInput!): Embed!
   unlockDocumentView(input: UnlockDocumentViewInput!): DocumentView!
@@ -1184,6 +1185,11 @@ input SyncDocumentInput {
   clientId: String!
   data: String!
   documentId: ID!
+  type: DocumentSyncType!
+}
+
+type SyncDocumentPayload {
+  data: String!
   type: DocumentSyncType!
 }
 

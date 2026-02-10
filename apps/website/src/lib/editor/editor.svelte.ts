@@ -1,11 +1,11 @@
-import { Application, getMemory, SyncVersion } from '@typie/editor';
+import { Application, getMemory } from '@typie/editor';
 import icuPostcardUrl from '@typie/editor/pkg/icu_data.postcard?url';
 import { nanoid } from 'nanoid';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { PAGE_GAP } from './constants';
 import { ensureAllFontBases, ensureRequiredFallbackFont, ensureRequiredFont } from './fonts';
 import { calculateImageDisplaySize, calculateRelativePosition, findNearestPageCoordinate, getPageElement, idleCallback } from './utils';
-import type { Editor as WasmEditor, ExportedUpdates, Modifier, PointerButton, TableOverlay } from '@typie/editor';
+import type { DocExportMode, Editor as WasmEditor, Modifier, PointerButton, TableOverlay } from '@typie/editor';
 import type { ScrollViewport } from '@typie/ui/utils';
 import type { ThemeColors } from './theme';
 import type {
@@ -88,9 +88,6 @@ export type EditorOptions = {
 };
 
 export class Editor {
-  static get SyncVersion() {
-    return SyncVersion;
-  }
   #application: Application | null = null;
   #wasmEditor: WasmEditor | null = null;
   #running = false;
@@ -536,28 +533,8 @@ export class Editor {
     return this.#wasmEditor?.renderPage(pageIdx);
   }
 
-  getSnapshot(): Uint8Array | undefined {
-    return this.#wasmEditor?.getSnapshot();
-  }
-
-  getVersion(): Uint8Array | undefined {
-    return this.#wasmEditor?.getVersion();
-  }
-
-  exportAllUpdates(): Uint8Array | undefined {
-    return this.#wasmEditor?.exportAllUpdates();
-  }
-
-  exportUpdatesFrom(version: Uint8Array): Uint8Array | undefined {
-    return this.#wasmEditor?.exportUpdatesFrom(version);
-  }
-
-  exportNewUpdates(): ExportedUpdates | undefined {
-    return this.#wasmEditor?.exportNewUpdates();
-  }
-
-  commitSync(version: SyncVersion): void {
-    this.#wasmEditor?.commitSync(version);
+  export(mode: DocExportMode): Uint8Array | undefined {
+    return this.#wasmEditor?.export(mode);
   }
 
   importUpdates(updates: Uint8Array): void {

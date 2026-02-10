@@ -3,28 +3,63 @@ import 'dart:typed_data';
 import 'package:hive_ce/hive.dart';
 import 'package:path_provider/path_provider.dart';
 
-const _boxName = 'document_sync';
+const _boxName = 'documents';
 
 class _StoredDocument {
-  _StoredDocument({required this.id, required this.snapshot, required this.pendingUpdates, required this.updatedAt});
+  _StoredDocument({
+    required this.id,
+    required this.snapshot,
+    required this.updates,
+    required this.version,
+    required this.checkpoint,
+    required this.updatedAt,
+  });
 
   final String id;
   final Uint8List? snapshot;
-  final List<Uint8List> pendingUpdates;
+  final List<Uint8List> updates;
+  final Uint8List version;
+  final Uint8List checkpoint;
   final int updatedAt;
 
+  _StoredDocument withUpdatedAt({
+    Uint8List? snapshot,
+    List<Uint8List>? updates,
+    Uint8List? version,
+    Uint8List? checkpoint,
+  }) {
+    return _StoredDocument(
+      id: id,
+      snapshot: snapshot ?? this.snapshot,
+      updates: updates ?? this.updates,
+      version: version ?? this.version,
+      checkpoint: checkpoint ?? this.checkpoint,
+      updatedAt: DateTime.now().millisecondsSinceEpoch,
+    );
+  }
+
   Map<String, dynamic> toMap() {
-    return {'id': id, 'snapshot': snapshot, 'pendingUpdates': pendingUpdates, 'updatedAt': updatedAt};
+    return {
+      'id': id,
+      'snapshot': snapshot,
+      'updates': updates,
+      'version': version,
+      'checkpoint': checkpoint,
+      'updatedAt': updatedAt,
+    };
   }
 
   static _StoredDocument? fromMap(Map<dynamic, dynamic>? map) {
     if (map == null) {
       return null;
     }
+
     return _StoredDocument(
       id: map['id'] as String,
       snapshot: map['snapshot'] as Uint8List?,
-      pendingUpdates: (map['pendingUpdates'] as List?)?.cast<Uint8List>() ?? [],
+      updates: (map['updates'] as List?)?.cast<Uint8List>() ?? [],
+      version: map['version'] as Uint8List? ?? Uint8List(0),
+      checkpoint: map['checkpoint'] as Uint8List? ?? Uint8List(0),
       updatedAt: map['updatedAt'] as int,
     );
   }
@@ -36,6 +71,11 @@ class LocalPersistence {
   final String documentId;
   Box<dynamic>? _box;
   bool _disposed = false;
+  Uint8List _version = Uint8List(0);
+  Uint8List _checkpoint = Uint8List(0);
+
+  Uint8List get version => _version;
+  Uint8List get checkpoint => _checkpoint;
 
   Future<void> _ensureBox() async {
     if (_box != null) {
@@ -49,7 +89,7 @@ class LocalPersistence {
     _box = await Hive.openBox(_boxName);
   }
 
-  Future<({Uint8List? snapshot, List<Uint8List> pendingUpdates})?> load() async {
+  Future<({Uint8List? snapshot, List<Uint8List> updates})?> load() async {
     if (_disposed) {
       return null;
     }
@@ -61,10 +101,14 @@ class LocalPersistence {
     if (doc == null) {
       return null;
     }
-    return (snapshot: doc.snapshot, pendingUpdates: doc.pendingUpdates);
+
+    _version = doc.version;
+    _checkpoint = doc.checkpoint;
+
+    return (snapshot: doc.snapshot, updates: doc.updates);
   }
 
-  Future<void> storeUpdate(Uint8List update) async {
+  Future<void> saveUpdate(Uint8List update) async {
     if (_disposed) {
       return;
     }
@@ -72,29 +116,47 @@ class LocalPersistence {
     await _ensureBox();
     final existing = _StoredDocument.fromMap(_box!.get(documentId) as Map<dynamic, dynamic>?);
 
-    final doc = _StoredDocument(
-      id: documentId,
-      snapshot: existing?.snapshot,
-      pendingUpdates: [...(existing?.pendingUpdates ?? []), update],
-      updatedAt: DateTime.now().millisecondsSinceEpoch,
-    );
-
-    await _box!.put(documentId, doc.toMap());
+    if (existing != null) {
+      await _put(existing.withUpdatedAt(updates: [...existing.updates, update]));
+    }
   }
 
-  Future<void> saveSnapshot(Uint8List snapshot) async {
+  Future<void> saveSnapshot(Uint8List snapshot, Uint8List version) async {
     if (_disposed) {
       return;
     }
 
     await _ensureBox();
-    final doc = _StoredDocument(
-      id: documentId,
-      snapshot: snapshot,
-      pendingUpdates: [],
-      updatedAt: DateTime.now().millisecondsSinceEpoch,
+    await _put(
+      _StoredDocument(
+        id: documentId,
+        snapshot: snapshot,
+        updates: [],
+        version: version,
+        checkpoint: _checkpoint,
+        updatedAt: DateTime.now().millisecondsSinceEpoch,
+      ),
     );
+    _version = version;
+  }
 
+  Future<void> saveCheckpoint(Uint8List checkpoint) async {
+    _checkpoint = checkpoint;
+
+    if (_disposed) {
+      return;
+    }
+
+    await _ensureBox();
+    final existing = _StoredDocument.fromMap(_box!.get(documentId) as Map<dynamic, dynamic>?);
+    if (existing == null) {
+      return;
+    }
+
+    await _put(existing.withUpdatedAt(checkpoint: checkpoint));
+  }
+
+  Future<void> _put(_StoredDocument doc) async {
     await _box!.put(documentId, doc.toMap());
   }
 
@@ -105,6 +167,8 @@ class LocalPersistence {
 
     await _ensureBox();
     await _box!.delete(documentId);
+    _version = Uint8List(0);
+    _checkpoint = Uint8List(0);
   }
 
   void dispose() {

@@ -239,6 +239,13 @@ final class NativeEditorCharacterCounts {
   final int selectionWithoutWhitespaceAndPunctuation;
 }
 
+abstract class DocExportMode {
+  static const snapshot = 0;
+  static const version = 1;
+  static const allUpdates = 2;
+  static const updatesFrom = 3;
+}
+
 final class NativeEditor {
   NativeEditor._(this._handle);
 
@@ -313,126 +320,47 @@ final class NativeEditor {
 
   Pointer<EditorHandle> get handle => _handle;
 
-  Uint8List? getSnapshot() {
+  Uint8List? export(int mode, [Uint8List? version]) {
     _checkDisposed();
 
-    final outLen = calloc<Size>();
-    try {
-      final ptr = _bindings.editor_get_snapshot(_handle, outLen);
-      if (ptr == nullptr) {
-        return null;
-      }
-
-      final len = outLen.value;
-      final data = Uint8List.fromList(ptr.asTypedList(len));
-      _bindings.editor_free(ptr, len, len);
-      return data;
-    } finally {
-      calloc.free(outLen);
+    final Pointer<Uint8> versionPtr;
+    final int versionLen;
+    if (version != null) {
+      final allocated = _allocNative(version);
+      versionPtr = allocated.$1;
+      versionLen = allocated.$2;
+    } else {
+      versionPtr = nullptr;
+      versionLen = 0;
     }
-  }
 
-  Uint8List? getVersion() {
-    _checkDisposed();
-
-    final outLen = calloc<Size>();
-    try {
-      final ptr = _bindings.editor_get_version(_handle, outLen);
-      if (ptr == nullptr) {
-        return null;
+    return _extractBytes((outLen) {
+      final ptr = _bindings.editor_export(_handle, mode, versionPtr, versionLen, outLen);
+      if (version != null) {
+        _freeNative(versionPtr, versionLen);
       }
-
-      final len = outLen.value;
-      final data = Uint8List.fromList(ptr.asTypedList(len));
-      _bindings.editor_free(ptr, len, len);
-      return data;
-    } finally {
-      calloc.free(outLen);
-    }
-  }
-
-  Uint8List? exportAllUpdates() {
-    _checkDisposed();
-
-    final outLen = calloc<Size>();
-    try {
-      final ptr = _bindings.editor_export_all_updates(_handle, outLen);
-      if (ptr == nullptr) {
-        return null;
-      }
-
-      final len = outLen.value;
-      final data = Uint8List.fromList(ptr.asTypedList(len));
-      _bindings.editor_free(ptr, len, len);
-      return data;
-    } finally {
-      calloc.free(outLen);
-    }
-  }
-
-  ({Uint8List updates, Uint8List version})? exportNewUpdates() {
-    _checkDisposed();
-
-    final outUpdates = calloc<Pointer<Uint8>>();
-    final outUpdatesLen = calloc<Size>();
-    final outVersion = calloc<Pointer<Uint8>>();
-    final outVersionLen = calloc<Size>();
-
-    try {
-      final result = _bindings.editor_export_new_updates(_handle, outUpdates, outUpdatesLen, outVersion, outVersionLen);
-
-      if (result != 0) {
-        return null;
-      }
-
-      final updatesPtr = outUpdates.value;
-      final updatesLen = outUpdatesLen.value;
-      final versionPtr = outVersion.value;
-      final versionLen = outVersionLen.value;
-
-      final updates = Uint8List.fromList(updatesPtr.asTypedList(updatesLen));
-      final version = Uint8List.fromList(versionPtr.asTypedList(versionLen));
-
-      _bindings
-        ..editor_free(updatesPtr, updatesLen, updatesLen)
-        ..editor_free(versionPtr, versionLen, versionLen);
-
-      return (updates: updates, version: version);
-    } finally {
-      calloc
-        ..free(outUpdates)
-        ..free(outUpdatesLen)
-        ..free(outVersion)
-        ..free(outVersionLen);
-    }
+      return ptr;
+    });
   }
 
   void importUpdates(Uint8List updates) {
     _checkDisposed();
-
-    final ptr = _bindings.editor_alloc(updates.length);
-    ptr.asTypedList(updates.length).setAll(0, updates);
-
-    final result = _bindings.editor_import_updates(_handle, ptr, updates.length);
-    _bindings.editor_free(ptr, updates.length, updates.length);
-
-    if (result != 0) {
-      throw EditorException(_getLastError() ?? 'Failed to import updates');
-    }
+    _withNativeBytes(updates, (ptr, len) {
+      final result = _bindings.editor_import_updates(_handle, ptr, len);
+      if (result != 0) {
+        throw EditorException(_getLastError() ?? 'Failed to import updates');
+      }
+    });
   }
 
   void insertTemplateFragment(Uint8List snapshot) {
     _checkDisposed();
-
-    final ptr = _bindings.editor_alloc(snapshot.length);
-    ptr.asTypedList(snapshot.length).setAll(0, snapshot);
-
-    final result = _bindings.editor_insert_template_fragment(_handle, ptr, snapshot.length);
-    _bindings.editor_free(ptr, snapshot.length, snapshot.length);
-
-    if (result != 0) {
-      throw EditorException(_getLastError() ?? 'Failed to insert template fragment');
-    }
+    _withNativeBytes(snapshot, (ptr, len) {
+      final result = _bindings.editor_insert_template_fragment(_handle, ptr, len);
+      if (result != 0) {
+        throw EditorException(_getLastError() ?? 'Failed to insert template fragment');
+      }
+    });
   }
 
   void importUpdatesBatch(List<Uint8List> updatesBatch) {
@@ -448,17 +376,15 @@ final class NativeEditor {
 
     try {
       for (var i = 0; i < count; i++) {
-        final update = updatesBatch[i];
-        final ptr = _bindings.editor_alloc(update.length);
-        ptr.asTypedList(update.length).setAll(0, update);
+        final (ptr, len) = _allocNative(updatesBatch[i]);
         ptrsArray[i] = ptr;
-        lensArray[i] = update.length;
+        lensArray[i] = len;
       }
 
       final result = _bindings.editor_import_updates_batch(_handle, ptrsArray, lensArray, count);
 
       for (var i = 0; i < count; i++) {
-        _bindings.editor_free(ptrsArray[i], lensArray[i], lensArray[i]);
+        _freeNative(ptrsArray[i], lensArray[i]);
       }
 
       if (result != 0) {
@@ -468,20 +394,6 @@ final class NativeEditor {
       calloc
         ..free(ptrsArray)
         ..free(lensArray);
-    }
-  }
-
-  void commitSync(Uint8List version) {
-    _checkDisposed();
-
-    final ptr = _bindings.editor_alloc(version.length);
-    ptr.asTypedList(version.length).setAll(0, version);
-
-    final result = _bindings.editor_commit_sync(_handle, ptr, version.length);
-    _bindings.editor_free(ptr, version.length, version.length);
-
-    if (result != 0) {
-      throw EditorException(_getLastError() ?? 'Failed to commit sync');
     }
   }
 
@@ -705,6 +617,44 @@ final class NativeEditor {
         visiblePages.length * sizeOf<Size>(),
       );
       calloc.free(resultPtr);
+    }
+  }
+
+  (Pointer<Uint8>, int) _allocNative(Uint8List data) {
+    final ptr = _bindings.editor_alloc(data.length);
+    ptr.asTypedList(data.length).setAll(0, data);
+    return (ptr, data.length);
+  }
+
+  void _freeNative(Pointer<Uint8> ptr, int len) {
+    _bindings.editor_free(ptr, len, len);
+  }
+
+  Uint8List? _extractBytes(Pointer<Uint8> Function(Pointer<Size> outLen) fn) {
+    _checkDisposed();
+
+    final outLen = calloc<Size>();
+    try {
+      final ptr = fn(outLen);
+      if (ptr == nullptr) {
+        return null;
+      }
+
+      final len = outLen.value;
+      final data = Uint8List.fromList(ptr.asTypedList(len));
+      _freeNative(ptr, len);
+      return data;
+    } finally {
+      calloc.free(outLen);
+    }
+  }
+
+  void _withNativeBytes(Uint8List data, void Function(Pointer<Uint8> ptr, int len) fn) {
+    final (ptr, len) = _allocNative(data);
+    try {
+      fn(ptr, len);
+    } finally {
+      _freeNative(ptr, len);
     }
   }
 
