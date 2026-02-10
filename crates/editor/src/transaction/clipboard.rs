@@ -85,7 +85,7 @@ impl Transaction {
             self.set_selection(selection);
         }
 
-        if let Some(text) = text {
+        if let Some(text) = text.filter(|t| !t.is_empty()) {
             if let Some(range) = result.as_range_selection() {
                 let (from, to) = range.as_sorted(self.doc())?;
                 self.push_effect(Effect::HtmlPasted { text, from, to });
