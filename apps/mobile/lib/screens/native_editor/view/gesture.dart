@@ -60,12 +60,13 @@ class GestureController {
   void startAutoScroll({
     required ValueNotifier<Offset?> handleDragPosition,
     required ValueNotifier<Offset?> longPressPosition,
+    required ValueNotifier<Offset?> dropPosition,
   }) {
     if (_autoScrollTimer != null) {
       return;
     }
     _autoScrollTimer = Timer.periodic(const Duration(milliseconds: 16), (_) {
-      final activePosition = handleDragPosition.value ?? longPressPosition.value;
+      final activePosition = dropPosition.value ?? handleDragPosition.value ?? longPressPosition.value;
       var scrolledY = activePosition?.dy ?? 0;
       var scrolledX = activePosition?.dx ?? 0;
 
@@ -132,6 +133,11 @@ class GestureController {
         }
         _lastDispatchedPosition = currentPosition;
 
+        if (dropPosition.value != null) {
+          editor.dispatch({'type': 'dragOver', 'pageIdx': pageIdx, 'x': pointerX, 'y': localY});
+          return;
+        }
+
         final anchorHandle = dragAnchorHandle;
         if (draggingHandleType != null && anchorHandle != null) {
           editor.dispatch({
@@ -174,6 +180,7 @@ class GestureController {
     required double viewHeight,
     required ValueNotifier<Offset?> handleDragPosition,
     required ValueNotifier<Offset?> longPressPosition,
+    required ValueNotifier<Offset?> dropPosition,
   }) {
     _autoScrollViewSize = Size(viewWidth, viewHeight);
 
@@ -198,7 +205,11 @@ class GestureController {
     }
 
     if (_verticalDirection != 0 || _horizontalDirection != 0) {
-      startAutoScroll(handleDragPosition: handleDragPosition, longPressPosition: longPressPosition);
+      startAutoScroll(
+        handleDragPosition: handleDragPosition,
+        longPressPosition: longPressPosition,
+        dropPosition: dropPosition,
+      );
     } else {
       stopAutoScroll();
     }

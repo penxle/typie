@@ -342,6 +342,7 @@ class EditorView extends HookWidget {
     final state = useListenable(controller);
     final currentLayout = state.state.layout;
     final cursor = state.state.cursor;
+    final isDropping = useValueListenable(dndController.isDropping);
 
     useEffect(
       () {
@@ -380,6 +381,7 @@ class EditorView extends HookWidget {
           (cursor.show || cursor.scrollToCursor) &&
           currentLayout != null &&
           !isLongPressing.value &&
+          !isDropping &&
           state.state.isFocused;
 
       if (shouldScroll) {

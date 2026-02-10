@@ -72,6 +72,7 @@ class PageList extends HookWidget {
 
     final longPressPosition = scope.longPressPosition;
     final handleDragPosition = scope.handleDragPosition;
+    final dropPosition = useValueNotifier<Offset?>(null);
 
     final gesture = useMemoized(
       () => GestureController(
@@ -206,6 +207,7 @@ class PageList extends HookWidget {
             viewHeight: viewHeight,
             handleDragPosition: handleDragPosition,
             longPressPosition: longPressPosition,
+            dropPosition: dropPosition,
           );
         }
 
@@ -333,6 +335,7 @@ class PageList extends HookWidget {
                                 viewHeight: viewHeight,
                                 handleDragPosition: handleDragPosition,
                                 longPressPosition: longPressPosition,
+                                dropPosition: dropPosition,
                               );
                             }
                             ..onLongPressEnd = (details) {
@@ -618,26 +621,44 @@ class PageList extends HookWidget {
             final position = event.position.local;
             final (pIdx, localY) = getPageAtPosition(position.dy);
 
-            if (pIdx < 0) {
-              return DropOperation.none;
-            }
-
             final pointerX = gesture.getPointerX(position.dx);
 
+            dropPosition.value = position;
+            gesture.handleAutoScroll(
+              y: position.dy,
+              x: position.dx,
+              viewWidth: viewWidth,
+              viewHeight: viewHeight,
+              handleDragPosition: handleDragPosition,
+              longPressPosition: longPressPosition,
+              dropPosition: dropPosition,
+            );
+
             scope.dndController.handleDragOver(pIdx, pointerX, localY);
+
+            final localData = item.localData;
+            if (localData is Map && localData['isInternal'] == true) {
+              return DropOperation.move;
+            }
             return DropOperation.copy;
           },
           onDropEnter: (event) {
             scope.dndController.handleDragEnter();
           },
           onDropLeave: (event) {
+            dropPosition.value = null;
+            gesture.stopAutoScroll();
             scope.dndController.handleDragLeave();
           },
           onPerformDrop: (event) async {
+            dropPosition.value = null;
+            gesture.stopAutoScroll();
+
             final position = event.position.local;
             final (pageIdx, localY) = getPageAtPosition(position.dy);
 
             if (pageIdx < 0) {
+              scope.dndController.handleDragEnd();
               return;
             }
 

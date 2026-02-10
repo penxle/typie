@@ -121,16 +121,24 @@ class DndController {
   }
 
   void handleDragEnter() {
+    isDropping.value = true;
     editor.dispatch({'type': 'dragEnter'});
   }
 
   void handleDragLeave() {
+    isDropping.value = false;
     editor.dispatch({'type': 'dragLeave'});
   }
 
   void handleDragOver(int pageIdx, double x, double y) {
+    if (pageIdx < 0) {
+      editor.dispatch({'type': 'dragLeave'});
+      return;
+    }
     editor.dispatch({'type': 'dragOver', 'pageIdx': pageIdx, 'x': x, 'y': y});
   }
+
+  final ValueNotifier<bool> isDropping = ValueNotifier(false);
 
   Future<void> handleDrop({
     required int pageIdx,
@@ -204,6 +212,7 @@ class DndController {
   }
 
   void _handleDragEnd() {
+    isDropping.value = false;
     editor.dispatch({'type': 'dragEnd'});
   }
 }
