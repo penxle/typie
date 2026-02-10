@@ -143,7 +143,7 @@ impl Runtime {
     }
 
     pub(crate) fn handle_delete_node(&mut self, node_id: String) -> Vec<Effect> {
-        use crate::model::{Node, NodeId};
+        use crate::model::NodeId;
 
         let Some(node_id) = NodeId::from_string(&node_id) else {
             return vec![];
@@ -152,12 +152,7 @@ impl Runtime {
         let is_external = self
             .doc()
             .node(node_id)
-            .map(|n| {
-                matches!(
-                    n.node(),
-                    Node::Image(_) | Node::File(_) | Node::Embed(_) | Node::Archived(_)
-                )
-            })
+            .map(|n| n.node().is_external(self.doc().schema()))
             .unwrap_or(false);
 
         self.transact(move |tr| {

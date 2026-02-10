@@ -1,6 +1,7 @@
 use crate::layout::{Layout, LayoutContext, LayoutNode};
 use crate::model::html::{DomSpec, NodeHtmlCodec};
 use crate::model::*;
+use crate::schema::Schema;
 use crate::types::BoxConstraints;
 use macros::Codec;
 use serde::{Deserialize, Serialize};
@@ -80,6 +81,10 @@ impl Node {
                 weight: None,
             },
         }
+    }
+
+    pub fn is_external(&self, schema: &Schema) -> bool {
+        schema.node_spec(self.as_type()).external
     }
 
     pub fn as_type(&self) -> NodeType {
