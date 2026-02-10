@@ -18,6 +18,7 @@ pub enum DocExportMode {
     Version,
     AllUpdates,
     UpdatesFrom {
+        #[serde(with = "serde_bytes")]
         #[cfg_attr(feature = "wasm", tsify(type = "Uint8Array"))]
         version: Vec<u8>,
     },
