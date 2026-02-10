@@ -7,6 +7,7 @@ impl Runtime {
                 return Ok(true);
             }
             tr.delete_selection()?;
+            tr.normalize()?;
 
             if tr.split_list_item()? {
                 return Ok(true);
@@ -22,6 +23,7 @@ impl Runtime {
     pub(crate) fn handle_insert_hard_break(&mut self) -> Vec<Effect> {
         self.transact(|tr| {
             tr.delete_selection()?;
+            tr.normalize()?;
             tr.insert_hard_break()
         })
     }
@@ -30,6 +32,7 @@ impl Runtime {
         self.transact(|tr| {
             tr.insert_paragraph_on_nontextblock_selection()?;
             tr.delete_selection()?;
+            tr.normalize()?;
             tr.insert_page_break()
         })
     }
@@ -154,6 +157,99 @@ mod tests {
                 paragraph {}
             }
             selection { (n1, 0) }
+        };
+
+        assert_state_eq!(*rt.state(), expected);
+    }
+
+    #[test]
+    fn insert_newline_after_select_all() {
+        let mut p1 = id!();
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                paragraph {
+                    text { "Hello" }
+                }
+                paragraph {
+                    text { "World" }
+                }
+            }
+            selection { (NodeId::ROOT, 0) -> (NodeId::ROOT, 2) }
+        };
+
+        rt.update(Message::InsertNewline);
+        rt.tick();
+
+        let expected = state! {
+            doc {
+                paragraph {}
+                @p1 paragraph {}
+            }
+            selection { (p1, 0) -> (p1, 0) }
+        };
+
+        assert_state_eq!(*rt.state(), expected);
+    }
+
+    #[test]
+    fn insert_hard_break_after_select_all() {
+        let mut p1 = id!();
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                paragraph {
+                    text { "Hello" }
+                }
+                paragraph {
+                    text { "World" }
+                }
+            }
+            selection { (NodeId::ROOT, 0) -> (NodeId::ROOT, 2) }
+        };
+
+        rt.update(Message::InsertHardBreak);
+        rt.tick();
+
+        let expected = state! {
+            doc {
+                @p1 paragraph {
+                  hard_break {}
+                }
+            }
+            selection { (p1, 1) -> (p1, 1) }
+        };
+
+        assert_state_eq!(*rt.state(), expected);
+    }
+
+    #[test]
+    fn insert_page_break_after_select_all() {
+        let mut p1 = id!();
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                paragraph {
+                    text { "Hello" }
+                }
+                paragraph {
+                    text { "World" }
+                }
+            }
+            selection { (NodeId::ROOT, 0) -> (NodeId::ROOT, 2) }
+        };
+
+        rt.update(Message::InsertPageBreak);
+        rt.tick();
+
+        let expected = state! {
+            doc {
+                paragraph {
+                  page_break {}
+                }
+                @p1 paragraph {}
+            }
+            selection { (p1, 0) -> (p1, 0) }
         };
 
         assert_state_eq!(*rt.state(), expected);
