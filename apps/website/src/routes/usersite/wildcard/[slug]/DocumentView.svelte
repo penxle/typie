@@ -222,6 +222,10 @@
 
   const document = $derived($entityView.node.__typename === 'DocumentView' ? $entityView.node : null);
 
+  $effect(() => {
+    editor.protectContent = document?.protectContent ?? false;
+  });
+
   const bodySnapshot = $derived(
     document?.documentBody?.__typename === 'DocumentViewBodyAvailable'
       ? Uint8Array.fromBase64(document.documentBody.snapshot)

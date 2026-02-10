@@ -184,6 +184,7 @@ export class Editor {
   isFocused = $state(false);
   isPointerModeIdle = $state(false);
   readOnly = $state(false);
+  protectContent = $state(false);
 
   placeholder = $state({
     visible: false,
