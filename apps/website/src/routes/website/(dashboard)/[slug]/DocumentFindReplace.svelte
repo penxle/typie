@@ -93,7 +93,7 @@
     gap: '4px',
     padding: '8px',
     position: 'absolute',
-    top: '8px',
+    top: editor.layout.layoutMode.type === 'paginated' ? '24px' : '0',
     right: '52px',
     zIndex: 'overEditor',
     backgroundColor: 'surface.default',
