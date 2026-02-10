@@ -58,7 +58,7 @@ impl Runtime {
         }
 
         if modifier.shift {
-            return self.handle_shift_click(position);
+            return self.handle_shift_click(hit_selection);
         }
 
         if let Some(effects) = self.handle_multi_click(click_count, position) {
@@ -68,12 +68,16 @@ impl Runtime {
         self.handle_single_click(page_idx, x, y, position, hit_selection)
     }
 
-    fn handle_shift_click(&mut self, position: Position) -> Vec<Effect> {
-        let anchor = self.state.selection.anchor;
+    fn handle_shift_click(&mut self, hit_selection: Selection) -> Vec<Effect> {
         self.set_pointer_mode(PointerMode::DraggingSelection);
 
+        let extended_selection = self
+            .state
+            .selection
+            .extend_to(&self.state.doc, hit_selection);
+
         self.transact(move |tr| {
-            tr.set_selection(Selection::new(anchor, position));
+            tr.set_selection(extended_selection);
             tr.set_preferred_x(None);
             Ok(true)
         })
@@ -373,12 +377,8 @@ impl Runtime {
             return vec![];
         };
 
-        if !head_hit.is_collapsed() {
-            return vec![];
-        }
-
         let selection = self.state.selection;
-        let new_selection = Selection::new(anchor_hit.head, head_hit.head);
+        let new_selection = anchor_hit.extend_to(&self.state.doc, head_hit);
 
         if new_selection.is_collapsed() {
             return vec![];

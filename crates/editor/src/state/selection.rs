@@ -75,6 +75,50 @@ impl Selection {
         }
     }
 
+    pub fn extend_to(&self, doc: &Doc, target: Selection) -> Selection {
+        let (sorted_from, sorted_to) = self.as_sorted(doc).unwrap_or((self.anchor, self.head));
+        let (span_from, span_to) = target
+            .as_sorted(doc)
+            .unwrap_or((target.anchor, target.head));
+
+        let was_forward = self.anchor_before_head(doc);
+
+        let crossed = if was_forward {
+            matches!(
+                compare_positions(doc, span_from, self.anchor),
+                Ok(Ordering::Less)
+            )
+        } else {
+            matches!(
+                compare_positions(doc, span_to, self.anchor),
+                Ok(Ordering::Greater)
+            )
+        };
+
+        let anchor = if crossed {
+            if was_forward { sorted_to } else { sorted_from }
+        } else {
+            self.anchor
+        };
+
+        let head = {
+            let is_new_forward = matches!(
+                compare_positions(doc, anchor, target.head),
+                Ok(Ordering::Less) | Ok(Ordering::Equal)
+            );
+
+            if is_new_forward { span_to } else { span_from }
+        };
+
+        let head = if eq_positions_ignoring_affinity(anchor, head) {
+            head.with_affinity(anchor.affinity)
+        } else {
+            head
+        };
+
+        Selection::new(anchor, head)
+    }
+
     pub fn to_plain_text(&self, doc: &Doc) -> String {
         if self.is_collapsed() {
             return String::new();

@@ -1,12 +1,9 @@
 use super::super::{Direction, Effect, Runtime};
 use crate::layout::cursor::{Cursor, NavigationContext};
 use crate::model::{MarkType, NodeId};
-use crate::state::position_helpers::{
-    compare_positions, eq_positions_ignoring_affinity, move_from_block_position,
-};
+use crate::state::position_helpers::move_from_block_position;
 use crate::state::{Position, Selection, block_content_len};
 use crate::types::Affinity;
-use std::cmp::Ordering;
 
 impl Runtime {
     pub(crate) fn handle_navigate(
@@ -242,45 +239,8 @@ impl Runtime {
 
         if extend_selection {
             let new_span = move_from(selection.head);
-            let (sorted_from, sorted_to) = selection.as_sorted(&self.state.doc).unwrap();
-            let (span_from, span_to) = new_span.as_sorted(&self.state.doc).unwrap();
-
-            let was_forward = selection.anchor_before_head(&self.state.doc);
-
-            let crossed = if was_forward {
-                matches!(
-                    compare_positions(&self.state.doc, span_from.clone(), selection.anchor.clone()),
-                    Ok(Ordering::Less)
-                )
-            } else {
-                matches!(
-                    compare_positions(&self.state.doc, span_to.clone(), selection.anchor.clone()),
-                    Ok(Ordering::Greater)
-                )
-            };
-
-            let anchor = if crossed {
-                if was_forward { sorted_to } else { sorted_from }
-            } else {
-                selection.anchor.clone()
-            };
-
-            let head = {
-                let is_new_forward = matches!(
-                    compare_positions(&self.state.doc, anchor.clone(), new_span.head.clone()),
-                    Ok(Ordering::Less) | Ok(Ordering::Equal)
-                );
-
-                if is_new_forward { span_to } else { span_from }
-            };
-
-            let head = if eq_positions_ignoring_affinity(anchor, head) {
-                head.with_affinity(anchor.affinity)
-            } else {
-                head
-            };
-
-            (anchor, head)
+            let extended = selection.extend_to(&self.state.doc, new_span);
+            (extended.anchor, extended.head)
         } else {
             if !selection.is_collapsed() {
                 match direction {
@@ -326,7 +286,7 @@ impl Runtime {
 #[cfg(test)]
 mod tests {
     use crate::model::NodeId;
-    use crate::runtime::{Direction, Message};
+    use crate::runtime::{Direction, Message, Modifier, PointerButton};
     use crate::state::{Position, Selection};
     use crate::types::Affinity;
 
@@ -1142,5 +1102,37 @@ mod tests {
             selection.anchor.offset, 0,
             "Select All should include the first element (HR) at offset 0"
         );
+    }
+
+    #[test]
+    fn test_extend_selection_by_clicking_above_image_from_below_image() {
+        let mut rt = runtime! {
+          viewport { 800, 600, 1.0 }
+          doc {
+            image(id: Some("image1".to_string()), proportion: 1.0,) {}
+            image(id: Some("image2".to_string()), proportion: 1.0,) {}
+            paragraph {  }
+          }
+          selection { (NodeId::ROOT, 1) -> (NodeId::ROOT, 2, Affinity::Upstream) }
+        };
+
+        rt.layout();
+        rt.update(Message::PointerDown {
+            x: 1.0,
+            y: 1.0,
+            page_idx: 0,
+            click_count: 1,
+            button: PointerButton::Primary,
+            modifier: Modifier {
+                shift: true,
+                ..Default::default()
+            },
+        });
+
+        let selection = &rt.state().selection;
+        assert_eq!(selection.anchor.node_id, NodeId::ROOT);
+        assert_eq!(selection.anchor.offset, 2);
+        assert_eq!(selection.head.node_id, NodeId::ROOT);
+        assert_eq!(selection.head.offset, 0);
     }
 }
