@@ -6,6 +6,7 @@ import { match } from 'ts-pattern';
 import { clearLoaders } from '@/context';
 import {
   db,
+  DocumentContents,
   Documents,
   Entities,
   first,
@@ -146,20 +147,32 @@ Site.implement({
         }),
       }),
       resolve: async (self) => {
-        const row = await db
-          .select({
-            totalCharacterCount: sum(PostContents.characterCount).mapWith(Number),
-            totalBlobSize: sum(PostContents.blobSize).mapWith(Number),
-          })
-          .from(PostContents)
-          .innerJoin(Posts, eq(PostContents.postId, Posts.id))
-          .innerJoin(Entities, eq(Posts.entityId, Entities.id))
-          .where(and(eq(Entities.siteId, self.id), eq(Entities.state, EntityState.ACTIVE)))
-          .then(firstOrThrow);
+        const [postRow, documentRow] = await Promise.all([
+          db
+            .select({
+              totalCharacterCount: sum(PostContents.characterCount).mapWith(Number),
+              totalBlobSize: sum(PostContents.blobSize).mapWith(Number),
+            })
+            .from(PostContents)
+            .innerJoin(Posts, eq(PostContents.postId, Posts.id))
+            .innerJoin(Entities, eq(Posts.entityId, Entities.id))
+            .where(and(eq(Entities.siteId, self.id), eq(Entities.state, EntityState.ACTIVE)))
+            .then(firstOrThrow),
+          db
+            .select({
+              totalCharacterCount: sum(DocumentContents.characterCount).mapWith(Number),
+              totalBlobSize: sum(DocumentContents.blobSize).mapWith(Number),
+            })
+            .from(DocumentContents)
+            .innerJoin(Documents, eq(DocumentContents.documentId, Documents.id))
+            .innerJoin(Entities, eq(Documents.entityId, Entities.id))
+            .where(and(eq(Entities.siteId, self.id), eq(Entities.state, EntityState.ACTIVE)))
+            .then(firstOrThrow),
+        ]);
 
         return {
-          totalCharacterCount: row.totalCharacterCount || 0,
-          totalBlobSize: row.totalBlobSize || 0,
+          totalCharacterCount: (postRow.totalCharacterCount || 0) + (documentRow.totalCharacterCount || 0),
+          totalBlobSize: (postRow.totalBlobSize || 0) + (documentRow.totalBlobSize || 0),
         };
       },
     }),

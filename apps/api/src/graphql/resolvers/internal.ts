@@ -1,4 +1,5 @@
-import { and, asc, eq, getTableColumns, gt, isNull } from 'drizzle-orm';
+import dayjs from 'dayjs';
+import { and, asc, desc, eq, getTableColumns, gt, isNull } from 'drizzle-orm';
 import { LoroDoc } from 'loro-crdt';
 import * as Y from 'yjs';
 import {
@@ -12,12 +13,13 @@ import {
   first,
   firstOrThrow,
   Folders,
+  Notes,
   PostContents,
   Posts,
   TableCode,
   validateDbId,
 } from '@/db';
-import { EntityState, EntityType, EntityVisibility } from '@/enums';
+import { EntityState, EntityType, EntityVisibility, NoteState } from '@/enums';
 import { enqueueJob } from '@/mq';
 import { schema } from '@/pm';
 import { pubsub } from '@/pubsub';
@@ -33,6 +35,7 @@ import {
 import { compressZstd } from '@/utils/compression';
 import { convertPostToDocumentJson } from '@/utils/convert';
 import { assertSitePermission } from '@/utils/permission';
+import { assertPlanRule } from '@/utils/plan';
 import { jsonToSnapshot } from '@/utils/wasm';
 import { builder } from '../builder';
 import { Document, PostView } from '../objects';
@@ -210,6 +213,9 @@ builder.mutationFields((t) => ({
         .limit(1)
         .then(first);
 
+      await assertPlanRule({ userId: ctx.session.userId, rule: 'maxTotalCharacterCount' });
+      await assertPlanRule({ userId: ctx.session.userId, rule: 'maxTotalBlobSize' });
+
       const { json, archivedNodes } = convertPostToDocumentJson(postContents.body, {
         maxWidth: post.maxWidth,
         layoutMode: postContents.layoutMode,
@@ -221,6 +227,29 @@ builder.mutationFields((t) => ({
       doc.import(snapshot);
       const version = doc.version().encode();
       const { json: contentJson, text, characterCount, blobSize } = await extractLoroDocContents(doc);
+
+      const notes = await db
+        .select({
+          content: Notes.content,
+          color: Notes.color,
+          order: Notes.order,
+        })
+        .from(Notes)
+        .where(and(eq(Notes.entityId, entity.id), eq(Notes.state, NoteState.ACTIVE)))
+        .orderBy(asc(Notes.order));
+
+      let lastOrder: string | null = null;
+      if (notes.length > 0) {
+        const lastUserNote = await db
+          .select({ order: Notes.order })
+          .from(Notes)
+          .where(and(eq(Notes.userId, ctx.session.userId), eq(Notes.state, NoteState.ACTIVE)))
+          .orderBy(desc(Notes.order))
+          .limit(1)
+          .then(first);
+
+        lastOrder = lastUserNote?.order ?? null;
+      }
 
       const document = await db.transaction(async (tx) => {
         if (archivedNodes.length > 0) {
@@ -287,6 +316,28 @@ builder.mutationFields((t) => ({
           versionId: documentVersion.id,
           userId: ctx.session.userId,
         });
+
+        if (notes.length > 0) {
+          const notesWithNewOrder = notes.map((note) => {
+            const newOrder = generateFractionalOrder({
+              lower: lastOrder,
+              upper: null,
+            });
+            lastOrder = newOrder;
+
+            return {
+              userId: ctx.session.userId,
+              entityId: newEntity.id,
+              content: note.content,
+              color: note.color,
+              order: newOrder,
+              createdAt: dayjs(),
+              updatedAt: dayjs(),
+            };
+          });
+
+          await tx.insert(Notes).values(notesWithNewOrder);
+        }
 
         return newDocument;
       });
