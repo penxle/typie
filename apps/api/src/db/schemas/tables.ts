@@ -8,6 +8,16 @@ import type { JSONContent } from '@tiptap/core';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import type { CouponCondition, PageLayout, PlanRules } from './json';
 
+export const DocumentArchivedNodes = pgTable('document_archived_nodes', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => createDbId(TableCode.DOCUMENT_ARCHIVED_NODES)),
+  content: text('content').notNull(),
+  createdAt: datetime('created_at')
+    .notNull()
+    .default(sql`now()`),
+});
+
 export const Documents = pgTable(
   'documents',
   {

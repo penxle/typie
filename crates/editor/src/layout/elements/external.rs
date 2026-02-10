@@ -22,6 +22,8 @@ pub enum ExternalElementData {
     },
     #[serde(rename_all = "camelCase")]
     Embed { id: Option<String> },
+    #[serde(rename_all = "camelCase")]
+    Archived { id: Option<String> },
 }
 
 #[allow(dead_code)]

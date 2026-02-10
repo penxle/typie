@@ -61,6 +61,11 @@ query NativeEditorScreen_Query($slug: String!) {
             thumbnailUrl
             html
           }
+
+          ... on DocumentArchivedNode {
+            id
+            content
+          }
         }
       }
     }

@@ -14,6 +14,8 @@ sealed class ExternalElementData with _$ExternalElementData {
 
   const factory ExternalElementData.embed({String? id}) = EmbedElementData;
 
+  const factory ExternalElementData.archived({String? id}) = ArchivedElementData;
+
   factory ExternalElementData.fromJson(Map<String, dynamic> json) => _$ExternalElementDataFromJson(json);
 }
 
@@ -92,4 +94,10 @@ abstract class EmbedAsset with _$EmbedAsset {
   }) = _EmbedAsset;
 
   factory EmbedAsset.fromJson(Map<String, dynamic> json) => _$EmbedAssetFromJson(json);
+}
+
+@freezed
+abstract class ArchivedAsset with _$ArchivedAsset {
+  const factory ArchivedAsset({required String id, required String content}) = _ArchivedAsset;
+  factory ArchivedAsset.fromJson(Map<String, dynamic> json) => _$ArchivedAssetFromJson(json);
 }

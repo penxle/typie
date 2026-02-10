@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:typie/screens/native_editor/external/archived.dart';
 import 'package:typie/screens/native_editor/external/embed.dart';
 import 'package:typie/screens/native_editor/external/file.dart';
 import 'package:typie/screens/native_editor/external/image.dart';
@@ -81,6 +82,7 @@ class _ExternalElementWrapper extends HookWidget {
       ImageElementData() => ImageWidget(element: element),
       FileElementData() => FileWidget(element: element),
       EmbedElementData() => EmbedWidget(element: element),
+      ArchivedElementData() => const ArchivedWidget(),
     };
   }
 }
