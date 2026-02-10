@@ -10,6 +10,7 @@ pub struct NodeSpec {
     pub selectable: bool,
     pub isolating: bool,
     pub structural: bool, // 부모의 구조적 일부인 노드. true면 부모 없이 단독 삭제 불가, 내용만 삭제됨.
+    pub external: bool,
     pub grandparent_must_be: Option<NodeType>,
 }
 
@@ -46,6 +47,7 @@ impl Default for NodeSpec {
             selectable: false,
             isolating: false,
             structural: false,
+            external: false,
             grandparent_must_be: None,
         }
     }

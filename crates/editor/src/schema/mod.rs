@@ -110,6 +110,7 @@ impl Default for Schema {
             NodeType::Image,
             NodeSpec {
                 selectable: true,
+                external: true,
                 ..Default::default()
             },
         );
@@ -118,6 +119,7 @@ impl Default for Schema {
             NodeType::File,
             NodeSpec {
                 selectable: true,
+                external: true,
                 ..Default::default()
             },
         );
@@ -126,6 +128,7 @@ impl Default for Schema {
             NodeType::Embed,
             NodeSpec {
                 selectable: true,
+                external: true,
                 ..Default::default()
             },
         );
@@ -134,6 +137,7 @@ impl Default for Schema {
             NodeType::Archived,
             NodeSpec {
                 selectable: true,
+                external: true,
                 ..Default::default()
             },
         );
