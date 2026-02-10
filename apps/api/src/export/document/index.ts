@@ -1,7 +1,7 @@
+import { createWasmApplication } from '@/utils/wasm';
 import { ensureAllFontBases, ensureRequiredFallbackFont, ensureRequiredFont } from './fonts';
 import { createPdfFromPages } from './pdf';
 import { renderDocumentPages } from './render';
-import { createWasmApplication } from './wasm';
 import type { Cmd, Theme } from '@typie/editor';
 
 const SCALE_FACTOR = 2;

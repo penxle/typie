@@ -26,6 +26,20 @@ pub fn validate_regex(pattern: &str) -> bool {
     fancy_regex::Regex::new(&anchored).is_ok()
 }
 
+#[wasm_bindgen(js_name = snapshotToJson)]
+pub fn snapshot_to_json_wasm(snapshot: Vec<u8>) -> Result<JsValue, JsValue> {
+    let doc_json =
+        crate::model::snapshot_to_json(&snapshot).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    serde_wasm_bindgen::to_value(&doc_json).map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
+#[wasm_bindgen(js_name = jsonToSnapshot)]
+pub fn json_to_snapshot_wasm(json: JsValue) -> Result<Vec<u8>, JsValue> {
+    let doc_json: crate::model::DocumentJson =
+        serde_wasm_bindgen::from_value(json).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    crate::model::json_to_snapshot(&doc_json).map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
 #[wasm_bindgen]
 pub struct Application;
 

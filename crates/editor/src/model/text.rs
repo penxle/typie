@@ -358,12 +358,16 @@ impl<'de> Deserialize<'de> for Text {
     {
         let segments: Vec<TextSegment> = Vec::deserialize(deserializer)?;
         let text = Text::new();
-        for segment in segments {
+        let mut ranges = Vec::new();
+        for segment in &segments {
             let start = text.char_len();
-            let end = start + segment.text.chars().count();
             text.insert(start, &segment.text);
-            for mark in segment.marks {
-                let _ = text.mark(start..end, &mark);
+            let end = text.char_len();
+            ranges.push((start..end, &segment.marks));
+        }
+        for (range, marks) in ranges {
+            for mark in marks {
+                let _ = text.mark(range.clone(), mark);
             }
         }
         Ok(text)

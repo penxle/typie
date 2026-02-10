@@ -1,4 +1,5 @@
 mod codec;
+mod convert;
 mod decorations;
 mod fragment;
 mod html;
@@ -12,6 +13,7 @@ mod text;
 mod tree;
 
 pub use codec::*;
+pub use convert::*;
 pub use decorations::*;
 pub use fragment::*;
 pub use id::*;
