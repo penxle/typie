@@ -57,7 +57,7 @@ import {
 import { compressZstd, decompressZstd } from '@/utils/compression';
 import { assertSitePermission } from '@/utils/permission';
 import { assertPlanRule } from '@/utils/plan';
-import { jsonToSnapshot } from '@/utils/wasm';
+import { jsonToSnapshot, snapshotToJson } from '@/utils/wasm';
 import { builder } from '../builder';
 import {
   CharacterCountChange,
@@ -826,14 +826,15 @@ builder.mutationFields((t) => ({
           .returning()
           .then(firstOrThrow);
 
-        const freshSnapshot = await jsonToSnapshot(document.content.json);
+        const json = await snapshotToJson(new Uint8Array(document.content.snapshot));
+        const freshSnapshot = await jsonToSnapshot(json);
         const freshDoc = new LoroDoc();
         freshDoc.import(freshSnapshot);
         const freshVersion = freshDoc.version().encode();
 
         await tx.insert(DocumentContents).values({
           documentId: newDocument.id,
-          json: document.content.json,
+          json,
           text: document.content.text,
           characterCount: document.content.characterCount,
           blobSize: document.content.blobSize,

@@ -1,6 +1,6 @@
-const DB_NAME = 'typie-editor';
+const DB_NAME = 'typie:documents';
 const DB_VERSION = 1;
-const STORE_NAME = 'typie:documents';
+const STORE_NAME = 'documents';
 
 type StoredDocument = {
   id: string;
@@ -48,8 +48,20 @@ export class IndexeddbPersistence {
 
   async #ensureDb(): Promise<IDBDatabase> {
     if (this.#db) return this.#db;
-    this.#db = await openDatabase();
-    return this.#db;
+    let db = await openDatabase();
+
+    if (!db.objectStoreNames.contains(STORE_NAME)) {
+      db.close();
+      await new Promise<void>((resolve, reject) => {
+        const request = indexedDB.deleteDatabase(DB_NAME);
+        request.addEventListener('success', () => resolve());
+        request.addEventListener('error', () => reject(request.error));
+      });
+      db = await openDatabase();
+    }
+
+    this.#db = db;
+    return db;
   }
 
   #request<T>(request: IDBRequest<T>): Promise<T> {

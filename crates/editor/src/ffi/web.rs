@@ -30,7 +30,7 @@ pub fn validate_regex(pattern: &str) -> bool {
 pub fn snapshot_to_json_wasm(snapshot: Vec<u8>) -> Result<JsValue, JsValue> {
     let doc_json =
         crate::model::snapshot_to_json(&snapshot).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    serde_wasm_bindgen::to_value(&doc_json).map_err(|e| JsValue::from_str(&e.to_string()))
+    Ok(to_js_value(&doc_json))
 }
 
 #[wasm_bindgen(js_name = jsonToSnapshot)]
