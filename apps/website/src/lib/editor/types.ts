@@ -69,3 +69,8 @@ export type EmbedAsset = {
   thumbnailUrl: string | null;
   html: string | null;
 };
+
+export type ArchivedAsset = {
+  id: string;
+  content: string;
+};

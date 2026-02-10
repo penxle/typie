@@ -1,6 +1,6 @@
 <script lang="ts">
   import { flex } from '@typie/styled-system/patterns';
-  import { CONTINUOUS_VIEW_PADDING, PAGE_GAP, PAGINATED_VIEW_PADDING } from '$lib/editor/constants';
+  import { CONTINUOUS_VIEW_PADDING, IS_MAC, PAGE_GAP, PAGINATED_VIEW_PADDING } from '$lib/editor/constants';
   import { getEditor } from '$lib/editor/context';
   import { setupTypewriter } from '$lib/editor/typewriter.svelte';
   import ContextMenu from './ContextMenu.svelte';
@@ -129,6 +129,19 @@
   aria-multiline="true"
   draggable={editor.isDraggable}
   onclick={focusInput}
+  oncopy={(e) => {
+    if (!editor.readOnly) return;
+    if (editor.protectContent) {
+      e.preventDefault();
+      return;
+    }
+    const data = editor.getClipboardData();
+    if (data) {
+      e.preventDefault();
+      e.clipboardData?.setData('text/html', data.html);
+      e.clipboardData?.setData('text/plain', data.text);
+    }
+  }}
   ondragend={handleDragEnd}
   ondragenter={handleDragEnter}
   ondragleave={handleDragLeave}
@@ -146,7 +159,20 @@
     }
     editor.isFocused = false;
   }}
-  onkeydown={focusInput}
+  onkeydown={(e) => {
+    if (editor.readOnly) {
+      const cmdKey = IS_MAC ? e.metaKey : e.ctrlKey;
+      const key = e.key.toLowerCase();
+      if (cmdKey && key === 'a') {
+        e.preventDefault();
+        editor.dispatch({ type: 'selectAll' });
+      } else if (cmdKey && key === 'c' && editor.protectContent) {
+        e.preventDefault();
+      }
+      return;
+    }
+    focusInput();
+  }}
   role="textbox"
   tabindex="0"
 >
