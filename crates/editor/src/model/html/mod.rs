@@ -378,6 +378,7 @@ mod tests {
                 "ListItem" => matches!(node.data(), Node::ListItem(_)),
                 "Image" => matches!(node.data(), Node::Image(_)),
                 "Embed" => matches!(node.data(), Node::Embed(_)),
+                "Archived" => matches!(node.data(), Node::Archived(_)),
                 "File" => matches!(node.data(), Node::File(_)),
                 "HorizontalRule" => matches!(node.data(), Node::HorizontalRule(_)),
                 "HardBreak" => matches!(node.data(), Node::HardBreak(_)),

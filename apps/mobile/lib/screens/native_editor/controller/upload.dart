@@ -7,6 +7,7 @@ class UploadManager extends ChangeNotifier {
   final Map<String, ImageAsset> _imageAssets = {};
   final Map<String, FileAsset> _fileAssets = {};
   final Map<String, EmbedAsset> _embedAssets = {};
+  final Map<String, ArchivedAsset> _archivedAssets = {};
   final Map<String, String> _localImageUploadIds = {};
   final Map<String, String> _localFileUploadIds = {};
   final Map<String, bool> _inflightEmbeds = {};
@@ -16,6 +17,7 @@ class UploadManager extends ChangeNotifier {
   Map<String, ImageAsset> get imageAssets => Map.unmodifiable(_imageAssets);
   Map<String, FileAsset> get fileAssets => Map.unmodifiable(_fileAssets);
   Map<String, EmbedAsset> get embedAssets => Map.unmodifiable(_embedAssets);
+  Map<String, ArchivedAsset> get archivedAssets => Map.unmodifiable(_archivedAssets);
   Map<String, String> get localImageUploadIds => Map.unmodifiable(_localImageUploadIds);
   Map<String, String> get localFileUploadIds => Map.unmodifiable(_localFileUploadIds);
   Map<String, bool> get inflightEmbeds => Map.unmodifiable(_inflightEmbeds);
@@ -108,6 +110,11 @@ class UploadManager extends ChangeNotifier {
 
   void addEmbedAsset(String id, EmbedAsset asset) {
     _embedAssets[id] = asset;
+    notifyListeners();
+  }
+
+  void addArchivedAsset(String id, ArchivedAsset asset) {
+    _archivedAssets[id] = asset;
     notifyListeners();
   }
 

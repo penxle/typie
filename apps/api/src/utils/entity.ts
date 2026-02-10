@@ -127,13 +127,16 @@ const extractTextFromLoroDoc = (doc: LoroDoc): string => {
   return texts.join('');
 };
 
-export const extractAssetIdsFromLoroDoc = (doc: LoroDoc): { imageIds: string[]; fileIds: string[]; embedIds: string[] } => {
+export const extractAssetIdsFromLoroDoc = (
+  doc: LoroDoc,
+): { imageIds: string[]; fileIds: string[]; embedIds: string[]; archivedIds: string[] } => {
   const allNodes = doc.getMap('nodes').toJSON() as Record<string, unknown>;
   const reachable = collectReachableNodeIds(allNodes as Record<string, { children?: string[] }>);
 
   const imageIds: string[] = [];
   const fileIds: string[] = [];
   const embedIds: string[] = [];
+  const archivedIds: string[] = [];
 
   for (const nodeId of reachable) {
     const typedNode = allNodes[nodeId] as { type?: string; id?: string };
@@ -143,10 +146,12 @@ export const extractAssetIdsFromLoroDoc = (doc: LoroDoc): { imageIds: string[]; 
       fileIds.push(typedNode.id);
     } else if (typedNode.type === 'embed' && typedNode.id) {
       embedIds.push(typedNode.id);
+    } else if (typedNode.type === 'archived' && typedNode.id) {
+      archivedIds.push(typedNode.id);
     }
   }
 
-  return { imageIds, fileIds, embedIds };
+  return { imageIds, fileIds, embedIds, archivedIds };
 };
 
 export const calculateBlobSizeFromAssetIds = async (imageIds: string[], fileIds: string[]): Promise<number> => {

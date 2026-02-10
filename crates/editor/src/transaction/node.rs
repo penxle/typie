@@ -27,7 +27,10 @@ fn common_parent_if_same(tr: &Transaction, block_ids: &[NodeId]) -> Result<Optio
 
 impl Transaction {
     pub fn insert_node(&mut self, node: Node) -> Result<bool> {
-        if matches!(node, Node::Image(_) | Node::File(_)) {
+        if matches!(
+            node,
+            Node::Image(_) | Node::File(_) | Node::Embed(_) | Node::Archived(_)
+        ) {
             self.push_effect(Effect::ExternalElementChanged);
         }
 

@@ -102,6 +102,14 @@ fn format_node(node: NodeRef, indent_level: usize, labeler: &Labeler, output: &m
             let attrs = format_attributes(&[("id", id_value)]);
             output.push_str(&format!("{indent}{prefix}embed{attrs}\n"));
         }
+        Node::Archived(archived) => {
+            let id_value = match &archived.id {
+                Some(s) => format!("Some(\"{}\".to_string())", escape_str(s)),
+                None => "None".to_string(),
+            };
+            let attrs = format_attributes(&[("id", id_value)]);
+            output.push_str(&format!("{indent}{prefix}archived{attrs}\n"));
+        }
         Node::HardBreak(_) => {
             output.push_str(&format!("{indent}{prefix}hard_break {{}}\n"));
         }
@@ -576,6 +584,14 @@ fn format_fragment_node(
             };
             let attrs = format_attributes(&[("id", id_value)]);
             output.push_str(&format!("{indent}embed{attrs}\n"));
+        }
+        Node::Archived(archived) => {
+            let id_value = match &archived.id {
+                Some(s) => format!("Some(\"{}\".to_string())", escape_str(s)),
+                None => "None".to_string(),
+            };
+            let attrs = format_attributes(&[("id", id_value)]);
+            output.push_str(&format!("{indent}archived{attrs}\n"));
         }
         Node::HardBreak(_) => {
             output.push_str(&format!("{indent}hard_break {{}}\n"));

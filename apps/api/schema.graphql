@@ -179,7 +179,12 @@ type Document implements IDocument {
   view: DocumentView!
 }
 
-union DocumentAsset = Embed | File | Image
+type DocumentArchivedNode {
+  content: String!
+  id: ID!
+}
+
+union DocumentAsset = DocumentArchivedNode | Embed | File | Image
 
 enum DocumentAvailableAction {
   EDIT

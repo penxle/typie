@@ -152,7 +152,12 @@ impl Runtime {
         let is_external = self
             .doc()
             .node(node_id)
-            .map(|n| matches!(n.node(), Node::Image(_) | Node::File(_) | Node::Embed(_)))
+            .map(|n| {
+                matches!(
+                    n.node(),
+                    Node::Image(_) | Node::File(_) | Node::Embed(_) | Node::Archived(_)
+                )
+            })
             .unwrap_or(false);
 
         self.transact(move |tr| {

@@ -123,6 +123,8 @@ class EditorView extends HookWidget {
                 html: e.html,
               ),
             ),
+            documentArchivedNode: (a) =>
+                uploadManager.addArchivedAsset(a.id, ArchivedAsset(id: a.id, content: a.content)),
             orElse: () {},
           );
         }

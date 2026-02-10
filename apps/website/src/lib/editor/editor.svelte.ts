@@ -11,6 +11,7 @@ import type { ThemeColors } from './theme';
 import type {
   AiFeedbackData,
   AiFeedbackOverlay,
+  ArchivedAsset,
   Cmd,
   EmbedAsset,
   ExternalElement,
@@ -153,6 +154,7 @@ export class Editor {
   imageAssets = $state(new SvelteMap<string, ImageAsset>());
   fileAssets = $state(new SvelteMap<string, FileAsset>());
   embedAssets = $state(new SvelteMap<string, EmbedAsset>());
+  archivedAssets = $state(new SvelteMap<string, ArchivedAsset>());
   inflightImages = $state(new SvelteMap<string, { url: string; width: number; height: number }>());
   inflightFiles = $state(new SvelteMap<string, { url: string; name: string; size: number }>());
 

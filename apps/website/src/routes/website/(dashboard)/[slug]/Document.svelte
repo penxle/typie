@@ -130,6 +130,11 @@
                   thumbnailUrl
                   html
                 }
+
+                ... on DocumentArchivedNode {
+                  id
+                  content
+                }
               }
 
               ...DocumentPanel_document
@@ -214,6 +219,11 @@
             description: asset.description ?? null,
             thumbnailUrl: asset.thumbnailUrl ?? null,
             html: asset.html ?? null,
+          });
+        } else if (asset.__typename === 'DocumentArchivedNode') {
+          editor.archivedAssets.set(asset.id, {
+            id: asset.id,
+            content: asset.content,
           });
         }
       }

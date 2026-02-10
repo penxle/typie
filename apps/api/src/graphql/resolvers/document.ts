@@ -7,6 +7,7 @@ import { redis } from '@/cache';
 import {
   db,
   decodeDbId,
+  DocumentArchivedNodes,
   DocumentCharacterCountChanges,
   DocumentContents,
   DocumentReactions,
@@ -62,6 +63,7 @@ import { builder } from '../builder';
 import {
   CharacterCountChange,
   Document,
+  DocumentArchivedNode,
   DocumentReaction,
   DocumentVersion,
   DocumentView,
@@ -76,19 +78,21 @@ import {
 import type { Context } from '@/context';
 
 const DocumentAsset = builder.loadableUnion('DocumentAsset', {
-  types: [Image, File, Embed],
+  types: [Image, File, Embed, DocumentArchivedNode],
   load: async (ids: string[]) => {
     const imageIds = ids.filter((id) => decodeDbId(id) === TableCode.IMAGES);
     const fileIds = ids.filter((id) => decodeDbId(id) === TableCode.FILES);
     const embedIds = ids.filter((id) => decodeDbId(id) === TableCode.EMBEDS);
+    const archivedIds = ids.filter((id) => decodeDbId(id) === TableCode.DOCUMENT_ARCHIVED_NODES);
 
-    const [images, files, embeds] = await Promise.all([
+    const [images, files, embeds, archivedNodes] = await Promise.all([
       imageIds.length > 0 ? db.select().from(Images).where(inArray(Images.id, imageIds)) : [],
       fileIds.length > 0 ? db.select().from(Files).where(inArray(Files.id, fileIds)) : [],
       embedIds.length > 0 ? db.select().from(Embeds).where(inArray(Embeds.id, embedIds)) : [],
+      archivedIds.length > 0 ? db.select().from(DocumentArchivedNodes).where(inArray(DocumentArchivedNodes.id, archivedIds)) : [],
     ]);
 
-    return [...images, ...files, ...embeds];
+    return [...images, ...files, ...embeds, ...archivedNodes];
   },
   toKey: (item) => item.id,
   sort: true,
@@ -151,6 +155,23 @@ Document.implement({
     contentRating: t.expose('contentRating', { type: DocumentContentRating }),
     allowReaction: t.exposeBoolean('allowReaction'),
     protectContent: t.exposeBoolean('protectContent'),
+
+    assets: t.field({
+      type: [DocumentAsset],
+      resolve: async (self) => {
+        const content = await db
+          .select({ snapshot: DocumentContents.snapshot })
+          .from(DocumentContents)
+          .where(eq(DocumentContents.documentId, self.id))
+          .then(firstOrThrow);
+
+        const doc = new LoroDoc();
+        doc.import(content.snapshot);
+        const { imageIds, fileIds, embedIds, archivedIds } = extractAssetIdsFromLoroDoc(doc);
+
+        return [...imageIds, ...fileIds, ...embedIds, ...archivedIds];
+      },
+    }),
 
     thumbnail: t.field({
       type: Image,
@@ -509,6 +530,14 @@ DocumentView.implement({
         return await loader.load(self.id);
       },
     }),
+  }),
+});
+
+DocumentArchivedNode.implement({
+  isTypeOf: isTypeOf(TableCode.DOCUMENT_ARCHIVED_NODES),
+  fields: (t) => ({
+    id: t.exposeID('id'),
+    content: t.exposeString('content'),
   }),
 });
 

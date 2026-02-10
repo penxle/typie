@@ -1,3 +1,4 @@
+mod archived;
 mod blockquote;
 mod bullet_list;
 mod callout;
@@ -17,6 +18,7 @@ mod root;
 mod table;
 mod text;
 
+pub use archived::*;
 pub use blockquote::*;
 pub use bullet_list::*;
 pub use callout::*;
