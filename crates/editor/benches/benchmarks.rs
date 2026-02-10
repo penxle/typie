@@ -1,6 +1,6 @@
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
 use editor::model::{Node, NodeId, Text, TextNode};
-use editor::runtime::{Direction, Message, PasteMode, Runtime, State};
+use editor::runtime::{Direction, Message, Runtime, State};
 use editor::state::{Position, Selection, compute_selection_aggregates};
 use editor::transact;
 use editor::transaction::Transaction;
@@ -180,10 +180,8 @@ fn bench_editing(c: &mut Criterion) {
                 runtime
             },
             |runtime| {
-                runtime.update(Message::Paste {
-                    html: None,
+                runtime.update(Message::PasteText {
                     text: paste_text.clone(),
-                    mode: PasteMode::Auto,
                 });
                 runtime.tick();
                 runtime.render_page(0);

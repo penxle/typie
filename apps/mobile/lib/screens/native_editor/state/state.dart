@@ -244,7 +244,17 @@ abstract class EditorState with _$EditorState {
     @Default(AiFeedbackState()) AiFeedbackState aiFeedback,
     @Default(PlaceholderInfo()) PlaceholderInfo placeholder,
     DropIndicatorInfo? dropIndicator,
+    PasteOptionsInfo? pasteOptions,
   }) = _EditorState;
 
   const EditorState._();
+}
+
+@freezed
+abstract class PasteOptionsInfo with _$PasteOptionsInfo {
+  const factory PasteOptionsInfo({
+    required String text,
+    required Map<String, dynamic> from,
+    required Map<String, dynamic> to,
+  }) = _PasteOptionsInfo;
 }

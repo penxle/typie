@@ -1,37 +1,23 @@
-use super::super::{Effect, PasteMode, Runtime};
+use super::super::{Effect, Runtime};
 use crate::model::Fragment;
 
 impl Runtime {
-    pub(crate) fn handle_paste(
-        &mut self,
-        html: Option<String>,
-        text: String,
-        mode: PasteMode,
-    ) -> Vec<Effect> {
-        if let Some(html_str) = html {
-            match Fragment::from_html(&html_str) {
-                Ok(frag) => {
-                    if mode == PasteMode::Text {
-                        let plain = frag.to_plain_text();
-                        return self.transact(|tr| {
-                            tr.delete_selection()?;
-                            tr.normalize()?;
-                            tr.paste_text(plain)
-                        });
-                    }
-
-                    return self.transact(|tr| {
-                        tr.delete_selection()?;
-                        tr.normalize()?;
-                        tr.paste_fragment(frag)
-                    });
-                }
-                Err(e) => {
-                    error!("HTML parse error: {:?}", e);
-                }
-            }
+    pub(crate) fn handle_paste_html(&mut self, html: String, text: String) -> Vec<Effect> {
+        match Fragment::from_html(&html) {
+            Ok(frag) => self.transact(|tr| {
+                tr.delete_selection()?;
+                tr.normalize()?;
+                tr.paste_fragment(frag, Some(text))
+            }),
+            Err(_e) => self.transact(|tr| {
+                tr.delete_selection()?;
+                tr.normalize()?;
+                tr.paste_text(text)
+            }),
         }
+    }
 
+    pub(crate) fn handle_paste_text(&mut self, text: String) -> Vec<Effect> {
         self.transact(|tr| {
             tr.delete_selection()?;
             tr.normalize()?;

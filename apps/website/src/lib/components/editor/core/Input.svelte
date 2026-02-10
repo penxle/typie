@@ -166,7 +166,11 @@
       return;
     }
 
-    editor.dispatch({ type: 'paste', html, text, mode: 'auto' });
+    if (html) {
+      editor.dispatch({ type: 'pasteHtml', html, text });
+    } else {
+      editor.dispatch({ type: 'pasteText', text });
+    }
   };
 
   const handleCompositionStart = (e: CompositionEvent) => {

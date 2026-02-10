@@ -29,7 +29,7 @@ impl Transaction {
         Ok(changed)
     }
 
-    pub fn paste_fragment(&mut self, fragment: Fragment) -> Result<bool> {
+    pub fn paste_fragment(&mut self, fragment: Fragment, text: Option<String>) -> Result<bool> {
         if fragment.is_empty() {
             return Ok(false);
         }
@@ -84,6 +84,14 @@ impl Transaction {
         if let Some(selection) = result.as_selection() {
             self.set_selection(selection);
         }
+
+        if let Some(text) = text {
+            if let Some(range) = result.as_range_selection() {
+                let (from, to) = range.as_sorted(self.doc())?;
+                self.push_effect(Effect::HtmlPasted { text, from, to });
+            }
+        }
+
         Ok(result.inserted())
     }
 }
@@ -396,7 +404,7 @@ mod tests {
 
     #[test]
     fn test_paste_single_line_rendering() {
-        use crate::runtime::{Cmd, Message, PasteMode};
+        use crate::runtime::{Cmd, Message};
 
         let mut p = id!();
         let mut runtime = runtime! {
@@ -409,10 +417,8 @@ mod tests {
 
         runtime.layout();
 
-        runtime.update(Message::Paste {
-            html: None,
+        runtime.update(Message::PasteText {
             text: "Hello".to_string(),
-            mode: PasteMode::Auto,
         });
 
         let cmds = runtime.tick();
@@ -472,7 +478,7 @@ mod tests {
         };
 
         let actual = transact!(initial, |tr| {
-            tr.paste_fragment(fragment).unwrap();
+            tr.paste_fragment(fragment, None).unwrap();
         });
 
         let expected = state! {
@@ -512,7 +518,7 @@ mod tests {
         };
 
         let actual = transact!(initial, |tr| {
-            tr.paste_fragment(fragment).unwrap();
+            tr.paste_fragment(fragment, None).unwrap();
         });
 
         let expected = state! {
@@ -553,7 +559,7 @@ mod tests {
         };
 
         let actual = transact!(initial, |tr| {
-            tr.paste_fragment(fragment).unwrap();
+            tr.paste_fragment(fragment, None).unwrap();
         });
 
         let expected = state! {
@@ -610,7 +616,7 @@ mod tests {
         };
 
         let actual = transact!(state_after_collapse, |tr| {
-            tr.paste_fragment(fragment).unwrap();
+            tr.paste_fragment(fragment, None).unwrap();
         });
 
         let expected = state! {
@@ -652,7 +658,7 @@ mod tests {
         };
 
         let actual = transact!(initial, |tr| {
-            tr.paste_fragment(fragment).unwrap();
+            tr.paste_fragment(fragment, None).unwrap();
         });
 
         let expected = state! {
@@ -686,7 +692,7 @@ mod tests {
         };
 
         let actual = transact!(initial, |tr| {
-            tr.paste_fragment(fragment).unwrap();
+            tr.paste_fragment(fragment, None).unwrap();
         });
 
         let root = actual.doc.node(crate::model::NodeId::ROOT).expect("root");
@@ -745,7 +751,7 @@ mod tests {
         };
 
         let actual = transact!(initial, |tr| {
-            tr.paste_fragment(fragment).unwrap();
+            tr.paste_fragment(fragment, None).unwrap();
         });
 
         let expected = state! {
@@ -795,7 +801,7 @@ mod tests {
         };
 
         let actual = transact!(paste_target, |tr| {
-            tr.paste_fragment(fragment).unwrap();
+            tr.paste_fragment(fragment, None).unwrap();
         });
 
         let expected = state! {
@@ -838,7 +844,7 @@ mod tests {
         };
 
         let actual = transact!(paste_target, |tr| {
-            tr.paste_fragment(fragment).unwrap();
+            tr.paste_fragment(fragment, None).unwrap();
         });
 
         let expected = state! {
@@ -882,7 +888,7 @@ mod tests {
         };
 
         let actual = transact!(paste_target, |tr| {
-            tr.paste_fragment(restored_fragment).unwrap();
+            tr.paste_fragment(restored_fragment, None).unwrap();
         });
 
         let expected = state! {
@@ -939,7 +945,7 @@ mod tests {
         };
 
         let actual = transact!(paste_target, |tr| {
-            tr.paste_fragment(fragment).unwrap();
+            tr.paste_fragment(fragment, None).unwrap();
         });
 
         let expected = state! {
@@ -982,7 +988,7 @@ mod tests {
         };
 
         let actual = transact!(paste_target, |tr| {
-            tr.paste_fragment(fragment).unwrap();
+            tr.paste_fragment(fragment, None).unwrap();
         });
 
         let expected = state! {
@@ -1063,7 +1069,7 @@ mod tests {
         };
 
         let (_, effects) = transact_with_effect!(paste_target, |tr| {
-            tr.paste_fragment(fragment).unwrap();
+            tr.paste_fragment(fragment, None).unwrap();
         });
 
         let codepoints: Vec<u32> = effects
@@ -1111,7 +1117,7 @@ mod tests {
         };
 
         let actual = transact!(initial, |tr| {
-            tr.paste_fragment(fragment).unwrap();
+            tr.paste_fragment(fragment, None).unwrap();
         });
 
         assert!(
@@ -1142,7 +1148,7 @@ mod tests {
         };
 
         let actual = transact!(paste_target, |tr| {
-            tr.paste_fragment(fragment).unwrap();
+            tr.paste_fragment(fragment, None).unwrap();
         });
 
         assert!(
@@ -1171,7 +1177,7 @@ mod tests {
 
     #[test]
     fn select_all_then_paste_text() {
-        use crate::runtime::{Message, PasteMode};
+        use crate::runtime::Message;
 
         let mut p1 = id!();
         let mut p2 = id!();
@@ -1187,10 +1193,8 @@ mod tests {
 
         rt.layout();
         rt.update(Message::SelectAll);
-        rt.update(Message::Paste {
-            html: None,
+        rt.update(Message::PasteText {
             text: "New text".to_string(),
-            mode: PasteMode::Auto,
         });
 
         let doc = &rt.state().doc;
@@ -1216,7 +1220,7 @@ mod tests {
 
     #[test]
     fn select_all_then_paste_multiline_text() {
-        use crate::runtime::{Message, PasteMode};
+        use crate::runtime::Message;
 
         let mut p = id!();
 
@@ -1230,10 +1234,8 @@ mod tests {
 
         rt.layout();
         rt.update(Message::SelectAll);
-        rt.update(Message::Paste {
-            html: None,
+        rt.update(Message::PasteText {
             text: "Line1\nLine2\nLine3".to_string(),
-            mode: PasteMode::Auto,
         });
 
         let doc = &rt.state().doc;
@@ -1287,7 +1289,7 @@ mod tests {
         };
 
         let _ = transact!(initial, |tr| {
-            tr.paste_fragment(fragment).unwrap();
+            tr.paste_fragment(fragment, None).unwrap();
         });
     }
 }

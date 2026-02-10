@@ -216,7 +216,7 @@ class EditorSettingsScreen extends HookWidget {
                               ),
                               HookFormSelectItem(
                                 value: 'text',
-                                label: '문서 서식 적용',
+                                label: '서식 없이 붙여넣기',
                                 description: '현재 문서의 서식을 적용하여 붙여넣어요.',
                               ),
                             ],
