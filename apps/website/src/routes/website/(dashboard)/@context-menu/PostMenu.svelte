@@ -14,6 +14,7 @@
   import CopyIcon from '~icons/lucide/copy';
   import DotIcon from '~icons/lucide/dot';
   import DownloadIcon from '~icons/lucide/download';
+  import FileOutputIcon from '~icons/lucide/file-output';
   import GlobeIcon from '~icons/lucide/globe';
   import InfoIcon from '~icons/lucide/info';
   import LayoutTemplateIcon from '~icons/lucide/layout-template';
@@ -118,6 +119,23 @@
     }
   `);
 
+  const convertPostToDocument = graphql(`
+    mutation PostMenu_ConvertPostToDocument_Mutation($input: ConvertPostToDocumentInput!) {
+      convertPostToDocument(input: $input) {
+        id
+
+        entity {
+          id
+          slug
+
+          site {
+            id
+          }
+        }
+      }
+    }
+  `);
+
   const exportPostAsPdf = graphql(`
     mutation PostMenu_ExportPostAsPdf_Mutation($input: ExportPostAsPdfInput!) {
       exportPostAsPdf(input: $input) {
@@ -179,6 +197,26 @@
       actionLabel: '전환',
       actionHandler: async () => {
         await updatePostType({ postId: post.id, type: newType });
+      },
+    });
+  };
+
+  const handleConvertToDocument = () => {
+    Dialog.confirm({
+      title: 'V2 에디터로 변환',
+      message:
+        '이 포스트를 V2 에디터로 변환하시겠어요?\n포스트의 내용이 V2 에디터 문서로 새롭게 복사되어 생성돼요. 기존 포스트는 그대로 남아있어요.',
+      actionLabel: '변환',
+      actionHandler: async () => {
+        try {
+          const resp = await convertPostToDocument({ postId: post.id });
+          mixpanel.track('convert_post_to_document', { via });
+          await goto(`/${resp.entity.slug}`);
+        } catch (err) {
+          if (err instanceof TypieError) {
+            Toast.error(err.message);
+          }
+        }
       },
     });
   };
@@ -293,6 +331,10 @@
   <MenuItem icon={LayoutTemplateIcon} onclick={() => handleTypeChange(PostType.TEMPLATE)}>템플릿으로 전환</MenuItem>
 {:else if post.type === PostType.TEMPLATE}
   <MenuItem icon={LayoutTemplateIcon} onclick={() => handleTypeChange(PostType.NORMAL)}>포스트로 전환</MenuItem>
+{/if}
+
+{#if app.preference.current.experimental_v2EditorEnabled}
+  <MenuItem icon={FileOutputIcon} onclick={handleConvertToDocument}>V2 에디터로 변환</MenuItem>
 {/if}
 
 {@render children?.()}
