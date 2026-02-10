@@ -4080,3 +4080,104 @@ fn test_image_selection_handle_bounds() {
     assert_eq!(rect.x, 750.0);
     assert_eq!(rect.height, 1.0);
 }
+
+#[test]
+fn test_justify_no_space_cursor_hit_test() {
+    let mut p = id!();
+    let width = 200.0;
+    let text_content = "A".repeat(30);
+
+    let rt = runtime! {
+        viewport { paginated { width: width, height: 400.0, margin: 0.0 } }
+        doc {
+            @p paragraph(align: crate::model::TextAlign::Justify,) {
+                text { text_content.as_str() }
+            }
+        }
+        selection { (p, 0) }
+    };
+
+    let pages = rt.pages();
+
+    let (_, rect) = Cursor::bounds(&ctx(&rt.state()), &pages, rt.selection().head).unwrap();
+    let end_pos = Cursor::move_to_line_end(&ctx(&rt.state()), &pages, rt.selection().head).unwrap();
+    assert!(
+        end_pos.head.offset < 100,
+        "Text should wrap to test justification"
+    );
+
+    let middle_x = width / 2.0;
+
+    let selection = Cursor::hit_test(
+        &ctx(&rt.state()),
+        &pages[0],
+        middle_x,
+        rect.y + rect.height / 2.0,
+    )
+    .unwrap();
+
+    let line_len = end_pos.head.offset;
+    let expected_offset = line_len / 2;
+
+    println!(
+        "Line len: {}, Hit offset: {}, Expected approx: {}",
+        line_len, selection.head.offset, expected_offset
+    );
+
+    assert!(
+        selection.head.offset < line_len,
+        "Cursor hit end of line {}, expected intermediate offset ~{}",
+        selection.head.offset,
+        expected_offset
+    );
+    assert!(selection.head.offset > 0, "Cursor hit start of line");
+}
+
+#[test]
+fn test_left_align_long_text_cursor_hit_test() {
+    let mut p = id!();
+    let width = 200.0;
+    let text_content = "A".repeat(100);
+
+    let rt = runtime! {
+        viewport { paginated { width: width, height: 400.0, margin: 0.0 } }
+        doc {
+            @p paragraph(align: crate::model::TextAlign::Left,) {
+                text { text_content.as_str() }
+            }
+        }
+        selection { (p, 0) }
+    };
+
+    let pages = rt.pages();
+
+    let (_, rect) = Cursor::bounds(&ctx(&rt.state()), &pages, rt.selection().head).unwrap();
+    let end_pos = Cursor::move_to_line_end(&ctx(&rt.state()), &pages, rt.selection().head).unwrap();
+    assert!(end_pos.head.offset < 100, "Text should wrap");
+
+    let middle_x = width / 2.0;
+
+    let selection = Cursor::hit_test(
+        &ctx(&rt.state()),
+        &pages[0],
+        middle_x,
+        rect.y + rect.height / 2.0,
+    )
+    .unwrap();
+
+    let line_len = end_pos.head.offset;
+    println!(
+        "Left Align - Line len: {}, Hit offset: {}",
+        line_len, selection.head.offset
+    );
+
+    assert!(
+        selection.head.offset < line_len,
+        "Left Align: Cursor hit end of line {}, expected intermediate",
+        selection.head.offset
+    );
+    assert!(
+        selection.head.offset > 0,
+        "Left Align: Cursor hit start of line"
+    );
+}
