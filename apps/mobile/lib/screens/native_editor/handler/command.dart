@@ -3,6 +3,7 @@ import 'package:typie/screens/native_editor/handler/commands/document.dart';
 import 'package:typie/screens/native_editor/handler/commands/font.dart';
 import 'package:typie/screens/native_editor/handler/commands/layout.dart';
 import 'package:typie/screens/native_editor/handler/commands/overlay.dart';
+import 'package:typie/screens/native_editor/handler/commands/paste.dart';
 import 'package:typie/screens/native_editor/handler/commands/placeholder.dart';
 import 'package:typie/screens/native_editor/handler/commands/selection.dart';
 import 'package:typie/screens/native_editor/state/controller.dart';
@@ -27,6 +28,7 @@ class CommandHandler {
     'aiFeedbackOverlaysChanged': handleAiFeedbackOverlaysChanged,
     'placeholderChanged': handlePlaceholderChanged,
     'dropIndicatorChanged': handleDropIndicatorChanged,
+    'htmlPasted': handleHtmlPasted,
   };
 
   static void handleCommands(EditorController controller, List<dynamic>? commands) {

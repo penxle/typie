@@ -9,6 +9,7 @@
   import Input from './Input.svelte';
   import LineHighlight from './LineHighlight.svelte';
   import Page from './Page.svelte';
+  import PasteOptions from './PasteOptions.svelte';
 
   type Props = {
     defaultPaddingBottom?: number;
@@ -158,6 +159,7 @@
   <DocumentPlaceholder />
   <LineHighlight />
   <Cursor />
+  <PasteOptions />
 {/if}
 
 {#if !editor.readOnly}

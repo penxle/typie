@@ -68,6 +68,7 @@ struct PendingUpdates {
     ai_feedback_overlays: bool,
     search_overlays: bool,
     table_overlays: bool,
+    html_pasted: Option<(String, Position, Position)>,
 }
 
 #[derive(Clone)]
@@ -162,6 +163,7 @@ impl Runtime {
                 ai_feedback_overlays: false,
                 search_overlays: false,
                 table_overlays: true,
+                html_pasted: None,
             },
             message_queue: Vec::new(),
             pointer: PointerState::default(),
@@ -315,7 +317,7 @@ impl Runtime {
             })?;
 
             tr.delete_selection()?;
-            tr.paste_fragment(fragment)?;
+            tr.paste_fragment(fragment, None)?;
 
             tr.push_effect(Effect::SettingsChanged);
             Ok(true)
@@ -1025,6 +1027,11 @@ impl Runtime {
             self.pending.table_overlays = false;
         }
 
+        if let Some((text, from, to)) = self.pending.html_pasted.take() {
+            cmds.push(Cmd::HtmlPasted { text, from, to });
+            self.pending.html_pasted = None;
+        }
+
         cmds
     }
 
@@ -1424,6 +1431,9 @@ impl Runtime {
                 }
                 Effect::TextReplacementApplied { undo_state } => {
                     self.text_replacement_undo = Some(undo_state);
+                }
+                Effect::HtmlPasted { text, from, to } => {
+                    self.pending.html_pasted = Some((text, from, to));
                 }
             }
         }

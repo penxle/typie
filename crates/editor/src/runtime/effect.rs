@@ -37,4 +37,9 @@ pub enum Effect {
     TextReplacementApplied {
         undo_state: super::text_replacement::ReplacementUndoState,
     },
+    HtmlPasted {
+        text: String,
+        from: Position,
+        to: Position,
+    },
 }

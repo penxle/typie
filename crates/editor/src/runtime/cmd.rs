@@ -192,4 +192,11 @@ pub enum Cmd {
     TableOverlaysChanged {
         overlays: Vec<TableOverlay>,
     },
+
+    #[serde(rename_all = "camelCase")]
+    HtmlPasted {
+        text: String,
+        from: Position,
+        to: Position,
+    },
 }

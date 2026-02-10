@@ -3,6 +3,7 @@
   import { flex } from '@typie/styled-system/patterns';
   import { HorizontalDivider, Menu, MenuItem } from '@typie/ui/components';
   import ClipboardPasteIcon from '~icons/lucide/clipboard-paste';
+  import ClipboardTypeIcon from '~icons/lucide/clipboard-type';
   import CopyIcon from '~icons/lucide/copy';
   import ScissorsIcon from '~icons/lucide/scissors';
   import SquareDashedIcon from '~icons/lucide/square-dashed';
@@ -22,6 +23,8 @@
   const modKey = IS_MAC ? '⌘' : 'Ctrl+';
   const modKeyStyle = IS_MAC ? css.raw({ fontSize: '14px' }) : undefined;
   const shortcutStyle = flex.raw({ alignItems: 'center', marginLeft: 'auto', color: 'text.faint', fontSize: '12px' });
+
+  const shiftKey = IS_MAC ? '⇧' : 'Shift+';
 </script>
 
 <Menu
@@ -75,6 +78,20 @@
             V
           </span>{/snippet}
         붙여넣기
+      </MenuItem>
+      <MenuItem
+        icon={ClipboardTypeIcon}
+        onclick={() => {
+          editor.handlePasteTextOnly();
+          close();
+        }}
+      >
+        {#snippet suffix()}<span class={css(shortcutStyle)}>
+            <span class={css(modKeyStyle)}>{modKey}</span>
+            <span>{shiftKey}</span>
+            V
+          </span>{/snippet}
+        서식 없이 붙여넣기
       </MenuItem>
       <HorizontalDivider color="secondary" />
     {/if}

@@ -212,6 +212,12 @@ export class Editor {
     needsScroll: false,
   });
 
+  pasteOptions = $state<{
+    text: string;
+    from: Position;
+    to: Position;
+  } | null>(null);
+
   pageVisibility = new SvelteMap<number, number>();
 
   extensionArea = $state({
@@ -351,6 +357,10 @@ export class Editor {
         }
 
         case 'selectionChanged': {
+          if (this.pasteOptions) {
+            this.pasteOptions = null;
+          }
+
           this.selection.stats = cmd.stats;
           this.selection.collapsed = cmd.collapsed;
           this.characterCountsVersion++;
@@ -495,6 +505,15 @@ export class Editor {
           this.tableOverlays = cmd.overlays;
           break;
         }
+
+        case 'htmlPasted': {
+          this.pasteOptions = {
+            text: cmd.text,
+            from: cmd.from,
+            to: cmd.to,
+          };
+          break;
+        }
       }
     }
   }
@@ -513,6 +532,29 @@ export class Editor {
     ensureRequiredFallbackFont(this.#application, codepoints).then(() => {
       this.dispatch({ type: 'fontsLoaded' });
     });
+  }
+
+  handleRepasteAsText(): void {
+    if (!this.pasteOptions) return;
+
+    const { text, from, to } = this.pasteOptions;
+
+    this.dispatch({
+      type: 'setSelection',
+      anchorNodeId: from.nodeId,
+      anchorOffset: from.offset,
+      anchorAffinity: from.affinity,
+      headNodeId: to.nodeId,
+      headOffset: to.offset,
+      headAffinity: to.affinity,
+    });
+
+    this.dispatch({
+      type: 'pasteText',
+      text,
+    });
+
+    this.pasteOptions = null;
   }
 
   dispatch(message: Message): Editor {
@@ -842,15 +884,28 @@ export class Editor {
         }
       }
 
-      if (html && this.onPaste?.(html, text)) {
-        this.closeContextMenu();
-        return;
+      if (html) {
+        if (this.onPaste?.(html, text)) {
+          this.closeContextMenu();
+          return;
+        }
+        this.dispatch({ type: 'pasteHtml', html, text });
+      } else {
+        this.dispatch({ type: 'pasteText', text });
       }
-
-      this.dispatch({ type: 'paste', html, text, mode: 'auto' });
     } catch {
       const text = await navigator.clipboard.readText();
-      this.dispatch({ type: 'paste', html: undefined, text, mode: 'auto' });
+      this.dispatch({ type: 'pasteText', text });
+    }
+    this.closeContextMenu();
+  }
+
+  async handlePasteTextOnly(): Promise<void> {
+    try {
+      const text = await navigator.clipboard.readText();
+      this.dispatch({ type: 'pasteText', text });
+    } catch {
+      // ignore
     }
     this.closeContextMenu();
   }

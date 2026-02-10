@@ -18,7 +18,9 @@ void handleSelectionChanged(EditorController controller, Map<String, dynamic> cm
   final fromHandle = fromHandleMap != null ? SelectionHandleInfo.fromMap(fromHandleMap) : null;
   final toHandle = toHandleMap != null ? SelectionHandleInfo.fromMap(toHandleMap) : null;
 
-  controller.updateState((state) => state.copyWith(selectionStats: stats, fromHandle: fromHandle, toHandle: toHandle));
+  controller.updateState(
+    (state) => state.copyWith(selectionStats: stats, fromHandle: fromHandle, toHandle: toHandle, pasteOptions: null),
+  );
 
   final anchor = cmd['anchor'] as Map<String, dynamic>?;
   final head = cmd['head'] as Map<String, dynamic>?;

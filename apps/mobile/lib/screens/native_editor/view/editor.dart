@@ -17,7 +17,6 @@ import 'package:typie/screens/native_editor/controller/keyboard.dart';
 import 'package:typie/screens/native_editor/controller/ticker.dart';
 import 'package:typie/screens/native_editor/controller/upload.dart';
 import 'package:typie/screens/native_editor/external/models.dart';
-import 'package:typie/screens/native_editor/sheet/paste_option.dart';
 import 'package:typie/screens/native_editor/sheet/template.dart';
 import 'package:typie/screens/native_editor/state/controller.dart';
 import 'package:typie/screens/native_editor/state/state.dart';
@@ -28,6 +27,7 @@ import 'package:typie/screens/native_editor/view/geometry.dart';
 import 'package:typie/screens/native_editor/view/input.dart';
 import 'package:typie/screens/native_editor/view/magnifier.dart';
 import 'package:typie/screens/native_editor/view/pages.dart';
+import 'package:typie/screens/native_editor/view/paste_option.dart';
 import 'package:typie/screens/native_editor/view/scope.dart';
 import 'package:typie/screens/native_editor/view/scroll.dart';
 import 'package:typie/screens/native_editor/view/scrollbar.dart';
@@ -156,25 +156,7 @@ class EditorView extends HookWidget {
       inputController
         ..onPasteHandler = () async {
           final payload = await EditorClipboard().getPastePayload();
-          final html = payload['html'] as String?;
-          final mode = pref.pasteMode;
-
-          if (html != null && mode == 'ask') {
-            if (!context.mounted) {
-              return;
-            }
-            await context.showBottomSheet(
-              intercept: true,
-              child: PasteOptionBottomSheet(
-                onConfirm: (selectedMode) async {
-                  controller.dispatch({...payload, 'mode': selectedMode == 'text' ? 'text' : 'auto'});
-                },
-              ),
-            );
-            return;
-          }
-
-          controller.dispatch({...payload, 'mode': mode == 'text' ? 'text' : 'auto'});
+          controller.dispatch(payload);
         }
         ..floatingCursorBeginHandler = () {
           floatingCursorOrigin.value = controller.state.cursor;
@@ -571,6 +553,13 @@ class EditorView extends HookWidget {
                         ),
                       ),
                       const Positioned(bottom: 20, right: 20, child: NativeEditorFloatingToolbar()),
+                      if (state.state.pasteOptions != null)
+                        Positioned(
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          child: PasteOptionWidget(controller: controller, info: state.state.pasteOptions!),
+                        ),
                       EditorScrollbar(
                         viewHeight: constraints.maxHeight,
                         viewWidth: constraints.maxWidth,
