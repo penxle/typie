@@ -4,9 +4,24 @@ use crate::schema::{Expand, Schema};
 use anyhow::{Context, Result};
 use loro::{ExpandType, ExportMode, Frontiers, LoroDoc, LoroMap, StyleConfig, StyleConfigMap};
 use rustc_hash::FxHashSet;
+use serde::Deserialize;
 use std::rc::Rc;
 
 const SETTINGS_KEY: &str = "settings";
+
+#[derive(Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(from_wasm_abi))]
+#[serde(tag = "type", rename_all = "kebab-case")]
+pub enum DocExportMode {
+    Snapshot,
+    Version,
+    AllUpdates,
+    UpdatesFrom {
+        #[cfg_attr(feature = "wasm", tsify(type = "Uint8Array"))]
+        version: Vec<u8>,
+    },
+}
 
 #[derive(Debug)]
 pub struct Doc {
@@ -108,25 +123,27 @@ impl Doc {
         self.inner.loro.oplog_frontiers()
     }
 
-    pub fn snapshot(&self) -> Result<Vec<u8>> {
-        self.inner
-            .loro
-            .export(ExportMode::snapshot())
-            .context("Failed to export document snapshot")
-    }
-
-    pub fn export_all_updates(&self) -> Result<Vec<u8>> {
-        self.inner
-            .loro
-            .export(ExportMode::all_updates())
-            .context("Failed to export all updates")
-    }
-
-    pub fn export_updates_from(&self, version: &loro::VersionVector) -> Result<Vec<u8>> {
-        self.inner
-            .loro
-            .export(ExportMode::updates(version))
-            .context("Failed to export updates from version")
+    pub fn export(&self, mode: DocExportMode) -> Result<Vec<u8>> {
+        match mode {
+            DocExportMode::Snapshot => self
+                .inner
+                .loro
+                .export(ExportMode::snapshot())
+                .context("Failed to export snapshot"),
+            DocExportMode::Version => Ok(self.inner.loro.oplog_vv().encode()),
+            DocExportMode::AllUpdates => self
+                .inner
+                .loro
+                .export(ExportMode::all_updates())
+                .context("Failed to export all updates"),
+            DocExportMode::UpdatesFrom { version } => {
+                let vv = loro::VersionVector::decode(&version)?;
+                self.inner
+                    .loro
+                    .export(ExportMode::updates(&vv))
+                    .context("Failed to export updates from version")
+            }
+        }
     }
 
     pub fn import_updates(&self, updates: &[u8]) -> Result<()> {

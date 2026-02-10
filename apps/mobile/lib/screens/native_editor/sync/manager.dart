@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
 import 'package:typie/graphql/client.dart';
@@ -11,36 +12,62 @@ import 'package:typie/screens/native_editor/__generated__/sync_document.req.gql.
 import 'package:typie/screens/native_editor/sync/persistence.dart';
 import 'package:uuid/uuid.dart';
 
-enum SyncStatus { syncing, synced, error }
+enum ConnectionStatus { connecting, connected, disconnected }
 
 class SyncManager {
-  SyncManager({required this.documentId, required this.editor, required this.client});
+  SyncManager({
+    required this.documentId,
+    required this.editor,
+    required this.client,
+    required LocalPersistence persistence,
+  }) : _persistence = persistence;
 
   final String documentId;
   final NativeEditor editor;
   final GraphQLClient client;
+  final LocalPersistence _persistence;
+
+  static const _disconnectThreshold = Duration(seconds: 3);
 
   final String _clientId = const Uuid().v4();
-  final ValueNotifier<SyncStatus> syncStatus = ValueNotifier(SyncStatus.synced);
+  final ValueNotifier<ConnectionStatus> connectionStatus = ValueNotifier(ConnectionStatus.connecting);
 
+  DateTime _lastHeartbeatAt = DateTime.now();
   Timer? _syncUpdateTimer;
   Timer? _forceSyncTimer;
   Timer? _fullSyncTimer;
+  Timer? _heartbeatTimer;
   StreamSubscription<dynamic>? _subscription;
-  LocalPersistence? _persistence;
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
 
   bool _disposed = false;
 
   Future<void> start() async {
-    _persistence = LocalPersistence(documentId);
-
-    final local = await _persistence!.load();
-    if (local != null) {
-      final updates = [if (local.snapshot != null) local.snapshot!, ...local.pendingUpdates];
-      if (updates.isNotEmpty) {
-        editor.importUpdatesBatch(updates);
-      }
+    final connectivityResult = await Connectivity().checkConnectivity();
+    if (connectivityResult.contains(ConnectivityResult.none)) {
+      connectionStatus.value = ConnectionStatus.disconnected;
     }
+
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((results) {
+      if (_disposed) {
+        return;
+      }
+      if (results.contains(ConnectivityResult.none)) {
+        connectionStatus.value = ConnectionStatus.disconnected;
+      } else {
+        final isFresh = DateTime.now().difference(_lastHeartbeatAt) <= _disconnectThreshold;
+        connectionStatus.value = isFresh ? ConnectionStatus.connected : ConnectionStatus.connecting;
+      }
+    });
+
+    _heartbeatTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (_disposed) {
+        return;
+      }
+      if (DateTime.now().difference(_lastHeartbeatAt) > _disconnectThreshold) {
+        connectionStatus.value = ConnectionStatus.disconnected;
+      }
+    });
 
     await fullSync();
 
@@ -63,11 +90,11 @@ class SyncManager {
       return;
     }
 
-    syncStatus.value = SyncStatus.syncing;
-
-    final result = editor.exportNewUpdates();
-    if (result != null && _persistence != null) {
-      unawaited(_persistence!.storeUpdate(result.updates));
+    if (_persistence.version.isNotEmpty) {
+      final updates = editor.export(DocExportMode.updatesFrom, _persistence.version);
+      if (updates != null) {
+        unawaited(_persistence.saveUpdate(updates));
+      }
     }
 
     _syncUpdateTimer?.cancel();
@@ -79,34 +106,17 @@ class SyncManager {
       return;
     }
 
-    final result = editor.exportNewUpdates();
-    if (result == null || result.updates.isEmpty) {
-      if (!_disposed) {
-        syncStatus.value = SyncStatus.synced;
-      }
+    final updates = _persistence.checkpoint.isNotEmpty
+        ? editor.export(DocExportMode.updatesFrom, _persistence.checkpoint)
+        : null;
+    if (updates == null || updates.isEmpty) {
       return;
     }
 
     try {
-      await client.request(
-        GNativeEditor_SyncDocument_MutationReq(
-          (b) => b
-            ..vars.input.clientId = _clientId
-            ..vars.input.documentId = documentId
-            ..vars.input.type = GDocumentSyncType.UPDATE
-            ..vars.input.data = base64Encode(result.updates),
-        ),
-      );
-      if (_disposed) {
-        return;
-      }
-      editor.commitSync(result.version);
-      syncStatus.value = SyncStatus.synced;
+      await _doSync(type: GDocumentSyncType.UPDATE, data: base64Encode(updates));
     } catch (err) {
       debugPrint('Sync error: $err');
-      if (!_disposed) {
-        syncStatus.value = SyncStatus.error;
-      }
     }
   }
 
@@ -115,42 +125,24 @@ class SyncManager {
       return;
     }
 
-    final update = editor.exportAllUpdates();
-    if (update == null) {
-      return;
-    }
+    final snapshot = editor.export(DocExportMode.snapshot);
+    final version = editor.export(DocExportMode.version);
 
-    final snapshot = editor.getSnapshot();
-    final version = editor.getVersion();
-
-    if (_persistence != null && snapshot != null) {
-      await _persistence!.saveSnapshot(snapshot);
+    if (snapshot != null && version != null) {
+      await _persistence.saveSnapshot(snapshot, Uint8List.fromList(version));
     }
 
     if (_disposed) {
       return;
     }
 
-    try {
-      await client.request(
-        GNativeEditor_SyncDocument_MutationReq(
-          (b) => b
-            ..vars.input.clientId = _clientId
-            ..vars.input.documentId = documentId
-            ..vars.input.type = GDocumentSyncType.UPDATE
-            ..vars.input.data = base64Encode(update),
-        ),
-      );
-
-      if (_disposed) {
-        return;
+    final update = editor.export(DocExportMode.allUpdates);
+    if (update != null && update.isNotEmpty) {
+      try {
+        await _doSync(type: GDocumentSyncType.UPDATE, data: base64Encode(update));
+      } catch (err) {
+        debugPrint('Full sync error: $err');
       }
-
-      if (version != null) {
-        editor.commitSync(version);
-      }
-    } catch (err) {
-      debugPrint('Full sync error: $err');
     }
   }
 
@@ -159,23 +151,45 @@ class SyncManager {
       return;
     }
 
-    final version = editor.getVersion();
+    final version = editor.export(DocExportMode.version);
     if (version == null) {
       return;
     }
 
     try {
-      await client.request(
-        GNativeEditor_SyncDocument_MutationReq(
-          (b) => b
-            ..vars.input.clientId = _clientId
-            ..vars.input.documentId = documentId
-            ..vars.input.type = GDocumentSyncType.VECTOR
-            ..vars.input.data = base64Encode(version),
-        ),
-      );
+      await _doSync(type: GDocumentSyncType.VECTOR, data: base64Encode(version));
     } catch (err) {
       debugPrint('Force sync error: $err');
+    }
+  }
+
+  Future<void> _doSync({required GDocumentSyncType type, required String data}) async {
+    final result = await client.request(
+      GNativeEditor_SyncDocument_MutationReq(
+        (b) => b
+          ..vars.input.clientId = _clientId
+          ..vars.input.documentId = documentId
+          ..vars.input.type = type
+          ..vars.input.data = data,
+      ),
+    );
+
+    for (final payload in result.syncDocument) {
+      await _handleSyncPayload(payload.type, payload.data);
+    }
+  }
+
+  Future<void> _handleSyncPayload(GDocumentSyncType type, String data) async {
+    switch (type) {
+      case GDocumentSyncType.HEARTBEAT:
+        _lastHeartbeatAt = DateTime.parse(data);
+        connectionStatus.value = ConnectionStatus.connected;
+      case GDocumentSyncType.UPDATE:
+        editor.importUpdates(Uint8List.fromList(base64Decode(data)));
+      case GDocumentSyncType.VECTOR:
+        await _persistence.saveCheckpoint(Uint8List.fromList(base64Decode(data)));
+      default:
+        break;
     }
   }
 
@@ -185,16 +199,7 @@ class SyncManager {
     }
 
     final payload = data.documentSyncStream;
-
-    if (payload.type == GDocumentSyncType.HEARTBEAT) {
-      syncStatus.value = SyncStatus.synced;
-    } else if (payload.type == GDocumentSyncType.UPDATE) {
-      final updates = base64Decode(payload.data);
-      editor.importUpdates(Uint8List.fromList(updates));
-    } else if (payload.type == GDocumentSyncType.VECTOR) {
-      final versionBytes = base64Decode(payload.data);
-      editor.commitSync(Uint8List.fromList(versionBytes));
-    }
+    unawaited(_handleSyncPayload(payload.type, payload.data));
   }
 
   void dispose() {
@@ -202,24 +207,28 @@ class SyncManager {
     _syncUpdateTimer?.cancel();
     _forceSyncTimer?.cancel();
     _fullSyncTimer?.cancel();
+    _heartbeatTimer?.cancel();
     unawaited(_subscription?.cancel());
+    unawaited(_connectivitySubscription?.cancel());
 
-    final result = editor.exportNewUpdates();
-    if (result != null && result.updates.isNotEmpty) {
-      unawaited(
-        client.request(
-          GNativeEditor_SyncDocument_MutationReq(
-            (b) => b
-              ..vars.input.clientId = _clientId
-              ..vars.input.documentId = documentId
-              ..vars.input.type = GDocumentSyncType.UPDATE
-              ..vars.input.data = base64Encode(result.updates),
+    if (_persistence.checkpoint.isNotEmpty) {
+      final updates = editor.export(DocExportMode.updatesFrom, _persistence.checkpoint);
+      if (updates != null && updates.isNotEmpty) {
+        unawaited(
+          client.request(
+            GNativeEditor_SyncDocument_MutationReq(
+              (b) => b
+                ..vars.input.clientId = _clientId
+                ..vars.input.documentId = documentId
+                ..vars.input.type = GDocumentSyncType.UPDATE
+                ..vars.input.data = base64Encode(updates),
+            ),
           ),
-        ),
-      );
+        );
+      }
     }
 
-    _persistence?.dispose();
-    syncStatus.dispose();
+    _persistence.dispose();
+    connectionStatus.dispose();
   }
 }

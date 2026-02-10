@@ -1,7 +1,7 @@
 import dayjs from 'dayjs';
 import { and, asc, count, desc, eq, gt, gte, inArray, isNull, lt, sum } from 'drizzle-orm';
 import { filter, pipe, Repeater } from 'graphql-yoga';
-import { LoroDoc } from 'loro-crdt';
+import { LoroDoc, VersionVector } from 'loro-crdt';
 import { match } from 'ts-pattern';
 import { redis } from '@/cache';
 import {
@@ -178,6 +178,18 @@ Document.implement({
           .then(firstOrThrow);
 
         return content.snapshot;
+      },
+    }),
+
+    version: t.field({
+      type: 'Binary',
+      resolve: async (self) => {
+        const content = await db
+          .select({ version: DocumentContents.version })
+          .from(DocumentContents)
+          .where(eq(DocumentContents.documentId, self.id))
+          .then(firstOrThrow);
+        return content.version;
       },
     }),
 
@@ -542,6 +554,13 @@ builder.queryFields((t) => ({
     },
   }),
 }));
+
+const SyncDocumentPayload = builder.simpleObject('SyncDocumentPayload', {
+  fields: (t) => ({
+    type: t.field({ type: DocumentSyncType }),
+    data: t.string(),
+  }),
+});
 
 builder.mutationFields((t) => ({
   createDocument: t.withAuth({ session: true }).fieldWithInput({
@@ -1038,7 +1057,7 @@ builder.mutationFields((t) => ({
   }),
 
   syncDocument: t.withAuth({ session: true }).fieldWithInput({
-    type: 'Boolean',
+    type: [SyncDocumentPayload],
     input: {
       clientId: t.input.string(),
       documentId: t.input.id({ validate: validateDbId(TableCode.DOCUMENTS) }),
@@ -1060,6 +1079,15 @@ builder.mutationFields((t) => ({
         });
       }
 
+      const { snapshot, version } = await db
+        .select({
+          snapshot: DocumentContents.snapshot,
+          version: DocumentContents.version,
+        })
+        .from(DocumentContents)
+        .where(eq(DocumentContents.documentId, input.documentId))
+        .then(firstOrThrow);
+
       if (input.type === DocumentSyncType.UPDATE) {
         pubsub.publish('document:sync', input.documentId, {
           target: `!${input.clientId}`,
@@ -1077,25 +1105,30 @@ builder.mutationFields((t) => ({
 
         await enqueueJob('document:sync:collect', input.documentId);
       } else if (input.type === DocumentSyncType.VECTOR) {
-        const contents = await db
-          .select({ snapshot: DocumentContents.snapshot, version: DocumentContents.version })
-          .from(DocumentContents)
-          .where(eq(DocumentContents.documentId, input.documentId))
-          .then(first);
+        const clientVV = VersionVector.decode(Uint8Array.fromBase64(input.data));
+        const doc = new LoroDoc();
+        doc.import(snapshot);
+        const updates = doc.export({ mode: 'update', from: clientVV });
 
-        if (contents) {
-          pubsub.publish('document:sync', input.documentId, {
-            target: input.clientId,
-            type: DocumentSyncType.UPDATE,
-            data: contents.snapshot.toBase64(),
-          });
+        const updatesBase64 = updates.toBase64();
+        const versionBase64 = version.toBase64();
 
-          pubsub.publish('document:sync', input.documentId, {
-            target: input.clientId,
-            type: DocumentSyncType.VECTOR,
-            data: contents.version.toBase64(),
-          });
-        }
+        pubsub.publish('document:sync', input.documentId, {
+          target: input.clientId,
+          type: DocumentSyncType.UPDATE,
+          data: updatesBase64,
+        });
+
+        pubsub.publish('document:sync', input.documentId, {
+          target: input.clientId,
+          type: DocumentSyncType.VECTOR,
+          data: versionBase64,
+        });
+
+        return [
+          { type: DocumentSyncType.UPDATE, data: updatesBase64 },
+          { type: DocumentSyncType.VECTOR, data: versionBase64 },
+        ];
       } else if (input.type === DocumentSyncType.AWARENESS) {
         pubsub.publish('document:sync', input.documentId, {
           target: `!${input.clientId}`,
@@ -1104,7 +1137,7 @@ builder.mutationFields((t) => ({
         });
       }
 
-      return true;
+      return [];
     },
   }),
 

@@ -1,7 +1,7 @@
 import * as Sentry from '@sentry/bun';
 import dayjs from 'dayjs';
-import { and, asc, eq, gt, lt, lte, or, sql } from 'drizzle-orm';
-import { LoroDoc, VersionVector } from 'loro-crdt';
+import { and, eq, gt, lt, sql } from 'drizzle-orm';
+import { LoroDoc } from 'loro-crdt';
 import * as R from 'remeda';
 import { redis } from '@/cache';
 import {
@@ -19,67 +19,9 @@ import { Lock } from '@/lock';
 import { pubsub } from '@/pubsub';
 import { meilisearch } from '@/search';
 import { extractLoroDocContents, garbageCollectLoroDoc } from '@/utils';
-import { compressZstd, decompressZstd } from '@/utils/compression';
+import { compressZstd } from '@/utils/compression';
 import { enqueueJob } from '../index';
 import { defineCron, defineJob } from '../types';
-
-type RetainedVersion = {
-  id: string;
-  createdAt: dayjs.Dayjs;
-  userIds: Set<string>;
-};
-
-const computeRetainedVersions = (
-  storedVersions: { id: string; createdAt: dayjs.Dayjs }[],
-  contributorsByVersionId: Map<string, Set<string>>,
-): RetainedVersion[] => {
-  const threshold24h = dayjs().subtract(24, 'hours');
-  const threshold2w = dayjs().subtract(2, 'weeks');
-
-  type StoredVersion = (typeof storedVersions)[number];
-  const olderVersions: StoredVersion[] = [];
-  const recentVersions: StoredVersion[] = [];
-  const latestVersions: StoredVersion[] = [];
-
-  for (const version of storedVersions) {
-    if (version.createdAt.isAfter(threshold24h)) {
-      latestVersions.push(version);
-    } else if (version.createdAt.isAfter(threshold2w)) {
-      recentVersions.push(version);
-    } else {
-      olderVersions.push(version);
-    }
-  }
-
-  const windowedVersions = new Map<string, RetainedVersion>();
-
-  const processWindow = (versions: StoredVersion[], getBucket: (createdAt: dayjs.Dayjs) => string) => {
-    for (let i = 0; i < versions.length; i++) {
-      const version = versions[i];
-      const userIds = [...(contributorsByVersionId.get(version.id) ?? [])];
-      const isEdge = i === 0 || i === versions.length - 1;
-      const bucket = isEdge ? version.id : getBucket(version.createdAt);
-
-      const existing = windowedVersions.get(bucket);
-      windowedVersions.set(bucket, {
-        id: version.id,
-        createdAt: version.createdAt,
-        userIds: new Set([...(existing?.userIds ?? []), ...userIds]),
-      });
-    }
-  };
-
-  processWindow(olderVersions, (createdAt) =>
-    createdAt
-      .startOf('hour')
-      .add(Math.floor(createdAt.minute() / 5) * 5, 'minutes')
-      .toISOString(),
-  );
-  processWindow(recentVersions, (createdAt) => createdAt.startOf('minute').toISOString());
-  processWindow(latestVersions, (createdAt) => createdAt.toISOString());
-
-  return [...windowedVersions.values()].toSorted((a, b) => a.createdAt.valueOf() - b.createdAt.valueOf());
-};
 
 export const DocumentSyncCollectJob = defineJob('document:sync:collect', async (documentId: string) => {
   const lock = new Lock(`document:${documentId}`);
@@ -313,7 +255,7 @@ export const DocumentIndexJob = defineJob('document:index', async (documentId: s
   }
 });
 
-export const DocumentCompactJob = defineJob('document:compact', async (documentId: string) => {
+export const DocumentGCJob = defineJob('document:gc', async (documentId: string) => {
   const lock = new Lock(`document:${documentId}`);
 
   const acquired = await lock.tryAcquire();
@@ -322,175 +264,39 @@ export const DocumentCompactJob = defineJob('document:compact', async (documentI
   }
 
   try {
-    const storedVersions = await db
-      .select({
-        id: DocumentVersions.id,
-        createdAt: DocumentVersions.createdAt,
-      })
-      .from(DocumentVersions)
-      .where(eq(DocumentVersions.documentId, documentId))
-      .orderBy(asc(DocumentVersions.createdAt), asc(DocumentVersions.order));
-
-    let retainedVersions: RetainedVersion[] = [];
-
-    if (storedVersions.length > 0) {
-      const contributors = await db
-        .select({
-          versionId: DocumentVersionContributors.versionId,
-          userId: DocumentVersionContributors.userId,
-        })
-        .from(DocumentVersionContributors)
-        .innerJoin(DocumentVersions, eq(DocumentVersionContributors.versionId, DocumentVersions.id))
-        .where(eq(DocumentVersions.documentId, documentId));
-
-      const contributorsByVersionId = new Map<string, Set<string>>();
-      for (const contributor of contributors) {
-        const userIds = contributorsByVersionId.get(contributor.versionId) ?? new Set();
-        userIds.add(contributor.userId);
-        contributorsByVersionId.set(contributor.versionId, userIds);
-      }
-
-      retainedVersions = computeRetainedVersions(storedVersions, contributorsByVersionId);
-    }
-
     const { snapshot } = await db
       .select({ snapshot: DocumentContents.snapshot })
       .from(DocumentContents)
       .where(eq(DocumentContents.documentId, documentId))
       .then(firstOrThrow);
 
-    if (retainedVersions.length === storedVersions.length) {
-      const doc = new LoroDoc();
-      doc.import(snapshot);
-      const prevVersion = doc.version();
-      const deletedCount = garbageCollectLoroDoc(doc);
-
-      if (deletedCount > 0) {
-        const gcSnapshot = doc.export({ mode: 'snapshot' });
-        const gcVersion = doc.version().encode();
-        const gcUpdate = doc.export({ mode: 'update', from: prevVersion });
-
-        await db
-          .update(DocumentContents)
-          .set({
-            snapshot: gcSnapshot,
-            version: gcVersion,
-            compactedAt: dayjs(),
-          })
-          .where(eq(DocumentContents.documentId, documentId));
-
-        pubsub.publish('document:sync', documentId, {
-          target: '*',
-          type: DocumentSyncType.UPDATE,
-          data: gcUpdate.toBase64(),
-        });
-      } else {
-        await db.update(DocumentContents).set({ compactedAt: dayjs() }).where(eq(DocumentContents.documentId, documentId));
-      }
-
-      return;
-    }
-
     const doc = new LoroDoc();
     doc.import(snapshot);
+    const prevVersion = doc.version();
+    const deletedCount = garbageCollectLoroDoc(doc);
 
-    const currentFrontiers = doc.oplogFrontiers();
+    if (deletedCount > 0) {
+      const gcSnapshot = doc.export({ mode: 'snapshot' });
+      const gcVersion = doc.version().encode();
+      const gcUpdate = doc.export({ mode: 'update', from: prevVersion });
 
-    type CompactedVersion = {
-      version: Uint8Array;
-      createdAt: dayjs.Dayjs;
-      userIds: string[];
-    };
-
-    const compactedVersions: CompactedVersion[] = [];
-
-    let startFrontiers = currentFrontiers;
-    if (retainedVersions.length > 0) {
-      const { version: firstVersion } = await db
-        .select({ version: DocumentVersions.version })
-        .from(DocumentVersions)
-        .where(eq(DocumentVersions.id, retainedVersions[0].id))
-        .then(firstOrThrow);
-      startFrontiers = doc.vvToFrontiers(VersionVector.decode(await decompressZstd(firstVersion)));
-    }
-
-    const forkedDoc = doc.forkAt(startFrontiers);
-    const baseline = new LoroDoc();
-    baseline.import(forkedDoc.export({ mode: 'shallow-snapshot', frontiers: startFrontiers }));
-
-    let prevFrontiers = startFrontiers;
-
-    for (const [i, retainedVersion] of retainedVersions.entries()) {
-      if (i > 0) {
-        const { version } = await db
-          .select({ version: DocumentVersions.version })
-          .from(DocumentVersions)
-          .where(eq(DocumentVersions.id, retainedVersion.id))
-          .then(firstOrThrow);
-        const frontiers = doc.vvToFrontiers(VersionVector.decode(await decompressZstd(version)));
-        const diff = doc.diff(prevFrontiers, frontiers, false);
-        prevFrontiers = frontiers;
-        if (diff.length === 0) {
-          continue;
-        }
-        baseline.applyDiff(diff);
-      }
-
-      compactedVersions.push({
-        version: await compressZstd(baseline.version().encode()),
-        createdAt: retainedVersion.createdAt,
-        userIds: [...retainedVersion.userIds],
-      });
-    }
-
-    if (retainedVersions.length > 0) {
-      const finalDiff = doc.diff(prevFrontiers, currentFrontiers, false);
-      baseline.applyDiff(finalDiff);
-    }
-
-    garbageCollectLoroDoc(baseline);
-
-    const finalSnapshot = baseline.export({ mode: 'snapshot' });
-    const finalVersion = baseline.version().encode();
-
-    await db.transaction(async (tx) => {
-      if (storedVersions.length > 0) {
-        await tx.delete(DocumentVersions).where(eq(DocumentVersions.documentId, documentId));
-      }
-
-      for (const version of compactedVersions) {
-        const documentVersion = await tx
-          .insert(DocumentVersions)
-          .values({
-            documentId,
-            version: version.version,
-            createdAt: version.createdAt,
-            order: 0,
-          })
-          .returning({ id: DocumentVersions.id })
-          .then(firstOrThrow);
-
-        if (version.userIds.length > 0) {
-          await tx.insert(DocumentVersionContributors).values(
-            version.userIds.map((userId) => ({
-              versionId: documentVersion.id,
-              userId,
-            })),
-          );
-        }
-      }
-
-      await tx
+      await db
         .update(DocumentContents)
         .set({
-          snapshot: finalSnapshot,
-          version: finalVersion,
+          snapshot: gcSnapshot,
+          version: gcVersion,
           compactedAt: dayjs(),
         })
         .where(eq(DocumentContents.documentId, documentId));
 
-      lock.signal.throwIfAborted();
-    });
+      pubsub.publish('document:sync', documentId, {
+        target: '*',
+        type: DocumentSyncType.UPDATE,
+        data: gcUpdate.toBase64(),
+      });
+    } else {
+      await db.update(DocumentContents).set({ compactedAt: dayjs() }).where(eq(DocumentContents.documentId, documentId));
+    }
   } catch (err) {
     Sentry.captureException(err);
   } finally {
@@ -498,34 +304,17 @@ export const DocumentCompactJob = defineJob('document:compact', async (documentI
   }
 });
 
-export const DocumentCompactScanCron = defineCron('document:compact:scan', '0 * * * *', async () => {
-  const now = dayjs();
-
-  const threshold12h = now.subtract(12, 'hours');
-  const threshold24h = now.subtract(24, 'hours');
-  const threshold48h = now.subtract(48, 'hours');
-  const threshold7d = now.subtract(7, 'days');
+export const DocumentGCScanCron = defineCron('document:gc:scan', '0 * * * *', async () => {
+  const threshold = dayjs().subtract(24, 'hours');
 
   const contents = await db
     .select({ documentId: DocumentContents.documentId })
     .from(DocumentContents)
-    .where(
-      or(
-        and(
-          lte(DocumentContents.updatedAt, threshold24h),
-          gt(DocumentContents.updatedAt, threshold48h),
-          lt(DocumentContents.compactedAt, threshold12h),
-        ),
-        and(
-          lt(DocumentContents.compactedAt, threshold7d),
-          lt(DocumentContents.compactedAt, sql`${DocumentContents.updatedAt} + interval '30 days'`),
-        ),
-      ),
-    );
+    .where(and(gt(DocumentContents.updatedAt, threshold), lt(DocumentContents.compactedAt, threshold)));
 
   await Promise.all(
     contents.map(({ documentId }) =>
-      enqueueJob('document:compact', documentId, {
+      enqueueJob('document:gc', documentId, {
         delay: Math.floor(Math.random() * 50 * 60 * 1000),
         priority: 0,
       }),

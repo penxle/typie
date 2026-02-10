@@ -27,6 +27,7 @@ query NativeEditorScreen_Query($slug: String!) {
         subtitle
         type
         snapshot
+        version
         createdAt
         updatedAt
         characterCountChange {

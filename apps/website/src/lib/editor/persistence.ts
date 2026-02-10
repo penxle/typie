@@ -1,11 +1,13 @@
 const DB_NAME = 'typie-editor';
 const DB_VERSION = 1;
-const STORE_NAME = 'documents';
+const STORE_NAME = 'typie:documents';
 
 type StoredDocument = {
   id: string;
-  snapshot: Uint8Array | null;
-  pendingUpdates: Uint8Array[];
+  snapshot: Uint8Array;
+  updates: Uint8Array[];
+  version: Uint8Array;
+  checkpoint: Uint8Array;
   updatedAt: number;
 };
 
@@ -29,9 +31,19 @@ export class IndexeddbPersistence {
   #documentId: string;
   #db: IDBDatabase | null = null;
   #destroyed = false;
+  #version: Uint8Array = new Uint8Array();
+  #checkpoint: Uint8Array = new Uint8Array();
 
   constructor(documentId: string) {
     this.#documentId = documentId;
+  }
+
+  get version(): Uint8Array {
+    return this.#version;
+  }
+
+  get checkpoint(): Uint8Array {
+    return this.#checkpoint;
   }
 
   async #ensureDb(): Promise<IDBDatabase> {
@@ -40,73 +52,80 @@ export class IndexeddbPersistence {
     return this.#db;
   }
 
-  async load(): Promise<{ snapshot: Uint8Array | null; pendingUpdates: Uint8Array[] } | null> {
+  #request<T>(request: IDBRequest<T>): Promise<T> {
+    return new Promise((resolve, reject) => {
+      request.addEventListener('error', () => reject(request.error));
+      request.addEventListener('success', () => resolve(request.result));
+    });
+  }
+
+  async #getAndUpdate(updater: (existing: StoredDocument | undefined) => StoredDocument | null): Promise<void> {
+    if (this.#destroyed) return;
+
+    const db = await this.#ensureDb();
+    const transaction = db.transaction(STORE_NAME, 'readwrite');
+    const store = transaction.objectStore(STORE_NAME);
+    const existing = (await this.#request(store.get(this.#documentId))) as StoredDocument | undefined;
+    const updated = updater(existing);
+    if (updated) {
+      await this.#request(store.put(updated));
+    }
+  }
+
+  async load(): Promise<{ snapshot: Uint8Array; updates: Uint8Array[] } | null> {
     if (this.#destroyed) return null;
 
     const db = await this.#ensureDb();
+    const store = db.transaction(STORE_NAME, 'readonly').objectStore(STORE_NAME);
+    const result = (await this.#request(store.get(this.#documentId))) as StoredDocument | undefined;
 
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction(STORE_NAME, 'readonly');
-      const store = transaction.objectStore(STORE_NAME);
-      const request = store.get(this.#documentId);
+    if (!result) {
+      return null;
+    }
 
-      request.addEventListener('error', () => reject(request.error));
-      request.addEventListener('success', () => {
-        const result = request.result as StoredDocument | undefined;
-        if (result) {
-          resolve({ snapshot: result.snapshot, pendingUpdates: result.pendingUpdates });
-        } else {
-          resolve(null);
-        }
-      });
-    });
+    this.#version = result.version;
+    this.#checkpoint = result.checkpoint;
+
+    return {
+      snapshot: result.snapshot,
+      updates: result.updates,
+    };
   }
 
-  async storeUpdate(update: Uint8Array): Promise<void> {
-    if (this.#destroyed) return;
-
-    const db = await this.#ensureDb();
-
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction(STORE_NAME, 'readwrite');
-      const store = transaction.objectStore(STORE_NAME);
-      const getRequest = store.get(this.#documentId);
-
-      getRequest.addEventListener('error', () => reject(getRequest.error));
-      getRequest.addEventListener('success', () => {
-        const existing = getRequest.result as StoredDocument | undefined;
-        const data: StoredDocument = {
-          id: this.#documentId,
-          snapshot: existing?.snapshot ?? null,
-          pendingUpdates: [...(existing?.pendingUpdates ?? []), update],
-          updatedAt: Date.now(),
-        };
-        const putRequest = store.put(data);
-
-        putRequest.addEventListener('error', () => reject(putRequest.error));
-        putRequest.addEventListener('success', () => resolve());
-      });
-    });
-  }
-
-  async saveSnapshot(snapshot: Uint8Array): Promise<void> {
-    if (this.#destroyed) return;
-
-    const db = await this.#ensureDb();
-
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction(STORE_NAME, 'readwrite');
-      const store = transaction.objectStore(STORE_NAME);
-      const data: StoredDocument = {
-        id: this.#documentId,
-        snapshot,
-        pendingUpdates: [],
+  async saveUpdate(update: Uint8Array): Promise<void> {
+    return this.#getAndUpdate((existing) => {
+      if (!existing) return null;
+      return {
+        ...existing,
+        updates: [...(existing.updates ?? []), update],
         updatedAt: Date.now(),
       };
-      const request = store.put(data);
+    });
+  }
 
-      request.addEventListener('error', () => reject(request.error));
-      request.addEventListener('success', () => resolve());
+  async saveSnapshot(snapshot: Uint8Array, version: Uint8Array): Promise<void> {
+    if (this.#destroyed) return;
+
+    const db = await this.#ensureDb();
+    const store = db.transaction(STORE_NAME, 'readwrite').objectStore(STORE_NAME);
+    await this.#request(
+      store.put({
+        id: this.#documentId,
+        snapshot,
+        updates: [],
+        version,
+        checkpoint: this.#checkpoint,
+        updatedAt: Date.now(),
+      }),
+    );
+    this.#version = version;
+  }
+
+  async saveCheckpoint(checkpoint: Uint8Array): Promise<void> {
+    this.#checkpoint = checkpoint;
+    return this.#getAndUpdate((existing) => {
+      if (!existing) return null;
+      return { ...existing, checkpoint, updatedAt: Date.now() };
     });
   }
 
@@ -114,15 +133,10 @@ export class IndexeddbPersistence {
     if (this.#destroyed) return;
 
     const db = await this.#ensureDb();
-
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction(STORE_NAME, 'readwrite');
-      const store = transaction.objectStore(STORE_NAME);
-      const request = store.delete(this.#documentId);
-
-      request.addEventListener('error', () => reject(request.error));
-      request.addEventListener('success', () => resolve());
-    });
+    const store = db.transaction(STORE_NAME, 'readwrite').objectStore(STORE_NAME);
+    await this.#request(store.delete(this.#documentId));
+    this.#version = new Uint8Array();
+    this.#checkpoint = new Uint8Array();
   }
 
   destroy(): void {
