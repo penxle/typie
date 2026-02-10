@@ -314,7 +314,7 @@ impl Renderer {
         if let Some(ref element) = positioned.node.element {
             if let Some(render) = element.as_render() {
                 let element_transform = transform.pre_translate(pos.x, pos.y);
-                render.render(pixmap, glyph_renderer, element_transform, ctx);
+                render.render(pixmap, glyph_renderer, element_transform, render_ctx);
             }
         }
 
