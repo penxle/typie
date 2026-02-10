@@ -1183,7 +1183,6 @@ pub fn build_metrics(
     let mut lines = Vec::new();
 
     let global_grapheme_offsets = crate::utils::compute_grapheme_boundaries(text);
-    let mut grapheme_cursor: usize = 0;
 
     let mut top = 0.0;
 
@@ -1252,29 +1251,23 @@ pub fn build_metrics(
 
         grapheme_offsets.push(line_start_char);
 
-        while grapheme_cursor < global_grapheme_offsets.len()
-            && global_grapheme_offsets[grapheme_cursor] <= line_start_char
-        {
-            grapheme_cursor += 1;
-        }
-
-        let mut cursor = grapheme_cursor;
-        while cursor < global_grapheme_offsets.len() {
-            let g = global_grapheme_offsets[cursor];
+        // NOTE: parley가 라인을 비순차적으로 반환할 수 있어서 이진 탐색으로 grapheme 경계를 찾는다
+        let start_idx = global_grapheme_offsets.partition_point(|&g| g <= line_start_char);
+        let mut idx = start_idx;
+        while idx < global_grapheme_offsets.len() {
+            let g = global_grapheme_offsets[idx];
             if g >= line_end_char {
                 break;
             }
             if g > line_start_char {
                 grapheme_offsets.push(g);
             }
-            cursor += 1;
+            idx += 1;
         }
 
         if grapheme_offsets.last() != Some(&line_end_char) {
             grapheme_offsets.push(line_end_char);
         }
-
-        grapheme_cursor = cursor;
 
         let content_width = advance_x - inline_prefix;
 
