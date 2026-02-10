@@ -58,6 +58,10 @@ input CheckSpellingInput {
   body: JSON!
 }
 
+input ConvertPostToDocumentInput {
+  postId: ID!
+}
+
 enum CouponState {
   ACTIVE
   DISABLED
@@ -661,6 +665,7 @@ type Mutation {
   cancelSubscriptionCancellation: Subscription_!
   checkSpelling(input: CheckSpellingInput!): [SpellingError!]!
   checkSpellingDocument(input: CheckSpellingDocumentInput!): [DocumentSpellingError!]!
+  convertPostToDocument(input: ConvertPostToDocumentInput!): Document!
   createDocument(input: CreateDocumentInput!): Document!
   createDocumentReaction(input: CreateDocumentReactionInput!): DocumentReaction!
   createFolder(input: CreateFolderInput!): Folder!
