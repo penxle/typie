@@ -11,6 +11,7 @@
   import ReplaceAllIcon from '~icons/lucide/replace-all';
   import WholeWordIcon from '~icons/lucide/whole-word';
   import XIcon from '~icons/lucide/x';
+  import { IS_MAC } from '$lib/editor/constants';
   import type { Editor } from '@tiptap/core';
   import type { Ref } from '@typie/ui/utils';
 
@@ -46,7 +47,7 @@
   };
 
   const handleKeydown = (e: KeyboardEvent) => {
-    if ((e.ctrlKey || e.metaKey) && e.code === 'KeyF') {
+    if ((IS_MAC ? e.metaKey : e.ctrlKey) && e.code === 'KeyF') {
       e.preventDefault();
 
       getFindTextFromSelection();

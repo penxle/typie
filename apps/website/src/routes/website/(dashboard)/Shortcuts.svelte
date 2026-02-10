@@ -2,6 +2,7 @@
   import { getAppContext } from '@typie/ui/context';
   import mixpanel from 'mixpanel-browser';
   import { fragment, graphql } from '$graphql';
+  import { IS_MAC } from '$lib/editor/constants';
   import { getSplitViewContext } from './[slug]/@split-view/context.svelte';
   import type { DashboardLayout_Shortcuts_query } from '$graphql';
 
@@ -27,7 +28,7 @@
   );
 
   const handleKeydown = async (event: KeyboardEvent) => {
-    if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.code === 'KeyM') {
+    if ((IS_MAC ? event.metaKey : event.ctrlKey) && event.shiftKey && event.code === 'KeyM') {
       if (!app.state.current) return;
 
       event.preventDefault();
@@ -43,7 +44,7 @@
       return;
     }
 
-    if ((event.ctrlKey || event.metaKey) && event.code === 'KeyF') {
+    if ((IS_MAC ? event.metaKey : event.ctrlKey) && event.code === 'KeyF') {
       if (!app.state.current) return;
 
       event.preventDefault();

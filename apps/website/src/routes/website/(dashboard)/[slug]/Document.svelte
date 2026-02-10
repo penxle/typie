@@ -19,6 +19,7 @@
   import XIcon from '~icons/lucide/x';
   import { fragment, graphql } from '$graphql';
   import { BottomToolbar, Editor as EditorComponent, TopToolbar } from '$lib/components/editor';
+  import { IS_MAC } from '$lib/editor/constants';
   import { setEditor } from '$lib/editor/context';
   import { Editor } from '$lib/editor/editor.svelte';
   import { IndexeddbPersistence } from '$lib/editor/persistence';
@@ -547,7 +548,7 @@
   }
 
   function handleGlobalKeydown(e: KeyboardEvent) {
-    if ((e.ctrlKey || e.metaKey) && e.code === 'KeyF' && focused) {
+    if ((IS_MAC ? e.metaKey : e.ctrlKey) && e.code === 'KeyF' && focused) {
       e.preventDefault();
       showFindReplace = true;
     }
