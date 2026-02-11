@@ -51,7 +51,7 @@ pub struct PositionedNode {
     pub node: Rc<LayoutNode>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Element {
     Line(LineElement),
     External(ExternalElement),

@@ -6,7 +6,7 @@ use crate::types::Size;
 const MESSAGE_PADDING_X: f32 = 14.0;
 const MESSAGE_PADDING_Y: f32 = 8.0;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct BlockquoteLineElement {
     pub size: Size,
     pub block_id: NodeId,
@@ -18,7 +18,7 @@ impl BlockquoteLineElement {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct BlockquoteQuoteElement {
     pub size: Size,
     pub block_id: NodeId,
@@ -30,7 +30,7 @@ impl BlockquoteQuoteElement {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct BlockquoteMessageElement {
     pub size: Size,
     pub block_id: NodeId,

@@ -10,7 +10,7 @@ use rustc_hash::FxHashSet;
 use std::fmt;
 use std::rc::Rc;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct BackgroundSegment {
     pub start_offset: usize,
     pub end_offset: usize,
@@ -34,7 +34,7 @@ impl BackgroundSegment {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RubySegment {
     pub start_offset: usize,
     pub end_offset: usize,
@@ -94,6 +94,22 @@ pub struct LineElement {
     pub ruby_segments: Vec<RubySegment>,
     pub background_segments: Vec<BackgroundSegment>,
     pub has_page_break: bool,
+}
+
+impl PartialEq for LineElement {
+    fn eq(&self, other: &Self) -> bool {
+        self.block_id == other.block_id
+            && self.size == other.size
+            && self.line_idx == other.line_idx
+            && Rc::ptr_eq(&self.layout, &other.layout)
+            && self.metric == other.metric
+            && self.preedit == other.preedit
+            && self.is_empty == other.is_empty
+            && self.text == other.text
+            && self.ruby_segments == other.ruby_segments
+            && self.background_segments == other.background_segments
+            && self.has_page_break == other.has_page_break
+    }
 }
 
 impl fmt::Debug for LineElement {
@@ -1150,7 +1166,7 @@ impl CursorNavigable for LineElement {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ClusterMetric {
     pub start_offset: usize,
     pub end_offset: usize,
@@ -1158,7 +1174,7 @@ pub struct ClusterMetric {
     pub width: f32,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct LineMetric {
     pub top: f32,
     pub left: f32,

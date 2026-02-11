@@ -7,7 +7,7 @@ use crate::types::Size;
 pub const CALLOUT_PADDING_X: f32 = 12.0;
 pub const CALLOUT_PADDING_Y: f32 = 16.0;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct CalloutBackgroundElement {
     pub size: Size,
     pub variant: CalloutVariant,
@@ -41,7 +41,7 @@ impl crate::layout::elements::Wrapper for CalloutBackgroundElement {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct CalloutIconElement {
     pub size: Size,
     pub variant: CalloutVariant,

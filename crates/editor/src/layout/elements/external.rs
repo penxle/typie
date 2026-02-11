@@ -27,7 +27,7 @@ pub enum ExternalElementData {
 }
 
 #[allow(dead_code)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ExternalElement {
     pub id: NodeId,
     pub parent_block_id: NodeId,

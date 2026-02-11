@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-#[derive(Debug, Clone, Copy, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 #[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 #[allow(dead_code)]
 pub struct Point {
@@ -19,7 +19,7 @@ impl Point {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 #[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 #[allow(dead_code)]
 pub struct Size {

@@ -1,6 +1,6 @@
 use crate::model::{Mark, NodeId};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PreeditDecor {
     pub node_id: NodeId,
     pub offset: usize,
@@ -8,7 +8,7 @@ pub struct PreeditDecor {
     pub marks: Option<Vec<Mark>>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum SelectionDecor {
     Text {
         node_id: NodeId,
@@ -55,7 +55,7 @@ impl SelectionDecor {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PendingMarksDecor {
     pub node_id: NodeId,
     pub marks: Vec<Mark>,
