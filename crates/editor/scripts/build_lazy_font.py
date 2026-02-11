@@ -199,6 +199,15 @@ def resolve_gsub_alternates(
                                 alt_gid = name_to_gid.get(alt)
                                 if alt_gid is not None:
                                     alternates.setdefault(src_gid, set()).add(alt_gid)
+                if hasattr(subtable, "ligatures"):
+                    for src, ligs in subtable.ligatures.items():
+                        src_gid = name_to_gid.get(src)
+                        if src_gid is not None:
+                            for lig in ligs:
+                                lig_gid = name_to_gid.get(lig.LigGlyph)
+                                if lig_gid is not None:
+                                    alternates.setdefault(src_gid, set()).add(lig_gid)
+
     return alternates
 
 
