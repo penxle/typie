@@ -4181,3 +4181,42 @@ fn test_left_align_long_text_cursor_hit_test() {
         "Left Align: Cursor hit start of line"
     );
 }
+
+#[test]
+fn test_paragraph_indent_with_no_space_long_text() {
+    let mut p = id!();
+    let width = 400.0;
+    let text_content = ",".repeat(100);
+
+    let mut rt = runtime! {
+        viewport { paginated { width: width, height: 400.0, margin: PAGE_MARGIN } }
+        doc {
+            @p paragraph {
+                text { text_content.as_str() }
+            }
+        }
+        selection { (p, 0) }
+    };
+
+    rt.update(Message::SetParagraphIndent { indent: 2.0 });
+    rt.layout();
+
+    let pages = rt.pages();
+    let settings = rt.doc().settings();
+    let expected_indent = settings.paragraph_indent * 16.0;
+
+    let (_, rect) = Cursor::bounds(
+        &ctx(&rt.state()),
+        &pages,
+        Position::new(p, 0, Affinity::Downstream),
+    )
+    .unwrap();
+
+    assert_eq!(
+        rect.x,
+        PAGE_MARGIN + expected_indent,
+        "Cursor at offset 0 should reflect paragraph indent (expected {}, got {})",
+        PAGE_MARGIN + expected_indent,
+        rect.x
+    );
+}
