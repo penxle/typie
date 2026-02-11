@@ -505,6 +505,30 @@ final class NativeEditor {
     }
   }
 
+  List<Map<String, dynamic>> performSearch(String query, bool matchWholeWord) {
+    _checkDisposed();
+
+    final queryPtr = query.toNativeUtf8().cast<Char>();
+
+    try {
+      final ptr = _bindings.editor_perform_search(_handle, queryPtr, matchWholeWord ? 1 : 0);
+      if (ptr == nullptr) {
+        final error = _getLastError();
+        if (error != null) {
+          throw EditorException(error);
+        }
+        return [];
+      }
+
+      final json = ptr.cast<Utf8>().toDartString();
+      _bindings.editor_free_string(ptr);
+
+      return (jsonDecode(json) as List<dynamic>).cast<Map<String, dynamic>>();
+    } finally {
+      calloc.free(queryPtr);
+    }
+  }
+
   bool replaceTextInBlock(String blockId, int startOffset, int endOffset, String replacement) {
     _checkDisposed();
 
@@ -527,6 +551,22 @@ final class NativeEditor {
       calloc
         ..free(blockIdPtr)
         ..free(replacementPtr);
+    }
+  }
+
+  void replaceTextInBlocks(List<List<dynamic>> items) {
+    _checkDisposed();
+
+    final json = jsonEncode(items);
+    final jsonPtr = json.toNativeUtf8().cast<Char>();
+
+    try {
+      final result = _bindings.editor_replace_text_in_blocks(_handle, jsonPtr);
+      if (result < 0) {
+        throw EditorException(_getLastError() ?? 'Failed to replace text in blocks');
+      }
+    } finally {
+      calloc.free(jsonPtr);
     }
   }
 

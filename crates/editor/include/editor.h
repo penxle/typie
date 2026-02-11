@@ -102,10 +102,12 @@ char* editor_get_clipboard_data(EditorHandle* editor);
 
 char* editor_get_text_with_mappings(EditorHandle* editor);
 int32_t editor_set_tracked_items(EditorHandle* editor, uint32_t group, const char* items_json);
+char* editor_perform_search(EditorHandle* editor, const char* query, int32_t match_whole_word);
 int32_t editor_replace_text_in_block(
     EditorHandle* editor, const char* block_id,
     size_t start_offset, size_t end_offset, const char* replacement
 );
+int32_t editor_replace_text_in_blocks(EditorHandle* editor, const char* items_json);
 
 int32_t editor_insert_template_fragment(EditorHandle* editor, const uint8_t* snapshot, size_t snapshot_len);
 

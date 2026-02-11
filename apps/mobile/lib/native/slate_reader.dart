@@ -267,45 +267,6 @@ class SlateReader {
     return result;
   }
 
-  List<_SearchOverlayRaw> readSearchOverlays() {
-    final count = getU32('search_overlays_count');
-    if (count == 0) {
-      return const [];
-    }
-
-    var pos = getU32('search_overlays_offset');
-    final result = <_SearchOverlayRaw>[];
-
-    for (var i = 0; i < count; i++) {
-      final pageIdx = _slabU32(pos);
-      pos += 4;
-
-      final boundsCount = _slabU32(pos);
-      pos += 4;
-
-      final bounds = <_TextBoundRaw>[];
-      for (var j = 0; j < boundsCount; j++) {
-        bounds.add(
-          _TextBoundRaw(
-            x: _slabF32(pos),
-            y: _slabF32(pos + 4),
-            width: _slabF32(pos + 8),
-            height: _slabF32(pos + 12),
-            ascent: _slabF32(pos + 16),
-          ),
-        );
-        pos += 20;
-      }
-
-      final isCurrent = _slabU32(pos) != 0;
-      pos += 4;
-
-      result.add(_SearchOverlayRaw(pageIdx: pageIdx, isCurrent: isCurrent, bounds: bounds));
-    }
-
-    return result;
-  }
-
   List<_TrackedItemOverlayRaw> readTrackedItems() {
     final count = getU32('tracked_items_count');
     if (count == 0) {
@@ -519,14 +480,6 @@ class _TextBoundRaw {
   final double width;
   final double height;
   final double ascent;
-}
-
-class _SearchOverlayRaw {
-  const _SearchOverlayRaw({required this.pageIdx, required this.isCurrent, required this.bounds});
-
-  final int pageIdx;
-  final bool isCurrent;
-  final List<_TextBoundRaw> bounds;
 }
 
 class _TrackedItemOverlayRaw {

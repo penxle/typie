@@ -1,4 +1,4 @@
-import type { ExternalElement, Mark, MarkType, Position, Rect, SearchOverlay, SelectionStats, TextAlign, TextBound } from './types';
+import type { ExternalElement, Mark, MarkType, Position, Rect, SelectionStats, TextAlign, TextBound } from './types';
 
 export type TableOverlay = {
   pageIdx: number;
@@ -26,7 +26,6 @@ export const DIRTY_EXTERNAL_ELEMENTS = 8;
 export const DIRTY_ENABLED_ACTIONS = 9;
 export const DIRTY_LINK_OVERLAYS = 10;
 export const DIRTY_TRACKED_ITEMS = 11;
-export const DIRTY_SEARCH_OVERLAYS = 13;
 export const DIRTY_TABLE_OVERLAYS = 14;
 export const DIRTY_DOC_CHANGED = 15;
 export const DIRTY_RENDER_REQUIRED = 16;
@@ -343,16 +342,6 @@ export class SlateReader {
     return readTrackedItems(this.#slabView, this.#slabPtr + offset, count);
   }
 
-  readSearchOverlays(): { overlays: SearchOverlay[]; totalCount: number; currentIndex: number } {
-    const count = this.#u32('search_overlays_count');
-    const offset = this.#u32('search_overlays_offset');
-    return {
-      overlays: readSearchOverlays(this.#slabView, this.#slabPtr + offset, count),
-      totalCount: this.#u32('search_total_count'),
-      currentIndex: this.#u32('search_current_index'),
-    };
-  }
-
   readTableOverlays(): TableOverlay[] {
     const count = this.#u32('table_overlays_count');
     const offset = this.#u32('table_overlays_offset');
@@ -627,27 +616,6 @@ function readTrackedItems(view: DataView, offset: number, count: number): Tracke
     pos = afterBounds;
 
     overlays.push({ pageIdx, group, id, nodeId, startOffset, endOffset, bounds });
-  }
-  return overlays;
-}
-
-function readSearchOverlays(view: DataView, offset: number, count: number): SearchOverlay[] {
-  const overlays: SearchOverlay[] = [];
-  let pos = offset;
-  for (let i = 0; i < count; i++) {
-    const pageIdx = view.getUint32(pos, true);
-    pos += 4;
-
-    const boundsCount = view.getUint32(pos, true);
-    pos += 4;
-
-    const { bounds, end: afterBounds } = readTextBounds(view, pos, boundsCount);
-    pos = afterBounds;
-
-    const isCurrent = view.getUint32(pos, true) !== 0;
-    pos += 4;
-
-    overlays.push({ pageIdx, bounds, isCurrent });
   }
   return overlays;
 }

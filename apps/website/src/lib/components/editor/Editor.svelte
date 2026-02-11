@@ -102,7 +102,7 @@
   });
 
   $effect(() => {
-    if (editor.layout.pages.length > 0) {
+    if (editor.layout.pages.length > 0 && !initialized) {
       initialized = true;
       tick().then(() => onEditorReady?.(editor));
     }

@@ -472,6 +472,33 @@ impl Editor {
         Ok(serde_wasm_bindgen::to_value(&result).map_err(|e| e.to_string())?)
     }
 
+    #[wasm_bindgen(js_name = performSearch)]
+    pub fn perform_search(&self, query: &str, match_whole_word: bool) -> JsValue {
+        use crate::runtime::search::{SearchQuery, perform_search};
+
+        let search_query = SearchQuery::new(query.to_string(), match_whole_word);
+        let matches = perform_search(&self.runtime.doc(), &search_query);
+
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct MatchResult {
+            node_id: String,
+            start_offset: usize,
+            end_offset: usize,
+        }
+
+        let results: Vec<MatchResult> = matches
+            .into_iter()
+            .map(|m| MatchResult {
+                node_id: m.node_id.to_string(),
+                start_offset: m.start_offset,
+                end_offset: m.end_offset,
+            })
+            .collect();
+
+        to_js_value(&results)
+    }
+
     #[wasm_bindgen(js_name = replaceTextInBlock)]
     pub fn replace_text_in_block(
         &mut self,
@@ -486,6 +513,24 @@ impl Editor {
         self.runtime
             .replace_text_in_block(block_id, start_offset, end_offset, replacement)
             .is_ok()
+    }
+
+    #[wasm_bindgen(js_name = replaceTextInBlocks)]
+    pub fn replace_text_in_blocks(&mut self, items: JsValue) -> bool {
+        let entries: Vec<(String, usize, usize, String)> =
+            match serde_wasm_bindgen::from_value(items) {
+                Ok(v) => v,
+                Err(_) => return false,
+            };
+
+        let replacements: Vec<_> = entries
+            .iter()
+            .filter_map(|(node_id, start, end, replacement)| {
+                NodeId::from_string(node_id).map(|id| (id, *start, *end, replacement.as_str()))
+            })
+            .collect();
+
+        self.runtime.replace_text_in_blocks(&replacements).is_ok()
     }
 }
 

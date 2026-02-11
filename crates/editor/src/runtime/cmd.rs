@@ -31,13 +31,6 @@ pub struct SelectionHandleBounds {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct SearchOverlay {
-    pub page_idx: usize,
-    pub bounds: Vec<TextBound>,
-    pub is_current: bool,
-}
-
-#[derive(Debug, Clone, PartialEq)]
 pub struct TableOverlay {
     pub page_idx: usize,
     pub table_id: String,

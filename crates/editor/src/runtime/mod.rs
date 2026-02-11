@@ -66,7 +66,6 @@ struct PendingUpdates {
     placeholder: bool,
     link_overlays: bool,
     tracked_items: bool,
-    search_overlays: bool,
     table_overlays: bool,
     html_pasted: Option<(String, Position, Position)>,
 }
@@ -114,7 +113,6 @@ pub struct Runtime {
 
     auto_surround_enabled: bool,
     tracked_items: Vec<TrackedItem>,
-    search_state: search::SearchState,
     is_focused: bool,
     last_table_overlays: Vec<TableOverlay>,
     text_replacement_undo: Option<text_replacement::ReplacementUndoState>,
@@ -159,7 +157,6 @@ impl Runtime {
                 placeholder: true,
                 link_overlays: false,
                 tracked_items: false,
-                search_overlays: false,
                 table_overlays: true,
                 html_pasted: None,
             },
@@ -172,7 +169,6 @@ impl Runtime {
             cached_plain_text: None,
             auto_surround_enabled: true,
             tracked_items: Vec::new(),
-            search_state: search::SearchState::default(),
             is_focused: true,
             last_table_overlays: Vec::new(),
             text_replacement_undo: None,
@@ -386,6 +382,66 @@ impl Runtime {
             end_internal_offset - start_internal,
             replacement,
         );
+
+        self.handle_external_doc_change();
+
+        Ok(())
+    }
+
+    pub fn replace_text_in_blocks(
+        &mut self,
+        replacements: &[(NodeId, usize, usize, &str)],
+    ) -> Result<()> {
+        use anyhow::Context;
+
+        let mut indices: Vec<usize> = (0..replacements.len()).collect();
+        indices.sort_by(|&a, &b| {
+            let ra = &replacements[a];
+            let rb = &replacements[b];
+            match ra.0.cmp(&rb.0) {
+                std::cmp::Ordering::Equal => rb.1.cmp(&ra.1),
+                other => other,
+            }
+        });
+
+        let doc_handle = self.state.doc.clone();
+
+        for i in indices {
+            let (block_id, start_offset, end_offset, replacement) = replacements[i];
+
+            let node = doc_handle
+                .node(block_id)
+                .context(format!("Failed to find block node: {:?}", block_id))?;
+
+            let (start_child_id, start_internal, _) =
+                find_text_at_offset(&doc_handle, &node, start_offset).context(format!(
+                    "Failed to find text at start offset: {} in block {:?}",
+                    start_offset, block_id
+                ))?;
+
+            let (end_child_id, _, _) = find_text_at_offset(&doc_handle, &node, end_offset)
+                .context(format!(
+                    "Failed to find text at end offset: {} in block {:?}",
+                    end_offset, block_id
+                ))?;
+
+            if start_child_id != end_child_id {
+                continue;
+            }
+
+            let (_, _, text_node) =
+                find_text_at_offset(&doc_handle, &node, start_offset).context(format!(
+                    "Failed to re-find text node at start offset: {}",
+                    start_offset
+                ))?;
+
+            let end_internal_offset = end_offset - start_offset + start_internal;
+            let _ = text_node.splice(
+                start_internal,
+                end_internal_offset - start_internal,
+                replacement,
+            );
+        }
 
         self.handle_external_doc_change();
 
@@ -1280,27 +1336,6 @@ impl Runtime {
             self.pending.tracked_items = false;
         }
 
-        if self.pending.search_overlays {
-            let overlays = search::build_search_overlays(
-                &self.pages,
-                &self.search_state.matches,
-                self.search_state.current_index,
-            );
-            let start = self.slab.alloc(0, 4);
-            for o in &overlays {
-                self.slab.write_u32_slice(&[o.page_idx as u32]);
-                self.slab.write_u32_slice(&[o.bounds.len() as u32]);
-                Self::write_text_bounds_to_slab(&mut self.slab, &o.bounds);
-                self.slab.write_u32_slice(&[o.is_current as u32]);
-            }
-            self.slate.search_overlays_offset = start;
-            self.slate.search_overlays_count = overlays.len() as u32;
-            self.slate.search_total_count = self.search_state.total_count() as u32;
-            self.slate.search_current_index = self.search_state.current_index as u32;
-            self.slate.dirty |= DIRTY_SEARCH_OVERLAYS;
-            self.pending.search_overlays = false;
-        }
-
         if self.pending.table_overlays {
             let overlays = self.build_table_overlays();
             if overlays != self.last_table_overlays {
@@ -1594,12 +1629,6 @@ impl Runtime {
                     self.pending.enabled_actions = true;
                     self.pending.placeholder = true;
                     self.pending.table_overlays = true;
-                    if !self.search_state.query.is_empty() {
-                        let new_matches =
-                            search::perform_search(&self.doc(), &self.search_state.query);
-                        self.search_state.refresh(new_matches);
-                        self.pending.search_overlays = true;
-                    }
                 }
                 Effect::NodeChanged { node_id } => {
                     if let Some(node) = self.doc().node(node_id) {
@@ -1678,7 +1707,6 @@ impl Runtime {
                     self.pending.active_marks = true;
                     self.pending.external_elements = true;
                     self.pending.placeholder = true;
-                    self.pending.search_overlays = true;
                     self.pending.table_overlays = true;
                 }
                 Effect::PointerStyleChanged { style } => {
@@ -1725,10 +1753,6 @@ impl Runtime {
                 }
                 Effect::ExitedDocumentStart => {
                     self.pending.exited_document_start = true;
-                }
-                Effect::SearchStateChanged => {
-                    self.pending.search_overlays = true;
-                    self.pending.render = true;
                 }
                 Effect::TextReplacementApplied { undo_state } => {
                     self.text_replacement_undo = Some(undo_state);

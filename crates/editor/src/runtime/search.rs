@@ -1,6 +1,4 @@
-use crate::layout::Page;
 use crate::model::{Doc, NodeId};
-use crate::runtime::cmd::SearchOverlay;
 
 #[derive(Clone, Debug, Default)]
 pub struct SearchQuery {
@@ -26,80 +24,6 @@ pub struct SearchMatch {
     pub node_id: NodeId,
     pub start_offset: usize,
     pub end_offset: usize,
-}
-
-#[derive(Clone, Debug, Default)]
-pub struct SearchState {
-    pub query: SearchQuery,
-    pub matches: Vec<SearchMatch>,
-    pub current_index: usize,
-}
-
-impl SearchState {
-    pub fn clear(&mut self) {
-        self.query = SearchQuery::default();
-        self.matches.clear();
-        self.current_index = 0;
-    }
-
-    pub fn current_match(&self) -> Option<&SearchMatch> {
-        self.matches.get(self.current_index)
-    }
-
-    pub fn total_count(&self) -> usize {
-        self.matches.len()
-    }
-
-    pub fn move_to_next(&mut self) {
-        if !self.matches.is_empty() {
-            self.current_index = (self.current_index + 1) % self.matches.len();
-        }
-    }
-
-    pub fn move_to_previous(&mut self) {
-        if !self.matches.is_empty() {
-            self.current_index = if self.current_index == 0 {
-                self.matches.len() - 1
-            } else {
-                self.current_index - 1
-            };
-        }
-    }
-
-    pub fn refresh(&mut self, new_matches: Vec<SearchMatch>) {
-        let current_ref = self.current_match().map(|m| (m.node_id, m.start_offset));
-
-        self.matches = new_matches;
-
-        if self.matches.is_empty() {
-            self.current_index = 0;
-            return;
-        }
-
-        if let Some((prev_node_id, prev_offset)) = current_ref {
-            if let Some(idx) = self
-                .matches
-                .iter()
-                .position(|m| m.node_id == prev_node_id && m.start_offset == prev_offset)
-            {
-                self.current_index = idx;
-                return;
-            }
-
-            if let Some(idx) = self
-                .matches
-                .iter()
-                .position(|m| m.node_id == prev_node_id && m.start_offset >= prev_offset)
-            {
-                self.current_index = idx;
-                return;
-            }
-
-            self.current_index = self.current_index.min(self.matches.len() - 1);
-        } else {
-            self.current_index = 0;
-        }
-    }
 }
 
 pub fn perform_search(doc: &Doc, query: &SearchQuery) -> Vec<SearchMatch> {
@@ -157,33 +81,4 @@ fn is_word_boundary(chars: &[char], start: usize, len: usize) -> bool {
 
 fn is_word_char(c: char) -> bool {
     c.is_alphanumeric()
-}
-
-pub fn build_search_overlays(
-    pages: &[Page],
-    matches: &[SearchMatch],
-    current_index: usize,
-) -> Vec<SearchOverlay> {
-    let mut overlays = Vec::new();
-
-    for (match_idx, search_match) in matches.iter().enumerate() {
-        for (page_idx, page) in pages.iter().enumerate() {
-            let bounds = page.get_text_range_bounds(
-                search_match.node_id,
-                search_match.start_offset,
-                search_match.end_offset,
-            );
-
-            if !bounds.is_empty() {
-                overlays.push(SearchOverlay {
-                    page_idx,
-                    bounds,
-                    is_current: match_idx == current_index,
-                });
-                break;
-            }
-        }
-    }
-
-    overlays
 }

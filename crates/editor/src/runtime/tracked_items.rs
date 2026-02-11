@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 pub enum TrackedItemGroup {
     Spellcheck = 0,
     AiFeedback = 1,
+    Search = 2,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -128,6 +129,7 @@ impl Runtime {
         let target_group = match group {
             0 => TrackedItemGroup::Spellcheck,
             1 => TrackedItemGroup::AiFeedback,
+            2 => TrackedItemGroup::Search,
             _ => return,
         };
 
