@@ -637,4 +637,42 @@ mod tests {
             panic!("n3 should be paragraph");
         }
     }
+
+    #[test]
+    fn test_delete_row_with_selection() {
+        let mut t = id!();
+        let mut p1 = id!();
+        let mut p2 = id!();
+        let mut p3 = id!();
+
+        let initial = state! {
+            doc {
+                @t table {
+                    table_row {
+                        table_cell { @p1 paragraph { text { "row1" } } }
+                    }
+                    table_row {
+                        table_cell { @p2 paragraph { text { "row2" } } }
+                    }
+                    table_row {
+                        table_cell { @p3 paragraph { text { "row3" } } }
+                    }
+                }
+            }
+            selection { (p2, 2) }
+        };
+
+        let actual = transact!(initial, |tr| {
+            tr.delete_table_row(t, 1).unwrap();
+        });
+
+        let doc = actual.doc;
+        let table = doc.node(t).unwrap();
+        assert_eq!(table.children().count(), 2);
+
+        assert!(
+            doc.node(actual.selection.anchor.node_id).is_some(),
+            "Selection anchor node should exist"
+        );
+    }
 }
