@@ -166,7 +166,7 @@
   });
 </script>
 
-<div class={flex({ direction: 'column', height: 'full', width: 'full' })}>
+<div class={flex({ flex: '1', direction: 'column', height: 'full', width: 'full' })}>
   {#if initialized}
     <div
       style:grid-template-columns={showRuler ? `${rulerThickness}px 1fr` : '1fr'}
@@ -310,7 +310,7 @@
       {/if}
     </div>
   {:else}
-    <div class={center({ size: 'full' })}>
+    <div class={center({ flex: '1', size: 'full' })}>
       <Logo
         class={css({
           size: '32px',
