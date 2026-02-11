@@ -4,15 +4,36 @@ import { nanoid } from 'nanoid';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { PAGE_GAP } from './constants';
 import { ensureAllFontBases, ensureRequiredFallbackFont, ensureRequiredFont } from './fonts';
+import {
+  DIRTY_CURSOR,
+  DIRTY_DOC_CHANGED,
+  DIRTY_ENABLED_ACTIONS,
+  DIRTY_EXITED_DOCUMENT_START,
+  DIRTY_EXTERNAL_ELEMENTS,
+  DIRTY_FALLBACK_FONT_REQUIRED,
+  DIRTY_FONT_REQUIRED,
+  DIRTY_FORMATTING,
+  DIRTY_HTML_PASTED,
+  DIRTY_LAYOUT,
+  DIRTY_LINK_OVERLAYS,
+  DIRTY_PLACEHOLDER,
+  DIRTY_POINTER,
+  DIRTY_RENDER_REQUIRED,
+  DIRTY_SEARCH_OVERLAYS,
+  DIRTY_SELECTION,
+  DIRTY_SETTINGS,
+  DIRTY_TABLE_OVERLAYS,
+  DIRTY_TRACKED_ITEMS,
+  SlateReader,
+} from './slate';
 import { calculateImageDisplaySize, calculateRelativePosition, findNearestPageCoordinate, getPageElement, idleCallback } from './utils';
-import type { DocExportMode, Editor as WasmEditor, Modifier, PointerButton, TableOverlay } from '@typie/editor';
+import type { DocExportMode, Editor as WasmEditor, Modifier, PointerButton } from '@typie/editor';
 import type { ScrollViewport } from '@typie/ui/utils';
+import type { TableOverlay, TrackedItemOverlay } from './slate';
 import type { ThemeColors } from './theme';
 import type {
   AiFeedbackData,
-  AiFeedbackOverlay,
   ArchivedAsset,
-  Cmd,
   EmbedAsset,
   ExternalElement,
   FileAsset,
@@ -26,7 +47,6 @@ import type {
   SearchOverlay,
   SelectionStats,
   SpellcheckErrorData,
-  SpellcheckOverlay,
 } from './types';
 
 let sharedApplication: Application | null = null;
@@ -91,6 +111,7 @@ export type EditorOptions = {
 export class Editor {
   #application: Application | null = null;
   #wasmEditor: WasmEditor | null = null;
+  #slateReader: SlateReader | null = null;
   #running = false;
   #rafId: number | null = null;
   #flushPending = false;
@@ -111,9 +132,7 @@ export class Editor {
   renderVersion = $state(0);
 
   layout = $state({
-    pageCount: 0,
-    pageWidth: 0,
-    pageHeights: [] as number[],
+    pages: [] as { width: number; height: number }[],
     layoutMode: {
       type: 'continuous',
       maxWidth: 600,
@@ -122,8 +141,6 @@ export class Editor {
 
   selection = $state({
     stats: {
-      blockCount: 0,
-      paragraphCount: 0,
       uniformAlign: undefined,
       uniformLineHeight: undefined,
     } as SelectionStats,
@@ -163,10 +180,10 @@ export class Editor {
   cursor = $state({
     pageIdx: -1,
     bounds: null as Rect | null,
-    show: false,
-    scrollToCursor: false,
-    animate: false,
+    visible: false,
   });
+
+  pendingScrollMode = $state<'auto' | 'typewriter' | null>(null);
 
   inputElement = $state<HTMLInputElement | null>(null);
 
@@ -184,7 +201,7 @@ export class Editor {
   });
 
   isFocused = $state(false);
-  isPointerModeIdle = $state(false);
+  pointerState = $state(0);
   readOnly = $state(false);
   protectContent = $state(false);
 
@@ -195,11 +212,11 @@ export class Editor {
 
   linkOverlays = $state<{ pageIdx: number; href: string; bounds: Rect[] }[]>([]);
 
-  spellcheckOverlays = $state<SpellcheckOverlay[]>([]);
+  spellcheckOverlays = $state<TrackedItemOverlay[]>([]);
   activeSpellcheckErrorId = $state<string | null>(null);
   fullSpellcheckErrors = $state<SpellcheckErrorData[]>([]);
 
-  aiFeedbackOverlays = $state<AiFeedbackOverlay[]>([]);
+  aiFeedbackOverlays = $state<TrackedItemOverlay[]>([]);
   activeAiFeedbackItemId = $state<string | null>(null);
   fullAiFeedbackItems = $state<AiFeedbackData[]>([]);
 
@@ -210,10 +227,6 @@ export class Editor {
   });
 
   tableOverlays = $state<TableOverlay[]>([]);
-
-  typewriter = $state({
-    needsScroll: false,
-  });
 
   pasteOptions = $state<{
     text: string;
@@ -274,6 +287,14 @@ export class Editor {
     const wasmEditor = app.createEditor(scaleFactor, options.snapshot);
     this.#wasmEditor = wasmEditor;
 
+    const memory = getMemory() as WebAssembly.Memory;
+    const rawOffsets = wasmEditor.getSlateOffsets();
+    const offsets: Record<string, number> = {};
+    for (const [key, value] of rawOffsets) {
+      offsets[key] = value;
+    }
+    this.#slateReader = new SlateReader(memory, offsets, wasmEditor.getSlatePtr(), wasmEditor.getSlabPtr());
+
     this.dispatch({
       type: 'initialize',
       theme: options.theme,
@@ -304,9 +325,12 @@ export class Editor {
   #tick = (): void => {
     if (!this.#running) return;
 
-    const cmds = this.#wasmEditor?.tick() as Cmd[] | null;
-    if (cmds) {
-      this.#processCommands(cmds);
+    if (this.#wasmEditor && this.#slateReader) {
+      this.#wasmEditor.tick();
+      this.#slateReader.refresh(this.#wasmEditor.getSlatePtr(), this.#wasmEditor.getSlabPtr());
+      if (this.#slateReader.hasDirty) {
+        this.#readSlate(this.#slateReader);
+      }
     }
 
     if (!this.#flushPending) {
@@ -320,204 +344,180 @@ export class Editor {
     this.#rafId = requestAnimationFrame(this.#tick);
   };
 
-  #processCommands(cmds: Cmd[]): void {
-    for (const cmd of cmds) {
-      switch (cmd.type) {
-        case 'docChanged': {
-          this.#onDocChanged?.();
-          this.typewriter.needsScroll = true;
-          this.characterCountsVersion++;
-          break;
-        }
+  #readSlate(slate: SlateReader): void {
+    if (slate.isDirty(DIRTY_DOC_CHANGED)) {
+      this.#onDocChanged?.();
+      this.pendingScrollMode = 'typewriter';
+      this.characterCountsVersion++;
+    }
 
-        case 'settingsChanged': {
-          this.settings.paragraphIndent = cmd.paragraphIndent;
-          this.settings.blockGap = cmd.blockGap;
-          break;
-        }
+    if (slate.isDirty(DIRTY_RENDER_REQUIRED)) {
+      this.renderVersion++;
+    }
 
-        case 'layoutChanged': {
-          this.layout.pageCount = cmd.pageCount;
-          this.layout.layoutMode = cmd.layoutMode;
-          this.layout.pageWidth = cmd.pageWidth;
-          this.layout.pageHeights = cmd.pageHeights;
-          break;
-        }
+    if (slate.isDirty(DIRTY_SETTINGS)) {
+      const s = slate.readSettings();
+      this.settings.paragraphIndent = s.paragraphIndent;
+      this.settings.blockGap = s.blockGap;
+    }
 
-        case 'cursorChanged': {
-          if (cmd.pageIdx !== null && cmd.pageIdx !== undefined && cmd.bounds) {
-            this.cursor.pageIdx = cmd.pageIdx;
-            this.cursor.bounds = cmd.bounds;
-            this.cursor.show = cmd.show;
-            this.cursor.scrollToCursor = cmd.scrollToCursor;
-          } else {
-            this.cursor.pageIdx = -1;
-            this.cursor.bounds = null;
-            this.cursor.show = false;
-            this.cursor.scrollToCursor = false;
-          }
-          break;
-        }
+    if (slate.isDirty(DIRTY_LAYOUT)) {
+      const l = slate.readLayout();
+      this.layout.pages = l.pages;
+      this.layout.layoutMode = l.layoutMode;
+    }
 
-        case 'selectionChanged': {
-          if (this.pasteOptions) {
-            this.pasteOptions = null;
-          }
+    if (slate.isDirty(DIRTY_CURSOR)) {
+      const c = slate.readCursor();
+      if (c.pageIdx >= 0 && c.bounds) {
+        this.cursor.pageIdx = c.pageIdx;
+        this.cursor.bounds = c.bounds;
+        this.cursor.visible = c.visible;
+      } else {
+        this.cursor.pageIdx = -1;
+        this.cursor.bounds = null;
+        this.cursor.visible = false;
+        this.pendingScrollMode = null;
+      }
+    }
 
-          this.selection.stats = cmd.stats;
-          this.selection.collapsed = cmd.collapsed;
-          this.characterCountsVersion++;
-          this.#onSelectionChanged?.(cmd.anchor, cmd.head);
-          break;
-        }
+    if (slate.isDirty(DIRTY_SELECTION)) {
+      if (this.pasteOptions) {
+        this.pasteOptions = null;
+      }
 
-        case 'activeMarksChanged': {
-          this.activeMarks.uniformMarks = cmd.uniformMarks;
-          this.activeMarks.mixedMarks = cmd.mixedMarks;
-          break;
-        }
+      const sel = slate.readSelection();
+      this.selection.stats = sel.stats;
+      this.selection.collapsed = sel.collapsed;
+      this.characterCountsVersion++;
+      this.#onSelectionChanged?.(sel.anchor, sel.head);
+    }
 
-        case 'externalElementChanged': {
-          this.externalElements = cmd.elements;
-          break;
-        }
+    if (slate.isDirty(DIRTY_FORMATTING)) {
+      const m = slate.readActiveMarks();
+      this.activeMarks.uniformMarks = m.uniformMarks;
+      this.activeMarks.mixedMarks = m.mixedMarks;
+    }
 
-        case 'pointerStyleChanged': {
-          if (this.pointer.currentHoverTarget && !this.pointer.currentHoverTarget.closest('[data-external-element]')) {
-            this.pointer.currentHoverTarget.style.cursor = cmd.style;
-          }
-          break;
-        }
+    if (slate.isDirty(DIRTY_EXTERNAL_ELEMENTS)) {
+      this.externalElements = slate.readExternalElements();
+    }
 
-        case 'fontRequired': {
-          this.#handleFontRequired(cmd.family, cmd.weight, cmd.codepoints);
-          break;
-        }
+    if (slate.isDirty(DIRTY_POINTER)) {
+      const style = slate.readPointerStyle();
+      if (this.pointer.currentHoverTarget && !this.pointer.currentHoverTarget.closest('[data-external-element]')) {
+        this.pointer.currentHoverTarget.style.cursor = style;
+      }
+      this.pointerState = slate.readPointerState();
+    }
 
-        case 'fallbackFontRequired': {
-          this.#handleFallbackFontRequired(cmd.codepoints);
-          break;
-        }
+    if (slate.isDirty(DIRTY_FONT_REQUIRED)) {
+      for (const req of slate.readFontRequests()) {
+        this.#handleFontRequired(req.family, req.weight, req.codepoints);
+      }
+    }
 
-        case 'renderRequired': {
-          this.renderVersion++;
-          break;
-        }
+    if (slate.isDirty(DIRTY_FALLBACK_FONT_REQUIRED)) {
+      this.#handleFallbackFontRequired(slate.readFallbackCodepoints());
+    }
 
-        case 'enabledActionsChanged': {
-          this.enabledActions = new SvelteSet(cmd.enabled);
-          break;
-        }
+    if (slate.isDirty(DIRTY_ENABLED_ACTIONS)) {
+      this.enabledActions = new SvelteSet(slate.readEnabledActions());
+    }
 
-        case 'exitedDocumentStart': {
-          this.#onExitedDocumentStart?.();
-          break;
-        }
+    if (slate.isDirty(DIRTY_EXITED_DOCUMENT_START)) {
+      this.#onExitedDocumentStart?.();
+    }
 
-        case 'pointerModeChanged': {
-          this.isPointerModeIdle = cmd.is_idle;
-          break;
-        }
+    if (slate.isDirty(DIRTY_PLACEHOLDER)) {
+      const p = slate.readPlaceholder();
+      this.placeholder.visible = p.visible;
+      this.placeholder.bounds = p.bounds;
+    }
 
-        case 'placeholderChanged': {
-          this.placeholder.visible = cmd.visible;
-          this.placeholder.bounds = cmd.bounds ?? null;
-          break;
-        }
+    if (slate.isDirty(DIRTY_LINK_OVERLAYS)) {
+      this.linkOverlays = slate.readLinkOverlays();
+    }
 
-        case 'linkOverlaysChanged': {
-          this.linkOverlays = cmd.overlays;
-          break;
-        }
+    if (slate.isDirty(DIRTY_TRACKED_ITEMS)) {
+      const items = slate.readTrackedItems();
 
-        case 'spellcheckOverlaysChanged': {
-          this.spellcheckOverlays = cmd.overlays;
-          this.activeSpellcheckErrorId = cmd.overlays.find((o: SpellcheckOverlay) => o.isActive)?.id ?? null;
-
-          const validIds = new SvelteSet(cmd.overlays.map((o: SpellcheckOverlay) => o.id));
-          if (this.fullSpellcheckErrors.length > 0) {
-            this.fullSpellcheckErrors = this.fullSpellcheckErrors.filter((e: SpellcheckErrorData) => validIds.has(e.id));
-          }
-
-          const activeSpellcheckOverlay = cmd.overlays.find((o: SpellcheckOverlay) => o.isActive);
-          if (activeSpellcheckOverlay && activeSpellcheckOverlay.bounds.length > 0) {
-            const pageEl = this.pageContainerEls[activeSpellcheckOverlay.pageIdx];
-            const scroller = this.scrollContainerEl;
-            if (pageEl && scroller) {
-              const pageRect = pageEl.getBoundingClientRect();
-              const scrollerRect = scroller.getBoundingClientRect();
-              const bound = activeSpellcheckOverlay.bounds[0];
-              const targetY = pageRect.top + bound.y - scrollerRect.top + scroller.scrollTop;
-              const viewportCenter = scroller.clientHeight / 2;
-              const targetScroll = targetY - viewportCenter + bound.height / 2;
-              scroller.scrollTo({ top: Math.max(0, targetScroll), behavior: 'smooth' });
-            }
-          }
-          break;
-        }
-
-        case 'aiFeedbackOverlaysChanged': {
-          this.aiFeedbackOverlays = cmd.overlays;
-          this.activeAiFeedbackItemId = cmd.overlays.find((o: AiFeedbackOverlay) => o.isActive)?.id ?? null;
-
-          const validFeedbackIds = new SvelteSet(cmd.overlays.map((o: AiFeedbackOverlay) => o.id));
-          if (this.fullAiFeedbackItems.length > 0) {
-            this.fullAiFeedbackItems = this.fullAiFeedbackItems.filter((e: AiFeedbackData) => validFeedbackIds.has(e.id));
-          }
-
-          const activeOverlay = cmd.overlays.find((o: AiFeedbackOverlay) => o.isActive);
-          if (activeOverlay && activeOverlay.bounds.length > 0) {
-            const pageEl = this.pageContainerEls[activeOverlay.pageIdx];
-            const scroller = this.scrollContainerEl;
-            if (pageEl && scroller) {
-              const pageRect = pageEl.getBoundingClientRect();
-              const scrollerRect = scroller.getBoundingClientRect();
-              const bound = activeOverlay.bounds[0];
-              const targetY = pageRect.top + bound.y - scrollerRect.top + scroller.scrollTop;
-              const viewportCenter = scroller.clientHeight / 2;
-              const targetScroll = targetY - viewportCenter + bound.height / 2;
-              scroller.scrollTo({ top: Math.max(0, targetScroll), behavior: 'smooth' });
-            }
-          }
-          break;
-        }
-
-        case 'searchResultsChanged': {
-          this.searchResults.overlays = cmd.overlays;
-          this.searchResults.totalCount = cmd.totalCount;
-          this.searchResults.currentIndex = cmd.currentIndex;
-
-          const currentOverlay = cmd.overlays.find((o) => o.isCurrent);
-          if (currentOverlay && currentOverlay.bounds.length > 0) {
-            const pageEl = this.pageContainerEls[currentOverlay.pageIdx];
-            const scroller = this.scrollContainerEl;
-            if (pageEl && scroller) {
-              const pageRect = pageEl.getBoundingClientRect();
-              const scrollerRect = scroller.getBoundingClientRect();
-              const bound = currentOverlay.bounds[0];
-              const targetY = pageRect.top + bound.y - scrollerRect.top + scroller.scrollTop;
-              const viewportCenter = scroller.clientHeight / 2;
-              const targetScroll = targetY - viewportCenter + bound.height / 2;
-              scroller.scrollTo({ top: Math.max(0, targetScroll), behavior: 'smooth' });
-            }
-          }
-          break;
-        }
-
-        case 'tableOverlaysChanged': {
-          this.tableOverlays = cmd.overlays;
-          break;
-        }
-
-        case 'htmlPasted': {
-          this.pasteOptions = {
-            text: cmd.text,
-            from: cmd.from,
-            to: cmd.to,
-          };
-          break;
+      const spellcheckItems: TrackedItemOverlay[] = [];
+      const feedbackItems: TrackedItemOverlay[] = [];
+      for (const item of items) {
+        if (item.group === 0) {
+          spellcheckItems.push(item);
+        } else {
+          feedbackItems.push(item);
         }
       }
+
+      this.spellcheckOverlays = spellcheckItems;
+      const spellcheckValidIds = new SvelteSet(spellcheckItems.map((o) => o.id));
+      if (this.fullSpellcheckErrors.length > 0) {
+        this.fullSpellcheckErrors = this.fullSpellcheckErrors.filter((e: SpellcheckErrorData) => spellcheckValidIds.has(e.id));
+      }
+
+      if (this.activeSpellcheckErrorId && !spellcheckValidIds.has(this.activeSpellcheckErrorId)) {
+        this.activeSpellcheckErrorId = null;
+      }
+
+      const activeSpellcheckOverlay = this.activeSpellcheckErrorId
+        ? spellcheckItems.find((o) => o.id === this.activeSpellcheckErrorId)
+        : null;
+      if (activeSpellcheckOverlay && activeSpellcheckOverlay.bounds.length > 0) {
+        this.#scrollOverlayIntoView(activeSpellcheckOverlay);
+      }
+
+      this.aiFeedbackOverlays = feedbackItems;
+      const feedbackValidIds = new SvelteSet(feedbackItems.map((o) => o.id));
+      if (this.fullAiFeedbackItems.length > 0) {
+        this.fullAiFeedbackItems = this.fullAiFeedbackItems.filter((e: AiFeedbackData) => feedbackValidIds.has(e.id));
+      }
+
+      if (this.activeAiFeedbackItemId && !feedbackValidIds.has(this.activeAiFeedbackItemId)) {
+        this.activeAiFeedbackItemId = null;
+      }
+
+      const activeFeedbackOverlay = this.activeAiFeedbackItemId ? feedbackItems.find((o) => o.id === this.activeAiFeedbackItemId) : null;
+      if (activeFeedbackOverlay && activeFeedbackOverlay.bounds.length > 0) {
+        this.#scrollOverlayIntoView(activeFeedbackOverlay);
+      }
+    }
+
+    if (slate.isDirty(DIRTY_SEARCH_OVERLAYS)) {
+      const search = slate.readSearchOverlays();
+      this.searchResults.overlays = search.overlays;
+      this.searchResults.totalCount = search.totalCount;
+      this.searchResults.currentIndex = search.currentIndex;
+
+      const currentOverlay = search.overlays.find((o) => o.isCurrent);
+      if (currentOverlay && currentOverlay.bounds.length > 0) {
+        const pageEl = this.pageContainerEls[currentOverlay.pageIdx];
+        const scroller = this.scrollContainerEl;
+        if (pageEl && scroller) {
+          const pageRect = pageEl.getBoundingClientRect();
+          const scrollerRect = scroller.getBoundingClientRect();
+          const bound = currentOverlay.bounds[0];
+          const targetY = pageRect.top + bound.y - scrollerRect.top + scroller.scrollTop;
+          const viewportCenter = scroller.clientHeight / 2;
+          const targetScroll = targetY - viewportCenter + bound.height / 2;
+          scroller.scrollTo({ top: Math.max(0, targetScroll), behavior: 'smooth' });
+        }
+      }
+    }
+
+    if (slate.isDirty(DIRTY_TABLE_OVERLAYS)) {
+      this.tableOverlays = slate.readTableOverlays();
+    }
+
+    if (slate.isDirty(DIRTY_HTML_PASTED)) {
+      const pasted = slate.readHtmlPasted();
+      this.pasteOptions = {
+        text: pasted.text,
+        from: pasted.from,
+        to: pasted.to,
+      };
     }
   }
 
@@ -527,6 +527,20 @@ export class Editor {
     ensureRequiredFont(this.#application, family, weight, codepoints).then(() => {
       this.dispatch({ type: 'fontsLoaded' });
     });
+  }
+
+  #scrollOverlayIntoView(overlay: TrackedItemOverlay): void {
+    const pageEl = this.pageContainerEls[overlay.pageIdx];
+    const scroller = this.scrollContainerEl;
+    if (pageEl && scroller && overlay.bounds.length > 0) {
+      const pageRect = pageEl.getBoundingClientRect();
+      const scrollerRect = scroller.getBoundingClientRect();
+      const bound = overlay.bounds[0];
+      const targetY = pageRect.top + bound.y - scrollerRect.top + scroller.scrollTop;
+      const viewportCenter = scroller.clientHeight / 2;
+      const targetScroll = targetY - viewportCenter + bound.height / 2;
+      scroller.scrollTo({ top: Math.max(0, targetScroll), behavior: 'smooth' });
+    }
   }
 
   #handleFallbackFontRequired(codepoints: number[]): void {
@@ -555,7 +569,7 @@ export class Editor {
     this.dispatch({
       type: 'pasteText',
       text,
-    });
+    }).scrollIntoView();
 
     this.pasteOptions = null;
   }
@@ -659,7 +673,7 @@ export class Editor {
 
     const { containerEl, pageElements } = this.extensionArea;
     if (containerEl && pageElements.length > 0) {
-      const coord = findNearestPageCoordinate(e, pageElements, this.layout.pageWidth);
+      const coord = findNearestPageCoordinate(e, pageElements, this.layout.pages[0]?.width ?? 0);
       if (coord) {
         return {
           pageIdx: coord.pageIdx,
@@ -853,7 +867,7 @@ export class Editor {
     const data = this.getClipboardData();
     if (data) {
       await this.#writeToClipboard(data.html, data.text);
-      this.dispatch({ type: 'deleteSelection' });
+      this.dispatch({ type: 'deleteSelection' }).scrollIntoView();
     }
     this.closeContextMenu();
   }
@@ -892,13 +906,13 @@ export class Editor {
           this.closeContextMenu();
           return;
         }
-        this.dispatch({ type: 'pasteHtml', html, text });
+        this.dispatch({ type: 'pasteHtml', html, text }).scrollIntoView();
       } else {
-        this.dispatch({ type: 'pasteText', text });
+        this.dispatch({ type: 'pasteText', text }).scrollIntoView();
       }
     } catch {
       const text = await navigator.clipboard.readText();
-      this.dispatch({ type: 'pasteText', text });
+      this.dispatch({ type: 'pasteText', text }).scrollIntoView();
     }
     this.closeContextMenu();
   }
@@ -906,7 +920,7 @@ export class Editor {
   async handlePasteTextOnly(): Promise<void> {
     try {
       const text = await navigator.clipboard.readText();
-      this.dispatch({ type: 'pasteText', text });
+      this.dispatch({ type: 'pasteText', text }).scrollIntoView();
     } catch {
       // ignore
     }
@@ -914,7 +928,7 @@ export class Editor {
   }
 
   handleSelectAll(): void {
-    this.dispatch({ type: 'selectAll' });
+    this.dispatch({ type: 'selectAll' }).scrollIntoView();
     this.closeContextMenu();
   }
 
@@ -961,7 +975,7 @@ export class Editor {
       }
     }
 
-    this.dispatch({ type: 'dragStart', pageIdx, x, y });
+    this.dispatch({ type: 'dragStart', pageIdx, x, y }).scrollIntoView();
   }
 
   #renderDragImage(visiblePages: number[], pageIdx: number): { element: HTMLCanvasElement; offsetX: number; offsetY: number } | null {
@@ -1024,7 +1038,7 @@ export class Editor {
         const end = Math.max(pageIdx, el.pageIdx);
         let dist = 0;
         for (let i = start; i < end; i++) {
-          dist += (this.layout.pageHeights[i] ?? 0) + PAGE_GAP;
+          dist += (this.layout.pages[i]?.height ?? 0) + PAGE_GAP;
         }
         relativePageY = el.pageIdx < pageIdx ? -dist : dist;
       }
@@ -1111,7 +1125,9 @@ export class Editor {
           x,
           y,
           uploadIds,
-        }).focus();
+        })
+          .scrollIntoView()
+          .focus();
       }
 
       if (otherFiles.length > 0) {
@@ -1127,7 +1143,9 @@ export class Editor {
           x,
           y,
           uploadIds,
-        }).focus();
+        })
+          .scrollIntoView()
+          .focus();
       }
 
       if (imageFiles.length > 0 || otherFiles.length > 0) {
@@ -1155,7 +1173,7 @@ export class Editor {
       text,
       html,
       modifier: this.#toModifier(e),
-    });
+    }).scrollIntoView();
   }
 
   handleDragEnd(e: DragEvent): void {
@@ -1182,48 +1200,18 @@ export class Editor {
     });
   }
 
-  setSpellcheckErrors(errors: { id: string; nodeId: string; startOffset: number; endOffset: number }[]): void {
+  setTrackedItems(group: number, items: { id: string; nodeId: string; startOffset: number; endOffset: number }[]): void {
     this.ready.then(() => {
-      this.#wasmEditor?.setSpellcheckErrors(errors);
+      this.#wasmEditor?.setTrackedItems(group, items);
     });
   }
 
-  clearSpellcheckErrors(): void {
-    this.ready.then(() => {
-      this.#wasmEditor?.clearSpellcheckErrors();
-    });
+  replaceTextInBlock(blockId: string, startOffset: number, endOffset: number, replacement: string): boolean {
+    return this.#wasmEditor?.replaceTextInBlock(blockId, startOffset, endOffset, replacement) ?? false;
   }
 
-  applySpellcheckCorrection(nodeId: string, startOffset: number, endOffset: number, correction: string): boolean {
-    return this.#wasmEditor?.applySpellcheckCorrection(nodeId, startOffset, endOffset, correction) ?? false;
-  }
-
-  getSpellcheckErrors(): { id: string; nodeId: string; startOffset: number; endOffset: number }[] {
-    return this.#wasmEditor?.getSpellcheckErrors() ?? [];
-  }
-
-  getSpellcheckText(): { text: string; mappings: { nodeId: string; textStart: number; textEnd: number; blockOffset: number }[] } | null {
-    return this.#wasmEditor?.getSpellcheckText() ?? null;
-  }
-
-  selectSpellcheckError(errorId: string): void {
-    this.dispatch({ type: 'selectSpellcheckError', errorId });
-  }
-
-  setAiFeedbackItems(items: { id: string; nodeId: string; startOffset: number; endOffset: number }[]): void {
-    this.ready.then(() => {
-      this.#wasmEditor?.setAiFeedbackItems(items);
-    });
-  }
-
-  clearAiFeedbackItems(): void {
-    this.ready.then(() => {
-      this.#wasmEditor?.clearAiFeedbackItems();
-    });
-  }
-
-  selectAiFeedbackItem(itemId: string): void {
-    this.dispatch({ type: 'selectAiFeedbackItem', itemId });
+  getTextWithMappings(): { text: string; mappings: { nodeId: string; textStart: number; textEnd: number; blockOffset: number }[] } | null {
+    return this.#wasmEditor?.getTextWithMappings() ?? null;
   }
 
   isSelectionHit(pageIdx: number, x: number, y: number): boolean {
@@ -1263,7 +1251,7 @@ export class Editor {
       type: 'search',
       query,
       matchWholeWord: options?.matchWholeWord ?? false,
-    });
+    }).scrollIntoView();
   }
 
   clearSearch(): void {
@@ -1271,19 +1259,24 @@ export class Editor {
   }
 
   findNext(): void {
-    this.dispatch({ type: 'findNext' });
+    this.dispatch({ type: 'findNext' }).scrollIntoView();
   }
 
   findPrevious(): void {
-    this.dispatch({ type: 'findPrevious' });
+    this.dispatch({ type: 'findPrevious' }).scrollIntoView();
   }
 
   replace(replacement: string): void {
-    this.dispatch({ type: 'replace', replacement });
+    this.dispatch({ type: 'replace', replacement }).scrollIntoView();
   }
 
   replaceAll(replacement: string): void {
-    this.dispatch({ type: 'replaceAll', replacement });
+    this.dispatch({ type: 'replaceAll', replacement }).scrollIntoView();
+  }
+
+  scrollIntoView({ mode = 'auto' }: { mode?: 'auto' | 'typewriter' } = {}): Editor {
+    this.pendingScrollMode = mode;
+    return this;
   }
 
   focus(): Editor {
@@ -1295,6 +1288,7 @@ export class Editor {
   destroy(): void {
     this.#stop();
     this.#wasmEditor = null;
+    this.#slateReader = null;
   }
 
   #toPointerButton(button: number): PointerButton {

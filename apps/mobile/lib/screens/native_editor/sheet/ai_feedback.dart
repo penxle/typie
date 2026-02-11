@@ -57,7 +57,7 @@ class AiFeedbackSheet extends HookWidget {
         unawaited(subscription.value?.cancel());
         try {
           if (!editor.isDisposed) {
-            editor.clearAiFeedbackItems();
+            editor.setTrackedItems(1, []);
           }
         } catch (_) {}
       };
@@ -74,7 +74,7 @@ class AiFeedbackSheet extends HookWidget {
             },
           )
           .toList();
-      editor.setAiFeedbackItems(rawItems);
+      editor.setTrackedItems(1, rawItems);
     }
 
     Future<void> runAnalysis() async {
@@ -82,7 +82,7 @@ class AiFeedbackSheet extends HookWidget {
         return;
       }
 
-      final spellcheckData = editor.getSpellcheckText();
+      final spellcheckData = editor.getTextWithMappings();
       if (spellcheckData == null) {
         return;
       }
@@ -101,7 +101,7 @@ class AiFeedbackSheet extends HookWidget {
       feedbacks.value = [];
       activeFeedbackId.value = null;
       progress.value = null;
-      editor.clearAiFeedbackItems();
+      editor.setTrackedItems(1, []);
 
       final mappingInputs = mappings.map((m) {
         final map = m as Map<String, dynamic>;
@@ -163,7 +163,7 @@ class AiFeedbackSheet extends HookWidget {
     void onFeedbackTap(Map<String, dynamic> feedback) {
       final id = feedback['id'] as String;
       activeFeedbackId.value = id;
-      controller.dispatch({'type': 'selectAiFeedbackItem', 'itemId': id});
+      controller.scrollIntoView();
     }
 
     void onDismissFeedback(Map<String, dynamic> feedback) {
@@ -171,7 +171,6 @@ class AiFeedbackSheet extends HookWidget {
       feedbacks.value = feedbacks.value.where((f) => f['id'] != id).toList();
       if (activeFeedbackId.value == id) {
         activeFeedbackId.value = null;
-        controller.dispatch({'type': 'selectAiFeedbackItem', 'itemId': ''});
       }
       updateOverlays();
     }

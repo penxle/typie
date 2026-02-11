@@ -190,6 +190,7 @@ class _MenuBubble extends StatelessWidget {
                   child: PasteOptionBottomSheet(
                     onConfirm: (selectedMode) async {
                       scope.editor.dispatch({...payload, 'mode': selectedMode == 'text' ? 'text' : 'auto'});
+                      scope.controller.scrollIntoView();
                     },
                   ),
                 );
@@ -197,6 +198,7 @@ class _MenuBubble extends StatelessWidget {
               }
 
               scope.editor.dispatch({...payload, 'mode': pref.pasteMode == 'text' ? 'text' : 'auto'});
+              scope.controller.scrollIntoView();
               onDismiss();
             },
           ),
@@ -204,6 +206,7 @@ class _MenuBubble extends StatelessWidget {
             label: '전체 선택',
             onTap: () {
               scope.editor.dispatch({'type': 'selectAll'});
+              scope.controller.scrollIntoView();
               onDismiss();
             },
           ),

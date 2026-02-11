@@ -73,11 +73,11 @@
     if (value.startsWith(lastInputValue) && value.length > lastInputValue.length) {
       // Append
       const newText = value.slice(lastInputValue.length);
-      editor.dispatch({ type: 'input', text: newText });
+      editor.dispatch({ type: 'input', text: newText }).scrollIntoView();
     } else if (lastInputValue.length > 0 && value !== lastInputValue) {
       // Replace (macOS accent popup / text replacement)
       const deleteLength = lastInputValue.length;
-      editor.dispatch({ type: 'replaceBackward', length: deleteLength, text: value });
+      editor.dispatch({ type: 'replaceBackward', length: deleteLength, text: value }).scrollIntoView();
     }
 
     if (value.length > 64) {
@@ -129,7 +129,7 @@
 
     if (action !== null) {
       e.preventDefault();
-      editor.dispatch(action);
+      editor.dispatch(action).scrollIntoView();
 
       resetInputState();
     }
@@ -151,7 +151,7 @@
 
     e.preventDefault();
     setClipboardData(e.clipboardData, data);
-    editor.dispatch({ type: 'deleteBackward' });
+    editor.dispatch({ type: 'deleteBackward' }).scrollIntoView();
   };
 
   const handlePaste = (e: ClipboardEvent) => {
@@ -167,9 +167,9 @@
     }
 
     if (html) {
-      editor.dispatch({ type: 'pasteHtml', html, text });
+      editor.dispatch({ type: 'pasteHtml', html, text }).scrollIntoView();
     } else {
-      editor.dispatch({ type: 'pasteText', text });
+      editor.dispatch({ type: 'pasteText', text }).scrollIntoView();
     }
   };
 
@@ -178,7 +178,7 @@
 
     currentCompositionText = '';
     const text = e.data || '';
-    editor.dispatch({ type: 'compositionStart', text });
+    editor.dispatch({ type: 'compositionStart', text }).scrollIntoView();
   };
 
   const handleCompositionUpdate = (e: CompositionEvent) => {
@@ -191,8 +191,7 @@
       return;
     }
 
-    editor.dispatch({ type: 'compositionUpdate', text });
-    editor.typewriter.needsScroll = true;
+    editor.dispatch({ type: 'compositionUpdate', text }).scrollIntoView({ mode: 'typewriter' });
   };
 
   const handleCompositionEnd = (e: CompositionEvent) => {
@@ -201,12 +200,12 @@
     const text = e.data || '';
     if (ignoreEventText && text === ignoreEventText) {
       ignoreEventText = '';
-      editor.dispatch({ type: 'compositionEnd' });
+      editor.dispatch({ type: 'compositionEnd' }).scrollIntoView();
       resetInputState();
       return;
     }
 
-    editor.dispatch({ type: 'input', text });
+    editor.dispatch({ type: 'input', text }).scrollIntoView();
     editor.dispatch({ type: 'compositionEnd' });
 
     if (inputEl) {

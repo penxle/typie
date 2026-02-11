@@ -88,7 +88,7 @@
       icon={ImageIcon}
       label="이미지"
       onclick={() => {
-        editor.dispatch({ type: 'insertImage', uploadId: undefined });
+        editor.dispatch({ type: 'insertImage', uploadId: undefined }).scrollIntoView();
         editor.focus();
       }}
       size={toolbarSize}
@@ -98,7 +98,7 @@
       icon={PaperclipIcon}
       label="파일"
       onclick={() => {
-        editor.dispatch({ type: 'insertFile', uploadId: undefined });
+        editor.dispatch({ type: 'insertFile', uploadId: undefined }).scrollIntoView();
         editor.focus();
       }}
       size={toolbarSize}
@@ -108,7 +108,7 @@
       icon={FileUpIcon}
       label="임베드"
       onclick={() => {
-        editor.dispatch({ type: 'insertEmbed' });
+        editor.dispatch({ type: 'insertEmbed' }).scrollIntoView();
         editor.focus();
       }}
       size={toolbarSize}
@@ -125,7 +125,7 @@
             <DropdownMenuItem
               style={css.raw({ justifyContent: 'center', height: '48px' })}
               onclick={() => {
-                editor.focus().dispatch({ type: 'insertHorizontalRule', variant });
+                editor.focus().dispatch({ type: 'insertHorizontalRule', variant }).scrollIntoView();
                 close();
               }}
             >
@@ -172,7 +172,7 @@
       icon={ChevronsDownUpIcon}
       label="접기"
       onclick={() => {
-        editor.focus().dispatch({ type: 'insertFold' });
+        editor.focus().dispatch({ type: 'insertFold' }).scrollIntoView();
       }}
       size={toolbarSize}
     />
@@ -185,7 +185,7 @@
       {#snippet floating({ close })}
         <TableSizeSelector
           onSelect={(rows, cols) => {
-            editor.focus().dispatch({ type: 'insertTable', rows, cols });
+            editor.focus().dispatch({ type: 'insertTable', rows, cols }).scrollIntoView();
             close();
           }}
         />
@@ -233,7 +233,7 @@
         icon={FilePlusIcon}
         label="페이지 나누기"
         onclick={() => {
-          editor.focus().dispatch({ type: 'insertPageBreak' });
+          editor.focus().dispatch({ type: 'insertPageBreak' }).scrollIntoView();
         }}
         size={toolbarSize}
       />

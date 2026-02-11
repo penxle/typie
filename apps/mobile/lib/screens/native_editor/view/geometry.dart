@@ -14,12 +14,12 @@ class ContentGeometry {
   double get horizontalPadding => layout.isPaginated ? pagePadding : 0.0;
   double get defaultBottomPadding => layout.isPaginated ? pagePadding : 200.0;
 
-  double gapAfterPage(int index) => layout.isPaginated && index < layout.pageCount - 1 ? pageGap : 0.0;
+  double gapAfterPage(int index) => layout.isPaginated && index < layout.pages.length - 1 ? pageGap : 0.0;
 
   double get pagesContentHeight {
     var total = 0.0;
-    for (var i = 0; i < layout.pageCount; i++) {
-      total += layout.pageHeights.elementAtOrNull(i) ?? 0.0;
+    for (var i = 0; i < layout.pages.length; i++) {
+      total += layout.pages.elementAtOrNull(i)?.height ?? 0.0;
       total += gapAfterPage(i);
     }
     return total;
@@ -28,7 +28,7 @@ class ContentGeometry {
   double cursorTopInPages(CursorInfo cursor) {
     var top = 0.0;
     for (var i = 0; i < cursor.pageIdx; i++) {
-      top += layout.pageHeights.elementAtOrNull(i) ?? 0.0;
+      top += layout.pages.elementAtOrNull(i)?.height ?? 0.0;
       top += gapAfterPage(i);
     }
     return top + cursor.y;
@@ -38,8 +38,8 @@ class ContentGeometry {
 
   List<double> computeCumulativePageOffsets() {
     final offsets = <double>[0];
-    for (var i = 0; i < layout.pageCount; i++) {
-      final h = layout.pageHeights.elementAtOrNull(i) ?? 0.0;
+    for (var i = 0; i < layout.pages.length; i++) {
+      final h = layout.pages.elementAtOrNull(i)?.height ?? 0.0;
       offsets.add(offsets.last + h + gapAfterPage(i));
     }
     return offsets;

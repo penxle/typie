@@ -18,6 +18,10 @@ impl NodeId {
         Some(Self(Uuid::parse_str(string).ok()?))
     }
 
+    pub fn as_uuid(&self) -> &Uuid {
+        &self.0
+    }
+
     pub fn to_string(&self) -> String {
         self.0.as_simple().to_string()
     }

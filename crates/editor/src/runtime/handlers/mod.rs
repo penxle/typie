@@ -1,4 +1,3 @@
-mod ai_feedback;
 mod auto_surround;
 mod callout;
 mod clipboard;
@@ -19,6 +18,5 @@ mod layout;
 mod navigation;
 mod pointer;
 mod search;
-mod spellcheck;
 mod table;
 mod text_replacement;

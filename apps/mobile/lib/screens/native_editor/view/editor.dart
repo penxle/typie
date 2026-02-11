@@ -19,6 +19,7 @@ import 'package:typie/screens/native_editor/controller/upload.dart';
 import 'package:typie/screens/native_editor/external/models.dart';
 import 'package:typie/screens/native_editor/sheet/template.dart';
 import 'package:typie/screens/native_editor/state/controller.dart';
+import 'package:typie/screens/native_editor/state/scroll_mode.dart';
 import 'package:typie/screens/native_editor/state/state.dart';
 import 'package:typie/screens/native_editor/toolbar/floating/floating.dart';
 import 'package:typie/screens/native_editor/toolbar/scope.dart';
@@ -158,7 +159,9 @@ class EditorView extends HookWidget {
       inputController
         ..onPasteHandler = () async {
           final payload = await EditorClipboard().getPastePayload();
-          controller.dispatch(payload);
+          controller
+            ..dispatch(payload)
+            ..scrollIntoView();
         }
         ..floatingCursorBeginHandler = () {
           floatingCursorOrigin.value = controller.state.cursor;
@@ -191,7 +194,7 @@ class EditorView extends HookWidget {
             }
           }
 
-          final pageIdx = (low - 1).clamp(0, layout.pageCount - 1);
+          final pageIdx = (low - 1).clamp(0, layout.pages.length - 1);
           final localY = newAbsoluteY - offsets[pageIdx];
 
           final pointerEvent = <String, dynamic>{
@@ -205,7 +208,8 @@ class EditorView extends HookWidget {
 
           controller
             ..dispatch({...pointerEvent, 'type': 'pointerDown'})
-            ..dispatch({...pointerEvent, 'type': 'pointerUp'});
+            ..dispatch({...pointerEvent, 'type': 'pointerUp'})
+            ..scrollIntoView();
         }
         ..floatingCursorEndHandler = () {
           floatingCursorOrigin.value = null;
@@ -305,7 +309,7 @@ class EditorView extends HookWidget {
             final cursor = controller.state.cursor;
             if (controller.state.layout == null ||
                 cursor == null ||
-                !cursor.show ||
+                !cursor.visible ||
                 isLongPressing.value ||
                 !controller.state.isFocused) {
               return;
@@ -369,7 +373,7 @@ class EditorView extends HookWidget {
         return null;
       }
 
-      if (cursor.show) {
+      if (cursor.visible) {
         final horizontalScrollOffset = horizontalScrollController.hasClients ? horizontalScrollController.offset : 0.0;
         final geo = ContentGeometry(layout: currentLayout!, titleAreaHeight: titleAreaHeight.value);
         final screenY = geo.cursorTopInPages(cursor);
@@ -378,7 +382,7 @@ class EditorView extends HookWidget {
       }
 
       final shouldScroll =
-          (cursor.show || cursor.scrollToCursor) &&
+          controller.pendingScrollMode != null &&
           currentLayout != null &&
           !isLongPressing.value &&
           !isDropping &&
@@ -388,25 +392,22 @@ class EditorView extends HookWidget {
         if (lastScrollRenderVersion.value != state.state.renderVersion) {
           lastScrollRenderVersion.value = state.state.renderVersion;
           final capturedCursor = cursor;
-          final useTypewriter = cursor.show && pref.typewriterEnabled && controller.typewriterNeedsScroll;
-          if (useTypewriter) {
-            controller.typewriterNeedsScroll = false;
+          final useTypewriter =
+              cursor.visible && pref.typewriterEnabled && controller.pendingScrollMode == ScrollMode.typewriter;
+          final useAutoScroll = controller.pendingScrollMode == ScrollMode.auto;
+          if (controller.pendingScrollMode != null) {
+            controller.pendingScrollMode = null;
           }
-          pendingScroll.value = () {
-            suppressScrollbarTimer.value?.cancel();
-            suppressScrollbarShow.value = true;
-            scrollToCursorWith(capturedCursor, typewriter: useTypewriter);
-            suppressScrollbarTimer.value = Timer(const Duration(milliseconds: 150), () {
-              suppressScrollbarShow.value = false;
-            });
-          };
-        } else if (cursor.show) {
-          suppressScrollbarTimer.value?.cancel();
-          suppressScrollbarShow.value = true;
-          scrollToCursorWith(cursor);
-          suppressScrollbarTimer.value = Timer(const Duration(milliseconds: 150), () {
-            suppressScrollbarShow.value = false;
-          });
+          if (useTypewriter || useAutoScroll) {
+            pendingScroll.value = () {
+              suppressScrollbarTimer.value?.cancel();
+              suppressScrollbarShow.value = true;
+              scrollToCursorWith(capturedCursor, typewriter: useTypewriter);
+              suppressScrollbarTimer.value = Timer(const Duration(milliseconds: 150), () {
+                suppressScrollbarShow.value = false;
+              });
+            };
+          }
         }
       }
       return null;
@@ -458,6 +459,7 @@ class EditorView extends HookWidget {
     }
 
     return NativeEditorToolbarScope(
+      controller: controller,
       keyboardHeight: keyboardHeight,
       isKeyboardVisible: isKeyboardVisible,
       keyboardType: keyboardType,
@@ -522,7 +524,7 @@ class EditorView extends HookWidget {
                               return EditorMagnifier(
                                 position: pos,
                                 focalPoint: pos,
-                                pageSize: Size(currentLayout.pageWidth, constraints.maxHeight),
+                                pageSize: Size(currentLayout.pages.firstOrNull?.width ?? 0, constraints.maxHeight),
                               );
                             },
                           );
@@ -551,7 +553,9 @@ class EditorView extends HookWidget {
                             onReplaceBackward: inputController.onReplaceBackward,
                             onNavigate: (direction, extend) {
                               inputController.commitComposing();
-                              controller.dispatch({'type': 'navigate', 'direction': direction, 'extend': extend});
+                              controller
+                                ..dispatch({'type': 'navigate', 'direction': direction, 'extend': extend})
+                                ..scrollIntoView();
                             },
                           ),
                         ),

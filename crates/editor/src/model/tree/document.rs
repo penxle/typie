@@ -31,7 +31,7 @@ pub struct Doc {
 
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SpellcheckTextMapping {
+pub struct TextMapping {
     #[serde(serialize_with = "serialize_node_id")]
     pub node_id: NodeId,
     pub text_start: usize,
@@ -202,7 +202,7 @@ impl Doc {
         text
     }
 
-    pub fn to_spellcheck_text(&self) -> (String, Vec<SpellcheckTextMapping>) {
+    pub fn to_text_with_mappings(&self) -> (String, Vec<TextMapping>) {
         let mut full_text = String::new();
         let mut mappings = Vec::new();
         let mut char_offset = 0usize;
@@ -220,7 +220,7 @@ impl Doc {
                                 full_text.push_str(&segment_text);
                                 char_offset += char_len;
 
-                                mappings.push(SpellcheckTextMapping {
+                                mappings.push(TextMapping {
                                     node_id: block_id,
                                     text_start,
                                     text_end: char_offset,
@@ -236,7 +236,7 @@ impl Doc {
                         full_text.push('\n');
                         char_offset += 1;
 
-                        mappings.push(SpellcheckTextMapping {
+                        mappings.push(TextMapping {
                             node_id: block_id,
                             text_start,
                             text_end: char_offset,
@@ -254,7 +254,7 @@ impl Doc {
                 let text_start = char_offset;
                 char_offset += 1;
 
-                mappings.push(SpellcheckTextMapping {
+                mappings.push(TextMapping {
                     node_id: block_id,
                     text_start,
                     text_end: char_offset,

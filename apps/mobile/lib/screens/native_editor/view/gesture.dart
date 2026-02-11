@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:typie/native/editor_native.dart';
+import 'package:typie/screens/native_editor/state/controller.dart';
 import 'package:typie/screens/native_editor/state/state.dart';
 import 'package:typie/screens/native_editor/view/geometry.dart';
 
@@ -11,6 +12,7 @@ class GestureController {
     required this.verticalScrollController,
     required this.horizontalScrollController,
     required this.editor,
+    required this.controller,
     required this.getPageAtPosition,
     required this.getPointerX,
     required this.getHorizontalPadding,
@@ -19,6 +21,7 @@ class GestureController {
   final ScrollController verticalScrollController;
   final ScrollController horizontalScrollController;
   final NativeEditor editor;
+  final EditorController controller;
   final (int, double) Function(double y) getPageAtPosition;
   final double Function(double localX) getPointerX;
   final double Function() getHorizontalPadding;
@@ -168,6 +171,7 @@ class GestureController {
               'button': 'primary',
               'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
             });
+          controller.scrollIntoView();
         }
       }
     });

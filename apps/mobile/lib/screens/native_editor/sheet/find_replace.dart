@@ -45,25 +45,35 @@ class FindReplaceSheet extends HookWidget {
         return null;
       }
       debounceTimer.value = Timer(const Duration(milliseconds: 150), () {
-        controller.dispatch({'type': 'search', 'query': findText, 'matchWholeWord': false});
+        controller
+          ..dispatch({'type': 'search', 'query': findText, 'matchWholeWord': false})
+          ..scrollIntoView();
       });
       return null;
     }, [findText]);
 
     void findNext() {
-      controller.dispatch({'type': 'findNext'});
+      controller
+        ..dispatch({'type': 'findNext'})
+        ..scrollIntoView();
     }
 
     void findPrevious() {
-      controller.dispatch({'type': 'findPrevious'});
+      controller
+        ..dispatch({'type': 'findPrevious'})
+        ..scrollIntoView();
     }
 
     void replace() {
-      controller.dispatch({'type': 'replace', 'replacement': replaceTextController.text});
+      controller
+        ..dispatch({'type': 'replace', 'replacement': replaceTextController.text})
+        ..scrollIntoView();
     }
 
     void replaceAll() {
-      controller.dispatch({'type': 'replaceAll', 'replacement': replaceTextController.text});
+      controller
+        ..dispatch({'type': 'replaceAll', 'replacement': replaceTextController.text})
+        ..scrollIntoView();
     }
 
     final totalCount = state.state.search.totalCount;

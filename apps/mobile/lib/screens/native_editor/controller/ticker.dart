@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/scheduler.dart';
+import 'package:typie/native/slate_reader.dart';
 import 'package:typie/screens/native_editor/handler/command.dart';
 import 'package:typie/screens/native_editor/state/controller.dart';
 
@@ -45,8 +46,15 @@ class TickerLoop {
       editor.dispatch({'type': 'resize', 'width': width, 'height': height, 'scaleFactor': _cachedScaleFactor});
     }
 
-    final cmds = editor.tick();
-    CommandHandler.handleCommands(controller, cmds);
+    editor.tick();
+
+    final slatePtr = editor.getSlatePtr();
+    final slateLen = editor.getSlateLen();
+    final slabPtr = editor.getSlabPtr();
+    final slabLen = editor.getSlabLen();
+
+    final reader = SlateReader(slatePtr, slateLen, slabPtr, slabLen);
+    CommandHandler.handleSlate(controller, reader);
 
     if (!editor.isDisposed) {
       controller.notifyTick();

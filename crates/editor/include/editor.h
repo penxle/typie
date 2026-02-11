@@ -52,7 +52,12 @@ EditorHandle* editor_application_create_editor(EditorApplication* app, double sc
 
 void editor_handle_free(EditorHandle* editor);
 int32_t editor_dispatch(EditorHandle* editor, const char* message_json);
-char* editor_tick(EditorHandle* editor);
+int32_t editor_tick(EditorHandle* editor);
+const uint8_t* editor_get_slate_ptr(EditorHandle* editor);
+uint32_t editor_get_slate_len(EditorHandle* editor);
+const uint8_t* editor_get_slab_ptr(EditorHandle* editor);
+uint32_t editor_get_slab_len(EditorHandle* editor);
+char* editor_get_slate_offsets(void);
 int32_t editor_flush(EditorHandle* editor);
 size_t editor_get_page_count(EditorHandle* editor);
 int32_t editor_get_render_info(EditorHandle* editor, size_t page_index, RenderInfo* out_info);
@@ -95,18 +100,12 @@ int32_t editor_import_updates_batch(
 );
 char* editor_get_clipboard_data(EditorHandle* editor);
 
-char* editor_get_spellcheck_text(EditorHandle* editor);
-int32_t editor_set_spellcheck_errors(EditorHandle* editor, const char* errors_json);
-char* editor_get_spellcheck_errors(EditorHandle* editor);
-int32_t editor_apply_spellcheck_correction(
+char* editor_get_text_with_mappings(EditorHandle* editor);
+int32_t editor_set_tracked_items(EditorHandle* editor, uint32_t group, const char* items_json);
+int32_t editor_replace_text_in_block(
     EditorHandle* editor, const char* block_id,
-    size_t start_offset, size_t end_offset, const char* correction
+    size_t start_offset, size_t end_offset, const char* replacement
 );
-int32_t editor_clear_spellcheck_errors(EditorHandle* editor);
-
-int32_t editor_set_ai_feedback_items(EditorHandle* editor, const char* items_json);
-int32_t editor_clear_ai_feedback_items(EditorHandle* editor);
-char* editor_get_ai_feedback_items(EditorHandle* editor);
 
 int32_t editor_insert_template_fragment(EditorHandle* editor, const uint8_t* snapshot, size_t snapshot_len);
 

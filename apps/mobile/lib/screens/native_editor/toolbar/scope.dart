@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:typie/screens/native_editor/controller/upload.dart';
 import 'package:typie/screens/native_editor/external/models.dart';
+import 'package:typie/screens/native_editor/state/controller.dart';
 import 'package:typie/services/keyboard.dart';
 
 enum SecondaryToolbarMode {
@@ -21,6 +22,7 @@ enum BottomToolbarMode { hidden, insert, horizontalRule, blockquote }
 class NativeEditorToolbarScope extends InheritedWidget {
   const NativeEditorToolbarScope({
     required super.child,
+    required this.controller,
     required this.keyboardHeight,
     required this.isKeyboardVisible,
     required this.keyboardType,
@@ -39,6 +41,8 @@ class NativeEditorToolbarScope extends InheritedWidget {
     required this.commitComposing,
     super.key,
   });
+
+  final EditorController controller;
 
   final ValueNotifier<double> keyboardHeight;
   final ValueNotifier<bool> isKeyboardVisible;

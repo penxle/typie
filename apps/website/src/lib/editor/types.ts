@@ -1,10 +1,9 @@
+import type { ExternalElementData, Rect, TextAlign, TextBound } from '@typie/editor';
+
 export type {
   Affinity,
-  AiFeedbackOverlay,
   BlockquoteVariant,
-  Cmd,
   Direction,
-  ExternalElement,
   ExternalElementData,
   HorizontalRuleVariant,
   LayoutMode,
@@ -16,13 +15,29 @@ export type {
   PointerStyle,
   Position,
   Rect,
-  SearchOverlay,
-  SelectionStats,
-  SpellcheckOverlay,
   TextAlign,
   TextBound,
   Theme,
 } from '@typie/editor';
+
+export type ExternalElement = {
+  pageIdx: number;
+  nodeId: string;
+  bounds: Rect;
+  data: ExternalElementData;
+  isSelected: boolean;
+};
+
+export type SelectionStats = {
+  uniformAlign: TextAlign | undefined;
+  uniformLineHeight: number | undefined;
+};
+
+export type SearchOverlay = {
+  pageIdx: number;
+  bounds: TextBound[];
+  isCurrent: boolean;
+};
 
 export type AiFeedbackData = {
   id: string;

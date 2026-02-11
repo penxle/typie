@@ -34,6 +34,16 @@ impl PointerMode {
     pub fn is_idle(&self) -> bool {
         matches!(self, Self::Idle)
     }
+
+    pub fn as_u32(&self) -> u32 {
+        match self {
+            Self::Idle => 0,
+            Self::Pressed { .. } => 1,
+            Self::DraggingContent => 2,
+            Self::DraggingExternal => 3,
+            Self::DraggingSelection => 4,
+        }
+    }
 }
 
 impl Default for PointerMode {

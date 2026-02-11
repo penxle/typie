@@ -4,7 +4,7 @@
 
   type Props = {
     thickness?: number;
-    pageHeights: number[];
+    pages: { width: number; height: number }[];
     pageGap: number;
     marginTop: number;
     marginBottom: number;
@@ -16,7 +16,7 @@
 
   let {
     thickness = 24,
-    pageHeights,
+    pages,
     pageGap,
     marginTop,
     marginBottom,
@@ -46,15 +46,15 @@
     userSelect: 'none',
   })}
 >
-  {#each pageHeights as pageHeight, i (i)}
-    {@const ticks = getTicksForPage(pageHeight)}
+  {#each pages as page, i (i)}
+    {@const ticks = getTicksForPage(page.height)}
     <div
-      style:height="{pageHeight}px"
-      style:margin-bottom="{i === pageHeights.length - 1 ? 0 : pageGap}px"
+      style:height="{page.height}px"
+      style:margin-bottom="{i === pages.length - 1 ? 0 : pageGap}px"
       class={css({ position: 'relative' })}
     >
       {#each ticks as tick (tick.position)}
-        {@const inMargin = isInMargin(tick.position, pageHeight)}
+        {@const inMargin = isInMargin(tick.position, page.height)}
         {#if tick.isMajor}
           <div
             style:top="{tick.position}px"

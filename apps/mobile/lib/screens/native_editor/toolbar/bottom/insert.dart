@@ -55,6 +55,7 @@ class NativeEditorInsertBottomToolbar extends HookWidget {
               scope.bottomToolbarMode.value = BottomToolbarMode.blockquote;
             } else {
               scope.dispatch({'type': node.type, ...?node.attrs});
+              scope.controller.scrollIntoView();
               switch (keyboardType) {
                 case KeyboardType.software:
                   scope.requestFocus();

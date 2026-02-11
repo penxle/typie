@@ -8,7 +8,7 @@
 
   const PADDING = 4;
 
-  const show = $derived(editor.isFocused && editor.cursor.show && !!editor.cursor.bounds);
+  const show = $derived(editor.isFocused && editor.cursor.visible && !!editor.cursor.bounds);
   const pageIdx = $derived(editor.cursor.pageIdx);
   const bounds = $derived(editor.cursor.bounds);
 

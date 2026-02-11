@@ -61,7 +61,7 @@ class PageList extends HookWidget {
         }
       }
 
-      final pageIdx = (low - 1).clamp(0, geo.layout.pageCount - 1);
+      final pageIdx = (low - 1).clamp(0, geo.layout.pages.length - 1);
       final localY = adjustedY - offsets[pageIdx];
       return (pageIdx, localY);
     }
@@ -79,6 +79,7 @@ class PageList extends HookWidget {
         verticalScrollController: verticalScrollController,
         horizontalScrollController: horizontalScrollController,
         editor: editor,
+        controller: scope.controller,
         getPageAtPosition: getPageAtPosition,
         getPointerX: (localX) {
           final offset = horizontalScrollController.hasClients ? horizontalScrollController.offset : 0.0;
@@ -222,7 +223,7 @@ class PageList extends HookWidget {
 
         final geo = scope.geometry;
         final offsets = geo.computeCumulativePageOffsets();
-        final contentWidth = layout.pageWidth + geo.horizontalPadding * 2;
+        final contentWidth = (layout.pages.firstOrNull?.width ?? 0) + geo.horizontalPadding * 2;
         final needsHorizontalScroll = contentWidth > viewWidth;
         final horizontalPhysics = isSelecting || !needsHorizontalScroll
             ? const NeverScrollableScrollPhysics()
@@ -326,6 +327,7 @@ class PageList extends HookWidget {
                                     'button': 'primary',
                                     'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
                                   });
+                                scope.controller.scrollIntoView();
                               }
 
                               gesture.handleAutoScroll(
@@ -355,7 +357,7 @@ class PageList extends HookWidget {
                         scrollDirection: Axis.horizontal,
                         physics: horizontalPhysics,
                         child: Container(
-                          width: geo.layout.pageWidth + geo.horizontalPadding * 2,
+                          width: (geo.layout.pages.firstOrNull?.width ?? 0) + geo.horizontalPadding * 2,
                           padding: EdgeInsets.only(
                             left: geo.horizontalPadding,
                             right: geo.horizontalPadding,
@@ -363,12 +365,12 @@ class PageList extends HookWidget {
                           ),
                           child: Column(
                             children: [
-                              for (var i = 0; i < layout.pageCount; i++) ...[
+                              for (var i = 0; i < layout.pages.length; i++) ...[
                                 _PageSlot(
                                   key: ValueKey(i),
                                   pageIndex: i,
                                   pageTop: geo.titleAreaHeight + offsets[i],
-                                  pageBottom: geo.titleAreaHeight + offsets[i] + layout.pageHeights[i],
+                                  pageBottom: geo.titleAreaHeight + offsets[i] + layout.pages[i].height,
                                 ),
                               ],
                             ],
@@ -377,7 +379,7 @@ class PageList extends HookWidget {
                       )
                     else
                       Container(
-                        width: geo.layout.pageWidth + geo.horizontalPadding * 2,
+                        width: (geo.layout.pages.firstOrNull?.width ?? 0) + geo.horizontalPadding * 2,
                         padding: EdgeInsets.only(
                           left: geo.horizontalPadding,
                           right: geo.horizontalPadding,
@@ -385,12 +387,12 @@ class PageList extends HookWidget {
                         ),
                         child: Column(
                           children: [
-                            for (var i = 0; i < layout.pageCount; i++) ...[
+                            for (var i = 0; i < layout.pages.length; i++) ...[
                               _PageSlot(
                                 key: ValueKey(i),
                                 pageIndex: i,
                                 pageTop: geo.titleAreaHeight + offsets[i],
-                                pageBottom: geo.titleAreaHeight + offsets[i] + layout.pageHeights[i],
+                                pageBottom: geo.titleAreaHeight + offsets[i] + layout.pages[i].height,
                               ),
                             ],
                           ],
@@ -468,6 +470,7 @@ class PageList extends HookWidget {
               'button': 'primary',
               'modifier': {'shift': isShiftHeader, 'ctrl': false, 'alt': false, 'meta': false},
             });
+          scope.controller.scrollIntoView();
 
           if (clickCount == 1) {
             unawaited(
@@ -803,6 +806,7 @@ class _MeasuredTitleFields extends HookWidget {
           onEnterDocument: () {
             scope.inputController.openInput();
             scope.controller.dispatch({'type': 'navigate', 'direction': 'documentStart', 'extend': false});
+            scope.controller.scrollIntoView();
           },
           pageWidth: constraints.maxWidth,
           onFieldTap: scope.inputController.clearFocus,

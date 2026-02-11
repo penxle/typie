@@ -191,9 +191,9 @@ class EditorScrollbar extends HookWidget {
       var mostVisible = 0;
       var maxVisibility = 0.0;
 
-      for (var i = 0; i < layout.pageCount; i++) {
+      for (var i = 0; i < layout.pages.length; i++) {
         final pageTop = cumHeight;
-        final pageHeight = layout.pageHeights.elementAtOrNull(i) ?? 0.0;
+        final pageHeight = layout.pages.elementAtOrNull(i)?.height ?? 0.0;
         final pageBottom = cumHeight + pageHeight;
         cumHeight = pageBottom + geometry.gapAfterPage(i);
 
@@ -212,7 +212,7 @@ class EditorScrollbar extends HookWidget {
     String getDisplayText() {
       if (layout.isPaginated) {
         final mostVisiblePage = calculateMostVisiblePage();
-        return '${mostVisiblePage + 1}/${layout.pageCount}';
+        return '${mostVisiblePage + 1}/${layout.pages.length}';
       }
       return '${(scrollRatioV * 100).round()}%';
     }

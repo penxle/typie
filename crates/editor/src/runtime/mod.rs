@@ -1,4 +1,3 @@
-pub mod ai_feedback;
 mod cmd;
 mod context;
 mod dnd;
@@ -7,28 +6,30 @@ mod handlers;
 mod message;
 mod pointer;
 pub mod search;
-pub mod spellcheck;
+pub mod slate;
 mod state;
 mod table;
 pub mod text_replacement;
+pub mod tracked_items;
 mod view_state;
 
-pub use ai_feedback::{AiFeedbackItem, RawAiFeedbackItem};
 pub use cmd::*;
 pub use context::*;
 pub use dnd::*;
 pub use effect::*;
 pub use message::*;
 pub use pointer::*;
-pub use spellcheck::{RawSpellcheckError, SpellcheckError};
 pub use state::*;
 pub use text_replacement::RawTextReplacementRule;
+pub use tracked_items::{RawTrackedItem, TrackedItem, TrackedItemGroup};
 pub use view_state::*;
 
 use crate::inspect::inspect_page_element;
 use crate::layout::cursor::{Cursor, NavigationContext};
+use crate::layout::elements::ExternalElementData;
 use crate::layout::query::find_drag_image_bounds;
 use crate::layout::{LayoutCache, LayoutContext, Page, Paginator};
+use crate::model::TextAlign;
 use crate::model::*;
 use crate::render::{RenderResult, Renderer};
 
@@ -42,6 +43,7 @@ use crate::types::{Affinity, BoxConstraints, PointerStyle, Rect, Size};
 use anyhow::Result;
 use loro::UndoManager;
 use rustc_hash::{FxHashMap, FxHashSet};
+use slate::*;
 use std::cell::RefCell;
 
 #[derive(Default)]
@@ -50,7 +52,6 @@ struct PendingUpdates {
     selection: bool,
     active_marks: bool,
     cursor: bool,
-    scroll_to_cursor: bool,
     settings: bool,
     layout: bool,
     external_elements: bool,
@@ -64,8 +65,7 @@ struct PendingUpdates {
     pointer_mode_changed: bool,
     placeholder: bool,
     link_overlays: bool,
-    spellcheck_overlays: bool,
-    ai_feedback_overlays: bool,
+    tracked_items: bool,
     search_overlays: bool,
     table_overlays: bool,
     html_pasted: Option<(String, Position, Position)>,
@@ -104,16 +104,16 @@ pub struct Runtime {
     message_queue: Vec<Message>,
     pointer: PointerState,
 
+    pub slate: Slate,
+    pub slab: Slab,
+
     undo_selections: Vec<Selection>,
     redo_selections: Vec<Selection>,
 
     cached_plain_text: Option<String>,
 
     auto_surround_enabled: bool,
-    spellcheck_errors: Vec<SpellcheckError>,
-    active_spellcheck_error_id: Option<String>,
-    ai_feedback_items: Vec<AiFeedbackItem>,
-    active_ai_feedback_item_id: Option<String>,
+    tracked_items: Vec<TrackedItem>,
     search_state: search::SearchState,
     is_focused: bool,
     last_table_overlays: Vec<TableOverlay>,
@@ -143,7 +143,6 @@ impl Runtime {
             pending: PendingUpdates {
                 doc: true,
                 cursor: true,
-                scroll_to_cursor: true,
                 selection: true,
                 active_marks: true,
                 settings: true,
@@ -159,22 +158,20 @@ impl Runtime {
                 pointer_mode_changed: true,
                 placeholder: true,
                 link_overlays: false,
-                spellcheck_overlays: false,
-                ai_feedback_overlays: false,
+                tracked_items: false,
                 search_overlays: false,
                 table_overlays: true,
                 html_pasted: None,
             },
             message_queue: Vec::new(),
             pointer: PointerState::default(),
+            slate: Slate::default(),
+            slab: Slab::new(),
             undo_selections: Vec::new(),
             redo_selections: Vec::new(),
             cached_plain_text: None,
             auto_surround_enabled: true,
-            spellcheck_errors: Vec::new(),
-            active_spellcheck_error_id: None,
-            ai_feedback_items: Vec::new(),
-            active_ai_feedback_item_id: None,
+            tracked_items: Vec::new(),
             search_state: search::SearchState::default(),
             is_focused: true,
             last_table_overlays: Vec::new(),
@@ -438,12 +435,10 @@ impl Runtime {
             let mut block_set = FxHashSet::default();
             block_set.extend(block_ids.iter().copied());
 
-            let (paragraph_count, uniform_align, uniform_line_height, uniform_marks, mixed_marks) =
+            let (_, uniform_align, uniform_line_height, uniform_marks, mixed_marks) =
                 compute_selection_aggregates(self.doc(), &block_ids, from.clone(), to.clone());
 
             let stats = SelectionStats {
-                block_count: block_ids.len(),
-                paragraph_count,
                 uniform_align,
                 uniform_line_height,
             };
@@ -765,14 +760,16 @@ impl Runtime {
         page.get_pointer_style(x, y)
     }
 
-    pub fn tick(&mut self) -> Vec<Cmd> {
+    pub fn tick(&mut self) {
+        self.slate.dirty = 0;
+        self.slab.reset();
         let messages = std::mem::take(&mut self.message_queue);
-
         for msg in messages {
             self.process_message(msg);
         }
-
-        self.build_commands()
+        self.build_output();
+        self.slate.slab_len = self.slab.len() as u32;
+        self.slate.slab_capacity = self.slab.data.capacity() as u32;
     }
 
     pub fn flush(&mut self) {
@@ -787,25 +784,127 @@ impl Runtime {
         self.process_effects(effects);
     }
 
-    fn build_commands(&mut self) -> Vec<Cmd> {
-        let mut cmds = Vec::new();
+    fn node_id_to_bytes(id: NodeId) -> [u8; 16] {
+        *id.as_uuid().as_bytes()
+    }
+
+    fn affinity_to_u32(a: Affinity) -> u32 {
+        match a {
+            Affinity::Upstream => 0,
+            Affinity::Downstream => 1,
+        }
+    }
+
+    fn pointer_style_to_u32(s: PointerStyle) -> u32 {
+        match s {
+            PointerStyle::Default => 0,
+            PointerStyle::Text => 1,
+            PointerStyle::Pointer => 2,
+        }
+    }
+
+    fn text_align_to_i32(a: Option<TextAlign>) -> i32 {
+        match a {
+            None => -1,
+            Some(TextAlign::Left) => 0,
+            Some(TextAlign::Center) => 1,
+            Some(TextAlign::Right) => 2,
+            Some(TextAlign::Justify) => 3,
+        }
+    }
+
+    fn write_mark_to_slab(slab: &mut Slab, mark: &Mark) -> u32 {
+        let start = slab.alloc(0, 4);
+
+        let (type_tag, value_kind) = match mark {
+            Mark::BackgroundColor(_) => (0u32, 3u32),
+            Mark::TextColor(_) => (1, 3),
+            Mark::FontSize(_) => (2, 1),
+            Mark::FontFamily(_) => (3, 3),
+            Mark::FontWeight(_) => (4, 2),
+            Mark::Italic(_) => (5, 0),
+            Mark::LetterSpacing(_) => (6, 1),
+            Mark::Link(_) => (7, 3),
+            Mark::Ruby(_) => (8, 3),
+            Mark::Strikethrough(_) => (9, 0),
+            Mark::Underline(_) => (10, 0),
+        };
+
+        slab.write_u32_slice(&[type_tag, value_kind]);
+
+        match mark {
+            Mark::BackgroundColor(m) => {
+                slab.write_str(&m.key);
+            }
+            Mark::TextColor(m) => {
+                slab.write_str(&m.key);
+            }
+            Mark::FontSize(m) => {
+                slab.write_f32_slice(&[m.size]);
+            }
+            Mark::FontFamily(m) => {
+                slab.write_str(&m.family);
+            }
+            Mark::FontWeight(m) => {
+                slab.write_u32_slice(&[m.weight as u32]);
+            }
+            Mark::Italic(_) => {}
+            Mark::LetterSpacing(m) => {
+                slab.write_f32_slice(&[m.spacing]);
+            }
+            Mark::Link(m) => {
+                slab.write_str(&m.href);
+            }
+            Mark::Ruby(m) => {
+                slab.write_str(&m.text);
+            }
+            Mark::Strikethrough(_) => {}
+            Mark::Underline(_) => {}
+        }
+
+        start
+    }
+
+    fn mark_type_to_bit(mt: &MarkType) -> u32 {
+        match mt {
+            MarkType::BackgroundColor => 1 << 0,
+            MarkType::TextColor => 1 << 1,
+            MarkType::FontSize => 1 << 2,
+            MarkType::FontFamily => 1 << 3,
+            MarkType::FontWeight => 1 << 4,
+            MarkType::Italic => 1 << 5,
+            MarkType::LetterSpacing => 1 << 6,
+            MarkType::Link => 1 << 7,
+            MarkType::Ruby => 1 << 8,
+            MarkType::Strikethrough => 1 << 9,
+            MarkType::Underline => 1 << 10,
+        }
+    }
+
+    fn write_text_bounds_to_slab(slab: &mut Slab, bounds: &[crate::types::TextBound]) {
+        for b in bounds {
+            slab.write_f32_slice(&[b.x, b.y, b.width, b.height, b.ascent]);
+        }
+    }
+
+    fn build_output(&mut self) {
+        let mut had_layout = false;
 
         if self.pending.doc {
-            cmds.push(Cmd::DocChanged);
+            self.slate.dirty |= DIRTY_DOC_CHANGED;
             self.pending.doc = false;
         }
 
         if self.pending.render {
-            cmds.push(Cmd::RenderRequired);
+            self.slate.dirty |= DIRTY_RENDER_REQUIRED;
             self.pending.render = false;
         }
 
         if self.pending.settings {
             let settings = self.doc().settings();
-            cmds.push(Cmd::SettingsChanged {
-                paragraph_indent: settings.paragraph_indent,
-                block_gap: settings.block_gap,
-            });
+            self.slate.paragraph_indent = settings.paragraph_indent;
+            self.slate.block_gap = settings.block_gap;
+            self.slate.dirty |= DIRTY_SETTINGS;
             self.pending.settings = false;
         }
 
@@ -832,33 +931,57 @@ impl Runtime {
                     .collect(),
             };
 
-            cmds.push(Cmd::LayoutChanged {
-                page_count: self.pages.len(),
-                layout_mode,
-                page_width,
-                page_heights,
-            });
+            let pages_data: Vec<f32> = page_heights.iter().flat_map(|&h| [page_width, h]).collect();
+            let (off, cnt) = self.slab.write_f32_slice(&pages_data);
+            self.slate.pages_offset = off;
+            self.slate.pages_count = cnt / 2;
+
+            let lm_start = self.slab.alloc(0, 4);
+            match layout_mode {
+                LayoutMode::Paginated {
+                    page_width,
+                    page_height,
+                    page_margin_top,
+                    page_margin_bottom,
+                    page_margin_left,
+                    page_margin_right,
+                } => {
+                    self.slab.write_u32_slice(&[0]);
+                    self.slab.write_f32_slice(&[
+                        page_width,
+                        page_height,
+                        page_margin_top,
+                        page_margin_bottom,
+                        page_margin_left,
+                        page_margin_right,
+                    ]);
+                }
+                LayoutMode::Continuous { max_width } => {
+                    self.slab.write_u32_slice(&[1]);
+                    self.slab.write_f32_slice(&[max_width]);
+                }
+            }
+            self.slate.layout_mode_offset = lm_start;
+
+            self.slate.dirty |= DIRTY_LAYOUT;
             self.pending.layout = false;
+            had_layout = true;
 
             if self.state.read_only {
                 self.pending.link_overlays = true;
             }
 
-            if self.has_spellcheck_errors() {
-                self.pending.spellcheck_overlays = true;
-            }
-
-            if self.has_ai_feedback_items() {
-                self.pending.ai_feedback_overlays = true;
+            if !self.tracked_items.is_empty() {
+                self.pending.tracked_items = true;
             }
 
             self.pending.table_overlays = true;
         }
 
         if self.pending.cursor {
-            let selection = self.selection();
+            let selection = self.state.selection;
             let ctx = NavigationContext::new(&self.state.doc);
-            let (page_idx, bounds, show) = Cursor::bounds(&ctx, &self.pages, selection.head)
+            let (page_idx, bounds, visible) = Cursor::bounds(&ctx, &self.pages, selection.head)
                 .map(|(idx, rect)| (Some(idx), Some(rect), selection.is_collapsed()))
                 .unwrap_or((None, None, false));
 
@@ -868,108 +991,229 @@ impl Runtime {
                 None
             };
 
-            cmds.push(Cmd::CursorChanged {
-                page_idx,
-                bounds,
-                show,
-                scroll_to_cursor: self.pending.scroll_to_cursor,
-                preceding_char_widths,
-            });
+            self.slate.cursor_page_idx = page_idx.map(|i| i as i32).unwrap_or(-1);
+            if let Some(b) = bounds {
+                self.slate.cursor_x = b.x;
+                self.slate.cursor_y = b.y;
+                self.slate.cursor_width = b.width;
+                self.slate.cursor_height = b.height;
+            } else {
+                self.slate.cursor_x = 0.0;
+                self.slate.cursor_y = 0.0;
+                self.slate.cursor_width = 0.0;
+                self.slate.cursor_height = 0.0;
+            }
+            self.slate.cursor_visible = visible as u32;
+
+            if let Some(widths) = preceding_char_widths {
+                let (off, cnt) = self.slab.write_f32_slice(&widths);
+                self.slate.preceding_char_widths_offset = off;
+                self.slate.preceding_char_widths_count = cnt;
+            } else {
+                self.slate.preceding_char_widths_offset = 0;
+                self.slate.preceding_char_widths_count = 0;
+            }
+
+            self.slate.dirty |= DIRTY_CURSOR;
             self.pending.cursor = false;
-            self.pending.scroll_to_cursor = false;
         }
 
         if self.pending.selection {
-            let snapshot = self.selection_snapshot_owned();
-            let stats = snapshot
-                .as_ref()
-                .map(|s| s.stats.clone())
-                .unwrap_or_default();
-
-            let selection = self.selection();
+            let selection = self.state.selection;
             let collapsed = selection.is_collapsed();
 
-            let (from_handle, to_handle) = if collapsed {
-                (None, None)
+            let cmp = if collapsed {
+                0
             } else {
-                let ctx = NavigationContext::new(&self.state.doc);
-                let (from, to) = selection
-                    .as_sorted(&self.state.doc)
-                    .map(|(f, t)| (f, t))
-                    .unwrap_or((selection.anchor, selection.head));
-                let from_handle = Cursor::selection_handle_bounds(&ctx, &self.pages, from)
-                    .map(|(page_idx, bounds)| SelectionHandleBounds { page_idx, bounds });
-                let to_handle = Cursor::selection_handle_bounds(&ctx, &self.pages, to)
-                    .map(|(page_idx, bounds)| SelectionHandleBounds { page_idx, bounds });
-                (from_handle, to_handle)
+                match selection.as_sorted(&self.state.doc) {
+                    Ok((from, _to)) => {
+                        if from == selection.anchor {
+                            1
+                        } else {
+                            -1
+                        }
+                    }
+                    Err(_) => 0,
+                }
             };
 
-            cmds.push(Cmd::SelectionChanged {
-                stats,
-                collapsed,
-                anchor: selection.anchor,
-                head: selection.head,
-                from_handle,
-                to_handle,
-            });
+            let ctx = NavigationContext::new(&self.state.doc);
+            let anchor_handle =
+                Cursor::selection_handle_bounds(&ctx, &self.pages, selection.anchor)
+                    .map(|(page_idx, bounds)| SelectionHandleBounds { page_idx, bounds });
+            let head_handle = Cursor::selection_handle_bounds(&ctx, &self.pages, selection.head)
+                .map(|(page_idx, bounds)| SelectionHandleBounds { page_idx, bounds });
+
+            self.slate.selection_cmp = cmp;
+            self.slate.selection_anchor_node_id = Self::node_id_to_bytes(selection.anchor.node_id);
+            self.slate.selection_anchor_offset = selection.anchor.offset as u32;
+            self.slate.selection_anchor_affinity = Self::affinity_to_u32(selection.anchor.affinity);
+            self.slate.selection_head_node_id = Self::node_id_to_bytes(selection.head.node_id);
+            self.slate.selection_head_offset = selection.head.offset as u32;
+            self.slate.selection_head_affinity = Self::affinity_to_u32(selection.head.affinity);
+
+            if let Some(h) = anchor_handle {
+                self.slate.selection_anchor_page_idx = h.page_idx as i32;
+                self.slate.selection_anchor_x = h.bounds.x;
+                self.slate.selection_anchor_y = h.bounds.y;
+                self.slate.selection_anchor_width = h.bounds.width;
+                self.slate.selection_anchor_height = h.bounds.height;
+            } else {
+                self.slate.selection_anchor_page_idx = -1;
+                self.slate.selection_anchor_x = 0.0;
+                self.slate.selection_anchor_y = 0.0;
+                self.slate.selection_anchor_width = 0.0;
+                self.slate.selection_anchor_height = 0.0;
+            }
+
+            if let Some(h) = head_handle {
+                self.slate.selection_head_page_idx = h.page_idx as i32;
+                self.slate.selection_head_x = h.bounds.x;
+                self.slate.selection_head_y = h.bounds.y;
+                self.slate.selection_head_width = h.bounds.width;
+                self.slate.selection_head_height = h.bounds.height;
+            } else {
+                self.slate.selection_head_page_idx = -1;
+                self.slate.selection_head_x = 0.0;
+                self.slate.selection_head_y = 0.0;
+                self.slate.selection_head_width = 0.0;
+                self.slate.selection_head_height = 0.0;
+            }
+
+            self.slate.dirty |= DIRTY_SELECTION;
             self.pending.selection = false;
         }
 
         if self.pending.active_marks {
             let snapshot = self.selection_snapshot_owned();
+            let stats = snapshot
+                .as_ref()
+                .map(|s| s.stats.clone())
+                .unwrap_or_default();
             let (uniform_marks, mixed_marks) = self.collect_selection_marks(snapshot);
 
-            cmds.push(Cmd::ActiveMarksChanged {
-                uniform_marks,
-                mixed_marks,
-            });
+            self.slate.formatting_uniform_align = Self::text_align_to_i32(stats.uniform_align);
+            self.slate.formatting_uniform_line_height = stats.uniform_line_height.unwrap_or(-1.0);
+
+            let marks_start = self.slab.alloc(0, 4);
+            for mark in &uniform_marks {
+                Self::write_mark_to_slab(&mut self.slab, mark);
+            }
+            self.slate.formatting_uniform_marks_offset = marks_start;
+            self.slate.formatting_uniform_marks_count = uniform_marks.len() as u32;
+
+            let mut bitfield = 0u32;
+            for mt in &mixed_marks {
+                bitfield |= Self::mark_type_to_bit(mt);
+            }
+            self.slate.formatting_mixed_marks_bitfield = bitfield;
+
+            self.slate.dirty |= DIRTY_FORMATTING;
             self.pending.active_marks = false;
         }
 
         if self.pending.external_elements {
             let elements = self.build_external_elements();
-            cmds.push(Cmd::ExternalElementChanged { elements });
+            let start = self.slab.alloc(0, 4);
+            for el in &elements {
+                self.slab.write_u32_slice(&[el.page_idx as u32]);
+                self.slab.write_str(&el.node_id);
+                self.slab.write_f32_slice(&[
+                    el.bounds.x,
+                    el.bounds.y,
+                    el.bounds.width,
+                    el.bounds.height,
+                ]);
+                self.slab.write_u32_slice(&[el.is_selected as u32]);
+                match &el.data {
+                    ExternalElementData::Image {
+                        id,
+                        proportion,
+                        upload_id,
+                    } => {
+                        self.slab.write_u32_slice(&[0]);
+                        self.slab.write_str(id.as_deref().unwrap_or(""));
+                        self.slab.write_str(upload_id.as_deref().unwrap_or(""));
+                        self.slab.write_f32_slice(&[*proportion]);
+                    }
+                    ExternalElementData::File { id, upload_id } => {
+                        self.slab.write_u32_slice(&[1]);
+                        self.slab.write_str(id.as_deref().unwrap_or(""));
+                        self.slab.write_str(upload_id.as_deref().unwrap_or(""));
+                    }
+                    ExternalElementData::Embed { id } => {
+                        self.slab.write_u32_slice(&[2]);
+                        self.slab.write_str(id.as_deref().unwrap_or(""));
+                    }
+                    ExternalElementData::Archived { id } => {
+                        self.slab.write_u32_slice(&[3]);
+                        self.slab.write_str(id.as_deref().unwrap_or(""));
+                    }
+                }
+            }
+            self.slate.external_elements_offset = start;
+            self.slate.external_elements_count = elements.len() as u32;
+            self.slate.dirty |= DIRTY_EXTERNAL_ELEMENTS;
             self.pending.external_elements = false;
         }
 
         if let Some(style) = self.pending.pointer_style.take() {
-            cmds.push(Cmd::PointerStyleChanged { style });
+            self.slate.pointer_style = Self::pointer_style_to_u32(style);
+            self.slate.dirty |= DIRTY_POINTER;
         }
 
-        for ((family, weight), codepoints) in std::mem::take(&mut self.pending.fonts) {
-            if !codepoints.is_empty() {
-                cmds.push(Cmd::FontRequired {
-                    family,
-                    weight,
-                    codepoints,
-                });
+        let fonts = std::mem::take(&mut self.pending.fonts);
+        if !fonts.is_empty() {
+            let start = self.slab.alloc(0, 4);
+            let mut count = 0u32;
+            for ((family, weight), codepoints) in &fonts {
+                if !codepoints.is_empty() {
+                    self.slab.write_str(family);
+                    self.slab.write_u32_slice(&[*weight as u32]);
+                    self.slab.write_u32_slice(&[codepoints.len() as u32]);
+                    self.slab.write_u32_slice(codepoints);
+                    count += 1;
+                }
+            }
+            if count > 0 {
+                self.slate.font_requests_offset = start;
+                self.slate.font_requests_count = count;
+                self.slate.dirty |= DIRTY_FONT_REQUIRED;
             }
         }
 
         let codepoints = std::mem::take(&mut self.pending.codepoints);
         if !codepoints.is_empty() {
-            cmds.push(Cmd::FallbackFontRequired { codepoints });
+            let (off, cnt) = self.slab.write_u32_slice(&codepoints);
+            self.slate.fallback_codepoints_offset = off;
+            self.slate.fallback_codepoints_count = cnt;
+            self.slate.dirty |= DIRTY_FALLBACK_FONT_REQUIRED;
         }
 
-        if cmds.iter().any(|c| matches!(c, Cmd::LayoutChanged { .. })) {
-            cmds.push(Cmd::RenderRequired);
+        if had_layout {
+            self.slate.dirty |= DIRTY_RENDER_REQUIRED;
         }
 
         if self.pending.enabled_actions {
             let enabled = self.evaluate_enabled_actions();
-            cmds.push(Cmd::EnabledActionsChanged { enabled });
+            let start = self.slab.alloc(0, 4);
+            for action in &enabled {
+                self.slab.write_str(action);
+            }
+            self.slate.enabled_actions_offset = start;
+            self.slate.enabled_actions_count = enabled.len() as u32;
+            self.slate.dirty |= DIRTY_ENABLED_ACTIONS;
             self.pending.enabled_actions = false;
         }
 
         if self.pending.exited_document_start {
-            cmds.push(Cmd::ExitedDocumentStart);
+            self.slate.dirty |= DIRTY_EXITED_DOCUMENT_START;
             self.pending.exited_document_start = false;
         }
 
         if self.pending.pointer_mode_changed {
-            cmds.push(Cmd::PointerModeChanged {
-                is_idle: self.pointer.mode.is_idle(),
-            });
+            self.slate.pointer_state = self.pointer.mode.as_u32();
+            self.slate.dirty |= DIRTY_POINTER;
             self.pending.pointer_mode_changed = false;
         }
 
@@ -982,26 +1226,58 @@ impl Runtime {
             } else {
                 None
             };
-            cmds.push(Cmd::PlaceholderChanged { visible, bounds });
+            self.slate.placeholder_visible = visible as u32;
+            if let Some(b) = bounds {
+                self.slate.placeholder_x = b.x;
+                self.slate.placeholder_y = b.y;
+                self.slate.placeholder_width = b.width;
+                self.slate.placeholder_height = b.height;
+            } else {
+                self.slate.placeholder_x = 0.0;
+                self.slate.placeholder_y = 0.0;
+                self.slate.placeholder_width = 0.0;
+                self.slate.placeholder_height = 0.0;
+            }
+            self.slate.dirty |= DIRTY_PLACEHOLDER;
             self.pending.placeholder = false;
         }
 
         if self.pending.link_overlays {
             let overlays = self.build_link_overlays();
-            cmds.push(Cmd::LinkOverlaysChanged { overlays });
+            let start = self.slab.alloc(0, 4);
+            for o in &overlays {
+                self.slab.write_u32_slice(&[o.page_idx as u32]);
+                self.slab.write_str(&o.href);
+                self.slab.write_u32_slice(&[o.bounds.len() as u32]);
+                Self::write_text_bounds_to_slab(&mut self.slab, &o.bounds);
+            }
+            self.slate.link_overlays_offset = start;
+            self.slate.link_overlays_count = overlays.len() as u32;
+            self.slate.dirty |= DIRTY_LINK_OVERLAYS;
             self.pending.link_overlays = false;
         }
 
-        if self.pending.spellcheck_overlays {
-            let overlays = self.build_spellcheck_overlays();
-            cmds.push(Cmd::SpellcheckOverlaysChanged { overlays });
-            self.pending.spellcheck_overlays = false;
-        }
-
-        if self.pending.ai_feedback_overlays {
-            let overlays = self.build_ai_feedback_overlays();
-            cmds.push(Cmd::AiFeedbackOverlaysChanged { overlays });
-            self.pending.ai_feedback_overlays = false;
+        if self.pending.tracked_items {
+            let overlays = tracked_items::build_tracked_item_overlays(
+                &self.pages,
+                &self.tracked_items,
+                &self.state.doc,
+            );
+            let start = self.slab.alloc(0, 4);
+            for o in &overlays {
+                self.slab.write_u32_slice(&[o.page_idx as u32]);
+                self.slab.write_u32_slice(&[o.group]);
+                self.slab.write_str(&o.id);
+                self.slab.write_bytes(o.node_id.as_uuid().as_bytes());
+                self.slab
+                    .write_u32_slice(&[o.start_offset as u32, o.end_offset as u32]);
+                self.slab.write_u32_slice(&[o.bounds.len() as u32]);
+                Self::write_text_bounds_to_slab(&mut self.slab, &o.bounds);
+            }
+            self.slate.tracked_items_offset = start;
+            self.slate.tracked_items_count = overlays.len() as u32;
+            self.slate.dirty |= DIRTY_TRACKED_ITEMS;
+            self.pending.tracked_items = false;
         }
 
         if self.pending.search_overlays {
@@ -1010,11 +1286,18 @@ impl Runtime {
                 &self.search_state.matches,
                 self.search_state.current_index,
             );
-            cmds.push(Cmd::SearchResultsChanged {
-                overlays,
-                total_count: self.search_state.total_count(),
-                current_index: self.search_state.current_index,
-            });
+            let start = self.slab.alloc(0, 4);
+            for o in &overlays {
+                self.slab.write_u32_slice(&[o.page_idx as u32]);
+                self.slab.write_u32_slice(&[o.bounds.len() as u32]);
+                Self::write_text_bounds_to_slab(&mut self.slab, &o.bounds);
+                self.slab.write_u32_slice(&[o.is_current as u32]);
+            }
+            self.slate.search_overlays_offset = start;
+            self.slate.search_overlays_count = overlays.len() as u32;
+            self.slate.search_total_count = self.search_state.total_count() as u32;
+            self.slate.search_current_index = self.search_state.current_index as u32;
+            self.slate.dirty |= DIRTY_SEARCH_OVERLAYS;
             self.pending.search_overlays = false;
         }
 
@@ -1022,17 +1305,55 @@ impl Runtime {
             let overlays = self.build_table_overlays();
             if overlays != self.last_table_overlays {
                 self.last_table_overlays = overlays.clone();
-                cmds.push(Cmd::TableOverlaysChanged { overlays });
+                let start = self.slab.alloc(0, 4);
+                for o in &overlays {
+                    self.slab.write_u32_slice(&[o.page_idx as u32]);
+                    self.slab.write_str(&o.table_id);
+                    self.slab.write_f32_slice(&[
+                        o.bounds.x,
+                        o.bounds.y,
+                        o.bounds.width,
+                        o.bounds.height,
+                    ]);
+                    self.slab.write_str(&o.border_style);
+                    self.slab.write_str(&o.align);
+                    self.slab.write_u32_slice(&[
+                        o.start_row_index as u32,
+                        o.total_rows as u32,
+                        o.is_focused as u32,
+                    ]);
+                    self.slab.write_u32_slice(&[o.col_widths.len() as u32]);
+                    self.slab.write_f32_slice(&o.col_widths);
+                    self.slab.write_u32_slice(&[o.col_positions.len() as u32]);
+                    self.slab.write_f32_slice(&o.col_positions);
+                    self.slab.write_u32_slice(&[o.row_heights.len() as u32]);
+                    self.slab.write_f32_slice(&o.row_heights);
+                    self.slab.write_u32_slice(&[o.row_positions.len() as u32]);
+                    self.slab.write_f32_slice(&o.row_positions);
+                }
+                self.slate.table_overlays_offset = start;
+                self.slate.table_overlays_count = overlays.len() as u32;
+                self.slate.dirty |= DIRTY_TABLE_OVERLAYS;
             }
             self.pending.table_overlays = false;
         }
 
         if let Some((text, from, to)) = self.pending.html_pasted.take() {
-            cmds.push(Cmd::HtmlPasted { text, from, to });
-            self.pending.html_pasted = None;
+            let start = self.slab.alloc(0, 4);
+            let str_off = self.slab.write_str(&text);
+            let from_node = Self::node_id_to_bytes(from.node_id);
+            self.slab.write_bytes(&from_node);
+            self.slab
+                .write_u32_slice(&[from.offset as u32, Self::affinity_to_u32(from.affinity)]);
+            let to_node = Self::node_id_to_bytes(to.node_id);
+            self.slab.write_bytes(&to_node);
+            self.slab
+                .write_u32_slice(&[to.offset as u32, Self::affinity_to_u32(to.affinity)]);
+            self.slate.html_pasted_offset = start;
+            self.slate.html_pasted_len = text.len() as u32;
+            let _ = str_off;
+            self.slate.dirty |= DIRTY_HTML_PASTED;
         }
-
-        cmds
     }
 
     fn evaluate_enabled_actions(&self) -> Vec<String> {
@@ -1093,24 +1414,6 @@ impl Runtime {
         }
 
         overlays
-    }
-
-    fn build_spellcheck_overlays(&self) -> Vec<cmd::SpellcheckOverlay> {
-        spellcheck::build_spellcheck_overlays(
-            &self.pages,
-            &self.spellcheck_errors,
-            &self.state.doc,
-            self.active_spellcheck_error_id.as_ref(),
-        )
-    }
-
-    fn build_ai_feedback_overlays(&self) -> Vec<cmd::AiFeedbackOverlay> {
-        ai_feedback::build_ai_feedback_overlays(
-            &self.pages,
-            &self.ai_feedback_items,
-            &self.state.doc,
-            self.active_ai_feedback_item_id.as_ref(),
-        )
     }
 
     fn get_first_paragraph_bounds(&self) -> Option<Rect> {
@@ -1285,7 +1588,6 @@ impl Runtime {
                     self.pending.layout = true;
                     self.pending.render = true;
                     self.pending.cursor = true;
-                    self.pending.scroll_to_cursor = true;
                     self.pending.selection = true;
                     self.pending.active_marks = true;
                     self.pending.external_elements = true;
@@ -1342,7 +1644,6 @@ impl Runtime {
                     self.selection_cache = None;
                     self.text_replacement_undo = None;
                     self.pending.cursor = true;
-                    self.pending.scroll_to_cursor = true;
                     self.pending.selection = true;
                     self.pending.active_marks = true;
                     self.pending.render = true;
@@ -1484,7 +1785,7 @@ impl Runtime {
         match result {
             Ok((new_state, effects)) => {
                 let doc_changed = effects.iter().any(|e| matches!(e, Effect::DocChanged));
-                let selection_changed = effects
+                let _selection_changed = effects
                     .iter()
                     .any(|e| matches!(e, Effect::SelectionChanged));
 
@@ -1494,24 +1795,6 @@ impl Runtime {
                 }
 
                 self.state = new_state;
-
-                if doc_changed {
-                    if self.clean_invalidated_spellcheck_errors() {
-                        self.pending.spellcheck_overlays = true;
-                    }
-                    if self.clean_invalidated_ai_feedback_items() {
-                        self.pending.ai_feedback_overlays = true;
-                    }
-                }
-
-                if doc_changed || selection_changed {
-                    if self.update_active_spellcheck_error() {
-                        self.pending.spellcheck_overlays = true;
-                    }
-                    if self.update_active_ai_feedback_item() {
-                        self.pending.ai_feedback_overlays = true;
-                    }
-                }
 
                 effects
             }

@@ -165,7 +165,7 @@
       const key = e.key.toLowerCase();
       if (cmdKey && key === 'a') {
         e.preventDefault();
-        editor.dispatch({ type: 'selectAll' });
+        editor.dispatch({ type: 'selectAll' }).scrollIntoView();
       } else if (cmdKey && key === 'c' && editor.protectContent) {
         e.preventDefault();
       }
@@ -176,7 +176,7 @@
   role="textbox"
   tabindex="0"
 >
-  {#each editor.layout.pageHeights, i}
+  {#each editor.layout.pages, i}
     <Page page={i} bind:containerEl={containerEls[i]} />
   {/each}
 </div>

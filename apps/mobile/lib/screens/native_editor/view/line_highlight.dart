@@ -14,7 +14,7 @@ class LineHighlight extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cursor = cursorInfo;
-    if (!enabled || cursor == null || !cursor.show || !isFocused) {
+    if (!enabled || cursor == null || !cursor.visible || !isFocused) {
       return const SizedBox.shrink();
     }
 

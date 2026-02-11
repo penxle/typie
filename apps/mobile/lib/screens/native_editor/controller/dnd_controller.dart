@@ -118,6 +118,7 @@ class DndController {
     _isDragging = true;
     unawaited(prepareDragImage(pageIdx, initialPoint));
     editor.dispatch({'type': 'dragStart', 'pageIdx': pageIdx, 'x': x, 'y': y});
+    controller.scrollIntoView();
   }
 
   void handleDragEnter() {
@@ -167,6 +168,7 @@ class DndController {
         'fragment': localData['fragment'],
         'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
       });
+      controller.scrollIntoView();
       return;
     }
 
@@ -199,6 +201,7 @@ class DndController {
           'fragment': null,
           'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
         });
+        controller.scrollIntoView();
         return;
       }
     }

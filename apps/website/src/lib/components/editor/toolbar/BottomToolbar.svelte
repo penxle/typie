@@ -187,7 +187,7 @@
       icon={UndoIcon}
       label="실행 취소"
       onclick={() => {
-        editor.focus().dispatch({ type: 'undo' });
+        editor.focus().dispatch({ type: 'undo' }).scrollIntoView();
       }}
       size="small"
     />
@@ -198,7 +198,7 @@
       icon={RedoIcon}
       label="다시 실행"
       onclick={() => {
-        editor.focus().dispatch({ type: 'redo' });
+        editor.focus().dispatch({ type: 'redo' }).scrollIntoView();
       }}
       size="small"
     />

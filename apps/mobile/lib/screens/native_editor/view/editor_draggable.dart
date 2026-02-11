@@ -45,7 +45,7 @@ class EditorDraggable extends StatelessWidget {
               high = mid;
             }
           }
-          pageIdx = (low - 1).clamp(0, geo.layout.pageCount - 1);
+          pageIdx = (low - 1).clamp(0, geo.layout.pages.length - 1);
           localY = adjustedY - offsets[pageIdx];
         } else {
           // Inside Title Area

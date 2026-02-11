@@ -93,25 +93,20 @@
   });
 
   const applyCorrection = (correction: string) => {
-    if (!activeError || !editor) return;
-    const currentErrors = editor.getSpellcheckErrors();
-    const active = currentErrors.find((e) => e.id === activeError.id);
+    if (!activeError || !activeOverlay || !editor) return;
 
-    if (active) {
-      const success = editor.applySpellcheckCorrection(active.nodeId, active.startOffset, active.endOffset, correction);
-      if (success) {
-        editor.fullSpellcheckErrors = editor.fullSpellcheckErrors.filter((e) => e.id !== activeError.id);
-
-        const freshErrors = editor.getSpellcheckErrors();
-        const freshMap = new Map(freshErrors.map((e) => [e.id, e]));
-        editor.fullSpellcheckErrors = editor.fullSpellcheckErrors.map((e) => {
-          const fresh = freshMap.get(e.id);
-          if (fresh) {
-            return { ...e, startOffset: fresh.startOffset, endOffset: fresh.endOffset };
-          }
-          return e;
-        });
-      }
+    const success = editor.replaceTextInBlock(activeOverlay.nodeId, activeOverlay.startOffset, activeOverlay.endOffset, correction);
+    if (success) {
+      editor.fullSpellcheckErrors = editor.fullSpellcheckErrors.filter((e) => e.id !== activeError.id);
+      editor.setTrackedItems(
+        0,
+        editor.fullSpellcheckErrors.map((e) => ({
+          id: e.id,
+          nodeId: e.nodeId,
+          startOffset: e.startOffset,
+          endOffset: e.endOffset,
+        })),
+      );
     }
     editor.focus();
   };
@@ -119,7 +114,8 @@
   const removeError = () => {
     if (!activeError) return;
     editor.fullSpellcheckErrors = editor.fullSpellcheckErrors.filter((e) => e.id !== activeError.id);
-    editor.setSpellcheckErrors(
+    editor.setTrackedItems(
+      0,
       editor.fullSpellcheckErrors.map((e) => ({
         id: e.id,
         nodeId: e.nodeId,
