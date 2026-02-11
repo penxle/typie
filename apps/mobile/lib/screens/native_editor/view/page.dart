@@ -32,8 +32,8 @@ class PageItem extends HookWidget {
     final isFocused = state.state.isFocused;
     final layoutMode = layout.layoutMode;
     final margins = layoutMode is PaginatedLayoutMode ? layoutMode : null;
-    final bottomGap = layout.isPaginated && pageIndex < layout.pageCount - 1 ? ContentGeometry.pageGap : 0.0;
-    final pageHeight = layout.pageHeights.elementAtOrNull(pageIndex);
+    final bottomGap = layout.isPaginated && pageIndex < layout.pages.length - 1 ? ContentGeometry.pageGap : 0.0;
+    final pageHeight = layout.pages.elementAtOrNull(pageIndex)?.height;
 
     final editor = scope.editor;
     final renderVersion = state.state.renderVersion;

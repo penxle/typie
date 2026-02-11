@@ -20,8 +20,8 @@
   import PlusIcon from '~icons/lucide/plus';
   import TableProperties from '~icons/lucide/table-properties';
   import Trash2Icon from '~icons/lucide/trash-2';
-  import type { TableOverlay as TableOverlayType } from '@typie/editor';
   import type { Editor } from '$lib/editor/editor.svelte';
+  import type { TableOverlay as TableOverlayType } from '$lib/editor/slate';
 
   type Props = {
     editor: Editor;
@@ -176,7 +176,7 @@
         offset={4}
         onopen={() => {
           menuOpenColIndex = i;
-          editor.dispatch({ type: 'selectTableColumn', tableId: overlay.tableId, col: i });
+          editor.dispatch({ type: 'selectTableColumn', tableId: overlay.tableId, col: i }).scrollIntoView();
         }}
         ontransitionend={() => {
           menuOpenColIndex = null;
@@ -213,7 +213,7 @@
             <MenuItem
               onclick={() => {
                 close();
-                editor.dispatch({ type: 'moveTableColumn', tableId: overlay.tableId, fromCol: i, toCol: i - 1 });
+                editor.dispatch({ type: 'moveTableColumn', tableId: overlay.tableId, fromCol: i, toCol: i - 1 }).scrollIntoView();
                 editor.focus();
               }}
             >
@@ -225,7 +225,7 @@
             <MenuItem
               onclick={() => {
                 close();
-                editor.dispatch({ type: 'moveTableColumn', tableId: overlay.tableId, fromCol: i, toCol: i + 1 });
+                editor.dispatch({ type: 'moveTableColumn', tableId: overlay.tableId, fromCol: i, toCol: i + 1 }).scrollIntoView();
                 editor.focus();
               }}
             >
@@ -237,7 +237,7 @@
             <MenuItem
               onclick={() => {
                 close();
-                editor.dispatch({ type: 'addTableColumn', tableId: overlay.tableId, afterCol: i - 1 });
+                editor.dispatch({ type: 'addTableColumn', tableId: overlay.tableId, afterCol: i - 1 }).scrollIntoView();
                 editor.focus();
               }}
             >
@@ -248,7 +248,7 @@
           <MenuItem
             onclick={() => {
               close();
-              editor.dispatch({ type: 'addTableColumn', tableId: overlay.tableId, afterCol: i });
+              editor.dispatch({ type: 'addTableColumn', tableId: overlay.tableId, afterCol: i }).scrollIntoView();
               editor.focus();
             }}
           >
@@ -258,7 +258,7 @@
           <MenuItem
             onclick={() => {
               close();
-              editor.dispatch({ type: 'deleteTableColumn', tableId: overlay.tableId, col: i });
+              editor.dispatch({ type: 'deleteTableColumn', tableId: overlay.tableId, col: i }).scrollIntoView();
               editor.focus();
             }}
             variant="danger"
@@ -294,7 +294,7 @@
         onopen={() => {
           const globalRowIndex = (overlay.startRowIndex ?? 0) + i;
           menuOpenRowIndex = i;
-          editor.dispatch({ type: 'selectTableRow', tableId: overlay.tableId, row: globalRowIndex });
+          editor.dispatch({ type: 'selectTableRow', tableId: overlay.tableId, row: globalRowIndex }).scrollIntoView();
         }}
         ontransitionend={() => {
           menuOpenRowIndex = null;
@@ -332,7 +332,9 @@
               onclick={() => {
                 close();
                 const globalRowIndex = (overlay.startRowIndex ?? 0) + i;
-                editor.dispatch({ type: 'moveTableRow', tableId: overlay.tableId, fromRow: globalRowIndex, toRow: globalRowIndex - 1 });
+                editor
+                  .dispatch({ type: 'moveTableRow', tableId: overlay.tableId, fromRow: globalRowIndex, toRow: globalRowIndex - 1 })
+                  .scrollIntoView();
                 editor.focus();
               }}
             >
@@ -345,7 +347,9 @@
               onclick={() => {
                 close();
                 const globalRowIndex = (overlay.startRowIndex ?? 0) + i;
-                editor.dispatch({ type: 'moveTableRow', tableId: overlay.tableId, fromRow: globalRowIndex, toRow: globalRowIndex + 1 });
+                editor
+                  .dispatch({ type: 'moveTableRow', tableId: overlay.tableId, fromRow: globalRowIndex, toRow: globalRowIndex + 1 })
+                  .scrollIntoView();
                 editor.focus();
               }}
             >
@@ -357,7 +361,9 @@
             <MenuItem
               onclick={() => {
                 close();
-                editor.dispatch({ type: 'addTableRow', tableId: overlay.tableId, afterRow: (overlay.startRowIndex ?? 0) + i - 1 });
+                editor
+                  .dispatch({ type: 'addTableRow', tableId: overlay.tableId, afterRow: (overlay.startRowIndex ?? 0) + i - 1 })
+                  .scrollIntoView();
                 editor.focus();
               }}
             >
@@ -368,7 +374,9 @@
           <MenuItem
             onclick={() => {
               close();
-              editor.dispatch({ type: 'addTableRow', tableId: overlay.tableId, afterRow: (overlay.startRowIndex ?? 0) + i });
+              editor
+                .dispatch({ type: 'addTableRow', tableId: overlay.tableId, afterRow: (overlay.startRowIndex ?? 0) + i })
+                .scrollIntoView();
               editor.focus();
             }}
           >
@@ -378,7 +386,7 @@
           <MenuItem
             onclick={() => {
               close();
-              editor.dispatch({ type: 'deleteTableRow', tableId: overlay.tableId, row: (overlay.startRowIndex ?? 0) + i });
+              editor.dispatch({ type: 'deleteTableRow', tableId: overlay.tableId, row: (overlay.startRowIndex ?? 0) + i }).scrollIntoView();
               editor.focus();
             }}
             variant="danger"
@@ -508,7 +516,7 @@
     })}
     aria-label="열 추가"
     onclick={() => {
-      editor.dispatch({ type: 'addTableColumn', tableId: overlay.tableId, afterCol: overlay.colWidths.length - 1 });
+      editor.dispatch({ type: 'addTableColumn', tableId: overlay.tableId, afterCol: overlay.colWidths.length - 1 }).scrollIntoView();
       editor.focus();
     }}
     type="button"
@@ -555,7 +563,9 @@
       })}
       aria-label="행 추가"
       onclick={() => {
-        editor.dispatch({ type: 'addTableRow', tableId: overlay.tableId, afterRow: (overlay.totalRows ?? overlay.rowHeights.length) - 1 });
+        editor
+          .dispatch({ type: 'addTableRow', tableId: overlay.tableId, afterRow: (overlay.totalRows ?? overlay.rowHeights.length) - 1 })
+          .scrollIntoView();
         editor.focus();
       }}
       type="button"
@@ -604,8 +614,10 @@
       })}
       aria-label="행 및 열 추가"
       onclick={() => {
-        editor.dispatch({ type: 'addTableRow', tableId: overlay.tableId, afterRow: (overlay.totalRows ?? overlay.rowHeights.length) - 1 });
-        editor.dispatch({ type: 'addTableColumn', tableId: overlay.tableId, afterCol: overlay.colWidths.length - 1 });
+        editor
+          .dispatch({ type: 'addTableRow', tableId: overlay.tableId, afterRow: (overlay.totalRows ?? overlay.rowHeights.length) - 1 })
+          .scrollIntoView();
+        editor.dispatch({ type: 'addTableColumn', tableId: overlay.tableId, afterCol: overlay.colWidths.length - 1 }).scrollIntoView();
         editor.focus();
       }}
       type="button"

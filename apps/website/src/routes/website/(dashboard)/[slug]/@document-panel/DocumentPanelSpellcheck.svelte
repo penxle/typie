@@ -77,7 +77,7 @@
 
     await editor.ready;
 
-    const spellcheckData = editor.getSpellcheckText();
+    const spellcheckData = editor.getTextWithMappings();
     if (!spellcheckData?.text?.trim()) {
       return;
     }
@@ -107,14 +107,15 @@
       console.error('Spellcheck failed:', err);
       checkFailed = true;
       editor.fullSpellcheckErrors = [];
-      editor.clearSpellcheckErrors();
+      editor.setTrackedItems(0, []);
     } finally {
       inflight = false;
     }
   };
 
   const updateOverlays = () => {
-    editor.setSpellcheckErrors(
+    editor.setTrackedItems(
+      0,
       editor.fullSpellcheckErrors.map((e) => ({
         id: e.id,
         nodeId: e.nodeId,
@@ -135,48 +136,35 @@
   };
 
   const applyCorrection = (errorId: string, correction: string) => {
-    const error = errors.find((e) => e.id === errorId);
-    if (!error || !editor) return;
+    if (!editor) return;
 
-    const currentErrors = editor.getSpellcheckErrors();
-    const active = currentErrors.find((e) => e.id === errorId);
+    const overlay = editor.spellcheckOverlays.find((o) => o.id === errorId);
+    if (!overlay) return;
 
-    if (active) {
-      const success = editor.applySpellcheckCorrection(active.nodeId, active.startOffset, active.endOffset, correction);
-      if (success) {
-        editor.fullSpellcheckErrors = editor.fullSpellcheckErrors.filter((e) => e.id !== errorId);
-
-        const freshErrors = editor.getSpellcheckErrors();
-        const freshMap = new Map(freshErrors.map((e) => [e.id, e]));
-        editor.fullSpellcheckErrors = editor.fullSpellcheckErrors.map((e) => {
-          const fresh = freshMap.get(e.id);
-          if (fresh) {
-            return { ...e, startOffset: fresh.startOffset, endOffset: fresh.endOffset };
-          }
-          return e;
-        });
-      }
+    const success = editor.replaceTextInBlock(overlay.nodeId, overlay.startOffset, overlay.endOffset, correction);
+    if (success) {
+      editor.fullSpellcheckErrors = editor.fullSpellcheckErrors.filter((e) => e.id !== errorId);
+      updateOverlays();
     }
   };
 
   const scrollToError = (error: SpellcheckErrorData) => {
     if (!editor) return;
-    editor.selectSpellcheckError(error.id);
+    editor.activeSpellcheckErrorId = error.id;
   };
 
   const selectErrorRange = (error: SpellcheckErrorData) => {
     scrollToError(error);
 
-    const currentErrors = editor.getSpellcheckErrors();
-    const active = currentErrors.find((e) => e.id === error.id);
-    if (active) {
+    const overlay = editor.spellcheckOverlays.find((o) => o.id === error.id);
+    if (overlay) {
       editor.dispatch({
         type: 'setSelection',
-        anchorNodeId: active.nodeId,
-        anchorOffset: active.startOffset,
+        anchorNodeId: overlay.nodeId,
+        anchorOffset: overlay.startOffset,
         anchorAffinity: 'downstream',
-        headNodeId: active.nodeId,
-        headOffset: active.endOffset,
+        headNodeId: overlay.nodeId,
+        headOffset: overlay.endOffset,
         headAffinity: 'downstream',
       });
     }
@@ -244,7 +232,7 @@
 
   $effect(() => {
     return () => {
-      editor?.clearSpellcheckErrors();
+      editor?.setTrackedItems(0, []);
     };
   });
 

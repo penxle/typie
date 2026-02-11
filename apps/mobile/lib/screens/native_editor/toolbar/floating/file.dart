@@ -47,6 +47,7 @@ class NativeEditorFileFloatingToolbar extends StatelessWidget {
           onTap: () {
             uploadManager.removeLocalFileUploadId(element.nodeId);
             scope.dispatch({'type': 'deleteNode', 'nodeId': element.nodeId});
+            scope.controller.scrollIntoView();
           },
         ),
       ],
@@ -93,6 +94,7 @@ class NativeEditorFileFloatingToolbar extends StatelessWidget {
         InflightFile(path: platformFile.path!, name: platformFile.name, size: platformFile.size),
       );
       scope.dispatch({'type': 'insertFile', 'uploadId': uploadId});
+      scope.controller.scrollIntoView();
     }
   }
 }

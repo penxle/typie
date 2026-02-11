@@ -404,7 +404,8 @@ mod tests {
 
     #[test]
     fn test_paste_single_line_rendering() {
-        use crate::runtime::{Cmd, Message};
+        use crate::runtime::Message;
+        use crate::runtime::slate::DIRTY_RENDER_REQUIRED;
 
         let mut p = id!();
         let mut runtime = runtime! {
@@ -421,10 +422,10 @@ mod tests {
             text: "Hello".to_string(),
         });
 
-        let cmds = runtime.tick();
+        runtime.tick();
 
         assert!(
-            cmds.iter().any(|c| matches!(c, Cmd::RenderRequired)),
+            runtime.slate.dirty & DIRTY_RENDER_REQUIRED != 0,
             "Should emit RenderRequired"
         );
 

@@ -102,7 +102,7 @@
   });
 
   $effect(() => {
-    if (editor.layout.pageCount > 0) {
+    if (editor.layout.pages.length > 0) {
       initialized = true;
       tick().then(() => onEditorReady?.(editor));
     }
@@ -135,8 +135,8 @@
 
   const layoutMode = $derived<LayoutMode>(editor.layout.layoutMode);
   const showRuler = $derived(!readOnly && layoutMode.type === 'paginated');
-  const pageWidth = $derived(editor.layout.pageWidth);
-  const pageHeights = $derived(editor.layout.pageHeights);
+  const pages = $derived(editor.layout.pages);
+  const pageWidth = $derived(pages[0]?.width ?? 0);
   const marginTop = $derived(layoutMode.type === 'paginated' ? layoutMode.pageMarginTop : 0);
   const marginBottom = $derived(layoutMode.type === 'paginated' ? layoutMode.pageMarginBottom : 0);
   const marginLeft = $derived(layoutMode.type === 'paginated' ? layoutMode.pageMarginLeft : 0);
@@ -152,7 +152,7 @@
   );
 
   $effect(() => {
-    return handleDragScroll(editor.scrollViewport, !editor.isPointerModeIdle, {
+    return handleDragScroll(editor.scrollViewport, editor.pointerState !== 0, {
       onScroll: (clientX, clientY) => {
         editor.handlePointerMoveFromCoordinate(clientX, clientY);
       },
@@ -203,13 +203,13 @@
         </div>
 
         <div class={css({ overflow: 'hidden' })}>
-          {#if pageHeights.length > 0}
+          {#if pages.length > 0}
             <VerticalRuler
               {marginBottom}
               {marginTop}
               padding={headerHeight}
               {pageGap}
-              {pageHeights}
+              {pages}
               thickness={rulerThickness}
               {unit}
               bind:ref={verticalRulerEl}

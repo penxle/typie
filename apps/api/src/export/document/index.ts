@@ -2,7 +2,7 @@ import { createWasmApplication } from '@/utils/wasm';
 import { ensureAllFontBases, ensureRequiredFallbackFont, ensureRequiredFont } from './fonts';
 import { createPdfFromPages } from './pdf';
 import { renderDocumentPages } from './render';
-import type { Cmd, Theme } from '@typie/editor';
+import type { Theme } from '@typie/editor';
 
 const SCALE_FACTOR = 2;
 const MAX_TICKS = 1000;
@@ -99,11 +99,25 @@ async function generateDocumentPdfInternal(
       let pageCount = 0;
       let needsRender = false;
 
+      const offsets = Object.fromEntries(editor.getSlateOffsets());
+      const memory = getMemory() as WebAssembly.Memory;
+
+      const DIRTY_LAYOUT = 1;
+      const DIRTY_RENDER_REQUIRED = 16;
+      const DIRTY_FONT_REQUIRED = 17;
+      const DIRTY_FALLBACK_FONT_REQUIRED = 18;
+
       for (let tick = 0; tick < MAX_TICKS; tick++) {
-        const cmds = editor.tick() as Cmd[] | null;
+        editor.tick();
         editor.flush();
 
-        if (!cmds || cmds.length === 0) {
+        const view = new DataView(memory.buffer);
+        const slatePtr = editor.getSlatePtr();
+        const slabPtr = editor.getSlabPtr();
+
+        const dirtyLo = view.getUint32(slatePtr + offsets.dirty, true);
+
+        if (dirtyLo === 0) {
           if (needsRender && pageCount > 0) {
             break;
           }
@@ -112,25 +126,42 @@ async function generateDocumentPdfInternal(
 
         const fontPromises: Promise<void>[] = [];
 
-        for (const cmd of cmds) {
-          switch (cmd.type) {
-            case 'layoutChanged': {
-              pageCount = cmd.pageCount;
-              break;
+        if (dirtyLo & (1 << DIRTY_LAYOUT)) {
+          pageCount = view.getUint32(slatePtr + offsets.pages_count, true);
+        }
+
+        if (dirtyLo & (1 << DIRTY_FONT_REQUIRED)) {
+          const count = view.getUint32(slatePtr + offsets.font_requests_count, true);
+          let pos = slabPtr + view.getUint32(slatePtr + offsets.font_requests_offset, true);
+          for (let i = 0; i < count; i++) {
+            const byteLen = view.getUint32(pos, true);
+            const family = new TextDecoder().decode(new Uint8Array(memory.buffer, pos + 4, byteLen));
+            pos += 4 + ((byteLen + 3) & ~3);
+            const weight = view.getUint32(pos, true);
+            pos += 4;
+            const cpCount = view.getUint32(pos, true);
+            pos += 4;
+            const codepoints: number[] = [];
+            for (let j = 0; j < cpCount; j++) {
+              codepoints.push(view.getUint32(pos + j * 4, true));
             }
-            case 'fontRequired': {
-              fontPromises.push(ensureRequiredFont(app, cmd.family, cmd.weight, cmd.codepoints));
-              break;
-            }
-            case 'fallbackFontRequired': {
-              fontPromises.push(ensureRequiredFallbackFont(app, cmd.codepoints));
-              break;
-            }
-            case 'renderRequired': {
-              needsRender = true;
-              break;
-            }
+            pos += cpCount * 4;
+            fontPromises.push(ensureRequiredFont(app, family, weight, codepoints));
           }
+        }
+
+        if (dirtyLo & (1 << DIRTY_FALLBACK_FONT_REQUIRED)) {
+          const count = view.getUint32(slatePtr + offsets.fallback_codepoints_count, true);
+          const offset = slabPtr + view.getUint32(slatePtr + offsets.fallback_codepoints_offset, true);
+          const codepoints: number[] = [];
+          for (let i = 0; i < count; i++) {
+            codepoints.push(view.getUint32(offset + i * 4, true));
+          }
+          fontPromises.push(ensureRequiredFallbackFont(app, codepoints));
+        }
+
+        if (dirtyLo & (1 << DIRTY_RENDER_REQUIRED)) {
+          needsRender = true;
         }
 
         if (fontPromises.length > 0) {

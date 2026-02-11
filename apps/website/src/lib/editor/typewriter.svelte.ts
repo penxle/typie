@@ -47,14 +47,14 @@ export function setupTypewriter(getTargetEl: () => HTMLElement | undefined, defa
     const cursorHeight = editor.cursor.bounds?.height ?? 0;
 
     const totalContentHeight =
-      editor.layout.pageHeights.reduce((sum, h) => sum + h, 0) + (isPaginated ? (editor.layout.pageHeights.length - 1) * PAGE_GAP : 0);
+      editor.layout.pages.reduce((sum, p) => sum + p.height, 0) + (isPaginated ? (editor.layout.pages.length - 1) * PAGE_GAP : 0);
 
     const bounds = editor.cursor.bounds;
     const pageIdx = editor.cursor.pageIdx;
     let cursorTopInDocument = 0;
     if (bounds && pageIdx !== undefined) {
       for (let i = 0; i < pageIdx; i++) {
-        cursorTopInDocument += editor.layout.pageHeights[i] ?? 0;
+        cursorTopInDocument += editor.layout.pages[i]?.height ?? 0;
         if (isPaginated) cursorTopInDocument += PAGE_GAP;
       }
       cursorTopInDocument += bounds.y;
@@ -76,7 +76,7 @@ export function setupTypewriter(getTargetEl: () => HTMLElement | undefined, defa
   $effect(() => {
     void editor.cursor.bounds;
     void editor.cursor.pageIdx;
-    void editor.layout.pageHeights;
+    void editor.layout.pages;
     void editor.layout.layoutMode;
     void app.preference.current.typewriterEnabled;
     void app.preference.current.typewriterPosition;
@@ -93,7 +93,7 @@ export function setupTypewriter(getTargetEl: () => HTMLElement | undefined, defa
       return;
     }
 
-    if (!editor.typewriter.needsScroll) {
+    if (editor.pendingScrollMode !== 'typewriter') {
       return;
     }
 
@@ -113,7 +113,7 @@ export function setupTypewriter(getTargetEl: () => HTMLElement | undefined, defa
       return;
     }
 
-    editor.typewriter.needsScroll = false;
+    editor.pendingScrollMode = null;
 
     const containerRect = containerEl.getBoundingClientRect();
     const cursorTop = containerRect.top + bounds.y;

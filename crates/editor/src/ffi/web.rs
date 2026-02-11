@@ -1,8 +1,6 @@
 use crate::font::{add_font_base, add_font_chunk, set_fallback_fonts};
 use crate::model::{Doc, DocExportMode, LayoutMode, Node, NodeId, ParagraphNode};
-use crate::runtime::{
-    Message, RawAiFeedbackItem, RawSpellcheckError, RawTextReplacementRule, Runtime, State,
-};
+use crate::runtime::{Message, RawTextReplacementRule, RawTrackedItem, Runtime, State, slate};
 use crate::state::{Position, Selection};
 use crate::types::Affinity;
 use serde::Serialize;
@@ -310,12 +308,9 @@ impl Editor {
     }
 
     #[wasm_bindgen(js_name = dispatch)]
-    pub fn dispatch(&mut self, val: JsValue) -> JsValue {
+    pub fn dispatch(&mut self, val: JsValue) {
         if let Ok(msg) = serde_wasm_bindgen::from_value::<Message>(val) {
-            let cmd = self.runtime.update(msg);
-            to_js_value(&cmd)
-        } else {
-            JsValue::NULL
+            self.runtime.update(msg);
         }
     }
 
@@ -339,13 +334,34 @@ impl Editor {
         self.runtime.inspect_page_element(page_idx, x, y)
     }
 
-    pub fn tick(&mut self) -> JsValue {
-        let cmds = self.runtime.tick();
-        if cmds.is_empty() {
-            JsValue::NULL
-        } else {
-            to_js_value(&cmds)
-        }
+    pub fn tick(&mut self) {
+        self.runtime.tick();
+    }
+
+    #[wasm_bindgen(js_name = getSlatePtr)]
+    pub fn get_slate_ptr(&self) -> u32 {
+        &self.runtime.slate as *const _ as u32
+    }
+
+    #[wasm_bindgen(js_name = getSlateLen)]
+    pub fn get_slate_len(&self) -> u32 {
+        std::mem::size_of::<slate::Slate>() as u32
+    }
+
+    #[wasm_bindgen(js_name = getSlabPtr)]
+    pub fn get_slab_ptr(&self) -> u32 {
+        self.runtime.slab.data.as_ptr() as u32
+    }
+
+    #[wasm_bindgen(js_name = getSlabLen)]
+    pub fn get_slab_len(&self) -> u32 {
+        self.runtime.slab.len() as u32
+    }
+
+    #[wasm_bindgen(js_name = getSlateOffsets)]
+    pub fn get_slate_offsets(&self) -> JsValue {
+        let offsets = slate::get_slate_offsets();
+        to_js_value(&offsets)
     }
 
     #[wasm_bindgen(js_name = enqueueMessage)]
@@ -437,65 +453,39 @@ impl Editor {
         self.runtime.set_auto_surround_enabled(enabled);
     }
 
-    #[wasm_bindgen(js_name = setSpellcheckErrors)]
-    pub fn set_spellcheck_errors(&mut self, raw_errors: Vec<RawSpellcheckError>) {
-        self.runtime.set_spellcheck_errors(raw_errors);
+    #[wasm_bindgen(js_name = setTrackedItems)]
+    pub fn set_tracked_items(&mut self, group: u32, raw_items: Vec<RawTrackedItem>) {
+        self.runtime.set_tracked_items(group, raw_items);
     }
 
-    #[wasm_bindgen(js_name = getSpellcheckErrors)]
-    pub fn get_spellcheck_errors(&mut self) -> Result<JsValue, JsValue> {
-        let errors = self.runtime.get_spellcheck_errors();
-        Ok(serde_wasm_bindgen::to_value(&errors).map_err(|e| e.to_string())?)
-    }
-
-    #[wasm_bindgen(js_name = getSpellcheckText)]
-    pub fn get_spellcheck_text(&self) -> Result<JsValue, JsValue> {
+    #[wasm_bindgen(js_name = getTextWithMappings)]
+    pub fn get_text_with_mappings(&self) -> Result<JsValue, JsValue> {
         #[derive(serde::Serialize)]
         #[serde(rename_all = "camelCase")]
-        struct SpellcheckTextResult {
+        struct TextWithMappingsResult {
             text: String,
-            mappings: Vec<crate::model::SpellcheckTextMapping>,
+            mappings: Vec<crate::model::TextMapping>,
         }
 
-        let (text, mappings) = self.runtime.doc().to_spellcheck_text();
-        let result = SpellcheckTextResult { text, mappings };
+        let (text, mappings) = self.runtime.doc().to_text_with_mappings();
+        let result = TextWithMappingsResult { text, mappings };
         Ok(serde_wasm_bindgen::to_value(&result).map_err(|e| e.to_string())?)
     }
 
-    #[wasm_bindgen(js_name = clearSpellcheckErrors)]
-    pub fn clear_spellcheck_errors(&mut self) {
-        self.runtime.clear_spellcheck_errors();
-    }
-
-    #[wasm_bindgen(js_name = applySpellcheckCorrection)]
-    pub fn apply_spellcheck_correction(
+    #[wasm_bindgen(js_name = replaceTextInBlock)]
+    pub fn replace_text_in_block(
         &mut self,
         block_id: &str,
         start_offset: usize,
         end_offset: usize,
-        correction: &str,
+        replacement: &str,
     ) -> bool {
         let Some(block_id) = NodeId::from_string(block_id) else {
             return false;
         };
         self.runtime
-            .apply_spellcheck_correction(block_id, start_offset, end_offset, correction)
-    }
-
-    #[wasm_bindgen(js_name = setAiFeedbackItems)]
-    pub fn set_ai_feedback_items(&mut self, raw_items: Vec<RawAiFeedbackItem>) {
-        self.runtime.set_ai_feedback_items(raw_items);
-    }
-
-    #[wasm_bindgen(js_name = getAiFeedbackItems)]
-    pub fn get_ai_feedback_items(&mut self) -> Result<JsValue, JsValue> {
-        let items = self.runtime.get_ai_feedback_items();
-        Ok(serde_wasm_bindgen::to_value(&items).map_err(|e| e.to_string())?)
-    }
-
-    #[wasm_bindgen(js_name = clearAiFeedbackItems)]
-    pub fn clear_ai_feedback_items(&mut self) {
-        self.runtime.clear_ai_feedback_items();
+            .replace_text_in_block(block_id, start_offset, end_offset, replacement)
+            .is_ok()
     }
 }
 

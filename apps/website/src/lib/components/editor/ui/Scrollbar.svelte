@@ -129,7 +129,7 @@
           mostVisiblePage = page;
         }
       }
-      return `${mostVisiblePage + 1}/${editor.layout.pageCount}`;
+      return `${mostVisiblePage + 1}/${editor.layout.pages.length}`;
     }
     return `${Math.round(scrollRatioV * 100)}%`;
   });

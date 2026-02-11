@@ -17,7 +17,7 @@ class Cursor extends HookWidget {
     final blinkTimer = useRef<Timer?>(null);
 
     final cursor = cursorInfo;
-    final shouldAnimate = cursor != null && cursor.show && isFocused;
+    final shouldAnimate = cursor != null && cursor.visible && isFocused;
 
     void startBlinkTimer() {
       blinkTimer.value?.cancel();

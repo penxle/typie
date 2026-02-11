@@ -54,6 +54,7 @@ class NativeEditorEmbedFloatingToolbar extends HookWidget {
           onTap: () {
             uploadManager.removeInflightEmbed(element.nodeId);
             scope.dispatch({'type': 'deleteNode', 'nodeId': element.nodeId});
+            scope.controller.scrollIntoView();
           },
         ),
       ],

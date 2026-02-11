@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:typie/native/editor_native.dart';
 import 'package:typie/screens/native_editor/state/fonts.dart';
+import 'package:typie/screens/native_editor/state/scroll_mode.dart';
 import 'package:typie/screens/native_editor/state/state.dart';
 
 class EditorController extends ChangeNotifier {
@@ -22,7 +23,7 @@ class EditorController extends ChangeNotifier {
   final void Function(Map<String, dynamic> anchor, Map<String, dynamic> head)? onSelectionChanged;
   final void Function()? onEditorReady;
 
-  bool typewriterNeedsScroll = false;
+  ScrollMode? pendingScrollMode;
 
   VoidCallback? _clearFocusCallback;
   VoidCallback? _requestFocusCallback;
@@ -55,6 +56,10 @@ class EditorController extends ChangeNotifier {
     if (!editor.isDisposed) {
       editor.dispatch(message);
     }
+  }
+
+  void scrollIntoView({ScrollMode mode = ScrollMode.auto}) {
+    pendingScrollMode = mode;
   }
 
   void setFocused(bool focused) {

@@ -18,8 +18,8 @@
 
   const editor = getEditor();
 
-  const pageWidth = $derived(editor.layout.pageWidth);
-  const pageHeight = $derived(editor.layout.pageHeights[page] ?? 0);
+  const pageWidth = $derived(editor.layout.pages[page]?.width ?? 0);
+  const pageHeight = $derived(editor.layout.pages[page]?.height ?? 0);
   const marginTop = $derived(editor.layout.layoutMode.type === 'paginated' ? editor.layout.layoutMode.pageMarginTop : 0);
   const marginBottom = $derived(editor.layout.layoutMode.type === 'paginated' ? editor.layout.layoutMode.pageMarginBottom : 0);
   const marginLeft = $derived(editor.layout.layoutMode.type === 'paginated' ? editor.layout.layoutMode.pageMarginLeft : 0);
@@ -196,7 +196,7 @@
       {/each}
 
       {#each editor.aiFeedbackOverlays.filter((o) => o.pageIdx === page) as overlay, i (`ai-${i}-${overlay.id}`)}
-        {#if overlay.isActive}
+        {#if editor.activeAiFeedbackItemId === overlay.id}
           {#each overlay.bounds as bound, j (`ai-bound-${j}-${overlay.id}`)}
             <div
               style:left={`${bound.x}px`}

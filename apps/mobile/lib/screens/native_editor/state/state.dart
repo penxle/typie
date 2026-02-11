@@ -64,9 +64,7 @@ abstract class CursorInfo with _$CursorInfo {
     required double x,
     required double y,
     required double height,
-    required bool show,
-    required bool scrollToCursor,
-    required bool animate,
+    required bool visible,
     required List<double> precedingCharWidths,
   }) = _CursorInfo;
 
@@ -79,9 +77,7 @@ abstract class CursorInfo with _$CursorInfo {
       x: (bounds?['x'] as num?)?.toDouble() ?? 0,
       y: (bounds?['y'] as num?)?.toDouble() ?? 0,
       height: (bounds?['height'] as num?)?.toDouble() ?? 0,
-      show: map['show'] as bool? ?? false,
-      scrollToCursor: map['scrollToCursor'] as bool? ?? false,
-      animate: map['animate'] as bool? ?? false,
+      visible: map['visible'] as bool? ?? false,
       precedingCharWidths: (map['precedingCharWidths'] as List?)?.map((e) => (e as num).toDouble()).toList() ?? [],
     );
   }
@@ -106,14 +102,14 @@ abstract class LayoutModeInfo with _$LayoutModeInfo {
 }
 
 @freezed
+abstract class PageSize with _$PageSize {
+  const factory PageSize({required double width, required double height}) = _PageSize;
+}
+
+@freezed
 abstract class LayoutInfo with _$LayoutInfo {
-  const factory LayoutInfo({
-    required int pageCount,
-    required bool isPaginated,
-    required double pageWidth,
-    required List<double> pageHeights,
-    LayoutModeInfo? layoutMode,
-  }) = _LayoutInfo;
+  const factory LayoutInfo({required bool isPaginated, required List<PageSize> pages, LayoutModeInfo? layoutMode}) =
+      _LayoutInfo;
 }
 
 @freezed

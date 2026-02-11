@@ -157,6 +157,7 @@
   const handleDelete = () => {
     editor.dispatch({ type: 'deleteNode', nodeId: el.nodeId });
     editor.focus();
+    editor.scrollIntoView();
   };
 
   const handleUpload = async () => {

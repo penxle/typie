@@ -1,8 +1,7 @@
 use crate::font::{add_font_base, add_font_chunk, set_fallback_fonts};
 use crate::model::{Doc, DocExportMode, LayoutMode, Node, NodeId, ParagraphNode};
-use crate::runtime::ai_feedback::RawAiFeedbackItem;
-use crate::runtime::spellcheck::RawSpellcheckError;
 use crate::runtime::text_replacement::RawTextReplacementRule;
+use crate::runtime::tracked_items::RawTrackedItem;
 use crate::runtime::{Runtime, State};
 use crate::state::{Position, Selection};
 use crate::types::Affinity;
@@ -461,25 +460,72 @@ pub extern "C" fn editor_dispatch(editor: *mut EditorHandle, message_json: *cons
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn editor_tick(editor: *mut EditorHandle) -> *mut c_char {
+pub extern "C" fn editor_tick(editor: *mut EditorHandle) -> i32 {
     ffi!(
         {
             if editor.is_null() {
                 return Err("Editor is null".into());
             }
-
             let editor = unsafe { &mut *(editor as *mut EditorInner) };
-            let cmds = editor.runtime.tick();
-            if cmds.is_empty() {
-                return Ok(std::ptr::null_mut());
-            }
-            let json =
-                serde_json::to_string(&cmds).map_err(|e| format!("Failed to serialize: {e}"))?;
-            let c_str = CString::new(json).map_err(|_| "Invalid string")?;
-            Ok(c_str.into_raw())
+            editor.runtime.tick();
+            Ok(())
         },
-        std::ptr::null_mut()
+        -1
     )
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn editor_get_slate_ptr(editor: *mut EditorHandle) -> *const u8 {
+    install_panic_hook();
+    if editor.is_null() {
+        return std::ptr::null();
+    }
+    let editor = unsafe { &*(editor as *const EditorInner) };
+    &editor.runtime.slate as *const _ as *const u8
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn editor_get_slate_len(_editor: *mut EditorHandle) -> u32 {
+    std::mem::size_of::<crate::runtime::slate::Slate>() as u32
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn editor_get_slab_ptr(editor: *mut EditorHandle) -> *const u8 {
+    install_panic_hook();
+    if editor.is_null() {
+        return std::ptr::null();
+    }
+    let editor = unsafe { &*(editor as *const EditorInner) };
+    editor.runtime.slab.data.as_ptr()
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn editor_get_slab_len(editor: *mut EditorHandle) -> u32 {
+    install_panic_hook();
+    if editor.is_null() {
+        return 0;
+    }
+    let editor = unsafe { &*(editor as *const EditorInner) };
+    editor.runtime.slab.len() as u32
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn editor_get_slate_offsets() -> *mut c_char {
+    install_panic_hook();
+    match catch_unwind(AssertUnwindSafe(|| {
+        let offsets = crate::runtime::slate::get_slate_offsets();
+        let json = serde_json::to_string(&offsets).unwrap_or_default();
+        CString::new(json)
+            .ok()
+            .map(CString::into_raw)
+            .unwrap_or(std::ptr::null_mut())
+    })) {
+        Ok(ptr) => ptr,
+        Err(e) => {
+            handle_panic(e);
+            std::ptr::null_mut()
+        }
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -1048,7 +1094,7 @@ pub extern "C" fn editor_import_updates_batch(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn editor_get_spellcheck_text(editor: *mut EditorHandle) -> *mut c_char {
+pub extern "C" fn editor_get_text_with_mappings(editor: *mut EditorHandle) -> *mut c_char {
     ffi!(
         {
             if editor.is_null() {
@@ -1059,13 +1105,13 @@ pub extern "C" fn editor_get_spellcheck_text(editor: *mut EditorHandle) -> *mut 
 
             #[derive(serde::Serialize)]
             #[serde(rename_all = "camelCase")]
-            struct SpellcheckTextResult {
+            struct TextWithMappingsResult {
                 text: String,
-                mappings: Vec<crate::model::SpellcheckTextMapping>,
+                mappings: Vec<crate::model::TextMapping>,
             }
 
-            let (text, mappings) = editor.runtime.doc().to_spellcheck_text();
-            let result = SpellcheckTextResult { text, mappings };
+            let (text, mappings) = editor.runtime.doc().to_text_with_mappings();
+            let result = TextWithMappingsResult { text, mappings };
             let json_str =
                 serde_json::to_string(&result).map_err(|e| format!("Failed to serialize: {e}"))?;
             let c_str = CString::new(json_str).map_err(|_| "Invalid string")?;
@@ -1076,102 +1122,9 @@ pub extern "C" fn editor_get_spellcheck_text(editor: *mut EditorHandle) -> *mut 
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn editor_set_spellcheck_errors(
+pub extern "C" fn editor_set_tracked_items(
     editor: *mut EditorHandle,
-    errors_json: *const c_char,
-) -> i32 {
-    ffi!(
-        {
-            if editor.is_null() {
-                return Err("Editor is null".into());
-            }
-
-            let json_str = parse_cstr(errors_json, "errors_json")?;
-            let errors: Vec<RawSpellcheckError> = serde_json::from_str(json_str)
-                .map_err(|e| format!("Failed to parse errors: {e}"))?;
-
-            let editor = unsafe { &mut *(editor as *mut EditorInner) };
-            editor.runtime.set_spellcheck_errors(errors);
-
-            Ok(())
-        },
-        -1
-    )
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn editor_apply_spellcheck_correction(
-    editor: *mut EditorHandle,
-    block_id: *const c_char,
-    start_offset: usize,
-    end_offset: usize,
-    correction: *const c_char,
-) -> i32 {
-    ffi!(
-        {
-            if editor.is_null() {
-                return Err("Editor is null".into());
-            }
-
-            let block_id_str = parse_cstr(block_id, "block_id")?;
-            let correction_str = parse_cstr(correction, "correction")?;
-
-            let node_id =
-                NodeId::from_string(block_id_str).ok_or_else(|| "Invalid block_id".to_string())?;
-
-            let editor = unsafe { &mut *(editor as *mut EditorInner) };
-            let success = editor.runtime.apply_spellcheck_correction(
-                node_id,
-                start_offset,
-                end_offset,
-                correction_str,
-            );
-
-            Ok(if success { 1 } else { 0 })
-        },
-        -1
-    )
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn editor_get_spellcheck_errors(editor: *mut EditorHandle) -> *mut c_char {
-    ffi!(
-        {
-            if editor.is_null() {
-                return Err("Editor is null".into());
-            }
-
-            let editor = unsafe { &mut *(editor as *mut EditorInner) };
-            let errors = editor.runtime.get_spellcheck_errors();
-            let json_str =
-                serde_json::to_string(&errors).map_err(|e| format!("Failed to serialize: {e}"))?;
-            let c_str = CString::new(json_str).map_err(|_| "Invalid string")?;
-            Ok(c_str.into_raw())
-        },
-        std::ptr::null_mut()
-    )
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn editor_clear_spellcheck_errors(editor: *mut EditorHandle) -> i32 {
-    ffi!(
-        {
-            if editor.is_null() {
-                return Err("Editor is null".into());
-            }
-
-            let editor = unsafe { &mut *(editor as *mut EditorInner) };
-            editor.runtime.clear_spellcheck_errors();
-
-            Ok(())
-        },
-        -1
-    )
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn editor_set_ai_feedback_items(
-    editor: *mut EditorHandle,
+    group: u32,
     items_json: *const c_char,
 ) -> i32 {
     ffi!(
@@ -1181,11 +1134,11 @@ pub extern "C" fn editor_set_ai_feedback_items(
             }
 
             let json_str = parse_cstr(items_json, "items_json")?;
-            let items: Vec<RawAiFeedbackItem> = serde_json::from_str(json_str)
+            let items: Vec<RawTrackedItem> = serde_json::from_str(json_str)
                 .map_err(|e| format!("Failed to parse items: {e}"))?;
 
             let editor = unsafe { &mut *(editor as *mut EditorInner) };
-            editor.runtime.set_ai_feedback_items(items);
+            editor.runtime.set_tracked_items(group, items);
 
             Ok(())
         },
@@ -1194,38 +1147,34 @@ pub extern "C" fn editor_set_ai_feedback_items(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn editor_clear_ai_feedback_items(editor: *mut EditorHandle) -> i32 {
+pub extern "C" fn editor_replace_text_in_block(
+    editor: *mut EditorHandle,
+    block_id: *const c_char,
+    start_offset: usize,
+    end_offset: usize,
+    replacement: *const c_char,
+) -> i32 {
     ffi!(
         {
             if editor.is_null() {
                 return Err("Editor is null".into());
             }
 
-            let editor = unsafe { &mut *(editor as *mut EditorInner) };
-            editor.runtime.clear_ai_feedback_items();
+            let block_id_str = parse_cstr(block_id, "block_id")?;
+            let replacement_str = parse_cstr(replacement, "replacement")?;
 
-            Ok(())
+            let node_id =
+                NodeId::from_string(block_id_str).ok_or_else(|| "Invalid block_id".to_string())?;
+
+            let editor = unsafe { &mut *(editor as *mut EditorInner) };
+            let success = editor
+                .runtime
+                .replace_text_in_block(node_id, start_offset, end_offset, replacement_str)
+                .is_ok();
+
+            Ok(if success { 1 } else { 0 })
         },
         -1
-    )
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn editor_get_ai_feedback_items(editor: *mut EditorHandle) -> *mut c_char {
-    ffi!(
-        {
-            if editor.is_null() {
-                return Err("Editor is null".into());
-            }
-
-            let editor = unsafe { &mut *(editor as *mut EditorInner) };
-            let items = editor.runtime.get_ai_feedback_items();
-            let json_str =
-                serde_json::to_string(&items).map_err(|e| format!("Failed to serialize: {e}"))?;
-            let c_str = CString::new(json_str).map_err(|_| "Invalid string")?;
-            Ok(c_str.into_raw())
-        },
-        std::ptr::null_mut()
     )
 }
 

@@ -39,6 +39,7 @@ class NativeEditorImageFloatingToolbar extends StatelessWidget {
           onTap: () {
             uploadManager.removeLocalImageUploadId(element.nodeId);
             scope.dispatch({'type': 'deleteNode', 'nodeId': element.nodeId});
+            scope.controller.scrollIntoView();
           },
         ),
       ],
@@ -102,6 +103,7 @@ class NativeEditorImageFloatingToolbar extends StatelessWidget {
 
         uploadManager.addInflightImage(uploadId, InflightImage(bytes: bytes, width: width, height: height));
         scope.dispatch({'type': 'insertImage', 'uploadId': uploadId});
+        scope.controller.scrollIntoView();
       } catch (err) {
         uploadManager.removeInflightImage(uploadId);
       }

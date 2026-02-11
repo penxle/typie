@@ -73,6 +73,20 @@ String? _getLastError() {
   return error;
 }
 
+Map<String, int> getSlateOffsets() {
+  _ensureInitialized();
+
+  final ptr = _bindings.editor_get_slate_offsets();
+  if (ptr == nullptr) {
+    throw const EditorException('Failed to get slate offsets');
+  }
+
+  final json = ptr.cast<Utf8>().toDartString();
+  _bindings.editor_free_string(ptr);
+
+  return (jsonDecode(json) as Map<String, dynamic>).map((k, v) => MapEntry(k, v as int));
+}
+
 bool validateRegex(String pattern) {
   _ensureInitialized();
 
@@ -269,23 +283,37 @@ final class NativeEditor {
     }
   }
 
-  List<dynamic>? tick() {
+  int tick() {
     _checkDisposed();
 
-    final ptr = _bindings.editor_tick(_handle);
-    if (ptr == nullptr) {
+    final result = _bindings.editor_tick(_handle);
+    if (result != 0) {
       final error = _getLastError();
       if (error != null) {
         throw EditorException(error);
       }
-      return null;
     }
+    return result;
+  }
 
-    final json = ptr.cast<Utf8>().toDartString();
-    _bindings.editor_free_string(ptr);
+  Pointer<Uint8> getSlatePtr() {
+    _checkDisposed();
+    return _bindings.editor_get_slate_ptr(_handle);
+  }
 
-    final result = jsonDecode(json) as List<dynamic>;
-    return result.isEmpty ? null : result;
+  int getSlateLen() {
+    _checkDisposed();
+    return _bindings.editor_get_slate_len(_handle);
+  }
+
+  Pointer<Uint8> getSlabPtr() {
+    _checkDisposed();
+    return _bindings.editor_get_slab_ptr(_handle);
+  }
+
+  int getSlabLen() {
+    _checkDisposed();
+    return _bindings.editor_get_slab_len(_handle);
   }
 
   void flush() {
@@ -443,10 +471,10 @@ final class NativeEditor {
     }
   }
 
-  Map<String, dynamic>? getSpellcheckText() {
+  Map<String, dynamic>? getTextWithMappings() {
     _checkDisposed();
 
-    final ptr = _bindings.editor_get_spellcheck_text(_handle);
+    final ptr = _bindings.editor_get_text_with_mappings(_handle);
     if (ptr == nullptr) {
       final error = _getLastError();
       if (error != null) {
@@ -461,115 +489,45 @@ final class NativeEditor {
     return jsonDecode(json) as Map<String, dynamic>;
   }
 
-  void setSpellcheckErrors(List<Map<String, dynamic>> errors) {
-    _checkDisposed();
-
-    final json = jsonEncode(errors);
-    final jsonPtr = json.toNativeUtf8().cast<Char>();
-
-    try {
-      final result = _bindings.editor_set_spellcheck_errors(_handle, jsonPtr);
-      if (result < 0) {
-        throw EditorException(_getLastError() ?? 'Failed to set spellcheck errors');
-      }
-    } finally {
-      calloc.free(jsonPtr);
-    }
-  }
-
-  bool applySpellcheckCorrection(String blockId, int startOffset, int endOffset, String correction) {
-    _checkDisposed();
-
-    final blockIdPtr = blockId.toNativeUtf8().cast<Char>();
-    final correctionPtr = correction.toNativeUtf8().cast<Char>();
-
-    try {
-      final result = _bindings.editor_apply_spellcheck_correction(
-        _handle,
-        blockIdPtr,
-        startOffset,
-        endOffset,
-        correctionPtr,
-      );
-      if (result < 0) {
-        throw EditorException(_getLastError() ?? 'Failed to apply spellcheck correction');
-      }
-      return result == 1;
-    } finally {
-      calloc
-        ..free(blockIdPtr)
-        ..free(correctionPtr);
-    }
-  }
-
-  List<dynamic> getSpellcheckErrors() {
-    _checkDisposed();
-
-    final ptr = _bindings.editor_get_spellcheck_errors(_handle);
-    if (ptr == nullptr) {
-      final error = _getLastError();
-      if (error != null) {
-        throw EditorException(error);
-      }
-      return [];
-    }
-
-    final json = ptr.cast<Utf8>().toDartString();
-    _bindings.editor_free_string(ptr);
-
-    return jsonDecode(json) as List<dynamic>;
-  }
-
-  void clearSpellcheckErrors() {
-    _checkDisposed();
-
-    final result = _bindings.editor_clear_spellcheck_errors(_handle);
-    if (result < 0) {
-      throw EditorException(_getLastError() ?? 'Failed to clear spellcheck errors');
-    }
-  }
-
-  void setAiFeedbackItems(List<Map<String, dynamic>> items) {
+  void setTrackedItems(int group, List<Map<String, dynamic>> items) {
     _checkDisposed();
 
     final json = jsonEncode(items);
     final jsonPtr = json.toNativeUtf8().cast<Char>();
 
     try {
-      final result = _bindings.editor_set_ai_feedback_items(_handle, jsonPtr);
+      final result = _bindings.editor_set_tracked_items(_handle, group, jsonPtr);
       if (result < 0) {
-        throw EditorException(_getLastError() ?? 'Failed to set ai feedback items');
+        throw EditorException(_getLastError() ?? 'Failed to set tracked items');
       }
     } finally {
       calloc.free(jsonPtr);
     }
   }
 
-  void clearAiFeedbackItems() {
+  bool replaceTextInBlock(String blockId, int startOffset, int endOffset, String replacement) {
     _checkDisposed();
 
-    final result = _bindings.editor_clear_ai_feedback_items(_handle);
-    if (result < 0) {
-      throw EditorException(_getLastError() ?? 'Failed to clear ai feedback items');
-    }
-  }
+    final blockIdPtr = blockId.toNativeUtf8().cast<Char>();
+    final replacementPtr = replacement.toNativeUtf8().cast<Char>();
 
-  List<dynamic> getAiFeedbackItems() {
-    _checkDisposed();
-
-    final ptr = _bindings.editor_get_ai_feedback_items(_handle);
-    if (ptr == nullptr) {
-      final error = _getLastError();
-      if (error != null) {
-        throw EditorException(error);
+    try {
+      final result = _bindings.editor_replace_text_in_block(
+        _handle,
+        blockIdPtr,
+        startOffset,
+        endOffset,
+        replacementPtr,
+      );
+      if (result < 0) {
+        throw EditorException(_getLastError() ?? 'Failed to replace text in block');
       }
-      return [];
+      return result == 1;
+    } finally {
+      calloc
+        ..free(blockIdPtr)
+        ..free(replacementPtr);
     }
-
-    final json = ptr.cast<Utf8>().toDartString();
-    _bindings.editor_free_string(ptr);
-
-    return jsonDecode(json) as List<dynamic>;
   }
 
   NativeDragImageResult? renderDragImage(List<int> visiblePages, int pageIdx) {

@@ -1,15 +1,24 @@
 use crate::layout::Page;
 use crate::model::{Doc, NodeId};
 use crate::runtime::Runtime;
-use crate::runtime::cmd::AiFeedbackOverlay;
 use crate::state::position_helpers::{calculate_offset_before_child, find_text_at_offset};
+use crate::types::TextBound;
 use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[serde(rename_all = "camelCase")]
+#[repr(u32)]
+pub enum TrackedItemGroup {
+    Spellcheck = 0,
+    AiFeedback = 1,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 #[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
 #[serde(rename_all = "camelCase")]
-pub struct RawAiFeedbackItem {
+pub struct RawTrackedItem {
     pub id: String,
     #[serde(
         serialize_with = "serialize_node_id",
@@ -36,17 +45,17 @@ where
 }
 
 #[derive(Clone)]
-pub struct AiFeedbackItem {
+pub struct TrackedItem {
     pub id: String,
+    pub group: TrackedItemGroup,
     pub node_id: NodeId,
     pub start_node_id: NodeId,
     pub start_cursor: loro::cursor::Cursor,
     pub end_node_id: NodeId,
     pub end_cursor: loro::cursor::Cursor,
-    pub original_length: usize,
 }
 
-impl AiFeedbackItem {
+impl TrackedItem {
     pub fn resolve_range(&self, doc: &Doc) -> Option<(NodeId, usize, usize)> {
         let loro = doc.loro_doc();
 
@@ -72,12 +81,21 @@ impl AiFeedbackItem {
     }
 }
 
-pub fn build_ai_feedback_overlays(
+pub struct TrackedItemOverlay {
+    pub page_idx: usize,
+    pub group: u32,
+    pub id: String,
+    pub node_id: NodeId,
+    pub start_offset: usize,
+    pub end_offset: usize,
+    pub bounds: Vec<TextBound>,
+}
+
+pub fn build_tracked_item_overlays(
     pages: &[Page],
-    items: &[AiFeedbackItem],
+    items: &[TrackedItem],
     doc: &Doc,
-    active_item_id: Option<&String>,
-) -> Vec<AiFeedbackOverlay> {
+) -> Vec<TrackedItemOverlay> {
     let mut overlays = Vec::new();
 
     for item in items {
@@ -88,11 +106,14 @@ pub fn build_ai_feedback_overlays(
         for (page_idx, page) in pages.iter().enumerate() {
             let bounds = page.get_text_range_bounds(node_id, start_flat, end_flat);
             if !bounds.is_empty() {
-                overlays.push(AiFeedbackOverlay {
+                overlays.push(TrackedItemOverlay {
                     page_idx,
+                    group: item.group as u32,
                     id: item.id.clone(),
+                    node_id,
+                    start_offset: start_flat,
+                    end_offset: end_flat,
                     bounds,
-                    is_active: Some(&item.id) == active_item_id,
                 });
                 break;
             }
@@ -103,65 +124,14 @@ pub fn build_ai_feedback_overlays(
 }
 
 impl Runtime {
-    pub fn get_ai_feedback_items(&mut self) -> Vec<RawAiFeedbackItem> {
-        self.ai_feedback_items
-            .iter()
-            .filter_map(|item| {
-                let (node_id, start_offset, end_offset) = item.resolve_range(&self.state.doc)?;
-                Some(RawAiFeedbackItem {
-                    id: item.id.clone(),
-                    node_id,
-                    start_offset,
-                    end_offset,
-                })
-            })
-            .collect()
-    }
+    pub fn set_tracked_items(&mut self, group: u32, raw_items: Vec<RawTrackedItem>) {
+        let target_group = match group {
+            0 => TrackedItemGroup::Spellcheck,
+            1 => TrackedItemGroup::AiFeedback,
+            _ => return,
+        };
 
-    pub(crate) fn update_active_ai_feedback_item(&mut self) -> bool {
-        let head = self.state.selection.head;
-
-        let new_active_id = self
-            .ai_feedback_items
-            .iter()
-            .find(|item| {
-                if item.node_id != head.node_id {
-                    return false;
-                }
-
-                item.resolve_range(&self.state.doc)
-                    .is_some_and(|(_, start, end)| head.offset >= start && head.offset <= end)
-            })
-            .map(|item| item.id.clone());
-
-        if self.active_ai_feedback_item_id != new_active_id {
-            self.active_ai_feedback_item_id = new_active_id;
-            true
-        } else {
-            false
-        }
-    }
-
-    pub(crate) fn clean_invalidated_ai_feedback_items(&mut self) -> bool {
-        if self.ai_feedback_items.is_empty() {
-            return false;
-        }
-
-        let old_count = self.ai_feedback_items.len();
-
-        self.ai_feedback_items.retain(|item| {
-            if let Some((_, start, end)) = item.resolve_range(&self.state.doc) {
-                start < end && (end - start) == item.original_length
-            } else {
-                false
-            }
-        });
-
-        self.ai_feedback_items.len() != old_count
-    }
-
-    pub fn set_ai_feedback_items(&mut self, raw_items: Vec<RawAiFeedbackItem>) {
-        let mut items = Vec::new();
+        self.tracked_items.retain(|item| item.group != target_group);
 
         for raw in raw_items {
             let Some(block_node) = self.state.doc.node(raw.node_id) else {
@@ -191,31 +161,17 @@ impl Runtime {
                 continue;
             };
 
-            items.push(AiFeedbackItem {
+            self.tracked_items.push(TrackedItem {
                 id: raw.id,
+                group: target_group,
                 node_id: raw.node_id,
                 start_node_id: start_child_id,
                 start_cursor,
                 end_node_id: end_child_id,
                 end_cursor,
-                original_length: raw.end_offset.saturating_sub(raw.start_offset),
             });
         }
 
-        self.ai_feedback_items = items;
-        self.update_active_ai_feedback_item();
-        self.pending.ai_feedback_overlays = true;
-    }
-
-    pub fn clear_ai_feedback_items(&mut self) {
-        if !self.ai_feedback_items.is_empty() {
-            self.ai_feedback_items.clear();
-            self.active_ai_feedback_item_id = None;
-            self.pending.ai_feedback_overlays = true;
-        }
-    }
-
-    pub fn has_ai_feedback_items(&self) -> bool {
-        !self.ai_feedback_items.is_empty()
+        self.pending.tracked_items = true;
     }
 }

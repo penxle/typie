@@ -22,7 +22,7 @@
 
   function scrollIntoView(animate: boolean, position = 0.5) {
     if (!element) return;
-    if (!animate && !editor.isPointerModeIdle) return;
+    if (!animate && editor.pointerState !== 0) return;
 
     const scroller = editor.scrollContainerEl;
     if (!scroller) return;
@@ -96,14 +96,15 @@
   $effect(() => {
     if (!element) return;
 
-    const { pageIdx, bounds, show, scrollToCursor } = editor.cursor;
+    const { pageIdx, bounds, visible } = editor.cursor;
+    const scrollToCursor = editor.pendingScrollMode === 'auto';
     const containerEls = editor.pageContainerEls;
     const inputEl = editor.inputElement;
 
     if (bounds && containerEls[pageIdx]) {
       containerEls[pageIdx].append(element);
 
-      element.style.visibility = show && editor.isFocused ? 'visible' : 'hidden';
+      element.style.visibility = visible && editor.isFocused ? 'visible' : 'hidden';
       element.style.left = `${bounds.x}px`;
       element.style.top = `${bounds.y}px`;
       element.style.height = `${bounds.height}px`;
@@ -120,13 +121,10 @@
       }
 
       if (scrollToCursor) {
-        const animate = editor.cursor.animate;
         requestAnimationFrame(() => {
-          scrollIntoView(animate);
+          scrollIntoView(false);
         });
-        if (animate) {
-          editor.cursor.animate = false;
-        }
+        editor.pendingScrollMode = null;
       }
     } else {
       element.style.visibility = 'hidden';

@@ -94,7 +94,8 @@
   };
 
   const updateOverlays = () => {
-    editor.setAiFeedbackItems(
+    editor.setTrackedItems(
+      1,
       editor.fullAiFeedbackItems.map((e) => ({
         id: e.id,
         nodeId: e.nodeId,
@@ -111,7 +112,7 @@
 
     await editor.ready;
 
-    const spellcheckData = editor.getSpellcheckText();
+    const spellcheckData = editor.getTextWithMappings();
     if (!spellcheckData?.text?.trim()) {
       return;
     }
@@ -125,7 +126,7 @@
     hasChecked = true;
     checkFailed = false;
     editor.fullAiFeedbackItems = [];
-    editor.clearAiFeedbackItems();
+    editor.setTrackedItems(1, []);
     progress = null;
 
     currentUnsubscribe = literaryAnalysisDocumentStream.subscribe(
@@ -161,7 +162,7 @@
 
   const scrollToFeedback = (feedback: AiFeedbackData) => {
     if (!editor) return;
-    editor.selectAiFeedbackItem(feedback.id);
+    editor.activeAiFeedbackItemId = feedback.id;
   };
 
   const removeFeedback = (feedbackId: string) => {
@@ -211,7 +212,7 @@
 
   $effect(() => {
     return () => {
-      editor?.clearAiFeedbackItems();
+      editor?.setTrackedItems(1, []);
     };
   });
 

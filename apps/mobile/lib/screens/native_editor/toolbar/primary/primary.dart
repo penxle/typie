@@ -68,6 +68,7 @@ class NativeEditorPrimaryToolbar extends HookWidget {
                     icon: LucideLightIcons.image,
                     onTap: () {
                       scope.dispatch({'type': 'insertImage'});
+                      scope.controller.scrollIntoView();
                       scope.requestFocus();
                     },
                   ),
@@ -75,12 +76,14 @@ class NativeEditorPrimaryToolbar extends HookWidget {
                     icon: LucideLightIcons.undo,
                     onTap: () {
                       scope.dispatch({'type': 'undo'});
+                      scope.controller.scrollIntoView();
                     },
                   ),
                   IconToolbarButton(
                     icon: LucideLightIcons.redo,
                     onTap: () {
                       scope.dispatch({'type': 'redo'});
+                      scope.controller.scrollIntoView();
                     },
                   ),
                 ],
@@ -94,6 +97,7 @@ class NativeEditorPrimaryToolbar extends HookWidget {
               scope.commitComposing();
               scope.requestFocus();
               scope.dispatch({'type': 'navigate', 'direction': 'left', 'extend': false});
+              scope.controller.scrollIntoView();
             },
           ),
           IconToolbarButton(
@@ -103,6 +107,7 @@ class NativeEditorPrimaryToolbar extends HookWidget {
               scope.commitComposing();
               scope.requestFocus();
               scope.dispatch({'type': 'navigate', 'direction': 'right', 'extend': false});
+              scope.controller.scrollIntoView();
             },
           ),
           AnimatedIndexedSwitcher(

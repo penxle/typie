@@ -30,6 +30,7 @@ class PasteOptionWidget extends StatelessWidget {
                   'headAffinity': info.to['affinity'],
                 })
                 ..dispatch({'type': 'pasteText', 'text': info.text})
+                ..scrollIntoView()
                 ..updateState((s) => s.copyWith(pasteOptions: null));
             },
             behavior: HitTestBehavior.opaque,
