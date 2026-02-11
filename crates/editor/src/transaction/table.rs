@@ -1,7 +1,8 @@
 use crate::model::{Node, NodeId, ParagraphNode, TableCellNode, TableNode, TableRowNode};
 use crate::runtime::Effect;
 use crate::state::selection_helpers::StructureSelectionInfo;
-use crate::state::{Position, Selection};
+use crate::state::table_helpers::find_table_cell;
+use crate::state::{Position, Selection, leaf_block_start};
 use crate::transaction::Transaction;
 use crate::types::Affinity;
 use anyhow::{Context, Result};
@@ -226,10 +227,51 @@ impl Transaction {
             return Ok(false);
         }
 
-        let row_id = table_node.children().nth(row).map(|r| r.node_id());
-        let Some(row_id) = row_id else {
+        let row_child = table_node.children().nth(row);
+        let Some(row_child) = row_child else {
             return Ok(false);
         };
+        let row_id = row_child.node_id();
+
+        let selection = self.selection();
+        let is_selected = {
+            let doc = self.doc();
+            let check = |node_id| {
+                if let Some((_, t_id, r_idx, _)) = find_table_cell(doc, node_id) {
+                    t_id == table_id && r_idx == row
+                } else {
+                    false
+                }
+            };
+            check(selection.anchor.node_id) || check(selection.head.node_id)
+        };
+
+        if is_selected {
+            let target_row_idx = if row + 1 < row_count {
+                row + 1
+            } else if row > 0 {
+                row - 1
+            } else {
+                unreachable!("row_count <= 1 should be handled early return")
+            };
+
+            let target_pos = {
+                let table_node = self.node(table_id).context("Table not found")?;
+                if let Some(target_row) = table_node.children().nth(target_row_idx) {
+                    if let Some(first_cell) = target_row.first_child() {
+                        Some(leaf_block_start(&first_cell))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            };
+
+            if let Some(pos) = target_pos {
+                self.set_selection(Selection::collapsed(pos));
+            }
+        }
 
         self.delete_node_recursive(row_id)?;
 
@@ -251,6 +293,38 @@ impl Transaction {
         let col_count = first_row.children().count();
         if col >= col_count || col_count <= 1 {
             return Ok(false);
+        }
+
+        let selection = self.selection();
+        let is_selected = {
+            let doc = self.doc();
+            let check = |node_id| {
+                if let Some((_, t_id, _, c_idx)) = find_table_cell(doc, node_id) {
+                    t_id == table_id && c_idx == col
+                } else {
+                    false
+                }
+            };
+            check(selection.anchor.node_id) || check(selection.head.node_id)
+        };
+
+        if is_selected {
+            let target_col_idx = if col + 1 < col_count {
+                col + 1
+            } else if col > 0 {
+                col - 1
+            } else {
+                unreachable!("col_count <= 1 should be handled early return")
+            };
+
+            if let Some(first_row_id) = row_ids.first() {
+                if let Some(first_row) = self.node(*first_row_id) {
+                    if let Some(target_cell) = first_row.children().nth(target_col_idx) {
+                        let pos = leaf_block_start(&target_cell);
+                        self.set_selection(Selection::collapsed(pos));
+                    }
+                }
+            }
         }
 
         for row_id in row_ids {
@@ -674,5 +748,47 @@ mod tests {
             doc.node(actual.selection.anchor.node_id).is_some(),
             "Selection anchor node should exist"
         );
+    }
+
+    #[test]
+    fn test_delete_column_with_selection() {
+        let mut t = id!();
+        let mut p1 = id!();
+        let mut p2 = id!();
+        let mut p3 = id!();
+        let mut p4 = id!();
+
+        let initial = state! {
+            doc {
+                @t table {
+                    table_row {
+                        table_cell { @p1 paragraph { text { "c1" } } }
+                        table_cell { @p2 paragraph { text { "c2" } } }
+                    }
+                    table_row {
+                        table_cell { @p3 paragraph { text { "c1" } } }
+                        table_cell { @p4 paragraph { text { "c2" } } }
+                    }
+                }
+            }
+            selection { (p4, 1) }
+        };
+
+        let actual = transact!(initial, |tr| {
+            tr.delete_table_column(t, 1).unwrap();
+        });
+
+        let doc = actual.doc;
+        let table = doc.node(t).unwrap();
+        let row1 = table.first_child().unwrap();
+        assert_eq!(row1.children().count(), 1, "Row should have 1 cell left");
+
+        let sel = actual.selection;
+        assert!(
+            doc.node(sel.anchor.node_id).is_some(),
+            "Selection anchor node should exist"
+        );
+
+        assert_eq!(sel.anchor.node_id, p1, "Selection should move to p1");
     }
 }
