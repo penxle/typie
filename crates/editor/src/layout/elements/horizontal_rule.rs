@@ -5,7 +5,7 @@ use crate::state::position_helpers::calculate_offset_before_child;
 use crate::state::{Position, Selection};
 use crate::types::{Affinity, Rect, Size};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct HorizontalRuleElement {
     pub node_id: NodeId,
     pub parent_id: NodeId,

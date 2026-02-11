@@ -58,7 +58,7 @@ impl<'a> LayoutContext<'a> {
         let rc = Rc::new(layout);
 
         let result = if let Some(prev_layout) = prev {
-            if children_equal(&rc, &prev_layout) {
+            if is_layout_equal(&rc, &prev_layout) {
                 prev_layout
             } else {
                 rc
@@ -72,7 +72,11 @@ impl<'a> LayoutContext<'a> {
     }
 }
 
-fn children_equal(new: &LayoutNode, old: &LayoutNode) -> bool {
+fn is_layout_equal(new: &LayoutNode, old: &LayoutNode) -> bool {
+    if new.element != old.element {
+        return false;
+    }
+
     match (&new.children, &old.children) {
         (Some(new_children), Some(old_children)) => {
             new_children.len() == old_children.len()
@@ -81,7 +85,7 @@ fn children_equal(new: &LayoutNode, old: &LayoutNode) -> bool {
                     .zip(old_children.iter())
                     .all(|(n, o)| Rc::ptr_eq(&n.node, &o.node))
         }
-        (None, None) => false,
+        (None, None) => true,
         _ => false,
     }
 }
@@ -173,5 +177,73 @@ mod tests {
             .expect("리스트 아이템 내 문단에도 preedit가 반영되어야 함");
         assert_eq!(preedit.node_id, p, "preedit 대상 노드가 일치해야 함");
         assert_eq!(preedit.offset, 1, "preedit 오프셋이 유지되어야 함");
+    }
+
+    fn find_table_border(
+        layout: &crate::layout::LayoutNode,
+    ) -> Option<&crate::layout::elements::TableBorderElement> {
+        if let Some(crate::layout::Element::TableBorder(ref t)) = layout.element {
+            return Some(t);
+        }
+        if let Some(ref children) = layout.children {
+            for child in children {
+                if let Some(t) = find_table_border(&child.node) {
+                    return Some(t);
+                }
+            }
+        }
+        None
+    }
+
+    #[test]
+    fn layout_cache_respects_element_change_with_same_children() {
+        use crate::model::TableAlign;
+        use crate::runtime::Runtime;
+
+        let mut t = id!();
+        let state = state! {
+            doc {
+                @t table(align: TableAlign::Left,) {
+                   table_row {
+                       table_cell {
+                           paragraph { text { "cell" } }
+                       }
+                   }
+                }
+            }
+            selection { (t, 0) }
+        };
+
+        let mut rt = Runtime::new(400.0, 1.0, state);
+
+        rt.layout();
+
+        let page = &rt.pages()[0];
+        let t_elem =
+            find_table_border(&page.root.node).expect("Should find table border in first layout");
+        assert_eq!(
+            t_elem.align,
+            TableAlign::Left,
+            "Initial align should be Left"
+        );
+
+        rt.update(crate::runtime::Message::SetTableAlign {
+            table_id: t.to_string(),
+            align: TableAlign::Right,
+        });
+        rt.flush();
+        rt.tick();
+
+        rt.layout();
+
+        let page = &rt.pages()[0];
+        let t_elem =
+            find_table_border(&page.root.node).expect("Should find table border in second layout");
+
+        assert_eq!(
+            t_elem.align,
+            TableAlign::Right,
+            "Align should be updated to Right"
+        );
     }
 }

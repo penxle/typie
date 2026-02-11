@@ -16,7 +16,7 @@ pub enum ListMarkerType {
     Ordered(usize),
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct ListMarkerElement {
     pub marker_type: ListMarkerType,
     pub baseline: f32,

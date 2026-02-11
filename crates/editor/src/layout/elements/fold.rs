@@ -6,7 +6,7 @@ use crate::types::Size;
 pub const FOLD_CONTENT_PADDING_X: f32 = 24.0;
 pub const FOLD_CONTENT_PADDING_Y: f32 = 16.0;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct FoldTitleElement {
     pub size: Size,
     pub block_id: NodeId,
@@ -25,7 +25,7 @@ impl FoldTitleElement {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct FoldTitleBackgroundElement {
     pub size: Size,
     pub expanded: bool,
@@ -58,7 +58,7 @@ impl Interactive for FoldTitleBackgroundElement {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct FoldContentElement {
     pub size: Size,
     pub split_edges: SplitEdges,

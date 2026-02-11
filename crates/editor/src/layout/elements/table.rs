@@ -4,7 +4,7 @@ use crate::model::TableAlign;
 use crate::model::TableBorderStyle;
 use crate::types::Size;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TableBorderElement {
     pub size: Size,
     pub node_id: NodeId,
@@ -70,7 +70,7 @@ impl crate::layout::elements::Wrapper for TableBorderElement {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TableCellElement {
     pub size: Size,
     pub node_id: NodeId,
