@@ -46,6 +46,49 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use slate::*;
 use std::cell::RefCell;
 
+fn get_marks_at_offset(text_node: &loro::LoroText, offset: usize) -> Vec<Mark> {
+    let rich_value = text_node.get_richtext_value();
+    let mut marks = Vec::new();
+    if let loro::LoroValue::List(list) = rich_value {
+        let mut current_offset = 0;
+        for item in list.iter() {
+            if let loro::LoroValue::Map(map) = item {
+                let text = map
+                    .get("insert")
+                    .and_then(|v| v.as_string())
+                    .cloned()
+                    .unwrap_or_default();
+                let segment_len = text.chars().count();
+                let segment_end = current_offset + segment_len;
+
+                if offset >= current_offset && offset < segment_end {
+                    if let Some(attrs_value) = map.get("attributes") {
+                        if let loro::LoroValue::Map(attrs) = attrs_value {
+                            for (key, value) in attrs.iter() {
+                                if let Some(mark) = Mark::from_key_value(key, value.clone()) {
+                                    marks.push(mark);
+                                }
+                            }
+                        }
+                    }
+                    break;
+                }
+
+                current_offset = segment_end;
+            }
+        }
+    }
+    marks
+}
+
+fn reapply_marks(text_node: &loro::LoroText, offset: usize, len: usize, marks: &[Mark]) {
+    for mark in marks {
+        let key = mark.key();
+        let value = mark.to_loro_value();
+        let _ = text_node.mark(offset..offset + len, key, value);
+    }
+}
+
 #[derive(Default)]
 struct PendingUpdates {
     doc: bool,
@@ -377,11 +420,19 @@ impl Runtime {
             ))?;
 
         let end_internal_offset = end_offset - start_offset + start_internal;
+
+        let marks = get_marks_at_offset(&text_node, start_internal);
+
         let _ = text_node.splice(
             start_internal,
             end_internal_offset - start_internal,
             replacement,
         );
+
+        let replacement_len = replacement.chars().count();
+        if replacement_len > 0 {
+            reapply_marks(&text_node, start_internal, replacement_len, &marks);
+        }
 
         self.handle_external_doc_change();
 
@@ -436,11 +487,19 @@ impl Runtime {
                 ))?;
 
             let end_internal_offset = end_offset - start_offset + start_internal;
+
+            let marks = get_marks_at_offset(&text_node, start_internal);
+
             let _ = text_node.splice(
                 start_internal,
                 end_internal_offset - start_internal,
                 replacement,
             );
+
+            let replacement_len = replacement.chars().count();
+            if replacement_len > 0 {
+                reapply_marks(&text_node, start_internal, replacement_len, &marks);
+            }
         }
 
         self.handle_external_doc_change();
