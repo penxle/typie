@@ -396,6 +396,17 @@ impl Doc {
         Ok(())
     }
 
+    pub fn is_ancestor(&self, ancestor: NodeId, node: NodeId) -> bool {
+        let mut current = self.get_parent_id(node);
+        while let Some(parent) = current {
+            if parent == ancestor {
+                return true;
+            }
+            current = self.get_parent_id(parent);
+        }
+        false
+    }
+
     pub fn get_parent_id(&self, node_id: NodeId) -> Option<NodeId> {
         let map = self.inner.get_node_map(node_id)?;
         map.get("parent")

@@ -2,6 +2,7 @@ mod position;
 pub mod position_helpers;
 mod selection;
 pub mod selection_helpers;
+pub mod table_helpers;
 pub mod traversal;
 mod types;
 

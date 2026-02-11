@@ -1,13 +1,14 @@
-use crate::model::{
-    Doc, Mark, MarkType, Node, NodeId, NodeRef, NodeType, SelectionDecor, TextAlign,
-};
+use crate::model::{Doc, Mark, MarkType, Node, NodeId, NodeRef, SelectionDecor, TextAlign};
 use crate::state::position::Position;
 use crate::state::position_helpers::compare_positions;
 use crate::state::position_helpers::find_child_at_offset;
+use crate::state::table_helpers::{
+    TableSelection, collect_cells_in_range, compute_table_selection,
+};
 use crate::state::{BlockTraverser, Selection};
 use anyhow::{Context, Result};
 use rustc_hash::{FxHashMap, FxHashSet};
-use std::cmp::{Ordering, max, min};
+use std::cmp::Ordering;
 
 pub fn collect_blocks_in_range(doc: &Doc, from: Position, to: Position) -> Result<Vec<NodeId>> {
     let start_id = start_block_id(doc, from)?;
@@ -52,7 +53,7 @@ pub fn collect_top_level_blocks_in_range(
         top_level_blocks.push(current);
 
         if let Some(end) = end_exclusive {
-            if end == current || is_ancestor(doc, current, end) {
+            if end == current || doc.is_ancestor(current, end) {
                 break;
             }
         }
@@ -128,17 +129,6 @@ pub(crate) fn end_boundary_node(doc: &Doc, pos: Position) -> Result<Option<NodeI
     let mut traverser =
         BlockTraverser::new(doc, block_id).context("end_boundary_node: Traverser init failed")?;
     Ok(traverser.next())
-}
-
-fn is_ancestor(doc: &Doc, ancestor: NodeId, node: NodeId) -> bool {
-    let mut current = doc.get_parent_id(node);
-    while let Some(parent) = current {
-        if parent == ancestor {
-            return true;
-        }
-        current = doc.get_parent_id(parent);
-    }
-    false
 }
 
 pub fn block_content_len(node: &NodeRef<'_>) -> usize {
@@ -239,22 +229,10 @@ fn collect_structure_decorations(
     let mut decorations = Vec::new();
     match structure_selection {
         StructureSelectionInfo::Rectangular { table_id, range } => {
-            if let Some(table) = doc.node(*table_id) {
-                for (r_idx, row) in table.children().enumerate() {
-                    if r_idx < range.0.0 || r_idx > range.0.1 {
-                        continue;
-                    }
-
-                    for (c_idx, cell) in row.children().enumerate() {
-                        if c_idx < range.1.0 || c_idx > range.1.1 {
-                            continue;
-                        }
-
-                        let cell_id = cell.node_id();
-                        if processed_structural_nodes.insert(cell_id) {
-                            decorations.push(SelectionDecor::Cell { node_id: cell_id });
-                        }
-                    }
+            let cells = collect_cells_in_range(doc, *table_id, *range);
+            for cell_id in cells {
+                if processed_structural_nodes.insert(cell_id) {
+                    decorations.push(SelectionDecor::Cell { node_id: cell_id });
                 }
             }
         }
@@ -633,7 +611,7 @@ fn collect_all_blocks_in_subtree(doc: &Doc, root_id: NodeId) -> Vec<NodeId> {
     };
 
     while let Some(node_id) = traverser.next() {
-        if !is_ancestor(doc, root_id, node_id) {
+        if !doc.is_ancestor(root_id, node_id) {
             break;
         }
         blocks.push(node_id);
@@ -654,18 +632,9 @@ pub fn collect_selected_block_ids(
     match cell_selection {
         StructureSelectionInfo::Rectangular { table_id, range } => {
             let mut ids = Vec::new();
-            if let Some(table) = doc.node(*table_id) {
-                for (r_idx, row) in table.children().enumerate() {
-                    if r_idx < range.0.0 || r_idx > range.0.1 {
-                        continue;
-                    }
-                    for (c_idx, cell) in row.children().enumerate() {
-                        if c_idx < range.1.0 || c_idx > range.1.1 {
-                            continue;
-                        }
-                        ids.extend(collect_all_blocks_in_subtree(doc, cell.node_id()));
-                    }
-                }
+            let cells = collect_cells_in_range(doc, *table_id, *range);
+            for cell_id in cells {
+                ids.extend(collect_all_blocks_in_subtree(doc, cell_id));
             }
             ids
         }
@@ -702,8 +671,13 @@ pub enum StructureSelectionInfo {
 }
 
 pub fn compute_structure_selection(doc: &Doc, selection: &Selection) -> StructureSelectionInfo {
-    if let Some(info) = compute_table_selection_info(doc, selection) {
-        return info;
+    if let Some(table_selection) = compute_table_selection(doc, selection) {
+        return match table_selection {
+            TableSelection::Full(table_id) => StructureSelectionInfo::Structural(vec![table_id]),
+            TableSelection::Rectangular { table_id, range } => {
+                StructureSelectionInfo::Rectangular { table_id, range }
+            }
+        };
     }
 
     let blocks = collect_relevant_blocks(doc, selection).unwrap_or_default();
@@ -712,53 +686,6 @@ pub fn compute_structure_selection(doc: &Doc, selection: &Selection) -> Structur
         StructureSelectionInfo::None
     } else {
         StructureSelectionInfo::Structural(blocks)
-    }
-}
-
-fn compute_table_selection_info(
-    doc: &Doc,
-    selection: &Selection,
-) -> Option<StructureSelectionInfo> {
-    let anchor_info = find_table_cell(doc, selection.anchor.node_id);
-    let head_info = find_table_cell(doc, selection.head.node_id);
-
-    let (Some((_, t1, r1, c1)), Some((_, t2, r2, c2))) = (anchor_info, head_info) else {
-        return None;
-    };
-
-    if t1 != t2 {
-        return None;
-    }
-
-    if r1 == r2 && c1 == c2 {
-        Some(StructureSelectionInfo::None)
-    } else {
-        let start_row = min(r1, r2);
-        let end_row = max(r1, r2);
-        let start_col = min(c1, c2);
-        let end_col = max(c1, c2);
-
-        if let Some(table) = doc.node(t1) {
-            let num_rows = table.children().count();
-            let num_cols = table
-                .children()
-                .next()
-                .map(|row| row.children().count())
-                .unwrap_or(0);
-
-            if start_row == 0
-                && end_row == num_rows.saturating_sub(1)
-                && start_col == 0
-                && end_col == num_cols.saturating_sub(1)
-            {
-                return Some(StructureSelectionInfo::Structural(vec![t1]));
-            }
-        }
-
-        Some(StructureSelectionInfo::Rectangular {
-            table_id: t1,
-            range: ((start_row, end_row), (start_col, end_col)),
-        })
     }
 }
 
@@ -793,9 +720,9 @@ fn collect_relevant_blocks(doc: &Doc, selection: &Selection) -> Result<Vec<NodeI
             let fully_selected = is_node_fully_selected(doc, selection, id).unwrap_or(false);
 
             let contains_anchor =
-                id == selection.anchor.node_id || is_ancestor(doc, id, selection.anchor.node_id);
+                id == selection.anchor.node_id || doc.is_ancestor(id, selection.anchor.node_id);
             let contains_head =
-                id == selection.head.node_id || is_ancestor(doc, id, selection.head.node_id);
+                id == selection.head.node_id || doc.is_ancestor(id, selection.head.node_id);
 
             fully_selected || (contains_anchor != contains_head)
         })
@@ -808,44 +735,6 @@ fn collect_relevant_blocks(doc: &Doc, selection: &Selection) -> Result<Vec<NodeI
     });
 
     Ok(result)
-}
-
-fn find_table_cell(doc: &Doc, node_id: NodeId) -> Option<(NodeId, NodeId, usize, usize)> {
-    let mut current_id = node_id;
-
-    loop {
-        let Some(node) = doc.node(current_id) else {
-            break;
-        };
-
-        if node.node_type() == NodeType::TableCell {
-            let cell = node;
-            let row = cell.parent()?;
-            if row.node_type() != NodeType::TableRow {
-                return None;
-            }
-            let table = row.parent()?;
-            if table.node_type() != NodeType::Table {
-                return None;
-            }
-
-            let row_idx = row.index()?;
-            let col_idx = cell.index()?;
-
-            return Some((cell.node_id(), table.node_id(), row_idx, col_idx));
-        }
-
-        if node.node_type() == NodeType::Table {
-            break;
-        }
-
-        if let Some(parent) = node.parent() {
-            current_id = parent.node_id();
-        } else {
-            break;
-        }
-    }
-    None
 }
 
 #[cfg(test)]
