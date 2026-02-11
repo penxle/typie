@@ -392,6 +392,7 @@ export class Editor {
       this.selection.collapsed = sel.collapsed;
       this.characterCountsVersion++;
       this.#onSelectionChanged?.(sel.anchor, sel.head);
+      this.#updateActiveTrackedItems(sel.head);
     }
 
     if (slate.isDirty(DIRTY_FORMATTING)) {
@@ -515,6 +516,22 @@ export class Editor {
     ensureRequiredFont(this.#application, family, weight, codepoints).then(() => {
       this.dispatch({ type: 'fontsLoaded' });
     });
+  }
+
+  #updateActiveTrackedItems(head: Position): void {
+    const newSpellcheckId =
+      this.spellcheckOverlays.find((o) => o.nodeId === head.nodeId && head.offset >= o.startOffset && head.offset <= o.endOffset)?.id ??
+      null;
+    if (this.activeSpellcheckErrorId !== newSpellcheckId) {
+      this.activeSpellcheckErrorId = newSpellcheckId;
+    }
+
+    const newFeedbackId =
+      this.aiFeedbackOverlays.find((o) => o.nodeId === head.nodeId && head.offset >= o.startOffset && head.offset <= o.endOffset)?.id ??
+      null;
+    if (this.activeAiFeedbackItemId !== newFeedbackId) {
+      this.activeAiFeedbackItemId = newFeedbackId;
+    }
   }
 
   #scrollOverlayIntoView(overlay: TrackedItemOverlay): void {
