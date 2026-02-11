@@ -9,7 +9,6 @@ pub const DIRTY_EXTERNAL_ELEMENTS: u64 = 1 << 8;
 pub const DIRTY_ENABLED_ACTIONS: u64 = 1 << 9;
 pub const DIRTY_LINK_OVERLAYS: u64 = 1 << 10;
 pub const DIRTY_TRACKED_ITEMS: u64 = 1 << 11;
-pub const DIRTY_SEARCH_OVERLAYS: u64 = 1 << 13;
 pub const DIRTY_TABLE_OVERLAYS: u64 = 1 << 14;
 pub const DIRTY_DOC_CHANGED: u64 = 1 << 15;
 pub const DIRTY_RENDER_REQUIRED: u64 = 1 << 16;
@@ -88,10 +87,6 @@ pub struct Slate {
     pub link_overlays_count: u32,
     pub tracked_items_offset: u32,
     pub tracked_items_count: u32,
-    pub search_overlays_offset: u32,
-    pub search_overlays_count: u32,
-    pub search_total_count: u32,
-    pub search_current_index: u32,
     pub table_overlays_offset: u32,
     pub table_overlays_count: u32,
 
@@ -351,22 +346,6 @@ pub fn get_slate_offsets() -> Vec<(&'static str, usize)> {
         (
             "tracked_items_count",
             std::mem::offset_of!(Slate, tracked_items_count),
-        ),
-        (
-            "search_overlays_offset",
-            std::mem::offset_of!(Slate, search_overlays_offset),
-        ),
-        (
-            "search_overlays_count",
-            std::mem::offset_of!(Slate, search_overlays_count),
-        ),
-        (
-            "search_total_count",
-            std::mem::offset_of!(Slate, search_total_count),
-        ),
-        (
-            "search_current_index",
-            std::mem::offset_of!(Slate, search_current_index),
         ),
         (
             "table_overlays_offset",

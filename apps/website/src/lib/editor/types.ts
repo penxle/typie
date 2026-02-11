@@ -1,4 +1,4 @@
-import type { ExternalElementData, Rect, TextAlign, TextBound } from '@typie/editor';
+import type { ExternalElementData, Rect, TextAlign } from '@typie/editor';
 
 export type {
   Affinity,
@@ -31,12 +31,6 @@ export type ExternalElement = {
 export type SelectionStats = {
   uniformAlign: TextAlign | undefined;
   uniformLineHeight: number | undefined;
-};
-
-export type SearchOverlay = {
-  pageIdx: number;
-  bounds: TextBound[];
-  isCurrent: boolean;
 };
 
 export type AiFeedbackData = {

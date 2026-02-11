@@ -33,7 +33,6 @@ pub enum Effect {
     },
     StructureChanged, // 구조적 변경 (노드 추가 / 삭제)
     ExitedDocumentStart,
-    SearchStateChanged,
     TextReplacementApplied {
         undo_state: super::text_replacement::ReplacementUndoState,
     },

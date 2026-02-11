@@ -215,14 +215,14 @@
         {/if}
       {/each}
 
-      {#each editor.searchResults.overlays.filter((o) => o.pageIdx === page) as overlay, i (`search-${i}`)}
+      {#each editor.searchOverlays.filter((o) => o.pageIdx === page) as overlay, i (`search-${i}-${overlay.id}`)}
         {#each overlay.bounds as bound, j (`search-${i}-${j}`)}
           <div
             style:left={`${bound.x}px`}
             style:top={`${bound.y}px`}
             style:width={`${bound.width}px`}
             style:height={`${bound.height}px`}
-            style:background-color={overlay.isCurrent ? 'rgba(255, 165, 0, 0.5)' : 'rgba(255, 255, 0, 0.5)'}
+            style:background-color={overlay.id === editor.activeSearchMatchId ? 'rgba(255, 165, 0, 0.5)' : 'rgba(255, 255, 0, 0.5)'}
             class={css({
               position: 'absolute',
               pointerEvents: 'none',

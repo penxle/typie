@@ -561,30 +561,6 @@ define_messages! {
     => when When::True
     => handle(rt) { rt.handle_set_selection(anchor_node_id, anchor_offset, anchor_affinity, head_node_id, head_offset, head_affinity) },
 
-    Search { query: String, match_whole_word: bool }
-    => when When::True
-    => handle(rt) { rt.handle_search(query, match_whole_word) },
-
-    ClearSearch
-    => when When::True
-    => handle(rt) { rt.handle_clear_search() },
-
-    FindNext
-    => when When::True
-    => handle(rt) { rt.handle_find_next() },
-
-    FindPrevious
-    => when When::True
-    => handle(rt) { rt.handle_find_previous() },
-
-    Replace { replacement: String }
-    => when When::key(ContextKey::CanEdit)
-    => handle(rt) { rt.handle_replace(replacement) },
-
-    ReplaceAll { replacement: String }
-    => when When::key(ContextKey::CanEdit)
-    => handle(rt) { rt.handle_replace_all(replacement) },
-
     ExtendSelectionTo {
         anchor_page_idx: usize,
         anchor_x: f32,

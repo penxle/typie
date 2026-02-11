@@ -1147,6 +1147,54 @@ pub extern "C" fn editor_set_tracked_items(
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn editor_perform_search(
+    editor: *mut EditorHandle,
+    query: *const c_char,
+    match_whole_word: i32,
+) -> *mut c_char {
+    ffi!(
+        {
+            if editor.is_null() {
+                return Err("Editor is null".into());
+            }
+
+            let query_str = parse_cstr(query, "query")?;
+
+            let editor = unsafe { &*(editor as *const EditorInner) };
+            let search_query = crate::runtime::search::SearchQuery::new(
+                query_str.to_string(),
+                match_whole_word != 0,
+            );
+            let matches =
+                crate::runtime::search::perform_search(editor.runtime.doc(), &search_query);
+
+            #[derive(serde::Serialize)]
+            #[serde(rename_all = "camelCase")]
+            struct MatchResult {
+                node_id: String,
+                start_offset: usize,
+                end_offset: usize,
+            }
+
+            let results: Vec<MatchResult> = matches
+                .into_iter()
+                .map(|m| MatchResult {
+                    node_id: m.node_id.to_string(),
+                    start_offset: m.start_offset,
+                    end_offset: m.end_offset,
+                })
+                .collect();
+
+            let json_str =
+                serde_json::to_string(&results).map_err(|e| format!("Failed to serialize: {e}"))?;
+            let c_str = CString::new(json_str).map_err(|_| "Invalid string")?;
+            Ok(c_str.into_raw())
+        },
+        std::ptr::null_mut()
+    )
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn editor_replace_text_in_block(
     editor: *mut EditorHandle,
     block_id: *const c_char,
@@ -1173,6 +1221,41 @@ pub extern "C" fn editor_replace_text_in_block(
                 .is_ok();
 
             Ok(if success { 1 } else { 0 })
+        },
+        -1
+    )
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn editor_replace_text_in_blocks(
+    editor: *mut EditorHandle,
+    items_json: *const c_char,
+) -> i32 {
+    ffi!(
+        {
+            if editor.is_null() {
+                return Err("Editor is null".into());
+            }
+
+            let items_str = parse_cstr(items_json, "items_json")?;
+
+            let entries: Vec<(String, usize, usize, String)> = serde_json::from_str(items_str)
+                .map_err(|e| format!("Failed to parse items: {e}"))?;
+
+            let replacements: Vec<_> = entries
+                .iter()
+                .filter_map(|(node_id, start, end, replacement)| {
+                    NodeId::from_string(node_id).map(|id| (id, *start, *end, replacement.as_str()))
+                })
+                .collect();
+
+            let editor = unsafe { &mut *(editor as *mut EditorInner) };
+            editor
+                .runtime
+                .replace_text_in_blocks(&replacements)
+                .map_err(|e| format!("Failed to replace: {e}"))?;
+
+            Ok(())
         },
         -1
     )

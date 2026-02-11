@@ -19,7 +19,6 @@ import {
   DIRTY_PLACEHOLDER,
   DIRTY_POINTER,
   DIRTY_RENDER_REQUIRED,
-  DIRTY_SEARCH_OVERLAYS,
   DIRTY_SELECTION,
   DIRTY_SETTINGS,
   DIRTY_TABLE_OVERLAYS,
@@ -44,7 +43,6 @@ import type {
   Message,
   Position,
   Rect,
-  SearchOverlay,
   SelectionStats,
   SpellcheckErrorData,
 } from './types';
@@ -117,6 +115,8 @@ export class Editor {
   #flushPending = false;
   #onDocChanged?: () => void;
   #onExitedDocumentStart?: () => void;
+  #searchQuery = '';
+  #searchMatchWholeWord = false;
   #onSelectionChanged?: (anchor: Position, head: Position) => void;
   #readyResolve?: () => void;
   ready: Promise<void>;
@@ -220,11 +220,9 @@ export class Editor {
   activeAiFeedbackItemId = $state<string | null>(null);
   fullAiFeedbackItems = $state<AiFeedbackData[]>([]);
 
-  searchResults = $state({
-    overlays: [] as SearchOverlay[],
-    totalCount: 0,
-    currentIndex: 0,
-  });
+  searchMatches = $state<{ id: string; nodeId: string; startOffset: number; endOffset: number }[]>([]);
+  activeSearchMatchId = $state<string | null>(null);
+  searchOverlays = $state<TrackedItemOverlay[]>([]);
 
   tableOverlays = $state<TableOverlay[]>([]);
 
@@ -349,6 +347,9 @@ export class Editor {
       this.#onDocChanged?.();
       this.pendingScrollMode = 'typewriter';
       this.characterCountsVersion++;
+      if (this.#searchQuery) {
+        this.#performSearchAndUpdateTrackedItems();
+      }
     }
 
     if (slate.isDirty(DIRTY_RENDER_REQUIRED)) {
@@ -444,11 +445,14 @@ export class Editor {
 
       const spellcheckItems: TrackedItemOverlay[] = [];
       const feedbackItems: TrackedItemOverlay[] = [];
+      const searchItems: TrackedItemOverlay[] = [];
       for (const item of items) {
         if (item.group === 0) {
           spellcheckItems.push(item);
-        } else {
+        } else if (item.group === 1) {
           feedbackItems.push(item);
+        } else if (item.group === 2) {
+          searchItems.push(item);
         }
       }
 
@@ -483,27 +487,11 @@ export class Editor {
       if (activeFeedbackOverlay && activeFeedbackOverlay.bounds.length > 0) {
         this.#scrollOverlayIntoView(activeFeedbackOverlay);
       }
-    }
 
-    if (slate.isDirty(DIRTY_SEARCH_OVERLAYS)) {
-      const search = slate.readSearchOverlays();
-      this.searchResults.overlays = search.overlays;
-      this.searchResults.totalCount = search.totalCount;
-      this.searchResults.currentIndex = search.currentIndex;
-
-      const currentOverlay = search.overlays.find((o) => o.isCurrent);
-      if (currentOverlay && currentOverlay.bounds.length > 0) {
-        const pageEl = this.pageContainerEls[currentOverlay.pageIdx];
-        const scroller = this.scrollContainerEl;
-        if (pageEl && scroller) {
-          const pageRect = pageEl.getBoundingClientRect();
-          const scrollerRect = scroller.getBoundingClientRect();
-          const bound = currentOverlay.bounds[0];
-          const targetY = pageRect.top + bound.y - scrollerRect.top + scroller.scrollTop;
-          const viewportCenter = scroller.clientHeight / 2;
-          const targetScroll = targetY - viewportCenter + bound.height / 2;
-          scroller.scrollTo({ top: Math.max(0, targetScroll), behavior: 'smooth' });
-        }
+      this.searchOverlays = searchItems;
+      const activeSearchOverlay = this.activeSearchMatchId ? searchItems.find((o) => o.id === this.activeSearchMatchId) : null;
+      if (activeSearchOverlay && activeSearchOverlay.bounds.length > 0) {
+        this.#scrollOverlayIntoView(activeSearchOverlay);
       }
     }
 
@@ -1246,32 +1234,97 @@ export class Editor {
     }, 150);
   }
 
+  #performSearchAndUpdateTrackedItems(): void {
+    if (!this.#wasmEditor) return;
+
+    const matches = this.#wasmEditor.performSearch(this.#searchQuery, this.#searchMatchWholeWord) as {
+      nodeId: string;
+      startOffset: number;
+      endOffset: number;
+    }[];
+
+    const items = matches.map((m, i) => ({
+      id: `search-${i}`,
+      nodeId: m.nodeId,
+      startOffset: m.startOffset,
+      endOffset: m.endOffset,
+    }));
+
+    this.searchMatches = items;
+
+    if (items.length > 0) {
+      const prevId = this.activeSearchMatchId;
+      if (!prevId || !items.some((it) => it.id === prevId)) {
+        this.activeSearchMatchId = items[0].id;
+      }
+    } else {
+      this.activeSearchMatchId = null;
+    }
+
+    this.#wasmEditor.setTrackedItems(
+      2,
+      items.map((it) => ({ id: it.id, nodeId: it.nodeId, startOffset: it.startOffset, endOffset: it.endOffset })),
+    );
+  }
+
   search(query: string, options?: { matchWholeWord?: boolean }): void {
-    this.dispatch({
-      type: 'search',
-      query,
-      matchWholeWord: options?.matchWholeWord ?? false,
-    }).scrollIntoView();
+    this.#searchQuery = query;
+    this.#searchMatchWholeWord = options?.matchWholeWord ?? false;
+
+    if (!query) {
+      this.clearSearch();
+      return;
+    }
+
+    this.#performSearchAndUpdateTrackedItems();
+    this.activeSearchMatchId = this.searchMatches.length > 0 ? this.searchMatches[0].id : null;
+    this.#scrollActiveSearchIntoView();
   }
 
   clearSearch(): void {
-    this.dispatch({ type: 'clearSearch' });
+    this.#searchQuery = '';
+    this.searchMatches = [];
+    this.activeSearchMatchId = null;
+    this.searchOverlays = [];
+    this.#wasmEditor?.setTrackedItems(2, []);
   }
 
   findNext(): void {
-    this.dispatch({ type: 'findNext' }).scrollIntoView();
+    if (this.searchMatches.length === 0) return;
+    const currentIdx = this.searchMatches.findIndex((m) => m.id === this.activeSearchMatchId);
+    const nextIdx = (currentIdx + 1) % this.searchMatches.length;
+    this.activeSearchMatchId = this.searchMatches[nextIdx].id;
+    this.#scrollActiveSearchIntoView();
   }
 
   findPrevious(): void {
-    this.dispatch({ type: 'findPrevious' }).scrollIntoView();
+    if (this.searchMatches.length === 0) return;
+    const currentIdx = this.searchMatches.findIndex((m) => m.id === this.activeSearchMatchId);
+    const prevIdx = currentIdx <= 0 ? this.searchMatches.length - 1 : currentIdx - 1;
+    this.activeSearchMatchId = this.searchMatches[prevIdx].id;
+    this.#scrollActiveSearchIntoView();
   }
 
   replace(replacement: string): void {
-    this.dispatch({ type: 'replace', replacement }).scrollIntoView();
+    const match = this.searchMatches.find((m) => m.id === this.activeSearchMatchId);
+    if (!match || !this.#wasmEditor) return;
+    this.#wasmEditor.replaceTextInBlock(match.nodeId, match.startOffset, match.endOffset, replacement);
+    this.#performSearchAndUpdateTrackedItems();
+    this.#scrollActiveSearchIntoView();
   }
 
   replaceAll(replacement: string): void {
-    this.dispatch({ type: 'replaceAll', replacement }).scrollIntoView();
+    if (this.searchMatches.length === 0 || !this.#wasmEditor) return;
+    const items = this.searchMatches.map((m) => [m.nodeId, m.startOffset, m.endOffset, replacement]);
+    this.#wasmEditor.replaceTextInBlocks(items);
+    this.#performSearchAndUpdateTrackedItems();
+  }
+
+  #scrollActiveSearchIntoView(): void {
+    const overlay = this.searchOverlays.find((o) => o.id === this.activeSearchMatchId);
+    if (overlay && overlay.bounds.length > 0) {
+      this.#scrollOverlayIntoView(overlay);
+    }
   }
 
   scrollIntoView({ mode = 'auto' }: { mode?: 'auto' | 'typewriter' } = {}): Editor {

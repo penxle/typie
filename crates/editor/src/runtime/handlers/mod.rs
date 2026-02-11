@@ -17,6 +17,5 @@ mod interaction;
 mod layout;
 mod navigation;
 mod pointer;
-mod search;
 mod table;
 mod text_replacement;

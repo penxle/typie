@@ -29,55 +29,104 @@ class FindReplaceSheet extends HookWidget {
 
     final debounceTimer = useRef<Timer?>(null);
 
-    final state = useListenable(controller);
+    final searchMatches = useRef<List<Map<String, dynamic>>>([]);
+    final activeIndex = useState(0);
+
+    void performSearchAndUpdate(String query) {
+      if (query.isEmpty) {
+        searchMatches.value = [];
+        activeIndex.value = 0;
+        controller.editor.setTrackedItems(2, []);
+        return;
+      }
+
+      final matches = controller.editor.performSearch(query, false);
+      final items = <Map<String, dynamic>>[];
+      for (var i = 0; i < matches.length; i++) {
+        items.add({
+          'id': 'search-$i',
+          'nodeId': matches[i]['nodeId'],
+          'startOffset': matches[i]['startOffset'],
+          'endOffset': matches[i]['endOffset'],
+        });
+      }
+
+      searchMatches.value = items;
+      if (items.isNotEmpty) {
+        if (activeIndex.value >= items.length) {
+          activeIndex.value = 0;
+        }
+      } else {
+        activeIndex.value = 0;
+      }
+
+      controller.editor.setTrackedItems(2, items);
+    }
 
     useEffect(() {
       return () {
         debounceTimer.value?.cancel();
-        controller.dispatch({'type': 'clearSearch'});
+        controller.editor.setTrackedItems(2, []);
       };
     }, []);
 
     useEffect(() {
       debounceTimer.value?.cancel();
       if (findText.isEmpty) {
-        controller.dispatch({'type': 'clearSearch'});
+        performSearchAndUpdate('');
         return null;
       }
       debounceTimer.value = Timer(const Duration(milliseconds: 150), () {
-        controller
-          ..dispatch({'type': 'search', 'query': findText, 'matchWholeWord': false})
-          ..scrollIntoView();
+        performSearchAndUpdate(findText);
+        controller.scrollIntoView();
       });
       return null;
     }, [findText]);
 
     void findNext() {
-      controller
-        ..dispatch({'type': 'findNext'})
-        ..scrollIntoView();
+      if (searchMatches.value.isEmpty) {
+        return;
+      }
+      activeIndex.value = (activeIndex.value + 1) % searchMatches.value.length;
+      controller.scrollIntoView();
     }
 
     void findPrevious() {
-      controller
-        ..dispatch({'type': 'findPrevious'})
-        ..scrollIntoView();
+      if (searchMatches.value.isEmpty) {
+        return;
+      }
+      activeIndex.value = activeIndex.value <= 0 ? searchMatches.value.length - 1 : activeIndex.value - 1;
+      controller.scrollIntoView();
     }
 
     void replace() {
-      controller
-        ..dispatch({'type': 'replace', 'replacement': replaceTextController.text})
-        ..scrollIntoView();
+      if (searchMatches.value.isEmpty) {
+        return;
+      }
+      final match = searchMatches.value[activeIndex.value];
+      controller.editor.replaceTextInBlock(
+        match['nodeId'] as String,
+        match['startOffset'] as int,
+        match['endOffset'] as int,
+        replaceTextController.text,
+      );
+      performSearchAndUpdate(findText);
+      controller.scrollIntoView();
     }
 
     void replaceAll() {
-      controller
-        ..dispatch({'type': 'replaceAll', 'replacement': replaceTextController.text})
-        ..scrollIntoView();
+      if (searchMatches.value.isEmpty) {
+        return;
+      }
+      final items = searchMatches.value
+          .map((m) => [m['nodeId'], m['startOffset'], m['endOffset'], replaceTextController.text])
+          .toList();
+      controller.editor.replaceTextInBlocks(items);
+      performSearchAndUpdate(findText);
     }
 
-    final totalCount = state.state.search.totalCount;
-    final currentIndex = state.state.search.currentIndex;
+    final totalCount = searchMatches.value.length;
+    final currentIndex = activeIndex.value;
 
     final mediaQuery = MediaQuery.of(context);
 

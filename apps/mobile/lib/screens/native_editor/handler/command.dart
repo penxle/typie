@@ -53,10 +53,6 @@ class CommandHandler {
       _handleTrackedItemsChanged(controller, reader);
     }
 
-    if (dirty & (1 << 13) != 0) {
-      _handleSearchResultsChanged(controller, reader);
-    }
-
     if (dirty & (1 << 17) != 0) {
       _handleFontRequired(controller, reader);
     }
@@ -264,6 +260,7 @@ class CommandHandler {
 
     final spellcheckOverlays = <SpellcheckOverlayInfo>[];
     final aiFeedbackOverlays = <AiFeedbackOverlayInfo>[];
+    final searchOverlays = <SearchOverlayInfo>[];
 
     for (final item in rawItems) {
       if (item.group == 0) {
@@ -273,13 +270,18 @@ class CommandHandler {
         spellcheckOverlays.add(
           SpellcheckOverlayInfo(pageIdx: item.pageIdx, id: item.id, isActive: false, bounds: bounds),
         );
-      } else {
+      } else if (item.group == 1) {
         final bounds = item.bounds
             .map((b) => AiFeedbackOverlayBound(x: b.x, y: b.y, width: b.width, height: b.height))
             .toList();
         aiFeedbackOverlays.add(
           AiFeedbackOverlayInfo(pageIdx: item.pageIdx, id: item.id, isActive: false, bounds: bounds),
         );
+      } else if (item.group == 2) {
+        final rects = item.bounds
+            .map((b) => SearchHighlightRect(x: b.x, y: b.y, width: b.width, height: b.height))
+            .toList();
+        searchOverlays.add(SearchOverlayInfo(pageIdx: item.pageIdx, isCurrent: false, bounds: rects));
       }
     }
 
@@ -287,40 +289,7 @@ class CommandHandler {
       (state) => state.copyWith(
         spellcheck: SpellcheckState(overlays: spellcheckOverlays),
         aiFeedback: AiFeedbackState(overlays: aiFeedbackOverlays),
-      ),
-    );
-  }
-
-  static void _handleSearchResultsChanged(EditorController controller, SlateReader reader) {
-    final totalCount = reader.getU32('search_total_count');
-    final currentIndex = reader.getU32('search_current_index');
-    final rawOverlays = reader.readSearchOverlays();
-
-    SearchScrollTarget? scrollTarget;
-    final searchOverlays = rawOverlays.map((o) {
-      final rects = o.bounds.map((b) => SearchHighlightRect(x: b.x, y: b.y, width: b.width, height: b.height)).toList();
-
-      if (o.isCurrent && rects.isNotEmpty) {
-        scrollTarget = SearchScrollTarget(
-          pageIdx: o.pageIdx,
-          x: rects[0].x,
-          y: rects[0].y,
-          width: rects[0].width,
-          height: rects[0].height,
-        );
-      }
-
-      return SearchOverlayInfo(pageIdx: o.pageIdx, isCurrent: o.isCurrent, bounds: rects);
-    }).toList();
-
-    controller.updateState(
-      (state) => state.copyWith(
-        search: SearchState(
-          totalCount: totalCount,
-          currentIndex: currentIndex,
-          scrollTarget: scrollTarget,
-          overlays: searchOverlays,
-        ),
+        search: state.search.copyWith(overlays: searchOverlays),
       ),
     );
   }
