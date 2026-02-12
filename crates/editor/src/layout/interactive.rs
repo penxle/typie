@@ -6,6 +6,15 @@ pub enum InteractionKind {
     CycleCalloutVariant { node_id: NodeId },
 }
 
+impl InteractionKind {
+    pub fn allow_in_read_only(&self) -> bool {
+        match self {
+            InteractionKind::Toggle { .. } => true,
+            InteractionKind::CycleCalloutVariant { .. } => false,
+        }
+    }
+}
+
 pub trait Interactive {
     fn interaction_kind(&self) -> InteractionKind;
 }
