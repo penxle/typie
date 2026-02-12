@@ -491,6 +491,7 @@
     pointerEvents: 'auto',
   })}
   data-external-element
+  onpointerdown={(e) => e.stopPropagation()}
   onpointerenter={() => (addColButtonHovered = true)}
   onpointerleave={() => (addColButtonHovered = false)}
 >
@@ -537,6 +538,7 @@
     pointerEvents: 'auto',
   })}
   data-external-element
+  onpointerdown={(e) => e.stopPropagation()}
   onpointerenter={() => (addRowButtonHovered = true)}
   onpointerleave={() => (addRowButtonHovered = false)}
 >
@@ -588,6 +590,7 @@
     pointerEvents: 'auto',
   })}
   data-external-element
+  onpointerdown={(e) => e.stopPropagation()}
   onpointerenter={() => (addBothButtonHovered = true)}
   onpointerleave={() => (addBothButtonHovered = false)}
 >
@@ -650,6 +653,7 @@
     cursor: 'default',
   })}
   data-external-element
+  onpointerdown={(e) => e.stopPropagation()}
   onpointerenter={() => (buttonHovered = true)}
   onpointerleave={() => (buttonHovered = false)}
 >
