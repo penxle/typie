@@ -101,7 +101,7 @@
   });
 
   const getMenuItems = () => {
-    return menuEl?.querySelectorAll('[role="menuitem"], [role="menuitemradio"]');
+    return menuEl?.querySelectorAll('[role="menuitem"]:not(:disabled), [role="menuitemradio"]:not(:disabled)');
   };
 
   const onKeydown = (e: KeyboardEvent) => {
@@ -136,7 +136,7 @@
           const prev = (menuItems[pos - 1] || menuItems[menuItems.length - 1]) as HTMLElement;
           prev?.focus();
         }
-      } else if (focusInButton && ['ArrowDown', 'ArrowUp'].includes(e.key)) {
+      } else if (['ArrowDown', 'ArrowUp'].includes(e.key)) {
         e.preventDefault();
         (menuItems[0] as HTMLElement).focus();
       }
