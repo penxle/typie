@@ -87,9 +87,8 @@
   };
 
   const handleKeyDown = (e: KeyboardEvent) => {
-    if (e.key === 'Escape' && editor.contextMenu.isOpen) {
+    if (editor.contextMenu.isOpen) {
       e.preventDefault();
-      editor.closeContextMenu();
       return;
     }
 
