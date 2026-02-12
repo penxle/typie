@@ -392,6 +392,10 @@ pub fn is_selection_hit(
     false
 }
 
+pub fn is_interactive_hit(_doc: &Doc, page: &Page, x: f32, y: f32) -> bool {
+    page.find_interactive_at(x, y).is_some()
+}
+
 pub fn is_selectable_block_hit(doc: &Doc, hit_selection: &crate::state::Selection) -> bool {
     use crate::state::position_helpers::find_child_at_offset;
 
@@ -411,4 +415,76 @@ pub fn is_selectable_block_hit(doc: &Doc, hit_selection: &crate::state::Selectio
     doc.node(child_id)
         .map(|child| child.spec().selectable)
         .unwrap_or(false)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::layout::elements::CalloutIconElement;
+    use crate::layout::{Element, LayoutNode, Page, PageBreakPolicy, PositionedNode, RenderHints};
+    use crate::model::{CalloutVariant, Doc, NodeId};
+    use crate::types::{Point, Size};
+    use std::rc::Rc;
+
+    #[test]
+    fn test_is_interactive_hit() {
+        let icon_node_id = NodeId::new();
+        let icon_element =
+            CalloutIconElement::new(Size::new(20.0, 20.0), CalloutVariant::Info, icon_node_id);
+
+        let icon_node = PositionedNode {
+            position: Point::new(10.0, 10.0),
+            node: Rc::new(LayoutNode {
+                size: Size::new(20.0, 20.0),
+                element: Some(Element::CalloutIcon(icon_element)),
+                children: None,
+                page_break_policy: PageBreakPolicy::default(),
+                render_hints: RenderHints::default(),
+                scope_id: None,
+            }),
+        };
+
+        let root_node = Rc::new(LayoutNode {
+            size: Size::new(100.0, 100.0),
+            element: None,
+            children: Some(vec![icon_node]),
+            page_break_policy: PageBreakPolicy::default(),
+            render_hints: RenderHints::default(),
+            scope_id: None,
+        });
+
+        let page_root = PositionedNode {
+            position: Point::zero(),
+            node: root_node,
+        };
+
+        let page = Page::from_root(page_root);
+        let doc = Doc::new();
+
+        assert!(
+            is_interactive_hit(&doc, &page, 15.0, 15.0),
+            "Should hit inside icon"
+        );
+        assert!(
+            is_interactive_hit(&doc, &page, 10.0, 10.0),
+            "Should hit top-left corner"
+        );
+        assert!(
+            is_interactive_hit(&doc, &page, 30.0, 30.0),
+            "Should hit bottom-right corner"
+        );
+
+        assert!(
+            !is_interactive_hit(&doc, &page, 5.0, 5.0),
+            "Should not hit before icon"
+        );
+        assert!(
+            !is_interactive_hit(&doc, &page, 31.0, 15.0),
+            "Should not hit right of icon"
+        );
+        assert!(
+            !is_interactive_hit(&doc, &page, 15.0, 31.0),
+            "Should not hit below icon"
+        );
+    }
 }
