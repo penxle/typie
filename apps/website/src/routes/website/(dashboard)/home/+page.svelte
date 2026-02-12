@@ -53,6 +53,7 @@
             ... on Document {
               id
               title
+              excerpt
             }
           }
         }
@@ -181,7 +182,7 @@
                       {entity.node.__typename === 'Post' || entity.node.__typename === 'Document' ? entity.node.title : ''}
                     </div>
                   </div>
-                  {#if entity.node.__typename === 'Post' && entity.node.excerpt}
+                  {#if (entity.node.__typename === 'Post' || entity.node.__typename === 'Document') && entity.node.excerpt}
                     <div class={css({ fontSize: '13px', color: 'text.subtle', paddingLeft: '24px', lineClamp: '1' })}>
                       {entity.node.excerpt}
                     </div>
