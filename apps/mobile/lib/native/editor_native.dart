@@ -84,7 +84,8 @@ Map<String, int> getSlateOffsets() {
   final json = ptr.cast<Utf8>().toDartString();
   _bindings.editor_free_string(ptr);
 
-  return (jsonDecode(json) as Map<String, dynamic>).map((k, v) => MapEntry(k, v as int));
+  final list = jsonDecode(json) as List;
+  return {for (final item in list) (item as List)[0] as String: item[1] as int};
 }
 
 bool validateRegex(String pattern) {
