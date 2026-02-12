@@ -21,6 +21,7 @@ query SearchScreen_RecentlyViewed_Query {
           id
           title
           excerpt
+          documentType: type
           updatedAt
         }
       }

@@ -11,7 +11,7 @@
   import { tick } from 'svelte';
   import { SvelteMap } from 'svelte/reactivity';
   import { match } from 'ts-pattern';
-  import { PostType } from '@/enums';
+  import { DocumentType, PostType } from '@/enums';
   import ArrowDownIcon from '~icons/lucide/arrow-down';
   import ArrowUpIcon from '~icons/lucide/arrow-up';
   import CornerDownLeftIcon from '~icons/lucide/corner-down-left';
@@ -67,6 +67,7 @@
             ... on Document {
               id
               title
+              documentType: type
             }
           }
         }
@@ -260,7 +261,7 @@
                 __typename: 'SearchHitRecent' as const,
                 entity,
                 title: node.title || '제목 없음',
-                icon: FileIcon,
+                icon: node.documentType === DocumentType.TEMPLATE ? LayoutTemplateIcon : FileIcon,
               }))
               .with({ __typename: 'Folder' }, () => null)
               .exhaustive(),

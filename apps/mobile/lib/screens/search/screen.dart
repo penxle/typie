@@ -178,6 +178,8 @@ class SearchScreen extends HookWidget {
                               Row(
                                 spacing: 8,
                                 children: [
+                                  if (document.document.type == GDocumentType.TEMPLATE)
+                                    const Icon(LucideLightIcons.shapes, size: 18),
                                   Expanded(
                                     child: _HTMLText(
                                       document.title ?? '(제목 없음)',
@@ -273,6 +275,7 @@ class _RecentlyViewedItem extends StatelessWidget {
               Row(
                 spacing: 8,
                 children: [
+                  if (document.documentType == GDocumentType.TEMPLATE) const Icon(LucideLightIcons.shapes, size: 18),
                   Expanded(
                     child: Text(
                       document.title,
