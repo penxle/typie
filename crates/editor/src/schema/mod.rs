@@ -7,9 +7,7 @@ mod spec;
 pub use content::{ContentExpr, RepairAction};
 pub use spec::*;
 
-use crate::model::NodeType;
-use crate::model::annotation::AnnotationType;
-use crate::model::style::StyleType;
+use crate::model::{AnnotationType, NodeType, StyleType};
 use rustc_hash::FxHashMap;
 
 #[derive(Debug, Clone)]
@@ -26,19 +24,6 @@ impl Schema {
             styles: FxHashMap::default(),
             annotations: FxHashMap::default(),
         }
-    }
-
-    #[allow(dead_code)]
-    pub fn nodes(&self) -> &FxHashMap<NodeType, NodeSpec> {
-        &self.nodes
-    }
-
-    pub fn styles(&self) -> &FxHashMap<StyleType, StyleSpec> {
-        &self.styles
-    }
-
-    pub fn annotations(&self) -> &FxHashMap<AnnotationType, AnnotationSpec> {
-        &self.annotations
     }
 
     pub fn add_node(&mut self, node_type: NodeType, spec: NodeSpec) {
@@ -59,13 +44,6 @@ impl Schema {
             .unwrap_or_else(|| panic!("Unknown node type: {:?}", node_type))
     }
 
-    pub fn style_spec(&self, style_type: StyleType) -> &StyleSpec {
-        self.styles
-            .get(&style_type)
-            .unwrap_or_else(|| panic!("Unknown style type: {:?}", style_type))
-    }
-
-    #[allow(dead_code)]
     pub fn annotation_spec(&self, annotation_type: AnnotationType) -> &AnnotationSpec {
         self.annotations
             .get(&annotation_type)

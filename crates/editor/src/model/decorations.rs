@@ -45,10 +45,6 @@ impl SelectionDecor {
         }
     }
 
-    pub fn is_text(&self) -> bool {
-        matches!(self, SelectionDecor::Text { .. })
-    }
-
     pub fn is_cell(&self) -> bool {
         matches!(self, SelectionDecor::Cell { .. })
     }

@@ -1,6 +1,5 @@
 use crate::model::*;
 use crate::runtime::Effect;
-use crate::state::position_helpers::find_child_at_offset;
 use crate::state::{Position, block_content_len, calculate_block_offsets, collect_blocks_in_range};
 use crate::transaction::Transaction;
 use anyhow::{Context, Result};
@@ -77,46 +76,6 @@ impl Transaction {
         }
 
         Ok(true)
-    }
-
-    pub fn get_annotations_at_cursor(&self) -> Vec<(AnnotationId, Annotation)> {
-        let position = &self.selection().head;
-        let Some(node) = self.node(position.node_id) else {
-            return Vec::new();
-        };
-
-        let Some((child_id, local_offset)) = find_child_at_offset(&node, position.offset) else {
-            return Vec::new();
-        };
-
-        let Some(child) = self.node(child_id) else {
-            return Vec::new();
-        };
-
-        if let Node::Text(text_node) = child.node() {
-            let segments = text_node.text.get_segments();
-            let mut current_offset = 0;
-
-            for segment in segments {
-                let segment_len = segment.text.chars().count();
-                let in_range = (local_offset > current_offset
-                    && local_offset <= current_offset + segment_len)
-                    || (local_offset == 0 && current_offset == 0);
-
-                if in_range {
-                    let mut result = Vec::new();
-                    for ann_id in &segment.annotations {
-                        if let Some(ann) = self.doc().get_annotation(*ann_id) {
-                            result.push((*ann_id, ann));
-                        }
-                    }
-                    return result;
-                }
-                current_offset += segment_len;
-            }
-        }
-
-        Vec::new()
     }
 
     fn find_annotation_ranges(&self, id: AnnotationId) -> Vec<(NodeId, usize, usize)> {

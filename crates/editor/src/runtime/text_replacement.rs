@@ -87,6 +87,7 @@ pub enum CompiledPattern {
     Regex(fancy_regex::Regex),
 }
 
+#[allow(dead_code)]
 pub struct TextReplacementRule {
     pub id: String,
     pub pattern: CompiledPattern,

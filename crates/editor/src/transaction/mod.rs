@@ -16,8 +16,6 @@ mod style;
 mod table;
 mod text;
 
-#[allow(unused_imports)]
-pub use document::InsertResult;
 pub use text::DeleteResult;
 
 use crate::model::{Doc, Node, NodeId, NodeRef, ParagraphNode};
@@ -84,7 +82,6 @@ impl Transaction {
         self.commit_internal(true)
     }
 
-    #[allow(unused)]
     pub fn commit_immediate(self) -> Result<(State, Vec<Effect>)> {
         self.commit_internal(false)
     }

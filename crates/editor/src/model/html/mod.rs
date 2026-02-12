@@ -673,7 +673,6 @@ mod tests {
 
     #[test]
     fn test_roundtrip_styles() {
-        #[allow(unused_imports)]
         use crate::model::annotations::*;
         use crate::model::nodes::ParagraphNode;
         use crate::model::styles::*;
@@ -794,7 +793,6 @@ mod tests {
 
     #[test]
     fn test_roundtrip_node_ids_complex() {
-        #[allow(unused_imports)]
         use crate::model::annotations::*;
         use crate::model::nodes::{BlockquoteNode, ParagraphNode};
 

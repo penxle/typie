@@ -24,17 +24,6 @@ impl ScopeEntry {
             bounds: AABB::from_corners([pos.x, pos.y], [pos.x + size.width, pos.y + size.height]),
         }
     }
-
-    pub fn contains(&self, x: f32, y: f32) -> bool {
-        x >= self.pos.x
-            && x < self.pos.x + self.size.width
-            && y >= self.pos.y
-            && y < self.pos.y + self.size.height
-    }
-
-    pub fn is_container(&self) -> bool {
-        self.scope_id != NodeId::ROOT
-    }
 }
 
 impl RTreeObject for ScopeEntry {

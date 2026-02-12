@@ -1,16 +1,16 @@
-pub mod annotation;
-pub mod annotations;
+mod annotation;
+mod annotations;
 mod codec;
 mod convert;
 mod decorations;
 mod fragment;
-pub mod html;
+mod html;
 mod id;
 mod node;
 mod nodes;
 mod settings;
-pub mod style;
-pub mod styles;
+mod style;
+mod styles;
 mod text;
 mod tree;
 

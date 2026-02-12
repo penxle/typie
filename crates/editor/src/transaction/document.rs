@@ -85,14 +85,6 @@ impl InsertResult {
             }
         }
     }
-
-    #[allow(unused)]
-    pub fn as_collapsed_selection(&self) -> Option<Selection> {
-        match self {
-            InsertResult::None => None,
-            InsertResult::Inserted { head, .. } => Some(Selection::collapsed(*head)),
-        }
-    }
 }
 
 struct FragmentMergeResult {

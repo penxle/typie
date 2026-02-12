@@ -49,7 +49,6 @@ where
 }
 
 impl Doc {
-    #[allow(dead_code)]
     pub fn new() -> Self {
         let schema = Rc::new(Schema::default());
 
@@ -116,12 +115,6 @@ impl Doc {
         let inner = DocInner::new(loro, schema);
 
         Self { inner }
-    }
-
-    pub fn fork(&self) -> Self {
-        Self {
-            inner: self.inner.fork(),
-        }
     }
 
     pub fn loro_doc(&self) -> &LoroDoc {
@@ -360,29 +353,6 @@ impl Doc {
         }
     }
 
-    pub fn update_default_styles(&self, f: impl FnOnce(&mut DefaultStyles)) -> Result<()> {
-        let mut defaults = self.default_styles();
-        f(&mut defaults);
-        let styles_map = self.inner.loro.get_map(STYLES_KEY);
-        styles_map.insert("font_family", defaults.font_family.as_str())?;
-        styles_map.insert("font_size", defaults.font_size as f64)?;
-        styles_map.insert("font_weight", defaults.font_weight as i64)?;
-        styles_map.insert("text_color", defaults.text_color.as_str())?;
-        styles_map.insert("background_color", defaults.background_color.as_str())?;
-        styles_map.insert("letter_spacing", defaults.letter_spacing as f64)?;
-        styles_map.insert("italic", defaults.italic)?;
-        styles_map.insert("strikethrough", defaults.strikethrough)?;
-        styles_map.insert("underline", defaults.underline)?;
-        self.inner.loro.commit();
-        Ok(())
-    }
-
-    #[allow(dead_code)]
-    pub fn validate(&self) -> Result<()> {
-        self.validate_schema()?;
-        Ok(())
-    }
-
     pub fn validate_node(&self, node_id: NodeId) -> Result<()> {
         let node_ref = self.node(node_id).context("Node not found")?;
         let node_type = node_ref.node_type();
@@ -461,72 +431,6 @@ impl Doc {
         }
 
         allowed
-    }
-
-    #[allow(dead_code)]
-    fn validate_schema(&self) -> Result<()> {
-        self.validate_schema_subtree(NodeId::ROOT)
-    }
-
-    #[allow(dead_code)]
-    fn validate_schema_subtree(&self, node_id: NodeId) -> Result<()> {
-        let node_ref = self
-            .node(node_id)
-            .with_context(|| format!("Node not found during schema validation: {:?}", node_id))?;
-
-        let node_type = node_ref.node_type();
-        let spec = self.inner.schema.node_spec(node_type);
-
-        let child_types: Vec<NodeType> = node_ref
-            .children()
-            .map(|child| child.node().as_type())
-            .collect();
-
-        spec.content.validate(&child_types).with_context(|| {
-            format!(
-                "Content validation failed for '{:?}' at node {}",
-                node_type, node_id
-            )
-        })?;
-
-        if let Node::Text(text_node) = node_ref.node() {
-            let allowed_styles = self.allowed_styles_for(node_id);
-            let allowed_annotations = self.allowed_annotations_for(node_id);
-
-            let segments = text_node.text.get_segments();
-            for seg in segments {
-                for style in &seg.styles {
-                    let style_type = style.as_type();
-                    if !allowed_styles.contains(&style_type) {
-                        anyhow::bail!(
-                            "Style '{:?}' is not allowed at Text node {}. Allowed: {:?}",
-                            style_type,
-                            node_id,
-                            allowed_styles
-                        );
-                    }
-                }
-                for ann_id in &seg.annotations {
-                    if let Some(ann) = self.get_annotation(*ann_id) {
-                        let ann_type = ann.as_type();
-                        if !allowed_annotations.contains(&ann_type) {
-                            anyhow::bail!(
-                                "Annotation '{:?}' is not allowed at Text node {}. Allowed: {:?}",
-                                ann_type,
-                                node_id,
-                                allowed_annotations
-                            );
-                        }
-                    }
-                }
-            }
-        }
-
-        for child in node_ref.children() {
-            self.validate_schema_subtree(child.node_id())?;
-        }
-
-        Ok(())
     }
 
     pub fn is_ancestor(&self, ancestor: NodeId, node: NodeId) -> bool {

@@ -487,21 +487,6 @@ impl Labeler {
             self.register(*id);
         }
     }
-
-    #[allow(unused)]
-    fn ensure_all_labeled(&mut self, ids: HashSet<NodeId>) {
-        let mut missing: Vec<_> = ids
-            .into_iter()
-            .filter(|id| !self.labels.contains_key(id))
-            .collect();
-        missing.sort_by(|a, b| a.to_string().cmp(&b.to_string()));
-
-        for node_id in missing {
-            let name = format!("n{}", self.labels.len() + 1);
-            self.labels.insert(node_id, name);
-            self.order.push(node_id);
-        }
-    }
 }
 
 fn format_fragment(fragment: &crate::model::Fragment, labeler: &Labeler, output: &mut String) {

@@ -21,7 +21,7 @@ pub use message::*;
 pub use pointer::*;
 pub use state::*;
 pub use text_replacement::RawTextReplacementRule;
-pub use tracked_items::{RawTrackedItem, TrackedItem, TrackedItemGroup};
+pub use tracked_items::{RawTrackedItem, TrackedItem};
 pub use view_state::*;
 
 use crate::inspect::inspect_page_element;
@@ -124,7 +124,6 @@ struct SelectionSnapshot {
     annotations: Vec<(AnnotationId, Annotation)>,
 }
 
-#[allow(dead_code)]
 pub struct Runtime {
     viewport_width: f32,
     viewport_height: f32,
@@ -161,7 +160,6 @@ pub struct Runtime {
     text_replacement_undo: Option<text_replacement::ReplacementUndoState>,
 }
 
-#[allow(dead_code)]
 impl Runtime {
     pub fn new(width: f32, scale_factor: f64, state: State) -> Self {
         let mut undo_manager = UndoManager::new(&state.doc.loro_doc());
@@ -276,6 +274,7 @@ impl Runtime {
         self.auto_surround_enabled = enabled;
     }
 
+    #[allow(dead_code)]
     pub fn is_auto_surround_enabled(&self) -> bool {
         self.auto_surround_enabled
     }
@@ -304,6 +303,7 @@ impl Runtime {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn export(&self, mode: DocExportMode) -> Result<Vec<u8>> {
         self.state.doc.export(mode)
     }
@@ -697,6 +697,7 @@ impl Runtime {
         )
     }
 
+    #[allow(dead_code)]
     pub fn get_render_info(&mut self, page_index: usize) -> Option<crate::render::RenderInfo> {
         let doc = &self.state.doc;
         let page = self.pages.get(page_index)?;
@@ -721,6 +722,7 @@ impl Runtime {
         })
     }
 
+    #[allow(dead_code)]
     pub fn render_page_to(&mut self, page_index: usize, dst: &mut [u8]) -> bool {
         let snapshot = self.selection_snapshot_owned();
 
@@ -793,6 +795,7 @@ impl Runtime {
         (snapshot.uniform_styles, snapshot.mixed_styles)
     }
 
+    #[allow(dead_code)]
     fn collect_selection_annotations(
         &mut self,
         snapshot: Option<SelectionSnapshot>,
@@ -811,6 +814,7 @@ impl Runtime {
         snapshot.annotations
     }
 
+    #[allow(dead_code)]
     fn get_annotations_at_position(&self, position: &Position) -> Vec<(AnnotationId, Annotation)> {
         let Some(node) = self.doc().node(position.node_id) else {
             return Vec::new();
@@ -959,6 +963,7 @@ impl Runtime {
         start
     }
 
+    #[allow(dead_code)]
     fn write_annotation_to_slab(
         slab: &mut Slab,
         id: &AnnotationId,
@@ -1834,7 +1839,7 @@ impl Runtime {
         self.transact_internal(f, true)
     }
 
-    #[allow(unused)]
+    #[allow(dead_code)]
     fn transact_immediate<F>(&mut self, f: F) -> Vec<Effect>
     where
         F: FnOnce(&mut Transaction) -> Result<bool>,

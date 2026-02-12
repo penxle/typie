@@ -22,10 +22,6 @@ impl FragmentNode {
         &self.data
     }
 
-    pub fn data_mut(&mut self) -> &mut Node {
-        &mut self.data
-    }
-
     pub fn parent(&self) -> Option<NodeId> {
         self.parent
     }
@@ -37,7 +33,6 @@ impl FragmentNode {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[allow(dead_code)]
 pub struct Fragment {
     pub nodes: IndexMap<NodeId, FragmentNode>,
     pub(crate) open_start: usize,
@@ -65,17 +60,11 @@ impl FragmentBuilder {
         self
     }
 
-    pub fn last_node_mut(&mut self) -> Option<&mut FragmentNode> {
-        self.nodes.last_mut().map(|(_, n)| n)
-    }
-
-    #[allow(dead_code)]
     pub fn open_start(mut self, depth: usize) -> Self {
         self.open_start = depth;
         self
     }
 
-    #[allow(dead_code)]
     pub fn open_end(mut self, depth: usize) -> Self {
         self.open_end = depth;
         self
@@ -96,7 +85,6 @@ impl Default for FragmentBuilder {
     }
 }
 
-#[allow(dead_code)]
 impl Fragment {
     pub fn builder() -> FragmentBuilder {
         FragmentBuilder::new()
@@ -172,11 +160,6 @@ impl Fragment {
             }
         }
         Ok(())
-    }
-
-    pub fn from_snapshot(snapshot: &[u8]) -> Result<Self> {
-        let doc = std::rc::Rc::new(Doc::from_snapshot(snapshot.to_vec()));
-        Self::from_doc(&doc)
     }
 
     pub fn from_text(text: &str, styles: &[Style]) -> Self {
@@ -522,10 +505,12 @@ impl Fragment {
         self.flatten_for_merge(parent_disc)
     }
 
+    #[allow(dead_code)]
     pub fn to_json(&self) -> Result<String> {
         serde_json::to_string(self).context("Failed to serialize fragment to JSON")
     }
 
+    #[allow(dead_code)]
     pub fn from_json(json: &str) -> Result<Self> {
         serde_json::from_str(json).context("Failed to deserialize fragment from JSON")
     }
@@ -565,6 +550,7 @@ impl Fragment {
         self.nodes.is_empty()
     }
 
+    #[allow(dead_code)]
     pub fn child_count(&self) -> usize {
         self.nodes.len()
     }
@@ -602,14 +588,6 @@ impl Fragment {
             open_start: self.open_start,
             open_end: self.open_end,
         }
-    }
-
-    pub fn with_fresh_ids(&self) -> Self {
-        let mut id_map = FxHashMap::default();
-        for old_id in self.collect_all_ids() {
-            id_map.insert(old_id, NodeId::new());
-        }
-        self.remap_ids(&id_map)
     }
 
     pub fn with_fresh_ids_for_doc(&self, doc: &Doc) -> Self {
@@ -678,6 +656,7 @@ impl Fragment {
         self.nodes.get(&id)
     }
 
+    #[allow(dead_code)]
     pub fn text_segments_of_node(&self, node_id: NodeId) -> Vec<TextSegment> {
         if let Some(frag_node) = self.node(node_id) {
             if let Node::Text(text_node) = frag_node.data() {
@@ -916,18 +895,6 @@ impl Fragment {
 
     pub fn is_open(&self) -> bool {
         self.has_open_start() || self.has_open_end()
-    }
-
-    pub fn first_top_level_is_paragraph(&self) -> bool {
-        self.top_level_node_ids()
-            .first()
-            .and_then(|id| self.node(*id))
-            .map(|n| matches!(n.data(), Node::Paragraph(_)))
-            .unwrap_or(false)
-    }
-
-    pub fn needs_closed_insert(&self, schema: &Schema) -> bool {
-        self.is_open() && self.has_leaf_block(schema)
     }
 
     pub fn find_last_leaf_block(&self, root_id: NodeId) -> Option<NodeId> {

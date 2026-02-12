@@ -1,6 +1,4 @@
-use crate::model::NodeType;
-use crate::model::annotation::AnnotationType;
-use crate::model::style::StyleType;
+use crate::model::{AnnotationType, NodeType, StyleType};
 use crate::schema::Schema;
 use crate::schema::content::ContentExpr;
 
@@ -59,6 +57,7 @@ impl Default for NodeSpec {
 
 #[derive(Debug, Clone)]
 pub struct StyleSpec {
+    #[allow(dead_code)]
     pub expand: Expand,
 }
 
@@ -82,10 +81,11 @@ impl Default for AnnotationSpec {
 }
 
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub enum Expand {
+    #[allow(dead_code)]
     Before,
     After,
+    #[allow(dead_code)]
     Both,
     None,
 }
