@@ -245,7 +245,32 @@ fn derive_struct_codec(input: &DeriveInput, data: &syn::DataStruct) -> TokenStre
         Fields::Named(fields) => {
             let field_count = fields.named.len();
 
-            if field_count == 1 {
+            if field_count == 0 {
+                let expanded = quote! {
+                    impl crate::model::Codec for #name {
+                        fn to_value(&self) -> Option<loro::LoroValue> {
+                            Some(loro::LoroValue::Bool(true))
+                        }
+
+                        fn from_value(value: loro::LoroValue) -> anyhow::Result<Self> {
+                            match value {
+                                loro::LoroValue::Bool(true) => Ok(Self {}),
+                                _ => anyhow::bail!("expected true for empty struct"),
+                            }
+                        }
+
+                        fn encode(&mut self, _map: &loro::LoroMap) -> anyhow::Result<()> {
+                            Ok(())
+                        }
+
+                        fn decode(_map: &loro::LoroMap) -> anyhow::Result<Self> {
+                            Ok(Self {})
+                        }
+                    }
+                };
+
+                TokenStream::from(expanded)
+            } else if field_count == 1 {
                 let field = fields.named.first().unwrap();
                 let field_name = &field.ident;
                 let field_type = &field.ty;
@@ -538,23 +563,16 @@ fn derive_enum_codec(input: &DeriveInput, data: &syn::DataEnum) -> TokenStream {
     TokenStream::from(expanded)
 }
 
-#[proc_macro_derive(LoroMark)]
-pub fn derive_loro_mark(input: TokenStream) -> TokenStream {
+#[proc_macro_derive(LoroStyle)]
+pub fn derive_loro_style(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let enum_name = &input.ident;
-    let mark_type_name = format_ident!("{}Type", enum_name);
 
     let Data::Enum(data_enum) = &input.data else {
-        return syn::Error::new_spanned(&input.ident, "LoroMark can only be derived for enums")
+        return syn::Error::new_spanned(&input.ident, "LoroStyle can only be derived for enums")
             .to_compile_error()
             .into();
     };
-
-    let mark_type_key_arms = data_enum.variants.iter().map(|variant| {
-        let variant_name = &variant.ident;
-        let key = variant_name.to_string().to_snake_case();
-        quote! { #mark_type_name::#variant_name => #key }
-    });
 
     let to_value_arms = data_enum.variants.iter().map(|variant| {
         let variant_name = &variant.ident;
@@ -575,7 +593,7 @@ pub fn derive_loro_mark(input: TokenStream) -> TokenStream {
             _ => {
                 return syn::Error::new_spanned(
                     variant,
-                    "LoroMark variants must have exactly one unnamed field",
+                    "LoroStyle variants must have exactly one unnamed field",
                 )
                 .to_compile_error();
             }
@@ -597,14 +615,6 @@ pub fn derive_loro_mark(input: TokenStream) -> TokenStream {
     });
 
     let expanded = quote! {
-        impl #mark_type_name {
-            pub fn key(&self) -> &'static str {
-                match self {
-                    #(#mark_type_key_arms),*
-                }
-            }
-        }
-
         impl #enum_name {
             pub fn key(&self) -> &'static str {
                 self.as_type().key()
@@ -617,8 +627,86 @@ pub fn derive_loro_mark(input: TokenStream) -> TokenStream {
             }
 
             pub fn from_key_value(key: &str, value: loro::LoroValue) -> Option<Self> {
-                match key {
+                let style_key = match key.strip_prefix("style:") {
+                    Some(k) => k,
+                    None => return None,
+                };
+                match style_key {
                     #(#from_value_arms,)*
+                    _ => None,
+                }
+            }
+        }
+    };
+
+    TokenStream::from(expanded)
+}
+
+#[proc_macro_derive(LoroAnnotation)]
+pub fn derive_loro_annotation(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    let enum_name = &input.ident;
+
+    let Data::Enum(data_enum) = &input.data else {
+        return syn::Error::new_spanned(
+            &input.ident,
+            "LoroAnnotation can only be derived for enums",
+        )
+        .to_compile_error()
+        .into();
+    };
+
+    let encode_arms = data_enum.variants.iter().map(|variant| {
+        let variant_name = &variant.ident;
+        let key = variant_name.to_string().to_snake_case();
+        quote! {
+            #enum_name::#variant_name(inner) => {
+                use crate::model::Codec;
+                map.insert("type", #key)?;
+                let mut inner = inner.clone();
+                inner.encode(map)?;
+            }
+        }
+    });
+
+    let decode_arms = data_enum.variants.iter().map(|variant| {
+        let variant_name = &variant.ident;
+        let key = variant_name.to_string().to_snake_case();
+
+        let inner_type = match &variant.fields {
+            Fields::Unnamed(fields) if fields.unnamed.len() == 1 => &fields.unnamed[0].ty,
+            _ => {
+                return syn::Error::new_spanned(
+                    variant,
+                    "LoroAnnotation variants must have exactly one unnamed field",
+                )
+                .to_compile_error();
+            }
+        };
+
+        quote! {
+            #key => <#inner_type>::decode(map).ok().map(#enum_name::#variant_name)
+        }
+    });
+
+    let expanded = quote! {
+        impl #enum_name {
+            pub fn encode_to_map(&self, map: &loro::LoroMap) -> anyhow::Result<()> {
+                match self {
+                    #(#encode_arms)*
+                }
+                Ok(())
+            }
+
+            pub fn decode_from_map(map: &loro::LoroMap) -> Option<#enum_name> {
+                use anyhow::Context;
+                let type_value = map.get("type")?.into_value().ok()?;
+                let type_str = match type_value {
+                    loro::LoroValue::String(s) => s.to_string(),
+                    _ => return None,
+                };
+                match type_str.as_str() {
+                    #(#decode_arms,)*
                     _ => None,
                 }
             }

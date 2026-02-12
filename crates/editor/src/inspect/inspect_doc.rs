@@ -1,5 +1,5 @@
 use super::utils::truncate_str;
-use crate::model::{Doc, Node, NodeId, NodeRef};
+use crate::model::{Annotation, Doc, Node, NodeId, NodeRef};
 use std::collections::BTreeMap;
 
 pub fn inspect_document_tree(doc: &Doc) -> String {
@@ -47,18 +47,18 @@ fn format_node_info(node: &NodeRef) -> String {
             let display_text = truncate_str(&text_node.text.as_str(), 50);
             let mut info = format!("Text {} \"{}\"", id, display_text);
 
-            let segments = text_node.text.get_rich_text_segments();
-            let mut mark_ranges: BTreeMap<String, Vec<(usize, usize)>> = BTreeMap::new();
+            let segments = text_node.text.get_segments();
+            let mut style_ranges: BTreeMap<String, Vec<(usize, usize)>> = BTreeMap::new();
             let mut offset = 0;
 
-            for (segment_text, marks) in segments.iter() {
-                let len = segment_text.chars().count();
+            for segment in segments.iter() {
+                let len = segment.text.chars().count();
                 let start = offset;
                 let end = offset + len;
 
-                for mark in marks {
-                    let label = format!("{:?}", mark);
-                    let ranges = mark_ranges.entry(label).or_default();
+                for style in &segment.styles {
+                    let label = format!("{:?}", style);
+                    let ranges = style_ranges.entry(label).or_default();
                     if let Some((last_start, last_end)) = ranges.last_mut() {
                         if *last_end == start && *last_start <= start {
                             *last_end = end;
@@ -71,8 +71,8 @@ fn format_node_info(node: &NodeRef) -> String {
                 offset = end;
             }
 
-            if !mark_ranges.is_empty() {
-                let marks_str: Vec<String> = mark_ranges
+            if !style_ranges.is_empty() {
+                let styles_str: Vec<String> = style_ranges
                     .into_iter()
                     .map(|(label, ranges)| {
                         let ranges_str = ranges
@@ -83,7 +83,45 @@ fn format_node_info(node: &NodeRef) -> String {
                         format!("{label} ({ranges_str})")
                     })
                     .collect();
-                info.push_str(&format!(" ({})", marks_str.join(", ")));
+                info.push_str(&format!(" ({})", styles_str.join(", ")));
+            }
+
+            let mut ann_ranges: Vec<(Annotation, Vec<(usize, usize)>)> = Vec::new();
+            let mut offset = 0;
+            for segment in segments.iter() {
+                let len = segment.text.chars().count();
+                let start = offset;
+                let end = offset + len;
+                for ann in &segment.annotations {
+                    if let Some((_, ranges)) = ann_ranges.iter_mut().find(|(a, _)| a == ann) {
+                        if let Some((_last_start, last_end)) = ranges.last_mut() {
+                            if *last_end == start {
+                                *last_end = end;
+                                continue;
+                            }
+                        }
+                        ranges.push((start, end));
+                    } else {
+                        ann_ranges.push((ann.clone(), vec![(start, end)]));
+                    }
+                }
+                offset = end;
+            }
+
+            if !ann_ranges.is_empty() {
+                let ann_str: Vec<String> = ann_ranges
+                    .into_iter()
+                    .map(|(ann, ranges)| {
+                        let label = format!("{:?}", ann);
+                        let ranges_str = ranges
+                            .iter()
+                            .map(|(start, end)| format!("{}-{}", start, end))
+                            .collect::<Vec<_>>()
+                            .join(", ");
+                        format!("{label} ({ranges_str})")
+                    })
+                    .collect();
+                info.push_str(&format!(" [{}]", ann_str.join(", ")));
             }
 
             info

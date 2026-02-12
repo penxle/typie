@@ -10,18 +10,16 @@ Map<String, int> _getOffsets() {
   return _cachedOffsets ??= getSlateOffsets();
 }
 
-const _markTypeNames = [
-  'backgroundColor',
-  'textColor',
-  'fontSize',
-  'fontFamily',
-  'fontWeight',
-  'italic',
-  'letterSpacing',
-  'link',
-  'ruby',
-  'strikethrough',
-  'underline',
+const _styleBits = [
+  ('background_color', 1 << 0),
+  ('text_color', 1 << 1),
+  ('font_size', 1 << 2),
+  ('font_family', 1 << 3),
+  ('font_weight', 1 << 4),
+  ('italic', 1 << 5),
+  ('letter_spacing', 1 << 6),
+  ('strikethrough', 1 << 9),
+  ('underline', 1 << 10),
 ];
 
 class SlateReader {
@@ -101,13 +99,13 @@ class SlateReader {
     return aligned;
   }
 
-  List<Map<String, dynamic>> readUniformMarks() {
-    final count = getU32('formatting_uniform_marks_count');
+  List<Map<String, dynamic>> readUniformStyles() {
+    final count = getU32('formatting_uniform_styles_count');
     if (count == 0) {
       return const [];
     }
 
-    var pos = getU32('formatting_uniform_marks_offset');
+    var pos = getU32('formatting_uniform_styles_offset');
     final result = <Map<String, dynamic>>[];
 
     for (var i = 0; i < count; i++) {
@@ -115,39 +113,65 @@ class SlateReader {
       final valueKind = _slabU32(pos + 4);
       pos += 8;
 
-      final typeName = typeTag < _markTypeNames.length ? _markTypeNames[typeTag] : 'unknown';
-      final mark = <String, dynamic>{'type': typeName};
+      var strValue = '';
+      num numValue = 0;
 
       switch (valueKind) {
         case 0:
           break;
         case 1:
-          mark['value'] = _slabF32(pos);
+          numValue = _slabF32(pos);
           pos += 4;
         case 2:
-          mark['value'] = _slabU32(pos);
+          numValue = _slabU32(pos);
           pos += 4;
         case 3:
-          mark['value'] = readStr(pos);
+          strValue = readStr(pos);
           pos += _strByteLen(pos);
       }
 
-      result.add(mark);
+      final Map<String, dynamic>? style;
+      switch (typeTag) {
+        case 0:
+          style = {'type': 'background_color', 'color': strValue};
+        case 1:
+          style = {'type': 'text_color', 'color': strValue};
+        case 2:
+          style = {'type': 'font_size', 'size': numValue};
+        case 3:
+          style = {'type': 'font_family', 'family': strValue};
+        case 4:
+          style = {'type': 'font_weight', 'weight': numValue};
+        case 5:
+          style = {'type': 'italic'};
+        case 6:
+          style = {'type': 'letter_spacing', 'spacing': numValue};
+        case 9:
+          style = {'type': 'strikethrough'};
+        case 10:
+          style = {'type': 'underline'};
+        default:
+          style = null;
+      }
+
+      if (style != null) {
+        result.add(style);
+      }
     }
 
     return result;
   }
 
-  List<String> readMixedMarks() {
-    final bitfield = getU32('formatting_mixed_marks_bitfield');
+  List<String> readMixedStyles() {
+    final bitfield = getU32('formatting_mixed_styles_bitfield');
     if (bitfield == 0) {
       return const [];
     }
 
     final result = <String>[];
-    for (var i = 0; i < _markTypeNames.length; i++) {
-      if (bitfield & (1 << i) != 0) {
-        result.add(_markTypeNames[i]);
+    for (final (name, bit) in _styleBits) {
+      if (bitfield & bit != 0) {
+        result.add(name);
       }
     }
     return result;

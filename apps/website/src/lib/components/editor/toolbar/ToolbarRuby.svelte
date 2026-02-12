@@ -13,45 +13,22 @@
 
   const editor = getEditor();
 
-  const activeMarks = $derived(editor.activeMarks);
-  const findMark = (type: string) => activeMarks.uniformMarks.find((m) => m.type === type);
-  const isRubyActive = $derived(activeMarks.uniformMarks.some((m) => m.type === 'ruby'));
-  const currentRubyText = $derived((findMark('ruby') as { text?: string })?.text ?? '');
-
   const form = createForm({
     schema: z.object({
       ruby: z.string().min(1),
     }),
     onSubmit: (data) => {
-      editor.focus().dispatch({ type: 'toggleRuby', text: data.ruby });
+      editor.focus().dispatch({ type: 'addAnnotation', annotation: { type: 'ruby', text: data.ruby } });
       close();
     },
     defaultValues: {
-      ruby: currentRubyText,
+      ruby: '',
     },
-  });
-
-  $effect(() => {
-    void form;
   });
 </script>
 
 <form class={flex({ alignItems: 'center', gap: '4px', padding: '4px' })} onsubmit={form.handleSubmit}>
   <TextInput autofocus placeholder="텍스트 위에 들어갈 문구" size="sm" bind:value={form.fields.ruby} />
 
-  <Button size="sm" type="submit">{isRubyActive ? '수정' : '삽입'}</Button>
-
-  {#if isRubyActive}
-    <Button
-      onclick={() => {
-        editor.focus().dispatch({ type: 'toggleRuby', text: '' });
-        close();
-      }}
-      size="sm"
-      type="button"
-      variant="secondary"
-    >
-      제거
-    </Button>
-  {/if}
+  <Button size="sm" type="submit">삽입</Button>
 </form>

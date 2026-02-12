@@ -2,7 +2,7 @@ use crate::global::GLOBALS;
 use crate::layout::elements::{FoldTitleElement, LineElement, build_metrics};
 use crate::layout::{Element, Layout, LayoutContext, LayoutNode, PageBreakPolicy, PositionedNode};
 use crate::model::html::{DomSpec, NodeHtmlCodec, NodeParseRule};
-use crate::model::{FontFamilyMark, Node, PreeditDecor};
+use crate::model::{Node, PreeditDecor};
 use crate::types::{BoxConstraints, Point, Size};
 use crate::utils::char_to_byte_offset;
 use macros::Codec;
@@ -78,7 +78,7 @@ impl Layout for FoldTitleNode {
 
             let setup_defaults = |builder: &mut parley::RangedBuilder<'_, String>| {
                 builder.push_default(StyleProperty::FontStack(FontStack::Single(
-                    FontFamily::Named(FontFamilyMark::default().family.into()),
+                    FontFamily::Named(ctx.default_styles.font_family().into()),
                 )));
                 builder.push_default(StyleProperty::FontSize(14.0));
                 builder.push_default(StyleProperty::FontWeight(FontWeight::new(

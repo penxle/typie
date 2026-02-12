@@ -75,8 +75,8 @@ class EditorView extends HookWidget {
     final bottomToolbarMode = useValueNotifier<BottomToolbarMode>(BottomToolbarMode.hidden);
     final secondaryToolbarMode = useValueNotifier<SecondaryToolbarMode>(SecondaryToolbarMode.hidden);
 
-    final uniformMarks = useValueNotifier<List<Map<String, dynamic>>>([]);
-    final mixedMarks = useValueNotifier<List<String>>([]);
+    final uniformStyles = useValueNotifier<List<Map<String, dynamic>>>([]);
+    final mixedStyles = useValueNotifier<List<String>>([]);
     final selectionStats = useValueNotifier<Map<String, dynamic>>({});
 
     final externalElements = useValueNotifier<List<ExternalElement>>([]);
@@ -350,16 +350,16 @@ class EditorView extends HookWidget {
 
     useEffect(
       () {
-        uniformMarks.value = state.state.uniformMarks;
-        mixedMarks.value = state.state.mixedMarks;
+        uniformStyles.value = state.state.uniformStyles;
+        mixedStyles.value = state.state.mixedStyles;
         selectionStats.value = state.state.selectionStats;
         externalElements.value = state.state.externalElements;
         isEditorFocused.value = state.state.isFocused;
         return null;
       },
       [
-        state.state.uniformMarks,
-        state.state.mixedMarks,
+        state.state.uniformStyles,
+        state.state.mixedStyles,
         state.state.selectionStats,
         state.state.externalElements,
         state.state.isFocused,
@@ -466,8 +466,8 @@ class EditorView extends HookWidget {
       isEditorFocused: isEditorFocused,
       bottomToolbarMode: bottomToolbarMode,
       secondaryToolbarMode: secondaryToolbarMode,
-      uniformMarks: uniformMarks,
-      mixedMarks: mixedMarks,
+      uniformStyles: uniformStyles,
+      mixedStyles: mixedStyles,
       selectionStats: selectionStats,
       externalElements: externalElements,
       uploadManager: uploadManager,

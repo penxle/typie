@@ -10,8 +10,6 @@ pub const TABLE_BORDER_WIDTH: f32 = 1.0;
 
 pub const TABLE_CELL_PADDING: f32 = 8.0;
 
-pub const MIN_CELL_WIDTH: f32 = 40.0;
-
 pub const DEFAULT_CELL_WIDTH: f32 = 80.0;
 
 pub fn calculate_col_widths(col_count: usize, custom_widths: Option<&[f32]>) -> Vec<f32> {

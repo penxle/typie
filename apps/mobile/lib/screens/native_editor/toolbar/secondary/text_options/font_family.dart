@@ -43,15 +43,15 @@ class NativeEditorFontFamilyTextOptionsToolbar extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final scope = NativeEditorToolbarScope.of(context);
-    final uniformMarks = useValueListenable(scope.uniformMarks);
-    final mixedMarks = useValueListenable(scope.mixedMarks);
+    final uniformStyles = useValueListenable(scope.uniformStyles);
+    final mixedStyles = useValueListenable(scope.mixedStyles);
 
-    final isMixed = mixedMarks.contains('font_family');
-    final fontFamilyMark = uniformMarks.firstWhereOrNull((m) => m['type'] == 'font_family');
-    final activeValue = isMixed ? null : (fontFamilyMark?['family'] as String? ?? editorDefaultValues['fontFamily']);
+    final isMixed = mixedStyles.contains('font_family');
+    final fontFamilyStyle = uniformStyles.firstWhereOrNull((m) => m['type'] == 'font_family');
+    final activeValue = isMixed ? null : (fontFamilyStyle?['family'] as String? ?? editorDefaultValues['fontFamily']);
 
-    final fontWeightMark = uniformMarks.firstWhereOrNull((m) => m['type'] == 'font_weight');
-    final currentWeight = fontWeightMark?['weight'] as int? ?? (editorDefaultValues['fontWeight'] as int);
+    final fontWeightStyle = uniformStyles.firstWhereOrNull((m) => m['type'] == 'font_weight');
+    final currentWeight = fontWeightStyle?['weight'] as int? ?? (editorDefaultValues['fontWeight'] as int);
 
     final allItems = editorValues['fontFamily']!;
 
@@ -66,8 +66,14 @@ class NativeEditorFontFamilyTextOptionsToolbar extends HookWidget {
             final defaultWeight =
                 _getDefaultWeight(item['value'] as String, currentWeight) ?? (editorDefaultValues['fontWeight'] as int);
 
-            scope.dispatch({'type': 'setFontFamily', 'family': item['value']});
-            scope.dispatch({'type': 'setFontWeight', 'weight': defaultWeight});
+            scope.dispatch({
+              'type': 'toggleStyle',
+              'style': {'type': 'font_family', 'family': item['value']},
+            });
+            scope.dispatch({
+              'type': 'toggleStyle',
+              'style': {'type': 'font_weight', 'weight': defaultWeight},
+            });
           },
         );
       },

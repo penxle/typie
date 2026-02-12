@@ -10,9 +10,9 @@ macro_rules! id {
 #[allow(unused)]
 macro_rules! transact {
     ($state:expr, |$tr:ident| $body:expr) => {{
-        let state: $crate::runtime::State = $state;
+        let state: $crate::State = $state;
         #[allow(unused_mut)]
-        let mut $tr = $crate::transaction::Transaction::new(&state);
+        let mut $tr = $crate::Transaction::new(&state);
         $body;
         let (new_state, _) = $tr.commit().unwrap();
         new_state
@@ -239,105 +239,87 @@ macro_rules! runtime {
 
 #[macro_export]
 #[allow(unused)]
-macro_rules! __parse_marks {
+macro_rules! __parse_styles {
     () => { vec![] };
-
-    (bold() $(, $($rest:tt)*)?) => {
-        {
-            #[allow(unused_mut)]
-            let mut marks = vec![$crate::model::Mark::FontWeight($crate::model::FontWeightMark { weight: 700 })];
-            $(marks.extend(__parse_marks!($($rest)*));)?
-            marks
-        }
-    };
 
     (italic() $(, $($rest:tt)*)?) => {
         {
             #[allow(unused_mut)]
-            let mut marks = vec![$crate::model::Mark::Italic($crate::model::ItalicMark)];
-            $(marks.extend(__parse_marks!($($rest)*));)?
-            marks
+            let mut styles = vec![$crate::model::Style::Italic($crate::model::ItalicStyle {})];
+            $(styles.extend(__parse_styles!($($rest)*));)?
+            styles
         }
     };
 
     (font_weight($weight:expr) $(, $($rest:tt)*)?) => {
         {
             #[allow(unused_mut)]
-            let mut marks = vec![$crate::model::Mark::FontWeight($crate::model::FontWeightMark { weight: $weight })];
-            $(marks.extend(__parse_marks!($($rest)*));)?
-            marks
+            let mut styles = vec![$crate::model::Style::FontWeight($crate::model::FontWeightStyle { weight: $weight })];
+            $(styles.extend(__parse_styles!($($rest)*));)?
+            styles
         }
     };
 
     (font_size($size:expr) $(, $($rest:tt)*)?) => {
         {
             #[allow(unused_mut)]
-            let mut marks = vec![$crate::model::Mark::FontSize($crate::model::FontSizeMark { size: $size })];
-            $(marks.extend(__parse_marks!($($rest)*));)?
-            marks
-        }
-    };
-
-    (ruby($text:expr) $(, $($rest:tt)*)?) => {
-        {
-            #[allow(unused_mut)]
-            let mut marks = vec![$crate::model::Mark::Ruby($crate::model::RubyMark { text: $text.to_string() })];
-            $(marks.extend(__parse_marks!($($rest)*));)?
-            marks
+            let mut styles = vec![$crate::model::Style::FontSize($crate::model::FontSizeStyle { size: $size })];
+            $(styles.extend(__parse_styles!($($rest)*));)?
+            styles
         }
     };
 
     (text_color($key:expr) $(, $($rest:tt)*)?) => {
         {
             #[allow(unused_mut)]
-            let mut marks = vec![$crate::model::Mark::TextColor($crate::model::TextColorMark { key: $key.to_string() })];
-            $(marks.extend(__parse_marks!($($rest)*));)?
-            marks
+            let mut styles = vec![$crate::model::Style::TextColor($crate::model::TextColorStyle { color: $key.to_string() })];
+            $(styles.extend(__parse_styles!($($rest)*));)?
+            styles
         }
     };
 
     (bg_color($key:expr) $(, $($rest:tt)*)?) => {
         {
             #[allow(unused_mut)]
-            let mut marks = vec![$crate::model::Mark::BackgroundColor($crate::model::BackgroundColorMark { key: $key.to_string() })];
-            $(marks.extend(__parse_marks!($($rest)*));)?
-            marks
+            let mut styles = vec![$crate::model::Style::BackgroundColor($crate::model::BackgroundColorStyle { color: $key.to_string() })];
+            $(styles.extend(__parse_styles!($($rest)*));)?
+            styles
         }
     };
 
     (font_family($family:expr) $(, $($rest:tt)*)?) => {
         {
             #[allow(unused_mut)]
-            let mut marks = vec![$crate::model::Mark::FontFamily($crate::model::FontFamilyMark { family: $family.to_string() })];
-            $(marks.extend(__parse_marks!($($rest)*));)?
-            marks
+            let mut styles = vec![$crate::model::Style::FontFamily($crate::model::FontFamilyStyle { family: $family.to_string() })];
+            $(styles.extend(__parse_styles!($($rest)*));)?
+            styles
         }
     };
 
     (letter_spacing($spacing:expr) $(, $($rest:tt)*)?) => {
         {
             #[allow(unused_mut)]
-            let mut marks = vec![$crate::model::Mark::LetterSpacing($crate::model::LetterSpacingMark { spacing: $spacing })];
-            $(marks.extend(__parse_marks!($($rest)*));)?
-            marks
+            let mut styles = vec![$crate::model::Style::LetterSpacing($crate::model::LetterSpacingStyle { spacing: $spacing })];
+            $(styles.extend(__parse_styles!($($rest)*));)?
+            styles
         }
     };
 
     (strikethrough() $(, $($rest:tt)*)?) => {
         {
             #[allow(unused_mut)]
-            let mut marks = vec![$crate::model::Mark::Strikethrough($crate::model::StrikethroughMark)];
-            $(marks.extend(__parse_marks!($($rest)*));)?
-            marks
+            let mut styles = vec![$crate::model::Style::Strikethrough($crate::model::StrikethroughStyle {})];
+            $(styles.extend(__parse_styles!($($rest)*));)?
+            styles
         }
     };
 
     (underline() $(, $($rest:tt)*)?) => {
         {
             #[allow(unused_mut)]
-            let mut marks = vec![$crate::model::Mark::Underline($crate::model::UnderlineMark)];
-            $(marks.extend(__parse_marks!($($rest)*));)?
-            marks
+            let mut styles = vec![$crate::model::Style::Underline($crate::model::UnderlineStyle {})];
+            $(styles.extend(__parse_styles!($($rest)*));)?
+            styles
         }
     };
 }
@@ -348,14 +330,14 @@ macro_rules! __parse_text_segments {
     ($text:ident,) => {};
     ($text:ident) => {};
 
-    ($text:ident, $content:literal => [$($marks:tt)*] $(, $($rest:tt)*)?) => {
+    ($text:ident, $content:literal => [$($styles:tt)*] $(, $($rest:tt)*)?) => {
         {
             let mut segment_ranges = Vec::new();
-            __parse_text_segments_collect!($text, segment_ranges, $content => [$($marks)*] $(, $($rest)*)?);
+            __parse_text_segments_collect!($text, segment_ranges, $content => [$($styles)*] $(, $($rest)*)?);
 
-            for (range, marks) in segment_ranges {
-                for mark in marks {
-                    let _ = $text.mark(range.clone(), &mark);
+            for (range, styles) in segment_ranges {
+                for style in styles {
+                    let _ = $text.apply_style(range.clone(), &style);
                 }
             }
         }
@@ -366,9 +348,9 @@ macro_rules! __parse_text_segments {
             let mut segment_ranges = Vec::new();
             __parse_text_segments_collect!($text, segment_ranges, $content $(, $($rest)*)?);
 
-            for (range, marks) in segment_ranges {
-                for mark in marks {
-                    let _ = $text.mark(range.clone(), &mark);
+            for (range, styles) in segment_ranges {
+                for style in styles {
+                    let _ = $text.apply_style(range.clone(), &style);
                 }
             }
         }
@@ -381,13 +363,13 @@ macro_rules! __parse_text_segments_collect {
     ($text:ident, $ranges:ident,) => {};
     ($text:ident, $ranges:ident) => {};
 
-    ($text:ident, $ranges:ident, $content:literal => [$($marks:tt)*] $(, $($rest:tt)*)?) => {
+    ($text:ident, $ranges:ident, $content:literal => [$($styles:tt)*] $(, $($rest:tt)*)?) => {
         {
             let start = $text.char_len();
             $text.insert(start, $content);
             let end = $text.char_len();
-            let marks = __parse_marks!($($marks)*);
-            $ranges.push((start..end, marks));
+            let styles = __parse_styles!($($styles)*);
+            $ranges.push((start..end, styles));
         }
         $(__parse_text_segments_collect!($text, $ranges, $($rest)*);)?
     };
@@ -407,14 +389,14 @@ macro_rules! __parse_text_segments_with_pending {
     ($text:ident, $pending:ident,) => {};
     ($text:ident, $pending:ident) => {};
 
-    ($text:ident, $pending:ident, $content:literal => [$($marks:tt)*] $(, $($rest:tt)*)?) => {
+    ($text:ident, $pending:ident, $content:literal => [$($styles:tt)*] $(, $($rest:tt)*)?) => {
         {
             let start = $text.char_len();
             $text.insert(start, $content);
             let end = $text.char_len();
-            let marks = __parse_marks!($($marks)*);
-            for mark in marks {
-                $pending.push((start, end, mark));
+            let styles = __parse_styles!($($styles)*);
+            for style in styles {
+                $pending.push((start, end, style));
             }
         }
         $(__parse_text_segments_with_pending!($text, $pending, $($rest)*);)?
@@ -669,7 +651,7 @@ macro_rules! __doc_create_node_with_id {
         }
     };
 
-    ($tr:ident, $id:expr, $parent:expr, $prev:expr, text, [], [$first:literal => [$($first_marks:tt)*] $(, $($rest_segments:tt)*)?]) => {
+    ($tr:ident, $id:expr, $parent:expr, $prev:expr, text, [], [$first:literal => [$($first_styles:tt)*] $(, $($rest_segments:tt)*)?]) => {
         {
             let parent_node = $tr.doc().node($parent).unwrap();
             let index = if let Some(prev_id) = $prev {
@@ -680,8 +662,8 @@ macro_rules! __doc_create_node_with_id {
             };
 
             let text = $crate::model::Text::new();
-            let mut pending_marks: Vec<(usize, usize, $crate::model::Mark)> = Vec::new();
-            __parse_text_segments_with_pending!(text, pending_marks, $first => [$($first_marks)*] $(, $($rest_segments)*)?);
+            let mut pending_styles: Vec<(usize, usize, $crate::model::Style)> = Vec::new();
+            __parse_text_segments_with_pending!(text, pending_styles, $first => [$($first_styles)*] $(, $($rest_segments)*)?);
 
             parent_node.as_mut().insert_child_with_id(
                 index,
@@ -692,22 +674,13 @@ macro_rules! __doc_create_node_with_id {
                 })
             ).unwrap();
 
-            if !pending_marks.is_empty() {
+            $crate::test_utils::__apply_default_styles($tr.doc(), $id);
+
+            if !pending_styles.is_empty() {
                 if let Some(node) = $tr.doc().node($id) {
                     if let $crate::model::Node::Text(text_node) = node.node() {
-                        let text_len = text_node.text.char_len();
-
-                        let mut mark_types = std::collections::HashSet::new();
-                        for (_, _, mark) in &pending_marks {
-                            mark_types.insert(mark.as_type());
-                        }
-
-                        for mark_type in &mark_types {
-                            let _ = text_node.text.unmark(0..text_len, *mark_type);
-                        }
-
-                        for (start, end, mark) in pending_marks {
-                            let _ = text_node.text.mark(start..end, &mark);
+                        for (start, end, style) in pending_styles {
+                            let _ = text_node.text.apply_style(start..end, &style);
                         }
                     }
                 }
@@ -726,7 +699,8 @@ macro_rules! __doc_create_node_with_id {
             };
 
             let text = $crate::model::Text::new();
-            __parse_text_segments!(text, $first, $($rest_segments)+);
+            let mut __segment_ranges = Vec::new();
+            __parse_text_segments_collect!(text, __segment_ranges, $first, $($rest_segments)+);
 
             parent_node.as_mut().insert_child_with_id(
                 index,
@@ -736,10 +710,22 @@ macro_rules! __doc_create_node_with_id {
                     ..Default::default()
                 })
             ).unwrap();
+
+            $crate::test_utils::__apply_default_styles($tr.doc(), $id);
+
+            if let Some(node) = $tr.doc().node($id) {
+                if let $crate::model::Node::Text(text_node) = node.node() {
+                    for (range, styles) in __segment_ranges {
+                        for style in styles {
+                            let _ = text_node.text.apply_style(range.clone(), &style);
+                        }
+                    }
+                }
+            }
         }
     };
 
-    ($tr:ident, $id:expr, $parent:expr, $prev:expr, text, [marks: [$($marks:tt)*], $($rest:tt)*], [$text:expr]) => {
+    ($tr:ident, $id:expr, $parent:expr, $prev:expr, text, [styles: [$($styles:tt)*], $($rest:tt)*], [$text:expr]) => {
         {
             let parent_node = $tr.doc().node($parent).unwrap();
             let index = if let Some(prev_id) = $prev {
@@ -762,12 +748,14 @@ macro_rules! __doc_create_node_with_id {
                 })
             ).unwrap();
 
-            let marks = __parse_marks!($($marks)*);
-            if !marks.is_empty() {
+            $crate::test_utils::__apply_default_styles($tr.doc(), $id);
+
+            let styles = __parse_styles!($($styles)*);
+            if !styles.is_empty() {
                 if let Some(node) = $tr.doc().node($id) {
                     if let $crate::model::Node::Text(text_node) = node.node() {
-                        for mark in marks {
-                            let _ = text_node.text.mark(0..text_len, &mark);
+                        for style in styles {
+                            let _ = text_node.text.apply_style(0..text_len, &style);
                         }
                     }
                 }
@@ -775,7 +763,7 @@ macro_rules! __doc_create_node_with_id {
         }
     };
 
-    ($tr:ident, $id:expr, $parent:expr, $prev:expr, text, [marks: [$($marks:tt)*]], [$text:expr]) => {
+    ($tr:ident, $id:expr, $parent:expr, $prev:expr, text, [styles: [$($styles:tt)*]], [$text:expr]) => {
         {
             let parent_node = $tr.doc().node($parent).unwrap();
             let index = if let Some(prev_id) = $prev {
@@ -797,12 +785,14 @@ macro_rules! __doc_create_node_with_id {
                 })
             ).unwrap();
 
-            let marks = __parse_marks!($($marks)*);
-            if !marks.is_empty() {
+            $crate::test_utils::__apply_default_styles($tr.doc(), $id);
+
+            let styles = __parse_styles!($($styles)*);
+            if !styles.is_empty() {
                 if let Some(node) = $tr.doc().node($id) {
                     if let $crate::model::Node::Text(text_node) = node.node() {
-                        for mark in marks {
-                            let _ = text_node.text.mark(0..text_len, &mark);
+                        for style in styles {
+                            let _ = text_node.text.apply_style(0..text_len, &style);
                         }
                     }
                 }
@@ -828,6 +818,7 @@ macro_rules! __doc_create_node_with_id {
                     ..Default::default()
                 })
             ).unwrap();
+            $crate::test_utils::__apply_default_styles($tr.doc(), $id);
         }
     };
 
@@ -1248,25 +1239,18 @@ macro_rules! __fragment_create_node_with_id {
         }
     };
 
-    ($nodes:ident, $id:expr, $parent:expr, text, [], [$first:literal => [$($first_marks:tt)*] $(, $($rest_segments:tt)*)?]) => {
+    ($nodes:ident, $id:expr, $parent:expr, text, [], [$first:literal => [$($first_styles:tt)*] $(, $($rest_segments:tt)*)?]) => {
         {
             let mut text = $crate::model::Text::new();
-            let mut pending_marks: Vec<(usize, usize, $crate::model::Mark)> = Vec::new();
-            __parse_text_segments_with_pending!(text, pending_marks, $first => [$($first_marks)*] $(, $($rest_segments)*)?);
+            let mut pending_styles: Vec<(usize, usize, $crate::model::Style)> = Vec::new();
+            __parse_text_segments_with_pending!(text, pending_styles, $first => [$($first_styles)*] $(, $($rest_segments)*)?);
 
-            if !pending_marks.is_empty() {
-                let text_len = text.char_len();
-                let mut mark_types = std::collections::HashSet::new();
-                for (_, _, mark) in &pending_marks {
-                    mark_types.insert(mark.as_type());
-                }
+            let __defaults = $crate::model::DefaultStyles::default().to_styles();
+            $crate::test_utils::__apply_default_styles_to_text(&text, &__defaults);
 
-                for mark_type in &mark_types {
-                    let _ = text.unmark(0..text_len, *mark_type);
-                }
-
-                for (start, end, mark) in pending_marks {
-                    let _ = text.mark(start..end, &mark);
+            if !pending_styles.is_empty() {
+                for (start, end, style) in pending_styles {
+                    let _ = text.apply_style(start..end, &style);
                 }
             }
 
@@ -1286,7 +1270,17 @@ macro_rules! __fragment_create_node_with_id {
     ($nodes:ident, $id:expr, $parent:expr, text, [], [$first:literal, $($rest_segments:tt)+]) => {
         {
             let mut text = $crate::model::Text::new();
-            __parse_text_segments!(text, $first, $($rest_segments)+);
+            let mut __segment_ranges = Vec::new();
+            __parse_text_segments_collect!(text, __segment_ranges, $first, $($rest_segments)+);
+
+            let __defaults = $crate::model::DefaultStyles::default().to_styles();
+            $crate::test_utils::__apply_default_styles_to_text(&text, &__defaults);
+
+            for (range, styles) in __segment_ranges {
+                for style in styles {
+                    let _ = text.apply_style(range.clone(), &style);
+                }
+            }
 
             $nodes.push((
                 $id,
@@ -1301,14 +1295,17 @@ macro_rules! __fragment_create_node_with_id {
         }
     };
 
-    ($nodes:ident, $id:expr, $parent:expr, text, [marks: [$($marks:tt)*], $($rest:tt)*], [$text:expr]) => {
+    ($nodes:ident, $id:expr, $parent:expr, text, [styles: [$($styles:tt)*], $($rest:tt)*], [$text:expr]) => {
         {
             let text = $crate::model::Text::from($text.to_string());
             let text_len = text.char_len();
-            let marks = __parse_marks!($($marks)*);
 
-            for mark in marks {
-                let _ = text.mark(0..text_len, &mark);
+            let __defaults = $crate::model::DefaultStyles::default().to_styles();
+            $crate::test_utils::__apply_default_styles_to_text(&text, &__defaults);
+
+            let styles = __parse_styles!($($styles)*);
+            for style in styles {
+                let _ = text.apply_style(0..text_len, &style);
             }
 
             $nodes.push((
@@ -1325,14 +1322,17 @@ macro_rules! __fragment_create_node_with_id {
         }
     };
 
-    ($nodes:ident, $id:expr, $parent:expr, text, [marks: [$($marks:tt)*]], [$text:expr]) => {
+    ($nodes:ident, $id:expr, $parent:expr, text, [styles: [$($styles:tt)*]], [$text:expr]) => {
         {
             let text = $crate::model::Text::from($text.to_string());
             let text_len = text.char_len();
-            let marks = __parse_marks!($($marks)*);
 
-            for mark in marks {
-                let _ = text.mark(0..text_len, &mark);
+            let __defaults = $crate::model::DefaultStyles::default().to_styles();
+            $crate::test_utils::__apply_default_styles_to_text(&text, &__defaults);
+
+            let styles = __parse_styles!($($styles)*);
+            for style in styles {
+                let _ = text.apply_style(0..text_len, &style);
             }
 
             $nodes.push((
@@ -1350,11 +1350,16 @@ macro_rules! __fragment_create_node_with_id {
 
     ($nodes:ident, $id:expr, $parent:expr, text, [$($attrs:tt)*], [$text:expr]) => {
         {
+            let text = $crate::model::Text::from($text.to_string());
+
+            let __defaults = $crate::model::DefaultStyles::default().to_styles();
+            $crate::test_utils::__apply_default_styles_to_text(&text, &__defaults);
+
             $nodes.push((
                 $id,
                 $crate::model::FragmentNode::new(
                     $crate::model::Node::Text($crate::model::TextNode {
-                        text: $crate::model::Text::from($text.to_string()),
+                        text,
                         $($attrs)*
                         ..Default::default()
                     }),
@@ -1630,6 +1635,26 @@ fn position_to_path_position(
 }
 
 #[allow(unused)]
+pub fn __apply_default_styles(doc: &crate::model::Doc, node_id: crate::model::NodeId) {
+    let defaults = doc.default_styles().to_styles();
+    if let Some(node) = doc.node(node_id) {
+        if let crate::model::Node::Text(text_node) = node.node() {
+            __apply_default_styles_to_text(&text_node.text, &defaults);
+        }
+    }
+}
+
+#[allow(unused)]
+pub fn __apply_default_styles_to_text(text: &crate::model::Text, defaults: &[crate::model::Style]) {
+    let len = text.char_len();
+    if len > 0 {
+        for style in defaults {
+            let _ = text.apply_style(0..len, style);
+        }
+    }
+}
+
+#[allow(unused)]
 pub fn __assert_state_eq_impl(state1: &crate::runtime::State, state2: &crate::runtime::State) {
     let (doc1, sel1) = (&*state1.doc, &state1.selection);
     let (doc2, sel2) = (&*state2.doc, &state2.selection);
@@ -1665,12 +1690,12 @@ pub fn __assert_state_eq_impl(state1: &crate::runtime::State, state2: &crate::ru
 
     for (i, (node1, node2)) in nodes1.iter().zip(nodes2.iter()).enumerate() {
         if let (crate::model::Node::Text(t1), crate::model::Node::Text(t2)) = (node1, node2) {
-            let seg1 = collect_mark_ranges(&t1.text);
-            let seg2 = collect_mark_ranges(&t2.text);
+            let seg1 = collect_style_ranges(&t1.text);
+            let seg2 = collect_style_ranges(&t2.text);
             pretty_assertions::assert_eq!(
                 seg1,
                 seg2,
-                "Text mark ranges at index {} differ\n\n[Left]\n{}\n[Right]\n{}",
+                "Text style ranges at index {} differ\n\n[Left]\n{}\n[Right]\n{}",
                 i,
                 crate::inspect::inspect_state(doc1, sel1),
                 crate::inspect::inspect_state(doc2, sel2),
@@ -1704,20 +1729,20 @@ pub fn __assert_state_eq_impl(state1: &crate::runtime::State, state2: &crate::ru
     );
 }
 
-fn collect_mark_ranges(
+fn collect_style_ranges(
     text: &crate::model::Text,
-) -> Vec<(std::ops::Range<usize>, Vec<crate::model::Mark>)> {
+) -> Vec<(std::ops::Range<usize>, Vec<crate::model::Style>)> {
     let mut result = Vec::new();
     let mut offset = 0;
 
-    for (segment_text, segment_marks) in text.get_rich_text_segments() {
-        let len = segment_text.chars().count();
+    for segment in text.get_segments() {
+        let len = segment.text.chars().count();
         let range = offset..offset + len;
 
-        let mut marks = segment_marks.clone();
-        marks.sort_by_key(|m| m.as_type());
+        let mut styles = segment.styles.clone();
+        styles.sort_by_key(|s| s.as_type());
 
-        result.push((range, marks));
+        result.push((range, styles));
         offset += len;
     }
 
@@ -1808,10 +1833,12 @@ macro_rules! assert_fragment_eq {
     ($f1:expr, $f2:expr) => {{ $crate::test_utils::__assert_fragment_eq_impl(&$f1, &$f2) }};
 }
 
+#[allow(unused)]
 pub struct ScopedFontRegistration {
     keys: Vec<(String, u16)>,
 }
 
+#[allow(unused)]
 impl ScopedFontRegistration {
     pub fn new(fonts: std::collections::HashMap<String, Vec<u16>>) -> Self {
         let mut keys = Vec::new();
@@ -1857,7 +1884,7 @@ impl Drop for ScopedFontRegistration {
 mod tests {
     #[test]
     #[should_panic]
-    fn assert_state_eq_fails_on_mark_ranges() {
+    fn assert_state_eq_fails_on_style_ranges() {
         let mut p = id!();
 
         let state1 = state! {
@@ -1872,7 +1899,7 @@ mod tests {
         let state2 = state! {
             doc {
                 @p paragraph {
-                    text(marks: [italic()]) { "abc" }
+                    text(styles: [italic()]) { "abc" }
                 }
             }
             selection { (p, 0) }

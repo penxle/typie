@@ -23,15 +23,6 @@ impl DocInner {
         }
     }
 
-    pub fn fork(&self) -> Self {
-        Self {
-            loro: self.loro.fork(),
-            schema: self.schema.clone(),
-            children_cache: RefCell::new(FxHashMap::default()),
-            reachable: RefCell::new(None),
-        }
-    }
-
     pub fn is_reachable(&self, node_id: NodeId) -> bool {
         let needs_build = self.reachable.borrow().is_none();
         if needs_build {

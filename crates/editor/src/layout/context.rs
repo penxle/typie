@@ -1,5 +1,5 @@
 use crate::layout::{Layout, LayoutCache, LayoutNode};
-use crate::model::{Decorations, DocumentSettings, NodeRef};
+use crate::model::{Decorations, DefaultStyles, DocumentSettings, NodeRef};
 use crate::runtime::ViewStates;
 use crate::types::BoxConstraints;
 use std::cell::RefCell;
@@ -8,6 +8,7 @@ use std::rc::Rc;
 pub struct LayoutContext<'a> {
     pub node: &'a NodeRef<'a>,
     pub settings: &'a DocumentSettings,
+    pub default_styles: &'a DefaultStyles,
     pub decorations: &'a Decorations,
     pub scale_factor: f64,
     pub view_states: &'a ViewStates,
@@ -18,6 +19,7 @@ impl<'a> LayoutContext<'a> {
     pub fn new(
         node: &'a NodeRef<'a>,
         settings: &'a DocumentSettings,
+        default_styles: &'a DefaultStyles,
         decorations: &'a Decorations,
         scale_factor: f64,
         view_states: &'a ViewStates,
@@ -26,6 +28,7 @@ impl<'a> LayoutContext<'a> {
         Self {
             node,
             settings,
+            default_styles,
             decorations,
             scale_factor,
             view_states,
@@ -37,6 +40,7 @@ impl<'a> LayoutContext<'a> {
         Self {
             node,
             settings: self.settings,
+            default_styles: self.default_styles,
             decorations: self.decorations,
             scale_factor: self.scale_factor,
             view_states: self.view_states,
@@ -132,9 +136,18 @@ mod tests {
         let constraints = BoxConstraints::new(0.0, 400.0, 0.0, f32::INFINITY);
         let cache = RefCell::new(LayoutCache::new());
         let view_states = ViewStates::default();
+        let default_styles = crate::model::DefaultStyles::default();
 
         let decorations = Decorations::default();
-        let ctx = LayoutContext::new(&root, &settings, &decorations, 1.0, &view_states, &cache);
+        let ctx = LayoutContext::new(
+            &root,
+            &settings,
+            &default_styles,
+            &decorations,
+            1.0,
+            &view_states,
+            &cache,
+        );
         let layout_without_preedit = root.node().layout(&ctx, constraints);
         let line_without_preedit =
             first_line(&layout_without_preedit).expect("라인을 찾을 수 있어야 함");
@@ -148,9 +161,8 @@ mod tests {
                 node_id: p,
                 offset: 1,
                 text: "가".into(),
-                marks: None,
             }),
-            pending_marks: None,
+            pending_styles: Default::default(),
         };
 
         let p_node = doc.node(p).unwrap();
@@ -162,6 +174,7 @@ mod tests {
         let ctx_with_preedit = LayoutContext::new(
             &root,
             &settings,
+            &default_styles,
             &decorations_with_preedit,
             1.0,
             &view_states,

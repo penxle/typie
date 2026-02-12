@@ -38,7 +38,7 @@ class CommandHandler {
     }
 
     if (dirty & (1 << 4) != 0) {
-      _handleMarksChanged(controller, reader);
+      _handleStylesChanged(controller, reader);
     }
 
     if (dirty & (1 << 7) != 0) {
@@ -219,11 +219,11 @@ class CommandHandler {
     controller.onSelectionChanged?.call(anchor, head);
   }
 
-  static void _handleMarksChanged(EditorController controller, SlateReader reader) {
-    final uniformMarks = reader.readUniformMarks();
-    final mixedMarks = reader.readMixedMarks();
+  static void _handleStylesChanged(EditorController controller, SlateReader reader) {
+    final uniformStyles = reader.readUniformStyles();
+    final mixedStyles = reader.readMixedStyles();
 
-    controller.updateState((state) => state.copyWith(uniformMarks: uniformMarks, mixedMarks: mixedMarks));
+    controller.updateState((state) => state.copyWith(uniformStyles: uniformStyles, mixedStyles: mixedStyles));
   }
 
   static void _handlePlaceholderChanged(EditorController controller, SlateReader reader) {

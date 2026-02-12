@@ -1,5 +1,5 @@
 use crate::model::html::builder::{DomSpec, HtmlBuilder};
-use crate::model::{Fragment, Mark, Node, NodeId};
+use crate::model::{Annotation, Fragment, Node, NodeId, Style};
 use scraper::ElementRef;
 
 pub struct HtmlContext<'a> {
@@ -13,9 +13,38 @@ impl<'a> HtmlContext<'a> {
 
     pub fn write_children(&self, id: NodeId, b: &mut HtmlBuilder) {
         for (child_id, child) in self.fragment.children_of_node(id) {
-            if let Some(spec) = child.data().to_dom() {
+            if let Some(spec) = self.node_to_dom(child.data()) {
                 render_node(&spec, self, child_id, b);
             }
+        }
+    }
+
+    pub(crate) fn node_to_dom(&self, node: &Node) -> Option<DomSpec> {
+        match node {
+            Node::Text(text_node) => {
+                let specs: Vec<DomSpec> = text_node
+                    .text
+                    .get_segments()
+                    .into_iter()
+                    .map(|seg| {
+                        let style_specs: Vec<DomSpec> = seg
+                            .styles
+                            .iter()
+                            .map(|s| StyleHtmlCodec::to_dom(s))
+                            .collect();
+                        let ann_specs: Vec<DomSpec> = seg
+                            .annotations
+                            .iter()
+                            .map(|a| AnnotationHtmlCodec::to_dom(a))
+                            .collect();
+                        let mut all_specs = ann_specs;
+                        all_specs.extend(style_specs);
+                        DomSpec::wrap_with_styles(seg.text, all_specs)
+                    })
+                    .collect();
+                Some(DomSpec::Fragment(specs))
+            }
+            _ => node.to_dom(),
         }
     }
 }
@@ -102,9 +131,19 @@ pub fn render_node_spec(spec: &DomSpec, ctx: &HtmlContext, id: NodeId, b: &mut H
     }
 }
 
-pub trait MarkHtmlCodec {
+pub trait StyleHtmlCodec {
     fn to_dom(&self) -> DomSpec;
-    fn parse_rules() -> Vec<MarkParseRule>
+    fn parse_rules() -> Vec<StyleParseRule>
+    where
+        Self: Sized,
+    {
+        vec![]
+    }
+}
+
+pub trait AnnotationHtmlCodec {
+    fn to_dom(&self) -> DomSpec;
+    fn parse_rules() -> Vec<AnnotationParseRule>
     where
         Self: Sized,
     {
@@ -151,20 +190,58 @@ impl NodeParseRule {
     }
 }
 
-pub struct MarkParseRule {
+pub struct StyleParseRule {
     pub tag: Option<&'static str>,
     pub style_key: Option<&'static str>,
     pub data_attr: Option<&'static str>,
     pub priority: u8,
-    pub parse: fn(&ElementRef) -> Option<Mark>,
-    pub get_content: Option<fn(&ElementRef) -> String>,
+    pub parse: fn(&ElementRef) -> Option<Style>,
 }
 
-impl MarkParseRule {
-    pub fn from_tag(tag: &'static str, parse: fn(&ElementRef) -> Option<Mark>) -> Self {
+impl StyleParseRule {
+    pub fn from_tag(tag: &'static str, parse: fn(&ElementRef) -> Option<Style>) -> Self {
         Self {
             tag: Some(tag),
             style_key: None,
+            data_attr: None,
+            priority: 50,
+            parse,
+        }
+    }
+
+    pub fn from_style(style_key: &'static str, parse: fn(&ElementRef) -> Option<Style>) -> Self {
+        Self {
+            tag: None,
+            style_key: Some(style_key),
+            data_attr: None,
+            priority: 30,
+            parse,
+        }
+    }
+
+    pub fn from_data(data_attr: &'static str, parse: fn(&ElementRef) -> Option<Style>) -> Self {
+        Self {
+            tag: None,
+            style_key: None,
+            data_attr: Some(data_attr),
+            priority: 60,
+            parse,
+        }
+    }
+}
+
+pub struct AnnotationParseRule {
+    pub tag: Option<&'static str>,
+    pub data_attr: Option<&'static str>,
+    pub priority: u8,
+    pub parse: fn(&ElementRef) -> Option<Annotation>,
+    pub get_content: Option<fn(&ElementRef) -> String>,
+}
+
+impl AnnotationParseRule {
+    pub fn from_tag(tag: &'static str, parse: fn(&ElementRef) -> Option<Annotation>) -> Self {
+        Self {
+            tag: Some(tag),
             data_attr: None,
             priority: 50,
             parse,
@@ -174,44 +251,22 @@ impl MarkParseRule {
 
     pub fn from_tag_with_content(
         tag: &'static str,
-        parse: fn(&ElementRef) -> Option<Mark>,
+        parse: fn(&ElementRef) -> Option<Annotation>,
         get_content: fn(&ElementRef) -> String,
     ) -> Self {
         Self {
             tag: Some(tag),
-            style_key: None,
             data_attr: None,
             priority: 50,
             parse,
             get_content: Some(get_content),
         }
     }
-
-    pub fn from_style(style_key: &'static str, parse: fn(&ElementRef) -> Option<Mark>) -> Self {
-        Self {
-            tag: None,
-            style_key: Some(style_key),
-            data_attr: None,
-            priority: 30,
-            parse,
-            get_content: None,
-        }
-    }
-
-    pub fn from_data(data_attr: &'static str, parse: fn(&ElementRef) -> Option<Mark>) -> Self {
-        Self {
-            tag: None,
-            style_key: None,
-            data_attr: Some(data_attr),
-            priority: 60,
-            parse,
-            get_content: None,
-        }
-    }
 }
 
-use crate::model::marks::*;
+use crate::model::annotations::*;
 use crate::model::nodes::*;
+use crate::model::styles::*;
 
 pub fn collect_node_parse_rules() -> Vec<NodeParseRule> {
     let mut rules = Vec::new();
@@ -238,19 +293,25 @@ pub fn collect_node_parse_rules() -> Vec<NodeParseRule> {
     rules
 }
 
-pub fn collect_mark_parse_rules() -> Vec<MarkParseRule> {
+pub fn collect_style_parse_rules() -> Vec<StyleParseRule> {
     let mut rules = Vec::new();
-    rules.extend(ItalicMark::parse_rules());
-    rules.extend(UnderlineMark::parse_rules());
-    rules.extend(StrikethroughMark::parse_rules());
-    rules.extend(FontWeightMark::parse_rules());
-    rules.extend(FontSizeMark::parse_rules());
-    rules.extend(FontFamilyMark::parse_rules());
-    rules.extend(LetterSpacingMark::parse_rules());
-    rules.extend(TextColorMark::parse_rules());
-    rules.extend(BackgroundColorMark::parse_rules());
-    rules.extend(RubyMark::parse_rules());
-    rules.extend(LinkMark::parse_rules());
+    rules.extend(ItalicStyle::parse_rules());
+    rules.extend(UnderlineStyle::parse_rules());
+    rules.extend(StrikethroughStyle::parse_rules());
+    rules.extend(FontWeightStyle::parse_rules());
+    rules.extend(FontSizeStyle::parse_rules());
+    rules.extend(FontFamilyStyle::parse_rules());
+    rules.extend(LetterSpacingStyle::parse_rules());
+    rules.extend(TextColorStyle::parse_rules());
+    rules.extend(BackgroundColorStyle::parse_rules());
+    rules.sort_by(|a, b| b.priority.cmp(&a.priority));
+    rules
+}
+
+pub fn collect_annotation_parse_rules() -> Vec<AnnotationParseRule> {
+    let mut rules = Vec::new();
+    rules.extend(LinkAnnotation::parse_rules());
+    rules.extend(RubyAnnotation::parse_rules());
     rules.sort_by(|a, b| b.priority.cmp(&a.priority));
     rules
 }
@@ -267,15 +328,14 @@ pub fn try_parse_node(elem: &ElementRef, rules: &[NodeParseRule]) -> Option<Node
     None
 }
 
-pub struct ParsedMarks {
-    pub marks: Vec<Mark>,
+pub struct ParsedAnnotations {
+    pub annotations: Vec<Annotation>,
     pub custom_content: Option<String>,
 }
 
-pub fn try_parse_marks(elem: &ElementRef, rules: &[MarkParseRule]) -> ParsedMarks {
+pub fn parse_inline_styles(elem: &ElementRef, rules: &[StyleParseRule]) -> Vec<Style> {
     let tag = elem.value().name();
-    let mut marks = Vec::new();
-    let mut custom_content = None;
+    let mut styles = Vec::new();
 
     for rule in rules {
         let matches = if let Some(rule_tag) = rule.tag {
@@ -287,8 +347,35 @@ pub fn try_parse_marks(elem: &ElementRef, rules: &[MarkParseRule]) -> ParsedMark
         };
 
         if matches {
-            if let Some(mark) = (rule.parse)(elem) {
-                marks.push(mark);
+            if let Some(style) = (rule.parse)(elem) {
+                styles.push(style);
+            }
+        }
+    }
+
+    styles
+}
+
+pub fn parse_inline_annotations(
+    elem: &ElementRef,
+    rules: &[AnnotationParseRule],
+) -> ParsedAnnotations {
+    let tag = elem.value().name();
+    let mut annotations = Vec::new();
+    let mut custom_content = None;
+
+    for rule in rules {
+        let matches = if let Some(rule_tag) = rule.tag {
+            rule_tag == tag
+        } else if rule.data_attr.is_some() {
+            true
+        } else {
+            false
+        };
+
+        if matches {
+            if let Some(annotation) = (rule.parse)(elem) {
+                annotations.push(annotation);
                 if let Some(get_content) = rule.get_content {
                     custom_content = Some(get_content(elem));
                 }
@@ -296,8 +383,8 @@ pub fn try_parse_marks(elem: &ElementRef, rules: &[MarkParseRule]) -> ParsedMark
         }
     }
 
-    ParsedMarks {
-        marks,
+    ParsedAnnotations {
+        annotations,
         custom_content,
     }
 }

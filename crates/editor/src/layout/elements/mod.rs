@@ -16,6 +16,7 @@ pub use line::*;
 pub use list_marker::*;
 pub use table::*;
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, Default)]
 pub struct WrapperPadding {
     pub top: f32,

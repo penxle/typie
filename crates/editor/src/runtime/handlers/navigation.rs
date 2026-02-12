@@ -1,6 +1,6 @@
 use super::super::{Direction, Effect, Runtime};
 use crate::layout::cursor::{Cursor, NavigationContext};
-use crate::model::{MarkType, NodeId};
+use crate::model::NodeId;
 use crate::state::position_helpers::move_from_block_position;
 use crate::state::{Position, Selection, leaf_block_end, leaf_block_start};
 use crate::types::Affinity;
@@ -110,10 +110,6 @@ impl Runtime {
         } else {
             vec![]
         }
-    }
-
-    pub(crate) fn handle_extend_mark_range(&mut self, mark_type: MarkType) -> Vec<Effect> {
-        self.transact(|tr| tr.extend_mark_range(mark_type))
     }
 
     pub(crate) fn handle_set_selection(

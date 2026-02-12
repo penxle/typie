@@ -73,9 +73,9 @@ pub struct Slate {
 
     pub formatting_uniform_align: i32,
     pub formatting_uniform_line_height: f32,
-    pub formatting_uniform_marks_offset: u32,
-    pub formatting_uniform_marks_count: u32,
-    pub formatting_mixed_marks_bitfield: u32,
+    pub formatting_uniform_styles_offset: u32,
+    pub formatting_uniform_styles_count: u32,
+    pub formatting_mixed_styles_bitfield: u32,
 
     pub enabled_actions_offset: u32,
     pub enabled_actions_count: u32,
@@ -304,16 +304,16 @@ pub fn get_slate_offsets() -> Vec<(&'static str, usize)> {
             std::mem::offset_of!(Slate, placeholder_height),
         ),
         (
-            "formatting_uniform_marks_offset",
-            std::mem::offset_of!(Slate, formatting_uniform_marks_offset),
+            "formatting_uniform_styles_offset",
+            std::mem::offset_of!(Slate, formatting_uniform_styles_offset),
         ),
         (
-            "formatting_uniform_marks_count",
-            std::mem::offset_of!(Slate, formatting_uniform_marks_count),
+            "formatting_uniform_styles_count",
+            std::mem::offset_of!(Slate, formatting_uniform_styles_count),
         ),
         (
-            "formatting_mixed_marks_bitfield",
-            std::mem::offset_of!(Slate, formatting_mixed_marks_bitfield),
+            "formatting_mixed_styles_bitfield",
+            std::mem::offset_of!(Slate, formatting_mixed_styles_bitfield),
         ),
         (
             "enabled_actions_offset",

@@ -2,7 +2,6 @@ use crate::model::NodeType;
 use anyhow::Result;
 
 #[derive(Debug, Clone, PartialEq)]
-#[allow(dead_code)]
 pub enum ContentExpr {
     Empty,
     Single(NodeType),

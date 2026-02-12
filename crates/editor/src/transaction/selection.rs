@@ -27,7 +27,6 @@ fn find_word_boundaries_in_text(text: &str, char_offset: usize) -> Option<(usize
 
 impl Transaction {
     pub fn select_word_at(&mut self, position: Position) -> Result<bool> {
-        self.state.pending_marks = None;
         let block = self.node(position.node_id).context("Node not found")?;
 
         if let Some((child_id, local_offset)) = find_child_at_offset(&block, position.offset) {
@@ -202,7 +201,6 @@ impl Transaction {
     }
 
     pub fn select_paragraph_at(&mut self, position: Position) -> Result<bool> {
-        self.state.pending_marks = None;
         let this = self.node(position.node_id).context("Node not found")?;
         let paragraph = match this
             .ancestors()

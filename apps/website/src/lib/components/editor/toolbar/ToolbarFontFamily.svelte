@@ -2,7 +2,7 @@
   import { css } from '@typie/styled-system/css';
   import { SearchableDropdown } from '@typie/ui/components';
   import { getEditor } from '$lib/editor/context';
-  import type { Mark, MarkType } from '$lib/editor/types';
+  import type { Style, StyleType } from '$lib/editor/types';
 
   const editor = getEditor();
 
@@ -18,12 +18,12 @@
   const defaultFontFamily = 'Pretendard';
   const defaultFontWeight = 400;
 
-  const activeMarks = $derived(editor.activeMarks);
-  const findMark = (type: string): Mark | undefined => activeMarks.uniformMarks.find((m) => m.type === type);
-  const isMixed = (type: MarkType): boolean => activeMarks.mixedMarks.includes(type);
+  const activeStyles = $derived(editor.activeStyles);
+  const findStyle = (type: string): Style | undefined => activeStyles.uniformStyles.find((s) => s.type === type);
+  const isMixed = (type: StyleType): boolean => activeStyles.mixedStyles.includes(type);
 
   const currentFontFamilyValue = $derived(
-    isMixed('font_family') ? undefined : ((findMark('font_family') as { family?: string })?.family ?? defaultFontFamily),
+    isMixed('font_family') ? undefined : ((findStyle('font_family') as { family?: string })?.family ?? defaultFontFamily),
   );
 
   const allFontFamilies = $derived(fontFamilies.map((f) => ({ value: f.value, label: f.label })));
@@ -56,7 +56,7 @@
 
 <SearchableDropdown
   style={css.raw({ width: '120px' })}
-  disabled={!editor.can('setFontFamily')}
+  disabled={!editor.can('toggleStyle')}
   getLabel={(value) => {
     const item = allFontFamilies.find((f) => f.value === value);
     return item?.label ?? '(알 수 없는 폰트)';
@@ -65,11 +65,11 @@
   label="폰트 패밀리"
   onEscape={() => editor.focus()}
   onchange={(fontFamilyValue) => {
-    const currentWeight = (findMark('font_weight') as { weight?: number })?.weight ?? defaultFontWeight;
+    const currentWeight = (findStyle('font_weight') as { weight?: number })?.weight ?? defaultFontWeight;
     const defaultWeight = getDefaultWeight(fontFamilyValue, currentWeight);
 
-    editor.focus().dispatch({ type: 'setFontFamily', family: fontFamilyValue });
-    editor.dispatch({ type: 'setFontWeight', weight: defaultWeight });
+    editor.focus().dispatch({ type: 'toggleStyle', style: { type: 'font_family', family: fontFamilyValue } });
+    editor.dispatch({ type: 'toggleStyle', style: { type: 'font_weight', weight: defaultWeight } });
   }}
   placeholder="-"
   value={currentFontFamilyValue}

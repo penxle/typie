@@ -109,21 +109,21 @@ export const getActionFromKeyEvent = (e: KeyboardEvent): Message | null => {
     case 'i':
     case 'I': {
       if ((IS_MAC && e.metaKey) || (!IS_MAC && e.ctrlKey)) {
-        return { type: 'toggleItalic' };
+        return { type: 'toggleStyle', style: { type: 'italic' } };
       }
       break;
     }
     case 'u':
     case 'U': {
       if ((IS_MAC && e.metaKey) || (!IS_MAC && e.ctrlKey)) {
-        return { type: 'toggleUnderline' };
+        return { type: 'toggleStyle', style: { type: 'underline' } };
       }
       break;
     }
     case 's':
     case 'S': {
       if ((e.shiftKey && IS_MAC && e.metaKey) || (!IS_MAC && e.ctrlKey)) {
-        return { type: 'toggleStrikethrough' };
+        return { type: 'toggleStyle', style: { type: 'strikethrough' } };
       }
       break;
     }

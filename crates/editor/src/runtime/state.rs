@@ -9,7 +9,7 @@ pub struct State {
     pub selection: Selection,
     pub preedit: Option<Preedit>,
     pub preferred_x: Option<f32>,
-    pub pending_marks: Option<Vec<Mark>>,
+    pub pending_styles: Vec<Style>,
     pub frontiers: Frontiers,
     pub pending_loro_commit: bool,
     pub read_only: bool,
@@ -18,12 +18,13 @@ pub struct State {
 impl State {
     pub fn new(doc: Rc<Doc>, selection: Selection) -> Self {
         let frontiers = doc.frontiers();
+        let pending_styles = doc.default_styles().to_styles();
         Self {
             doc,
             selection,
             preedit: None,
             preferred_x: None,
-            pending_marks: None,
+            pending_styles,
             frontiers,
             pending_loro_commit: false,
             read_only: false,

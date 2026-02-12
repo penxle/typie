@@ -150,10 +150,10 @@ impl DomSpec {
         }
     }
 
-    pub fn wrap_with_marks(text: String, marks: Vec<DomSpec>) -> DomSpec {
+    pub fn wrap_with_styles(text: String, styles: Vec<DomSpec>) -> DomSpec {
         let mut result = DomSpec::Text(text);
-        for mark_spec in marks.into_iter().rev() {
-            result = mark_spec.substitute_hole(result);
+        for style_spec in styles.into_iter().rev() {
+            result = style_spec.substitute_hole(result);
         }
         result
     }

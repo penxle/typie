@@ -392,10 +392,6 @@ pub fn is_selection_hit(
     false
 }
 
-pub fn is_interactive_hit(_doc: &Doc, page: &Page, x: f32, y: f32) -> bool {
-    page.find_interactive_at(x, y).is_some()
-}
-
 pub fn is_selectable_block_hit(doc: &Doc, hit_selection: &crate::state::Selection) -> bool {
     use crate::state::position_helpers::find_child_at_offset;
 
@@ -419,10 +415,9 @@ pub fn is_selectable_block_hit(doc: &Doc, hit_selection: &crate::state::Selectio
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::layout::elements::CalloutIconElement;
     use crate::layout::{Element, LayoutNode, Page, PageBreakPolicy, PositionedNode, RenderHints};
-    use crate::model::{CalloutVariant, Doc, NodeId};
+    use crate::model::{CalloutVariant, NodeId};
     use crate::types::{Point, Size};
     use std::rc::Rc;
 
@@ -459,31 +454,30 @@ mod tests {
         };
 
         let page = Page::from_root(page_root);
-        let doc = Doc::new();
 
         assert!(
-            is_interactive_hit(&doc, &page, 15.0, 15.0),
+            page.find_interactive_at(15.0, 15.0).is_some(),
             "Should hit inside icon"
         );
         assert!(
-            is_interactive_hit(&doc, &page, 10.0, 10.0),
+            page.find_interactive_at(10.0, 10.0).is_some(),
             "Should hit top-left corner"
         );
         assert!(
-            is_interactive_hit(&doc, &page, 30.0, 30.0),
+            page.find_interactive_at(30.0, 30.0).is_some(),
             "Should hit bottom-right corner"
         );
 
         assert!(
-            !is_interactive_hit(&doc, &page, 5.0, 5.0),
+            page.find_interactive_at(5.0, 5.0).is_none(),
             "Should not hit before icon"
         );
         assert!(
-            !is_interactive_hit(&doc, &page, 31.0, 15.0),
+            page.find_interactive_at(31.0, 15.0).is_none(),
             "Should not hit right of icon"
         );
         assert!(
-            !is_interactive_hit(&doc, &page, 15.0, 31.0),
+            page.find_interactive_at(15.0, 31.0).is_none(),
             "Should not hit below icon"
         );
     }

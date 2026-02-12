@@ -2,10 +2,7 @@ use crate::global::GLOBALS;
 use crate::layout::elements::{LineElement, build_metrics};
 use crate::layout::{Element, Layout, LayoutContext, LayoutNode, PageBreakPolicy, PositionedNode};
 use crate::model::html::{DomSpec, NodeHtmlCodec, NodeParseRule, parse_styles};
-use crate::model::{
-    FontFamilyMark, FontSizeMark, FontWeightMark, LetterSpacingMark, Mark, Node, PendingMarksDecor,
-    PreeditDecor, TextColorMark,
-};
+use crate::model::{Annotation, Node, PendingStylesDecor, PreeditDecor, Style};
 use crate::schema::Expand;
 use crate::types::{BoxConstraints, Point, Size};
 use crate::utils::{LengthUnit, char_to_byte_offset, convert_length};
@@ -49,49 +46,46 @@ fn preedit_for_node<'a>(ctx: &'a LayoutContext<'a>) -> Option<&'a PreeditDecor> 
         .filter(|preedit| preedit.node_id == ctx.node.node_id())
 }
 
-fn pending_marks_for_node<'a>(ctx: &'a LayoutContext<'a>) -> Option<&'a PendingMarksDecor> {
-    ctx.decorations
-        .pending_marks
-        .as_ref()
-        .filter(|pm| pm.node_id == ctx.node.node_id())
+fn pending_styles_for_node<'a>(ctx: &'a LayoutContext<'a>) -> Option<&'a PendingStylesDecor> {
+    let ps = &ctx.decorations.pending_styles;
+    if ps.node_id == ctx.node.node_id() {
+        Some(ps)
+    } else {
+        None
+    }
 }
 
 fn extract_ruby_segments(ctx: &LayoutContext) -> Vec<crate::layout::elements::RubySegment> {
     use crate::layout::elements::RubySegment;
-    use crate::model::{Mark, Node};
+    use crate::model::Node;
 
     let mut ruby_segments = Vec::new();
     let mut offset = 0;
 
     let preedit = preedit_for_node(ctx);
     let preedit_info = preedit.map(|preedit| (preedit.offset, preedit.text.chars().count()));
-    let preedit_has_explicit_marks = preedit.map(|p| p.marks.is_some()).unwrap_or(false);
-
-    let schema = ctx.node.schema();
 
     for child in ctx.node.children() {
         if let Node::Text(node) = child.node() {
-            let segments = node.text.get_rich_text_segments();
+            let segments = node.text.get_segments();
 
-            for (segment_text, segment_marks) in segments {
-                let segment_len = segment_text.chars().count();
+            for segment in segments {
+                let segment_len = segment.text.chars().count();
                 let base_start = offset;
                 let base_end = offset + segment_len;
 
-                for mark in segment_marks {
-                    if let Mark::Ruby(ref ruby_mark) = mark {
-                        let expand = if preedit_has_explicit_marks {
-                            &Expand::None
-                        } else {
-                            &schema.mark_spec(mark.as_type()).expand
-                        };
-                        let (start, end) =
-                            map_range_with_preedit((base_start, base_end), preedit_info, expand);
+                for annotation in &segment.annotations {
+                    if let Annotation::Ruby(ruby_ann) = annotation {
+                        let (start, end) = map_range_with_preedit(
+                            (base_start, base_end),
+                            preedit_info,
+                            &Expand::None,
+                        );
 
                         ruby_segments.push(RubySegment {
                             start_offset: start,
                             end_offset: end,
-                            ruby_text: ruby_mark.text.clone(),
+                            ruby_text: ruby_ann.text.clone(),
                         });
                         break;
                     }
@@ -101,23 +95,6 @@ fn extract_ruby_segments(ctx: &LayoutContext) -> Vec<crate::layout::elements::Ru
             }
         } else if let Node::HardBreak(_) = child.node() {
             offset += 1;
-        }
-    }
-
-    if let Some(preedit) = preedit {
-        if let Some(marks) = &preedit.marks {
-            let preedit_start = preedit.offset;
-            let preedit_end = preedit_start + preedit.text.chars().count();
-
-            for mark in marks {
-                if let Mark::Ruby(ruby_mark) = mark {
-                    ruby_segments.push(RubySegment {
-                        start_offset: preedit_start,
-                        end_offset: preedit_end,
-                        ruby_text: ruby_mark.text.clone(),
-                    });
-                }
-            }
         }
     }
 
@@ -138,42 +115,39 @@ fn extract_background_segments(
     ctx: &LayoutContext,
 ) -> Vec<crate::layout::elements::BackgroundSegment> {
     use crate::layout::elements::BackgroundSegment;
-    use crate::model::{Mark, Node};
+    use crate::model::Node;
 
     let mut background_segments = Vec::new();
     let mut offset = 0;
 
     let preedit = preedit_for_node(ctx);
     let preedit_info = preedit.map(|preedit| (preedit.offset, preedit.text.chars().count()));
-    let preedit_has_explicit_marks = preedit.map(|p| p.marks.is_some()).unwrap_or(false);
-
-    let schema = ctx.node.schema();
 
     for child in ctx.node.children() {
         if let Node::Text(node) = child.node() {
-            let segments = node.text.get_rich_text_segments();
+            let segments = node.text.get_segments();
 
-            for (segment_text, segment_marks) in segments {
-                let segment_len = segment_text.chars().count();
+            for segment in segments {
+                let segment_len = segment.text.chars().count();
                 let base_start = offset;
                 let base_end = offset + segment_len;
 
-                for mark in segment_marks {
-                    if let Mark::BackgroundColor(ref bg_mark) = mark {
-                        let expand = if preedit_has_explicit_marks {
-                            &Expand::None
-                        } else {
-                            &schema.mark_spec(mark.as_type()).expand
-                        };
-                        let (start, end) =
-                            map_range_with_preedit((base_start, base_end), preedit_info, expand);
+                for style in &segment.styles {
+                    if let Style::BackgroundColor(bg_style) = style {
+                        if bg_style.has_color() {
+                            let (start, end) = map_range_with_preedit(
+                                (base_start, base_end),
+                                preedit_info,
+                                &Expand::None,
+                            );
 
-                        background_segments.push(BackgroundSegment {
-                            start_offset: start,
-                            end_offset: end,
-                            color_key: bg_mark.key.clone(),
-                        });
-                        break;
+                            background_segments.push(BackgroundSegment {
+                                start_offset: start,
+                                end_offset: end,
+                                color_key: bg_style.color.clone(),
+                            });
+                            break;
+                        }
                     }
                 }
 
@@ -185,17 +159,20 @@ fn extract_background_segments(
     }
 
     if let Some(preedit) = preedit {
-        if let Some(marks) = &preedit.marks {
+        let pending = pending_styles_for_node(ctx);
+        if let Some(ps) = pending {
             let preedit_start = preedit.offset;
             let preedit_end = preedit_start + preedit.text.chars().count();
 
-            for mark in marks {
-                if let Mark::BackgroundColor(bg_mark) = mark {
-                    background_segments.push(BackgroundSegment {
-                        start_offset: preedit_start,
-                        end_offset: preedit_end,
-                        color_key: bg_mark.key.clone(),
-                    });
+            for style in &ps.styles {
+                if let Style::BackgroundColor(bg_style) = style {
+                    if bg_style.has_color() {
+                        background_segments.push(BackgroundSegment {
+                            start_offset: preedit_start,
+                            end_offset: preedit_end,
+                            color_key: bg_style.color.clone(),
+                        });
+                    }
                 }
             }
         }
@@ -214,6 +191,60 @@ fn extract_background_segments(
         merged.push(segment);
     }
     merged
+}
+
+fn apply_style_to_builder(
+    builder: &mut parley::RangedBuilder<'_, String>,
+    style: &Style,
+    range: std::ops::Range<usize>,
+    font_size: f32,
+) {
+    use parley::style::*;
+    match style {
+        Style::FontFamily(m) => builder.push(
+            StyleProperty::FontStack(FontStack::Single(FontFamily::Named(
+                m.family.clone().into(),
+            ))),
+            range,
+        ),
+        Style::FontSize(m) => builder.push(
+            StyleProperty::FontSize(convert_length(m.size, LengthUnit::Pt, LengthUnit::Px)),
+            range,
+        ),
+        Style::FontWeight(m) => builder.push(
+            StyleProperty::FontWeight(FontWeight::new(m.weight as f32)),
+            range,
+        ),
+        Style::LetterSpacing(m) => {
+            let font_size_px = convert_length(font_size, LengthUnit::Pt, LengthUnit::Px);
+            builder.push(
+                StyleProperty::LetterSpacing(m.spacing * font_size_px),
+                range,
+            )
+        }
+        Style::Italic(_) => builder.push(StyleProperty::FontStyle(FontStyle::Italic), range),
+        Style::Strikethrough(_) => builder.push(StyleProperty::Strikethrough(true), range),
+        Style::Underline(_) => builder.push(StyleProperty::Underline(true), range),
+        Style::TextColor(m) => {
+            builder.push(StyleProperty::Brush(format!("text.{}", m.color)), range)
+        }
+        Style::BackgroundColor(_) => {}
+    }
+}
+
+fn apply_annotation_to_builder(
+    builder: &mut parley::RangedBuilder<'_, String>,
+    annotation: &Annotation,
+    range: std::ops::Range<usize>,
+) {
+    use parley::style::*;
+    match annotation {
+        Annotation::Link(_) => {
+            builder.push(StyleProperty::Underline(true), range.clone());
+            builder.push(StyleProperty::Brush("ui.text.faint".to_string()), range);
+        }
+        Annotation::Ruby(_) => {}
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Hash, Serialize, Deserialize, Codec)]
@@ -407,8 +438,6 @@ impl Layout for ParagraphNode {
 
         let preedit = preedit_for_node(ctx);
         let preedit_info = preedit.map(|preedit| (preedit.offset, preedit.text.chars().count()));
-        let preedit_has_explicit_marks = preedit.map(|p| p.marks.is_some()).unwrap_or(false);
-
         if let Some(preedit) = preedit {
             let idx = char_to_byte_offset(&text, preedit.offset);
             text.insert_str(idx, &preedit.text);
@@ -419,7 +448,7 @@ impl Layout for ParagraphNode {
             text = "\u{200B}".to_string();
         }
 
-        let pending_marks = pending_marks_for_node(ctx);
+        let pending_styles = pending_styles_for_node(ctx);
 
         let line_height = self.line_height;
         let layout = GLOBALS.with(|globals| {
@@ -430,90 +459,14 @@ impl Layout for ParagraphNode {
             let mut lcx = globals.parley_layout_context.borrow_mut();
             let mut fcx = globals.parley_font_context.borrow_mut();
 
-            let setup_defaults = |builder: &mut parley::RangedBuilder<'_, String>| {
-                builder.push_default(StyleProperty::FontStack(FontStack::Single(
-                    FontFamily::Named(FontFamilyMark::default().family.into()),
-                )));
-                builder.push_default(StyleProperty::FontSize(convert_length(
-                    FontSizeMark::default().size,
-                    LengthUnit::Pt,
-                    LengthUnit::Px,
-                )));
-                builder.push_default(StyleProperty::FontWeight(FontWeight::new(
-                    FontWeightMark::default().weight as f32,
-                )));
-                builder.push_default(StyleProperty::LineHeight(LineHeight::FontSizeRelative(
-                    line_height,
-                )));
-                builder.push_default(StyleProperty::LetterSpacing(
-                    LetterSpacingMark::default().spacing,
-                ));
-                builder.push_default(StyleProperty::Brush(format!(
-                    "text.{}",
-                    TextColorMark::default().key
-                )));
-
-                builder.push_default(StyleProperty::FontFeatures(FontSettings::Source(
-                    Cow::Owned("\"ss05\" 1, \"cv12\" 1, \"ss18\" 1".to_string()),
-                )));
-            };
-
             let mut builder = lcx.ranged_builder(&mut fcx, &text, 1.0, false);
 
-            let apply_mark = |builder: &mut parley::RangedBuilder<'_, String>,
-                              mark: &Mark,
-                              range: std::ops::Range<usize>,
-                              font_size: f32| {
-                match mark {
-                    Mark::FontFamily(m) => builder.push(
-                        StyleProperty::FontStack(FontStack::Single(FontFamily::Named(
-                            m.family.clone().into(),
-                        ))),
-                        range,
-                    ),
-                    Mark::FontSize(m) => builder.push(
-                        StyleProperty::FontSize(convert_length(
-                            m.size,
-                            LengthUnit::Pt,
-                            LengthUnit::Px,
-                        )),
-                        range,
-                    ),
-                    Mark::FontWeight(m) => builder.push(
-                        StyleProperty::FontWeight(FontWeight::new(m.weight as f32)),
-                        range,
-                    ),
-                    Mark::LetterSpacing(m) => {
-                        let font_size_px =
-                            convert_length(font_size, LengthUnit::Pt, LengthUnit::Px);
-                        builder.push(
-                            StyleProperty::LetterSpacing(m.spacing * font_size_px),
-                            range,
-                        )
-                    }
-                    Mark::Italic(_) => {
-                        builder.push(StyleProperty::FontStyle(FontStyle::Italic), range)
-                    }
-                    Mark::Strikethrough(_) => {
-                        builder.push(StyleProperty::Strikethrough(true), range)
-                    }
-                    Mark::Underline(_) => builder.push(StyleProperty::Underline(true), range),
-                    Mark::TextColor(m) => {
-                        builder.push(StyleProperty::Brush(format!("text.{}", m.key)), range)
-                    }
-                    Mark::Ruby(_) => {
-                        // Parley가 아직 ruby를 지원하지 않으므로 layout 단계가 아닌 rendering 단계에서 처리
-                        // https://github.com/linebender/parley/issues/255
-                    }
-                    Mark::BackgroundColor(_) => {
-                        // Parley가 background를 지원하지 않으므로 rendering 단계에서 처리
-                    }
-                    Mark::Link(_) => {
-                        builder.push(StyleProperty::Underline(true), range.clone());
-                        builder.push(StyleProperty::Brush("ui.text.faint".to_string()), range);
-                    }
-                }
-            };
+            builder.push_default(StyleProperty::LineHeight(LineHeight::FontSizeRelative(
+                line_height,
+            )));
+            builder.push_default(StyleProperty::FontFeatures(FontSettings::Source(
+                Cow::Owned("\"ss05\" 1, \"cv12\" 1, \"ss18\" 1".to_string()),
+            )));
 
             let parent_is_root = ctx
                 .node
@@ -532,8 +485,6 @@ impl Layout for ParagraphNode {
                 _ => StyleProperty::WordBreak(WordBreakStrength::BreakAll),
             });
 
-            setup_defaults(&mut builder);
-
             match self.align {
                 TextAlign::Left | TextAlign::Justify if indent > 0.0 => {
                     builder.push_inline_box(parley::InlineBox {
@@ -546,23 +497,23 @@ impl Layout for ParagraphNode {
                 _ => {}
             }
 
-            let schema = ctx.node.schema();
             let mut offset = 0;
             for child in ctx.node.children() {
                 match child.node() {
                     Node::Text(node) => {
-                        let segments = node.text.get_rich_text_segments();
+                        let segments = node.text.get_segments();
                         let mut segment_offset = 0;
 
-                        for (segment_text, segment_marks) in segments {
-                            let segment_len = segment_text.chars().count();
+                        for segment in segments {
+                            let segment_len = segment.text.chars().count();
                             let base_start = offset + segment_offset;
                             let base_end = base_start + segment_len;
 
-                            let segment_font_size = segment_marks
+                            let segment_font_size = segment
+                                .styles
                                 .iter()
-                                .find_map(|m| {
-                                    if let Mark::FontSize(fs) = m {
+                                .find_map(|s| {
+                                    if let Style::FontSize(fs) = s {
                                         Some(fs.size)
                                     } else {
                                         None
@@ -570,21 +521,33 @@ impl Layout for ParagraphNode {
                                 })
                                 .unwrap_or(12.0);
 
-                            for mark in &segment_marks {
-                                let expand = if preedit_has_explicit_marks {
-                                    &Expand::None
-                                } else {
-                                    &schema.mark_spec(mark.as_type()).expand
-                                };
+                            for style in &segment.styles {
                                 let (start, end) = map_range_with_preedit(
                                     (base_start, base_end),
                                     preedit_info,
-                                    expand,
+                                    &Expand::None,
                                 );
                                 let range = char_to_byte_offset(&text, start)
                                     ..char_to_byte_offset(&text, end);
 
-                                apply_mark(&mut builder, mark, range, segment_font_size);
+                                apply_style_to_builder(
+                                    &mut builder,
+                                    style,
+                                    range,
+                                    segment_font_size,
+                                );
+                            }
+
+                            for annotation in &segment.annotations {
+                                let (start, end) = map_range_with_preedit(
+                                    (base_start, base_end),
+                                    preedit_info,
+                                    &Expand::None,
+                                );
+                                let range = char_to_byte_offset(&text, start)
+                                    ..char_to_byte_offset(&text, end);
+
+                                apply_annotation_to_builder(&mut builder, annotation, range);
                             }
 
                             segment_offset += segment_len;
@@ -600,16 +563,17 @@ impl Layout for ParagraphNode {
             }
 
             if let Some(preedit) = preedit {
-                if let Some(marks) = &preedit.marks {
+                if let Some(ps) = pending_styles {
                     let preedit_start = preedit.offset;
                     let preedit_end = preedit_start + preedit.text.chars().count();
                     let range = char_to_byte_offset(&text, preedit_start)
                         ..char_to_byte_offset(&text, preedit_end);
 
-                    let preedit_font_size = marks
+                    let preedit_font_size = ps
+                        .styles
                         .iter()
-                        .find_map(|m| {
-                            if let Mark::FontSize(fs) = m {
+                        .find_map(|s| {
+                            if let Style::FontSize(fs) = s {
                                 Some(fs.size)
                             } else {
                                 None
@@ -617,28 +581,33 @@ impl Layout for ParagraphNode {
                         })
                         .unwrap_or(12.0);
 
-                    for mark in marks {
-                        apply_mark(&mut builder, mark, range.clone(), preedit_font_size);
+                    for style in &ps.styles {
+                        apply_style_to_builder(
+                            &mut builder,
+                            style,
+                            range.clone(),
+                            preedit_font_size,
+                        );
                     }
                 }
             }
 
             if is_text_empty {
-                if let Some(pm) = pending_marks {
+                if let Some(ps) = pending_styles {
                     let range = 0..text.len();
-                    let font_size = pm
-                        .marks
+                    let font_size = ps
+                        .styles
                         .iter()
-                        .find_map(|m| {
-                            if let Mark::FontSize(fs) = m {
+                        .find_map(|s| {
+                            if let Style::FontSize(fs) = s {
                                 Some(fs.size)
                             } else {
                                 None
                             }
                         })
                         .unwrap_or(12.0);
-                    for mark in &pm.marks {
-                        apply_mark(&mut builder, mark, range.clone(), font_size);
+                    for style in &ps.styles {
+                        apply_style_to_builder(&mut builder, style, range.clone(), font_size);
                     }
                 }
             }
@@ -656,25 +625,31 @@ impl Layout for ParagraphNode {
                 parley::AlignmentOptions::default(),
             );
 
-            let default_height = if pending_marks.is_some() {
-                let mut dummy_builder = lcx.ranged_builder(&mut fcx, "\u{200B}", 1.0, false);
-                setup_defaults(&mut dummy_builder);
+            let default_height = {
+                let ps_styles = pending_styles.map(|ps| &ps.styles[..]);
 
-                if let Some(pm) = pending_marks {
+                let mut dummy_builder = lcx.ranged_builder(&mut fcx, "\u{200B}", 1.0, false);
+                dummy_builder.push_default(StyleProperty::LineHeight(
+                    LineHeight::FontSizeRelative(line_height),
+                ));
+                dummy_builder.push_default(StyleProperty::FontFeatures(FontSettings::Source(
+                    Cow::Owned("\"ss05\" 1, \"cv12\" 1, \"ss18\" 1".to_string()),
+                )));
+
+                if let Some(styles) = ps_styles {
                     let range = 0.."\u{200B}".len();
-                    let font_size = pm
-                        .marks
+                    let font_size = styles
                         .iter()
-                        .find_map(|m| {
-                            if let Mark::FontSize(fs) = m {
+                        .find_map(|s| {
+                            if let Style::FontSize(fs) = s {
                                 Some(fs.size)
                             } else {
                                 None
                             }
                         })
                         .unwrap_or(12.0);
-                    for mark in &pm.marks {
-                        apply_mark(&mut dummy_builder, mark, range.clone(), font_size);
+                    for style in styles {
+                        apply_style_to_builder(&mut dummy_builder, style, range.clone(), font_size);
                     }
                 }
 
@@ -683,29 +658,6 @@ impl Layout for ParagraphNode {
                 let dummy_line = dummy_layout.lines().next().unwrap();
                 let dummy_metrics = dummy_line.metrics();
                 dummy_metrics.ascent + dummy_metrics.descent
-            } else {
-                let cache_key = line_height.to_bits();
-                let cached = globals
-                    .dummy_line_height_cache
-                    .borrow()
-                    .get(&cache_key)
-                    .copied();
-                if let Some(h) = cached {
-                    h
-                } else {
-                    let mut dummy_builder = lcx.ranged_builder(&mut fcx, "\u{200B}", 1.0, false);
-                    setup_defaults(&mut dummy_builder);
-                    let mut dummy_layout = dummy_builder.build("\u{200B}");
-                    dummy_layout.break_all_lines(None);
-                    let dummy_line = dummy_layout.lines().next().unwrap();
-                    let dummy_metrics = dummy_line.metrics();
-                    let h = dummy_metrics.ascent + dummy_metrics.descent;
-                    globals
-                        .dummy_line_height_cache
-                        .borrow_mut()
-                        .insert(cache_key, h);
-                    h
-                }
             };
 
             (layout, default_height)
@@ -792,18 +744,18 @@ impl Layout for ParagraphNode {
 mod tests {
     use super::*;
     use crate::layout::LayoutCache;
-    use crate::model::{Decorations, PreeditDecor};
+    use crate::model::{BackgroundColorStyle, Decorations, PendingStylesDecor, PreeditDecor};
     use crate::types::BoxConstraints;
     use std::cell::RefCell;
 
     #[test]
-    fn layout_handles_multibyte_mark_ranges() {
+    fn layout_handles_multibyte_style_ranges() {
         let mut p = id!();
 
         let state = state! {
             doc {
                 @p paragraph {
-                    text(marks: [font_size(24.0)]) { "ㅁㄴㅇㄹ" }
+                    text(styles: [font_size(24.0)]) { "ㅁㄴㅇㄹ" }
                 }
             }
             selection { (p, 0) }
@@ -812,10 +764,19 @@ mod tests {
         let doc = &state.doc;
         let para = doc.node(p).unwrap();
         let settings = doc.settings();
+        let default_styles = crate::model::DefaultStyles::default();
         let decorations = Decorations::default();
         let cache = RefCell::new(LayoutCache::new());
         let view_states = crate::runtime::ViewStates::default();
-        let ctx = LayoutContext::new(&para, &settings, &decorations, 1.0, &view_states, &cache);
+        let ctx = LayoutContext::new(
+            &para,
+            &settings,
+            &default_styles,
+            &decorations,
+            1.0,
+            &view_states,
+            &cache,
+        );
         let constraints = BoxConstraints::new(0.0, 800.0, 0.0, f32::INFINITY);
 
         if let Node::Paragraph(paragraph) = para.node() {
@@ -892,7 +853,7 @@ mod tests {
     }
 
     #[test]
-    fn preedit_from_other_node_does_not_shift_mark_range() {
+    fn preedit_from_other_node_does_not_shift_style_range() {
         let mut p1 = id!();
         let mut p2 = id!();
 
@@ -901,13 +862,12 @@ mod tests {
             node_id: p2,
             offset: 1,
             text: "가나".into(),
-            marks: None,
         });
 
         let state = state! {
             doc {
                 @p1 paragraph {
-                    text(marks: [font_weight(700)]) { "abcd" }
+                    text(styles: [font_weight(700)]) { "abcd" }
                 }
                 @p2 paragraph {
                     text { "efgh" }
@@ -919,9 +879,18 @@ mod tests {
         let doc = &state.doc;
         let para = doc.node(p1).unwrap();
         let settings = doc.settings();
+        let default_styles = crate::model::DefaultStyles::default();
         let cache = RefCell::new(LayoutCache::new());
         let view_states = crate::runtime::ViewStates::default();
-        let ctx = LayoutContext::new(&para, &settings, &decorations, 1.0, &view_states, &cache);
+        let ctx = LayoutContext::new(
+            &para,
+            &settings,
+            &default_styles,
+            &decorations,
+            1.0,
+            &view_states,
+            &cache,
+        );
 
         let preedit_info =
             preedit_for_node(&ctx).map(|preedit| (preedit.offset, preedit.text.chars().count()));
@@ -931,12 +900,12 @@ mod tests {
     }
 
     #[test]
-    fn extract_background_segments_includes_preedit_marks() {
+    fn extract_background_segments_includes_preedit_styles() {
         let mut p = id!();
         let state = state! {
             doc {
                 @p paragraph {
-                    text(marks: [bg_color("red")]) { "ABC" }
+                    text(styles: [bg_color("red")]) { "ABC" }
                 }
             }
             selection { (p, 0) }
@@ -947,17 +916,29 @@ mod tests {
             node_id: p,
             offset: 1,
             text: "XY".into(),
-            marks: Some(vec![Mark::BackgroundColor(
-                crate::model::BackgroundColorMark { key: "blue".into() },
-            )]),
         });
+        decorations.pending_styles = PendingStylesDecor {
+            node_id: p,
+            styles: vec![Style::BackgroundColor(BackgroundColorStyle {
+                color: "blue".into(),
+            })],
+        };
 
         let doc = &state.doc;
         let para = doc.node(p).unwrap();
         let settings = doc.settings();
+        let default_styles = crate::model::DefaultStyles::default();
         let cache = RefCell::new(LayoutCache::new());
         let view_states = crate::runtime::ViewStates::default();
-        let ctx = LayoutContext::new(&para, &settings, &decorations, 1.0, &view_states, &cache);
+        let ctx = LayoutContext::new(
+            &para,
+            &settings,
+            &default_styles,
+            &decorations,
+            1.0,
+            &view_states,
+            &cache,
+        );
 
         let segments = extract_background_segments(&ctx);
 
@@ -973,12 +954,12 @@ mod tests {
     }
 
     #[test]
-    fn extract_ruby_segments_expands_with_preedit() {
+    fn extract_ruby_segments_returns_empty_without_annotations() {
         let mut p = id!();
         let state = state! {
             doc {
                 @p paragraph {
-                    text(marks: [ruby("ruby_text")]) { "ABC" }
+                    text { "ABC" }
                 }
             }
             selection { (p, 0) }
@@ -989,22 +970,26 @@ mod tests {
             node_id: p,
             offset: 1,
             text: "XY".into(),
-            marks: None,
         });
 
         let doc = &state.doc;
         let para = doc.node(p).unwrap();
         let settings = doc.settings();
+        let default_styles = crate::model::DefaultStyles::default();
         let cache = RefCell::new(LayoutCache::new());
         let view_states = crate::runtime::ViewStates::default();
-        let ctx = LayoutContext::new(&para, &settings, &decorations, 1.0, &view_states, &cache);
+        let ctx = LayoutContext::new(
+            &para,
+            &settings,
+            &default_styles,
+            &decorations,
+            1.0,
+            &view_states,
+            &cache,
+        );
 
         let segments = extract_ruby_segments(&ctx);
 
-        assert_eq!(segments.len(), 1);
-
-        assert_eq!(segments[0].start_offset, 0);
-        assert_eq!(segments[0].end_offset, 5);
-        assert_eq!(segments[0].ruby_text, "ruby_text");
+        assert_eq!(segments.len(), 0);
     }
 }

@@ -21,7 +21,7 @@ pub use message::*;
 pub use pointer::*;
 pub use state::*;
 pub use text_replacement::RawTextReplacementRule;
-pub use tracked_items::{RawTrackedItem, TrackedItem, TrackedItemGroup};
+pub use tracked_items::{RawTrackedItem, TrackedItem};
 pub use view_state::*;
 
 use crate::inspect::inspect_page_element;
@@ -33,7 +33,6 @@ use crate::model::TextAlign;
 use crate::model::*;
 use crate::render::{RenderResult, Renderer};
 
-use crate::schema::Expand;
 use crate::state::selection_helpers::{build_selection_decorations, compute_selection_aggregates};
 use crate::state::{
     Position, Preedit, Selection, find_child_at_offset, find_text_at_offset, position_in_selection,
@@ -46,9 +45,9 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use slate::*;
 use std::cell::RefCell;
 
-fn get_marks_at_offset(text_node: &loro::LoroText, offset: usize) -> Vec<Mark> {
+fn get_styles_at_offset(text_node: &loro::LoroText, offset: usize) -> Vec<Style> {
     let rich_value = text_node.get_richtext_value();
-    let mut marks = Vec::new();
+    let mut styles = Vec::new();
     if let loro::LoroValue::List(list) = rich_value {
         let mut current_offset = 0;
         for item in list.iter() {
@@ -65,8 +64,8 @@ fn get_marks_at_offset(text_node: &loro::LoroText, offset: usize) -> Vec<Mark> {
                     if let Some(attrs_value) = map.get("attributes") {
                         if let loro::LoroValue::Map(attrs) = attrs_value {
                             for (key, value) in attrs.iter() {
-                                if let Some(mark) = Mark::from_key_value(key, value.clone()) {
-                                    marks.push(mark);
+                                if let Some(style) = Style::from_key_value(key, value.clone()) {
+                                    styles.push(style);
                                 }
                             }
                         }
@@ -78,13 +77,13 @@ fn get_marks_at_offset(text_node: &loro::LoroText, offset: usize) -> Vec<Mark> {
             }
         }
     }
-    marks
+    styles
 }
 
-fn reapply_marks(text_node: &loro::LoroText, offset: usize, len: usize, marks: &[Mark]) {
-    for mark in marks {
-        let key = mark.key();
-        let value = mark.to_loro_value();
+fn reapply_styles(text_node: &loro::LoroText, offset: usize, len: usize, styles: &[Style]) {
+    for style in styles {
+        let key = style.key();
+        let value = style.to_loro_value();
         let _ = text_node.mark(offset..offset + len, key, value);
     }
 }
@@ -93,7 +92,7 @@ fn reapply_marks(text_node: &loro::LoroText, offset: usize, len: usize, marks: &
 struct PendingUpdates {
     doc: bool,
     selection: bool,
-    active_marks: bool,
+    active_styles: bool,
     cursor: bool,
     settings: bool,
     layout: bool,
@@ -120,11 +119,11 @@ struct SelectionSnapshot {
     block_ids: Vec<NodeId>,
     block_set: FxHashSet<NodeId>,
     stats: SelectionStats,
-    uniform_marks: Vec<Mark>,
-    mixed_marks: Vec<MarkType>,
+    uniform_styles: Vec<Style>,
+    mixed_styles: Vec<StyleType>,
+    annotations: Vec<Annotation>,
 }
 
-#[allow(dead_code)]
 pub struct Runtime {
     viewport_width: f32,
     viewport_height: f32,
@@ -161,7 +160,6 @@ pub struct Runtime {
     text_replacement_undo: Option<text_replacement::ReplacementUndoState>,
 }
 
-#[allow(dead_code)]
 impl Runtime {
     pub fn new(width: f32, scale_factor: f64, state: State) -> Self {
         let mut undo_manager = UndoManager::new(&state.doc.loro_doc());
@@ -185,7 +183,7 @@ impl Runtime {
                 doc: true,
                 cursor: true,
                 selection: true,
-                active_marks: true,
+                active_styles: true,
                 settings: true,
                 layout: true,
                 external_elements: true,
@@ -276,6 +274,7 @@ impl Runtime {
         self.auto_surround_enabled = enabled;
     }
 
+    #[allow(dead_code)]
     pub fn is_auto_surround_enabled(&self) -> bool {
         self.auto_surround_enabled
     }
@@ -304,6 +303,7 @@ impl Runtime {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn export(&self, mode: DocExportMode) -> Result<Vec<u8>> {
         self.state.doc.export(mode)
     }
@@ -372,7 +372,7 @@ impl Runtime {
         self.pending.layout = true;
         self.pending.render = true;
         self.pending.selection = true;
-        self.pending.active_marks = true;
+        self.pending.active_styles = true;
         self.pending.cursor = true;
         self.pending.external_elements = true;
         self.pending.settings = true;
@@ -421,7 +421,7 @@ impl Runtime {
 
         let end_internal_offset = end_offset - start_offset + start_internal;
 
-        let marks = get_marks_at_offset(&text_node, start_internal);
+        let styles = get_styles_at_offset(&text_node, start_internal);
 
         let _ = text_node.splice(
             start_internal,
@@ -431,7 +431,7 @@ impl Runtime {
 
         let replacement_len = replacement.chars().count();
         if replacement_len > 0 {
-            reapply_marks(&text_node, start_internal, replacement_len, &marks);
+            reapply_styles(&text_node, start_internal, replacement_len, &styles);
         }
 
         self.handle_external_doc_change();
@@ -488,7 +488,7 @@ impl Runtime {
 
             let end_internal_offset = end_offset - start_offset + start_internal;
 
-            let marks = get_marks_at_offset(&text_node, start_internal);
+            let styles = get_styles_at_offset(&text_node, start_internal);
 
             let _ = text_node.splice(
                 start_internal,
@@ -498,7 +498,7 @@ impl Runtime {
 
             let replacement_len = replacement.chars().count();
             if replacement_len > 0 {
-                reapply_marks(&text_node, start_internal, replacement_len, &marks);
+                reapply_styles(&text_node, start_internal, replacement_len, &styles);
             }
         }
 
@@ -550,7 +550,7 @@ impl Runtime {
             let mut block_set = FxHashSet::default();
             block_set.extend(block_ids.iter().copied());
 
-            let (_, uniform_align, uniform_line_height, uniform_marks, mixed_marks) =
+            let (_, uniform_align, uniform_line_height, _, _) =
                 compute_selection_aggregates(self.doc(), &block_ids, from.clone(), to.clone());
 
             let stats = SelectionStats {
@@ -564,8 +564,9 @@ impl Runtime {
                 block_ids,
                 block_set,
                 stats,
-                uniform_marks,
-                mixed_marks,
+                uniform_styles: Vec::new(),
+                mixed_styles: Vec::new(),
+                annotations: Vec::new(),
             });
         }
 
@@ -627,29 +628,24 @@ impl Runtime {
 
         let preedit = self.preedit();
 
-        let pending_marks_decor =
-            self.state
-                .pending_marks
-                .as_ref()
-                .map(|marks| PendingMarksDecor {
-                    node_id: self.state.selection.head.node_id,
-                    marks: marks.clone(),
-                });
-
         let decorations = Decorations {
             preedit: preedit.map(|preedit| PreeditDecor {
                 node_id: preedit.node_id,
                 offset: preedit.offset,
                 text: preedit.text.clone(),
-                marks: preedit.marks.clone(),
             }),
-            pending_marks: pending_marks_decor,
+            pending_styles: PendingStylesDecor {
+                node_id: self.state.selection.head.node_id,
+                styles: self.state.pending_styles.clone(),
+            },
         };
 
         let root_ref = self.doc().node(NodeId::ROOT).unwrap();
+        let default_styles = self.doc().default_styles();
         let ctx = LayoutContext::new(
             &root_ref,
             &settings,
+            &default_styles,
             &decorations,
             self.scale_factor,
             &self.view_states,
@@ -703,6 +699,7 @@ impl Runtime {
         )
     }
 
+    #[allow(dead_code)]
     pub fn get_render_info(&mut self, page_index: usize) -> Option<crate::render::RenderInfo> {
         let doc = &self.state.doc;
         let page = self.pages.get(page_index)?;
@@ -727,6 +724,7 @@ impl Runtime {
         })
     }
 
+    #[allow(dead_code)]
     pub fn render_page_to(&mut self, page_index: usize, dst: &mut [u8]) -> bool {
         let snapshot = self.selection_snapshot_owned();
 
@@ -781,18 +779,14 @@ impl Runtime {
         )
     }
 
-    fn collect_selection_marks(
+    fn collect_selection_styles(
         &mut self,
         snapshot: Option<SelectionSnapshot>,
-    ) -> (Vec<Mark>, Vec<MarkType>) {
-        if let Some(marks) = &self.state.pending_marks {
-            return (marks.clone(), Vec::new());
-        }
-
+    ) -> (Vec<Style>, Vec<StyleType>) {
         let selection = &self.state.selection;
 
         if selection.is_collapsed() {
-            return (self.get_marks_at_position(&selection.head), Vec::new());
+            return (self.state.pending_styles.clone(), Vec::new());
         }
 
         let snapshot_owned = snapshot.or_else(|| self.selection_snapshot_owned());
@@ -800,10 +794,30 @@ impl Runtime {
             return (Vec::new(), Vec::new());
         };
 
-        (snapshot.uniform_marks, snapshot.mixed_marks)
+        (snapshot.uniform_styles, snapshot.mixed_styles)
     }
 
-    fn get_marks_at_position(&self, position: &Position) -> Vec<Mark> {
+    #[allow(dead_code)]
+    fn collect_selection_annotations(
+        &mut self,
+        snapshot: Option<SelectionSnapshot>,
+    ) -> Vec<Annotation> {
+        let selection = &self.state.selection;
+
+        if selection.is_collapsed() {
+            return self.get_annotations_at_position(&selection.head);
+        }
+
+        let snapshot_owned = snapshot.or_else(|| self.selection_snapshot_owned());
+        let Some(snapshot) = snapshot_owned else {
+            return Vec::new();
+        };
+
+        snapshot.annotations
+    }
+
+    #[allow(dead_code)]
+    fn get_annotations_at_position(&self, position: &Position) -> Vec<Annotation> {
         let Some(node) = self.doc().node(position.node_id) else {
             return Vec::new();
         };
@@ -820,47 +834,20 @@ impl Runtime {
             return Vec::new();
         };
 
-        let schema = self.doc().schema();
-        let segments = text_node.text.get_rich_text_segments();
+        let segments = text_node.text.get_segments();
         let mut current_offset = 0;
 
-        for (segment_text, segment_marks) in segments {
-            let segment_len = segment_text.chars().count();
+        for segment in segments {
+            let segment_len = segment.text.chars().count();
             let segment_start = current_offset;
             let segment_end = current_offset + segment_len;
 
-            let at_middle = local_offset > segment_start && local_offset < segment_end;
-            let at_end = local_offset == segment_end && segment_len > 0;
-            let at_start = local_offset == segment_start;
+            let in_range = (local_offset > segment_start && local_offset <= segment_end)
+                || (local_offset == 0 && segment_start == 0);
 
-            if at_middle {
-                return segment_marks;
+            if in_range {
+                return segment.annotations.clone();
             }
-
-            if at_end {
-                return segment_marks
-                    .into_iter()
-                    .filter(|m| {
-                        matches!(
-                            schema.mark_spec(m.as_type()).expand,
-                            Expand::After | Expand::Both
-                        )
-                    })
-                    .collect();
-            }
-
-            if at_start {
-                return segment_marks
-                    .into_iter()
-                    .filter(|m| {
-                        matches!(
-                            schema.mark_spec(m.as_type()).expand,
-                            Expand::Before | Expand::Both
-                        )
-                    })
-                    .collect();
-            }
-
             current_offset += segment_len;
         }
 
@@ -928,71 +915,84 @@ impl Runtime {
         }
     }
 
-    fn write_mark_to_slab(slab: &mut Slab, mark: &Mark) -> u32 {
+    fn write_style_to_slab(slab: &mut Slab, style: &Style) -> u32 {
         let start = slab.alloc(0, 4);
 
-        let (type_tag, value_kind) = match mark {
-            Mark::BackgroundColor(_) => (0u32, 3u32),
-            Mark::TextColor(_) => (1, 3),
-            Mark::FontSize(_) => (2, 1),
-            Mark::FontFamily(_) => (3, 3),
-            Mark::FontWeight(_) => (4, 2),
-            Mark::Italic(_) => (5, 0),
-            Mark::LetterSpacing(_) => (6, 1),
-            Mark::Link(_) => (7, 3),
-            Mark::Ruby(_) => (8, 3),
-            Mark::Strikethrough(_) => (9, 0),
-            Mark::Underline(_) => (10, 0),
+        let (type_tag, value_kind) = match style {
+            Style::BackgroundColor(_) => (0u32, 3u32),
+            Style::TextColor(_) => (1, 3),
+            Style::FontSize(_) => (2, 1),
+            Style::FontFamily(_) => (3, 3),
+            Style::FontWeight(_) => (4, 2),
+            Style::Italic(_) => (5, 0),
+            Style::LetterSpacing(_) => (6, 1),
+            Style::Strikethrough(_) => (9, 0),
+            Style::Underline(_) => (10, 0),
         };
 
         slab.write_u32_slice(&[type_tag, value_kind]);
 
-        match mark {
-            Mark::BackgroundColor(m) => {
-                slab.write_str(&m.key);
+        match style {
+            Style::BackgroundColor(s) => {
+                slab.write_str(&s.color);
             }
-            Mark::TextColor(m) => {
-                slab.write_str(&m.key);
+            Style::TextColor(s) => {
+                slab.write_str(&s.color);
             }
-            Mark::FontSize(m) => {
-                slab.write_f32_slice(&[m.size]);
+            Style::FontSize(s) => {
+                slab.write_f32_slice(&[s.size]);
             }
-            Mark::FontFamily(m) => {
-                slab.write_str(&m.family);
+            Style::FontFamily(s) => {
+                slab.write_str(&s.family);
             }
-            Mark::FontWeight(m) => {
-                slab.write_u32_slice(&[m.weight as u32]);
+            Style::FontWeight(s) => {
+                slab.write_u32_slice(&[s.weight as u32]);
             }
-            Mark::Italic(_) => {}
-            Mark::LetterSpacing(m) => {
-                slab.write_f32_slice(&[m.spacing]);
+            Style::Italic(_) => {}
+            Style::LetterSpacing(s) => {
+                slab.write_f32_slice(&[s.spacing]);
             }
-            Mark::Link(m) => {
-                slab.write_str(&m.href);
-            }
-            Mark::Ruby(m) => {
-                slab.write_str(&m.text);
-            }
-            Mark::Strikethrough(_) => {}
-            Mark::Underline(_) => {}
+            Style::Strikethrough(_) => {}
+            Style::Underline(_) => {}
         }
 
         start
     }
 
-    fn mark_type_to_bit(mt: &MarkType) -> u32 {
-        match mt {
-            MarkType::BackgroundColor => 1 << 0,
-            MarkType::TextColor => 1 << 1,
-            MarkType::FontSize => 1 << 2,
-            MarkType::FontFamily => 1 << 3,
-            MarkType::FontWeight => 1 << 4,
-            MarkType::Italic => 1 << 5,
-            MarkType::LetterSpacing => 1 << 6,
-            MarkType::Link => 1 << 7,
-            MarkType::Ruby => 1 << 8,
-            MarkType::Strikethrough => 1 << 9,
-            MarkType::Underline => 1 << 10,
+    #[allow(dead_code)]
+    fn write_annotation_to_slab(slab: &mut Slab, annotation: &Annotation) -> u32 {
+        let start = slab.alloc(0, 4);
+
+        let type_tag = match annotation {
+            Annotation::Link(_) => 0u32,
+            Annotation::Ruby(_) => 1,
+        };
+
+        slab.write_u32_slice(&[type_tag]);
+
+        match annotation {
+            Annotation::Link(link) => {
+                slab.write_str(&link.href);
+            }
+            Annotation::Ruby(ruby) => {
+                slab.write_str(&ruby.text);
+            }
+        }
+
+        start
+    }
+
+    fn style_type_to_bit(st: &StyleType) -> u32 {
+        match st {
+            StyleType::BackgroundColor => 1 << 0,
+            StyleType::TextColor => 1 << 1,
+            StyleType::FontSize => 1 << 2,
+            StyleType::FontFamily => 1 << 3,
+            StyleType::FontWeight => 1 << 4,
+            StyleType::Italic => 1 << 5,
+            StyleType::LetterSpacing => 1 << 6,
+            StyleType::Strikethrough => 1 << 9,
+            StyleType::Underline => 1 << 10,
         }
     }
 
@@ -1199,32 +1199,32 @@ impl Runtime {
             self.pending.selection = false;
         }
 
-        if self.pending.active_marks {
+        if self.pending.active_styles {
             let snapshot = self.selection_snapshot_owned();
             let stats = snapshot
                 .as_ref()
                 .map(|s| s.stats.clone())
                 .unwrap_or_default();
-            let (uniform_marks, mixed_marks) = self.collect_selection_marks(snapshot);
+            let (uniform_styles, mixed_styles) = self.collect_selection_styles(snapshot);
 
             self.slate.formatting_uniform_align = Self::text_align_to_i32(stats.uniform_align);
             self.slate.formatting_uniform_line_height = stats.uniform_line_height.unwrap_or(-1.0);
 
-            let marks_start = self.slab.alloc(0, 4);
-            for mark in &uniform_marks {
-                Self::write_mark_to_slab(&mut self.slab, mark);
+            let styles_start = self.slab.alloc(0, 4);
+            for style in &uniform_styles {
+                Self::write_style_to_slab(&mut self.slab, style);
             }
-            self.slate.formatting_uniform_marks_offset = marks_start;
-            self.slate.formatting_uniform_marks_count = uniform_marks.len() as u32;
+            self.slate.formatting_uniform_styles_offset = styles_start;
+            self.slate.formatting_uniform_styles_count = uniform_styles.len() as u32;
 
             let mut bitfield = 0u32;
-            for mt in &mixed_marks {
-                bitfield |= Self::mark_type_to_bit(mt);
+            for st in &mixed_styles {
+                bitfield |= Self::style_type_to_bit(st);
             }
-            self.slate.formatting_mixed_marks_bitfield = bitfield;
+            self.slate.formatting_mixed_styles_bitfield = bitfield;
 
             self.slate.dirty |= DIRTY_FORMATTING;
-            self.pending.active_marks = false;
+            self.pending.active_styles = false;
         }
 
         if self.pending.external_elements {
@@ -1683,7 +1683,7 @@ impl Runtime {
                     self.pending.render = true;
                     self.pending.cursor = true;
                     self.pending.selection = true;
-                    self.pending.active_marks = true;
+                    self.pending.active_styles = true;
                     self.pending.external_elements = true;
                     self.pending.enabled_actions = true;
                     self.pending.placeholder = true;
@@ -1703,7 +1703,7 @@ impl Runtime {
                     self.pending.render = true;
                     self.pending.cursor = true;
                     self.pending.selection = true;
-                    self.pending.active_marks = true;
+                    self.pending.active_styles = true;
                     self.pending.external_elements = true;
                 }
                 Effect::SubtreeChanged { node_id } => {
@@ -1724,7 +1724,7 @@ impl Runtime {
                     self.pending.render = true;
                     self.pending.cursor = true;
                     self.pending.selection = true;
-                    self.pending.active_marks = true;
+                    self.pending.active_styles = true;
                     self.pending.external_elements = true;
                     self.pending.table_overlays = true;
                 }
@@ -1733,15 +1733,15 @@ impl Runtime {
                     self.text_replacement_undo = None;
                     self.pending.cursor = true;
                     self.pending.selection = true;
-                    self.pending.active_marks = true;
+                    self.pending.active_styles = true;
                     self.pending.render = true;
                     self.pending.external_elements = true;
                     self.pending.enabled_actions = true;
                     self.pending.placeholder = true;
                     self.pending.table_overlays = true;
                 }
-                Effect::PendingMarksChanged => {
-                    self.pending.active_marks = true;
+                Effect::PendingStylesChanged => {
+                    self.pending.active_styles = true;
                     let nid = self.state.selection.head.node_id;
                     if let Some(node) = self.doc().node(nid) {
                         let ancestors: Vec<_> = node.ancestors().map(|n| n.node_id()).collect();
@@ -1763,7 +1763,7 @@ impl Runtime {
                     self.pending.cursor = true;
                     self.pending.render = true;
                     self.pending.selection = true;
-                    self.pending.active_marks = true;
+                    self.pending.active_styles = true;
                     self.pending.external_elements = true;
                     self.pending.placeholder = true;
                     self.pending.table_overlays = true;
@@ -1830,7 +1830,7 @@ impl Runtime {
         self.transact_internal(f, true)
     }
 
-    #[allow(unused)]
+    #[allow(dead_code)]
     fn transact_immediate<F>(&mut self, f: F) -> Vec<Effect>
     where
         F: FnOnce(&mut Transaction) -> Result<bool>,
@@ -2401,100 +2401,6 @@ mod tests {
         assert!(
             !Rc::ptr_eq(&p_layout_initial, &p_layout_after),
             "Layout should be recomputed (fix verified)"
-        );
-    }
-
-    #[test]
-    fn get_marks_at_position_filters_expand_none_at_end() {
-        let mut p = id!();
-        let mut runtime = runtime! {
-            viewport { 800, 600, 1.0 }
-            doc {
-                @p paragraph {
-                    text(marks: [ruby("루비")]) { "베이스" }
-                    text { "일반" }
-                }
-            }
-            selection { (p, 3) }
-        };
-
-        runtime.layout();
-        let marks = runtime.get_marks_at_position(&runtime.state().selection.head);
-
-        assert!(
-            !marks.iter().any(|m| matches!(m, Mark::Ruby(_))),
-            "Ruby mark should not be returned at segment end (Expand::None)"
-        );
-    }
-
-    #[test]
-    fn get_marks_at_position_filters_expand_none_at_start() {
-        let mut p = id!();
-        let mut runtime = runtime! {
-            viewport { 800, 600, 1.0 }
-            doc {
-                @p paragraph {
-                    text(marks: [ruby("루비")]) { "베이스" }
-                }
-            }
-            selection { (p, 0) }
-        };
-
-        runtime.layout();
-        let marks = runtime.get_marks_at_position(&runtime.state().selection.head);
-
-        assert!(
-            !marks.iter().any(|m| matches!(m, Mark::Ruby(_))),
-            "Ruby mark should not be returned at segment start (Expand::None)"
-        );
-    }
-
-    #[test]
-    fn get_marks_at_position_returns_expand_after_at_end() {
-        let mut p = id!();
-
-        let mut fonts = std::collections::HashMap::new();
-        fonts.insert(FontFamilyMark::default().family, vec![400, 700]);
-        let _guard = crate::test_utils::ScopedFontRegistration::new(fonts);
-
-        let mut runtime = runtime! {
-            viewport { 800, 600, 1.0 }
-            doc {
-                @p paragraph {
-                    text { "aa" => [font_weight(700)], "bb" }
-                }
-            }
-            selection { (p, 2) }
-        };
-
-        runtime.layout();
-        let marks = runtime.get_marks_at_position(&runtime.state().selection.head);
-
-        assert!(
-            marks.iter().any(|m| matches!(m, Mark::FontWeight(_))),
-            "FontWeight mark should be returned at segment end (Expand::After)"
-        );
-    }
-
-    #[test]
-    fn get_marks_at_position_returns_all_marks_in_middle() {
-        let mut p = id!();
-        let mut runtime = runtime! {
-            viewport { 800, 600, 1.0 }
-            doc {
-                @p paragraph {
-                    text(marks: [ruby("루비")]) { "베이스텍스트" }
-                }
-            }
-            selection { (p, 3) }
-        };
-
-        runtime.layout();
-        let marks = runtime.get_marks_at_position(&runtime.state().selection.head);
-
-        assert!(
-            marks.iter().any(|m| matches!(m, Mark::Ruby(_))),
-            "Ruby mark should be returned in segment middle"
         );
     }
 }

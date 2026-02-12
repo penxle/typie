@@ -38,13 +38,13 @@ import type {
   FileAsset,
   ImageAsset,
   LayoutMode,
-  Mark,
-  MarkType,
   Message,
   Position,
   Rect,
   SelectionStats,
   SpellcheckErrorData,
+  Style,
+  StyleType,
 } from './types';
 
 let sharedApplication: Application | null = null;
@@ -156,9 +156,9 @@ export class Editor {
     selectionWithoutWhitespaceAndPunctuation: 0,
   });
 
-  activeMarks = $state({
-    uniformMarks: [] as Mark[],
-    mixedMarks: [] as MarkType[],
+  activeStyles = $state({
+    uniformStyles: [] as Style[],
+    mixedStyles: [] as StyleType[],
   });
 
   settings = $state({
@@ -396,9 +396,9 @@ export class Editor {
     }
 
     if (slate.isDirty(DIRTY_FORMATTING)) {
-      const m = slate.readActiveMarks();
-      this.activeMarks.uniformMarks = m.uniformMarks;
-      this.activeMarks.mixedMarks = m.mixedMarks;
+      const m = slate.readActiveStyles();
+      this.activeStyles.uniformStyles = m.uniformStyles;
+      this.activeStyles.mixedStyles = m.mixedStyles;
     }
 
     if (slate.isDirty(DIRTY_EXTERNAL_ELEMENTS)) {

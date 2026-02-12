@@ -1,15 +1,13 @@
 use crate::model::{Codec, Node, NodeId};
-use crate::schema::{Expand, Schema};
 use anyhow::{Context, Result};
-use loro::{
-    ExpandType, ExportMode, LoroDoc, LoroList, LoroMap, LoroValue, StyleConfig, StyleConfigMap,
-};
+use loro::{ExpandType, ExportMode, LoroDoc, LoroList, LoroMap, LoroValue, StyleConfig};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 #[derive(Serialize, Deserialize)]
 pub struct DocumentJson {
-    pub settings: serde_json::Value,
+    pub settings: serde_json::Map<String, serde_json::Value>,
+    pub styles: serde_json::Map<String, serde_json::Value>,
     pub nodes: HashMap<String, NodeEntry>,
 }
 
@@ -17,29 +15,10 @@ pub struct DocumentJson {
 pub struct NodeEntry {
     #[serde(flatten)]
     pub node: Node,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub children: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent: Option<String>,
-}
-
-fn configure_text_styles(loro: &LoroDoc) {
-    let schema = Schema::default();
-
-    loro.config_default_text_style(Some(StyleConfig {
-        expand: ExpandType::After,
-    }));
-
-    let mut styles = StyleConfigMap::new();
-    for (mark_type, mark_spec) in schema.marks() {
-        let expand = match mark_spec.expand {
-            Expand::Before => ExpandType::Before,
-            Expand::After => ExpandType::After,
-            Expand::Both => ExpandType::Both,
-            Expand::None => ExpandType::None,
-        };
-        styles.insert(mark_type.key().into(), StyleConfig { expand });
-    }
-    loro.config_text_style(styles);
 }
 
 fn loro_value_to_json(value: &LoroValue) -> serde_json::Value {
@@ -137,10 +116,23 @@ fn apply_json_value_to_list(list: &LoroList, value: &serde_json::Value) -> Resul
 
 pub fn snapshot_to_json(snapshot: &[u8]) -> Result<DocumentJson> {
     let loro = LoroDoc::from_snapshot(snapshot).context("failed to parse snapshot")?;
-    configure_text_styles(&loro);
+    loro.config_default_text_style(Some(StyleConfig {
+        expand: ExpandType::None,
+    }));
 
     let settings_map = loro.get_map("settings");
-    let settings = loro_value_to_json(&settings_map.get_deep_value());
+    let settings_json = loro_value_to_json(&settings_map.get_deep_value());
+    let settings = match settings_json {
+        serde_json::Value::Object(m) => m,
+        _ => serde_json::Map::new(),
+    };
+
+    let styles_map = loro.get_map("styles");
+    let styles_json = loro_value_to_json(&styles_map.get_deep_value());
+    let styles = match styles_json {
+        serde_json::Value::Object(m) => m,
+        _ => serde_json::Map::new(),
+    };
 
     let nodes_map = loro.get_map("nodes");
     let mut nodes = HashMap::new();
@@ -212,12 +204,32 @@ pub fn snapshot_to_json(snapshot: &[u8]) -> Result<DocumentJson> {
         );
     }
 
-    Ok(DocumentJson { settings, nodes })
+    Ok(DocumentJson {
+        settings,
+        styles,
+        nodes,
+    })
 }
 
 pub fn json_to_snapshot(doc_json: &DocumentJson) -> Result<Vec<u8>> {
     let loro = LoroDoc::new();
-    configure_text_styles(&loro);
+    loro.config_default_text_style(Some(StyleConfig {
+        expand: ExpandType::None,
+    }));
+
+    let settings_map = loro.get_map("settings");
+    apply_json_to_loro_map(
+        &settings_map,
+        &serde_json::Value::Object(doc_json.settings.clone()),
+    )?;
+
+    if !doc_json.styles.is_empty() {
+        let styles_map = loro.get_map("styles");
+        apply_json_to_loro_map(
+            &styles_map,
+            &serde_json::Value::Object(doc_json.styles.clone()),
+        )?;
+    }
 
     let nodes_map = loro.get_map("nodes");
 
@@ -238,9 +250,6 @@ pub fn json_to_snapshot(doc_json: &DocumentJson) -> Result<Vec<u8>> {
             children_list.push(child_id.as_str())?;
         }
     }
-
-    let settings_map = loro.get_map("settings");
-    apply_json_to_loro_map(&settings_map, &doc_json.settings)?;
 
     loro.commit();
 
@@ -298,8 +307,10 @@ mod tests {
     }
 
     #[test]
-    fn test_roundtrip_doc_with_marks() {
-        use crate::model::{Mark, Node, ParagraphNode, Text, TextNode, marks::ItalicMark};
+    fn test_roundtrip_doc_with_styles() {
+        use crate::model::{
+            FontWeightStyle, ItalicStyle, Node, ParagraphNode, Style, Text, TextNode, TextSegment,
+        };
 
         let doc = Doc::new();
         let root = doc.node(NodeId::ROOT).unwrap();
@@ -309,15 +320,26 @@ mod tests {
             .unwrap();
 
         let text = Text::from_segments(&[
-            ("normal ".to_string(), vec![]),
-            (
-                "bold".to_string(),
-                vec![Mark::FontWeight(crate::model::marks::FontWeightMark {
-                    weight: 700,
-                })],
-            ),
-            (" ".to_string(), vec![]),
-            ("italic".to_string(), vec![Mark::Italic(ItalicMark)]),
+            TextSegment {
+                text: "normal ".to_string(),
+                styles: vec![],
+                annotations: vec![],
+            },
+            TextSegment {
+                text: "bold".to_string(),
+                styles: vec![Style::FontWeight(FontWeightStyle { weight: 700 })],
+                annotations: vec![],
+            },
+            TextSegment {
+                text: " ".to_string(),
+                styles: vec![],
+                annotations: vec![],
+            },
+            TextSegment {
+                text: "italic".to_string(),
+                styles: vec![Style::Italic(ItalicStyle {})],
+                annotations: vec![],
+            },
         ]);
 
         let para = doc.node(para_id).unwrap();
@@ -338,7 +360,7 @@ mod tests {
         let orig_para = orig_root.child(0).unwrap();
         let orig_text = orig_para.child(0).unwrap();
         let original_segments = match orig_text.node() {
-            Node::Text(t) => t.text.get_rich_text_segments(),
+            Node::Text(t) => t.text.get_segments(),
             _ => panic!("expected text node"),
         };
 
@@ -346,7 +368,7 @@ mod tests {
         let new_para = new_root.child(0).unwrap();
         let new_text = new_para.child(0).unwrap();
         let new_segments = match new_text.node() {
-            Node::Text(t) => t.text.get_rich_text_segments(),
+            Node::Text(t) => t.text.get_segments(),
             _ => panic!("expected text node"),
         };
 
@@ -355,20 +377,24 @@ mod tests {
             new_segments.len(),
             "segment count mismatch"
         );
-        for (i, ((orig_text, orig_marks), (new_text, new_marks))) in original_segments
+        for (i, (orig_seg, new_seg)) in original_segments
             .iter()
             .zip(new_segments.iter())
             .enumerate()
         {
-            assert_eq!(orig_text, new_text, "text mismatch at segment {}", i);
             assert_eq!(
-                orig_marks.len(),
-                new_marks.len(),
-                "marks count mismatch at segment {}",
+                orig_seg.text, new_seg.text,
+                "text mismatch at segment {}",
                 i
             );
-            for (orig_mark, new_mark) in orig_marks.iter().zip(new_marks.iter()) {
-                assert_eq!(orig_mark, new_mark, "mark mismatch at segment {}", i);
+            assert_eq!(
+                orig_seg.styles.len(),
+                new_seg.styles.len(),
+                "styles count mismatch at segment {}",
+                i
+            );
+            for (orig_style, new_style) in orig_seg.styles.iter().zip(new_seg.styles.iter()) {
+                assert_eq!(orig_style, new_style, "style mismatch at segment {}", i);
             }
         }
     }

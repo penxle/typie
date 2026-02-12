@@ -1,5 +1,5 @@
 use crate::model::tree::Doc;
-use crate::model::{Mark, NodeId, NodeType};
+use crate::model::{NodeId, NodeType, TextSegment};
 use crate::state::BlockTraverser;
 
 pub struct BlockTextIterator<'a> {
@@ -39,7 +39,7 @@ pub struct TextSegmentIterator<'a> {
     current_block_id: Option<NodeId>,
     current_child_ids: std::rc::Rc<Vec<NodeId>>,
     current_child_index: usize,
-    current_segments: std::vec::IntoIter<(String, Vec<Mark>)>,
+    current_segments: std::vec::IntoIter<TextSegment>,
     current_offset: usize,
 }
 
@@ -69,20 +69,16 @@ impl<'a> TextSegmentIterator<'a> {
 }
 
 impl<'a> Iterator for TextSegmentIterator<'a> {
-    type Item = (NodeId, usize, String, Vec<Mark>);
+    type Item = (NodeId, usize, TextSegment);
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            if let Some((text, marks)) = self.current_segments.next() {
-                let len = text.chars().count();
-                let params = (
-                    self.current_block_id.unwrap(),
-                    self.current_offset,
-                    text,
-                    marks,
-                );
+            if let Some(seg) = self.current_segments.next() {
+                let len = seg.text.chars().count();
+                let block_id = self.current_block_id.unwrap();
+                let offset = self.current_offset;
                 self.current_offset += len;
-                return Some(params);
+                return Some((block_id, offset, seg));
             }
 
             if let Some(&child_id) = self.current_child_ids.get(self.current_child_index) {

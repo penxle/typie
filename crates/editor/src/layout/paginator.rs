@@ -319,10 +319,6 @@ impl Paginator {
         }
     }
 
-    pub fn paginate(&self, root: LayoutNode) -> Vec<Page> {
-        self.paginate_rc(Rc::new(root))
-    }
-
     pub fn paginate_rc(&self, root: Rc<LayoutNode>) -> Vec<Page> {
         let content_height = self.content_height();
         let mut state = PaginationState::new(
@@ -589,7 +585,7 @@ mod tests {
             page_margin,
             layout_mode,
         );
-        let pages = paginator.paginate(root);
+        let pages = paginator.paginate_rc(Rc::new(root));
 
         assert_eq!(pages.len(), 2);
 
@@ -661,7 +657,7 @@ mod tests {
             page_margin,
             layout_mode,
         );
-        let pages = paginator.paginate(root);
+        let pages = paginator.paginate_rc(Rc::new(root));
 
         assert_eq!(pages.len(), 2);
 
@@ -732,7 +728,7 @@ mod tests {
             page_margin,
             layout_mode,
         );
-        let pages = paginator.paginate(root);
+        let pages = paginator.paginate_rc(Rc::new(root));
 
         assert_eq!(pages.len(), 2);
 
@@ -816,7 +812,7 @@ mod tests {
             page_margin,
             layout_mode,
         );
-        let pages = paginator.paginate(root);
+        let pages = paginator.paginate_rc(Rc::new(root));
 
         assert_eq!(pages.len(), 2);
 
@@ -901,7 +897,7 @@ mod tests {
             page_margin,
             layout_mode,
         );
-        let pages = paginator.paginate(root);
+        let pages = paginator.paginate_rc(Rc::new(root));
 
         assert_eq!(pages.len(), 1);
     }
@@ -965,7 +961,7 @@ mod tests {
             page_margin,
             layout_mode,
         );
-        let pages = paginator.paginate(root);
+        let pages = paginator.paginate_rc(Rc::new(root));
 
         assert!(pages.len() >= 2);
         let p1 = &pages[0];
@@ -1070,7 +1066,7 @@ mod tests {
             page_margin,
             layout_mode,
         );
-        let pages = paginator.paginate(root);
+        let pages = paginator.paginate_rc(Rc::new(root));
 
         assert!(pages.len() >= 2);
 
@@ -1147,7 +1143,7 @@ mod tests {
             page_margin,
             layout_mode,
         );
-        let pages = paginator.paginate(root);
+        let pages = paginator.paginate_rc(Rc::new(root));
 
         assert_eq!(pages.len(), 2);
 
@@ -1264,7 +1260,7 @@ mod tests {
             page_margin,
             layout_mode,
         );
-        let pages = paginator.paginate(root);
+        let pages = paginator.paginate_rc(Rc::new(root));
 
         assert_eq!(pages.len(), 2);
 
@@ -1421,7 +1417,7 @@ mod tests {
             page_margin,
             layout_mode,
         );
-        let pages = paginator.paginate(root);
+        let pages = paginator.paginate_rc(Rc::new(root));
 
         assert_eq!(pages.len(), 1, "Continuous mode should ignore page break");
     }
@@ -1493,7 +1489,7 @@ mod tests {
             page_margin,
             layout_mode,
         );
-        let pages = paginator.paginate(root);
+        let pages = paginator.paginate_rc(Rc::new(root));
 
         assert_eq!(pages.len(), 2);
 
