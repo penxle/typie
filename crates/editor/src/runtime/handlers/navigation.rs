@@ -2,7 +2,7 @@ use super::super::{Direction, Effect, Runtime};
 use crate::layout::cursor::{Cursor, NavigationContext};
 use crate::model::{MarkType, NodeId};
 use crate::state::position_helpers::move_from_block_position;
-use crate::state::{Position, Selection, block_content_len};
+use crate::state::{Position, Selection, leaf_block_end, leaf_block_start};
 use crate::types::Affinity;
 
 impl Runtime {
@@ -82,13 +82,8 @@ impl Runtime {
             let isolating_ancestor = head_node.ancestors().find(|a| a.spec().isolating);
 
             if let Some(isolating) = isolating_ancestor {
-                let start =
-                    Position::new(isolating.node_id(), 0, crate::types::Affinity::Downstream);
-                let end = Position::new(
-                    isolating.node_id(),
-                    block_content_len(&isolating),
-                    crate::types::Affinity::Downstream,
-                );
+                let start = leaf_block_start(&isolating);
+                let end = leaf_block_end(&isolating);
 
                 let (from, to) = self.state.selection.as_sorted(&self.state.doc).unwrap();
 
@@ -101,18 +96,20 @@ impl Runtime {
             }
         }
 
-        let root = self.state.doc.node(NodeId::ROOT).unwrap();
-        let start = Position::new(root.node_id(), 0, crate::types::Affinity::Downstream);
-        let end = Position::new(
-            root.node_id(),
-            block_content_len(&root),
-            crate::types::Affinity::Downstream,
-        );
+        let ctx = NavigationContext::new(&self.state.doc);
+        let doc_start = Cursor::move_to_document_start(&ctx, &self.pages);
+        let doc_end = Cursor::move_to_document_end(&ctx, &self.pages);
 
-        self.transact(move |tr| {
-            tr.set_selection(Selection::new(start, end));
-            Ok(true)
-        })
+        if let (Some(start_sel), Some(end_sel)) = (doc_start, doc_end) {
+            let (start, _) = start_sel.as_sorted(&self.state.doc).unwrap();
+            let (_, end) = end_sel.as_sorted(&self.state.doc).unwrap();
+            self.transact(move |tr| {
+                tr.set_selection(Selection::new(start, end));
+                Ok(true)
+            })
+        } else {
+            vec![]
+        }
     }
 
     pub(crate) fn handle_extend_mark_range(&mut self, mark_type: MarkType) -> Vec<Effect> {
@@ -498,7 +495,6 @@ mod tests {
     #[test]
     fn select_all_in_isolating_node_selects_within_isolating_boundary() {
         let mut p1 = id!();
-        let mut fc = id!();
 
         let mut rt = runtime! {
             viewport { 800, 600, 1.0 }
@@ -510,7 +506,7 @@ mod tests {
                     fold_title {
                         text { "title" }
                     }
-                    @fc fold_content {
+                    fold_content {
                         @p1 paragraph {
                             text { "inside fold" }
                         }
@@ -527,17 +523,16 @@ mod tests {
         rt.update(Message::SelectAll);
 
         let selection = &rt.state().selection;
-        assert_eq!(selection.anchor.node_id, fc);
+        assert_eq!(selection.anchor.node_id, p1);
         assert_eq!(selection.anchor.offset, 0);
-        assert_eq!(selection.head.node_id, fc);
-        assert_eq!(selection.head.offset, 1);
+        assert_eq!(selection.head.node_id, p1);
+        assert_eq!(selection.head.offset, 11);
     }
 
     #[test]
     fn select_all_in_fold_with_multiple_paragraphs() {
         let mut p1 = id!();
         let mut p2 = id!();
-        let mut fc = id!();
 
         let mut rt = runtime! {
             viewport { 800, 600, 1.0 }
@@ -549,7 +544,7 @@ mod tests {
                     fold_title {
                         text { "title" }
                     }
-                    @fc fold_content {
+                    fold_content {
                         @p1 paragraph {
                             text { "first para" }
                         }
@@ -569,10 +564,10 @@ mod tests {
         rt.update(Message::SelectAll);
 
         let selection = &rt.state().selection;
-        assert_eq!(selection.anchor.node_id, fc);
+        assert_eq!(selection.anchor.node_id, p1);
         assert_eq!(selection.anchor.offset, 0);
-        assert_eq!(selection.head.node_id, fc);
-        assert_eq!(selection.head.offset, 2);
+        assert_eq!(selection.head.node_id, p2);
+        assert_eq!(selection.head.offset, 11);
     }
 
     #[test]
@@ -750,10 +745,10 @@ mod tests {
         rt.update(Message::SelectAll);
 
         let selection = &rt.state().selection;
-        assert_eq!(selection.anchor.node_id, NodeId::ROOT);
+        assert_eq!(selection.anchor.node_id, p1);
         assert_eq!(selection.anchor.offset, 0);
-        assert_eq!(selection.head.node_id, NodeId::ROOT);
-        assert_eq!(selection.head.offset, 2);
+        assert_eq!(selection.head.node_id, p2);
+        assert_eq!(selection.head.offset, 6);
     }
 
     #[test]
