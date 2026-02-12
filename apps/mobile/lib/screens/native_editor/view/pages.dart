@@ -489,7 +489,8 @@ class PageList extends HookWidget {
                     newState.cursor!.isSamePosition(prevCursor);
 
                 if (isSameCursor) {
-                  if (!wasContextMenuOpen.value) {
+                  final isInteractive = scope.editor.isInteractiveHit(pageIdx, pointerX, localY);
+                  if (!isInteractive && !wasContextMenuOpen.value) {
                     showContextMenu.value = true;
                   }
                 }

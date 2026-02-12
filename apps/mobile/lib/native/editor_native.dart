@@ -448,6 +448,11 @@ final class NativeEditor {
     return _bindings.editor_is_selection_hit(_handle, pageIdx, x, y) == 1;
   }
 
+  bool isInteractiveHit(int pageIdx, double x, double y) {
+    _checkDisposed();
+    return _bindings.editor_is_interactive_hit(_handle, pageIdx, x, y) == 1;
+  }
+
   NativeEditorCharacterCounts getCharacterCounts() {
     _checkDisposed();
 
