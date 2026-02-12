@@ -1,11 +1,10 @@
-use crate::model::{Mark, NodeId};
+use crate::model::{NodeId, Style};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct PreeditDecor {
     pub node_id: NodeId,
     pub offset: usize,
     pub text: String,
-    pub marks: Option<Vec<Mark>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -56,13 +55,22 @@ impl SelectionDecor {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct PendingMarksDecor {
+pub struct PendingStylesDecor {
     pub node_id: NodeId,
-    pub marks: Vec<Mark>,
+    pub styles: Vec<Style>,
+}
+
+impl Default for PendingStylesDecor {
+    fn default() -> Self {
+        Self {
+            node_id: NodeId::ROOT,
+            styles: Vec::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct Decorations {
     pub preedit: Option<PreeditDecor>,
-    pub pending_marks: Option<PendingMarksDecor>,
+    pub pending_styles: PendingStylesDecor,
 }

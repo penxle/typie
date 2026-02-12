@@ -1,58 +1,75 @@
+use crate::model::*;
 use crate::runtime::Effect;
 use crate::state::position_helpers::find_child_at_offset;
 use crate::state::{Position, block_content_len, calculate_block_offsets, collect_blocks_in_range};
 use crate::transaction::Transaction;
-use crate::{model::*, state::Selection};
 use anyhow::{Context, Result};
 
-pub(crate) fn get_marks_at_cursor(tr: &Transaction, position: &Position) -> Vec<Mark> {
+pub(crate) fn compute_styles_at_cursor(tr: &Transaction, position: &Position) -> Vec<Style> {
+    let defaults = tr.doc().default_styles().to_styles();
+
     let Some(node) = tr.node(position.node_id) else {
-        return Vec::new();
+        return defaults;
     };
 
     let Some((child_id, local_offset)) = find_child_at_offset(&node, position.offset) else {
-        return Vec::new();
+        return defaults;
     };
 
     let Some(child) = tr.node(child_id) else {
-        return Vec::new();
+        return defaults;
     };
 
     if let Node::Text(text_node) = child.node() {
-        let segments = text_node.text.get_rich_text_segments();
+        let segments = text_node.text.get_segments();
         let mut current_offset = 0;
 
-        for (segment_text, segment_marks) in segments {
-            let segment_len = segment_text.chars().count();
+        for segment in segments {
+            let segment_len = segment.text.chars().count();
             if local_offset > current_offset && local_offset <= current_offset + segment_len {
-                return segment_marks;
+                return fill_missing_styles(segment.styles, &defaults);
             }
             if local_offset == 0 && current_offset == 0 {
-                return segment_marks;
+                return fill_missing_styles(segment.styles, &defaults);
             }
             current_offset += segment_len;
         }
     }
 
-    Vec::new()
+    defaults
 }
 
-fn apply_mark_to_range<F>(
+fn fill_missing_styles(mut styles: Vec<Style>, defaults: &[Style]) -> Vec<Style> {
+    for default in defaults {
+        if !styles.iter().any(|s| s.as_type() == default.as_type()) {
+            styles.push(default.clone());
+        }
+    }
+    styles
+}
+
+fn apply_style_to_range(
     tr: &mut Transaction,
     from: Position,
     to: Position,
-    mut apply_fn: F,
-) -> Result<()>
-where
-    F: FnMut(&Text, std::ops::Range<usize>) -> Result<()>,
-{
+    style: &Style,
+) -> Result<()> {
     let ranges = collect_text_ranges_in_selection(tr, from, to)?;
+    let style_type = style.as_type();
 
     for (text_node_id, start_offset, end_offset) in ranges {
+        let allowed = tr.doc().allowed_styles_for(text_node_id);
+        anyhow::ensure!(
+            allowed.contains(&style_type),
+            "Style '{:?}' not allowed at node {}",
+            style_type,
+            text_node_id,
+        );
+
         let node = tr.node_mut(text_node_id).context("Text node not found")?;
         if let Node::Text(text_node) = node.node() {
             let range = start_offset..end_offset;
-            apply_fn(&text_node.text, range)?;
+            text_node.text.apply_style(range, style)?;
             tr.push_effect(Effect::NodeChanged {
                 node_id: text_node_id,
             });
@@ -62,29 +79,51 @@ where
     Ok(())
 }
 
-fn check_range_has_mark(
+fn remove_style_from_range(
+    tr: &mut Transaction,
+    from: Position,
+    to: Position,
+    style_type: StyleType,
+) -> Result<()> {
+    let ranges = collect_text_ranges_in_selection(tr, from, to)?;
+
+    for (text_node_id, start_offset, end_offset) in ranges {
+        let node = tr.node_mut(text_node_id).context("Text node not found")?;
+        if let Node::Text(text_node) = node.node() {
+            let range = start_offset..end_offset;
+            text_node.text.remove_style(range, style_type)?;
+            tr.push_effect(Effect::NodeChanged {
+                node_id: text_node_id,
+            });
+        }
+    }
+
+    Ok(())
+}
+
+fn check_range_has_style(
     tr: &Transaction,
     from: Position,
     to: Position,
-    mark: &Mark,
+    style: &Style,
 ) -> Result<bool> {
     let ranges = collect_text_ranges_in_selection(tr, from, to)?;
 
     for (text_node_id, start_offset, end_offset) in ranges {
         let node = tr.node(text_node_id).context("Text node not found")?;
         if let Node::Text(text_node) = node.node() {
-            let segments = text_node.text.get_rich_text_segments();
+            let segments = text_node.text.get_segments();
 
             let mut current_offset = 0;
-            for (segment_text, segment_marks) in segments {
-                let segment_len = segment_text.chars().count();
+            for segment in segments {
+                let segment_len = segment.text.chars().count();
                 let segment_end = current_offset + segment_len;
 
                 let overlap_start = current_offset.max(start_offset);
                 let overlap_end = segment_end.min(end_offset);
 
                 if overlap_start < overlap_end {
-                    if !segment_marks.contains(mark) {
+                    if !segment.styles.contains(style) {
                         return Ok(false);
                     }
                 }
@@ -97,11 +136,11 @@ fn check_range_has_mark(
     Ok(true)
 }
 
-fn range_contains_mark_type(
+fn range_contains_style_type(
     tr: &Transaction,
     from: Position,
     to: Position,
-    mark_type: MarkType,
+    style_type: StyleType,
 ) -> Result<bool> {
     let ranges = collect_text_ranges_in_selection(tr, from, to)?;
 
@@ -110,17 +149,17 @@ fn range_contains_mark_type(
             continue;
         };
         if let Node::Text(text_node) = node.node() {
-            let segments = text_node.text.get_rich_text_segments();
+            let segments = text_node.text.get_segments();
             let mut current_offset = 0;
 
-            for (segment_text, segment_marks) in segments {
-                let segment_len = segment_text.chars().count();
+            for segment in segments {
+                let segment_len = segment.text.chars().count();
                 let segment_end = current_offset + segment_len;
                 let overlap_start = current_offset.max(start_offset);
                 let overlap_end = segment_end.min(end_offset);
 
                 if overlap_start < overlap_end
-                    && segment_marks.iter().any(|m| m.as_type() == mark_type)
+                    && segment.styles.iter().any(|s| s.as_type() == style_type)
                 {
                     return Ok(true);
                 }
@@ -133,34 +172,34 @@ fn range_contains_mark_type(
     Ok(false)
 }
 
-fn get_common_mark_in_range(
+fn get_common_style_in_range(
     tr: &Transaction,
     from: Position,
     to: Position,
-    mark_type: MarkType,
-) -> Option<Mark> {
+    style_type: StyleType,
+) -> Option<Style> {
     let ranges = collect_text_ranges_in_selection(tr, from, to).ok()?;
-    let mut common_mark: Option<Mark> = None;
+    let mut common_style: Option<Style> = None;
 
     for (text_node_id, start_offset, end_offset) in ranges {
         let node = tr.node(text_node_id)?;
         if let Node::Text(text_node) = node.node() {
-            let segments = text_node.text.get_rich_text_segments();
+            let segments = text_node.text.get_segments();
             let mut current_offset = 0;
 
-            for (segment_text, segment_marks) in segments {
-                let segment_len = segment_text.chars().count();
+            for segment in segments {
+                let segment_len = segment.text.chars().count();
                 let segment_end = current_offset + segment_len;
 
                 let overlap_start = current_offset.max(start_offset);
                 let overlap_end = segment_end.min(end_offset);
 
                 if overlap_start < overlap_end {
-                    let found = segment_marks.iter().find(|m| m.as_type() == mark_type);
-                    match (found, &common_mark) {
+                    let found = segment.styles.iter().find(|s| s.as_type() == style_type);
+                    match (found, &common_style) {
                         (None, _) => return None,
-                        (Some(m), None) => common_mark = Some(m.clone()),
-                        (Some(m), Some(existing)) if existing != m => return None,
+                        (Some(s), None) => common_style = Some(s.clone()),
+                        (Some(s), Some(existing)) if existing != s => return None,
                         _ => {}
                     }
                 }
@@ -170,7 +209,7 @@ fn get_common_mark_in_range(
         }
     }
 
-    common_mark
+    common_style
 }
 
 fn collect_text_ranges_in_selection(
@@ -235,62 +274,57 @@ fn collect_ranges_in_textblock(
 }
 
 impl Transaction {
-    pub fn add_mark(&mut self, mark: Mark) -> Result<bool> {
+    pub fn recompute_pending_styles(&mut self) {
+        let new_styles = compute_styles_at_cursor(self, &self.selection().head);
+        if self.state.pending_styles != new_styles {
+            self.state.pending_styles = new_styles;
+            self.push_effect(Effect::PendingStylesChanged);
+        }
+    }
+
+    pub fn set_style(&mut self, style: Style) -> Result<bool> {
         let selection = self.selection().clone();
 
         if selection.is_collapsed() {
-            let mut current = self
-                .state
-                .pending_marks
-                .clone()
-                .unwrap_or_else(|| get_marks_at_cursor(self, &selection.head));
-
-            let mark_type = mark.as_type();
-            current.retain(|m| m.as_type() != mark_type);
-            current.push(mark);
-
-            self.state.pending_marks = Some(current);
-            self.push_effect(Effect::PendingMarksChanged);
+            let style_type = style.as_type();
+            self.state
+                .pending_styles
+                .retain(|s| s.as_type() != style_type);
+            self.state.pending_styles.push(style);
+            self.push_effect(Effect::PendingStylesChanged);
             return Ok(true);
         }
 
         let (from, to) = selection.as_sorted(self.doc())?;
-        apply_mark_to_range(self, from, to, |text, range| text.mark(range, &mark))?;
+        apply_style_to_range(self, from, to, &style)?;
 
         Ok(true)
     }
 
-    #[allow(dead_code)]
-    pub fn remove_mark(&mut self, mark: Mark) -> Result<bool> {
+    pub fn remove_style(&mut self, style_type: StyleType) -> Result<bool> {
         let selection = self.selection().clone();
 
         if selection.is_collapsed() {
-            let mut current = self
-                .state
-                .pending_marks
-                .clone()
-                .unwrap_or_else(|| get_marks_at_cursor(self, &selection.head));
-
-            let mark_type = mark.as_type();
-            current.retain(|m| m.as_type() != mark_type);
-
-            self.state.pending_marks = Some(current);
-            self.push_effect(Effect::PendingMarksChanged);
+            let defaults = self.doc().default_styles().to_styles();
+            self.state
+                .pending_styles
+                .retain(|s| s.as_type() != style_type);
+            if let Some(default) = defaults.into_iter().find(|s| s.as_type() == style_type) {
+                self.state.pending_styles.push(default);
+            }
+            self.push_effect(Effect::PendingStylesChanged);
             return Ok(true);
         }
 
         let (from, to) = selection.as_sorted(self.doc())?;
-        let mark_type = mark.as_type();
-        apply_mark_to_range(self, from, to, |text, range| text.unmark(range, mark_type))?;
+        remove_style_from_range(self, from, to, style_type)?;
 
         Ok(true)
     }
 
-    pub fn toggle_mark(&mut self, mark: Mark) -> Result<bool> {
-        let selection = self.selection().clone();
-
-        match &mark {
-            Mark::FontFamily(fm) => {
+    pub fn toggle_style(&mut self, style: Style) -> Result<bool> {
+        match &style {
+            Style::FontFamily(fm) => {
                 let available = crate::font::get_available_fonts();
                 let weights = available.get(&fm.family).cloned().unwrap_or_default();
                 let weight = if let Some(&first) = weights.first() {
@@ -312,10 +346,10 @@ impl Transaction {
                     codepoints,
                 });
             }
-            Mark::FontWeight(fw) => {
-                let family = match self.get_mark_attributes(MarkType::FontFamily) {
-                    Some(Mark::FontFamily(fm)) => fm.family,
-                    _ => FontFamilyMark::default().family,
+            Style::FontWeight(fw) => {
+                let family = match self.get_style_value(StyleType::FontFamily) {
+                    Some(Style::FontFamily(fm)) => fm.family,
+                    _ => FontFamilyStyle::default().family,
                 };
                 let codepoints = self.selection_codepoints();
                 self.push_effect(Effect::FontDetected {
@@ -327,178 +361,83 @@ impl Transaction {
             _ => {}
         }
 
+        let selection = self.selection().clone();
+
         if selection.is_collapsed() {
-            let current = self
-                .state
-                .pending_marks
-                .clone()
-                .unwrap_or_else(|| get_marks_at_cursor(self, &selection.head));
+            let style_type = style.as_type();
+            let has_exact_style = self.state.pending_styles.contains(&style);
 
-            let mark_type = mark.as_type();
-            let has_exact_mark = current.contains(&mark);
+            self.state
+                .pending_styles
+                .retain(|s| s.as_type() != style_type);
 
-            let mut new_pending: Vec<Mark> = current
-                .into_iter()
-                .filter(|m| m.as_type() != mark_type)
-                .collect();
-
-            if !has_exact_mark {
-                new_pending.push(mark);
+            if !has_exact_style {
+                self.state.pending_styles.push(style);
             }
 
-            self.state.pending_marks = Some(new_pending);
-            self.push_effect(Effect::PendingMarksChanged);
+            self.push_effect(Effect::PendingStylesChanged);
 
             return Ok(true);
         }
 
         let (from, to) = selection.as_sorted(self.doc())?;
-        let all_have_mark = check_range_has_mark(self, from.clone(), to.clone(), &mark)?;
+        let all_have_style = check_range_has_style(self, from.clone(), to.clone(), &style)?;
 
-        let add = !all_have_mark;
-        let mark_type = mark.as_type();
-        apply_mark_to_range(self, from, to, |text, range| {
-            if add {
-                text.mark(range, &mark)
-            } else {
-                text.unmark(range, mark_type)
-            }
-        })?;
+        if all_have_style {
+            let style_type = style.as_type();
+            remove_style_from_range(self, from, to, style_type)?;
+        } else {
+            apply_style_to_range(self, from, to, &style)?;
+        }
 
         Ok(true)
     }
 
-    pub fn extend_mark_range(&mut self, mark_type: MarkType) -> Result<bool> {
-        let selection = self.selection().clone();
-        let (from, to) = selection.as_sorted(self.doc())?;
-
-        let has_mark_type = |marks: &[Mark]| marks.iter().any(|m| m.as_type() == mark_type);
-
-        let cursor_has_mark = if selection.is_collapsed() {
-            let marks = get_marks_at_cursor(self, &from);
-            has_mark_type(&marks)
-        } else {
-            range_contains_mark_type(self, from.clone(), to.clone(), mark_type)?
-        };
-
-        if !cursor_has_mark {
-            return Ok(false);
-        }
-
-        let paragraph = self
-            .node(from.node_id)
-            .context("extend_mark_range: Paragraph not found")?;
-
-        let mut all_segments = Vec::new();
-        let mut current_offset = 0;
-
-        for child in paragraph.children() {
-            match child.node() {
-                Node::Text(text_node) => {
-                    for (text, marks) in text_node.text.get_rich_text_segments() {
-                        let len = text.chars().count();
-                        all_segments.push((current_offset, current_offset + len, marks));
-                        current_offset += len;
-                    }
-                }
-                Node::HardBreak(_) => {
-                    all_segments.push((current_offset, current_offset + 1, Vec::new()));
-                    current_offset += 1;
-                }
-                _ => {}
-            }
-        }
-
-        let cursor_segment_idx = all_segments.iter().position(|(seg_start, seg_end, marks)| {
-            if from.offset > *seg_start && from.offset <= *seg_end {
-                return has_mark_type(marks);
-            }
-            if from.offset == *seg_start {
-                return has_mark_type(marks);
-            }
-            false
-        });
-
-        let cursor_segment_idx = cursor_segment_idx.or_else(|| {
-            all_segments
-                .iter()
-                .position(|(_seg_start, seg_end, marks)| {
-                    from.offset == *seg_end && has_mark_type(marks)
-                })
-        });
-
-        let Some(cursor_idx) = cursor_segment_idx else {
-            return Ok(false);
-        };
-
-        let mut start_idx = cursor_idx;
-        while start_idx > 0 {
-            let (_, _, marks) = &all_segments[start_idx - 1];
-            if !has_mark_type(marks) {
-                break;
-            }
-            start_idx -= 1;
-        }
-
-        let mut end_idx = cursor_idx;
-        while end_idx < all_segments.len() - 1 {
-            let (_, _, marks) = &all_segments[end_idx + 1];
-            if !has_mark_type(marks) {
-                break;
-            }
-            end_idx += 1;
-        }
-
-        let (mark_start, _, _) = all_segments[start_idx];
-        let (_, mark_end, _) = all_segments[end_idx];
-
-        if mark_start != from.offset || mark_end != to.offset {
-            self.set_selection(Selection::new(
-                Position::new(from.node_id, mark_start, Default::default()),
-                Position::new(from.node_id, mark_end, Default::default()),
-            ));
-            Ok(true)
+    pub fn reset_style(&mut self, style_type: StyleType) -> Result<bool> {
+        let defaults = self.doc().default_styles();
+        let default_styles = defaults.to_styles();
+        if let Some(default_style) = default_styles
+            .into_iter()
+            .find(|s| s.as_type() == style_type)
+        {
+            self.set_style(default_style)
         } else {
             Ok(false)
         }
     }
 
-    pub fn clear_pending_marks(&mut self) -> Result<bool> {
-        if self.state.pending_marks.is_some() {
-            self.state.pending_marks = None;
-            self.push_effect(Effect::PendingMarksChanged);
-            Ok(true)
-        } else {
-            Ok(false)
-        }
-    }
-
-    pub fn unset_all_marks(&mut self) -> Result<bool> {
+    pub fn reset_all_styles(&mut self) -> Result<bool> {
+        let defaults = self.doc().default_styles();
+        let default_styles = defaults.to_styles();
         let selection = self.selection().clone();
+
         if selection.is_collapsed() {
-            return Ok(false);
-        }
-
-        let (from, to) = selection.as_sorted(self.doc())?;
-        apply_mark_to_range(self, from, to, |text, range| {
-            for mark_type in MarkType::all() {
-                text.unmark(range.clone(), mark_type)?;
+            self.state.pending_styles = default_styles;
+            self.push_effect(Effect::PendingStylesChanged);
+        } else {
+            let (from, to) = selection.as_sorted(self.doc())?;
+            for style in &default_styles {
+                apply_style_to_range(self, from.clone(), to.clone(), style)?;
             }
-            Ok(())
-        })?;
+            for &style_type in StyleType::all() {
+                if !default_styles.iter().any(|s| s.as_type() == style_type) {
+                    remove_style_from_range(self, from.clone(), to.clone(), style_type)?;
+                }
+            }
+        }
 
         Ok(true)
     }
 
-    pub fn toggle_bold(&mut self) -> Result<bool> {
-        let current_weight = match self.get_mark_attributes(MarkType::FontWeight) {
-            Some(Mark::FontWeight(mark)) => Some(mark.weight),
+    pub fn toggle_bold_style(&mut self) -> Result<bool> {
+        let current_weight = match self.get_style_value(StyleType::FontWeight) {
+            Some(Style::FontWeight(s)) => Some(s.weight),
             _ => None,
         };
 
-        let family_name = match self.get_mark_attributes(MarkType::FontFamily) {
-            Some(Mark::FontFamily(mark)) => mark.family.clone(),
-            _ => FontFamilyMark::default().family,
+        let family_name = match self.get_style_value(StyleType::FontFamily) {
+            Some(Style::FontFamily(s)) => s.family.clone(),
+            _ => FontFamilyStyle::default().family,
         };
 
         let available = crate::font::get_available_fonts();
@@ -531,7 +470,7 @@ impl Transaction {
             normal_weight
         };
 
-        let mark = Mark::FontWeight(FontWeightMark {
+        let style = Style::FontWeight(FontWeightStyle {
             weight: target_weight,
         });
         let codepoints = self.selection_codepoints();
@@ -540,28 +479,163 @@ impl Transaction {
             weight: target_weight,
             codepoints,
         });
-        self.add_mark(mark)
+        self.set_style(style)
     }
 
-    pub fn get_mark_attributes(&self, mark_type: MarkType) -> Option<Mark> {
+    pub fn get_style_value(&self, style_type: StyleType) -> Option<Style> {
         let selection = self.selection();
 
         if selection.is_collapsed() {
-            if let Some(pending) = &self.state.pending_marks {
-                if let Some(mark) = pending.iter().find(|m| m.as_type() == mark_type) {
-                    return Some(mark.clone());
-                }
-            }
-
-            let marks = get_marks_at_cursor(self, &selection.head);
-            if let Some(mark) = marks.iter().find(|m| m.as_type() == mark_type) {
-                return Some(mark.clone());
+            if let Some(style) = self
+                .state
+                .pending_styles
+                .iter()
+                .find(|s| s.as_type() == style_type)
+            {
+                return Some(style.clone());
             }
         } else if let Ok((from, to)) = selection.as_sorted(self.doc()) {
-            return get_common_mark_in_range(self, from, to, mark_type);
+            return get_common_style_in_range(self, from, to, style_type);
         }
 
         None
+    }
+
+    pub fn unset_all_styles(&mut self) -> Result<bool> {
+        let selection = self.selection().clone();
+        if selection.is_collapsed() {
+            return Ok(false);
+        }
+
+        let (from, to) = selection.as_sorted(self.doc())?;
+        for style_type in StyleType::all() {
+            remove_style_from_range(self, from.clone(), to.clone(), *style_type)?;
+        }
+
+        Ok(true)
+    }
+
+    pub fn extend_style_range(&mut self, style_type: StyleType) -> Result<bool> {
+        let selection = self.selection().clone();
+        let (from, to) = selection.as_sorted(self.doc())?;
+
+        let has_style_type = |styles: &[Style]| styles.iter().any(|s| s.as_type() == style_type);
+
+        let cursor_has_style = if selection.is_collapsed() {
+            has_style_type(&self.state.pending_styles)
+        } else {
+            range_contains_style_type(self, from.clone(), to.clone(), style_type)?
+        };
+
+        if !cursor_has_style {
+            return Ok(false);
+        }
+
+        let paragraph = self
+            .node(from.node_id)
+            .context("extend_style_range: Paragraph not found")?;
+
+        let mut all_segments = Vec::new();
+        let mut current_offset = 0;
+
+        for child in paragraph.children() {
+            match child.node() {
+                Node::Text(text_node) => {
+                    for segment in text_node.text.get_segments() {
+                        let len = segment.text.chars().count();
+                        all_segments.push((current_offset, current_offset + len, segment.styles));
+                        current_offset += len;
+                    }
+                }
+                Node::HardBreak(_) => {
+                    all_segments.push((current_offset, current_offset + 1, Vec::new()));
+                    current_offset += 1;
+                }
+                _ => {}
+            }
+        }
+
+        let cursor_segment_idx = all_segments
+            .iter()
+            .position(|(seg_start, seg_end, styles)| {
+                if from.offset > *seg_start && from.offset <= *seg_end {
+                    return has_style_type(styles);
+                }
+                if from.offset == *seg_start {
+                    return has_style_type(styles);
+                }
+                false
+            });
+
+        let cursor_segment_idx = cursor_segment_idx.or_else(|| {
+            all_segments
+                .iter()
+                .position(|(_seg_start, seg_end, styles)| {
+                    from.offset == *seg_end && has_style_type(styles)
+                })
+        });
+
+        let Some(cursor_idx) = cursor_segment_idx else {
+            return Ok(false);
+        };
+
+        let mut start_idx = cursor_idx;
+        while start_idx > 0 {
+            let (_, _, styles) = &all_segments[start_idx - 1];
+            if !has_style_type(styles) {
+                break;
+            }
+            start_idx -= 1;
+        }
+
+        let mut end_idx = cursor_idx;
+        while end_idx < all_segments.len() - 1 {
+            let (_, _, styles) = &all_segments[end_idx + 1];
+            if !has_style_type(styles) {
+                break;
+            }
+            end_idx += 1;
+        }
+
+        let (style_start, _, _) = all_segments[start_idx];
+        let (_, style_end, _) = all_segments[end_idx];
+
+        if style_start != from.offset || style_end != to.offset {
+            self.set_selection(crate::state::Selection::new(
+                Position::new(from.node_id, style_start, Default::default()),
+                Position::new(from.node_id, style_end, Default::default()),
+            ));
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+
+    pub(crate) fn current_font(&self) -> (String, u16) {
+        let styles = &self.state.pending_styles;
+
+        let mut family = FontFamilyStyle::default().family;
+        let mut weight = FontWeightStyle::default().weight;
+
+        if let Some(node_ref) = self.doc().node(self.selection().head.node_id) {
+            let overrides = node_ref.node().font_overrides();
+            if let Some(f) = overrides.family {
+                family = f;
+            }
+            if let Some(w) = overrides.weight {
+                weight = w;
+            }
+        }
+
+        for style in styles {
+            match style {
+                Style::FontFamily(f) => family = f.family.clone(),
+                Style::FontWeight(w) => weight = w.weight,
+                _ => {}
+            }
+        }
+
+        (family, weight)
     }
 }
 
@@ -570,11 +644,10 @@ mod tests {
     use crate::{
         model::*,
         runtime::{Effect, Message},
-        types::Affinity,
     };
 
     #[test]
-    fn add_mark_to_partial_text_node() {
+    fn set_style_to_partial_text_node() {
         let mut p = id!();
 
         let initial = state! {
@@ -586,7 +659,9 @@ mod tests {
             selection { (p, 0) -> (p, 5) }
         };
 
-        let actual = transact!(initial, |tr| tr.add_mark(Mark::Italic(ItalicMark)).unwrap());
+        let actual = transact!(initial, |tr| tr
+            .set_style(Style::Italic(ItalicStyle))
+            .unwrap());
 
         let expected = state! {
             doc {
@@ -604,7 +679,7 @@ mod tests {
     }
 
     #[test]
-    fn add_mark_to_full_text_node() {
+    fn set_style_to_full_text_node() {
         let mut p = id!();
 
         let initial = state! {
@@ -616,12 +691,14 @@ mod tests {
             selection { (p, 0) -> (p, 5) }
         };
 
-        let actual = transact!(initial, |tr| tr.add_mark(Mark::Italic(ItalicMark)).unwrap());
+        let actual = transact!(initial, |tr| tr
+            .set_style(Style::Italic(ItalicStyle))
+            .unwrap());
 
         let expected = state! {
             doc {
                 @p paragraph {
-                    text(marks: [italic()]) { "hello" }
+                    text(styles: [italic()]) { "hello" }
                 }
             }
             selection { (p, 0) -> (p, 5) }
@@ -631,7 +708,7 @@ mod tests {
     }
 
     #[test]
-    fn add_mark_across_two_text_nodes() {
+    fn set_style_across_two_text_nodes() {
         let mut p = id!();
 
         let initial = state! {
@@ -644,7 +721,9 @@ mod tests {
             selection { (p, 2) -> (p, 9) }
         };
 
-        let actual = transact!(initial, |tr| tr.add_mark(Mark::Italic(ItalicMark)).unwrap());
+        let actual = transact!(initial, |tr| tr
+            .set_style(Style::Italic(ItalicStyle))
+            .unwrap());
 
         let expected = state! {
             doc {
@@ -666,7 +745,7 @@ mod tests {
     }
 
     #[test]
-    fn add_mark_across_three_text_nodes() {
+    fn set_style_across_three_text_nodes() {
         let mut p = id!();
 
         let initial = state! {
@@ -680,7 +759,9 @@ mod tests {
             selection { (p, 2) -> (p, 19) }
         };
 
-        let actual = transact!(initial, |tr| tr.add_mark(Mark::Italic(ItalicMark)).unwrap());
+        let actual = transact!(initial, |tr| tr
+            .set_style(Style::Italic(ItalicStyle))
+            .unwrap());
 
         let expected = state! {
             doc {
@@ -689,7 +770,7 @@ mod tests {
                         "he",
                         "llo" => [italic()]
                     }
-                    text(marks: [italic()]) { " beautiful" }
+                    text(styles: [italic()]) { " beautiful" }
                     text {
                         " wor" => [italic()],
                         "ld"
@@ -703,7 +784,7 @@ mod tests {
     }
 
     #[test]
-    fn add_mark_with_slot_at_start() {
+    fn set_style_with_slot_at_start() {
         let mut p1 = id!();
         let mut p2 = id!();
 
@@ -717,7 +798,9 @@ mod tests {
             selection { (p1, 0) -> (p2, 3) }
         };
 
-        let actual = transact!(initial, |tr| tr.add_mark(Mark::Italic(ItalicMark)).unwrap());
+        let actual = transact!(initial, |tr| tr
+            .set_style(Style::Italic(ItalicStyle))
+            .unwrap());
 
         let expected = state! {
             doc {
@@ -736,7 +819,7 @@ mod tests {
     }
 
     #[test]
-    fn add_mark_with_slot_at_end() {
+    fn set_style_with_slot_at_end() {
         let mut p1 = id!();
         let mut p2 = id!();
 
@@ -750,7 +833,9 @@ mod tests {
             selection { (p1, 2) -> (p2, 0) }
         };
 
-        let actual = transact!(initial, |tr| tr.add_mark(Mark::Italic(ItalicMark)).unwrap());
+        let actual = transact!(initial, |tr| tr
+            .set_style(Style::Italic(ItalicStyle))
+            .unwrap());
 
         let expected = state! {
             doc {
@@ -769,7 +854,7 @@ mod tests {
     }
 
     #[test]
-    fn add_mark_with_slots_at_both_ends() {
+    fn set_style_with_slots_at_both_ends() {
         let mut p1 = id!();
         let mut p2 = id!();
         let mut p3 = id!();
@@ -785,13 +870,15 @@ mod tests {
             selection { (p1, 0) -> (p3, 0) }
         };
 
-        let actual = transact!(initial, |tr| tr.add_mark(Mark::Italic(ItalicMark)).unwrap());
+        let actual = transact!(initial, |tr| tr
+            .set_style(Style::Italic(ItalicStyle))
+            .unwrap());
 
         let expected = state! {
             doc {
                 @p1 paragraph { }
                 @p2 paragraph {
-                    text(marks: [italic()]) { "hello" }
+                    text(styles: [italic()]) { "hello" }
                 }
                 @p3 paragraph { }
             }
@@ -802,7 +889,7 @@ mod tests {
     }
 
     #[test]
-    fn add_mark_across_multiple_paragraphs() {
+    fn set_style_across_multiple_paragraphs() {
         let mut p1 = id!();
         let mut p2 = id!();
         let mut p3 = id!();
@@ -822,7 +909,9 @@ mod tests {
             selection { (p1, 2) -> (p3, 3) }
         };
 
-        let actual = transact!(initial, |tr| tr.add_mark(Mark::Italic(ItalicMark)).unwrap());
+        let actual = transact!(initial, |tr| tr
+            .set_style(Style::Italic(ItalicStyle))
+            .unwrap());
 
         let expected = state! {
             doc {
@@ -833,7 +922,7 @@ mod tests {
                     }
                 }
                 @p2 paragraph {
-                    text(marks: [italic()]) { "beautiful" }
+                    text(styles: [italic()]) { "beautiful" }
                 }
                 @p3 paragraph {
                     text {
@@ -849,24 +938,26 @@ mod tests {
     }
 
     #[test]
-    fn add_mark_to_already_marked_text() {
+    fn set_style_to_already_styled_text() {
         let mut p = id!();
 
         let initial = state! {
             doc {
                 @p paragraph {
-                    text(marks: [italic()]) { "hello" }
+                    text(styles: [italic()]) { "hello" }
                 }
             }
             selection { (p, 0) -> (p, 5) }
         };
 
-        let actual = transact!(initial, |tr| tr.add_mark(Mark::Italic(ItalicMark)).unwrap());
+        let actual = transact!(initial, |tr| tr
+            .set_style(Style::Italic(ItalicStyle))
+            .unwrap());
 
         let expected = state! {
             doc {
                 @p paragraph {
-                    text(marks: [italic()]) { "hello" }
+                    text(styles: [italic()]) { "hello" }
                 }
             }
             selection { (p, 0) -> (p, 5) }
@@ -876,7 +967,7 @@ mod tests {
     }
 
     #[test]
-    fn add_mark_to_multiple_text_nodes_full() {
+    fn set_style_to_multiple_text_nodes_full() {
         let mut p = id!();
 
         let initial = state! {
@@ -890,14 +981,16 @@ mod tests {
             selection { (p, 0) -> (p, 21) }
         };
 
-        let actual = transact!(initial, |tr| tr.add_mark(Mark::Italic(ItalicMark)).unwrap());
+        let actual = transact!(initial, |tr| tr
+            .set_style(Style::Italic(ItalicStyle))
+            .unwrap());
 
         let expected = state! {
             doc {
                 @p paragraph {
-                    text(marks: [italic()]) { "hello" }
-                    text(marks: [italic()]) { " beautiful" }
-                    text(marks: [italic()]) { " world" }
+                    text(styles: [italic()]) { "hello" }
+                    text(styles: [italic()]) { " beautiful" }
+                    text(styles: [italic()]) { " world" }
                 }
             }
             selection { (p, 0) -> (p, 21) }
@@ -907,7 +1000,7 @@ mod tests {
     }
 
     #[test]
-    fn add_mark_to_all_list_items() {
+    fn set_style_to_all_list_items() {
         let mut p1 = id!();
         let mut p2 = id!();
 
@@ -930,19 +1023,21 @@ mod tests {
             selection { (p1, 0) -> (p2, 0) }
         };
 
-        let actual = transact!(initial, |tr| tr.add_mark(Mark::Italic(ItalicMark)).unwrap());
+        let actual = transact!(initial, |tr| tr
+            .set_style(Style::Italic(ItalicStyle))
+            .unwrap());
 
         let expected = state! {
             doc {
                 bullet_list {
                     list_item {
                         @p1 paragraph {
-                            text(marks: [italic()]) { "A" }
+                            text(styles: [italic()]) { "A" }
                         }
                     }
                     list_item {
                         @p2 paragraph {
-                            text(marks: [italic()]) { "B" }
+                            text(styles: [italic()]) { "B" }
                         }
                     }
                 }
@@ -955,21 +1050,19 @@ mod tests {
     }
 
     #[test]
-    fn remove_mark_from_partial_text_node() {
+    fn remove_style_from_partial_text_node() {
         let mut p = id!();
 
         let initial = state! {
             doc {
                 @p paragraph {
-                    text(marks: [italic()]) { "hello world" }
+                    text(styles: [italic()]) { "hello world" }
                 }
             }
             selection { (p, 0) -> (p, 5) }
         };
 
-        let actual = transact!(initial, |tr| tr
-            .remove_mark(Mark::Italic(ItalicMark))
-            .unwrap());
+        let actual = transact!(initial, |tr| tr.remove_style(StyleType::Italic).unwrap());
 
         let expected = state! {
             doc {
@@ -987,21 +1080,19 @@ mod tests {
     }
 
     #[test]
-    fn remove_mark_from_full_text_node() {
+    fn remove_style_from_full_text_node() {
         let mut p = id!();
 
         let initial = state! {
             doc {
                 @p paragraph {
-                    text(marks: [italic()]) { "hello" }
+                    text(styles: [italic()]) { "hello" }
                 }
             }
             selection { (p, 0) -> (p, 5) }
         };
 
-        let actual = transact!(initial, |tr| tr
-            .remove_mark(Mark::Italic(ItalicMark))
-            .unwrap());
+        let actual = transact!(initial, |tr| tr.remove_style(StyleType::Italic).unwrap());
 
         let expected = state! {
             doc {
@@ -1016,22 +1107,20 @@ mod tests {
     }
 
     #[test]
-    fn remove_mark_across_two_text_nodes() {
+    fn remove_style_across_two_text_nodes() {
         let mut p = id!();
 
         let initial = state! {
             doc {
                 @p paragraph {
-                    text(marks: [italic()]) { "hello" }
-                    text(marks: [italic()]) { " world" }
+                    text(styles: [italic()]) { "hello" }
+                    text(styles: [italic()]) { " world" }
                 }
             }
             selection { (p, 2) -> (p, 9) }
         };
 
-        let actual = transact!(initial, |tr| tr
-            .remove_mark(Mark::Italic(ItalicMark))
-            .unwrap());
+        let actual = transact!(initial, |tr| tr.remove_style(StyleType::Italic).unwrap());
 
         let expected = state! {
             doc {
@@ -1053,23 +1142,21 @@ mod tests {
     }
 
     #[test]
-    fn remove_mark_across_three_text_nodes() {
+    fn remove_style_across_three_text_nodes() {
         let mut p = id!();
 
         let initial = state! {
             doc {
                 @p paragraph {
-                    text(marks: [italic()]) { "hello" }
-                    text(marks: [italic()]) { " beautiful" }
-                    text(marks: [italic()]) { " world" }
+                    text(styles: [italic()]) { "hello" }
+                    text(styles: [italic()]) { " beautiful" }
+                    text(styles: [italic()]) { " world" }
                 }
             }
             selection { (p, 2) -> (p, 19) }
         };
 
-        let actual = transact!(initial, |tr| tr
-            .remove_mark(Mark::Italic(ItalicMark))
-            .unwrap());
+        let actual = transact!(initial, |tr| tr.remove_style(StyleType::Italic).unwrap());
 
         let expected = state! {
             doc {
@@ -1092,7 +1179,7 @@ mod tests {
     }
 
     #[test]
-    fn remove_mark_with_slot_at_start() {
+    fn remove_style_with_slot_at_start() {
         let mut p1 = id!();
         let mut p2 = id!();
 
@@ -1100,15 +1187,13 @@ mod tests {
             doc {
                 @p1 paragraph { }
                 @p2 paragraph {
-                    text(marks: [italic()]) { "hello" }
+                    text(styles: [italic()]) { "hello" }
                 }
             }
             selection { (p1, 0) -> (p2, 3) }
         };
 
-        let actual = transact!(initial, |tr| tr
-            .remove_mark(Mark::Italic(ItalicMark))
-            .unwrap());
+        let actual = transact!(initial, |tr| tr.remove_style(StyleType::Italic).unwrap());
 
         let expected = state! {
             doc {
@@ -1127,23 +1212,21 @@ mod tests {
     }
 
     #[test]
-    fn remove_mark_with_slot_at_end() {
+    fn remove_style_with_slot_at_end() {
         let mut p1 = id!();
         let mut p2 = id!();
 
         let initial = state! {
             doc {
                 @p1 paragraph {
-                    text(marks: [italic()]) { "hello" }
+                    text(styles: [italic()]) { "hello" }
                 }
                 @p2 paragraph { }
             }
             selection { (p1, 2) -> (p2, 0) }
         };
 
-        let actual = transact!(initial, |tr| tr
-            .remove_mark(Mark::Italic(ItalicMark))
-            .unwrap());
+        let actual = transact!(initial, |tr| tr.remove_style(StyleType::Italic).unwrap());
 
         let expected = state! {
             doc {
@@ -1162,7 +1245,7 @@ mod tests {
     }
 
     #[test]
-    fn remove_mark_with_slots_at_both_ends() {
+    fn remove_style_with_slots_at_both_ends() {
         let mut p1 = id!();
         let mut p2 = id!();
         let mut p3 = id!();
@@ -1171,16 +1254,14 @@ mod tests {
             doc {
                 @p1 paragraph { }
                 @p2 paragraph {
-                    text(marks: [italic()]) { "hello" }
+                    text(styles: [italic()]) { "hello" }
                 }
                 @p3 paragraph { }
             }
             selection { (p1, 0) -> (p3, 0) }
         };
 
-        let actual = transact!(initial, |tr| tr
-            .remove_mark(Mark::Italic(ItalicMark))
-            .unwrap());
+        let actual = transact!(initial, |tr| tr.remove_style(StyleType::Italic).unwrap());
 
         let expected = state! {
             doc {
@@ -1197,7 +1278,7 @@ mod tests {
     }
 
     #[test]
-    fn remove_mark_across_multiple_paragraphs() {
+    fn remove_style_across_multiple_paragraphs() {
         let mut p1 = id!();
         let mut p2 = id!();
         let mut p3 = id!();
@@ -1205,21 +1286,19 @@ mod tests {
         let initial = state! {
             doc {
                 @p1 paragraph {
-                    text(marks: [italic()]) { "hello" }
+                    text(styles: [italic()]) { "hello" }
                 }
                 @p2 paragraph {
-                    text(marks: [italic()]) { "beautiful" }
+                    text(styles: [italic()]) { "beautiful" }
                 }
                 @p3 paragraph {
-                    text(marks: [italic()]) { "world" }
+                    text(styles: [italic()]) { "world" }
                 }
             }
             selection { (p1, 2) -> (p3, 3) }
         };
 
-        let actual = transact!(initial, |tr| tr
-            .remove_mark(Mark::Italic(ItalicMark))
-            .unwrap());
+        let actual = transact!(initial, |tr| tr.remove_style(StyleType::Italic).unwrap());
 
         let expected = state! {
             doc {
@@ -1246,7 +1325,7 @@ mod tests {
     }
 
     #[test]
-    fn remove_mark_from_text_without_mark() {
+    fn remove_style_from_text_without_style() {
         let mut p = id!();
 
         let initial = state! {
@@ -1258,9 +1337,7 @@ mod tests {
             selection { (p, 0) -> (p, 5) }
         };
 
-        let actual = transact!(initial, |tr| tr
-            .remove_mark(Mark::Italic(ItalicMark))
-            .unwrap());
+        let actual = transact!(initial, |tr| tr.remove_style(StyleType::Italic).unwrap());
 
         let expected = state! {
             doc {
@@ -1275,23 +1352,21 @@ mod tests {
     }
 
     #[test]
-    fn remove_mark_from_multiple_text_nodes_full() {
+    fn remove_style_from_multiple_text_nodes_full() {
         let mut p = id!();
 
         let initial = state! {
             doc {
                 @p paragraph {
-                    text(marks: [italic()]) { "hello" }
-                    text(marks: [italic()]) { " beautiful" }
-                    text(marks: [italic()]) { " world" }
+                    text(styles: [italic()]) { "hello" }
+                    text(styles: [italic()]) { " beautiful" }
+                    text(styles: [italic()]) { " world" }
                 }
             }
             selection { (p, 0) -> (p, 21) }
         };
 
-        let actual = transact!(initial, |tr| tr
-            .remove_mark(Mark::Italic(ItalicMark))
-            .unwrap());
+        let actual = transact!(initial, |tr| tr.remove_style(StyleType::Italic).unwrap());
 
         let expected = state! {
             doc {
@@ -1308,20 +1383,20 @@ mod tests {
     }
 
     #[test]
-    fn toggle_mark_all_marked_to_unmarked() {
+    fn toggle_style_all_styled_to_unstyled() {
         let mut p = id!();
 
         let initial = state! {
             doc {
                 @p paragraph {
-                    text(marks: [italic()]) { "hello" }
+                    text(styles: [italic()]) { "hello" }
                 }
             }
             selection { (p, 0) -> (p, 5) }
         };
 
         let actual = transact!(initial, |tr| tr
-            .toggle_mark(Mark::Italic(ItalicMark))
+            .toggle_style(Style::Italic(ItalicStyle))
             .unwrap());
 
         let expected = state! {
@@ -1337,7 +1412,7 @@ mod tests {
     }
 
     #[test]
-    fn toggle_mark_all_unmarked_to_marked() {
+    fn toggle_style_all_unstyled_to_styled() {
         let mut p = id!();
 
         let initial = state! {
@@ -1350,13 +1425,13 @@ mod tests {
         };
 
         let actual = transact!(initial, |tr| tr
-            .toggle_mark(Mark::Italic(ItalicMark))
+            .toggle_style(Style::Italic(ItalicStyle))
             .unwrap());
 
         let expected = state! {
             doc {
                 @p paragraph {
-                    text(marks: [italic()]) { "hello" }
+                    text(styles: [italic()]) { "hello" }
                 }
             }
             selection { (p, 0) -> (p, 5) }
@@ -1366,13 +1441,13 @@ mod tests {
     }
 
     #[test]
-    fn toggle_mark_partial_marked_adds_to_unmarked() {
+    fn toggle_style_partial_styled_adds_to_unstyled() {
         let mut p = id!();
 
         let initial = state! {
             doc {
                 @p paragraph {
-                    text(marks: [italic()]) { "hello" }
+                    text(styles: [italic()]) { "hello" }
                     text { " world" }
                 }
             }
@@ -1380,14 +1455,14 @@ mod tests {
         };
 
         let actual = transact!(initial, |tr| tr
-            .toggle_mark(Mark::Italic(ItalicMark))
+            .toggle_style(Style::Italic(ItalicStyle))
             .unwrap());
 
         let expected = state! {
             doc {
                 @p paragraph {
-                    text(marks: [italic()]) { "hello" }
-                    text(marks: [italic()]) { " world" }
+                    text(styles: [italic()]) { "hello" }
+                    text(styles: [italic()]) { " world" }
                 }
             }
             selection { (p, 0) -> (p, 11) }
@@ -1397,20 +1472,20 @@ mod tests {
     }
 
     #[test]
-    fn toggle_mark_partial_selection_all_marked() {
+    fn toggle_style_partial_selection_all_styled() {
         let mut p = id!();
 
         let initial = state! {
             doc {
                 @p paragraph {
-                    text(marks: [italic()]) { "hello world" }
+                    text(styles: [italic()]) { "hello world" }
                 }
             }
             selection { (p, 0) -> (p, 5) }
         };
 
         let actual = transact!(initial, |tr| tr
-            .toggle_mark(Mark::Italic(ItalicMark))
+            .toggle_style(Style::Italic(ItalicStyle))
             .unwrap());
 
         let expected = state! {
@@ -1429,7 +1504,7 @@ mod tests {
     }
 
     #[test]
-    fn toggle_mark_partial_selection_all_unmarked() {
+    fn toggle_style_partial_selection_all_unstyled() {
         let mut p = id!();
 
         let initial = state! {
@@ -1442,7 +1517,7 @@ mod tests {
         };
 
         let actual = transact!(initial, |tr| tr
-            .toggle_mark(Mark::Italic(ItalicMark))
+            .toggle_style(Style::Italic(ItalicStyle))
             .unwrap());
 
         let expected = state! {
@@ -1461,30 +1536,30 @@ mod tests {
     }
 
     #[test]
-    fn toggle_mark_mixed_marks_across_nodes() {
+    fn toggle_style_mixed_styles_across_nodes() {
         let mut p = id!();
 
         let initial = state! {
             doc {
                 @p paragraph {
-                    text(marks: [italic()]) { "hello" }
+                    text(styles: [italic()]) { "hello" }
                     text { " beautiful" }
-                    text(marks: [italic()]) { " world" }
+                    text(styles: [italic()]) { " world" }
                 }
             }
             selection { (p, 0) -> (p, 21) }
         };
 
         let actual = transact!(initial, |tr| tr
-            .toggle_mark(Mark::Italic(ItalicMark))
+            .toggle_style(Style::Italic(ItalicStyle))
             .unwrap());
 
         let expected = state! {
             doc {
                 @p paragraph {
-                    text(marks: [italic()]) { "hello" }
-                    text(marks: [italic()]) { " beautiful" }
-                    text(marks: [italic()]) { " world" }
+                    text(styles: [italic()]) { "hello" }
+                    text(styles: [italic()]) { " beautiful" }
+                    text(styles: [italic()]) { " world" }
                 }
             }
             selection { (p, 0) -> (p, 21) }
@@ -1494,22 +1569,22 @@ mod tests {
     }
 
     #[test]
-    fn toggle_mark_all_marked_multiple_nodes() {
+    fn toggle_style_all_styled_multiple_nodes() {
         let mut p = id!();
 
         let initial = state! {
             doc {
                 @p paragraph {
-                    text(marks: [italic()]) { "hello" }
-                    text(marks: [italic()]) { " beautiful" }
-                    text(marks: [italic()]) { " world" }
+                    text(styles: [italic()]) { "hello" }
+                    text(styles: [italic()]) { " beautiful" }
+                    text(styles: [italic()]) { " world" }
                 }
             }
             selection { (p, 0) -> (p, 21) }
         };
 
         let actual = transact!(initial, |tr| tr
-            .toggle_mark(Mark::Italic(ItalicMark))
+            .toggle_style(Style::Italic(ItalicStyle))
             .unwrap());
 
         let expected = state! {
@@ -1527,7 +1602,7 @@ mod tests {
     }
 
     #[test]
-    fn toggle_mark_with_slot_positions() {
+    fn toggle_style_with_slot_positions() {
         let mut p1 = id!();
         let mut p2 = id!();
         let mut p3 = id!();
@@ -1544,14 +1619,14 @@ mod tests {
         };
 
         let actual = transact!(initial, |tr| tr
-            .toggle_mark(Mark::Italic(ItalicMark))
+            .toggle_style(Style::Italic(ItalicStyle))
             .unwrap());
 
         let expected = state! {
             doc {
                 @p1 paragraph { }
                 @p2 paragraph {
-                    text(marks: [italic()]) { "hello" }
+                    text(styles: [italic()]) { "hello" }
                 }
                 @p3 paragraph { }
             }
@@ -1562,7 +1637,7 @@ mod tests {
     }
 
     #[test]
-    fn toggle_mark_across_multiple_paragraphs_mixed() {
+    fn toggle_style_across_multiple_paragraphs_mixed() {
         let mut p1 = id!();
         let mut p2 = id!();
         let mut p3 = id!();
@@ -1570,32 +1645,32 @@ mod tests {
         let initial = state! {
             doc {
                 @p1 paragraph {
-                    text(marks: [italic()]) { "hello" }
+                    text(styles: [italic()]) { "hello" }
                 }
                 @p2 paragraph {
                     text { "beautiful" }
                 }
                 @p3 paragraph {
-                    text(marks: [italic()]) { "world" }
+                    text(styles: [italic()]) { "world" }
                 }
             }
             selection { (p1, 0) -> (p3, 5) }
         };
 
         let actual = transact!(initial, |tr| tr
-            .toggle_mark(Mark::Italic(ItalicMark))
+            .toggle_style(Style::Italic(ItalicStyle))
             .unwrap());
 
         let expected = state! {
             doc {
                 @p1 paragraph {
-                    text(marks: [italic()]) { "hello" }
+                    text(styles: [italic()]) { "hello" }
                 }
                 @p2 paragraph {
-                    text(marks: [italic()]) { "beautiful" }
+                    text(styles: [italic()]) { "beautiful" }
                 }
                 @p3 paragraph {
-                    text(marks: [italic()]) { "world" }
+                    text(styles: [italic()]) { "world" }
                 }
             }
             selection { (p1, 0) -> (p3, 5) }
@@ -1605,13 +1680,13 @@ mod tests {
     }
 
     #[test]
-    fn toggle_mark_partial_with_split() {
+    fn toggle_style_partial_with_split() {
         let mut p = id!();
 
         let initial = state! {
             doc {
                 @p paragraph {
-                    text(marks: [italic()]) { "hello" }
+                    text(styles: [italic()]) { "hello" }
                     text { " world" }
                 }
             }
@@ -1619,13 +1694,13 @@ mod tests {
         };
 
         let actual = transact!(initial, |tr| tr
-            .toggle_mark(Mark::Italic(ItalicMark))
+            .toggle_style(Style::Italic(ItalicStyle))
             .unwrap());
 
         let expected = state! {
             doc {
                 @p paragraph {
-                    text(marks: [italic()]) { "hello" }
+                    text(styles: [italic()]) { "hello" }
                     text {
                         " wor" => [italic()],
                         "ld"
@@ -1639,7 +1714,7 @@ mod tests {
     }
 
     #[test]
-    fn toggle_mark_single_text_with_adjacent_text_position() {
+    fn toggle_style_single_text_with_adjacent_text_position() {
         let mut p = id!();
 
         let initial = state! {
@@ -1654,14 +1729,14 @@ mod tests {
         };
 
         let actual = transact!(initial, |tr| tr
-            .toggle_mark(Mark::Italic(ItalicMark))
+            .toggle_style(Style::Italic(ItalicStyle))
             .unwrap());
 
         let expected = state! {
             doc {
                 @p paragraph {
                     text { "hello" }
-                    text(marks: [italic()]) { "wor" }
+                    text(styles: [italic()]) { "wor" }
                     text { "ld" }
                 }
             }
@@ -1672,7 +1747,7 @@ mod tests {
     }
 
     #[test]
-    fn toggle_mark_partial_split_text() {
+    fn toggle_style_partial_split_text() {
         let mut p = id!();
 
         let initial = state! {
@@ -1686,7 +1761,7 @@ mod tests {
         };
 
         let actual = transact!(initial, |tr| tr
-            .toggle_mark(Mark::Italic(ItalicMark))
+            .toggle_style(Style::Italic(ItalicStyle))
             .unwrap());
 
         let expected = state! {
@@ -1706,7 +1781,7 @@ mod tests {
     }
 
     #[test]
-    fn toggle_mark_partial_split_text_multiple() {
+    fn toggle_style_partial_split_text_multiple() {
         let mut p = id!();
 
         let initial = state! {
@@ -1720,7 +1795,7 @@ mod tests {
         };
 
         let actual = transact!(initial, |tr| tr
-            .toggle_mark(Mark::Italic(ItalicMark))
+            .toggle_style(Style::Italic(ItalicStyle))
             .unwrap());
 
         let expected = state! {
@@ -1741,7 +1816,7 @@ mod tests {
     }
 
     #[test]
-    fn toggle_mark_multiple_paragraphs() {
+    fn toggle_style_multiple_paragraphs() {
         let mut p1 = id!();
         let mut p2 = id!();
 
@@ -1758,7 +1833,7 @@ mod tests {
         };
 
         let actual = transact!(initial, |tr| tr
-            .toggle_mark(Mark::Italic(ItalicMark))
+            .toggle_style(Style::Italic(ItalicStyle))
             .unwrap());
 
         let expected = state! {
@@ -1767,7 +1842,7 @@ mod tests {
                     text { "hello" }
                 }
                 @p2 paragraph {
-                    text(marks: [italic()]) { "world" }
+                    text(styles: [italic()]) { "world" }
                 }
             }
             selection { (p1, 5) -> (p2, 5) }
@@ -1777,7 +1852,7 @@ mod tests {
     }
 
     #[test]
-    fn toggle_mark_collapsed_adds_to_pending_marks() {
+    fn toggle_style_collapsed_adds_to_pending_styles() {
         let mut p = id!();
 
         let state = state! {
@@ -1790,87 +1865,101 @@ mod tests {
         };
 
         let mut tr = crate::transaction::Transaction::new(&state);
-        tr.toggle_mark(Mark::Italic(ItalicMark)).unwrap();
+        tr.toggle_style(Style::Italic(ItalicStyle)).unwrap();
         let (view, _) = tr.commit().unwrap();
 
-        let pending = view.pending_marks.as_ref().unwrap();
-        assert!(pending.iter().any(|m| matches!(m, Mark::Italic(_))));
-    }
-
-    #[test]
-    fn toggle_mark_collapsed_removes_from_pending_marks() {
-        let mut p = id!();
-
-        let state = state! {
-            doc {
-                @p paragraph {
-                    text(marks: [italic()]) { "hello" }
-                }
-            }
-            selection { (p, 2) }
-        };
-
-        let mut tr = crate::transaction::Transaction::new(&state);
-        tr.toggle_mark(Mark::Italic(ItalicMark)).unwrap();
-        let (view, _) = tr.commit().unwrap();
-
-        let pending = view.pending_marks.as_ref().unwrap();
-        assert!(!pending.iter().any(|m| matches!(m, Mark::Italic(_))));
-    }
-
-    #[test]
-    fn add_mark_collapsed_sets_pending_marks() {
-        let mut p = id!();
-
-        let state = state! {
-            doc {
-                @p paragraph {
-                    text { "hello" }
-                }
-            }
-            selection { (p, 2) }
-        };
-
-        let mut tr = crate::transaction::Transaction::new(&state);
-        tr.add_mark(Mark::FontWeight(FontWeightMark { weight: 700 }))
-            .unwrap();
-        let (view, _) = tr.commit().unwrap();
-
-        let pending = view.pending_marks.as_ref().unwrap();
         assert!(
-            pending
+            view.pending_styles
                 .iter()
-                .any(|m| matches!(m, Mark::FontWeight(fw) if fw.weight == 700))
+                .any(|s| matches!(s, Style::Italic(_)))
         );
     }
 
     #[test]
-    fn remove_mark_collapsed_removes_from_pending_marks() {
+    fn toggle_style_collapsed_removes_from_pending_styles() {
         let mut p = id!();
 
         let state = state! {
             doc {
                 @p paragraph {
-                    text(marks: [italic(), font_weight(700)]) { "hello" }
+                    text(styles: [italic()]) { "hello" }
                 }
             }
             selection { (p, 2) }
         };
 
         let mut tr = crate::transaction::Transaction::new(&state);
-        tr.remove_mark(Mark::Italic(ItalicMark)).unwrap();
+        tr.toggle_style(Style::Italic(ItalicStyle)).unwrap();
         let (view, _) = tr.commit().unwrap();
 
-        let pending = view.pending_marks.as_ref().unwrap();
-        assert!(!pending.iter().any(|m| matches!(m, Mark::Italic(_))));
-        assert!(pending.iter().any(|m| matches!(m, Mark::FontWeight(_))));
+        assert!(
+            !view
+                .pending_styles
+                .iter()
+                .any(|s| matches!(s, Style::Italic(_)))
+        );
     }
 
     #[test]
-    fn toggle_bold() {
+    fn set_style_collapsed_sets_pending_styles() {
         let mut p = id!();
 
-        let font_family = FontFamilyMark::default().family;
+        let state = state! {
+            doc {
+                @p paragraph {
+                    text { "hello" }
+                }
+            }
+            selection { (p, 2) }
+        };
+
+        let mut tr = crate::transaction::Transaction::new(&state);
+        tr.set_style(Style::FontWeight(FontWeightStyle { weight: 700 }))
+            .unwrap();
+        let (view, _) = tr.commit().unwrap();
+
+        assert!(
+            view.pending_styles
+                .iter()
+                .any(|s| matches!(s, Style::FontWeight(fw) if fw.weight == 700))
+        );
+    }
+
+    #[test]
+    fn remove_style_collapsed_removes_from_pending_styles() {
+        let mut p = id!();
+
+        let state = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [italic(), font_weight(700)]) { "hello" }
+                }
+            }
+            selection { (p, 2) }
+        };
+
+        let mut tr = crate::transaction::Transaction::new(&state);
+        tr.remove_style(StyleType::Italic).unwrap();
+        let (view, _) = tr.commit().unwrap();
+
+        assert!(
+            !view
+                .pending_styles
+                .iter()
+                .any(|s| matches!(s, Style::Italic(_)))
+        );
+        assert!(
+            view.pending_styles
+                .iter()
+                .any(|s| matches!(s, Style::FontWeight(_)))
+        );
+    }
+
+    #[test]
+    fn toggle_bold_style() {
+        let mut p = id!();
+
+        let font_family = FontFamilyStyle::default().family;
         let mut fonts = std::collections::HashMap::new();
         fonts.insert(font_family.clone(), vec![400, 700]);
         let _guard = crate::test_utils::ScopedFontRegistration::new(fonts);
@@ -1884,14 +1973,15 @@ mod tests {
             selection { (p, 0) -> (p, 5) }
         };
 
-        let (bold_state, effects) = transact_with_effect!(initial, |tr| tr.toggle_bold().unwrap());
+        let (bold_state, effects) =
+            transact_with_effect!(initial, |tr| tr.toggle_bold_style().unwrap());
 
         assert!(effects.iter().any(|e| matches!(e, Effect::FontDetected { family, weight: 700, .. } if family == &font_family)));
 
         let expected_bold = state! {
             doc {
                 @p paragraph {
-                    text(marks: [font_weight(700)]) { "hello" }
+                    text(styles: [font_weight(700)]) { "hello" }
                 }
             }
             selection { (p, 0) -> (p, 5) }
@@ -1899,14 +1989,14 @@ mod tests {
         assert_state_eq!(bold_state, expected_bold);
 
         let (normal_state, effects) =
-            transact_with_effect!(bold_state, |tr| tr.toggle_bold().unwrap());
+            transact_with_effect!(bold_state, |tr| tr.toggle_bold_style().unwrap());
 
         assert!(effects.iter().any(|e| matches!(e, Effect::FontDetected { family, weight: 400, .. } if family == &font_family)));
 
         let expected_normal = state! {
             doc {
                 @p paragraph {
-                    text(marks: [font_weight(400)]) { "hello" }
+                    text(styles: [font_weight(400)]) { "hello" }
                 }
             }
             selection { (p, 0) -> (p, 5) }
@@ -1915,10 +2005,10 @@ mod tests {
     }
 
     #[test]
-    fn toggle_bold_backward_selection() {
+    fn toggle_bold_style_backward_selection() {
         let mut p = id!();
 
-        let font_family = FontFamilyMark::default().family;
+        let font_family = FontFamilyStyle::default().family;
         let mut fonts = std::collections::HashMap::new();
         fonts.insert(font_family.clone(), vec![400, 700]);
         let _guard = crate::test_utils::ScopedFontRegistration::new(fonts);
@@ -1935,7 +2025,8 @@ mod tests {
             selection { (p, 4) -> (p, 3) }
         };
 
-        let (result_state, _) = transact_with_effect!(initial, |tr| tr.toggle_bold().unwrap());
+        let (result_state, _) =
+            transact_with_effect!(initial, |tr| tr.toggle_bold_style().unwrap());
 
         let expected = state! {
             doc {
@@ -1950,63 +2041,7 @@ mod tests {
     }
 
     #[test]
-    fn ruby_mark_does_not_extend_after_typing() {
-        let mut p = id!();
-
-        let initial = state! {
-            doc {
-                @p paragraph {
-                    text(marks: [ruby("ルビ")]) { "漢字" }
-                }
-            }
-            selection { (p, 2) }
-        };
-
-        let actual = transact!(initial, |tr| tr.insert_text("追加").unwrap());
-
-        let expected = state! {
-            doc {
-                @p paragraph {
-                    text {
-                        "漢字" => [ruby("ルビ")],
-                        "追加"
-                    }
-                }
-            }
-            selection { (p, 4, Affinity::Upstream) }
-        };
-
-        assert_state_eq!(actual, expected);
-    }
-
-    #[test]
-    fn ruby_mark_does_not_extend_in_pending_marks() {
-        let mut p = id!();
-
-        let initial = state! {
-            doc {
-                @p paragraph {
-                    text(marks: [ruby("ふりがな")]) { "文字" }
-                }
-            }
-            selection { (p, 2) }
-        };
-
-        let tr = crate::transaction::Transaction::new(&initial);
-        let pending = tr.state.pending_marks.clone();
-
-        if let Some(marks) = pending {
-            assert!(
-                !marks
-                    .iter()
-                    .any(|m| matches!(m, crate::model::Mark::Ruby(_))),
-                "Ruby mark should not be in pending marks due to Expand::None"
-            );
-        }
-    }
-
-    #[test]
-    fn test_mark_application_invalidates_layout_cache() {
+    fn test_style_application_invalidates_layout_cache() {
         let mut p = id!();
         let mut rt = runtime! {
             viewport { 800, 600, 1.0 }
@@ -2029,18 +2064,18 @@ mod tests {
 
         assert!(
             !rt.is_layout_cached(p),
-            "paragraph layout cache should be invalidated after applying mark"
+            "paragraph layout cache should be invalidated after applying style"
         );
     }
 
     #[test]
-    fn test_mark_removal_invalidates_layout_cache() {
+    fn test_style_removal_invalidates_layout_cache() {
         let mut p = id!();
         let mut rt = runtime! {
             viewport { 800, 600, 1.0 }
             doc {
                 @p paragraph {
-                    text(marks: [italic()]) { "Hello World" }
+                    text(styles: [italic()]) { "Hello World" }
                 }
             }
             selection { (p, 0) -> (p, 5) }
@@ -2057,12 +2092,12 @@ mod tests {
 
         assert!(
             !rt.is_layout_cached(p),
-            "paragraph layout cache should be invalidated after removing mark"
+            "paragraph layout cache should be invalidated after removing style"
         );
     }
 
     #[test]
-    fn toggle_mark_with_missing_400_weight() {
+    fn toggle_style_with_missing_400_weight() {
         let mut p = id!();
 
         let initial = state! {
@@ -2080,7 +2115,7 @@ mod tests {
         let _guard = crate::test_utils::ScopedFontRegistration::new(fonts);
 
         let (_, effects) = transact_with_effect!(initial, |tr| {
-            tr.toggle_mark(Mark::FontFamily(FontFamilyMark {
+            tr.toggle_style(Style::FontFamily(FontFamilyStyle {
                 family: "ThinFont".to_string(),
             }))
             .unwrap()
@@ -2089,7 +2124,7 @@ mod tests {
         let effect = effects
             .iter()
             .find(|e| matches!(e, Effect::FontDetected { .. }))
-            .expect("Effect::FontUsageChanged not found");
+            .expect("Effect::FontDetected not found");
 
         if let Effect::FontDetected { family, weight, .. } = effect {
             assert_eq!(family, "ThinFont");
@@ -2098,6 +2133,7 @@ mod tests {
             panic!("Unexpected effect");
         }
     }
+
     #[test]
     fn toggle_font_weight_collapsed_100_to_900() {
         let mut p = id!();
@@ -2105,29 +2141,27 @@ mod tests {
         let initial = state! {
             doc {
                 @p paragraph {
-                    text(marks: [font_weight(100)]) { "hello" }
+                    text(styles: [font_weight(100)]) { "hello" }
                 }
             }
             selection { (p, 2) -> (p, 2) }
         };
 
         let actual_state = transact!(initial, |tr| {
-            tr.toggle_mark(Mark::FontWeight(FontWeightMark { weight: 900 }))
+            tr.toggle_style(Style::FontWeight(FontWeightStyle { weight: 900 }))
                 .unwrap()
         });
 
-        let pending = actual_state
-            .pending_marks
-            .expect("Pending marks should be set");
+        let pending = &actual_state.pending_styles;
 
-        let has_900 = pending.contains(&Mark::FontWeight(FontWeightMark { weight: 900 }));
+        let has_900 = pending.contains(&Style::FontWeight(FontWeightStyle { weight: 900 }));
         assert!(
             has_900,
-            "Should have switched to 900, but pending marks are: {:?}",
+            "Should have switched to 900, but pending styles are: {:?}",
             pending
         );
 
-        let has_100 = pending.contains(&Mark::FontWeight(FontWeightMark { weight: 100 }));
+        let has_100 = pending.contains(&Style::FontWeight(FontWeightStyle { weight: 100 }));
         assert!(!has_100, "Should have removed 100");
     }
 
@@ -2138,28 +2172,26 @@ mod tests {
         let initial = state! {
             doc {
                 @p paragraph {
-                    text(marks: [font_weight(900)]) { "hello" }
+                    text(styles: [font_weight(900)]) { "hello" }
                 }
             }
             selection { (p, 2) -> (p, 2) }
         };
 
         let actual_state = transact!(initial, |tr| {
-            tr.toggle_mark(Mark::FontWeight(FontWeightMark { weight: 100 }))
+            tr.toggle_style(Style::FontWeight(FontWeightStyle { weight: 100 }))
                 .unwrap()
         });
 
-        let pending = actual_state
-            .pending_marks
-            .expect("Pending marks should be set");
+        let pending = &actual_state.pending_styles;
 
         assert!(
-            pending.contains(&Mark::FontWeight(FontWeightMark { weight: 100 })),
-            "Should have switched to 100, marks: {:?}",
+            pending.contains(&Style::FontWeight(FontWeightStyle { weight: 100 })),
+            "Should have switched to 100, styles: {:?}",
             pending
         );
         assert!(
-            !pending.contains(&Mark::FontWeight(FontWeightMark { weight: 900 })),
+            !pending.contains(&Style::FontWeight(FontWeightStyle { weight: 900 })),
             "Should have removed 900"
         );
     }
@@ -2184,8 +2216,8 @@ mod tests {
         let mut ep2 = id!();
         let expected = state! {
           doc {
-            @ep1 paragraph { text(marks: [italic()]) { "hello" } }
-            @ep2 paragraph { text(marks: [italic()]) { "world" } }
+            @ep1 paragraph { text(styles: [italic()]) { "hello" } }
+            @ep2 paragraph { text(styles: [italic()]) { "world" } }
           }
           selection { (NodeId::ROOT, 0) -> (NodeId::ROOT, 2) }
         };
@@ -2205,7 +2237,7 @@ mod tests {
         };
 
         let (_, effects) = transact_with_effect!(initial, |tr| {
-            tr.toggle_mark(Mark::FontWeight(FontWeightMark { weight: 700 }))
+            tr.toggle_style(Style::FontWeight(FontWeightStyle { weight: 700 }))
                 .unwrap()
         });
 

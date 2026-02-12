@@ -1,6 +1,6 @@
-use crate::model::Mark;
+use crate::model::Style;
 use crate::model::html::{
-    DomSpec, LengthUnit, MarkHtmlCodec, MarkParseRule, parse_as, parse_styles,
+    DomSpec, LengthUnit, StyleHtmlCodec, StyleParseRule, parse_as, parse_styles,
 };
 use macros::Codec;
 use serde::{Deserialize, Serialize};
@@ -8,17 +8,17 @@ use std::hash::{Hash, Hasher};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Codec)]
 #[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
-pub struct LetterSpacingMark {
+pub struct LetterSpacingStyle {
     pub spacing: f32,
 }
 
-impl Hash for LetterSpacingMark {
+impl Hash for LetterSpacingStyle {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.spacing.to_bits().hash(state);
     }
 }
 
-impl Default for LetterSpacingMark {
+impl Default for LetterSpacingStyle {
     fn default() -> Self {
         Self { spacing: 0.0 }
     }
@@ -39,21 +39,21 @@ fn snap_letter_spacing(v: f32) -> f32 {
     best
 }
 
-impl MarkHtmlCodec for LetterSpacingMark {
+impl StyleHtmlCodec for LetterSpacingStyle {
     fn to_dom(&self) -> DomSpec {
         DomSpec::el("span")
             .style(format!("letter-spacing:{}em", self.spacing))
             .hole()
     }
 
-    fn parse_rules() -> Vec<MarkParseRule> {
-        vec![MarkParseRule::from_style("letter-spacing", |elem| {
+    fn parse_rules() -> Vec<StyleParseRule> {
+        vec![StyleParseRule::from_style("letter-spacing", |elem| {
             elem.value().attr("style").and_then(|s| {
                 let m = parse_styles(s);
                 m.get("letter-spacing")
                     .and_then(|ls| parse_as(ls, LengthUnit::Em))
                     .map(|spacing| {
-                        Mark::LetterSpacing(LetterSpacingMark {
+                        Style::LetterSpacing(LetterSpacingStyle {
                             spacing: snap_letter_spacing(spacing),
                         })
                     })

@@ -1,5 +1,5 @@
 use crate::{
-    model::FontFamilyMark,
+    model::FontFamilyStyle,
     render::{GlyphRenderer, Render, RenderContext, glyph::Glyph},
 };
 use parley::swash;
@@ -114,7 +114,7 @@ impl ListMarkerElement {
 
             builder.push_default(StyleProperty::FontSize(MARKER_FONT_SIZE));
             builder.push_default(StyleProperty::FontStack(FontStack::Single(
-                FontFamily::Named(FontFamilyMark::default().family.into()),
+                FontFamily::Named(FontFamilyStyle::default().family.into()),
             )));
             builder.push_default(StyleProperty::FontFeatures(
                 parley::style::FontSettings::List(std::borrow::Cow::Borrowed(&[swash::Setting {

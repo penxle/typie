@@ -1,6 +1,6 @@
 use super::effect::Effect;
 use super::{Context, ContextKey, Runtime, When};
-use crate::model::{BlockquoteVariant, HorizontalRuleVariant, LayoutMode, MarkType, TextAlign};
+use crate::model::{Annotation, BlockquoteVariant, HorizontalRuleVariant, LayoutMode, TextAlign};
 use crate::types::{Affinity, Theme};
 use serde::{Deserialize, Serialize};
 
@@ -112,8 +112,6 @@ const TRACKED_ACTIONS: &[&str] = &[
     "ToggleUnderline",
     "ToggleTextColor",
     "ToggleBackgroundColor",
-    "ToggleLink",
-    "ToggleRuby",
     "SetTextAlign",
     "SetLineHeight",
     "SetLetterSpacing",
@@ -121,6 +119,8 @@ const TRACKED_ACTIONS: &[&str] = &[
     "SetFontSize",
     "SetFontWeight",
     "ClearFormatting",
+    "AddAnnotation",
+    "RemoveAnnotation",
 ];
 
 /// Toolbar에서 추적할 action들의 목록과 when 조건
@@ -329,15 +329,18 @@ define_messages! {
         .and(When::key(ContextKey::HasParagraphTextInSelection).or(When::key(ContextKey::InParagraph)))
     => handle(rt) { rt.handle_toggle_underline() },
 
-    ToggleRuby { text: String }
+    AddAnnotation { annotation: Annotation }
     => when When::key(ContextKey::CanEdit)
         .and(When::key(ContextKey::HasParagraphTextInSelection))
-    => handle(rt) { rt.handle_toggle_ruby(text) },
+    => handle(rt) { rt.handle_add_annotation(annotation) },
 
-    ToggleLink { href: String }
+    UpdateAnnotation { id: String, annotation: Annotation }
     => when When::key(ContextKey::CanEdit)
-        .and(When::key(ContextKey::HasParagraphTextInSelection))
-    => handle(rt) { rt.handle_toggle_link(href) },
+    => handle(rt) { rt.handle_update_annotation(id, annotation) },
+
+    RemoveAnnotation { id: String }
+    => when When::key(ContextKey::CanEdit)
+    => handle(rt) { rt.handle_remove_annotation(id) },
 
     ToggleBlockquote { variant: BlockquoteVariant }
     => when When::key(ContextKey::CanEdit)
@@ -425,10 +428,6 @@ define_messages! {
     Outdent
     => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_outdent() },
-
-    ExtendMarkRange { mark_type: MarkType }
-    => when When::key(ContextKey::CanEdit)
-    => handle(rt) { rt.handle_extend_mark_range(mark_type) },
 
     InsertImage { upload_id: Option<String> }
     => when When::key(ContextKey::CanEdit)

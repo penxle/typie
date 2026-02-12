@@ -1,9 +1,16 @@
-use crate::model::{Codec, Mark, MarkType};
+use crate::model::{AnnotationId, Codec, Style, StyleType};
 use anyhow::{Context, Result};
 use loro::{LoroMap, LoroText, LoroValue};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt::{self, Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TextSegment {
+    pub text: String,
+    pub styles: Vec<Style>,
+    pub annotations: Vec<AnnotationId>,
+}
 
 pub struct Text {
     loro_text: LoroText,
@@ -11,8 +18,8 @@ pub struct Text {
 
 impl PartialEq for Text {
     fn eq(&self, other: &Self) -> bool {
-        let self_segments = self.get_rich_text_segments();
-        let other_segments = other.get_rich_text_segments();
+        let self_segments = self.get_segments();
+        let other_segments = other.get_segments();
 
         if self_segments.len() != other_segments.len() {
             return false;
@@ -21,30 +28,36 @@ impl PartialEq for Text {
         self_segments
             .iter()
             .zip(other_segments.iter())
-            .all(|((t1, m1), (t2, m2))| {
-                if t1 != t2 || m1.len() != m2.len() {
+            .all(|(s1, s2)| {
+                if s1.text != s2.text || s1.styles.len() != s2.styles.len() {
                     return false;
                 }
-                let mut m1_sorted: Vec<_> = m1.iter().collect();
-                let mut m2_sorted: Vec<_> = m2.iter().collect();
+                let mut m1_sorted: Vec<_> = s1.styles.iter().collect();
+                let mut m2_sorted: Vec<_> = s2.styles.iter().collect();
                 m1_sorted.sort_by_key(|m| m.as_type());
                 m2_sorted.sort_by_key(|m| m.as_type());
                 m1_sorted == m2_sorted
+                    && s1.annotations.len() == s2.annotations.len()
+                    && s1.annotations.iter().all(|a| s2.annotations.contains(a))
             })
     }
 }
 
 impl Hash for Text {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        let segments = self.get_rich_text_segments();
+        let segments = self.get_segments();
         segments.len().hash(state);
-        for (text, marks) in segments {
-            text.hash(state);
-            marks.len().hash(state);
-            let mut sorted_marks: Vec<_> = marks.iter().collect();
-            sorted_marks.sort_by_key(|m| m.as_type());
-            for mark in sorted_marks {
-                mark.hash(state);
+        for seg in segments {
+            seg.text.hash(state);
+            seg.styles.len().hash(state);
+            let mut sorted: Vec<_> = seg.styles.iter().collect();
+            sorted.sort_by_key(|s| s.as_type());
+            for style in sorted {
+                style.hash(state);
+            }
+            seg.annotations.len().hash(state);
+            for ann in &seg.annotations {
+                ann.hash(state);
             }
         }
     }
@@ -67,19 +80,23 @@ impl Text {
         Text { loro_text }
     }
 
-    pub fn from_segments(segments: &[(String, Vec<Mark>)]) -> Self {
+    pub fn from_segments(segments: &[TextSegment]) -> Self {
         let text = Self::new();
         let mut total_text = String::new();
-        for (content, _) in segments {
-            total_text.push_str(content);
+        for seg in segments {
+            total_text.push_str(&seg.text);
         }
         text.insert(0, &total_text);
 
         let mut offset = 0;
-        for (content, marks) in segments {
-            let len = content.chars().count();
-            for mark in marks {
-                let _ = text.mark(offset..offset + len, mark);
+        for seg in segments {
+            let len = seg.text.chars().count();
+            let range = offset..offset + len;
+            for style in &seg.styles {
+                let _ = text.apply_style(range.clone(), style);
+            }
+            for ann_id in &seg.annotations {
+                let _ = text.apply_annotation(range.clone(), *ann_id);
             }
             offset += len;
         }
@@ -124,13 +141,13 @@ impl Text {
     }
 
     pub fn slice(&self, from_char: usize, to_char: usize) -> Text {
-        let segments = self.get_rich_text_segments();
+        let segments = self.get_segments();
         let result = Text::new();
         let mut current_offset = 0;
         let mut segment_ranges = Vec::new();
 
-        for (segment_text, segment_marks) in segments {
-            let segment_len = segment_text.chars().count();
+        for seg in segments {
+            let segment_len = seg.text.chars().count();
             let segment_end = current_offset + segment_len;
 
             if segment_end <= from_char {
@@ -154,22 +171,25 @@ impl Text {
                 segment_len
             };
 
-            let chars: Vec<char> = segment_text.chars().collect();
+            let chars: Vec<char> = seg.text.chars().collect();
             let sliced_text: String = chars[slice_start..slice_end].iter().collect();
 
             if !sliced_text.is_empty() {
                 let start = result.char_len();
                 result.insert(start, &sliced_text);
                 let end = result.char_len();
-                segment_ranges.push((start..end, segment_marks));
+                segment_ranges.push((start..end, seg.styles, seg.annotations));
             }
 
             current_offset = segment_end;
         }
 
-        for (range, marks) in segment_ranges {
-            for mark in marks {
-                let _ = result.mark(range.clone(), &mark);
+        for (range, styles, annotations) in segment_ranges {
+            for style in &styles {
+                let _ = result.apply_style(range.clone(), style);
+            }
+            for ann_id in &annotations {
+                let _ = result.apply_annotation(range.clone(), *ann_id);
             }
         }
 
@@ -217,54 +237,67 @@ impl Text {
         }
     }
 
-    pub fn mark(&self, range: std::ops::Range<usize>, mark: &Mark) -> anyhow::Result<()> {
-        if mark.is_default() {
-            return self.unmark(range, mark.as_type());
-        }
-        let key = mark.key();
-        let value = mark.to_loro_value();
+    pub fn apply_style(&self, range: std::ops::Range<usize>, style: &Style) -> Result<()> {
+        let key = style.key();
+        let value = style.to_loro_value();
         self.loro_text
             .mark(range, key, value)
-            .context("Failed to apply mark")
+            .context("Failed to apply style")
     }
 
-    pub fn unmark(&self, range: std::ops::Range<usize>, mark_type: MarkType) -> anyhow::Result<()> {
-        let key = mark_type.key();
+    pub fn apply_annotation(&self, range: std::ops::Range<usize>, id: AnnotationId) -> Result<()> {
+        let key = id.loro_key();
+        self.loro_text
+            .mark(range, &key, LoroValue::Bool(true))
+            .context("Failed to apply annotation")
+    }
+
+    pub fn remove_annotation(&self, range: std::ops::Range<usize>, id: AnnotationId) -> Result<()> {
+        let key = id.loro_key();
+        self.loro_text
+            .mark(range, &key, LoroValue::Null)
+            .context("Failed to remove annotation")
+    }
+
+    pub fn remove_style(&self, range: std::ops::Range<usize>, style_type: StyleType) -> Result<()> {
+        let key = style_type.key();
         self.loro_text
             .mark(range, key, LoroValue::Null)
-            .context("Failed to remove mark")
+            .context("Failed to remove style")
     }
 
-    pub fn get_rich_text_segments(&self) -> Vec<(String, Vec<Mark>)> {
+    pub fn get_segments(&self) -> Vec<TextSegment> {
         let rich_value = self.loro_text.get_richtext_value();
-
         let mut segments = Vec::new();
-
         if let LoroValue::List(list) = rich_value {
             for item in list.iter() {
                 if let LoroValue::Map(map) = item {
-                    let text = map
-                        .get("insert")
-                        .and_then(|v| v.as_string())
-                        .map(|s| s.to_string())
-                        .unwrap_or_default();
-
-                    let mut marks = Vec::new();
-                    if let Some(attrs_value) = map.get("attributes") {
-                        if let LoroValue::Map(attrs) = attrs_value {
-                            for (key, value) in attrs.iter() {
-                                if let Some(mark) = Mark::from_key_value(&key, value.clone()) {
-                                    marks.push(mark);
-                                }
+                    let text = match map.get("insert") {
+                        Some(LoroValue::String(s)) => s.to_string(),
+                        _ => continue,
+                    };
+                    let mut styles = Vec::new();
+                    let mut annotations = Vec::new();
+                    if let Some(LoroValue::Map(attrs)) = map.get("attributes") {
+                        for (key, value) in attrs.iter() {
+                            if matches!(value, LoroValue::Null) {
+                                continue;
+                            }
+                            if let Some(style) = Style::from_key_value(key, value.clone()) {
+                                styles.push(style);
+                            } else if let Some(id) = AnnotationId::parse_loro_key(key) {
+                                annotations.push(id);
                             }
                         }
                     }
-
-                    segments.push((text, marks));
+                    segments.push(TextSegment {
+                        text,
+                        styles,
+                        annotations,
+                    });
                 }
             }
         }
-
         segments
     }
 }
@@ -272,19 +305,23 @@ impl Text {
 impl Clone for Text {
     fn clone(&self) -> Self {
         let loro_text = LoroText::new();
-        let segments = self.get_rich_text_segments();
+        let segments = self.get_segments();
 
         let mut segment_ranges = Vec::new();
-        for (text, marks) in &segments {
+        for seg in &segments {
             let start = loro_text.len_unicode();
-            let _ = loro_text.insert(start, text);
+            let _ = loro_text.insert(start, &seg.text);
             let end = loro_text.len_unicode();
-            segment_ranges.push((start..end, marks.clone()));
+            segment_ranges.push((start..end, &seg.styles, &seg.annotations));
         }
 
-        for (range, marks) in segment_ranges {
-            for mark in marks {
-                let _ = loro_text.mark(range.clone(), mark.key(), mark.to_loro_value());
+        for (range, styles, annotations) in segment_ranges {
+            for style in styles {
+                let _ = loro_text.mark(range.clone(), style.key(), style.to_loro_value());
+            }
+            for ann_id in annotations {
+                let key = ann_id.loro_key();
+                let _ = loro_text.mark(range.clone(), &key, LoroValue::Bool(true));
             }
         }
 
@@ -331,10 +368,12 @@ impl From<Text> for String {
 }
 
 #[derive(Serialize, Deserialize)]
-struct TextSegment {
+struct SerializedSegment {
     text: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    marks: Vec<Mark>,
+    styles: Vec<Style>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    annotation_ids: Vec<String>,
 }
 
 impl Serialize for Text {
@@ -342,10 +381,18 @@ impl Serialize for Text {
     where
         S: Serializer,
     {
-        let segments: Vec<TextSegment> = self
-            .get_rich_text_segments()
+        let segments: Vec<SerializedSegment> = self
+            .get_segments()
             .into_iter()
-            .map(|(text, marks)| TextSegment { text, marks })
+            .map(|seg| SerializedSegment {
+                text: seg.text,
+                styles: seg.styles,
+                annotation_ids: seg
+                    .annotations
+                    .into_iter()
+                    .map(|id| id.to_string())
+                    .collect(),
+            })
             .collect();
         segments.serialize(serializer)
     }
@@ -356,18 +403,23 @@ impl<'de> Deserialize<'de> for Text {
     where
         D: Deserializer<'de>,
     {
-        let segments: Vec<TextSegment> = Vec::deserialize(deserializer)?;
+        let segments: Vec<SerializedSegment> = Vec::deserialize(deserializer)?;
         let text = Text::new();
         let mut ranges = Vec::new();
         for segment in &segments {
             let start = text.char_len();
             text.insert(start, &segment.text);
             let end = text.char_len();
-            ranges.push((start..end, &segment.marks));
+            ranges.push((start..end, &segment.styles, &segment.annotation_ids));
         }
-        for (range, marks) in ranges {
-            for mark in marks {
-                let _ = text.mark(range.clone(), mark);
+        for (range, styles, annotation_ids) in ranges {
+            for style in styles {
+                let _ = text.apply_style(range.clone(), style);
+            }
+            for id_str in annotation_ids {
+                if let Some(id) = AnnotationId::from_string(id_str) {
+                    let _ = text.apply_annotation(range.clone(), id);
+                }
             }
         }
         Ok(text)

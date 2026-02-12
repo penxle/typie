@@ -1,3 +1,4 @@
+mod annotation;
 mod blockquote;
 mod callout;
 mod clipboard;
@@ -6,12 +7,12 @@ mod drop;
 mod fold;
 mod horizontal_rule;
 mod list;
-mod mark;
 mod node;
 mod paragraph;
 mod preedit;
 mod root;
 mod selection;
+mod style;
 mod table;
 mod text;
 
@@ -52,6 +53,7 @@ impl Transaction {
 
     pub fn set_selection(&mut self, selection: Selection) {
         self.state.selection = selection;
+        self.recompute_pending_styles();
     }
 
     pub fn set_preferred_x(&mut self, preferred_x: Option<f32>) {
@@ -76,39 +78,6 @@ impl Transaction {
             .chars()
             .map(|c| c as u32)
             .collect()
-    }
-
-    pub(crate) fn current_font(&self) -> (String, u16) {
-        use crate::model::{FontFamilyMark, FontWeightMark, Mark};
-
-        let marks = self
-            .state
-            .pending_marks
-            .clone()
-            .unwrap_or_else(|| mark::get_marks_at_cursor(self, &self.selection().head));
-
-        let mut family = FontFamilyMark::default().family;
-        let mut weight = FontWeightMark::default().weight;
-
-        if let Some(node_ref) = self.doc().node(self.selection().head.node_id) {
-            let overrides = node_ref.node().font_overrides();
-            if let Some(f) = overrides.family {
-                family = f;
-            }
-            if let Some(w) = overrides.weight {
-                weight = w;
-            }
-        }
-
-        for mark in &marks {
-            match mark {
-                Mark::FontFamily(f) => family = f.family.clone(),
-                Mark::FontWeight(w) => weight = w.weight,
-                _ => {}
-            }
-        }
-
-        (family, weight)
     }
 
     pub fn commit(self) -> Result<(State, Vec<Effect>)> {

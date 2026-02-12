@@ -1,4 +1,4 @@
-use crate::model::{FontFamilyMark, FontWeightMark, LayoutMode, Mark, Node, NodeId};
+use crate::model::{FontFamilyStyle, FontWeightStyle, LayoutMode, Node, NodeId, Style};
 use crate::runtime::{Effect, Runtime};
 use crate::types::Theme;
 use rustc_hash::FxHashSet;
@@ -46,8 +46,8 @@ impl Runtime {
             NodeId::ROOT,
             &mut fonts,
             &mut codepoints,
-            FontFamilyMark::default().family,
-            FontWeightMark::default().weight,
+            FontFamilyStyle::default().family,
+            FontWeightStyle::default().weight,
         );
 
         let fonts = fonts
@@ -75,20 +75,20 @@ impl Runtime {
         let child_weight = overrides.weight.unwrap_or(default_weight);
 
         if let Node::Text(text_node) = node_ref.node() {
-            for (text, marks) in text_node.text.get_rich_text_segments() {
+            for seg in text_node.text.get_segments() {
                 let mut family = default_family.clone();
                 let mut weight = default_weight;
 
-                for mark in &marks {
-                    match mark {
-                        Mark::FontFamily(f) => family = f.family.clone(),
-                        Mark::FontWeight(w) => weight = w.weight,
+                for style in &seg.styles {
+                    match style {
+                        Style::FontFamily(f) => family = f.family.clone(),
+                        Style::FontWeight(w) => weight = w.weight,
                         _ => {}
                     }
                 }
 
                 let font_cps = fonts.entry((family, weight)).or_default();
-                for ch in text.chars() {
+                for ch in seg.text.chars() {
                     codepoints.insert(ch as u32);
                     font_cps.insert(ch as u32);
                 }

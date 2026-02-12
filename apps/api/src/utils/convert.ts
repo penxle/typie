@@ -8,22 +8,23 @@ import type { PageLayout } from '@/db/schemas/json';
 
 const ROOT_ID = '00000000000000000000000000000000';
 
-type LoroMark =
+type LoroStyle =
   | { type: 'font_weight'; weight: number }
   | { type: 'italic' }
   | { type: 'strikethrough' }
   | { type: 'underline' }
-  | { type: 'link'; href: string }
-  | { type: 'ruby'; text: string }
-  | { type: 'text_color'; key: string }
-  | { type: 'background_color'; key: string }
+  | { type: 'text_color'; color: string }
+  | { type: 'background_color'; color: string }
   | { type: 'font_family'; family: string }
   | { type: 'font_size'; size: number }
   | { type: 'letter_spacing'; spacing: number };
 
+type LoroAnnotation = { type: 'link'; href: string } | { type: 'ruby'; text: string };
+
 type TextSegment = {
   text: string;
-  marks?: LoroMark[];
+  styles?: LoroStyle[];
+  annotation_ids?: string[];
 };
 
 type LoroNode = {
@@ -49,7 +50,9 @@ type DocumentJson = {
           page_margin_right: number;
         };
   };
+  styles: Record<string, unknown>;
   nodes: Record<string, LoroNode>;
+  annotations: Record<string, unknown>;
 };
 
 type ArchivedNodeEntry = {
@@ -62,84 +65,94 @@ const generateNodeId = () => faker.string.uuid().replaceAll('-', '');
 const MM_TO_PX = 96 / 25.4;
 const PX_TO_PT = 72 / 96;
 
-function convertPmMarksToLoroMarks(marks: JSONContent['marks']): LoroMark[] {
-  if (!marks) return [];
+function convertPmMarks(
+  pmMarks: JSONContent['marks'],
+  annotations: Record<string, LoroAnnotation>,
+): { styles: LoroStyle[]; annotationIds: string[] } {
+  const styles: LoroStyle[] = [];
+  const annotationIds: string[] = [];
 
-  const loroMarks: LoroMark[] = [];
+  if (!pmMarks) return { styles, annotationIds };
 
-  for (const mark of marks) {
-    switch (mark.type) {
+  for (const pmMark of pmMarks) {
+    switch (pmMark.type) {
       case 'bold': {
-        loroMarks.push({ type: 'font_weight', weight: 700 });
+        styles.push({ type: 'font_weight', weight: 700 });
         break;
       }
       case 'italic': {
-        loroMarks.push({ type: 'italic' });
+        styles.push({ type: 'italic' });
         break;
       }
       case 'strike': {
-        loroMarks.push({ type: 'strikethrough' });
+        styles.push({ type: 'strikethrough' });
         break;
       }
       case 'underline': {
-        loroMarks.push({ type: 'underline' });
+        styles.push({ type: 'underline' });
         break;
       }
       case 'link': {
-        if (mark.attrs?.href) {
-          loroMarks.push({ type: 'link', href: mark.attrs.href as string });
+        if (pmMark.attrs?.href) {
+          const id = generateNodeId();
+          annotations[id] = { type: 'link', href: pmMark.attrs.href as string };
+          annotationIds.push(id);
         }
         break;
       }
       case 'ruby': {
-        if (mark.attrs?.text) {
-          loroMarks.push({ type: 'ruby', text: mark.attrs.text as string });
+        if (pmMark.attrs?.text) {
+          const id = generateNodeId();
+          annotations[id] = { type: 'ruby', text: pmMark.attrs.text as string };
+          annotationIds.push(id);
         }
         break;
       }
       case 'text_style': {
-        if (mark.attrs?.textColor) {
-          loroMarks.push({ type: 'text_color', key: mark.attrs.textColor as string });
+        if (pmMark.attrs?.textColor) {
+          styles.push({ type: 'text_color', color: pmMark.attrs.textColor as string });
         }
-        if (mark.attrs?.textBackgroundColor) {
-          loroMarks.push({ type: 'background_color', key: mark.attrs.textBackgroundColor as string });
+        if (pmMark.attrs?.textBackgroundColor) {
+          styles.push({ type: 'background_color', color: pmMark.attrs.textBackgroundColor as string });
         }
-        if (mark.attrs?.fontFamily) {
-          loroMarks.push({ type: 'font_family', family: mark.attrs.fontFamily as string });
+        if (pmMark.attrs?.fontFamily) {
+          styles.push({ type: 'font_family', family: pmMark.attrs.fontFamily as string });
         }
-        if (mark.attrs?.fontSize) {
-          loroMarks.push({ type: 'font_size', size: Number(mark.attrs.fontSize) * PX_TO_PT });
+        if (pmMark.attrs?.fontSize) {
+          styles.push({ type: 'font_size', size: Number(pmMark.attrs.fontSize) * PX_TO_PT });
         }
-        if (mark.attrs?.fontWeight) {
-          loroMarks.push({ type: 'font_weight', weight: Number(mark.attrs.fontWeight) });
+        if (pmMark.attrs?.fontWeight) {
+          styles.push({ type: 'font_weight', weight: Number(pmMark.attrs.fontWeight) });
         }
         break;
       }
     }
   }
 
-  return loroMarks;
+  return { styles, annotationIds };
 }
 
-function mergeInlineContent(content: JSONContent[] | undefined, extraMarks: LoroMark[]): TextSegment[] {
+function mergeInlineContent(
+  content: JSONContent[] | undefined,
+  extraStyles: LoroStyle[],
+  annotations: Record<string, LoroAnnotation>,
+): TextSegment[] {
   if (!content || content.length === 0) return [];
 
   const segments: TextSegment[] = [];
 
   for (const inline of content) {
     if (inline.type === 'text' && inline.text) {
-      const marks = [...convertPmMarksToLoroMarks(inline.marks), ...extraMarks];
-      if (marks.length > 0) {
-        segments.push({ text: inline.text, marks });
-      } else {
-        segments.push({ text: inline.text });
-      }
+      const converted = convertPmMarks(inline.marks, annotations);
+      const styles = [...converted.styles, ...extraStyles];
+      const segment: TextSegment = { text: inline.text };
+      if (styles.length > 0) segment.styles = styles;
+      if (converted.annotationIds.length > 0) segment.annotation_ids = converted.annotationIds;
+      segments.push(segment);
     } else if (inline.type === 'hard_break') {
-      if (extraMarks.length > 0) {
-        segments.push({ text: '\n', marks: [...extraMarks] });
-      } else {
-        segments.push({ text: '\n' });
-      }
+      const segment: TextSegment = { text: '\n' };
+      if (extraStyles.length > 0) segment.styles = [...extraStyles];
+      segments.push(segment);
     }
   }
 
@@ -151,16 +164,17 @@ function convertNode(
   parentId: string,
   nodes: Record<string, LoroNode>,
   archivedNodes: ArchivedNodeEntry[],
+  annotations: Record<string, LoroAnnotation>,
 ): string | null {
   const nodeId = generateNodeId();
 
   switch (pmNode.type) {
     case 'paragraph': {
       const letterSpacing = pmNode.attrs?.letterSpacing ?? 0;
-      const extraMarks: LoroMark[] = letterSpacing === 0 ? [] : [{ type: 'letter_spacing', spacing: letterSpacing }];
+      const extraStyles: LoroStyle[] = letterSpacing === 0 ? [] : [{ type: 'letter_spacing', spacing: letterSpacing }];
 
       const children: string[] = [];
-      const segments = mergeInlineContent(pmNode.content, extraMarks);
+      const segments = mergeInlineContent(pmNode.content, extraStyles, annotations);
 
       if (segments.length > 0) {
         const textNodeId = generateNodeId();
@@ -196,7 +210,7 @@ function convertNode(
       const children: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = convertNode(child, nodeId, nodes, archivedNodes);
+          const childId = convertNode(child, nodeId, nodes, archivedNodes, annotations);
           if (childId) children.push(childId);
         }
       }
@@ -216,7 +230,7 @@ function convertNode(
       const children: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = convertNode(child, nodeId, nodes, archivedNodes);
+          const childId = convertNode(child, nodeId, nodes, archivedNodes, annotations);
           if (childId) children.push(childId);
         }
       }
@@ -234,7 +248,7 @@ function convertNode(
       const children: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = convertNode(child, nodeId, nodes, archivedNodes);
+          const childId = convertNode(child, nodeId, nodes, archivedNodes, annotations);
           if (childId) children.push(childId);
         }
       }
@@ -251,7 +265,7 @@ function convertNode(
       const children: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = convertNode(child, nodeId, nodes, archivedNodes);
+          const childId = convertNode(child, nodeId, nodes, archivedNodes, annotations);
           if (childId) children.push(childId);
         }
       }
@@ -268,7 +282,7 @@ function convertNode(
       const children: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = convertNode(child, nodeId, nodes, archivedNodes);
+          const childId = convertNode(child, nodeId, nodes, archivedNodes, annotations);
           if (childId) children.push(childId);
         }
       }
@@ -316,7 +330,7 @@ function convertNode(
       const children: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = convertNode(child, nodeId, nodes, archivedNodes);
+          const childId = convertNode(child, nodeId, nodes, archivedNodes, annotations);
           if (childId) children.push(childId);
         }
       }
@@ -341,7 +355,7 @@ function convertNode(
       const children: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = convertNode(child, nodeId, nodes, archivedNodes);
+          const childId = convertNode(child, nodeId, nodes, archivedNodes, annotations);
           if (childId) children.push(childId);
         }
       }
@@ -358,7 +372,7 @@ function convertNode(
       const children: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = convertNode(child, nodeId, nodes, archivedNodes);
+          const childId = convertNode(child, nodeId, nodes, archivedNodes, annotations);
           if (childId) children.push(childId);
         }
       }
@@ -447,7 +461,7 @@ function convertNode(
       const contentChildren: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = convertNode(child, foldContentId, nodes, archivedNodes);
+          const childId = convertNode(child, foldContentId, nodes, archivedNodes, annotations);
           if (childId) contentChildren.push(childId);
         }
       }
@@ -550,13 +564,14 @@ export function convertPostToDocumentJson(
   }
 
   const nodes: Record<string, LoroNode> = {};
+  const annotations: Record<string, LoroAnnotation> = {};
   const archivedNodes: ArchivedNodeEntry[] = [];
 
   const rootChildren: string[] = [];
   const blocks = bodyNode?.content ?? [];
 
   for (const block of blocks) {
-    const childId = convertNode(block, ROOT_ID, nodes, archivedNodes);
+    const childId = convertNode(block, ROOT_ID, nodes, archivedNodes, annotations);
     if (childId) rootChildren.push(childId);
   }
 
@@ -583,7 +598,19 @@ export function convertPostToDocumentJson(
       paragraph_indent: paragraphIndent,
       layout_mode: layoutMode,
     },
+    styles: {
+      font_family: 'Pretendard',
+      font_size: 12,
+      font_weight: 400,
+      text_color: 'black',
+      background_color: 'none',
+      letter_spacing: 0,
+      italic: false,
+      strikethrough: false,
+      underline: false,
+    },
     nodes,
+    annotations,
   };
 
   return { json, archivedNodes };

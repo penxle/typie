@@ -1,4 +1,4 @@
-use crate::model::{FontFamilyMark, FontWeightMark, Fragment, Mark, Node};
+use crate::model::{Fragment, Node, Style};
 use crate::runtime::Effect;
 use crate::transaction::Transaction;
 use crate::utils::collect_codepoints;
@@ -34,28 +34,33 @@ impl Transaction {
             return Ok(false);
         }
 
-        let default_family = FontFamilyMark::default().family;
-        let default_weight = FontWeightMark::default().weight;
         let mut font_codepoints: FxHashMap<(String, u16), Vec<u32>> = FxHashMap::default();
         let mut all_codepoints = Vec::new();
 
         for (_, node) in fragment.iter() {
             if let Node::Text(text_node) = node.data() {
-                for (text, marks) in text_node.text.get_rich_text_segments() {
-                    let codepoints = collect_codepoints(&text);
+                for segment in text_node.text.get_segments() {
+                    let codepoints = collect_codepoints(&segment.text);
                     if codepoints.is_empty() {
                         continue;
                     }
 
-                    let mut family = default_family.clone();
-                    let mut weight = default_weight;
-                    for mark in &marks {
-                        match mark {
-                            Mark::FontFamily(f) => family = f.family.clone(),
-                            Mark::FontWeight(w) => weight = w.weight,
-                            _ => {}
-                        }
-                    }
+                    let family = segment
+                        .styles
+                        .iter()
+                        .find_map(|s| match s {
+                            Style::FontFamily(f) => Some(f.family.clone()),
+                            _ => None,
+                        })
+                        .expect("segment must have FontFamily style");
+                    let weight = segment
+                        .styles
+                        .iter()
+                        .find_map(|s| match s {
+                            Style::FontWeight(w) => Some(w.weight),
+                            _ => None,
+                        })
+                        .expect("segment must have FontWeight style");
 
                     all_codepoints.extend_from_slice(&codepoints);
                     font_codepoints
@@ -822,14 +827,14 @@ mod tests {
     }
 
     #[test]
-    fn paste_text_preserves_marks() {
+    fn paste_text_preserves_styles() {
         let mut p = id!();
 
         let initial = state! {
             doc {
                 @p paragraph {
                     text { "Hello " }
-                    text(marks: [bold()]) { "World" }
+                    text(styles: [font_weight(700)]) { "World" }
                 }
             }
             selection { (p, 0) -> (p, 11) }
@@ -853,7 +858,7 @@ mod tests {
                 @p paragraph {
                     text {
                         "Hello ",
-                        "World" => [bold()]
+                        "World" => [font_weight(700)]
                     }
                 }
             }
@@ -864,14 +869,14 @@ mod tests {
     }
 
     #[test]
-    fn paste_text_preserves_marks_through_json() {
+    fn paste_text_preserves_styles_through_json() {
         let mut p = id!();
 
         let initial = state! {
             doc {
                 @p paragraph {
                     text { "Hello " }
-                    text(marks: [bold()]) { "World" }
+                    text(styles: [font_weight(700)]) { "World" }
                 }
             }
             selection { (p, 0) -> (p, 11) }
@@ -897,7 +902,7 @@ mod tests {
                 @p paragraph {
                     text {
                         "Hello ",
-                        "World" => [bold()]
+                        "World" => [font_weight(700)]
                     }
                 }
             }

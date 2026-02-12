@@ -2,6 +2,9 @@ use macros::Codec;
 use serde::{Deserialize, Serialize};
 use std::hash::{Hash, Hasher};
 
+use super::style::Style;
+use super::styles::*;
+
 pub const CONTINUOUS_PAGE_MARGIN: f32 = 20.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Codec)]
@@ -75,5 +78,69 @@ impl Hash for DocumentSettings {
         self.block_gap.to_bits().hash(state);
         self.paragraph_indent.to_bits().hash(state);
         self.layout_mode.hash(state);
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DefaultStyles {
+    pub font_family: String,
+    pub font_size: f32,
+    pub font_weight: u16,
+    pub text_color: String,
+    pub background_color: String,
+    pub letter_spacing: f32,
+    pub italic: bool,
+    pub strikethrough: bool,
+    pub underline: bool,
+}
+
+impl Default for DefaultStyles {
+    fn default() -> Self {
+        Self {
+            font_family: "Pretendard".to_string(),
+            font_size: 12.0,
+            font_weight: 400,
+            text_color: "black".to_string(),
+            background_color: BackgroundColorStyle::NONE.to_string(),
+            letter_spacing: 0.0,
+            italic: false,
+            strikethrough: false,
+            underline: false,
+        }
+    }
+}
+
+impl DefaultStyles {
+    pub fn to_styles(&self) -> Vec<Style> {
+        let mut styles = vec![
+            Style::FontFamily(FontFamilyStyle {
+                family: self.font_family.clone(),
+            }),
+            Style::FontSize(FontSizeStyle {
+                size: self.font_size,
+            }),
+            Style::FontWeight(FontWeightStyle {
+                weight: self.font_weight,
+            }),
+            Style::TextColor(TextColorStyle {
+                color: self.text_color.clone(),
+            }),
+            Style::BackgroundColor(BackgroundColorStyle {
+                color: self.background_color.clone(),
+            }),
+            Style::LetterSpacing(LetterSpacingStyle {
+                spacing: self.letter_spacing,
+            }),
+        ];
+        if self.italic {
+            styles.push(Style::Italic(ItalicStyle));
+        }
+        if self.strikethrough {
+            styles.push(Style::Strikethrough(StrikethroughStyle));
+        }
+        if self.underline {
+            styles.push(Style::Underline(UnderlineStyle));
+        }
+        styles
     }
 }

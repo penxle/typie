@@ -1,26 +1,26 @@
-use crate::model::Mark;
-use crate::model::html::{DomSpec, MarkHtmlCodec, MarkParseRule, parse_styles};
+use crate::model::Style;
+use crate::model::html::{DomSpec, StyleHtmlCodec, StyleParseRule, parse_styles};
 use macros::Codec;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Default, PartialEq, Hash, Serialize, Deserialize, Codec)]
 #[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
-pub struct ItalicMark;
+pub struct ItalicStyle;
 
-impl MarkHtmlCodec for ItalicMark {
+impl StyleHtmlCodec for ItalicStyle {
     fn to_dom(&self) -> DomSpec {
         DomSpec::el("em").hole()
     }
 
-    fn parse_rules() -> Vec<MarkParseRule> {
+    fn parse_rules() -> Vec<StyleParseRule> {
         vec![
-            MarkParseRule::from_tag("i", |_| Some(Mark::Italic(ItalicMark))),
-            MarkParseRule::from_tag("em", |_| Some(Mark::Italic(ItalicMark))),
-            MarkParseRule::from_style("font-style", |elem| {
+            StyleParseRule::from_tag("i", |_| Some(Style::Italic(ItalicStyle))),
+            StyleParseRule::from_tag("em", |_| Some(Style::Italic(ItalicStyle))),
+            StyleParseRule::from_style("font-style", |elem| {
                 elem.value().attr("style").and_then(|s| {
                     let m = parse_styles(s);
                     if m.get("font-style") == Some(&"italic".into()) {
-                        Some(Mark::Italic(ItalicMark))
+                        Some(Style::Italic(ItalicStyle))
                     } else {
                         None
                     }

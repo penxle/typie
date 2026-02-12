@@ -1,5 +1,5 @@
 use crate::layout::elements::LineElement;
-use crate::model::{FontFamilyMark, TextColorMark};
+use crate::model::{FontFamilyStyle, TextColorStyle};
 use crate::render::glyph::Glyph;
 use crate::render::{GlyphRenderer, Render, RenderContext, RenderPhase};
 use crate::types::Point;
@@ -170,7 +170,7 @@ impl LineElement {
         }
     }
 
-    fn render_ruby_marks(
+    fn render_ruby_annotations(
         &self,
         pixmap: &mut PixmapMut,
         glyph_renderer: &mut GlyphRenderer,
@@ -223,7 +223,7 @@ impl LineElement {
                     lcx.ranged_builder(&mut fcx, &ruby_seg.ruby_text, 1.0, false);
 
                 ruby_builder.push_default(StyleProperty::FontStack(FontStack::Single(
-                    FontFamily::Named(FontFamilyMark::default().family.into()),
+                    FontFamily::Named(FontFamilyStyle::default().family.into()),
                 )));
                 ruby_builder.push_default(StyleProperty::FontSize(RUBY_FONT_SIZE));
                 ruby_builder.push_default(StyleProperty::FontWeight(FontWeight::new(400.0)));
@@ -317,11 +317,12 @@ impl Render for LineElement {
                             let style = glyph_run.style();
 
                             let color = if style.brush.is_empty()
-                                || style.brush == format!("text.{}", TextColorMark::default().key)
+                                || style.brush
+                                    == format!("text.{}", TextColorStyle::default().color)
                             {
                                 ctx.default_text_color.unwrap_or_else(|| {
                                     ctx.theme
-                                        .color(&format!("text.{}", TextColorMark::default().key))
+                                        .color(&format!("text.{}", TextColorStyle::default().color))
                                 })
                             } else {
                                 ctx.theme.color(&style.brush)
@@ -402,7 +403,7 @@ impl Render for LineElement {
                 }
 
                 self.render_preedit(pixmap, transform, point, ctx);
-                self.render_ruby_marks(pixmap, glyph_renderer, transform, &line_metrics, ctx);
+                self.render_ruby_annotations(pixmap, glyph_renderer, transform, &line_metrics, ctx);
             }
         }
     }
@@ -424,7 +425,7 @@ mod tests {
     fn decorations_from_state(_state: &crate::runtime::State) -> Decorations {
         Decorations {
             preedit: None,
-            pending_marks: None,
+            pending_styles: Default::default(),
         }
     }
 

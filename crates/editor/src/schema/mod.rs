@@ -7,21 +7,24 @@ mod spec;
 pub use content::{ContentExpr, RepairAction};
 pub use spec::*;
 
-use crate::model::{MarkType, NodeType};
-use crate::schema::spec::MarkSpec;
+use crate::model::NodeType;
+use crate::model::annotation::AnnotationType;
+use crate::model::style::StyleType;
 use rustc_hash::FxHashMap;
 
 #[derive(Debug, Clone)]
 pub struct Schema {
     nodes: FxHashMap<NodeType, NodeSpec>,
-    marks: FxHashMap<MarkType, MarkSpec>,
+    styles: FxHashMap<StyleType, StyleSpec>,
+    annotations: FxHashMap<AnnotationType, AnnotationSpec>,
 }
 
 impl Schema {
     pub fn new() -> Self {
         Self {
             nodes: FxHashMap::default(),
-            marks: FxHashMap::default(),
+            styles: FxHashMap::default(),
+            annotations: FxHashMap::default(),
         }
     }
 
@@ -30,16 +33,24 @@ impl Schema {
         &self.nodes
     }
 
-    pub fn marks(&self) -> &FxHashMap<MarkType, MarkSpec> {
-        &self.marks
+    pub fn styles(&self) -> &FxHashMap<StyleType, StyleSpec> {
+        &self.styles
+    }
+
+    pub fn annotations(&self) -> &FxHashMap<AnnotationType, AnnotationSpec> {
+        &self.annotations
     }
 
     pub fn add_node(&mut self, node_type: NodeType, spec: NodeSpec) {
         self.nodes.insert(node_type, spec);
     }
 
-    pub fn add_mark(&mut self, mark_type: MarkType, spec: MarkSpec) {
-        self.marks.insert(mark_type, spec);
+    pub fn add_style(&mut self, style_type: StyleType, spec: StyleSpec) {
+        self.styles.insert(style_type, spec);
+    }
+
+    pub fn add_annotation(&mut self, annotation_type: AnnotationType, spec: AnnotationSpec) {
+        self.annotations.insert(annotation_type, spec);
     }
 
     pub fn node_spec(&self, node_type: NodeType) -> &NodeSpec {
@@ -48,11 +59,17 @@ impl Schema {
             .unwrap_or_else(|| panic!("Unknown node type: {:?}", node_type))
     }
 
+    pub fn style_spec(&self, style_type: StyleType) -> &StyleSpec {
+        self.styles
+            .get(&style_type)
+            .unwrap_or_else(|| panic!("Unknown style type: {:?}", style_type))
+    }
+
     #[allow(dead_code)]
-    pub fn mark_spec(&self, mark_type: MarkType) -> &MarkSpec {
-        self.marks
-            .get(&mark_type)
-            .unwrap_or_else(|| panic!("Unknown mark type: {:?}", mark_type))
+    pub fn annotation_spec(&self, annotation_type: AnnotationType) -> &AnnotationSpec {
+        self.annotations
+            .get(&annotation_type)
+            .unwrap_or_else(|| panic!("Unknown annotation type: {:?}", annotation_type))
     }
 }
 
@@ -80,19 +97,18 @@ impl Default for Schema {
             NodeType::Paragraph,
             NodeSpec {
                 content: content_expr!([((Text | HardBreak)*), (PageBreak?)]),
-                marks: Some(&[
-                    MarkType::BackgroundColor,
-                    MarkType::FontFamily,
-                    MarkType::FontSize,
-                    MarkType::FontWeight,
-                    MarkType::Italic,
-                    MarkType::LetterSpacing,
-                    MarkType::Link,
-                    MarkType::Ruby,
-                    MarkType::Strikethrough,
-                    MarkType::TextColor,
-                    MarkType::Underline,
+                styles: Some(&[
+                    StyleType::BackgroundColor,
+                    StyleType::FontFamily,
+                    StyleType::FontSize,
+                    StyleType::FontWeight,
+                    StyleType::Italic,
+                    StyleType::LetterSpacing,
+                    StyleType::Strikethrough,
+                    StyleType::TextColor,
+                    StyleType::Underline,
                 ]),
+                annotations: Some(&[AnnotationType::Link, AnnotationType::Ruby]),
                 ..Default::default()
             },
         );
@@ -100,7 +116,6 @@ impl Default for Schema {
         schema.add_node(
             NodeType::Text,
             NodeSpec {
-                marks: Some(&[]),
                 inline: true,
                 ..Default::default()
             },
@@ -205,7 +220,6 @@ impl Default for Schema {
             NodeType::FoldTitle,
             NodeSpec {
                 content: content_expr!(Text*),
-                marks: Some(&[]),
                 isolating: true,
                 structural: true,
                 ..Default::default()
@@ -258,74 +272,63 @@ impl Default for Schema {
             },
         );
 
-        schema.add_mark(
-            MarkType::BackgroundColor,
-            MarkSpec {
-                ..Default::default()
+        schema.add_style(
+            StyleType::BackgroundColor,
+            StyleSpec {
+                expand: Expand::After,
             },
         );
-        schema.add_mark(
-            MarkType::FontFamily,
-            MarkSpec {
-                ..Default::default()
+        schema.add_style(
+            StyleType::FontFamily,
+            StyleSpec {
+                expand: Expand::After,
             },
         );
-        schema.add_mark(
-            MarkType::FontSize,
-            MarkSpec {
-                ..Default::default()
+        schema.add_style(
+            StyleType::FontSize,
+            StyleSpec {
+                expand: Expand::After,
             },
         );
-        schema.add_mark(
-            MarkType::FontWeight,
-            MarkSpec {
-                ..Default::default()
+        schema.add_style(
+            StyleType::FontWeight,
+            StyleSpec {
+                expand: Expand::After,
             },
         );
-        schema.add_mark(
-            MarkType::Italic,
-            MarkSpec {
-                ..Default::default()
+        schema.add_style(
+            StyleType::Italic,
+            StyleSpec {
+                expand: Expand::After,
             },
         );
-        schema.add_mark(
-            MarkType::LetterSpacing,
-            MarkSpec {
-                ..Default::default()
+        schema.add_style(
+            StyleType::LetterSpacing,
+            StyleSpec {
+                expand: Expand::After,
             },
         );
-        schema.add_mark(
-            MarkType::Strikethrough,
-            MarkSpec {
-                ..Default::default()
+        schema.add_style(
+            StyleType::Strikethrough,
+            StyleSpec {
+                expand: Expand::After,
             },
         );
-        schema.add_mark(
-            MarkType::Underline,
-            MarkSpec {
-                ..Default::default()
+        schema.add_style(
+            StyleType::TextColor,
+            StyleSpec {
+                expand: Expand::After,
             },
         );
-        schema.add_mark(
-            MarkType::TextColor,
-            MarkSpec {
-                ..Default::default()
+        schema.add_style(
+            StyleType::Underline,
+            StyleSpec {
+                expand: Expand::After,
             },
         );
-        schema.add_mark(
-            MarkType::Link,
-            MarkSpec {
-                expand: Expand::None,
-                persist: false,
-            },
-        );
-        schema.add_mark(
-            MarkType::Ruby,
-            MarkSpec {
-                expand: Expand::None,
-                persist: false,
-            },
-        );
+
+        schema.add_annotation(AnnotationType::Link, AnnotationSpec { overlap: false });
+        schema.add_annotation(AnnotationType::Ruby, AnnotationSpec { overlap: false });
 
         schema
     }

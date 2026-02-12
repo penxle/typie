@@ -226,6 +226,14 @@ impl<'a> NodeRef<'a> {
         &self.inner.schema
     }
 
+    pub fn get_annotation(&self, id: AnnotationId) -> Option<Annotation> {
+        let annotations_map = self.inner.loro.get_map("annotations");
+        let value = annotations_map.get(&id.to_string())?;
+        let container = value.into_container().ok()?;
+        let ann_map = container.into_map().ok()?;
+        Annotation::decode_from_map(&ann_map)
+    }
+
     pub fn as_mut(&self) -> NodeMut<'_> {
         NodeMut::from_node_ref(self.inner, self)
     }

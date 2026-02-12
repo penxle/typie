@@ -3,13 +3,16 @@ mod codec;
 mod utils;
 
 pub use builder::DomSpec;
-pub use codec::{HtmlContext, MarkHtmlCodec, MarkParseRule, NodeHtmlCodec, NodeParseRule};
+pub use codec::{
+    AnnotationHtmlCodec, AnnotationParseRule, HtmlContext, NodeHtmlCodec, NodeParseRule,
+    StyleHtmlCodec, StyleParseRule,
+};
 pub use utils::{LengthUnit, parse_as, parse_font_size, parse_styles};
 
 use builder::HtmlBuilder;
 use codec::{
-    collect_mark_parse_rules, collect_node_parse_rules, render_node, try_parse_marks,
-    try_parse_node,
+    collect_annotation_parse_rules, collect_node_parse_rules, collect_style_parse_rules,
+    parse_inline_annotations, parse_inline_styles, render_node, try_parse_node,
 };
 
 use crate::model::*;
@@ -48,7 +51,8 @@ impl Fragment {
 
         let schema = Schema::default();
         let node_rules = collect_node_parse_rules();
-        let mark_rules = collect_mark_parse_rules();
+        let style_rules = collect_style_parse_rules();
+        let annotation_rules = collect_annotation_parse_rules();
 
         let root = doc.root_element();
         let pending_text_id = Cell::new(None);
@@ -58,9 +62,11 @@ impl Fragment {
             None,
             &mut builder,
             &[],
+            &[],
             &schema,
             &node_rules,
-            &mark_rules,
+            &style_rules,
+            &annotation_rules,
             &pending_text_id,
         )?;
 
@@ -104,10 +110,12 @@ fn parse_children(
     parent_id: Option<NodeId>,
     parent_type: Option<NodeType>,
     builder: &mut FragmentBuilder,
-    marks: &[Mark],
+    styles: &[Style],
+    annotations: &[Annotation],
     schema: &Schema,
     node_rules: &[NodeParseRule],
-    mark_rules: &[MarkParseRule],
+    style_rules: &[StyleParseRule],
+    annotation_rules: &[AnnotationParseRule],
     pending_text_id: &Cell<Option<NodeId>>,
 ) -> Result<()> {
     for child in parent.children() {
@@ -119,10 +127,12 @@ fn parse_children(
                     parent_id,
                     parent_type,
                     builder,
-                    marks,
+                    styles,
+                    annotations,
                     schema,
                     node_rules,
-                    mark_rules,
+                    style_rules,
+                    annotation_rules,
                     pending_text_id,
                 )?;
             }
@@ -130,7 +140,14 @@ fn parse_children(
                 let s = t.text.to_string();
                 if !s.is_empty() {
                     let id = pending_text_id.take();
-                    add_text(&s, parent_id, builder, marks.to_vec(), id);
+                    add_text(
+                        &s,
+                        parent_id,
+                        builder,
+                        styles.to_vec(),
+                        annotations.to_vec(),
+                        id,
+                    );
                 }
             }
             _ => {}
@@ -144,10 +161,12 @@ fn parse_element(
     parent_id: Option<NodeId>,
     parent_type: Option<NodeType>,
     builder: &mut FragmentBuilder,
-    marks: &[Mark],
+    styles: &[Style],
+    annotations: &[Annotation],
     schema: &Schema,
     node_rules: &[NodeParseRule],
-    mark_rules: &[MarkParseRule],
+    style_rules: &[StyleParseRule],
+    annotation_rules: &[AnnotationParseRule],
     pending_text_id: &Cell<Option<NodeId>>,
 ) -> Result<()> {
     let tag = elem.value().name();
@@ -175,9 +194,11 @@ fn parse_element(
                     Some(node_type),
                     builder,
                     &[],
+                    &[],
                     schema,
                     node_rules,
-                    mark_rules,
+                    style_rules,
+                    annotation_rules,
                     &child_text_id,
                 )?;
             }
@@ -186,23 +207,43 @@ fn parse_element(
         }
     }
 
-    let parsed = try_parse_marks(elem, mark_rules);
-    if parsed.marks.is_empty() {
+    let parsed_styles = parse_inline_styles(elem, style_rules);
+    let parsed_annotations = parse_inline_annotations(elem, annotation_rules);
+    if parsed_styles.is_empty() && parsed_annotations.annotations.is_empty() {
         if let Some(id) = read_node_id(elem) {
             pending_text_id.set(Some(id));
         }
     }
-    let mut combined_marks = marks.to_vec();
-    for mark in parsed.marks {
-        if !combined_marks.iter().any(|m| m.as_type() == mark.as_type()) {
-            combined_marks.push(mark);
+    let mut combined_styles = styles.to_vec();
+    for style in parsed_styles {
+        if !combined_styles
+            .iter()
+            .any(|s| s.as_type() == style.as_type())
+        {
+            combined_styles.push(style);
+        }
+    }
+    let mut combined_annotations = annotations.to_vec();
+    for annotation in parsed_annotations.annotations {
+        if !combined_annotations
+            .iter()
+            .any(|a| a.as_type() == annotation.as_type())
+        {
+            combined_annotations.push(annotation);
         }
     }
 
-    if let Some(content) = parsed.custom_content {
+    if let Some(content) = parsed_annotations.custom_content {
         if !content.is_empty() {
             let id = pending_text_id.take();
-            add_text(&content, parent_id, builder, combined_marks, id);
+            add_text(
+                &content,
+                parent_id,
+                builder,
+                combined_styles,
+                combined_annotations,
+                id,
+            );
         }
     } else {
         parse_children(
@@ -210,10 +251,12 @@ fn parse_element(
             parent_id,
             parent_type,
             builder,
-            &combined_marks,
+            &combined_styles,
+            &combined_annotations,
             schema,
             node_rules,
-            mark_rules,
+            style_rules,
+            annotation_rules,
             pending_text_id,
         )?;
     }
@@ -235,13 +278,14 @@ fn add_text(
     content: &str,
     parent_id: Option<NodeId>,
     builder: &mut FragmentBuilder,
-    marks: Vec<Mark>,
+    styles: Vec<Style>,
+    _annotations: Vec<Annotation>,
     node_id: Option<NodeId>,
 ) {
     let text = Text::from(content);
     let len = text.char_len();
-    for m in &marks {
-        let _ = text.mark(0..len, m);
+    for s in &styles {
+        let _ = text.apply_style(0..len, s);
     }
     add_node(parent_id, builder, Node::Text(TextNode { text }), node_id);
 }
@@ -354,13 +398,23 @@ mod tests {
 
         let (_text_id, text_node) = children[0];
         if let Node::Text(t) = text_node.data() {
-            let segments = t.text.get_rich_text_segments();
+            let segments = t.text.get_segments();
             assert_eq!(segments.len(), 2);
-            assert_eq!(segments[0].0, "Red");
-            assert_eq!(segments[1].0, "Blue");
+            assert_eq!(segments[0].text, "Red");
+            assert_eq!(segments[1].text, "Blue");
 
-            assert!(matches!(&segments[0].1[0], Mark::TextColor(tc) if tc.key == "red"));
-            assert!(matches!(&segments[1].1[0], Mark::TextColor(tc) if tc.key == "indigo"));
+            assert!(
+                segments[0]
+                    .styles
+                    .iter()
+                    .any(|s| matches!(s, Style::TextColor(tc) if tc.color == "red"))
+            );
+            assert!(
+                segments[1]
+                    .styles
+                    .iter()
+                    .any(|s| matches!(s, Style::TextColor(tc) if tc.color == "indigo"))
+            );
         } else {
             panic!("Expected text node");
         }
@@ -618,21 +672,17 @@ mod tests {
     }
 
     #[test]
-    fn test_roundtrip_marks() {
-        use crate::model::marks::*;
+    fn test_roundtrip_styles() {
+        #[allow(unused_imports)]
+        use crate::model::annotations::*;
         use crate::model::nodes::ParagraphNode;
+        use crate::model::styles::*;
 
         let para_id = NodeId::new();
         let text_id = NodeId::new();
-        let text = Text::from("BoldItalicLinked");
-        let _ = text.mark(0..4, &Mark::FontWeight(FontWeightMark { weight: 700 }));
-        let _ = text.mark(4..10, &Mark::Italic(ItalicMark));
-        let _ = text.mark(
-            10..16,
-            &Mark::Link(LinkMark {
-                href: "https://example.com".to_string(),
-            }),
-        );
+        let text = Text::from("BoldItalic");
+        let _ = text.apply_style(0..4, &Style::FontWeight(FontWeightStyle { weight: 700 }));
+        let _ = text.apply_style(4..10, &Style::Italic(ItalicStyle));
 
         let frag = Fragment::builder()
             .add((
@@ -653,23 +703,21 @@ mod tests {
         assert_eq!(children.len(), 1);
 
         if let Node::Text(t) = children[0].1.data() {
-            let segments = t.text.get_rich_text_segments();
-            assert_eq!(segments.len(), 3);
-            assert_eq!(segments[0].0, "Bold");
+            let segments = t.text.get_segments();
+            assert_eq!(segments.len(), 2);
+            assert_eq!(segments[0].text, "Bold");
             assert!(
                 segments[0]
-                    .1
+                    .styles
                     .iter()
-                    .any(|m| matches!(m, Mark::FontWeight(_)))
+                    .any(|s| matches!(s, Style::FontWeight(_)))
             );
-            assert_eq!(segments[1].0, "Italic");
-            assert!(segments[1].1.iter().any(|m| matches!(m, Mark::Italic(_))));
-            assert_eq!(segments[2].0, "Linked");
+            assert_eq!(segments[1].text, "Italic");
             assert!(
-                segments[2]
-                    .1
+                segments[1]
+                    .styles
                     .iter()
-                    .any(|m| matches!(m, Mark::Link(l) if l.href == "https://example.com"))
+                    .any(|s| matches!(s, Style::Italic(_)))
             );
         } else {
             panic!("Expected Text");
@@ -678,13 +726,13 @@ mod tests {
 
     #[test]
     fn test_roundtrip_font_weight_precision() {
-        use crate::model::marks::*;
         use crate::model::nodes::ParagraphNode;
+        use crate::model::styles::*;
 
         let para_id = NodeId::new();
         let text_id = NodeId::new();
         let text = Text::from("W800");
-        let _ = text.mark(0..4, &Mark::FontWeight(FontWeightMark { weight: 800 }));
+        let _ = text.apply_style(0..4, &Style::FontWeight(FontWeightStyle { weight: 800 }));
 
         let frag = Fragment::builder()
             .add((
@@ -703,8 +751,8 @@ mod tests {
         let top = parsed.top_level_node_ids();
         let children = parsed.children_of_node(top[0]);
         if let Node::Text(t) = children[0].1.data() {
-            let segments = t.text.get_rich_text_segments();
-            if let Some(Mark::FontWeight(fw)) = segments[0].1.first() {
+            let segments = t.text.get_segments();
+            if let Some(Style::FontWeight(fw)) = segments[0].styles.first() {
                 assert_eq!(fw.weight, 800, "FontWeight 800 lost: got {}", fw.weight);
             }
         }
@@ -746,7 +794,8 @@ mod tests {
 
     #[test]
     fn test_roundtrip_node_ids_complex() {
-        use crate::model::marks::*;
+        #[allow(unused_imports)]
+        use crate::model::annotations::*;
         use crate::model::nodes::{BlockquoteNode, ParagraphNode};
 
         let bq_id = NodeId::new();
@@ -756,12 +805,6 @@ mod tests {
         let t2_id = NodeId::new();
 
         let text2 = Text::from("Linked");
-        let _ = text2.mark(
-            0..6,
-            &Mark::Link(LinkMark {
-                href: "https://example.com".to_string(),
-            }),
-        );
 
         let frag = Fragment::builder()
             .add((

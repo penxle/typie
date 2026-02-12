@@ -148,9 +148,8 @@ mod tests {
                 node_id: p,
                 offset: 1,
                 text: "가".into(),
-                marks: None,
             }),
-            pending_marks: None,
+            pending_styles: Default::default(),
         };
 
         let p_node = doc.node(p).unwrap();

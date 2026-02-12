@@ -103,9 +103,10 @@ impl Runtime {
                 self.transact(move |tr| tr.drag_and_drop(drop_position))
             }
         } else if let Some(text) = text {
+            let pending = self.state().pending_styles.clone();
             let fragment = html
                 .and_then(|h| Fragment::from_html(&h).ok())
-                .unwrap_or_else(|| Fragment::from_text(&text));
+                .unwrap_or_else(|| Fragment::from_text(&text, &pending));
             self.transact(move |tr| tr.drop_external(drop_position, fragment))
         } else {
             return self.handle_drag_end_internal();

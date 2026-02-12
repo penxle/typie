@@ -1060,13 +1060,13 @@ fn test_paragraph_indent_only_for_root_children() {
 }
 
 #[test]
-fn test_cursor_bounds_at_end_of_text_with_mark() {
+fn test_cursor_bounds_at_end_of_text_with_style() {
     let mut p = id!();
     let rt = runtime! {
         viewport { paginated { width: 400.0, height: 400.0, margin: PAGE_MARGIN } }
         doc {
             @p paragraph {
-                text(marks: [italic()]) { "asdf" }
+                text(styles: [italic()]) { "asdf" }
                 hard_break {}
             }
         }
@@ -1077,7 +1077,7 @@ fn test_cursor_bounds_at_end_of_text_with_mark() {
     let cursor_at_end = Cursor::bounds(&ctx(&rt.state()), &pages, rt.selection().head);
     assert!(
         cursor_at_end.is_some(),
-        "Marked line should show cursor at end of text before hard break"
+        "Styled line should show cursor at end of text before hard break"
     );
 
     let pos_after_break = Position::new(p, 5, Affinity::Downstream);

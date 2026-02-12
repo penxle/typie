@@ -3,43 +3,19 @@ use crate::runtime::{Effect, Runtime};
 
 impl Runtime {
     pub(crate) fn handle_toggle_bold(&mut self) -> Vec<Effect> {
-        self.transact(|tr| tr.toggle_bold())
+        self.transact(|tr| tr.toggle_bold_style())
     }
 
     pub(crate) fn handle_toggle_italic(&mut self) -> Vec<Effect> {
-        self.transact(|tr| tr.toggle_mark(Mark::Italic(ItalicMark)))
+        self.transact(|tr| tr.toggle_style(Style::Italic(ItalicStyle)))
     }
 
     pub(crate) fn handle_toggle_strikethrough(&mut self) -> Vec<Effect> {
-        self.transact(|tr| tr.toggle_mark(Mark::Strikethrough(StrikethroughMark)))
+        self.transact(|tr| tr.toggle_style(Style::Strikethrough(StrikethroughStyle)))
     }
 
     pub(crate) fn handle_toggle_underline(&mut self) -> Vec<Effect> {
-        self.transact(|tr| tr.toggle_mark(Mark::Underline(UnderlineMark)))
-    }
-
-    pub(crate) fn handle_toggle_ruby(&mut self, text: String) -> Vec<Effect> {
-        self.transact(|tr| {
-            let selection = tr.selection().clone();
-
-            if selection.is_collapsed() {
-                return Ok(false);
-            }
-
-            tr.toggle_mark(Mark::Ruby(RubyMark { text }))
-        })
-    }
-
-    pub(crate) fn handle_toggle_link(&mut self, href: String) -> Vec<Effect> {
-        self.transact(|tr| {
-            let selection = tr.selection().clone();
-
-            if selection.is_collapsed() {
-                return Ok(false);
-            }
-
-            tr.toggle_mark(Mark::Link(LinkMark { href }))
-        })
+        self.transact(|tr| tr.toggle_style(Style::Underline(UnderlineStyle)))
     }
 
     pub(crate) fn handle_toggle_blockquote(
@@ -62,15 +38,15 @@ impl Runtime {
     }
 
     pub(crate) fn handle_set_font_family(&mut self, family: String) -> Vec<Effect> {
-        self.transact(|tr| tr.toggle_mark(Mark::FontFamily(FontFamilyMark { family })))
+        self.transact(|tr| tr.toggle_style(Style::FontFamily(FontFamilyStyle { family })))
     }
 
     pub(crate) fn handle_set_font_size(&mut self, size: f32) -> Vec<Effect> {
-        self.transact(|tr| tr.toggle_mark(Mark::FontSize(FontSizeMark { size })))
+        self.transact(|tr| tr.toggle_style(Style::FontSize(FontSizeStyle { size })))
     }
 
     pub(crate) fn handle_set_font_weight(&mut self, weight: u16) -> Vec<Effect> {
-        self.transact(|tr| tr.toggle_mark(Mark::FontWeight(FontWeightMark { weight })))
+        self.transact(|tr| tr.toggle_style(Style::FontWeight(FontWeightStyle { weight })))
     }
 
     pub(crate) fn handle_set_line_height(&mut self, height: f32) -> Vec<Effect> {
@@ -78,7 +54,7 @@ impl Runtime {
     }
 
     pub(crate) fn handle_set_letter_spacing(&mut self, spacing: f32) -> Vec<Effect> {
-        self.transact(|tr| tr.toggle_mark(Mark::LetterSpacing(LetterSpacingMark { spacing })))
+        self.transact(|tr| tr.toggle_style(Style::LetterSpacing(LetterSpacingStyle { spacing })))
     }
 
     pub(crate) fn handle_set_text_align(&mut self, align: TextAlign) -> Vec<Effect> {
@@ -94,16 +70,14 @@ impl Runtime {
     }
 
     pub(crate) fn handle_toggle_text_color(&mut self, key: String) -> Vec<Effect> {
-        self.transact(|tr| tr.add_mark(Mark::TextColor(TextColorMark { key })))
+        self.transact(|tr| tr.set_style(Style::TextColor(TextColorStyle { color: key })))
     }
 
     pub(crate) fn handle_toggle_background_color(&mut self, key: Option<String>) -> Vec<Effect> {
         self.transact(|tr| {
-            if let Some(key) = key {
-                tr.toggle_mark(Mark::BackgroundColor(BackgroundColorMark { key }))
-            } else {
-                tr.remove_mark(Mark::BackgroundColor(BackgroundColorMark::default()))
-            }
+            tr.toggle_style(Style::BackgroundColor(BackgroundColorStyle {
+                color: key.unwrap_or_else(|| BackgroundColorStyle::NONE.to_string()),
+            }))
         })
     }
 
@@ -118,16 +92,16 @@ impl Runtime {
         self.transact(|tr| {
             let selection = tr.selection().clone();
             if selection.is_collapsed() {
-                tr.clear_pending_marks()
+                tr.reset_all_styles()
             } else {
                 let mut changed = false;
 
-                if tr.unset_all_marks()? {
+                if tr.reset_all_styles()? {
                     changed = true;
 
                     let codepoints = tr.selection_codepoints();
-                    let family = FontFamilyMark::default().family;
-                    let weight = FontWeightMark::default().weight;
+                    let family = FontFamilyStyle::default().family;
+                    let weight = FontWeightStyle::default().weight;
                     tr.push_effect(Effect::FontDetected {
                         family,
                         weight,
@@ -141,6 +115,42 @@ impl Runtime {
 
                 Ok(changed)
             }
+        })
+    }
+
+    pub(crate) fn handle_add_annotation(
+        &mut self,
+        annotation: crate::model::Annotation,
+    ) -> Vec<Effect> {
+        self.transact(|tr| {
+            let selection = tr.selection().clone();
+            if selection.is_collapsed() {
+                return Ok(false);
+            }
+            tr.add_annotation(annotation)?;
+            Ok(true)
+        })
+    }
+
+    pub(crate) fn handle_update_annotation(
+        &mut self,
+        id: String,
+        annotation: crate::model::Annotation,
+    ) -> Vec<Effect> {
+        self.transact(|tr| {
+            let Some(annotation_id) = crate::model::AnnotationId::from_string(&id) else {
+                return Ok(false);
+            };
+            tr.update_annotation(annotation_id, annotation)
+        })
+    }
+
+    pub(crate) fn handle_remove_annotation(&mut self, id: String) -> Vec<Effect> {
+        self.transact(|tr| {
+            let Some(annotation_id) = crate::model::AnnotationId::from_string(&id) else {
+                return Ok(false);
+            };
+            tr.remove_annotation(annotation_id)
         })
     }
 
@@ -159,11 +169,11 @@ mod tests {
     use crate::runtime::Message;
 
     #[test]
-    fn test_clear_formatting_collapsed_clears_pending_marks() {
+    fn test_clear_formatting_collapsed_clears_pending_styles() {
         let mut p = id!();
 
         let mut fonts = std::collections::HashMap::new();
-        fonts.insert(FontFamilyMark::default().family, vec![400, 700]);
+        fonts.insert(FontFamilyStyle::default().family, vec![400, 700]);
         let _guard = crate::test_utils::ScopedFontRegistration::new(fonts);
 
         let mut runtime = runtime! {
@@ -177,20 +187,32 @@ mod tests {
         };
 
         runtime.update(Message::ToggleBold);
-        assert!(runtime.state().pending_marks.is_some());
+        assert!(
+            runtime
+                .state()
+                .pending_styles
+                .iter()
+                .any(|s| matches!(s, Style::FontWeight(fw) if fw.weight == 700)),
+        );
 
         runtime.update(Message::ClearFormatting);
-        assert!(runtime.state().pending_marks.is_none());
+        assert!(
+            !runtime
+                .state()
+                .pending_styles
+                .iter()
+                .any(|s| matches!(s, Style::FontWeight(fw) if fw.weight == 700)),
+        );
     }
 
     #[test]
-    fn test_clear_formatting_range_clears_marks() {
+    fn test_clear_formatting_range_clears_styles() {
         let mut p = id!();
         let mut runtime = runtime! {
             viewport { 800, 600, 1.0 }
             doc {
                 @p paragraph {
-                    text(marks: [bold(), italic()]) { "hello" }
+                    text(styles: [font_weight(700), italic()]) { "hello" }
                 }
             }
             selection { (p, 0) -> (p, 5) }
@@ -265,13 +287,13 @@ mod tests {
     }
 
     #[test]
-    fn test_clear_formatting_range_clears_marks_and_alignment_if_full() {
+    fn test_clear_formatting_range_clears_styles_and_alignment_if_full() {
         let mut p = id!();
         let mut runtime = runtime! {
             viewport { 800, 600, 1.0 }
             doc {
                 @p paragraph(align: TextAlign::Right,) {
-                    text(marks: [bold()]) { "hello" }
+                    text(styles: [font_weight(700)]) { "hello" }
                 }
             }
             selection { (p, 0) -> (p, 5) }
@@ -292,7 +314,7 @@ mod tests {
     }
 
     #[test]
-    fn test_shortcut_during_composition_commits_preedit_and_applies_marks() {
+    fn test_shortcut_during_composition_commits_preedit_and_applies_styles() {
         let mut p = id!();
 
         let mut fonts = std::collections::HashMap::new();
@@ -321,11 +343,12 @@ mod tests {
         assert!(runtime.state().doc.to_plain_text().ends_with("start abc"));
         assert!(runtime.state().preedit.is_none());
 
-        let pending = runtime.state().pending_marks.as_ref().unwrap();
         assert!(
-            pending
+            runtime
+                .state()
+                .pending_styles
                 .iter()
-                .any(|m| matches!(m, Mark::FontWeight(FontWeightMark { weight: 700 })))
+                .any(|s| matches!(s, Style::FontWeight(FontWeightStyle { weight: 700 })))
         );
 
         runtime.update(Message::Input {
@@ -334,11 +357,11 @@ mod tests {
         assert!(runtime.state().doc.to_plain_text().ends_with("start abcd"));
 
         let snapshot = runtime.selection_snapshot_owned();
-        let (uniform, _) = runtime.collect_selection_marks(snapshot);
+        let (uniform, _) = runtime.collect_selection_styles(snapshot);
         assert!(
             uniform
                 .iter()
-                .any(|m| matches!(m, Mark::FontWeight(FontWeightMark { weight: 700 })))
+                .any(|s| matches!(s, Style::FontWeight(FontWeightStyle { weight: 700 })))
         );
     }
 }

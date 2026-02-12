@@ -1,4 +1,4 @@
-use crate::model::{Doc, Mark, Node, NodeId, NodeRef};
+use crate::model::{Doc, Node, NodeId, NodeRef, Style};
 use crate::state::Selection;
 use crate::types::Affinity;
 use std::collections::{HashMap, HashSet};
@@ -242,27 +242,28 @@ fn format_container_node(
 }
 
 fn format_text_node(text_node: &crate::model::TextNode) -> String {
-    let segments = text_node.text.get_rich_text_segments();
+    let segments = text_node.text.get_segments();
 
     if segments.is_empty() {
         return "text { \"\" }".to_string();
     }
 
     let mut parts = Vec::new();
-    for (segment_text, mut marks) in segments {
-        let text = escape_str(&segment_text);
-        if marks.is_empty() {
+    for segment in segments {
+        let text = escape_str(&segment.text);
+        if segment.styles.is_empty() {
             parts.push(format!("\"{text}\""));
             continue;
         }
 
-        marks.sort_by_key(|m| mark_to_macro(m));
-        let marks_str = marks
+        let mut styles = segment.styles.clone();
+        styles.sort_by_key(|s| style_to_macro(s));
+        let styles_str = styles
             .iter()
-            .map(mark_to_macro)
+            .map(style_to_macro)
             .collect::<Vec<_>>()
             .join(", ");
-        parts.push(format!("\"{text}\" => [{marks_str}]"));
+        parts.push(format!("\"{text}\" => [{styles_str}]"));
     }
 
     format!("text {{ {} }}", parts.join(", "))
@@ -327,19 +328,17 @@ fn format_attributes(attrs: &[(&str, String)]) -> String {
     format!("({rendered})")
 }
 
-fn mark_to_macro(mark: &Mark) -> String {
-    match mark {
-        Mark::BackgroundColor(m) => format!("background_color(\"{}\")", escape_str(&m.key)),
-        Mark::TextColor(m) => format!("text_color(\"{}\")", escape_str(&m.key)),
-        Mark::FontSize(m) => format!("font_size({})", format_number(m.size)),
-        Mark::FontFamily(m) => format!("font_family(\"{}\")", escape_str(&m.family)),
-        Mark::FontWeight(m) => format!("font_weight({})", m.weight),
-        Mark::Italic(_) => "italic()".to_string(),
-        Mark::LetterSpacing(m) => format!("letter_spacing({})", format_number(m.spacing)),
-        Mark::Link(m) => format!("link(\"{}\")", escape_str(&m.href)),
-        Mark::Ruby(m) => format!("ruby(\"{}\")", escape_str(&m.text)),
-        Mark::Strikethrough(_) => "strikethrough()".to_string(),
-        Mark::Underline(_) => "underline()".to_string(),
+fn style_to_macro(style: &Style) -> String {
+    match style {
+        Style::BackgroundColor(s) => format!("bg_color(\"{}\")", escape_str(&s.color)),
+        Style::TextColor(s) => format!("text_color(\"{}\")", escape_str(&s.color)),
+        Style::FontSize(s) => format!("font_size({})", format_number(s.size)),
+        Style::FontFamily(s) => format!("font_family(\"{}\")", escape_str(&s.family)),
+        Style::FontWeight(s) => format!("font_weight({})", s.weight),
+        Style::Italic(_) => "italic()".to_string(),
+        Style::LetterSpacing(s) => format!("letter_spacing({})", format_number(s.spacing)),
+        Style::Strikethrough(_) => "strikethrough()".to_string(),
+        Style::Underline(_) => "underline()".to_string(),
     }
 }
 
