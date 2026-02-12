@@ -160,25 +160,38 @@ class CommandHandler {
       stats['uniformLineHeight'] = uniformLineHeight;
     }
 
-    final anchorPageIdx = reader.getI32('selection_anchor_page_idx');
-    final fromHandleInfo = anchorPageIdx < 0
-        ? null
-        : SelectionHandleInfo(
-            pageIdx: anchorPageIdx,
-            x: reader.getF32('selection_anchor_x'),
-            y: reader.getF32('selection_anchor_y'),
-            height: reader.getF32('selection_anchor_height'),
-          );
+    SelectionHandleInfo? fromHandleInfo;
+    SelectionHandleInfo? toHandleInfo;
 
-    final headPageIdx = reader.getI32('selection_head_page_idx');
-    final toHandleInfo = headPageIdx < 0
-        ? null
-        : SelectionHandleInfo(
-            pageIdx: headPageIdx,
-            x: reader.getF32('selection_head_x'),
-            y: reader.getF32('selection_head_y'),
-            height: reader.getF32('selection_head_height'),
-          );
+    if (!collapsed) {
+      final anchorPageIdx = reader.getI32('selection_anchor_page_idx');
+      final anchorHandle = anchorPageIdx < 0
+          ? null
+          : SelectionHandleInfo(
+              pageIdx: anchorPageIdx,
+              x: reader.getF32('selection_anchor_x'),
+              y: reader.getF32('selection_anchor_y'),
+              height: reader.getF32('selection_anchor_height'),
+            );
+
+      final headPageIdx = reader.getI32('selection_head_page_idx');
+      final headHandle = headPageIdx < 0
+          ? null
+          : SelectionHandleInfo(
+              pageIdx: headPageIdx,
+              x: reader.getF32('selection_head_x'),
+              y: reader.getF32('selection_head_y'),
+              height: reader.getF32('selection_head_height'),
+            );
+
+      if (cmp < 0) {
+        fromHandleInfo = headHandle;
+        toHandleInfo = anchorHandle;
+      } else {
+        fromHandleInfo = anchorHandle;
+        toHandleInfo = headHandle;
+      }
+    }
 
     controller.updateState(
       (state) =>
