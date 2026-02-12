@@ -872,7 +872,7 @@ impl Runtime {
             return PointerStyle::Default;
         };
 
-        page.get_pointer_style(x, y)
+        page.get_pointer_style(x, y, self.is_read_only())
     }
 
     pub fn tick(&mut self) {

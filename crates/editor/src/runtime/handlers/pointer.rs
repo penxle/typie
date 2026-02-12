@@ -35,14 +35,22 @@ impl Runtime {
 
         if button.is_primary() && !modifier.shift {
             if let Some(kind) = page.find_interactive_at(x, y) {
-                self.set_pointer_mode(PointerMode::Pressed {
-                    page_idx,
-                    start_x: x,
-                    start_y: y,
-                    document_position: self.state.selection.head,
-                    context: PressContext::Interactive(kind),
-                });
-                return vec![];
+                let should_interact = if self.is_read_only() {
+                    kind.allow_in_read_only()
+                } else {
+                    true
+                };
+
+                if should_interact {
+                    self.set_pointer_mode(PointerMode::Pressed {
+                        page_idx,
+                        start_x: x,
+                        start_y: y,
+                        document_position: self.state.selection.head,
+                        context: PressContext::Interactive(kind),
+                    });
+                    return vec![];
+                }
             }
         }
 

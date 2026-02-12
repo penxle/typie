@@ -756,13 +756,15 @@ impl Page {
         }
     }
 
-    pub fn get_pointer_style(&self, x: f32, y: f32) -> PointerStyle {
+    pub fn get_pointer_style(&self, x: f32, y: f32, read_only: bool) -> PointerStyle {
         if let Some(entry) = self.spatial_index().locate_at_point(&[x, y]) {
             return entry.element().cursor_visual();
         }
 
-        if Self::traverse_for_interactive(&self.root, Point::zero(), x, y).is_some() {
-            return PointerStyle::Pointer;
+        if let Some(kind) = Self::traverse_for_interactive(&self.root, Point::zero(), x, y) {
+            if !read_only || kind.allow_in_read_only() {
+                return PointerStyle::Pointer;
+            }
         }
 
         Self::traverse_for_pointer_style(&self.root, Point::zero(), x, y)
