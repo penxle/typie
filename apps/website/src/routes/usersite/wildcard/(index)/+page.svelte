@@ -48,6 +48,18 @@
                 ...Img_image
               }
             }
+
+            ... on DocumentView {
+              id
+              title
+              subtitle
+              excerpt
+              updatedAt
+              thumbnail {
+                id
+                ...Img_image
+              }
+            }
           }
         }
       }
@@ -55,7 +67,9 @@
   `);
 
   const folders = $derived($query.siteView.entities.filter((entity) => entity.node.__typename === 'FolderView'));
-  const posts = $derived($query.siteView.entities.filter((entity) => entity.node.__typename === 'PostView'));
+  const posts = $derived(
+    $query.siteView.entities.filter((entity) => entity.node.__typename === 'PostView' || entity.node.__typename === 'DocumentView'),
+  );
 </script>
 
 <svelte:head>
@@ -194,7 +208,7 @@
       <section>
         <div class={flex({ flexDirection: 'column' })}>
           {#each posts as entity, index (entity.id)}
-            {#if entity.node.__typename === 'PostView'}
+            {#if entity.node.__typename === 'PostView' || entity.node.__typename === 'DocumentView'}
               <a
                 class={flex({
                   gap: '24px',
