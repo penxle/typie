@@ -23,6 +23,7 @@ query SearchScreen_Query($siteId: ID!, $query: String!) {
 
         document {
           id
+          type
           updatedAt
 
           entity {

@@ -8,7 +8,7 @@
   import mixpanel from 'mixpanel-browser';
   import { onMount } from 'svelte';
   import { match } from 'ts-pattern';
-  import { PostType } from '@/enums';
+  import { DocumentType, PostType } from '@/enums';
   import FileIcon from '~icons/lucide/file';
   import FilePenIcon from '~icons/lucide/file-pen';
   import LayoutTemplateIcon from '~icons/lucide/layout-template';
@@ -53,6 +53,7 @@
             ... on Document {
               id
               title
+              documentType: type
               excerpt
             }
           }
@@ -176,7 +177,10 @@
                   <div class={flex({ alignItems: 'center', gap: '8px' })}>
                     <Icon
                       style={css.raw({ size: '16px', color: 'text.subtle', flexShrink: '0' })}
-                      icon={entity.node.__typename === 'Post' && entity.node.type === PostType.TEMPLATE ? LayoutTemplateIcon : FileIcon}
+                      icon={(entity.node.__typename === 'Post' && entity.node.type === PostType.TEMPLATE) ||
+                      (entity.node.__typename === 'Document' && entity.node.documentType === DocumentType.TEMPLATE)
+                        ? LayoutTemplateIcon
+                        : FileIcon}
                     />
                     <div class={css({ fontSize: '14px', color: 'text.default', fontWeight: 'medium' })}>
                       {entity.node.__typename === 'Post' || entity.node.__typename === 'Document' ? entity.node.title : ''}
