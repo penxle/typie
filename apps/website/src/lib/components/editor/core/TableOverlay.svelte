@@ -42,11 +42,9 @@
   let hoveredColIndex = $state<number | null>(null);
   let hoveredRowIndex = $state<number | null>(null);
 
-  // Track which menu is open (keeps handle visible during menu interaction)
   let menuOpenColIndex = $state<number | null>(null);
   let menuOpenRowIndex = $state<number | null>(null);
 
-  // Separate state for add button hover (don't trigger handles)
   let addColButtonHovered = $state(false);
   let addRowButtonHovered = $state(false);
   let addBothButtonHovered = $state(false);
@@ -115,6 +113,14 @@
   let buttonHovered = $state(false);
 
   const isButtonVisible = $derived(isTableHovered || overlay.isFocused || menuOpen || buttonHovered);
+
+  $effect(() => {
+    if (menuOpenColIndex !== null || menuOpenRowIndex !== null || menuOpen) {
+      editor.inputElement?.blur();
+    } else {
+      editor.inputElement?.focus();
+    }
+  });
 </script>
 
 <div
