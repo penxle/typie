@@ -59,6 +59,7 @@ export const DocumentContents = pgTable('document_contents', {
   blobSize: bigint('blob_size', { mode: 'number' }).notNull().default(0),
   snapshot: bytea('snapshot').notNull(),
   version: bytea('version').notNull(),
+  generation: integer('generation').notNull().default(0),
   compactedAt: datetime('compacted_at')
     .notNull()
     .default(sql`now()`),

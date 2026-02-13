@@ -2,9 +2,9 @@
   import { css } from '@typie/styled-system/css';
   import { pushEscapeHandler } from '@typie/ui/utils';
   import ClipboardTypeIcon from '~icons/lucide/clipboard-type';
-  import { getEditor } from '$lib/editor/context';
+  import { getEditorContext } from '$lib/editor/context.svelte';
 
-  const editor = getEditor();
+  const { editor } = getEditorContext();
 
   let element = $state<HTMLButtonElement>();
   const show = $derived(!!editor.pasteOptions);

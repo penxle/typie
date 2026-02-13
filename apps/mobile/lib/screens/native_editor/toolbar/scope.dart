@@ -29,9 +29,7 @@ class NativeEditorToolbarScope extends InheritedWidget {
     required this.isEditorFocused,
     required this.bottomToolbarMode,
     required this.secondaryToolbarMode,
-    required this.uniformStyles,
-    required this.mixedStyles,
-    required this.selectionStats,
+    required this.attrs,
     required this.externalElements,
     required this.uploadManager,
     required this.dispatch,
@@ -51,9 +49,7 @@ class NativeEditorToolbarScope extends InheritedWidget {
   final ValueNotifier<BottomToolbarMode> bottomToolbarMode;
   final ValueNotifier<SecondaryToolbarMode> secondaryToolbarMode;
 
-  final ValueNotifier<List<Map<String, dynamic>>> uniformStyles;
-  final ValueNotifier<List<String>> mixedStyles;
-  final ValueNotifier<Map<String, dynamic>> selectionStats;
+  final ValueNotifier<List<Map<String, dynamic>>> attrs;
 
   final ValueNotifier<List<ExternalElement>> externalElements;
   final UploadManager uploadManager;
@@ -71,4 +67,11 @@ class NativeEditorToolbarScope extends InheritedWidget {
 
   @override
   bool updateShouldNotify(covariant NativeEditorToolbarScope old) => false;
+}
+
+Map<String, dynamic>? findAttr(List<Map<String, dynamic>> attrs, String type) {
+  for (final a in attrs) {
+    if (a['type'] == type) return a;
+  }
+  return null;
 }

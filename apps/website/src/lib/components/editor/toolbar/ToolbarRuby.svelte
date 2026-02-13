@@ -3,7 +3,7 @@
   import { Button, TextInput } from '@typie/ui/components';
   import { createForm } from '@typie/ui/form';
   import { z } from 'zod';
-  import { getEditor } from '$lib/editor/context';
+  import { getEditorContext } from '$lib/editor/context.svelte';
 
   type Props = {
     close: () => void;
@@ -11,7 +11,7 @@
 
   let { close }: Props = $props();
 
-  const editor = getEditor();
+  const { editor } = getEditorContext();
 
   const form = createForm({
     schema: z.object({

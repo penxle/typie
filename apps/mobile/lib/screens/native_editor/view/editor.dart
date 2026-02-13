@@ -75,9 +75,7 @@ class EditorView extends HookWidget {
     final bottomToolbarMode = useValueNotifier<BottomToolbarMode>(BottomToolbarMode.hidden);
     final secondaryToolbarMode = useValueNotifier<SecondaryToolbarMode>(SecondaryToolbarMode.hidden);
 
-    final uniformStyles = useValueNotifier<List<Map<String, dynamic>>>([]);
-    final mixedStyles = useValueNotifier<List<String>>([]);
-    final selectionStats = useValueNotifier<Map<String, dynamic>>({});
+    final attrs = useValueNotifier<List<Map<String, dynamic>>>([]);
 
     final externalElements = useValueNotifier<List<ExternalElement>>([]);
     final uploadManager = useMemoized(UploadManager.new);
@@ -348,23 +346,12 @@ class EditorView extends HookWidget {
     final cursor = state.state.cursor;
     final isDropping = useValueListenable(dndController.isDropping);
 
-    useEffect(
-      () {
-        uniformStyles.value = state.state.uniformStyles;
-        mixedStyles.value = state.state.mixedStyles;
-        selectionStats.value = state.state.selectionStats;
-        externalElements.value = state.state.externalElements;
-        isEditorFocused.value = state.state.isFocused;
-        return null;
-      },
-      [
-        state.state.uniformStyles,
-        state.state.mixedStyles,
-        state.state.selectionStats,
-        state.state.externalElements,
-        state.state.isFocused,
-      ],
-    );
+    useEffect(() {
+      attrs.value = state.state.attrs;
+      externalElements.value = state.state.externalElements;
+      isEditorFocused.value = state.state.isFocused;
+      return null;
+    }, [state.state.attrs, state.state.externalElements, state.state.isFocused]);
 
     final lastScrollRenderVersion = useRef<Object?>(state.state.renderVersion);
 
@@ -466,9 +453,7 @@ class EditorView extends HookWidget {
       isEditorFocused: isEditorFocused,
       bottomToolbarMode: bottomToolbarMode,
       secondaryToolbarMode: secondaryToolbarMode,
-      uniformStyles: uniformStyles,
-      mixedStyles: mixedStyles,
-      selectionStats: selectionStats,
+      attrs: attrs,
       externalElements: externalElements,
       uploadManager: uploadManager,
       dispatch: controller.dispatch,

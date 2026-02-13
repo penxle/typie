@@ -141,6 +141,7 @@ export const DocumentSyncType = {
   VECTOR: 'VECTOR',
   AWARENESS: 'AWARENESS',
   PRESENCE: 'PRESENCE',
+  RESET: 'RESET',
 } as const;
 
 export type DocumentType = keyof typeof DocumentType;

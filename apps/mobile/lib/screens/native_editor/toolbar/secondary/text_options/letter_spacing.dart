@@ -1,4 +1,3 @@
-import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/screens/native_editor/toolbar/buttons/label.dart';
@@ -12,14 +11,13 @@ class NativeEditorLetterSpacingTextOptionsToolbar extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final scope = NativeEditorToolbarScope.of(context);
-    final uniformStyles = useValueListenable(scope.uniformStyles);
-    final mixedStyles = useValueListenable(scope.mixedStyles);
+    final attrs = useValueListenable(scope.attrs);
 
-    final isMixed = mixedStyles.contains('letter_spacing');
-    final letterSpacingStyle = uniformStyles.firstWhereOrNull((m) => m['type'] == 'letter_spacing');
-    final activeValue = isMixed
-        ? null
-        : (letterSpacingStyle?['spacing'] as num? ?? editorDefaultValues['letterSpacing']);
+    final letterSpacingAttr = findAttr(attrs, 'letter_spacing');
+    final letterSpacingValues = (letterSpacingAttr?['values'] as List?)?.whereType<num>().toList() ?? [];
+    final activeValue = letterSpacingValues.length == 1
+        ? letterSpacingValues[0]
+        : (letterSpacingValues.isEmpty ? editorDefaultValues['letterSpacing'] : null);
 
     return NativeEditorTextOptionsToolbar(
       items: editorValues['letterSpacing']!,

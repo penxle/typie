@@ -1,8 +1,11 @@
+use crate::model::{Annotation, AnnotationType, Style, StyleType, TextAlign};
+use crate::state::selection_helpers::{BlockAttr, SelectionAttributes};
+
 pub const DIRTY_SETTINGS: u64 = 1 << 0;
 pub const DIRTY_LAYOUT: u64 = 1 << 1;
 pub const DIRTY_CURSOR: u64 = 1 << 2;
 pub const DIRTY_SELECTION: u64 = 1 << 3;
-pub const DIRTY_FORMATTING: u64 = 1 << 4;
+pub const DIRTY_ATTRS: u64 = 1 << 4;
 pub const DIRTY_POINTER: u64 = 1 << 5;
 pub const DIRTY_PLACEHOLDER: u64 = 1 << 7;
 pub const DIRTY_EXTERNAL_ELEMENTS: u64 = 1 << 8;
@@ -16,6 +19,31 @@ pub const DIRTY_FONT_REQUIRED: u64 = 1 << 17;
 pub const DIRTY_FALLBACK_FONT_REQUIRED: u64 = 1 << 18;
 pub const DIRTY_EXITED_DOCUMENT_START: u64 = 1 << 19;
 pub const DIRTY_HTML_PASTED: u64 = 1 << 20;
+
+pub const ATTR_TAG_BACKGROUND_COLOR: u32 = 0;
+pub const ATTR_TAG_TEXT_COLOR: u32 = 1;
+pub const ATTR_TAG_FONT_SIZE: u32 = 2;
+pub const ATTR_TAG_FONT_FAMILY: u32 = 3;
+pub const ATTR_TAG_FONT_WEIGHT: u32 = 4;
+pub const ATTR_TAG_ITALIC: u32 = 5;
+pub const ATTR_TAG_LETTER_SPACING: u32 = 6;
+pub const ATTR_TAG_STRIKETHROUGH: u32 = 9;
+pub const ATTR_TAG_UNDERLINE: u32 = 10;
+pub const ATTR_TAG_TEXT_ALIGN: u32 = 20;
+pub const ATTR_TAG_LINE_HEIGHT: u32 = 21;
+pub const ATTR_TAG_LINK: u32 = 30;
+pub const ATTR_TAG_RUBY: u32 = 31;
+
+pub const VK_UNIT: u32 = 0;
+pub const VK_F32: u32 = 1;
+pub const VK_U32: u32 = 2;
+pub const VK_STRING: u32 = 3;
+pub const VK_COMPOSITE: u32 = 4;
+
+pub const ALIGN_LEFT: u32 = 0;
+pub const ALIGN_CENTER: u32 = 1;
+pub const ALIGN_RIGHT: u32 = 2;
+pub const ALIGN_JUSTIFY: u32 = 3;
 
 #[repr(C)]
 pub struct Slate {
@@ -71,11 +99,8 @@ pub struct Slate {
     pub placeholder_height: f32,
     pub placeholder_visible: u32,
 
-    pub formatting_uniform_align: i32,
-    pub formatting_uniform_line_height: f32,
-    pub formatting_uniform_styles_offset: u32,
-    pub formatting_uniform_styles_count: u32,
-    pub formatting_mixed_styles_bitfield: u32,
+    pub attrs_offset: u32,
+    pub attrs_count: u32,
 
     pub enabled_actions_offset: u32,
     pub enabled_actions_count: u32,
@@ -175,6 +200,190 @@ impl Slab {
         self.data[offset as usize..offset as usize + 4].copy_from_slice(&len_bytes);
         self.data[offset as usize + 4..offset as usize + 4 + bytes.len()].copy_from_slice(bytes);
         offset
+    }
+
+    pub fn write_attrs(&mut self, attrs: &SelectionAttributes) -> (u32, u32) {
+        let start = self.alloc(0, 4);
+        let mut entry_count = 0u32;
+
+        for collected in &attrs.block_attrs {
+            let count = collected.values.len() as u32 + if collected.has_absent { 1 } else { 0 };
+            if count == 0 {
+                continue;
+            }
+            let Some(first) = collected.values.first() else {
+                continue;
+            };
+            match first {
+                BlockAttr::TextAlign(_) => {
+                    self.write_u32_slice(&[ATTR_TAG_TEXT_ALIGN, VK_U32, count]);
+                    for val in &collected.values {
+                        if let BlockAttr::TextAlign(align) = val {
+                            self.write_u32_slice(&[match align {
+                                TextAlign::Left => ALIGN_LEFT,
+                                TextAlign::Center => ALIGN_CENTER,
+                                TextAlign::Right => ALIGN_RIGHT,
+                                TextAlign::Justify => ALIGN_JUSTIFY,
+                            }]);
+                        }
+                    }
+                    if collected.has_absent {
+                        self.write_null_sentinel(VK_U32);
+                    }
+                }
+                BlockAttr::LineHeight(_) => {
+                    self.write_u32_slice(&[ATTR_TAG_LINE_HEIGHT, VK_F32, count]);
+                    for val in &collected.values {
+                        if let BlockAttr::LineHeight(lh) = val {
+                            self.write_f32_slice(&[*lh]);
+                        }
+                    }
+                    if collected.has_absent {
+                        self.write_null_sentinel(VK_F32);
+                    }
+                }
+            }
+            entry_count += 1;
+        }
+
+        for (&st, values) in &attrs.style_values {
+            let type_tag = style_type_to_tag(&st);
+            let value_kind = style_type_to_value_kind(&st);
+            let is_absent = attrs.absent_styles.contains(&st);
+            let count = values.len() as u32 + if is_absent { 1 } else { 0 };
+            if count == 0 {
+                continue;
+            }
+
+            self.write_u32_slice(&[type_tag, value_kind, count]);
+            for style in values {
+                self.write_style_value(style);
+            }
+            if is_absent {
+                self.write_null_sentinel(value_kind);
+            }
+            entry_count += 1;
+        }
+
+        for (&at, values) in &attrs.annotation_values {
+            let type_tag = annotation_type_to_tag(&at);
+            let is_absent = attrs.absent_annotations.contains(&at);
+            let count = values.len() as u32 + if is_absent { 1 } else { 0 };
+            if count == 0 {
+                continue;
+            }
+
+            self.write_u32_slice(&[type_tag, VK_COMPOSITE, count]);
+            for annotation in values {
+                self.write_annotation_instance(annotation);
+            }
+            if is_absent {
+                self.write_u32_slice(&[0xFFFFFFFF]);
+            }
+            entry_count += 1;
+        }
+
+        (start, entry_count)
+    }
+
+    pub fn write_text_bounds(&mut self, bounds: &[crate::types::TextBound]) {
+        for b in bounds {
+            self.write_f32_slice(&[b.x, b.y, b.width, b.height, b.ascent]);
+        }
+    }
+
+    fn write_style_value(&mut self, style: &Style) {
+        match style {
+            Style::BackgroundColor(s) => {
+                self.write_str(&s.color);
+            }
+            Style::TextColor(s) => {
+                self.write_str(&s.color);
+            }
+            Style::FontSize(s) => {
+                self.write_f32_slice(&[s.size]);
+            }
+            Style::FontFamily(s) => {
+                self.write_str(&s.family);
+            }
+            Style::FontWeight(s) => {
+                self.write_u32_slice(&[s.weight as u32]);
+            }
+            Style::Italic(_) => {
+                self.write_u32_slice(&[1]);
+            }
+            Style::LetterSpacing(s) => {
+                self.write_f32_slice(&[s.spacing]);
+            }
+            Style::Strikethrough(_) => {
+                self.write_u32_slice(&[1]);
+            }
+            Style::Underline(_) => {
+                self.write_u32_slice(&[1]);
+            }
+        }
+    }
+
+    fn write_null_sentinel(&mut self, value_kind: u32) {
+        match value_kind {
+            VK_UNIT | VK_U32 | VK_STRING | VK_COMPOSITE => {
+                self.write_u32_slice(&[0xFFFFFFFF]);
+            }
+            VK_F32 => {
+                self.write_f32_slice(&[f32::NAN]);
+            }
+            _ => {}
+        }
+    }
+
+    fn write_annotation_instance(&mut self, annotation: &Annotation) {
+        match annotation {
+            Annotation::Link(link) => {
+                self.write_u32_slice(&[1]);
+                self.write_u32_slice(&[VK_STRING]);
+                self.write_str(&link.href);
+            }
+            Annotation::Ruby(ruby) => {
+                self.write_u32_slice(&[1]);
+                self.write_u32_slice(&[VK_STRING]);
+                self.write_str(&ruby.text);
+            }
+        }
+    }
+}
+
+fn style_type_to_tag(st: &StyleType) -> u32 {
+    match st {
+        StyleType::BackgroundColor => ATTR_TAG_BACKGROUND_COLOR,
+        StyleType::TextColor => ATTR_TAG_TEXT_COLOR,
+        StyleType::FontSize => ATTR_TAG_FONT_SIZE,
+        StyleType::FontFamily => ATTR_TAG_FONT_FAMILY,
+        StyleType::FontWeight => ATTR_TAG_FONT_WEIGHT,
+        StyleType::Italic => ATTR_TAG_ITALIC,
+        StyleType::LetterSpacing => ATTR_TAG_LETTER_SPACING,
+        StyleType::Strikethrough => ATTR_TAG_STRIKETHROUGH,
+        StyleType::Underline => ATTR_TAG_UNDERLINE,
+    }
+}
+
+fn style_type_to_value_kind(st: &StyleType) -> u32 {
+    match st {
+        StyleType::BackgroundColor => VK_STRING,
+        StyleType::TextColor => VK_STRING,
+        StyleType::FontSize => VK_F32,
+        StyleType::FontFamily => VK_STRING,
+        StyleType::FontWeight => VK_U32,
+        StyleType::Italic => VK_UNIT,
+        StyleType::LetterSpacing => VK_F32,
+        StyleType::Strikethrough => VK_UNIT,
+        StyleType::Underline => VK_UNIT,
+    }
+}
+
+fn annotation_type_to_tag(at: &AnnotationType) -> u32 {
+    match at {
+        AnnotationType::Link => ATTR_TAG_LINK,
+        AnnotationType::Ruby => ATTR_TAG_RUBY,
     }
 }
 
@@ -279,14 +488,8 @@ pub fn get_slate_offsets() -> Vec<(&'static str, usize)> {
             "selection_head_height",
             std::mem::offset_of!(Slate, selection_head_height),
         ),
-        (
-            "formatting_uniform_align",
-            std::mem::offset_of!(Slate, formatting_uniform_align),
-        ),
-        (
-            "formatting_uniform_line_height",
-            std::mem::offset_of!(Slate, formatting_uniform_line_height),
-        ),
+        ("attrs_offset", std::mem::offset_of!(Slate, attrs_offset)),
+        ("attrs_count", std::mem::offset_of!(Slate, attrs_count)),
         ("pointer_style", std::mem::offset_of!(Slate, pointer_style)),
         ("pointer_state", std::mem::offset_of!(Slate, pointer_state)),
         (
@@ -302,18 +505,6 @@ pub fn get_slate_offsets() -> Vec<(&'static str, usize)> {
         (
             "placeholder_height",
             std::mem::offset_of!(Slate, placeholder_height),
-        ),
-        (
-            "formatting_uniform_styles_offset",
-            std::mem::offset_of!(Slate, formatting_uniform_styles_offset),
-        ),
-        (
-            "formatting_uniform_styles_count",
-            std::mem::offset_of!(Slate, formatting_uniform_styles_count),
-        ),
-        (
-            "formatting_mixed_styles_bitfield",
-            std::mem::offset_of!(Slate, formatting_mixed_styles_bitfield),
         ),
         (
             "enabled_actions_offset",

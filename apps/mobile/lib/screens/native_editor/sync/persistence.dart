@@ -13,6 +13,7 @@ class _StoredDocument {
     required this.version,
     required this.checkpoint,
     required this.updatedAt,
+    this.generation = 0,
   });
 
   final String id;
@@ -21,12 +22,14 @@ class _StoredDocument {
   final Uint8List version;
   final Uint8List checkpoint;
   final int updatedAt;
+  final int generation;
 
   _StoredDocument withUpdatedAt({
     Uint8List? snapshot,
     List<Uint8List>? updates,
     Uint8List? version,
     Uint8List? checkpoint,
+    int? generation,
   }) {
     return _StoredDocument(
       id: id,
@@ -35,6 +38,7 @@ class _StoredDocument {
       version: version ?? this.version,
       checkpoint: checkpoint ?? this.checkpoint,
       updatedAt: DateTime.now().millisecondsSinceEpoch,
+      generation: generation ?? this.generation,
     );
   }
 
@@ -46,6 +50,7 @@ class _StoredDocument {
       'version': version,
       'checkpoint': checkpoint,
       'updatedAt': updatedAt,
+      'generation': generation,
     };
   }
 
@@ -61,6 +66,7 @@ class _StoredDocument {
       version: map['version'] as Uint8List? ?? Uint8List(0),
       checkpoint: map['checkpoint'] as Uint8List? ?? Uint8List(0),
       updatedAt: map['updatedAt'] as int,
+      generation: map['generation'] as int? ?? 0,
     );
   }
 }
@@ -73,9 +79,11 @@ class LocalPersistence {
   bool _disposed = false;
   Uint8List _version = Uint8List(0);
   Uint8List _checkpoint = Uint8List(0);
+  int _generation = 0;
 
   Uint8List get version => _version;
   Uint8List get checkpoint => _checkpoint;
+  int get generation => _generation;
 
   Future<void> _ensureBox() async {
     if (_box != null) {
@@ -104,6 +112,7 @@ class LocalPersistence {
 
     _version = doc.version;
     _checkpoint = doc.checkpoint;
+    _generation = doc.generation;
 
     return (snapshot: doc.snapshot, updates: doc.updates);
   }
@@ -121,7 +130,7 @@ class LocalPersistence {
     }
   }
 
-  Future<void> saveSnapshot(Uint8List snapshot, Uint8List version) async {
+  Future<void> saveSnapshot(Uint8List snapshot, Uint8List version, {int? generation}) async {
     if (_disposed) {
       return;
     }
@@ -135,9 +144,11 @@ class LocalPersistence {
         version: version,
         checkpoint: _checkpoint,
         updatedAt: DateTime.now().millisecondsSinceEpoch,
+        generation: generation ?? _generation,
       ),
     );
     _version = version;
+    if (generation != null) _generation = generation;
   }
 
   Future<void> saveCheckpoint(Uint8List checkpoint) async {

@@ -321,12 +321,22 @@ mod tests {
         });
         assert!(runtime.state().doc.to_plain_text().ends_with("start abcd"));
 
-        let snapshot = runtime.selection_snapshot_owned();
-        let (uniform, _) = runtime.collect_selection_styles(snapshot);
-        assert!(
-            uniform
-                .iter()
-                .any(|s| matches!(s, Style::FontWeight(FontWeightStyle { weight: 700 })))
-        );
+        let doc = &runtime.state().doc;
+        let p_node = doc.node(p).unwrap();
+        let mut found_bold_d = false;
+        for child in p_node.children() {
+            if let Node::Text(text_node) = child.node() {
+                for seg in text_node.text.get_segments() {
+                    if seg.text.contains('d')
+                        && seg.styles.iter().any(|s| {
+                            matches!(s, Style::FontWeight(FontWeightStyle { weight: 700 }))
+                        })
+                    {
+                        found_bold_d = true;
+                    }
+                }
+            }
+        }
+        assert!(found_bold_d);
     }
 }

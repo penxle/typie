@@ -1,6 +1,6 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
-  import { getEditor } from '$lib/editor/context';
+  import { getEditorContext } from '$lib/editor/context.svelte';
 
   type Props = {
     scrollContainer: HTMLElement | null;
@@ -14,7 +14,7 @@
 
   let { scrollContainer }: Props = $props();
 
-  const editor = getEditor();
+  const { editor } = getEditorContext();
 
   let scrollTop = $state(0);
   let scrollHeight = $state(0);

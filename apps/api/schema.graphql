@@ -165,6 +165,7 @@ type Document implements IDocument {
   createdAt: DateTime!
   entity: Entity!
   excerpt: String!
+  generation: Int!
   id: ID!
   layoutMode: JSON!
   nullableTitle: String
@@ -241,6 +242,7 @@ enum DocumentSyncType {
   AWARENESS
   HEARTBEAT
   PRESENCE
+  RESET
   UPDATE
   VECTOR
 }

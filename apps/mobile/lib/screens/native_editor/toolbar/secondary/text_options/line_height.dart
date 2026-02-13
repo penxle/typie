@@ -11,9 +11,11 @@ class NativeEditorLineHeightTextOptionsToolbar extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final scope = NativeEditorToolbarScope.of(context);
-    final selectionStats = useValueListenable(scope.selectionStats);
+    final attrs = useValueListenable(scope.attrs);
 
-    final activeValue = selectionStats['uniformLineHeight'] as num? ?? editorDefaultValues['lineHeight'];
+    final lineHeightAttr = findAttr(attrs, 'line_height');
+    final lineHeightValues = (lineHeightAttr?['values'] as List?)?.whereType<num>().toList() ?? [];
+    final activeValue = lineHeightValues.length == 1 ? lineHeightValues[0] : editorDefaultValues['lineHeight'];
 
     return NativeEditorTextOptionsToolbar(
       items: editorValues['lineHeight']!,

@@ -9,6 +9,7 @@ import 'package:typie/native/editor_native.dart';
 import 'package:typie/screens/native_editor/__generated__/document_sync_stream.data.gql.dart';
 import 'package:typie/screens/native_editor/__generated__/document_sync_stream.req.gql.dart';
 import 'package:typie/screens/native_editor/__generated__/sync_document.req.gql.dart';
+import 'package:typie/screens/native_editor/context.dart';
 import 'package:typie/screens/native_editor/sync/persistence.dart';
 import 'package:uuid/uuid.dart';
 
@@ -20,12 +21,15 @@ class SyncManager {
     required this.editor,
     required this.client,
     required LocalPersistence persistence,
-  }) : _persistence = persistence;
+    required EditorContext editorContext,
+  }) : _persistence = persistence,
+       _editorContext = editorContext;
 
   final String documentId;
   final NativeEditor editor;
   final GraphQLClient client;
   final LocalPersistence _persistence;
+  final EditorContext _editorContext;
 
   static const _disconnectThreshold = Duration(seconds: 3);
 
@@ -188,6 +192,10 @@ class SyncManager {
         editor.importUpdates(Uint8List.fromList(base64Decode(data)));
       case GDocumentSyncType.VECTOR:
         await _persistence.saveCheckpoint(Uint8List.fromList(base64Decode(data)));
+      case GDocumentSyncType.RESET:
+        await _persistence.clear();
+        _editorContext.serverSnapshot = Uint8List.fromList(base64Decode(data));
+        _editorContext.resetKey.value++;
       default:
         break;
     }

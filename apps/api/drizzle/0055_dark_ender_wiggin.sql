@@ -1,0 +1,1 @@
+ALTER TABLE "document_contents" ADD COLUMN "generation" integer DEFAULT 0 NOT NULL;

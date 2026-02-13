@@ -10,17 +10,40 @@ Map<String, int> _getOffsets() {
   return _cachedOffsets ??= getSlateOffsets();
 }
 
-const _styleBits = [
-  ('background_color', 1 << 0),
-  ('text_color', 1 << 1),
-  ('font_size', 1 << 2),
-  ('font_family', 1 << 3),
-  ('font_weight', 1 << 4),
-  ('italic', 1 << 5),
-  ('letter_spacing', 1 << 6),
-  ('strikethrough', 1 << 9),
-  ('underline', 1 << 10),
-];
+const _tagItalic = 5;
+const _tagStrikethrough = 9;
+const _tagUnderline = 10;
+const _tagFontSize = 2;
+const _tagLetterSpacing = 6;
+const _tagLineHeight = 21;
+const _tagFontWeight = 4;
+const _tagTextAlign = 20;
+const _tagBackgroundColor = 0;
+const _tagTextColor = 1;
+const _tagFontFamily = 3;
+const _tagLink = 30;
+const _tagRuby = 31;
+
+const _vkUnit = 0;
+const _vkF32 = 1;
+const _vkU32 = 2;
+const _vkString = 3;
+const _vkComposite = 4;
+
+const _alignLeft = 0;
+const _alignCenter = 1;
+const _alignRight = 2;
+const _alignJustify = 3;
+
+const _unitTagMap = {_tagItalic: 'italic', _tagStrikethrough: 'strikethrough', _tagUnderline: 'underline'};
+const _f32TagMap = {_tagFontSize: 'font_size', _tagLetterSpacing: 'letter_spacing', _tagLineHeight: 'line_height'};
+const _u32TagMap = {_tagFontWeight: 'font_weight', _tagTextAlign: 'text_align'};
+const _stringTagMap = {
+  _tagBackgroundColor: 'background_color',
+  _tagTextColor: 'text_color',
+  _tagFontFamily: 'font_family',
+};
+const _textAlignMap = {_alignLeft: 'left', _alignCenter: 'center', _alignRight: 'right', _alignJustify: 'justify'};
 
 class SlateReader {
   SlateReader(Pointer<Uint8> slatePtr, int slateLen, Pointer<Uint8> slabPtr, int slabLen)
@@ -99,81 +122,117 @@ class SlateReader {
     return aligned;
   }
 
-  List<Map<String, dynamic>> readUniformStyles() {
-    final count = getU32('formatting_uniform_styles_count');
+  List<Map<String, dynamic>> readAttrs() {
+    final count = getU32('attrs_count');
     if (count == 0) {
       return const [];
     }
 
-    var pos = getU32('formatting_uniform_styles_offset');
+    var pos = getU32('attrs_offset');
     final result = <Map<String, dynamic>>[];
 
     for (var i = 0; i < count; i++) {
       final typeTag = _slabU32(pos);
       final valueKind = _slabU32(pos + 4);
-      pos += 8;
+      final valueCount = _slabU32(pos + 8);
+      pos += 12;
 
-      var strValue = '';
-      num numValue = 0;
-
-      switch (valueKind) {
-        case 0:
-          break;
-        case 1:
-          numValue = _slabF32(pos);
+      if (valueKind == _vkUnit) {
+        final values = <bool?>[];
+        for (var j = 0; j < valueCount; j++) {
+          final v = _slabU32(pos);
           pos += 4;
-        case 2:
-          numValue = _slabU32(pos);
+          values.add(v == 0xFFFFFFFF ? null : true);
+        }
+        final type = _unitTagMap[typeTag];
+        if (type != null) result.add({'type': type, 'values': values});
+      } else if (valueKind == _vkF32) {
+        final values = <double?>[];
+        for (var j = 0; j < valueCount; j++) {
+          final v = _slabF32(pos);
           pos += 4;
-        case 3:
-          strValue = readStr(pos);
-          pos += _strByteLen(pos);
-      }
-
-      final Map<String, dynamic>? style;
-      switch (typeTag) {
-        case 0:
-          style = {'type': 'background_color', 'color': strValue};
-        case 1:
-          style = {'type': 'text_color', 'color': strValue};
-        case 2:
-          style = {'type': 'font_size', 'size': numValue};
-        case 3:
-          style = {'type': 'font_family', 'family': strValue};
-        case 4:
-          style = {'type': 'font_weight', 'weight': numValue};
-        case 5:
-          style = {'type': 'italic'};
-        case 6:
-          style = {'type': 'letter_spacing', 'spacing': numValue};
-        case 9:
-          style = {'type': 'strikethrough'};
-        case 10:
-          style = {'type': 'underline'};
-        default:
-          style = null;
-      }
-
-      if (style != null) {
-        result.add(style);
+          values.add(v.isNaN ? null : v);
+        }
+        final type = _f32TagMap[typeTag];
+        if (type != null) result.add({'type': type, 'values': values});
+      } else if (valueKind == _vkU32) {
+        final values = <dynamic>[];
+        for (var j = 0; j < valueCount; j++) {
+          final v = _slabU32(pos);
+          pos += 4;
+          values.add(v == 0xFFFFFFFF ? null : v);
+        }
+        final type = _u32TagMap[typeTag];
+        if (type != null) {
+          if (type == 'text_align') {
+            result.add({'type': type, 'values': values.map((v) => v == null ? null : _textAlignMap[v]).toList()});
+          } else {
+            result.add({'type': type, 'values': values});
+          }
+        }
+      } else if (valueKind == _vkString) {
+        final values = <String?>[];
+        for (var j = 0; j < valueCount; j++) {
+          final byteLen = _slabU32(pos);
+          if (byteLen == 0xFFFFFFFF) {
+            values.add(null);
+            pos += 4;
+          } else {
+            values.add(readStr(pos));
+            pos += _strByteLen(pos);
+          }
+        }
+        final type = _stringTagMap[typeTag];
+        if (type != null) result.add({'type': type, 'values': values});
+      } else if (valueKind == _vkComposite) {
+        if (typeTag == _tagLink) {
+          final values = <Map<String, String>?>[];
+          for (var j = 0; j < valueCount; j++) {
+            final fieldCount = _slabU32(pos);
+            pos += 4;
+            if (fieldCount == 0xFFFFFFFF) {
+              values.add(null);
+            } else {
+              final obj = <String, String>{};
+              for (var k = 0; k < fieldCount; k++) {
+                final fvk = _slabU32(pos);
+                pos += 4;
+                if (fvk == _vkString) {
+                  final value = readStr(pos);
+                  pos += _strByteLen(pos);
+                  obj[k == 0 ? 'href' : 'field_$k'] = value;
+                }
+              }
+              values.add(obj);
+            }
+          }
+          result.add({'type': 'link', 'values': values});
+        } else if (typeTag == _tagRuby) {
+          final values = <Map<String, String>?>[];
+          for (var j = 0; j < valueCount; j++) {
+            final fieldCount = _slabU32(pos);
+            pos += 4;
+            if (fieldCount == 0xFFFFFFFF) {
+              values.add(null);
+            } else {
+              final obj = <String, String>{};
+              for (var k = 0; k < fieldCount; k++) {
+                final fvk = _slabU32(pos);
+                pos += 4;
+                if (fvk == _vkString) {
+                  final value = readStr(pos);
+                  pos += _strByteLen(pos);
+                  obj[k == 0 ? 'text' : 'field_$k'] = value;
+                }
+              }
+              values.add(obj);
+            }
+          }
+          result.add({'type': 'ruby', 'values': values});
+        }
       }
     }
 
-    return result;
-  }
-
-  List<String> readMixedStyles() {
-    final bitfield = getU32('formatting_mixed_styles_bitfield');
-    if (bitfield == 0) {
-      return const [];
-    }
-
-    final result = <String>[];
-    for (final (name, bit) in _styleBits) {
-      if (bitfield & bit != 0) {
-        result.add(name);
-      }
-    }
     return result;
   }
 
