@@ -8,9 +8,9 @@
   import ScissorsIcon from '~icons/lucide/scissors';
   import SquareDashedIcon from '~icons/lucide/square-dashed';
   import { IS_MAC } from '$lib/editor/constants';
-  import { getEditor } from '$lib/editor/context';
+  import { getEditorContext } from '$lib/editor/context.svelte';
 
-  const editor = getEditor();
+  const { editor } = getEditorContext();
 
   let open = $state(false);
 

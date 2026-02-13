@@ -1,7 +1,7 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { IS_MAC } from '$lib/editor/constants';
-  import { getEditor } from '$lib/editor/context';
+  import { getEditorContext } from '$lib/editor/context.svelte';
   import { getActionFromKeyEvent } from '$lib/editor/keyboard';
 
   type Props = {
@@ -11,7 +11,7 @@
 
   let { onFocus, onBlur }: Props = $props();
 
-  const editor = getEditor();
+  const { editor } = getEditorContext();
 
   let inputEl = $state<HTMLInputElement>();
 

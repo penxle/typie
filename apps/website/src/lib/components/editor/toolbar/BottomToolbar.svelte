@@ -19,7 +19,7 @@
   import LetterSpacingIcon from '~icons/typie/letter-spacing';
   import LineHeightIcon from '~icons/typie/line-height';
   import RubyIcon from '~icons/typie/ruby';
-  import { getEditor } from '$lib/editor/context';
+  import { getEditorContext } from '$lib/editor/context.svelte';
   import { THEME_COLORS } from '$lib/editor/theme';
   import ToolbarButton from './ToolbarButton.svelte';
   import ToolbarColorGrid from './ToolbarColorGrid.svelte';
@@ -32,7 +32,7 @@
   import ToolbarRuby from './ToolbarRuby.svelte';
   import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { ThemeVariant } from '$lib/editor/theme';
-  import type { Style, StyleType, TextAlign } from '$lib/editor/types';
+  import type { TextAlign } from '$lib/editor/types';
 
   type Props = {
     style?: SystemStyleObject;
@@ -43,18 +43,11 @@
 
   const app = getAppContext();
   const theme = getThemeContext();
-  const editor = getEditor();
+  const { editor } = getEditorContext();
 
   const themeVariant = $derived(
     (theme.effectiveTheme === 'light' ? `light-${theme.lightVariant}` : `dark-${theme.darkVariant}`) as ThemeVariant,
   );
-
-  const activeStyles = $derived(editor.activeStyles);
-  const selection = $derived(editor.selection);
-
-  const findStyle = (type: string): Style | undefined => activeStyles.uniformStyles.find((s) => s.type === type);
-  const isMixed = (type: StyleType): boolean => activeStyles.mixedStyles.includes(type);
-  const hasStyle = (type: string): boolean => activeStyles.uniformStyles.some((s) => s.type === type);
 
   const defaultTextColor = 'black';
   const defaultTextBackgroundColor = 'none';
@@ -128,29 +121,33 @@
     { label: '양쪽 정렬', value: 'justify', icon: AlignJustifyIcon },
   ];
 
-  const currentTextColor = $derived(
-    isMixed('text_color') ? defaultTextColor : ((findStyle('text_color') as { color?: string })?.color ?? defaultTextColor),
-  );
-  const currentTextBackgroundColor = $derived(
-    isMixed('background_color')
-      ? defaultTextBackgroundColor
-      : ((findStyle('background_color') as { color?: string })?.color ?? defaultTextBackgroundColor),
-  );
-  const currentLineHeight = $derived(selection.stats.uniformLineHeight ?? defaultLineHeight);
-  const currentLetterSpacing = $derived(
-    isMixed('letter_spacing')
-      ? defaultLetterSpacing
-      : ((findStyle('letter_spacing') as { spacing?: number })?.spacing ?? defaultLetterSpacing),
-  );
-  const currentTextAlign = $derived(selection.stats.uniformAlign ?? defaultTextAlign);
+  const textColorAttr = $derived(editor.getAttr('text_color'));
+  const textColorValues = $derived(textColorAttr?.values.filter((v): v is string => v != null) ?? []);
+  const currentTextColor = $derived(textColorValues.length === 1 ? textColorValues[0] : defaultTextColor);
 
-  const selectedFontWeight = $derived(
-    isMixed('font_weight') ? undefined : ((findStyle('font_weight') as { weight?: number })?.weight ?? 400),
-  );
+  const bgColorAttr = $derived(editor.getAttr('background_color'));
+  const bgColorValues = $derived(bgColorAttr?.values.filter((v): v is string => v != null) ?? []);
+  const currentTextBackgroundColor = $derived(bgColorValues.length === 1 ? bgColorValues[0] : defaultTextBackgroundColor);
+
+  const lineHeightAttr = $derived(editor.getAttr('line_height'));
+  const lineHeightValues = $derived(lineHeightAttr?.values.filter((v): v is number => v != null) ?? []);
+  const currentLineHeight = $derived(lineHeightValues.length === 1 ? lineHeightValues[0] : defaultLineHeight);
+
+  const letterSpacingAttr = $derived(editor.getAttr('letter_spacing'));
+  const letterSpacingValues = $derived(letterSpacingAttr?.values.filter((v): v is number => v != null) ?? []);
+  const currentLetterSpacing = $derived(letterSpacingValues.length === 1 ? letterSpacingValues[0] : defaultLetterSpacing);
+
+  const alignAttr = $derived(editor.getAttr('text_align'));
+  const alignValues = $derived(alignAttr?.values.filter((v): v is TextAlign => v != null) ?? []);
+  const currentTextAlign = $derived(alignValues.length === 1 ? alignValues[0] : defaultTextAlign);
+
+  const fontWeightAttr = $derived(editor.getAttr('font_weight'));
+  const fontWeightValues = $derived(fontWeightAttr?.values.filter((v): v is number => v != null) ?? []);
+  const selectedFontWeight = $derived(fontWeightValues.length === 1 ? fontWeightValues[0] : undefined);
   const isBoldActive = $derived(selectedFontWeight !== undefined && selectedFontWeight >= 700);
-  const isItalicActive = $derived(hasStyle('italic'));
-  const isStrikethroughActive = $derived(hasStyle('strikethrough'));
-  const isUnderlineActive = $derived(hasStyle('underline'));
+  const isItalicActive = $derived(editor.getAttr('italic')?.values.includes(null) === false);
+  const isStrikethroughActive = $derived(editor.getAttr('strikethrough')?.values.includes(null) === false);
+  const isUnderlineActive = $derived(editor.getAttr('underline')?.values.includes(null) === false);
 
   const currentTextAlignIcon = $derived(textAligns.find((a) => a.value === currentTextAlign)?.icon ?? AlignLeftIcon);
 </script>

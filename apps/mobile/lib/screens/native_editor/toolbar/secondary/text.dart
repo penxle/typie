@@ -20,52 +20,51 @@ class NativeEditorTextToolbar extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final scope = NativeEditorToolbarScope.of(context);
-    final uniformStyles = useValueListenable(scope.uniformStyles);
-    final mixedStyles = useValueListenable(scope.mixedStyles);
+    final attrs = useValueListenable(scope.attrs);
 
-    Map<String, dynamic>? findStyle(String type) => uniformStyles.firstWhereOrNull((m) => m['type'] == type);
-    bool isMixed(String type) => mixedStyles.contains(type);
+    final textColorAttr = findAttr(attrs, 'text_color');
+    final textColorValues = (textColorAttr?['values'] as List?)?.whereType<String>().toList() ?? [];
+    final activeTextColor = textColorValues.length == 1
+        ? textColorValues[0]
+        : (textColorValues.isEmpty ? editorDefaultValues['textColor'] as String : null);
 
-    final textColorStyle = findStyle('text_color');
-    final isTextColorMixed = isMixed('text_color');
-    final activeTextColor = isTextColorMixed
-        ? null
-        : (textColorStyle?['color'] as String? ?? editorDefaultValues['textColor'] as String);
+    final bgColorAttr = findAttr(attrs, 'background_color');
+    final bgColorValues = (bgColorAttr?['values'] as List?)?.whereType<String>().toList() ?? [];
+    final activeBackgroundColor = bgColorValues.length == 1
+        ? bgColorValues[0]
+        : (bgColorValues.isEmpty ? editorDefaultValues['textBackgroundColor'] as String : null);
 
-    final backgroundColorStyle = findStyle('background_color');
-    final isBackgroundColorMixed = isMixed('background_color');
-    final activeBackgroundColor = isBackgroundColorMixed
-        ? null
-        : (backgroundColorStyle?['color'] as String? ?? editorDefaultValues['textBackgroundColor'] as String);
+    final fontFamilyAttr = findAttr(attrs, 'font_family');
+    final fontFamilyValues = (fontFamilyAttr?['values'] as List?)?.whereType<String>().toList() ?? [];
+    final activeFontFamily = fontFamilyValues.length == 1
+        ? fontFamilyValues[0]
+        : (fontFamilyValues.isEmpty ? editorDefaultValues['fontFamily'] as String : null);
+    final isFontFamilyMixed = fontFamilyValues.length > 1;
 
-    final fontFamilyStyle = findStyle('font_family');
-    final isFontFamilyMixed = isMixed('font_family');
-    final activeFontFamily = isFontFamilyMixed
-        ? null
-        : (fontFamilyStyle?['family'] as String? ?? editorDefaultValues['fontFamily'] as String);
+    final fontWeightAttr = findAttr(attrs, 'font_weight');
+    final fontWeightValues = (fontWeightAttr?['values'] as List?)?.whereType<int>().toList() ?? [];
+    final activeFontWeight = fontWeightValues.length == 1
+        ? fontWeightValues[0]
+        : (fontWeightValues.isEmpty ? editorDefaultValues['fontWeight'] as int : null);
+    final isFontWeightMixed = fontWeightValues.length > 1;
 
-    final fontWeightStyle = findStyle('font_weight');
-    final isFontWeightMixed = isMixed('font_weight');
-    final activeFontWeight = isFontWeightMixed
-        ? null
-        : (fontWeightStyle?['weight'] as int? ?? editorDefaultValues['fontWeight'] as int);
-
-    final fontSizeStyle = findStyle('font_size');
-    final isFontSizeMixed = isMixed('font_size');
-    final activeFontSize = isFontSizeMixed
-        ? null
-        : (fontSizeStyle?['size'] as num? ?? editorDefaultValues['fontSize'] as num);
+    final fontSizeAttr = findAttr(attrs, 'font_size');
+    final fontSizeValues = (fontSizeAttr?['values'] as List?)?.whereType<num>().toList() ?? [];
+    final activeFontSize = fontSizeValues.length == 1
+        ? fontSizeValues[0]
+        : (fontSizeValues.isEmpty ? editorDefaultValues['fontSize'] as num : null);
+    final isFontSizeMixed = fontSizeValues.length > 1;
 
     final isBold = !isFontWeightMixed && activeFontWeight != null && activeFontWeight >= 700;
 
-    final isItalicMixed = isMixed('italic');
-    final isItalic = !isItalicMixed && uniformStyles.any((m) => m['type'] == 'italic');
+    final italicAttr = findAttr(attrs, 'italic');
+    final isItalic = italicAttr != null && !(italicAttr['values'] as List).contains(null);
 
-    final isUnderlineMixed = isMixed('underline');
-    final isUnderline = !isUnderlineMixed && uniformStyles.any((m) => m['type'] == 'underline');
+    final underlineAttr = findAttr(attrs, 'underline');
+    final isUnderline = underlineAttr != null && !(underlineAttr['values'] as List).contains(null);
 
-    final isStrikethroughMixed = isMixed('strikethrough');
-    final isStrikethrough = !isStrikethroughMixed && uniformStyles.any((m) => m['type'] == 'strikethrough');
+    final strikethroughAttr = findAttr(attrs, 'strikethrough');
+    final isStrikethrough = strikethroughAttr != null && !(strikethroughAttr['values'] as List).contains(null);
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,

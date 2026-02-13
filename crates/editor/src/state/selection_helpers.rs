@@ -1,4 +1,7 @@
-use crate::model::{Doc, Node, NodeId, NodeRef, SelectionDecor, Style, StyleType, TextAlign};
+use crate::model::{
+    Annotation, AnnotationType, Doc, Node, NodeId, NodeRef, SelectionDecor, Style, StyleType,
+    TextAlign,
+};
 use crate::state::position::Position;
 use crate::state::position_helpers::compare_positions;
 use crate::state::position_helpers::find_child_at_offset;
@@ -9,6 +12,49 @@ use crate::state::{BlockTraverser, Selection};
 use anyhow::{Context, Result};
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::cmp::Ordering;
+use std::mem::discriminant;
+
+#[derive(Debug, Clone)]
+pub enum BlockAttr {
+    TextAlign(TextAlign),
+    LineHeight(f32),
+}
+
+impl PartialEq for BlockAttr {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::TextAlign(a), Self::TextAlign(b)) => a == b,
+            (Self::LineHeight(a), Self::LineHeight(b)) => (a - b).abs() < f32::EPSILON,
+            _ => false,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CollectedBlockAttrs {
+    pub values: Vec<BlockAttr>,
+    pub has_absent: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct SelectionAttributes {
+    pub block_attrs: Vec<CollectedBlockAttrs>,
+    pub style_values: FxHashMap<StyleType, Vec<Style>>,
+    pub annotation_values: FxHashMap<AnnotationType, Vec<Annotation>>,
+    pub absent_styles: FxHashSet<StyleType>,
+    pub absent_annotations: FxHashSet<AnnotationType>,
+}
+
+fn extract_block_attrs(node: &NodeRef) -> Vec<BlockAttr> {
+    let mut result = Vec::new();
+    for ancestor in node.ancestors() {
+        if let Node::Paragraph(p) = ancestor.node() {
+            result.push(BlockAttr::TextAlign(p.align));
+            result.push(BlockAttr::LineHeight(p.line_height));
+        }
+    }
+    result
+}
 
 pub fn collect_blocks_in_range(doc: &Doc, from: Position, to: Position) -> Result<Vec<NodeId>> {
     let start_id = start_block_id(doc, from)?;
@@ -404,26 +450,49 @@ fn add_ancestor_decorations(
     }
 }
 
-pub fn compute_selection_aggregates(
+pub fn collect_block_attrs_at(doc: &Doc, node_id: NodeId) -> Vec<CollectedBlockAttrs> {
+    let Some(node) = doc.node(node_id) else {
+        return Vec::new();
+    };
+    group_block_attrs(extract_block_attrs(&node))
+}
+
+fn group_block_attrs(attrs: Vec<BlockAttr>) -> Vec<CollectedBlockAttrs> {
+    let mut map: Vec<(std::mem::Discriminant<BlockAttr>, Vec<BlockAttr>)> = Vec::new();
+    for attr in attrs {
+        let disc = discriminant(&attr);
+        if let Some(entry) = map.iter_mut().find(|(d, _)| *d == disc) {
+            if !entry.1.contains(&attr) {
+                entry.1.push(attr);
+            }
+        } else {
+            map.push((disc, vec![attr]));
+        }
+    }
+    map.into_iter()
+        .map(|(_, values)| CollectedBlockAttrs {
+            values,
+            has_absent: false,
+        })
+        .collect()
+}
+
+pub fn compute_selection_attrs(
     doc: &Doc,
     block_ids: &[NodeId],
     from: Position,
     to: Position,
-) -> (
-    usize,
-    Option<TextAlign>,
-    Option<f32>,
-    Vec<Style>,
-    Vec<StyleType>,
-) {
-    let mut paragraph_count = 0usize;
-    let mut uniform_align: Option<TextAlign> = None;
-    let mut uniform_line_height: Option<f32> = None;
-    let mut align_mixed = false;
-    let mut line_height_mixed = false;
+) -> SelectionAttributes {
+    let mut block_attr_map: FxHashMap<
+        std::mem::Discriminant<BlockAttr>,
+        (Vec<BlockAttr>, FxHashSet<NodeId>),
+    > = FxHashMap::default();
 
-    let mut uniform_styles: Option<FxHashMap<StyleType, Style>> = None;
-    let mut all_types: FxHashSet<StyleType> = FxHashSet::default();
+    let mut style_values: FxHashMap<StyleType, Vec<Style>> = FxHashMap::default();
+    let mut annotation_values: FxHashMap<AnnotationType, Vec<Annotation>> = FxHashMap::default();
+    let mut segment_count: usize = 0;
+    let mut style_segment_counts: FxHashMap<StyleType, usize> = FxHashMap::default();
+    let mut annotation_segment_counts: FxHashMap<AnnotationType, usize> = FxHashMap::default();
 
     for &block_id in block_ids {
         let Some(node) = doc.node(block_id) else {
@@ -432,68 +501,75 @@ pub fn compute_selection_aggregates(
 
         let block_len = block_content_len(&node);
 
-        if let Node::Paragraph(p) = node.node() {
-            paragraph_count += 1;
-
-            if !align_mixed {
-                if let Some(current) = uniform_align {
-                    if current != p.align {
-                        align_mixed = true;
-                        uniform_align = None;
-                    }
-                } else {
-                    uniform_align = Some(p.align);
-                }
-            }
-
-            if !line_height_mixed {
-                if let Some(current) = uniform_line_height {
-                    if (current - p.line_height).abs() > f32::EPSILON {
-                        line_height_mixed = true;
-                        uniform_line_height = None;
-                    }
-                } else {
-                    uniform_line_height = Some(p.line_height);
-                }
+        for attr in extract_block_attrs(&node) {
+            let entry = block_attr_map.entry(discriminant(&attr)).or_default();
+            entry.1.insert(block_id);
+            if !entry.0.contains(&attr) {
+                entry.0.push(attr);
             }
         }
 
         let (start_offset, end_offset) = calculate_block_offsets(block_id, block_len, from, to);
 
-        accumulate_block_styles(
+        accumulate_block_attrs(
             &node,
             start_offset,
             end_offset,
-            &mut uniform_styles,
-            &mut all_types,
+            &mut style_values,
+            &mut annotation_values,
+            &mut segment_count,
+            &mut style_segment_counts,
+            &mut annotation_segment_counts,
         );
     }
 
-    let uniform_styles_vec: Vec<Style> = uniform_styles
-        .map(|u| u.into_values().collect())
-        .unwrap_or_default();
-    let uniform_types: FxHashSet<_> = uniform_styles_vec.iter().map(|s| s.as_type()).collect();
-    let mixed_styles: Vec<_> = all_types.difference(&uniform_types).copied().collect();
+    let block_count = block_ids.len();
 
-    (
-        paragraph_count,
-        if align_mixed { None } else { uniform_align },
-        if line_height_mixed {
-            None
-        } else {
-            uniform_line_height
-        },
-        uniform_styles_vec,
-        mixed_styles,
-    )
+    let block_attrs: Vec<CollectedBlockAttrs> = block_attr_map
+        .into_values()
+        .filter(|(values, _)| !values.is_empty())
+        .map(|(values, covered)| CollectedBlockAttrs {
+            values,
+            has_absent: covered.len() < block_count,
+        })
+        .collect();
+
+    let mut absent_styles: FxHashSet<StyleType> = FxHashSet::default();
+    if segment_count > 0 {
+        for (&st, &count) in &style_segment_counts {
+            if count < segment_count {
+                absent_styles.insert(st);
+            }
+        }
+    }
+
+    let mut absent_annotations: FxHashSet<AnnotationType> = FxHashSet::default();
+    if segment_count > 0 {
+        for (&at, &count) in &annotation_segment_counts {
+            if count < segment_count {
+                absent_annotations.insert(at);
+            }
+        }
+    }
+
+    SelectionAttributes {
+        block_attrs,
+        style_values,
+        annotation_values,
+        absent_styles,
+        absent_annotations,
+    }
 }
 
-fn accumulate_block_styles(
+fn accumulate_block_attrs(
     block: &NodeRef<'_>,
     start_offset: usize,
     end_offset: usize,
-    uniform: &mut Option<FxHashMap<StyleType, Style>>,
-    all_types: &mut FxHashSet<StyleType>,
+    style_values: &mut FxHashMap<StyleType, Vec<Style>>,
+    annotation_values: &mut FxHashMap<AnnotationType, Vec<Annotation>>,
+    segment_count: &mut usize,
+    style_segment_counts: &mut FxHashMap<StyleType, usize>,
+    annotation_segment_counts: &mut FxHashMap<AnnotationType, usize>,
 ) {
     let mut current_offset = 0;
 
@@ -521,7 +597,25 @@ fn accumulate_block_styles(
                         let seg_overlap_end = seg_end.min(local_end);
 
                         if seg_overlap_start < seg_overlap_end {
-                            update_style_sets(&segment.styles, uniform, all_types);
+                            *segment_count += 1;
+
+                            for style in &segment.styles {
+                                let st = style.as_type();
+                                *style_segment_counts.entry(st).or_default() += 1;
+                                let values = style_values.entry(st).or_default();
+                                if !values.iter().any(|v| v == style) {
+                                    values.push(style.clone());
+                                }
+                            }
+
+                            for annotation in &segment.annotations {
+                                let at = annotation.as_type();
+                                *annotation_segment_counts.entry(at).or_default() += 1;
+                                let values = annotation_values.entry(at).or_default();
+                                if !values.iter().any(|v| v == annotation) {
+                                    values.push(annotation.clone());
+                                }
+                            }
                         }
 
                         seg_offset = seg_end;
@@ -536,33 +630,6 @@ fn accumulate_block_styles(
             _ => {}
         }
     }
-}
-
-fn update_style_sets(
-    styles: &[Style],
-    uniform: &mut Option<FxHashMap<StyleType, Style>>,
-    all_types: &mut FxHashSet<StyleType>,
-) {
-    if let Some(u) = uniform {
-        if styles.is_empty() {
-            u.clear();
-        } else {
-            let segment_map: FxHashMap<StyleType, &Style> =
-                styles.iter().map(|s| (s.as_type(), s)).collect();
-
-            u.retain(|style_type, style| {
-                segment_map.get(style_type).map_or(false, |s| *s == style)
-            });
-        }
-    } else {
-        let mut initial = FxHashMap::default();
-        for s in styles {
-            initial.insert(s.as_type(), s.clone());
-        }
-        *uniform = Some(initial);
-    }
-
-    all_types.extend(styles.iter().map(|s| s.as_type()));
 }
 
 pub fn is_node_fully_selected(doc: &Doc, selection: &Selection, node_id: NodeId) -> Result<bool> {
@@ -744,7 +811,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_compute_selection_aggregates_with_list() {
+    fn test_compute_selection_attrs_with_list() {
         let mut p1 = id!();
         let state = state! {
             doc {
@@ -769,13 +836,14 @@ mod tests {
         let (from, to) = state.selection.as_sorted(&state.doc).unwrap();
         let block_ids = collect_blocks_in_range(&state.doc, from, to).unwrap();
 
-        let (_, _, _, uniform_styles, _) =
-            compute_selection_aggregates(&state.doc, &block_ids, from, to);
+        let attrs = compute_selection_attrs(&state.doc, &block_ids, from, to);
+
+        let has_font_weight = attrs
+            .style_values
+            .contains_key(&crate::model::StyleType::FontWeight);
 
         assert!(
-            uniform_styles
-                .iter()
-                .any(|s| s.as_type() == crate::model::StyleType::FontWeight),
+            has_font_weight,
             "Should detect font weight style in list item"
         );
     }

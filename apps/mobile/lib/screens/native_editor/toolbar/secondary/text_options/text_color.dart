@@ -1,4 +1,3 @@
-import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/screens/native_editor/toolbar/buttons/color.dart';
@@ -12,12 +11,13 @@ class NativeEditorTextColorTextOptionsToolbar extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final scope = NativeEditorToolbarScope.of(context);
-    final uniformStyles = useValueListenable(scope.uniformStyles);
-    final mixedStyles = useValueListenable(scope.mixedStyles);
+    final attrs = useValueListenable(scope.attrs);
 
-    final isMixed = mixedStyles.contains('text_color');
-    final textColorStyle = uniformStyles.firstWhereOrNull((m) => m['type'] == 'text_color');
-    final activeValue = isMixed ? null : (textColorStyle?['color'] as String? ?? editorDefaultValues['textColor']);
+    final textColorAttr = findAttr(attrs, 'text_color');
+    final textColorValues = (textColorAttr?['values'] as List?)?.whereType<String>().toList() ?? [];
+    final activeValue = textColorValues.length == 1
+        ? textColorValues[0]
+        : (textColorValues.isEmpty ? editorDefaultValues['textColor'] : null);
 
     return NativeEditorTextOptionsToolbar(
       items: editorValues['textColor']!,

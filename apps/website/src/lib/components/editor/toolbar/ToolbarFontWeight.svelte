@@ -1,10 +1,9 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { SearchableDropdown } from '@typie/ui/components';
-  import { getEditor } from '$lib/editor/context';
-  import type { Style, StyleType } from '$lib/editor/types';
+  import { getEditorContext } from '$lib/editor/context.svelte';
 
-  const editor = getEditor();
+  const { editor } = getEditorContext();
 
   const fontWeights = [
     { label: '가장 가늘게', value: 100 },
@@ -28,11 +27,6 @@
   ];
 
   const defaultFontFamily = 'Pretendard';
-  const defaultFontWeight = 400;
-
-  const activeStyles = $derived(editor.activeStyles);
-  const findStyle = (type: string): Style | undefined => activeStyles.uniformStyles.find((s) => s.type === type);
-  const isMixed = (type: StyleType): boolean => activeStyles.mixedStyles.includes(type);
 
   const currentFontFamilyAndWeights = $derived.by(() => {
     const defaultFontFamilyWeights = fontFamilies.find((f) => f.value === defaultFontFamily)?.weights ?? [400];
@@ -41,9 +35,9 @@
       weights: defaultFontFamilyWeights.toSorted((a, b) => a - b),
     };
 
-    const fontFamily = isMixed('font_family')
-      ? undefined
-      : ((findStyle('font_family') as { family?: string })?.family ?? defaultFontFamily);
+    const fontFamilyAttr = editor.getAttr('font_family');
+    const fontFamilyValues = fontFamilyAttr?.values.filter((v): v is string => v != null) ?? [];
+    const fontFamily = fontFamilyValues.length === 1 ? fontFamilyValues[0] : undefined;
     if (!fontFamily) return defaultFontFamilyAndWeights;
 
     const systemFontFamily = fontFamilies.find((f) => f.value === fontFamily);
@@ -57,9 +51,9 @@
     return defaultFontFamilyAndWeights;
   });
 
-  const currentWeight = $derived(
-    isMixed('font_weight') ? undefined : ((findStyle('font_weight') as { weight?: number })?.weight ?? defaultFontWeight),
-  );
+  const fontWeightAttr = $derived(editor.getAttr('font_weight'));
+  const fontWeightValues = $derived(fontWeightAttr?.values.filter((v): v is number => v != null) ?? []);
+  const currentWeight = $derived(fontWeightValues.length === 1 ? fontWeightValues[0] : undefined);
 
   const weightItems = $derived(
     currentFontFamilyAndWeights.weights.map((weight) => ({

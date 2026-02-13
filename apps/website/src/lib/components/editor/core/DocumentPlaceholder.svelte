@@ -4,9 +4,9 @@
   import { portal } from '@typie/ui/actions';
   import { Icon } from '@typie/ui/components';
   import LayoutTemplateIcon from '~icons/lucide/layout-template';
-  import { getEditor } from '$lib/editor/context';
+  import { getEditorContext } from '$lib/editor/context.svelte';
 
-  const editor = getEditor();
+  const { editor } = getEditorContext();
 
   let element = $state<HTMLDivElement>();
 

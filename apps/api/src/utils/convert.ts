@@ -24,7 +24,7 @@ type LoroAnnotation = { type: 'link'; href: string } | { type: 'ruby'; text: str
 type TextSegment = {
   text: string;
   styles?: LoroStyle[];
-  annotation_ids?: string[];
+  annotations?: LoroAnnotation[];
 };
 
 type LoroNode = {
@@ -52,7 +52,6 @@ type DocumentJson = {
   };
   styles: Record<string, unknown>;
   nodes: Record<string, LoroNode>;
-  annotations: Record<string, unknown>;
 };
 
 type ArchivedNodeEntry = {
@@ -65,14 +64,31 @@ const generateNodeId = () => faker.string.uuid().replaceAll('-', '');
 const MM_TO_PX = 96 / 25.4;
 const PX_TO_PT = 72 / 96;
 
-function convertPmMarks(
-  pmMarks: JSONContent['marks'],
-  annotations: Record<string, LoroAnnotation>,
-): { styles: LoroStyle[]; annotationIds: string[] } {
-  const styles: LoroStyle[] = [];
-  const annotationIds: string[] = [];
+const DEFAULT_STYLES: LoroStyle[] = [
+  { type: 'font_family', family: 'Pretendard' },
+  { type: 'font_size', size: 12 },
+  { type: 'font_weight', weight: 400 },
+  { type: 'text_color', color: 'black' },
+  { type: 'background_color', color: 'none' },
+  { type: 'letter_spacing', spacing: 0 },
+];
 
-  if (!pmMarks) return { styles, annotationIds };
+function fillDefaultStyles(styles: LoroStyle[]): LoroStyle[] {
+  const presentTypes = new Set(styles.map((s) => s.type));
+  const filled = [...styles];
+  for (const def of DEFAULT_STYLES) {
+    if (!presentTypes.has(def.type)) {
+      filled.push(def);
+    }
+  }
+  return filled;
+}
+
+function convertPmMarks(pmMarks: JSONContent['marks']): { styles: LoroStyle[]; annotations: LoroAnnotation[] } {
+  const styles: LoroStyle[] = [];
+  const annotations: LoroAnnotation[] = [];
+
+  if (!pmMarks) return { styles, annotations };
 
   for (const pmMark of pmMarks) {
     switch (pmMark.type) {
@@ -94,17 +110,13 @@ function convertPmMarks(
       }
       case 'link': {
         if (pmMark.attrs?.href) {
-          const id = generateNodeId();
-          annotations[id] = { type: 'link', href: pmMark.attrs.href as string };
-          annotationIds.push(id);
+          annotations.push({ type: 'link', href: pmMark.attrs.href as string });
         }
         break;
       }
       case 'ruby': {
         if (pmMark.attrs?.text) {
-          const id = generateNodeId();
-          annotations[id] = { type: 'ruby', text: pmMark.attrs.text as string };
-          annotationIds.push(id);
+          annotations.push({ type: 'ruby', text: pmMark.attrs.text as string });
         }
         break;
       }
@@ -129,29 +141,20 @@ function convertPmMarks(
     }
   }
 
-  return { styles, annotationIds };
+  return { styles, annotations };
 }
 
-function mergeInlineContent(
-  content: JSONContent[] | undefined,
-  extraStyles: LoroStyle[],
-  annotations: Record<string, LoroAnnotation>,
-): TextSegment[] {
+function mergeInlineContent(content: JSONContent[] | undefined, extraStyles: LoroStyle[]): TextSegment[] {
   if (!content || content.length === 0) return [];
 
   const segments: TextSegment[] = [];
 
   for (const inline of content) {
     if (inline.type === 'text' && inline.text) {
-      const converted = convertPmMarks(inline.marks, annotations);
-      const styles = [...converted.styles, ...extraStyles];
-      const segment: TextSegment = { text: inline.text };
-      if (styles.length > 0) segment.styles = styles;
-      if (converted.annotationIds.length > 0) segment.annotation_ids = converted.annotationIds;
-      segments.push(segment);
-    } else if (inline.type === 'hard_break') {
-      const segment: TextSegment = { text: '\n' };
-      if (extraStyles.length > 0) segment.styles = [...extraStyles];
+      const converted = convertPmMarks(inline.marks);
+      const styles = fillDefaultStyles([...converted.styles, ...extraStyles]);
+      const segment: TextSegment = { text: inline.text, styles };
+      if (converted.annotations.length > 0) segment.annotations = converted.annotations;
       segments.push(segment);
     }
   }
@@ -164,7 +167,6 @@ function convertNode(
   parentId: string,
   nodes: Record<string, LoroNode>,
   archivedNodes: ArchivedNodeEntry[],
-  annotations: Record<string, LoroAnnotation>,
 ): string | null {
   const nodeId = generateNodeId();
 
@@ -174,18 +176,39 @@ function convertNode(
       const extraStyles: LoroStyle[] = letterSpacing === 0 ? [] : [{ type: 'letter_spacing', spacing: letterSpacing }];
 
       const children: string[] = [];
-      const segments = mergeInlineContent(pmNode.content, extraStyles, annotations);
+      let pendingInlines: JSONContent[] = [];
 
-      if (segments.length > 0) {
-        const textNodeId = generateNodeId();
-        nodes[textNodeId] = {
-          type: 'text',
-          text: segments,
-          children: [],
-          parent: nodeId,
-        } as LoroNode;
-        children.push(textNodeId);
+      const flushText = () => {
+        const segments = mergeInlineContent(pendingInlines, extraStyles);
+        if (segments.length > 0) {
+          const textNodeId = generateNodeId();
+          nodes[textNodeId] = {
+            type: 'text',
+            text: segments,
+            children: [],
+            parent: nodeId,
+          } as LoroNode;
+          children.push(textNodeId);
+        }
+        pendingInlines = [];
+      };
+
+      for (const inline of pmNode.content ?? []) {
+        if (inline.type === 'hard_break') {
+          flushText();
+          const hardBreakId = generateNodeId();
+          nodes[hardBreakId] = {
+            type: 'hard_break',
+            children: [],
+            parent: nodeId,
+          };
+          children.push(hardBreakId);
+        } else {
+          pendingInlines.push(inline);
+        }
       }
+
+      flushText();
 
       nodes[nodeId] = {
         type: 'paragraph',
@@ -210,7 +233,7 @@ function convertNode(
       const children: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = convertNode(child, nodeId, nodes, archivedNodes, annotations);
+          const childId = convertNode(child, nodeId, nodes, archivedNodes);
           if (childId) children.push(childId);
         }
       }
@@ -230,7 +253,7 @@ function convertNode(
       const children: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = convertNode(child, nodeId, nodes, archivedNodes, annotations);
+          const childId = convertNode(child, nodeId, nodes, archivedNodes);
           if (childId) children.push(childId);
         }
       }
@@ -248,7 +271,7 @@ function convertNode(
       const children: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = convertNode(child, nodeId, nodes, archivedNodes, annotations);
+          const childId = convertNode(child, nodeId, nodes, archivedNodes);
           if (childId) children.push(childId);
         }
       }
@@ -265,7 +288,7 @@ function convertNode(
       const children: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = convertNode(child, nodeId, nodes, archivedNodes, annotations);
+          const childId = convertNode(child, nodeId, nodes, archivedNodes);
           if (childId) children.push(childId);
         }
       }
@@ -282,7 +305,7 @@ function convertNode(
       const children: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = convertNode(child, nodeId, nodes, archivedNodes, annotations);
+          const childId = convertNode(child, nodeId, nodes, archivedNodes);
           if (childId) children.push(childId);
         }
       }
@@ -330,7 +353,7 @@ function convertNode(
       const children: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = convertNode(child, nodeId, nodes, archivedNodes, annotations);
+          const childId = convertNode(child, nodeId, nodes, archivedNodes);
           if (childId) children.push(childId);
         }
       }
@@ -355,7 +378,7 @@ function convertNode(
       const children: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = convertNode(child, nodeId, nodes, archivedNodes, annotations);
+          const childId = convertNode(child, nodeId, nodes, archivedNodes);
           if (childId) children.push(childId);
         }
       }
@@ -372,7 +395,7 @@ function convertNode(
       const children: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = convertNode(child, nodeId, nodes, archivedNodes, annotations);
+          const childId = convertNode(child, nodeId, nodes, archivedNodes);
           if (childId) children.push(childId);
         }
       }
@@ -417,15 +440,6 @@ function convertNode(
       return nodeId;
     }
 
-    case 'hard_break': {
-      nodes[nodeId] = {
-        type: 'hard_break',
-        children: [],
-        parent: parentId,
-      };
-      return nodeId;
-    }
-
     case 'page_break': {
       nodes[nodeId] = {
         type: 'page_break',
@@ -461,7 +475,7 @@ function convertNode(
       const contentChildren: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = convertNode(child, foldContentId, nodes, archivedNodes, annotations);
+          const childId = convertNode(child, foldContentId, nodes, archivedNodes);
           if (childId) contentChildren.push(childId);
         }
       }
@@ -564,14 +578,13 @@ export function convertPostToDocumentJson(
   }
 
   const nodes: Record<string, LoroNode> = {};
-  const annotations: Record<string, LoroAnnotation> = {};
   const archivedNodes: ArchivedNodeEntry[] = [];
 
   const rootChildren: string[] = [];
   const blocks = bodyNode?.content ?? [];
 
   for (const block of blocks) {
-    const childId = convertNode(block, ROOT_ID, nodes, archivedNodes, annotations);
+    const childId = convertNode(block, ROOT_ID, nodes, archivedNodes);
     if (childId) rootChildren.push(childId);
   }
 
@@ -610,7 +623,6 @@ export function convertPostToDocumentJson(
       underline: false,
     },
     nodes,
-    annotations,
   };
 
   return { json, archivedNodes };

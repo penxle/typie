@@ -10,7 +10,7 @@
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import FileIcon from '~icons/lucide/file';
   import Trash2Icon from '~icons/lucide/trash-2';
-  import { getEditor } from '$lib/editor/context';
+  import { getEditorContext } from '$lib/editor/context.svelte';
   import { uploadBlobAsFile } from '$lib/utils/blob.svelte';
   import { formatFileSize } from '$lib/utils/format';
   import ExternalElementWrapper from './ExternalElementWrapper.svelte';
@@ -24,7 +24,7 @@
 
   let { el }: Props = $props();
 
-  const editor = getEditor();
+  const { editor } = getEditorContext();
 
   let pickerOpened = $state(false);
   let processedUploadId = $state<string>();

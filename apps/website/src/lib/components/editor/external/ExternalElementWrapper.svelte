@@ -1,6 +1,6 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
-  import { getEditor } from '$lib/editor/context';
+  import { getEditorContext } from '$lib/editor/context.svelte';
   import type { Snippet } from 'svelte';
   import type { ExternalElement } from '$lib/editor/types';
 
@@ -13,7 +13,7 @@
 
   let { el, minHeight = '48px', containerEl = $bindable(), children }: Props = $props();
 
-  const editor = getEditor();
+  const { editor } = getEditorContext();
 
   let reportedHeight = $state<number>();
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;

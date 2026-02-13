@@ -30,10 +30,23 @@ export type ExternalElement = {
   isSelected: boolean;
 };
 
-export type SelectionStats = {
-  uniformAlign: TextAlign | undefined;
-  uniformLineHeight: number | undefined;
-};
+export type LinkAnnotationValue = { href: string; [key: string]: string };
+export type RubyAnnotationValue = { text: string; [key: string]: string };
+
+export type Attribute =
+  | { type: 'text_align'; values: (TextAlign | null)[] }
+  | { type: 'line_height'; values: (number | null)[] }
+  | { type: 'background_color'; values: (string | null)[] }
+  | { type: 'text_color'; values: (string | null)[] }
+  | { type: 'font_size'; values: (number | null)[] }
+  | { type: 'font_family'; values: (string | null)[] }
+  | { type: 'font_weight'; values: (number | null)[] }
+  | { type: 'letter_spacing'; values: (number | null)[] }
+  | { type: 'italic'; values: (true | null)[] }
+  | { type: 'strikethrough'; values: (true | null)[] }
+  | { type: 'underline'; values: (true | null)[] }
+  | { type: 'link'; values: (LinkAnnotationValue | null)[] }
+  | { type: 'ruby'; values: (RubyAnnotationValue | null)[] };
 
 export type AiFeedbackData = {
   id: string;

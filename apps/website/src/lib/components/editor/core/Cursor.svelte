@@ -1,9 +1,9 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { cubicOut } from 'svelte/easing';
-  import { getEditor } from '$lib/editor/context';
+  import { getEditorContext } from '$lib/editor/context.svelte';
 
-  const editor = getEditor();
+  const { editor } = getEditorContext();
 
   let element = $state<HTMLDivElement>();
   let prevCursorPos: { x: number; y: number } | null = null;

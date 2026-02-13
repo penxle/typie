@@ -1,10 +1,9 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { SearchableDropdown } from '@typie/ui/components';
-  import { getEditor } from '$lib/editor/context';
-  import type { Style, StyleType } from '$lib/editor/types';
+  import { getEditorContext } from '$lib/editor/context.svelte';
 
-  const editor = getEditor();
+  const { editor } = getEditorContext();
 
   const fontFamilies = [
     { label: '프리텐다드', value: 'Pretendard', weights: [100, 200, 300, 400, 500, 600, 700, 800, 900] },
@@ -15,16 +14,11 @@
     { label: '나눔명조', value: 'NanumMyeongjo', weights: [400, 700] },
   ];
 
-  const defaultFontFamily = 'Pretendard';
   const defaultFontWeight = 400;
 
-  const activeStyles = $derived(editor.activeStyles);
-  const findStyle = (type: string): Style | undefined => activeStyles.uniformStyles.find((s) => s.type === type);
-  const isMixed = (type: StyleType): boolean => activeStyles.mixedStyles.includes(type);
-
-  const currentFontFamilyValue = $derived(
-    isMixed('font_family') ? undefined : ((findStyle('font_family') as { family?: string })?.family ?? defaultFontFamily),
-  );
+  const fontFamilyAttr = $derived(editor.getAttr('font_family'));
+  const fontFamilyValues = $derived(fontFamilyAttr?.values.filter((v): v is string => v != null) ?? []);
+  const currentFontFamilyValue = $derived(fontFamilyValues.length === 1 ? fontFamilyValues[0] : undefined);
 
   const allFontFamilies = $derived(fontFamilies.map((f) => ({ value: f.value, label: f.label })));
 
@@ -65,7 +59,9 @@
   label="폰트 패밀리"
   onEscape={() => editor.focus()}
   onchange={(fontFamilyValue) => {
-    const currentWeight = (findStyle('font_weight') as { weight?: number })?.weight ?? defaultFontWeight;
+    const weightAttr = editor.getAttr('font_weight');
+    const weightValues = weightAttr?.values.filter((v): v is number => v != null) ?? [];
+    const currentWeight = weightValues.length === 1 ? weightValues[0] : defaultFontWeight;
     const defaultWeight = getDefaultWeight(fontFamilyValue, currentWeight);
 
     editor.focus().dispatch({ type: 'toggleStyle', style: { type: 'font_family', family: fontFamilyValue } });

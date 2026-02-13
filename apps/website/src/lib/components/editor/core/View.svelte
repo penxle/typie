@@ -1,7 +1,7 @@
 <script lang="ts">
   import { flex } from '@typie/styled-system/patterns';
   import { CONTINUOUS_VIEW_PADDING, IS_MAC, PAGE_GAP, PAGINATED_VIEW_PADDING } from '$lib/editor/constants';
-  import { getEditor } from '$lib/editor/context';
+  import { getEditorContext } from '$lib/editor/context.svelte';
   import { setupTypewriter } from '$lib/editor/typewriter.svelte';
   import ContextMenu from './ContextMenu.svelte';
   import Cursor from './Cursor.svelte';
@@ -21,7 +21,7 @@
   let inputComponent = $state<Input>();
   let extensionAreaEl = $state<HTMLDivElement>();
 
-  const editor = getEditor();
+  const { editor } = getEditorContext();
 
   $effect(() => {
     editor.inputElement = inputComponent?.getElement() ?? null;
