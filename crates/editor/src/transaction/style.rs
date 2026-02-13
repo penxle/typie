@@ -1,3 +1,4 @@
+use crate::font::get_available_fonts;
 use crate::model::*;
 use crate::runtime::Effect;
 use crate::state::position_helpers::find_child_at_offset;
@@ -237,6 +238,115 @@ fn collect_ranges_in_textblock(
     Ok(())
 }
 
+fn find_closest_weight(weights: &[u16], target: u16) -> u16 {
+    weights.iter().fold(weights[0], |prev, &curr| {
+        if (curr as i32 - target as i32).abs() < (prev as i32 - target as i32).abs() {
+            curr
+        } else {
+            prev
+        }
+    })
+}
+
+fn apply_font_style_normalized(
+    tr: &mut Transaction,
+    from: Position,
+    to: Position,
+    style: &Style,
+) -> Result<()> {
+    let ranges = collect_text_ranges_in_selection(tr, from, to)?;
+    let available = get_available_fonts();
+    let default_family = tr.doc().default_styles().font_family().to_string();
+    let style_type = style.as_type();
+
+    let mut actions: Vec<(NodeId, usize, usize, Vec<Style>)> = Vec::new();
+
+    for &(text_node_id, start_offset, end_offset) in &ranges {
+        let allowed = tr.doc().allowed_styles_for(text_node_id);
+        anyhow::ensure!(
+            allowed.contains(&style_type),
+            "Style '{:?}' not allowed at node {}",
+            style_type,
+            text_node_id,
+        );
+
+        let node = tr.node(text_node_id).context("Text node not found")?;
+        if let Node::Text(text_node) = node.node() {
+            let segments = text_node.text.get_segments();
+            let mut current_offset = 0;
+
+            for segment in segments {
+                let seg_len = segment.text.chars().count();
+                let seg_end = current_offset + seg_len;
+                let overlap_start = current_offset.max(start_offset);
+                let overlap_end = seg_end.min(end_offset);
+
+                if overlap_start < overlap_end {
+                    let mut styles = Vec::new();
+
+                    match style {
+                        Style::FontWeight(fw) => {
+                            let family = segment
+                                .styles
+                                .iter()
+                                .find_map(|s| match s {
+                                    Style::FontFamily(f) => Some(f.family.clone()),
+                                    _ => None,
+                                })
+                                .unwrap_or_else(|| default_family.clone());
+
+                            let weight = match available.get(&family) {
+                                Some(w) if !w.is_empty() => find_closest_weight(w, fw.weight),
+                                _ => fw.weight,
+                            };
+                            styles.push(Style::FontWeight(FontWeightStyle { weight }));
+                        }
+                        Style::FontFamily(fm) => {
+                            styles.push(style.clone());
+
+                            if let Some(weight) = segment.styles.iter().find_map(|s| match s {
+                                Style::FontWeight(fw) => Some(fw.weight),
+                                _ => None,
+                            }) {
+                                if let Some(family_weights) = available.get(&fm.family) {
+                                    if !family_weights.is_empty() {
+                                        let normalized =
+                                            find_closest_weight(family_weights, weight);
+                                        if normalized != weight {
+                                            styles.push(Style::FontWeight(FontWeightStyle {
+                                                weight: normalized,
+                                            }));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+
+                    actions.push((text_node_id, overlap_start, overlap_end, styles));
+                }
+
+                current_offset = seg_end;
+            }
+        }
+    }
+
+    for (text_node_id, start, end, styles) in actions {
+        let node = tr.node_mut(text_node_id).context("Text node not found")?;
+        if let Node::Text(text_node) = node.node() {
+            for s in &styles {
+                text_node.text.apply_style(start..end, s)?;
+            }
+            tr.push_effect(Effect::NodeChanged {
+                node_id: text_node_id,
+            });
+        }
+    }
+
+    Ok(())
+}
+
 fn collect_style_codepoints_in_selection(
     tr: &Transaction,
     style_type: StyleType,
@@ -318,54 +428,153 @@ impl Transaction {
     pub fn set_style(&mut self, style: Style) -> Result<bool> {
         let selection = self.selection().clone();
 
-        if selection.is_collapsed() {
-            let style_type = style.as_type();
-            self.state
-                .pending_styles
-                .retain(|s| s.as_type() != style_type);
-            self.state.pending_styles.push(style);
-            self.push_effect(Effect::PendingStylesChanged);
-            return Ok(true);
+        match &style {
+            Style::FontFamily(fm) => {
+                let available = get_available_fonts();
+                let family_name = fm.family.clone();
+                let family_weights = available.get(&family_name);
+
+                if selection.is_collapsed() {
+                    let current_weight = self.state.pending_styles.iter().find_map(|s| match s {
+                        Style::FontWeight(fw) => Some(fw.weight),
+                        _ => None,
+                    });
+
+                    self.state
+                        .pending_styles
+                        .retain(|s| s.as_type() != StyleType::FontFamily);
+                    self.state.pending_styles.push(style);
+
+                    if let Some(weight) = current_weight {
+                        let normalized = match family_weights {
+                            Some(w) if !w.is_empty() => find_closest_weight(w, weight),
+                            _ => weight,
+                        };
+                        if normalized != weight {
+                            self.state
+                                .pending_styles
+                                .retain(|s| s.as_type() != StyleType::FontWeight);
+                            self.state
+                                .pending_styles
+                                .push(Style::FontWeight(FontWeightStyle { weight: normalized }));
+                        }
+                    }
+
+                    self.push_effect(Effect::PendingStylesChanged);
+                } else {
+                    let mut grouped: rustc_hash::FxHashMap<u16, Vec<u32>> =
+                        rustc_hash::FxHashMap::default();
+                    for (s, codepoints) in
+                        collect_style_codepoints_in_selection(self, StyleType::FontWeight)
+                    {
+                        let Style::FontWeight(fw) = s else {
+                            continue;
+                        };
+                        let weight = match family_weights {
+                            Some(w) if !w.is_empty() => find_closest_weight(w, fw.weight),
+                            _ => fw.weight,
+                        };
+                        grouped.entry(weight).or_default().extend(codepoints);
+                    }
+                    for (weight, codepoints) in grouped {
+                        self.push_effect(Effect::FontDetected {
+                            family: family_name.clone(),
+                            weight,
+                            codepoints,
+                        });
+                    }
+
+                    let (from, to) = selection.as_sorted(self.doc())?;
+                    apply_font_style_normalized(self, from, to, &style)?;
+                }
+
+                Ok(true)
+            }
+            Style::FontWeight(fw) => {
+                let available = get_available_fonts();
+
+                if selection.is_collapsed() {
+                    let current_family = self.state.pending_styles.iter().find_map(|s| match s {
+                        Style::FontFamily(f) => Some(f.family.clone()),
+                        _ => None,
+                    });
+
+                    let normalized_weight = if let Some(ref family) = current_family {
+                        match available.get(family) {
+                            Some(w) if !w.is_empty() => find_closest_weight(w, fw.weight),
+                            _ => fw.weight,
+                        }
+                    } else {
+                        fw.weight
+                    };
+
+                    self.state
+                        .pending_styles
+                        .retain(|s| s.as_type() != StyleType::FontWeight);
+                    self.state
+                        .pending_styles
+                        .push(Style::FontWeight(FontWeightStyle {
+                            weight: normalized_weight,
+                        }));
+                    self.push_effect(Effect::PendingStylesChanged);
+                } else {
+                    let mut grouped: rustc_hash::FxHashMap<(String, u16), Vec<u32>> =
+                        rustc_hash::FxHashMap::default();
+                    for (s, codepoints) in
+                        collect_style_codepoints_in_selection(self, StyleType::FontFamily)
+                    {
+                        let Style::FontFamily(fm) = s else {
+                            continue;
+                        };
+                        let weight = match available.get(&fm.family) {
+                            Some(w) if !w.is_empty() => find_closest_weight(w, fw.weight),
+                            _ => fw.weight,
+                        };
+                        grouped
+                            .entry((fm.family, weight))
+                            .or_default()
+                            .extend(codepoints);
+                    }
+                    for ((family, weight), codepoints) in grouped {
+                        self.push_effect(Effect::FontDetected {
+                            family,
+                            weight,
+                            codepoints,
+                        });
+                    }
+
+                    let (from, to) = selection.as_sorted(self.doc())?;
+                    apply_font_style_normalized(self, from, to, &style)?;
+                }
+
+                Ok(true)
+            }
+            _ => {
+                if selection.is_collapsed() {
+                    let style_type = style.as_type();
+                    self.state
+                        .pending_styles
+                        .retain(|s| s.as_type() != style_type);
+                    self.state.pending_styles.push(style);
+                    self.push_effect(Effect::PendingStylesChanged);
+                    return Ok(true);
+                }
+
+                let (from, to) = selection.as_sorted(self.doc())?;
+                apply_style_to_range(self, from, to, &style)?;
+                Ok(true)
+            }
         }
-
-        let (from, to) = selection.as_sorted(self.doc())?;
-        apply_style_to_range(self, from, to, &style)?;
-
-        Ok(true)
     }
 
     pub fn toggle_style(&mut self, style: Style) -> Result<bool> {
-        match &style {
-            Style::FontFamily(fm) => {
-                for (style, codepoints) in
-                    collect_style_codepoints_in_selection(self, StyleType::FontWeight)
-                {
-                    let Style::FontWeight(fw) = style else {
-                        continue;
-                    };
-                    self.push_effect(Effect::FontDetected {
-                        family: fm.family.clone(),
-                        weight: fw.weight,
-                        codepoints,
-                    });
-                }
-            }
-            Style::FontWeight(fw) => {
-                for (style, codepoints) in
-                    collect_style_codepoints_in_selection(self, StyleType::FontFamily)
-                {
-                    let Style::FontFamily(fm) = style else {
-                        continue;
-                    };
-                    self.push_effect(Effect::FontDetected {
-                        family: fm.family,
-                        weight: fw.weight,
-                        codepoints,
-                    });
-                }
-            }
-            _ => {}
-        }
+        anyhow::ensure!(
+            matches!(
+                style,
+                Style::Italic(_) | Style::Strikethrough(_) | Style::Underline(_)
+            ),
+            "toggle_style only supports Italic, Strikethrough, and Underline"
+        );
 
         let selection = self.selection().clone();
 
@@ -433,25 +642,15 @@ impl Transaction {
             _ => self.doc().default_styles().font_family().to_string(),
         };
 
-        let available = crate::font::get_available_fonts();
+        let available = get_available_fonts();
         let weights = available.get(&family_name).cloned().unwrap_or_default();
 
         if weights.is_empty() {
             return Ok(false);
         }
 
-        let find_closest_weight = |target: u16| -> u16 {
-            weights.iter().fold(weights[0], |prev, &curr| {
-                if (curr as i32 - target as i32).abs() < (prev as i32 - target as i32).abs() {
-                    curr
-                } else {
-                    prev
-                }
-            })
-        };
-
-        let normal_weight = find_closest_weight(400);
-        let bold_weight = find_closest_weight(700);
+        let normal_weight = find_closest_weight(&weights, 400);
+        let bold_weight = find_closest_weight(&weights, 700);
 
         if normal_weight == bold_weight {
             return Ok(false);
@@ -530,10 +729,11 @@ impl Transaction {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        model::*,
-        runtime::{Effect, Message},
-    };
+    use crate::model::*;
+    use crate::runtime::{Effect, Message};
+    use crate::test_utils::ScopedFontRegistration;
+    use crate::transaction::Transaction;
+    use crate::types::Affinity;
 
     #[test]
     fn set_style_to_partial_text_node() {
@@ -1420,7 +1620,7 @@ mod tests {
             selection { (p, 2) }
         };
 
-        let mut tr = crate::transaction::Transaction::new(&state);
+        let mut tr = Transaction::new(&state);
         tr.toggle_style(Style::Italic(ItalicStyle {})).unwrap();
         let (view, _) = tr.commit().unwrap();
 
@@ -1444,7 +1644,7 @@ mod tests {
             selection { (p, 2) }
         };
 
-        let mut tr = crate::transaction::Transaction::new(&state);
+        let mut tr = Transaction::new(&state);
         tr.toggle_style(Style::Italic(ItalicStyle {})).unwrap();
         let (view, _) = tr.commit().unwrap();
 
@@ -1469,7 +1669,7 @@ mod tests {
             selection { (p, 2) }
         };
 
-        let mut tr = crate::transaction::Transaction::new(&state);
+        let mut tr = Transaction::new(&state);
         tr.set_style(Style::FontWeight(FontWeightStyle { weight: 700 }))
             .unwrap();
         let (view, _) = tr.commit().unwrap();
@@ -1488,7 +1688,7 @@ mod tests {
         let font_family = DefaultStyles::default().font_family().to_string();
         let mut fonts = std::collections::HashMap::new();
         fonts.insert(font_family.clone(), vec![400, 700]);
-        let _guard = crate::test_utils::ScopedFontRegistration::new(fonts);
+        let _guard = ScopedFontRegistration::new(fonts);
 
         let initial = state! {
             doc {
@@ -1537,7 +1737,7 @@ mod tests {
         let font_family = DefaultStyles::default().font_family().to_string();
         let mut fonts = std::collections::HashMap::new();
         fonts.insert(font_family.clone(), vec![400, 700]);
-        let _guard = crate::test_utils::ScopedFontRegistration::new(fonts);
+        let _guard = ScopedFontRegistration::new(fonts);
 
         let initial = state! {
             doc {
@@ -1642,7 +1842,7 @@ mod tests {
         let mut fonts = std::collections::HashMap::new();
         fonts.insert("ThinFont".to_string(), vec![100]);
 
-        let _guard = crate::test_utils::ScopedFontRegistration::new(fonts);
+        let _guard = ScopedFontRegistration::new(fonts);
 
         let (_, effects) = transact_with_effect!(initial, |tr| {
             tr.toggle_style(Style::FontFamily(FontFamilyStyle {
@@ -1751,7 +1951,7 @@ mod tests {
             @ep1 paragraph { text(styles: [italic()]) { "hello" } }
             @ep2 paragraph { text(styles: [italic()]) { "world" } }
           }
-          selection { (ep1, 0) -> (ep2, 5, crate::types::Affinity::Upstream) }
+          selection { (ep1, 0) -> (ep2, 5, Affinity::Upstream) }
         };
 
         assert_state_eq!(rt.state(), expected);
@@ -1785,5 +1985,533 @@ mod tests {
                 "FontDetected should contain codepoints of selected text"
             );
         }
+    }
+
+    #[test]
+    fn set_font_weight_normalizes_to_closest_available() {
+        let mut p = id!();
+
+        let mut fonts = std::collections::HashMap::new();
+        fonts.insert("NarrowFont".to_string(), vec![100, 400]);
+        let _guard = ScopedFontRegistration::new(fonts);
+
+        let initial = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_family("NarrowFont")]) { "hello" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+
+        let (actual, effects) = transact_with_effect!(initial, |tr| {
+            tr.set_style(Style::FontWeight(FontWeightStyle { weight: 700 }))
+                .unwrap()
+        });
+
+        let expected = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_family("NarrowFont"), font_weight(400)]) { "hello" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+        assert_state_eq!(actual, expected);
+
+        assert!(effects.iter().any(
+            |e| matches!(e, Effect::FontDetected { family, weight: 400, .. } if family == "NarrowFont")
+        ));
+    }
+
+    #[test]
+    fn set_font_weight_normalizes_per_segment_family() {
+        let mut p = id!();
+
+        let mut fonts = std::collections::HashMap::new();
+        fonts.insert("FontA".to_string(), vec![400, 700]);
+        fonts.insert("FontB".to_string(), vec![100, 300]);
+        let _guard = ScopedFontRegistration::new(fonts);
+
+        let initial = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_family("FontA")]) { "aaa" }
+                    text(styles: [font_family("FontB")]) { "bbb" }
+                }
+            }
+            selection { (p, 0) -> (p, 6) }
+        };
+
+        let (actual, _) = transact_with_effect!(initial, |tr| {
+            tr.set_style(Style::FontWeight(FontWeightStyle { weight: 700 }))
+                .unwrap()
+        });
+
+        let expected = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_family("FontA"), font_weight(700)]) { "aaa" }
+                    text(styles: [font_family("FontB"), font_weight(300)]) { "bbb" }
+                }
+            }
+            selection { (p, 0) -> (p, 6) }
+        };
+        assert_state_eq!(actual, expected);
+    }
+
+    #[test]
+    fn set_font_weight_no_normalization_when_weight_available() {
+        let mut p = id!();
+
+        let mut fonts = std::collections::HashMap::new();
+        fonts.insert("FullFont".to_string(), vec![400, 700]);
+        let _guard = ScopedFontRegistration::new(fonts);
+
+        let initial = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_family("FullFont")]) { "hello" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+
+        let (actual, _) = transact_with_effect!(initial, |tr| {
+            tr.set_style(Style::FontWeight(FontWeightStyle { weight: 700 }))
+                .unwrap()
+        });
+
+        let expected = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_family("FullFont"), font_weight(700)]) { "hello" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+        assert_state_eq!(actual, expected);
+    }
+
+    #[test]
+    fn set_font_family_normalizes_existing_weight() {
+        let mut p = id!();
+
+        let mut fonts = std::collections::HashMap::new();
+        fonts.insert("LightFont".to_string(), vec![100, 300]);
+        let _guard = ScopedFontRegistration::new(fonts);
+
+        let initial = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_weight(700)]) { "hello" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+
+        let (actual, effects) = transact_with_effect!(initial, |tr| {
+            tr.set_style(Style::FontFamily(FontFamilyStyle {
+                family: "LightFont".to_string(),
+            }))
+            .unwrap()
+        });
+
+        let expected = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_weight(300), font_family("LightFont")]) { "hello" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+        assert_state_eq!(actual, expected);
+
+        assert!(effects.iter().any(
+            |e| matches!(e, Effect::FontDetected { family, weight: 300, .. } if family == "LightFont")
+        ));
+    }
+
+    #[test]
+    fn set_font_family_no_normalization_when_weight_available() {
+        let mut p = id!();
+
+        let mut fonts = std::collections::HashMap::new();
+        fonts.insert("RichFont".to_string(), vec![400, 700, 900]);
+        let _guard = ScopedFontRegistration::new(fonts);
+
+        let initial = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_weight(700)]) { "hello" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+
+        let (actual, _) = transact_with_effect!(initial, |tr| {
+            tr.set_style(Style::FontFamily(FontFamilyStyle {
+                family: "RichFont".to_string(),
+            }))
+            .unwrap()
+        });
+
+        let expected = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_weight(700), font_family("RichFont")]) { "hello" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+        assert_state_eq!(actual, expected);
+    }
+
+    #[test]
+    fn set_font_family_normalizes_default_weight() {
+        let mut p = id!();
+
+        let mut fonts = std::collections::HashMap::new();
+        fonts.insert("LightFont".to_string(), vec![100]);
+        let _guard = ScopedFontRegistration::new(fonts);
+
+        let initial = state! {
+            doc {
+                @p paragraph {
+                    text { "hello" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+
+        let (actual, _) = transact_with_effect!(initial, |tr| {
+            tr.set_style(Style::FontFamily(FontFamilyStyle {
+                family: "LightFont".to_string(),
+            }))
+            .unwrap()
+        });
+
+        let expected = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_family("LightFont"), font_weight(100)]) { "hello" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+        assert_state_eq!(actual, expected);
+    }
+
+    #[test]
+    fn set_font_family_normalizes_different_weights_across_segments() {
+        let mut p = id!();
+
+        let mut fonts = std::collections::HashMap::new();
+        fonts.insert("TwoWeight".to_string(), vec![300, 600]);
+        let _guard = ScopedFontRegistration::new(fonts);
+
+        let initial = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_weight(100)]) { "aaa" }
+                    text(styles: [font_weight(900)]) { "bbb" }
+                }
+            }
+            selection { (p, 0) -> (p, 6) }
+        };
+
+        let (actual, _) = transact_with_effect!(initial, |tr| {
+            tr.set_style(Style::FontFamily(FontFamilyStyle {
+                family: "TwoWeight".to_string(),
+            }))
+            .unwrap()
+        });
+
+        let expected = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_weight(300), font_family("TwoWeight")]) { "aaa" }
+                    text(styles: [font_weight(600), font_family("TwoWeight")]) { "bbb" }
+                }
+            }
+            selection { (p, 0) -> (p, 6) }
+        };
+        assert_state_eq!(actual, expected);
+    }
+
+    #[test]
+    fn set_font_weight_collapsed_normalizes_pending() {
+        let mut p = id!();
+
+        let mut fonts = std::collections::HashMap::new();
+        fonts.insert("NarrowFont".to_string(), vec![100, 400]);
+        let _guard = ScopedFontRegistration::new(fonts);
+
+        let state = state! {
+            doc {
+                @p paragraph {
+                    text { "hello" }
+                }
+            }
+            selection { (p, 2) }
+        };
+
+        let mut tr = Transaction::new(&state);
+        tr.set_style(Style::FontFamily(FontFamilyStyle {
+            family: "NarrowFont".to_string(),
+        }))
+        .unwrap();
+        tr.set_style(Style::FontWeight(FontWeightStyle { weight: 700 }))
+            .unwrap();
+        let (view, _) = tr.commit().unwrap();
+
+        assert!(
+            view.pending_styles
+                .contains(&Style::FontWeight(FontWeightStyle { weight: 400 }))
+        );
+        assert!(
+            !view
+                .pending_styles
+                .contains(&Style::FontWeight(FontWeightStyle { weight: 700 }))
+        );
+    }
+
+    #[test]
+    fn set_font_weight_collapsed_no_normalization_without_family() {
+        let mut p = id!();
+
+        let state = state! {
+            doc {
+                @p paragraph {
+                    text { "hello" }
+                }
+            }
+            selection { (p, 2) }
+        };
+
+        let mut tr = Transaction::new(&state);
+        tr.set_style(Style::FontWeight(FontWeightStyle { weight: 700 }))
+            .unwrap();
+        let (view, _) = tr.commit().unwrap();
+
+        assert!(
+            view.pending_styles
+                .contains(&Style::FontWeight(FontWeightStyle { weight: 700 }))
+        );
+    }
+
+    #[test]
+    fn set_font_family_collapsed_normalizes_pending_weight() {
+        let mut p = id!();
+
+        let mut fonts = std::collections::HashMap::new();
+        fonts.insert("LightFont".to_string(), vec![100, 300]);
+        let _guard = ScopedFontRegistration::new(fonts);
+
+        let state = state! {
+            doc {
+                @p paragraph {
+                    text { "hello" }
+                }
+            }
+            selection { (p, 2) }
+        };
+
+        let mut tr = Transaction::new(&state);
+        tr.set_style(Style::FontWeight(FontWeightStyle { weight: 700 }))
+            .unwrap();
+        tr.set_style(Style::FontFamily(FontFamilyStyle {
+            family: "LightFont".to_string(),
+        }))
+        .unwrap();
+        let (view, _) = tr.commit().unwrap();
+
+        assert!(
+            view.pending_styles
+                .contains(&Style::FontWeight(FontWeightStyle { weight: 300 }))
+        );
+        assert!(
+            !view
+                .pending_styles
+                .contains(&Style::FontWeight(FontWeightStyle { weight: 700 }))
+        );
+        assert!(
+            view.pending_styles
+                .contains(&Style::FontFamily(FontFamilyStyle {
+                    family: "LightFont".to_string()
+                }))
+        );
+    }
+
+    #[test]
+    fn set_font_family_collapsed_normalizes_default_weight() {
+        let mut p = id!();
+
+        let mut fonts = std::collections::HashMap::new();
+        fonts.insert("LightFont".to_string(), vec![100]);
+        let _guard = ScopedFontRegistration::new(fonts);
+
+        let state = state! {
+            doc {
+                @p paragraph {
+                    text { "hello" }
+                }
+            }
+            selection { (p, 2) }
+        };
+
+        let mut tr = Transaction::new(&state);
+        tr.set_style(Style::FontFamily(FontFamilyStyle {
+            family: "LightFont".to_string(),
+        }))
+        .unwrap();
+        let (view, _) = tr.commit().unwrap();
+
+        assert!(
+            view.pending_styles
+                .contains(&Style::FontWeight(FontWeightStyle { weight: 100 }))
+        );
+        assert!(
+            view.pending_styles
+                .contains(&Style::FontFamily(FontFamilyStyle {
+                    family: "LightFont".to_string()
+                }))
+        );
+    }
+
+    #[test]
+    fn set_font_weight_collapsed_no_font_detected_effect() {
+        let mut p = id!();
+
+        let mut fonts = std::collections::HashMap::new();
+        fonts.insert("TestFont".to_string(), vec![400]);
+        let _guard = ScopedFontRegistration::new(fonts);
+
+        let state = state! {
+            doc {
+                @p paragraph {
+                    text { "hello" }
+                }
+            }
+            selection { (p, 2) }
+        };
+
+        let mut tr = Transaction::new(&state);
+        tr.set_style(Style::FontWeight(FontWeightStyle { weight: 700 }))
+            .unwrap();
+        let (_, effects) = tr.commit().unwrap();
+
+        assert!(
+            !effects
+                .iter()
+                .any(|e| matches!(e, Effect::FontDetected { .. })),
+            "collapsed selection should not emit FontDetected"
+        );
+    }
+
+    #[test]
+    fn set_font_family_font_detected_uses_normalized_weight() {
+        let mut p = id!();
+
+        let mut fonts = std::collections::HashMap::new();
+        fonts.insert("SingleWeight".to_string(), vec![300]);
+        let _guard = ScopedFontRegistration::new(fonts);
+
+        let initial = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_weight(700)]) { "hello" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+
+        let (_, effects) = transact_with_effect!(initial, |tr| {
+            tr.set_style(Style::FontFamily(FontFamilyStyle {
+                family: "SingleWeight".to_string(),
+            }))
+            .unwrap()
+        });
+
+        assert!(
+            effects.iter().any(
+                |e| matches!(e, Effect::FontDetected { family, weight: 300, .. } if family == "SingleWeight")
+            ),
+            "FontDetected should use normalized weight 300, not original 700"
+        );
+        assert!(
+            !effects
+                .iter()
+                .any(|e| matches!(e, Effect::FontDetected { weight: 700, .. })),
+            "FontDetected should not contain original weight 700"
+        );
+    }
+
+    #[test]
+    fn set_font_weight_font_detected_uses_normalized_weight() {
+        let mut p = id!();
+
+        let mut fonts = std::collections::HashMap::new();
+        fonts.insert("ThinFont".to_string(), vec![100]);
+        let _guard = ScopedFontRegistration::new(fonts);
+
+        let initial = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_family("ThinFont")]) { "hello" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+
+        let (_, effects) = transact_with_effect!(initial, |tr| {
+            tr.set_style(Style::FontWeight(FontWeightStyle { weight: 700 }))
+                .unwrap()
+        });
+
+        assert!(
+            effects.iter().any(
+                |e| matches!(e, Effect::FontDetected { family, weight: 100, .. } if family == "ThinFont")
+            ),
+            "FontDetected should use normalized weight 100, not original 700"
+        );
+    }
+
+    #[test]
+    fn set_font_family_partial_selection_normalizes() {
+        let mut p = id!();
+
+        let mut fonts = std::collections::HashMap::new();
+        fonts.insert("NarrowFont".to_string(), vec![100, 400]);
+        let _guard = ScopedFontRegistration::new(fonts);
+
+        let initial = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_weight(700)]) { "hello world" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+
+        let (actual, _) = transact_with_effect!(initial, |tr| {
+            tr.set_style(Style::FontFamily(FontFamilyStyle {
+                family: "NarrowFont".to_string(),
+            }))
+            .unwrap()
+        });
+
+        let expected = state! {
+            doc {
+                @p paragraph {
+                    text {
+                        "hello" => [font_weight(400), font_family("NarrowFont")],
+                        " world" => [font_weight(700)]
+                    }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+        assert_state_eq!(actual, expected);
     }
 }
