@@ -1,6 +1,7 @@
 use crate::runtime::Effect;
-use crate::state::Preedit;
+use crate::state::{Position, Preedit, Selection};
 use crate::transaction::Transaction;
+use crate::types::Affinity;
 use crate::utils::collect_codepoints;
 use anyhow::Result;
 
@@ -43,13 +44,11 @@ impl Transaction {
         if let Some(preedit) = self.state.preedit.take() {
             let text = preedit.text.clone();
 
-            self.set_selection(crate::state::Selection::collapsed(
-                crate::state::Position::new(
-                    preedit.node_id,
-                    preedit.offset,
-                    crate::types::Affinity::Downstream,
-                ),
-            ));
+            self.set_selection(Selection::collapsed(Position::new(
+                preedit.node_id,
+                preedit.offset,
+                Affinity::Downstream,
+            )));
 
             self.insert_text(&text)?;
 

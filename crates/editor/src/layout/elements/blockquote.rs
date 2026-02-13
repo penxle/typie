@@ -1,6 +1,5 @@
-use crate::layout::elements::{SplitEdges, WrapperPadding};
-use crate::model::BlockquoteVariant;
-use crate::model::NodeId;
+use crate::layout::elements::{SplitEdges, Wrapper, WrapperPadding};
+use crate::model::{BlockquoteVariant, NodeId};
 use crate::types::Size;
 
 const MESSAGE_PADDING_X: f32 = 14.0;
@@ -54,7 +53,7 @@ impl BlockquoteMessageElement {
     }
 }
 
-impl crate::layout::elements::Wrapper for BlockquoteMessageElement {
+impl Wrapper for BlockquoteMessageElement {
     fn padding(&self) -> WrapperPadding {
         WrapperPadding::symmetric(MESSAGE_PADDING_Y, MESSAGE_PADDING_X)
     }

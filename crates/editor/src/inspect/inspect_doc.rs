@@ -1,4 +1,4 @@
-use super::utils::truncate_str;
+use crate::inspect::utils::truncate_str;
 use crate::model::{Annotation, Doc, Node, NodeId, NodeRef};
 use std::collections::BTreeMap;
 

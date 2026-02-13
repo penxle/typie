@@ -1,9 +1,9 @@
 use crate::layout::Page;
 use crate::layout::cursor::{Cursor, NavigationContext};
 use crate::layout::query::{find_node_bounds, find_node_bounds_on_page};
+use crate::model::NodeRef;
 use crate::state::Position;
 use crate::state::position_helpers::is_inline_position;
-
 use serde::Serialize;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -78,7 +78,7 @@ impl DropIndicator {
     fn calc_indicator_horizontal(
         ctx: &NavigationContext,
         pages: &[Page],
-        children: &[crate::model::NodeRef],
+        children: &[NodeRef],
     ) -> Option<(f32, f32)> {
         children
             .first()
@@ -93,7 +93,7 @@ impl DropIndicator {
     fn calc_indicator_vertical(
         ctx: &NavigationContext,
         pages: &[Page],
-        children: &[crate::model::NodeRef],
+        children: &[NodeRef],
         offset: usize,
     ) -> Option<(usize, f32)> {
         if offset == 0 {

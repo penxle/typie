@@ -1,4 +1,4 @@
-use crate::model::{FoldContentNode, FoldNode, FoldTitleNode, Node, NodeId};
+use crate::model::{FoldContentNode, FoldNode, FoldTitleNode, Node, NodeId, NodeType};
 use crate::runtime::Effect;
 use crate::state::{Position, Selection, collect_top_level_blocks_in_range};
 use crate::transaction::Transaction;
@@ -12,15 +12,15 @@ impl Transaction {
         let target = self.expand_selection_until(|parent, blocks| {
             let parent_type = parent.as_type();
             let parent_spec = self.doc().schema().node_spec(parent_type);
-            let fold_type = crate::model::NodeType::Fold;
+            let fold_type = NodeType::Fold;
 
             if !parent_spec.content.matches(fold_type) {
                 return false;
             }
 
-            let fold_content_type = crate::model::NodeType::FoldContent;
+            let fold_content_type = NodeType::FoldContent;
             let fold_content_spec = self.doc().schema().node_spec(fold_content_type);
-            let block_types: Vec<crate::model::NodeType> = blocks
+            let block_types: Vec<NodeType> = blocks
                 .iter()
                 .map(|id| self.node(*id).unwrap().node().as_type())
                 .collect();
@@ -62,7 +62,7 @@ impl Transaction {
         }
 
         let parent_spec = parent.spec();
-        let fold_type = crate::model::NodeType::Fold;
+        let fold_type = NodeType::Fold;
         if !parent_spec.content.matches(fold_type) {
             return Ok(None);
         }

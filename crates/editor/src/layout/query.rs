@@ -1,12 +1,12 @@
-use std::cmp::Ordering;
-use std::collections::HashSet;
-
 use crate::layout::cursor::{Cursor, NavigationContext};
 use crate::layout::{Element, Page, PositionedNode};
 use crate::model::{Doc, NodeId, SelectionDecor};
-use crate::state::selection_helpers::build_selection_decorations;
-use crate::state::{compare_positions, position_in_selection};
+use crate::state::position_helpers::find_child_at_offset;
+use crate::state::selection_helpers::{build_selection_decorations, collect_blocks_in_range};
+use crate::state::{Selection, compare_positions, position_in_selection};
 use crate::types::{Point, Rect};
+use std::cmp::Ordering;
+use std::collections::HashSet;
 
 #[derive(Debug, Clone, Copy)]
 pub struct NodeBounds {
@@ -22,8 +22,8 @@ impl NodeBounds {
         self.y + self.height
     }
 
-    pub fn to_rect(&self) -> crate::types::Rect {
-        crate::types::Rect::new(self.x, self.y, self.width, self.height)
+    pub fn to_rect(&self) -> Rect {
+        Rect::new(self.x, self.y, self.width, self.height)
     }
 }
 
@@ -173,8 +173,8 @@ impl BoundsAccumulator {
 #[derive(Debug, Clone)]
 pub struct DragImagePageBounds {
     pub page_idx: usize,
-    pub bounds: crate::types::Rect,
-    pub clip_rects: Vec<crate::types::Rect>,
+    pub bounds: Rect,
+    pub clip_rects: Vec<Rect>,
 }
 
 #[derive(Debug, Clone)]
@@ -184,7 +184,7 @@ pub struct DragImageBounds {
 
 pub fn find_drag_image_bounds(
     doc: &Doc,
-    selection: &crate::state::Selection,
+    selection: &Selection,
     pages: &[Page],
 ) -> Option<DragImageBounds> {
     if selection.is_collapsed() {
@@ -227,10 +227,9 @@ pub fn find_drag_image_bounds(
     }
 }
 
-fn collect_selected_non_text_blocks(doc: &Doc, selection: &crate::state::Selection) -> Vec<NodeId> {
+fn collect_selected_non_text_blocks(doc: &Doc, selection: &Selection) -> Vec<NodeId> {
     if let Ok((from, to)) = selection.as_sorted(doc) {
-        if let Ok(blocks) = crate::state::selection_helpers::collect_blocks_in_range(doc, from, to)
-        {
+        if let Ok(blocks) = collect_blocks_in_range(doc, from, to) {
             return blocks
                 .into_iter()
                 .filter(|&id| {
@@ -247,7 +246,7 @@ fn collect_selected_non_text_blocks(doc: &Doc, selection: &crate::state::Selecti
 fn collect_page_selection_bounds(
     doc: &Doc,
     page: &Page,
-    _selection: &crate::state::Selection,
+    _selection: &Selection,
     decorations: &[SelectionDecor],
     non_text_blocks: &[NodeId],
 ) -> Vec<Rect> {
@@ -305,7 +304,7 @@ fn scan_for_selection_bounds(
 pub fn is_point_in_selection_bounds(
     doc: &Doc,
     page: &Page,
-    selection: &crate::state::Selection,
+    selection: &Selection,
     point: Point,
 ) -> bool {
     if selection.is_collapsed() {
@@ -334,13 +333,7 @@ pub fn is_point_in_selection_bounds(
     false
 }
 
-pub fn is_selection_hit(
-    doc: &Doc,
-    page: &Page,
-    selection: &crate::state::Selection,
-    x: f32,
-    y: f32,
-) -> bool {
+pub fn is_selection_hit(doc: &Doc, page: &Page, selection: &Selection, x: f32, y: f32) -> bool {
     if selection.is_collapsed() {
         return false;
     }
@@ -378,12 +371,7 @@ pub fn is_selection_hit(
             let is_at_end = matches!(compare_positions(doc, to, position), Ok(Ordering::Equal));
 
             if is_at_start || is_at_end {
-                return is_point_in_selection_bounds(
-                    doc,
-                    page,
-                    selection,
-                    crate::types::Point::new(x, y),
-                );
+                return is_point_in_selection_bounds(doc, page, selection, Point::new(x, y));
             }
         }
         return true;
@@ -392,9 +380,7 @@ pub fn is_selection_hit(
     false
 }
 
-pub fn is_selectable_block_hit(doc: &Doc, hit_selection: &crate::state::Selection) -> bool {
-    use crate::state::position_helpers::find_child_at_offset;
-
+pub fn is_selectable_block_hit(doc: &Doc, hit_selection: &Selection) -> bool {
     if hit_selection.is_collapsed() {
         return false;
     }

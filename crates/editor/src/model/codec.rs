@@ -1,7 +1,6 @@
+use crate::model::id::NodeId;
 use anyhow::Context;
 use loro::{LoroList, LoroMap, LoroValue};
-
-use super::id::NodeId;
 
 pub trait Codec: Sized {
     fn to_value(&self) -> Option<LoroValue> {

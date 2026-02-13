@@ -1,7 +1,6 @@
-use crate::layout::elements::{SplitEdges, WrapperPadding};
+use crate::layout::elements::{SplitEdges, Wrapper, WrapperPadding};
 use crate::layout::interactive::{InteractionKind, Interactive};
-use crate::model::CalloutVariant;
-use crate::model::NodeId;
+use crate::model::{CalloutVariant, NodeId};
 use crate::types::Size;
 
 pub const CALLOUT_PADDING_X: f32 = 12.0;
@@ -31,7 +30,7 @@ impl CalloutBackgroundElement {
     }
 }
 
-impl crate::layout::elements::Wrapper for CalloutBackgroundElement {
+impl Wrapper for CalloutBackgroundElement {
     fn padding(&self) -> WrapperPadding {
         WrapperPadding::symmetric(CALLOUT_PADDING_Y, CALLOUT_PADDING_X)
     }

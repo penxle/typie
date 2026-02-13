@@ -1,8 +1,8 @@
-use super::super::{Effect, Runtime};
 use crate::layout::cursor::{Cursor, NavigationContext};
-use crate::model::Fragment;
+use crate::model::{FileNode, Fragment, ImageNode, Node};
 use crate::runtime::PointerMode;
 use crate::runtime::message::Modifier;
+use crate::runtime::{Effect, Runtime};
 use crate::state::{Position, Selection};
 use crate::transaction::Transaction;
 
@@ -137,7 +137,7 @@ impl Runtime {
         let mut effects = self.transact(|tr| {
             tr.set_selection(Selection::collapsed(drop_position));
             for upload_id in upload_ids {
-                tr.insert_node(crate::model::Node::Image(crate::model::ImageNode {
+                tr.insert_node(Node::Image(ImageNode {
                     id: None,
                     proportion: 1.0,
                     upload_id: Some(upload_id),
@@ -166,7 +166,7 @@ impl Runtime {
         let mut effects = self.transact(|tr| {
             tr.set_selection(Selection::collapsed(drop_position));
             for upload_id in upload_ids {
-                tr.insert_node(crate::model::Node::File(crate::model::FileNode {
+                tr.insert_node(Node::File(FileNode {
                     id: None,
                     upload_id: Some(upload_id),
                 }))?;
@@ -190,18 +190,13 @@ impl Runtime {
 
 #[cfg(test)]
 mod tests {
-    use crate::layout::cursor::{Cursor, NavigationContext};
-
+    use super::*;
     use crate::model::NodeId;
-    use crate::runtime::DropIndicator;
-    use crate::runtime::message::{Modifier, PointerButton};
-    use crate::state::Position;
+    use crate::runtime::message::PointerButton;
+    use crate::runtime::{DropIndicator, Message};
     use crate::types::Affinity;
 
-    fn find_position_coordinates(
-        rt: &mut crate::runtime::Runtime,
-        position: Position,
-    ) -> (usize, f32, f32) {
+    fn find_position_coordinates(rt: &mut Runtime, position: Position) -> (usize, f32, f32) {
         let ctx = NavigationContext::new(&rt.state.doc);
         let (page_idx, rect) =
             Cursor::bounds(&ctx, &rt.pages, position).expect("Bounds should be found for position");
@@ -212,10 +207,7 @@ mod tests {
         )
     }
 
-    fn find_gap_coordinates(
-        rt: &mut crate::runtime::Runtime,
-        position: Position,
-    ) -> (usize, f32, f32) {
+    fn find_gap_coordinates(rt: &mut Runtime, position: Position) -> (usize, f32, f32) {
         let ctx = NavigationContext::new(&rt.state.doc);
         let drop_indicator = DropIndicator::from_position(&ctx, &rt.pages, position)
             .expect("Drop indicator should be found for position");
@@ -249,12 +241,12 @@ mod tests {
         }
     }
 
-    fn drag_and_drop(rt: &mut crate::runtime::Runtime, from: Position, to: Position) {
+    fn drag_and_drop(rt: &mut Runtime, from: Position, to: Position) {
         drag_and_drop_with_modifier(rt, from, to, Modifier::default());
     }
 
     fn drag_and_drop_with_modifier(
-        rt: &mut crate::runtime::Runtime,
+        rt: &mut Runtime,
         from: Position,
         to: Position,
         modifier: Modifier,
@@ -262,7 +254,7 @@ mod tests {
         let (from_page, from_x, from_y) = find_position_coordinates(rt, from);
         let (to_page, to_x, to_y) = find_position_coordinates(rt, to);
 
-        rt.update(crate::runtime::Message::PointerDown {
+        rt.update(Message::PointerDown {
             page_idx: from_page,
             x: from_x,
             y: from_y,
@@ -271,7 +263,7 @@ mod tests {
             modifier: Modifier::default(),
         });
 
-        rt.update(crate::runtime::Message::PointerMove {
+        rt.update(Message::PointerMove {
             page_idx: from_page,
             x: from_x,
             y: from_y,
@@ -279,21 +271,21 @@ mod tests {
             modifier: Modifier::default(),
         });
 
-        rt.update(crate::runtime::Message::DragStart {
+        rt.update(Message::DragStart {
             page_idx: from_page,
             x: from_x,
             y: from_y,
         });
 
-        rt.update(crate::runtime::Message::DragEnter);
+        rt.update(Message::DragEnter);
 
-        rt.update(crate::runtime::Message::DragOver {
+        rt.update(Message::DragOver {
             page_idx: to_page,
             x: to_x,
             y: to_y,
         });
 
-        rt.update(crate::runtime::Message::Drop {
+        rt.update(Message::Drop {
             page_idx: to_page,
             x: to_x,
             y: to_y,
@@ -304,11 +296,11 @@ mod tests {
         });
     }
 
-    fn drag_and_drop_to_gap(rt: &mut crate::runtime::Runtime, from: Position, to: Position) {
+    fn drag_and_drop_to_gap(rt: &mut Runtime, from: Position, to: Position) {
         let (from_page, from_x, from_y) = find_position_coordinates(rt, from);
         let (to_page, to_x, to_y) = find_gap_coordinates(rt, to);
 
-        rt.update(crate::runtime::Message::PointerDown {
+        rt.update(Message::PointerDown {
             page_idx: from_page,
             x: from_x,
             y: from_y,
@@ -317,7 +309,7 @@ mod tests {
             modifier: Modifier::default(),
         });
 
-        rt.update(crate::runtime::Message::PointerMove {
+        rt.update(Message::PointerMove {
             page_idx: from_page,
             x: from_x,
             y: from_y,
@@ -325,21 +317,21 @@ mod tests {
             modifier: Modifier::default(),
         });
 
-        rt.update(crate::runtime::Message::DragStart {
+        rt.update(Message::DragStart {
             page_idx: from_page,
             x: from_x,
             y: from_y,
         });
 
-        rt.update(crate::runtime::Message::DragEnter);
+        rt.update(Message::DragEnter);
 
-        rt.update(crate::runtime::Message::DragOver {
+        rt.update(Message::DragOver {
             page_idx: to_page,
             x: to_x,
             y: to_y,
         });
 
-        rt.update(crate::runtime::Message::Drop {
+        rt.update(Message::Drop {
             page_idx: to_page,
             x: to_x,
             y: to_y,
@@ -351,21 +343,21 @@ mod tests {
     }
 
     fn drag_and_drop_external(
-        rt: &mut crate::runtime::Runtime,
+        rt: &mut Runtime,
         to: Position,
         text: Option<String>,
         html: Option<String>,
     ) {
         let (to_page, to_x, to_y) = find_gap_coordinates(rt, to);
 
-        rt.update(crate::runtime::Message::DragEnter);
-        rt.update(crate::runtime::Message::DragOver {
+        rt.update(Message::DragEnter);
+        rt.update(Message::DragOver {
             page_idx: to_page,
             x: to_x,
             y: to_y,
         });
 
-        rt.update(crate::runtime::Message::Drop {
+        rt.update(Message::Drop {
             page_idx: to_page,
             x: to_x,
             y: to_y,
@@ -611,7 +603,7 @@ mod tests {
             )
         };
 
-        rt.update(crate::runtime::Message::PointerDown {
+        rt.update(Message::PointerDown {
             page_idx: 0,
             x: img_x,
             y: img_y,
@@ -620,7 +612,7 @@ mod tests {
             modifier: Modifier::default(),
         });
 
-        rt.update(crate::runtime::Message::PointerUp {
+        rt.update(Message::PointerUp {
             page_idx: 0,
             x: img_x,
             y: img_y,

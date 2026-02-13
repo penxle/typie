@@ -1,4 +1,4 @@
-use super::super::{Effect, Runtime};
+use crate::runtime::{Effect, Runtime};
 
 impl Runtime {
     pub(crate) fn handle_insert_newline(&mut self) -> Vec<Effect> {
@@ -40,7 +40,8 @@ impl Runtime {
 
 #[cfg(test)]
 mod tests {
-    use crate::{model::NodeId, runtime::Message};
+    use crate::model::NodeId;
+    use crate::runtime::Message;
 
     #[test]
     fn insert_page_break_on_first_block() {

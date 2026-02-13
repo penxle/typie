@@ -1,8 +1,9 @@
-use super::{CursorNavigable, GapBehavior, NavigationContext};
+use crate::layout::cursor::{CursorNavigable, GapBehavior, NavigationContext};
+use crate::layout::page::ElementEntry;
 use crate::layout::{Element, Page};
-use crate::model::NodeId;
-use crate::state::Selection;
-use crate::types::Point;
+use crate::model::{NodeId, NodeRef};
+use crate::state::{Position, Selection};
+use crate::types::{Affinity, Point};
 use rstar::AABB;
 
 pub fn hit_test(ctx: &NavigationContext, page: &Page, x: f32, y: f32) -> Option<Selection> {
@@ -136,10 +137,10 @@ fn find_block_gap_position(
             let first_block = ctx.doc.node(first_elem.block_id()?)?;
             let root_child_id = find_root_child(ctx, &first_block)?;
             let root_child = ctx.doc.node(root_child_id)?;
-            return Some(Selection::collapsed(crate::state::Position::new(
-                crate::model::NodeId::ROOT,
+            return Some(Selection::collapsed(Position::new(
+                NodeId::ROOT,
                 root_child.index()?,
-                crate::types::Affinity::Downstream,
+                Affinity::Downstream,
             )));
         }
     }
@@ -149,18 +150,15 @@ fn find_block_gap_position(
             let last_block = ctx.doc.node(last_elem.block_id()?)?;
             let root_child_id = find_root_child(ctx, &last_block)?;
             let root_child = ctx.doc.node(root_child_id)?;
-            return Some(Selection::collapsed(crate::state::Position::new(
-                crate::model::NodeId::ROOT,
+            return Some(Selection::collapsed(Position::new(
+                NodeId::ROOT,
                 root_child.index()? + 1,
-                crate::types::Affinity::Downstream,
+                Affinity::Downstream,
             )));
         }
     }
 
-    if page
-        .find_element_at_point(crate::types::Point::new(x, y))
-        .is_some()
-    {
+    if page.find_element_at_point(Point::new(x, y)).is_some() {
         return None;
     }
 
@@ -177,11 +175,7 @@ fn find_block_gap_position(
         let below_parent = below_block.parent()?;
         let index = below_block.index()?;
 
-        let position = crate::state::Position::new(
-            below_parent.node_id(),
-            index,
-            crate::types::Affinity::Downstream,
-        );
+        let position = Position::new(below_parent.node_id(), index, Affinity::Downstream);
         return Some(Selection::collapsed(position));
     }
 
@@ -190,8 +184,8 @@ fn find_block_gap_position(
 
 fn handle_container_boundary(
     ctx: &NavigationContext,
-    above_block: &crate::model::NodeRef,
-    below_block: &crate::model::NodeRef,
+    above_block: &NodeRef,
+    below_block: &NodeRef,
 ) -> Option<Selection> {
     let above_parent = above_block.parent()?;
     let below_parent = below_block.parent()?;
@@ -209,23 +203,16 @@ fn handle_container_boundary(
 
     let below_root = ctx.doc.node(below_root_id)?;
 
-    let position = crate::state::Position::new(
-        crate::model::NodeId::ROOT,
-        below_root.index()?,
-        crate::types::Affinity::Downstream,
-    );
+    let position = Position::new(NodeId::ROOT, below_root.index()?, Affinity::Downstream);
     Some(Selection::collapsed(position))
 }
 
-fn find_root_child(
-    ctx: &NavigationContext,
-    node: &crate::model::NodeRef,
-) -> Option<crate::model::NodeId> {
+fn find_root_child(ctx: &NavigationContext, node: &NodeRef) -> Option<NodeId> {
     let mut current_id = node.node_id();
     loop {
         let current = ctx.doc.node(current_id)?;
         if let Some(parent) = current.parent() {
-            if parent.node_id() == crate::model::NodeId::ROOT {
+            if parent.node_id() == NodeId::ROOT {
                 return Some(current_id);
             }
             current_id = parent.node_id();
@@ -235,7 +222,7 @@ fn find_root_child(
     }
 }
 
-fn find_element_above(page: &Page, x: f32, y: f32) -> Option<&crate::layout::page::ElementEntry> {
+fn find_element_above(page: &Page, x: f32, y: f32) -> Option<&ElementEntry> {
     let search_above = AABB::from_corners([f32::MIN, f32::MIN], [f32::MAX, y]);
 
     page.spatial_index()
@@ -261,7 +248,7 @@ fn find_element_above(page: &Page, x: f32, y: f32) -> Option<&crate::layout::pag
         })
 }
 
-fn find_element_below(page: &Page, x: f32, y: f32) -> Option<&crate::layout::page::ElementEntry> {
+fn find_element_below(page: &Page, x: f32, y: f32) -> Option<&ElementEntry> {
     let search_below = AABB::from_corners([f32::MIN, y], [f32::MAX, f32::MAX]);
 
     page.spatial_index()
@@ -296,8 +283,8 @@ fn find_closest_cursor_in_gap_scoped(
         return None;
     }
 
-    let mut element_above: Option<&crate::layout::page::ElementEntry> = None;
-    let mut element_below: Option<&crate::layout::page::ElementEntry> = None;
+    let mut element_above: Option<&ElementEntry> = None;
+    let mut element_below: Option<&ElementEntry> = None;
 
     for entry in page.spatial_index().iter() {
         if entry.element().block_id().is_some() {
@@ -353,9 +340,9 @@ fn find_closest_navigable_node_in_scope<'a>(
     match scope_node_id {
         None => find_closest_navigable_node(page, x, y),
         Some(scope_id) => {
-            let mut closest: Option<(&crate::layout::page::ElementEntry, f32)> = None;
-            let mut first: Option<&crate::layout::page::ElementEntry> = None;
-            let mut last: Option<&crate::layout::page::ElementEntry> = None;
+            let mut closest: Option<(&ElementEntry, f32)> = None;
+            let mut first: Option<&ElementEntry> = None;
+            let mut last: Option<&ElementEntry> = None;
 
             for entry in page.spatial_index().iter() {
                 if entry.element().block_id().is_some() {

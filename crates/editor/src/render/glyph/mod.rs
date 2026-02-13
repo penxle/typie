@@ -3,14 +3,16 @@ mod pen;
 mod scaler;
 
 use parley::FontData;
+use pen::TinySkiaPen;
 use rustc_hash::FxHashMap;
+use scaler::{ColorImage, MaskImage};
 use skrifa::bitmap::BitmapStrikes;
+use skrifa::instance::Size;
 use skrifa::raw::TableProvider;
+use skrifa::raw::tables::postscript::dict;
 use skrifa::{FontRef, GlyphId, MetadataProvider};
 use std::hash::{Hash, Hasher};
 use tiny_skia::{Paint, PixmapMut, Transform};
-
-use scaler::{ColorImage, MaskImage};
 
 const SUBPIXEL_POS_BITS: u32 = 2;
 const SUBPIXEL_POS_COUNT: u32 = 1 << SUBPIXEL_POS_BITS;
@@ -212,8 +214,6 @@ fn get_stem_widths(font_ref: &FontRef, units_per_em: u16) -> (f32, f32) {
 }
 
 fn read_cff_stem_widths(font_ref: &FontRef, em_ratio: f32) -> Option<(f32, f32)> {
-    use skrifa::raw::tables::postscript::dict;
-
     let cff = font_ref.cff().ok()?;
     let top_dict_data = cff.top_dicts().get(0).ok()?;
     let offset_data = cff.offset_data();
@@ -239,9 +239,6 @@ fn read_cff_stem_widths(font_ref: &FontRef, em_ratio: f32) -> Option<(f32, f32)>
 }
 
 fn measure_stem_widths_from_glyphs(font_ref: &FontRef, _units_per_em: u16) -> Option<(f32, f32)> {
-    use pen::TinySkiaPen;
-    use skrifa::instance::Size;
-
     let charmap = font_ref.charmap();
     let outlines = font_ref.outline_glyphs();
     let size = Size::unscaled();

@@ -1,4 +1,4 @@
-use super::super::{Effect, Runtime};
+use crate::runtime::{Effect, Runtime};
 
 impl Runtime {
     pub(crate) fn handle_escape(&mut self) -> Vec<Effect> {

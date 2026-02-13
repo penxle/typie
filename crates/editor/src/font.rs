@@ -1,9 +1,8 @@
+use crate::global::GLOBALS;
 use std::cell::{RefCell, UnsafeCell};
 use std::collections::{HashMap, HashSet};
 use std::io::Read;
 use std::sync::Arc;
-
-use crate::global::GLOBALS;
 
 thread_local! {
     static FONT_VERSIONS: RefCell<HashMap<usize, u64>> = RefCell::new(HashMap::new());

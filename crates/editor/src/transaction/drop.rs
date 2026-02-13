@@ -1,10 +1,12 @@
 use crate::model::{Doc, Fragment, Node, NodeId};
+use crate::schema::Schema;
+use crate::state::position_helpers::compare_positions;
+use crate::state::selection_helpers::{StructureSelectionInfo, compute_structure_selection};
 use crate::state::{Position, Selection, SelectionKind, is_block_position, position_in_selection};
 use crate::transaction::DeleteResult;
+use crate::transaction::Transaction;
 use crate::types::Affinity;
 use anyhow::Result;
-
-use super::Transaction;
 
 impl Transaction {
     pub fn can_drop(&self, target: Position) -> bool {
@@ -109,15 +111,14 @@ impl Transaction {
         let children_before = collect_children(self.doc(), target.node_id);
         let fragment = prepare_fragment(fragment, self.doc().schema(), self.doc(), is_block_drop);
 
-        let cell_selection =
-            crate::state::selection_helpers::compute_structure_selection(self.doc(), &source);
+        let cell_selection = compute_structure_selection(self.doc(), &source);
 
         let delete_result = match cell_selection {
-            crate::state::selection_helpers::StructureSelectionInfo::Rectangular { .. } => {
+            StructureSelectionInfo::Rectangular { .. } => {
                 self.delete_structure_selection(&cell_selection)?;
                 DeleteResult::None
             }
-            crate::state::selection_helpers::StructureSelectionInfo::Structural(ref block_ids) => {
+            StructureSelectionInfo::Structural(ref block_ids) => {
                 let mut expanded_source = source;
                 if let Ok((mut from, mut to)) = source.as_sorted(self.doc()) {
                     for &block_id in block_ids {
@@ -132,23 +133,15 @@ impl Transaction {
                                     Affinity::Downstream,
                                 );
 
-                                if crate::state::position_helpers::compare_positions(
-                                    self.doc(),
-                                    start_pos,
-                                    from,
-                                )
-                                .unwrap_or(std::cmp::Ordering::Equal)
-                                .is_lt()
+                                if compare_positions(self.doc(), start_pos, from)
+                                    .unwrap_or(std::cmp::Ordering::Equal)
+                                    .is_lt()
                                 {
                                     from = start_pos;
                                 }
-                                if crate::state::position_helpers::compare_positions(
-                                    self.doc(),
-                                    end_pos,
-                                    to,
-                                )
-                                .unwrap_or(std::cmp::Ordering::Equal)
-                                .is_gt()
+                                if compare_positions(self.doc(), end_pos, to)
+                                    .unwrap_or(std::cmp::Ordering::Equal)
+                                    .is_gt()
                                 {
                                     to = end_pos;
                                 }
@@ -217,7 +210,7 @@ impl Transaction {
 
 fn prepare_fragment(
     fragment: Fragment,
-    schema: &crate::schema::Schema,
+    schema: &Schema,
     doc: &Doc,
     is_block_drop: bool,
 ) -> Fragment {
@@ -281,8 +274,7 @@ fn collect_children(doc: &Doc, node_id: NodeId) -> Vec<NodeId> {
 
 #[cfg(test)]
 mod tests {
-    use crate::state::Position;
-    use crate::types::Affinity;
+    use super::*;
 
     #[test]
     fn test_drag_and_drop_rectangular_table_selection() {
@@ -343,7 +335,7 @@ mod tests {
         let text_node = p01
             .first_child()
             .expect("Cell B should still have text node");
-        if let crate::model::Node::Text(t) = text_node.node() {
+        if let Node::Text(t) = text_node.node() {
             assert_eq!(
                 t.text.to_string(),
                 "B",

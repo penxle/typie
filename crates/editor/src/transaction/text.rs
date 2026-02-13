@@ -1,8 +1,12 @@
 use crate::model::*;
 use crate::runtime::Effect;
-use crate::state::position_helpers::{calculate_offset_before_child, find_child_at_offset};
-use crate::state::selection_helpers::{StructureSelectionInfo, compute_structure_selection};
-use crate::state::{Position, Selection, block_content_len};
+use crate::state::position_helpers::{
+    calculate_offset_before_child, compare_positions, find_child_at_offset,
+};
+use crate::state::selection_helpers::{
+    StructureSelectionInfo, block_content_len, compute_structure_selection,
+};
+use crate::state::{Position, Selection};
 use crate::transaction::Transaction;
 use crate::types::Affinity;
 use crate::utils::{
@@ -508,13 +512,13 @@ impl Transaction {
                 let start_pos = Position::new(parent.node_id(), index, Affinity::Downstream);
                 let end_pos = Position::new(parent.node_id(), index + 1, Affinity::Downstream);
 
-                if crate::state::position_helpers::compare_positions(self.doc(), start_pos, from)
+                if compare_positions(self.doc(), start_pos, from)
                     .unwrap_or(std::cmp::Ordering::Equal)
                     .is_lt()
                 {
                     from = start_pos;
                 }
-                if crate::state::position_helpers::compare_positions(self.doc(), end_pos, to)
+                if compare_positions(self.doc(), end_pos, to)
                     .unwrap_or(std::cmp::Ordering::Equal)
                     .is_gt()
                 {
@@ -576,7 +580,7 @@ impl Transaction {
             .context("From node not found")?;
         let to_node = self.doc().node(to.node_id).context("To node not found")?;
 
-        let find_isolating = |node: &crate::model::NodeRef<'_>| {
+        let find_isolating = |node: &NodeRef<'_>| {
             if node.spec().isolating {
                 return Some(node.node_id());
             }
@@ -746,7 +750,7 @@ impl Transaction {
         };
 
         let child = self.doc().node(child_id).unwrap();
-        let child_len = crate::state::selection_helpers::block_content_len(&child);
+        let child_len = block_content_len(&child);
 
         let seg_to = if is_last_in_range && to.node_id != lca_id {
             to
@@ -867,7 +871,7 @@ impl Transaction {
     fn find_last_textblock_pos(&self, node_id: NodeId) -> Option<Position> {
         let node = self.doc().node(node_id)?;
         if node.spec().is_textblock(self.doc().schema()) {
-            let len = crate::state::selection_helpers::block_content_len(&node);
+            let len = block_content_len(&node);
             return Some(Position::new(node_id, len, Affinity::Downstream));
         }
         let children: Vec<_> = node.children().collect();
@@ -892,10 +896,7 @@ impl Transaction {
 
 #[cfg(test)]
 mod tests {
-    use crate::model::*;
-    use crate::runtime::Effect;
-    use crate::state::{Position, Selection};
-    use crate::types::Affinity;
+    use super::*;
 
     #[test]
     fn insert_text_at_middle() {
@@ -2665,7 +2666,7 @@ mod tests {
             selection { (p, 5) }
         };
 
-        let mut tr = crate::transaction::Transaction::new(&state);
+        let mut tr = Transaction::new(&state);
         tr.state.pending_styles.push(Style::Italic(ItalicStyle {}));
         tr.insert_text("X").unwrap();
         let (new_state, _) = tr.commit().unwrap();
@@ -2701,7 +2702,7 @@ mod tests {
             selection { (p, 5) }
         };
 
-        let mut tr = crate::transaction::Transaction::new(&state);
+        let mut tr = Transaction::new(&state);
         tr.state.pending_styles.push(Style::Italic(ItalicStyle {}));
         tr.insert_text("X").unwrap();
         let (new_state, _) = tr.commit().unwrap();
@@ -2720,7 +2721,7 @@ mod tests {
             selection { (p, 0) }
         };
 
-        let mut tr = crate::transaction::Transaction::new(&state);
+        let mut tr = Transaction::new(&state);
         tr.state.pending_styles = vec![Style::FontWeight(FontWeightStyle { weight: 700 })];
         tr.insert_text("Bold").unwrap();
         let (new_state, _) = tr.commit().unwrap();
@@ -3268,8 +3269,6 @@ mod tests {
 
     #[test]
     fn delete_forward_into_list_invalidates_layout() {
-        use crate::runtime::Effect;
-
         let mut p = id!();
         let mut list = id!();
 
@@ -3310,8 +3309,6 @@ mod tests {
 
     #[test]
     fn delete_forward_into_list_with_remaining_items() {
-        use crate::runtime::Effect;
-
         let mut p = id!();
         let mut list = id!();
 
@@ -3464,7 +3461,7 @@ mod tests {
             selection { (p, 2) }
         };
 
-        let mut tr = crate::transaction::Transaction::new(&state);
+        let mut tr = Transaction::new(&state);
         tr.delete_text_backward().unwrap();
         let (view, _) = tr.commit().unwrap();
 

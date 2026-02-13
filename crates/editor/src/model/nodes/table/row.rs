@@ -2,12 +2,11 @@ use crate::layout::elements::TableCellElement;
 use crate::layout::{Element, Layout, LayoutContext, LayoutNode, PageBreakPolicy, PositionedNode};
 use crate::model::Node;
 use crate::model::html::{DomSpec, NodeHtmlCodec, NodeParseRule};
+use crate::model::nodes::table::TABLE_BORDER_WIDTH;
 use crate::types::{BoxConstraints, Point, Size};
 use macros::Codec;
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;
-
-use super::TABLE_BORDER_WIDTH;
 
 #[derive(Debug, Clone, Default, PartialEq, Hash, Serialize, Deserialize, Codec)]
 #[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
@@ -45,17 +44,19 @@ impl Layout for TableRowNode {
                     .children()
                     .map(|cell| {
                         if let Node::TableCell(cell_node) = cell.node() {
-                            cell_node.col_width.unwrap_or(super::DEFAULT_CELL_WIDTH)
+                            cell_node
+                                .col_width
+                                .unwrap_or(crate::model::nodes::table::DEFAULT_CELL_WIDTH)
                         } else {
-                            super::DEFAULT_CELL_WIDTH
+                            crate::model::nodes::table::DEFAULT_CELL_WIDTH
                         }
                     })
                     .collect()
             } else {
-                vec![super::DEFAULT_CELL_WIDTH; cells.len()]
+                vec![crate::model::nodes::table::DEFAULT_CELL_WIDTH; cells.len()]
             }
         } else {
-            vec![super::DEFAULT_CELL_WIDTH; cells.len()]
+            vec![crate::model::nodes::table::DEFAULT_CELL_WIDTH; cells.len()]
         };
 
         let mut cell_layouts = Vec::new();
@@ -65,7 +66,7 @@ impl Layout for TableRowNode {
             let cell_width = col_widths
                 .get(col_idx)
                 .copied()
-                .unwrap_or(super::DEFAULT_CELL_WIDTH);
+                .unwrap_or(crate::model::nodes::table::DEFAULT_CELL_WIDTH);
 
             let cell_constraints = BoxConstraints::new(cell_width, cell_width, 0.0, f32::MAX);
             let cell_layout = ctx.layout(cell, cell_constraints);

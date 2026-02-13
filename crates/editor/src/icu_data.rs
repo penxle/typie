@@ -2,7 +2,6 @@ use icu_properties::CodePointMapData;
 use icu_properties::props::GeneralCategory;
 use icu_provider::buf::AsDeserializingBufferProvider;
 use icu_provider_blob::BlobDataProvider;
-
 use std::sync::OnceLock;
 
 #[cfg(feature = "wasm")]

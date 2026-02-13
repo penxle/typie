@@ -729,10 +729,9 @@ impl Transaction {
 
 #[cfg(test)]
 mod tests {
-    use crate::model::*;
-    use crate::runtime::{Effect, Message};
+    use super::*;
+    use crate::runtime::Message;
     use crate::test_utils::ScopedFontRegistration;
-    use crate::transaction::Transaction;
     use crate::types::Affinity;
 
     #[test]
@@ -1845,7 +1844,7 @@ mod tests {
         let _guard = ScopedFontRegistration::new(fonts);
 
         let (_, effects) = transact_with_effect!(initial, |tr| {
-            tr.toggle_style(Style::FontFamily(FontFamilyStyle {
+            tr.set_style(Style::FontFamily(FontFamilyStyle {
                 family: "ThinFont".to_string(),
             }))
             .unwrap()
@@ -1858,7 +1857,7 @@ mod tests {
 
         if let Effect::FontDetected { family, weight, .. } = effect {
             assert_eq!(family, "ThinFont");
-            assert_eq!(*weight, 400);
+            assert_eq!(*weight, 100);
         } else {
             panic!("Unexpected effect");
         }
@@ -1878,7 +1877,7 @@ mod tests {
         };
 
         let actual_state = transact!(initial, |tr| {
-            tr.toggle_style(Style::FontWeight(FontWeightStyle { weight: 900 }))
+            tr.set_style(Style::FontWeight(FontWeightStyle { weight: 900 }))
                 .unwrap()
         });
 
@@ -1909,7 +1908,7 @@ mod tests {
         };
 
         let actual_state = transact!(initial, |tr| {
-            tr.toggle_style(Style::FontWeight(FontWeightStyle { weight: 100 }))
+            tr.set_style(Style::FontWeight(FontWeightStyle { weight: 100 }))
                 .unwrap()
         });
 
@@ -1969,7 +1968,7 @@ mod tests {
         };
 
         let (_, effects) = transact_with_effect!(initial, |tr| {
-            tr.toggle_style(Style::FontWeight(FontWeightStyle { weight: 700 }))
+            tr.set_style(Style::FontWeight(FontWeightStyle { weight: 700 }))
                 .unwrap()
         });
 
