@@ -1,5 +1,6 @@
 use crate::model::*;
 use crate::runtime::Effect;
+use crate::state::position_helpers::find_child_at_offset;
 use crate::state::{Position, Selection, block_content_len, collect_top_level_blocks_in_range};
 use crate::transaction::Transaction;
 use crate::types::Affinity;
@@ -68,8 +69,6 @@ impl Transaction {
                 let next_sibling = parent_node.next_sibling().map(|n| n.node_id());
 
                 let child_info = if insert_pos.offset > 0 && insert_pos.offset < parent_size {
-                    use crate::state::position_helpers::find_child_at_offset;
-
                     let (child_id, local_offset) =
                         find_child_at_offset(&parent_node, insert_pos.offset)
                             .context("No child at offset")?;
@@ -624,8 +623,7 @@ impl Transaction {
 
 #[cfg(test)]
 mod tests {
-    use crate::model::*;
-    use crate::types::Affinity;
+    use super::*;
 
     #[test]
     fn insert_node_after() {

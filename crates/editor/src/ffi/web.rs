@@ -1,8 +1,17 @@
 use crate::font::{add_font_base, add_font_chunk, set_fallback_fonts};
-use crate::model::{Doc, DocExportMode, LayoutMode, Node, NodeId, ParagraphNode};
+use crate::global::{clear_text_replacement_rules, set_text_replacement_rules};
+use crate::icu_data::{get_general_category_map, load_icu_data};
+use crate::layout::query::is_selection_hit;
+use crate::model::{
+    Doc, DocExportMode, DocumentJson, LayoutMode, Node, NodeId, ParagraphNode, TextMapping,
+    json_to_snapshot, snapshot_to_json,
+};
+use crate::render::DragImageResult;
+use crate::runtime::search::{SearchQuery, perform_search};
 use crate::runtime::{Message, RawTextReplacementRule, RawTrackedItem, Runtime, State, slate};
 use crate::state::{Position, Selection};
 use crate::types::Affinity;
+use icu_properties::props::GeneralCategory;
 use serde::Serialize;
 use std::rc::Rc;
 use wasm_bindgen::JsCast;
@@ -26,16 +35,15 @@ pub fn validate_regex(pattern: &str) -> bool {
 
 #[wasm_bindgen(js_name = snapshotToJson)]
 pub fn snapshot_to_json_wasm(snapshot: Vec<u8>) -> Result<JsValue, JsValue> {
-    let doc_json =
-        crate::model::snapshot_to_json(&snapshot).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let doc_json = snapshot_to_json(&snapshot).map_err(|e| JsValue::from_str(&e.to_string()))?;
     Ok(to_js_value(&doc_json))
 }
 
 #[wasm_bindgen(js_name = jsonToSnapshot)]
 pub fn json_to_snapshot_wasm(json: JsValue) -> Result<Vec<u8>, JsValue> {
-    let doc_json: crate::model::DocumentJson =
+    let doc_json: DocumentJson =
         serde_wasm_bindgen::from_value(json).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    crate::model::json_to_snapshot(&doc_json).map_err(|e| JsValue::from_str(&e.to_string()))
+    json_to_snapshot(&doc_json).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 #[wasm_bindgen]
@@ -51,7 +59,7 @@ impl Application {
 
     #[wasm_bindgen(js_name = loadIcuData)]
     pub fn load_icu_data(&self, icu_data: Vec<u8>) -> Result<(), JsValue> {
-        crate::icu_data::load_icu_data(&icu_data)
+        load_icu_data(&icu_data)
     }
 
     #[wasm_bindgen(js_name = addFontBase)]
@@ -76,13 +84,13 @@ impl Application {
     pub fn set_text_replacement_rules(&self, rules: JsValue) {
         if let Ok(raw_rules) = serde_wasm_bindgen::from_value::<Vec<RawTextReplacementRule>>(rules)
         {
-            crate::global::set_text_replacement_rules(raw_rules);
+            set_text_replacement_rules(raw_rules);
         }
     }
 
     #[wasm_bindgen(js_name = clearTextReplacementRules)]
     pub fn clear_text_replacement_rules(&self) {
-        crate::global::clear_text_replacement_rules();
+        clear_text_replacement_rules();
     }
 
     #[wasm_bindgen(js_name = createEditor)]
@@ -121,7 +129,7 @@ pub struct CharacterCounts {
 
 #[wasm_bindgen]
 pub struct DragImageInfo {
-    drag_image: crate::render::DragImageResult,
+    drag_image: DragImageResult,
 }
 
 #[wasm_bindgen]
@@ -285,13 +293,7 @@ impl Editor {
     #[wasm_bindgen(js_name = isSelectionHit)]
     pub fn is_selection_hit(&self, page_idx: usize, x: f32, y: f32) -> bool {
         if let Some(page) = self.runtime.pages().get(page_idx) {
-            crate::layout::query::is_selection_hit(
-                self.runtime.doc(),
-                page,
-                self.runtime.selection(),
-                x,
-                y,
-            )
+            is_selection_hit(self.runtime.doc(), page, self.runtime.selection(), x, y)
         } else {
             false
         }
@@ -464,7 +466,7 @@ impl Editor {
         #[serde(rename_all = "camelCase")]
         struct TextWithMappingsResult {
             text: String,
-            mappings: Vec<crate::model::TextMapping>,
+            mappings: Vec<TextMapping>,
         }
 
         let (text, mappings) = self.runtime.doc().to_text_with_mappings();
@@ -474,8 +476,6 @@ impl Editor {
 
     #[wasm_bindgen(js_name = performSearch)]
     pub fn perform_search(&self, query: &str, match_whole_word: bool) -> JsValue {
-        use crate::runtime::search::{SearchQuery, perform_search};
-
         let search_query = SearchQuery::new(query.to_string(), match_whole_word);
         let matches = perform_search(&self.runtime.doc(), &search_query);
 
@@ -535,9 +535,7 @@ impl Editor {
 }
 
 fn count_all(text: &str) -> (u32, u32, u32) {
-    use icu_properties::props::GeneralCategory;
-
-    let gc_data = crate::icu_data::get_general_category_map();
+    let gc_data = get_general_category_map();
     let gc_map = gc_data.as_borrowed();
 
     let mut with_ws: u32 = 0;

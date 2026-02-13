@@ -1,4 +1,7 @@
+use crate::model::annotations::*;
 use crate::model::html::builder::{DomSpec, HtmlBuilder};
+use crate::model::nodes::*;
+use crate::model::styles::*;
 use crate::model::{Annotation, Fragment, Node, NodeId, Style};
 use scraper::ElementRef;
 
@@ -263,10 +266,6 @@ impl AnnotationParseRule {
         }
     }
 }
-
-use crate::model::annotations::*;
-use crate::model::nodes::*;
-use crate::model::styles::*;
 
 pub fn collect_node_parse_rules() -> Vec<NodeParseRule> {
     let mut rules = Vec::new();

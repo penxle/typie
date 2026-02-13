@@ -1,7 +1,7 @@
+use crate::model::annotations::*;
 use loro::LoroValue;
+use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
-
-use super::annotations::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
@@ -50,7 +50,6 @@ impl Annotation {
     }
 
     pub fn to_loro_value(&self) -> LoroValue {
-        use rustc_hash::FxHashMap;
         let mut map = FxHashMap::default();
         match self {
             Annotation::Link(l) => {

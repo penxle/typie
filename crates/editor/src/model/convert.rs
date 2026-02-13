@@ -260,12 +260,15 @@ pub fn json_to_snapshot(doc_json: &DocumentJson) -> Result<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::tree::Doc;
+    use crate::model::{
+        Doc, DocExportMode, FontWeightStyle, ItalicStyle, Node, ParagraphNode, Style, Text,
+        TextNode, TextSegment,
+    };
 
     #[test]
     fn test_roundtrip_empty_doc() {
         let doc = Doc::new();
-        let snapshot = doc.export(crate::model::DocExportMode::Snapshot).unwrap();
+        let snapshot = doc.export(DocExportMode::Snapshot).unwrap();
 
         let json = snapshot_to_json(&snapshot).unwrap();
         assert!(json.nodes.contains_key(&NodeId::ROOT.to_string()));
@@ -278,8 +281,6 @@ mod tests {
 
     #[test]
     fn test_roundtrip_doc_with_content() {
-        use crate::model::{Node, ParagraphNode, TextNode};
-
         let doc = Doc::new();
         let root = doc.node(NodeId::ROOT).unwrap();
         let para_id = root
@@ -292,12 +293,12 @@ mod tests {
             .insert_child(
                 0,
                 Node::Text(TextNode {
-                    text: crate::model::Text::from("hello world"),
+                    text: Text::from("hello world"),
                 }),
             )
             .unwrap();
 
-        let snapshot = doc.export(crate::model::DocExportMode::Snapshot).unwrap();
+        let snapshot = doc.export(DocExportMode::Snapshot).unwrap();
 
         let json = snapshot_to_json(&snapshot).unwrap();
         let new_snapshot = json_to_snapshot(&json).unwrap();
@@ -308,10 +309,6 @@ mod tests {
 
     #[test]
     fn test_roundtrip_doc_with_styles() {
-        use crate::model::{
-            FontWeightStyle, ItalicStyle, Node, ParagraphNode, Style, Text, TextNode, TextSegment,
-        };
-
         let doc = Doc::new();
         let root = doc.node(NodeId::ROOT).unwrap();
         let para_id = root
@@ -347,7 +344,7 @@ mod tests {
             .insert_child(0, Node::Text(TextNode { text }))
             .unwrap();
 
-        let snapshot = doc.export(crate::model::DocExportMode::Snapshot).unwrap();
+        let snapshot = doc.export(DocExportMode::Snapshot).unwrap();
         let json = snapshot_to_json(&snapshot).unwrap();
 
         let serialized = serde_json::to_string(&json).unwrap();
@@ -402,7 +399,7 @@ mod tests {
     #[test]
     fn test_json_serialization() {
         let doc = Doc::new();
-        let snapshot = doc.export(crate::model::DocExportMode::Snapshot).unwrap();
+        let snapshot = doc.export(DocExportMode::Snapshot).unwrap();
 
         let json = snapshot_to_json(&snapshot).unwrap();
         let serialized = serde_json::to_string(&json).unwrap();

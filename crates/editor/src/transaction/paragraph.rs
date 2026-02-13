@@ -557,7 +557,7 @@ impl Transaction {
         let selection = self.selection().clone();
         let (from, to) = selection.as_sorted(self.doc())?;
 
-        let blocks = crate::state::collect_blocks_in_range(self.doc(), from, to)?;
+        let blocks = collect_blocks_in_range(self.doc(), from, to)?;
 
         for block_id in blocks {
             let block = self.node_mut(block_id).context("Block not found")?;
@@ -578,7 +578,7 @@ impl Transaction {
         let selection = self.selection().clone();
         let (from, to) = selection.as_sorted(self.doc())?;
 
-        let blocks = crate::state::collect_blocks_in_range(self.doc(), from, to)?;
+        let blocks = collect_blocks_in_range(self.doc(), from, to)?;
 
         for block_id in blocks {
             let block = self.node_mut(block_id).context("Block not found")?;
@@ -597,19 +597,13 @@ impl Transaction {
 
     pub fn reset_fully_selected_paragraphs(&mut self) -> Result<bool> {
         let selection = self.selection().clone();
-        let paragraph_ids = crate::state::selection_helpers::collect_nodes_in_selection(
-            self.doc(),
-            &selection,
-            |node| matches!(node, Node::Paragraph(_)),
-        )?;
+        let paragraph_ids = collect_nodes_in_selection(self.doc(), &selection, |node| {
+            matches!(node, Node::Paragraph(_))
+        })?;
 
         let mut changed = false;
         for para_id in paragraph_ids {
-            if crate::state::selection_helpers::is_node_fully_selected(
-                self.doc(),
-                &selection,
-                para_id,
-            )? {
+            if is_node_fully_selected(self.doc(), &selection, para_id)? {
                 let para_node = self
                     .node_mut(para_id)
                     .context("reset_fully_selected_paragraphs: Paragraph not found")?;
@@ -634,8 +628,7 @@ impl Transaction {
 
 #[cfg(test)]
 mod tests {
-    use crate::model::*;
-    use crate::types::Affinity;
+    use super::*;
 
     #[test]
     fn split_paragraph_not_collapsed() {
@@ -648,7 +641,7 @@ mod tests {
             }
             selection { (p, 0) -> (p, 2) }
         };
-        let mut tr = crate::transaction::Transaction::new(&state);
+        let mut tr = Transaction::new(&state);
         let result = tr.split_paragraph().unwrap();
         assert!(!result);
     }
@@ -662,7 +655,7 @@ mod tests {
             }
             selection { (p, 0) -> (p, 2) }
         };
-        let mut tr = crate::transaction::Transaction::new(&state);
+        let mut tr = Transaction::new(&state);
         let result = tr.join_backward().unwrap();
         assert!(!result);
     }
@@ -676,7 +669,7 @@ mod tests {
             }
             selection { (p, 1) }
         };
-        let mut tr = crate::transaction::Transaction::new(&state);
+        let mut tr = Transaction::new(&state);
         let result = tr.join_backward().unwrap();
         assert!(!result);
     }
@@ -690,7 +683,7 @@ mod tests {
             }
             selection { (p, 0) }
         };
-        let mut tr = crate::transaction::Transaction::new(&state);
+        let mut tr = Transaction::new(&state);
         let result = tr.join_backward().unwrap();
         assert!(!result);
     }
@@ -704,7 +697,7 @@ mod tests {
             }
             selection { (p, 0) }
         };
-        let mut tr = crate::transaction::Transaction::new(&state);
+        let mut tr = Transaction::new(&state);
         let result = tr.join_backward().unwrap();
         assert!(!result);
     }
@@ -718,7 +711,7 @@ mod tests {
             }
             selection { (p, 0) -> (p, 2) }
         };
-        let mut tr = crate::transaction::Transaction::new(&state);
+        let mut tr = Transaction::new(&state);
         let result = tr.join_forward().unwrap();
         assert!(!result);
     }
@@ -733,7 +726,7 @@ mod tests {
             }
             selection { (p, 2) }
         };
-        let mut tr = crate::transaction::Transaction::new(&state);
+        let mut tr = Transaction::new(&state);
         let result = tr.join_forward().unwrap();
         assert!(!result);
     }
@@ -747,7 +740,7 @@ mod tests {
             }
             selection { (p, 5) }
         };
-        let mut tr = crate::transaction::Transaction::new(&state);
+        let mut tr = Transaction::new(&state);
         let result = tr.join_forward().unwrap();
         assert!(!result);
     }
@@ -761,7 +754,7 @@ mod tests {
             }
             selection { (p, 0) }
         };
-        let mut tr = crate::transaction::Transaction::new(&state);
+        let mut tr = Transaction::new(&state);
         let result = tr.join_forward().unwrap();
         assert!(!result);
     }

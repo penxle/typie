@@ -18,7 +18,8 @@ impl Transaction {
 
 #[cfg(test)]
 mod tests {
-    use crate::model::BlockquoteVariant;
+    use super::*;
+    use crate::transaction::Effect;
 
     #[test]
     fn toggle_wraps_when_outside() {
@@ -95,7 +96,7 @@ mod tests {
             selection { (p1, 1) -> (p2, 1) }
         };
 
-        let mut tr = crate::transaction::Transaction::new(&state);
+        let mut tr = Transaction::new(&state);
         let result = tr.toggle_blockquote(BlockquoteVariant::default()).unwrap();
 
         assert!(!result);
@@ -230,8 +231,6 @@ mod tests {
 
     #[test]
     fn wrap_in_blockquote_emits_node_changed_for_children() {
-        use crate::transaction::Effect;
-
         let mut p = id!();
 
         let initial = state! {

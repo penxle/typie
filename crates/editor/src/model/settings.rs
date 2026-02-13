@@ -1,9 +1,8 @@
+use crate::model::style::Style;
+use crate::model::styles::*;
 use macros::Codec;
 use serde::{Deserialize, Serialize};
 use std::hash::{Hash, Hasher};
-
-use super::style::Style;
-use super::styles::*;
 
 pub const CONTINUOUS_PAGE_MARGIN: f32 = 20.0;
 

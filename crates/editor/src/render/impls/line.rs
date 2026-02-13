@@ -1,3 +1,4 @@
+use crate::global::GLOBALS;
 use crate::layout::elements::LineElement;
 use crate::render::glyph::Glyph;
 use crate::render::{GlyphRenderer, Render, RenderContext, RenderPhase};
@@ -177,8 +178,6 @@ impl LineElement {
         line_metrics: &parley::layout::LineMetrics,
         ctx: &RenderContext<'_>,
     ) {
-        use crate::global::GLOBALS;
-
         if self.ruby_segments.is_empty() {
             return;
         }
@@ -409,33 +408,32 @@ impl Render for LineElement {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::layout::{Element, Layout, LayoutCache, LayoutContext};
-    use crate::model::{Decorations, SelectionDecor};
-    use crate::state::build_selection_decorations;
-    use crate::types::{Affinity, BoxConstraints};
+    use crate::layout::elements::LineMetric;
+    use crate::layout::{Element, Layout, LayoutCache, LayoutContext, LayoutNode};
+    use crate::model::{Decorations, NodeId, SelectionDecor};
+    use crate::runtime::{State, ViewStates};
+    use crate::state::{build_selection_decorations, collect_blocks_in_range};
+    use crate::types::{Affinity, BoxConstraints, Rect, Size};
     use std::cell::RefCell;
 
-    fn selections_from_state(state: &crate::runtime::State) -> Vec<SelectionDecor> {
+    fn selections_from_state(state: &State) -> Vec<SelectionDecor> {
         build_selection_decorations(&state.doc, &state.selection, None)
     }
 
-    fn decorations_from_state(_state: &crate::runtime::State) -> Decorations {
+    fn decorations_from_state(_state: &State) -> Decorations {
         Decorations {
             preedit: None,
             pending_styles: Default::default(),
         }
     }
 
-    fn layout_for_paragraph(
-        state: &crate::runtime::State,
-        para_id: crate::model::NodeId,
-    ) -> crate::layout::LayoutNode {
+    fn layout_for_paragraph(state: &State, para_id: NodeId) -> LayoutNode {
         let decorations = decorations_from_state(state);
         let paragraph = state.doc.node(para_id).unwrap();
         let settings = state.doc.settings();
         let default_styles = state.doc.default_styles();
         let cache = RefCell::new(LayoutCache::new());
-        let view_states = crate::runtime::ViewStates::default();
+        let view_states = ViewStates::default();
         let ctx = LayoutContext::new(
             &paragraph,
             &settings,
@@ -449,10 +447,7 @@ mod tests {
         paragraph.node().layout(&ctx, constraints)
     }
 
-    fn selection_rects(
-        line: &LineElement,
-        selections: &[SelectionDecor],
-    ) -> Vec<crate::types::Rect> {
+    fn selection_rects(line: &LineElement, selections: &[SelectionDecor]) -> Vec<Rect> {
         line.compute_selection_rects(Point::zero(), selections)
     }
 
@@ -740,7 +735,7 @@ mod tests {
 
     #[test]
     fn test_page_break_indicator_in_empty_paragraph() {
-        let metric = crate::layout::elements::LineMetric {
+        let metric = LineMetric {
             top: 0.0,
             left: 0.0,
             height: 20.0,
@@ -757,7 +752,7 @@ mod tests {
 
         let line = LineElement::build(
             id!(),
-            crate::types::Size::new(100.0, 20.0),
+            Size::new(100.0, 20.0),
             0,
             std::rc::Rc::new(parley::Layout::default()),
             metric,
@@ -823,7 +818,7 @@ mod tests {
         };
 
         let (from, to) = state.selection.as_sorted(&state.doc).unwrap();
-        let block_ids = crate::state::collect_blocks_in_range(&state.doc, from, to).unwrap();
+        let block_ids = collect_blocks_in_range(&state.doc, from, to).unwrap();
         let selections =
             build_selection_decorations(&state.doc, &state.selection, Some(&block_ids));
 

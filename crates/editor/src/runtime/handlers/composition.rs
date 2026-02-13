@@ -1,4 +1,4 @@
-use super::super::{Effect, Runtime};
+use crate::runtime::{Effect, Runtime};
 
 impl Runtime {
     pub(crate) fn handle_composition_update(&mut self, text: &str) -> Vec<Effect> {

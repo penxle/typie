@@ -2,12 +2,11 @@ use crate::layout::elements::TableCellElement;
 use crate::layout::{Element, Layout, LayoutContext, LayoutNode, PageBreakPolicy, PositionedNode};
 use crate::model::Node;
 use crate::model::html::{DomSpec, NodeHtmlCodec, NodeParseRule};
+use crate::model::nodes::table::TABLE_CELL_PADDING;
 use crate::types::{BoxConstraints, Point, Size};
 use macros::Codec;
 use serde::{Deserialize, Serialize};
 use std::hash::{Hash, Hasher};
-
-use super::TABLE_CELL_PADDING;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Codec)]
 #[cfg_attr(feature = "wasm", derive(tsify::Tsify))]

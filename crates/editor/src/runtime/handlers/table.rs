@@ -1,4 +1,4 @@
-use crate::model::NodeId;
+use crate::model::{NodeId, TableAlign};
 use crate::runtime::{Effect, Runtime};
 
 impl Runtime {
@@ -80,7 +80,7 @@ impl Runtime {
     pub(crate) fn handle_set_table_align(
         &mut self,
         table_id: String,
-        align: crate::model::TableAlign,
+        align: TableAlign,
     ) -> Vec<Effect> {
         let Some(node_id) = NodeId::from_string(&table_id) else {
             return vec![];

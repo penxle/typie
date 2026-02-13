@@ -1,4 +1,7 @@
-use crate::runtime::text_replacement::{ReplacementUndoState, offset_len_for_text};
+use crate::global::with_text_replacement_rules;
+use crate::runtime::text_replacement::{
+    CompiledPattern, ReplacementUndoState, expand_substitute, offset_len_for_text,
+};
 use crate::runtime::{Effect, Runtime};
 
 impl Runtime {
@@ -19,10 +22,10 @@ impl Runtime {
 
         let input_start_byte = text_before.len().saturating_sub(input_byte_len);
 
-        let matched = crate::global::with_text_replacement_rules(|rules| {
+        let matched = with_text_replacement_rules(|rules| {
             for rule in rules {
                 match &rule.pattern {
-                    crate::runtime::text_replacement::CompiledPattern::Plain(pattern) => {
+                    CompiledPattern::Plain(pattern) => {
                         for (pos, _) in text_before.match_indices(pattern.as_str()) {
                             let match_end = pos + pattern.len();
                             if match_end > input_start_byte {
@@ -31,7 +34,7 @@ impl Runtime {
                             }
                         }
                     }
-                    crate::runtime::text_replacement::CompiledPattern::Regex(regex) => {
+                    CompiledPattern::Regex(regex) => {
                         for try_end in (input_start_byte + 1)..=text_before.len() {
                             if !text_before.is_char_boundary(try_end) {
                                 continue;
@@ -41,11 +44,7 @@ impl Runtime {
                                 if let Some(m) = caps.get(0) {
                                     if m.end() == truncated.len() {
                                         let matched_str = m.as_str().to_string();
-                                        let expanded =
-                                            crate::runtime::text_replacement::expand_substitute(
-                                                &caps,
-                                                &rule.substitute,
-                                            );
+                                        let expanded = expand_substitute(&caps, &rule.substitute);
                                         let suffix = text_before[try_end..].to_string();
                                         return Some((matched_str, expanded, suffix));
                                     }
@@ -114,17 +113,18 @@ impl Runtime {
 
 #[cfg(test)]
 mod tests {
+    use crate::global::{clear_text_replacement_rules, set_text_replacement_rules};
     use crate::runtime::Message;
     use crate::runtime::message::Direction;
     use crate::runtime::text_replacement::RawTextReplacementRule;
     use crate::types::Affinity;
 
     fn set_rules(rules: Vec<RawTextReplacementRule>) {
-        crate::global::set_text_replacement_rules(rules);
+        set_text_replacement_rules(rules);
     }
 
     fn clear_rules() {
-        crate::global::clear_text_replacement_rules();
+        clear_text_replacement_rules();
     }
 
     #[test]

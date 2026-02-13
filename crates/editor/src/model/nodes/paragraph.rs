@@ -1,5 +1,5 @@
 use crate::global::GLOBALS;
-use crate::layout::elements::{LineElement, build_metrics};
+use crate::layout::elements::{BackgroundSegment, LineElement, RubySegment, build_metrics};
 use crate::layout::{Element, Layout, LayoutContext, LayoutNode, PageBreakPolicy, PositionedNode};
 use crate::model::html::{DomSpec, NodeHtmlCodec, NodeParseRule, parse_styles};
 use crate::model::{Annotation, Node, PendingStylesDecor, PreeditDecor, Style};
@@ -7,6 +7,7 @@ use crate::schema::Expand;
 use crate::types::{BoxConstraints, Point, Size};
 use crate::utils::{LengthUnit, char_to_byte_offset, convert_length};
 use macros::Codec;
+use parley::style::*;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::rc::Rc;
@@ -55,10 +56,7 @@ fn pending_styles_for_node<'a>(ctx: &'a LayoutContext<'a>) -> Option<&'a Pending
     }
 }
 
-fn extract_ruby_segments(ctx: &LayoutContext) -> Vec<crate::layout::elements::RubySegment> {
-    use crate::layout::elements::RubySegment;
-    use crate::model::Node;
-
+fn extract_ruby_segments(ctx: &LayoutContext) -> Vec<RubySegment> {
     let mut ruby_segments = Vec::new();
     let mut offset = 0;
 
@@ -111,12 +109,7 @@ fn extract_ruby_segments(ctx: &LayoutContext) -> Vec<crate::layout::elements::Ru
     merged
 }
 
-fn extract_background_segments(
-    ctx: &LayoutContext,
-) -> Vec<crate::layout::elements::BackgroundSegment> {
-    use crate::layout::elements::BackgroundSegment;
-    use crate::model::Node;
-
+fn extract_background_segments(ctx: &LayoutContext) -> Vec<BackgroundSegment> {
     let mut background_segments = Vec::new();
     let mut offset = 0;
 
@@ -199,7 +192,6 @@ fn apply_style_to_builder(
     range: std::ops::Range<usize>,
     font_size: f32,
 ) {
-    use parley::style::*;
     match style {
         Style::FontFamily(m) => builder.push(
             StyleProperty::FontStack(FontStack::Single(FontFamily::Named(
@@ -237,7 +229,6 @@ fn apply_annotation_to_builder(
     annotation: &Annotation,
     range: std::ops::Range<usize>,
 ) {
-    use parley::style::*;
     match annotation {
         Annotation::Link(_) => {
             builder.push(StyleProperty::Underline(true), range.clone());
@@ -744,7 +735,10 @@ impl Layout for ParagraphNode {
 mod tests {
     use super::*;
     use crate::layout::LayoutCache;
-    use crate::model::{BackgroundColorStyle, Decorations, PendingStylesDecor, PreeditDecor};
+    use crate::model::{
+        BackgroundColorStyle, Decorations, DefaultStyles, PendingStylesDecor, PreeditDecor,
+    };
+    use crate::runtime::ViewStates;
     use crate::types::BoxConstraints;
     use std::cell::RefCell;
 
@@ -764,10 +758,10 @@ mod tests {
         let doc = &state.doc;
         let para = doc.node(p).unwrap();
         let settings = doc.settings();
-        let default_styles = crate::model::DefaultStyles::default();
+        let default_styles = DefaultStyles::default();
         let decorations = Decorations::default();
         let cache = RefCell::new(LayoutCache::new());
-        let view_states = crate::runtime::ViewStates::default();
+        let view_states = ViewStates::default();
         let ctx = LayoutContext::new(
             &para,
             &settings,
@@ -879,9 +873,9 @@ mod tests {
         let doc = &state.doc;
         let para = doc.node(p1).unwrap();
         let settings = doc.settings();
-        let default_styles = crate::model::DefaultStyles::default();
+        let default_styles = DefaultStyles::default();
         let cache = RefCell::new(LayoutCache::new());
-        let view_states = crate::runtime::ViewStates::default();
+        let view_states = ViewStates::default();
         let ctx = LayoutContext::new(
             &para,
             &settings,
@@ -927,9 +921,9 @@ mod tests {
         let doc = &state.doc;
         let para = doc.node(p).unwrap();
         let settings = doc.settings();
-        let default_styles = crate::model::DefaultStyles::default();
+        let default_styles = DefaultStyles::default();
         let cache = RefCell::new(LayoutCache::new());
-        let view_states = crate::runtime::ViewStates::default();
+        let view_states = ViewStates::default();
         let ctx = LayoutContext::new(
             &para,
             &settings,
@@ -975,9 +969,9 @@ mod tests {
         let doc = &state.doc;
         let para = doc.node(p).unwrap();
         let settings = doc.settings();
-        let default_styles = crate::model::DefaultStyles::default();
+        let default_styles = DefaultStyles::default();
         let cache = RefCell::new(LayoutCache::new());
-        let view_states = crate::runtime::ViewStates::default();
+        let view_states = ViewStates::default();
         let ctx = LayoutContext::new(
             &para,
             &settings,

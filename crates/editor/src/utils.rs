@@ -1,6 +1,12 @@
 #[cfg(feature = "wasm")]
 extern crate web_sys;
 
+use crate::icu_data::get_icu_provider;
+use crate::types::Affinity;
+use icu_provider::buf::AsDeserializingBufferProvider;
+use icu_segmenter::WordSegmenter;
+use icu_segmenter::options::WordBreakOptions;
+
 #[allow(unused_macros)]
 macro_rules! log {
     ( $( $t:tt )* ) => {
@@ -72,11 +78,7 @@ pub fn char_to_byte_offset(text: &str, char_offset: usize) -> usize {
 }
 
 pub fn compute_word_boundaries(text: &str) -> Vec<usize> {
-    use icu_provider::buf::AsDeserializingBufferProvider;
-    use icu_segmenter::WordSegmenter;
-    use icu_segmenter::options::WordBreakOptions;
-
-    let provider = crate::icu_data::get_icu_provider();
+    let provider = get_icu_provider();
     let deserializing_provider = provider.as_deserializing();
     let segmenter = WordSegmenter::try_new_dictionary_unstable(
         &deserializing_provider,
@@ -95,7 +97,7 @@ pub fn compute_sentence_boundaries(text: &str) -> Vec<usize> {
     use icu_provider::buf::AsDeserializingBufferProvider;
     use icu_segmenter::SentenceSegmenter;
 
-    let provider = crate::icu_data::get_icu_provider();
+    let provider = get_icu_provider();
     let deserializing_provider = provider.as_deserializing();
     let segmenter =
         SentenceSegmenter::try_new_unstable(&deserializing_provider, Default::default())
@@ -112,7 +114,7 @@ pub fn compute_grapheme_boundaries(text: &str) -> Vec<usize> {
     use icu_provider::buf::AsDeserializingBufferProvider;
     use icu_segmenter::GraphemeClusterSegmenter;
 
-    let provider = crate::icu_data::get_icu_provider();
+    let provider = get_icu_provider();
     let deserializing_provider = provider.as_deserializing();
     let segmenter = GraphemeClusterSegmenter::try_new_unstable(&deserializing_provider)
         .expect("Failed to create GraphemeClusterSegmenter");
@@ -151,12 +153,12 @@ pub fn find_next_grapheme_boundary(text: &str, offset: usize) -> usize {
 pub fn resolve_affinity_boundary(
     left_is_hard_break: bool,
     right_is_hard_break: bool,
-    default_affinity: crate::types::Affinity,
-) -> crate::types::Affinity {
+    default_affinity: Affinity,
+) -> Affinity {
     match (left_is_hard_break, right_is_hard_break) {
-        (true, true) => crate::types::Affinity::Downstream,
-        (true, false) => crate::types::Affinity::Downstream,
-        (false, true) => crate::types::Affinity::Upstream,
+        (true, true) => Affinity::Downstream,
+        (true, false) => Affinity::Downstream,
+        (false, true) => Affinity::Upstream,
         (false, false) => default_affinity,
     }
 }
@@ -164,18 +166,18 @@ pub fn resolve_affinity_boundary(
 pub fn resolve_explicit_break_line_end(
     current_offset: usize,
     end_offset: usize,
-    current_affinity: crate::types::Affinity,
-) -> Option<(usize, crate::types::Affinity)> {
+    current_affinity: Affinity,
+) -> Option<(usize, Affinity)> {
     if end_offset == 0 {
         return None;
     }
 
     let break_offset = end_offset.saturating_sub(1);
 
-    if current_offset == break_offset && current_affinity == crate::types::Affinity::Upstream {
+    if current_offset == break_offset && current_affinity == Affinity::Upstream {
         Some((current_offset, current_affinity))
     } else {
-        Some((break_offset, crate::types::Affinity::Upstream))
+        Some((break_offset, Affinity::Upstream))
     }
 }
 

@@ -1,7 +1,5 @@
-use crate::layout::elements::{SplitEdges, WrapperPadding};
-use crate::model::NodeId;
-use crate::model::TableAlign;
-use crate::model::TableBorderStyle;
+use crate::layout::elements::{SplitEdges, Wrapper, WrapperPadding};
+use crate::model::{NodeId, TABLE_BORDER_WIDTH, TableAlign, TableBorderStyle};
 use crate::types::Size;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -55,11 +53,11 @@ impl TableBorderElement {
     }
 }
 
-impl crate::layout::elements::Wrapper for TableBorderElement {
+impl Wrapper for TableBorderElement {
     fn padding(&self) -> WrapperPadding {
         WrapperPadding {
-            top: super::super::super::model::TABLE_BORDER_WIDTH,
-            bottom: super::super::super::model::TABLE_BORDER_WIDTH,
+            top: TABLE_BORDER_WIDTH,
+            bottom: TABLE_BORDER_WIDTH,
             left: 0.0,
             right: 0.0,
         }

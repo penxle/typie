@@ -103,8 +103,11 @@ impl Transaction {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use crate::layout::{Element, LayoutNode};
     use crate::model::NodeId;
-    use crate::runtime::Effect;
+    use crate::runtime::Message;
+    use crate::runtime::slate::DIRTY_RENDER_REQUIRED;
     use crate::types::Affinity;
 
     #[test]
@@ -409,9 +412,6 @@ mod tests {
 
     #[test]
     fn test_paste_single_line_rendering() {
-        use crate::runtime::Message;
-        use crate::runtime::slate::DIRTY_RENDER_REQUIRED;
-
         let mut p = id!();
         let mut runtime = runtime! {
             viewport { 800, 600, 1.0 }
@@ -436,8 +436,6 @@ mod tests {
 
         let page = &runtime.pages()[0];
         let root = &page.root;
-
-        use crate::layout::{Element, LayoutNode};
 
         fn find_text_in_layout(node: &LayoutNode, target: &str) -> bool {
             if let Some(Element::Line(line)) = &node.element {
@@ -701,33 +699,24 @@ mod tests {
             tr.paste_fragment(fragment, None).unwrap();
         });
 
-        let root = actual.doc.node(crate::model::NodeId::ROOT).expect("root");
+        let root = actual.doc.node(NodeId::ROOT).expect("root");
         let children: Vec<_> = root.children().collect();
         assert_eq!(children.len(), 3, "should have 3 children");
-        assert!(matches!(
-            children[0].node(),
-            crate::model::Node::Paragraph(_)
-        ));
-        assert!(matches!(
-            children[1].node(),
-            crate::model::Node::HorizontalRule(_)
-        ));
-        assert!(matches!(
-            children[2].node(),
-            crate::model::Node::Paragraph(_)
-        ));
+        assert!(matches!(children[0].node(), Node::Paragraph(_)));
+        assert!(matches!(children[1].node(), Node::HorizontalRule(_)));
+        assert!(matches!(children[2].node(), Node::Paragraph(_)));
 
         let first_text = children[0]
             .first_child()
             .expect("first para should have child");
-        if let crate::model::Node::Text(t) = first_text.node() {
+        if let Node::Text(t) = first_text.node() {
             assert_eq!(t.text.to_string(), "A");
         }
 
         let last_text = children[2]
             .first_child()
             .expect("last para should have child");
-        if let crate::model::Node::Text(t) = last_text.node() {
+        if let Node::Text(t) = last_text.node() {
             assert_eq!(t.text.to_string(), "B");
         }
     }
@@ -778,8 +767,6 @@ mod tests {
 
     #[test]
     fn paste_text_and_hr_selection() {
-        use crate::model::NodeId;
-
         let mut n1 = id!();
 
         let initial = state! {
@@ -884,7 +871,7 @@ mod tests {
 
         let fragment = initial.selection.extract_fragment(&initial.doc).unwrap();
         let json = fragment.to_json().unwrap();
-        let restored_fragment = crate::model::Fragment::from_json(&json).unwrap();
+        let restored_fragment = Fragment::from_json(&json).unwrap();
 
         let paste_target = state! {
             doc {
@@ -932,13 +919,13 @@ mod tests {
 
         let has_blockquote = fragment
             .iter()
-            .any(|(_, n)| matches!(n.data(), crate::model::Node::Blockquote(_)));
+            .any(|(_, n)| matches!(n.data(), Node::Blockquote(_)));
         assert!(has_blockquote, "Fragment should contain blockquote");
 
         let top_levels = fragment.top_level_node_ids();
         let first_top = fragment.node(top_levels[0]).unwrap();
         assert!(
-            matches!(first_top.data(), crate::model::Node::Blockquote(_)),
+            matches!(first_top.data(), Node::Blockquote(_)),
             "First top-level should be Blockquote, got {:?}",
             first_top.data().as_type()
         );
@@ -1183,8 +1170,6 @@ mod tests {
 
     #[test]
     fn select_all_then_paste_text() {
-        use crate::runtime::Message;
-
         let mut p1 = id!();
         let mut p2 = id!();
 
@@ -1204,20 +1189,20 @@ mod tests {
         });
 
         let doc = &rt.state().doc;
-        let root = doc.node(crate::model::NodeId::ROOT).unwrap();
+        let root = doc.node(NodeId::ROOT).unwrap();
         let children: Vec<_> = root.children().collect();
         assert_eq!(children.len(), 1, "should have exactly one paragraph");
 
         let para = &children[0];
         assert!(
-            matches!(para.node(), crate::model::Node::Paragraph(_)),
+            matches!(para.node(), Node::Paragraph(_)),
             "child should be a paragraph"
         );
 
         let text_child = para.first_child();
         assert!(text_child.is_some(), "paragraph should have a text child");
 
-        if let crate::model::Node::Text(t) = text_child.unwrap().node() {
+        if let Node::Text(t) = text_child.unwrap().node() {
             assert_eq!(t.text.to_string(), "New text");
         } else {
             panic!("Expected text node");
@@ -1226,8 +1211,6 @@ mod tests {
 
     #[test]
     fn select_all_then_paste_multiline_text() {
-        use crate::runtime::Message;
-
         let mut p = id!();
 
         let mut rt = runtime! {
@@ -1245,7 +1228,7 @@ mod tests {
         });
 
         let doc = &rt.state().doc;
-        let root = doc.node(crate::model::NodeId::ROOT).unwrap();
+        let root = doc.node(NodeId::ROOT).unwrap();
         let children: Vec<_> = root.children().collect();
         assert_eq!(children.len(), 3);
 
@@ -1253,7 +1236,7 @@ mod tests {
             .iter()
             .filter_map(|child| {
                 child.first_child().and_then(|tc| {
-                    if let crate::model::Node::Text(t) = tc.node() {
+                    if let Node::Text(t) = tc.node() {
                         Some(t.text.to_string())
                     } else {
                         None

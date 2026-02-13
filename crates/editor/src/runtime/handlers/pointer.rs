@@ -1,7 +1,7 @@
-use super::super::{Effect, Runtime};
 use crate::layout::cursor::{Cursor, NavigationContext};
 use crate::runtime::message::{Modifier, PointerButton};
 use crate::runtime::pointer::{PointerMode, PressContext};
+use crate::runtime::{Effect, Runtime};
 use crate::state::position_helpers::compare_positions;
 use crate::state::{Position, Selection};
 

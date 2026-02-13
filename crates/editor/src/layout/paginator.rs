@@ -491,9 +491,12 @@ impl Paginator {
 
 #[cfg(test)]
 mod tests {
-    use crate::layout::elements::{LineElement, LineMetric};
-    use crate::layout::{Element, LayoutNode, Paginator, PositionedNode, SplitEdges};
+    use crate::layout::elements::{FoldContentElement, LineElement, LineMetric};
+    use crate::layout::{
+        Element, LayoutNode, PageBreakPolicy, Paginator, PositionedNode, SplitEdges,
+    };
     use crate::model::{LayoutMode, NodeId};
+    use crate::runtime::Message;
     use crate::types::{Point, Size};
     use std::rc::Rc;
 
@@ -928,7 +931,7 @@ mod tests {
             size: Size::new(80.0, 150.0),
             element: None,
             children: None,
-            page_break_policy: crate::layout::PageBreakPolicy::Avoid,
+            page_break_policy: PageBreakPolicy::Avoid,
             render_hints: Default::default(),
             scope_id: None,
         });
@@ -1028,13 +1031,11 @@ mod tests {
 
         let wrapper_node = Rc::new(LayoutNode {
             size: Size::new(80.0, 170.0), // Content + Padding
-            element: Some(Element::FoldContent(
-                crate::layout::elements::FoldContentElement::new(
-                    Size::new(80.0, 170.0),
-                    SplitEdges::default(),
-                    crate::model::NodeId::new(),
-                ),
-            )),
+            element: Some(Element::FoldContent(FoldContentElement::new(
+                Size::new(80.0, 170.0),
+                SplitEdges::default(),
+                NodeId::new(),
+            ))),
             children: Some(vec![PositionedNode {
                 position: Point::new(10.0, 10.0), // Padding
                 node: content_node,
@@ -1110,7 +1111,7 @@ mod tests {
             size: Size::new(80.0, 50.0),
             element: None,
             children: None,
-            page_break_policy: crate::layout::PageBreakPolicy::Avoid,
+            page_break_policy: PageBreakPolicy::Avoid,
             render_hints: Default::default(),
             scope_id: None,
         });
@@ -1307,8 +1308,8 @@ mod tests {
             selection { (p, 0) }
         };
 
-        runtime.update(crate::runtime::Message::SetLayoutMode {
-            mode: crate::model::LayoutMode::Paginated {
+        runtime.update(Message::SetLayoutMode {
+            mode: LayoutMode::Paginated {
                 page_width: 200.0,
                 page_height: 125.0,
                 page_margin_top: 0.0,
@@ -1424,8 +1425,6 @@ mod tests {
 
     #[test]
     fn test_paginator_replicates_parent_element() {
-        use crate::layout::elements::FoldContentElement;
-
         let page_height = 100.0;
         let page_margin = 10.0;
         let layout_mode = LayoutMode::Paginated {
@@ -1440,7 +1439,7 @@ mod tests {
         let parent_element = Element::FoldContent(FoldContentElement::new(
             Size::new(80.0, 150.0),
             SplitEdges::default(),
-            crate::model::NodeId::new(),
+            NodeId::new(),
         ));
 
         let node1 = Rc::new(LayoutNode {
@@ -1553,7 +1552,7 @@ mod tests {
             selection { (title_id, 0) }
         };
 
-        runtime.update(crate::runtime::Message::ToggleFoldExpansion {
+        runtime.update(Message::ToggleFoldExpansion {
             node_id: fold_id.to_string(),
         });
 
@@ -1614,10 +1613,10 @@ mod tests {
         };
 
         // Expand folds
-        runtime.update(crate::runtime::Message::ToggleFoldExpansion {
+        runtime.update(Message::ToggleFoldExpansion {
             node_id: outer_fold_id.to_string(),
         });
-        runtime.update(crate::runtime::Message::ToggleFoldExpansion {
+        runtime.update(Message::ToggleFoldExpansion {
             node_id: inner_fold_id.to_string(),
         });
 
@@ -1703,7 +1702,7 @@ mod tests {
 
     fn find_element<F>(node: &LayoutNode, predicate: F) -> bool
     where
-        F: Fn(&crate::layout::Element) -> bool + Copy,
+        F: Fn(&Element) -> bool + Copy,
     {
         if let Some(e) = &node.element {
             if predicate(e) {

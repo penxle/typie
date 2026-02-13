@@ -1,5 +1,6 @@
-use super::super::{Effect, Runtime};
 use crate::layout::cursor::{Cursor, NavigationContext};
+use crate::model::NodeId;
+use crate::runtime::{Effect, Runtime};
 use crate::state::Selection;
 
 impl Runtime {
@@ -143,8 +144,6 @@ impl Runtime {
     }
 
     pub(crate) fn handle_delete_node(&mut self, node_id: String) -> Vec<Effect> {
-        use crate::model::NodeId;
-
         let Some(node_id) = NodeId::from_string(&node_id) else {
             return vec![];
         };
@@ -169,10 +168,9 @@ impl Runtime {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        model::CalloutVariant,
-        runtime::{Effect, Message},
-    };
+    use super::*;
+    use crate::model::CalloutVariant;
+    use crate::runtime::Message;
 
     #[test]
     fn test_delete_word_backward_after_horizontal_rule_does_nothing() {
@@ -464,8 +462,6 @@ mod tests {
 
     #[test]
     fn test_delete_selected_image_adjusts_selection() {
-        use crate::model::NodeId;
-
         let mut p1 = id!();
         let mut img = id!();
         let mut p2 = id!();

@@ -1,10 +1,16 @@
 use crate::font::{add_font_base, add_font_chunk, set_fallback_fonts};
-use crate::model::{Doc, DocExportMode, LayoutMode, Node, NodeId, ParagraphNode};
+use crate::global::{clear_text_replacement_rules, set_text_replacement_rules};
+use crate::icu_data::{get_general_category_map, load_icu_data};
+use crate::layout::query::is_selection_hit;
+use crate::model::{Doc, DocExportMode, LayoutMode, Node, NodeId, ParagraphNode, TextMapping};
+use crate::runtime::search::{SearchQuery, perform_search};
+use crate::runtime::slate::{Slate, get_slate_offsets};
 use crate::runtime::text_replacement::RawTextReplacementRule;
 use crate::runtime::tracked_items::RawTrackedItem;
-use crate::runtime::{Runtime, State};
+use crate::runtime::{Message, Runtime, State};
 use crate::state::{Position, Selection};
 use crate::types::Affinity;
+use icu_properties::props::GeneralCategory;
 use std::backtrace::Backtrace;
 use std::cell::RefCell;
 use std::ffi::{CStr, CString, c_char};
@@ -18,6 +24,8 @@ use jni::JNIEnv;
 use jni::objects::{JByteBuffer, JClass};
 #[cfg(target_os = "android")]
 use jni::sys::jlong;
+#[cfg(target_arch = "aarch64")]
+use std::arch::aarch64::*;
 
 static PANIC_HOOK_INSTALLED: AtomicBool = AtomicBool::new(false);
 
@@ -272,7 +280,7 @@ pub extern "C" fn editor_application_load_icu_data(
     ffi!(
         {
             let data = unsafe { slice_from_raw(data, len, "ICU data")? };
-            crate::icu_data::load_icu_data(data)
+            load_icu_data(data)
         },
         -1
     )
@@ -344,7 +352,7 @@ pub extern "C" fn editor_application_set_text_replacement_rules(
             let json = parse_cstr(rules_json, "Rules JSON")?;
             let rules: Vec<RawTextReplacementRule> =
                 serde_json::from_str(json).map_err(|e| format!("Failed to parse JSON: {e}"))?;
-            crate::global::set_text_replacement_rules(rules);
+            set_text_replacement_rules(rules);
             Ok(())
         },
         -1
@@ -357,7 +365,7 @@ pub extern "C" fn editor_application_clear_text_replacement_rules(
 ) -> i32 {
     ffi!(
         {
-            crate::global::clear_text_replacement_rules();
+            clear_text_replacement_rules();
             Ok(())
         },
         -1
@@ -448,7 +456,7 @@ pub extern "C" fn editor_dispatch(editor: *mut EditorHandle, message_json: *cons
             }
 
             let json = parse_cstr(message_json, "Message JSON")?;
-            let message: crate::runtime::Message =
+            let message: Message =
                 serde_json::from_str(json).map_err(|e| format!("Failed to parse message: {e}"))?;
 
             let editor = unsafe { &mut *(editor as *mut EditorInner) };
@@ -486,7 +494,7 @@ pub extern "C" fn editor_get_slate_ptr(editor: *mut EditorHandle) -> *const u8 {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn editor_get_slate_len(_editor: *mut EditorHandle) -> u32 {
-    std::mem::size_of::<crate::runtime::slate::Slate>() as u32
+    std::mem::size_of::<Slate>() as u32
 }
 
 #[unsafe(no_mangle)]
@@ -513,7 +521,7 @@ pub extern "C" fn editor_get_slab_len(editor: *mut EditorHandle) -> u32 {
 pub extern "C" fn editor_get_slate_offsets() -> *mut c_char {
     install_panic_hook();
     match catch_unwind(AssertUnwindSafe(|| {
-        let offsets = crate::runtime::slate::get_slate_offsets();
+        let offsets = get_slate_offsets();
         let json = serde_json::to_string(&offsets).unwrap_or_default();
         CString::new(json)
             .ok()
@@ -699,8 +707,6 @@ fn rgba_to_bgra_fast(data: &mut [u8]) {
 #[cfg(target_arch = "aarch64")]
 #[inline]
 fn rgba_to_bgra_neon(data: &mut [u8]) {
-    use std::arch::aarch64::*;
-
     let len = data.len();
     let mut i = 0;
 
@@ -747,13 +753,7 @@ pub extern "C" fn editor_is_selection_hit(
 
             let editor = unsafe { &*(editor as *const EditorInner) };
             Ok(if let Some(page) = editor.runtime.pages().get(page_idx) {
-                if crate::layout::query::is_selection_hit(
-                    editor.runtime.doc(),
-                    page,
-                    editor.runtime.selection(),
-                    x,
-                    y,
-                ) {
+                if is_selection_hit(editor.runtime.doc(), page, editor.runtime.selection(), x, y) {
                     1
                 } else {
                     0
@@ -895,9 +895,7 @@ pub extern "C" fn editor_get_character_counts(
 }
 
 fn count_all(text: &str) -> (u32, u32, u32) {
-    use icu_properties::props::GeneralCategory;
-
-    let gc_data = crate::icu_data::get_general_category_map();
+    let gc_data = get_general_category_map();
     let gc_map = gc_data.as_borrowed();
 
     let mut with_ws: u32 = 0;
@@ -1134,7 +1132,7 @@ pub extern "C" fn editor_get_text_with_mappings(editor: *mut EditorHandle) -> *m
             #[serde(rename_all = "camelCase")]
             struct TextWithMappingsResult {
                 text: String,
-                mappings: Vec<crate::model::TextMapping>,
+                mappings: Vec<TextMapping>,
             }
 
             let (text, mappings) = editor.runtime.doc().to_text_with_mappings();
@@ -1188,12 +1186,8 @@ pub extern "C" fn editor_perform_search(
             let query_str = parse_cstr(query, "query")?;
 
             let editor = unsafe { &*(editor as *const EditorInner) };
-            let search_query = crate::runtime::search::SearchQuery::new(
-                query_str.to_string(),
-                match_whole_word != 0,
-            );
-            let matches =
-                crate::runtime::search::perform_search(editor.runtime.doc(), &search_query);
+            let search_query = SearchQuery::new(query_str.to_string(), match_whole_word != 0);
+            let matches = perform_search(editor.runtime.doc(), &search_query);
 
             #[derive(serde::Serialize)]
             #[serde(rename_all = "camelCase")]

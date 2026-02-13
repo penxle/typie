@@ -18,9 +18,9 @@ mod text;
 
 pub use text::DeleteResult;
 
-use crate::model::{Doc, Node, NodeId, NodeRef, ParagraphNode};
+use crate::model::*;
 use crate::runtime::{Effect, State};
-use crate::schema::Schema;
+use crate::schema::{RepairAction, Schema};
 use crate::state::position_helpers::find_child_at_offset;
 use crate::state::{BlockTraverser, Position, Selection};
 use crate::types::Affinity;
@@ -258,8 +258,6 @@ impl Transaction {
     }
 
     fn repair_node_children(&mut self, node_id: NodeId, schema: &Schema) -> Result<bool> {
-        use crate::schema::RepairAction;
-
         let node_type = self
             .doc()
             .get_node_type(node_id)
@@ -299,9 +297,7 @@ impl Transaction {
         Ok(true)
     }
 
-    fn create_default_node(&self, node_type: crate::model::NodeType) -> Result<Node> {
-        use crate::model::*;
-
+    fn create_default_node(&self, node_type: NodeType) -> Result<Node> {
         Ok(match node_type {
             NodeType::Paragraph => Node::Paragraph(ParagraphNode::default()),
             NodeType::Text => Node::Text(TextNode::default()),
@@ -353,8 +349,7 @@ impl Transaction {
 
 #[cfg(test)]
 mod tests {
-    use crate::model::NodeId;
-    use crate::runtime::Effect;
+    use super::*;
 
     #[test]
     fn ensure_no_grandchild_page_break_removes_nested_page_breaks() {

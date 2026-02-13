@@ -15,10 +15,7 @@ impl Runtime {
         })
     }
 
-    pub(crate) fn handle_toggle_blockquote(
-        &mut self,
-        variant: crate::model::BlockquoteVariant,
-    ) -> Vec<Effect> {
+    pub(crate) fn handle_toggle_blockquote(&mut self, variant: BlockquoteVariant) -> Vec<Effect> {
         self.transact(|tr| tr.toggle_blockquote(variant))
     }
 
@@ -52,7 +49,7 @@ impl Runtime {
 
     pub(crate) fn handle_insert_horizontal_rule(
         &mut self,
-        variant: crate::model::HorizontalRuleVariant,
+        variant: HorizontalRuleVariant,
     ) -> Vec<Effect> {
         self.transact(|tr| tr.insert_horizontal_rule(variant))
     }
@@ -87,10 +84,7 @@ impl Runtime {
         })
     }
 
-    pub(crate) fn handle_add_annotation(
-        &mut self,
-        annotation: crate::model::Annotation,
-    ) -> Vec<Effect> {
+    pub(crate) fn handle_add_annotation(&mut self, annotation: Annotation) -> Vec<Effect> {
         self.transact(|tr| {
             let selection = tr.selection().clone();
             if selection.is_collapsed() {
@@ -101,17 +95,14 @@ impl Runtime {
         })
     }
 
-    pub(crate) fn handle_update_annotation(
-        &mut self,
-        annotation: crate::model::Annotation,
-    ) -> Vec<Effect> {
+    pub(crate) fn handle_update_annotation(&mut self, annotation: Annotation) -> Vec<Effect> {
         let ann_type = annotation.as_type();
         self.transact(|tr| tr.update_annotation(ann_type, annotation))
     }
 
     pub(crate) fn handle_remove_annotation(
         &mut self,
-        annotation_type: crate::model::AnnotationType,
+        annotation_type: AnnotationType,
     ) -> Vec<Effect> {
         self.transact(|tr| tr.remove_annotation(annotation_type))
     }
@@ -127,8 +118,9 @@ impl Runtime {
 
 #[cfg(test)]
 mod tests {
-    use crate::model::*;
+    use super::*;
     use crate::runtime::Message;
+    use crate::test_utils::ScopedFontRegistration;
 
     #[test]
     fn test_clear_formatting_collapsed_clears_pending_styles() {
@@ -139,7 +131,7 @@ mod tests {
             DefaultStyles::default().font_family().to_string(),
             vec![400, 700],
         );
-        let _guard = crate::test_utils::ScopedFontRegistration::new(fonts);
+        let _guard = ScopedFontRegistration::new(fonts);
 
         let mut runtime = runtime! {
             viewport { 800, 600, 1.0 }
@@ -284,7 +276,7 @@ mod tests {
 
         let mut fonts = std::collections::HashMap::new();
         fonts.insert("Pretendard".to_string(), vec![400, 700]);
-        let _guard = crate::test_utils::ScopedFontRegistration::new(fonts);
+        let _guard = ScopedFontRegistration::new(fonts);
 
         let mut runtime = runtime! {
             viewport { 800, 600, 1.0 }

@@ -1,8 +1,11 @@
-use crate::model::{Node, NodeId, ParagraphNode, TableCellNode, TableNode, TableRowNode};
+use crate::model::{
+    DEFAULT_CELL_WIDTH, Node, NodeId, NodeType, ParagraphNode, TableAlign, TableBorderStyle,
+    TableCellNode, TableNode, TableRowNode,
+};
 use crate::runtime::Effect;
 use crate::state::selection_helpers::StructureSelectionInfo;
 use crate::state::table_helpers::find_table_cell;
-use crate::state::{Position, Selection, leaf_block_start};
+use crate::state::{Position, Selection, leaf_block_end, leaf_block_start};
 use crate::transaction::Transaction;
 use crate::types::Affinity;
 use anyhow::{Context, Result};
@@ -23,7 +26,7 @@ impl Transaction {
         let parent_id = parent.node_id();
         let parent_spec = parent.spec();
 
-        let table_type = crate::model::NodeType::Table;
+        let table_type = NodeType::Table;
         if !parent_spec.content.matches(table_type) {
             return Ok(None);
         }
@@ -203,7 +206,6 @@ impl Transaction {
         }
 
         if let Some(cell_id) = first_row_new_cell_id {
-            use crate::model::DEFAULT_CELL_WIDTH;
             let cell_mut = self.node_mut(cell_id).context("Cell not found")?;
             cell_mut.as_mut().update(|node| {
                 if let Node::TableCell(cell_node) = node {
@@ -343,8 +345,6 @@ impl Transaction {
     }
 
     pub fn set_table_border_style(&mut self, table_id: NodeId, style: &str) -> Result<bool> {
-        use crate::model::TableBorderStyle;
-
         let border_style = match style {
             "solid" => TableBorderStyle::Solid,
             "dashed" => TableBorderStyle::Dashed,
@@ -367,11 +367,7 @@ impl Transaction {
         Ok(true)
     }
 
-    pub fn set_table_align(
-        &mut self,
-        table_id: NodeId,
-        align: crate::model::TableAlign,
-    ) -> Result<bool> {
+    pub fn set_table_align(&mut self, table_id: NodeId, align: TableAlign) -> Result<bool> {
         let table_mut = self.node_mut(table_id).context("Table not found")?;
 
         table_mut.as_mut().update(|node| {
@@ -387,8 +383,6 @@ impl Transaction {
     }
 
     pub fn select_table_row(&mut self, table_id: NodeId, row: usize) -> Result<bool> {
-        use crate::state::{leaf_block_end, leaf_block_start};
-
         let table_node = self.node(table_id).context("Table not found")?;
 
         let row_node = table_node.children().nth(row);
@@ -405,8 +399,6 @@ impl Transaction {
     }
 
     pub fn select_table_column(&mut self, table_id: NodeId, col: usize) -> Result<bool> {
-        use crate::state::{leaf_block_end, leaf_block_start};
-
         let table_node = self.node(table_id).context("Table not found")?;
 
         let first_row = table_node.first_child();
@@ -567,7 +559,8 @@ impl Transaction {
 
 #[cfg(test)]
 mod tests {
-    use crate::{model::NodeId, runtime::Message};
+    use super::*;
+    use crate::runtime::Message;
 
     #[test]
     fn test_delete_cell_selection_rectangular() {
@@ -598,7 +591,7 @@ mod tests {
         let root = doc.node(NodeId::ROOT).unwrap();
         let table = root
             .children()
-            .find(|n| n.node_type() == crate::model::NodeType::Table)
+            .find(|n| n.node_type() == NodeType::Table)
             .unwrap();
         let row = table.first_child().unwrap();
         let cell1 = row.first_child().unwrap();
@@ -670,7 +663,6 @@ mod tests {
 
     #[test]
     fn test_delete_mixed_table_selection() {
-        use crate::model::{Node, TableBorderStyle};
         let mut n2 = id!();
         let mut n3 = id!();
 
