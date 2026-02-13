@@ -156,6 +156,21 @@ class InputController {
       } else {
         unawaited(EditorClipboard().getPastePayload().then(dispatch));
       }
+    } else if (action == 'toggleItalic') {
+      dispatch({
+        'type': 'toggleStyle',
+        'style': {'type': 'italic'},
+      });
+    } else if (action == 'toggleUnderline') {
+      dispatch({
+        'type': 'toggleStyle',
+        'style': {'type': 'underline'},
+      });
+    } else if (action == 'toggleStrikethrough') {
+      dispatch({
+        'type': 'toggleStyle',
+        'style': {'type': 'strikethrough'},
+      });
     } else {
       dispatch({'type': action});
     }

@@ -81,7 +81,6 @@ pub(crate) fn register_font(
         .map(|(id, _)| id)
 }
 
-#[allow(unused)]
 pub fn add_font_base(family: &str, weight: u16, data: &[u8]) {
     let decompressed = decode_tpft(data);
     let split_offset = u32::from_be_bytes(decompressed[0..4].try_into().unwrap()) as usize;
@@ -121,7 +120,6 @@ pub fn add_font_base(family: &str, weight: u16, data: &[u8]) {
     });
 }
 
-#[allow(unused)]
 pub fn add_font_chunk(family: &str, weight: u16, data: &[u8]) {
     let chunk_data = decode_tpft(data);
     let num_entries = u32::from_be_bytes(chunk_data[0..4].try_into().unwrap()) as usize;
@@ -153,7 +151,6 @@ pub fn add_font_chunk(family: &str, weight: u16, data: &[u8]) {
     });
 }
 
-#[allow(unused)]
 pub fn set_fallback_fonts(names: &[&str]) {
     GLOBALS.with(|globals| {
         let globals = globals.borrow();
@@ -171,7 +168,6 @@ pub fn set_fallback_fonts(names: &[&str]) {
     });
 }
 
-#[allow(unused)]
 pub fn get_available_fonts() -> HashMap<String, Vec<u16>> {
     GLOBALS.with(|globals| {
         let globals = globals.borrow();

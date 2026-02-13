@@ -29,8 +29,8 @@ class NativeEditorToolbarScope extends InheritedWidget {
     required this.isEditorFocused,
     required this.bottomToolbarMode,
     required this.secondaryToolbarMode,
-    required this.uniformMarks,
-    required this.mixedMarks,
+    required this.uniformStyles,
+    required this.mixedStyles,
     required this.selectionStats,
     required this.externalElements,
     required this.uploadManager,
@@ -51,8 +51,8 @@ class NativeEditorToolbarScope extends InheritedWidget {
   final ValueNotifier<BottomToolbarMode> bottomToolbarMode;
   final ValueNotifier<SecondaryToolbarMode> secondaryToolbarMode;
 
-  final ValueNotifier<List<Map<String, dynamic>>> uniformMarks;
-  final ValueNotifier<List<String>> mixedMarks;
+  final ValueNotifier<List<Map<String, dynamic>>> uniformStyles;
+  final ValueNotifier<List<String>> mixedStyles;
   final ValueNotifier<Map<String, dynamic>> selectionStats;
 
   final ValueNotifier<List<ExternalElement>> externalElements;

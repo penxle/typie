@@ -10,7 +10,7 @@ pub enum Effect {
         node_id: NodeId,
     }, // 노드와 자손 invalidate
     SelectionChanged,
-    PendingMarksChanged,
+    PendingStylesChanged,
     SettingsChanged,
     LayoutChanged,
     PreeditChanged {

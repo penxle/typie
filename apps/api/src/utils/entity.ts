@@ -93,6 +93,18 @@ export const makeLoroDoc = () => {
   const layoutMode = settings.setContainer('layout_mode', new LoroMap());
   layoutMode.set('type', 'continuous');
   layoutMode.set('max_width', 600);
+
+  const styles = doc.getMap('styles');
+  styles.set('font_family', 'Pretendard');
+  styles.set('font_size', 12);
+  styles.set('font_weight', 400);
+  styles.set('text_color', 'black');
+  styles.set('background_color', 'none');
+  styles.set('letter_spacing', 0);
+  styles.set('italic', false);
+  styles.set('strikethrough', false);
+  styles.set('underline', false);
+
   const paragraphId = faker.string.uuid().replaceAll('-', '');
 
   const nodes = doc.getMap('nodes');
@@ -108,6 +120,8 @@ export const makeLoroDoc = () => {
   paragraphNode.set('line_height', 1.6);
   paragraphNode.set('parent', ROOT_ID);
   paragraphNode.setContainer('children', new LoroList());
+
+  doc.getMap('annotations');
 
   return doc;
 };
@@ -170,18 +184,45 @@ export const calculateBlobSizeFromAssetIds = async (imageIds: string[], fileIds:
   return totalSize;
 };
 
-export const garbageCollectLoroDoc = (doc: LoroDoc): number => {
+export const garbageCollectLoroDoc = (doc: LoroDoc): { deletedNodes: number; deletedAnnotations: number } => {
   const nodes = doc.getMap('nodes');
-  const reachable = collectReachableNodeIds(nodes.toJSON() as Record<string, { children?: string[] }>);
+  const allNodes = nodes.toJSON() as Record<string, { children?: string[]; text?: unknown }>;
+  const reachable = collectReachableNodeIds(allNodes as Record<string, { children?: string[] }>);
 
-  let deleted = 0;
+  let deletedNodes = 0;
   for (const key of nodes.keys()) {
     if (!reachable.has(key)) {
       nodes.delete(key);
-      deleted++;
+      deletedNodes++;
     }
   }
-  return deleted;
+
+  const referencedAnnotationIds = new Set<string>();
+  for (const nodeId of reachable) {
+    const node = allNodes[nodeId];
+    if (!node?.text) continue;
+    const textJson = node.text as { insert: string; attributes?: Record<string, unknown> }[];
+    if (!Array.isArray(textJson)) continue;
+    for (const segment of textJson) {
+      if (!segment.attributes) continue;
+      for (const key of Object.keys(segment.attributes)) {
+        if (key.startsWith('annotation:')) {
+          referencedAnnotationIds.add(key.slice('annotation:'.length));
+        }
+      }
+    }
+  }
+
+  const annotations = doc.getMap('annotations');
+  let deletedAnnotations = 0;
+  for (const key of annotations.keys()) {
+    if (!referencedAnnotationIds.has(key)) {
+      annotations.delete(key);
+      deletedAnnotations++;
+    }
+  }
+
+  return { deletedNodes, deletedAnnotations };
 };
 
 export const getLoroDocCharacterCount = (text: string) => {

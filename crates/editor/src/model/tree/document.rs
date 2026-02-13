@@ -1,13 +1,14 @@
 use crate::model::tree::{BlockTextIterator, DocInner, NodeRef, TextSegmentIterator};
 use crate::model::*;
-use crate::schema::{Expand, Schema};
+use crate::schema::Schema;
 use anyhow::{Context, Result};
-use loro::{ExpandType, ExportMode, Frontiers, LoroDoc, LoroMap, StyleConfig, StyleConfigMap};
+use loro::{ExpandType, ExportMode, Frontiers, LoroDoc, LoroMap, LoroValue, StyleConfig};
 use rustc_hash::FxHashSet;
 use serde::Deserialize;
 use std::rc::Rc;
 
 const SETTINGS_KEY: &str = "settings";
+const STYLES_KEY: &str = "styles";
 
 #[derive(Deserialize)]
 #[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
@@ -47,26 +48,45 @@ where
 }
 
 impl Doc {
-    #[allow(dead_code)]
     pub fn new() -> Self {
         let schema = Rc::new(Schema::default());
 
         let loro = LoroDoc::new();
         loro.config_default_text_style(Some(StyleConfig {
-            expand: ExpandType::After,
+            expand: ExpandType::None,
         }));
 
-        let mut styles = StyleConfigMap::new();
-        for (mark_type, mark_spec) in schema.marks() {
-            let expand = match mark_spec.expand {
-                Expand::Before => ExpandType::Before,
-                Expand::After => ExpandType::After,
-                Expand::Both => ExpandType::Both,
-                Expand::None => ExpandType::None,
-            };
-            styles.insert(mark_type.key().into(), StyleConfig { expand });
+        let map = loro.get_map(SETTINGS_KEY);
+        let mut settings = DocumentSettings::new();
+        settings.encode(&map).unwrap();
+
+        {
+            let styles_map = loro.get_map(STYLES_KEY);
+            let defaults = DefaultStyles::default();
+            styles_map
+                .insert("font_family", defaults.font_family.as_str())
+                .unwrap();
+            styles_map
+                .insert("font_size", defaults.font_size as f64)
+                .unwrap();
+            styles_map
+                .insert("font_weight", defaults.font_weight as i64)
+                .unwrap();
+            styles_map
+                .insert("text_color", defaults.text_color.as_str())
+                .unwrap();
+            styles_map
+                .insert("background_color", defaults.background_color.as_str())
+                .unwrap();
+            styles_map
+                .insert("letter_spacing", defaults.letter_spacing as f64)
+                .unwrap();
+            styles_map.insert("italic", defaults.italic).unwrap();
+            styles_map
+                .insert("strikethrough", defaults.strikethrough)
+                .unwrap();
+            styles_map.insert("underline", defaults.underline).unwrap();
         }
-        loro.config_text_style(styles);
 
         let nodes = loro.get_map("nodes");
 
@@ -75,10 +95,6 @@ impl Doc {
             .unwrap();
         let mut root = Node::Root(RootNode::default());
         root.encode(&map).unwrap();
-
-        let map = loro.get_map(SETTINGS_KEY);
-        let mut settings = DocumentSettings::new();
-        settings.encode(&map).unwrap();
 
         let inner = DocInner::new(loro, schema);
 
@@ -90,30 +106,12 @@ impl Doc {
 
         let loro = LoroDoc::from_snapshot(&snapshot).unwrap();
         loro.config_default_text_style(Some(StyleConfig {
-            expand: ExpandType::After,
+            expand: ExpandType::None,
         }));
-
-        let mut styles = StyleConfigMap::new();
-        for (mark_type, mark_spec) in schema.marks() {
-            let expand = match mark_spec.expand {
-                Expand::Before => ExpandType::Before,
-                Expand::After => ExpandType::After,
-                Expand::Both => ExpandType::Both,
-                Expand::None => ExpandType::None,
-            };
-            styles.insert(mark_type.key().into(), StyleConfig { expand });
-        }
-        loro.config_text_style(styles);
 
         let inner = DocInner::new(loro, schema);
 
         Self { inner }
-    }
-
-    pub fn fork(&self) -> Self {
-        Self {
-            inner: self.inner.fork(),
-        }
     }
 
     pub fn loro_doc(&self) -> &LoroDoc {
@@ -214,10 +212,10 @@ impl Doc {
                 match self.get_node_type(child_id) {
                     Some(NodeType::Text) => {
                         if let Some(segments) = self.get_text_segments(child_id) {
-                            for (segment_text, _) in segments {
+                            for seg in segments {
                                 let text_start = char_offset;
-                                let char_len = segment_text.chars().count();
-                                full_text.push_str(&segment_text);
+                                let char_len = seg.text.chars().count();
+                                full_text.push_str(&seg.text);
                                 char_offset += char_len;
 
                                 mappings.push(TextMapping {
@@ -280,10 +278,61 @@ impl Doc {
         Ok(())
     }
 
-    #[allow(dead_code)]
-    pub fn validate(&self) -> Result<()> {
-        self.validate_schema()?;
-        Ok(())
+    pub fn default_styles(&self) -> DefaultStyles {
+        let styles_map = self.inner.loro.get_map(STYLES_KEY);
+
+        let get_string = |key: &str| -> String {
+            styles_map
+                .get(key)
+                .and_then(|v| v.into_value().ok())
+                .and_then(|v| match v {
+                    LoroValue::String(s) => Some(s.to_string()),
+                    _ => None,
+                })
+                .expect("styles map must contain all default style keys")
+        };
+        let get_f32 = |key: &str| -> f32 {
+            styles_map
+                .get(key)
+                .and_then(|v| v.into_value().ok())
+                .and_then(|v| match v {
+                    LoroValue::Double(d) => Some(d as f32),
+                    _ => None,
+                })
+                .expect("styles map must contain all default style keys")
+        };
+        let get_i64 = |key: &str| -> i64 {
+            styles_map
+                .get(key)
+                .and_then(|v| v.into_value().ok())
+                .and_then(|v| match v {
+                    LoroValue::I64(i) => Some(i),
+                    _ => None,
+                })
+                .expect("styles map must contain all default style keys")
+        };
+        let get_bool = |key: &str| -> bool {
+            styles_map
+                .get(key)
+                .and_then(|v| v.into_value().ok())
+                .and_then(|v| match v {
+                    LoroValue::Bool(b) => Some(b),
+                    _ => None,
+                })
+                .expect("styles map must contain all default style keys")
+        };
+
+        DefaultStyles {
+            font_family: get_string("font_family"),
+            font_size: get_f32("font_size"),
+            font_weight: get_i64("font_weight") as u16,
+            text_color: get_string("text_color"),
+            background_color: get_string("background_color"),
+            letter_spacing: get_f32("letter_spacing"),
+            italic: get_bool("italic"),
+            strikethrough: get_bool("strikethrough"),
+            underline: get_bool("underline"),
+        }
     }
 
     pub fn validate_node(&self, node_id: NodeId) -> Result<()> {
@@ -304,96 +353,64 @@ impl Doc {
         })?;
 
         if let Node::Text(text_node) = node_ref.node() {
-            if let Some(parent) = node_ref.parent() {
-                let parent_spec = self.inner.schema.node_spec(parent.node().as_type());
-                let allowed_marks = parent_spec.marks.unwrap_or(&[]);
+            let allowed_styles = self.allowed_styles_for(node_id);
+            let allowed_annotations = self.allowed_annotations_for(node_id);
 
-                let segments = text_node.text.get_rich_text_segments();
-                for (_, marks) in segments {
-                    for mark in marks {
-                        let mark_type = mark.as_type();
-                        if !allowed_marks.contains(&mark_type) {
-                            anyhow::bail!(
-                                "Mark '{:?}' not allowed in node {} (parent type: {:?})",
-                                mark_type,
-                                node_id,
-                                parent.node().as_type()
-                            );
-                        }
+            let segments = text_node.text.get_segments();
+            for seg in segments {
+                for style in &seg.styles {
+                    let style_type = style.as_type();
+                    if !allowed_styles.contains(&style_type) {
+                        anyhow::bail!("Style '{:?}' not allowed at node {}", style_type, node_id,);
                     }
                 }
-            }
-        }
-        Ok(())
-    }
-
-    #[allow(dead_code)]
-    fn validate_schema(&self) -> Result<()> {
-        self.validate_schema_subtree(NodeId::ROOT, &FxHashSet::default())
-    }
-
-    #[allow(dead_code)]
-    fn validate_schema_subtree(
-        &self,
-        node_id: NodeId,
-        allowed_marks: &FxHashSet<MarkType>,
-    ) -> Result<()> {
-        let node_ref = self
-            .node(node_id)
-            .with_context(|| format!("Node not found during schema validation: {:?}", node_id))?;
-
-        let node_type = node_ref.node_type();
-        let spec = self.inner.schema.node_spec(node_type);
-
-        let child_types: Vec<NodeType> = node_ref
-            .children()
-            .map(|child| child.node().as_type())
-            .collect();
-
-        spec.content.validate(&child_types).with_context(|| {
-            format!(
-                "Content validation failed for '{:?}' at node {}",
-                node_type, node_id
-            )
-        })?;
-
-        if let Node::Text(text_node) = node_ref.node() {
-            let segments = text_node.text.get_rich_text_segments();
-            for (_, marks) in segments {
-                for mark in marks {
-                    let mark_type = mark.as_type();
-                    if !allowed_marks.contains(&mark_type) {
+                for ann in &seg.annotations {
+                    let ann_type = ann.as_type();
+                    if !allowed_annotations.contains(&ann_type) {
                         anyhow::bail!(
-                            "Mark '{:?}' is not allowed at Text node {}. Allowed marks: {:?}",
-                            mark_type,
+                            "Annotation '{:?}' not allowed at node {}",
+                            ann_type,
                             node_id,
-                            allowed_marks
                         );
                     }
                 }
             }
         }
+        Ok(())
+    }
 
-        let next_allowed_marks = match spec.marks {
-            None => FxHashSet::default(),
-            Some(marks) => {
-                if marks.is_empty() {
-                    allowed_marks.clone()
-                } else {
-                    let mut new_marks = allowed_marks.clone();
-                    for &mark in marks {
-                        new_marks.insert(mark);
-                    }
-                    new_marks
-                }
-            }
+    pub fn allowed_styles_for(&self, node_id: NodeId) -> FxHashSet<StyleType> {
+        self.collect_allowed(node_id, |spec| spec.styles)
+    }
+
+    pub fn allowed_annotations_for(&self, node_id: NodeId) -> FxHashSet<AnnotationType> {
+        self.collect_allowed(node_id, |spec| spec.annotations)
+    }
+
+    fn collect_allowed<T: Eq + std::hash::Hash + Copy + 'static>(
+        &self,
+        node_id: NodeId,
+        get_field: impl Fn(&crate::schema::NodeSpec) -> Option<&'static [T]>,
+    ) -> FxHashSet<T> {
+        let mut allowed = FxHashSet::default();
+        let Some(node) = self.node(node_id) else {
+            return allowed;
         };
 
-        for child in node_ref.children() {
-            self.validate_schema_subtree(child.node_id(), &next_allowed_marks)?;
+        for ancestor in node.ancestors().skip(1) {
+            let spec = self.inner.schema.node_spec(ancestor.node().as_type());
+            match get_field(spec) {
+                Some(items) if !items.is_empty() => {
+                    for &item in items {
+                        allowed.insert(item);
+                    }
+                }
+                Some(_) => {}
+                None => break,
+            }
         }
 
-        Ok(())
+        allowed
     }
 
     pub fn is_ancestor(&self, ancestor: NodeId, node: NodeId) -> bool {
@@ -467,8 +484,8 @@ impl Doc {
             match self.get_node_type(child_id) {
                 Some(NodeType::Text) => {
                     if let Some(segments) = self.get_text_segments(child_id) {
-                        for (segment_text, _) in segments {
-                            result.push_str(&segment_text);
+                        for seg in segments {
+                            result.push_str(&seg.text);
                         }
                     }
                 }
@@ -482,20 +499,20 @@ impl Doc {
         result
     }
 
-    pub(crate) fn get_text_segments(&self, node_id: NodeId) -> Option<Vec<(String, Vec<Mark>)>> {
+    pub(crate) fn get_text_segments(&self, node_id: NodeId) -> Option<Vec<TextSegment>> {
         let node_map = self.inner.get_node_map(node_id)?;
         let text = Text::decode_field(&node_map, "text").ok()?;
-        Some(text.get_rich_text_segments())
+        Some(text.get_segments())
     }
 
     pub fn get_link_ranges(&self) -> Vec<LinkRange> {
         let mut ranges: Vec<LinkRange> = Vec::new();
 
-        for (block_id, offset, text, marks) in self.iter_segments() {
-            let segment_len = text.chars().count();
+        for (block_id, offset, seg) in self.iter_segments() {
+            let segment_len = seg.text.chars().count();
 
-            for mark in &marks {
-                if let Mark::Link(link) = mark {
+            for ann in &seg.annotations {
+                if let Annotation::Link(link) = ann {
                     if let Some(last) = ranges.last_mut() {
                         if last.block_id == block_id
                             && last.href == link.href

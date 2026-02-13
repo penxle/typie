@@ -130,28 +130,6 @@ pub fn compare_positions(doc: &Doc, a: Position, b: Position) -> Result<Ordering
     Ok(path_a.len().cmp(&path_b.len()))
 }
 
-#[allow(unused)]
-pub fn compare_positions_strict(doc: &Doc, a: Position, b: Position) -> Result<Ordering> {
-    if a == b {
-        return Ok(Ordering::Equal);
-    }
-
-    let path_a = position_path(doc, a)?;
-    let path_b = position_path(doc, b)?;
-
-    for (segment_a, segment_b) in path_a.iter().zip(path_b.iter()) {
-        match segment_a.cmp(segment_b) {
-            Ordering::Equal => continue,
-            other => return Ok(other),
-        }
-    }
-
-    match path_a.len().cmp(&path_b.len()) {
-        Ordering::Equal => Ok(a.affinity.cmp(&b.affinity)),
-        other => Ok(other),
-    }
-}
-
 pub fn position_in_selection(doc: &Doc, pos: Position, selection: &Selection) -> bool {
     let (from, to) = selection.as_sorted(doc).unwrap();
 

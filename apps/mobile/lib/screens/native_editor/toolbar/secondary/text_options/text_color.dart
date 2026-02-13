@@ -12,12 +12,12 @@ class NativeEditorTextColorTextOptionsToolbar extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final scope = NativeEditorToolbarScope.of(context);
-    final uniformMarks = useValueListenable(scope.uniformMarks);
-    final mixedMarks = useValueListenable(scope.mixedMarks);
+    final uniformStyles = useValueListenable(scope.uniformStyles);
+    final mixedStyles = useValueListenable(scope.mixedStyles);
 
-    final isMixed = mixedMarks.contains('text_color');
-    final textColorMark = uniformMarks.firstWhereOrNull((m) => m['type'] == 'text_color');
-    final activeValue = isMixed ? null : (textColorMark?['key'] as String? ?? editorDefaultValues['textColor']);
+    final isMixed = mixedStyles.contains('text_color');
+    final textColorStyle = uniformStyles.firstWhereOrNull((m) => m['type'] == 'text_color');
+    final activeValue = isMixed ? null : (textColorStyle?['color'] as String? ?? editorDefaultValues['textColor']);
 
     return NativeEditorTextOptionsToolbar(
       items: editorValues['textColor']!,
@@ -28,7 +28,10 @@ class NativeEditorTextColorTextOptionsToolbar extends HookWidget {
           value: item['value'] as String,
           isActive: isActive,
           onTap: () {
-            scope.dispatch({'type': 'toggleTextColor', 'key': item['value']});
+            scope.dispatch({
+              'type': 'toggleStyle',
+              'style': {'type': 'text_color', 'color': item['value']},
+            });
           },
         );
       },

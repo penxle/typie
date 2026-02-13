@@ -1,4 +1,4 @@
-use super::{Doc, FontFamilyMark, FontWeightMark, Mark, Node, NodeId, TextNode};
+use super::{Doc, FontWeightStyle, Node, NodeId, Style, TextNode, TextSegment};
 use crate::schema::Schema;
 use crate::state::position_helpers::find_child_at_offset;
 use crate::state::{Position, Selection, StructureSelectionInfo, compute_structure_selection};
@@ -22,10 +22,6 @@ impl FragmentNode {
         &self.data
     }
 
-    pub fn data_mut(&mut self) -> &mut Node {
-        &mut self.data
-    }
-
     pub fn parent(&self) -> Option<NodeId> {
         self.parent
     }
@@ -37,7 +33,6 @@ impl FragmentNode {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[allow(dead_code)]
 pub struct Fragment {
     pub nodes: IndexMap<NodeId, FragmentNode>,
     pub(crate) open_start: usize,
@@ -65,17 +60,11 @@ impl FragmentBuilder {
         self
     }
 
-    pub fn last_node_mut(&mut self) -> Option<&mut FragmentNode> {
-        self.nodes.last_mut().map(|(_, n)| n)
-    }
-
-    #[allow(dead_code)]
     pub fn open_start(mut self, depth: usize) -> Self {
         self.open_start = depth;
         self
     }
 
-    #[allow(dead_code)]
     pub fn open_end(mut self, depth: usize) -> Self {
         self.open_end = depth;
         self
@@ -96,7 +85,6 @@ impl Default for FragmentBuilder {
     }
 }
 
-#[allow(dead_code)]
 impl Fragment {
     pub fn builder() -> FragmentBuilder {
         FragmentBuilder::new()
@@ -174,12 +162,7 @@ impl Fragment {
         Ok(())
     }
 
-    pub fn from_snapshot(snapshot: &[u8]) -> Result<Self> {
-        let doc = std::rc::Rc::new(Doc::from_snapshot(snapshot.to_vec()));
-        Self::from_doc(&doc)
-    }
-
-    pub fn from_text(text: &str) -> Self {
+    pub fn from_text(text: &str, styles: &[Style]) -> Self {
         if text.is_empty() {
             return Self::empty();
         }
@@ -189,9 +172,14 @@ impl Fragment {
 
         if lines.len() == 1 {
             let node_id = NodeId::new();
+            let text_obj = crate::model::Text::from(lines[0]);
+            let len = text_obj.char_len();
+            for style in styles {
+                let _ = text_obj.apply_style(0..len, style);
+            }
             let fragment_node = FragmentNode::new(
                 Node::Text(TextNode {
-                    text: crate::model::Text::from(lines[0]),
+                    text: text_obj,
                     ..Default::default()
                 }),
                 None,
@@ -212,9 +200,14 @@ impl Fragment {
 
             if !line.is_empty() {
                 let text_id = NodeId::new();
+                let text_obj = crate::model::Text::from(line);
+                let len = text_obj.char_len();
+                for style in styles {
+                    let _ = text_obj.apply_style(0..len, style);
+                }
                 let text_node = FragmentNode::new(
                     Node::Text(TextNode {
-                        text: crate::model::Text::from(line),
+                        text: text_obj,
                         ..Default::default()
                     }),
                     Some(para_id),
@@ -512,10 +505,12 @@ impl Fragment {
         self.flatten_for_merge(parent_disc)
     }
 
+    #[allow(dead_code)]
     pub fn to_json(&self) -> Result<String> {
         serde_json::to_string(self).context("Failed to serialize fragment to JSON")
     }
 
+    #[allow(dead_code)]
     pub fn from_json(json: &str) -> Result<Self> {
         serde_json::from_str(json).context("Failed to deserialize fragment from JSON")
     }
@@ -555,6 +550,7 @@ impl Fragment {
         self.nodes.is_empty()
     }
 
+    #[allow(dead_code)]
     pub fn child_count(&self) -> usize {
         self.nodes.len()
     }
@@ -592,14 +588,6 @@ impl Fragment {
             open_start: self.open_start,
             open_end: self.open_end,
         }
-    }
-
-    pub fn with_fresh_ids(&self) -> Self {
-        let mut id_map = FxHashMap::default();
-        for old_id in self.collect_all_ids() {
-            id_map.insert(old_id, NodeId::new());
-        }
-        self.remap_ids(&id_map)
     }
 
     pub fn with_fresh_ids_for_doc(&self, doc: &Doc) -> Self {
@@ -668,10 +656,11 @@ impl Fragment {
         self.nodes.get(&id)
     }
 
-    pub fn text_segments_of_node(&self, node_id: NodeId) -> Vec<(String, Vec<Mark>)> {
+    #[allow(dead_code)]
+    pub fn text_segments_of_node(&self, node_id: NodeId) -> Vec<TextSegment> {
         if let Some(frag_node) = self.node(node_id) {
             if let Node::Text(text_node) = frag_node.data() {
-                return text_node.text.get_rich_text_segments();
+                return text_node.text.get_segments();
             }
         }
 
@@ -695,24 +684,32 @@ impl Fragment {
     pub fn split_segments_at(
         text: &super::Text,
         offset: usize,
-    ) -> (Vec<(String, Vec<Mark>)>, Vec<(String, Vec<Mark>)>) {
+    ) -> (Vec<TextSegment>, Vec<TextSegment>) {
         let mut left = Vec::new();
         let mut right = Vec::new();
         let mut consumed = 0;
 
-        for (seg_text, seg_marks) in text.get_rich_text_segments() {
-            let seg_len = seg_text.chars().count();
+        for seg in text.get_segments() {
+            let seg_len = seg.text.chars().count();
             if consumed + seg_len <= offset {
-                left.push((seg_text.clone(), seg_marks.clone()));
+                left.push(seg);
             } else if consumed >= offset {
-                right.push((seg_text.clone(), seg_marks.clone()));
+                right.push(seg);
             } else {
                 let split_point = offset - consumed;
-                let chars: Vec<char> = seg_text.chars().collect();
+                let chars: Vec<char> = seg.text.chars().collect();
                 let left_text: String = chars[..split_point].iter().collect();
                 let right_text: String = chars[split_point..].iter().collect();
-                left.push((left_text, seg_marks.clone()));
-                right.push((right_text, seg_marks.clone()));
+                left.push(TextSegment {
+                    text: left_text,
+                    styles: seg.styles.clone(),
+                    annotations: seg.annotations.clone(),
+                });
+                right.push(TextSegment {
+                    text: right_text,
+                    styles: seg.styles,
+                    annotations: seg.annotations,
+                });
             }
             consumed += seg_len;
         }
@@ -731,41 +728,41 @@ impl Fragment {
         for (id, node) in &self.nodes {
             match node.data() {
                 Node::Text(text_node) => {
-                    let segments = text_node.text.get_rich_text_segments();
+                    let segments = text_node.text.get_segments();
                     let mut modified = false;
                     let mut new_segments = Vec::with_capacity(segments.len());
 
-                    let default_family = FontFamilyMark::default().family;
-
-                    for (text, marks) in &segments {
-                        let family = marks
+                    for seg in &segments {
+                        let family = seg
+                            .styles
                             .iter()
-                            .find_map(|m| {
-                                if let Mark::FontFamily(ff) = m {
+                            .find_map(|s| {
+                                if let Style::FontFamily(ff) = s {
                                     Some(ff.family.as_str())
                                 } else {
                                     None
                                 }
                             })
-                            .unwrap_or(&default_family);
+                            .expect("segment must have FontFamily style");
 
-                        let weight_idx =
-                            marks.iter().position(|m| matches!(m, Mark::FontWeight(_)));
+                        let weight_idx = seg
+                            .styles
+                            .iter()
+                            .position(|s| matches!(s, Style::FontWeight(_)));
 
                         if let Some(idx) = weight_idx {
-                            if let Mark::FontWeight(fw) = &marks[idx] {
+                            if let Style::FontWeight(fw) = &seg.styles[idx] {
                                 if let Some(weights) = available.get(family) {
                                     if !weights.contains(&fw.weight) {
                                         let nearest = nearest_weight(fw.weight, weights);
-                                        let mut new_marks = marks.clone();
-                                        if nearest == FontWeightMark::default().weight {
-                                            new_marks.remove(idx);
-                                        } else {
-                                            new_marks[idx] = Mark::FontWeight(FontWeightMark {
-                                                weight: nearest,
-                                            });
-                                        }
-                                        new_segments.push((text.clone(), new_marks));
+                                        let mut new_styles = seg.styles.clone();
+                                        new_styles[idx] =
+                                            Style::FontWeight(FontWeightStyle { weight: nearest });
+                                        new_segments.push(TextSegment {
+                                            text: seg.text.clone(),
+                                            styles: new_styles,
+                                            annotations: seg.annotations.clone(),
+                                        });
                                         modified = true;
                                         continue;
                                     }
@@ -773,7 +770,7 @@ impl Fragment {
                             }
                         }
 
-                        new_segments.push((text.clone(), marks.clone()));
+                        new_segments.push(seg.clone());
                     }
 
                     if modified {
@@ -898,18 +895,6 @@ impl Fragment {
 
     pub fn is_open(&self) -> bool {
         self.has_open_start() || self.has_open_end()
-    }
-
-    pub fn first_top_level_is_paragraph(&self) -> bool {
-        self.top_level_node_ids()
-            .first()
-            .and_then(|id| self.node(*id))
-            .map(|n| matches!(n.data(), Node::Paragraph(_)))
-            .unwrap_or(false)
-    }
-
-    pub fn needs_closed_insert(&self, schema: &Schema) -> bool {
-        self.is_open() && self.has_leaf_block(schema)
     }
 
     pub fn find_last_leaf_block(&self, root_id: NodeId) -> Option<NodeId> {
@@ -1813,7 +1798,7 @@ mod tests {
         let state = state! {
             doc {
                 @p paragraph {
-                    text(marks: [italic()]) { "italic" }
+                    text(styles: [italic()]) { "italic" }
                     text { "normal" }
                 }
                 @p2 paragraph {
@@ -1981,7 +1966,7 @@ mod tests {
         assert_eq!(c00_content.len(), 1);
         let (p00_id, _) = c00_content[0];
         let p00_text = fragment.text_segments_of_node(p00_id);
-        assert_eq!(p00_text[0].0, "0-0");
+        assert_eq!(p00_text[0].text, "0-0");
 
         let (r1_id, _) = rows[1];
         let r1_cells = fragment.children_of_node(r1_id);
@@ -1991,7 +1976,7 @@ mod tests {
         let c11_content = fragment.children_of_node(c11_id);
         let (p11_id, _) = c11_content[0];
         let p11_text = fragment.text_segments_of_node(p11_id);
-        assert_eq!(p11_text[0].0, "1-1");
+        assert_eq!(p11_text[0].text, "1-1");
     }
     #[test]
     fn test_new_from_selection_full_tables_mixed() {

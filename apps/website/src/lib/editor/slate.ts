@@ -1,4 +1,4 @@
-import type { ExternalElement, Mark, MarkType, Position, Rect, SelectionStats, TextAlign, TextBound } from './types';
+import type { ExternalElement, Position, Rect, SelectionStats, Style, StyleType, TextAlign, TextBound } from './types';
 
 export type TableOverlay = {
   pageIdx: number;
@@ -39,20 +39,6 @@ export const POINTER_STATE_PRESSED = 1;
 export const POINTER_STATE_DRAGGING_CONTENT = 2;
 export const POINTER_STATE_DRAGGING_EXTERNAL = 3;
 export const POINTER_STATE_DRAGGING_SELECTION = 4;
-
-const MARK_TYPE_NAMES: MarkType[] = [
-  'background_color',
-  'text_color',
-  'font_size',
-  'font_family',
-  'font_weight',
-  'italic',
-  'letter_spacing',
-  'link',
-  'ruby',
-  'strikethrough',
-  'underline',
-];
 
 const POINTER_STYLES = ['default', 'text', 'pointer'] as const;
 
@@ -278,20 +264,31 @@ export class SlateReader {
     };
   }
 
-  readActiveMarks(): { uniformMarks: Mark[]; mixedMarks: MarkType[] } {
-    const count = this.#u32('formatting_uniform_marks_count');
-    const offset = this.#u32('formatting_uniform_marks_offset');
-    const uniformMarks = readUniformMarks(this.#slabView, this.#slabPtr + offset, count);
+  readActiveStyles(): { uniformStyles: Style[]; mixedStyles: StyleType[] } {
+    const count = this.#u32('formatting_uniform_styles_count');
+    const offset = this.#u32('formatting_uniform_styles_offset');
+    const uniformStyles = readUniformStyles(this.#slabView, this.#slabPtr + offset, count);
 
-    const bitfield = this.#u32('formatting_mixed_marks_bitfield');
-    const mixedMarks: MarkType[] = [];
-    for (const [i, MARK_TYPE_NAME] of MARK_TYPE_NAMES.entries()) {
-      if (bitfield & (1 << i)) {
-        mixedMarks.push(MARK_TYPE_NAME);
+    const bitfield = this.#u32('formatting_mixed_styles_bitfield');
+    const mixedStyles: StyleType[] = [];
+    const STYLE_BITS: [StyleType, number][] = [
+      ['background_color', Math.trunc(1)],
+      ['text_color', 1 << 1],
+      ['font_size', 1 << 2],
+      ['font_family', 1 << 3],
+      ['font_weight', 1 << 4],
+      ['italic', 1 << 5],
+      ['letter_spacing', 1 << 6],
+      ['strikethrough', 1 << 9],
+      ['underline', 1 << 10],
+    ];
+    for (const [styleName, bit] of STYLE_BITS) {
+      if (bitfield & bit) {
+        mixedStyles.push(styleName);
       }
     }
 
-    return { uniformMarks, mixedMarks };
+    return { uniformStyles, mixedStyles };
   }
 
   readPointerStyle(): string {
@@ -420,15 +417,13 @@ function readStringArray(view: DataView, offset: number, count: number): string[
   return result;
 }
 
-function readUniformMarks(view: DataView, offset: number, count: number): Mark[] {
-  const marks: Mark[] = [];
+function readUniformStyles(view: DataView, offset: number, count: number): Style[] {
+  const styles: Style[] = [];
   let pos = offset;
   for (let i = 0; i < count; i++) {
     const typeTag = view.getUint32(pos, true);
     const valueKind = view.getUint32(pos + 4, true);
     pos += 8;
-
-    const markType = MARK_TYPE_NAMES[typeTag] ?? 'background_color';
 
     let strValue = '';
     let numValue = 0;
@@ -447,61 +442,52 @@ function readUniformMarks(view: DataView, offset: number, count: number): Mark[]
       pos = end;
     }
 
-    let mark: Mark;
+    let style: Style;
     switch (typeTag) {
       case 0: {
-        mark = { type: 'background_color', key: strValue };
+        style = { type: 'background_color', color: strValue };
         break;
       }
       case 1: {
-        mark = { type: 'text_color', key: strValue };
+        style = { type: 'text_color', color: strValue };
         break;
       }
       case 2: {
-        mark = { type: 'font_size', size: numValue };
+        style = { type: 'font_size', size: numValue };
         break;
       }
       case 3: {
-        mark = { type: 'font_family', family: strValue };
+        style = { type: 'font_family', family: strValue };
         break;
       }
       case 4: {
-        mark = { type: 'font_weight', weight: numValue };
+        style = { type: 'font_weight', weight: numValue };
         break;
       }
       case 5: {
-        mark = { type: 'italic' } as unknown as Mark;
+        style = { type: 'italic' };
         break;
       }
       case 6: {
-        mark = { type: 'letter_spacing', spacing: numValue };
-        break;
-      }
-      case 7: {
-        mark = { type: 'link', href: strValue };
-        break;
-      }
-      case 8: {
-        mark = { type: 'ruby', text: strValue };
+        style = { type: 'letter_spacing', spacing: numValue };
         break;
       }
       case 9: {
-        mark = { type: 'strikethrough' } as unknown as Mark;
+        style = { type: 'strikethrough' };
         break;
       }
       case 10: {
-        mark = { type: 'underline' } as unknown as Mark;
+        style = { type: 'underline' };
         break;
       }
       default: {
-        mark = { type: markType } as unknown as Mark;
-        break;
+        continue;
       }
     }
 
-    marks.push(mark);
+    styles.push(style);
   }
-  return marks;
+  return styles;
 }
 
 function readExternalElements(view: DataView, offset: number, count: number): ExternalElement[] {

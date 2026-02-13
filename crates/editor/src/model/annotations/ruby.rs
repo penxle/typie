@@ -1,16 +1,16 @@
-use crate::model::Mark;
-use crate::model::html::{DomSpec, MarkHtmlCodec, MarkParseRule};
+use crate::model::Annotation;
+use crate::model::html::{AnnotationHtmlCodec, AnnotationParseRule, DomSpec};
 use macros::Codec;
 use scraper::{ElementRef, Node as ScraperNode, Selector};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Hash, Serialize, Deserialize, Codec)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Codec)]
 #[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
-pub struct RubyMark {
+pub struct RubyAnnotation {
     pub text: String,
 }
 
-impl Default for RubyMark {
+impl Default for RubyAnnotation {
     fn default() -> Self {
         Self {
             text: String::new(),
@@ -30,7 +30,7 @@ fn get_ruby_base_content(elem: &ElementRef) -> String {
         .collect()
 }
 
-impl MarkHtmlCodec for RubyMark {
+impl AnnotationHtmlCodec for RubyAnnotation {
     fn to_dom(&self) -> DomSpec {
         DomSpec::el("ruby")
             .child(DomSpec::Hole)
@@ -40,8 +40,8 @@ impl MarkHtmlCodec for RubyMark {
             .build()
     }
 
-    fn parse_rules() -> Vec<MarkParseRule> {
-        vec![MarkParseRule::from_tag_with_content(
+    fn parse_rules() -> Vec<AnnotationParseRule> {
+        vec![AnnotationParseRule::from_tag_with_content(
             "ruby",
             |elem| {
                 let rt_sel = Selector::parse("rt").unwrap();
@@ -50,7 +50,7 @@ impl MarkHtmlCodec for RubyMark {
                     .next()
                     .map(|rt| rt.text().collect::<String>())
                     .unwrap_or_default();
-                Some(Mark::Ruby(RubyMark { text: ruby_text }))
+                Some(Annotation::Ruby(RubyAnnotation { text: ruby_text }))
             },
             get_ruby_base_content,
         )]

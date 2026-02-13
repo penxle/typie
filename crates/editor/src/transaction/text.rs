@@ -64,40 +64,9 @@ impl DeleteResult {
     }
 }
 
-fn apply_pending_marks_to_text(text: &Text, range: std::ops::Range<usize>, marks: &[Mark]) {
-    for mark_type in MarkType::all() {
-        let _ = text.unmark(range.clone(), mark_type);
-    }
-
-    for mark in marks {
-        let _ = text.mark(range.clone(), mark);
-    }
-}
-
-fn persist_marks_after_deletion(tr: &mut Transaction, marks_before: Vec<Mark>, cursor: &Position) {
-    if marks_before.is_empty() {
-        return;
-    }
-
-    let marks_after = super::mark::get_marks_at_cursor(tr, cursor);
-    let schema = tr.doc().schema();
-
-    let persisted: Vec<Mark> = marks_before
-        .into_iter()
-        .filter(|mark| {
-            let spec = schema.mark_spec(mark.as_type());
-            spec.persist && !marks_after.iter().any(|m| m.as_type() == mark.as_type())
-        })
-        .collect();
-
-    if !persisted.is_empty() {
-        let mut pending = tr.state.pending_marks.clone().unwrap_or(marks_after);
-        for mark in persisted {
-            if !pending.iter().any(|m| m.as_type() == mark.as_type()) {
-                pending.push(mark);
-            }
-        }
-        tr.state.pending_marks = Some(pending);
+fn apply_pending_styles_to_text(text: &Text, range: std::ops::Range<usize>, styles: &[Style]) {
+    for style in styles {
+        let _ = text.apply_style(range.clone(), style);
     }
 }
 
@@ -218,7 +187,7 @@ impl Transaction {
             return Ok(false);
         }
 
-        let pending_marks = self.state.pending_marks.clone();
+        let pending_styles = self.state.pending_styles.clone();
 
         let paragraph = self
             .node(selection.head.node_id)
@@ -238,13 +207,11 @@ impl Transaction {
                     }
                 })?;
 
-                if let Some(marks) = &pending_marks {
-                    apply_pending_marks_to_text(
-                        &text_node.text,
-                        local_offset..(local_offset + char_count),
-                        marks,
-                    );
-                }
+                apply_pending_styles_to_text(
+                    &text_node.text,
+                    local_offset..(local_offset + char_count),
+                    &pending_styles,
+                );
 
                 self.set_selection(Selection::collapsed(Position::new(
                     selection.head.node_id,
@@ -252,7 +219,6 @@ impl Transaction {
                     Affinity::Upstream,
                 )));
 
-                self.state.pending_marks = None;
                 self.push_effect(Effect::NodeChanged { node_id: child_id });
                 self.push_effect(Effect::NodeChanged {
                     node_id: selection.head.node_id,
@@ -268,10 +234,8 @@ impl Transaction {
         ));
 
         let text = Text::from(s);
-        if let Some(marks) = &pending_marks {
-            for mark in marks {
-                let _ = text.mark(0..text.char_len(), mark);
-            }
+        for style in &pending_styles {
+            let _ = text.apply_style(0..text.char_len(), style);
         }
 
         let node_id = NodeId::new();
@@ -287,7 +251,6 @@ impl Transaction {
         self.replace_range(selection.head, selection.head, fragment)?;
         self.set_selection(new_selection);
 
-        self.state.pending_marks = None;
         self.push_effect(Effect::NodeChanged {
             node_id: selection.head.node_id,
         });
@@ -429,8 +392,6 @@ impl Transaction {
         let from = Position::new(head.node_id, from_global_offset, head.affinity);
         let to = Position::new(head.node_id, to_global_offset, head.affinity);
 
-        let marks_before = super::mark::get_marks_at_cursor(self, &head);
-
         self.delete_range(from, to)?;
 
         let new_affinity =
@@ -441,12 +402,6 @@ impl Transaction {
             from_global_offset,
             new_affinity,
         )));
-
-        persist_marks_after_deletion(
-            self,
-            marks_before,
-            &Position::new(head.node_id, from_global_offset, new_affinity),
-        );
 
         self.push_effect(Effect::NodeChanged {
             node_id: head.node_id,
@@ -514,8 +469,6 @@ impl Transaction {
         let from = Position::new(head.node_id, from_global_offset, head.affinity);
         let to = Position::new(head.node_id, to_global_offset, head.affinity);
 
-        let marks_before = super::mark::get_marks_at_cursor(self, &head);
-
         self.delete_range(from, to)?;
 
         let new_affinity =
@@ -526,12 +479,6 @@ impl Transaction {
             from_global_offset,
             new_affinity,
         )));
-
-        persist_marks_after_deletion(
-            self,
-            marks_before,
-            &Position::new(head.node_id, from_global_offset, new_affinity),
-        );
 
         self.push_effect(Effect::NodeChanged {
             node_id: head.node_id,
@@ -595,8 +542,6 @@ impl Transaction {
             return self.delete_across_isolating_boundary(from, to);
         }
 
-        let marks_before = super::mark::get_marks_at_cursor(self, &from);
-
         self.push_effect(Effect::NodeChanged {
             node_id: from.node_id,
         });
@@ -607,8 +552,6 @@ impl Transaction {
         }
 
         self.delete_range(from, to)?;
-
-        persist_marks_after_deletion(self, marks_before, &from);
 
         if from.node_id != to.node_id {
             Ok(DeleteResult::Merged {
@@ -1095,7 +1038,7 @@ mod tests {
     }
 
     #[test]
-    fn insert_text_inherits_marks_at_boundary() {
+    fn insert_text_inherits_styles_at_boundary() {
         let mut p = id!();
 
         let initial = state! {
@@ -1108,7 +1051,7 @@ mod tests {
         };
 
         let actual = transact!(initial, |tr| {
-            tr.add_mark(Mark::Italic(ItalicMark)).unwrap();
+            tr.set_style(Style::Italic(ItalicStyle {})).unwrap();
             tr.set_selection(Selection::collapsed(Position::new(
                 p,
                 2,
@@ -2591,7 +2534,7 @@ mod tests {
     }
 
     #[test]
-    fn delete_selection_of_mark_and_paragraph() {
+    fn delete_selection_of_style_and_paragraph() {
         let mut p = id!();
         let mut p2 = id!();
 
@@ -2599,7 +2542,7 @@ mod tests {
             doc {
                 @p paragraph {
                     text { "a" }
-                    text(marks: [italic()]) { "b" }
+                    text(styles: [italic()]) { "b" }
                     text { "c" }
                 }
                 @p2 paragraph { }
@@ -2710,7 +2653,7 @@ mod tests {
     }
 
     #[test]
-    fn insert_text_applies_pending_marks() {
+    fn insert_text_applies_pending_styles() {
         let mut p = id!();
 
         let state = state! {
@@ -2723,7 +2666,7 @@ mod tests {
         };
 
         let mut tr = crate::transaction::Transaction::new(&state);
-        tr.state.pending_marks = Some(vec![Mark::Italic(ItalicMark)]);
+        tr.state.pending_styles.push(Style::Italic(ItalicStyle {}));
         tr.insert_text("X").unwrap();
         let (new_state, _) = tr.commit().unwrap();
 
@@ -2731,19 +2674,22 @@ mod tests {
         let text_child = p_node.first_child().unwrap();
 
         if let Node::Text(text_node) = text_child.node() {
-            let segments = text_node.text.get_rich_text_segments();
+            let segments = text_node.text.get_segments();
             assert!(segments.len() >= 2);
             let last_segment = segments.last().unwrap();
-            assert!(last_segment.1.iter().any(|m| matches!(m, Mark::Italic(_))));
+            assert!(
+                last_segment
+                    .styles
+                    .iter()
+                    .any(|m| matches!(m, Style::Italic(_)))
+            );
         } else {
             panic!("Expected text node");
         }
-
-        assert!(new_state.pending_marks.is_none());
     }
 
     #[test]
-    fn insert_text_clears_pending_marks() {
+    fn insert_text_recomputes_pending_styles_after_insertion() {
         let mut p = id!();
 
         let state = state! {
@@ -2756,15 +2702,15 @@ mod tests {
         };
 
         let mut tr = crate::transaction::Transaction::new(&state);
-        tr.state.pending_marks = Some(vec![Mark::Italic(ItalicMark)]);
+        tr.state.pending_styles.push(Style::Italic(ItalicStyle {}));
         tr.insert_text("X").unwrap();
         let (new_state, _) = tr.commit().unwrap();
 
-        assert!(new_state.pending_marks.is_none());
+        assert!(!new_state.pending_styles.is_empty(),);
     }
 
     #[test]
-    fn insert_text_at_slot_with_pending_marks() {
+    fn insert_text_at_slot_with_pending_styles() {
         let mut p = id!();
 
         let state = state! {
@@ -2775,7 +2721,7 @@ mod tests {
         };
 
         let mut tr = crate::transaction::Transaction::new(&state);
-        tr.state.pending_marks = Some(vec![Mark::FontWeight(FontWeightMark { weight: 700 })]);
+        tr.state.pending_styles = vec![Style::FontWeight(FontWeightStyle { weight: 700 })];
         tr.insert_text("Bold").unwrap();
         let (new_state, _) = tr.commit().unwrap();
 
@@ -2783,13 +2729,13 @@ mod tests {
         let text_child = p_node.first_child().unwrap();
 
         if let Node::Text(text_node) = text_child.node() {
-            let segments = text_node.text.get_rich_text_segments();
+            let segments = text_node.text.get_segments();
             assert_eq!(segments.len(), 1);
             assert!(
                 segments[0]
-                    .1
+                    .styles
                     .iter()
-                    .any(|m| matches!(m, Mark::FontWeight(fw) if fw.weight == 700))
+                    .any(|m| matches!(m, Style::FontWeight(fw) if fw.weight == 700))
             );
         } else {
             panic!("Expected text node");
@@ -3506,69 +3452,13 @@ mod tests {
     }
 
     #[test]
-    fn persist_marks_after_backspace_deletes_all_bold_text() {
+    fn no_persist_when_style_still_exists_after_partial_deletion() {
         let mut p = id!();
 
         let state = state! {
             doc {
                 @p paragraph {
-                    text(marks: [font_weight(700)]) { "a" }
-                }
-            }
-            selection { (p, 1) }
-        };
-
-        let mut tr = crate::transaction::Transaction::new(&state);
-        tr.delete_text_backward().unwrap();
-        let (view, _) = tr.commit().unwrap();
-
-        let pending = view
-            .pending_marks
-            .as_ref()
-            .expect("pending_marks should be set");
-        assert!(
-            pending
-                .iter()
-                .any(|m| matches!(m, Mark::FontWeight(fw) if fw.weight == 700)),
-            "FontWeight(700) should persist after deleting all bold text, got: {:?}",
-            pending
-        );
-    }
-
-    #[test]
-    fn no_persist_for_ruby_mark_after_deletion() {
-        let mut p = id!();
-
-        let state = state! {
-            doc {
-                @p paragraph {
-                    text(marks: [ruby("ルビ")]) { "字" }
-                }
-            }
-            selection { (p, 1) }
-        };
-
-        let mut tr = crate::transaction::Transaction::new(&state);
-        tr.delete_text_backward().unwrap();
-        let (view, _) = tr.commit().unwrap();
-
-        if let Some(pending) = &view.pending_marks {
-            assert!(
-                !pending.iter().any(|m| matches!(m, Mark::Ruby(_))),
-                "Ruby mark should NOT persist (persist: false), got: {:?}",
-                pending
-            );
-        }
-    }
-
-    #[test]
-    fn no_persist_when_mark_still_exists_after_partial_deletion() {
-        let mut p = id!();
-
-        let state = state! {
-            doc {
-                @p paragraph {
-                    text(marks: [font_weight(700)]) { "ab" }
+                    text(styles: [font_weight(700)]) { "ab" }
                 }
             }
             selection { (p, 2) }
@@ -3579,48 +3469,11 @@ mod tests {
         let (view, _) = tr.commit().unwrap();
 
         assert!(
-            view.pending_marks.is_none(),
-            "pending_marks should be None when bold text still remains, got: {:?}",
-            view.pending_marks
-        );
-    }
-
-    #[test]
-    fn persist_merges_with_existing_pending_marks() {
-        let mut p = id!();
-
-        let mut state = state! {
-            doc {
-                @p paragraph {
-                    text(marks: [font_family("Arial")]) { "a" }
-                }
-            }
-            selection { (p, 1) }
-        };
-
-        state.pending_marks = Some(vec![Mark::FontWeight(FontWeightMark { weight: 700 })]);
-
-        let mut tr = crate::transaction::Transaction::new(&state);
-        tr.delete_text_backward().unwrap();
-        let (view, _) = tr.commit().unwrap();
-
-        let pending = view
-            .pending_marks
-            .as_ref()
-            .expect("pending_marks should be set");
-        assert!(
-            pending
+            view.pending_styles
                 .iter()
-                .any(|m| matches!(m, Mark::FontWeight(fw) if fw.weight == 700)),
-            "Existing FontWeight(700) should be preserved, got: {:?}",
-            pending
-        );
-        assert!(
-            pending
-                .iter()
-                .any(|m| matches!(m, Mark::FontFamily(ff) if ff.family == "Arial")),
-            "FontFamily(Arial) should be merged into pending, got: {:?}",
-            pending
+                .any(|m| matches!(m, Style::FontWeight(fw) if fw.weight == 700)),
+            "pending_styles should contain font_weight when bold text still remains, got: {:?}",
+            view.pending_styles
         );
     }
 }

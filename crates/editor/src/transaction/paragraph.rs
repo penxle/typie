@@ -1,6 +1,6 @@
 use crate::model::*;
 use crate::runtime::Effect;
-use crate::schema::{ContentExpr, Expand};
+use crate::schema::ContentExpr;
 use crate::state::collect_top_level_blocks_in_range;
 use crate::state::position_helpers::{calculate_offset_before_child, find_child_at_offset};
 use crate::state::*;
@@ -52,38 +52,6 @@ fn find_first_joinable_block(node: &NodeRef, target_content: &ContentExpr) -> Op
     }
 
     None
-}
-
-fn get_marks_at_cursor(tr: &Transaction, position: &Position) -> Vec<Mark> {
-    let Some(node) = tr.node(position.node_id) else {
-        return Vec::new();
-    };
-
-    let Some((child_id, local_offset)) = find_child_at_offset(&node, position.offset) else {
-        return Vec::new();
-    };
-
-    let Some(child) = tr.node(child_id) else {
-        return Vec::new();
-    };
-
-    if let Node::Text(text_node) = child.node() {
-        let segments = text_node.text.get_rich_text_segments();
-        let mut current_offset = 0;
-
-        for (segment_text, segment_marks) in segments {
-            let segment_len = segment_text.chars().count();
-            if local_offset > current_offset && local_offset <= current_offset + segment_len {
-                return segment_marks;
-            }
-            if local_offset == 0 && current_offset == 0 {
-                return segment_marks;
-            }
-            current_offset += segment_len;
-        }
-    }
-
-    Vec::new()
 }
 
 impl Transaction {
@@ -309,27 +277,11 @@ impl Transaction {
             return Ok(false);
         }
 
-        let marks = self
-            .state
-            .pending_marks
-            .clone()
-            .unwrap_or_else(|| get_marks_at_cursor(self, &selection.head));
+        let styles = self.state.pending_styles.clone();
 
         if let Some((_, new_pos)) = self.split_block_at(selection.head)? {
             self.set_selection(Selection::collapsed(new_pos));
-            if !marks.is_empty() {
-                let filtered_marks: Vec<Mark> = marks
-                    .into_iter()
-                    .filter(|mark| {
-                        let spec = self.doc().schema().mark_spec(mark.as_type());
-                        matches!(spec.expand, Expand::After | Expand::Both)
-                    })
-                    .collect();
-
-                if !filtered_marks.is_empty() {
-                    self.state.pending_marks = Some(filtered_marks);
-                }
-            }
+            self.state.pending_styles = styles;
             Ok(true)
         } else {
             Ok(false)
@@ -1248,12 +1200,12 @@ mod tests {
     }
 
     #[test]
-    fn split_paragraph_with_mark() {
+    fn split_paragraph_with_style() {
         let mut p = id!();
         let initial = state! {
             doc {
                 @p paragraph {
-                    text(marks: [italic()]) { "asdf" }
+                    text(styles: [italic()]) { "asdf" }
                 }
             }
             selection { (p, 2) }
@@ -1264,10 +1216,10 @@ mod tests {
         let expected = state! {
             doc {
                 paragraph {
-                    text(marks: [italic()]) { "as" }
+                    text(styles: [italic()]) { "as" }
                 }
                 @p paragraph {
-                    text(marks: [italic()]) { "df" }
+                    text(styles: [italic()]) { "df" }
                 }
             }
             selection { (p, 0) }
@@ -1277,7 +1229,7 @@ mod tests {
     }
 
     #[test]
-    fn split_paragraph_with_mark_2() {
+    fn split_paragraph_with_style_2() {
         let mut p = id!();
         let initial = state! {
             doc {
@@ -1293,7 +1245,7 @@ mod tests {
         let expected = state! {
             doc {
                 paragraph {
-                    text(marks: [italic()]) { "as" }
+                    text(styles: [italic()]) { "as" }
                 }
                 @p paragraph {
                     text { "df" => [italic()], "gh" }
@@ -1576,13 +1528,13 @@ mod tests {
     }
 
     #[test]
-    fn join_backward_mark_diff() {
+    fn join_backward_style_diff() {
         let mut p1 = id!();
         let mut p2 = id!();
 
         let initial = state! {
             doc {
-                @p1 paragraph { text(marks: [italic()]) { "asdf" } }
+                @p1 paragraph { text(styles: [italic()]) { "asdf" } }
                 @p2 paragraph { text { "qwer" } }
             }
             selection { (p2, 0) }
@@ -1624,42 +1576,6 @@ mod tests {
         };
 
         assert_state_eq!(actual, expected);
-    }
-
-    #[test]
-    fn split_paragraph_with_ruby_mark_does_not_duplicate() {
-        let mut p = id!();
-
-        let initial = state! {
-            doc {
-                @p paragraph {
-                    text(marks: [ruby("ルビ")]) { "漢字" }
-                }
-            }
-            selection { (p, 2) }
-        };
-
-        let after_split = transact!(initial, |tr| {
-            tr.split_paragraph().unwrap();
-            tr.insert_text("新しい段落").unwrap();
-        });
-
-        let doc = &after_split.doc;
-        let root = doc.node(crate::model::NodeId::ROOT).unwrap();
-        assert_eq!(root.children().count(), 2);
-
-        let second_para = root.children().nth(1).unwrap();
-        let text_node = second_para.children().next().unwrap();
-
-        if let crate::model::Node::Text(t) = text_node.node() {
-            let segments = t.text.get_rich_text_segments();
-            assert_eq!(segments.len(), 1);
-            let (text, marks) = &segments[0];
-            assert_eq!(text, "新しい段落");
-            assert!(marks.is_empty(), "New paragraph should not have any marks");
-        } else {
-            panic!("Expected text node");
-        }
     }
 
     #[test]
@@ -1812,13 +1728,13 @@ mod tests {
     }
 
     #[test]
-    fn split_paragraph_marks_preserved_through_complete_preedit() {
+    fn split_paragraph_styles_preserved_through_complete_preedit() {
         let mut p = id!();
 
         let initial = state! {
             doc {
                 @p paragraph {
-                    text(marks: [font_weight(700)]) { "안녕하세요" }
+                    text(styles: [font_weight(700)]) { "안녕하세요" }
                 }
             }
             selection { (p, 5) }
@@ -1826,11 +1742,12 @@ mod tests {
 
         let after_split = transact!(initial, |tr| tr.split_paragraph().unwrap());
 
-        let pending = after_split
-            .pending_marks
-            .as_ref()
-            .expect("pending_marks should be set after split_paragraph");
-        assert!(pending.iter().any(|m| matches!(m, Mark::FontWeight(_))));
+        assert!(
+            after_split
+                .pending_styles
+                .iter()
+                .any(|m| matches!(m, Style::FontWeight(_)))
+        );
 
         let after_preedit = transact!(after_split, |tr| {
             tr.set_preedit("ㅎ".to_string()).unwrap()
@@ -1838,11 +1755,12 @@ mod tests {
 
         let after_complete = transact!(after_preedit, |tr| tr.complete_preedit().unwrap());
 
-        let restored = after_complete
-            .pending_marks
-            .as_ref()
-            .expect("pending_marks should be restored from preedit after complete_preedit");
-        assert!(restored.iter().any(|m| matches!(m, Mark::FontWeight(_))));
+        assert!(
+            after_complete
+                .pending_styles
+                .iter()
+                .any(|m| matches!(m, Style::FontWeight(_)))
+        );
 
         let after_insert = transact!(after_complete, |tr| tr.insert_text("ㅎ").unwrap());
 
@@ -1851,13 +1769,13 @@ mod tests {
         let text_node = second_para.children().next().unwrap();
 
         if let Node::Text(t) = text_node.node() {
-            let segments = t.text.get_rich_text_segments();
+            let segments = t.text.get_segments();
             assert_eq!(segments.len(), 1);
-            let (text, marks) = &segments[0];
-            assert_eq!(text, "ㅎ");
+            let seg = &segments[0];
+            assert_eq!(seg.text, "ㅎ");
             assert!(
-                marks.iter().any(|m| matches!(m, Mark::FontWeight(_))),
-                "Text on new line should have FontWeight mark"
+                seg.styles.iter().any(|m| matches!(m, Style::FontWeight(_))),
+                "Text on new line should have FontWeight style"
             );
         } else {
             panic!("Expected text node");

@@ -1,15 +1,15 @@
-use crate::model::Mark;
-use crate::model::html::{DomSpec, MarkHtmlCodec, MarkParseRule};
+use crate::model::Annotation;
+use crate::model::html::{AnnotationHtmlCodec, AnnotationParseRule, DomSpec};
 use macros::Codec;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Hash, Serialize, Deserialize, Codec)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Codec)]
 #[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
-pub struct LinkMark {
+pub struct LinkAnnotation {
     pub href: String,
 }
 
-impl Default for LinkMark {
+impl Default for LinkAnnotation {
     fn default() -> Self {
         Self {
             href: String::new(),
@@ -17,7 +17,7 @@ impl Default for LinkMark {
     }
 }
 
-impl MarkHtmlCodec for LinkMark {
+impl AnnotationHtmlCodec for LinkAnnotation {
     fn to_dom(&self) -> DomSpec {
         DomSpec::el("a")
             .attr("href", &self.href)
@@ -26,11 +26,11 @@ impl MarkHtmlCodec for LinkMark {
             .hole()
     }
 
-    fn parse_rules() -> Vec<MarkParseRule> {
-        vec![MarkParseRule::from_tag("a", |elem| {
+    fn parse_rules() -> Vec<AnnotationParseRule> {
+        vec![AnnotationParseRule::from_tag("a", |elem| {
             elem.value()
                 .attr("href")
-                .map(|href| Mark::Link(LinkMark { href: href.into() }))
+                .map(|href| Annotation::Link(LinkAnnotation { href: href.into() }))
         })]
     }
 }
