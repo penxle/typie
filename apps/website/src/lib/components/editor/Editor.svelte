@@ -12,7 +12,7 @@
     PAGE_GAP,
     PAGINATED_VIEW_PADDING,
   } from '$lib/editor/constants';
-  import { setEditor } from '$lib/editor/context';
+  import { setupEditorContext } from '$lib/editor/context.svelte';
   import { Editor } from '$lib/editor/editor.svelte';
   import { getEditorTheme } from '$lib/editor/theme';
   import View from './core/View.svelte';
@@ -56,7 +56,8 @@
 
   const editor = externalEditor ?? new Editor();
   if (!externalEditor) {
-    setEditor(editor);
+    const ctx = setupEditorContext();
+    ctx.editor = editor;
   }
 
   const theme = getThemeContext();

@@ -10,7 +10,7 @@
   import FileUpIcon from '~icons/lucide/file-up';
   import Trash2Icon from '~icons/lucide/trash-2';
   import { graphql } from '$graphql';
-  import { getEditor } from '$lib/editor/context';
+  import { getEditorContext } from '$lib/editor/context.svelte';
   import ExternalElementWrapper from './ExternalElementWrapper.svelte';
   import type { ExternalElement, ExternalElementData } from '$lib/editor/types';
 
@@ -22,7 +22,7 @@
 
   let { el }: Props = $props();
 
-  const editor = getEditor();
+  const { editor } = getEditorContext();
 
   let pickerOpened = $state(false);
   let inputEl = $state<HTMLInputElement>();

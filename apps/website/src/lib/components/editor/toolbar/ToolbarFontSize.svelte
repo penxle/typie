@@ -6,10 +6,9 @@
   import { tick } from 'svelte';
   import { fly } from 'svelte/transition';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
-  import { getEditor } from '$lib/editor/context';
-  import type { Style, StyleType } from '$lib/editor/types';
+  import { getEditorContext } from '$lib/editor/context.svelte';
 
-  const editor = getEditor();
+  const { editor } = getEditorContext();
 
   const MIN_FONT_SIZE = 1;
   const MAX_FONT_SIZE = 200;
@@ -56,13 +55,9 @@
   let inputValue = $state('');
   let isFocused = $state(false);
 
-  const activeStyles = $derived(editor.activeStyles);
-  const findStyle = (type: string): Style | undefined => activeStyles.uniformStyles.find((s) => s.type === type);
-  const isMixed = (type: StyleType): boolean => activeStyles.mixedStyles.includes(type);
-
-  const currentFontSize = $derived(
-    isMixed('font_size') ? undefined : ((findStyle('font_size') as { size?: number })?.size ?? defaultFontSize),
-  );
+  const fontSizeAttr = $derived(editor.getAttr('font_size'));
+  const fontSizeValues = $derived(fontSizeAttr?.values.filter((v): v is number => v != null) ?? []);
+  const currentFontSize = $derived(fontSizeValues.length === 1 ? fontSizeValues[0] : undefined);
 
   $effect(() => {
     if (!opened && document.activeElement !== inputElement) {

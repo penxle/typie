@@ -19,7 +19,7 @@
   import { fragment, graphql } from '$graphql';
   import { Img } from '$lib/components';
   import { Editor as EditorComponent } from '$lib/components/editor';
-  import { setEditor } from '$lib/editor/context';
+  import { setupEditorContext } from '$lib/editor/context.svelte';
   import { Editor } from '$lib/editor/editor.svelte';
   import ContentNavigation from './ContentNavigation.svelte';
   import DocumentActionMenu from './DocumentActionMenu.svelte';
@@ -217,8 +217,9 @@
     void form;
   });
 
+  const ctx = setupEditorContext();
   const editor = new Editor();
-  setEditor(editor);
+  ctx.editor = editor;
 
   const document = $derived($entityView.node.__typename === 'DocumentView' ? $entityView.node : null);
 

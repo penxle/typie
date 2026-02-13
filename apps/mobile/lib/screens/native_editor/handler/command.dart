@@ -38,7 +38,7 @@ class CommandHandler {
     }
 
     if (dirty & (1 << 4) != 0) {
-      _handleStylesChanged(controller, reader);
+      _handleAttrsChanged(controller, reader);
     }
 
     if (dirty & (1 << 7) != 0) {
@@ -149,16 +149,6 @@ class CommandHandler {
   static void _handleSelectionChanged(EditorController controller, SlateReader reader) {
     final cmp = reader.getI32('selection_cmp');
     final collapsed = cmp == 0;
-    final uniformAlign = reader.getI32('formatting_uniform_align');
-    final uniformLineHeight = reader.getF32('formatting_uniform_line_height');
-
-    final stats = <String, dynamic>{'collapsed': collapsed};
-    if (uniformAlign >= 0) {
-      stats['uniformAlign'] = ['left', 'center', 'right', 'justify'][uniformAlign];
-    }
-    if (!uniformLineHeight.isNaN && uniformLineHeight >= 0) {
-      stats['uniformLineHeight'] = uniformLineHeight;
-    }
 
     SelectionHandleInfo? fromHandleInfo;
     SelectionHandleInfo? toHandleInfo;
@@ -194,8 +184,7 @@ class CommandHandler {
     }
 
     controller.updateState(
-      (state) =>
-          state.copyWith(selectionStats: stats, fromHandle: fromHandleInfo, toHandle: toHandleInfo, pasteOptions: null),
+      (state) => state.copyWith(fromHandle: fromHandleInfo, toHandle: toHandleInfo, pasteOptions: null),
     );
 
     final anchorNodeId = reader.readNodeIdField('selection_anchor_node_id');
@@ -219,11 +208,9 @@ class CommandHandler {
     controller.onSelectionChanged?.call(anchor, head);
   }
 
-  static void _handleStylesChanged(EditorController controller, SlateReader reader) {
-    final uniformStyles = reader.readUniformStyles();
-    final mixedStyles = reader.readMixedStyles();
-
-    controller.updateState((state) => state.copyWith(uniformStyles: uniformStyles, mixedStyles: mixedStyles));
+  static void _handleAttrsChanged(EditorController controller, SlateReader reader) {
+    final attrs = reader.readAttrs();
+    controller.updateState((state) => state.copyWith(attrs: attrs));
   }
 
   static void _handlePlaceholderChanged(EditorController controller, SlateReader reader) {

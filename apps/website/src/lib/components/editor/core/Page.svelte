@@ -1,7 +1,7 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { CROP_MARKER_SIZE } from '$lib/editor/constants';
-  import { getEditor } from '$lib/editor/context';
+  import { getEditorContext } from '$lib/editor/context.svelte';
   import { WebGLRenderer } from '$lib/editor/webgl';
   import ExternalArchived from '../external/ExternalArchived.svelte';
   import ExternalEmbed from '../external/ExternalEmbed.svelte';
@@ -16,7 +16,7 @@
 
   let { page, containerEl = $bindable() }: Props = $props();
 
-  const editor = getEditor();
+  const { editor } = getEditorContext();
 
   const pageWidth = $derived(editor.layout.pages[page]?.width ?? 0);
   const pageHeight = $derived(editor.layout.pages[page]?.height ?? 0);

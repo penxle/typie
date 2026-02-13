@@ -23,7 +23,7 @@ pub use model::{Doc, Node, NodeId, Text, TextNode};
 #[cfg(any(test, feature = "bench"))]
 pub use runtime::{Direction, Effect, Message, Runtime, State};
 #[cfg(any(test, feature = "bench"))]
-pub use state::{Position, Selection, compute_selection_aggregates};
+pub use state::{Position, Selection, compute_selection_attrs};
 #[cfg(any(test, feature = "bench"))]
 pub use test_utils::init_test_env;
 #[cfg(any(test, feature = "bench"))]

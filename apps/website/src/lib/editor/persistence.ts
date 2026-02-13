@@ -9,6 +9,7 @@ type StoredDocument = {
   version: Uint8Array;
   checkpoint: Uint8Array;
   updatedAt: number;
+  generation: number;
 };
 
 function openDatabase(): Promise<IDBDatabase> {
@@ -33,6 +34,7 @@ export class IndexeddbPersistence {
   #destroyed = false;
   #version: Uint8Array = new Uint8Array();
   #checkpoint: Uint8Array = new Uint8Array();
+  #generation = 0;
 
   constructor(documentId: string) {
     this.#documentId = documentId;
@@ -44,6 +46,10 @@ export class IndexeddbPersistence {
 
   get checkpoint(): Uint8Array {
     return this.#checkpoint;
+  }
+
+  get generation(): number {
+    return this.#generation;
   }
 
   async #ensureDb(): Promise<IDBDatabase> {
@@ -97,6 +103,7 @@ export class IndexeddbPersistence {
 
     this.#version = result.version;
     this.#checkpoint = result.checkpoint;
+    this.#generation = result.generation ?? 0;
 
     return {
       snapshot: result.snapshot,
@@ -115,8 +122,12 @@ export class IndexeddbPersistence {
     });
   }
 
-  async saveSnapshot(snapshot: Uint8Array, version: Uint8Array): Promise<void> {
+  async saveSnapshot(snapshot: Uint8Array, version: Uint8Array, generation?: number): Promise<void> {
     if (this.#destroyed) return;
+
+    if (generation !== undefined) {
+      this.#generation = generation;
+    }
 
     const db = await this.#ensureDb();
     const store = db.transaction(STORE_NAME, 'readwrite').objectStore(STORE_NAME);
@@ -128,6 +139,7 @@ export class IndexeddbPersistence {
         version,
         checkpoint: this.#checkpoint,
         updatedAt: Date.now(),
+        generation: this.#generation,
       }),
     );
     this.#version = version;
@@ -149,6 +161,7 @@ export class IndexeddbPersistence {
     await this.#request(store.delete(this.#documentId));
     this.#version = new Uint8Array();
     this.#checkpoint = new Uint8Array();
+    this.#generation = 0;
   }
 
   destroy(): void {

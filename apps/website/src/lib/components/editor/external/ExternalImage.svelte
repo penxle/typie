@@ -10,7 +10,7 @@
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import ImageIcon from '~icons/lucide/image';
   import Trash2Icon from '~icons/lucide/trash-2';
-  import { getEditor } from '$lib/editor/context';
+  import { getEditorContext } from '$lib/editor/context.svelte';
   import { uploadBlobAsImage } from '$lib/utils/blob.svelte';
   import ExternalElementWrapper from './ExternalElementWrapper.svelte';
   import type { ExternalElement, ExternalElementData } from '$lib/editor/types';
@@ -23,7 +23,7 @@
 
   let { el }: Props = $props();
 
-  const editor = getEditor();
+  const { editor } = getEditorContext();
 
   let pickerOpened = $state(false);
   let proportion = $state(0);

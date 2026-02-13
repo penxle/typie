@@ -1,9 +1,9 @@
 import { getAppContext } from '@typie/ui/context';
 import { CONTINUOUS_PAGE_MARGIN, PAGE_GAP } from './constants';
-import { getEditor } from './context';
+import { getEditorContext } from './context.svelte';
 
 export function setupTypewriter(getTargetEl: () => HTMLElement | undefined, defaultPadding: number) {
-  const editor = getEditor();
+  const { editor } = getEditorContext();
 
   if (editor.readOnly) {
     $effect(() => {

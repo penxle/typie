@@ -1,4 +1,4 @@
-import type { ExternalElement, Position, Rect, SelectionStats, Style, StyleType, TextAlign, TextBound } from './types';
+import type { Attribute, ExternalElement, LinkAnnotationValue, Position, Rect, RubyAnnotationValue, TextAlign, TextBound } from './types';
 
 export type TableOverlay = {
   pageIdx: number;
@@ -19,7 +19,7 @@ export const DIRTY_SETTINGS = 0;
 export const DIRTY_LAYOUT = 1;
 export const DIRTY_CURSOR = 2;
 export const DIRTY_SELECTION = 3;
-export const DIRTY_FORMATTING = 4;
+export const DIRTY_ATTRS = 4;
 export const DIRTY_POINTER = 5;
 export const DIRTY_PLACEHOLDER = 7;
 export const DIRTY_EXTERNAL_ELEMENTS = 8;
@@ -194,7 +194,6 @@ export class SlateReader {
     collapsed: boolean;
     anchor: Position;
     head: Position;
-    stats: SelectionStats;
     fromHandle: { pageIdx: number; bounds: Rect } | null;
     toHandle: { pageIdx: number; bounds: Rect } | null;
   } {
@@ -215,13 +214,6 @@ export class SlateReader {
       offset: this.#u32('selection_head_offset'),
       affinity: AFFINITY_MAP[headAffinity] ?? 'downstream',
     };
-
-    const alignVal = this.#i32('formatting_uniform_align');
-    const uniformAlign: TextAlign | undefined =
-      alignVal === 0 ? 'left' : alignVal === 1 ? 'center' : alignVal === 2 ? 'right' : alignVal === 3 ? 'justify' : undefined;
-
-    const lh = this.#f32('formatting_uniform_line_height');
-    const uniformLineHeight = lh < 0 || Number.isNaN(lh) ? undefined : lh;
 
     const anchorPageIdx = this.#i32('selection_anchor_page_idx');
     const fromHandle =
@@ -255,40 +247,15 @@ export class SlateReader {
       collapsed,
       anchor,
       head,
-      stats: {
-        uniformAlign,
-        uniformLineHeight,
-      },
       fromHandle,
       toHandle,
     };
   }
 
-  readActiveStyles(): { uniformStyles: Style[]; mixedStyles: StyleType[] } {
-    const count = this.#u32('formatting_uniform_styles_count');
-    const offset = this.#u32('formatting_uniform_styles_offset');
-    const uniformStyles = readUniformStyles(this.#slabView, this.#slabPtr + offset, count);
-
-    const bitfield = this.#u32('formatting_mixed_styles_bitfield');
-    const mixedStyles: StyleType[] = [];
-    const STYLE_BITS: [StyleType, number][] = [
-      ['background_color', Math.trunc(1)],
-      ['text_color', 1 << 1],
-      ['font_size', 1 << 2],
-      ['font_family', 1 << 3],
-      ['font_weight', 1 << 4],
-      ['italic', 1 << 5],
-      ['letter_spacing', 1 << 6],
-      ['strikethrough', 1 << 9],
-      ['underline', 1 << 10],
-    ];
-    for (const [styleName, bit] of STYLE_BITS) {
-      if (bitfield & bit) {
-        mixedStyles.push(styleName);
-      }
-    }
-
-    return { uniformStyles, mixedStyles };
+  readAttrs(): Attribute[] {
+    const count = this.#u32('attrs_count');
+    const offset = this.#u32('attrs_offset');
+    return readAttrEntries(this.#slabView, this.#slabPtr + offset, count);
   }
 
   readPointerStyle(): string {
@@ -417,77 +384,161 @@ function readStringArray(view: DataView, offset: number, count: number): string[
   return result;
 }
 
-function readUniformStyles(view: DataView, offset: number, count: number): Style[] {
-  const styles: Style[] = [];
+const TAG_BACKGROUND_COLOR = 0;
+const TAG_TEXT_COLOR = 1;
+const TAG_FONT_SIZE = 2;
+const TAG_FONT_FAMILY = 3;
+const TAG_FONT_WEIGHT = 4;
+const TAG_ITALIC = 5;
+const TAG_LETTER_SPACING = 6;
+const TAG_STRIKETHROUGH = 9;
+const TAG_UNDERLINE = 10;
+const TAG_TEXT_ALIGN = 20;
+const TAG_LINE_HEIGHT = 21;
+const TAG_LINK = 30;
+const TAG_RUBY = 31;
+
+const VK_UNIT = 0;
+const VK_F32 = 1;
+const VK_U32 = 2;
+const VK_STRING = 3;
+const VK_COMPOSITE = 4;
+
+const ALIGN_LEFT = 0;
+const ALIGN_CENTER = 1;
+const ALIGN_RIGHT = 2;
+const ALIGN_JUSTIFY = 3;
+
+const TEXT_ALIGN_MAP: Record<number, TextAlign> = {
+  [ALIGN_LEFT]: 'left',
+  [ALIGN_CENTER]: 'center',
+  [ALIGN_RIGHT]: 'right',
+  [ALIGN_JUSTIFY]: 'justify',
+};
+
+const UNIT_TAG_MAP: Record<number, string> = { [TAG_ITALIC]: 'italic', [TAG_STRIKETHROUGH]: 'strikethrough', [TAG_UNDERLINE]: 'underline' };
+const F32_TAG_MAP: Record<number, string> = {
+  [TAG_FONT_SIZE]: 'font_size',
+  [TAG_LETTER_SPACING]: 'letter_spacing',
+  [TAG_LINE_HEIGHT]: 'line_height',
+};
+const U32_TAG_MAP: Record<number, string> = { [TAG_FONT_WEIGHT]: 'font_weight', [TAG_TEXT_ALIGN]: 'text_align' };
+const STRING_TAG_MAP: Record<number, string> = {
+  [TAG_BACKGROUND_COLOR]: 'background_color',
+  [TAG_TEXT_COLOR]: 'text_color',
+  [TAG_FONT_FAMILY]: 'font_family',
+};
+
+function readAttrEntries(view: DataView, offset: number, count: number): Attribute[] {
+  const attrs: Attribute[] = [];
   let pos = offset;
+
   for (let i = 0; i < count; i++) {
     const typeTag = view.getUint32(pos, true);
     const valueKind = view.getUint32(pos + 4, true);
-    pos += 8;
+    const valueCount = view.getUint32(pos + 8, true);
+    pos += 12;
 
-    let strValue = '';
-    let numValue = 0;
-
-    if (valueKind === 0) {
-      // unit
-    } else if (valueKind === 1) {
-      numValue = view.getFloat32(pos, true);
-      pos += 4;
-    } else if (valueKind === 2) {
-      numValue = view.getUint32(pos, true);
-      pos += 4;
-    } else if (valueKind === 3) {
-      const { value: sv, end } = readStr(view, pos);
-      strValue = sv;
-      pos = end;
+    if (valueKind === VK_UNIT) {
+      const values: (true | null)[] = [];
+      for (let j = 0; j < valueCount; j++) {
+        const v = view.getUint32(pos, true);
+        pos += 4;
+        values.push(v === 0xff_ff_ff_ff ? null : true);
+      }
+      const type = UNIT_TAG_MAP[typeTag];
+      if (type) attrs.push({ type, values } as Attribute);
+    } else if (valueKind === VK_F32) {
+      const values: (number | null)[] = [];
+      for (let j = 0; j < valueCount; j++) {
+        const v = view.getFloat32(pos, true);
+        pos += 4;
+        values.push(Number.isNaN(v) ? null : v);
+      }
+      const type = F32_TAG_MAP[typeTag];
+      if (type) attrs.push({ type, values } as Attribute);
+    } else if (valueKind === VK_U32) {
+      const values: (number | null)[] = [];
+      for (let j = 0; j < valueCount; j++) {
+        const v = view.getUint32(pos, true);
+        pos += 4;
+        values.push(v === 0xff_ff_ff_ff ? null : v);
+      }
+      const type = U32_TAG_MAP[typeTag];
+      if (type) {
+        if (type === 'text_align') {
+          attrs.push({ type: 'text_align', values: values.map((v) => (v === null ? null : (TEXT_ALIGN_MAP[v] ?? null))) } as Attribute);
+        } else {
+          attrs.push({ type, values } as Attribute);
+        }
+      }
+    } else if (valueKind === VK_STRING) {
+      const values: (string | null)[] = [];
+      for (let j = 0; j < valueCount; j++) {
+        const byteLen = view.getUint32(pos, true);
+        if (byteLen === 0xff_ff_ff_ff) {
+          values.push(null);
+          pos += 4;
+        } else {
+          const { value, end } = readStr(view, pos);
+          values.push(value);
+          pos = end;
+        }
+      }
+      const type = STRING_TAG_MAP[typeTag];
+      if (type) attrs.push({ type, values } as Attribute);
+    } else if (valueKind === VK_COMPOSITE) {
+      if (typeTag === TAG_LINK) {
+        const values: (LinkAnnotationValue | null)[] = [];
+        for (let j = 0; j < valueCount; j++) {
+          const fieldCount = view.getUint32(pos, true);
+          pos += 4;
+          if (fieldCount === 0xff_ff_ff_ff) {
+            values.push(null);
+          } else {
+            const obj: Record<string, string> = {};
+            for (let k = 0; k < fieldCount; k++) {
+              const fvk = view.getUint32(pos, true);
+              pos += 4;
+              if (fvk === VK_STRING) {
+                const { value, end } = readStr(view, pos);
+                pos = end;
+                if (k === 0) obj['href'] = value;
+                else obj[`field_${k}`] = value;
+              }
+            }
+            values.push(obj as LinkAnnotationValue);
+          }
+        }
+        attrs.push({ type: 'link', values });
+      } else if (typeTag === TAG_RUBY) {
+        const values: (RubyAnnotationValue | null)[] = [];
+        for (let j = 0; j < valueCount; j++) {
+          const fieldCount = view.getUint32(pos, true);
+          pos += 4;
+          if (fieldCount === 0xff_ff_ff_ff) {
+            values.push(null);
+          } else {
+            const obj: Record<string, string> = {};
+            for (let k = 0; k < fieldCount; k++) {
+              const fvk = view.getUint32(pos, true);
+              pos += 4;
+              if (fvk === VK_STRING) {
+                const { value, end } = readStr(view, pos);
+                pos = end;
+                if (k === 0) obj['text'] = value;
+                else obj[`field_${k}`] = value;
+              }
+            }
+            values.push(obj as RubyAnnotationValue);
+          }
+        }
+        attrs.push({ type: 'ruby', values });
+      }
     }
-
-    let style: Style;
-    switch (typeTag) {
-      case 0: {
-        style = { type: 'background_color', color: strValue };
-        break;
-      }
-      case 1: {
-        style = { type: 'text_color', color: strValue };
-        break;
-      }
-      case 2: {
-        style = { type: 'font_size', size: numValue };
-        break;
-      }
-      case 3: {
-        style = { type: 'font_family', family: strValue };
-        break;
-      }
-      case 4: {
-        style = { type: 'font_weight', weight: numValue };
-        break;
-      }
-      case 5: {
-        style = { type: 'italic' };
-        break;
-      }
-      case 6: {
-        style = { type: 'letter_spacing', spacing: numValue };
-        break;
-      }
-      case 9: {
-        style = { type: 'strikethrough' };
-        break;
-      }
-      case 10: {
-        style = { type: 'underline' };
-        break;
-      }
-      default: {
-        continue;
-      }
-    }
-
-    styles.push(style);
   }
-  return styles;
+
+  return attrs;
 }
 
 function readExternalElements(view: DataView, offset: number, count: number): ExternalElement[] {

@@ -215,6 +215,17 @@ Document.implement({
       },
     }),
 
+    generation: t.int({
+      resolve: async (self) => {
+        const content = await db
+          .select({ generation: DocumentContents.generation })
+          .from(DocumentContents)
+          .where(eq(DocumentContents.documentId, self.id))
+          .then(firstOrThrow);
+        return content.generation;
+      },
+    }),
+
     layoutMode: t.field({
       type: 'JSON',
       resolve: async (self) => {

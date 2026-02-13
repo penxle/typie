@@ -1,4 +1,3 @@
-import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/context/modal.dart';
@@ -19,12 +18,13 @@ class NativeEditorFontSizeTextOptionsToolbar extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final scope = NativeEditorToolbarScope.of(context);
-    final uniformStyles = useValueListenable(scope.uniformStyles);
-    final mixedStyles = useValueListenable(scope.mixedStyles);
+    final attrs = useValueListenable(scope.attrs);
 
-    final isMixed = mixedStyles.contains('font_size');
-    final fontSizeStyle = uniformStyles.firstWhereOrNull((m) => m['type'] == 'font_size');
-    final activeValue = isMixed ? null : (fontSizeStyle?['size'] as num? ?? editorDefaultValues['fontSize'] as num);
+    final fontSizeAttr = findAttr(attrs, 'font_size');
+    final fontSizeValues = (fontSizeAttr?['values'] as List?)?.whereType<num>().toList() ?? [];
+    final activeValue = fontSizeValues.length == 1
+        ? fontSizeValues[0]
+        : (fontSizeValues.isEmpty ? editorDefaultValues['fontSize'] as num : null);
 
     final presetItems = editorValues['fontSize']!;
     final allItems = useMemoized(() {

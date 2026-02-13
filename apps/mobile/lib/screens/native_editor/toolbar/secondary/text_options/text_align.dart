@@ -11,9 +11,11 @@ class NativeEditorTextAlignTextOptionsToolbar extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final scope = NativeEditorToolbarScope.of(context);
-    final selectionStats = useValueListenable(scope.selectionStats);
+    final attrs = useValueListenable(scope.attrs);
 
-    final activeValue = selectionStats['uniformAlign'] as String? ?? editorDefaultValues['textAlign'];
+    final textAlignAttr = findAttr(attrs, 'text_align');
+    final textAlignValues = (textAlignAttr?['values'] as List?)?.whereType<String>().toList() ?? [];
+    final activeValue = textAlignValues.length == 1 ? textAlignValues[0] : editorDefaultValues['textAlign'];
 
     return NativeEditorTextOptionsToolbar(
       items: editorValues['textAlign']!,

@@ -29,11 +29,13 @@ use crate::layout::cursor::{Cursor, NavigationContext};
 use crate::layout::elements::ExternalElementData;
 use crate::layout::query::find_drag_image_bounds;
 use crate::layout::{LayoutCache, LayoutContext, Page, Paginator};
-use crate::model::TextAlign;
 use crate::model::*;
 use crate::render::{RenderResult, Renderer};
 
-use crate::state::selection_helpers::{build_selection_decorations, compute_selection_aggregates};
+use crate::state::selection_helpers::{
+    SelectionAttributes, build_selection_decorations, collect_block_attrs_at,
+    compute_selection_attrs,
+};
 use crate::state::{
     Position, Preedit, Selection, find_child_at_offset, find_text_at_offset, position_in_selection,
 };
@@ -118,10 +120,7 @@ struct SelectionSnapshot {
     to: Position,
     block_ids: Vec<NodeId>,
     block_set: FxHashSet<NodeId>,
-    stats: SelectionStats,
-    uniform_styles: Vec<Style>,
-    mixed_styles: Vec<StyleType>,
-    annotations: Vec<Annotation>,
+    attrs: SelectionAttributes,
 }
 
 pub struct Runtime {
@@ -525,7 +524,7 @@ impl Runtime {
         self.state.preedit.as_ref()
     }
 
-    fn selection_snapshot(&mut self) -> Option<&SelectionSnapshot> {
+    fn selection_snapshot(&mut self) -> Option<SelectionSnapshot> {
         let selection = &self.state.selection;
         let Ok((from, to)) = selection.as_sorted(self.doc()) else {
             self.selection_cache = None;
@@ -550,31 +549,18 @@ impl Runtime {
             let mut block_set = FxHashSet::default();
             block_set.extend(block_ids.iter().copied());
 
-            let (_, uniform_align, uniform_line_height, _, _) =
-                compute_selection_aggregates(self.doc(), &block_ids, from.clone(), to.clone());
-
-            let stats = SelectionStats {
-                uniform_align,
-                uniform_line_height,
-            };
+            let attrs = compute_selection_attrs(self.doc(), &block_ids, from.clone(), to.clone());
 
             self.selection_cache = Some(SelectionSnapshot {
                 from: from.clone(),
                 to: to.clone(),
                 block_ids,
                 block_set,
-                stats,
-                uniform_styles: Vec::new(),
-                mixed_styles: Vec::new(),
-                annotations: Vec::new(),
+                attrs,
             });
         }
 
-        self.selection_cache.as_ref()
-    }
-
-    fn selection_snapshot_owned(&mut self) -> Option<SelectionSnapshot> {
-        self.selection_snapshot().cloned()
+        self.selection_cache.clone()
     }
     fn set_width(&mut self, width: f32) {
         if self.width != width {
@@ -668,7 +654,7 @@ impl Runtime {
     }
 
     pub fn render_page(&mut self, page_index: usize) -> Option<RenderResult> {
-        let snapshot = self.selection_snapshot_owned();
+        let snapshot = self.selection_snapshot();
 
         let doc = &self.state.doc;
         let selection = &self.state.selection;
@@ -726,7 +712,7 @@ impl Runtime {
 
     #[allow(dead_code)]
     pub fn render_page_to(&mut self, page_index: usize, dst: &mut [u8]) -> bool {
-        let snapshot = self.selection_snapshot_owned();
+        let snapshot = self.selection_snapshot();
 
         let doc = &self.state.doc;
         let selection = &self.state.selection;
@@ -779,44 +765,6 @@ impl Runtime {
         )
     }
 
-    fn collect_selection_styles(
-        &mut self,
-        snapshot: Option<SelectionSnapshot>,
-    ) -> (Vec<Style>, Vec<StyleType>) {
-        let selection = &self.state.selection;
-
-        if selection.is_collapsed() {
-            return (self.state.pending_styles.clone(), Vec::new());
-        }
-
-        let snapshot_owned = snapshot.or_else(|| self.selection_snapshot_owned());
-        let Some(snapshot) = snapshot_owned else {
-            return (Vec::new(), Vec::new());
-        };
-
-        (snapshot.uniform_styles, snapshot.mixed_styles)
-    }
-
-    #[allow(dead_code)]
-    fn collect_selection_annotations(
-        &mut self,
-        snapshot: Option<SelectionSnapshot>,
-    ) -> Vec<Annotation> {
-        let selection = &self.state.selection;
-
-        if selection.is_collapsed() {
-            return self.get_annotations_at_position(&selection.head);
-        }
-
-        let snapshot_owned = snapshot.or_else(|| self.selection_snapshot_owned());
-        let Some(snapshot) = snapshot_owned else {
-            return Vec::new();
-        };
-
-        snapshot.annotations
-    }
-
-    #[allow(dead_code)]
     fn get_annotations_at_position(&self, position: &Position) -> Vec<Annotation> {
         let Some(node) = self.doc().node(position.node_id) else {
             return Vec::new();
@@ -902,103 +850,6 @@ impl Runtime {
             PointerStyle::Default => 0,
             PointerStyle::Text => 1,
             PointerStyle::Pointer => 2,
-        }
-    }
-
-    fn text_align_to_i32(a: Option<TextAlign>) -> i32 {
-        match a {
-            None => -1,
-            Some(TextAlign::Left) => 0,
-            Some(TextAlign::Center) => 1,
-            Some(TextAlign::Right) => 2,
-            Some(TextAlign::Justify) => 3,
-        }
-    }
-
-    fn write_style_to_slab(slab: &mut Slab, style: &Style) -> u32 {
-        let start = slab.alloc(0, 4);
-
-        let (type_tag, value_kind) = match style {
-            Style::BackgroundColor(_) => (0u32, 3u32),
-            Style::TextColor(_) => (1, 3),
-            Style::FontSize(_) => (2, 1),
-            Style::FontFamily(_) => (3, 3),
-            Style::FontWeight(_) => (4, 2),
-            Style::Italic(_) => (5, 0),
-            Style::LetterSpacing(_) => (6, 1),
-            Style::Strikethrough(_) => (9, 0),
-            Style::Underline(_) => (10, 0),
-        };
-
-        slab.write_u32_slice(&[type_tag, value_kind]);
-
-        match style {
-            Style::BackgroundColor(s) => {
-                slab.write_str(&s.color);
-            }
-            Style::TextColor(s) => {
-                slab.write_str(&s.color);
-            }
-            Style::FontSize(s) => {
-                slab.write_f32_slice(&[s.size]);
-            }
-            Style::FontFamily(s) => {
-                slab.write_str(&s.family);
-            }
-            Style::FontWeight(s) => {
-                slab.write_u32_slice(&[s.weight as u32]);
-            }
-            Style::Italic(_) => {}
-            Style::LetterSpacing(s) => {
-                slab.write_f32_slice(&[s.spacing]);
-            }
-            Style::Strikethrough(_) => {}
-            Style::Underline(_) => {}
-        }
-
-        start
-    }
-
-    #[allow(dead_code)]
-    fn write_annotation_to_slab(slab: &mut Slab, annotation: &Annotation) -> u32 {
-        let start = slab.alloc(0, 4);
-
-        let type_tag = match annotation {
-            Annotation::Link(_) => 0u32,
-            Annotation::Ruby(_) => 1,
-        };
-
-        slab.write_u32_slice(&[type_tag]);
-
-        match annotation {
-            Annotation::Link(link) => {
-                slab.write_str(&link.href);
-            }
-            Annotation::Ruby(ruby) => {
-                slab.write_str(&ruby.text);
-            }
-        }
-
-        start
-    }
-
-    fn style_type_to_bit(st: &StyleType) -> u32 {
-        match st {
-            StyleType::BackgroundColor => 1 << 0,
-            StyleType::TextColor => 1 << 1,
-            StyleType::FontSize => 1 << 2,
-            StyleType::FontFamily => 1 << 3,
-            StyleType::FontWeight => 1 << 4,
-            StyleType::Italic => 1 << 5,
-            StyleType::LetterSpacing => 1 << 6,
-            StyleType::Strikethrough => 1 << 9,
-            StyleType::Underline => 1 << 10,
-        }
-    }
-
-    fn write_text_bounds_to_slab(slab: &mut Slab, bounds: &[crate::types::TextBound]) {
-        for b in bounds {
-            slab.write_f32_slice(&[b.x, b.y, b.width, b.height, b.ascent]);
         }
     }
 
@@ -1200,30 +1051,52 @@ impl Runtime {
         }
 
         if self.pending.active_styles {
-            let snapshot = self.selection_snapshot_owned();
-            let stats = snapshot
-                .as_ref()
-                .map(|s| s.stats.clone())
-                .unwrap_or_default();
-            let (uniform_styles, mixed_styles) = self.collect_selection_styles(snapshot);
+            let selection = self.state.selection;
 
-            self.slate.formatting_uniform_align = Self::text_align_to_i32(stats.uniform_align);
-            self.slate.formatting_uniform_line_height = stats.uniform_line_height.unwrap_or(-1.0);
+            if selection.is_collapsed() {
+                let block_attrs = collect_block_attrs_at(self.doc(), selection.head.node_id);
+                let annotations = self.get_annotations_at_position(&selection.head);
 
-            let styles_start = self.slab.alloc(0, 4);
-            for style in &uniform_styles {
-                Self::write_style_to_slab(&mut self.slab, style);
+                let mut style_values: FxHashMap<StyleType, Vec<Style>> = FxHashMap::default();
+                for style in &self.state.pending_styles {
+                    let st = style.as_type();
+                    style_values.entry(st).or_default().push(style.clone());
+                }
+
+                let mut annotation_values: FxHashMap<AnnotationType, Vec<Annotation>> =
+                    FxHashMap::default();
+                for annotation in &annotations {
+                    let at = annotation.as_type();
+                    let values = annotation_values.entry(at).or_default();
+                    if !values.iter().any(|v| v == annotation) {
+                        values.push(annotation.clone());
+                    }
+                }
+
+                let attrs = SelectionAttributes {
+                    block_attrs,
+                    style_values,
+                    annotation_values,
+                    absent_styles: FxHashSet::default(),
+                    absent_annotations: FxHashSet::default(),
+                };
+
+                let (offset, count) = self.slab.write_attrs(&attrs);
+                self.slate.attrs_offset = offset;
+                self.slate.attrs_count = count;
+            } else {
+                let snapshot = self.selection_snapshot();
+                if let Some(snapshot) = snapshot {
+                    let (offset, count) = self.slab.write_attrs(&snapshot.attrs);
+                    self.slate.attrs_offset = offset;
+                    self.slate.attrs_count = count;
+                } else {
+                    self.slate.attrs_offset = 0;
+                    self.slate.attrs_count = 0;
+                }
             }
-            self.slate.formatting_uniform_styles_offset = styles_start;
-            self.slate.formatting_uniform_styles_count = uniform_styles.len() as u32;
 
-            let mut bitfield = 0u32;
-            for st in &mixed_styles {
-                bitfield |= Self::style_type_to_bit(st);
-            }
-            self.slate.formatting_mixed_styles_bitfield = bitfield;
-
-            self.slate.dirty |= DIRTY_FORMATTING;
+            self.slate.dirty |= DIRTY_ATTRS;
             self.pending.active_styles = false;
         }
 
@@ -1364,7 +1237,7 @@ impl Runtime {
                 self.slab.write_u32_slice(&[o.page_idx as u32]);
                 self.slab.write_str(&o.href);
                 self.slab.write_u32_slice(&[o.bounds.len() as u32]);
-                Self::write_text_bounds_to_slab(&mut self.slab, &o.bounds);
+                self.slab.write_text_bounds(&o.bounds);
             }
             self.slate.link_overlays_offset = start;
             self.slate.link_overlays_count = overlays.len() as u32;
@@ -1387,7 +1260,7 @@ impl Runtime {
                 self.slab
                     .write_u32_slice(&[o.start_offset as u32, o.end_offset as u32]);
                 self.slab.write_u32_slice(&[o.bounds.len() as u32]);
-                Self::write_text_bounds_to_slab(&mut self.slab, &o.bounds);
+                self.slab.write_text_bounds(&o.bounds);
             }
             self.slate.tracked_items_offset = start;
             self.slate.tracked_items_count = overlays.len() as u32;
@@ -1469,7 +1342,7 @@ impl Runtime {
     fn build_external_elements(&mut self) -> Vec<ExternalElement> {
         let mut elements = Vec::new();
         let selected_nodes = self
-            .selection_snapshot_owned()
+            .selection_snapshot()
             .map(|snapshot| snapshot.block_set)
             .unwrap_or_default();
 

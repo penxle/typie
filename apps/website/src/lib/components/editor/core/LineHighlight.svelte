@@ -1,9 +1,9 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { getAppContext } from '@typie/ui/context';
-  import { getEditor } from '$lib/editor/context';
+  import { getEditorContext } from '$lib/editor/context.svelte';
 
-  const editor = getEditor();
+  const { editor } = getEditorContext();
   const app = getAppContext();
 
   const PADDING = 4;

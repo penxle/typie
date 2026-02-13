@@ -12,17 +12,19 @@ class NativeEditorFontWeightTextOptionsToolbar extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final scope = NativeEditorToolbarScope.of(context);
-    final uniformStyles = useValueListenable(scope.uniformStyles);
-    final mixedStyles = useValueListenable(scope.mixedStyles);
+    final attrs = useValueListenable(scope.attrs);
 
-    final fontFamilyStyle = uniformStyles.firstWhereOrNull((m) => m['type'] == 'font_family');
-    final currentFontFamily = fontFamilyStyle?['family'] as String? ?? editorDefaultValues['fontFamily'] as String;
+    final fontFamilyAttr = findAttr(attrs, 'font_family');
+    final fontFamilyValues = (fontFamilyAttr?['values'] as List?)?.whereType<String>().toList() ?? [];
+    final currentFontFamily = fontFamilyValues.length == 1
+        ? fontFamilyValues[0]
+        : editorDefaultValues['fontFamily'] as String;
 
-    final isMixed = mixedStyles.contains('font_weight');
-    final fontWeightStyle = uniformStyles.firstWhereOrNull((m) => m['type'] == 'font_weight');
-    final activeValue = isMixed
-        ? null
-        : (fontWeightStyle?['weight'] as int? ?? editorDefaultValues['fontWeight'] as int);
+    final fontWeightAttr = findAttr(attrs, 'font_weight');
+    final fontWeightValues = (fontWeightAttr?['values'] as List?)?.whereType<int>().toList() ?? [];
+    final activeValue = fontWeightValues.length == 1
+        ? fontWeightValues[0]
+        : (fontWeightValues.isEmpty ? editorDefaultValues['fontWeight'] as int : null);
 
     final currentFontFamilyAndWeights = _getCurrentFontFamilyAndWeights(currentFontFamily);
 

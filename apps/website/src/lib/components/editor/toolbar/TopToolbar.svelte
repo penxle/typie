@@ -23,7 +23,7 @@
   import HorizontalRuleIcon from '~icons/typie/horizontal-rule';
   import { fragment, graphql } from '$graphql';
   import { blockquoteVariants, horizontalRuleVariants } from '$lib/components/editor/values';
-  import { getEditor } from '$lib/editor/context';
+  import { getEditorContext } from '$lib/editor/context.svelte';
   import TableSizeSelector from './TableSizeSelector.svelte';
   import ToolbarButton from './ToolbarButton.svelte';
   import ToolbarDropdownButton from './ToolbarDropdownButton.svelte';
@@ -50,7 +50,7 @@
   );
 
   const app = getAppContext();
-  const editor = getEditor();
+  const { editor } = getEditorContext();
 
   const toolbarSize = $derived(app.preference.current.toolbarStyle === 'compact' ? 'medium' : 'large');
   const layoutMode = $derived(editor.layout.layoutMode);

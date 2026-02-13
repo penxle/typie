@@ -1,5 +1,4 @@
 use crate::layout::elements::ExternalElementData;
-use crate::model::TextAlign;
 use crate::types::{Rect, TextBound};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -9,12 +8,6 @@ pub struct ExternalElement {
     pub bounds: Rect,
     pub data: ExternalElementData,
     pub is_selected: bool,
-}
-
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct SelectionStats {
-    pub uniform_align: Option<TextAlign>,
-    pub uniform_line_height: Option<f32>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

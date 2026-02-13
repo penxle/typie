@@ -273,9 +273,9 @@ export const DocumentGCJob = defineJob('document:gc', async (documentId: string)
     const doc = new LoroDoc();
     doc.import(snapshot);
     const prevVersion = doc.version();
-    const { deletedNodes, deletedAnnotations } = garbageCollectLoroDoc(doc);
+    const deletedNodes = garbageCollectLoroDoc(doc);
 
-    if (deletedNodes + deletedAnnotations > 0) {
+    if (deletedNodes > 0) {
       const gcSnapshot = doc.export({ mode: 'snapshot' });
       const gcVersion = doc.version().encode();
       const gcUpdate = doc.export({ mode: 'update', from: prevVersion });

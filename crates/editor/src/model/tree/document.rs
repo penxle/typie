@@ -289,7 +289,7 @@ impl Doc {
                     LoroValue::String(s) => Some(s.to_string()),
                     _ => None,
                 })
-                .expect("styles map must contain all default style keys")
+                .unwrap_or_else(|| panic!("styles map must contain default style key: {key}"))
         };
         let get_f32 = |key: &str| -> f32 {
             styles_map
@@ -297,9 +297,10 @@ impl Doc {
                 .and_then(|v| v.into_value().ok())
                 .and_then(|v| match v {
                     LoroValue::Double(d) => Some(d as f32),
+                    LoroValue::I64(i) => Some(i as f32),
                     _ => None,
                 })
-                .expect("styles map must contain all default style keys")
+                .unwrap_or_else(|| panic!("styles map must contain default style key: {key}"))
         };
         let get_i64 = |key: &str| -> i64 {
             styles_map
@@ -309,7 +310,7 @@ impl Doc {
                     LoroValue::I64(i) => Some(i),
                     _ => None,
                 })
-                .expect("styles map must contain all default style keys")
+                .unwrap_or_else(|| panic!("styles map must contain default style key: {key}"))
         };
         let get_bool = |key: &str| -> bool {
             styles_map
@@ -319,7 +320,7 @@ impl Doc {
                     LoroValue::Bool(b) => Some(b),
                     _ => None,
                 })
-                .expect("styles map must contain all default style keys")
+                .unwrap_or_else(|| panic!("styles map must contain default style key: {key}"))
         };
 
         DefaultStyles {

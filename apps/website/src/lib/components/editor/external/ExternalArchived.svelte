@@ -3,7 +3,7 @@
   import { flex } from '@typie/styled-system/patterns';
   import { Button, Icon, Modal } from '@typie/ui/components';
   import ArchiveIcon from '~icons/lucide/archive';
-  import { getEditor } from '$lib/editor/context';
+  import { getEditorContext } from '$lib/editor/context.svelte';
   import ExternalElementWrapper from './ExternalElementWrapper.svelte';
   import type { ExternalElement, ExternalElementData } from '$lib/editor/types';
 
@@ -15,7 +15,7 @@
 
   let { el }: Props = $props();
 
-  const editor = getEditor();
+  const { editor } = getEditorContext();
 
   const archivedData = $derived(el.data as ArchivedData);
   const isEditable = $derived(!editor.isReadOnly());

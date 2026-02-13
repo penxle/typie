@@ -5,6 +5,7 @@ import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { PAGE_GAP } from './constants';
 import { ensureAllFontBases, ensureRequiredFallbackFont, ensureRequiredFont } from './fonts';
 import {
+  DIRTY_ATTRS,
   DIRTY_CURSOR,
   DIRTY_DOC_CHANGED,
   DIRTY_ENABLED_ACTIONS,
@@ -12,7 +13,6 @@ import {
   DIRTY_EXTERNAL_ELEMENTS,
   DIRTY_FALLBACK_FONT_REQUIRED,
   DIRTY_FONT_REQUIRED,
-  DIRTY_FORMATTING,
   DIRTY_HTML_PASTED,
   DIRTY_LAYOUT,
   DIRTY_LINK_OVERLAYS,
@@ -33,6 +33,7 @@ import type { ThemeColors } from './theme';
 import type {
   AiFeedbackData,
   ArchivedAsset,
+  Attribute,
   EmbedAsset,
   ExternalElement,
   FileAsset,
@@ -41,10 +42,7 @@ import type {
   Message,
   Position,
   Rect,
-  SelectionStats,
   SpellcheckErrorData,
-  Style,
-  StyleType,
 } from './types';
 
 let sharedApplication: Application | null = null;
@@ -140,10 +138,6 @@ export class Editor {
   });
 
   selection = $state({
-    stats: {
-      uniformAlign: undefined,
-      uniformLineHeight: undefined,
-    } as SelectionStats,
     collapsed: true,
   });
 
@@ -156,10 +150,11 @@ export class Editor {
     selectionWithoutWhitespaceAndPunctuation: 0,
   });
 
-  activeStyles = $state({
-    uniformStyles: [] as Style[],
-    mixedStyles: [] as StyleType[],
-  });
+  attrs = $state<Attribute[]>([]);
+
+  getAttr(type: string): Attribute | undefined {
+    return this.attrs.find((a) => a.type === type);
+  }
 
   settings = $state({
     paragraphIndent: 1,
@@ -388,17 +383,14 @@ export class Editor {
       }
 
       const sel = slate.readSelection();
-      this.selection.stats = sel.stats;
       this.selection.collapsed = sel.collapsed;
       this.characterCountsVersion++;
       this.#onSelectionChanged?.(sel.anchor, sel.head);
       this.#updateActiveTrackedItems(sel.head);
     }
 
-    if (slate.isDirty(DIRTY_FORMATTING)) {
-      const m = slate.readActiveStyles();
-      this.activeStyles.uniformStyles = m.uniformStyles;
-      this.activeStyles.mixedStyles = m.mixedStyles;
+    if (slate.isDirty(DIRTY_ATTRS)) {
+      this.attrs = slate.readAttrs();
     }
 
     if (slate.isDirty(DIRTY_EXTERNAL_ELEMENTS)) {
