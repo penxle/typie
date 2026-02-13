@@ -19,12 +19,12 @@ class NativeEditorFontSizeTextOptionsToolbar extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final scope = NativeEditorToolbarScope.of(context);
-    final uniformMarks = useValueListenable(scope.uniformMarks);
-    final mixedMarks = useValueListenable(scope.mixedMarks);
+    final uniformStyles = useValueListenable(scope.uniformStyles);
+    final mixedStyles = useValueListenable(scope.mixedStyles);
 
-    final isMixed = mixedMarks.contains('font_size');
-    final fontSizeMark = uniformMarks.firstWhereOrNull((m) => m['type'] == 'font_size');
-    final activeValue = isMixed ? null : (fontSizeMark?['size'] as num? ?? editorDefaultValues['fontSize'] as num);
+    final isMixed = mixedStyles.contains('font_size');
+    final fontSizeStyle = uniformStyles.firstWhereOrNull((m) => m['type'] == 'font_size');
+    final activeValue = isMixed ? null : (fontSizeStyle?['size'] as num? ?? editorDefaultValues['fontSize'] as num);
 
     final presetItems = editorValues['fontSize']!;
     final allItems = useMemoized(() {
@@ -62,7 +62,10 @@ class NativeEditorFontSizeTextOptionsToolbar extends HookWidget {
                   onSubmit: (form) async {
                     final value = num.tryParse(form.data['fontSize'] as String? ?? '');
                     if (value != null && value >= minFontSize && value <= maxFontSize) {
-                      scope.dispatch({'type': 'setFontSize', 'size': value});
+                      scope.dispatch({
+                        'type': 'toggleStyle',
+                        'style': {'type': 'font_size', 'size': value},
+                      });
                     }
                   },
                   builder: (context, form) {
@@ -85,7 +88,10 @@ class NativeEditorFontSizeTextOptionsToolbar extends HookWidget {
                 ),
               );
             } else {
-              scope.dispatch({'type': 'setFontSize', 'size': item['value']});
+              scope.dispatch({
+                'type': 'toggleStyle',
+                'style': {'type': 'font_size', 'size': item['value']},
+              });
             }
           },
         );

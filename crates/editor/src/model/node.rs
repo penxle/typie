@@ -122,13 +122,13 @@ impl Node {
 
     pub fn plan_consecutive_text_merges<'a>(
         nodes: impl Iterator<Item = (NodeId, &'a Node)>,
-    ) -> Vec<(NodeId, Vec<NodeId>, Vec<(String, Vec<Mark>)>)> {
+    ) -> Vec<(NodeId, Vec<NodeId>, Vec<TextSegment>)> {
         let mut plans = Vec::new();
-        let mut current_merge: Option<(NodeId, Vec<NodeId>, Vec<(String, Vec<Mark>)>)> = None;
+        let mut current_merge: Option<(NodeId, Vec<NodeId>, Vec<TextSegment>)> = None;
 
         for (id, node) in nodes {
             if let Node::Text(text_node) = node {
-                let segments = text_node.text.get_rich_text_segments();
+                let segments = text_node.text.get_segments();
                 if let Some(ref mut merge) = current_merge {
                     merge.1.push(id);
                     merge.2.extend(segments);

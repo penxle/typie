@@ -1,5 +1,4 @@
 use crate::layout::elements::LineElement;
-use crate::model::{FontFamilyMark, TextColorMark};
 use crate::render::glyph::Glyph;
 use crate::render::{GlyphRenderer, Render, RenderContext, RenderPhase};
 use crate::types::Point;
@@ -170,7 +169,7 @@ impl LineElement {
         }
     }
 
-    fn render_ruby_marks(
+    fn render_ruby_annotations(
         &self,
         pixmap: &mut PixmapMut,
         glyph_renderer: &mut GlyphRenderer,
@@ -223,7 +222,7 @@ impl LineElement {
                     lcx.ranged_builder(&mut fcx, &ruby_seg.ruby_text, 1.0, false);
 
                 ruby_builder.push_default(StyleProperty::FontStack(FontStack::Single(
-                    FontFamily::Named(FontFamilyMark::default().family.into()),
+                    FontFamily::Named(ctx.doc.default_styles().font_family().into()),
                 )));
                 ruby_builder.push_default(StyleProperty::FontSize(RUBY_FONT_SIZE));
                 ruby_builder.push_default(StyleProperty::FontWeight(FontWeight::new(400.0)));
@@ -316,16 +315,15 @@ impl Render for LineElement {
                             let run = glyph_run.run();
                             let style = glyph_run.style();
 
-                            let color = if style.brush.is_empty()
-                                || style.brush == format!("text.{}", TextColorMark::default().key)
-                            {
-                                ctx.default_text_color.unwrap_or_else(|| {
-                                    ctx.theme
-                                        .color(&format!("text.{}", TextColorMark::default().key))
-                                })
-                            } else {
-                                ctx.theme.color(&style.brush)
-                            };
+                            let default_text_brush =
+                                format!("text.{}", ctx.doc.default_styles().text_color());
+                            let color =
+                                if style.brush.is_empty() || style.brush == default_text_brush {
+                                    ctx.default_text_color
+                                        .unwrap_or_else(|| ctx.theme.color(&default_text_brush))
+                                } else {
+                                    ctx.theme.color(&style.brush)
+                                };
                             let text_paint = create_solid_paint(color);
 
                             let run_x = glyph_run.offset();
@@ -402,7 +400,7 @@ impl Render for LineElement {
                 }
 
                 self.render_preedit(pixmap, transform, point, ctx);
-                self.render_ruby_marks(pixmap, glyph_renderer, transform, &line_metrics, ctx);
+                self.render_ruby_annotations(pixmap, glyph_renderer, transform, &line_metrics, ctx);
             }
         }
     }
@@ -424,7 +422,7 @@ mod tests {
     fn decorations_from_state(_state: &crate::runtime::State) -> Decorations {
         Decorations {
             preedit: None,
-            pending_marks: None,
+            pending_styles: Default::default(),
         }
     }
 
@@ -435,11 +433,13 @@ mod tests {
         let decorations = decorations_from_state(state);
         let paragraph = state.doc.node(para_id).unwrap();
         let settings = state.doc.settings();
+        let default_styles = state.doc.default_styles();
         let cache = RefCell::new(LayoutCache::new());
         let view_states = crate::runtime::ViewStates::default();
         let ctx = LayoutContext::new(
             &paragraph,
             &settings,
+            &default_styles,
             &decorations,
             1.0,
             &view_states,

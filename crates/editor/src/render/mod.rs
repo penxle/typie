@@ -34,13 +34,8 @@ pub trait Render {
         transform: Transform,
         ctx: &RenderContext<'_>,
     );
-
-    fn ignores_clip(&self) -> bool {
-        false
-    }
 }
 
-#[allow(dead_code)]
 pub struct RenderResult {
     pub ptr: *const u8,
     pub len: usize,
@@ -48,6 +43,7 @@ pub struct RenderResult {
     pub height: u16,
 }
 
+#[allow(dead_code)]
 pub struct RenderInfo {
     pub width: u16,
     pub height: u16,
@@ -180,6 +176,7 @@ impl Renderer {
         }
     }
 
+    #[allow(dead_code)]
     pub fn render_to(
         &mut self,
         page: &Page,

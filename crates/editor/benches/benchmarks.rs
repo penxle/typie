@@ -1,10 +1,8 @@
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
-use editor::model::{Node, NodeId, Text, TextNode};
-use editor::runtime::{Direction, Message, Runtime, State};
-use editor::state::{Position, Selection, compute_selection_aggregates};
-use editor::transact;
-use editor::transaction::Transaction;
-use editor::types::{Affinity, Theme};
+use editor::{
+    Affinity, Direction, Doc, Effect, Message, Node, NodeId, Position, Runtime, Selection, State,
+    Text, TextNode, Theme, Transaction, compute_selection_aggregates, init_test_env, transact,
+};
 use rustc_hash::FxHashMap;
 use std::rc::Rc;
 use std::time::Duration;
@@ -31,9 +29,9 @@ fn test_theme() -> Theme {
 }
 
 fn runtime_with_paragraphs(count: usize) -> Runtime {
-    editor::test_utils::init_test_env();
+    init_test_env();
 
-    let doc = Rc::new(editor::model::Doc::new());
+    let doc = Rc::new(Doc::new());
     let initial_state = State::new(
         doc,
         Selection::collapsed(Position::new(NodeId::ROOT, 0, Affinity::default())),
@@ -144,9 +142,9 @@ fn bench_editing(c: &mut Criterion) {
 
         b.iter_batched_ref(
             || {
-                editor::test_utils::init_test_env();
+                init_test_env();
 
-                let doc = Rc::new(editor::model::Doc::new());
+                let doc = Rc::new(Doc::new());
                 let initial_state = State::new(
                     doc,
                     Selection::collapsed(Position::new(NodeId::ROOT, 0, Affinity::default())),
@@ -243,7 +241,7 @@ fn bench_commit(c: &mut Criterion) {
             |runtime| {
                 let state = runtime.state();
                 let mut tr = Transaction::new(state);
-                tr.push_effect(editor::runtime::Effect::StructureChanged);
+                tr.push_effect(Effect::StructureChanged);
                 tr.commit().unwrap();
             },
             BATCH,

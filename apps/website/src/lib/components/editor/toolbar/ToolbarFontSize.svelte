@@ -7,7 +7,7 @@
   import { fly } from 'svelte/transition';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import { getEditor } from '$lib/editor/context';
-  import type { Mark, MarkType } from '$lib/editor/types';
+  import type { Style, StyleType } from '$lib/editor/types';
 
   const editor = getEditor();
 
@@ -56,12 +56,12 @@
   let inputValue = $state('');
   let isFocused = $state(false);
 
-  const activeMarks = $derived(editor.activeMarks);
-  const findMark = (type: string): Mark | undefined => activeMarks.uniformMarks.find((m) => m.type === type);
-  const isMixed = (type: MarkType): boolean => activeMarks.mixedMarks.includes(type);
+  const activeStyles = $derived(editor.activeStyles);
+  const findStyle = (type: string): Style | undefined => activeStyles.uniformStyles.find((s) => s.type === type);
+  const isMixed = (type: StyleType): boolean => activeStyles.mixedStyles.includes(type);
 
   const currentFontSize = $derived(
-    isMixed('font_size') ? undefined : ((findMark('font_size') as { size?: number })?.size ?? defaultFontSize),
+    isMixed('font_size') ? undefined : ((findStyle('font_size') as { size?: number })?.size ?? defaultFontSize),
   );
 
   $effect(() => {
@@ -91,7 +91,7 @@
     const parsed = Number.parseFloat(inputValue);
     if (!Number.isNaN(parsed) && parsed !== currentFontSize) {
       const clamped = clamp(parsed, MIN_FONT_SIZE, MAX_FONT_SIZE);
-      editor.dispatch({ type: 'setFontSize', size: clamped });
+      editor.dispatch({ type: 'toggleStyle', style: { type: 'font_size', size: clamped } });
     }
     void shouldFocus;
   };
@@ -155,7 +155,7 @@
       const newValue = sortedSizes[newIndex];
       if (newValue !== undefined) {
         inputValue = String(newValue);
-        editor.dispatch({ type: 'setFontSize', size: newValue });
+        editor.dispatch({ type: 'toggleStyle', style: { type: 'font_size', size: newValue } });
         tick().then(() => {
           inputElement?.select();
         });
@@ -196,7 +196,7 @@
         border: 'none',
         outline: 'none',
       })}
-      disabled={!editor.can('setFontSize')}
+      disabled={!editor.can('toggleStyle')}
       onblur={handleBlur}
       onfocus={handleFocus}
       onkeydown={handleKeydown}
@@ -211,7 +211,7 @@
         pointerEvents: opened ? 'auto' : 'none',
         cursor: 'pointer',
       })}
-      disabled={!editor.can('setFontSize')}
+      disabled={!editor.can('toggleStyle')}
       onclick={() => {
         applyFontSize(true);
         inputElement?.blur();
@@ -263,7 +263,7 @@
           <DropdownMenuItem
             active={currentFontSize === value}
             onclick={() => {
-              editor.focus().dispatch({ type: 'setFontSize', size: value });
+              editor.focus().dispatch({ type: 'toggleStyle', style: { type: 'font_size', size: value } });
               close();
             }}
           >

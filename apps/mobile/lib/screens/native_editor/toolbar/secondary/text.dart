@@ -20,52 +20,52 @@ class NativeEditorTextToolbar extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final scope = NativeEditorToolbarScope.of(context);
-    final uniformMarks = useValueListenable(scope.uniformMarks);
-    final mixedMarks = useValueListenable(scope.mixedMarks);
+    final uniformStyles = useValueListenable(scope.uniformStyles);
+    final mixedStyles = useValueListenable(scope.mixedStyles);
 
-    Map<String, dynamic>? findMark(String type) => uniformMarks.firstWhereOrNull((m) => m['type'] == type);
-    bool isMixed(String type) => mixedMarks.contains(type);
+    Map<String, dynamic>? findStyle(String type) => uniformStyles.firstWhereOrNull((m) => m['type'] == type);
+    bool isMixed(String type) => mixedStyles.contains(type);
 
-    final textColorMark = findMark('text_color');
+    final textColorStyle = findStyle('text_color');
     final isTextColorMixed = isMixed('text_color');
     final activeTextColor = isTextColorMixed
         ? null
-        : (textColorMark?['key'] as String? ?? editorDefaultValues['textColor'] as String);
+        : (textColorStyle?['color'] as String? ?? editorDefaultValues['textColor'] as String);
 
-    final backgroundColorMark = findMark('background_color');
+    final backgroundColorStyle = findStyle('background_color');
     final isBackgroundColorMixed = isMixed('background_color');
     final activeBackgroundColor = isBackgroundColorMixed
         ? null
-        : (backgroundColorMark?['key'] as String? ?? editorDefaultValues['textBackgroundColor'] as String);
+        : (backgroundColorStyle?['color'] as String? ?? editorDefaultValues['textBackgroundColor'] as String);
 
-    final fontFamilyMark = findMark('font_family');
+    final fontFamilyStyle = findStyle('font_family');
     final isFontFamilyMixed = isMixed('font_family');
     final activeFontFamily = isFontFamilyMixed
         ? null
-        : (fontFamilyMark?['family'] as String? ?? editorDefaultValues['fontFamily'] as String);
+        : (fontFamilyStyle?['family'] as String? ?? editorDefaultValues['fontFamily'] as String);
 
-    final fontWeightMark = findMark('font_weight');
+    final fontWeightStyle = findStyle('font_weight');
     final isFontWeightMixed = isMixed('font_weight');
     final activeFontWeight = isFontWeightMixed
         ? null
-        : (fontWeightMark?['weight'] as int? ?? editorDefaultValues['fontWeight'] as int);
+        : (fontWeightStyle?['weight'] as int? ?? editorDefaultValues['fontWeight'] as int);
 
-    final fontSizeMark = findMark('font_size');
+    final fontSizeStyle = findStyle('font_size');
     final isFontSizeMixed = isMixed('font_size');
     final activeFontSize = isFontSizeMixed
         ? null
-        : (fontSizeMark?['size'] as num? ?? editorDefaultValues['fontSize'] as num);
+        : (fontSizeStyle?['size'] as num? ?? editorDefaultValues['fontSize'] as num);
 
     final isBold = !isFontWeightMixed && activeFontWeight != null && activeFontWeight >= 700;
 
     final isItalicMixed = isMixed('italic');
-    final isItalic = !isItalicMixed && uniformMarks.any((m) => m['type'] == 'italic');
+    final isItalic = !isItalicMixed && uniformStyles.any((m) => m['type'] == 'italic');
 
     final isUnderlineMixed = isMixed('underline');
-    final isUnderline = !isUnderlineMixed && uniformMarks.any((m) => m['type'] == 'underline');
+    final isUnderline = !isUnderlineMixed && uniformStyles.any((m) => m['type'] == 'underline');
 
     final isStrikethroughMixed = isMixed('strikethrough');
-    final isStrikethrough = !isStrikethroughMixed && uniformMarks.any((m) => m['type'] == 'strikethrough');
+    final isStrikethrough = !isStrikethroughMixed && uniformStyles.any((m) => m['type'] == 'strikethrough');
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -148,21 +148,30 @@ class NativeEditorTextToolbar extends HookWidget {
             icon: LucideLightIcons.italic,
             isActive: isItalic,
             onTap: () {
-              scope.dispatch({'type': 'toggleItalic'});
+              scope.dispatch({
+                'type': 'toggleStyle',
+                'style': {'type': 'italic'},
+              });
             },
           ),
           IconToolbarButton(
             icon: LucideLightIcons.underline,
             isActive: isUnderline,
             onTap: () {
-              scope.dispatch({'type': 'toggleUnderline'});
+              scope.dispatch({
+                'type': 'toggleStyle',
+                'style': {'type': 'underline'},
+              });
             },
           ),
           IconToolbarButton(
             icon: LucideLightIcons.strikethrough,
             isActive: isStrikethrough,
             onTap: () {
-              scope.dispatch({'type': 'toggleStrikethrough'});
+              scope.dispatch({
+                'type': 'toggleStyle',
+                'style': {'type': 'strikethrough'},
+              });
             },
           ),
           AppVerticalDivider(color: context.colors.borderSubtle, height: 20),

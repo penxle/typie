@@ -32,7 +32,7 @@
   import ToolbarRuby from './ToolbarRuby.svelte';
   import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { ThemeVariant } from '$lib/editor/theme';
-  import type { Mark, MarkType, TextAlign } from '$lib/editor/types';
+  import type { Style, StyleType, TextAlign } from '$lib/editor/types';
 
   type Props = {
     style?: SystemStyleObject;
@@ -49,12 +49,12 @@
     (theme.effectiveTheme === 'light' ? `light-${theme.lightVariant}` : `dark-${theme.darkVariant}`) as ThemeVariant,
   );
 
-  const activeMarks = $derived(editor.activeMarks);
+  const activeStyles = $derived(editor.activeStyles);
   const selection = $derived(editor.selection);
 
-  const findMark = (type: string): Mark | undefined => activeMarks.uniformMarks.find((m) => m.type === type);
-  const isMixed = (type: MarkType): boolean => activeMarks.mixedMarks.includes(type);
-  const hasMark = (type: string): boolean => activeMarks.uniformMarks.some((m) => m.type === type);
+  const findStyle = (type: string): Style | undefined => activeStyles.uniformStyles.find((s) => s.type === type);
+  const isMixed = (type: StyleType): boolean => activeStyles.mixedStyles.includes(type);
+  const hasStyle = (type: string): boolean => activeStyles.uniformStyles.some((s) => s.type === type);
 
   const defaultTextColor = 'black';
   const defaultTextBackgroundColor = 'none';
@@ -129,30 +129,28 @@
   ];
 
   const currentTextColor = $derived(
-    isMixed('text_color') ? defaultTextColor : ((findMark('text_color') as { key?: string })?.key ?? defaultTextColor),
+    isMixed('text_color') ? defaultTextColor : ((findStyle('text_color') as { color?: string })?.color ?? defaultTextColor),
   );
   const currentTextBackgroundColor = $derived(
     isMixed('background_color')
       ? defaultTextBackgroundColor
-      : ((findMark('background_color') as { key?: string })?.key ?? defaultTextBackgroundColor),
+      : ((findStyle('background_color') as { color?: string })?.color ?? defaultTextBackgroundColor),
   );
   const currentLineHeight = $derived(selection.stats.uniformLineHeight ?? defaultLineHeight);
   const currentLetterSpacing = $derived(
     isMixed('letter_spacing')
       ? defaultLetterSpacing
-      : ((findMark('letter_spacing') as { spacing?: number })?.spacing ?? defaultLetterSpacing),
+      : ((findStyle('letter_spacing') as { spacing?: number })?.spacing ?? defaultLetterSpacing),
   );
   const currentTextAlign = $derived(selection.stats.uniformAlign ?? defaultTextAlign);
 
   const selectedFontWeight = $derived(
-    isMixed('font_weight') ? undefined : ((findMark('font_weight') as { weight?: number })?.weight ?? 400),
+    isMixed('font_weight') ? undefined : ((findStyle('font_weight') as { weight?: number })?.weight ?? 400),
   );
   const isBoldActive = $derived(selectedFontWeight !== undefined && selectedFontWeight >= 700);
-  const isItalicActive = $derived(hasMark('italic'));
-  const isStrikethroughActive = $derived(hasMark('strikethrough'));
-  const isUnderlineActive = $derived(hasMark('underline'));
-  const isLinkActive = $derived(hasMark('link'));
-  const isRubyActive = $derived(hasMark('ruby'));
+  const isItalicActive = $derived(hasStyle('italic'));
+  const isStrikethroughActive = $derived(hasStyle('strikethrough'));
+  const isUnderlineActive = $derived(hasStyle('underline'));
 
   const currentTextAlignIcon = $derived(textAligns.find((a) => a.value === currentTextAlign)?.icon ?? AlignLeftIcon);
 </script>
@@ -209,7 +207,7 @@
   <div class={flex({ alignItems: 'center', gap: '4px' })}>
     <ToolbarDropdownButton
       chevron
-      disabled={!editor.can('toggleTextColor')}
+      disabled={!editor.can('toggleStyle')}
       label="글씨 색"
       onEscape={() => editor.focus()}
       placement="bottom-start"
@@ -231,7 +229,7 @@
           items={textColors}
           onClose={close}
           onSelect={(value) => {
-            editor.focus().dispatch({ type: 'toggleTextColor', key: value });
+            editor.focus().dispatch({ type: 'toggleStyle', style: { type: 'text_color', color: value } });
           }}
           {opened}
         />
@@ -240,7 +238,7 @@
 
     <ToolbarDropdownButton
       chevron
-      disabled={!editor.can('toggleBackgroundColor')}
+      disabled={!editor.can('toggleStyle')}
       label="배경색"
       onEscape={() => editor.focus()}
       placement="bottom-start"
@@ -283,7 +281,7 @@
           items={textBackgroundColors}
           onClose={close}
           onSelect={(value) => {
-            editor.focus().dispatch({ type: 'toggleBackgroundColor', key: value ?? undefined });
+            editor.focus().dispatch({ type: 'toggleStyle', style: { type: 'background_color', color: value ?? 'none' } });
           }}
           {opened}
           shape="square"
@@ -314,36 +312,36 @@
 
     <ToolbarButton
       active={isItalicActive}
-      disabled={!editor.can('toggleItalic')}
+      disabled={!editor.can('toggleStyle')}
       icon={ItalicIcon}
       keys={['Mod', 'I']}
       label="기울임"
       onclick={() => {
-        editor.focus().dispatch({ type: 'toggleItalic' });
+        editor.focus().dispatch({ type: 'toggleStyle', style: { type: 'italic' } });
       }}
       size="small"
     />
 
     <ToolbarButton
       active={isStrikethroughActive}
-      disabled={!editor.can('toggleStrikethrough')}
+      disabled={!editor.can('toggleStyle')}
       icon={StrikethroughIcon}
       keys={['Mod', 'Shift', 'S']}
       label="취소선"
       onclick={() => {
-        editor.focus().dispatch({ type: 'toggleStrikethrough' });
+        editor.focus().dispatch({ type: 'toggleStyle', style: { type: 'strikethrough' } });
       }}
       size="small"
     />
 
     <ToolbarButton
       active={isUnderlineActive}
-      disabled={!editor.can('toggleUnderline')}
+      disabled={!editor.can('toggleStyle')}
       icon={UnderlineIcon}
       keys={['Mod', 'U']}
       label="밑줄"
       onclick={() => {
-        editor.focus().dispatch({ type: 'toggleUnderline' });
+        editor.focus().dispatch({ type: 'toggleStyle', style: { type: 'underline' } });
       }}
       size="small"
     />
@@ -352,18 +350,7 @@
   <VerticalDivider style={css.raw({ height: '12px' })} />
 
   <div class={flex({ alignItems: 'center', gap: '4px' })}>
-    <ToolbarDropdownButton
-      active={isLinkActive}
-      disabled={!(editor.can('toggleLink') || isLinkActive)}
-      label="링크"
-      onEscape={() => editor.focus()}
-      onOpenChange={(opened) => {
-        if (opened && isLinkActive) {
-          editor.dispatch({ type: 'extendMarkRange', markType: 'link' });
-        }
-      }}
-      size="small"
-    >
+    <ToolbarDropdownButton disabled={!editor.can('addAnnotation')} label="링크" onEscape={() => editor.focus()} size="small">
       {#snippet anchor()}
         <ToolbarIcon icon={LinkIcon} />
       {/snippet}
@@ -373,18 +360,7 @@
       {/snippet}
     </ToolbarDropdownButton>
 
-    <ToolbarDropdownButton
-      active={isRubyActive}
-      disabled={!(editor.can('toggleRuby') || isRubyActive)}
-      label="루비"
-      onEscape={() => editor.focus()}
-      onOpenChange={(opened) => {
-        if (opened && isRubyActive) {
-          editor.dispatch({ type: 'extendMarkRange', markType: 'ruby' });
-        }
-      }}
-      size="small"
-    >
+    <ToolbarDropdownButton disabled={!editor.can('addAnnotation')} label="루비" onEscape={() => editor.focus()} size="small">
       {#snippet anchor()}
         <ToolbarIcon icon={RubyIcon} />
       {/snippet}
@@ -444,7 +420,7 @@
       {/snippet}
     </ToolbarDropdownButton>
 
-    <ToolbarDropdownButton disabled={!editor.can('setLetterSpacing')} label="문단 자간" onEscape={() => editor.focus()} size="small">
+    <ToolbarDropdownButton disabled={!editor.can('toggleStyle')} label="문단 자간" onEscape={() => editor.focus()} size="small">
       {#snippet anchor()}
         <ToolbarIcon icon={LetterSpacingIcon} />
       {/snippet}
@@ -456,7 +432,7 @@
               style={css.raw({ fontSize: '14px' })}
               active={Math.abs(currentLetterSpacing - value) < 0.001}
               onclick={() => {
-                editor.focus().dispatch({ type: 'setLetterSpacing', spacing: value });
+                editor.focus().dispatch({ type: 'toggleStyle', style: { type: 'letter_spacing', spacing: value } });
                 close();
               }}
             >

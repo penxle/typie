@@ -26,7 +26,6 @@ pub enum ExternalElementData {
     Archived { id: Option<String> },
 }
 
-#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct ExternalElement {
     pub id: NodeId,

@@ -594,7 +594,6 @@ pub extern "C" fn editor_get_render_info(
     )
 }
 
-#[allow(dead_code)]
 pub const PIXEL_FORMAT_RGBA: i32 = 0;
 pub const PIXEL_FORMAT_BGRA: i32 = 1;
 
@@ -782,7 +781,7 @@ pub extern "C" fn editor_is_interactive_hit(
 
             let editor = unsafe { &*(editor as *const EditorInner) };
             Ok(if let Some(page) = editor.runtime.pages().get(page_idx) {
-                if crate::layout::query::is_interactive_hit(editor.runtime.doc(), page, x, y) {
+                if page.find_interactive_at(x, y).is_some() {
                     1
                 } else {
                     0

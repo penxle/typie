@@ -12,14 +12,14 @@ class NativeEditorTextBackgroundColorTextOptionsToolbar extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final scope = NativeEditorToolbarScope.of(context);
-    final uniformMarks = useValueListenable(scope.uniformMarks);
-    final mixedMarks = useValueListenable(scope.mixedMarks);
+    final uniformStyles = useValueListenable(scope.uniformStyles);
+    final mixedStyles = useValueListenable(scope.mixedStyles);
 
-    final isMixed = mixedMarks.contains('background_color');
-    final backgroundColorMark = uniformMarks.firstWhereOrNull((m) => m['type'] == 'background_color');
+    final isMixed = mixedStyles.contains('background_color');
+    final backgroundColorStyle = uniformStyles.firstWhereOrNull((m) => m['type'] == 'background_color');
     final activeValue = isMixed
         ? null
-        : (backgroundColorMark?['key'] as String? ?? editorDefaultValues['textBackgroundColor']);
+        : (backgroundColorStyle?['color'] as String? ?? editorDefaultValues['textBackgroundColor']);
 
     return NativeEditorTextOptionsToolbar(
       items: editorValues['textBackgroundColor']!,
@@ -31,7 +31,10 @@ class NativeEditorTextBackgroundColorTextOptionsToolbar extends HookWidget {
           isActive: isActive,
           onTap: () {
             final value = item['value'] as String;
-            scope.dispatch({'type': 'toggleBackgroundColor', if (value != 'none') 'key': value});
+            scope.dispatch({
+              'type': 'toggleStyle',
+              'style': {'type': 'background_color', 'color': value},
+            });
           },
         );
       },

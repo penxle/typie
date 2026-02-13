@@ -85,14 +85,6 @@ impl InsertResult {
             }
         }
     }
-
-    #[allow(unused)]
-    pub fn as_collapsed_selection(&self) -> Option<Selection> {
-        match self {
-            InsertResult::None => None,
-            InsertResult::Inserted { head, .. } => Some(Selection::collapsed(*head)),
-        }
-    }
 }
 
 struct FragmentMergeResult {
@@ -2120,11 +2112,9 @@ impl Transaction {
                     let child_end = current_offset + char_count;
 
                     if child_end <= split_at {
-                        left_children
-                            .push(SplitChild::Text(text_node.text.get_rich_text_segments()));
+                        left_children.push(SplitChild::Text(text_node.text.get_segments()));
                     } else if child_start >= split_at {
-                        right_children
-                            .push(SplitChild::Text(text_node.text.get_rich_text_segments()));
+                        right_children.push(SplitChild::Text(text_node.text.get_segments()));
                     } else {
                         let local_split = split_at - child_start;
                         let (left_segs, right_segs) =
@@ -2309,7 +2299,7 @@ enum SiblingDirection {
 }
 
 enum SplitChild {
-    Text(Vec<(String, Vec<Mark>)>),
+    Text(Vec<TextSegment>),
     Node(Node),
 }
 
@@ -2435,7 +2425,7 @@ mod tests {
     }
 
     #[test]
-    fn insert_open_fragment_merges_inline_and_preserves_marks() {
+    fn insert_open_fragment_merges_inline_and_preserves_styles() {
         let mut p = id!();
 
         let initial = state! {
@@ -2450,7 +2440,7 @@ mod tests {
         let fragment = fragment! {
             open_start: 1, open_end: 1,
             paragraph {
-                text(marks: [italic()]) { "X" }
+                text(styles: [italic()]) { "X" }
             }
         };
 
@@ -2512,10 +2502,12 @@ mod tests {
             selection { (p, 6) }
         };
 
-        // Manually construct a fragment where the node has an external parent
-        let text_node = Node::Text(TextNode {
-            text: "World".into(),
-        });
+        let text_obj: crate::model::Text = "World".into();
+        let defaults = crate::model::DefaultStyles::default().to_styles();
+        for style in &defaults {
+            let _ = text_obj.apply_style(0..text_obj.char_len(), style);
+        }
+        let text_node = Node::Text(TextNode { text: text_obj });
         let fragment_node = FragmentNode::new(text_node, Some(external_parent));
         let node_id = NodeId::new();
 

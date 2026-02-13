@@ -1,7 +1,7 @@
 #[cfg(feature = "wasm")]
 extern crate web_sys;
 
-#[allow(unused)]
+#[allow(unused_macros)]
 macro_rules! log {
     ( $( $t:tt )* ) => {
         {
@@ -21,27 +21,7 @@ macro_rules! log {
     }
 }
 
-#[allow(unused)]
-macro_rules! error {
-    ( $( $t:tt )* ) => {
-        {
-            #[cfg(all(feature = "wasm", target_arch = "wasm32"))]
-            {
-                web_sys::console::error_1(&format!( $( $t )* ).into());
-            }
-            #[cfg(feature = "native")]
-            {
-                crate::ffi::native::native_log(crate::ffi::native::LOG_LEVEL_ERROR, &format!( $( $t )* ));
-            }
-            #[cfg(not(any(all(feature = "wasm", target_arch = "wasm32"), feature = "native")))]
-            {
-                eprintln!( $( $t )* );
-            }
-        }
-    }
-}
-
-#[allow(unused)]
+#[allow(unused_macros)]
 macro_rules! warn {
     ( $( $t:tt )* ) => {
         {
@@ -52,6 +32,25 @@ macro_rules! warn {
             #[cfg(feature = "native")]
             {
                 crate::ffi::native::native_log(crate::ffi::native::LOG_LEVEL_WARN, &format!( $( $t )* ));
+            }
+            #[cfg(not(any(all(feature = "wasm", target_arch = "wasm32"), feature = "native")))]
+            {
+                eprintln!( $( $t )* );
+            }
+        }
+    }
+}
+
+macro_rules! error {
+    ( $( $t:tt )* ) => {
+        {
+            #[cfg(all(feature = "wasm", target_arch = "wasm32"))]
+            {
+                web_sys::console::error_1(&format!( $( $t )* ).into());
+            }
+            #[cfg(feature = "native")]
+            {
+                crate::ffi::native::native_log(crate::ffi::native::LOG_LEVEL_ERROR, &format!( $( $t )* ));
             }
             #[cfg(not(any(all(feature = "wasm", target_arch = "wasm32"), feature = "native")))]
             {

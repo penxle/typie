@@ -26,15 +26,13 @@ impl Transaction {
             node_id: selection.head.node_id,
             offset: selection.head.offset,
             text,
-            marks: self.state.pending_marks.clone(),
         });
 
         Ok(true)
     }
 
     pub fn complete_preedit(&mut self) -> Result<bool> {
-        if let Some(preedit) = self.state.preedit.take() {
-            self.state.pending_marks = preedit.marks;
+        if self.state.preedit.take().is_some() {
             Ok(true)
         } else {
             Ok(false)
@@ -44,7 +42,6 @@ impl Transaction {
     pub fn commit_preedit(&mut self) -> Result<bool> {
         if let Some(preedit) = self.state.preedit.take() {
             let text = preedit.text.clone();
-            let marks = preedit.marks.clone();
 
             self.set_selection(crate::state::Selection::collapsed(
                 crate::state::Position::new(
@@ -54,7 +51,6 @@ impl Transaction {
                 ),
             ));
 
-            self.state.pending_marks = marks;
             self.insert_text(&text)?;
 
             Ok(true)

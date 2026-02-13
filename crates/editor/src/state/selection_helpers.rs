@@ -1,4 +1,4 @@
-use crate::model::{Doc, Mark, MarkType, Node, NodeId, NodeRef, SelectionDecor, TextAlign};
+use crate::model::{Doc, Node, NodeId, NodeRef, SelectionDecor, Style, StyleType, TextAlign};
 use crate::state::position::Position;
 use crate::state::position_helpers::compare_positions;
 use crate::state::position_helpers::find_child_at_offset;
@@ -413,8 +413,8 @@ pub fn compute_selection_aggregates(
     usize,
     Option<TextAlign>,
     Option<f32>,
-    Vec<Mark>,
-    Vec<MarkType>,
+    Vec<Style>,
+    Vec<StyleType>,
 ) {
     let mut paragraph_count = 0usize;
     let mut uniform_align: Option<TextAlign> = None;
@@ -422,8 +422,8 @@ pub fn compute_selection_aggregates(
     let mut align_mixed = false;
     let mut line_height_mixed = false;
 
-    let mut uniform_marks: Option<FxHashMap<MarkType, Mark>> = None;
-    let mut all_types: FxHashSet<MarkType> = FxHashSet::default();
+    let mut uniform_styles: Option<FxHashMap<StyleType, Style>> = None;
+    let mut all_types: FxHashSet<StyleType> = FxHashSet::default();
 
     for &block_id in block_ids {
         let Some(node) = doc.node(block_id) else {
@@ -460,20 +460,20 @@ pub fn compute_selection_aggregates(
 
         let (start_offset, end_offset) = calculate_block_offsets(block_id, block_len, from, to);
 
-        accumulate_block_marks(
+        accumulate_block_styles(
             &node,
             start_offset,
             end_offset,
-            &mut uniform_marks,
+            &mut uniform_styles,
             &mut all_types,
         );
     }
 
-    let uniform_marks_vec: Vec<Mark> = uniform_marks
+    let uniform_styles_vec: Vec<Style> = uniform_styles
         .map(|u| u.into_values().collect())
         .unwrap_or_default();
-    let uniform_types: FxHashSet<_> = uniform_marks_vec.iter().map(|m| m.as_type()).collect();
-    let mixed_marks: Vec<_> = all_types.difference(&uniform_types).copied().collect();
+    let uniform_types: FxHashSet<_> = uniform_styles_vec.iter().map(|s| s.as_type()).collect();
+    let mixed_styles: Vec<_> = all_types.difference(&uniform_types).copied().collect();
 
     (
         paragraph_count,
@@ -483,17 +483,17 @@ pub fn compute_selection_aggregates(
         } else {
             uniform_line_height
         },
-        uniform_marks_vec,
-        mixed_marks,
+        uniform_styles_vec,
+        mixed_styles,
     )
 }
 
-fn accumulate_block_marks(
+fn accumulate_block_styles(
     block: &NodeRef<'_>,
     start_offset: usize,
     end_offset: usize,
-    uniform: &mut Option<FxHashMap<MarkType, Mark>>,
-    all_types: &mut FxHashSet<MarkType>,
+    uniform: &mut Option<FxHashMap<StyleType, Style>>,
+    all_types: &mut FxHashSet<StyleType>,
 ) {
     let mut current_offset = 0;
 
@@ -510,18 +510,18 @@ fn accumulate_block_marks(
                     let local_start = overlap_start - current_offset;
                     let local_end = overlap_end - current_offset;
 
-                    let rich_segments = text_node.text.get_rich_text_segments();
+                    let segments = text_node.text.get_segments();
                     let mut seg_offset = 0;
 
-                    for (segment_text, segment_marks) in rich_segments {
-                        let segment_len = segment_text.chars().count();
+                    for segment in segments {
+                        let segment_len = segment.text.chars().count();
                         let seg_end = seg_offset + segment_len;
 
                         let seg_overlap_start = seg_offset.max(local_start);
                         let seg_overlap_end = seg_end.min(local_end);
 
                         if seg_overlap_start < seg_overlap_end {
-                            update_mark_sets(&segment_marks, uniform, all_types);
+                            update_style_sets(&segment.styles, uniform, all_types);
                         }
 
                         seg_offset = seg_end;
@@ -538,29 +538,31 @@ fn accumulate_block_marks(
     }
 }
 
-fn update_mark_sets(
-    marks: &[Mark],
-    uniform: &mut Option<FxHashMap<MarkType, Mark>>,
-    all_types: &mut FxHashSet<MarkType>,
+fn update_style_sets(
+    styles: &[Style],
+    uniform: &mut Option<FxHashMap<StyleType, Style>>,
+    all_types: &mut FxHashSet<StyleType>,
 ) {
     if let Some(u) = uniform {
-        if marks.is_empty() {
+        if styles.is_empty() {
             u.clear();
         } else {
-            let segment_map: FxHashMap<MarkType, &Mark> =
-                marks.iter().map(|m| (m.as_type(), m)).collect();
+            let segment_map: FxHashMap<StyleType, &Style> =
+                styles.iter().map(|s| (s.as_type(), s)).collect();
 
-            u.retain(|mark_type, mark| segment_map.get(mark_type).map_or(false, |m| *m == mark));
+            u.retain(|style_type, style| {
+                segment_map.get(style_type).map_or(false, |s| *s == style)
+            });
         }
     } else {
         let mut initial = FxHashMap::default();
-        for m in marks {
-            initial.insert(m.as_type(), m.clone());
+        for s in styles {
+            initial.insert(s.as_type(), s.clone());
         }
         *uniform = Some(initial);
     }
 
-    all_types.extend(marks.iter().map(|m| m.as_type()));
+    all_types.extend(styles.iter().map(|s| s.as_type()));
 }
 
 pub fn is_node_fully_selected(doc: &Doc, selection: &Selection, node_id: NodeId) -> Result<bool> {
@@ -758,8 +760,8 @@ mod tests {
         };
 
         let mut tr = crate::transaction::Transaction::new(&state);
-        tr.add_mark(crate::model::Mark::FontWeight(
-            crate::model::FontWeightMark { weight: 700 },
+        tr.set_style(crate::model::Style::FontWeight(
+            crate::model::FontWeightStyle { weight: 700 },
         ))
         .unwrap();
         let state = tr.commit().unwrap().0;
@@ -767,14 +769,14 @@ mod tests {
         let (from, to) = state.selection.as_sorted(&state.doc).unwrap();
         let block_ids = collect_blocks_in_range(&state.doc, from, to).unwrap();
 
-        let (_, _, _, uniform_marks, _) =
+        let (_, _, _, uniform_styles, _) =
             compute_selection_aggregates(&state.doc, &block_ids, from, to);
 
         assert!(
-            uniform_marks
+            uniform_styles
                 .iter()
-                .any(|m| m.as_type() == crate::model::MarkType::FontWeight),
-            "Should detect font weight mark in list item"
+                .any(|s| s.as_type() == crate::model::StyleType::FontWeight),
+            "Should detect font weight style in list item"
         );
     }
 

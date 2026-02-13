@@ -2,36 +2,26 @@ use crate::runtime::State;
 use loro::UndoManager;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(dead_code)]
 pub enum ContextKey {
     RangeSelection,
     CanUndo,
     CanRedo,
     CanEdit,
-    InComposition,
     HasParagraphTextInSelection,
     InParagraph,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-#[allow(dead_code)]
 pub enum When {
     True,
-    False,
     Key(ContextKey),
-    Not(Box<When>),
     And(Vec<When>),
     Or(Vec<When>),
 }
 
-#[allow(dead_code)]
 impl When {
     pub fn key(key: ContextKey) -> Self {
         When::Key(key)
-    }
-
-    pub fn not(self) -> Self {
-        When::Not(Box::new(self))
     }
 
     pub fn and(self, other: When) -> Self {
@@ -73,9 +63,7 @@ impl When {
     pub fn evaluate(&self, ctx: &Context) -> bool {
         match self {
             When::True => true,
-            When::False => false,
             When::Key(key) => ctx.get(*key),
-            When::Not(expr) => !expr.evaluate(ctx),
             When::And(exprs) => exprs.iter().all(|e| e.evaluate(ctx)),
             When::Or(exprs) => exprs.iter().any(|e| e.evaluate(ctx)),
         }
@@ -101,7 +89,6 @@ impl<'a> Context<'a> {
             ContextKey::CanUndo => self.undo_manager.can_undo(),
             ContextKey::CanRedo => self.undo_manager.can_redo(),
             ContextKey::CanEdit => !self.state.read_only,
-            ContextKey::InComposition => self.state.preedit.is_some(),
             ContextKey::HasParagraphTextInSelection => self.has_paragraph_text_in_selection(),
             ContextKey::InParagraph => self.in_paragraph(),
         }
@@ -192,11 +179,6 @@ mod tests {
         let ctx = create_dummy_context(&state, &undo_manager);
 
         assert_eq!(When::True.evaluate(&ctx), true);
-        assert_eq!(When::False.evaluate(&ctx), false);
-        assert_eq!(When::True.not().evaluate(&ctx), false);
         assert_eq!(When::True.and(When::True).evaluate(&ctx), true);
-        assert_eq!(When::True.and(When::False).evaluate(&ctx), false);
-        assert_eq!(When::False.or(When::True).evaluate(&ctx), true);
-        assert_eq!(When::False.or(When::False).evaluate(&ctx), false);
     }
 }

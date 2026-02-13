@@ -1,11 +1,12 @@
-use crate::model::{MarkType, NodeType};
+use crate::model::{AnnotationType, NodeType, StyleType};
 use crate::schema::Schema;
 use crate::schema::content::ContentExpr;
 
 #[derive(Debug, Clone)]
 pub struct NodeSpec {
     pub content: ContentExpr,
-    pub marks: Option<&'static [MarkType]>,
+    pub styles: Option<&'static [StyleType]>,
+    pub annotations: Option<&'static [AnnotationType]>,
     pub inline: bool,
     pub selectable: bool,
     pub isolating: bool,
@@ -42,7 +43,8 @@ impl Default for NodeSpec {
     fn default() -> Self {
         Self {
             content: ContentExpr::Empty,
-            marks: None,
+            styles: None,
+            annotations: None,
             inline: false,
             selectable: false,
             isolating: false,
@@ -54,25 +56,36 @@ impl Default for NodeSpec {
 }
 
 #[derive(Debug, Clone)]
-pub struct MarkSpec {
+pub struct StyleSpec {
+    #[allow(dead_code)]
     pub expand: Expand,
-    pub persist: bool,
 }
 
-impl Default for MarkSpec {
+impl Default for StyleSpec {
     fn default() -> Self {
         Self {
             expand: Expand::After,
-            persist: true,
         }
     }
 }
 
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
+pub struct AnnotationSpec {
+    pub overlap: bool,
+}
+
+impl Default for AnnotationSpec {
+    fn default() -> Self {
+        Self { overlap: false }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum Expand {
+    #[allow(dead_code)]
     Before,
     After,
+    #[allow(dead_code)]
     Both,
     None,
 }

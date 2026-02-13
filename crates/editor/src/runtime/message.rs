@@ -1,6 +1,9 @@
 use super::effect::Effect;
 use super::{Context, ContextKey, Runtime, When};
-use crate::model::{BlockquoteVariant, HorizontalRuleVariant, LayoutMode, MarkType, TextAlign};
+use crate::model::{
+    Annotation, AnnotationType, BlockquoteVariant, HorizontalRuleVariant, LayoutMode, Style,
+    TextAlign,
+};
 use crate::types::{Affinity, Theme};
 use serde::{Deserialize, Serialize};
 
@@ -107,20 +110,12 @@ const TRACKED_ACTIONS: &[&str] = &[
     "Undo",
     "Redo",
     "ToggleBold",
-    "ToggleItalic",
-    "ToggleStrikethrough",
-    "ToggleUnderline",
-    "ToggleTextColor",
-    "ToggleBackgroundColor",
-    "ToggleLink",
-    "ToggleRuby",
+    "ToggleStyle",
     "SetTextAlign",
     "SetLineHeight",
-    "SetLetterSpacing",
-    "SetFontFamily",
-    "SetFontSize",
-    "SetFontWeight",
     "ClearFormatting",
+    "AddAnnotation",
+    "RemoveAnnotation",
 ];
 
 /// Toolbar에서 추적할 action들의 목록과 when 조건
@@ -314,30 +309,23 @@ define_messages! {
         .and(When::key(ContextKey::HasParagraphTextInSelection).or(When::key(ContextKey::InParagraph)))
     => handle(rt) { rt.handle_toggle_bold() },
 
-    ToggleItalic
+    ToggleStyle { style: Style }
     => when When::key(ContextKey::CanEdit)
         .and(When::key(ContextKey::HasParagraphTextInSelection).or(When::key(ContextKey::InParagraph)))
-    => handle(rt) { rt.handle_toggle_italic() },
+    => handle(rt) { rt.handle_toggle_style(style) },
 
-    ToggleStrikethrough
-    => when When::key(ContextKey::CanEdit)
-        .and(When::key(ContextKey::HasParagraphTextInSelection).or(When::key(ContextKey::InParagraph)))
-    => handle(rt) { rt.handle_toggle_strikethrough() },
-
-    ToggleUnderline
-    => when When::key(ContextKey::CanEdit)
-        .and(When::key(ContextKey::HasParagraphTextInSelection).or(When::key(ContextKey::InParagraph)))
-    => handle(rt) { rt.handle_toggle_underline() },
-
-    ToggleRuby { text: String }
+    AddAnnotation { annotation: Annotation }
     => when When::key(ContextKey::CanEdit)
         .and(When::key(ContextKey::HasParagraphTextInSelection))
-    => handle(rt) { rt.handle_toggle_ruby(text) },
+    => handle(rt) { rt.handle_add_annotation(annotation) },
 
-    ToggleLink { href: String }
+    UpdateAnnotation { annotation: Annotation }
     => when When::key(ContextKey::CanEdit)
-        .and(When::key(ContextKey::HasParagraphTextInSelection))
-    => handle(rt) { rt.handle_toggle_link(href) },
+    => handle(rt) { rt.handle_update_annotation(annotation) },
+
+    RemoveAnnotation { annotation_type: AnnotationType }
+    => when When::key(ContextKey::CanEdit)
+    => handle(rt) { rt.handle_remove_annotation(annotation_type) },
 
     ToggleBlockquote { variant: BlockquoteVariant }
     => when When::key(ContextKey::CanEdit)
@@ -365,30 +353,12 @@ define_messages! {
         .and(When::key(ContextKey::CanEdit))
     => handle(rt) { rt.handle_redo() },
 
-    SetFontFamily { family: String }
-    => when When::key(ContextKey::CanEdit)
-        .and(When::key(ContextKey::HasParagraphTextInSelection).or(When::key(ContextKey::InParagraph)))
-    => handle(rt) { rt.handle_set_font_family(family) },
-
-    SetFontSize { size: f32 }
-    => when When::key(ContextKey::CanEdit)
-        .and(When::key(ContextKey::HasParagraphTextInSelection).or(When::key(ContextKey::InParagraph)))
-    => handle(rt) { rt.handle_set_font_size(size) },
-
-    SetFontWeight { weight: u16 }
-    => when When::key(ContextKey::CanEdit)
-        .and(When::key(ContextKey::HasParagraphTextInSelection).or(When::key(ContextKey::InParagraph)))
-    => handle(rt) { rt.handle_set_font_weight(weight) },
 
     SetLineHeight { height: f32 }
     => when When::key(ContextKey::CanEdit)
         .and(When::key(ContextKey::HasParagraphTextInSelection).or(When::key(ContextKey::InParagraph)))
     => handle(rt) { rt.handle_set_line_height(height) },
 
-    SetLetterSpacing { spacing: f32 }
-    => when When::key(ContextKey::CanEdit)
-        .and(When::key(ContextKey::HasParagraphTextInSelection).or(When::key(ContextKey::InParagraph)))
-    => handle(rt) { rt.handle_set_letter_spacing(spacing) },
 
     SetTextAlign { align: TextAlign }
     => when When::key(ContextKey::CanEdit)
@@ -403,15 +373,6 @@ define_messages! {
     => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_set_paragraph_indent(indent) },
 
-    ToggleTextColor { key: String }
-    => when When::key(ContextKey::CanEdit)
-        .and(When::key(ContextKey::HasParagraphTextInSelection).or(When::key(ContextKey::InParagraph)))
-    => handle(rt) { rt.handle_toggle_text_color(key) },
-
-    ToggleBackgroundColor { key: Option<String> }
-    => when When::key(ContextKey::CanEdit)
-        .and(When::key(ContextKey::HasParagraphTextInSelection).or(When::key(ContextKey::InParagraph)))
-    => handle(rt) { rt.handle_toggle_background_color(key) },
 
     ClearFormatting
     => when When::key(ContextKey::CanEdit)
@@ -425,10 +386,6 @@ define_messages! {
     Outdent
     => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_outdent() },
-
-    ExtendMarkRange { mark_type: MarkType }
-    => when When::key(ContextKey::CanEdit)
-    => handle(rt) { rt.handle_extend_mark_range(mark_type) },
 
     InsertImage { upload_id: Option<String> }
     => when When::key(ContextKey::CanEdit)

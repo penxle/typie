@@ -48,7 +48,6 @@ impl Selection {
         Ok(())
     }
 
-    #[allow(dead_code)]
     pub fn extract_fragment(&self, doc: &Doc) -> Result<Fragment> {
         Fragment::new_from_selection(doc, self)
     }

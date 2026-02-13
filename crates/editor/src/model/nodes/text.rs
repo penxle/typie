@@ -1,5 +1,5 @@
 use crate::model::Text;
-use crate::model::html::{DomSpec, MarkHtmlCodec, NodeHtmlCodec};
+use crate::model::html::{DomSpec, NodeHtmlCodec, StyleHtmlCodec};
 use macros::Codec;
 use serde::{Deserialize, Serialize};
 
@@ -13,15 +13,15 @@ impl NodeHtmlCodec for TextNode {
     fn to_dom(&self) -> Option<DomSpec> {
         let specs: Vec<DomSpec> = self
             .text
-            .get_rich_text_segments()
+            .get_segments()
             .into_iter()
-            .map(|(text, marks)| {
-                if marks.is_empty() {
-                    DomSpec::Text(text)
-                } else {
-                    let mark_specs: Vec<DomSpec> = marks.iter().map(|m| m.to_dom()).collect();
-                    DomSpec::wrap_with_marks(text, mark_specs)
-                }
+            .map(|seg| {
+                let style_specs: Vec<DomSpec> = seg
+                    .styles
+                    .iter()
+                    .map(|s| StyleHtmlCodec::to_dom(s))
+                    .collect();
+                DomSpec::wrap_with_styles(seg.text, style_specs)
             })
             .collect();
 
