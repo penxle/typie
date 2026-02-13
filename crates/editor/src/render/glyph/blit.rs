@@ -1,6 +1,7 @@
+use crate::render::glyph::scaler::{ColorImage, MaskImage};
+#[cfg(target_arch = "aarch64")]
+use std::arch::aarch64::*;
 use tiny_skia::PixmapMut;
-
-use super::scaler::{ColorImage, MaskImage};
 
 #[inline(always)]
 fn pack_rgba(r: u8, g: u8, b: u8, a: u8) -> u32 {
@@ -162,7 +163,6 @@ unsafe fn blend_pixel_opaque(dst: *mut u32, mask_val: u8, src: u32) {
 
 #[cfg(target_arch = "aarch64")]
 unsafe fn row_blend_opaque(mut dst: *mut u32, mut mask: *const u8, src: u32, mut width: usize) {
-    use std::arch::aarch64::*;
     unsafe {
         let src_vec = vdupq_n_u32(src);
 
@@ -240,7 +240,6 @@ unsafe fn row_blend_general(
     pm_a: u32,
     mut width: usize,
 ) {
-    use std::arch::aarch64::*;
     unsafe {
         while width >= 16 {
             let m16 = vld1q_u8(mask);

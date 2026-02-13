@@ -171,8 +171,6 @@ impl Render for FoldContentElement {
         transform: Transform,
         ctx: &RenderContext,
     ) {
-        use crate::render::RenderPhase;
-
         let mb = FOLD_BORDER_WIDTH / 2.0;
 
         match ctx.phase {

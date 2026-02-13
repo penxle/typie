@@ -1,9 +1,9 @@
 use super::*;
 use crate::layout::Element;
 use crate::layout::elements::line::LineElement;
-use crate::model::NodeId;
-use crate::runtime::{Message, Modifier, PointerButton};
-use crate::state::Selection;
+use crate::model::{LayoutMode, NodeId, TextAlign};
+use crate::runtime::{Effect, Message, Modifier, PointerButton, State};
+use crate::state::{Position, Selection};
 use crate::types::Affinity;
 use crate::utils::{byte_to_char_offset, char_to_byte_offset};
 
@@ -30,7 +30,7 @@ fn line_text_slice(line: &LineElement) -> &str {
     &line.text[start..end]
 }
 
-fn ctx(state: &crate::runtime::State) -> NavigationContext<'_> {
+fn ctx(state: &State) -> NavigationContext<'_> {
     NavigationContext::new(&state.doc)
 }
 
@@ -538,7 +538,7 @@ fn test_hard_break_cursor_visuals() {
 
     let pages = rt.pages();
 
-    let pos_5 = crate::state::Position::new(p, 5, Affinity::Upstream);
+    let pos_5 = Position::new(p, 5, Affinity::Upstream);
     let cursor_5 = Cursor::bounds(&ctx(&rt.state()), &pages, pos_5);
     assert!(
         cursor_5.is_some(),
@@ -546,7 +546,7 @@ fn test_hard_break_cursor_visuals() {
     );
     let (_, rect_5) = cursor_5.unwrap();
 
-    let pos_6 = crate::state::Position::new(p, 6, Affinity::Downstream);
+    let pos_6 = Position::new(p, 6, Affinity::Downstream);
     let cursor_6 = Cursor::bounds(&ctx(&rt.state()), &pages, pos_6);
     assert!(
         cursor_6.is_some(),
@@ -593,7 +593,7 @@ fn test_hard_break_click_at_line_end() {
 
     let pages = rt.pages();
 
-    let pos_at_5 = crate::state::Position::new(p, 5, Affinity::Upstream);
+    let pos_at_5 = Position::new(p, 5, Affinity::Upstream);
     let (_, rect) = Cursor::bounds(&ctx(&rt.state()), &pages, pos_at_5).unwrap();
 
     let selection = Cursor::hit_test(
@@ -756,13 +756,13 @@ fn test_consecutive_hard_breaks_visuals() {
     let pages = rt.pages();
     let settings = rt.doc().settings();
 
-    let pos_0 = crate::state::Position::new(p, 0, Affinity::Downstream);
+    let pos_0 = Position::new(p, 0, Affinity::Downstream);
     let (_, rect_0) = Cursor::bounds(&ctx(&rt.state()), &pages, pos_0).unwrap();
 
-    let pos_1 = crate::state::Position::new(p, 1, Affinity::Downstream);
+    let pos_1 = Position::new(p, 1, Affinity::Downstream);
     let (_, rect_1) = Cursor::bounds(&ctx(&rt.state()), &pages, pos_1).unwrap();
 
-    let pos_2 = crate::state::Position::new(p, 2, Affinity::Downstream);
+    let pos_2 = Position::new(p, 2, Affinity::Downstream);
     let (_, rect_2) = Cursor::bounds(&ctx(&rt.state()), &pages, pos_2).unwrap();
 
     assert!(rect_1.y > rect_0.y, "Second line should be below first");
@@ -836,10 +836,10 @@ fn test_hard_break_in_empty_paragraph() {
 
     let pages = rt.pages();
 
-    let pos_0 = crate::state::Position::new(p, 0, Affinity::Downstream);
+    let pos_0 = Position::new(p, 0, Affinity::Downstream);
     let cursor_0 = Cursor::bounds(&ctx(&rt.state()), &pages, pos_0);
 
-    let pos_1 = crate::state::Position::new(p, 1, Affinity::Downstream);
+    let pos_1 = Position::new(p, 1, Affinity::Downstream);
     let cursor_1 = Cursor::bounds(&ctx(&rt.state()), &pages, pos_1);
 
     assert!(cursor_0.is_some(), "Cursor should be visible at position 0");
@@ -875,7 +875,7 @@ fn test_hard_break_at_doc_end() {
 
     let pages = rt.pages();
 
-    let pos_4 = crate::state::Position::new(p, 4, Affinity::Downstream);
+    let pos_4 = Position::new(p, 4, Affinity::Downstream);
     let cursor_4 = Cursor::bounds(&ctx(&rt.state()), &pages, pos_4);
 
     assert!(
@@ -884,7 +884,7 @@ fn test_hard_break_at_doc_end() {
     );
     let (_, rect_4) = cursor_4.unwrap();
 
-    let pos_3 = crate::state::Position::new(p, 3, Affinity::Upstream);
+    let pos_3 = Position::new(p, 3, Affinity::Upstream);
     let (_, rect_3) = Cursor::bounds(&ctx(&rt.state()), &pages, pos_3).unwrap();
 
     assert!(rect_4.y > rect_3.y, "Final cursor should be on new line");
@@ -906,10 +906,10 @@ fn test_hard_break_at_doc_start() {
 
     let pages = rt.pages();
 
-    let pos_0 = crate::state::Position::new(p, 0, Affinity::Downstream);
+    let pos_0 = Position::new(p, 0, Affinity::Downstream);
     let (_, rect_0) = Cursor::bounds(&ctx(&rt.state()), &pages, pos_0).unwrap();
 
-    let pos_1 = crate::state::Position::new(p, 1, Affinity::Downstream);
+    let pos_1 = Position::new(p, 1, Affinity::Downstream);
     let (_, rect_1) = Cursor::bounds(&ctx(&rt.state()), &pages, pos_1).unwrap();
 
     assert!(
@@ -1918,8 +1918,6 @@ fn test_word_nav_soft_wrap_with_long_word() {
 #[test]
 // 1페이지 하단 클릭은 Upstream, 그 다음 2페이지 상단 클릭은 Downstream
 fn test_pagination_margin_clicks() {
-    use crate::runtime::Effect;
-
     let mut p = id!();
     let text = "a".repeat(10000);
     let mut runtime = runtime! {
@@ -1932,8 +1930,8 @@ fn test_pagination_margin_clicks() {
         selection { (p, 0) }
     };
 
-    runtime.update(crate::runtime::Message::SetLayoutMode {
-        mode: crate::model::LayoutMode::Paginated {
+    runtime.update(Message::SetLayoutMode {
+        mode: LayoutMode::Paginated {
             page_width: 400.0,
             page_height: 400.0,
             page_margin_top: 20.0,
@@ -4038,7 +4036,7 @@ fn test_table_navigation_left_image_to_text() {
     let pages = rt.pages();
     let ctx = NavigationContext::new(rt.doc());
 
-    let start_pos = crate::state::Position::new(n1, 0, Affinity::Downstream);
+    let start_pos = Position::new(n1, 0, Affinity::Downstream);
 
     let (_, rect) = Cursor::bounds(&ctx, &pages, start_pos).expect("bounds at start");
 
@@ -4090,7 +4088,7 @@ fn test_justify_no_space_cursor_hit_test() {
     let rt = runtime! {
         viewport { paginated { width: width, height: 400.0, margin: 0.0 } }
         doc {
-            @p paragraph(align: crate::model::TextAlign::Justify,) {
+            @p paragraph(align: TextAlign::Justify,) {
                 text { text_content.as_str() }
             }
         }
@@ -4142,7 +4140,7 @@ fn test_left_align_long_text_cursor_hit_test() {
     let rt = runtime! {
         viewport { paginated { width: width, height: 400.0, margin: 0.0 } }
         doc {
-            @p paragraph(align: crate::model::TextAlign::Left,) {
+            @p paragraph(align: TextAlign::Left,) {
                 text { text_content.as_str() }
             }
         }
@@ -4183,6 +4181,7 @@ fn test_left_align_long_text_cursor_hit_test() {
 }
 
 #[test]
+#[ignore = "https://github.com/linebender/parley/pull/550"]
 fn test_paragraph_indent_with_no_space_long_text() {
     let mut p = id!();
     let width = 400.0;

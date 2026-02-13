@@ -1,7 +1,7 @@
 use crate::model::*;
 use crate::runtime::Effect;
 use crate::schema::NodeSpec;
-use crate::state::position_helpers::find_child_at_offset;
+use crate::state::position_helpers::{find_child_at_offset, leaf_block_end, leaf_block_start};
 use crate::state::{Position, Selection, block_content_len};
 use crate::transaction::Transaction;
 use crate::types::Affinity;
@@ -53,8 +53,6 @@ impl InsertResult {
     }
 
     pub fn as_inline_range_selection(&self, doc: &Doc) -> Option<Selection> {
-        use crate::state::position_helpers::{leaf_block_end, leaf_block_start};
-
         match self {
             InsertResult::None => None,
             InsertResult::Inserted { anchor, head, .. } => {
@@ -956,11 +954,7 @@ impl Transaction {
         let prev_len = block_content_len(&prev);
 
         self.merge_blocks_content(prev_id, first_id)?;
-        self.merge_adjacent_text_nodes(Position::new(
-            prev_id,
-            prev_len,
-            crate::types::Affinity::Downstream,
-        ))?;
+        self.merge_adjacent_text_nodes(Position::new(prev_id, prev_len, Affinity::Downstream))?;
 
         result.start_merge_offset = prev_len;
         result.merged_start_node = Some(prev_id);
@@ -990,11 +984,7 @@ impl Transaction {
                 if *had_open_start {
                     if let Some(target_id) = target {
                         let offset = fragment.last_top_level_inline_len(self.doc().schema());
-                        return Ok(Position::new(
-                            target_id,
-                            offset,
-                            crate::types::Affinity::Downstream,
-                        ));
+                        return Ok(Position::new(target_id, offset, Affinity::Downstream));
                     }
                     Ok(position)
                 } else {
@@ -1038,11 +1028,7 @@ impl Transaction {
             let target_id = merged_start_node.unwrap_or(position.node_id);
             let base_offset = merged_start_node.map_or(position.offset, |_| start_merge_offset);
             let end_offset = base_offset + fragment.inline_len(self.doc().schema());
-            Ok(Position::new(
-                target_id,
-                end_offset,
-                crate::types::Affinity::Downstream,
-            ))
+            Ok(Position::new(target_id, end_offset, Affinity::Downstream))
         }
     }
 
@@ -1060,7 +1046,7 @@ impl Transaction {
                     return Ok(Position::new(
                         next.node_id(),
                         content_len,
-                        crate::types::Affinity::Downstream,
+                        Affinity::Downstream,
                     ));
                 }
             }
@@ -1277,7 +1263,7 @@ impl Transaction {
                     return Ok(Position::new(
                         position.node_id,
                         position.offset + 1,
-                        crate::types::Affinity::Upstream,
+                        Affinity::Upstream,
                     ));
                 }
             }
@@ -1297,7 +1283,7 @@ impl Transaction {
         Ok(Position::new(
             position.node_id,
             position.offset + inserted_count,
-            crate::types::Affinity::Downstream,
+            Affinity::Downstream,
         ))
     }
 
@@ -1330,7 +1316,7 @@ impl Transaction {
         }
 
         if let Some(survivor) = last_survivor {
-            let pos = Position::new(survivor, 0, crate::types::Affinity::Downstream);
+            let pos = Position::new(survivor, 0, Affinity::Downstream);
             if let Some(node) = self.doc().node(survivor) {
                 let mut paragraph_ids = Vec::new();
                 let mut stack: Vec<NodeId> = node.children().map(|c| c.node_id()).collect();
@@ -1349,7 +1335,7 @@ impl Transaction {
                     let _ = self.merge_adjacent_text_nodes(Position::new(
                         para_id,
                         0,
-                        crate::types::Affinity::Downstream,
+                        Affinity::Downstream,
                     ));
                 }
             }
@@ -1387,7 +1373,7 @@ impl Transaction {
             return Ok(Position::new(
                 target_block_id,
                 base_offset + content_len,
-                crate::types::Affinity::Downstream,
+                Affinity::Downstream,
             ));
         }
 
@@ -1744,7 +1730,6 @@ impl Transaction {
     }
 
     fn set_selection_position(&mut self, position: Position) {
-        use crate::state::Selection;
         self.state.selection = Selection::collapsed(position);
     }
 
@@ -2081,11 +2066,7 @@ impl Transaction {
         }
         self.push_effect(Effect::StructureChanged);
 
-        let head = Position::new(
-            last_para_id,
-            last_para_content_len,
-            crate::types::Affinity::Downstream,
-        );
+        let head = Position::new(last_para_id, last_para_content_len, Affinity::Downstream);
         self.push_effect(Effect::StructureChanged);
         Ok(head)
     }
@@ -2305,6 +2286,8 @@ enum SplitChild {
 
 #[cfg(test)]
 mod tests {
+    use crate::model::{DefaultStyles, Fragment, FragmentNode, Node, NodeId, Text, TextNode};
+
     #[test]
     fn test_nested_merge_traversal_open_start() {
         let mut list = id!();
@@ -2476,7 +2459,7 @@ mod tests {
             selection { (p, 1) }
         };
 
-        let fragment = crate::model::Fragment::empty();
+        let fragment = Fragment::empty();
 
         let actual = transact!(initial.clone(), |tr| {
             tr.insert_fragment(tr.selection().head, fragment).unwrap();
@@ -2487,9 +2470,6 @@ mod tests {
 
     #[test]
     fn insert_fragment_with_external_parent_updates_selection_correctly() {
-        use crate::model::{Fragment, FragmentNode, Node, TextNode};
-        use crate::transaction::NodeId;
-
         let mut p = id!();
         let external_parent = id!(); // Simulate an external parent ID
 
@@ -2502,8 +2482,8 @@ mod tests {
             selection { (p, 6) }
         };
 
-        let text_obj: crate::model::Text = "World".into();
-        let defaults = crate::model::DefaultStyles::default().to_styles();
+        let text_obj: Text = "World".into();
+        let defaults = DefaultStyles::default().to_styles();
         for style in &defaults {
             let _ = text_obj.apply_style(0..text_obj.char_len(), style);
         }

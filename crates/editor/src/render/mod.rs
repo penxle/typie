@@ -3,8 +3,9 @@ mod impls;
 
 pub use glyph::GlyphRenderer;
 
+use crate::layout::query::{DragImageBounds, DragImagePageBounds};
 use crate::layout::{Element, Page, PositionedNode, RenderHints};
-use crate::model::{Doc, SelectionDecor};
+use crate::model::{Doc, LayoutMode, SelectionDecor};
 use crate::runtime::DropIndicator;
 use crate::types::{Point, Theme};
 use tiny_skia::{Color, Pixmap, PixmapMut, Rect, Transform};
@@ -333,8 +334,8 @@ impl Renderer {
     pub fn render_drag_image(
         &mut self,
         pages: &[Page],
-        bounds: &crate::layout::query::DragImageBounds,
-        selections: &[crate::model::SelectionDecor],
+        bounds: &DragImageBounds,
+        selections: &[SelectionDecor],
         doc: &Doc,
         visible_pages: &[usize],
         drag_page_idx: usize,
@@ -409,8 +410,8 @@ impl Renderer {
         for page in pages {
             offsets.push(current_y);
             let h = match settings.layout_mode {
-                crate::model::LayoutMode::Paginated { page_height, .. } => page_height,
-                crate::model::LayoutMode::Continuous { .. } => page.root.node.size.height,
+                LayoutMode::Paginated { page_height, .. } => page_height,
+                LayoutMode::Continuous { .. } => page.root.node.size.height,
             };
             current_y += h + gap;
         }
@@ -418,7 +419,7 @@ impl Renderer {
     }
 
     fn compute_global_bounds(
-        visible_bounds: &[&crate::layout::query::DragImagePageBounds],
+        visible_bounds: &[&DragImagePageBounds],
         page_y_offsets: &[f32],
     ) -> (f32, f32, f32, f32) {
         let mut min_x = f32::MAX;
@@ -444,8 +445,8 @@ impl Renderer {
     fn render_page_part_inner(
         glyph_renderer: &mut GlyphRenderer,
         page: &Page,
-        pb: &crate::layout::query::DragImagePageBounds,
-        selections: &[crate::model::SelectionDecor],
+        pb: &DragImagePageBounds,
+        selections: &[SelectionDecor],
         page_y: f32,
         min_x: f32,
         min_y: f32,
@@ -562,7 +563,7 @@ impl Renderer {
     fn collect_clip_rects(
         positioned: &PositionedNode,
         offset: Point,
-        selections: &[crate::model::SelectionDecor],
+        selections: &[SelectionDecor],
         bounds_origin: Point,
         scale: f32,
         out: &mut Vec<Rect>,

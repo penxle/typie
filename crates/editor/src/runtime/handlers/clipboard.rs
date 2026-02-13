@@ -1,5 +1,5 @@
-use super::super::{Effect, Runtime};
 use crate::model::Fragment;
+use crate::runtime::{Effect, Runtime};
 
 impl Runtime {
     pub(crate) fn handle_paste_html(&mut self, html: String, text: String) -> Vec<Effect> {

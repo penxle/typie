@@ -1,6 +1,6 @@
-use super::super::{Direction, Effect, Runtime};
 use crate::layout::cursor::{Cursor, NavigationContext};
 use crate::model::NodeId;
+use crate::runtime::{Direction, Effect, Runtime};
 use crate::state::position_helpers::move_from_block_position;
 use crate::state::{Position, Selection, leaf_block_end, leaf_block_start};
 use crate::types::Affinity;
@@ -278,10 +278,9 @@ impl Runtime {
 
 #[cfg(test)]
 mod tests {
-    use crate::model::NodeId;
-    use crate::runtime::{Direction, Message, Modifier, PointerButton};
-    use crate::state::{Position, Selection};
-    use crate::types::Affinity;
+    use super::*;
+    use crate::runtime::Message;
+    use crate::runtime::message::{Modifier, PointerButton};
 
     #[test]
     fn test_horizontal_rule_shift_up_extends_selection() {

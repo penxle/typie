@@ -1,10 +1,10 @@
 use crate::layout::cursor::{CursorNavigable, CursorNavigation, NavigationContext};
-use crate::model::{NodeId, PreeditDecor};
+use crate::model::{NodeId, PreeditDecor, SelectionDecor};
 use crate::state::{Position, Selection};
-use crate::types::{Affinity, Rect, Size};
+use crate::types::{Affinity, Point, Rect, Size};
 use crate::utils::{
-    byte_to_char_offset, char_to_byte_offset, compute_word_boundaries,
-    resolve_explicit_break_line_end,
+    byte_to_char_offset, char_to_byte_offset, compute_grapheme_boundaries,
+    compute_sentence_boundaries, compute_word_boundaries, resolve_explicit_break_line_end,
 };
 use rustc_hash::FxHashSet;
 use std::fmt;
@@ -583,9 +583,9 @@ impl LineElement {
 
     pub fn compute_selection_rects(
         &self,
-        point: crate::types::Point,
-        selections: &[crate::model::SelectionDecor],
-    ) -> Vec<crate::types::Rect> {
+        point: Point,
+        selections: &[SelectionDecor],
+    ) -> Vec<Rect> {
         const MIN_WIDTH: f32 = 4.0;
         let mut rects = Vec::new();
 
@@ -612,17 +612,17 @@ impl LineElement {
 
     fn selection_for_node<'a>(
         &self,
-        selections: &'a [crate::model::SelectionDecor],
-    ) -> Option<&'a crate::model::SelectionDecor> {
+        selections: &'a [SelectionDecor],
+    ) -> Option<&'a SelectionDecor> {
         selections.iter().find(|s| s.node_id() == self.block_id)
     }
 
     fn selection_highlight(
         &self,
-        selection: &crate::model::SelectionDecor,
+        selection: &SelectionDecor,
         min_width: f32,
-        point: crate::types::Point,
-    ) -> Option<crate::types::Rect> {
+        point: Point,
+    ) -> Option<Rect> {
         let (local_start, local_end) = self.intersect_selection_segment(selection)?;
         let line_is_blank = self.metric.clusters.is_empty();
 
@@ -645,7 +645,7 @@ impl LineElement {
             return None;
         }
 
-        Some(crate::types::Rect::new(
+        Some(Rect::new(
             point.x + start_x,
             point.y,
             width,
@@ -653,12 +653,8 @@ impl LineElement {
         ))
     }
 
-    fn empty_paragraph_rect(
-        &self,
-        point: crate::types::Point,
-        min_width: f32,
-    ) -> crate::types::Rect {
-        crate::types::Rect::new(
+    fn empty_paragraph_rect(&self, point: Point, min_width: f32) -> Rect {
+        Rect::new(
             point.x + self.metric.left,
             point.y,
             min_width,
@@ -668,10 +664,10 @@ impl LineElement {
 
     fn explicit_break_marker(
         &self,
-        selection: &crate::model::SelectionDecor,
+        selection: &SelectionDecor,
         marker_width: f32,
-        point: crate::types::Point,
-    ) -> Option<crate::types::Rect> {
+        point: Point,
+    ) -> Option<Rect> {
         let (local_start, _) = self.intersect_selection_segment(selection)?;
         let selection_covers_explicit_break = self.metric.break_reason
             == parley::layout::BreakReason::Explicit
@@ -684,7 +680,7 @@ impl LineElement {
         }
 
         let break_x = self.offset_to_x(self.metric.end_offset);
-        Some(crate::types::Rect::new(
+        Some(Rect::new(
             point.x + break_x,
             point.y,
             marker_width,
@@ -692,10 +688,7 @@ impl LineElement {
         ))
     }
 
-    fn intersect_selection_segment(
-        &self,
-        selection: &crate::model::SelectionDecor,
-    ) -> Option<(usize, usize)> {
+    fn intersect_selection_segment(&self, selection: &SelectionDecor) -> Option<(usize, usize)> {
         if selection.start_offset() >= self.metric.end_offset
             || selection.end_offset() <= self.metric.start_offset
         {
@@ -710,9 +703,9 @@ impl LineElement {
 
     pub fn page_break_indicator(
         &self,
-        point: crate::types::Point,
-        selections: &[crate::model::SelectionDecor],
-    ) -> Option<crate::types::Rect> {
+        point: Point,
+        selections: &[SelectionDecor],
+    ) -> Option<Rect> {
         let Some(selection) = self.selection_for_node(selections) else {
             return None;
         };
@@ -722,7 +715,7 @@ impl LineElement {
         }
 
         let end_x = self.offset_to_x(self.metric.end_offset);
-        Some(crate::types::Rect::new(
+        Some(Rect::new(
             point.x + end_x,
             point.y,
             self.size.width - end_x + 20.0,
@@ -982,7 +975,7 @@ impl CursorNavigable for LineElement {
         }
 
         let mut boundaries = vec![0];
-        boundaries.extend(crate::utils::compute_sentence_boundaries(&self.text));
+        boundaries.extend(compute_sentence_boundaries(&self.text));
 
         let idx = boundaries.partition_point(|&b| b < offset);
         if idx == 0 {
@@ -1030,7 +1023,7 @@ impl CursorNavigable for LineElement {
             return exit();
         }
 
-        let boundaries = crate::utils::compute_sentence_boundaries(&self.text);
+        let boundaries = compute_sentence_boundaries(&self.text);
         if boundaries.is_empty() {
             return exit();
         }
@@ -1045,7 +1038,7 @@ impl CursorNavigable for LineElement {
         let mut boundary = boundaries[boundary_idx];
 
         // 뒤쪽 공백 제외한 문장 끝 위치 계산
-        let mut byte_offset = crate::utils::char_to_byte_offset(&self.text, boundary);
+        let mut byte_offset = char_to_byte_offset(&self.text, boundary);
         if byte_offset > self.text.len() {
             return exit();
         }
@@ -1056,7 +1049,7 @@ impl CursorNavigable for LineElement {
                 // 다음 문장의 끝으로 이동 (trimmed)
                 boundary_idx += 1;
                 boundary = boundaries[boundary_idx];
-                byte_offset = crate::utils::char_to_byte_offset(&self.text, boundary);
+                byte_offset = char_to_byte_offset(&self.text, boundary);
                 if byte_offset > self.text.len() {
                     return exit();
                 }
@@ -1198,7 +1191,7 @@ pub fn build_metrics(
 ) -> Vec<LineMetric> {
     let mut lines = Vec::new();
 
-    let global_grapheme_offsets = crate::utils::compute_grapheme_boundaries(text);
+    let global_grapheme_offsets = compute_grapheme_boundaries(text);
 
     let mut top = 0.0;
 

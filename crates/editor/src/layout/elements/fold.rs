@@ -1,4 +1,4 @@
-use crate::layout::elements::{SplitEdges, WrapperPadding};
+use crate::layout::elements::{SplitEdges, Wrapper, WrapperPadding};
 use crate::layout::interactive::{InteractionKind, Interactive};
 use crate::model::NodeId;
 use crate::types::Size;
@@ -75,7 +75,7 @@ impl FoldContentElement {
     }
 }
 
-impl crate::layout::elements::Wrapper for FoldContentElement {
+impl Wrapper for FoldContentElement {
     fn padding(&self) -> WrapperPadding {
         WrapperPadding::symmetric(FOLD_CONTENT_PADDING_Y, FOLD_CONTENT_PADDING_X)
     }

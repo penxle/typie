@@ -1,4 +1,4 @@
-use super::Size;
+use crate::types::Size;
 
 #[derive(Debug, Clone, Copy)]
 pub struct BoxConstraints {

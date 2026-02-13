@@ -1,8 +1,8 @@
 use crate::layout::context::LayoutContext;
 use crate::layout::cursor::CursorNavigable;
-use crate::layout::elements::*;
+use crate::layout::elements::{Wrapper, *};
 use crate::layout::interactive::Interactive;
-use crate::model::TABLE_BORDER_WIDTH;
+use crate::model::{NodeId, TABLE_BORDER_WIDTH};
 use crate::render::Render;
 use crate::types::{BoxConstraints, Point, PointerStyle, Size};
 use std::rc::Rc;
@@ -42,7 +42,7 @@ pub struct LayoutNode {
     pub children: Option<Vec<PositionedNode>>,
     pub page_break_policy: PageBreakPolicy,
     pub render_hints: RenderHints,
-    pub scope_id: Option<crate::model::NodeId>, // TableCell처럼 새 scope를 만드는 경우 그 NodeId
+    pub scope_id: Option<NodeId>, // TableCell처럼 새 scope를 만드는 경우 그 NodeId
 }
 
 #[derive(Clone)]
@@ -146,7 +146,7 @@ impl Element {
         }
     }
 
-    pub fn block_id(&self) -> Option<crate::model::NodeId> {
+    pub fn block_id(&self) -> Option<NodeId> {
         match self {
             Element::Line(e) => Some(e.block_id),
             Element::External(e) => Some(e.id),
@@ -174,7 +174,7 @@ impl Element {
         }
     }
 
-    pub fn as_wrapper(&self) -> Option<&dyn crate::layout::elements::Wrapper> {
+    pub fn as_wrapper(&self) -> Option<&dyn Wrapper> {
         match self {
             Element::CalloutBackground(e) => Some(e),
             Element::BlockquoteMessage(e) => Some(e),
@@ -279,6 +279,7 @@ impl Element {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::layout::elements::{CalloutBackgroundElement, FoldContentElement};
     use crate::model::{CalloutVariant, NodeId};
 
     fn all_wrapper_elements() -> Vec<Element> {

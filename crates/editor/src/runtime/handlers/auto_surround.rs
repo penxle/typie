@@ -1,4 +1,4 @@
-use super::super::{Effect, Runtime};
+use crate::runtime::{Effect, Runtime};
 
 const AUTO_SURROUND_PAIRS: &[(&str, &str, &str)] = &[
     ("(", "(", ")"),

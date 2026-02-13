@@ -1,5 +1,6 @@
 use crate::model::{Annotation, AnnotationType, Style, StyleType, TextAlign};
 use crate::state::selection_helpers::{BlockAttr, SelectionAttributes};
+use crate::types::TextBound;
 
 pub const DIRTY_SETTINGS: u64 = 1 << 0;
 pub const DIRTY_LAYOUT: u64 = 1 << 1;
@@ -286,7 +287,7 @@ impl Slab {
         (start, entry_count)
     }
 
-    pub fn write_text_bounds(&mut self, bounds: &[crate::types::TextBound]) {
+    pub fn write_text_bounds(&mut self, bounds: &[TextBound]) {
         for b in bounds {
             self.write_f32_slice(&[b.x, b.y, b.width, b.height, b.ascent]);
         }

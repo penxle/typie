@@ -1,4 +1,6 @@
+use crate::global::GLOBALS;
 use crate::render::{GlyphRenderer, Render, RenderContext, glyph::Glyph};
+use parley::style::{FontFamily, FontStack, StyleProperty};
 use parley::swash;
 use std::fmt;
 use tiny_skia::{Paint, PixmapMut, Transform};
@@ -91,9 +93,6 @@ impl ListMarkerElement {
         transform: Transform,
         ctx: &RenderContext,
     ) {
-        use crate::global::GLOBALS;
-        use parley::style::{FontFamily, FontStack, StyleProperty};
-
         let text = format!("{}.", index);
         let scale = ctx.scale_factor as f32;
 

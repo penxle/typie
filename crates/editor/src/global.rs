@@ -1,10 +1,9 @@
-use std::cell::RefCell;
-use std::collections::HashMap;
-
 use crate::font::LazyFont;
 use crate::runtime::text_replacement::{
     CompiledPattern, RawTextReplacementRule, TextReplacementRule,
 };
+use std::cell::RefCell;
+use std::collections::HashMap;
 
 thread_local! {
     pub static GLOBALS: RefCell<Globals> = RefCell::new(Globals::new());

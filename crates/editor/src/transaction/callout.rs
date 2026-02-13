@@ -18,6 +18,8 @@ impl Transaction {
 
 #[cfg(test)]
 mod tests {
+    use crate::transaction::Transaction;
+
     #[test]
     fn toggle_callout_wraps_when_outside() {
         let mut p1 = id!();
@@ -89,7 +91,7 @@ mod tests {
             selection { (p1, 1) -> (p2, 1) }
         };
 
-        let mut tr = crate::transaction::Transaction::new(&state);
+        let mut tr = Transaction::new(&state);
         let result = tr.toggle_callout().unwrap();
 
         assert!(!result);

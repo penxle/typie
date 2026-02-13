@@ -13,28 +13,19 @@ pub mod text_replacement;
 pub mod tracked_items;
 mod view_state;
 
-pub use cmd::*;
-pub use context::*;
-pub use dnd::*;
-pub use effect::*;
-pub use message::*;
-pub use pointer::*;
-pub use state::*;
-pub use text_replacement::RawTextReplacementRule;
-pub use tracked_items::{RawTrackedItem, TrackedItem};
-pub use view_state::*;
-
-use crate::inspect::inspect_page_element;
+use crate::inspect::{
+    inspect_fragment_as_macro, inspect_page_element, inspect_state, inspect_state_as_macro,
+};
 use crate::layout::cursor::{Cursor, NavigationContext};
 use crate::layout::elements::ExternalElementData;
-use crate::layout::query::find_drag_image_bounds;
+use crate::layout::query::{find_drag_image_bounds, is_selectable_block_hit};
 use crate::layout::{LayoutCache, LayoutContext, Page, Paginator};
 use crate::model::*;
-use crate::render::{RenderResult, Renderer};
-
+use crate::render::{DragImageResult, RenderInfo, RenderResult, Renderer};
 use crate::state::selection_helpers::{
-    SelectionAttributes, build_selection_decorations, collect_block_attrs_at,
-    compute_selection_attrs,
+    SelectionAttributes, StructureSelectionInfo, build_selection_decorations,
+    collect_block_attrs_at, collect_selected_block_ids, compute_selection_attrs,
+    compute_structure_selection,
 };
 use crate::state::{
     Position, Preedit, Selection, find_child_at_offset, find_text_at_offset, position_in_selection,
@@ -42,10 +33,20 @@ use crate::state::{
 use crate::transaction::Transaction;
 use crate::types::{Affinity, BoxConstraints, PointerStyle, Rect, Size};
 use anyhow::Result;
+pub use cmd::*;
+pub use context::*;
+pub use dnd::*;
+pub use effect::*;
 use loro::UndoManager;
+pub use message::*;
+pub use pointer::*;
 use rustc_hash::{FxHashMap, FxHashSet};
 use slate::*;
+pub use state::*;
 use std::cell::RefCell;
+pub use text_replacement::RawTextReplacementRule;
+pub use tracked_items::{RawTrackedItem, TrackedItem};
+pub use view_state::*;
 
 fn get_styles_at_offset(text_node: &loro::LoroText, offset: usize) -> Vec<Style> {
     let rich_value = text_node.get_richtext_value();
@@ -538,13 +539,8 @@ impl Runtime {
             .unwrap_or(true);
 
         if needs_rebuild {
-            let cell_selection =
-                crate::state::selection_helpers::compute_structure_selection(self.doc(), selection);
-            let block_ids = crate::state::selection_helpers::collect_selected_block_ids(
-                self.doc(),
-                selection,
-                &cell_selection,
-            );
+            let cell_selection = compute_structure_selection(self.doc(), selection);
+            let block_ids = collect_selected_block_ids(self.doc(), selection, &cell_selection);
 
             let mut block_set = FxHashSet::default();
             block_set.extend(block_ids.iter().copied());
@@ -686,7 +682,7 @@ impl Runtime {
     }
 
     #[allow(dead_code)]
-    pub fn get_render_info(&mut self, page_index: usize) -> Option<crate::render::RenderInfo> {
+    pub fn get_render_info(&mut self, page_index: usize) -> Option<RenderInfo> {
         let doc = &self.state.doc;
         let page = self.pages.get(page_index)?;
 
@@ -703,7 +699,7 @@ impl Runtime {
         let height = self.renderer.height();
         let buffer_size = width as usize * height as usize * 4;
 
-        Some(crate::render::RenderInfo {
+        Some(RenderInfo {
             width,
             height,
             buffer_size,
@@ -747,7 +743,7 @@ impl Runtime {
         &mut self,
         visible_pages: &[usize],
         drag_page_idx: usize,
-    ) -> Option<crate::render::DragImageResult> {
+    ) -> Option<DragImageResult> {
         let doc = &self.state.doc;
         let selection = &self.state.selection;
 
@@ -1412,15 +1408,15 @@ impl Runtime {
     }
 
     pub fn inspect_state(&self) -> String {
-        crate::inspect::inspect_state(&self.doc(), &self.state.selection)
+        inspect_state(&self.doc(), &self.state.selection)
     }
 
     pub fn inspect_state_as_macro(&self) -> String {
-        crate::inspect::inspect_state_as_macro(&self.doc(), &self.state.selection)
+        inspect_state_as_macro(&self.doc(), &self.state.selection)
     }
 
     pub fn inspect_fragment_as_macro(&self, fragment: &Fragment) -> String {
-        crate::inspect::inspect_fragment_as_macro(fragment)
+        inspect_fragment_as_macro(fragment)
     }
 
     pub fn inspect_page_element(&self, page_idx: usize, x: f32, y: f32) -> Option<String> {
@@ -1444,14 +1440,10 @@ impl Runtime {
             return false;
         }
 
-        let cell_selection =
-            crate::state::selection_helpers::compute_structure_selection(self.doc(), &selection);
+        let cell_selection = compute_structure_selection(self.doc(), &selection);
 
         match cell_selection {
-            crate::state::selection_helpers::StructureSelectionInfo::Rectangular {
-                table_id,
-                range,
-            } => {
+            StructureSelectionInfo::Rectangular { table_id, range } => {
                 let Some(_table) = self.doc().node(table_id) else {
                     return position_in_selection(&self.state.doc, position, &selection);
                 };
@@ -1493,7 +1485,7 @@ impl Runtime {
 
                 false
             }
-            crate::state::selection_helpers::StructureSelectionInfo::Structural(block_ids) => {
+            StructureSelectionInfo::Structural(block_ids) => {
                 let mut current_id = Some(position.node_id);
                 while let Some(id) = current_id {
                     if block_ids.contains(&id) {
@@ -1512,7 +1504,7 @@ impl Runtime {
     }
 
     pub(crate) fn is_block_selectable_hit(&self, hit_selection: &Selection) -> bool {
-        crate::layout::query::is_selectable_block_hit(&self.state.doc, hit_selection)
+        is_selectable_block_hit(&self.state.doc, hit_selection)
     }
 
     pub fn update(&mut self, msg: Message) {
@@ -1814,9 +1806,7 @@ impl Runtime {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::state::Position;
     use crate::state::position_helpers::calculate_offset_before_child;
-    use crate::types::Affinity;
     use std::rc::Rc;
 
     #[test]

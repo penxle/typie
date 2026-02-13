@@ -1,5 +1,5 @@
 use crate::layout::{Element, PositionedNode};
-use crate::model::{Doc, NodeId, TABLE_BORDER_WIDTH, TableBorderStyle};
+use crate::model::{Doc, NodeId, TABLE_BORDER_WIDTH, TableAlign, TableBorderStyle};
 use crate::runtime::Runtime;
 use crate::runtime::cmd::{self, TableOverlay};
 use crate::state::Selection;
@@ -75,9 +75,9 @@ fn collect_table_overlays_from_tree(
                 },
                 border_style: border_style.to_string(),
                 align: match table_border.align {
-                    crate::model::TableAlign::Left => "left".to_string(),
-                    crate::model::TableAlign::Center => "center".to_string(),
-                    crate::model::TableAlign::Right => "right".to_string(),
+                    TableAlign::Left => "left".to_string(),
+                    TableAlign::Center => "center".to_string(),
+                    TableAlign::Right => "right".to_string(),
                 },
                 col_widths: table_border.col_widths.clone(),
                 col_positions,

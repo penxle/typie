@@ -9,6 +9,7 @@ use crate::state::table_helpers::{
     TableSelection, collect_cells_in_range, compute_table_selection,
 };
 use crate::state::{BlockTraverser, Selection};
+use crate::types::Affinity;
 use anyhow::{Context, Result};
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::cmp::Ordering;
@@ -638,12 +639,8 @@ pub fn is_node_fully_selected(doc: &Doc, selection: &Selection, node_id: NodeId)
     let node = doc
         .node(node_id)
         .context("is_node_fully_selected: Node not found")?;
-    let node_start = Position::new(node_id, 0, crate::types::Affinity::default());
-    let node_end = Position::new(
-        node_id,
-        block_content_len(&node),
-        crate::types::Affinity::default(),
-    );
+    let node_start = Position::new(node_id, 0, Affinity::default());
+    let node_end = Position::new(node_id, block_content_len(&node), Affinity::default());
 
     let start_ok = compare_positions(doc, from, node_start)? != Ordering::Greater;
     let end_ok = compare_positions(doc, to, node_end)? != Ordering::Less;
@@ -719,8 +716,8 @@ pub fn collect_selected_block_ids(
 
             let mut result: Vec<NodeId> = ids.into_iter().collect();
             result.sort_by(|&a, &b| {
-                let pos_a = Position::new(a, 0, crate::types::Affinity::default());
-                let pos_b = Position::new(b, 0, crate::types::Affinity::default());
+                let pos_a = Position::new(a, 0, Affinity::default());
+                let pos_b = Position::new(b, 0, Affinity::default());
                 compare_positions(doc, pos_a, pos_b).unwrap_or(Ordering::Equal)
             });
             result
@@ -798,8 +795,8 @@ fn collect_relevant_blocks(doc: &Doc, selection: &Selection) -> Result<Vec<NodeI
         .collect();
 
     result.sort_by(|&a, &b| {
-        let pos_a = Position::new(a, 0, crate::types::Affinity::default());
-        let pos_b = Position::new(b, 0, crate::types::Affinity::default());
+        let pos_a = Position::new(a, 0, Affinity::default());
+        let pos_b = Position::new(b, 0, Affinity::default());
         compare_positions(doc, pos_a, pos_b).unwrap_or(Ordering::Equal)
     });
 
@@ -809,6 +806,8 @@ fn collect_relevant_blocks(doc: &Doc, selection: &Selection) -> Result<Vec<NodeI
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::FontWeightStyle;
+    use crate::transaction::Transaction;
 
     #[test]
     fn test_compute_selection_attrs_with_list() {
@@ -826,11 +825,9 @@ mod tests {
             selection { (p1, 0) -> (p1, 4) }
         };
 
-        let mut tr = crate::transaction::Transaction::new(&state);
-        tr.set_style(crate::model::Style::FontWeight(
-            crate::model::FontWeightStyle { weight: 700 },
-        ))
-        .unwrap();
+        let mut tr = Transaction::new(&state);
+        tr.set_style(Style::FontWeight(FontWeightStyle { weight: 700 }))
+            .unwrap();
         let state = tr.commit().unwrap().0;
 
         let (from, to) = state.selection.as_sorted(&state.doc).unwrap();
@@ -838,9 +835,7 @@ mod tests {
 
         let attrs = compute_selection_attrs(&state.doc, &block_ids, from, to);
 
-        let has_font_weight = attrs
-            .style_values
-            .contains_key(&crate::model::StyleType::FontWeight);
+        let has_font_weight = attrs.style_values.contains_key(&StyleType::FontWeight);
 
         assert!(
             has_font_weight,

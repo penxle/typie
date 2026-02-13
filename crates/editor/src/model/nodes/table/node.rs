@@ -2,12 +2,11 @@ use crate::layout::elements::{SplitEdges, TableBorderElement};
 use crate::layout::{Element, Layout, LayoutContext, LayoutNode, PageBreakPolicy, PositionedNode};
 use crate::model::Node;
 use crate::model::html::{DomSpec, NodeHtmlCodec, NodeParseRule};
+use crate::model::nodes::table::{TABLE_BORDER_WIDTH, calculate_col_widths};
 use crate::types::{BoxConstraints, Point, Size};
 use macros::Codec;
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;
-
-use super::{TABLE_BORDER_WIDTH, calculate_col_widths};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize, Codec)]
 #[cfg_attr(feature = "wasm", derive(tsify::Tsify))]

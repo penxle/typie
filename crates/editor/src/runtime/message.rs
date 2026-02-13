@@ -1,9 +1,9 @@
-use super::effect::Effect;
-use super::{Context, ContextKey, Runtime, When};
 use crate::model::{
     Annotation, AnnotationType, BlockquoteVariant, HorizontalRuleVariant, LayoutMode, Style,
-    TextAlign,
+    TableAlign, TextAlign,
 };
+use crate::runtime::effect::Effect;
+use crate::runtime::{Context, ContextKey, Runtime, When};
 use crate::types::{Affinity, Theme};
 use serde::{Deserialize, Serialize};
 
@@ -459,7 +459,7 @@ define_messages! {
     => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_set_table_border_style(table_id, style) },
 
-    SetTableAlign { table_id: String, align: crate::model::TableAlign }
+    SetTableAlign { table_id: String, align: TableAlign }
     => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_set_table_align(table_id, align) },
 

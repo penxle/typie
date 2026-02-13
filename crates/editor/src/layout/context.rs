@@ -97,10 +97,10 @@ fn is_layout_equal(new: &LayoutNode, old: &LayoutNode) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::layout::elements::LineElement;
-    use crate::layout::{Element, Layout};
-    use crate::model::{Decorations, NodeId};
-    use crate::types::BoxConstraints;
+    use crate::layout::Element;
+    use crate::layout::elements::{LineElement, TableBorderElement};
+    use crate::model::{NodeId, PreeditDecor, TableAlign};
+    use crate::runtime::{Message, Runtime};
     use std::cell::RefCell;
 
     fn first_line(layout: &LayoutNode) -> Option<&LineElement> {
@@ -131,12 +131,12 @@ mod tests {
         };
 
         let doc = &state.doc;
-        let root = doc.node(crate::model::NodeId::ROOT).unwrap();
+        let root = doc.node(NodeId::ROOT).unwrap();
         let settings = doc.settings();
         let constraints = BoxConstraints::new(0.0, 400.0, 0.0, f32::INFINITY);
         let cache = RefCell::new(LayoutCache::new());
         let view_states = ViewStates::default();
-        let default_styles = crate::model::DefaultStyles::default();
+        let default_styles = DefaultStyles::default();
 
         let decorations = Decorations::default();
         let ctx = LayoutContext::new(
@@ -157,7 +157,7 @@ mod tests {
         );
 
         let decorations_with_preedit = Decorations {
-            preedit: Some(crate::model::PreeditDecor {
+            preedit: Some(PreeditDecor {
                 node_id: p,
                 offset: 1,
                 text: "가".into(),
@@ -192,10 +192,8 @@ mod tests {
         assert_eq!(preedit.offset, 1, "preedit 오프셋이 유지되어야 함");
     }
 
-    fn find_table_border(
-        layout: &crate::layout::LayoutNode,
-    ) -> Option<&crate::layout::elements::TableBorderElement> {
-        if let Some(crate::layout::Element::TableBorder(ref t)) = layout.element {
+    fn find_table_border(layout: &LayoutNode) -> Option<&TableBorderElement> {
+        if let Some(Element::TableBorder(ref t)) = layout.element {
             return Some(t);
         }
         if let Some(ref children) = layout.children {
@@ -210,9 +208,6 @@ mod tests {
 
     #[test]
     fn layout_cache_respects_element_change_with_same_children() {
-        use crate::model::TableAlign;
-        use crate::runtime::Runtime;
-
         let mut t = id!();
         let state = state! {
             doc {
@@ -240,7 +235,7 @@ mod tests {
             "Initial align should be Left"
         );
 
-        rt.update(crate::runtime::Message::SetTableAlign {
+        rt.update(Message::SetTableAlign {
             table_id: t.to_string(),
             align: TableAlign::Right,
         });

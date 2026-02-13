@@ -1,12 +1,12 @@
-use super::{
+use crate::layout::Element;
+use crate::layout::cursor::{
     CursorNavigable, CursorNavigation, HorizontalDirection, NavigationContext, VerticalDirection,
     WordDirection, find_scope,
 };
-use crate::layout::Element;
 use crate::layout::page::{ElementEntry, Page};
 use crate::model::NodeId;
 use crate::state::{Position, Selection};
-use crate::types::{Point, Rect};
+use crate::types::{Affinity, Point, Rect};
 use crate::utils::resolve_affinity_boundary;
 use rstar::AABB;
 
@@ -110,10 +110,10 @@ where
         CursorNavigation::SoftWrap { offset } => {
             let next_pos = match direction {
                 HorizontalDirection::Left => {
-                    Position::new(position.node_id, offset, crate::types::Affinity::Upstream)
+                    Position::new(position.node_id, offset, Affinity::Upstream)
                 }
                 HorizontalDirection::Right => {
-                    Position::new(position.node_id, offset, crate::types::Affinity::Downstream)
+                    Position::new(position.node_id, offset, Affinity::Downstream)
                 }
             };
             match direction {
@@ -309,11 +309,9 @@ fn navigate_word(
         CursorNavigation::Moved { selection } => Some(selection),
         CursorNavigation::SoftWrap { offset } => {
             let next_pos = match direction {
-                WordDirection::Left => {
-                    Position::new(position.node_id, offset, crate::types::Affinity::Upstream)
-                }
+                WordDirection::Left => Position::new(position.node_id, offset, Affinity::Upstream),
                 WordDirection::Right => {
-                    Position::new(position.node_id, offset, crate::types::Affinity::Downstream)
+                    Position::new(position.node_id, offset, Affinity::Downstream)
                 }
             };
 
@@ -534,7 +532,7 @@ fn find_element_at_position<'a>(
 }
 
 fn adjust_affinity_after_explicit_break(pages: &[Page], position: Position) -> Position {
-    if position.affinity == crate::types::Affinity::Downstream {
+    if position.affinity == Affinity::Downstream {
         return position;
     }
 

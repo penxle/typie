@@ -279,8 +279,7 @@ impl Transaction {
 
 #[cfg(test)]
 mod tests {
-    use crate::state::Position;
-    use crate::types::Affinity;
+    use super::*;
 
     #[test]
     fn select_word_at() {
@@ -442,7 +441,7 @@ mod tests {
             selection { (p, 1) }
         };
 
-        let mut tr = crate::transaction::Transaction::new(&initial);
+        let mut tr = Transaction::new(&initial);
         tr.select_word_at(tr.selection().anchor).unwrap();
         let (actual, _) = tr.commit().unwrap();
 
@@ -473,7 +472,7 @@ mod tests {
             selection { (p, 1) }
         };
 
-        let mut tr = crate::transaction::Transaction::new(&initial);
+        let mut tr = Transaction::new(&initial);
         tr.select_word_at(tr.selection().anchor).unwrap();
         let (actual, _) = tr.commit().unwrap();
 
@@ -503,7 +502,7 @@ mod tests {
             selection { (p, 1) }
         };
 
-        let mut tr = crate::transaction::Transaction::new(&state);
+        let mut tr = Transaction::new(&state);
         let result = tr.select_word_at(tr.selection().anchor).unwrap();
         assert!(!result);
     }

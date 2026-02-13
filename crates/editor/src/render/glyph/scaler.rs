@@ -1,10 +1,9 @@
+use crate::render::glyph::pen::TinySkiaPen;
 use skrifa::GlyphId;
 use skrifa::bitmap::{BitmapData, BitmapStrikes, Origin};
 use skrifa::instance::Size;
 use skrifa::outline::OutlineGlyphCollection;
 use tiny_skia::{ColorU8, FillRule, FilterQuality, Paint, Pixmap, PixmapPaint, Transform};
-
-use super::pen::TinySkiaPen;
 
 pub(crate) struct MaskImage {
     pub data: Vec<u8>,

@@ -1,7 +1,8 @@
+use crate::model::Codec;
+use crate::model::html::{DomSpec, StyleHtmlCodec};
+use crate::model::styles::*;
 use serde::{Deserialize, Serialize};
 use std::hash::{Hash, Hasher};
-
-use super::styles::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
@@ -83,7 +84,6 @@ impl Style {
     }
 
     pub fn to_loro_value(&self) -> loro::LoroValue {
-        use crate::model::Codec;
         match self {
             Style::BackgroundColor(inner) => inner.to_value().expect("style must serialize"),
             Style::TextColor(inner) => inner.to_value().expect("style must serialize"),
@@ -98,7 +98,6 @@ impl Style {
     }
 
     pub fn from_key_value(key: &str, value: loro::LoroValue) -> Option<Self> {
-        use crate::model::Codec;
         let style_key = key.strip_prefix("style:")?;
         match style_key {
             "background_color" => BackgroundColorStyle::from_value(value)
@@ -125,18 +124,18 @@ impl Style {
     }
 }
 
-impl crate::model::html::StyleHtmlCodec for Style {
-    fn to_dom(&self) -> crate::model::html::DomSpec {
+impl StyleHtmlCodec for Style {
+    fn to_dom(&self) -> DomSpec {
         match self {
-            Style::BackgroundColor(s) => crate::model::html::StyleHtmlCodec::to_dom(s),
-            Style::TextColor(s) => crate::model::html::StyleHtmlCodec::to_dom(s),
-            Style::FontSize(s) => crate::model::html::StyleHtmlCodec::to_dom(s),
-            Style::FontFamily(s) => crate::model::html::StyleHtmlCodec::to_dom(s),
-            Style::FontWeight(s) => crate::model::html::StyleHtmlCodec::to_dom(s),
-            Style::Italic(s) => crate::model::html::StyleHtmlCodec::to_dom(s),
-            Style::LetterSpacing(s) => crate::model::html::StyleHtmlCodec::to_dom(s),
-            Style::Strikethrough(s) => crate::model::html::StyleHtmlCodec::to_dom(s),
-            Style::Underline(s) => crate::model::html::StyleHtmlCodec::to_dom(s),
+            Style::BackgroundColor(s) => StyleHtmlCodec::to_dom(s),
+            Style::TextColor(s) => StyleHtmlCodec::to_dom(s),
+            Style::FontSize(s) => StyleHtmlCodec::to_dom(s),
+            Style::FontFamily(s) => StyleHtmlCodec::to_dom(s),
+            Style::FontWeight(s) => StyleHtmlCodec::to_dom(s),
+            Style::Italic(s) => StyleHtmlCodec::to_dom(s),
+            Style::LetterSpacing(s) => StyleHtmlCodec::to_dom(s),
+            Style::Strikethrough(s) => StyleHtmlCodec::to_dom(s),
+            Style::Underline(s) => StyleHtmlCodec::to_dom(s),
         }
     }
 }

@@ -1,5 +1,8 @@
-use crate::model::{Node, NodeId, NodeType};
+use crate::model::{
+    BulletListNode, ListItemNode, Node, NodeId, NodeType, OrderedListNode, ParagraphNode,
+};
 use crate::runtime::Effect;
+use crate::state::selection_helpers::{block_content_len, collect_top_level_blocks_in_range};
 use crate::state::{Position, Selection};
 use crate::transaction::Transaction;
 use crate::types::Affinity;
@@ -68,10 +71,9 @@ impl Transaction {
                 .context("List node not found")?;
             let list_item_index = list_item.index().context("List item index not found")?;
 
-            let new_list_item_id = list_node.as_mut().insert_child(
-                list_item_index + 1,
-                Node::ListItem(crate::model::ListItemNode::default()),
-            )?;
+            let new_list_item_id = list_node
+                .as_mut()
+                .insert_child(list_item_index + 1, Node::ListItem(ListItemNode::default()))?;
 
             self.move_node(second_para_id, new_list_item_id, 0)?;
 
@@ -171,12 +173,8 @@ impl Transaction {
                 id
             } else {
                 let new_list = match list_type {
-                    NodeType::BulletList => {
-                        Node::BulletList(crate::model::BulletListNode::default())
-                    }
-                    NodeType::OrderedList => {
-                        Node::OrderedList(crate::model::OrderedListNode::default())
-                    }
+                    NodeType::BulletList => Node::BulletList(BulletListNode::default()),
+                    NodeType::OrderedList => Node::OrderedList(OrderedListNode::default()),
                     _ => return Ok(false),
                 };
 
@@ -218,8 +216,7 @@ impl Transaction {
             return Ok(false);
         }
 
-        let at_end =
-            selection.head.offset == crate::state::selection_helpers::block_content_len(&block);
+        let at_end = selection.head.offset == block_content_len(&block);
         if !at_end || block.next_sibling().is_some() {
             return Ok(false);
         }
@@ -342,11 +339,7 @@ impl Transaction {
         let start_affinity = from.affinity;
         let end_affinity = to.affinity;
 
-        let blocks = crate::state::selection_helpers::collect_top_level_blocks_in_range(
-            self.doc(),
-            from,
-            to,
-        )?;
+        let blocks = collect_top_level_blocks_in_range(self.doc(), from, to)?;
 
         if blocks.is_empty() {
             return Ok(false);
@@ -393,9 +386,9 @@ impl Transaction {
             }
         }
 
-        self.set_selection(crate::state::Selection::new(
-            crate::state::Position::new(start_node_id, start_offset, start_affinity),
-            crate::state::Position::new(end_node_id, end_offset, end_affinity),
+        self.set_selection(Selection::new(
+            Position::new(start_node_id, start_offset, start_affinity),
+            Position::new(end_node_id, end_offset, end_affinity),
         ));
 
         self.push_effect(Effect::StructureChanged);
@@ -549,7 +542,7 @@ impl Transaction {
                 .node_mut(list_id)
                 .unwrap()
                 .as_mut()
-                .insert_child(count, Node::ListItem(crate::model::ListItemNode::default()))?;
+                .insert_child(count, Node::ListItem(ListItemNode::default()))?;
             self.move_node(block_id, new_list_item_id, 0)?;
             return Ok(true);
         }
@@ -600,7 +593,7 @@ impl Transaction {
             .node_mut(new_list_id)
             .unwrap()
             .as_mut()
-            .insert_child(0, Node::ListItem(crate::model::ListItemNode::default()))?;
+            .insert_child(0, Node::ListItem(ListItemNode::default()))?;
 
         self.move_node(block_id, new_list_item_id, 0)?;
         Ok(new_list_id)
@@ -723,8 +716,8 @@ impl Transaction {
 
     fn new_list_node(&self, list_type: NodeType) -> Result<Node> {
         let node = match list_type {
-            NodeType::BulletList => Node::BulletList(crate::model::BulletListNode::default()),
-            NodeType::OrderedList => Node::OrderedList(crate::model::OrderedListNode::default()),
+            NodeType::BulletList => Node::BulletList(BulletListNode::default()),
+            NodeType::OrderedList => Node::OrderedList(OrderedListNode::default()),
             _ => return Err(anyhow!("Unsupported list type")),
         };
 
@@ -804,10 +797,7 @@ impl Transaction {
                 .node_mut(ctx.owner_id)
                 .context("Parent not found")?
                 .as_mut()
-                .insert_child(
-                    insert_at,
-                    Node::Paragraph(crate::model::ParagraphNode::default()),
-                )?;
+                .insert_child(insert_at, Node::Paragraph(ParagraphNode::default()))?;
 
             self.set_selection(Selection::collapsed(Position::new(
                 new_para_id,
@@ -869,7 +859,8 @@ struct LiftContext {
 
 #[cfg(test)]
 mod tests {
-    use crate::{model::NodeId, runtime::Effect};
+    use super::*;
+    use crate::runtime::State;
 
     #[test]
     fn split_list_item_middle() {
@@ -1280,11 +1271,11 @@ mod tests {
             @p2 paragraph { text { "2" } }
             @p3 paragraph { text { "3" } }
         };
-        let selection = crate::state::Selection::new(
-            crate::state::Position::new(p1, 0, crate::types::Affinity::default()),
-            crate::state::Position::new(p3, 1, crate::types::Affinity::default()),
+        let selection = Selection::new(
+            Position::new(p1, 0, Affinity::default()),
+            Position::new(p3, 1, Affinity::default()),
         );
-        let initial = crate::runtime::State::new(doc, selection);
+        let initial = State::new(doc, selection);
 
         let actual = transact!(initial, |tr| tr.toggle_bullet_list().unwrap());
 

@@ -1,4 +1,4 @@
-use crate::model::{LayoutMode, Node, NodeId, Style};
+use crate::model::{CONTINUOUS_PAGE_MARGIN, LayoutMode, Node, NodeId, Style};
 use crate::runtime::{Effect, Runtime};
 use crate::types::Theme;
 use rustc_hash::FxHashSet;
@@ -137,7 +137,7 @@ impl Runtime {
         match layout_mode {
             LayoutMode::Paginated { page_width, .. } => page_width,
             LayoutMode::Continuous { max_width } => {
-                let margin = crate::model::CONTINUOUS_PAGE_MARGIN;
+                let margin = CONTINUOUS_PAGE_MARGIN;
                 let max_page_width = max_width + 2.0 * margin;
                 self.viewport_width.min(max_page_width)
             }

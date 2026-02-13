@@ -1,7 +1,11 @@
-use super::{Doc, FontWeightStyle, Node, NodeId, Style, TextNode, TextSegment};
+use crate::font::get_available_fonts;
+use crate::model::{
+    Doc, FontWeightStyle, Node, NodeId, NodeRef, ParagraphNode, Style, Text, TextNode, TextSegment,
+};
 use crate::schema::Schema;
 use crate::state::position_helpers::find_child_at_offset;
 use crate::state::{Position, Selection, StructureSelectionInfo, compute_structure_selection};
+use crate::types::Affinity;
 use anyhow::{Context, Result};
 use indexmap::IndexMap;
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -99,8 +103,8 @@ impl Fragment {
         }
 
         let selection = Selection::new(
-            Position::new(NodeId::ROOT, 0, crate::types::Affinity::Downstream),
-            Position::new(NodeId::ROOT, child_count, crate::types::Affinity::Upstream),
+            Position::new(NodeId::ROOT, 0, Affinity::Downstream),
+            Position::new(NodeId::ROOT, child_count, Affinity::Upstream),
         );
 
         Self::new_from_selection(doc, &selection)
@@ -172,7 +176,7 @@ impl Fragment {
 
         if lines.len() == 1 {
             let node_id = NodeId::new();
-            let text_obj = crate::model::Text::from(lines[0]);
+            let text_obj = Text::from(lines[0]);
             let len = text_obj.char_len();
             for style in styles {
                 let _ = text_obj.apply_style(0..len, style);
@@ -200,7 +204,7 @@ impl Fragment {
 
             if !line.is_empty() {
                 let text_id = NodeId::new();
-                let text_obj = crate::model::Text::from(line);
+                let text_obj = Text::from(line);
                 let len = text_obj.char_len();
                 for style in styles {
                     let _ = text_obj.apply_style(0..len, style);
@@ -239,22 +243,14 @@ impl Fragment {
                         if f.node_id == block_id
                             || from_node.ancestors().any(|n| n.node_id() == block_id)
                         {
-                            f = Position::new(
-                                parent.node_id(),
-                                idx,
-                                crate::types::Affinity::Downstream,
-                            );
+                            f = Position::new(parent.node_id(), idx, Affinity::Downstream);
                         }
 
                         let to_node = doc.node(t.node_id).context("To node not found")?;
                         if t.node_id == block_id
                             || to_node.ancestors().any(|n| n.node_id() == block_id)
                         {
-                            t = Position::new(
-                                parent.node_id(),
-                                idx + 1,
-                                crate::types::Affinity::Upstream,
-                            );
+                            t = Position::new(parent.node_id(), idx + 1, Affinity::Upstream);
                         }
                     }
                 }
@@ -297,7 +293,7 @@ impl Fragment {
     }
 
     fn is_atomic_node_selection(
-        node: &crate::model::NodeRef<'_>,
+        node: &NodeRef<'_>,
         local_offset: usize,
         from_offset: usize,
         to_offset: usize,
@@ -313,7 +309,7 @@ impl Fragment {
         node.spec().content.is_leaf()
     }
 
-    fn extract_atomic_node(node_id: NodeId, node: &crate::model::NodeRef<'_>) -> Self {
+    fn extract_atomic_node(node_id: NodeId, node: &NodeRef<'_>) -> Self {
         let parent_id = node.parent().map(|n| n.node_id());
         let fragment_node = FragmentNode::new(node.node().clone(), parent_id);
         Self::builder()
@@ -339,7 +335,7 @@ impl Fragment {
         }
     }
 
-    pub fn into_blocks(self, schema: &crate::schema::Schema) -> Self {
+    pub fn into_blocks(self, schema: &Schema) -> Self {
         let top_levels = self.top_level_node_ids();
         let has_inline_top_level = top_levels.iter().any(|&id| self.is_inline_node(id, schema));
 
@@ -350,7 +346,7 @@ impl Fragment {
         self.wrap_inline_nodes_in_paragraphs(schema)
     }
 
-    pub fn split_at_page_breaks(self, schema: &crate::schema::Schema) -> Self {
+    pub fn split_at_page_breaks(self, schema: &Schema) -> Self {
         let ends_with_page_break = self
             .nodes
             .values()
@@ -377,10 +373,7 @@ impl Fragment {
                     let pid = NodeId::new();
                     new_nodes.insert(
                         pid,
-                        FragmentNode::new(
-                            Node::Paragraph(crate::model::ParagraphNode::default()),
-                            None,
-                        ),
+                        FragmentNode::new(Node::Paragraph(ParagraphNode::default()), None),
                     );
                     pid
                 });
@@ -393,10 +386,7 @@ impl Fragment {
 
         new_nodes.insert(
             NodeId::new(),
-            FragmentNode::new(
-                Node::Paragraph(crate::model::ParagraphNode::default()),
-                None,
-            ),
+            FragmentNode::new(Node::Paragraph(ParagraphNode::default()), None),
         );
 
         Self {
@@ -406,13 +396,13 @@ impl Fragment {
         }
     }
 
-    fn is_inline_node(&self, id: NodeId, schema: &crate::schema::Schema) -> bool {
+    fn is_inline_node(&self, id: NodeId, schema: &Schema) -> bool {
         self.node(id)
             .map(|n| schema.node_spec(n.data().as_type()).inline)
             .unwrap_or(false)
     }
 
-    fn wrap_inline_nodes_in_paragraphs(self, schema: &crate::schema::Schema) -> Self {
+    fn wrap_inline_nodes_in_paragraphs(self, schema: &Schema) -> Self {
         let all_ids = self.collect_all_ids();
         let mut new_nodes = IndexMap::with_capacity(self.nodes.len());
         let mut current_para: Option<NodeId> = None;
@@ -428,10 +418,7 @@ impl Fragment {
                     let pid = NodeId::new();
                     new_nodes.insert(
                         pid,
-                        FragmentNode::new(
-                            Node::Paragraph(crate::model::ParagraphNode::default()),
-                            None,
-                        ),
+                        FragmentNode::new(Node::Paragraph(ParagraphNode::default()), None),
                     );
                     pid
                 });
@@ -498,7 +485,7 @@ impl Fragment {
             .build()
     }
 
-    pub fn flatten_for_merge_at(self, doc: &Doc, insert_pos: crate::state::Position) -> Self {
+    pub fn flatten_for_merge_at(self, doc: &Doc, insert_pos: Position) -> Self {
         let parent_disc = doc
             .node(insert_pos.node_id)
             .and_then(|n| n.parent().map(|p| std::mem::discriminant(p.node())));
@@ -682,7 +669,7 @@ impl Fragment {
     }
 
     pub fn split_segments_at(
-        text: &super::Text,
+        text: &crate::model::Text,
         offset: usize,
     ) -> (Vec<TextSegment>, Vec<TextSegment>) {
         let mut left = Vec::new();
@@ -718,7 +705,7 @@ impl Fragment {
     }
 
     pub fn normalize_font_weights(self) -> Self {
-        let available = crate::font::get_available_fonts();
+        let available = get_available_fonts();
         if available.is_empty() {
             return self;
         }
@@ -774,7 +761,7 @@ impl Fragment {
                     }
 
                     if modified {
-                        let new_text = crate::model::Text::from_segments(&new_segments);
+                        let new_text = Text::from_segments(&new_segments);
                         new_nodes.insert(
                             *id,
                             FragmentNode::new(
@@ -817,7 +804,7 @@ impl Fragment {
             let plans = Node::plan_consecutive_text_merges(siblings_nodes);
 
             for (keep_id, remove_ids, segments) in plans {
-                let merged_text = crate::model::Text::from_segments(&segments);
+                let merged_text = Text::from_segments(&segments);
                 let parent_id = self.nodes[&keep_id].parent();
 
                 next_nodes.insert(
@@ -1206,9 +1193,6 @@ fn nearest_weight(target: u16, weights: &[u16]) -> u16 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::Text;
-    use crate::state::{Position, Selection};
-    use crate::types::Affinity;
     use std::rc::Rc;
 
     #[test]

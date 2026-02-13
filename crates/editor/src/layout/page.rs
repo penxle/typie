@@ -2,9 +2,9 @@ use crate::layout::cursor::NavigationContext;
 use crate::layout::elements::external::ExternalElement;
 use crate::layout::interactive::InteractionKind;
 use crate::layout::{Element, PositionedNode};
-use crate::model::NodeId;
+use crate::model::{LinkRange, NodeId};
 use crate::state::Position;
-use crate::types::{Point, PointerStyle, Size};
+use crate::types::{Point, PointerStyle, Size, TextBound};
 use rstar::{AABB, PointDistance, RTree, RTreeObject};
 
 #[derive(Clone)]
@@ -835,10 +835,10 @@ impl Page {
 
     pub fn get_text_range_bounds(
         &self,
-        block_id: crate::model::NodeId,
+        block_id: NodeId,
         start_offset: usize,
         end_offset: usize,
-    ) -> Vec<crate::types::TextBound> {
+    ) -> Vec<TextBound> {
         let mut bounds = Vec::new();
 
         Self::collect_text_range_bounds(
@@ -856,10 +856,10 @@ impl Page {
     fn collect_text_range_bounds(
         positioned: &PositionedNode,
         offset: Point,
-        block_id: crate::model::NodeId,
+        block_id: NodeId,
         start_offset: usize,
         end_offset: usize,
-        bounds: &mut Vec<crate::types::TextBound>,
+        bounds: &mut Vec<TextBound>,
     ) {
         let abs_pos = Point::new(
             offset.x + positioned.position.x,
@@ -881,7 +881,7 @@ impl Page {
 
                         let width = end_x - start_x;
                         if width > 0.0 {
-                            bounds.push(crate::types::TextBound {
+                            bounds.push(TextBound {
                                 x: abs_pos.x + start_x,
                                 y: abs_pos.y + line.metric.top,
                                 width,
@@ -908,10 +908,7 @@ impl Page {
         }
     }
 
-    pub fn get_link_overlays(
-        &self,
-        link_ranges: &[crate::model::LinkRange],
-    ) -> Vec<(String, Vec<crate::types::TextBound>)> {
+    pub fn get_link_overlays(&self, link_ranges: &[LinkRange]) -> Vec<(String, Vec<TextBound>)> {
         let mut results = Vec::new();
 
         for range in link_ranges {

@@ -6,6 +6,7 @@ use crate::model::{Node, PreeditDecor};
 use crate::types::{BoxConstraints, Point, Size};
 use crate::utils::char_to_byte_offset;
 use macros::Codec;
+use parley::style::*;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::rc::Rc;
@@ -69,8 +70,6 @@ impl Layout for FoldTitleNode {
         let content_width = (constraints.max_width - CONTENT_OFFSET).max(0.0);
 
         let layout = GLOBALS.with(|globals| {
-            use parley::style::*;
-
             let globals = globals.borrow();
 
             let mut lcx = globals.parley_layout_context.borrow_mut();

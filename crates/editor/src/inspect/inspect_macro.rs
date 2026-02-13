@@ -1,4 +1,6 @@
-use crate::model::{Doc, Node, NodeId, NodeRef, Style};
+use crate::model::{
+    Doc, Fragment, FragmentNode, Node, NodeId, NodeRef, ParagraphNode, Style, TextAlign, TextNode,
+};
 use crate::state::Selection;
 use crate::types::Affinity;
 use std::collections::{HashMap, HashSet};
@@ -241,7 +243,7 @@ fn format_container_node(
     output.push_str(&format!("{}{}\n", INDENT.repeat(indent_level), "}"));
 }
 
-fn format_text_node(text_node: &crate::model::TextNode) -> String {
+fn format_text_node(text_node: &TextNode) -> String {
     let segments = text_node.text.get_segments();
 
     if segments.is_empty() {
@@ -304,10 +306,10 @@ fn format_position(
     }
 }
 
-fn format_paragraph_attrs(paragraph: &crate::model::ParagraphNode) -> String {
+fn format_paragraph_attrs(paragraph: &ParagraphNode) -> String {
     let mut attrs = Vec::new();
 
-    if paragraph.align != crate::model::TextAlign::default() {
+    if paragraph.align != TextAlign::default() {
         attrs.push(("align", format!("TextAlign::{:?}", paragraph.align)));
     }
 
@@ -457,7 +459,7 @@ impl Labeler {
     }
 }
 
-pub fn inspect_fragment_as_macro(fragment: &crate::model::Fragment) -> String {
+pub fn inspect_fragment_as_macro(fragment: &Fragment) -> String {
     let mut labeler = Labeler::new_for_fragment();
     labeler.collect_from_fragment(fragment);
 
@@ -482,14 +484,14 @@ impl Labeler {
         }
     }
 
-    fn collect_from_fragment(&mut self, fragment: &crate::model::Fragment) {
+    fn collect_from_fragment(&mut self, fragment: &Fragment) {
         for id in fragment.nodes.keys() {
             self.register(*id);
         }
     }
 }
 
-fn format_fragment(fragment: &crate::model::Fragment, labeler: &Labeler, output: &mut String) {
+fn format_fragment(fragment: &Fragment, labeler: &Labeler, output: &mut String) {
     let top_levels = fragment.top_level_node_ids();
     if top_levels.is_empty() {
         return;
@@ -504,8 +506,8 @@ fn format_fragment(fragment: &crate::model::Fragment, labeler: &Labeler, output:
 
 fn format_fragment_node(
     id: NodeId,
-    node: &crate::model::FragmentNode,
-    fragment: &crate::model::Fragment,
+    node: &FragmentNode,
+    fragment: &Fragment,
     indent_level: usize,
     labeler: &Labeler,
     output: &mut String,
@@ -692,7 +694,7 @@ fn format_fragment_node(
 fn format_fragment_container_node(
     head: &str,
     node_id: NodeId,
-    fragment: &crate::model::Fragment,
+    fragment: &Fragment,
     indent_level: usize,
     labeler: &Labeler,
     output: &mut String,

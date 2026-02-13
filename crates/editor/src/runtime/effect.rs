@@ -1,3 +1,4 @@
+use crate::runtime::text_replacement::ReplacementUndoState;
 use crate::{model::NodeId, state::Position, types::PointerStyle};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -34,7 +35,7 @@ pub enum Effect {
     StructureChanged, // 구조적 변경 (노드 추가 / 삭제)
     ExitedDocumentStart,
     TextReplacementApplied {
-        undo_state: super::text_replacement::ReplacementUndoState,
+        undo_state: ReplacementUndoState,
     },
     HtmlPasted {
         text: String,

@@ -2,24 +2,22 @@ mod builder;
 mod codec;
 mod utils;
 
+use crate::model::*;
+use crate::schema::Schema;
+use anyhow::Result;
 pub use builder::DomSpec;
+use builder::HtmlBuilder;
 pub use codec::{
     AnnotationHtmlCodec, AnnotationParseRule, HtmlContext, NodeHtmlCodec, NodeParseRule,
     StyleHtmlCodec, StyleParseRule,
 };
-pub use utils::{LengthUnit, parse_as, parse_font_size, parse_styles};
-
-use builder::HtmlBuilder;
 use codec::{
     collect_annotation_parse_rules, collect_node_parse_rules, collect_style_parse_rules,
     parse_inline_annotations, parse_inline_styles, render_node, try_parse_node,
 };
-
-use crate::model::*;
-use crate::schema::Schema;
-use anyhow::Result;
 use scraper::{ElementRef, Html as HtmlDoc, Node as ScraperNode, Selector};
 use std::cell::Cell;
+pub use utils::{LengthUnit, parse_as, parse_font_size, parse_styles};
 
 impl Fragment {
     pub fn to_html(&self) -> String {
@@ -296,6 +294,9 @@ fn add_text(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::annotations::*;
+    use crate::model::nodes::*;
+    use crate::model::styles::*;
 
     #[test]
     fn test_roundtrip() {
@@ -314,8 +315,6 @@ mod tests {
 
     #[test]
     fn test_paragraph_with_text() {
-        use crate::model::nodes::ParagraphNode;
-
         let para_id = NodeId::new();
         let text_id = NodeId::new();
 
@@ -456,8 +455,6 @@ mod tests {
 
     #[test]
     fn test_roundtrip_paragraph_attrs() {
-        use crate::model::nodes::ParagraphNode;
-
         let para_id = NodeId::new();
         let text_id = NodeId::new();
         let frag = Fragment::builder()
@@ -465,7 +462,7 @@ mod tests {
                 para_id,
                 FragmentNode::new(
                     Node::Paragraph(ParagraphNode {
-                        align: crate::model::nodes::TextAlign::Center,
+                        align: TextAlign::Center,
                         line_height: 2.0,
                     }),
                     None,
@@ -488,7 +485,7 @@ mod tests {
         assert_eq!(top.len(), 1);
 
         if let Node::Paragraph(p) = parsed.node(top[0]).unwrap().data() {
-            assert_eq!(p.align, crate::model::nodes::TextAlign::Center);
+            assert_eq!(p.align, TextAlign::Center);
             assert!((p.line_height - 2.0).abs() < 0.01);
         } else {
             panic!("Expected Paragraph");
@@ -497,8 +494,6 @@ mod tests {
 
     #[test]
     fn test_roundtrip_blockquote() {
-        use crate::model::nodes::{BlockquoteNode, BlockquoteVariant, ParagraphNode};
-
         let bq_id = NodeId::new();
         let para_id = NodeId::new();
         let text_id = NodeId::new();
@@ -540,8 +535,6 @@ mod tests {
 
     #[test]
     fn test_roundtrip_callout() {
-        use crate::model::nodes::{CalloutNode, CalloutVariant, ParagraphNode};
-
         let callout_id = NodeId::new();
         let para_id = NodeId::new();
         let text_id = NodeId::new();
@@ -579,11 +572,6 @@ mod tests {
 
     #[test]
     fn test_roundtrip_table() {
-        use crate::model::nodes::ParagraphNode;
-        use crate::model::nodes::{
-            TableAlign, TableBorderStyle, TableCellNode, TableNode, TableRowNode,
-        };
-
         let table_id = NodeId::new();
         let row_id = NodeId::new();
         let cell_id = NodeId::new();
@@ -645,8 +633,6 @@ mod tests {
 
     #[test]
     fn test_roundtrip_file() {
-        use crate::model::nodes::FileNode;
-
         let file_id = NodeId::new();
         let frag = Fragment::builder()
             .add((
@@ -676,9 +662,6 @@ mod tests {
 
     #[test]
     fn test_roundtrip_styles() {
-        use crate::model::nodes::ParagraphNode;
-        use crate::model::styles::*;
-
         let para_id = NodeId::new();
         let text_id = NodeId::new();
         let text = Text::from("BoldItalic");
@@ -727,9 +710,6 @@ mod tests {
 
     #[test]
     fn test_roundtrip_font_weight_precision() {
-        use crate::model::nodes::ParagraphNode;
-        use crate::model::styles::*;
-
         let para_id = NodeId::new();
         let text_id = NodeId::new();
         let text = Text::from("W800");
@@ -761,8 +741,6 @@ mod tests {
 
     #[test]
     fn test_roundtrip_node_ids_preserved() {
-        use crate::model::nodes::ParagraphNode;
-
         let para_id = NodeId::new();
         let text_id = NodeId::new();
         let frag = Fragment::builder()
@@ -795,8 +773,6 @@ mod tests {
 
     #[test]
     fn test_roundtrip_node_ids_complex() {
-        use crate::model::nodes::{BlockquoteNode, ParagraphNode};
-
         let bq_id = NodeId::new();
         let p1_id = NodeId::new();
         let t1_id = NodeId::new();
@@ -854,8 +830,6 @@ mod tests {
 
     #[test]
     fn test_roundtrip_open_fragment() {
-        use crate::model::nodes::ParagraphNode;
-
         let para_id = NodeId::new();
         let text_id = NodeId::new();
         let mut frag = Fragment::builder()
@@ -903,9 +877,6 @@ mod tests {
 
     #[test]
     fn test_roundtrip_link_annotation() {
-        use crate::model::annotations::*;
-        use crate::model::nodes::ParagraphNode;
-
         let para_id = NodeId::new();
         let text_id = NodeId::new();
 
@@ -958,9 +929,6 @@ mod tests {
 
     #[test]
     fn test_roundtrip_ruby_annotation() {
-        use crate::model::annotations::*;
-        use crate::model::nodes::ParagraphNode;
-
         let para_id = NodeId::new();
         let text_id = NodeId::new();
 
@@ -1010,10 +978,6 @@ mod tests {
 
     #[test]
     fn test_roundtrip_link_with_styles() {
-        use crate::model::annotations::*;
-        use crate::model::nodes::ParagraphNode;
-        use crate::model::styles::*;
-
         let para_id = NodeId::new();
         let text_id = NodeId::new();
 
