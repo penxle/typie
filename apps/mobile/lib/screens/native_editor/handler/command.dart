@@ -155,6 +155,13 @@ class CommandHandler {
 
   static void _handleCursorChanged(EditorController controller, SlateReader reader) {
     final pageIdx = reader.getI32('cursor_page_idx');
+    if (pageIdx < 0) {
+      controller
+        ..pendingScrollMode = null
+        ..updateState((state) => state.copyWith(cursor: null));
+      return;
+    }
+
     final precedingOffset = reader.getU32('preceding_char_widths_offset');
     final precedingCount = reader.getU32('preceding_char_widths_count');
 
