@@ -161,44 +161,36 @@ class CommandHandler {
     final cmp = reader.getI32('selection_cmp');
     final collapsed = cmp == 0;
 
-    SelectionHandleInfo? fromHandleInfo;
-    SelectionHandleInfo? toHandleInfo;
+    SelectionEndpointBounds? anchorBounds;
+    SelectionEndpointBounds? headBounds;
 
     if (!collapsed) {
       final anchorPageIdx = reader.getI32('selection_anchor_page_idx');
-      final anchorHandle = anchorPageIdx < 0
+      anchorBounds = anchorPageIdx < 0
           ? null
-          : SelectionHandleInfo(
+          : SelectionEndpointBounds(
               pageIdx: anchorPageIdx,
               x: reader.getF32('selection_anchor_x'),
               y: reader.getF32('selection_anchor_y'),
+              width: reader.getF32('selection_anchor_width'),
               height: reader.getF32('selection_anchor_height'),
             );
 
       final headPageIdx = reader.getI32('selection_head_page_idx');
-      final headHandle = headPageIdx < 0
+      headBounds = headPageIdx < 0
           ? null
-          : SelectionHandleInfo(
+          : SelectionEndpointBounds(
               pageIdx: headPageIdx,
               x: reader.getF32('selection_head_x'),
               y: reader.getF32('selection_head_y'),
+              width: reader.getF32('selection_head_width'),
               height: reader.getF32('selection_head_height'),
             );
-
-      if (cmp < 0) {
-        fromHandleInfo = headHandle;
-        toHandleInfo = anchorHandle;
-      } else {
-        fromHandleInfo = anchorHandle;
-        toHandleInfo = headHandle;
-      }
     }
 
     controller.updateState(
       (state) => state.copyWith(
-        selectionCollapsed: collapsed,
-        fromHandle: fromHandleInfo,
-        toHandle: toHandleInfo,
+        selection: EditorSelection(collapsed: collapsed, cmp: cmp, anchorBounds: anchorBounds, headBounds: headBounds),
         pasteOptions: null,
       ),
     );

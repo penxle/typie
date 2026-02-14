@@ -27,7 +27,8 @@ class NativeEditorTextToolbar extends HookWidget {
   Widget build(BuildContext context) {
     final scope = NativeEditorToolbarScope.of(context);
     final attrs = useValueListenable(scope.attrs);
-    final collapsed = useValueListenable(scope.selectionCollapsed);
+    final selection = useValueListenable(scope.selection);
+    final collapsed = selection?.collapsed ?? true;
 
     final textColorAttr = findAttr(attrs, 'text_color');
     final textColorValues = (textColorAttr?['values'] as List?)?.whereType<String>().toList() ?? [];

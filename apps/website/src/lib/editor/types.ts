@@ -1,4 +1,4 @@
-import type { ExternalElementData, Rect, TextAlign } from '@typie/editor';
+import type { ExternalElementData, Position, Rect, TextAlign } from '@typie/editor';
 
 export type {
   Affinity,
@@ -32,6 +32,19 @@ export type ExternalElement = {
 
 export type LinkAnnotationValue = { href: string; [key: string]: string };
 export type RubyAnnotationValue = { text: string; [key: string]: string };
+
+export type SelectionEndpointBounds = {
+  pageIdx: number;
+  bounds: Rect;
+};
+
+export type Selection = {
+  collapsed: boolean;
+  anchor: Position;
+  head: Position;
+  anchorBounds: SelectionEndpointBounds | null;
+  headBounds: SelectionEndpointBounds | null;
+};
 
 export type Attribute =
   | { type: 'text_align'; values: (TextAlign | null)[] }

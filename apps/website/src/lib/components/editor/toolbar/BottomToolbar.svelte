@@ -355,7 +355,7 @@
   <div class={flex({ alignItems: 'center', gap: '4px' })}>
     <ToolbarDropdownButton
       active={isLinkActive}
-      disabled={isLinkMixed || (editor.selection.collapsed && !isLinkActive)}
+      disabled={isLinkMixed || (editor.selection?.collapsed !== false && !isLinkActive)}
       label="링크"
       onEscape={() => editor.focus()}
       size="small"
@@ -371,7 +371,7 @@
 
     <ToolbarDropdownButton
       active={isRubyActive}
-      disabled={isRubyMixed || (editor.selection.collapsed && !isRubyActive)}
+      disabled={isRubyMixed || (editor.selection?.collapsed !== false && !isRubyActive)}
       label="루비"
       onEscape={() => editor.focus()}
       size="small"

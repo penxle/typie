@@ -38,7 +38,7 @@
 >
   {#snippet children({ close })}
     <MenuItem
-      disabled={editor.selection.collapsed}
+      disabled={editor.selection?.collapsed !== false}
       icon={CopyIcon}
       onclick={() => {
         editor.handleCopy();
@@ -53,7 +53,7 @@
     </MenuItem>
     {#if !editor.readOnly}
       <MenuItem
-        disabled={editor.selection.collapsed}
+        disabled={editor.selection?.collapsed !== false}
         icon={ScissorsIcon}
         onclick={() => {
           editor.handleCut();
