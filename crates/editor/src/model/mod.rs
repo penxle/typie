@@ -15,7 +15,6 @@ mod text;
 mod tree;
 
 pub use annotation::*;
-pub use annotations::*;
 pub use codec::*;
 pub use convert::*;
 pub use decorations::*;
@@ -28,3 +27,6 @@ pub use style::*;
 pub use styles::*;
 pub use text::*;
 pub use tree::{Doc, DocExportMode, LinkRange, NodeRef, TextMapping};
+
+#[cfg(test)]
+pub use annotations::*;

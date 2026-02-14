@@ -756,7 +756,9 @@ macro_rules! __doc_create_node_with_id {
             };
 
             let text = $crate::model::Text::new();
+            #[allow(unused_mut)]
             let mut pending_styles: Vec<(usize, usize, $crate::model::Style)> = Vec::new();
+            #[allow(unused_mut)]
             let mut pending_annotations: Vec<(usize, usize, $crate::model::Annotation)> = Vec::new();
             __parse_text_segments_with_pending!(text, pending_styles, pending_annotations, $first => [$($first_styles)*] $(, $($rest_segments)*)?);
 
@@ -795,7 +797,9 @@ macro_rules! __doc_create_node_with_id {
             };
 
             let text = $crate::model::Text::new();
+            #[allow(unused_mut)]
             let mut pending_styles: Vec<(usize, usize, $crate::model::Style)> = Vec::new();
+            #[allow(unused_mut)]
             let mut pending_annotations: Vec<(usize, usize, $crate::model::Annotation)> = Vec::new();
             __parse_text_segments_with_pending!(text, pending_styles, pending_annotations, $first @[$($first_anns)*] $(, $($rest_segments)*)?);
 
@@ -834,7 +838,9 @@ macro_rules! __doc_create_node_with_id {
             };
 
             let text = $crate::model::Text::new();
+            #[allow(unused_mut)]
             let mut style_ranges: Vec<(std::ops::Range<usize>, Vec<$crate::model::Style>)> = Vec::new();
+            #[allow(unused_mut)]
             let mut annotation_ranges: Vec<(std::ops::Range<usize>, $crate::model::Annotation)> = Vec::new();
             __parse_text_segments_collect!(text, style_ranges, annotation_ranges, $first, $($rest_segments)+);
 
