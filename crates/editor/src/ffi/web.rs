@@ -9,7 +9,7 @@ use crate::model::{
 use crate::render::DragImageResult;
 use crate::runtime::search::{SearchQuery, perform_search};
 use crate::runtime::{Message, RawTextReplacementRule, RawTrackedItem, Runtime, State, slate};
-use crate::state::{Position, Selection};
+use crate::state::{Position, Selection, leaf_block_end};
 use crate::types::Affinity;
 use icu_properties::props::GeneralCategory;
 use serde::Serialize;
@@ -206,16 +206,17 @@ impl Editor {
     fn new_with_snapshot(scale_factor: f64, snapshot: Vec<u8>) -> Self {
         let doc = Rc::new(Doc::from_snapshot(snapshot));
         let layout_mode = doc.settings().layout_mode;
+        let selection_pos = {
+            let root = doc.node(NodeId::ROOT).unwrap();
+            leaf_block_end(&root)
+        };
 
         let width = match layout_mode {
             LayoutMode::Paginated { page_width, .. } => page_width,
             LayoutMode::Continuous { max_width, .. } => max_width,
         };
 
-        let state = State::new(
-            doc,
-            Selection::collapsed(Position::new(NodeId::ROOT, 0, Affinity::default())),
-        );
+        let state = State::new(doc, Selection::collapsed(selection_pos));
 
         let mut runtime = Runtime::new(width, scale_factor, state);
 
