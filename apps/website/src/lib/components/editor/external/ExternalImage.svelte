@@ -13,6 +13,7 @@
   import { getEditorContext } from '$lib/editor/context.svelte';
   import { uploadBlobAsImage } from '$lib/utils/blob.svelte';
   import ExternalElementWrapper from './ExternalElementWrapper.svelte';
+  import ExternalImageEnlarge from './ExternalImageEnlarge.svelte';
   import type { ExternalElement, ExternalElementData } from '$lib/editor/types';
 
   type ImageData = Extract<ExternalElementData, { type: 'image' }>;
@@ -31,6 +32,8 @@
   let initialResizeData: { x: number; width: number; proportion: number; reverse: boolean } | null = null;
   let processedUploadId = $state<string>();
   let localUploadId = $state<string>();
+  let enlarged = $state(false);
+  let containerEl = $state<HTMLDivElement>();
 
   const imageData = $derived(el.data as ImageData);
   const isEditable = $derived(!editor.isReadOnly());
@@ -110,6 +113,12 @@
         editor.popUpload(uploadId);
       }
     };
+  });
+
+  $effect(() => {
+    if (!hasImage) {
+      enlarged = false;
+    }
   });
 
   const getImageDimensions = (src: string): Promise<{ width: number; height: number }> => {
@@ -247,6 +256,7 @@
 
 <ExternalElementWrapper {el} minHeight={hasImage ? undefined : '48px'}>
   <div
+    bind:this={containerEl}
     style:width={hasImage ? `${liveWidth}px` : '100%'}
     style:height={hasImage ? `${liveHeight}px` : undefined}
     class={cx('group', css({ position: 'relative', margin: '[0 auto]' }))}
@@ -254,12 +264,33 @@
   >
     {#if hasImage}
       <Img
-        style={css.raw({ width: 'full', borderRadius: '4px' })}
+        style={css.raw({ width: 'full', borderRadius: '4px' }, !isEditable && { cursor: 'zoom-in' })}
         alt="본문 이미지"
+        aria-label={isEditable ? undefined : '이미지 확대 보기'}
+        onclick={() => {
+          if (isEditable) {
+            return;
+          }
+          enlarged = true;
+        }}
+        onkeydown={(event) => {
+          if (!isEditable && (event.key === 'Enter' || event.key === ' ')) {
+            event.preventDefault();
+            enlarged = true;
+          }
+        }}
+        onpointerdown={(e) => {
+          if (isEditable) {
+            return;
+          }
+          e.stopPropagation();
+        }}
         placeholder={asset?.placeholder}
         progressive
         ratio={originalHeight > 0 ? originalWidth / originalHeight : undefined}
+        role={isEditable ? undefined : 'button'}
         size="full"
+        tabindex={isEditable ? undefined : 0}
         url={imageSrc ?? ''}
       />
 
@@ -459,4 +490,14 @@
       이미지 선택
     </button>
   </div>
+{/if}
+
+{#if enlarged && hasImage && imageSrc}
+  <ExternalImageEnlarge
+    onclose={() => (enlarged = false)}
+    placeholder={asset?.placeholder}
+    ratio={originalHeight > 0 ? originalWidth / originalHeight : undefined}
+    referenceEl={containerEl}
+    url={imageSrc}
+  />
 {/if}
