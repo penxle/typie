@@ -60,8 +60,8 @@ class SelectionContextMenu extends StatelessWidget {
     final hScrollOffset = hController.hasClients ? hController.offset : 0.0;
 
     final state = scope.controller.state;
-    final fromHandle = state.fromHandle;
-    final toHandle = state.toHandle;
+    final fromHandle = state.selection?.fromBounds;
+    final toHandle = state.selection?.toBounds;
     final cursor = state.cursor;
 
     double topY;
@@ -145,7 +145,7 @@ class _MenuBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     final scope = ContentScope.of(context);
     final colors = context.colors;
-    final hasSelection = scope.controller.state.fromHandle != null;
+    final hasSelection = scope.controller.state.selection?.collapsed == false;
 
     return Container(
       decoration: BoxDecoration(

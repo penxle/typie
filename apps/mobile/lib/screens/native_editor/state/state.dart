@@ -36,26 +36,32 @@ abstract class SearchOverlayInfo with _$SearchOverlayInfo {
 }
 
 @freezed
-abstract class SelectionHandleInfo with _$SelectionHandleInfo {
-  const factory SelectionHandleInfo({
+abstract class SelectionEndpointBounds with _$SelectionEndpointBounds {
+  const factory SelectionEndpointBounds({
     required int pageIdx,
     required double x,
     required double y,
+    required double width,
     required double height,
-  }) = _SelectionHandleInfo;
-
-  const SelectionHandleInfo._();
-
-  factory SelectionHandleInfo.fromMap(Map<String, dynamic> map) {
-    final bounds = map['bounds'] as Map<String, dynamic>?;
-    return SelectionHandleInfo(
-      pageIdx: map['pageIdx'] as int,
-      x: (bounds?['x'] as num?)?.toDouble() ?? 0,
-      y: (bounds?['y'] as num?)?.toDouble() ?? 0,
-      height: (bounds?['height'] as num?)?.toDouble() ?? 0,
-    );
-  }
+  }) = _SelectionEndpointBounds;
 }
+
+@freezed
+abstract class EditorSelection with _$EditorSelection {
+  const factory EditorSelection({
+    @Default(true) bool collapsed,
+    @Default(0) int cmp,
+    SelectionEndpointBounds? anchorBounds,
+    SelectionEndpointBounds? headBounds,
+  }) = _EditorSelection;
+
+  const EditorSelection._();
+
+  SelectionEndpointBounds? get fromBounds => cmp < 0 ? headBounds : anchorBounds;
+  SelectionEndpointBounds? get toBounds => cmp < 0 ? anchorBounds : headBounds;
+}
+
+typedef SelectionHandleInfo = SelectionEndpointBounds;
 
 @freezed
 abstract class CursorInfo with _$CursorInfo {
@@ -226,13 +232,11 @@ abstract class EditorState with _$EditorState {
     CursorInfo? cursor,
     @Default(false) bool isFocused,
     @Default(false) bool isSelecting,
-    @Default(true) bool selectionCollapsed,
+    EditorSelection? selection,
     @Default([]) List<Map<String, dynamic>> attrs,
     @Default([]) List<ExternalElement> externalElements,
     Object? renderVersion,
     @Default(DocumentSettings()) DocumentSettings settings,
-    SelectionHandleInfo? fromHandle,
-    SelectionHandleInfo? toHandle,
     SelectionHandleType? draggingHandle,
     @Default(SearchState()) SearchState search,
     @Default(SpellcheckState()) SpellcheckState spellcheck,

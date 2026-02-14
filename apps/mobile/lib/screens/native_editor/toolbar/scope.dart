@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:typie/screens/native_editor/controller/upload.dart';
 import 'package:typie/screens/native_editor/external/models.dart';
 import 'package:typie/screens/native_editor/state/controller.dart';
+import 'package:typie/screens/native_editor/state/state.dart';
 import 'package:typie/services/keyboard.dart';
 
 enum SecondaryToolbarMode {
@@ -29,7 +30,7 @@ class NativeEditorToolbarScope extends InheritedWidget {
     required this.isEditorFocused,
     required this.bottomToolbarMode,
     required this.secondaryToolbarMode,
-    required this.selectionCollapsed,
+    required this.selection,
     required this.attrs,
     required this.floatingContext,
     required this.floatingNodeId,
@@ -52,7 +53,7 @@ class NativeEditorToolbarScope extends InheritedWidget {
   final ValueNotifier<BottomToolbarMode> bottomToolbarMode;
   final ValueNotifier<SecondaryToolbarMode> secondaryToolbarMode;
 
-  final ValueNotifier<bool> selectionCollapsed;
+  final ValueNotifier<EditorSelection?> selection;
   final ValueNotifier<List<Map<String, dynamic>>> attrs;
   final ValueNotifier<String?> floatingContext;
   final ValueNotifier<String?> floatingNodeId;

@@ -1,4 +1,15 @@
-import type { Attribute, ExternalElement, LinkAnnotationValue, Position, Rect, RubyAnnotationValue, TextAlign, TextBound } from './types';
+import type {
+  Attribute,
+  ExternalElement,
+  LinkAnnotationValue,
+  Position,
+  Rect,
+  RubyAnnotationValue,
+  Selection,
+  SelectionEndpointBounds,
+  TextAlign,
+  TextBound,
+} from './types';
 
 export type TableOverlay = {
   pageIdx: number;
@@ -190,13 +201,7 @@ export class SlateReader {
     };
   }
 
-  readSelection(): {
-    collapsed: boolean;
-    anchor: Position;
-    head: Position;
-    fromHandle: { pageIdx: number; bounds: Rect } | null;
-    toHandle: { pageIdx: number; bounds: Rect } | null;
-  } {
+  readSelection(): Selection {
     const cmp = this.#i32('selection_cmp');
     const collapsed = cmp === 0;
 
@@ -216,7 +221,7 @@ export class SlateReader {
     };
 
     const anchorPageIdx = this.#i32('selection_anchor_page_idx');
-    const fromHandle =
+    const anchorBounds: SelectionEndpointBounds | null =
       anchorPageIdx < 0
         ? null
         : {
@@ -230,7 +235,7 @@ export class SlateReader {
           };
 
     const headPageIdx = this.#i32('selection_head_page_idx');
-    const toHandle =
+    const headBounds: SelectionEndpointBounds | null =
       headPageIdx < 0
         ? null
         : {
@@ -247,8 +252,8 @@ export class SlateReader {
       collapsed,
       anchor,
       head,
-      fromHandle,
-      toHandle,
+      anchorBounds,
+      headBounds,
     };
   }
 
