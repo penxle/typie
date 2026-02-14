@@ -30,7 +30,7 @@ ENV PATH="/root/.bun/bin:/root/.cargo/bin:$PATH"
 ENV CARGO_HOME=/root/.cargo
 ENV RUSTUP_HOME=/root/.rustup
 
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain nightly
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
 RUN rustup target add wasm32-unknown-unknown
 RUN cargo install wasm-pack icu4x-datagen
 
