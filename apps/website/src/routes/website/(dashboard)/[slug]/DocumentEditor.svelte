@@ -344,7 +344,10 @@
       }
       case DocumentSyncType.RESET: {
         if (persistence) await persistence.clear();
-        ctx.serverSnapshot = Uint8Array.fromBase64(payload.data);
+        const reset = JSON.parse(payload.data);
+        ctx.serverSnapshot = Uint8Array.fromBase64(reset.snapshot);
+        ctx.serverVersion = reset.version;
+        ctx.serverGeneration = reset.generation;
         ctx.resetKey++;
         break;
       }
