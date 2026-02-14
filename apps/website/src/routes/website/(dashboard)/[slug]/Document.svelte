@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { settled } from 'svelte';
   import { fragment, graphql } from '$graphql';
   import { setupEditorContext } from '$lib/editor/context.svelte';
   import DocumentEditor from './DocumentEditor.svelte';
@@ -91,10 +92,23 @@
     ctx.serverVersion = entity?.node.__typename === 'Document' ? entity.node.version : null;
     ctx.serverGeneration = entity?.node.__typename === 'Document' ? entity.node.generation : 0;
   });
+
+  let mounted = $state(true);
+
+  $effect(() => {
+    void ctx.resetKey;
+
+    return () => {
+      mounted = false;
+      settled().then(() => {
+        mounted = true;
+      });
+    };
+  });
 </script>
 
 {#if entity?.node.__typename === 'Document'}
-  {#key ctx.resetKey}
+  {#if mounted}
     <DocumentEditor {$query} {focused} {slug} />
-  {/key}
+  {/if}
 {/if}
