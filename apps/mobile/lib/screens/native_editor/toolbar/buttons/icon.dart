@@ -7,6 +7,7 @@ class IconToolbarButton extends StatelessWidget {
     required this.onTap,
     required this.icon,
     this.isActive = false,
+    this.isDisabled = false,
     this.isRepeatable = false,
     super.key,
   });
@@ -14,6 +15,7 @@ class IconToolbarButton extends StatelessWidget {
   final IconData icon;
 
   final bool isActive;
+  final bool isDisabled;
   final bool isRepeatable;
   final void Function() onTap;
 
@@ -21,6 +23,7 @@ class IconToolbarButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return ToolbarButton(
       isActive: isActive,
+      isDisabled: isDisabled,
       isRepeatable: isRepeatable,
       onTap: onTap,
       builder: (context, color, backgroundColor) {

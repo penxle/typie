@@ -11,6 +11,7 @@ class ToolbarButton extends HookWidget {
     required this.onTap,
     required this.builder,
     this.isActive = false,
+    this.isDisabled = false,
     this.isRepeatable = false,
     this.color,
     super.key,
@@ -20,6 +21,7 @@ class ToolbarButton extends HookWidget {
 
   final Color? color;
   final bool isActive;
+  final bool isDisabled;
   final bool isRepeatable;
   final void Function() onTap;
 
@@ -80,6 +82,10 @@ class ToolbarButton extends HookWidget {
     useEffect(() {
       return repeatTimer.value?.cancel;
     }, []);
+
+    if (isDisabled) {
+      return Opacity(opacity: 0.5, child: builder(context, color ?? textSubtleColor, null));
+    }
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
