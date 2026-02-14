@@ -351,12 +351,8 @@ fn add_ancestor_decorations(
         return;
     };
 
-    let from_path: Vec<_> = std::iter::once(from.node_id)
-        .chain(from_node.ancestors().map(|n| n.node_id()))
-        .collect();
-    let to_path: Vec<_> = std::iter::once(to.node_id)
-        .chain(to_node.ancestors().map(|n| n.node_id()))
-        .collect();
+    let from_path: Vec<_> = from_node.ancestors().map(|n| n.node_id()).collect();
+    let to_path: Vec<_> = to_node.ancestors().map(|n| n.node_id()).collect();
 
     for (from_idx, &ancestor_id) in from_path.iter().enumerate() {
         if processed_blocks.contains(&ancestor_id)
@@ -723,6 +719,20 @@ pub fn collect_selected_block_ids(
             result
         }
         StructureSelectionInfo::None => collect_blocks_in_range(doc, from, to).unwrap_or_default(),
+    }
+}
+
+pub fn selected_single_block_id(doc: &Doc, selection: &Selection) -> Option<NodeId> {
+    if selection.is_collapsed() {
+        return None;
+    }
+
+    let structure_selection = compute_structure_selection(doc, selection);
+    let block_ids = collect_selected_block_ids(doc, selection, &structure_selection);
+    if block_ids.len() == 1 {
+        Some(block_ids[0])
+    } else {
+        None
     }
 }
 

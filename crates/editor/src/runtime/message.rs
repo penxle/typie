@@ -331,9 +331,17 @@ define_messages! {
     => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_toggle_blockquote(variant) },
 
+    SetBlockquote { variant: BlockquoteVariant }
+    => when When::key(ContextKey::CanEdit)
+    => handle(rt) { rt.handle_set_blockquote(variant) },
+
     ToggleCallout
     => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_toggle_callout() },
+
+    CycleCalloutVariant
+    => when When::key(ContextKey::CanEdit)
+    => handle(rt) { rt.handle_cycle_callout_variant_in_selection() },
 
     ToggleBulletList
     => when When::key(ContextKey::CanEdit)
@@ -403,6 +411,10 @@ define_messages! {
     => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_insert_horizontal_rule(variant) },
 
+    SetHorizontalRule { variant: HorizontalRuleVariant }
+    => when When::key(ContextKey::CanEdit)
+    => handle(rt) { rt.handle_set_horizontal_rule(variant) },
+
     SetLayoutMode { mode: LayoutMode }
     => when When::True
     => handle(rt) { rt.handle_set_layout_mode(mode) },
@@ -430,6 +442,10 @@ define_messages! {
     InsertFold
     => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_insert_fold() },
+
+    UnwrapFold
+    => when When::key(ContextKey::CanEdit)
+    => handle(rt) { rt.handle_unwrap_fold() },
 
     InsertTable { rows: u32, cols: u32 }
     => when When::key(ContextKey::CanEdit)

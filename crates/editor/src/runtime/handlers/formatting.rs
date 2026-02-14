@@ -19,6 +19,10 @@ impl Runtime {
         self.transact(|tr| tr.toggle_blockquote(variant))
     }
 
+    pub(crate) fn handle_set_blockquote(&mut self, variant: BlockquoteVariant) -> Vec<Effect> {
+        self.transact(|tr| tr.set_blockquote(variant))
+    }
+
     pub(crate) fn handle_toggle_callout(&mut self) -> Vec<Effect> {
         self.transact(|tr| tr.toggle_callout())
     }
@@ -52,6 +56,13 @@ impl Runtime {
         variant: HorizontalRuleVariant,
     ) -> Vec<Effect> {
         self.transact(|tr| tr.insert_horizontal_rule(variant))
+    }
+
+    pub(crate) fn handle_set_horizontal_rule(
+        &mut self,
+        variant: HorizontalRuleVariant,
+    ) -> Vec<Effect> {
+        self.transact(|tr| tr.set_horizontal_rule(variant))
     }
 
     pub(crate) fn handle_clear_formatting(&mut self) -> Vec<Effect> {

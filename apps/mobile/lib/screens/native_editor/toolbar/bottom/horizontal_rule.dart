@@ -23,7 +23,7 @@ class NativeEditorHorizontalRuleBottomToolbar extends HookWidget {
 
         return WidgetToolbarButton(
           onTap: () {
-            scope.dispatch({'type': 'insertHorizontalRule', 'variant': item['type']});
+            scope.dispatch({'type': 'setHorizontalRule', 'variant': item['type']});
             scope.controller.scrollIntoView();
             switch (keyboardType) {
               case KeyboardType.software:

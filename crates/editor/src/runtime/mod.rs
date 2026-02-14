@@ -22,6 +22,7 @@ use crate::layout::query::{find_drag_image_bounds, is_selectable_block_hit};
 use crate::layout::{LayoutCache, LayoutContext, Page, Paginator};
 use crate::model::*;
 use crate::render::{DragImageResult, RenderInfo, RenderResult, Renderer};
+use crate::state::ancestor_helpers::lowest_common_ancestor_id;
 use crate::state::selection_helpers::{
     SelectionAttributes, build_selection_decorations, collect_block_attrs_at,
     collect_selected_block_ids, compute_selection_attrs, compute_structure_selection,
@@ -557,6 +558,47 @@ impl Runtime {
 
         self.selection_cache.clone()
     }
+
+    fn selection_common_ancestor_ids(&self, selection: Selection) -> Vec<NodeId> {
+        let Some(lca_id) =
+            lowest_common_ancestor_id(self.doc(), selection.anchor.node_id, selection.head.node_id)
+        else {
+            return Vec::new();
+        };
+
+        self.doc()
+            .node(lca_id)
+            .map(|node| {
+                node.ancestors()
+                    .map(|ancestor| ancestor.node_id())
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    fn selection_type(node_type: NodeType) -> u32 {
+        match node_type {
+            NodeType::HorizontalRule => SELECTION_TYPE_HORIZONTAL_RULE,
+            NodeType::Callout => SELECTION_TYPE_CALLOUT,
+            NodeType::Fold => SELECTION_TYPE_FOLD,
+            NodeType::BulletList => SELECTION_TYPE_BULLET_LIST,
+            NodeType::OrderedList => SELECTION_TYPE_ORDERED_LIST,
+            NodeType::Image => SELECTION_TYPE_IMAGE,
+            NodeType::File => SELECTION_TYPE_FILE,
+            NodeType::Embed => SELECTION_TYPE_EMBED,
+            NodeType::Archived => SELECTION_TYPE_ARCHIVED,
+            NodeType::Blockquote => SELECTION_TYPE_BLOCKQUOTE,
+            _ => SELECTION_TYPE_NONE,
+        }
+    }
+
+    fn selection_type_for_id(&self, node_id: NodeId) -> u32 {
+        self.doc()
+            .node(node_id)
+            .map(|node| Self::selection_type(node.node_type()))
+            .unwrap_or(SELECTION_TYPE_NONE)
+    }
+
     fn set_width(&mut self, width: f32) {
         if self.width != width {
             self.layout_cache.borrow_mut().invalidate_all();
@@ -1004,8 +1046,40 @@ impl Runtime {
                     .map(|(page_idx, bounds)| SelectionHandleBounds { page_idx, bounds });
             let head_handle = Cursor::selection_handle_bounds(&ctx, &self.pages, selection.head)
                 .map(|(page_idx, bounds)| SelectionHandleBounds { page_idx, bounds });
+            let selected_block_ids = if collapsed {
+                Vec::new()
+            } else {
+                self.selection_snapshot()
+                    .map(|snapshot| snapshot.block_ids)
+                    .unwrap_or_default()
+            };
+            let selected_block_types: Vec<u32> = selected_block_ids
+                .iter()
+                .map(|node_id| self.selection_type_for_id(*node_id))
+                .collect();
+            let common_ancestor_ids = self.selection_common_ancestor_ids(selection);
+            let common_ancestor_types: Vec<u32> = common_ancestor_ids
+                .iter()
+                .map(|node_id| self.selection_type_for_id(*node_id))
+                .collect();
+            let (selected_block_ids_offset, selected_block_ids_count) =
+                self.slab.write_node_id_slice(&selected_block_ids);
+            let (selected_block_types_offset, selected_block_types_count) =
+                self.slab.write_u32_slice(&selected_block_types);
+            let (common_ancestor_ids_offset, common_ancestor_ids_count) =
+                self.slab.write_node_id_slice(&common_ancestor_ids);
+            let (common_ancestor_types_offset, common_ancestor_types_count) =
+                self.slab.write_u32_slice(&common_ancestor_types);
 
             self.slate.selection_cmp = cmp;
+            self.slate.selection_block_ids_offset = selected_block_ids_offset;
+            self.slate.selection_block_ids_count = selected_block_ids_count;
+            self.slate.selection_block_types_offset = selected_block_types_offset;
+            self.slate.selection_block_types_count = selected_block_types_count;
+            self.slate.selection_common_ancestor_ids_offset = common_ancestor_ids_offset;
+            self.slate.selection_common_ancestor_ids_count = common_ancestor_ids_count;
+            self.slate.selection_common_ancestor_types_offset = common_ancestor_types_offset;
+            self.slate.selection_common_ancestor_types_count = common_ancestor_types_count;
             self.slate.selection_anchor_node_id = Self::node_id_to_bytes(selection.anchor.node_id);
             self.slate.selection_anchor_offset = selection.anchor.offset as u32;
             self.slate.selection_anchor_affinity = Self::affinity_to_u32(selection.anchor.affinity);
@@ -2203,5 +2277,113 @@ mod tests {
             !Rc::ptr_eq(&p_layout_initial, &p_layout_after),
             "Layout should be recomputed (fix verified)"
         );
+    }
+
+    #[test]
+    fn selection_common_ancestors_are_root_when_endpoints_span_outside_callout() {
+        let mut outside = id!();
+        let mut callout = id!();
+        let mut inside = id!();
+
+        let mut runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @outside paragraph { text { "outside" } }
+                @callout callout {
+                    @inside paragraph { text { "inside" } }
+                }
+                paragraph {}
+            }
+            selection { (outside, 1) -> (inside, 3) }
+        };
+
+        runtime.tick();
+
+        let ancestor_ids = runtime.selection_common_ancestor_ids(runtime.state.selection);
+        assert_eq!(
+            ancestor_ids,
+            vec![NodeId::ROOT],
+            "only ROOT should be common ancestor when endpoints are in different branches"
+        );
+    }
+
+    #[test]
+    fn selection_common_ancestors_include_callout_when_both_endpoints_inside() {
+        let mut callout = id!();
+        let mut p1 = id!();
+        let mut p2 = id!();
+
+        let mut runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @callout callout {
+                    @p1 paragraph { text { "a" } }
+                    @p2 paragraph { text { "b" } }
+                }
+                paragraph {}
+            }
+            selection { (p1, 0) -> (p2, 1) }
+        };
+
+        runtime.tick();
+
+        let ancestor_ids = runtime.selection_common_ancestor_ids(runtime.state.selection);
+        assert_eq!(
+            ancestor_ids,
+            vec![callout, NodeId::ROOT],
+            "callout and ROOT should be shared ancestor chain"
+        );
+    }
+
+    #[test]
+    fn cycle_callout_variant_requires_common_callout_ancestor() {
+        let mut outside = id!();
+        let mut callout = id!();
+        let mut inside = id!();
+
+        let mut runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @outside paragraph { text { "outside" } }
+                @callout callout {
+                    @inside paragraph { text { "inside" } }
+                }
+                paragraph {}
+            }
+            selection { (outside, 1) -> (inside, 3) }
+        };
+
+        runtime.update(Message::CycleCalloutVariant);
+
+        let callout_node = runtime.doc().node(callout).unwrap();
+        let Node::Callout(callout_data) = callout_node.node() else {
+            panic!("node should be callout");
+        };
+        assert_eq!(callout_data.variant, CalloutVariant::Info);
+    }
+
+    #[test]
+    fn cycle_callout_variant_changes_when_selection_is_in_callout() {
+        let mut callout = id!();
+        let mut inside = id!();
+
+        let mut runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @callout callout {
+                    @inside paragraph { text { "inside" } }
+                }
+                paragraph {}
+            }
+            selection { (inside, 0) -> (inside, 6) }
+        };
+
+        runtime.update(Message::CycleCalloutVariant);
+
+        let callout_node = runtime.doc().node(callout).unwrap();
+        let Node::Callout(callout_data) = callout_node.node() else {
+            panic!("node should be callout");
+        };
+        assert_eq!(callout_data.variant, CalloutVariant::Success);
     }
 }

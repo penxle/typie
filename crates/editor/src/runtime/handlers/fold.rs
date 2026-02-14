@@ -42,4 +42,8 @@ impl Runtime {
 
         effects
     }
+
+    pub(crate) fn handle_unwrap_fold(&mut self) -> Vec<Effect> {
+        self.transact(|tr| tr.unwrap_fold())
+    }
 }

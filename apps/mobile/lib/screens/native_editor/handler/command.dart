@@ -7,6 +7,17 @@ import 'package:typie/screens/native_editor/state/scroll_mode.dart';
 import 'package:typie/screens/native_editor/state/state.dart';
 
 class CommandHandler {
+  static const _selectedHorizontalRuleContext = 'selected_horizontal_rule';
+  static const _inCalloutContext = 'in_callout';
+  static const _inFoldContext = 'in_fold';
+  static const _inBulletListContext = 'in_bullet_list';
+  static const _inOrderedListContext = 'in_ordered_list';
+  static const _inBlockquoteContext = 'in_blockquote';
+  static const _selectedImageContext = 'selected_image';
+  static const _selectedFileContext = 'selected_file';
+  static const _selectedEmbedContext = 'selected_embed';
+  static const _selectedArchivedContext = 'selected_archived';
+
   static void handleSlate(EditorController controller, SlateReader reader) {
     final dirty = reader.dirty;
     if (dirty == 0) {
@@ -186,6 +197,7 @@ class CommandHandler {
     controller.updateState(
       (state) => state.copyWith(fromHandle: fromHandleInfo, toHandle: toHandleInfo, pasteOptions: null),
     );
+    _updateFloatingSelection(controller, reader);
 
     final anchorNodeId = reader.readNodeIdField('selection_anchor_node_id');
     final headNodeId = reader.readNodeIdField('selection_head_node_id');
@@ -211,6 +223,51 @@ class CommandHandler {
   static void _handleAttrsChanged(EditorController controller, SlateReader reader) {
     final attrs = reader.readAttrs();
     controller.updateState((state) => state.copyWith(attrs: attrs));
+  }
+
+  static void _updateFloatingSelection(EditorController controller, SlateReader reader) {
+    final selectedBlockIds = reader.selectionBlockIds;
+    final selectedBlockTypes = reader.selectionBlockTypes;
+    final commonAncestorTypes = reader.selectionCommonAncestorTypes;
+    final resolved = _resolveFloatingSelection(selectedBlockIds, selectedBlockTypes, commonAncestorTypes);
+    controller.setFloatingSelection(context: resolved.context, nodeId: resolved.nodeId);
+  }
+
+  static ({String? context, String? nodeId}) _resolveFloatingSelection(
+    List<String> selectedBlockIds,
+    List<int> selectedBlockTypes,
+    List<int> commonAncestorTypes,
+  ) {
+    if (selectedBlockIds.length == 1 && selectedBlockTypes.length == 1) {
+      final selectedContext = switch (selectedBlockTypes.first) {
+        selectionTypeHorizontalRule => _selectedHorizontalRuleContext,
+        selectionTypeImage => _selectedImageContext,
+        selectionTypeFile => _selectedFileContext,
+        selectionTypeEmbed => _selectedEmbedContext,
+        selectionTypeArchived => _selectedArchivedContext,
+        _ => null,
+      };
+
+      if (selectedContext != null) {
+        return (context: selectedContext, nodeId: selectedBlockIds.first);
+      }
+    }
+
+    for (final nodeType in commonAncestorTypes) {
+      final inContext = switch (nodeType) {
+        selectionTypeBulletList => _inBulletListContext,
+        selectionTypeOrderedList => _inOrderedListContext,
+        selectionTypeBlockquote => _inBlockquoteContext,
+        selectionTypeCallout => _inCalloutContext,
+        selectionTypeFold => _inFoldContext,
+        _ => null,
+      };
+      if (inContext != null) {
+        return (context: inContext, nodeId: null);
+      }
+    }
+
+    return (context: null, nodeId: null);
   }
 
   static void _handlePlaceholderChanged(EditorController controller, SlateReader reader) {
