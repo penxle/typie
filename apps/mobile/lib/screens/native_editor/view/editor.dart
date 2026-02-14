@@ -67,6 +67,7 @@ class EditorView extends HookWidget {
     final verticalScrollController = useScrollController();
     final horizontalScrollController = useScrollController();
     final inputKey = useMemoized(GlobalKey<InputViewState>.new);
+    final controllerRef = useRef(controller)..value = controller;
 
     final keyboardHeight = useValueNotifier<double>(0);
     final isKeyboardVisible = useValueNotifier<bool>(false);
@@ -269,14 +270,18 @@ class EditorView extends HookWidget {
     );
 
     final tickerLoop = useMemoized(
-      () => TickerLoop(controller: controller, tickerProvider: tickerProvider, getSize: () => sizeRef.value),
-      [controller],
+      () => TickerLoop(
+        getController: () => controllerRef.value,
+        tickerProvider: tickerProvider,
+        getSize: () => sizeRef.value,
+      ),
+      const [],
     );
 
     useEffect(() {
       tickerLoop.start();
       return tickerLoop.dispose;
-    }, [tickerLoop]);
+    }, const []);
 
     final keyboard = useService<Keyboard>();
 

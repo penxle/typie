@@ -464,6 +464,83 @@ class SlateReader {
     return result;
   }
 
+  List<_TableOverlayRaw> readTableOverlays() {
+    final count = getU32('table_overlays_count');
+    if (count == 0) {
+      return const [];
+    }
+
+    var pos = getU32('table_overlays_offset');
+    final result = <_TableOverlayRaw>[];
+
+    for (var i = 0; i < count; i++) {
+      final pageIdx = _slabU32(pos);
+      pos += 4;
+
+      final tableId = readStr(pos);
+      pos += _strByteLen(pos);
+
+      final x = _slabF32(pos);
+      final y = _slabF32(pos + 4);
+      final width = _slabF32(pos + 8);
+      final height = _slabF32(pos + 12);
+      pos += 16;
+
+      final borderStyle = readStr(pos);
+      pos += _strByteLen(pos);
+
+      final align = readStr(pos);
+      pos += _strByteLen(pos);
+
+      final startRowIndex = _slabU32(pos);
+      final totalRows = _slabU32(pos + 4);
+      final isFocused = _slabU32(pos + 8) != 0;
+      pos += 12;
+
+      final colWidthsCount = _slabU32(pos);
+      pos += 4;
+      final colWidths = readF32List(pos, colWidthsCount);
+      pos += colWidthsCount * 4;
+
+      final colPositionsCount = _slabU32(pos);
+      pos += 4;
+      final colPositions = readF32List(pos, colPositionsCount);
+      pos += colPositionsCount * 4;
+
+      final rowHeightsCount = _slabU32(pos);
+      pos += 4;
+      final rowHeights = readF32List(pos, rowHeightsCount);
+      pos += rowHeightsCount * 4;
+
+      final rowPositionsCount = _slabU32(pos);
+      pos += 4;
+      final rowPositions = readF32List(pos, rowPositionsCount);
+      pos += rowPositionsCount * 4;
+
+      result.add(
+        _TableOverlayRaw(
+          pageIdx: pageIdx,
+          tableId: tableId,
+          x: x,
+          y: y,
+          width: width,
+          height: height,
+          borderStyle: borderStyle,
+          align: align,
+          startRowIndex: startRowIndex,
+          totalRows: totalRows,
+          isFocused: isFocused,
+          colWidths: colWidths,
+          colPositions: colPositions,
+          rowHeights: rowHeights,
+          rowPositions: rowPositions,
+        ),
+      );
+    }
+
+    return result;
+  }
+
   _HtmlPastedRaw? readHtmlPasted() {
     final textLen = getU32('html_pasted_len');
     if (textLen == 0) {
@@ -662,4 +739,40 @@ class _LinkOverlayRaw {
   final int pageIdx;
   final String href;
   final List<_TextBoundRaw> bounds;
+}
+
+class _TableOverlayRaw {
+  const _TableOverlayRaw({
+    required this.pageIdx,
+    required this.tableId,
+    required this.x,
+    required this.y,
+    required this.width,
+    required this.height,
+    required this.borderStyle,
+    required this.align,
+    required this.startRowIndex,
+    required this.totalRows,
+    required this.isFocused,
+    required this.colWidths,
+    required this.colPositions,
+    required this.rowHeights,
+    required this.rowPositions,
+  });
+
+  final int pageIdx;
+  final String tableId;
+  final double x;
+  final double y;
+  final double width;
+  final double height;
+  final String borderStyle;
+  final String align;
+  final int startRowIndex;
+  final int totalRows;
+  final bool isFocused;
+  final List<double> colWidths;
+  final List<double> colPositions;
+  final List<double> rowHeights;
+  final List<double> rowPositions;
 }

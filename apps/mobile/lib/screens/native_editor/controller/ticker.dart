@@ -7,11 +7,11 @@ import 'package:typie/screens/native_editor/handler/command.dart';
 import 'package:typie/screens/native_editor/state/controller.dart';
 
 class TickerLoop {
-  TickerLoop({required this.controller, required this.tickerProvider, required this.getSize});
+  TickerLoop({required this.getController, required this.tickerProvider, required this.getSize});
 
   static const _tickInterval = Duration(milliseconds: 16);
 
-  final EditorController controller;
+  final EditorController Function() getController;
   final TickerProvider tickerProvider;
   final (double, double) Function() getSize;
 
@@ -22,6 +22,9 @@ class TickerLoop {
   bool _flushPending = false;
 
   void start() {
+    if (_ticker != null) {
+      return;
+    }
     _cachedScaleFactor = ui.PlatformDispatcher.instance.views.first.devicePixelRatio;
     _ticker = tickerProvider.createTicker(_onTick);
     unawaited(_ticker!.start());
@@ -33,6 +36,7 @@ class TickerLoop {
     }
     _lastTickTime = elapsed;
 
+    final controller = getController();
     final editor = controller.editor;
     if (editor.isDisposed) {
       return;

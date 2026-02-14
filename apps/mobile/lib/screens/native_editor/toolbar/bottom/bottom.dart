@@ -4,6 +4,7 @@ import 'package:typie/context/theme.dart';
 import 'package:typie/screens/native_editor/toolbar/bottom/blockquote.dart';
 import 'package:typie/screens/native_editor/toolbar/bottom/horizontal_rule.dart';
 import 'package:typie/screens/native_editor/toolbar/bottom/insert.dart';
+import 'package:typie/screens/native_editor/toolbar/bottom/table.dart';
 import 'package:typie/screens/native_editor/toolbar/scope.dart';
 import 'package:typie/services/keyboard.dart';
 import 'package:typie/widgets/animated_indexed_switcher.dart';
@@ -40,12 +41,14 @@ class NativeEditorBottomToolbar extends HookWidget {
           BottomToolbarMode.insert => 1,
           BottomToolbarMode.horizontalRule => 2,
           BottomToolbarMode.blockquote => 3,
+          BottomToolbarMode.tableSize => 4,
         },
         children: const [
           SizedBox.expand(),
           NativeEditorInsertBottomToolbar(),
           NativeEditorHorizontalRuleBottomToolbar(),
           NativeEditorBlockquoteBottomToolbar(),
+          NativeEditorTableSizeBottomToolbar(),
         ],
       ),
     );

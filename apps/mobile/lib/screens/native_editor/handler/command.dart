@@ -5,6 +5,7 @@ import 'package:typie/screens/native_editor/external/models.dart';
 import 'package:typie/screens/native_editor/state/controller.dart';
 import 'package:typie/screens/native_editor/state/scroll_mode.dart';
 import 'package:typie/screens/native_editor/state/state.dart';
+import 'package:typie/screens/native_editor/table/models.dart';
 
 class CommandHandler {
   static const _selectedHorizontalRuleContext = 'selected_horizontal_rule';
@@ -62,6 +63,10 @@ class CommandHandler {
 
     if (dirty & (1 << 11) != 0) {
       _handleTrackedItemsChanged(controller, reader);
+    }
+
+    if (dirty & (1 << 14) != 0) {
+      _handleTableOverlaysChanged(controller, reader);
     }
 
     if (dirty & (1 << 17) != 0) {
@@ -354,6 +359,29 @@ class CommandHandler {
         search: state.search.copyWith(overlays: searchOverlays),
       ),
     );
+  }
+
+  static void _handleTableOverlaysChanged(EditorController controller, SlateReader reader) {
+    final rawOverlays = reader.readTableOverlays();
+    final overlays = rawOverlays
+        .map(
+          (o) => TableOverlayInfo(
+            pageIdx: o.pageIdx,
+            tableId: o.tableId,
+            bounds: TableOverlayBounds(x: o.x, y: o.y, width: o.width, height: o.height),
+            borderStyle: o.borderStyle,
+            align: o.align,
+            startRowIndex: o.startRowIndex,
+            totalRows: o.totalRows,
+            isFocused: o.isFocused,
+            colWidths: o.colWidths,
+            colPositions: o.colPositions,
+            rowHeights: o.rowHeights,
+            rowPositions: o.rowPositions,
+          ),
+        )
+        .toList();
+    controller.setTableOverlays(overlays);
   }
 
   static void _handleFontRequired(EditorController controller, SlateReader reader) {
