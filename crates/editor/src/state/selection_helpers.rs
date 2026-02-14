@@ -44,6 +44,7 @@ pub struct SelectionAttributes {
     pub annotation_values: FxHashMap<AnnotationType, Vec<Annotation>>,
     pub absent_styles: FxHashSet<StyleType>,
     pub absent_annotations: FxHashSet<AnnotationType>,
+    pub has_text_segments: bool,
 }
 
 fn extract_block_attrs(node: &NodeRef) -> Vec<BlockAttr> {
@@ -555,6 +556,7 @@ pub fn compute_selection_attrs(
         annotation_values,
         absent_styles,
         absent_annotations,
+        has_text_segments: segment_count > 0,
     }
 }
 
