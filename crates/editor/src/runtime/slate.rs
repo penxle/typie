@@ -46,6 +46,18 @@ pub const ALIGN_CENTER: u32 = 1;
 pub const ALIGN_RIGHT: u32 = 2;
 pub const ALIGN_JUSTIFY: u32 = 3;
 
+pub const SELECTION_TYPE_NONE: u32 = 0;
+pub const SELECTION_TYPE_HORIZONTAL_RULE: u32 = 1;
+pub const SELECTION_TYPE_CALLOUT: u32 = 2;
+pub const SELECTION_TYPE_FOLD: u32 = 3;
+pub const SELECTION_TYPE_BULLET_LIST: u32 = 4;
+pub const SELECTION_TYPE_ORDERED_LIST: u32 = 5;
+pub const SELECTION_TYPE_IMAGE: u32 = 6;
+pub const SELECTION_TYPE_FILE: u32 = 7;
+pub const SELECTION_TYPE_EMBED: u32 = 8;
+pub const SELECTION_TYPE_ARCHIVED: u32 = 9;
+pub const SELECTION_TYPE_BLOCKQUOTE: u32 = 10;
+
 #[repr(C)]
 pub struct Slate {
     pub dirty: u64,
@@ -72,6 +84,14 @@ pub struct Slate {
     pub preceding_char_widths_count: u32,
 
     pub selection_cmp: i32,
+    pub selection_block_ids_offset: u32,
+    pub selection_block_ids_count: u32,
+    pub selection_block_types_offset: u32,
+    pub selection_block_types_count: u32,
+    pub selection_common_ancestor_ids_offset: u32,
+    pub selection_common_ancestor_ids_count: u32,
+    pub selection_common_ancestor_types_offset: u32,
+    pub selection_common_ancestor_types_count: u32,
 
     pub selection_anchor_node_id: [u8; 16],
     pub selection_anchor_offset: u32,
@@ -188,6 +208,21 @@ impl Slab {
             dst[i * 4..(i + 1) * 4].copy_from_slice(&v.to_le_bytes());
         }
         (offset, values.len() as u32)
+    }
+
+    pub fn write_node_id_slice(&mut self, ids: &[crate::model::NodeId]) -> (u32, u32) {
+        if ids.is_empty() {
+            return (0, 0);
+        }
+
+        let byte_len = ids.len() * 16;
+        let offset = self.alloc(byte_len, 4);
+        let dst = &mut self.data[offset as usize..offset as usize + byte_len];
+        for (idx, node_id) in ids.iter().enumerate() {
+            let start = idx * 16;
+            dst[start..start + 16].copy_from_slice(node_id.as_uuid().as_bytes());
+        }
+        (offset, ids.len() as u32)
     }
 
     pub fn write_str(&mut self, s: &str) -> u32 {
@@ -425,6 +460,38 @@ pub fn get_slate_offsets() -> Vec<(&'static str, usize)> {
             std::mem::offset_of!(Slate, preceding_char_widths_count),
         ),
         ("selection_cmp", std::mem::offset_of!(Slate, selection_cmp)),
+        (
+            "selection_block_ids_offset",
+            std::mem::offset_of!(Slate, selection_block_ids_offset),
+        ),
+        (
+            "selection_block_ids_count",
+            std::mem::offset_of!(Slate, selection_block_ids_count),
+        ),
+        (
+            "selection_block_types_offset",
+            std::mem::offset_of!(Slate, selection_block_types_offset),
+        ),
+        (
+            "selection_block_types_count",
+            std::mem::offset_of!(Slate, selection_block_types_count),
+        ),
+        (
+            "selection_common_ancestor_ids_offset",
+            std::mem::offset_of!(Slate, selection_common_ancestor_ids_offset),
+        ),
+        (
+            "selection_common_ancestor_ids_count",
+            std::mem::offset_of!(Slate, selection_common_ancestor_ids_count),
+        ),
+        (
+            "selection_common_ancestor_types_offset",
+            std::mem::offset_of!(Slate, selection_common_ancestor_types_offset),
+        ),
+        (
+            "selection_common_ancestor_types_count",
+            std::mem::offset_of!(Slate, selection_common_ancestor_types_count),
+        ),
         (
             "selection_anchor_node_id",
             std::mem::offset_of!(Slate, selection_anchor_node_id),

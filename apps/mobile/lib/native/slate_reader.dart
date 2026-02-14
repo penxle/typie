@@ -34,6 +34,17 @@ const _alignLeft = 0;
 const _alignCenter = 1;
 const _alignRight = 2;
 const _alignJustify = 3;
+const selectionTypeNone = 0;
+const selectionTypeHorizontalRule = 1;
+const selectionTypeCallout = 2;
+const selectionTypeFold = 3;
+const selectionTypeBulletList = 4;
+const selectionTypeOrderedList = 5;
+const selectionTypeImage = 6;
+const selectionTypeFile = 7;
+const selectionTypeEmbed = 8;
+const selectionTypeArchived = 9;
+const selectionTypeBlockquote = 10;
 
 const _unitTagMap = {_tagItalic: 'italic', _tagStrikethrough: 'strikethrough', _tagUnderline: 'underline'};
 const _f32TagMap = {_tagFontSize: 'font_size', _tagLetterSpacing: 'letter_spacing', _tagLineHeight: 'line_height'};
@@ -73,6 +84,26 @@ class SlateReader {
   double getF32(String field) => _slateBytes.getFloat32(_offset(field), Endian.little);
 
   int getI32(String field) => _slateBytes.getInt32(_offset(field), Endian.little);
+  int getU32OrZero(String field) {
+    final offset = _offsets[field];
+    if (offset == null) {
+      return 0;
+    }
+    return _slateBytes.getUint32(offset, Endian.little);
+  }
+
+  List<String> get selectionBlockIds =>
+      readNodeIdList(getU32OrZero('selection_block_ids_offset'), getU32OrZero('selection_block_ids_count'));
+  List<int> get selectionBlockTypes =>
+      readU32List(getU32OrZero('selection_block_types_offset'), getU32OrZero('selection_block_types_count'));
+  List<String> get selectionCommonAncestorIds => readNodeIdList(
+    getU32OrZero('selection_common_ancestor_ids_offset'),
+    getU32OrZero('selection_common_ancestor_ids_count'),
+  );
+  List<int> get selectionCommonAncestorTypes => readU32List(
+    getU32OrZero('selection_common_ancestor_types_offset'),
+    getU32OrZero('selection_common_ancestor_types_count'),
+  );
 
   String readStr(int offset) {
     final byteLen = _slabBytes.getUint32(offset, Endian.little);
@@ -108,6 +139,20 @@ class SlateReader {
 
   String readNodeIdField(String field) {
     return readNodeId(_offset(field));
+  }
+
+  List<String> readNodeIdList(int offset, int count) {
+    if (count == 0) {
+      return const [];
+    }
+
+    final result = List<String>.filled(count, '');
+    for (var i = 0; i < count; i++) {
+      final start = offset + i * 16;
+      final end = start + 16;
+      result[i] = _bytesToHex(_slabData.sublist(start, end));
+    }
+    return result;
   }
 
   int _slabU32(int offset) => _slabBytes.getUint32(offset, Endian.little);

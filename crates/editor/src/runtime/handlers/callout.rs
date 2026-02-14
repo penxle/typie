@@ -1,5 +1,6 @@
 use crate::model::{Node, NodeId};
 use crate::runtime::{Effect, Runtime};
+use crate::state::ancestor_helpers::lowest_common_ancestor_id;
 
 impl Runtime {
     pub(crate) fn cycle_callout_variant(&mut self, node_id: NodeId) -> Vec<Effect> {
@@ -25,5 +26,29 @@ impl Runtime {
         self.layout_cache.borrow_mut().invalidate_all();
 
         vec![Effect::LayoutChanged]
+    }
+
+    pub(crate) fn handle_cycle_callout_variant_in_selection(&mut self) -> Vec<Effect> {
+        let selection = self.state.selection;
+        let Some(lca_id) =
+            lowest_common_ancestor_id(self.doc(), selection.anchor.node_id, selection.head.node_id)
+        else {
+            return vec![];
+        };
+
+        let mut current = Some(lca_id);
+        while let Some(node_id) = current {
+            let Some(node) = self.state.doc.node(node_id) else {
+                break;
+            };
+
+            if matches!(node.node(), Node::Callout(_)) {
+                return self.cycle_callout_variant(node_id);
+            }
+
+            current = node.parent().map(|parent| parent.node_id());
+        }
+
+        vec![]
     }
 }

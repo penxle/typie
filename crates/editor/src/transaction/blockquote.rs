@@ -14,6 +14,11 @@ impl Transaction {
 
         Ok(false)
     }
+
+    pub fn set_blockquote(&mut self, variant: BlockquoteVariant) -> Result<bool> {
+        self.lift_from_ancestor(|parent, _blocks| matches!(parent, Node::Blockquote(_)))?;
+        self.wrap_in_ancestor(Node::Blockquote(BlockquoteNode { variant }))
+    }
 }
 
 #[cfg(test)]
@@ -302,6 +307,64 @@ mod tests {
                 paragraph {}
             }
             selection { (p1, 0) -> (p2, 1) }
+        };
+
+        assert_state_eq!(actual, expected);
+    }
+
+    #[test]
+    fn set_blockquote_rewraps_with_requested_variant_when_inside_blockquote() {
+        let mut p = id!();
+
+        let initial = state! {
+            doc {
+                blockquote {
+                    @p paragraph { text { "hello" } }
+                }
+            }
+            selection { (p, 0) -> (p, 1) }
+        };
+
+        let actual = transact!(initial, |tr| tr
+            .set_blockquote(BlockquoteVariant::MessageSent)
+            .unwrap());
+
+        let expected = state! {
+            doc {
+                blockquote(variant: BlockquoteVariant::MessageSent,) {
+                    @p paragraph { text { "hello" } }
+                }
+                paragraph {}
+            }
+            selection { (p, 0) -> (p, 1) }
+        };
+
+        assert_state_eq!(actual, expected);
+    }
+
+    #[test]
+    fn set_blockquote_wraps_when_outside_blockquote() {
+        let mut p = id!();
+
+        let initial = state! {
+            doc {
+                @p paragraph { text { "hello" } }
+            }
+            selection { (p, 0) -> (p, 1) }
+        };
+
+        let actual = transact!(initial, |tr| tr
+            .set_blockquote(BlockquoteVariant::LeftQuote)
+            .unwrap());
+
+        let expected = state! {
+            doc {
+                blockquote(variant: BlockquoteVariant::LeftQuote,) {
+                    @p paragraph { text { "hello" } }
+                }
+                paragraph {}
+            }
+            selection { (p, 0) -> (p, 1) }
         };
 
         assert_state_eq!(actual, expected);

@@ -1,5 +1,6 @@
 use crate::model::*;
 use crate::runtime::Effect;
+use crate::state::ancestor_helpers::lowest_common_ancestor_id;
 use crate::state::position_helpers::{
     calculate_offset_before_child, compare_positions, find_child_at_offset,
 };
@@ -625,7 +626,8 @@ impl Transaction {
     }
 
     fn delete_structural_range(&mut self, from: Position, to: Position) -> Result<()> {
-        let lca_id = self.find_lowest_common_ancestor(from.node_id, to.node_id);
+        let lca_id =
+            lowest_common_ancestor_id(self.doc(), from.node_id, to.node_id).unwrap_or(NodeId::ROOT);
         let lca = self.doc().node(lca_id).context("LCA not found")?;
 
         if lca.spec().is_textblock(self.doc().schema()) {
@@ -695,33 +697,6 @@ impl Transaction {
             }
         }
         Ok(())
-    }
-
-    fn find_lowest_common_ancestor(&self, node_a: NodeId, node_b: NodeId) -> NodeId {
-        let ancestors_a = self.collect_ancestors_including_self(node_a);
-        let ancestors_b = self.collect_ancestors_including_self(node_b);
-
-        let mut lca = NodeId::ROOT;
-        for (a, b) in ancestors_a.iter().rev().zip(ancestors_b.iter().rev()) {
-            if a == b {
-                lca = *a;
-            } else {
-                break;
-            }
-        }
-        lca
-    }
-
-    fn collect_ancestors_including_self(&self, node_id: NodeId) -> Vec<NodeId> {
-        std::iter::once(node_id)
-            .chain(
-                self.doc()
-                    .node(node_id)
-                    .unwrap()
-                    .ancestors()
-                    .map(|n| n.node_id()),
-            )
-            .collect()
     }
 
     fn is_barrier_node(&self, node_id: NodeId) -> bool {

@@ -23,7 +23,7 @@ class NativeEditorBlockquoteBottomToolbar extends HookWidget {
 
         return WidgetToolbarButton(
           onTap: () {
-            scope.dispatch({'type': 'toggleBlockquote', 'variant': item['type']});
+            scope.dispatch({'type': 'setBlockquote', 'variant': item['type']});
             switch (keyboardType) {
               case KeyboardType.software:
                 scope.requestFocus();

@@ -454,6 +454,8 @@ class EditorView extends HookWidget {
       bottomToolbarMode: bottomToolbarMode,
       secondaryToolbarMode: secondaryToolbarMode,
       attrs: attrs,
+      floatingContext: controller.floatingContext,
+      floatingNodeId: controller.floatingNodeId,
       externalElements: externalElements,
       uploadManager: uploadManager,
       dispatch: controller.dispatch,

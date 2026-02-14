@@ -1159,6 +1159,7 @@ impl Fragment {
         }
     }
 
+    // TODO: nodeRef.ancestors()를 쓰면 되지 않나
     fn collect_ancestor_ids(doc: &Doc, node_id: NodeId) -> Vec<NodeId> {
         let mut ancestors = Vec::new();
         let Some(node) = doc.node(node_id) else {

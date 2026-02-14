@@ -30,6 +30,8 @@ class NativeEditorToolbarScope extends InheritedWidget {
     required this.bottomToolbarMode,
     required this.secondaryToolbarMode,
     required this.attrs,
+    required this.floatingContext,
+    required this.floatingNodeId,
     required this.externalElements,
     required this.uploadManager,
     required this.dispatch,
@@ -50,6 +52,8 @@ class NativeEditorToolbarScope extends InheritedWidget {
   final ValueNotifier<SecondaryToolbarMode> secondaryToolbarMode;
 
   final ValueNotifier<List<Map<String, dynamic>>> attrs;
+  final ValueNotifier<String?> floatingContext;
+  final ValueNotifier<String?> floatingNodeId;
 
   final ValueNotifier<List<ExternalElement>> externalElements;
   final UploadManager uploadManager;
