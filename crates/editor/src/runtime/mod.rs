@@ -1151,6 +1151,7 @@ impl Runtime {
                     annotation_values,
                     absent_styles: FxHashSet::default(),
                     absent_annotations: FxHashSet::default(),
+                    has_text_segments: false,
                 };
 
                 let (offset, count) = self.slab.write_attrs(&attrs);
@@ -1158,7 +1159,18 @@ impl Runtime {
                 self.slate.attrs_count = count;
             } else {
                 let snapshot = self.selection_snapshot();
-                if let Some(snapshot) = snapshot {
+                if let Some(mut snapshot) = snapshot {
+                    if !snapshot.attrs.has_text_segments {
+                        for style in &self.state.pending_styles {
+                            let st = style.as_type();
+                            snapshot
+                                .attrs
+                                .style_values
+                                .entry(st)
+                                .or_default()
+                                .push(style.clone());
+                        }
+                    }
                     let (offset, count) = self.slab.write_attrs(&snapshot.attrs);
                     self.slate.attrs_offset = offset;
                     self.slate.attrs_count = count;
