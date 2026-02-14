@@ -194,7 +194,10 @@ class SyncManager {
         await _persistence.saveCheckpoint(Uint8List.fromList(base64Decode(data)));
       case GDocumentSyncType.RESET:
         await _persistence.clear();
-        _editorContext.serverSnapshot = Uint8List.fromList(base64Decode(data));
+        final reset = jsonDecode(data) as Map<String, dynamic>;
+        _editorContext.serverSnapshot = Uint8List.fromList(base64Decode(reset['snapshot'] as String));
+        _editorContext.serverVersion = reset['version'] as String;
+        _editorContext.serverGeneration = reset['generation'] as int;
         _editorContext.resetKey.value++;
       default:
         break;

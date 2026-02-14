@@ -9,6 +9,8 @@ import { jsonToSnapshot, snapshotToJson } from '@/utils/wasm';
 
 process.env.SCRIPT = 'true';
 
+const force = process.argv.includes('--force');
+
 type Delta = {
   insert: string;
   attributes?: Record<string, unknown>;
@@ -222,6 +224,10 @@ function isAlreadyMigrated(doc: LoroDoc): boolean {
 }
 
 await (async () => {
+  if (force) {
+    console.log('Force mode enabled — re-migrating all documents');
+  }
+
   console.log('Starting mark → style/annotation migration...');
 
   const ids = await db
@@ -281,7 +287,7 @@ await (async () => {
           needsFix = true;
         }
 
-        if (!needsFix) {
+        if (!needsFix && !force) {
           skipped++;
           continue;
         }
@@ -352,7 +358,7 @@ await (async () => {
       newDoc.import(newSnapshot);
       const newVersion = newDoc.version().encode();
 
-      await db
+      const [updated] = await db
         .update(DocumentContents)
         .set({
           snapshot: newSnapshot,
@@ -360,12 +366,17 @@ await (async () => {
           version: newVersion,
           generation: sql`${DocumentContents.generation} + 1`,
         })
-        .where(eq(DocumentContents.id, id));
+        .where(eq(DocumentContents.id, id))
+        .returning({ generation: DocumentContents.generation });
 
       pubsub.publish('document:sync', documentId, {
         target: '*',
         type: DocumentSyncType.RESET,
-        data: newSnapshot.toBase64(),
+        data: JSON.stringify({
+          snapshot: newSnapshot.toBase64(),
+          version: Buffer.from(newVersion).toString('base64'),
+          generation: updated.generation,
+        }),
       });
 
       migrated++;
