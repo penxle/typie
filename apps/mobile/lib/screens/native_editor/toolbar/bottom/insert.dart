@@ -37,7 +37,7 @@ class NativeEditorInsertBottomToolbar extends HookWidget {
       _Node(icon: 'quote', label: '인용구', type: 'blockquote', attrs: {'type': editorDefaultValues['blockquote']}),
       const _Node(icon: 'gallery-vertical-end', label: '강조', type: 'toggleCallout'),
       const _Node(icon: 'chevrons-down-up', label: '접기', type: 'insertFold'),
-      const _Node(icon: 'table', label: '표', type: 'insertTable', attrs: {'rows': 3, 'cols': 3}),
+      const _Node(icon: 'table', label: '표', type: 'table'),
       const _Node(icon: 'list', label: '목록', type: 'toggleBulletList'),
     ];
 
@@ -53,6 +53,8 @@ class NativeEditorInsertBottomToolbar extends HookWidget {
               scope.bottomToolbarMode.value = BottomToolbarMode.horizontalRule;
             } else if (node.type == 'blockquote') {
               scope.bottomToolbarMode.value = BottomToolbarMode.blockquote;
+            } else if (node.type == 'table') {
+              scope.bottomToolbarMode.value = BottomToolbarMode.tableSize;
             } else {
               scope.dispatch({'type': node.type, ...?node.attrs});
               scope.controller.scrollIntoView();

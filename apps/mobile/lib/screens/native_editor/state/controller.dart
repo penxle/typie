@@ -5,6 +5,7 @@ import 'package:typie/native/editor_native.dart';
 import 'package:typie/screens/native_editor/state/fonts.dart';
 import 'package:typie/screens/native_editor/state/scroll_mode.dart';
 import 'package:typie/screens/native_editor/state/state.dart';
+import 'package:typie/screens/native_editor/table/models.dart';
 
 class EditorController extends ChangeNotifier {
   EditorController({
@@ -24,6 +25,7 @@ class EditorController extends ChangeNotifier {
   final void Function()? onEditorReady;
 
   ScrollMode? pendingScrollMode;
+  final ValueNotifier<List<TableOverlayInfo>> tableOverlays = ValueNotifier<List<TableOverlayInfo>>([]);
 
   VoidCallback? _clearFocusCallback;
   VoidCallback? _requestFocusCallback;
@@ -72,6 +74,10 @@ class EditorController extends ChangeNotifier {
     }
   }
 
+  void setTableOverlays(List<TableOverlayInfo> overlays) {
+    tableOverlays.value = overlays;
+  }
+
   void setSelecting(bool selecting) {
     if (_state.isSelecting != selecting) {
       _state = _state.copyWith(isSelecting: selecting);
@@ -107,6 +113,7 @@ class EditorController extends ChangeNotifier {
   void dispose() {
     floatingContext.dispose();
     floatingNodeId.dispose();
+    tableOverlays.dispose();
     super.dispose();
   }
 }

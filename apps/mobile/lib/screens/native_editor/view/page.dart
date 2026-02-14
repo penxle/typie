@@ -11,6 +11,7 @@ import 'package:typie/screens/native_editor/view/cursor.dart';
 import 'package:typie/screens/native_editor/view/geometry.dart';
 import 'package:typie/screens/native_editor/view/line_highlight.dart';
 import 'package:typie/screens/native_editor/view/scope.dart';
+import 'package:typie/screens/native_editor/view/table_overlay.dart';
 import 'package:typie/services/preference.dart';
 
 const _cropMarkerSize = 32.0;
@@ -134,6 +135,7 @@ class PageItem extends HookWidget {
             _SpellcheckOverlay(pageIndex: pageIndex, overlays: state.state.spellcheck.overlays),
             _AiFeedbackOverlay(pageIndex: pageIndex, overlays: state.state.aiFeedback.overlays),
             Cursor(cursorInfo: displayCursor.value, isFocused: isFocused),
+            TableOverlay(pageIndex: pageIndex),
             ElementOverlay(pageIndex: pageIndex),
             if (layout.isPaginated && margins != null)
               Positioned.fill(
