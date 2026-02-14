@@ -46,6 +46,8 @@ class EditorController extends ChangeNotifier {
 
   EditorState _state = const EditorState();
   EditorState get state => _state;
+  final ValueNotifier<String?> floatingContext = ValueNotifier(null);
+  final ValueNotifier<String?> floatingNodeId = ValueNotifier(null);
 
   void updateState(EditorState Function(EditorState) updater) {
     _state = updater(_state);
@@ -90,5 +92,21 @@ class EditorController extends ChangeNotifier {
       completer.complete();
     }
     _tickCompleters.clear();
+  }
+
+  void setFloatingSelection({required String? context, required String? nodeId}) {
+    if (floatingContext.value != context) {
+      floatingContext.value = context;
+    }
+    if (floatingNodeId.value != nodeId) {
+      floatingNodeId.value = nodeId;
+    }
+  }
+
+  @override
+  void dispose() {
+    floatingContext.dispose();
+    floatingNodeId.dispose();
+    super.dispose();
   }
 }

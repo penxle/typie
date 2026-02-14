@@ -1,6 +1,9 @@
 use crate::model::{FoldContentNode, FoldNode, FoldTitleNode, Node, NodeId, NodeType};
 use crate::runtime::Effect;
-use crate::state::{Position, Selection, collect_top_level_blocks_in_range};
+use crate::state::position_helpers::leaf_block_start;
+use crate::state::{
+    Position, Selection, collect_top_level_blocks_in_range, selected_single_block_id,
+};
 use crate::transaction::Transaction;
 use crate::types::Affinity;
 use anyhow::{Context, Result};
@@ -114,11 +117,100 @@ impl Transaction {
 
         Ok(Some(fold_id))
     }
+
+    pub fn unwrap_fold(&mut self) -> Result<bool> {
+        let Some(fold_id) = self.selected_or_ancestor_fold_id() else {
+            return Ok(false);
+        };
+
+        let fold = self.node(fold_id).context("Fold not found")?;
+        let parent = fold.parent().context("Fold parent not found")?;
+        let parent_id = parent.node_id();
+        let parent_prev = fold.prev_sibling().map(|n| n.node_id());
+
+        let fold_content_id = fold
+            .children()
+            .find(|child| matches!(child.node(), Node::FoldContent(_)))
+            .map(|child| child.node_id())
+            .context("FoldContent not found")?;
+
+        let content_child_ids: Vec<NodeId> = self
+            .node(fold_content_id)
+            .context("FoldContent node not found")?
+            .children()
+            .map(|child| child.node_id())
+            .collect();
+
+        if let (Some(first), Some(last)) = (
+            content_child_ids.first().copied(),
+            content_child_ids.last().copied(),
+        ) {
+            self.move_node_range(first, last, Some(parent_id), parent_prev, Some(fold_id))?;
+        }
+
+        self.delete_node_recursive(fold_id)?;
+
+        let new_selection = if let Some(first_unwrapped) = content_child_ids.first().copied() {
+            let first_node = self
+                .node(first_unwrapped)
+                .context("First unwrapped node not found")?;
+            Selection::collapsed(leaf_block_start(&first_node))
+        } else {
+            let fallback_offset = parent_prev
+                .and_then(|prev_id| self.node(prev_id).and_then(|n| n.index()))
+                .map(|idx| idx + 1)
+                .unwrap_or(0);
+
+            Selection::collapsed(Position::new(
+                parent_id,
+                fallback_offset,
+                Affinity::Downstream,
+            ))
+        };
+
+        self.set_selection(new_selection);
+        Ok(true)
+    }
+
+    fn selected_or_ancestor_fold_id(&self) -> Option<NodeId> {
+        let selection = self.selection().clone();
+
+        if let Some(node_id) = selected_single_block_id(self.doc(), &selection) {
+            if self
+                .node(node_id)
+                .map(|node| matches!(node.node(), Node::Fold(_)))
+                .unwrap_or(false)
+            {
+                return Some(node_id);
+            }
+        }
+
+        let head_fold = self.node(selection.head.node_id).and_then(|node| {
+            node.ancestors()
+                .find(|ancestor| matches!(ancestor.node(), Node::Fold(_)))
+                .map(|ancestor| ancestor.node_id())
+        });
+
+        if selection.is_collapsed() {
+            return head_fold;
+        }
+
+        let anchor_fold = self.node(selection.anchor.node_id).and_then(|node| {
+            node.ancestors()
+                .find(|ancestor| matches!(ancestor.node(), Node::Fold(_)))
+                .map(|ancestor| ancestor.node_id())
+        });
+
+        if head_fold.is_some() && head_fold == anchor_fold {
+            head_fold
+        } else {
+            None
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
-
     #[test]
     fn insert_fold_wraps_paragraph() {
         let mut p1 = id!();
@@ -227,6 +319,77 @@ mod tests {
                 paragraph { text { "!" } }
             }
             selection { (n1, 0) }
+        };
+
+        assert_state_eq!(actual, expected);
+    }
+
+    #[test]
+    fn unwrap_fold_from_fold_title_selection() {
+        let mut title = id!();
+        let mut p1 = id!();
+        let mut p2 = id!();
+
+        let initial = state! {
+            doc {
+                paragraph { text { "before" } }
+                fold {
+                    @title fold_title {}
+                    fold_content {
+                        @p1 paragraph { text { "hello" } }
+                        @p2 paragraph { text { "world" } }
+                    }
+                }
+                paragraph { text { "after" } }
+            }
+            selection { (title, 0) }
+        };
+
+        let actual = transact!(initial, |tr| tr.unwrap_fold().unwrap());
+
+        let expected = state! {
+            doc {
+                paragraph { text { "before" } }
+                @p1 paragraph { text { "hello" } }
+                @p2 paragraph { text { "world" } }
+                paragraph { text { "after" } }
+            }
+            selection { (p1, 0) }
+        };
+
+        assert_state_eq!(actual, expected);
+    }
+
+    #[test]
+    fn unwrap_fold_from_selected_fold_node() {
+        let mut p1 = id!();
+        let mut p2 = id!();
+
+        let initial = state! {
+            doc {
+                paragraph { text { "before" } }
+                fold {
+                    fold_title {}
+                    fold_content {
+                        @p1 paragraph { text { "hello" } }
+                        @p2 paragraph { text { "world" } }
+                    }
+                }
+                paragraph { text { "after" } }
+            }
+            selection { (p1, 0) -> (p1, 0) }
+        };
+
+        let actual = transact!(initial, |tr| tr.unwrap_fold().unwrap());
+
+        let expected = state! {
+            doc {
+                paragraph { text { "before" } }
+                @p1 paragraph { text { "hello" } }
+                @p2 paragraph { text { "world" } }
+                paragraph { text { "after" } }
+            }
+            selection { (p1, 0) }
         };
 
         assert_state_eq!(actual, expected);
