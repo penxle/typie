@@ -64,22 +64,13 @@ pub enum Node {
     TableCell(TableCellNode),
 }
 
-pub struct FontOverrides {
-    pub family: Option<String>,
-    pub weight: Option<u16>,
-}
-
 impl Node {
-    pub fn font_overrides(&self) -> FontOverrides {
+    pub fn style_overrides(&self) -> Vec<Style> {
         match self {
-            Node::FoldTitle(_) => FontOverrides {
-                family: None,
-                weight: Some(FOLD_TITLE_FONT_WEIGHT),
-            },
-            _ => FontOverrides {
-                family: None,
-                weight: None,
-            },
+            Node::FoldTitle(_) => vec![Style::FontWeight(FontWeightStyle {
+                weight: FOLD_TITLE_FONT_WEIGHT,
+            })],
+            _ => vec![],
         }
     }
 
