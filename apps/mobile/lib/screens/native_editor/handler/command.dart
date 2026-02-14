@@ -195,7 +195,12 @@ class CommandHandler {
     }
 
     controller.updateState(
-      (state) => state.copyWith(fromHandle: fromHandleInfo, toHandle: toHandleInfo, pasteOptions: null),
+      (state) => state.copyWith(
+        selectionCollapsed: collapsed,
+        fromHandle: fromHandleInfo,
+        toHandle: toHandleInfo,
+        pasteOptions: null,
+      ),
     );
     _updateFloatingSelection(controller, reader);
 

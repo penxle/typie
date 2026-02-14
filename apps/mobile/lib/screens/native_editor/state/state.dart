@@ -226,6 +226,7 @@ abstract class EditorState with _$EditorState {
     CursorInfo? cursor,
     @Default(false) bool isFocused,
     @Default(false) bool isSelecting,
+    @Default(true) bool selectionCollapsed,
     @Default([]) List<Map<String, dynamic>> attrs,
     @Default([]) List<ExternalElement> externalElements,
     Object? renderVersion,

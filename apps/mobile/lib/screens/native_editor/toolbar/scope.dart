@@ -29,6 +29,7 @@ class NativeEditorToolbarScope extends InheritedWidget {
     required this.isEditorFocused,
     required this.bottomToolbarMode,
     required this.secondaryToolbarMode,
+    required this.selectionCollapsed,
     required this.attrs,
     required this.floatingContext,
     required this.floatingNodeId,
@@ -51,6 +52,7 @@ class NativeEditorToolbarScope extends InheritedWidget {
   final ValueNotifier<BottomToolbarMode> bottomToolbarMode;
   final ValueNotifier<SecondaryToolbarMode> secondaryToolbarMode;
 
+  final ValueNotifier<bool> selectionCollapsed;
   final ValueNotifier<List<Map<String, dynamic>>> attrs;
   final ValueNotifier<String?> floatingContext;
   final ValueNotifier<String?> floatingNodeId;

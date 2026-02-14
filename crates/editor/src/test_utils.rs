@@ -330,32 +330,64 @@ macro_rules! __parse_styles {
 
 #[macro_export]
 #[allow(unused)]
+macro_rules! __parse_annotations {
+    () => { vec![] };
+
+    (link($href:expr) $(, $($rest:tt)*)?) => {
+        {
+            #[allow(unused_mut)]
+            let mut anns = vec![$crate::model::Annotation::Link($crate::model::LinkAnnotation { href: $href.to_string() })];
+            $(anns.extend(__parse_annotations!($($rest)*));)?
+            anns
+        }
+    };
+
+    (ruby($text:expr) $(, $($rest:tt)*)?) => {
+        {
+            #[allow(unused_mut)]
+            let mut anns = vec![$crate::model::Annotation::Ruby($crate::model::RubyAnnotation { text: $text.to_string() })];
+            $(anns.extend(__parse_annotations!($($rest)*));)?
+            anns
+        }
+    };
+}
+
+#[macro_export]
+#[allow(unused)]
 macro_rules! __parse_text_segments {
     ($text:ident,) => {};
     ($text:ident) => {};
 
     ($text:ident, $content:literal => [$($styles:tt)*] $(, $($rest:tt)*)?) => {
         {
-            let mut segment_ranges = Vec::new();
-            __parse_text_segments_collect!($text, segment_ranges, $content => [$($styles)*] $(, $($rest)*)?);
+            let mut style_ranges: Vec<(std::ops::Range<usize>, Vec<$crate::model::Style>)> = Vec::new();
+            let mut annotation_ranges: Vec<(std::ops::Range<usize>, $crate::model::Annotation)> = Vec::new();
+            __parse_text_segments_collect!($text, style_ranges, annotation_ranges, $content => [$($styles)*] $(, $($rest)*)?);
 
-            for (range, styles) in segment_ranges {
+            for (range, styles) in style_ranges {
                 for style in styles {
                     let _ = $text.apply_style(range.clone(), &style);
                 }
+            }
+            for (range, annotation) in annotation_ranges {
+                let _ = $text.apply_annotation(range, &annotation);
             }
         }
     };
 
     ($text:ident, $content:literal $(, $($rest:tt)*)?) => {
         {
-            let mut segment_ranges = Vec::new();
-            __parse_text_segments_collect!($text, segment_ranges, $content $(, $($rest)*)?);
+            let mut style_ranges: Vec<(std::ops::Range<usize>, Vec<$crate::model::Style>)> = Vec::new();
+            let mut annotation_ranges: Vec<(std::ops::Range<usize>, $crate::model::Annotation)> = Vec::new();
+            __parse_text_segments_collect!($text, style_ranges, annotation_ranges, $content $(, $($rest)*)?);
 
-            for (range, styles) in segment_ranges {
+            for (range, styles) in style_ranges {
                 for style in styles {
                     let _ = $text.apply_style(range.clone(), &style);
                 }
+            }
+            for (range, annotation) in annotation_ranges {
+                let _ = $text.apply_annotation(range, &annotation);
             }
         }
     };
@@ -364,54 +396,112 @@ macro_rules! __parse_text_segments {
 #[macro_export]
 #[allow(unused)]
 macro_rules! __parse_text_segments_collect {
-    ($text:ident, $ranges:ident,) => {};
-    ($text:ident, $ranges:ident) => {};
+    ($text:ident, $style_ranges:ident, $annotation_ranges:ident,) => {};
+    ($text:ident, $style_ranges:ident, $annotation_ranges:ident) => {};
 
-    ($text:ident, $ranges:ident, $content:literal => [$($styles:tt)*] $(, $($rest:tt)*)?) => {
+    ($text:ident, $style_ranges:ident, $annotation_ranges:ident, $content:literal => [$($styles:tt)*] @[$($anns:tt)*] $(, $($rest:tt)*)?) => {
         {
             let start = $text.char_len();
             $text.insert(start, $content);
             let end = $text.char_len();
             let styles = __parse_styles!($($styles)*);
-            $ranges.push((start..end, styles));
+            $style_ranges.push((start..end, styles));
+            let annotations = __parse_annotations!($($anns)*);
+            for annotation in annotations {
+                $annotation_ranges.push((start..end, annotation));
+            }
         }
-        $(__parse_text_segments_collect!($text, $ranges, $($rest)*);)?
+        $(__parse_text_segments_collect!($text, $style_ranges, $annotation_ranges, $($rest)*);)?
     };
 
-    ($text:ident, $ranges:ident, $content:literal $(, $($rest:tt)*)?) => {
+    ($text:ident, $style_ranges:ident, $annotation_ranges:ident, $content:literal @[$($anns:tt)*] $(, $($rest:tt)*)?) => {
+        {
+            let start = $text.char_len();
+            $text.insert(start, $content);
+            let end = $text.char_len();
+            let annotations = __parse_annotations!($($anns)*);
+            for annotation in annotations {
+                $annotation_ranges.push((start..end, annotation));
+            }
+        }
+        $(__parse_text_segments_collect!($text, $style_ranges, $annotation_ranges, $($rest)*);)?
+    };
+
+    ($text:ident, $style_ranges:ident, $annotation_ranges:ident, $content:literal => [$($styles:tt)*] $(, $($rest:tt)*)?) => {
+        {
+            let start = $text.char_len();
+            $text.insert(start, $content);
+            let end = $text.char_len();
+            let styles = __parse_styles!($($styles)*);
+            $style_ranges.push((start..end, styles));
+        }
+        $(__parse_text_segments_collect!($text, $style_ranges, $annotation_ranges, $($rest)*);)?
+    };
+
+    ($text:ident, $style_ranges:ident, $annotation_ranges:ident, $content:literal $(, $($rest:tt)*)?) => {
         {
             let start = $text.char_len();
             $text.insert(start, $content);
         }
-        $(__parse_text_segments_collect!($text, $ranges, $($rest)*);)?
+        $(__parse_text_segments_collect!($text, $style_ranges, $annotation_ranges, $($rest)*);)?
     };
 }
 
 #[macro_export]
 #[allow(unused)]
 macro_rules! __parse_text_segments_with_pending {
-    ($text:ident, $pending:ident,) => {};
-    ($text:ident, $pending:ident) => {};
+    ($text:ident, $pending_styles:ident, $pending_annotations:ident,) => {};
+    ($text:ident, $pending_styles:ident, $pending_annotations:ident) => {};
 
-    ($text:ident, $pending:ident, $content:literal => [$($styles:tt)*] $(, $($rest:tt)*)?) => {
+    ($text:ident, $pending_styles:ident, $pending_annotations:ident, $content:literal => [$($styles:tt)*] @[$($anns:tt)*] $(, $($rest:tt)*)?) => {
         {
             let start = $text.char_len();
             $text.insert(start, $content);
             let end = $text.char_len();
             let styles = __parse_styles!($($styles)*);
             for style in styles {
-                $pending.push((start, end, style));
+                $pending_styles.push((start, end, style));
+            }
+            let annotations = __parse_annotations!($($anns)*);
+            for annotation in annotations {
+                $pending_annotations.push((start, end, annotation));
             }
         }
-        $(__parse_text_segments_with_pending!($text, $pending, $($rest)*);)?
+        $(__parse_text_segments_with_pending!($text, $pending_styles, $pending_annotations, $($rest)*);)?
     };
 
-    ($text:ident, $pending:ident, $content:literal $(, $($rest:tt)*)?) => {
+    ($text:ident, $pending_styles:ident, $pending_annotations:ident, $content:literal @[$($anns:tt)*] $(, $($rest:tt)*)?) => {
+        {
+            let start = $text.char_len();
+            $text.insert(start, $content);
+            let end = $text.char_len();
+            let annotations = __parse_annotations!($($anns)*);
+            for annotation in annotations {
+                $pending_annotations.push((start, end, annotation));
+            }
+        }
+        $(__parse_text_segments_with_pending!($text, $pending_styles, $pending_annotations, $($rest)*);)?
+    };
+
+    ($text:ident, $pending_styles:ident, $pending_annotations:ident, $content:literal => [$($styles:tt)*] $(, $($rest:tt)*)?) => {
+        {
+            let start = $text.char_len();
+            $text.insert(start, $content);
+            let end = $text.char_len();
+            let styles = __parse_styles!($($styles)*);
+            for style in styles {
+                $pending_styles.push((start, end, style));
+            }
+        }
+        $(__parse_text_segments_with_pending!($text, $pending_styles, $pending_annotations, $($rest)*);)?
+    };
+
+    ($text:ident, $pending_styles:ident, $pending_annotations:ident, $content:literal $(, $($rest:tt)*)?) => {
         {
             let start = $text.char_len();
             $text.insert(start, $content);
         }
-        $(__parse_text_segments_with_pending!($text, $pending, $($rest)*);)?
+        $(__parse_text_segments_with_pending!($text, $pending_styles, $pending_annotations, $($rest)*);)?
     };
 }
 
@@ -667,7 +757,8 @@ macro_rules! __doc_create_node_with_id {
 
             let text = $crate::model::Text::new();
             let mut pending_styles: Vec<(usize, usize, $crate::model::Style)> = Vec::new();
-            __parse_text_segments_with_pending!(text, pending_styles, $first => [$($first_styles)*] $(, $($rest_segments)*)?);
+            let mut pending_annotations: Vec<(usize, usize, $crate::model::Annotation)> = Vec::new();
+            __parse_text_segments_with_pending!(text, pending_styles, pending_annotations, $first => [$($first_styles)*] $(, $($rest_segments)*)?);
 
             parent_node.as_mut().insert_child_with_id(
                 index,
@@ -680,12 +771,52 @@ macro_rules! __doc_create_node_with_id {
 
             $crate::test_utils::__apply_default_styles($tr.doc(), $id);
 
-            if !pending_styles.is_empty() {
-                if let Some(node) = $tr.doc().node($id) {
-                    if let $crate::model::Node::Text(text_node) = node.node() {
-                        for (start, end, style) in pending_styles {
-                            let _ = text_node.text.apply_style(start..end, &style);
-                        }
+            if let Some(node) = $tr.doc().node($id) {
+                if let $crate::model::Node::Text(text_node) = node.node() {
+                    for (start, end, style) in pending_styles {
+                        let _ = text_node.text.apply_style(start..end, &style);
+                    }
+                    for (start, end, annotation) in pending_annotations {
+                        let _ = text_node.text.apply_annotation(start..end, &annotation);
+                    }
+                }
+            }
+        }
+    };
+
+    ($tr:ident, $id:expr, $parent:expr, $prev:expr, text, [], [$first:literal @[$($first_anns:tt)*] $(, $($rest_segments:tt)*)?]) => {
+        {
+            let parent_node = $tr.doc().node($parent).unwrap();
+            let index = if let Some(prev_id) = $prev {
+                let prev_node = $tr.doc().node(prev_id).unwrap();
+                prev_node.index().unwrap() + 1
+            } else {
+                0
+            };
+
+            let text = $crate::model::Text::new();
+            let mut pending_styles: Vec<(usize, usize, $crate::model::Style)> = Vec::new();
+            let mut pending_annotations: Vec<(usize, usize, $crate::model::Annotation)> = Vec::new();
+            __parse_text_segments_with_pending!(text, pending_styles, pending_annotations, $first @[$($first_anns)*] $(, $($rest_segments)*)?);
+
+            parent_node.as_mut().insert_child_with_id(
+                index,
+                $id,
+                $crate::model::Node::Text($crate::model::TextNode {
+                    text,
+                    ..Default::default()
+                })
+            ).unwrap();
+
+            $crate::test_utils::__apply_default_styles($tr.doc(), $id);
+
+            if let Some(node) = $tr.doc().node($id) {
+                if let $crate::model::Node::Text(text_node) = node.node() {
+                    for (start, end, style) in pending_styles {
+                        let _ = text_node.text.apply_style(start..end, &style);
+                    }
+                    for (start, end, annotation) in pending_annotations {
+                        let _ = text_node.text.apply_annotation(start..end, &annotation);
                     }
                 }
             }
@@ -703,8 +834,9 @@ macro_rules! __doc_create_node_with_id {
             };
 
             let text = $crate::model::Text::new();
-            let mut __segment_ranges = Vec::new();
-            __parse_text_segments_collect!(text, __segment_ranges, $first, $($rest_segments)+);
+            let mut style_ranges: Vec<(std::ops::Range<usize>, Vec<$crate::model::Style>)> = Vec::new();
+            let mut annotation_ranges: Vec<(std::ops::Range<usize>, $crate::model::Annotation)> = Vec::new();
+            __parse_text_segments_collect!(text, style_ranges, annotation_ranges, $first, $($rest_segments)+);
 
             parent_node.as_mut().insert_child_with_id(
                 index,
@@ -719,10 +851,13 @@ macro_rules! __doc_create_node_with_id {
 
             if let Some(node) = $tr.doc().node($id) {
                 if let $crate::model::Node::Text(text_node) = node.node() {
-                    for (range, styles) in __segment_ranges {
+                    for (range, styles) in style_ranges {
                         for style in styles {
                             let _ = text_node.text.apply_style(range.clone(), &style);
                         }
+                    }
+                    for (range, annotation) in annotation_ranges {
+                        let _ = text_node.text.apply_annotation(range, &annotation);
                     }
                 }
             }
@@ -1247,15 +1382,17 @@ macro_rules! __fragment_create_node_with_id {
         {
             let mut text = $crate::model::Text::new();
             let mut pending_styles: Vec<(usize, usize, $crate::model::Style)> = Vec::new();
-            __parse_text_segments_with_pending!(text, pending_styles, $first => [$($first_styles)*] $(, $($rest_segments)*)?);
+            let mut pending_annotations: Vec<(usize, usize, $crate::model::Annotation)> = Vec::new();
+            __parse_text_segments_with_pending!(text, pending_styles, pending_annotations, $first => [$($first_styles)*] $(, $($rest_segments)*)?);
 
             let __defaults = $crate::model::DefaultStyles::default().to_styles();
             $crate::test_utils::__apply_default_styles_to_text(&text, &__defaults);
 
-            if !pending_styles.is_empty() {
-                for (start, end, style) in pending_styles {
-                    let _ = text.apply_style(start..end, &style);
-                }
+            for (start, end, style) in pending_styles {
+                let _ = text.apply_style(start..end, &style);
+            }
+            for (start, end, annotation) in pending_annotations {
+                let _ = text.apply_annotation(start..end, &annotation);
             }
 
             $nodes.push((
@@ -1274,16 +1411,20 @@ macro_rules! __fragment_create_node_with_id {
     ($nodes:ident, $id:expr, $parent:expr, text, [], [$first:literal, $($rest_segments:tt)+]) => {
         {
             let mut text = $crate::model::Text::new();
-            let mut __segment_ranges = Vec::new();
-            __parse_text_segments_collect!(text, __segment_ranges, $first, $($rest_segments)+);
+            let mut style_ranges: Vec<(std::ops::Range<usize>, Vec<$crate::model::Style>)> = Vec::new();
+            let mut annotation_ranges: Vec<(std::ops::Range<usize>, $crate::model::Annotation)> = Vec::new();
+            __parse_text_segments_collect!(text, style_ranges, annotation_ranges, $first, $($rest_segments)+);
 
             let __defaults = $crate::model::DefaultStyles::default().to_styles();
             $crate::test_utils::__apply_default_styles_to_text(&text, &__defaults);
 
-            for (range, styles) in __segment_ranges {
+            for (range, styles) in style_ranges {
                 for style in styles {
                     let _ = text.apply_style(range.clone(), &style);
                 }
+            }
+            for (range, annotation) in annotation_ranges {
+                let _ = text.apply_annotation(range, &annotation);
             }
 
             $nodes.push((

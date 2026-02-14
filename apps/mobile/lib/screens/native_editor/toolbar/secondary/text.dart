@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
+import 'package:auto_route/auto_route.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:typie/context/modal.dart';
 import 'package:typie/context/theme.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/icons/typie.dart';
@@ -12,6 +16,8 @@ import 'package:typie/screens/native_editor/toolbar/buttons/icon.dart';
 import 'package:typie/screens/native_editor/toolbar/buttons/label.dart';
 import 'package:typie/screens/native_editor/toolbar/scope.dart';
 import 'package:typie/screens/native_editor/toolbar/values.dart';
+import 'package:typie/widgets/forms/form.dart';
+import 'package:typie/widgets/forms/text_field.dart';
 import 'package:typie/widgets/vertical_divider.dart';
 
 class NativeEditorTextToolbar extends HookWidget {
@@ -21,6 +27,7 @@ class NativeEditorTextToolbar extends HookWidget {
   Widget build(BuildContext context) {
     final scope = NativeEditorToolbarScope.of(context);
     final attrs = useValueListenable(scope.attrs);
+    final collapsed = useValueListenable(scope.selectionCollapsed);
 
     final textColorAttr = findAttr(attrs, 'text_color');
     final textColorValues = (textColorAttr?['values'] as List?)?.whereType<String>().toList() ?? [];
@@ -65,6 +72,18 @@ class NativeEditorTextToolbar extends HookWidget {
 
     final strikethroughAttr = findAttr(attrs, 'strikethrough');
     final isStrikethrough = strikethroughAttr != null && !(strikethroughAttr['values'] as List).contains(null);
+
+    final linkAttr = findAttr(attrs, 'link');
+    final linkValues = (linkAttr?['values'] as List?) ?? [];
+    final isLinkActive = linkValues.length == 1 && linkValues[0] != null;
+    final isLinkMixed = linkValues.length >= 2;
+    final existingLinkHref = isLinkActive ? (linkValues[0] as Map<String, dynamic>)['href'] as String? : null;
+
+    final rubyAttr = findAttr(attrs, 'ruby');
+    final rubyValues = (rubyAttr?['values'] as List?) ?? [];
+    final isRubyActive = rubyValues.length == 1 && rubyValues[0] != null;
+    final isRubyMixed = rubyValues.length >= 2;
+    final existingRubyText = isRubyActive ? (rubyValues[0] as Map<String, dynamic>)['text'] as String? : null;
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -175,6 +194,65 @@ class NativeEditorTextToolbar extends HookWidget {
           ),
           AppVerticalDivider(color: context.colors.borderSubtle, height: 20),
           IconToolbarButton(
+            icon: LucideLightIcons.link,
+            isActive: isLinkActive,
+            isDisabled: isLinkMixed || (collapsed && !isLinkActive),
+            onTap: () {
+              unawaited(
+                _showAnnotationModal(
+                  context,
+                  scope: scope,
+                  title: '링크',
+                  placeholder: 'https://...',
+                  existingValue: existingLinkHref,
+                  keyboardType: TextInputType.url,
+                  onSubmit: (value) {
+                    final url = RegExp(r'^[^:]+:\/\/').hasMatch(value) ? value : 'https://$value';
+                    final type = isLinkActive ? 'updateAnnotation' : 'addAnnotation';
+                    scope.dispatch({
+                      'type': type,
+                      'annotation': {'type': 'link', 'href': url},
+                    });
+                  },
+                  onRemove: isLinkActive
+                      ? () {
+                          scope.dispatch({'type': 'removeAnnotation', 'annotationType': 'link'});
+                        }
+                      : null,
+                ),
+              );
+            },
+          ),
+          IconToolbarButton(
+            icon: TypieIcons.ruby,
+            isActive: isRubyActive,
+            isDisabled: isRubyMixed || (collapsed && !isRubyActive),
+            onTap: () {
+              unawaited(
+                _showAnnotationModal(
+                  context,
+                  scope: scope,
+                  title: '루비',
+                  placeholder: '텍스트 위에 들어갈 문구',
+                  existingValue: existingRubyText,
+                  onSubmit: (value) {
+                    final type = isRubyActive ? 'updateAnnotation' : 'addAnnotation';
+                    scope.dispatch({
+                      'type': type,
+                      'annotation': {'type': 'ruby', 'text': value},
+                    });
+                  },
+                  onRemove: isRubyActive
+                      ? () {
+                          scope.dispatch({'type': 'removeAnnotation', 'annotationType': 'ruby'});
+                        }
+                      : null,
+                ),
+              );
+            },
+          ),
+          AppVerticalDivider(color: context.colors.borderSubtle, height: 20),
+          IconToolbarButton(
             icon: LucideLightIcons.align_left,
             onTap: () {
               scope.secondaryToolbarMode.value = SecondaryToolbarMode.textAlign;
@@ -200,6 +278,64 @@ class NativeEditorTextToolbar extends HookWidget {
             },
           ),
         ],
+      ),
+    );
+  }
+
+  Future<void> _showAnnotationModal(
+    BuildContext context, {
+    required NativeEditorToolbarScope scope,
+    required String title,
+    required String placeholder,
+    required String? existingValue,
+    required void Function(String value) onSubmit,
+    void Function()? onRemove,
+    TextInputType? keyboardType,
+  }) async {
+    await context.showModal(
+      intercept: true,
+      child: HookForm(
+        onSubmit: (form) async {
+          final value = form.data['value'] as String?;
+          if (value == null || value.isEmpty) {
+            return;
+          }
+          onSubmit(value);
+        },
+        builder: (context, form) {
+          return ConfirmModal(
+            title: title,
+            confirmText: existingValue != null ? '수정' : '삽입',
+            onConfirm: () async {
+              await form.submit();
+            },
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                HookFormTextField.collapsed(
+                  name: 'value',
+                  placeholder: placeholder,
+                  initialValue: existingValue,
+                  style: const TextStyle(fontSize: 16),
+                  autofocus: true,
+                  submitOnEnter: false,
+                  keyboardType: keyboardType,
+                ),
+                if (onRemove != null) ...[
+                  const SizedBox(height: 12),
+                  GestureDetector(
+                    onTap: () async {
+                      onRemove();
+                      await context.router.maybePop();
+                    },
+                    child: Text('제거', style: TextStyle(fontSize: 14, color: context.colors.textSubtle)),
+                  ),
+                ],
+              ],
+            ),
+          );
+        },
       ),
     );
   }
