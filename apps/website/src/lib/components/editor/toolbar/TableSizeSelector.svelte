@@ -42,9 +42,9 @@
             height: '18px',
             borderWidth: '1px',
             borderStyle: 'solid',
-            borderColor: 'border.default',
+            borderColor: rowIdx < hoveredRow && colIdx < hoveredCol ? 'accent.brand.default' : 'border.default',
             borderRadius: '2px',
-            backgroundColor: rowIdx < hoveredRow && colIdx < hoveredCol ? 'accent.brand.default' : 'surface.default',
+            backgroundColor: rowIdx < hoveredRow && colIdx < hoveredCol ? 'accent.brand.default/25' : 'surface.default',
             transition: '[background-color 0.1s ease]',
             cursor: 'pointer',
             _hover: {
