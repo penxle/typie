@@ -23,9 +23,8 @@ use crate::layout::{LayoutCache, LayoutContext, Page, Paginator};
 use crate::model::*;
 use crate::render::{DragImageResult, RenderInfo, RenderResult, Renderer};
 use crate::state::selection_helpers::{
-    SelectionAttributes, StructureSelectionInfo, build_selection_decorations,
-    collect_block_attrs_at, collect_selected_block_ids, compute_selection_attrs,
-    compute_structure_selection,
+    SelectionAttributes, build_selection_decorations, collect_block_attrs_at,
+    collect_selected_block_ids, compute_selection_attrs, compute_structure_selection,
 };
 use crate::state::{
     Position, Preedit, Selection, find_child_at_offset, find_text_at_offset, position_in_selection,
@@ -1439,68 +1438,7 @@ impl Runtime {
         if selection.is_collapsed() {
             return false;
         }
-
-        let cell_selection = compute_structure_selection(self.doc(), &selection);
-
-        match cell_selection {
-            StructureSelectionInfo::Rectangular { table_id, range } => {
-                let Some(_table) = self.doc().node(table_id) else {
-                    return position_in_selection(&self.state.doc, position, &selection);
-                };
-
-                let ((r_start, r_end), (c_start, c_end)) = range;
-
-                let mut current_id = Some(position.node_id);
-                while let Some(id) = current_id {
-                    let Some(node) = self.doc().node(id) else {
-                        break;
-                    };
-
-                    if node.node_type() == NodeType::TableCell {
-                        let parent = node.parent();
-                        if let Some(row) = parent {
-                            if row.parent().map(|t| t.node_id()) == Some(table_id) {
-                                let r_idx = row.index().unwrap_or(0);
-                                let c_idx = node.index().unwrap_or(0);
-
-                                if r_idx >= r_start
-                                    && r_idx <= r_end
-                                    && c_idx >= c_start
-                                    && c_idx <= c_end
-                                {
-                                    return true;
-                                } else {
-                                    return false;
-                                }
-                            }
-                        }
-                    } else if node.node_type() == NodeType::Table {
-                        if id == table_id {
-                            break;
-                        }
-                    }
-
-                    current_id = node.parent().map(|n| n.node_id());
-                }
-
-                false
-            }
-            StructureSelectionInfo::Structural(block_ids) => {
-                let mut current_id = Some(position.node_id);
-                while let Some(id) = current_id {
-                    if block_ids.contains(&id) {
-                        return true;
-                    }
-                    if let Some(node) = self.doc().node(id) {
-                        current_id = node.parent().map(|n| n.node_id());
-                    } else {
-                        break;
-                    }
-                }
-                false
-            }
-            _ => position_in_selection(&self.state.doc, position, &selection),
-        }
+        position_in_selection(&self.state.doc, position, &selection)
     }
 
     pub(crate) fn is_block_selectable_hit(&self, hit_selection: &Selection) -> bool {
