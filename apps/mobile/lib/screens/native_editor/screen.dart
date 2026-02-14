@@ -75,11 +75,10 @@ class _Content extends HookWidget {
     useEffect(() {
       if (document != null) {
         final snapshotValue = document.snapshot.value;
-        editorContext.serverSnapshot = snapshotValue.isNotEmpty
-            ? Uint8List.fromList(base64Decode(snapshotValue))
-            : null;
-        editorContext.serverVersion = document.version.value;
-        editorContext.serverGeneration = 0;
+        editorContext
+          ..serverSnapshot = snapshotValue.isNotEmpty ? Uint8List.fromList(base64Decode(snapshotValue)) : null
+          ..serverVersion = document.version.value
+          ..serverGeneration = 0;
       }
       return null;
     }, [document?.snapshot.value, document?.version.value]);

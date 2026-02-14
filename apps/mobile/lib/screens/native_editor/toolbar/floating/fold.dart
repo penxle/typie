@@ -10,17 +10,12 @@ class NativeEditorFoldFloatingToolbar extends StatelessWidget {
   Widget build(BuildContext context) {
     final scope = NativeEditorToolbarScope.of(context);
 
-    return Row(
-      spacing: 8,
-      children: [
-        FloatingToolbarButton(
-          icon: LucideLightIcons.text_select,
-          onTap: () {
-            scope.dispatch({'type': 'unwrapFold'});
-            scope.controller.scrollIntoView();
-          },
-        ),
-      ],
+    return FloatingToolbarButton(
+      icon: LucideLightIcons.text_select,
+      onTap: () {
+        scope.dispatch({'type': 'unwrapFold'});
+        scope.controller.scrollIntoView();
+      },
     );
   }
 }
