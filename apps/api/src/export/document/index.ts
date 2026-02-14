@@ -102,7 +102,7 @@ async function generateDocumentPdfInternal(
       const offsets = Object.fromEntries(editor.getSlateOffsets());
       const memory = getMemory() as WebAssembly.Memory;
 
-      const DIRTY_LAYOUT = 1;
+      const DIRTY_PAGES = 1;
       const DIRTY_RENDER_REQUIRED = 16;
       const DIRTY_FONT_REQUIRED = 17;
       const DIRTY_FALLBACK_FONT_REQUIRED = 18;
@@ -126,7 +126,7 @@ async function generateDocumentPdfInternal(
 
         const fontPromises: Promise<void>[] = [];
 
-        if (dirtyLo & (1 << DIRTY_LAYOUT)) {
+        if (dirtyLo & (1 << DIRTY_PAGES)) {
           pageCount = view.getUint32(slatePtr + offsets.pages_count, true);
         }
 

@@ -14,8 +14,8 @@ import {
   DIRTY_FALLBACK_FONT_REQUIRED,
   DIRTY_FONT_REQUIRED,
   DIRTY_HTML_PASTED,
-  DIRTY_LAYOUT,
   DIRTY_LINK_OVERLAYS,
+  DIRTY_PAGES,
   DIRTY_PLACEHOLDER,
   DIRTY_POINTER,
   DIRTY_RENDER_REQUIRED,
@@ -354,12 +354,11 @@ export class Editor {
       const s = slate.readSettings();
       this.settings.paragraphIndent = s.paragraphIndent;
       this.settings.blockGap = s.blockGap;
+      this.layout.layoutMode = s.layoutMode;
     }
 
-    if (slate.isDirty(DIRTY_LAYOUT)) {
-      const l = slate.readLayout();
-      this.layout.pages = l.pages;
-      this.layout.layoutMode = l.layoutMode;
+    if (slate.isDirty(DIRTY_PAGES)) {
+      this.layout.pages = slate.readPages();
     }
 
     if (slate.isDirty(DIRTY_CURSOR)) {
