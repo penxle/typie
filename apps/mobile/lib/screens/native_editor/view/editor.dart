@@ -84,6 +84,7 @@ class EditorView extends HookWidget {
     final suppressScrollbarShow = useValueNotifier(false);
     final suppressScrollbarTimer = useRef<Timer?>(null);
     final titleAreaHeight = useValueNotifier<double>(0);
+    final scrollMetricsRevision = useValueNotifier(0);
     useValueListenable(titleAreaHeight);
     final isLongPressing = useValueNotifier(false);
     final longPressPosition = useValueNotifier<Offset?>(null);
@@ -275,13 +276,13 @@ class EditorView extends HookWidget {
         tickerProvider: tickerProvider,
         getSize: () => sizeRef.value,
       ),
-      const [],
+      [tickerProvider],
     );
 
     useEffect(() {
       tickerLoop.start();
-      return tickerLoop.dispose;
-    }, const []);
+      return tickerLoop.stop;
+    }, [tickerLoop]);
 
     final keyboard = useService<Keyboard>();
 
@@ -497,12 +498,19 @@ class EditorView extends HookWidget {
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      const PageList(),
+                      NotificationListener<ScrollMetricsNotification>(
+                        onNotification: (_) {
+                          scrollMetricsRevision.value++;
+                          return false;
+                        },
+                        child: const PageList(),
+                      ),
                       _DocumentPlaceholder(
                         controller: controller,
                         verticalScrollController: verticalScrollController,
                         horizontalScrollController: horizontalScrollController,
                         titleAreaHeight: titleAreaHeight,
+                        scrollMetricsRevision: scrollMetricsRevision,
                         documentTemplates: documentTemplates,
                         client: client,
                       ),
@@ -587,6 +595,7 @@ class _DocumentPlaceholder extends StatelessWidget {
     required this.verticalScrollController,
     required this.horizontalScrollController,
     required this.titleAreaHeight,
+    required this.scrollMetricsRevision,
     required this.documentTemplates,
     required this.client,
   });
@@ -595,13 +604,14 @@ class _DocumentPlaceholder extends StatelessWidget {
   final ScrollController verticalScrollController;
   final ScrollController horizontalScrollController;
   final ValueNotifier<double> titleAreaHeight;
+  final ValueNotifier<int> scrollMetricsRevision;
   final List<GNativeEditorScreen_QueryData_entity_site_documentTemplates> documentTemplates;
   final GraphQLClient client;
 
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: controller,
+      listenable: Listenable.merge([controller, titleAreaHeight]),
       builder: (context, _) {
         final placeholder = controller.state.placeholder;
         if (!placeholder.visible ||
@@ -620,7 +630,7 @@ class _DocumentPlaceholder extends StatelessWidget {
         final geo = ContentGeometry(layout: layout, titleAreaHeight: titleAreaHeight.value);
 
         return AnimatedBuilder(
-          animation: Listenable.merge([verticalScrollController, horizontalScrollController]),
+          animation: Listenable.merge([verticalScrollController, horizontalScrollController, scrollMetricsRevision]),
           builder: (context, child) {
             final verticalScroll = verticalScrollController.hasClients ? verticalScrollController.offset : 0.0;
             final horizontalScroll = horizontalScrollController.hasClients ? horizontalScrollController.offset : 0.0;

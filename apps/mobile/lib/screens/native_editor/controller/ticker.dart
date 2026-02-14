@@ -22,12 +22,17 @@ class TickerLoop {
   bool _flushPending = false;
 
   void start() {
-    if (_ticker != null) {
+    _ticker ??= tickerProvider.createTicker(_onTick);
+    if (_ticker!.isActive) {
       return;
     }
+    _lastTickTime = Duration.zero;
     _cachedScaleFactor = ui.PlatformDispatcher.instance.views.first.devicePixelRatio;
-    _ticker = tickerProvider.createTicker(_onTick);
     unawaited(_ticker!.start());
+  }
+
+  void stop() {
+    _ticker?.stop();
   }
 
   void _onTick(Duration elapsed) {
@@ -79,7 +84,6 @@ class TickerLoop {
   }
 
   void dispose() {
-    _ticker?.dispose();
-    _ticker = null;
+    stop();
   }
 }
