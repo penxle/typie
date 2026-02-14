@@ -35,6 +35,7 @@ class PageList extends HookWidget {
     final verticalScrollController = scope.verticalScrollController;
     final horizontalScrollController = scope.horizontalScrollController;
     final editor = scope.editor;
+    final handleMetricsRevision = useValueNotifier(0);
 
     useValueListenable(scope.titleAreaHeight);
 
@@ -673,9 +674,19 @@ class PageList extends HookWidget {
           child: Stack(
             clipBehavior: Clip.none,
             children: [
-              gestureDetector,
+              NotificationListener<ScrollMetricsNotification>(
+                onNotification: (_) {
+                  handleMetricsRevision.value++;
+                  return false;
+                },
+                child: gestureDetector,
+              ),
               ListenableBuilder(
-                listenable: Listenable.merge([verticalScrollController, horizontalScrollController]),
+                listenable: Listenable.merge([
+                  verticalScrollController,
+                  horizontalScrollController,
+                  handleMetricsRevision,
+                ]),
                 builder: (context, _) {
                   final fromPos = gesture.getHandlePosition(fromHandle, geo);
                   final toPos = gesture.getHandlePosition(toHandle, geo);
