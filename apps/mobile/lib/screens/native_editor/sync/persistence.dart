@@ -148,7 +148,9 @@ class LocalPersistence {
       ),
     );
     _version = version;
-    if (generation != null) _generation = generation;
+    if (generation != null) {
+      _generation = generation;
+    }
   }
 
   Future<void> saveCheckpoint(Uint8List checkpoint) async {

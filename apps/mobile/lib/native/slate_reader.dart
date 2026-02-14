@@ -190,7 +190,9 @@ class SlateReader {
           values.add(v == 0xFFFFFFFF ? null : true);
         }
         final type = _unitTagMap[typeTag];
-        if (type != null) result.add({'type': type, 'values': values});
+        if (type != null) {
+          result.add({'type': type, 'values': values});
+        }
       } else if (valueKind == _vkF32) {
         final values = <double?>[];
         for (var j = 0; j < valueCount; j++) {
@@ -199,7 +201,9 @@ class SlateReader {
           values.add(v.isNaN ? null : v);
         }
         final type = _f32TagMap[typeTag];
-        if (type != null) result.add({'type': type, 'values': values});
+        if (type != null) {
+          result.add({'type': type, 'values': values});
+        }
       } else if (valueKind == _vkU32) {
         final values = <dynamic>[];
         for (var j = 0; j < valueCount; j++) {
@@ -228,7 +232,9 @@ class SlateReader {
           }
         }
         final type = _stringTagMap[typeTag];
-        if (type != null) result.add({'type': type, 'values': values});
+        if (type != null) {
+          result.add({'type': type, 'values': values});
+        }
       } else if (valueKind == _vkComposite) {
         if (typeTag == _tagLink) {
           final values = <Map<String, String>?>[];

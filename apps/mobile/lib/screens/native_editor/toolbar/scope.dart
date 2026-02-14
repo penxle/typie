@@ -75,7 +75,9 @@ class NativeEditorToolbarScope extends InheritedWidget {
 
 Map<String, dynamic>? findAttr(List<Map<String, dynamic>> attrs, String type) {
   for (final a in attrs) {
-    if (a['type'] == type) return a;
+    if (a['type'] == type) {
+      return a;
+    }
   }
   return null;
 }
