@@ -705,6 +705,14 @@ impl Transaction {
         let mut family = self.doc().default_styles().font_family().to_string();
         let mut weight = self.doc().default_styles().font_weight();
 
+        for style in styles {
+            match style {
+                Style::FontFamily(f) => family = f.family.clone(),
+                Style::FontWeight(w) => weight = w.weight,
+                _ => {}
+            }
+        }
+
         if let Some(node_ref) = self.doc().node(self.selection().head.node_id) {
             for style in &node_ref.node().style_overrides() {
                 match style {
@@ -712,14 +720,6 @@ impl Transaction {
                     Style::FontWeight(w) => weight = w.weight,
                     _ => {}
                 }
-            }
-        }
-
-        for style in styles {
-            match style {
-                Style::FontFamily(f) => family = f.family.clone(),
-                Style::FontWeight(w) => weight = w.weight,
-                _ => {}
             }
         }
 
