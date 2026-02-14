@@ -2,6 +2,6 @@
 bun = "latest"
 java = "21"
 ruby = "latest"
-rust = "nightly"
+rust = "stable"
 terraform = "latest"
 zig = "latest"
