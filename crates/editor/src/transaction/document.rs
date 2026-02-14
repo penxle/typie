@@ -1183,25 +1183,49 @@ impl Transaction {
     }
 
     pub(crate) fn delete_node_with_selection_adjustment(&mut self, node_id: NodeId) -> Result<()> {
-        let (parent_id, node_index) = if let Some(node) = self.doc().node(node_id) {
-            (node.parent_id(), node.path().last().copied())
-        } else {
-            (None, None)
-        };
+        let selection_before = *self.selection();
+
+        let (parent_id, node_index, anchor_in_deleted_subtree, head_in_deleted_subtree) =
+            if let Some(node) = self.doc().node(node_id) {
+                let anchor_in_deleted_subtree = selection_before.anchor.node_id == node_id
+                    || self
+                        .doc()
+                        .is_ancestor(node_id, selection_before.anchor.node_id);
+                let head_in_deleted_subtree = selection_before.head.node_id == node_id
+                    || self
+                        .doc()
+                        .is_ancestor(node_id, selection_before.head.node_id);
+
+                (
+                    node.parent_id(),
+                    node.path().last().copied(),
+                    anchor_in_deleted_subtree,
+                    head_in_deleted_subtree,
+                )
+            } else {
+                (None, None, false, false)
+            };
 
         self.delete_node_recursive(node_id)?;
 
-        // TODO: 삭제되는 노드 내부에 selection이 있는 경우 삭제되는 노드 start position으로 selection을 이동시키기. 지금은 이 함수를 쓰는 경우가 external element 삭제 케이스밖에 없어서 노드 내부에 selection이 있을 수 없음.
         if let (Some(parent_id), Some(node_index)) = (parent_id, node_index) {
-            let mut selection = *self.selection();
+            let delete_start = Position::new(parent_id, node_index, Affinity::Downstream);
+            let mut selection = selection_before;
             let mut changed = false;
 
-            if selection.anchor.node_id == parent_id && selection.anchor.offset > node_index {
+            if anchor_in_deleted_subtree {
+                selection.anchor = delete_start;
+                changed = true;
+            } else if selection.anchor.node_id == parent_id && selection.anchor.offset > node_index
+            {
                 selection.anchor.offset = selection.anchor.offset.saturating_sub(1);
                 changed = true;
             }
 
-            if selection.head.node_id == parent_id && selection.head.offset > node_index {
+            if head_in_deleted_subtree {
+                selection.head = delete_start;
+                changed = true;
+            } else if selection.head.node_id == parent_id && selection.head.offset > node_index {
                 selection.head.offset = selection.head.offset.saturating_sub(1);
                 changed = true;
             }
@@ -2511,6 +2535,79 @@ mod tests {
                 }
             }
             selection { (p, 11) } // Selection should be at end (6 + 5)
+        };
+
+        assert_state_eq!(actual, expected);
+    }
+
+    #[test]
+    fn delete_node_with_selection_adjustment_moves_selection_from_deleted_subtree_to_start() {
+        let mut p_before = id!();
+        let mut table = id!();
+        let mut cell_p = id!();
+        let mut p_after = id!();
+
+        let initial = state! {
+            doc {
+                @p_before paragraph { text { "before" } }
+                @table table {
+                    table_row {
+                        table_cell { @cell_p paragraph { text { "cell" } } }
+                    }
+                }
+                @p_after paragraph { text { "after" } }
+            }
+            selection { (cell_p, 2) }
+        };
+
+        let actual = transact!(initial, |tr| {
+            tr.delete_node_with_selection_adjustment(table).unwrap();
+        });
+
+        let expected = state! {
+            doc {
+                @p_before paragraph { text { "before" } }
+                @p_after paragraph { text { "after" } }
+            }
+            selection { (NodeId::ROOT, 1) }
+        };
+
+        assert_state_eq!(actual, expected);
+    }
+
+    #[test]
+    fn delete_node_with_selection_adjustment_updates_mixed_selection_endpoints() {
+        let mut p_before = id!();
+        let mut table = id!();
+        let mut cell_p = id!();
+        let mut p_mid = id!();
+        let mut p_tail = id!();
+
+        let initial = state! {
+            doc {
+                @p_before paragraph { text { "before" } }
+                @table table {
+                    table_row {
+                        table_cell { @cell_p paragraph { text { "cell" } } }
+                    }
+                }
+                @p_mid paragraph { text { "mid" } }
+                @p_tail paragraph { text { "tail" } }
+            }
+            selection { (cell_p, 1) -> (NodeId::ROOT, 3) }
+        };
+
+        let actual = transact!(initial, |tr| {
+            tr.delete_node_with_selection_adjustment(table).unwrap();
+        });
+
+        let expected = state! {
+            doc {
+                @p_before paragraph { text { "before" } }
+                @p_mid paragraph { text { "mid" } }
+                @p_tail paragraph { text { "tail" } }
+            }
+            selection { (NodeId::ROOT, 1) -> (NodeId::ROOT, 2) }
         };
 
         assert_state_eq!(actual, expected);

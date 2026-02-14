@@ -120,6 +120,13 @@
     } else {
       editor.inputElement?.focus();
     }
+
+    return () => {
+      // Table 삭제 후 즉시 focus
+      if (menuOpenColIndex !== null || menuOpenRowIndex !== null || menuOpen) {
+        editor.inputElement?.focus();
+      }
+    };
   });
 </script>
 
@@ -264,13 +271,17 @@
           <MenuItem
             onclick={() => {
               close();
-              editor.dispatch({ type: 'deleteTableColumn', tableId: overlay.tableId, col: i }).scrollIntoView();
+              if (overlay.colWidths.length <= 1) {
+                editor.dispatch({ type: 'deleteNode', nodeId: overlay.tableId }).scrollIntoView();
+              } else {
+                editor.dispatch({ type: 'deleteTableColumn', tableId: overlay.tableId, col: i }).scrollIntoView();
+              }
               editor.focus();
             }}
             variant="danger"
           >
             <Icon icon={Trash2Icon} size={14} />
-            <span>열 삭제</span>
+            <span>{overlay.colWidths.length <= 1 ? '테이블 삭제' : '열 삭제'}</span>
           </MenuItem>
         {/snippet}
       </Menu>
@@ -392,13 +403,19 @@
           <MenuItem
             onclick={() => {
               close();
-              editor.dispatch({ type: 'deleteTableRow', tableId: overlay.tableId, row: (overlay.startRowIndex ?? 0) + i }).scrollIntoView();
+              if ((overlay.totalRows ?? overlay.rowHeights.length) <= 1) {
+                editor.dispatch({ type: 'deleteNode', nodeId: overlay.tableId }).scrollIntoView();
+              } else {
+                editor
+                  .dispatch({ type: 'deleteTableRow', tableId: overlay.tableId, row: (overlay.startRowIndex ?? 0) + i })
+                  .scrollIntoView();
+              }
               editor.focus();
             }}
             variant="danger"
           >
             <Icon icon={Trash2Icon} size={14} />
-            <span>행 삭제</span>
+            <span>{(overlay.totalRows ?? overlay.rowHeights.length) <= 1 ? '테이블 삭제' : '행 삭제'}</span>
           </MenuItem>
         {/snippet}
       </Menu>
