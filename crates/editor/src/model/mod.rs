@@ -15,6 +15,7 @@ mod text;
 mod tree;
 
 pub use annotation::*;
+pub use annotations::*;
 pub use codec::*;
 pub use convert::*;
 pub use decorations::*;

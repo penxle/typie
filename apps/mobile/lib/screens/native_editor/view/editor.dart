@@ -75,6 +75,7 @@ class EditorView extends HookWidget {
     final bottomToolbarMode = useValueNotifier<BottomToolbarMode>(BottomToolbarMode.hidden);
     final secondaryToolbarMode = useValueNotifier<SecondaryToolbarMode>(SecondaryToolbarMode.hidden);
 
+    final selectionCollapsed = useValueNotifier<bool>(true);
     final attrs = useValueNotifier<List<Map<String, dynamic>>>([]);
 
     final externalElements = useValueNotifier<List<ExternalElement>>([]);
@@ -347,11 +348,12 @@ class EditorView extends HookWidget {
     final isDropping = useValueListenable(dndController.isDropping);
 
     useEffect(() {
+      selectionCollapsed.value = state.state.selectionCollapsed;
       attrs.value = state.state.attrs;
       externalElements.value = state.state.externalElements;
       isEditorFocused.value = state.state.isFocused;
       return null;
-    }, [state.state.attrs, state.state.externalElements, state.state.isFocused]);
+    }, [state.state.selectionCollapsed, state.state.attrs, state.state.externalElements, state.state.isFocused]);
 
     final lastScrollRenderVersion = useRef<Object?>(state.state.renderVersion);
 
@@ -453,6 +455,7 @@ class EditorView extends HookWidget {
       isEditorFocused: isEditorFocused,
       bottomToolbarMode: bottomToolbarMode,
       secondaryToolbarMode: secondaryToolbarMode,
+      selectionCollapsed: selectionCollapsed,
       attrs: attrs,
       floatingContext: controller.floatingContext,
       floatingNodeId: controller.floatingNodeId,

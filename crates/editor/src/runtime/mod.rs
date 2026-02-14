@@ -831,6 +831,9 @@ impl Runtime {
                 || (local_offset == 0 && segment_start == 0);
 
             if in_range {
+                if !segment.annotations.is_empty() && local_offset == segment_end {
+                    return Vec::new();
+                }
                 return segment.annotations.clone();
             }
             current_offset += segment_len;
@@ -2385,5 +2388,220 @@ mod tests {
             panic!("node should be callout");
         };
         assert_eq!(callout_data.variant, CalloutVariant::Success);
+    }
+
+    mod get_annotations_at_position {
+        use super::*;
+
+        fn annotations_at(runtime: &Runtime, node_id: NodeId, offset: usize) -> Vec<Annotation> {
+            let position = Position::new(node_id, offset, Affinity::default());
+            runtime.get_annotations_at_position(&position)
+        }
+
+        #[test]
+        fn no_annotations_on_plain_text() {
+            let mut p = id!();
+            let runtime = runtime! {
+                doc {
+                    @p paragraph {
+                        text { "hello" }
+                    }
+                }
+                selection { (p, 0) }
+            };
+
+            for offset in 0..=5 {
+                assert_eq!(annotations_at(&runtime, p, offset), vec![]);
+            }
+        }
+
+        #[test]
+        fn cursor_inside_link_returns_annotation() {
+            let mut p = id!();
+            let runtime = runtime! {
+                doc {
+                    @p paragraph {
+                        text { "aa" @[link("https://x.com")], "bb" }
+                    }
+                }
+                selection { (p, 0) }
+            };
+
+            let link = Annotation::Link(crate::model::LinkAnnotation {
+                href: "https://x.com".into(),
+            });
+
+            assert_eq!(annotations_at(&runtime, p, 0), vec![link.clone()]);
+            assert_eq!(annotations_at(&runtime, p, 1), vec![link.clone()]);
+        }
+
+        #[test]
+        fn cursor_after_link_end_returns_empty() {
+            let mut p = id!();
+            let runtime = runtime! {
+                doc {
+                    @p paragraph {
+                        text { "aa" @[link("https://x.com")], "bb" }
+                    }
+                }
+                selection { (p, 0) }
+            };
+
+            assert_eq!(annotations_at(&runtime, p, 2), vec![]);
+            assert_eq!(annotations_at(&runtime, p, 3), vec![]);
+            assert_eq!(annotations_at(&runtime, p, 4), vec![]);
+        }
+
+        #[test]
+        fn cursor_inside_ruby_returns_annotation() {
+            let mut p = id!();
+            let runtime = runtime! {
+                doc {
+                    @p paragraph {
+                        text { "abc" @[ruby("かな")], "def" }
+                    }
+                }
+                selection { (p, 0) }
+            };
+
+            let ruby = Annotation::Ruby(crate::model::RubyAnnotation {
+                text: "かな".into(),
+            });
+
+            assert_eq!(annotations_at(&runtime, p, 0), vec![ruby.clone()]);
+            assert_eq!(annotations_at(&runtime, p, 1), vec![ruby.clone()]);
+            assert_eq!(annotations_at(&runtime, p, 2), vec![ruby.clone()]);
+        }
+
+        #[test]
+        fn cursor_after_ruby_end_returns_empty() {
+            let mut p = id!();
+            let runtime = runtime! {
+                doc {
+                    @p paragraph {
+                        text { "abc" @[ruby("かな")], "def" }
+                    }
+                }
+                selection { (p, 0) }
+            };
+
+            assert_eq!(annotations_at(&runtime, p, 3), vec![]);
+        }
+
+        #[test]
+        fn plain_before_link_after_plain() {
+            let mut p = id!();
+            let runtime = runtime! {
+                doc {
+                    @p paragraph {
+                        text { "aa", "bb" @[link("https://x.com")], "cc" }
+                    }
+                }
+                selection { (p, 0) }
+            };
+
+            let link = Annotation::Link(crate::model::LinkAnnotation {
+                href: "https://x.com".into(),
+            });
+
+            assert_eq!(annotations_at(&runtime, p, 0), vec![]);
+            assert_eq!(annotations_at(&runtime, p, 1), vec![]);
+            assert_eq!(annotations_at(&runtime, p, 2), vec![]);
+            assert_eq!(annotations_at(&runtime, p, 3), vec![link.clone()]);
+            assert_eq!(annotations_at(&runtime, p, 4), vec![]);
+            assert_eq!(annotations_at(&runtime, p, 5), vec![]);
+            assert_eq!(annotations_at(&runtime, p, 6), vec![]);
+        }
+
+        #[test]
+        fn adjacent_different_annotations() {
+            let mut p = id!();
+            let runtime = runtime! {
+                doc {
+                    @p paragraph {
+                        text { "aa" @[link("https://a.com")], "bb" @[link("https://b.com")], "cc" }
+                    }
+                }
+                selection { (p, 0) }
+            };
+
+            let link_a = Annotation::Link(crate::model::LinkAnnotation {
+                href: "https://a.com".into(),
+            });
+            let link_b = Annotation::Link(crate::model::LinkAnnotation {
+                href: "https://b.com".into(),
+            });
+
+            assert_eq!(annotations_at(&runtime, p, 0), vec![link_a.clone()]);
+            assert_eq!(annotations_at(&runtime, p, 1), vec![link_a.clone()]);
+            assert_eq!(annotations_at(&runtime, p, 2), vec![]);
+            assert_eq!(annotations_at(&runtime, p, 3), vec![link_b.clone()]);
+            assert_eq!(annotations_at(&runtime, p, 4), vec![]);
+        }
+
+        #[test]
+        fn annotation_at_text_start() {
+            let mut p = id!();
+            let runtime = runtime! {
+                doc {
+                    @p paragraph {
+                        text { "ab" @[link("https://x.com")] }
+                    }
+                }
+                selection { (p, 0) }
+            };
+
+            let link = Annotation::Link(crate::model::LinkAnnotation {
+                href: "https://x.com".into(),
+            });
+
+            assert_eq!(annotations_at(&runtime, p, 0), vec![link.clone()]);
+            assert_eq!(annotations_at(&runtime, p, 1), vec![link.clone()]);
+            assert_eq!(annotations_at(&runtime, p, 2), vec![]);
+        }
+
+        #[test]
+        fn annotation_covers_entire_text() {
+            let mut p = id!();
+            let runtime = runtime! {
+                doc {
+                    @p paragraph {
+                        text { "abc" @[link("https://x.com")] }
+                    }
+                }
+                selection { (p, 0) }
+            };
+
+            let link = Annotation::Link(crate::model::LinkAnnotation {
+                href: "https://x.com".into(),
+            });
+
+            assert_eq!(annotations_at(&runtime, p, 0), vec![link.clone()]);
+            assert_eq!(annotations_at(&runtime, p, 1), vec![link.clone()]);
+            assert_eq!(annotations_at(&runtime, p, 2), vec![link.clone()]);
+            assert_eq!(annotations_at(&runtime, p, 3), vec![]);
+        }
+
+        #[test]
+        fn annotation_with_multibyte_characters() {
+            let mut p = id!();
+            let runtime = runtime! {
+                doc {
+                    @p paragraph {
+                        text { "가나" @[ruby("かな")], "다" }
+                    }
+                }
+                selection { (p, 0) }
+            };
+
+            let ruby = Annotation::Ruby(crate::model::RubyAnnotation {
+                text: "かな".into(),
+            });
+
+            assert_eq!(annotations_at(&runtime, p, 0), vec![ruby.clone()]);
+            assert_eq!(annotations_at(&runtime, p, 1), vec![ruby.clone()]);
+            assert_eq!(annotations_at(&runtime, p, 2), vec![]);
+            assert_eq!(annotations_at(&runtime, p, 3), vec![]);
+        }
     }
 }

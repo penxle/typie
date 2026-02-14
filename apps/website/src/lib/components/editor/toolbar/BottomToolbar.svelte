@@ -148,6 +148,12 @@
   const isItalicActive = $derived(editor.getAttr('italic')?.values.includes(null) === false);
   const isStrikethroughActive = $derived(editor.getAttr('strikethrough')?.values.includes(null) === false);
   const isUnderlineActive = $derived(editor.getAttr('underline')?.values.includes(null) === false);
+  const linkValues = $derived(editor.getAttr('link')?.values ?? []);
+  const isLinkActive = $derived(linkValues.length === 1 && linkValues[0] != null);
+  const isLinkMixed = $derived(linkValues.length >= 2);
+  const rubyValues = $derived(editor.getAttr('ruby')?.values ?? []);
+  const isRubyActive = $derived(rubyValues.length === 1 && rubyValues[0] != null);
+  const isRubyMixed = $derived(rubyValues.length >= 2);
 
   const currentTextAlignIcon = $derived(textAligns.find((a) => a.value === currentTextAlign)?.icon ?? AlignLeftIcon);
 </script>
@@ -347,7 +353,13 @@
   <VerticalDivider style={css.raw({ height: '12px' })} />
 
   <div class={flex({ alignItems: 'center', gap: '4px' })}>
-    <ToolbarDropdownButton disabled={!editor.can('addAnnotation')} label="링크" onEscape={() => editor.focus()} size="small">
+    <ToolbarDropdownButton
+      active={isLinkActive}
+      disabled={isLinkMixed || (editor.selection.collapsed && !isLinkActive)}
+      label="링크"
+      onEscape={() => editor.focus()}
+      size="small"
+    >
       {#snippet anchor()}
         <ToolbarIcon icon={LinkIcon} />
       {/snippet}
@@ -357,7 +369,13 @@
       {/snippet}
     </ToolbarDropdownButton>
 
-    <ToolbarDropdownButton disabled={!editor.can('addAnnotation')} label="루비" onEscape={() => editor.focus()} size="small">
+    <ToolbarDropdownButton
+      active={isRubyActive}
+      disabled={isRubyMixed || (editor.selection.collapsed && !isRubyActive)}
+      label="루비"
+      onEscape={() => editor.focus()}
+      size="small"
+    >
       {#snippet anchor()}
         <ToolbarIcon icon={RubyIcon} />
       {/snippet}
