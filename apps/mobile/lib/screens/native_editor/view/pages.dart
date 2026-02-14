@@ -29,8 +29,8 @@ class PageList extends HookWidget {
     final cursor = state.state.cursor;
     final isFocused = state.state.isFocused;
     final isSelecting = state.state.isSelecting;
-    final fromHandle = state.state.fromHandle;
-    final toHandle = state.state.toHandle;
+    final fromHandle = state.state.selection?.fromBounds;
+    final toHandle = state.state.selection?.toBounds;
 
     final verticalScrollController = scope.verticalScrollController;
     final horizontalScrollController = scope.horizontalScrollController;
@@ -283,8 +283,8 @@ class PageList extends HookWidget {
 
                               final draggingHandle = state.state.draggingHandle;
                               final anchorHandle = draggingHandle == SelectionHandleType.from
-                                  ? state.state.toHandle
-                                  : state.state.fromHandle;
+                                  ? state.state.selection?.toBounds
+                                  : state.state.selection?.fromBounds;
 
                               gesture
                                 ..dragStartTouchPosition = details.globalPosition
@@ -480,7 +480,7 @@ class PageList extends HookWidget {
                 }
 
                 final newState = scope.controller.state;
-                final isCollapsed = newState.fromHandle == null || newState.toHandle == null;
+                final isCollapsed = newState.selection?.collapsed ?? true;
 
                 final isSameCursor =
                     isCollapsed &&

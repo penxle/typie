@@ -42,6 +42,7 @@ import type {
   Message,
   Position,
   Rect,
+  Selection,
   SpellcheckErrorData,
 } from './types';
 
@@ -137,9 +138,7 @@ export class Editor {
     } as LayoutMode,
   });
 
-  selection = $state({
-    collapsed: true,
-  });
+  selection: Selection | null = $state(null);
 
   characterCounts = $state({
     docWithWhitespace: 0,
@@ -383,7 +382,7 @@ export class Editor {
       }
 
       const sel = slate.readSelection();
-      this.selection.collapsed = sel.collapsed;
+      this.selection = sel;
       this.characterCountsVersion++;
       this.#onSelectionChanged?.(sel.anchor, sel.head);
       this.#updateActiveTrackedItems(sel.head);
