@@ -38,7 +38,7 @@ class CommandHandler {
     }
 
     if (dirty & (1 << 1) != 0) {
-      _handleLayoutChanged(controller, reader);
+      _handlePagesChanged(controller, reader);
     }
 
     if (dirty & (1 << 2) != 0) {
@@ -99,19 +99,6 @@ class CommandHandler {
     final paragraphIndent = reader.getF32('paragraph_indent');
     final blockGap = reader.getF32('block_gap');
 
-    controller.updateState(
-      (state) => state.copyWith(
-        settings: state.settings.copyWith(paragraphIndent: paragraphIndent, blockGap: blockGap),
-      ),
-    );
-  }
-
-  static void _handleLayoutChanged(EditorController controller, SlateReader reader) {
-    final pagesCount = reader.getU32('pages_count');
-    final pagesOffset = reader.getU32('pages_offset');
-    final raw = reader.readF32List(pagesOffset, pagesCount * 2);
-    final pages = [for (var i = 0; i < pagesCount; i++) PageSize(width: raw[i * 2], height: raw[i * 2 + 1])];
-
     var lmPos = reader.getU32('layout_mode_offset');
     final layoutModeTag = reader.slabU32(lmPos);
     lmPos += 4;
@@ -131,11 +118,32 @@ class CommandHandler {
       layoutMode = LayoutModeInfo.continuous(maxWidth: reader.slabF32(lmPos));
     }
 
+    controller.updateState(
+      (state) => state.copyWith(
+        settings: state.settings.copyWith(paragraphIndent: paragraphIndent, blockGap: blockGap),
+        layout: state.layout != null
+            ? LayoutInfo(isPaginated: layoutModeTag == 0, pages: state.layout!.pages, layoutMode: layoutMode)
+            : null,
+      ),
+    );
+  }
+
+  static void _handlePagesChanged(EditorController controller, SlateReader reader) {
+    final pagesCount = reader.getU32('pages_count');
+    final pagesOffset = reader.getU32('pages_offset');
+    final raw = reader.readF32List(pagesOffset, pagesCount * 2);
+    final pages = [for (var i = 0; i < pagesCount; i++) PageSize(width: raw[i * 2], height: raw[i * 2 + 1])];
+
     final hadLayout = controller.state.layout != null;
+    final currentLayout = controller.state.layout;
 
     controller.updateState(
       (state) => state.copyWith(
-        layout: LayoutInfo(isPaginated: layoutModeTag == 0, pages: pages, layoutMode: layoutMode),
+        layout: LayoutInfo(
+          isPaginated: currentLayout?.isPaginated ?? false,
+          pages: pages,
+          layoutMode: currentLayout?.layoutMode ?? const LayoutModeInfo.continuous(maxWidth: 600),
+        ),
         renderVersion: Object(),
       ),
     );

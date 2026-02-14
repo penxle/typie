@@ -27,7 +27,7 @@ export type TableOverlay = {
 };
 
 export const DIRTY_SETTINGS = 0;
-export const DIRTY_LAYOUT = 1;
+export const DIRTY_PAGES = 1;
 export const DIRTY_CURSOR = 2;
 export const DIRTY_SELECTION = 3;
 export const DIRTY_ATTRS = 4;
@@ -125,15 +125,9 @@ export class SlateReader {
     return hex;
   }
 
-  readSettings(): { paragraphIndent: number; blockGap: number } {
-    return {
-      paragraphIndent: this.#f32('paragraph_indent'),
-      blockGap: this.#f32('block_gap'),
-    };
-  }
-
-  readLayout(): {
-    pages: { width: number; height: number }[];
+  readSettings(): {
+    paragraphIndent: number;
+    blockGap: number;
     layoutMode:
       | {
           type: 'paginated';
@@ -146,11 +140,6 @@ export class SlateReader {
         }
       | { type: 'continuous'; maxWidth: number };
   } {
-    const count = this.#u32('pages_count');
-    const raw = readF32Array(this.#slabView, this.#slabPtr + this.#u32('pages_offset'), count * 2);
-    const pages: { width: number; height: number }[] = [];
-    for (let i = 0; i < count; i++) pages.push({ width: raw[i * 2], height: raw[i * 2 + 1] });
-
     let lmPos = this.#slabPtr + this.#u32('layout_mode_offset');
     const tag = this.#slabView.getUint32(lmPos, true);
     lmPos += 4;
@@ -172,9 +161,18 @@ export class SlateReader {
           };
 
     return {
-      pages,
+      paragraphIndent: this.#f32('paragraph_indent'),
+      blockGap: this.#f32('block_gap'),
       layoutMode,
     };
+  }
+
+  readPages(): { width: number; height: number }[] {
+    const count = this.#u32('pages_count');
+    const raw = readF32Array(this.#slabView, this.#slabPtr + this.#u32('pages_offset'), count * 2);
+    const pages: { width: number; height: number }[] = [];
+    for (let i = 0; i < count; i++) pages.push({ width: raw[i * 2], height: raw[i * 2 + 1] });
+    return pages;
   }
 
   readCursor(): {

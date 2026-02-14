@@ -1,9 +1,17 @@
-use crate::model::{Annotation, AnnotationType, Style, StyleType, TextAlign};
+use crate::layout::elements::ExternalElementData;
+use crate::model::{
+    Annotation, AnnotationType, LayoutMode, NodeId, NodeType, Style, StyleType, TextAlign,
+};
 use crate::state::selection_helpers::{BlockAttr, SelectionAttributes};
-use crate::types::TextBound;
+use crate::state::{Position, Selection};
+use crate::types::{Affinity, PointerStyle, Rect, TextBound};
+use rustc_hash::FxHashMap;
+
+use crate::runtime::tracked_items::TrackedItemOverlay;
+use crate::runtime::{ExternalElement, LinkOverlay, SelectionHandleBounds, TableOverlay};
 
 pub const DIRTY_SETTINGS: u64 = 1 << 0;
-pub const DIRTY_LAYOUT: u64 = 1 << 1;
+pub const DIRTY_PAGES: u64 = 1 << 1;
 pub const DIRTY_CURSOR: u64 = 1 << 2;
 pub const DIRTY_SELECTION: u64 = 1 << 3;
 pub const DIRTY_ATTRS: u64 = 1 << 4;
@@ -57,6 +65,33 @@ pub const SELECTION_TYPE_FILE: u32 = 7;
 pub const SELECTION_TYPE_EMBED: u32 = 8;
 pub const SELECTION_TYPE_ARCHIVED: u32 = 9;
 pub const SELECTION_TYPE_BLOCKQUOTE: u32 = 10;
+
+pub const AFFINITY_UPSTREAM: u32 = 0;
+pub const AFFINITY_DOWNSTREAM: u32 = 1;
+
+pub const POINTER_STYLE_DEFAULT: u32 = 0;
+pub const POINTER_STYLE_TEXT: u32 = 1;
+pub const POINTER_STYLE_POINTER: u32 = 2;
+
+pub fn node_id_to_bytes(id: NodeId) -> [u8; 16] {
+    *id.as_uuid().as_bytes()
+}
+
+pub fn selection_type(node_type: NodeType) -> u32 {
+    match node_type {
+        NodeType::HorizontalRule => SELECTION_TYPE_HORIZONTAL_RULE,
+        NodeType::Callout => SELECTION_TYPE_CALLOUT,
+        NodeType::Fold => SELECTION_TYPE_FOLD,
+        NodeType::BulletList => SELECTION_TYPE_BULLET_LIST,
+        NodeType::OrderedList => SELECTION_TYPE_ORDERED_LIST,
+        NodeType::Image => SELECTION_TYPE_IMAGE,
+        NodeType::File => SELECTION_TYPE_FILE,
+        NodeType::Embed => SELECTION_TYPE_EMBED,
+        NodeType::Archived => SELECTION_TYPE_ARCHIVED,
+        NodeType::Blockquote => SELECTION_TYPE_BLOCKQUOTE,
+        _ => SELECTION_TYPE_NONE,
+    }
+}
 
 #[repr(C)]
 pub struct Slate {
@@ -150,6 +185,25 @@ impl Default for Slate {
     }
 }
 
+impl Slate {
+    pub fn mark_doc_changed(&mut self) {
+        self.dirty |= DIRTY_DOC_CHANGED;
+    }
+
+    pub fn mark_render_required(&mut self) {
+        self.dirty |= DIRTY_RENDER_REQUIRED;
+    }
+
+    pub fn mark_exited_document_start(&mut self) {
+        self.dirty |= DIRTY_EXITED_DOCUMENT_START;
+    }
+
+    pub fn write_pointer_state(&mut self, state: u32) {
+        self.pointer_state = state;
+        self.dirty |= DIRTY_POINTER;
+    }
+}
+
 pub struct Slab {
     pub data: Vec<u8>,
     len: usize,
@@ -238,7 +292,7 @@ impl Slab {
         offset
     }
 
-    pub fn write_attrs(&mut self, attrs: &SelectionAttributes) -> (u32, u32) {
+    fn encode_attrs(&mut self, attrs: &SelectionAttributes) -> (u32, u32) {
         let start = self.alloc(0, 4);
         let mut entry_count = 0u32;
 
@@ -385,6 +439,359 @@ impl Slab {
                 self.write_str(&ruby.text);
             }
         }
+    }
+
+    pub fn write_pages(&mut self, slate: &mut Slate, pages_data: &[f32]) {
+        let (off, cnt) = self.write_f32_slice(pages_data);
+        slate.pages_offset = off;
+        slate.pages_count = cnt / 2;
+        slate.dirty |= DIRTY_PAGES;
+    }
+
+    pub fn write_settings(
+        &mut self,
+        slate: &mut Slate,
+        paragraph_indent: f32,
+        block_gap: f32,
+        layout_mode: LayoutMode,
+    ) {
+        slate.paragraph_indent = paragraph_indent;
+        slate.block_gap = block_gap;
+
+        let lm_start = self.alloc(0, 4);
+        match layout_mode {
+            LayoutMode::Paginated {
+                page_width,
+                page_height,
+                page_margin_top,
+                page_margin_bottom,
+                page_margin_left,
+                page_margin_right,
+            } => {
+                self.write_u32_slice(&[0]);
+                self.write_f32_slice(&[
+                    page_width,
+                    page_height,
+                    page_margin_top,
+                    page_margin_bottom,
+                    page_margin_left,
+                    page_margin_right,
+                ]);
+            }
+            LayoutMode::Continuous { max_width } => {
+                self.write_u32_slice(&[1]);
+                self.write_f32_slice(&[max_width]);
+            }
+        }
+        slate.layout_mode_offset = lm_start;
+        slate.dirty |= DIRTY_SETTINGS;
+    }
+
+    pub fn write_cursor(
+        &mut self,
+        slate: &mut Slate,
+        page_idx: Option<usize>,
+        bounds: Option<Rect>,
+        visible: bool,
+        preceding_char_widths: Option<&[f32]>,
+    ) {
+        slate.cursor_page_idx = page_idx.map(|i| i as i32).unwrap_or(-1);
+        if let Some(b) = bounds {
+            slate.cursor_x = b.x;
+            slate.cursor_y = b.y;
+            slate.cursor_width = b.width;
+            slate.cursor_height = b.height;
+        } else {
+            slate.cursor_x = 0.0;
+            slate.cursor_y = 0.0;
+            slate.cursor_width = 0.0;
+            slate.cursor_height = 0.0;
+        }
+        slate.cursor_visible = visible as u32;
+
+        if let Some(widths) = preceding_char_widths {
+            let (off, cnt) = self.write_f32_slice(widths);
+            slate.preceding_char_widths_offset = off;
+            slate.preceding_char_widths_count = cnt;
+        } else {
+            slate.preceding_char_widths_offset = 0;
+            slate.preceding_char_widths_count = 0;
+        }
+        slate.dirty |= DIRTY_CURSOR;
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn write_selection(
+        &mut self,
+        slate: &mut Slate,
+        selection: Selection,
+        cmp: i32,
+        block_ids: &[NodeId],
+        block_types: &[u32],
+        ancestor_ids: &[NodeId],
+        ancestor_types: &[u32],
+        anchor_handle: Option<&SelectionHandleBounds>,
+        head_handle: Option<&SelectionHandleBounds>,
+    ) {
+        let (selected_block_ids_offset, selected_block_ids_count) =
+            self.write_node_id_slice(block_ids);
+        let (selected_block_types_offset, selected_block_types_count) =
+            self.write_u32_slice(block_types);
+        let (common_ancestor_ids_offset, common_ancestor_ids_count) =
+            self.write_node_id_slice(ancestor_ids);
+        let (common_ancestor_types_offset, common_ancestor_types_count) =
+            self.write_u32_slice(ancestor_types);
+
+        slate.selection_cmp = cmp;
+        slate.selection_block_ids_offset = selected_block_ids_offset;
+        slate.selection_block_ids_count = selected_block_ids_count;
+        slate.selection_block_types_offset = selected_block_types_offset;
+        slate.selection_block_types_count = selected_block_types_count;
+        slate.selection_common_ancestor_ids_offset = common_ancestor_ids_offset;
+        slate.selection_common_ancestor_ids_count = common_ancestor_ids_count;
+        slate.selection_common_ancestor_types_offset = common_ancestor_types_offset;
+        slate.selection_common_ancestor_types_count = common_ancestor_types_count;
+        slate.selection_anchor_node_id = node_id_to_bytes(selection.anchor.node_id);
+        slate.selection_anchor_offset = selection.anchor.offset as u32;
+        slate.selection_anchor_affinity = match selection.anchor.affinity {
+            Affinity::Upstream => AFFINITY_UPSTREAM,
+            Affinity::Downstream => AFFINITY_DOWNSTREAM,
+        };
+        slate.selection_head_node_id = node_id_to_bytes(selection.head.node_id);
+        slate.selection_head_offset = selection.head.offset as u32;
+        slate.selection_head_affinity = match selection.head.affinity {
+            Affinity::Upstream => AFFINITY_UPSTREAM,
+            Affinity::Downstream => AFFINITY_DOWNSTREAM,
+        };
+
+        if let Some(h) = anchor_handle {
+            slate.selection_anchor_page_idx = h.page_idx as i32;
+            slate.selection_anchor_x = h.bounds.x;
+            slate.selection_anchor_y = h.bounds.y;
+            slate.selection_anchor_width = h.bounds.width;
+            slate.selection_anchor_height = h.bounds.height;
+        } else {
+            slate.selection_anchor_page_idx = -1;
+            slate.selection_anchor_x = 0.0;
+            slate.selection_anchor_y = 0.0;
+            slate.selection_anchor_width = 0.0;
+            slate.selection_anchor_height = 0.0;
+        }
+
+        if let Some(h) = head_handle {
+            slate.selection_head_page_idx = h.page_idx as i32;
+            slate.selection_head_x = h.bounds.x;
+            slate.selection_head_y = h.bounds.y;
+            slate.selection_head_width = h.bounds.width;
+            slate.selection_head_height = h.bounds.height;
+        } else {
+            slate.selection_head_page_idx = -1;
+            slate.selection_head_x = 0.0;
+            slate.selection_head_y = 0.0;
+            slate.selection_head_width = 0.0;
+            slate.selection_head_height = 0.0;
+        }
+        slate.dirty |= DIRTY_SELECTION;
+    }
+
+    pub fn write_attrs(&mut self, slate: &mut Slate, attrs: Option<&SelectionAttributes>) {
+        if let Some(attrs) = attrs {
+            let (offset, count) = self.encode_attrs(attrs);
+            slate.attrs_offset = offset;
+            slate.attrs_count = count;
+        } else {
+            slate.attrs_offset = 0;
+            slate.attrs_count = 0;
+        }
+        slate.dirty |= DIRTY_ATTRS;
+    }
+
+    pub fn write_external_elements(&mut self, slate: &mut Slate, elements: &[ExternalElement]) {
+        let start = self.alloc(0, 4);
+        for el in elements {
+            self.write_u32_slice(&[el.page_idx as u32]);
+            self.write_str(&el.node_id);
+            self.write_f32_slice(&[el.bounds.x, el.bounds.y, el.bounds.width, el.bounds.height]);
+            self.write_u32_slice(&[el.is_selected as u32]);
+            match &el.data {
+                ExternalElementData::Image {
+                    id,
+                    proportion,
+                    upload_id,
+                } => {
+                    self.write_u32_slice(&[0]);
+                    self.write_str(id.as_deref().unwrap_or(""));
+                    self.write_str(upload_id.as_deref().unwrap_or(""));
+                    self.write_f32_slice(&[*proportion]);
+                }
+                ExternalElementData::File { id, upload_id } => {
+                    self.write_u32_slice(&[1]);
+                    self.write_str(id.as_deref().unwrap_or(""));
+                    self.write_str(upload_id.as_deref().unwrap_or(""));
+                }
+                ExternalElementData::Embed { id } => {
+                    self.write_u32_slice(&[2]);
+                    self.write_str(id.as_deref().unwrap_or(""));
+                }
+                ExternalElementData::Archived { id } => {
+                    self.write_u32_slice(&[3]);
+                    self.write_str(id.as_deref().unwrap_or(""));
+                }
+            }
+        }
+        slate.external_elements_offset = start;
+        slate.external_elements_count = elements.len() as u32;
+        slate.dirty |= DIRTY_EXTERNAL_ELEMENTS;
+    }
+
+    pub fn write_pointer_style(&mut self, slate: &mut Slate, style: PointerStyle) {
+        slate.pointer_style = match style {
+            PointerStyle::Default => POINTER_STYLE_DEFAULT,
+            PointerStyle::Text => POINTER_STYLE_TEXT,
+            PointerStyle::Pointer => POINTER_STYLE_POINTER,
+        };
+        slate.dirty |= DIRTY_POINTER;
+    }
+
+    pub fn write_font_requests(
+        &mut self,
+        slate: &mut Slate,
+        fonts: &FxHashMap<(String, u16), Vec<u32>>,
+    ) {
+        let start = self.alloc(0, 4);
+        let mut count = 0u32;
+        for ((family, weight), codepoints) in fonts {
+            if !codepoints.is_empty() {
+                self.write_str(family);
+                self.write_u32_slice(&[*weight as u32]);
+                self.write_u32_slice(&[codepoints.len() as u32]);
+                self.write_u32_slice(codepoints);
+                count += 1;
+            }
+        }
+        if count > 0 {
+            slate.font_requests_offset = start;
+            slate.font_requests_count = count;
+            slate.dirty |= DIRTY_FONT_REQUIRED;
+        }
+    }
+
+    pub fn write_fallback_codepoints(&mut self, slate: &mut Slate, codepoints: &[u32]) {
+        let (off, cnt) = self.write_u32_slice(codepoints);
+        slate.fallback_codepoints_offset = off;
+        slate.fallback_codepoints_count = cnt;
+        slate.dirty |= DIRTY_FALLBACK_FONT_REQUIRED;
+    }
+
+    pub fn write_enabled_actions(&mut self, slate: &mut Slate, actions: &[String]) {
+        let start = self.alloc(0, 4);
+        for action in actions {
+            self.write_str(action);
+        }
+        slate.enabled_actions_offset = start;
+        slate.enabled_actions_count = actions.len() as u32;
+        slate.dirty |= DIRTY_ENABLED_ACTIONS;
+    }
+
+    pub fn write_placeholder(&mut self, slate: &mut Slate, visible: bool, bounds: Option<Rect>) {
+        slate.placeholder_visible = visible as u32;
+        if let Some(b) = bounds {
+            slate.placeholder_x = b.x;
+            slate.placeholder_y = b.y;
+            slate.placeholder_width = b.width;
+            slate.placeholder_height = b.height;
+        } else {
+            slate.placeholder_x = 0.0;
+            slate.placeholder_y = 0.0;
+            slate.placeholder_width = 0.0;
+            slate.placeholder_height = 0.0;
+        }
+        slate.dirty |= DIRTY_PLACEHOLDER;
+    }
+
+    pub fn write_link_overlays(&mut self, slate: &mut Slate, overlays: &[LinkOverlay]) {
+        let start = self.alloc(0, 4);
+        for o in overlays {
+            self.write_u32_slice(&[o.page_idx as u32]);
+            self.write_str(&o.href);
+            self.write_u32_slice(&[o.bounds.len() as u32]);
+            self.write_text_bounds(&o.bounds);
+        }
+        slate.link_overlays_offset = start;
+        slate.link_overlays_count = overlays.len() as u32;
+        slate.dirty |= DIRTY_LINK_OVERLAYS;
+    }
+
+    pub fn write_tracked_items(&mut self, slate: &mut Slate, overlays: &[TrackedItemOverlay]) {
+        let start = self.alloc(0, 4);
+        for o in overlays {
+            self.write_u32_slice(&[o.page_idx as u32]);
+            self.write_u32_slice(&[o.group]);
+            self.write_str(&o.id);
+            self.write_bytes(o.node_id.as_uuid().as_bytes());
+            self.write_u32_slice(&[o.start_offset as u32, o.end_offset as u32]);
+            self.write_u32_slice(&[o.bounds.len() as u32]);
+            self.write_text_bounds(&o.bounds);
+        }
+        slate.tracked_items_offset = start;
+        slate.tracked_items_count = overlays.len() as u32;
+        slate.dirty |= DIRTY_TRACKED_ITEMS;
+    }
+
+    pub fn write_table_overlays(&mut self, slate: &mut Slate, overlays: &[TableOverlay]) {
+        let start = self.alloc(0, 4);
+        for o in overlays {
+            self.write_u32_slice(&[o.page_idx as u32]);
+            self.write_str(&o.table_id);
+            self.write_f32_slice(&[o.bounds.x, o.bounds.y, o.bounds.width, o.bounds.height]);
+            self.write_str(&o.border_style);
+            self.write_str(&o.align);
+            self.write_u32_slice(&[
+                o.start_row_index as u32,
+                o.total_rows as u32,
+                o.is_focused as u32,
+            ]);
+            self.write_u32_slice(&[o.col_widths.len() as u32]);
+            self.write_f32_slice(&o.col_widths);
+            self.write_u32_slice(&[o.col_positions.len() as u32]);
+            self.write_f32_slice(&o.col_positions);
+            self.write_u32_slice(&[o.row_heights.len() as u32]);
+            self.write_f32_slice(&o.row_heights);
+            self.write_u32_slice(&[o.row_positions.len() as u32]);
+            self.write_f32_slice(&o.row_positions);
+        }
+        slate.table_overlays_offset = start;
+        slate.table_overlays_count = overlays.len() as u32;
+        slate.dirty |= DIRTY_TABLE_OVERLAYS;
+    }
+
+    pub fn write_html_pasted(
+        &mut self,
+        slate: &mut Slate,
+        text: &str,
+        from: Position,
+        to: Position,
+    ) {
+        let from_affinity = match from.affinity {
+            Affinity::Upstream => AFFINITY_UPSTREAM,
+            Affinity::Downstream => AFFINITY_DOWNSTREAM,
+        };
+        let to_affinity = match to.affinity {
+            Affinity::Upstream => AFFINITY_UPSTREAM,
+            Affinity::Downstream => AFFINITY_DOWNSTREAM,
+        };
+        let start = self.alloc(0, 4);
+        let str_off = self.write_str(text);
+        let from_node = node_id_to_bytes(from.node_id);
+        self.write_bytes(&from_node);
+        self.write_u32_slice(&[from.offset as u32, from_affinity]);
+        let to_node = node_id_to_bytes(to.node_id);
+        self.write_bytes(&to_node);
+        self.write_u32_slice(&[to.offset as u32, to_affinity]);
+        slate.html_pasted_offset = start;
+        slate.html_pasted_len = text.len() as u32;
+        slate.dirty |= DIRTY_HTML_PASTED;
+        let _ = str_off;
     }
 }
 

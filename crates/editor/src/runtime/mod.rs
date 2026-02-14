@@ -17,7 +17,6 @@ use crate::inspect::{
     inspect_fragment_as_macro, inspect_page_element, inspect_state, inspect_state_as_macro,
 };
 use crate::layout::cursor::{Cursor, NavigationContext};
-use crate::layout::elements::ExternalElementData;
 use crate::layout::query::{find_drag_image_bounds, is_selectable_block_hit};
 use crate::layout::{LayoutCache, LayoutContext, Page, Paginator};
 use crate::model::*;
@@ -41,7 +40,7 @@ use loro::UndoManager;
 pub use message::*;
 pub use pointer::*;
 use rustc_hash::{FxHashMap, FxHashSet};
-use slate::*;
+use slate::{Slab, Slate};
 pub use state::*;
 use std::cell::RefCell;
 pub use text_replacement::RawTextReplacementRule;
@@ -64,12 +63,10 @@ fn get_styles_at_offset(text_node: &loro::LoroText, offset: usize) -> Vec<Style>
                 let segment_end = current_offset + segment_len;
 
                 if offset >= current_offset && offset < segment_end {
-                    if let Some(attrs_value) = map.get("attributes") {
-                        if let loro::LoroValue::Map(attrs) = attrs_value {
-                            for (key, value) in attrs.iter() {
-                                if let Some(style) = Style::from_key_value(key, value.clone()) {
-                                    styles.push(style);
-                                }
+                    if let Some(loro::LoroValue::Map(attrs)) = map.get("attributes") {
+                        for (key, value) in attrs.iter() {
+                            if let Some(style) = Style::from_key_value(key, value.clone()) {
+                                styles.push(style);
                             }
                         }
                     }
@@ -162,7 +159,7 @@ pub struct Runtime {
 
 impl Runtime {
     pub fn new(width: f32, scale_factor: f64, state: State) -> Self {
-        let mut undo_manager = UndoManager::new(&state.doc.loro_doc());
+        let mut undo_manager = UndoManager::new(state.doc.loro_doc());
         undo_manager.set_merge_interval(1000);
 
         Self {
@@ -217,10 +214,10 @@ impl Runtime {
     }
 
     pub fn enqueue_message(&mut self, msg: Message) {
-        if let Some(last) = self.message_queue.last_mut() {
-            if Self::try_merge_message(last, &msg) {
-                return;
-            }
+        if let Some(last) = self.message_queue.last_mut()
+            && Self::try_merge_message(last, &msg)
+        {
+            return;
         }
 
         self.message_queue.push(msg);
@@ -545,11 +542,11 @@ impl Runtime {
             let mut block_set = FxHashSet::default();
             block_set.extend(block_ids.iter().copied());
 
-            let attrs = compute_selection_attrs(self.doc(), &block_ids, from.clone(), to.clone());
+            let attrs = compute_selection_attrs(self.doc(), &block_ids, from, to);
 
             self.selection_cache = Some(SelectionSnapshot {
-                from: from.clone(),
-                to: to.clone(),
+                from,
+                to,
                 block_ids,
                 block_set,
                 attrs,
@@ -576,27 +573,11 @@ impl Runtime {
             .unwrap_or_default()
     }
 
-    fn selection_type(node_type: NodeType) -> u32 {
-        match node_type {
-            NodeType::HorizontalRule => SELECTION_TYPE_HORIZONTAL_RULE,
-            NodeType::Callout => SELECTION_TYPE_CALLOUT,
-            NodeType::Fold => SELECTION_TYPE_FOLD,
-            NodeType::BulletList => SELECTION_TYPE_BULLET_LIST,
-            NodeType::OrderedList => SELECTION_TYPE_ORDERED_LIST,
-            NodeType::Image => SELECTION_TYPE_IMAGE,
-            NodeType::File => SELECTION_TYPE_FILE,
-            NodeType::Embed => SELECTION_TYPE_EMBED,
-            NodeType::Archived => SELECTION_TYPE_ARCHIVED,
-            NodeType::Blockquote => SELECTION_TYPE_BLOCKQUOTE,
-            _ => SELECTION_TYPE_NONE,
-        }
-    }
-
     fn selection_type_for_id(&self, node_id: NodeId) -> u32 {
         self.doc()
             .node(node_id)
-            .map(|node| Self::selection_type(node.node_type()))
-            .unwrap_or(SELECTION_TYPE_NONE)
+            .map(|node| slate::selection_type(node.node_type()))
+            .unwrap_or(slate::SELECTION_TYPE_NONE)
     }
 
     fn set_width(&mut self, width: f32) {
@@ -874,43 +855,27 @@ impl Runtime {
         self.process_effects(effects);
     }
 
-    fn node_id_to_bytes(id: NodeId) -> [u8; 16] {
-        *id.as_uuid().as_bytes()
-    }
-
-    fn affinity_to_u32(a: Affinity) -> u32 {
-        match a {
-            Affinity::Upstream => 0,
-            Affinity::Downstream => 1,
-        }
-    }
-
-    fn pointer_style_to_u32(s: PointerStyle) -> u32 {
-        match s {
-            PointerStyle::Default => 0,
-            PointerStyle::Text => 1,
-            PointerStyle::Pointer => 2,
-        }
-    }
-
     fn build_output(&mut self) {
         let mut had_layout = false;
 
         if self.pending.doc {
-            self.slate.dirty |= DIRTY_DOC_CHANGED;
+            self.slate.mark_doc_changed();
             self.pending.doc = false;
         }
 
         if self.pending.render {
-            self.slate.dirty |= DIRTY_RENDER_REQUIRED;
+            self.slate.mark_render_required();
             self.pending.render = false;
         }
 
         if self.pending.settings {
             let settings = self.doc().settings();
-            self.slate.paragraph_indent = settings.paragraph_indent;
-            self.slate.block_gap = settings.block_gap;
-            self.slate.dirty |= DIRTY_SETTINGS;
+            self.slab.write_settings(
+                &mut self.slate,
+                settings.paragraph_indent,
+                settings.block_gap,
+                settings.layout_mode,
+            );
             self.pending.settings = false;
         }
 
@@ -938,38 +903,7 @@ impl Runtime {
             };
 
             let pages_data: Vec<f32> = page_heights.iter().flat_map(|&h| [page_width, h]).collect();
-            let (off, cnt) = self.slab.write_f32_slice(&pages_data);
-            self.slate.pages_offset = off;
-            self.slate.pages_count = cnt / 2;
-
-            let lm_start = self.slab.alloc(0, 4);
-            match layout_mode {
-                LayoutMode::Paginated {
-                    page_width,
-                    page_height,
-                    page_margin_top,
-                    page_margin_bottom,
-                    page_margin_left,
-                    page_margin_right,
-                } => {
-                    self.slab.write_u32_slice(&[0]);
-                    self.slab.write_f32_slice(&[
-                        page_width,
-                        page_height,
-                        page_margin_top,
-                        page_margin_bottom,
-                        page_margin_left,
-                        page_margin_right,
-                    ]);
-                }
-                LayoutMode::Continuous { max_width } => {
-                    self.slab.write_u32_slice(&[1]);
-                    self.slab.write_f32_slice(&[max_width]);
-                }
-            }
-            self.slate.layout_mode_offset = lm_start;
-
-            self.slate.dirty |= DIRTY_LAYOUT;
+            self.slab.write_pages(&mut self.slate, &pages_data);
             self.pending.layout = false;
             had_layout = true;
 
@@ -997,30 +931,13 @@ impl Runtime {
                 None
             };
 
-            self.slate.cursor_page_idx = page_idx.map(|i| i as i32).unwrap_or(-1);
-            if let Some(b) = bounds {
-                self.slate.cursor_x = b.x;
-                self.slate.cursor_y = b.y;
-                self.slate.cursor_width = b.width;
-                self.slate.cursor_height = b.height;
-            } else {
-                self.slate.cursor_x = 0.0;
-                self.slate.cursor_y = 0.0;
-                self.slate.cursor_width = 0.0;
-                self.slate.cursor_height = 0.0;
-            }
-            self.slate.cursor_visible = visible as u32;
-
-            if let Some(widths) = preceding_char_widths {
-                let (off, cnt) = self.slab.write_f32_slice(&widths);
-                self.slate.preceding_char_widths_offset = off;
-                self.slate.preceding_char_widths_count = cnt;
-            } else {
-                self.slate.preceding_char_widths_offset = 0;
-                self.slate.preceding_char_widths_count = 0;
-            }
-
-            self.slate.dirty |= DIRTY_CURSOR;
+            self.slab.write_cursor(
+                &mut self.slate,
+                page_idx,
+                bounds,
+                visible,
+                preceding_char_widths.as_deref(),
+            );
             self.pending.cursor = false;
         }
 
@@ -1065,60 +982,17 @@ impl Runtime {
                 .iter()
                 .map(|node_id| self.selection_type_for_id(*node_id))
                 .collect();
-            let (selected_block_ids_offset, selected_block_ids_count) =
-                self.slab.write_node_id_slice(&selected_block_ids);
-            let (selected_block_types_offset, selected_block_types_count) =
-                self.slab.write_u32_slice(&selected_block_types);
-            let (common_ancestor_ids_offset, common_ancestor_ids_count) =
-                self.slab.write_node_id_slice(&common_ancestor_ids);
-            let (common_ancestor_types_offset, common_ancestor_types_count) =
-                self.slab.write_u32_slice(&common_ancestor_types);
-
-            self.slate.selection_cmp = cmp;
-            self.slate.selection_block_ids_offset = selected_block_ids_offset;
-            self.slate.selection_block_ids_count = selected_block_ids_count;
-            self.slate.selection_block_types_offset = selected_block_types_offset;
-            self.slate.selection_block_types_count = selected_block_types_count;
-            self.slate.selection_common_ancestor_ids_offset = common_ancestor_ids_offset;
-            self.slate.selection_common_ancestor_ids_count = common_ancestor_ids_count;
-            self.slate.selection_common_ancestor_types_offset = common_ancestor_types_offset;
-            self.slate.selection_common_ancestor_types_count = common_ancestor_types_count;
-            self.slate.selection_anchor_node_id = Self::node_id_to_bytes(selection.anchor.node_id);
-            self.slate.selection_anchor_offset = selection.anchor.offset as u32;
-            self.slate.selection_anchor_affinity = Self::affinity_to_u32(selection.anchor.affinity);
-            self.slate.selection_head_node_id = Self::node_id_to_bytes(selection.head.node_id);
-            self.slate.selection_head_offset = selection.head.offset as u32;
-            self.slate.selection_head_affinity = Self::affinity_to_u32(selection.head.affinity);
-
-            if let Some(h) = anchor_handle {
-                self.slate.selection_anchor_page_idx = h.page_idx as i32;
-                self.slate.selection_anchor_x = h.bounds.x;
-                self.slate.selection_anchor_y = h.bounds.y;
-                self.slate.selection_anchor_width = h.bounds.width;
-                self.slate.selection_anchor_height = h.bounds.height;
-            } else {
-                self.slate.selection_anchor_page_idx = -1;
-                self.slate.selection_anchor_x = 0.0;
-                self.slate.selection_anchor_y = 0.0;
-                self.slate.selection_anchor_width = 0.0;
-                self.slate.selection_anchor_height = 0.0;
-            }
-
-            if let Some(h) = head_handle {
-                self.slate.selection_head_page_idx = h.page_idx as i32;
-                self.slate.selection_head_x = h.bounds.x;
-                self.slate.selection_head_y = h.bounds.y;
-                self.slate.selection_head_width = h.bounds.width;
-                self.slate.selection_head_height = h.bounds.height;
-            } else {
-                self.slate.selection_head_page_idx = -1;
-                self.slate.selection_head_x = 0.0;
-                self.slate.selection_head_y = 0.0;
-                self.slate.selection_head_width = 0.0;
-                self.slate.selection_head_height = 0.0;
-            }
-
-            self.slate.dirty |= DIRTY_SELECTION;
+            self.slab.write_selection(
+                &mut self.slate,
+                selection,
+                cmp,
+                &selected_block_ids,
+                &selected_block_types,
+                &common_ancestor_ids,
+                &common_ancestor_types,
+                anchor_handle.as_ref(),
+                head_handle.as_ref(),
+            );
             self.pending.selection = false;
         }
 
@@ -1154,9 +1028,7 @@ impl Runtime {
                     has_text_segments: false,
                 };
 
-                let (offset, count) = self.slab.write_attrs(&attrs);
-                self.slate.attrs_offset = offset;
-                self.slate.attrs_count = count;
+                self.slab.write_attrs(&mut self.slate, Some(&attrs));
             } else {
                 let snapshot = self.selection_snapshot();
                 if let Some(mut snapshot) = snapshot {
@@ -1171,121 +1043,54 @@ impl Runtime {
                                 .push(style.clone());
                         }
                     }
-                    let (offset, count) = self.slab.write_attrs(&snapshot.attrs);
-                    self.slate.attrs_offset = offset;
-                    self.slate.attrs_count = count;
+                    self.slab
+                        .write_attrs(&mut self.slate, Some(&snapshot.attrs));
                 } else {
-                    self.slate.attrs_offset = 0;
-                    self.slate.attrs_count = 0;
+                    self.slab.write_attrs(&mut self.slate, None);
                 }
             }
-
-            self.slate.dirty |= DIRTY_ATTRS;
             self.pending.active_styles = false;
         }
 
         if self.pending.external_elements {
             let elements = self.build_external_elements();
-            let start = self.slab.alloc(0, 4);
-            for el in &elements {
-                self.slab.write_u32_slice(&[el.page_idx as u32]);
-                self.slab.write_str(&el.node_id);
-                self.slab.write_f32_slice(&[
-                    el.bounds.x,
-                    el.bounds.y,
-                    el.bounds.width,
-                    el.bounds.height,
-                ]);
-                self.slab.write_u32_slice(&[el.is_selected as u32]);
-                match &el.data {
-                    ExternalElementData::Image {
-                        id,
-                        proportion,
-                        upload_id,
-                    } => {
-                        self.slab.write_u32_slice(&[0]);
-                        self.slab.write_str(id.as_deref().unwrap_or(""));
-                        self.slab.write_str(upload_id.as_deref().unwrap_or(""));
-                        self.slab.write_f32_slice(&[*proportion]);
-                    }
-                    ExternalElementData::File { id, upload_id } => {
-                        self.slab.write_u32_slice(&[1]);
-                        self.slab.write_str(id.as_deref().unwrap_or(""));
-                        self.slab.write_str(upload_id.as_deref().unwrap_or(""));
-                    }
-                    ExternalElementData::Embed { id } => {
-                        self.slab.write_u32_slice(&[2]);
-                        self.slab.write_str(id.as_deref().unwrap_or(""));
-                    }
-                    ExternalElementData::Archived { id } => {
-                        self.slab.write_u32_slice(&[3]);
-                        self.slab.write_str(id.as_deref().unwrap_or(""));
-                    }
-                }
-            }
-            self.slate.external_elements_offset = start;
-            self.slate.external_elements_count = elements.len() as u32;
-            self.slate.dirty |= DIRTY_EXTERNAL_ELEMENTS;
+            self.slab
+                .write_external_elements(&mut self.slate, &elements);
             self.pending.external_elements = false;
         }
 
         if let Some(style) = self.pending.pointer_style.take() {
-            self.slate.pointer_style = Self::pointer_style_to_u32(style);
-            self.slate.dirty |= DIRTY_POINTER;
+            self.slab.write_pointer_style(&mut self.slate, style);
         }
 
         let fonts = std::mem::take(&mut self.pending.fonts);
         if !fonts.is_empty() {
-            let start = self.slab.alloc(0, 4);
-            let mut count = 0u32;
-            for ((family, weight), codepoints) in &fonts {
-                if !codepoints.is_empty() {
-                    self.slab.write_str(family);
-                    self.slab.write_u32_slice(&[*weight as u32]);
-                    self.slab.write_u32_slice(&[codepoints.len() as u32]);
-                    self.slab.write_u32_slice(codepoints);
-                    count += 1;
-                }
-            }
-            if count > 0 {
-                self.slate.font_requests_offset = start;
-                self.slate.font_requests_count = count;
-                self.slate.dirty |= DIRTY_FONT_REQUIRED;
-            }
+            self.slab.write_font_requests(&mut self.slate, &fonts);
         }
 
         let codepoints = std::mem::take(&mut self.pending.codepoints);
         if !codepoints.is_empty() {
-            let (off, cnt) = self.slab.write_u32_slice(&codepoints);
-            self.slate.fallback_codepoints_offset = off;
-            self.slate.fallback_codepoints_count = cnt;
-            self.slate.dirty |= DIRTY_FALLBACK_FONT_REQUIRED;
+            self.slab
+                .write_fallback_codepoints(&mut self.slate, &codepoints);
         }
 
         if had_layout {
-            self.slate.dirty |= DIRTY_RENDER_REQUIRED;
+            self.slate.mark_render_required();
         }
 
         if self.pending.enabled_actions {
             let enabled = self.evaluate_enabled_actions();
-            let start = self.slab.alloc(0, 4);
-            for action in &enabled {
-                self.slab.write_str(action);
-            }
-            self.slate.enabled_actions_offset = start;
-            self.slate.enabled_actions_count = enabled.len() as u32;
-            self.slate.dirty |= DIRTY_ENABLED_ACTIONS;
+            self.slab.write_enabled_actions(&mut self.slate, &enabled);
             self.pending.enabled_actions = false;
         }
 
         if self.pending.exited_document_start {
-            self.slate.dirty |= DIRTY_EXITED_DOCUMENT_START;
+            self.slate.mark_exited_document_start();
             self.pending.exited_document_start = false;
         }
 
         if self.pending.pointer_mode_changed {
-            self.slate.pointer_state = self.pointer.mode.as_u32();
-            self.slate.dirty |= DIRTY_POINTER;
+            self.slate.write_pointer_state(self.pointer.mode.as_u32());
             self.pending.pointer_mode_changed = false;
         }
 
@@ -1298,34 +1103,14 @@ impl Runtime {
             } else {
                 None
             };
-            self.slate.placeholder_visible = visible as u32;
-            if let Some(b) = bounds {
-                self.slate.placeholder_x = b.x;
-                self.slate.placeholder_y = b.y;
-                self.slate.placeholder_width = b.width;
-                self.slate.placeholder_height = b.height;
-            } else {
-                self.slate.placeholder_x = 0.0;
-                self.slate.placeholder_y = 0.0;
-                self.slate.placeholder_width = 0.0;
-                self.slate.placeholder_height = 0.0;
-            }
-            self.slate.dirty |= DIRTY_PLACEHOLDER;
+            self.slab
+                .write_placeholder(&mut self.slate, visible, bounds);
             self.pending.placeholder = false;
         }
 
         if self.pending.link_overlays {
             let overlays = self.build_link_overlays();
-            let start = self.slab.alloc(0, 4);
-            for o in &overlays {
-                self.slab.write_u32_slice(&[o.page_idx as u32]);
-                self.slab.write_str(&o.href);
-                self.slab.write_u32_slice(&[o.bounds.len() as u32]);
-                self.slab.write_text_bounds(&o.bounds);
-            }
-            self.slate.link_overlays_offset = start;
-            self.slate.link_overlays_count = overlays.len() as u32;
-            self.slate.dirty |= DIRTY_LINK_OVERLAYS;
+            self.slab.write_link_overlays(&mut self.slate, &overlays);
             self.pending.link_overlays = false;
         }
 
@@ -1335,20 +1120,7 @@ impl Runtime {
                 &self.tracked_items,
                 &self.state.doc,
             );
-            let start = self.slab.alloc(0, 4);
-            for o in &overlays {
-                self.slab.write_u32_slice(&[o.page_idx as u32]);
-                self.slab.write_u32_slice(&[o.group]);
-                self.slab.write_str(&o.id);
-                self.slab.write_bytes(o.node_id.as_uuid().as_bytes());
-                self.slab
-                    .write_u32_slice(&[o.start_offset as u32, o.end_offset as u32]);
-                self.slab.write_u32_slice(&[o.bounds.len() as u32]);
-                self.slab.write_text_bounds(&o.bounds);
-            }
-            self.slate.tracked_items_offset = start;
-            self.slate.tracked_items_count = overlays.len() as u32;
-            self.slate.dirty |= DIRTY_TRACKED_ITEMS;
+            self.slab.write_tracked_items(&mut self.slate, &overlays);
             self.pending.tracked_items = false;
         }
 
@@ -1356,54 +1128,14 @@ impl Runtime {
             let overlays = self.build_table_overlays();
             if overlays != self.last_table_overlays {
                 self.last_table_overlays = overlays.clone();
-                let start = self.slab.alloc(0, 4);
-                for o in &overlays {
-                    self.slab.write_u32_slice(&[o.page_idx as u32]);
-                    self.slab.write_str(&o.table_id);
-                    self.slab.write_f32_slice(&[
-                        o.bounds.x,
-                        o.bounds.y,
-                        o.bounds.width,
-                        o.bounds.height,
-                    ]);
-                    self.slab.write_str(&o.border_style);
-                    self.slab.write_str(&o.align);
-                    self.slab.write_u32_slice(&[
-                        o.start_row_index as u32,
-                        o.total_rows as u32,
-                        o.is_focused as u32,
-                    ]);
-                    self.slab.write_u32_slice(&[o.col_widths.len() as u32]);
-                    self.slab.write_f32_slice(&o.col_widths);
-                    self.slab.write_u32_slice(&[o.col_positions.len() as u32]);
-                    self.slab.write_f32_slice(&o.col_positions);
-                    self.slab.write_u32_slice(&[o.row_heights.len() as u32]);
-                    self.slab.write_f32_slice(&o.row_heights);
-                    self.slab.write_u32_slice(&[o.row_positions.len() as u32]);
-                    self.slab.write_f32_slice(&o.row_positions);
-                }
-                self.slate.table_overlays_offset = start;
-                self.slate.table_overlays_count = overlays.len() as u32;
-                self.slate.dirty |= DIRTY_TABLE_OVERLAYS;
+                self.slab.write_table_overlays(&mut self.slate, &overlays);
             }
             self.pending.table_overlays = false;
         }
 
         if let Some((text, from, to)) = self.pending.html_pasted.take() {
-            let start = self.slab.alloc(0, 4);
-            let str_off = self.slab.write_str(&text);
-            let from_node = Self::node_id_to_bytes(from.node_id);
-            self.slab.write_bytes(&from_node);
             self.slab
-                .write_u32_slice(&[from.offset as u32, Self::affinity_to_u32(from.affinity)]);
-            let to_node = Self::node_id_to_bytes(to.node_id);
-            self.slab.write_bytes(&to_node);
-            self.slab
-                .write_u32_slice(&[to.offset as u32, Self::affinity_to_u32(to.affinity)]);
-            self.slate.html_pasted_offset = start;
-            self.slate.html_pasted_len = text.len() as u32;
-            let _ = str_off;
-            self.slate.dirty |= DIRTY_HTML_PASTED;
+                .write_html_pasted(&mut self.slate, &text, from, to);
         }
     }
 
@@ -1496,11 +1228,11 @@ impl Runtime {
     }
 
     pub fn inspect_state(&self) -> String {
-        inspect_state(&self.doc(), &self.state.selection)
+        inspect_state(self.doc(), &self.state.selection)
     }
 
     pub fn inspect_state_as_macro(&self) -> String {
-        inspect_state_as_macro(&self.doc(), &self.state.selection)
+        inspect_state_as_macro(self.doc(), &self.state.selection)
     }
 
     pub fn inspect_fragment_as_macro(&self, fragment: &Fragment) -> String {
@@ -1508,9 +1240,7 @@ impl Runtime {
     }
 
     pub fn inspect_page_element(&self, page_idx: usize, x: f32, y: f32) -> Option<String> {
-        let Some(page) = self.pages.get(page_idx) else {
-            return None;
-        };
+        let page = self.pages.get(page_idx)?;
 
         inspect_page_element(page, x, y)
     }
