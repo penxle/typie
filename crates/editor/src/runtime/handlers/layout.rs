@@ -63,6 +63,12 @@ impl Runtime {
         };
 
         if let Node::Text(text_node) = node_ref.node() {
+            let defaults = self.doc().default_styles();
+            let overrides = node_ref
+                .parent()
+                .map(|p| p.node().style_overrides())
+                .unwrap_or_default();
+
             for seg in text_node.text.get_segments() {
                 let family = seg
                     .styles
@@ -71,7 +77,13 @@ impl Runtime {
                         Style::FontFamily(f) => Some(f.family.clone()),
                         _ => None,
                     })
-                    .unwrap();
+                    .or_else(|| {
+                        overrides.iter().find_map(|s| match s {
+                            Style::FontFamily(f) => Some(f.family.clone()),
+                            _ => None,
+                        })
+                    })
+                    .unwrap_or_else(|| defaults.font_family().to_string());
                 let weight = seg
                     .styles
                     .iter()
@@ -79,7 +91,13 @@ impl Runtime {
                         Style::FontWeight(w) => Some(w.weight),
                         _ => None,
                     })
-                    .unwrap();
+                    .or_else(|| {
+                        overrides.iter().find_map(|s| match s {
+                            Style::FontWeight(w) => Some(w.weight),
+                            _ => None,
+                        })
+                    })
+                    .unwrap_or_else(|| defaults.font_weight());
 
                 let font_cps = fonts.entry((family, weight)).or_default();
                 for ch in seg.text.chars() {

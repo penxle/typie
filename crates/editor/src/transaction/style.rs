@@ -706,12 +706,12 @@ impl Transaction {
         let mut weight = self.doc().default_styles().font_weight();
 
         if let Some(node_ref) = self.doc().node(self.selection().head.node_id) {
-            let overrides = node_ref.node().font_overrides();
-            if let Some(f) = overrides.family {
-                family = f;
-            }
-            if let Some(w) = overrides.weight {
-                weight = w;
+            for style in &node_ref.node().style_overrides() {
+                match style {
+                    Style::FontFamily(f) => family = f.family.clone(),
+                    Style::FontWeight(w) => weight = w.weight,
+                    _ => {}
+                }
             }
         }
 

@@ -14,6 +14,7 @@ use crate::utils::{
     resolve_affinity_boundary,
 };
 use anyhow::{Context, Result};
+use rustc_hash::FxHashSet;
 
 #[derive(Debug, Clone)]
 pub enum DeleteResult {
@@ -196,6 +197,26 @@ impl Transaction {
         let paragraph = self
             .node(selection.head.node_id)
             .context("Paragraph not found")?;
+
+        let pending_styles: Vec<Style> = {
+            let mut allowed = FxHashSet::default();
+            for ancestor in paragraph.ancestors() {
+                let spec = self.doc().schema().node_spec(ancestor.node().as_type());
+                match spec.styles {
+                    Some(items) if !items.is_empty() => {
+                        for &item in items {
+                            allowed.insert(item);
+                        }
+                    }
+                    Some(_) => {}
+                    None => break,
+                }
+            }
+            pending_styles
+                .into_iter()
+                .filter(|s| allowed.contains(&s.as_type()))
+                .collect()
+        };
 
         if let Some((child_id, local_offset)) =
             find_child_at_offset(&paragraph, selection.head.offset)
@@ -3472,5 +3493,83 @@ mod tests {
             "pending_styles should contain font_weight when bold text still remains, got: {:?}",
             view.pending_styles
         );
+    }
+
+    #[test]
+    fn insert_text_filters_pending_styles_by_node_spec() {
+        let mut ft = id!();
+
+        let state = state! {
+            doc {
+                fold {
+                    @ft fold_title {}
+                    fold_content {
+                        paragraph {}
+                    }
+                }
+            }
+            selection { (ft, 0) }
+        };
+
+        let mut tr = Transaction::new(&state);
+        tr.insert_text("title").unwrap();
+        let (state, _) = tr.commit().unwrap();
+
+        let mut tr = Transaction::new(&state);
+        tr.state.pending_styles.push(Style::Italic(ItalicStyle {}));
+        tr.insert_text("X").unwrap();
+        let (new_state, _) = tr.commit().unwrap();
+
+        let ft_node = new_state.doc.node(ft).unwrap();
+        let text_child = ft_node.first_child().unwrap();
+
+        if let Node::Text(text_node) = text_child.node() {
+            for seg in text_node.text.get_segments() {
+                assert!(
+                    seg.styles.is_empty(),
+                    "FoldTitle should not allow any styles, but found: {:?}",
+                    seg.styles
+                );
+            }
+        } else {
+            panic!("Expected text node");
+        }
+    }
+
+    #[test]
+    fn insert_text_at_slot_filters_pending_styles_by_node_spec() {
+        let mut ft = id!();
+
+        let state = state! {
+            doc {
+                fold {
+                    @ft fold_title {}
+                    fold_content {
+                        paragraph {}
+                    }
+                }
+            }
+            selection { (ft, 0) }
+        };
+
+        let mut tr = Transaction::new(&state);
+        tr.state.pending_styles = vec![Style::FontWeight(FontWeightStyle { weight: 700 })];
+        tr.insert_text("Bold").unwrap();
+        let (new_state, _) = tr.commit().unwrap();
+
+        let ft_node = new_state.doc.node(ft).unwrap();
+        let text_child = ft_node.first_child().unwrap();
+
+        if let Node::Text(text_node) = text_child.node() {
+            for seg in text_node.text.get_segments() {
+                assert!(
+                    seg.styles.is_empty(),
+                    "FoldTitle should not allow any styles, but found: {:?}",
+                    seg.styles
+                );
+            }
+        } else {
+            panic!("Expected text node");
+        }
     }
 }
