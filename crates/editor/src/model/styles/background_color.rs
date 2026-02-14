@@ -21,6 +21,9 @@ impl BackgroundColorStyle {
 
 impl StyleHtmlCodec for BackgroundColorStyle {
     fn to_dom(&self) -> DomSpec {
+        if !self.has_color() {
+            return DomSpec::Hole;
+        }
         let key = &self.color;
         let [r, g, b, _] = rgba_from_u32(Theme::bg_color_rgba(key).unwrap());
         DomSpec::el("span")

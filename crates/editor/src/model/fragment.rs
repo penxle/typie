@@ -720,17 +720,16 @@ impl Fragment {
                     let mut new_segments = Vec::with_capacity(segments.len());
 
                     for seg in &segments {
-                        let family = seg
-                            .styles
-                            .iter()
-                            .find_map(|s| {
-                                if let Style::FontFamily(ff) = s {
-                                    Some(ff.family.as_str())
-                                } else {
-                                    None
-                                }
-                            })
-                            .expect("segment must have FontFamily style");
+                        let Some(family) = seg.styles.iter().find_map(|s| {
+                            if let Style::FontFamily(ff) = s {
+                                Some(ff.family.as_str())
+                            } else {
+                                None
+                            }
+                        }) else {
+                            new_segments.push(seg.clone());
+                            continue;
+                        };
 
                         let weight_idx = seg
                             .styles
