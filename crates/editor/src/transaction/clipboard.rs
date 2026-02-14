@@ -45,6 +45,7 @@ impl Transaction {
                         continue;
                     }
 
+                    let (pending_family, pending_weight) = self.current_font();
                     let family = segment
                         .styles
                         .iter()
@@ -52,7 +53,7 @@ impl Transaction {
                             Style::FontFamily(f) => Some(f.family.clone()),
                             _ => None,
                         })
-                        .expect("segment must have FontFamily style");
+                        .unwrap_or(pending_family);
                     let weight = segment
                         .styles
                         .iter()
@@ -60,7 +61,7 @@ impl Transaction {
                             Style::FontWeight(w) => Some(w.weight),
                             _ => None,
                         })
-                        .expect("segment must have FontWeight style");
+                        .unwrap_or(pending_weight);
 
                     all_codepoints.extend_from_slice(&codepoints);
                     font_codepoints

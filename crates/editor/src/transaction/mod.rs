@@ -88,6 +88,7 @@ impl Transaction {
 
     pub fn normalize(&mut self) -> Result<()> {
         self.normalize_to_schema()?;
+        self.normalize_styles();
         self.normalize_selection();
         Ok(())
     }
@@ -183,6 +184,45 @@ impl Transaction {
     pub fn rollback(&self) -> Result<()> {
         self.state.doc.revert_to(&self.initial.frontiers)?;
         Ok(())
+    }
+
+    fn normalize_styles(&mut self) {
+        let node_ids: Vec<NodeId> = self
+            .effects
+            .iter()
+            .filter_map(|e| match e {
+                Effect::NodeChanged { node_id } => Some(*node_id),
+                _ => None,
+            })
+            .collect();
+
+        for node_id in node_ids {
+            let Some(node_ref) = self.doc().node(node_id) else {
+                continue;
+            };
+
+            let Node::Text(text_node) = node_ref.node() else {
+                continue;
+            };
+
+            let allowed = self.doc().allowed_styles_for(node_id);
+            let segments = text_node.text.get_segments();
+            let len = text_node.text.char_len();
+
+            if len == 0 {
+                continue;
+            }
+
+            let disallowed: Vec<StyleType> = segments
+                .iter()
+                .flat_map(|seg| seg.styles.iter().map(|s| s.as_type()))
+                .filter(|st| !allowed.contains(st))
+                .collect();
+
+            for style_type in disallowed {
+                let _ = text_node.text.remove_style(0..len, style_type);
+            }
+        }
     }
 
     fn validate(&self) -> Result<()> {
