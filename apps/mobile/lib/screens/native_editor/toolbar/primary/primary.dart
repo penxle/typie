@@ -41,12 +41,10 @@ class NativeEditorPrimaryToolbar extends HookWidget {
                     isActive: bottomToolbarMode == BottomToolbarMode.insert,
                     onTap: () {
                       if (bottomToolbarMode == BottomToolbarMode.insert) {
-                        switch (keyboardType) {
-                          case KeyboardType.software:
-                            scope.requestFocus();
-                          case KeyboardType.hardware:
-                            scope.bottomToolbarMode.value = BottomToolbarMode.hidden;
+                        if (keyboardType == KeyboardType.software) {
+                          scope.requestFocus();
                         }
+                        scope.bottomToolbarMode.value = BottomToolbarMode.hidden;
                       } else {
                         scope.bottomToolbarMode.value = BottomToolbarMode.insert;
                         if (keyboardType == KeyboardType.software) {
@@ -126,13 +124,10 @@ class NativeEditorPrimaryToolbar extends HookWidget {
               IconToolbarButton(
                 icon: LucideLightIcons.circle_x,
                 onTap: () {
-                  switch (keyboardType) {
-                    case KeyboardType.software:
-                      scope.requestFocus();
-                    case KeyboardType.hardware:
-                      scope.bottomToolbarMode.value = BottomToolbarMode.hidden;
+                  if (keyboardType == KeyboardType.software) {
+                    scope.requestFocus();
                   }
-
+                  scope.bottomToolbarMode.value = BottomToolbarMode.hidden;
                   scope.secondaryToolbarMode.value = SecondaryToolbarMode.hidden;
                 },
               ),
