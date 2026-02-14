@@ -18,7 +18,7 @@ enum SecondaryToolbarMode {
   letterSpacing,
 }
 
-enum BottomToolbarMode { hidden, insert, horizontalRule, blockquote }
+enum BottomToolbarMode { hidden, insert, horizontalRule, blockquote, tableSize }
 
 class NativeEditorToolbarScope extends InheritedWidget {
   const NativeEditorToolbarScope({
