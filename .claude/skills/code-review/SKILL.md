@@ -11,23 +11,64 @@ Provide a code review for the given pull request and submit it as a GitHub revie
 
 To do this, follow these steps precisely:
 
-1. Launch a haiku agent to check if any of the following are true:
+1. Launch a haiku agent to gather PR state and prior review info. The agent should:
+
+   a. Check if any of the following are true (if so, stop and do not proceed):
    - The pull request is closed
    - The pull request is a draft
-   - The pull request does not need code review (e.g. automated PR, trivial change that is obviously correct)
-   - Claude has already reviewed this PR (check `gh pr view <PR> --json reviews` for reviews left by claude)
 
-   If any condition is true, stop and do not proceed.
+   b. Check if Claude has previously reviewed this PR by running:
+   `gh pr view <PR> --json reviews,commits`
 
-   Note: Still review Claude generated PR's.
+   Determine:
+   - Whether Claude has submitted a prior review (look for reviews left by claude/Claude)
+   - If so, the **type** of the last actionable review (`APPROVED` or `CHANGES_REQUESTED` — ignore `COMMENTED` for determining review type)
+   - The **commit SHA** that Claude's last review was submitted against (`commit.oid` on the review)
+   - The **current HEAD SHA** of the PR branch
+   - The **diff checksum** from Claude's most recent review of any type (including `COMMENTED`) — check all of Claude's reviews from newest to oldest and use the first one containing `<!-- diff-checksum: ... -->` in the body. COMMENT reviews are used to update the checksum without changing the review state (see step 9B/9C).
 
-2. Launch a haiku agent to return a list of file paths (not their contents) for all relevant CLAUDE.md files including:
+   Compare the reviewed commit SHA to the current HEAD SHA. If they differ, the HEAD has changed — but this does NOT necessarily mean the code has changed. Rebases, base branch updates (e.g., GitHub UI "Update branch" button, Graphite bot), or local rebase + force push can change the HEAD SHA without altering the PR's actual changes.
+
+   To determine if the **code actually changed**, compare the PR diff at the time of the last review vs now. Run:
+   `gh pr diff <PR>` and compare it against the diff that was reviewed. Since we cannot retrieve the old diff directly, use a content-based heuristic: compute a checksum of the current PR diff (`gh pr diff <PR> | sha256sum`) and compare it to the checksum stored in Claude's last review body (see step 9 for how this is stored). If the checksums match, the code is unchanged despite the HEAD SHA change.
+
+   If Claude's last review body does not contain a diff checksum (e.g., reviews from before this workflow was added), treat any HEAD SHA change as a code change.
+
+   Return one of these states:
+   - `no_prior_review` — Claude has never reviewed this PR → proceed with full review
+   - `approved_no_change` — Claude approved, code unchanged (same HEAD or same diff checksum) → **stop, do not proceed**
+   - `approved_code_changed` — Claude approved, code actually changed → proceed (re-review mode)
+   - `changes_requested_no_change` — Claude requested changes, code unchanged → **stop, do not proceed**
+   - `changes_requested_code_changed` — Claude requested changes, code actually changed → proceed (re-review mode: check fixes + new changes)
+
+   Also return (if applicable — i.e., for any re-review state where Claude has a prior review):
+   - The list of review comment bodies, paths, and lines from Claude's last review (for cross-referencing in step 5 to avoid duplicate flags)
+
+   For `changes_requested_code_changed` specifically, also return the **thread node IDs** for each comment so they can be resolved in step 8. Fetch threads and comments together via GraphQL:
+
+   ```bash
+   gh api graphql -f query='query { repository(owner: "<OWNER>", name: "<REPO>") { pullRequest(number: <PR_NUMBER>) { reviewThreads(last: 100) { nodes { id isResolved comments(first: 10) { nodes { body path line author { login } } } } } } } }'
+   ```
+
+   Filter threads where the first comment's author is claude/Claude and match them to the prior review.
+
+2. **[Re-review only: `changes_requested_code_changed`]** Launch parallel sonnet agents to check whether each previously flagged issue from Claude's last `CHANGES_REQUESTED` review has been fixed in the current code. Each agent receives:
+   - The original review comment (body, path, line)
+   - The current state of the relevant file (read the file at the PR's HEAD)
+
+   Each agent should return whether the issue is **fixed** or **still present**.
+
+3. Launch a haiku agent to return a list of file paths (not their contents) for all relevant CLAUDE.md files including:
    - The root CLAUDE.md file, if it exists
    - Any CLAUDE.md files in directories containing files modified by the pull request
 
-3. Launch a sonnet agent to view the pull request and return a summary of the changes
+4. Launch a sonnet agent to view the pull request and return a summary of the changes
 
-4. Launch 4 agents in parallel to independently review the changes. Each agent should return the list of issues, where each issue includes a description, the file path, line number(s), and the reason it was flagged (e.g. "CLAUDE.md adherence", "bug"). The agents should do the following:
+5. Launch 4 agents in parallel to independently review the changes. Each agent should return the list of issues, where each issue includes a description, the file path, line number(s), and the reason it was flagged (e.g. "CLAUDE.md adherence", "bug").
+
+   **Scope note for re-review modes (`approved_code_changed` or `changes_requested_code_changed`):** Review the full PR diff (since the branch may have been amended/force-pushed, there is no reliable way to isolate only "new" changes). However, do NOT re-flag issues that were already raised in a prior review — each agent must receive the list of prior review comments from step 1b and skip any issue that matches an existing comment (compare by file path and issue description, not line numbers which may have shifted).
+
+   The agents should do the following:
 
    Agents 1 + 2: CLAUDE.md compliance sonnet agents
    Audit changes for CLAUDE.md compliance in parallel. Note: When evaluating CLAUDE.md compliance for a file, you should only consider CLAUDE.md files that share a file path with the file or parents.
@@ -52,27 +93,56 @@ To do this, follow these steps precisely:
 
    In addition to the above, each subagent should be told the PR title and description. This will help provide context regarding the author's intent.
 
-5. For each issue found in the previous step by agents 3 and 4, launch parallel subagents to validate the issue. These subagents should get the PR title and description along with a description of the issue. The agent's job is to review the issue to validate that the stated issue is truly an issue with high confidence. For example, if an issue such as "variable is not defined" was flagged, the subagent's job would be to validate that is actually true in the code. Another example would be CLAUDE.md issues. The agent should validate that the CLAUDE.md rule that was violated is scoped for this file and is actually violated. Use Opus subagents for bugs and logic issues, and sonnet agents for CLAUDE.md violations.
+6. For each issue found in the previous step by agents 3 and 4, launch parallel subagents to validate the issue. These subagents should get the PR title and description along with a description of the issue. The agent's job is to review the issue to validate that the stated issue is truly an issue with high confidence. For example, if an issue such as "variable is not defined" was flagged, the subagent's job would be to validate that is actually true in the code. Another example would be CLAUDE.md issues. The agent should validate that the CLAUDE.md rule that was violated is scoped for this file and is actually violated. Use Opus subagents for bugs and logic issues, and sonnet agents for CLAUDE.md violations.
 
-6. Filter out any issues that were not validated in step 5. This step will give us our list of high signal issues for our review.
+7. Filter out any issues that were not validated in step 6. This step will give us our list of high signal issues for our review.
 
-7. Submit a GitHub review:
+8. **[Re-review only: `changes_requested_code_changed`]** Resolve fixed review threads. For each issue from step 2 that was determined to be **fixed**, resolve its review thread using the GraphQL API and the thread node IDs returned from step 1b:
 
-   **If NO issues were found:**
-   Run the following command to approve the PR:
-
-   ```
-   gh pr review <PR_NUMBER> --approve --body "No issues found. Checked for bugs and CLAUDE.md compliance."
+   ```bash
+   gh api graphql -f query='mutation { resolveReviewThread(input: { threadId: "<THREAD_NODE_ID>" }) { thread { id isResolved } } }'
    ```
 
-   **If issues were found:**
+   Only resolve threads that correspond to issues confirmed as fixed in step 2.
+
+9. Submit a GitHub review. The action depends on the review state from step 1 and the issues found:
+
+   **A. First review (`no_prior_review`):**
+   - No issues → APPROVE
+   - Issues found → REQUEST_CHANGES
+
+   **B. Re-review after prior APPROVE (`approved_code_changed`):**
+   - No new issues → submit a COMMENT review (not APPROVE) with just the diff checksum to update it. Body: `"Re-reviewed after code update. No new issues found.\n<!-- diff-checksum: <HASH> -->"`. This prevents stale checksums from triggering infinite re-reviews.
+   - New issues found → REQUEST_CHANGES
+
+   **C. Re-review after prior REQUEST_CHANGES (`changes_requested_code_changed`):**
+   - All prior issues fixed AND no new issues → APPROVE
+   - Some prior issues still present, no new issues → submit a COMMENT review with just the diff checksum to update it. Body: `"Re-reviewed after code update. Previously flagged issues remain unresolved.\n<!-- diff-checksum: <HASH> -->"`. Do NOT submit another REQUEST_CHANGES — the existing one and its unresolved threads are sufficient.
+   - New issues found (regardless of prior issue status) → REQUEST_CHANGES (only for NEW issues not already flagged; do not re-post comments for unresolved prior issues)
+
+   **Diff checksum**: Before submitting any review, compute the current PR diff checksum:
+
+   ```bash
+   gh pr diff <PR_NUMBER> | sha256sum | awk '{print $1}'
+   ```
+
+   Include it in the review body as a metadata line: `<!-- diff-checksum: <HASH> -->`. This is used by future re-reviews (step 1b) to detect whether the code actually changed despite HEAD SHA changes (e.g., rebases).
+
+   **To APPROVE:**
+
+   ```
+   gh pr review <PR_NUMBER> --approve --body "<!-- diff-checksum: <HASH> -->"
+   ```
+
+   **To REQUEST_CHANGES:**
    Submit a review with REQUEST_CHANGES using `gh api`. Construct a JSON payload and submit it in a single API call:
 
    ```bash
    gh api repos/{owner}/{repo}/pulls/{pull_number}/reviews \
      --method POST \
      -f 'event=REQUEST_CHANGES' \
-     -f 'body=Found N issue(s).' \
+     -f 'body=Found N issue(s).
+   <!-- diff-checksum: <HASH> -->' \
      --input <(echo '{
        "comments": [
          {
@@ -92,9 +162,9 @@ To do this, follow these steps precisely:
    - `body`: A brief description of the issue. For small, self-contained fixes, include a GitHub suggestion block. For larger fixes, describe the issue and suggested fix without a suggestion block. Never include a suggestion block unless committing the suggestion fixes the issue entirely.
    - For multi-line comments, add `start_line` and `start_side: RIGHT` fields
 
-   **IMPORTANT: Only post ONE comment per unique issue. Do not post duplicate comments.**
+   **IMPORTANT: Only post ONE comment per unique issue. Do not post duplicate comments. Do not re-post comments for issues already flagged in a prior review.**
 
-Use this list when evaluating issues in Steps 4 and 5 (these are false positives, do NOT flag):
+Use this list when evaluating issues in Steps 5 and 6 (these are false positives, do NOT flag):
 
 - Pre-existing issues
 - Something that appears to be a bug but is actually correct
