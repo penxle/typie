@@ -20,7 +20,7 @@ const _columnResizeTouchWidth = 24.0;
 const _columnResizeVisualWidth = 3.0;
 const _minColumnWidth = 40.0;
 const _sheetOpenDelay = Duration(milliseconds: 40);
-typedef _OverlayDispatch = void Function(Map<String, dynamic> message, {bool requestFocus});
+typedef _OverlayDispatch = void Function(Map<String, dynamic> message);
 
 class TableOverlay extends HookWidget {
   const TableOverlay({super.key});
@@ -157,24 +157,35 @@ class _FocusedTableOverlay extends HookWidget {
       return const SizedBox.shrink();
     }
 
-    void dispatch(Map<String, dynamic> message, {bool requestFocus = true}) {
+    void dispatch(Map<String, dynamic> message) {
       scope.controller.dispatch(message);
-      scope.controller.scrollIntoView();
-      if (requestFocus) {
-        scope.inputController.requestFocus();
-      }
     }
 
-    void selectRow(int row, {bool requestFocus = true}) {
+    void scrollEditorIntoView() {
+      scope.controller.scrollIntoView();
+    }
+
+    void requestEditorFocus() {
+      scope.inputController.requestFocus();
+    }
+
+    void dispatchAndScrollAndFocus(Map<String, dynamic> message) {
+      dispatch(message);
+      scrollEditorIntoView();
+      requestEditorFocus();
+    }
+
+    void selectRow(int row) {
       final clamped = row.clamp(0, overlay.totalRows - 1);
       selectedRow.value = clamped;
-      dispatch({'type': 'selectTableRow', 'tableId': overlay.tableId, 'row': clamped}, requestFocus: requestFocus);
+      dispatch({'type': 'selectTableRow', 'tableId': overlay.tableId, 'row': clamped});
+      scrollEditorIntoView();
     }
 
-    void selectCol(int col, {bool requestFocus = true}) {
+    void selectCol(int col) {
       final clamped = col.clamp(0, overlay.colWidths.length - 1);
       selectedCol.value = clamped;
-      dispatch({'type': 'selectTableColumn', 'tableId': overlay.tableId, 'col': clamped}, requestFocus: requestFocus);
+      dispatch({'type': 'selectTableColumn', 'tableId': overlay.tableId, 'col': clamped});
     }
 
     final currentRow = selectedRow.value.clamp(0, overlay.totalRows - 1);
@@ -226,13 +237,27 @@ class _FocusedTableOverlay extends HookWidget {
       if (!isSelectedRowVisible) {
         return;
       }
-      selectRow(currentRow, requestFocus: false);
-      await _showRowActions(context, scope, overlay, currentRow, dispatch, onSelectedRowChanged: moveHandleRowTo);
+      selectRow(currentRow);
+      await _showRowActions(
+        context,
+        scope,
+        overlay,
+        currentRow,
+        dispatchAndScrollAndFocus,
+        onSelectedRowChanged: moveHandleRowTo,
+      );
     }
 
     Future<void> openColumnMenu() async {
-      selectCol(currentCol, requestFocus: false);
-      await _showColumnActions(context, scope, overlay, currentCol, dispatch, onSelectedColChanged: moveHandleColTo);
+      selectCol(currentCol);
+      await _showColumnActions(
+        context,
+        scope,
+        overlay,
+        currentCol,
+        dispatchAndScrollAndFocus,
+        onSelectedColChanged: moveHandleColTo,
+      );
     }
 
     return Stack(
@@ -243,11 +268,10 @@ class _FocusedTableOverlay extends HookWidget {
           renderBounds: renderBounds,
           selectedCol: currentCol,
           pageWidth: pageWidth,
-          onCommit: (nextWidths) => dispatch({
-            'type': 'setColumnWidths',
-            'tableId': overlay.tableId,
-            'colWidths': nextWidths,
-          }, requestFocus: false),
+          onCommit: (nextWidths) {
+            dispatch({'type': 'setColumnWidths', 'tableId': overlay.tableId, 'colWidths': nextWidths});
+            scrollEditorIntoView();
+          },
         ),
         Positioned(
           left: colHandleLeft,
