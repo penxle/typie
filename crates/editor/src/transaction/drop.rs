@@ -275,6 +275,162 @@ fn collect_children(doc: &Doc, node_id: NodeId) -> Vec<NodeId> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::runtime::Effect;
+
+    #[test]
+    fn drop_external_into_fold_title_detects_overridden_font_weight() {
+        let mut p = id!();
+        let mut ft = id!();
+
+        let source = state! {
+            doc {
+                @p paragraph {
+                    text { "본문 텍스트" }
+                }
+            }
+            selection { (p, 0) -> (p, 6) }
+        };
+
+        let fragment = source.selection.extract_fragment(&source.doc).unwrap();
+
+        let paste_target = state! {
+            doc {
+                fold {
+                    @ft fold_title {}
+                    fold_content {
+                        paragraph {}
+                    }
+                }
+            }
+            selection { (ft, 0) }
+        };
+
+        let (_, effects) = transact_with_effect!(paste_target, |tr| {
+            tr.drop_external(Position::new(ft, 0, Affinity::Downstream), fragment)
+                .unwrap();
+        });
+
+        let font_detected: Vec<(String, u16)> = effects
+            .iter()
+            .filter_map(|e| match e {
+                Effect::FontDetected { family, weight, .. } => Some((family.clone(), *weight)),
+                _ => None,
+            })
+            .collect();
+
+        assert!(
+            font_detected
+                .iter()
+                .any(|(_, w)| *w == crate::model::FOLD_TITLE_FONT_WEIGHT),
+            "drop_external into FoldTitle should emit FontDetected with weight {}, but got: {:?}",
+            crate::model::FOLD_TITLE_FONT_WEIGHT,
+            font_detected,
+        );
+
+        assert!(
+            !font_detected.iter().any(|(_, w)| *w == 400),
+            "drop_external into FoldTitle should NOT emit FontDetected with weight 400, but got: {:?}",
+            font_detected,
+        );
+    }
+
+    #[test]
+    fn drag_and_drop_into_fold_title_detects_overridden_font_weight() {
+        let mut p = id!();
+        let mut ft = id!();
+
+        let initial = state! {
+            doc {
+                @p paragraph {
+                    text { "본문 텍스트" }
+                }
+                fold {
+                    @ft fold_title {}
+                    fold_content {
+                        paragraph {}
+                    }
+                }
+            }
+            selection { (p, 0) -> (p, 6) }
+        };
+
+        let (_, effects) = transact_with_effect!(initial, |tr| {
+            tr.drag_and_drop(Position::new(ft, 0, Affinity::Downstream))
+                .unwrap();
+        });
+
+        let font_detected: Vec<(String, u16)> = effects
+            .iter()
+            .filter_map(|e| match e {
+                Effect::FontDetected { family, weight, .. } => Some((family.clone(), *weight)),
+                _ => None,
+            })
+            .collect();
+
+        assert!(
+            font_detected
+                .iter()
+                .any(|(_, w)| *w == crate::model::FOLD_TITLE_FONT_WEIGHT),
+            "drag_and_drop into FoldTitle should emit FontDetected with weight {}, but got: {:?}",
+            crate::model::FOLD_TITLE_FONT_WEIGHT,
+            font_detected,
+        );
+
+        assert!(
+            !font_detected.iter().any(|(_, w)| *w == 400),
+            "drag_and_drop into FoldTitle should NOT emit FontDetected with weight 400, but got: {:?}",
+            font_detected,
+        );
+    }
+
+    #[test]
+    fn drag_and_copy_into_fold_title_detects_overridden_font_weight() {
+        let mut p = id!();
+        let mut ft = id!();
+
+        let initial = state! {
+            doc {
+                @p paragraph {
+                    text { "본문 텍스트" }
+                }
+                fold {
+                    @ft fold_title {}
+                    fold_content {
+                        paragraph {}
+                    }
+                }
+            }
+            selection { (p, 0) -> (p, 6) }
+        };
+
+        let (_, effects) = transact_with_effect!(initial, |tr| {
+            tr.drag_and_copy(Position::new(ft, 0, Affinity::Downstream))
+                .unwrap();
+        });
+
+        let font_detected: Vec<(String, u16)> = effects
+            .iter()
+            .filter_map(|e| match e {
+                Effect::FontDetected { family, weight, .. } => Some((family.clone(), *weight)),
+                _ => None,
+            })
+            .collect();
+
+        assert!(
+            font_detected
+                .iter()
+                .any(|(_, w)| *w == crate::model::FOLD_TITLE_FONT_WEIGHT),
+            "drag_and_copy into FoldTitle should emit FontDetected with weight {}, but got: {:?}",
+            crate::model::FOLD_TITLE_FONT_WEIGHT,
+            font_detected,
+        );
+
+        assert!(
+            !font_detected.iter().any(|(_, w)| *w == 400),
+            "drag_and_copy into FoldTitle should NOT emit FontDetected with weight 400, but got: {:?}",
+            font_detected,
+        );
+    }
 
     #[test]
     fn test_drag_and_drop_rectangular_table_selection() {

@@ -1,9 +1,7 @@
-use crate::model::{Fragment, Node, Style};
+use crate::model::Fragment;
 use crate::runtime::Effect;
 use crate::transaction::Transaction;
-use crate::utils::collect_codepoints;
 use anyhow::Result;
-use rustc_hash::FxHashMap;
 
 impl Transaction {
     pub fn paste_text(&mut self, s: String) -> Result<bool> {
@@ -34,57 +32,6 @@ impl Transaction {
             return Ok(false);
         }
 
-        let mut font_codepoints: FxHashMap<(String, u16), Vec<u32>> = FxHashMap::default();
-        let mut all_codepoints = Vec::new();
-
-        for (_, node) in fragment.iter() {
-            if let Node::Text(text_node) = node.data() {
-                for segment in text_node.text.get_segments() {
-                    let codepoints = collect_codepoints(&segment.text);
-                    if codepoints.is_empty() {
-                        continue;
-                    }
-
-                    let (pending_family, pending_weight) = self.current_font();
-                    let family = segment
-                        .styles
-                        .iter()
-                        .find_map(|s| match s {
-                            Style::FontFamily(f) => Some(f.family.clone()),
-                            _ => None,
-                        })
-                        .unwrap_or(pending_family);
-                    let weight = segment
-                        .styles
-                        .iter()
-                        .find_map(|s| match s {
-                            Style::FontWeight(w) => Some(w.weight),
-                            _ => None,
-                        })
-                        .unwrap_or(pending_weight);
-
-                    all_codepoints.extend_from_slice(&codepoints);
-                    font_codepoints
-                        .entry((family, weight))
-                        .or_default()
-                        .extend(codepoints);
-                }
-            }
-        }
-
-        for ((family, weight), codepoints) in font_codepoints {
-            self.push_effect(Effect::FontDetected {
-                family,
-                weight,
-                codepoints,
-            });
-        }
-        if !all_codepoints.is_empty() {
-            self.push_effect(Effect::CodepointDetected {
-                codepoints: all_codepoints,
-            });
-        }
-
         let fragment = fragment.with_fresh_ids_for_doc(self.doc());
         let result = self.insert_fragment(self.selection().head, fragment)?;
         if let Some(selection) = result.as_selection() {
@@ -106,7 +53,7 @@ impl Transaction {
 mod tests {
     use super::*;
     use crate::layout::{Element, LayoutNode};
-    use crate::model::NodeId;
+    use crate::model::{Node, NodeId};
     use crate::runtime::Message;
     use crate::runtime::slate::DIRTY_RENDER_REQUIRED;
     use crate::types::Affinity;
@@ -1281,5 +1228,163 @@ mod tests {
         let _ = transact!(initial, |tr| {
             tr.paste_fragment(fragment, None).unwrap();
         });
+    }
+
+    #[test]
+    fn paste_fold_title_text_into_paragraph_uses_pending_styles() {
+        // FoldTitle 안의 텍스트를 복사하여 일반 Paragraph에 붙여넣으면,
+        // 목적지(Paragraph)의 pending styles가 적용되어야 한다.
+        let mut ft = id!();
+
+        let source = state! {
+            doc {
+                fold {
+                    @ft fold_title {
+                        text { "접기 제목" }
+                    }
+                    fold_content {
+                        paragraph {}
+                    }
+                }
+            }
+            selection { (ft, 0) -> (ft, 4) }
+        };
+
+        let fragment = source.selection.extract_fragment(&source.doc).unwrap();
+
+        let mut target = id!();
+        let paste_target = state! {
+            doc {
+                @target paragraph {}
+            }
+            selection { (target, 0) }
+        };
+
+        let (_, effects) = transact_with_effect!(paste_target, |tr| {
+            tr.paste_fragment(fragment, None).unwrap();
+        });
+
+        let font_detected: Vec<(String, u16)> = effects
+            .iter()
+            .filter_map(|e| match e {
+                Effect::FontDetected { family, weight, .. } => Some((family.clone(), *weight)),
+                _ => None,
+            })
+            .collect();
+
+        assert!(
+            font_detected.iter().any(|(_, w)| *w == 400),
+            "paste into Paragraph should emit FontDetected with default weight (400), but got: {:?}",
+            font_detected,
+        );
+        assert!(
+            !font_detected
+                .iter()
+                .any(|(_, w)| *w == crate::model::FOLD_TITLE_FONT_WEIGHT),
+            "paste into Paragraph should NOT emit FontDetected with FoldTitle weight ({}), but got: {:?}",
+            crate::model::FOLD_TITLE_FONT_WEIGHT,
+            font_detected,
+        );
+    }
+
+    #[test]
+    fn paste_text_into_fold_title_detects_overridden_font_weight() {
+        let mut ft = id!();
+
+        let initial = state! {
+            doc {
+                fold {
+                    @ft fold_title {}
+                    fold_content {
+                        paragraph {}
+                    }
+                }
+            }
+            selection { (ft, 0) }
+        };
+
+        let (_, effects) = transact_with_effect!(initial, |tr| {
+            tr.paste_text("붙여넣기".to_string()).unwrap();
+        });
+
+        let font_detected: Vec<(String, u16)> = effects
+            .iter()
+            .filter_map(|e| match e {
+                Effect::FontDetected { family, weight, .. } => Some((family.clone(), *weight)),
+                _ => None,
+            })
+            .collect();
+
+        let has_fold_title_weight = font_detected
+            .iter()
+            .any(|(_, w)| *w == crate::model::FOLD_TITLE_FONT_WEIGHT);
+
+        assert!(
+            has_fold_title_weight,
+            "paste_text into FoldTitle should emit FontDetected with style_overrides weight ({}), but got: {:?}",
+            crate::model::FOLD_TITLE_FONT_WEIGHT,
+            font_detected,
+        );
+    }
+
+    #[test]
+    fn paste_fragment_into_fold_title_detects_overridden_font_weight() {
+        // 일반 Paragraph 텍스트를 복사하여 FoldTitle에 붙여넣는 케이스.
+        // 목적지 FoldTitle의 style_overrides(weight=500)에 해당하는 FontDetected가 발행되어야 한다.
+        let mut p = id!();
+        let mut ft = id!();
+
+        let source = state! {
+            doc {
+                @p paragraph {
+                    text { "본문 텍스트" }
+                }
+            }
+            selection { (p, 0) -> (p, 6) }
+        };
+
+        let fragment = source.selection.extract_fragment(&source.doc).unwrap();
+
+        let paste_target = state! {
+            doc {
+                fold {
+                    @ft fold_title {}
+                    fold_content {
+                        paragraph {}
+                    }
+                }
+            }
+            selection { (ft, 0) }
+        };
+
+        let (_, effects) = transact_with_effect!(paste_target, |tr| {
+            tr.paste_fragment(fragment, None).unwrap();
+        });
+
+        let font_detected: Vec<(String, u16)> = effects
+            .iter()
+            .filter_map(|e| match e {
+                Effect::FontDetected { family, weight, .. } => Some((family.clone(), *weight)),
+                _ => None,
+            })
+            .collect();
+
+        let has_fold_title_weight = font_detected
+            .iter()
+            .any(|(_, w)| *w == crate::model::FOLD_TITLE_FONT_WEIGHT);
+
+        assert!(
+            has_fold_title_weight,
+            "paste_fragment into FoldTitle should emit FontDetected with style_overrides weight ({}), but got: {:?}",
+            crate::model::FOLD_TITLE_FONT_WEIGHT,
+            font_detected,
+        );
+
+        assert!(
+            !font_detected.iter().any(|(_, w)| *w == 400),
+            "paste_fragment into FoldTitle should NOT emit FontDetected with weight 400 (text renders only at {}), but got: {:?}",
+            crate::model::FOLD_TITLE_FONT_WEIGHT,
+            font_detected,
+        );
     }
 }
