@@ -123,7 +123,7 @@ impl Transaction {
         Ok(true)
     }
 
-    pub fn add_table_row(&mut self, table_id: NodeId, after_row: usize) -> Result<bool> {
+    pub fn add_table_row(&mut self, table_id: NodeId, row: usize, before: bool) -> Result<bool> {
         let table_node = self.node(table_id).context("Table not found")?;
 
         let first_row = table_node.children().next();
@@ -133,7 +133,11 @@ impl Transaction {
         }
 
         let row_count = table_node.children().count();
-        let insert_index = (after_row + 1).min(row_count);
+        let insert_index = if before {
+            row.min(row_count)
+        } else {
+            row.saturating_add(1).min(row_count)
+        };
 
         let row_id = NodeId::new();
         let table_mut = self.node_mut(table_id).context("Table not found")?;
@@ -169,7 +173,7 @@ impl Transaction {
         Ok(true)
     }
 
-    pub fn add_table_column(&mut self, table_id: NodeId, after_col: usize) -> Result<bool> {
+    pub fn add_table_column(&mut self, table_id: NodeId, col: usize, before: bool) -> Result<bool> {
         let table_node = self.node(table_id).context("Table not found")?;
 
         let row_ids: Vec<_> = table_node.children().map(|r| r.node_id()).collect();
@@ -179,7 +183,11 @@ impl Transaction {
 
         let first_row = self.node(row_ids[0]).context("First row not found")?;
         let col_count = first_row.children().count();
-        let insert_index = (after_col + 1).min(col_count);
+        let insert_index = if before {
+            col.min(col_count)
+        } else {
+            col.saturating_add(1).min(col_count)
+        };
 
         let mut first_row_new_cell_id: Option<NodeId> = None;
         for (row_idx, row_id) in row_ids.iter().enumerate() {
@@ -683,6 +691,84 @@ mod tests {
         assert_eq!(cell2.children().count(), 1);
         let p2_new = cell2.first_child().unwrap();
         assert_eq!(p2_new.children().count(), 0);
+    }
+
+    #[test]
+    fn test_add_row_before_first_row() {
+        let mut t = id!();
+        let mut p00 = id!();
+
+        let initial = state! {
+            doc {
+                @t table {
+                    table_row {
+                        table_cell { @p00 paragraph { text { "r0" } } }
+                    }
+                    table_row {
+                        table_cell { paragraph { text { "r1" } } }
+                    }
+                }
+            }
+            selection { (p00, 0) }
+        };
+
+        let actual = transact!(initial, |tr| {
+            tr.add_table_row(t, 0, true).unwrap();
+        });
+
+        let doc = actual.doc;
+        let table = doc.node(t).unwrap();
+        assert_eq!(table.children().count(), 3);
+
+        let first_row = table.first_child().unwrap();
+        let first_cell = first_row.first_child().unwrap();
+        let first_para = first_cell.first_child().unwrap();
+        assert_eq!(first_para.children().count(), 0);
+
+        let second_row = table.children().nth(1).unwrap();
+        let second_cell = second_row.first_child().unwrap();
+        let second_para = second_cell.first_child().unwrap();
+        assert_eq!(second_para.node_id(), p00);
+    }
+
+    #[test]
+    fn test_add_column_before_first_column() {
+        let mut t = id!();
+        let mut p00 = id!();
+
+        let initial = state! {
+            doc {
+                @t table {
+                    table_row {
+                        table_cell { @p00 paragraph { text { "r0c0" } } }
+                        table_cell { paragraph { text { "r0c1" } } }
+                    }
+                    table_row {
+                        table_cell { paragraph { text { "r1c0" } } }
+                        table_cell { paragraph { text { "r1c1" } } }
+                    }
+                }
+            }
+            selection { (p00, 0) }
+        };
+
+        let actual = transact!(initial, |tr| {
+            tr.add_table_column(t, 0, true).unwrap();
+        });
+
+        let doc = actual.doc;
+        let table = doc.node(t).unwrap();
+
+        let first_row = table.first_child().unwrap();
+        assert_eq!(first_row.children().count(), 3);
+
+        let first_cell = first_row.first_child().unwrap();
+        let first_para = first_cell.first_child().unwrap();
+        assert_eq!(first_para.children().count(), 0);
+
+        let second_cell = first_row.children().nth(1).unwrap();
+        let second_para = second_cell.first_child().unwrap();
+        assert_eq!(second_para.node_id(), p00);
     }
 
     #[test]

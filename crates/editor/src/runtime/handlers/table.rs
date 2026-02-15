@@ -24,25 +24,27 @@ impl Runtime {
     pub(crate) fn handle_add_table_row(
         &mut self,
         table_id: String,
-        after_row: usize,
+        row: usize,
+        before: bool,
     ) -> Vec<Effect> {
         let Some(node_id) = NodeId::from_string(&table_id) else {
             return vec![];
         };
 
-        self.transact(|tr| tr.add_table_row(node_id, after_row))
+        self.transact(|tr| tr.add_table_row(node_id, row, before))
     }
 
     pub(crate) fn handle_add_table_column(
         &mut self,
         table_id: String,
-        after_col: usize,
+        col: usize,
+        before: bool,
     ) -> Vec<Effect> {
         let Some(node_id) = NodeId::from_string(&table_id) else {
             return vec![];
         };
 
-        self.transact(|tr| tr.add_table_column(node_id, after_col))
+        self.transact(|tr| tr.add_table_column(node_id, col, before))
     }
 
     pub(crate) fn handle_delete_table_row(&mut self, table_id: String, row: usize) -> Vec<Effect> {
