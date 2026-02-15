@@ -1,7 +1,7 @@
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
 use editor::{
     Affinity, Direction, Doc, Effect, Message, Node, NodeId, Position, Runtime, Selection, State,
-    Text, TextNode, Theme, Transaction, compute_selection_aggregates, init_test_env, transact,
+    Text, TextNode, Theme, Transaction, compute_selection_attrs, init_test_env, transact,
 };
 use rustc_hash::FxHashMap;
 use std::rc::Rc;
@@ -320,7 +320,7 @@ fn bench_data_access(c: &mut Criterion) {
                 let state = runtime.state();
                 let (from, to) = state.selection.as_sorted(&state.doc).unwrap();
                 let block_ids: Vec<NodeId> = state.doc.iter_blocks().map(|(id, _)| id).collect();
-                compute_selection_aggregates(&state.doc, &block_ids, from, to)
+                compute_selection_attrs(&state.doc, &block_ids, from, to)
             },
             BATCH,
         );
