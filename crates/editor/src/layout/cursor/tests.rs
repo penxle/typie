@@ -3381,6 +3381,68 @@ fn test_click_in_short_cell_empty_space_stays_in_cell() {
 }
 
 #[test]
+fn test_click_on_table_side_margin_snaps_to_nearest_cell() {
+    let mut left_p = id!();
+    let mut right_p = id!();
+
+    let right_text = "Right";
+    let right_len = right_text.chars().count();
+
+    let rt = runtime! {
+        viewport { paginated { width: 400.0, height: 800.0, margin: PAGE_MARGIN } }
+        doc {
+            table {
+                table_row {
+                    table_cell {
+                        @left_p paragraph {
+                            text { "Left" }
+                        }
+                    }
+                    table_cell {
+                        @right_p paragraph {
+                            text { right_text }
+                        }
+                    }
+                }
+            }
+        }
+        selection { (left_p, 0) }
+    };
+
+    let pages = rt.pages();
+    let (_, left_start) = Cursor::bounds(
+        &ctx(&rt.state()),
+        &pages,
+        Position::new(left_p, 0, Affinity::Downstream),
+    )
+    .unwrap();
+    let (_, right_end) = Cursor::bounds(
+        &ctx(&rt.state()),
+        &pages,
+        Position::new(right_p, right_len, Affinity::Upstream),
+    )
+    .unwrap();
+
+    let test_y = left_start.y + left_start.height / 2.0;
+    let left_margin_x = left_start.x - 100.0;
+    let right_margin_x = right_end.x + 100.0;
+
+    let left_margin_selection =
+        Cursor::hit_test(&ctx(&rt.state()), &pages[0], left_margin_x, test_y).unwrap();
+    assert_eq!(
+        left_margin_selection.head.node_id, left_p,
+        "Left side margin click should snap to the nearest left cell"
+    );
+
+    let right_margin_selection =
+        Cursor::hit_test(&ctx(&rt.state()), &pages[0], right_margin_x, test_y).unwrap();
+    assert_eq!(
+        right_margin_selection.head.node_id, right_p,
+        "Right side margin click should snap to the nearest right cell"
+    );
+}
+
+#[test]
 fn test_table_cell_up_stays_in_scope() {
     let mut n1 = id!();
     let mut n2 = id!();
