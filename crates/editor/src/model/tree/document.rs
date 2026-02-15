@@ -322,24 +322,30 @@ impl Doc {
     }
 
     pub fn allowed_styles_for(&self, node_id: NodeId) -> FxHashSet<StyleType> {
-        self.collect_allowed(node_id, |spec| spec.styles)
+        self.collect_allowed(node_id, |spec| spec.styles, true)
     }
 
     pub fn allowed_annotations_for(&self, node_id: NodeId) -> FxHashSet<AnnotationType> {
-        self.collect_allowed(node_id, |spec| spec.annotations)
+        self.collect_allowed(node_id, |spec| spec.annotations, true)
+    }
+
+    pub fn allowed_styles_for_content(&self, node_id: NodeId) -> FxHashSet<StyleType> {
+        self.collect_allowed(node_id, |spec| spec.styles, false)
     }
 
     fn collect_allowed<T: Eq + std::hash::Hash + Copy + 'static>(
         &self,
         node_id: NodeId,
         get_field: impl Fn(&crate::schema::NodeSpec) -> Option<&'static [T]>,
+        skip_self: bool,
     ) -> FxHashSet<T> {
         let mut allowed = FxHashSet::default();
         let Some(node) = self.node(node_id) else {
             return allowed;
         };
 
-        for ancestor in node.ancestors().skip(1) {
+        let skip_count = if skip_self { 1 } else { 0 };
+        for ancestor in node.ancestors().skip(skip_count) {
             let spec = self.inner.schema.node_spec(ancestor.node().as_type());
             match get_field(spec) {
                 Some(items) if !items.is_empty() => {

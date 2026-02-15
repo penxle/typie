@@ -708,22 +708,60 @@ impl Transaction {
         let default_styles = self.resolve_style_cascade(NodeId::ROOT);
 
         if selection.is_collapsed() {
-            self.state.pending_styles = default_styles;
+            let allowed = self
+                .doc()
+                .allowed_styles_for_content(selection.head.node_id);
+            self.state.pending_styles = default_styles
+                .into_iter()
+                .filter(|s| allowed.contains(&s.as_type()))
+                .collect();
             self.push_effect(Effect::PendingStylesChanged);
             self.update_cascade_attrs_if_empty_textblock();
         } else {
             let (from, to) = selection.as_sorted(self.doc())?;
-            for style in &default_styles {
-                apply_style_to_range(self, from.clone(), to.clone(), style)?;
-            }
-            for &style_type in StyleType::all() {
-                if !default_styles.iter().any(|s| s.as_type() == style_type) {
-                    remove_style_from_range(self, from.clone(), to.clone(), style_type)?;
+            let text_ranges = collect_text_ranges_in_selection(self, from.clone(), to.clone())?;
+
+            for (text_node_id, start_offset, end_offset) in text_ranges {
+                let allowed = self.doc().allowed_styles_for(text_node_id);
+                if allowed.is_empty() {
+                    continue;
                 }
+                let range = start_offset..end_offset;
+
+                for style in &default_styles {
+                    if allowed.contains(&style.as_type()) {
+                        let node = self.node_mut(text_node_id).context("Text node not found")?;
+                        if let Node::Text(text_node) = node.node() {
+                            text_node.text.apply_style(range.clone(), style)?;
+                        }
+                    }
+                }
+
+                for &style_type in StyleType::all() {
+                    if allowed.contains(&style_type)
+                        && !default_styles.iter().any(|s| s.as_type() == style_type)
+                    {
+                        let node = self.node_mut(text_node_id).context("Text node not found")?;
+                        if let Node::Text(text_node) = node.node() {
+                            text_node.text.remove_style(range.clone(), style_type)?;
+                        }
+                    }
+                }
+
+                self.push_effect(Effect::NodeChanged {
+                    node_id: text_node_id,
+                });
             }
+
             let block_ids = collect_empty_textblocks_in_range(self, from, to)?;
             for block_id in block_ids {
-                self.set_cascade_attrs(block_id, &Attr::from_styles(&default_styles))?;
+                let allowed = self.doc().allowed_styles_for_content(block_id);
+                let filtered: Vec<Style> = default_styles
+                    .iter()
+                    .filter(|s| allowed.contains(&s.as_type()))
+                    .cloned()
+                    .collect();
+                self.set_cascade_attrs(block_id, &Attr::from_styles(&filtered))?;
             }
         }
 

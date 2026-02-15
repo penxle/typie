@@ -471,6 +471,56 @@ mod tests {
     }
 
     #[test]
+    fn test_clear_formatting_range_in_fold_title_does_not_apply_disallowed_styles() {
+        let mut ft = id!();
+
+        let initial = state! {
+            doc {
+                fold {
+                    @ft fold_title { text { "title" } }
+                    fold_content {
+                        paragraph { text { "content" } }
+                    }
+                }
+            }
+            selection { (ft, 0) -> (ft, 5) }
+        };
+
+        let actual = transact!(initial.clone(), |tr| {
+            tr.reset_all_styles()
+                .expect("reset_all_styles should not error for FoldTitle");
+        });
+
+        assert_state_eq!(actual, initial);
+    }
+
+    #[test]
+    fn test_clear_formatting_collapsed_in_fold_title_does_not_set_disallowed_pending_styles() {
+        let mut ft = id!();
+
+        let mut runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                fold {
+                    @ft fold_title { text { "title" } }
+                    fold_content {
+                        paragraph { text { "content" } }
+                    }
+                }
+            }
+            selection { (ft, 0) }
+        };
+
+        runtime.update(Message::ClearFormatting);
+
+        assert!(
+            runtime.state().pending_styles.is_empty(),
+            "FoldTitle should not have any pending styles after ClearFormatting, got: {:?}",
+            runtime.state().pending_styles
+        );
+    }
+
+    #[test]
     fn test_shortcut_during_composition_commits_preedit_and_applies_styles() {
         let mut p = id!();
 
