@@ -1355,8 +1355,8 @@ impl Transaction {
 
         let top_level_ids = remapped.top_level_node_ids();
 
-        // For selectable nodes inserted into non-paragraph, return block position after
-        if target.node_type() != NodeType::Paragraph && top_level_ids.len() == 1 {
+        // For selectable nodes inserted into non-textblock, return block position after
+        if !target.spec().is_textblock(self.doc().schema()) && top_level_ids.len() == 1 {
             if let Some(frag_node) = remapped.node(top_level_ids[0]) {
                 let node_type = frag_node.data().as_type();
                 let spec = self.state.doc.schema().node_spec(node_type);
@@ -1370,7 +1370,7 @@ impl Transaction {
             }
         }
 
-        let inserted_count = if target.node_type() == NodeType::Paragraph {
+        let inserted_count = if target.spec().is_textblock(self.doc().schema()) {
             let top_level_set: std::collections::HashSet<_> = top_level_ids.iter().collect();
             remapped
                 .iter()
@@ -1419,12 +1419,13 @@ impl Transaction {
         if let Some(survivor) = last_survivor {
             let pos = Position::new(survivor, 0, Affinity::Downstream);
             if let Some(node) = self.doc().node(survivor) {
-                let mut paragraph_ids = Vec::new();
+                let schema = self.doc().schema();
+                let mut textblock_ids = Vec::new();
                 let mut stack: Vec<NodeId> = node.children().map(|c| c.node_id()).collect();
                 while let Some(id) = stack.pop() {
                     if let Some(child) = self.doc().node(id) {
-                        if matches!(child.node(), Node::Paragraph(_)) {
-                            paragraph_ids.push(id);
+                        if child.spec().is_textblock(schema) {
+                            textblock_ids.push(id);
                         }
                         for g in child.children() {
                             stack.push(g.node_id());
@@ -1432,9 +1433,9 @@ impl Transaction {
                     }
                 }
 
-                for para_id in paragraph_ids {
+                for textblock_id in textblock_ids {
                     let _ = self.merge_adjacent_text_nodes(Position::new(
-                        para_id,
+                        textblock_id,
                         0,
                         Affinity::Downstream,
                     ));
@@ -2388,6 +2389,8 @@ enum SplitChild {
 #[cfg(test)]
 mod tests {
     use crate::model::{DefaultStyles, Fragment, FragmentNode, Node, NodeId, Text, TextNode};
+    use crate::state::Position;
+    use crate::types::Affinity;
 
     #[test]
     fn test_nested_merge_traversal_open_start() {
@@ -2688,5 +2691,80 @@ mod tests {
         };
 
         assert_state_eq!(actual, expected);
+    }
+
+    #[test]
+    fn open_end_merge_merges_adjacent_text_in_fold_title() {
+        let mut p = id!();
+
+        let initial = state! {
+            doc {
+                @p paragraph { text { "start" } }
+                fold {
+                    fold_title { text { "World" } }
+                    fold_content {
+                        paragraph { text { "inside" } }
+                    }
+                }
+            }
+            selection { (p, 5) }
+        };
+
+        // Fragment: open Fold with only FoldTitle("New"), open_end=2.
+        // open_end merge at depth 1 merges FoldTitle("New") with FoldTitle("World"),
+        // creating adjacent text nodes [Text("New"), Text("World")] in the surviving FoldTitle.
+        // The is_textblock check at line 1426 ensures these get consolidated into "NewWorld".
+        let fragment = fragment! {
+            open_start: 0, open_end: 2,
+            fold {
+                fold_title { text { "New" } }
+            }
+        };
+
+        let pos = Position::new(NodeId::ROOT, 1, Affinity::Downstream);
+
+        let state = transact!(initial, |tr| {
+            let result = tr.insert_fragment(pos, fragment).unwrap();
+            if let Some(selection) = result.as_selection() {
+                tr.set_selection(selection);
+            }
+        });
+
+        let doc = &state.doc;
+
+        // Navigate: Root → Fold → FoldTitle
+        let root = doc.node(NodeId::ROOT).expect("Root should exist");
+        let fold = root
+            .children()
+            .find(|c| matches!(c.node(), Node::Fold(_)))
+            .expect("Fold should exist");
+        let fold_title = fold
+            .children()
+            .find(|c| matches!(c.node(), Node::FoldTitle(_)))
+            .expect("FoldTitle should exist");
+
+        // Verify FoldTitle has exactly 1 text child (merged), not 2 separate ones
+        let text_children: Vec<_> = fold_title
+            .children()
+            .filter(|c| matches!(c.node(), Node::Text(_)))
+            .collect();
+
+        assert_eq!(
+            text_children.len(),
+            1,
+            "FoldTitle should have 1 merged text node, not {} separate ones",
+            text_children.len()
+        );
+
+        // Verify the merged text content
+        if let Node::Text(t) = text_children[0].node() {
+            assert_eq!(
+                t.text.as_str(),
+                "NewWorld",
+                "Merged text should be 'NewWorld'"
+            );
+        } else {
+            panic!("Expected text node");
+        }
     }
 }

@@ -1387,4 +1387,50 @@ mod tests {
             font_detected,
         );
     }
+
+    #[test]
+    fn paste_fragment_into_fold_title_selection_at_end() {
+        // Paragraph 텍스트를 복사하여 FoldTitle에 붙여넣으면,
+        // 커서가 붙여넣어진 텍스트의 맨 끝에 위치해야 한다.
+        let mut p = id!();
+        let mut ft = id!();
+
+        let source = state! {
+            doc {
+                @p paragraph {
+                    text { "본문 텍스트" }
+                }
+            }
+            selection { (p, 0) -> (p, 6) }
+        };
+
+        let fragment = source.selection.extract_fragment(&source.doc).unwrap();
+
+        let paste_target = state! {
+            doc {
+                fold {
+                    @ft fold_title {}
+                    fold_content {
+                        paragraph {}
+                    }
+                }
+            }
+            selection { (ft, 0) }
+        };
+
+        let actual = transact!(paste_target, |tr| {
+            tr.paste_fragment(fragment, None).unwrap();
+        });
+
+        assert_eq!(
+            actual.selection.head.offset, 6,
+            "cursor should be at end of pasted text (offset 6), but was at offset {}",
+            actual.selection.head.offset,
+        );
+        assert!(
+            actual.selection.is_collapsed(),
+            "selection should be collapsed after paste, but was {:?}",
+            actual.selection,
+        );
+    }
 }
