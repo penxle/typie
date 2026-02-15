@@ -7,7 +7,6 @@
   import ExternalEmbed from '../external/ExternalEmbed.svelte';
   import ExternalFile from '../external/ExternalFile.svelte';
   import ExternalImage from '../external/ExternalImage.svelte';
-  import TableOverlay from './TableOverlay.svelte';
 
   type Props = {
     page: number;
@@ -132,12 +131,6 @@
           };
         }}
       ></canvas>
-
-      {#if !editor.readOnly}
-        {#each editor.tableOverlays.filter((o) => o.pageIdx === page) as overlay (overlay.tableId)}
-          <TableOverlay {editor} {overlay} />
-        {/each}
-      {/if}
 
       {#each externalElements as el (el.nodeId)}
         {#if el.data.type === 'image'}
