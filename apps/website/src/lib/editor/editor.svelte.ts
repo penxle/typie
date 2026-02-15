@@ -119,6 +119,7 @@ export class Editor {
   #running = false;
   #rafId: number | null = null;
   #flushPending = false;
+  #needsTick = false;
   #onDocChanged?: () => void;
   #onExitedDocumentStart?: () => void;
   #searchQuery = '';
@@ -335,21 +336,22 @@ export class Editor {
   #tick = (): void => {
     if (!this.#running) return;
 
-    if (this.#wasmEditor && this.#slateReader) {
+    if (this.#wasmEditor && this.#slateReader && this.#needsTick) {
+      this.#needsTick = false;
       this.#wasmEditor.tick();
       this.#slateReader.refresh(this.#wasmEditor.getSlatePtr(), this.#wasmEditor.getSlabPtr());
       if (this.#slateReader.hasDirty) {
         this.#readSlate(this.#slateReader);
       }
       this.#pendingTypewriterRequest = false;
-    }
 
-    if (!this.#flushPending) {
-      this.#flushPending = true;
-      idleCallback(() => {
-        this.#flushPending = false;
-        this.#wasmEditor?.flush();
-      });
+      if (!this.#flushPending) {
+        this.#flushPending = true;
+        idleCallback(() => {
+          this.#flushPending = false;
+          this.#wasmEditor?.flush();
+        });
+      }
     }
 
     this.#rafId = requestAnimationFrame(this.#tick);
@@ -633,6 +635,7 @@ export class Editor {
 
   dispatch(message: Message): Editor {
     this.#wasmEditor?.enqueueMessage(message);
+    this.#needsTick = true;
 
     return this;
   }
@@ -655,22 +658,27 @@ export class Editor {
 
   importUpdates(updates: Uint8Array): void {
     this.#wasmEditor?.importUpdates(updates);
+    this.#needsTick = true;
   }
 
   insertTemplateFragment(snapshot: Uint8Array): void {
     this.#wasmEditor?.insertTemplateFragment(snapshot);
+    this.#needsTick = true;
   }
 
   importUpdatesBatch(updatesBatch: Uint8Array[]): void {
     this.#wasmEditor?.importUpdatesBatch(updatesBatch);
+    this.#needsTick = true;
   }
 
   checkout(version: Uint8Array): void {
     this.#wasmEditor?.checkout(version);
+    this.#needsTick = true;
   }
 
   checkoutToLatest(): void {
     this.#wasmEditor?.checkoutToLatest();
+    this.#needsTick = true;
   }
 
   isDetached(): boolean {
@@ -683,6 +691,7 @@ export class Editor {
 
   revertTo(version: Uint8Array): void {
     this.#wasmEditor?.revertTo(version);
+    this.#needsTick = true;
   }
 
   inspectState(): string | undefined {
@@ -1261,11 +1270,14 @@ export class Editor {
   setTrackedItems(group: number, items: { id: string; nodeId: string; startOffset: number; endOffset: number }[]): void {
     this.ready.then(() => {
       this.#wasmEditor?.setTrackedItems(group, items);
+      this.#needsTick = true;
     });
   }
 
   replaceTextInBlock(blockId: string, startOffset: number, endOffset: number, replacement: string): boolean {
-    return this.#wasmEditor?.replaceTextInBlock(blockId, startOffset, endOffset, replacement) ?? false;
+    const result = this.#wasmEditor?.replaceTextInBlock(blockId, startOffset, endOffset, replacement) ?? false;
+    this.#needsTick = true;
+    return result;
   }
 
   getTextWithMappings(): { text: string; mappings: { nodeId: string; textStart: number; textEnd: number; blockOffset: number }[] } | null {
@@ -1379,6 +1391,7 @@ export class Editor {
     const match = this.searchMatches.find((m) => m.id === this.activeSearchMatchId);
     if (!match || !this.#wasmEditor) return;
     this.#wasmEditor.replaceTextInBlock(match.nodeId, match.startOffset, match.endOffset, replacement);
+    this.#needsTick = true;
     this.#performSearchAndUpdateTrackedItems();
     this.#scrollActiveSearchIntoView();
   }
@@ -1387,6 +1400,7 @@ export class Editor {
     if (this.searchMatches.length === 0 || !this.#wasmEditor) return;
     const items = this.searchMatches.map((m) => [m.nodeId, m.startOffset, m.endOffset, replacement]);
     this.#wasmEditor.replaceTextInBlocks(items);
+    this.#needsTick = true;
     this.#performSearchAndUpdateTrackedItems();
   }
 
