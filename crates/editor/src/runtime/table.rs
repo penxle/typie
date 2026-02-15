@@ -5,6 +5,7 @@ use crate::model::{Doc, LayoutMode, NodeId, TABLE_BORDER_WIDTH, TableAlign, Tabl
 use crate::runtime::Runtime;
 use crate::runtime::cmd::TableOverlay;
 use crate::state::Selection;
+use crate::state::table_helpers::{TableSelection, compute_table_selection};
 use crate::types::{Point, Rect};
 use std::collections::{HashMap, hash_map::Entry};
 use std::rc::Rc;
@@ -22,6 +23,7 @@ struct ContinuousTableOverlaySegment {
     start_row_index: usize,
     total_rows: usize,
     is_focused: bool,
+    show_cell_selector: bool,
 }
 
 #[derive(Debug)]
@@ -43,6 +45,7 @@ struct ContinuousTableOverlayAccum {
     align: String,
     first_page_idx: usize,
     is_focused: bool,
+    show_cell_selector: bool,
     min_x: f32,
     max_right: f32,
     global_top: f32,
@@ -62,6 +65,7 @@ impl ContinuousTableOverlayAccum {
             align: segment.align,
             first_page_idx: segment.page_idx,
             is_focused: segment.is_focused,
+            show_cell_selector: segment.show_cell_selector,
             min_x: segment.bounds.x,
             max_right: segment.bounds.x + segment.bounds.width,
             global_top,
@@ -91,6 +95,9 @@ impl ContinuousTableOverlayAccum {
         if segment.is_focused {
             self.is_focused = true;
         }
+        if segment.show_cell_selector {
+            self.show_cell_selector = true;
+        }
         self.min_x = self.min_x.min(segment.bounds.x);
         self.max_right = self.max_right.max(segment.bounds.x + segment.bounds.width);
         self.global_top = self.global_top.min(global_top);
@@ -113,6 +120,7 @@ impl ContinuousTableOverlayAccum {
         let col_positions = table_col_positions(&self.col_widths);
         let total_rows = row_heights.len();
         let is_focused = self.is_focused;
+        let show_cell_selector = self.show_cell_selector;
 
         TableOverlay {
             page_idx: anchor_page_idx,
@@ -132,6 +140,7 @@ impl ContinuousTableOverlayAccum {
             start_row_index: 0,
             total_rows,
             is_focused,
+            show_cell_selector,
         }
     }
 
@@ -209,6 +218,7 @@ fn collect_paginated_table_overlays(
     focused_page_idx: Option<usize>,
 ) -> Vec<TableOverlay> {
     let mut overlays = Vec::new();
+    let cell_selector_table_id = selected_table_overlay_table_id(selection, doc.as_ref());
 
     for (page_idx, page) in pages.iter().enumerate() {
         visit_table_borders(&page.root, Point::zero(), &mut |abs_pos, table_border| {
@@ -219,11 +229,13 @@ fn collect_paginated_table_overlays(
                 page_idx,
                 table_border.node_id,
             );
+            let show_cell_selector = cell_selector_table_id == Some(table_border.node_id);
             overlays.push(to_paginated_overlay(
                 page_idx,
                 abs_pos,
                 table_border,
                 is_focused,
+                show_cell_selector,
             ));
         });
     }
@@ -243,6 +255,7 @@ fn collect_continuous_table_overlays(
 
     let page_offsets = compute_page_offsets(pages);
     let mut builder = ContinuousOverlayBuilder::default();
+    let cell_selector_table_id = selected_table_overlay_table_id(selection, doc.as_ref());
 
     for (page_idx, page) in pages.iter().enumerate() {
         let page_offset = page_offsets[page_idx];
@@ -254,12 +267,14 @@ fn collect_continuous_table_overlays(
                 page_idx,
                 table_border.node_id,
             );
+            let show_cell_selector = cell_selector_table_id == Some(table_border.node_id);
             builder.push(to_continuous_segment(
                 page_idx,
                 page_offset,
                 abs_pos,
                 table_border,
                 is_focused,
+                show_cell_selector,
             ));
         });
     }
@@ -295,6 +310,7 @@ fn to_paginated_overlay(
     abs_pos: Point,
     table_border: &TableBorderElement,
     is_focused: bool,
+    show_cell_selector: bool,
 ) -> TableOverlay {
     let payload = table_overlay_payload(abs_pos, table_border);
     let col_positions = table_col_positions(&payload.col_widths);
@@ -313,6 +329,7 @@ fn to_paginated_overlay(
         start_row_index: payload.start_row_index,
         total_rows: payload.total_rows,
         is_focused,
+        show_cell_selector,
     }
 }
 
@@ -322,6 +339,7 @@ fn to_continuous_segment(
     abs_pos: Point,
     table_border: &TableBorderElement,
     is_focused: bool,
+    show_cell_selector: bool,
 ) -> ContinuousTableOverlaySegment {
     let payload = table_overlay_payload(abs_pos, table_border);
 
@@ -337,6 +355,7 @@ fn to_continuous_segment(
         start_row_index: payload.start_row_index,
         total_rows: payload.total_rows,
         is_focused,
+        show_cell_selector,
     }
 }
 
@@ -425,6 +444,14 @@ fn focused_cursor_page(selection: &Selection, doc: &Rc<Doc>, pages: &[Page]) -> 
     Cursor::bounds(&ctx, pages, selection.head).map(|(page_idx, _)| page_idx)
 }
 
+fn selected_table_overlay_table_id(selection: &Selection, doc: &Doc) -> Option<NodeId> {
+    match compute_table_selection(doc, selection) {
+        Some(TableSelection::Full(table_id)) => Some(table_id),
+        Some(TableSelection::Rectangular { table_id, .. }) => Some(table_id),
+        _ => None,
+    }
+}
+
 fn is_cursor_in_table(cursor_node_id: NodeId, table_id: NodeId, doc: &Rc<Doc>) -> bool {
     let Some(cursor_node) = doc.node(cursor_node_id) else {
         return false;
@@ -453,6 +480,7 @@ mod tests {
         row_heights: Vec<f32>,
         total_rows: usize,
         is_focused: bool,
+        show_cell_selector: bool,
     ) -> ContinuousTableOverlaySegment {
         ContinuousTableOverlaySegment {
             page_idx,
@@ -471,6 +499,7 @@ mod tests {
             start_row_index,
             total_rows,
             is_focused,
+            show_cell_selector,
         }
     }
 
@@ -488,6 +517,7 @@ mod tests {
             vec![40.0, 40.0, 40.0],
             5,
             false,
+            false,
         ));
         builder.push(segment(
             1,
@@ -499,6 +529,7 @@ mod tests {
             vec![40.0, 40.0],
             5,
             true,
+            true,
         ));
 
         let merged = builder.finish(&[0.0, 1024.0]);
@@ -508,6 +539,7 @@ mod tests {
         assert_eq!(m.table_id, "table-1");
         assert_eq!(m.page_idx, 0);
         assert!(m.is_focused);
+        assert!(m.show_cell_selector);
         assert_eq!(m.start_row_index, 0);
         assert_eq!(m.total_rows, 5);
         assert_eq!(m.row_heights, vec![40.0, 40.0, 40.0, 40.0, 40.0]);

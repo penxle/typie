@@ -138,6 +138,25 @@ impl Runtime {
         vec![Effect::SelectionChanged]
     }
 
+    pub(crate) fn handle_collapse_selection(&mut self, to_anchor: bool) -> Vec<Effect> {
+        let selection = self.state.selection;
+        if selection.is_collapsed() {
+            return vec![];
+        }
+
+        let position = if to_anchor {
+            selection.anchor
+        } else {
+            selection.head
+        };
+
+        self.transact(move |tr| {
+            tr.set_selection(Selection::collapsed(position));
+            tr.set_preferred_x(None);
+            Ok(true)
+        })
+    }
+
     fn compute_navigation(
         &self,
         ctx: &NavigationContext,
@@ -1124,5 +1143,45 @@ mod tests {
         assert_eq!(selection.anchor.offset, 2);
         assert_eq!(selection.head.node_id, NodeId::ROOT);
         assert_eq!(selection.head.offset, 0);
+    }
+
+    #[test]
+    fn test_collapse_selection_to_anchor() {
+        let mut p = id!();
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph { text { "abcdef" } }
+            }
+            selection { (p, 1) -> (p, 4) }
+        };
+
+        rt.layout();
+        rt.update(Message::CollapseSelection { to_anchor: true });
+
+        let selection = &rt.state().selection;
+        assert!(selection.is_collapsed());
+        assert_eq!(selection.head.node_id, p);
+        assert_eq!(selection.head.offset, 1);
+    }
+
+    #[test]
+    fn test_collapse_selection_to_head() {
+        let mut p = id!();
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph { text { "abcdef" } }
+            }
+            selection { (p, 1) -> (p, 4) }
+        };
+
+        rt.layout();
+        rt.update(Message::CollapseSelection { to_anchor: false });
+
+        let selection = &rt.state().selection;
+        assert!(selection.is_collapsed());
+        assert_eq!(selection.head.node_id, p);
+        assert_eq!(selection.head.offset, 4);
     }
 }

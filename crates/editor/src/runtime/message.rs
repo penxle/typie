@@ -541,6 +541,10 @@ define_messages! {
     => when When::True
     => handle(rt) { rt.handle_set_selection(anchor_node_id, anchor_offset, anchor_affinity, head_node_id, head_offset, head_affinity) },
 
+    CollapseSelection { to_anchor: bool }
+    => when When::True
+    => handle(rt) { rt.handle_collapse_selection(to_anchor) },
+
     ExtendSelectionTo {
         anchor_page_idx: usize,
         anchor_x: f32,

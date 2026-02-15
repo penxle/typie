@@ -17,6 +17,7 @@ class TableOverlayInfo {
     required this.startRowIndex,
     required this.totalRows,
     required this.isFocused,
+    required this.showCellSelector,
     required this.colWidths,
     required this.colPositions,
     required this.rowHeights,
@@ -31,6 +32,7 @@ class TableOverlayInfo {
   final int startRowIndex;
   final int totalRows;
   final bool isFocused;
+  final bool showCellSelector;
   final List<double> colWidths;
   final List<double> colPositions;
   final List<double> rowHeights;

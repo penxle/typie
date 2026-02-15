@@ -425,6 +425,7 @@ class CommandHandler {
             startRowIndex: o.startRowIndex,
             totalRows: o.totalRows,
             isFocused: o.isFocused,
+            showCellSelector: o.showCellSelector,
             colWidths: o.colWidths,
             colPositions: o.colPositions,
             rowHeights: o.rowHeights,

@@ -24,6 +24,7 @@ export type TableOverlay = {
   startRowIndex: number;
   totalRows: number;
   isFocused: boolean;
+  showCellSelector: boolean;
 };
 
 export const DIRTY_SETTINGS = 0;
@@ -694,7 +695,8 @@ function readTableOverlays(view: DataView, offset: number, count: number): Table
     const startRowIndex = view.getUint32(pos, true);
     const totalRows = view.getUint32(pos + 4, true);
     const isFocused = view.getUint32(pos + 8, true) !== 0;
-    pos += 12;
+    const showCellSelector = view.getUint32(pos + 12, true) !== 0;
+    pos += 16;
 
     const cwCnt = view.getUint32(pos, true);
     pos += 4;
@@ -729,6 +731,7 @@ function readTableOverlays(view: DataView, offset: number, count: number): Table
       startRowIndex,
       totalRows,
       isFocused,
+      showCellSelector,
     });
   }
   return overlays;

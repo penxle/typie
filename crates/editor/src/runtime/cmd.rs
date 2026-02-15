@@ -37,4 +37,5 @@ pub struct TableOverlay {
     pub start_row_index: usize,
     pub total_rows: usize,
     pub is_focused: bool,
+    pub show_cell_selector: bool,
 }

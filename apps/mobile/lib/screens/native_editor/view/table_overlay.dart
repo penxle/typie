@@ -1,29 +1,45 @@
 import 'dart:math' as math;
 
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/context/bottom_sheet.dart';
 import 'package:typie/context/theme.dart';
 import 'package:typie/icons/lucide_light.dart';
-import 'package:typie/screens/native_editor/state/state.dart';
 import 'package:typie/screens/native_editor/table/models.dart';
 import 'package:typie/screens/native_editor/view/document_overlay_layer.dart';
+import 'package:typie/screens/native_editor/view/gesture.dart';
 import 'package:typie/screens/native_editor/view/scope.dart';
 
-const _handleGap = -9.0;
-const _colHandleWidth = 24.0;
-const _colHandleHeight = 18.0;
-const _rowHandleWidth = 18.0;
-const _rowHandleHeight = 24.0;
-const _columnResizeTouchWidth = 24.0;
-const _columnResizeVisualWidth = 3.0;
-const _minColumnWidth = 40.0;
-const _sheetOpenDelay = Duration(milliseconds: 40);
-typedef _OverlayDispatch = void Function(Map<String, dynamic> message);
+import 'table_overlay/cell_selector.dart';
+import 'table_overlay/column_resizer.dart';
+import 'table_overlay/constants.dart';
+import 'table_overlay/geometry.dart';
+import 'table_overlay/handles.dart';
+
+typedef OverlayDispatch = void Function(Map<String, dynamic> message);
+
+List<Widget> _optionalWidget(Widget? widget) {
+  if (widget == null) {
+    return const [];
+  }
+  return [widget];
+}
 
 class TableOverlay extends HookWidget {
-  const TableOverlay({super.key});
+  const TableOverlay({
+    required this.gesture,
+    required this.viewWidth,
+    required this.viewHeight,
+    required this.dropPosition,
+    required this.globalToViewport,
+    super.key,
+  });
+
+  final GestureController gesture;
+  final double viewWidth;
+  final double viewHeight;
+  final ValueNotifier<Offset?> dropPosition;
+  final Offset? Function(Offset globalPosition) globalToViewport;
 
   @override
   Widget build(BuildContext context) {
@@ -60,7 +76,14 @@ class TableOverlay extends HookWidget {
           top: pageRect.top,
           width: overlayWidth,
           height: overlayHeight,
-          child: _FocusedTableOverlay(overlay: focusedOverlay),
+          child: _FocusedTableOverlay(
+            overlay: focusedOverlay,
+            gesture: gesture,
+            viewWidth: viewWidth,
+            viewHeight: viewHeight,
+            dropPosition: dropPosition,
+            globalToViewport: globalToViewport,
+          ),
         );
       },
     );
@@ -68,12 +91,25 @@ class TableOverlay extends HookWidget {
 }
 
 class _FocusedTableOverlay extends HookWidget {
-  const _FocusedTableOverlay({required this.overlay});
+  const _FocusedTableOverlay({
+    required this.overlay,
+    required this.gesture,
+    required this.viewWidth,
+    required this.viewHeight,
+    required this.dropPosition,
+    required this.globalToViewport,
+  });
 
   final TableOverlayInfo overlay;
+  final GestureController gesture;
+  final double viewWidth;
+  final double viewHeight;
+  final ValueNotifier<Offset?> dropPosition;
+  final Offset? Function(Offset globalPosition) globalToViewport;
 
   @override
   Widget build(BuildContext context) {
+    final selectionHandleColor = context.colors.textDefault;
     final scope = ContentScope.of(context);
     useListenable(scope.controller);
 
@@ -97,12 +133,16 @@ class _FocusedTableOverlay extends HookWidget {
 
     final selectedRow = useState<int>(0);
     final selectedCol = useState<int>(0);
+    final selection = scope.controller.state.selection;
+    final cellSelectionDrag = useState<CellSelectionDragDraft?>(null);
+    final cellHandleDragPosition = useValueNotifier<Offset?>(null);
+
     useEffect(() {
       if (!hasOverlayGeometry) {
         return null;
       }
-      final focused = _focusedCellFromCursor(overlay, cursor, layout);
-      selectedRow.value = focused?.row ?? _defaultRow(overlay);
+      final focused = tableFocusedCellFromCursor(overlay, cursor, layout);
+      selectedRow.value = focused?.row ?? tableDefaultRow(overlay);
       selectedCol.value = focused?.col ?? 0;
       return null;
     }, [overlay.tableId, hasOverlayGeometry]);
@@ -121,7 +161,7 @@ class _FocusedTableOverlay extends HookWidget {
         if (!hasOverlayGeometry) {
           return null;
         }
-        final focused = _focusedCellFromCursor(overlay, cursor, layout);
+        final focused = tableFocusedCellFromCursor(overlay, cursor, layout);
         if (focused == null) {
           return null;
         }
@@ -153,6 +193,11 @@ class _FocusedTableOverlay extends HookWidget {
       ],
     );
 
+    useEffect(() {
+      resetCellSelectionDragIfTableChanged(draftState: cellSelectionDrag, tableId: overlay.tableId);
+      return null;
+    }, [cellSelectionDrag.value, overlay.tableId]);
+
     if (!hasOverlayGeometry) {
       return const SizedBox.shrink();
     }
@@ -161,25 +206,17 @@ class _FocusedTableOverlay extends HookWidget {
       scope.controller.dispatch(message);
     }
 
-    void scrollEditorIntoView() {
-      scope.controller.scrollIntoView();
-    }
-
-    void requestEditorFocus() {
-      scope.inputController.requestFocus();
-    }
-
     void dispatchAndScrollAndFocus(Map<String, dynamic> message) {
       dispatch(message);
-      scrollEditorIntoView();
-      requestEditorFocus();
+      scope.controller.scrollIntoView();
+      scope.inputController.requestFocus();
     }
 
     void selectRow(int row) {
       final clamped = row.clamp(0, overlay.totalRows - 1);
       selectedRow.value = clamped;
       dispatch({'type': 'selectTableRow', 'tableId': overlay.tableId, 'row': clamped});
-      scrollEditorIntoView();
+      scope.controller.scrollIntoView();
     }
 
     void selectCol(int col) {
@@ -190,7 +227,7 @@ class _FocusedTableOverlay extends HookWidget {
 
     final currentRow = selectedRow.value.clamp(0, overlay.totalRows - 1);
     final currentCol = selectedCol.value.clamp(0, overlay.colWidths.length - 1);
-    final selectedColLeft = _colLeft(overlay, currentCol);
+    final selectedColLeft = tableColLeft(overlay, currentCol);
     final selectedColWidth = overlay.colWidths[currentCol];
 
     final selectedRowLocal = currentRow - overlay.startRowIndex;
@@ -198,32 +235,52 @@ class _FocusedTableOverlay extends HookWidget {
         selectedRowLocal >= 0 &&
         selectedRowLocal < overlay.rowHeights.length &&
         selectedRowLocal < overlay.rowPositions.length;
-    final selectedRowTop = isSelectedRowVisible ? _rowTop(overlay, selectedRowLocal) : 0.0;
+    final selectedRowTop = isSelectedRowVisible ? tableRowTop(overlay, selectedRowLocal) : 0.0;
     final selectedRowHeight = isSelectedRowVisible ? overlay.rowHeights[selectedRowLocal] : 0.0;
 
-    final colHandleLeft = _clampDouble(
-      renderBounds.x + selectedColLeft + (selectedColWidth - _colHandleWidth) / 2,
+    final colHandleLeft = tableClampDouble(
+      renderBounds.x + selectedColLeft + (selectedColWidth - tableColumnHandleWidth) / 2,
       4,
-      math.max(4, pageWidth - _colHandleWidth - 4),
+      math.max(4, pageWidth - tableColumnHandleWidth - 4),
     );
-    final colHandleTop = _clampDouble(
-      renderBounds.y - _colHandleHeight - _handleGap,
+    final colHandleTop = tableClampDouble(
+      renderBounds.y - tableColumnHandleHeight - tableHandleGap,
       4,
-      math.max(4, pageHeight - _colHandleHeight - 4),
+      math.max(4, pageHeight - tableColumnHandleHeight - 4),
     );
 
-    final rowHandleLeft = _clampDouble(
-      renderBounds.x - _rowHandleWidth - _handleGap,
+    final rowHandleLeft = tableClampDouble(
+      renderBounds.x - tableRowHandleWidth - tableHandleGap,
       4,
-      math.max(4, pageWidth - _rowHandleWidth - 4),
+      math.max(4, pageWidth - tableRowHandleWidth - 4),
     );
     final rowHandleTop = isSelectedRowVisible
-        ? _clampDouble(
-            renderBounds.y + selectedRowTop + (selectedRowHeight - _rowHandleHeight) / 2,
+        ? tableClampDouble(
+            renderBounds.y + selectedRowTop + (selectedRowHeight - tableRowHandleHeight) / 2,
             4,
-            math.max(4, pageHeight - _rowHandleHeight - 4),
+            math.max(4, pageHeight - tableRowHandleHeight - 4),
           )
         : 0.0;
+
+    final cellSelector = TableCellSelectorController(
+      context: context,
+      scope: scope,
+      gesture: gesture,
+      overlay: overlay,
+      layout: layout,
+      selection: selection,
+      renderBounds: renderBounds,
+      fallbackRow: currentRow,
+      fallbackCol: currentCol,
+      dragDraftState: cellSelectionDrag,
+      cellHandleDragPosition: cellHandleDragPosition,
+      viewWidth: viewWidth,
+      viewHeight: viewHeight,
+      dropPosition: dropPosition,
+      globalToViewport: globalToViewport,
+    );
+    final resizeCol = cellSelector.rightEdgeCol;
+    final cellHandleWidget = buildCellSelectionHandleWidget(cellSelector, selectionHandleColor);
 
     void moveHandleRowTo(int row) {
       selectedRow.value = math.max(0, row);
@@ -260,41 +317,48 @@ class _FocusedTableOverlay extends HookWidget {
       );
     }
 
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        _TableColumnResizer(
-          overlay: overlay,
-          renderBounds: renderBounds,
-          selectedCol: currentCol,
-          pageWidth: pageWidth,
-          onCommit: (nextWidths) {
-            dispatch({'type': 'setColumnWidths', 'tableId': overlay.tableId, 'colWidths': nextWidths});
-            scrollEditorIntoView();
-          },
-        ),
-        Positioned(
-          left: colHandleLeft,
-          top: colHandleTop,
-          child: _SelectorHandleButton(
-            width: _colHandleWidth,
-            height: _colHandleHeight,
-            icon: LucideLightIcons.ellipsis,
-            onTap: openColumnMenu,
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerUp: (_) => cellSelector.endDrag(),
+      onPointerCancel: (_) => cellSelector.endDrag(),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          ...buildCellSelectionOutlineWidgets(cellSelector, selectionHandleColor),
+          TableColumnResizer(
+            overlay: overlay,
+            renderBounds: renderBounds,
+            selectedCol: resizeCol,
+            pageWidth: pageWidth,
+            onCommit: (nextWidths) {
+              dispatch({'type': 'setColumnWidths', 'tableId': overlay.tableId, 'colWidths': nextWidths});
+              scope.controller.scrollIntoView();
+            },
           ),
-        ),
-        if (isSelectedRowVisible)
           Positioned(
-            left: rowHandleLeft,
-            top: rowHandleTop,
-            child: _SelectorHandleButton(
-              width: _rowHandleWidth,
-              height: _rowHandleHeight,
-              icon: LucideLightIcons.ellipsis_vertical,
-              onTap: openRowMenu,
+            left: colHandleLeft,
+            top: colHandleTop,
+            child: SelectorHandleButton(
+              width: tableColumnHandleWidth,
+              height: tableColumnHandleHeight,
+              icon: LucideLightIcons.ellipsis,
+              onTap: openColumnMenu,
             ),
           ),
-      ],
+          if (isSelectedRowVisible)
+            Positioned(
+              left: rowHandleLeft,
+              top: rowHandleTop,
+              child: SelectorHandleButton(
+                width: tableRowHandleWidth,
+                height: tableRowHandleHeight,
+                icon: LucideLightIcons.ellipsis_vertical,
+                onTap: openRowMenu,
+              ),
+            ),
+          ..._optionalWidget(cellHandleWidget),
+        ],
+      ),
     );
   }
 
@@ -303,7 +367,7 @@ class _FocusedTableOverlay extends HookWidget {
     ContentScope scope,
     TableOverlayInfo overlay,
     int selectedRow,
-    _OverlayDispatch dispatch, {
+    OverlayDispatch dispatch, {
     required ValueChanged<int> onSelectedRowChanged,
   }) async {
     final isFirst = selectedRow == 0;
@@ -311,7 +375,7 @@ class _FocusedTableOverlay extends HookWidget {
     final isOnlyRow = overlay.totalRows <= 1;
 
     scope.inputController.dismissKeyboard();
-    await Future<void>.delayed(_sheetOpenDelay);
+    await Future<void>.delayed(tableOverlaySheetOpenDelay);
     if (!context.mounted) {
       return;
     }
@@ -394,7 +458,7 @@ class _FocusedTableOverlay extends HookWidget {
     ContentScope scope,
     TableOverlayInfo overlay,
     int selectedCol,
-    _OverlayDispatch dispatch, {
+    OverlayDispatch dispatch, {
     required ValueChanged<int> onSelectedColChanged,
   }) async {
     final isFirst = selectedCol == 0;
@@ -402,7 +466,7 @@ class _FocusedTableOverlay extends HookWidget {
     final isOnlyColumn = overlay.colWidths.length <= 1;
 
     scope.inputController.dismissKeyboard();
-    await Future<void>.delayed(_sheetOpenDelay);
+    await Future<void>.delayed(tableOverlaySheetOpenDelay);
     if (!context.mounted) {
       return;
     }
@@ -479,340 +543,4 @@ class _FocusedTableOverlay extends HookWidget {
       ),
     );
   }
-}
-
-class _TableColumnResizer extends HookWidget {
-  const _TableColumnResizer({
-    required this.overlay,
-    required this.renderBounds,
-    required this.selectedCol,
-    required this.pageWidth,
-    required this.onCommit,
-  });
-
-  final TableOverlayInfo overlay;
-  final TableOverlayBounds renderBounds;
-  final int selectedCol;
-  final double pageWidth;
-  final ValueChanged<List<double>> onCommit;
-
-  @override
-  Widget build(BuildContext context) {
-    final resizeDraft = useState<_ColumnResizeDraft?>(null);
-    final activeResizePointer = useState<int?>(null);
-
-    useEffect(() {
-      final draft = resizeDraft.value;
-      if (draft == null) {
-        return null;
-      }
-      final shouldReset =
-          draft.tableId != overlay.tableId ||
-          draft.colIndex >= overlay.colWidths.length ||
-          draft.initialWidths.length != overlay.colWidths.length;
-      if (shouldReset) {
-        resizeDraft.value = null;
-        activeResizePointer.value = null;
-      }
-      return null;
-    }, [resizeDraft.value, overlay.tableId, overlay.colWidths.length]);
-
-    final draft = resizeDraft.value;
-    final isResizing = draft != null;
-    final resizeCol = (isResizing ? draft.colIndex : selectedCol).clamp(0, overlay.colWidths.length - 1);
-    final resizeDelta = isResizing ? _clampColumnResizeDelta(draft.initialWidths, draft.colIndex, draft.deltaX) : 0.0;
-    final resizeHandleCenterX = renderBounds.x + _colRight(overlay, resizeCol) + resizeDelta;
-    final resizeHandleLeft = _clampDouble(
-      resizeHandleCenterX - _columnResizeTouchWidth / 2,
-      0,
-      math.max(0, pageWidth - _columnResizeTouchWidth),
-    );
-
-    void beginColumnResize(PointerDownEvent event) {
-      if (activeResizePointer.value != null) {
-        return;
-      }
-      activeResizePointer.value = event.pointer;
-      resizeDraft.value = _ColumnResizeDraft(
-        tableId: overlay.tableId,
-        colIndex: selectedCol,
-        startX: event.position.dx,
-        initialWidths: List<double>.from(overlay.colWidths),
-        deltaX: 0,
-      );
-    }
-
-    void updateColumnResize(PointerMoveEvent event) {
-      if (event.pointer != activeResizePointer.value) {
-        return;
-      }
-      final current = resizeDraft.value;
-      if (current == null) {
-        return;
-      }
-      resizeDraft.value = current.copyWith(deltaX: event.position.dx - current.startX);
-    }
-
-    void endColumnResize(PointerEvent event) {
-      if (event.pointer != activeResizePointer.value) {
-        return;
-      }
-      activeResizePointer.value = null;
-      final current = resizeDraft.value;
-      if (current == null) {
-        return;
-      }
-      final nextWidths = _applyColumnResizeDelta(current.initialWidths, current.colIndex, current.deltaX);
-      resizeDraft.value = null;
-      if (!_hasWidthChange(current.initialWidths, nextWidths)) {
-        return;
-      }
-      onCommit(nextWidths);
-    }
-
-    return Positioned(
-      left: resizeHandleLeft,
-      top: renderBounds.y,
-      child: RawGestureDetector(
-        behavior: HitTestBehavior.opaque,
-        gestures: {
-          EagerGestureRecognizer: GestureRecognizerFactoryWithHandlers<EagerGestureRecognizer>(
-            EagerGestureRecognizer.new,
-            (EagerGestureRecognizer instance) {},
-          ),
-        },
-        child: Listener(
-          behavior: HitTestBehavior.opaque,
-          onPointerDown: beginColumnResize,
-          onPointerMove: updateColumnResize,
-          onPointerUp: endColumnResize,
-          onPointerCancel: endColumnResize,
-          child: SizedBox(
-            width: _columnResizeTouchWidth,
-            height: renderBounds.height,
-            child: Align(
-              alignment: Alignment.topCenter,
-              child: Container(
-                margin: const EdgeInsets.only(top: 2),
-                width: _columnResizeVisualWidth,
-                height: math.max(0, renderBounds.height - 4),
-                decoration: BoxDecoration(
-                  color: isResizing ? context.colors.accentBrand : context.colors.accentBrand.withValues(alpha: 0.35),
-                  borderRadius: BorderRadius.circular(_columnResizeVisualWidth),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SelectorHandleButton extends StatelessWidget {
-  const _SelectorHandleButton({required this.width, required this.height, required this.icon, required this.onTap});
-
-  final double width;
-  final double height;
-  final IconData icon;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: Container(
-        width: width,
-        height: height,
-        decoration: BoxDecoration(
-          color: context.colors.surfaceDefault,
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: context.colors.borderStrong),
-          boxShadow: [
-            BoxShadow(color: Colors.black.withValues(alpha: 0.08), offset: const Offset(0, 1), blurRadius: 4),
-          ],
-        ),
-        child: Icon(icon, size: 14, color: context.colors.textSubtle),
-      ),
-    );
-  }
-}
-
-class _TableCellIndex {
-  const _TableCellIndex({required this.row, required this.col});
-
-  final int row;
-  final int col;
-}
-
-class _ColumnResizeDraft {
-  const _ColumnResizeDraft({
-    required this.tableId,
-    required this.colIndex,
-    required this.startX,
-    required this.initialWidths,
-    required this.deltaX,
-  });
-
-  final String tableId;
-  final int colIndex;
-  final double startX;
-  final List<double> initialWidths;
-  final double deltaX;
-
-  _ColumnResizeDraft copyWith({double? deltaX}) {
-    return _ColumnResizeDraft(
-      tableId: tableId,
-      colIndex: colIndex,
-      startX: startX,
-      initialWidths: initialWidths,
-      deltaX: deltaX ?? this.deltaX,
-    );
-  }
-}
-
-int _defaultRow(TableOverlayInfo overlay) {
-  return overlay.startRowIndex.clamp(0, overlay.totalRows - 1);
-}
-
-double _clampDouble(double value, double min, double max) {
-  if (max < min) {
-    return min;
-  }
-  return value.clamp(min, max);
-}
-
-int _indexForOffset(List<double> positions, double offset) {
-  for (var i = 0; i < positions.length; i++) {
-    if (offset < positions[i]) {
-      return i;
-    }
-  }
-  return positions.length - 1;
-}
-
-double _colLeft(TableOverlayInfo overlay, int colIndex) {
-  if (colIndex <= 0) {
-    return 0;
-  }
-  return overlay.colPositions[colIndex - 1];
-}
-
-double _colRight(TableOverlayInfo overlay, int colIndex) {
-  if (colIndex < 0) {
-    return 0;
-  }
-  if (colIndex >= overlay.colPositions.length) {
-    return overlay.bounds.width;
-  }
-  return overlay.colPositions[colIndex];
-}
-
-double _rowTop(TableOverlayInfo overlay, int localRowIndex) {
-  if (localRowIndex <= 0) {
-    return 0;
-  }
-  return overlay.rowPositions[localRowIndex - 1];
-}
-
-double _clampColumnResizeDelta(List<double> widths, int colIndex, double deltaX) {
-  if (widths.isEmpty || colIndex < 0 || colIndex >= widths.length) {
-    return 0;
-  }
-
-  final minDelta = _minColumnWidth - widths[colIndex];
-  if (colIndex == widths.length - 1) {
-    return math.max(minDelta, deltaX);
-  }
-
-  final maxDelta = widths[colIndex + 1] - _minColumnWidth;
-  return _clampDouble(deltaX, minDelta, maxDelta);
-}
-
-List<double> _applyColumnResizeDelta(List<double> initialWidths, int colIndex, double deltaX) {
-  if (initialWidths.isEmpty || colIndex < 0 || colIndex >= initialWidths.length) {
-    return initialWidths;
-  }
-
-  final next = List<double>.from(initialWidths);
-  final clampedDelta = _clampColumnResizeDelta(initialWidths, colIndex, deltaX);
-
-  if (colIndex == next.length - 1) {
-    next[colIndex] = next[colIndex] + clampedDelta;
-    return next;
-  }
-
-  next[colIndex] = next[colIndex] + clampedDelta;
-  next[colIndex + 1] = next[colIndex + 1] - clampedDelta;
-  return next;
-}
-
-bool _hasWidthChange(List<double> before, List<double> after) {
-  if (before.length != after.length) {
-    return true;
-  }
-  for (var i = 0; i < before.length; i++) {
-    if ((before[i] - after[i]).abs() > 0.01) {
-      return true;
-    }
-  }
-  return false;
-}
-
-double _pageTopOffset(LayoutInfo layout, int pageIdx) {
-  if (layout.pages.isEmpty) {
-    return 0;
-  }
-
-  final clamped = pageIdx.clamp(0, layout.pages.length - 1);
-  var top = 0.0;
-  for (var i = 0; i < clamped; i++) {
-    top += layout.pages[i].height;
-    if (layout.isPaginated && i < layout.pages.length - 1) {
-      top += 24.0;
-    }
-  }
-  return top;
-}
-
-_TableCellIndex? _focusedCellFromCursor(TableOverlayInfo overlay, CursorInfo? cursor, LayoutInfo? layout) {
-  if (cursor == null || !cursor.visible) {
-    return null;
-  }
-  if (layout == null) {
-    return null;
-  }
-  if (overlay.colPositions.isEmpty || overlay.rowPositions.isEmpty) {
-    return null;
-  }
-
-  final localX = cursor.x - overlay.bounds.x;
-  final localY = layout.isPaginated
-      ? (() {
-          if (cursor.pageIdx != overlay.pageIdx) {
-            return double.nan;
-          }
-          return cursor.y + cursor.height * 0.5 - overlay.bounds.y;
-        })()
-      : (() {
-          final overlayTop = _pageTopOffset(layout, overlay.pageIdx) + overlay.bounds.y;
-          final cursorMid = _pageTopOffset(layout, cursor.pageIdx) + cursor.y + cursor.height * 0.5;
-          return cursorMid - overlayTop;
-        })();
-
-  if (localY.isNaN) {
-    return null;
-  }
-  if (localX < 0 || localY < 0 || localX > overlay.bounds.width || localY > overlay.bounds.height) {
-    return null;
-  }
-
-  final localRow = _indexForOffset(overlay.rowPositions, localY);
-  final localCol = _indexForOffset(overlay.colPositions, localX);
-
-  return _TableCellIndex(
-    row: (overlay.startRowIndex + localRow).clamp(0, overlay.totalRows - 1),
-    col: localCol.clamp(0, overlay.colWidths.length - 1),
-  );
 }
