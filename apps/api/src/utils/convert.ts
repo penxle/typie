@@ -618,6 +618,7 @@ export function convertPostToDocumentJson(
       text_color: 'black',
       background_color: 'none',
       letter_spacing: 0,
+      line_height: 1.6,
       italic: false,
       strikethrough: false,
       underline: false,
