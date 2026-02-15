@@ -755,6 +755,13 @@ export class Editor {
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     const pageIdx = Number.parseInt(pageElement.dataset.pageIndex!);
     const point = calculateRelativePosition(pageElement, e);
+    const pageRect = pageElement.getBoundingClientRect();
+
+    // NOTE: continuous 모드에서 캔버스 경계에 걸친 table overlay 클릭 대응
+    if (point.x < 0 || point.y < 0 || point.x > pageRect.width || point.y > pageRect.height) {
+      return null;
+    }
+
     return {
       pageIdx,
       x: point.x,
