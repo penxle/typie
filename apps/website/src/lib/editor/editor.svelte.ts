@@ -178,6 +178,7 @@ export class Editor {
   });
 
   pendingScrollMode = $state<'auto' | 'typewriter' | null>(null);
+  #pendingTypewriterRequest = false;
 
   inputElement = $state<HTMLInputElement | null>(null);
 
@@ -323,6 +324,7 @@ export class Editor {
       if (this.#slateReader.hasDirty) {
         this.#readSlate(this.#slateReader);
       }
+      this.#pendingTypewriterRequest = false;
     }
 
     if (!this.#flushPending) {
@@ -367,6 +369,9 @@ export class Editor {
         this.cursor.pageIdx = c.pageIdx;
         this.cursor.bounds = c.bounds;
         this.cursor.visible = c.visible;
+        if (this.#pendingTypewriterRequest) {
+          this.pendingScrollMode = 'typewriter';
+        }
       } else {
         this.cursor.pageIdx = -1;
         this.cursor.bounds = null;
@@ -1335,7 +1340,12 @@ export class Editor {
   }
 
   scrollIntoView({ mode = 'auto' }: { mode?: 'auto' | 'typewriter' } = {}): Editor {
-    this.pendingScrollMode = mode;
+    if (mode === 'typewriter') {
+      this.#pendingTypewriterRequest = true;
+    } else {
+      this.pendingScrollMode = mode;
+      this.#pendingTypewriterRequest = false;
+    }
     return this;
   }
 
