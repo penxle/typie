@@ -14,6 +14,7 @@ pub struct Globals {
     pub parley_font_context: RefCell<parley::FontContext>,
     pub text_replacement_rules: RefCell<Vec<TextReplacementRule>>,
     pub lazy_fonts: RefCell<HashMap<(String, u16), LazyFont>>,
+    pub auto_surround_enabled: RefCell<bool>,
 }
 
 impl Globals {
@@ -23,6 +24,7 @@ impl Globals {
             parley_font_context: RefCell::new(parley::FontContext::new()),
             lazy_fonts: RefCell::new(HashMap::new()),
             text_replacement_rules: RefCell::new(Vec::new()),
+            auto_surround_enabled: RefCell::new(true),
         }
     }
 }
@@ -73,4 +75,18 @@ pub fn clear_text_replacement_rules() {
         let globals = globals.borrow();
         globals.text_replacement_rules.borrow_mut().clear();
     });
+}
+
+pub fn set_auto_surround_enabled(enabled: bool) {
+    GLOBALS.with(|globals| {
+        let globals = globals.borrow();
+        *globals.auto_surround_enabled.borrow_mut() = enabled;
+    });
+}
+
+pub fn is_auto_surround_enabled() -> bool {
+    GLOBALS.with(|globals| {
+        let globals = globals.borrow();
+        *globals.auto_surround_enabled.borrow()
+    })
 }

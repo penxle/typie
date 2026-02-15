@@ -1,3 +1,4 @@
+use crate::global::is_auto_surround_enabled;
 use crate::runtime::{Effect, Runtime};
 
 const AUTO_SURROUND_PAIRS: &[(&str, &str, &str)] = &[
@@ -28,7 +29,7 @@ const AUTO_SURROUND_PAIRS: &[(&str, &str, &str)] = &[
 
 impl Runtime {
     pub(crate) fn try_auto_surround(&mut self, text: &str) -> Option<Vec<Effect>> {
-        if !self.auto_surround_enabled {
+        if !is_auto_surround_enabled() {
             return None;
         }
 

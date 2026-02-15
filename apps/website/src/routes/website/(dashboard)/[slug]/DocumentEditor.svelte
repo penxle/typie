@@ -313,12 +313,6 @@
   });
 
   $effect(() => {
-    void app.preference.current.autoSurroundEnabled;
-    const enabled = app.preference.current.autoSurroundEnabled;
-    editor.setAutoSurroundEnabled(enabled);
-  });
-
-  $effect(() => {
     const _slug = slug;
     editorRegistry.registerNative(viewContext.id, slug, editor);
 

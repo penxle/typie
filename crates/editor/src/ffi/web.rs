@@ -1,5 +1,7 @@
 use crate::font::{add_font_base, add_font_chunk, set_fallback_fonts};
-use crate::global::{clear_text_replacement_rules, set_text_replacement_rules};
+use crate::global::{
+    clear_text_replacement_rules, set_auto_surround_enabled, set_text_replacement_rules,
+};
 use crate::icu_data::{get_general_category_map, load_icu_data};
 use crate::layout::query::is_selection_hit;
 use crate::model::{
@@ -91,6 +93,11 @@ impl Application {
     #[wasm_bindgen(js_name = clearTextReplacementRules)]
     pub fn clear_text_replacement_rules(&self) {
         clear_text_replacement_rules();
+    }
+
+    #[wasm_bindgen(js_name = setAutoSurroundEnabled)]
+    pub fn set_auto_surround_enabled(&self, enabled: bool) {
+        set_auto_surround_enabled(enabled);
     }
 
     #[wasm_bindgen(js_name = createEditor)]
@@ -449,11 +456,6 @@ impl Editor {
     #[wasm_bindgen(js_name = isReadOnly)]
     pub fn is_read_only(&self) -> bool {
         self.runtime.is_read_only()
-    }
-
-    #[wasm_bindgen(js_name = setAutoSurroundEnabled)]
-    pub fn set_auto_surround_enabled(&mut self, enabled: bool) {
-        self.runtime.set_auto_surround_enabled(enabled);
     }
 
     #[wasm_bindgen(js_name = setTrackedItems)]
