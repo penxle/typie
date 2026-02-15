@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import 'package:typie/screens/native_editor/state/scroll_mode.dart';
+
 Map<String, dynamic> _nav(String direction, bool extend) => {
   'type': 'navigate',
   'direction': direction,
@@ -8,10 +10,11 @@ Map<String, dynamic> _nav(String direction, bool extend) => {
 };
 
 class KeyboardHandler {
-  KeyboardHandler({required this.dispatch, required this.commitComposing});
+  KeyboardHandler({required this.dispatch, required this.commitComposing, required this.scrollIntoView});
 
   final void Function(Map<String, dynamic> message) dispatch;
   final void Function() commitComposing;
+  final void Function({ScrollMode mode}) scrollIntoView;
 
   bool handleKeyEvent(KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
@@ -23,10 +26,21 @@ class KeyboardHandler {
       return false;
     }
 
-    if (message['type'] == 'navigate') {
+    final type = message['type'] as String;
+    if (type == 'navigate') {
       commitComposing();
     }
     dispatch(message);
+
+    if (type == 'navigate') {
+      final extend = message['extend'] as bool? ?? false;
+      scrollIntoView(mode: extend ? ScrollMode.auto : ScrollMode.typewriter);
+    } else if (type == 'deleteForward' || type == 'deleteWordForward') {
+      scrollIntoView(mode: ScrollMode.typewriter);
+    } else {
+      scrollIntoView();
+    }
+
     return true;
   }
 

@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:typie/native/slate_reader.dart';
 import 'package:typie/screens/native_editor/external/models.dart';
 import 'package:typie/screens/native_editor/state/controller.dart';
-import 'package:typie/screens/native_editor/state/scroll_mode.dart';
 import 'package:typie/screens/native_editor/state/state.dart';
 import 'package:typie/screens/native_editor/table/models.dart';
 
@@ -95,7 +94,6 @@ class CommandHandler {
 
   static void _handleDocChanged(EditorController controller) {
     controller.onDocChanged?.call();
-    controller.pendingScrollMode = ScrollMode.typewriter;
   }
 
   static void _handleRenderRequired(EditorController controller) {

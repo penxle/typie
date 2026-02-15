@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'package:typie/native/editor_native.dart';
 import 'package:typie/screens/native_editor/controller/clipboard.dart';
+import 'package:typie/screens/native_editor/state/scroll_mode.dart';
 import 'package:typie/screens/native_editor/toolbar/scope.dart';
 import 'package:typie/screens/native_editor/view/input.dart';
 
@@ -12,6 +13,7 @@ class InputController {
     required this.dispatch,
     required this.editor,
     required this.onFocusChanged,
+    required this.scrollIntoView,
     required ValueGetter<BottomToolbarMode> getBottomToolbarMode,
   }) : _getBottomToolbarMode = getBottomToolbarMode;
 
@@ -19,6 +21,7 @@ class InputController {
   final void Function(Map<String, dynamic>) dispatch;
   final NativeEditor editor;
   final void Function(bool focused) onFocusChanged;
+  final void Function({ScrollMode mode}) scrollIntoView;
   final ValueGetter<BottomToolbarMode> _getBottomToolbarMode;
 
   bool _isActive = false;
@@ -87,6 +90,7 @@ class InputController {
   void onInsertText(String text) {
     _deleteStartTime = null;
     dispatch({'type': 'input', 'text': text});
+    scrollIntoView(mode: ScrollMode.typewriter);
   }
 
   void onDeleteBackward() {
@@ -110,11 +114,13 @@ class InputController {
     } else {
       dispatch({'type': 'deleteBackward'});
     }
+    scrollIntoView(mode: ScrollMode.typewriter);
   }
 
   void onSetMarkedText(String text) {
     isComposing = true;
     dispatch({'type': 'compositionUpdate', 'text': text});
+    scrollIntoView(mode: ScrollMode.typewriter);
   }
 
   void onUnmarkText() {
@@ -127,11 +133,13 @@ class InputController {
   void onCancelMarkedText() {
     isComposing = false;
     dispatch({'type': 'compositionEnd'});
+    scrollIntoView(mode: ScrollMode.typewriter);
   }
 
   void onPerformAction(String action) {
     if (action == 'newline') {
       dispatch({'type': 'insertNewline'});
+      scrollIntoView(mode: ScrollMode.typewriter);
     }
   }
 
@@ -146,33 +154,48 @@ class InputController {
 
     if (direction != null) {
       dispatch({'type': 'navigate', 'direction': direction, 'extend': false});
+      scrollIntoView(mode: ScrollMode.typewriter);
     } else if (action == 'copy') {
       unawaited(EditorClipboard().copy(editor));
     } else if (action == 'cut') {
-      unawaited(EditorClipboard().cut(editor, dispatch));
+      unawaited(
+        EditorClipboard().cut(editor, (msg) {
+          dispatch(msg);
+          scrollIntoView(mode: ScrollMode.typewriter);
+        }),
+      );
     } else if (action == 'paste') {
       if (onPasteHandler != null) {
         unawaited(onPasteHandler!());
       } else {
-        unawaited(EditorClipboard().getPastePayload().then(dispatch));
+        unawaited(
+          EditorClipboard().getPastePayload().then((payload) {
+            dispatch(payload);
+            scrollIntoView(mode: ScrollMode.typewriter);
+          }),
+        );
       }
     } else if (action == 'toggleItalic') {
       dispatch({
         'type': 'toggleStyle',
         'style': {'type': 'italic'},
       });
+      scrollIntoView();
     } else if (action == 'toggleUnderline') {
       dispatch({
         'type': 'toggleStyle',
         'style': {'type': 'underline'},
       });
+      scrollIntoView();
     } else if (action == 'toggleStrikethrough') {
       dispatch({
         'type': 'toggleStyle',
         'style': {'type': 'strikethrough'},
       });
+      scrollIntoView();
     } else {
       dispatch({'type': action});
+      scrollIntoView();
     }
   }
 
@@ -204,6 +227,7 @@ class InputController {
 
   void onReplaceBackward(int length, String text) {
     dispatch({'type': 'replaceBackward', 'length': length, 'text': text});
+    scrollIntoView(mode: ScrollMode.typewriter);
   }
 
   void onKeyboardHidden() {

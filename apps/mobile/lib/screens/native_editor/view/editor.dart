@@ -140,6 +140,7 @@ class EditorView extends HookWidget {
         dispatch: controller.dispatch,
         editor: controller.editor,
         onFocusChanged: controller.setFocused,
+        scrollIntoView: controller.scrollIntoView,
         getBottomToolbarMode: () => bottomToolbarMode.value,
       ),
       [controller],
@@ -162,7 +163,7 @@ class EditorView extends HookWidget {
           final payload = await EditorClipboard().getPastePayload();
           controller
             ..dispatch(payload)
-            ..scrollIntoView();
+            ..scrollIntoView(mode: ScrollMode.typewriter);
         }
         ..floatingCursorBeginHandler = () {
           floatingCursorOrigin.value = controller.state.cursor;
@@ -266,7 +267,11 @@ class EditorView extends HookWidget {
     }, [inputController]);
 
     final keyboardHandler = useMemoized(
-      () => KeyboardHandler(dispatch: controller.dispatch, commitComposing: inputController.commitComposing),
+      () => KeyboardHandler(
+        dispatch: controller.dispatch,
+        commitComposing: inputController.commitComposing,
+        scrollIntoView: controller.scrollIntoView,
+      ),
       [controller, inputController],
     );
 
@@ -566,7 +571,7 @@ class EditorView extends HookWidget {
                               inputController.commitComposing();
                               controller
                                 ..dispatch({'type': 'navigate', 'direction': direction, 'extend': extend})
-                                ..scrollIntoView();
+                                ..scrollIntoView(mode: extend ? ScrollMode.auto : ScrollMode.typewriter);
                             },
                           ),
                         ),
