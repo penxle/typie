@@ -319,20 +319,6 @@ impl std::hash::Hash for ParagraphNode {
 }
 
 impl ParagraphNode {
-    pub fn reset_attributes(&mut self) -> bool {
-        let mut changed = false;
-        if self.align != TextAlign::default() {
-            self.align = TextAlign::default();
-            changed = true;
-        }
-        if self.line_height != default_line_height() {
-            self.line_height = default_line_height();
-            changed = true;
-        }
-
-        changed
-    }
-
     fn build_style(&self) -> String {
         let mut s = Vec::new();
         if self.align != TextAlign::Left {

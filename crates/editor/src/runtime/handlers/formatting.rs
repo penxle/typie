@@ -286,6 +286,191 @@ mod tests {
     }
 
     #[test]
+    fn test_clear_formatting_collapsed_resets_to_document_defaults_despite_cascade_attrs() {
+        let mut p = id!();
+
+        let mut fonts = std::collections::HashMap::new();
+        fonts.insert(
+            DefaultAttrs::default().font_family().to_string(),
+            vec![400, 700],
+        );
+        let _guard = ScopedFontRegistration::new(fonts);
+
+        let mut runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {}
+            }
+            selection { (p, 0) }
+        };
+
+        runtime.update(Message::ToggleBold);
+        assert!(
+            runtime
+                .state()
+                .pending_styles
+                .iter()
+                .any(|s| matches!(s, Style::FontWeight(fw) if fw.weight == 700)),
+        );
+
+        runtime.update(Message::ClearFormatting);
+        assert!(
+            runtime
+                .state()
+                .pending_styles
+                .iter()
+                .any(|s| matches!(s, Style::FontWeight(fw) if fw.weight == 400)),
+            "expected font_weight: 400 after ClearFormatting, got: {:?}",
+            runtime.state().pending_styles
+        );
+        assert!(
+            !runtime
+                .state()
+                .pending_styles
+                .iter()
+                .any(|s| matches!(s, Style::FontWeight(fw) if fw.weight == 700)),
+        );
+    }
+
+    #[test]
+    fn test_clear_formatting_fully_selected_resets_cascade_attrs_to_document_defaults() {
+        let mut p = id!();
+
+        let mut fonts = std::collections::HashMap::new();
+        fonts.insert(
+            DefaultAttrs::default().font_family().to_string(),
+            vec![400, 700],
+        );
+        let _guard = ScopedFontRegistration::new(fonts);
+
+        let mut runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {}
+            }
+            selection { (p, 0) }
+        };
+
+        runtime.update(Message::ToggleBold);
+        runtime.update(Message::Input {
+            text: "hello".to_string(),
+        });
+
+        let node = runtime.state().doc.node(p).unwrap();
+        assert!(
+            node.cascade_attrs()
+                .unwrap_or_default()
+                .iter()
+                .any(|a| matches!(a, Attr::Style(Style::FontWeight(fw)) if fw.weight == 700)),
+            "cascade_attrs should contain font_weight: 700 before clear"
+        );
+
+        runtime.layout();
+        runtime.update(Message::SelectAll);
+        runtime.update(Message::ClearFormatting);
+
+        let node = runtime.state().doc.node(p).unwrap();
+        let has_bold = node
+            .cascade_attrs()
+            .unwrap_or_default()
+            .iter()
+            .any(|a| matches!(a, Attr::Style(Style::FontWeight(fw)) if fw.weight == 700));
+        assert!(
+            !has_bold,
+            "cascade_attrs should not contain font_weight: 700 after ClearFormatting on fully selected paragraph"
+        );
+    }
+
+    #[test]
+    fn test_clear_formatting_fully_selected_resets_line_height_to_document_default() {
+        let mut p = id!();
+        let mut runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph(line_height: 1.0,) {
+                    text { "hello" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+
+        let custom_defaults = DefaultAttrs::default();
+        let custom_line_height: f32 = 2.0;
+        let mut attrs: Vec<Attr> = custom_defaults
+            .to_attrs()
+            .into_iter()
+            .filter(|a| !matches!(a, Attr::Paragraph(_)))
+            .collect();
+        attrs.push(Attr::Paragraph(ParagraphAttr {
+            line_height: custom_line_height,
+        }));
+        let custom_defaults = DefaultAttrs::from_attrs(&attrs);
+
+        runtime.update(Message::SetDefaultAttrs {
+            attrs: custom_defaults,
+        });
+
+        runtime.update(Message::ClearFormatting);
+
+        let node = runtime.state().doc.node(p).unwrap();
+        if let Node::Paragraph(para) = node.node() {
+            assert!(
+                (para.line_height - custom_line_height).abs() < f32::EPSILON,
+                "expected line_height {} (document default) after ClearFormatting, got {}",
+                custom_line_height,
+                para.line_height
+            );
+        } else {
+            panic!("expected Paragraph node");
+        }
+    }
+
+    #[test]
+    fn test_clear_formatting_resets_empty_paragraph_line_height_to_document_default() {
+        let mut p1 = id!();
+        let mut p2 = id!();
+        let mut runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p1 paragraph(line_height: 1.0,) {
+                    text { "hello" }
+                }
+                @p2 paragraph(line_height: 1.0,) {}
+            }
+            selection { (p1, 0) }
+        };
+
+        let custom_line_height: f32 = 2.0;
+        let mut attrs: Vec<Attr> = DefaultAttrs::default()
+            .to_attrs()
+            .into_iter()
+            .filter(|a| !matches!(a, Attr::Paragraph(_)))
+            .collect();
+        attrs.push(Attr::Paragraph(ParagraphAttr {
+            line_height: custom_line_height,
+        }));
+        runtime.update(Message::SetDefaultAttrs {
+            attrs: DefaultAttrs::from_attrs(&attrs),
+        });
+
+        runtime.layout();
+        runtime.update(Message::SelectAll);
+        runtime.update(Message::ClearFormatting);
+
+        let node = runtime.state().doc.node(p2).unwrap();
+        if let Node::Paragraph(para) = node.node() {
+            assert!(
+                (para.line_height - custom_line_height).abs() < f32::EPSILON,
+                "empty paragraph line_height: expected {}, got {}",
+                custom_line_height,
+                para.line_height
+            );
+        } else {
+            panic!("expected Paragraph node");
+        }
+    }
+
+    #[test]
     fn test_shortcut_during_composition_commits_preedit_and_applies_styles() {
         let mut p = id!();
 

@@ -705,11 +705,12 @@ impl Transaction {
 
     pub fn reset_all_styles(&mut self) -> Result<bool> {
         let selection = self.selection().clone();
-        let default_styles = self.resolve_style_cascade(selection.head.node_id);
+        let default_styles = self.resolve_style_cascade(NodeId::ROOT);
 
         if selection.is_collapsed() {
             self.state.pending_styles = default_styles;
             self.push_effect(Effect::PendingStylesChanged);
+            self.update_cascade_attrs_if_empty_textblock();
         } else {
             let (from, to) = selection.as_sorted(self.doc())?;
             for style in &default_styles {
@@ -719,6 +720,10 @@ impl Transaction {
                 if !default_styles.iter().any(|s| s.as_type() == style_type) {
                     remove_style_from_range(self, from.clone(), to.clone(), style_type)?;
                 }
+            }
+            let block_ids = collect_empty_textblocks_in_range(self, from, to)?;
+            for block_id in block_ids {
+                self.set_cascade_attrs(block_id, &Attr::from_styles(&default_styles))?;
             }
         }
 

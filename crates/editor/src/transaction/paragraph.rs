@@ -619,27 +619,53 @@ impl Transaction {
 
     pub fn reset_fully_selected_paragraphs(&mut self) -> Result<bool> {
         let selection = self.selection().clone();
-        let paragraph_ids = collect_nodes_in_selection(self.doc(), &selection, |node| {
+        let mut paragraph_ids = collect_nodes_in_selection(self.doc(), &selection, |node| {
             matches!(node, Node::Paragraph(_))
         })?;
+
+        let (_, to) = selection.as_sorted(self.doc())?;
+        if let Some(node) = self.node(to.node_id) {
+            if matches!(node.node(), Node::Paragraph(_)) && !paragraph_ids.contains(&to.node_id) {
+                paragraph_ids.push(to.node_id);
+            }
+        }
+
+        let root_attrs = self.resolve_attr_cascade(NodeId::ROOT);
+        let default_styles = Attr::extract_styles(&root_attrs);
+        let default_para_attr = Attr::extract_paragraph_attr(&root_attrs);
 
         let mut changed = false;
         for para_id in paragraph_ids {
             if is_node_fully_selected(self.doc(), &selection, para_id)? {
+                let default_line_height = default_para_attr
+                    .as_ref()
+                    .map(|p| p.line_height)
+                    .unwrap_or(1.6);
+
                 let para_node = self
                     .node_mut(para_id)
                     .context("reset_fully_selected_paragraphs: Paragraph not found")?;
                 let mut para_changed = false;
                 para_node.as_mut().update(|n| {
                     if let Node::Paragraph(p) = n {
-                        if p.reset_attributes() {
+                        if p.align != TextAlign::default() {
+                            p.align = TextAlign::default();
                             para_changed = true;
-                            changed = true;
+                        }
+                        if (p.line_height - default_line_height).abs() > f32::EPSILON {
+                            p.line_height = default_line_height;
+                            para_changed = true;
                         }
                     }
                 })?;
                 if para_changed {
                     self.push_effect(Effect::NodeChanged { node_id: para_id });
+                    changed = true;
+                }
+
+                if self.node(para_id).and_then(|n| n.cascade_attrs()).is_some() {
+                    self.set_cascade_attrs(para_id, &Attr::from_styles(&default_styles))?;
+                    changed = true;
                 }
             }
         }
