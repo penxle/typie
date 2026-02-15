@@ -81,6 +81,9 @@ impl Doc {
             styles_map
                 .insert("letter_spacing", defaults.letter_spacing as f64)
                 .unwrap();
+            styles_map
+                .insert("line_height", defaults.line_height as f64)
+                .unwrap();
             styles_map.insert("italic", defaults.italic).unwrap();
             styles_map
                 .insert("strikethrough", defaults.strikethrough)
