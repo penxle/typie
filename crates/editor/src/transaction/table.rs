@@ -456,6 +456,13 @@ impl Transaction {
             return Ok(false);
         }
 
+        let preserve_first_row_col_widths = from_row == 0 || to_row == 0;
+        let preserved_col_widths = if preserve_first_row_col_widths {
+            Some(self.first_row_col_widths(table_id)?)
+        } else {
+            None
+        };
+
         let row_id = table_node
             .children()
             .nth(from_row)
@@ -465,11 +472,67 @@ impl Transaction {
         let row_node = self.node_mut(row_id).context("Row not found")?;
         row_node.as_mut().move_to(table_id, to_row)?;
 
+        if let Some(col_widths) = preserved_col_widths {
+            self.apply_first_row_col_widths(table_id, &col_widths)?;
+        }
+
         self.push_effect(Effect::SubtreeChanged { node_id: table_id });
         self.push_effect(Effect::StructureChanged);
         self.push_effect(Effect::LayoutChanged);
 
         Ok(true)
+    }
+
+    fn first_row_col_widths(&self, table_id: NodeId) -> Result<Vec<Option<f32>>> {
+        let table_node = self.node(table_id).context("Table not found")?;
+        let first_row = table_node
+            .children()
+            .next()
+            .context("First row not found")?;
+
+        Ok(first_row
+            .children()
+            .map(|cell| {
+                if let Node::TableCell(cell_node) = cell.node() {
+                    cell_node.col_width
+                } else {
+                    None
+                }
+            })
+            .collect())
+    }
+
+    fn apply_first_row_col_widths(
+        &mut self,
+        table_id: NodeId,
+        col_widths: &[Option<f32>],
+    ) -> Result<()> {
+        let first_row_cell_ids: Vec<_> = {
+            let table_node = self.node(table_id).context("Table not found")?;
+            let first_row = table_node
+                .children()
+                .next()
+                .context("First row not found")?;
+            first_row.children().map(|cell| cell.node_id()).collect()
+        };
+
+        if first_row_cell_ids.len() != col_widths.len() {
+            return Ok(());
+        }
+
+        for (cell_id, col_width) in first_row_cell_ids
+            .into_iter()
+            .zip(col_widths.iter().copied())
+        {
+            let cell_mut = self.node_mut(cell_id).context("Cell not found")?;
+            cell_mut.as_mut().update(|node| {
+                if let Node::TableCell(cell_node) = node {
+                    cell_node.col_width = col_width;
+                }
+            })?;
+        }
+
+        Ok(())
     }
 
     pub fn move_table_column(
@@ -798,6 +861,59 @@ mod tests {
         );
 
         assert_eq!(sel.anchor.node_id, p1, "Selection should move to p1");
+    }
+
+    #[test]
+    fn test_move_table_row_preserves_column_widths_when_first_row_changes() {
+        let mut t = id!();
+        let mut p00 = id!();
+        let mut p10 = id!();
+
+        let initial = state! {
+            doc {
+                @t table {
+                    table_row {
+                        table_cell { @p00 paragraph { text { "r0c0" } } }
+                        table_cell { paragraph { text { "r0c1" } } }
+                    }
+                    table_row {
+                        table_cell { @p10 paragraph { text { "r1c0" } } }
+                        table_cell { paragraph { text { "r1c1" } } }
+                    }
+                }
+            }
+            selection { (p00, 0) }
+        };
+
+        let actual = transact!(initial, |tr| {
+            tr.set_column_widths(t, vec![120.0, 180.0]).unwrap();
+            tr.move_table_row(t, 0, 1).unwrap();
+        });
+
+        let doc = actual.doc;
+        let table = doc.node(t).unwrap();
+        let first_row = table.first_child().unwrap();
+
+        let first_cell_after_move = first_row.first_child().unwrap();
+        let first_para_after_move = first_cell_after_move.first_child().unwrap();
+        assert_eq!(
+            first_para_after_move.node_id(),
+            p10,
+            "First row should now be the previous second row"
+        );
+
+        let widths: Vec<_> = first_row
+            .children()
+            .map(|cell| {
+                if let Node::TableCell(cell_node) = cell.node() {
+                    cell_node.col_width
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        assert_eq!(widths, vec![Some(120.0), Some(180.0)]);
     }
 
     #[test]
