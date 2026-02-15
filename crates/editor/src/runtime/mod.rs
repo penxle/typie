@@ -342,7 +342,15 @@ impl Runtime {
             })?;
             tr.doc().update_default_attrs(template_default_attrs)?;
 
-            tr.delete_selection()?;
+            let children: Vec<NodeId> = tr.doc().get_children_ids(NodeId::ROOT).to_vec();
+            for child_id in children {
+                tr.delete_node_recursive(child_id)?;
+            }
+            tr.set_selection(Selection::collapsed(Position::new(
+                NodeId::ROOT,
+                0,
+                Affinity::Downstream,
+            )));
             tr.paste_fragment(fragment, None)?;
 
             tr.push_effect(Effect::SettingsChanged);
@@ -2345,6 +2353,110 @@ mod tests {
             assert_eq!(annotations_at(&runtime, p, 1), vec![ruby.clone()]);
             assert_eq!(annotations_at(&runtime, p, 2), vec![]);
             assert_eq!(annotations_at(&runtime, p, 3), vec![]);
+        }
+    }
+
+    #[test]
+    fn insert_template_fragment_does_not_leave_empty_paragraph() {
+        let mut p = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {}
+            }
+            selection { (p, 0) }
+        };
+
+        rt.layout();
+
+        let template_doc = Rc::new(Doc::new());
+        let root = template_doc.node(NodeId::ROOT).unwrap();
+        let tp_id = root
+            .as_mut()
+            .insert_child(0, Node::Paragraph(ParagraphNode::default()))
+            .unwrap();
+        let tp = template_doc.node(tp_id).unwrap();
+        tp.as_mut()
+            .insert_child(
+                0,
+                Node::Text(TextNode {
+                    text: Text::from("template text"),
+                }),
+            )
+            .unwrap();
+        template_doc.loro_doc().commit();
+
+        let snapshot = template_doc.export(DocExportMode::Snapshot).unwrap();
+        rt.insert_template_fragment(snapshot).unwrap();
+
+        let root_children = rt.doc().get_children_ids(NodeId::ROOT);
+        assert_eq!(
+            root_children.len(),
+            1,
+            "should have exactly one paragraph after template insertion, got {}",
+            root_children.len()
+        );
+
+        assert_eq!(rt.doc().to_plain_text(), "template text");
+    }
+
+    #[test]
+    fn insert_template_fragment_clears_cascade_attrs_from_previous_paragraph() {
+        let mut p = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {}
+            }
+            selection { (p, 0) }
+        };
+
+        rt.layout();
+
+        rt.transact(|tr| {
+            tr.set_cascade_attrs(
+                p,
+                &Attr::from_styles(&[Style::FontFamily(FontFamilyStyle {
+                    family: "CustomFont".to_string(),
+                })]),
+            )?;
+            Ok(true)
+        });
+
+        let template_doc = Rc::new(Doc::new());
+        let root = template_doc.node(NodeId::ROOT).unwrap();
+        let tp_id = root
+            .as_mut()
+            .insert_child(0, Node::Paragraph(ParagraphNode::default()))
+            .unwrap();
+        let tp = template_doc.node(tp_id).unwrap();
+        tp.as_mut()
+            .insert_child(
+                0,
+                Node::Text(TextNode {
+                    text: Text::from("template"),
+                }),
+            )
+            .unwrap();
+        template_doc.loro_doc().commit();
+
+        let snapshot = template_doc.export(DocExportMode::Snapshot).unwrap();
+        rt.insert_template_fragment(snapshot).unwrap();
+
+        let root_children = rt.doc().get_children_ids(NodeId::ROOT);
+        for &child_id in root_children.iter() {
+            let node = rt.doc().node(child_id).unwrap();
+            if let Some(cascade) = node.cascade_attrs() {
+                let has_custom_font = cascade.iter().any(
+                    |a| matches!(a, Attr::Style(Style::FontFamily(f)) if f.family == "CustomFont"),
+                );
+                assert!(
+                    !has_custom_font,
+                    "previous paragraph's cascade_attrs should not remain after template insertion"
+                );
+            }
         }
     }
 }
