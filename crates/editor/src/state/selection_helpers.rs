@@ -1,5 +1,5 @@
 use crate::model::{
-    Annotation, AnnotationType, Doc, Node, NodeId, NodeRef, SelectionDecor, Style, StyleType,
+    Annotation, AnnotationType, Attr, Doc, Node, NodeId, NodeRef, SelectionDecor, Style, StyleType,
     TextAlign,
 };
 use crate::state::position::Position;
@@ -492,7 +492,16 @@ pub fn compute_selection_attrs(
     let mut style_segment_counts: FxHashMap<StyleType, usize> = FxHashMap::default();
     let mut annotation_segment_counts: FxHashMap<AnnotationType, usize> = FxHashMap::default();
 
-    for &block_id in block_ids {
+    let mut effective_block_ids: Vec<NodeId> = block_ids.to_vec();
+    if to.offset == 0 && from.node_id != to.node_id && !effective_block_ids.contains(&to.node_id) {
+        if let Some(node) = doc.node(to.node_id) {
+            if node.spec().is_textblock(doc.schema()) && block_content_len(&node) == 0 {
+                effective_block_ids.push(to.node_id);
+            }
+        }
+    }
+
+    for &block_id in &effective_block_ids {
         let Some(node) = doc.node(block_id) else {
             continue;
         };
@@ -519,9 +528,26 @@ pub fn compute_selection_attrs(
             &mut style_segment_counts,
             &mut annotation_segment_counts,
         );
+
+        if block_len == 0 {
+            if let Some(cascade) = node.cascade_attrs() {
+                let styles = Attr::extract_styles(&cascade);
+                if !styles.is_empty() {
+                    segment_count += 1;
+                    for style in &styles {
+                        let st = style.as_type();
+                        *style_segment_counts.entry(st).or_default() += 1;
+                        let values = style_values.entry(st).or_default();
+                        if !values.iter().any(|v| v == style) {
+                            values.push(style.clone());
+                        }
+                    }
+                }
+            }
+        }
     }
 
-    let block_count = block_ids.len();
+    let block_count = effective_block_ids.len();
 
     let block_attrs: Vec<CollectedBlockAttrs> = block_attr_map
         .into_values()
@@ -1316,6 +1342,80 @@ mod tests {
             p_nested_decor.is_some(),
             "Nested paragraph in list should have decoration, but found: {:?}",
             decorations
+        );
+    }
+
+    #[test]
+    fn compute_selection_attrs_includes_cascade_attrs_from_empty_textblocks() {
+        let mut p1 = id!();
+        let mut p2 = id!();
+        let state = state! {
+            doc {
+                @p1 paragraph { text { "hello" } }
+                @p2 paragraph {}
+            }
+            selection { (p1, 0) -> (p2, 0) }
+        };
+
+        let mut tr = Transaction::new(&state);
+        tr.set_style(Style::FontWeight(FontWeightStyle { weight: 700 }))
+            .unwrap();
+        let state = tr.commit().unwrap().0;
+
+        let (from, to) = state.selection.as_sorted(&state.doc).unwrap();
+        let block_ids = collect_blocks_in_range(&state.doc, from, to).unwrap();
+        let attrs = compute_selection_attrs(&state.doc, &block_ids, from, to);
+
+        let weights = attrs.style_values.get(&StyleType::FontWeight);
+        assert!(
+            weights.is_some(),
+            "Selection attrs should contain FontWeight"
+        );
+        assert!(
+            weights
+                .unwrap()
+                .iter()
+                .any(|s| matches!(s, Style::FontWeight(fw) if fw.weight == 700)),
+            "Selection attrs should contain FontWeight(700)"
+        );
+        assert!(
+            !attrs.absent_styles.contains(&StyleType::FontWeight),
+            "FontWeight should not be absent"
+        );
+    }
+
+    #[test]
+    fn compute_selection_attrs_includes_cascade_attrs_from_all_empty_textblocks() {
+        let mut p1 = id!();
+        let mut p2 = id!();
+        let state = state! {
+            doc {
+                @p1 paragraph {}
+                @p2 paragraph {}
+            }
+            selection { (p1, 0) -> (p2, 0) }
+        };
+
+        let mut tr = Transaction::new(&state);
+        tr.set_style(Style::FontWeight(FontWeightStyle { weight: 700 }))
+            .unwrap();
+        let state = tr.commit().unwrap().0;
+
+        let (from, to) = state.selection.as_sorted(&state.doc).unwrap();
+        let block_ids = collect_blocks_in_range(&state.doc, from, to).unwrap();
+        let attrs = compute_selection_attrs(&state.doc, &block_ids, from, to);
+
+        let weights = attrs.style_values.get(&StyleType::FontWeight);
+        assert!(
+            weights.is_some(),
+            "Selection attrs should contain FontWeight from cascade_attrs"
+        );
+        assert!(
+            weights
+                .unwrap()
+                .iter()
+                .any(|s| matches!(s, Style::FontWeight(fw) if fw.weight == 700)),
+            "Selection attrs should contain FontWeight(700) from cascade_attrs"
         );
     }
 }
