@@ -6,6 +6,7 @@ analyzer:
     invalid_annotation_target: ignore
   exclude:
     - '**/__generated__/**'
+    - 'build/**'
     - 'lib/native/editor_bindings.dart'
 linter:
   rules:
