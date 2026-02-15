@@ -7,6 +7,7 @@ import { ensureAllFontBases, ensureRequiredFallbackFont, ensureRequiredFont } fr
 import {
   DIRTY_ATTRS,
   DIRTY_CURSOR,
+  DIRTY_DEFAULT_STYLES,
   DIRTY_DOC_CHANGED,
   DIRTY_ENABLED_ACTIONS,
   DIRTY_EXITED_DOCUMENT_START,
@@ -165,6 +166,16 @@ export class Editor {
     paragraphIndent: 1,
     blockGap: 0,
   });
+
+  defaultStyles = $state<{
+    fontFamily: string;
+    fontSize: number;
+    fontWeight: number;
+    textColor: string;
+    backgroundColor: string;
+    letterSpacing: number;
+    lineHeight: number;
+  } | null>(null);
 
   externalElements = $state<ExternalElement[]>([]);
 
@@ -363,6 +374,46 @@ export class Editor {
       this.settings.paragraphIndent = s.paragraphIndent;
       this.settings.blockGap = s.blockGap;
       this.layout.layoutMode = s.layoutMode;
+    }
+
+    if (slate.isDirty(DIRTY_DEFAULT_STYLES)) {
+      const attrs = slate.readDefaultStyles();
+      const ds: Record<string, string | number> = {};
+      for (const attr of attrs) {
+        const v = attr.values[0];
+        if (v === null) continue;
+        switch (attr.type) {
+          case 'font_family': {
+            ds.fontFamily = v as string;
+            break;
+          }
+          case 'font_size': {
+            ds.fontSize = v as number;
+            break;
+          }
+          case 'font_weight': {
+            ds.fontWeight = v as number;
+            break;
+          }
+          case 'text_color': {
+            ds.textColor = v as string;
+            break;
+          }
+          case 'background_color': {
+            ds.backgroundColor = v as string;
+            break;
+          }
+          case 'letter_spacing': {
+            ds.letterSpacing = v as number;
+            break;
+          }
+          case 'line_height': {
+            ds.lineHeight = v as number;
+            break;
+          }
+        }
+      }
+      this.defaultStyles = ds as NonNullable<typeof this.defaultStyles>;
     }
 
     if (slate.isDirty(DIRTY_PAGES)) {

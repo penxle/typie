@@ -1,6 +1,6 @@
 use crate::model::{
-    Annotation, AnnotationType, BlockquoteVariant, HorizontalRuleVariant, LayoutMode, Style,
-    TableAlign, TextAlign,
+    Annotation, AnnotationType, BlockquoteVariant, DefaultStyles, HorizontalRuleVariant,
+    LayoutMode, Style, TableAlign, TextAlign,
 };
 use crate::runtime::effect::Effect;
 use crate::runtime::{Context, ContextKey, Runtime, When};
@@ -381,6 +381,9 @@ define_messages! {
     => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_set_paragraph_indent(indent) },
 
+    SetDefaultStyles { styles: DefaultStyles }
+    => when When::key(ContextKey::CanEdit)
+    => handle(rt) { rt.handle_set_default_styles(styles) },
 
     ClearFormatting
     => when When::key(ContextKey::CanEdit)

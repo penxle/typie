@@ -83,24 +83,59 @@ const collectReachableNodeIds = (nodes: Record<string, { children?: string[] }>)
   return reachable;
 };
 
-export const makeLoroDoc = () => {
+type TemplatePreset = {
+  fontFamily?: string;
+  fontSize?: number;
+  fontWeight?: number;
+  textColor?: string;
+  backgroundColor?: string;
+  letterSpacing?: number;
+  lineHeight?: number;
+  layoutMode?: PostLayoutMode;
+  maxWidth?: number;
+  pageLayout?: {
+    width: number;
+    height: number;
+    marginTop: number;
+    marginBottom: number;
+    marginLeft: number;
+    marginRight: number;
+  } | null;
+  paragraphIndent?: number;
+  blockGap?: number;
+};
+
+const mmToPx = (mm: number) => Math.round((mm * 96) / 25.4);
+
+export const makeLoroDoc = (template?: TemplatePreset) => {
   const doc = new LoroDoc();
 
   const settings = doc.getMap('settings');
-  settings.set('block_gap', 1);
-  settings.set('paragraph_indent', 1);
+  settings.set('block_gap', template?.blockGap ?? 1);
+  settings.set('paragraph_indent', template?.paragraphIndent ?? 1);
 
   const layoutMode = settings.setContainer('layout_mode', new LoroMap());
-  layoutMode.set('type', 'continuous');
-  layoutMode.set('max_width', 600);
+  if (template?.layoutMode === PostLayoutMode.PAGE && template.pageLayout) {
+    layoutMode.set('type', 'paginated');
+    layoutMode.set('page_width', mmToPx(template.pageLayout.width));
+    layoutMode.set('page_height', mmToPx(template.pageLayout.height));
+    layoutMode.set('page_margin_top', mmToPx(template.pageLayout.marginTop));
+    layoutMode.set('page_margin_bottom', mmToPx(template.pageLayout.marginBottom));
+    layoutMode.set('page_margin_left', mmToPx(template.pageLayout.marginLeft));
+    layoutMode.set('page_margin_right', mmToPx(template.pageLayout.marginRight));
+  } else {
+    layoutMode.set('type', 'continuous');
+    layoutMode.set('max_width', template?.maxWidth ?? 600);
+  }
 
   const styles = doc.getMap('styles');
-  styles.set('font_family', 'Pretendard');
-  styles.set('font_size', 12);
-  styles.set('font_weight', 400);
-  styles.set('text_color', 'black');
-  styles.set('background_color', 'none');
-  styles.set('letter_spacing', 0);
+  styles.set('font_family', template?.fontFamily ?? 'Pretendard');
+  styles.set('font_size', template?.fontSize ?? 12);
+  styles.set('font_weight', template?.fontWeight ?? 400);
+  styles.set('text_color', template?.textColor ?? 'black');
+  styles.set('background_color', template?.backgroundColor ?? 'none');
+  styles.set('letter_spacing', template?.letterSpacing ?? 0);
+  styles.set('line_height', template?.lineHeight ?? 1.6);
   styles.set('italic', false);
   styles.set('strikethrough', false);
   styles.set('underline', false);
@@ -117,7 +152,7 @@ export const makeLoroDoc = () => {
   const paragraphNode = nodes.setContainer(paragraphId, new LoroMap());
   paragraphNode.set('type', 'paragraph');
   paragraphNode.set('align', 'left');
-  paragraphNode.set('line_height', 1.6);
+  paragraphNode.set('line_height', template?.lineHeight ?? 1.6);
   paragraphNode.set('parent', ROOT_ID);
   paragraphNode.setContainer('children', new LoroList());
 

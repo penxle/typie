@@ -1,6 +1,7 @@
 use crate::layout::elements::ExternalElementData;
 use crate::model::{
-    Annotation, AnnotationType, LayoutMode, NodeId, NodeType, Style, StyleType, TextAlign,
+    Annotation, AnnotationType, DefaultStyles, LayoutMode, NodeId, NodeType, Style, StyleType,
+    TextAlign,
 };
 use crate::runtime::tracked_items::TrackedItemOverlay;
 use crate::runtime::{ExternalElement, LinkOverlay, SelectionHandleBounds, TableOverlay};
@@ -15,6 +16,7 @@ pub const DIRTY_CURSOR: u64 = 1 << 2;
 pub const DIRTY_SELECTION: u64 = 1 << 3;
 pub const DIRTY_ATTRS: u64 = 1 << 4;
 pub const DIRTY_POINTER: u64 = 1 << 5;
+pub const DIRTY_DEFAULT_STYLES: u64 = 1 << 6;
 pub const DIRTY_PLACEHOLDER: u64 = 1 << 7;
 pub const DIRTY_EXTERNAL_ELEMENTS: u64 = 1 << 8;
 pub const DIRTY_ENABLED_ACTIONS: u64 = 1 << 9;
@@ -201,6 +203,9 @@ define_slate! {
         pub fallback_codepoints_count: u32,
         pub html_pasted_offset: u32,
         pub html_pasted_len: u32,
+
+        pub default_styles_offset: u32,
+        pub default_styles_count: u32,
     }
 }
 
@@ -817,6 +822,43 @@ impl Slab {
         slate.html_pasted_len = text.len() as u32;
         slate.dirty |= DIRTY_HTML_PASTED;
         let _ = str_off;
+    }
+
+    pub fn write_default_styles(&mut self, slate: &mut Slate, styles: &DefaultStyles) {
+        let start = self.alloc(0, 4);
+        let mut count = 0u32;
+
+        self.write_u32_slice(&[ATTR_TAG_FONT_FAMILY, VK_STRING, 1]);
+        self.write_str(&styles.font_family);
+        count += 1;
+
+        self.write_u32_slice(&[ATTR_TAG_FONT_SIZE, VK_F32, 1]);
+        self.write_f32_slice(&[styles.font_size]);
+        count += 1;
+
+        self.write_u32_slice(&[ATTR_TAG_FONT_WEIGHT, VK_U32, 1]);
+        self.write_u32_slice(&[styles.font_weight as u32]);
+        count += 1;
+
+        self.write_u32_slice(&[ATTR_TAG_TEXT_COLOR, VK_STRING, 1]);
+        self.write_str(&styles.text_color);
+        count += 1;
+
+        self.write_u32_slice(&[ATTR_TAG_BACKGROUND_COLOR, VK_STRING, 1]);
+        self.write_str(&styles.background_color);
+        count += 1;
+
+        self.write_u32_slice(&[ATTR_TAG_LETTER_SPACING, VK_F32, 1]);
+        self.write_f32_slice(&[styles.letter_spacing]);
+        count += 1;
+
+        self.write_u32_slice(&[ATTR_TAG_LINE_HEIGHT, VK_F32, 1]);
+        self.write_f32_slice(&[styles.line_height]);
+        count += 1;
+
+        slate.default_styles_offset = start;
+        slate.default_styles_count = count;
+        slate.dirty |= DIRTY_DEFAULT_STYLES;
     }
 }
 

@@ -259,8 +259,14 @@ await (async () => {
 
       if (isAlreadyMigrated(doc)) {
         const currentJson = (await snapshotToJson(row.snapshot)) as Record<string, unknown>;
+        const styles = currentJson.styles as Record<string, unknown>;
         const nodes = currentJson.nodes as Record<string, Record<string, unknown>>;
         let needsFix = false;
+
+        if (!('line_height' in styles)) {
+          styles.line_height = 1.6;
+          needsFix = true;
+        }
 
         for (const node of Object.values(nodes)) {
           if (node.type !== 'text' || !Array.isArray(node.text)) continue;
@@ -343,6 +349,7 @@ await (async () => {
             text_color: 'black',
             background_color: 'none',
             letter_spacing: 0,
+            line_height: 1.6,
             italic: false,
             strikethrough: false,
             underline: false,

@@ -109,6 +109,7 @@ struct PendingUpdates {
     link_overlays: bool,
     tracked_items: bool,
     table_overlays: bool,
+    default_styles: bool,
     html_pasted: Option<(String, Position, Position)>,
 }
 
@@ -196,6 +197,7 @@ impl Runtime {
                 tracked_items: false,
                 table_overlays: true,
                 html_pasted: None,
+                default_styles: true,
             },
             message_queue: Vec::new(),
             pointer: PointerState::default(),
@@ -329,6 +331,7 @@ impl Runtime {
     pub fn insert_template_fragment(&mut self, snapshot: Vec<u8>) -> Result<()> {
         let template_doc = std::rc::Rc::new(Doc::from_snapshot(snapshot));
         let template_settings = template_doc.settings();
+        let template_default_styles = template_doc.default_styles();
         let fragment = Fragment::from_doc(&template_doc)?;
 
         let effects = self.transact(|tr| {
@@ -337,6 +340,7 @@ impl Runtime {
                 s.paragraph_indent = template_settings.paragraph_indent;
                 s.layout_mode = template_settings.layout_mode;
             })?;
+            tr.doc().update_default_styles(template_default_styles)?;
 
             tr.delete_selection()?;
             tr.paste_fragment(fragment, None)?;
@@ -363,6 +367,7 @@ impl Runtime {
         self.pending.external_elements = true;
         self.pending.settings = true;
         self.pending.enabled_actions = true;
+        self.pending.default_styles = true;
     }
 
     pub fn replace_text_in_block(
@@ -866,6 +871,12 @@ impl Runtime {
                 settings.layout_mode,
             );
             self.pending.settings = false;
+        }
+
+        if self.pending.default_styles {
+            let styles = self.doc().default_styles();
+            self.slab.write_default_styles(&mut self.slate, &styles);
+            self.pending.default_styles = false;
         }
 
         if self.pending.layout {
@@ -1413,6 +1424,7 @@ impl Runtime {
                     self.pending.cursor = true;
                     self.pending.settings = true;
                     self.pending.external_elements = true;
+                    self.pending.default_styles = true;
                 }
                 Effect::DropTargetChanged { target } => {
                     self.pending.drop_indicator = target.and_then(|position| {

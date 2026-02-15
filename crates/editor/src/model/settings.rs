@@ -81,6 +81,9 @@ impl Hash for DocumentSettings {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(from_wasm_abi))]
+#[serde(rename_all = "camelCase")]
 pub struct DefaultStyles {
     pub font_family: String,
     pub font_size: f32,
@@ -88,6 +91,7 @@ pub struct DefaultStyles {
     pub text_color: String,
     pub background_color: String,
     pub letter_spacing: f32,
+    pub line_height: f32,
     pub italic: bool,
     pub strikethrough: bool,
     pub underline: bool,
@@ -102,6 +106,7 @@ impl Default for DefaultStyles {
             text_color: "black".to_string(),
             background_color: BackgroundColorStyle::NONE.to_string(),
             letter_spacing: 0.0,
+            line_height: 1.6,
             italic: false,
             strikethrough: false,
             underline: false,

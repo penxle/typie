@@ -17,6 +17,7 @@
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import FileIcon from '~icons/lucide/file';
   import FileTextIcon from '~icons/lucide/file-text';
+  import PaletteIcon from '~icons/lucide/palette';
   import PanelBottomIcon from '~icons/lucide/panel-bottom';
   import PanelLeftIcon from '~icons/lucide/panel-left';
   import PanelRightIcon from '~icons/lucide/panel-right';
@@ -27,6 +28,7 @@
   import LineHeightIcon from '~icons/typie/line-height';
   import { fragment, graphql } from '$graphql';
   import { SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
+  import ToolbarColorGrid from '../[slug]/@toolbar/ToolbarColorGrid.svelte';
   import type { PageLayout, PageLayoutPreset } from '@typie/ui/utils';
   import type { DashboardLayout_PreferenceModal_PresetTab_user } from '$graphql';
 
@@ -68,6 +70,8 @@
     fontFamily?: string;
     fontSize?: number;
     fontWeight?: number;
+    textColor?: string;
+    backgroundColor?: string;
     letterSpacing?: number;
     lineHeight?: number;
     layoutMode?: PostLayoutMode;
@@ -142,6 +146,8 @@
     return closest;
   };
 
+  const textColor = $derived(template.textColor ?? defaultValues.textColor);
+  const backgroundColor = $derived(template.backgroundColor ?? defaultValues.textBackgroundColor);
   const letterSpacing = $derived(template.letterSpacing ?? defaultValues.letterSpacing);
   const lineHeight = $derived(template.lineHeight ?? defaultValues.lineHeight);
   const layoutMode = $derived(template.layoutMode ?? PostLayoutMode.SCROLL);
@@ -168,6 +174,25 @@
 
     mixpanel.track('reset_post_template');
   };
+
+  let textColorOpened = $state(false);
+  let bgColorOpened = $state(false);
+
+  const { anchor: textColorAnchorAction, floating: textColorFloatingAction } = createFloatingActions({
+    placement: 'bottom-start',
+    offset: 8,
+    onClickOutside: () => {
+      textColorOpened = false;
+    },
+  });
+
+  const { anchor: bgColorAnchorAction, floating: bgColorFloatingAction } = createFloatingActions({
+    placement: 'bottom-start',
+    offset: 8,
+    onClickOutside: () => {
+      bgColorOpened = false;
+    },
+  });
 
   const MIN_FONT_SIZE = 8;
   const MAX_FONT_SIZE = 72;
@@ -325,7 +350,7 @@
   </div>
 
   <div>
-    <h2 class={css({ fontSize: '16px', fontWeight: 'semibold', color: 'text.default', marginBottom: '20px' })}>폰트</h2>
+    <h2 class={css({ fontSize: '16px', fontWeight: 'semibold', color: 'text.default', marginBottom: '20px' })}>기본 스타일</h2>
 
     <SettingsCard>
       <SettingsRow>
@@ -334,13 +359,18 @@
         {/snippet}
         {#snippet value()}
           <SearchableDropdown
-            style={css.raw({ width: '160px', height: '28px', paddingX: '8px' })}
+            style={css.raw({
+              width: '160px',
+              height: '28px',
+              paddingX: '8px',
+              '& > input': { textAlign: 'right', fontSize: '12px', fontWeight: 'medium' },
+            })}
             getLabel={(value) => {
               const item = fontFamilyItems.find((f) => f.value === value);
               return item?.label ?? '(알 수 없는 폰트)';
             }}
             items={fontFamilyItems}
-            label="폰트 패밀리"
+            label=""
             onchange={(value) => {
               const defaultWeight = getDefaultWeight(value, fontWeight) ?? defaultValues.fontWeight;
               updateTemplate({ fontFamily: value, fontWeight: defaultWeight });
@@ -362,13 +392,18 @@
         {/snippet}
         {#snippet value()}
           <SearchableDropdown
-            style={css.raw({ width: '120px', height: '28px', paddingX: '8px' })}
+            style={css.raw({
+              width: '120px',
+              height: '28px',
+              paddingX: '8px',
+              '& > input': { textAlign: 'right', fontSize: '12px', fontWeight: 'medium' },
+            })}
             getLabel={(value) => {
               const item = fontWeightItems.find((w) => w.value === value);
               return item?.label ?? '(알 수 없는 굵기)';
             }}
             items={fontWeightItems}
-            label="폰트 굵기"
+            label=""
             onchange={(value) => {
               updateTemplate({ fontWeight: value });
             }}
@@ -503,13 +538,9 @@
           </div>
         {/snippet}
       </SettingsRow>
-    </SettingsCard>
-  </div>
 
-  <div>
-    <h2 class={css({ fontSize: '16px', fontWeight: 'semibold', color: 'text.default', marginBottom: '20px' })}>간격</h2>
+      <SettingsDivider />
 
-    <SettingsCard>
       <SettingsRow>
         {#snippet label()}
           <div class={flex({ alignItems: 'center', gap: '8px' })}>
@@ -545,6 +576,148 @@
             }}
             value={lineHeight}
           />
+        {/snippet}
+      </SettingsRow>
+
+      <SettingsDivider />
+
+      <SettingsRow>
+        {#snippet label()}
+          <div class={flex({ alignItems: 'center', gap: '8px' })}>
+            <Icon style={css.raw({ color: 'text.faint' })} icon={PaletteIcon} />
+            <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>글자 색</div>
+          </div>
+        {/snippet}
+        {#snippet value()}
+          <button
+            class={flex({
+              alignItems: 'center',
+              gap: '8px',
+              borderRadius: '6px',
+              paddingX: '8px',
+              paddingY: '4px',
+              height: '28px',
+              _hover: { backgroundColor: 'surface.muted' },
+            })}
+            onclick={() => (textColorOpened = !textColorOpened)}
+            type="button"
+            use:textColorAnchorAction
+          >
+            <div
+              style:background-color={values.textColor.find(({ value }) => value === textColor)?.color}
+              class={css({ borderWidth: '1px', borderRadius: 'full', size: '16px', flexShrink: '0' })}
+            ></div>
+            <span class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.subtle' })}>
+              {values.textColor.find(({ value }) => value === textColor)?.label ?? textColor}
+            </span>
+          </button>
+          {#if textColorOpened}
+            <div
+              class={css({
+                borderWidth: '1px',
+                borderColor: 'border.subtle',
+                borderRadius: '4px',
+                backgroundColor: 'surface.default',
+                zIndex: 'tooltip',
+                boxShadow: 'small',
+                overflow: 'hidden',
+              })}
+              use:textColorFloatingAction
+              in:fly={{ y: -5, duration: 150 }}
+            >
+              <ToolbarColorGrid
+                columns={11}
+                currentValue={textColor as (typeof values.textColor)[number]['value']}
+                items={values.textColor}
+                onClose={() => (textColorOpened = false)}
+                onSelect={(value) => {
+                  updateTemplate({ textColor: value });
+                  textColorOpened = false;
+                }}
+                opened={textColorOpened}
+              />
+            </div>
+          {/if}
+        {/snippet}
+      </SettingsRow>
+
+      <SettingsDivider />
+
+      <SettingsRow>
+        {#snippet label()}
+          <div class={flex({ alignItems: 'center', gap: '8px' })}>
+            <Icon style={css.raw({ color: 'text.faint' })} icon={PaletteIcon} />
+            <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>배경 색</div>
+          </div>
+        {/snippet}
+        {#snippet value()}
+          <button
+            class={flex({
+              alignItems: 'center',
+              gap: '8px',
+              borderRadius: '6px',
+              paddingX: '8px',
+              paddingY: '4px',
+              height: '28px',
+              _hover: { backgroundColor: 'surface.muted' },
+            })}
+            onclick={() => (bgColorOpened = !bgColorOpened)}
+            type="button"
+            use:bgColorAnchorAction
+          >
+            <div
+              style:background-color={backgroundColor === 'none'
+                ? 'transparent'
+                : values.textBackgroundColor.find(({ value }) => value === backgroundColor)?.color}
+              class={css({ borderWidth: '1px', borderRadius: '4px', size: '16px', flexShrink: '0', position: 'relative' })}
+            >
+              {#if backgroundColor === 'none'}
+                <div
+                  class={css({
+                    position: 'absolute',
+                    inset: '0',
+                    margin: 'auto',
+                    width: '1px',
+                    height: '12px',
+                    backgroundColor: 'text.disabled',
+                    transform: 'rotate(45deg)',
+                  })}
+                ></div>
+              {/if}
+            </div>
+            <span class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.subtle' })}>
+              {values.textBackgroundColor.find(({ value }) => value === backgroundColor)?.label ?? backgroundColor}
+            </span>
+          </button>
+          {#if bgColorOpened}
+            <div
+              class={css({
+                borderWidth: '1px',
+                borderColor: 'border.subtle',
+                borderRadius: '4px',
+                backgroundColor: 'surface.default',
+                zIndex: 'tooltip',
+                boxShadow: 'small',
+                overflow: 'hidden',
+              })}
+              use:bgColorFloatingAction
+              in:fly={{ y: -5, duration: 150 }}
+            >
+              <ToolbarColorGrid
+                columns={8}
+                currentValue={backgroundColor as (typeof values.textBackgroundColor)[number]['value']}
+                items={values.textBackgroundColor}
+                onClose={() => (bgColorOpened = false)}
+                onSelect={(value) => {
+                  updateTemplate({ backgroundColor: value });
+                  bgColorOpened = false;
+                }}
+                opened={bgColorOpened}
+                shape="square"
+                showNone
+              />
+            </div>
+          {/if}
         {/snippet}
       </SettingsRow>
     </SettingsCard>
@@ -793,7 +966,7 @@
   </div>
 
   <div>
-    <h2 class={css({ fontSize: '16px', fontWeight: 'semibold', color: 'text.default', marginBottom: '20px' })}>문단</h2>
+    <h2 class={css({ fontSize: '16px', fontWeight: 'semibold', color: 'text.default', marginBottom: '20px' })}>세부 레이아웃</h2>
 
     <SettingsCard>
       <SettingsRow>
