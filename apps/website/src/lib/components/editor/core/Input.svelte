@@ -2,7 +2,7 @@
   import { css } from '@typie/styled-system/css';
   import { IS_MAC } from '$lib/editor/constants';
   import { getEditorContext } from '$lib/editor/context.svelte';
-  import { getActionFromKeyEvent } from '$lib/editor/keyboard';
+  import { handleKeyEvent } from '$lib/editor/keyboard';
 
   type Props = {
     onFocus?: (e: FocusEvent) => void;
@@ -16,8 +16,6 @@
   let inputEl = $state<HTMLInputElement>();
 
   let lastInputValue = '';
-
-  let currentCompositionText = '';
   let ignoreEventText = '';
 
   const resetInputState = () => {
@@ -86,25 +84,21 @@
     lastInputValue = inputEl.value;
   };
 
+  let pendingKeyEvent: KeyboardEvent | undefined;
+
   const handleKeyDown = (e: KeyboardEvent) => {
-    if (editor.contextMenu.isOpen) {
+    if (e.isComposing) {
+      if (e.metaKey || e.ctrlKey) {
+        pendingKeyEvent = e;
+      }
+
       e.preventDefault();
       return;
     }
 
-    const action = getActionFromKeyEvent(e);
-
-    const isShortcut = e.ctrlKey || e.metaKey || e.altKey;
-
-    if (e.isComposing) {
-      if (action !== null && isShortcut) {
-        // 조합 중 단축키 입력 시 preedit을 커밋
-        ignoreEventText = currentCompositionText;
-        editor.dispatch({ type: 'commitPreedit' });
-        resetInputState();
-      } else {
-        return;
-      }
+    if (editor.contextMenu.isOpen) {
+      e.preventDefault();
+      return;
     }
 
     if (IS_MAC && e.ctrlKey) {
@@ -126,10 +120,8 @@
       }
     }
 
-    if (action !== null) {
+    if (handleKeyEvent(editor, e)) {
       e.preventDefault();
-      editor.dispatch(action).scrollIntoView();
-
       resetInputState();
     }
   };
@@ -175,7 +167,6 @@
   const handleCompositionStart = (e: CompositionEvent) => {
     if (editor.readOnly) return;
 
-    currentCompositionText = '';
     const text = e.data || '';
     editor.dispatch({ type: 'compositionStart', text }).scrollIntoView();
   };
@@ -184,7 +175,6 @@
     if (editor.readOnly) return;
 
     const text = e.data || '';
-    currentCompositionText = text;
 
     if (ignoreEventText && text === ignoreEventText) {
       return;
@@ -204,8 +194,7 @@
       return;
     }
 
-    editor.dispatch({ type: 'input', text }).scrollIntoView();
-    editor.dispatch({ type: 'compositionEnd' });
+    editor.dispatch({ type: 'commitPreedit' });
 
     if (inputEl) {
       const newValue = lastInputValue + text;
@@ -215,6 +204,11 @@
         inputEl.value = newValue;
       }
       lastInputValue = inputEl.value;
+    }
+
+    if (pendingKeyEvent) {
+      handleKeyEvent(editor, pendingKeyEvent);
+      pendingKeyEvent = undefined;
     }
   };
 
