@@ -189,7 +189,7 @@
         offset={4}
         onopen={() => {
           menuOpenColIndex = i;
-          editor.dispatch({ type: 'selectTableColumn', tableId: overlay.tableId, col: i }).scrollIntoView();
+          editor.dispatch({ type: 'selectTableColumn', tableId: overlay.tableId, col: i });
         }}
         ontransitionend={() => {
           menuOpenColIndex = null;
