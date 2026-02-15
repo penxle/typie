@@ -117,13 +117,14 @@ where
 }
 
 fn find_container_scope(page: &Page, x: f32, y: f32) -> Option<NodeId> {
-    let scope = page.scope_at(x, y)?;
-
-    if scope.scope_id != NodeId::ROOT {
-        Some(scope.scope_id)
-    } else {
-        None
+    if let Some(scope) = page.scope_at(x, y) {
+        if scope.scope_id != NodeId::ROOT {
+            return Some(scope.scope_id);
+        }
     }
+
+    page.nearest_scope_in_row(x, y)
+        .and_then(|scope| (scope.scope_id != NodeId::ROOT).then_some(scope.scope_id))
 }
 
 fn find_block_gap_position(

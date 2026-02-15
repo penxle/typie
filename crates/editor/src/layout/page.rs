@@ -139,6 +139,35 @@ impl Page {
             a_area.partial_cmp(&b_area).unwrap()
         })
     }
+
+    pub fn nearest_scope_in_row(&self, x: f32, y: f32) -> Option<&ScopeEntry> {
+        self.scopes
+            .iter()
+            .filter(|scope| y >= scope.pos.y && y <= scope.pos.y + scope.size.height)
+            .min_by(|a, b| {
+                let a_dist = if x < a.pos.x {
+                    a.pos.x - x
+                } else if x > a.pos.x + a.size.width {
+                    x - (a.pos.x + a.size.width)
+                } else {
+                    0.0
+                };
+                let b_dist = if x < b.pos.x {
+                    b.pos.x - x
+                } else if x > b.pos.x + b.size.width {
+                    x - (b.pos.x + b.size.width)
+                } else {
+                    0.0
+                };
+
+                a_dist.total_cmp(&b_dist).then_with(|| {
+                    let a_area = a.size.width * a.size.height;
+                    let b_area = b.size.width * b.size.height;
+                    a_area.total_cmp(&b_area)
+                })
+            })
+    }
+
     pub fn scope_entry(&self, scope_id: NodeId) -> Option<&ScopeEntry> {
         self.scopes.iter().find(|s| s.scope_id == scope_id)
     }
