@@ -317,6 +317,9 @@ class _NotesContent extends HookWidget {
       if (node.G__typename == 'Post') {
         return (node as GNotesScreen_QueryData_me_recentlyViewedEntities_node__asPost).title;
       }
+      if (node.G__typename == 'Document') {
+        return (node as GNotesScreen_QueryData_me_recentlyViewedEntities_node__asDocument).title;
+      }
       return null;
     }
 
@@ -363,8 +366,18 @@ class _NotesContent extends HookWidget {
 
     Future<void> handleNavigateToEntity(String noteId, List<GNotesScreen_QueryData_notes> notesList) async {
       final note = notesList.firstWhere((n) => n.id == noteId);
-      if (note.entity?.slug != null) {
-        await context.router.push(EditorRoute(slug: note.entity!.slug));
+      final entity = note.entity;
+      if (entity?.slug == null) {
+        return;
+      }
+
+      final node = entity!.node;
+      if (node.G__typename == 'Post') {
+        await context.router.push(EditorRoute(slug: entity.slug));
+        return;
+      }
+      if (node.G__typename == 'Document') {
+        await context.router.push(NativeEditorRoute(slug: entity.slug));
       }
     }
 
@@ -400,7 +413,7 @@ class _NotesContent extends HookWidget {
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Text(
-                                  '이 포스트 관련 노트가 없어요',
+                                  '이 항목 관련 노트가 없어요',
                                   style: TextStyle(fontSize: 14, color: context.colors.textSubtle),
                                   textAlign: TextAlign.center,
                                 ),
@@ -500,7 +513,7 @@ class _SliverNotesReorderableList extends StatelessWidget {
       onReorderEnd: (index) async {
         await HapticFeedback.lightImpact();
       },
-      proxyDecorator: (child, index, animation) => child,
+      proxyDecorator: (child, index, animation) => Material(type: MaterialType.transparency, child: child),
       itemBuilder: (context, index) {
         final note = notes[index];
         final controller = noteControllers[note.id];
@@ -515,6 +528,9 @@ class _SliverNotesReorderableList extends StatelessWidget {
           if (node.G__typename == 'Post') {
             return (node as GNotesScreen_QueryData_notes_entity_node__asPost).title;
           }
+          if (node.G__typename == 'Document') {
+            return (node as GNotesScreen_QueryData_notes_entity_node__asDocument).title;
+          }
           return null;
         }
 
@@ -526,6 +542,12 @@ class _SliverNotesReorderableList extends StatelessWidget {
           if (node.G__typename == 'Post') {
             final postNode = node as GNotesScreen_QueryData_notes_entity_node__asPost;
             return postNode.type == GPostType.TEMPLATE ? LucideLightIcons.shapes : LucideLightIcons.file;
+          }
+          if (node.G__typename == 'Document') {
+            final documentNode = node as GNotesScreen_QueryData_notes_entity_node__asDocument;
+            return documentNode.documentType == GDocumentType.TEMPLATE
+                ? LucideLightIcons.layout_template
+                : LucideLightIcons.file_text;
           }
           return null;
         }
@@ -641,6 +663,13 @@ class _EntitySelector extends StatelessWidget {
                     final postNode = node as GNotesScreen_QueryData_me_recentlyViewedEntities_node__asPost;
                     title = postNode.title;
                     icon = postNode.type == GPostType.TEMPLATE ? LucideLightIcons.shapes : LucideLightIcons.file;
+                  }
+                  if (node.G__typename == 'Document') {
+                    final documentNode = node as GNotesScreen_QueryData_me_recentlyViewedEntities_node__asDocument;
+                    title = documentNode.title;
+                    icon = documentNode.documentType == GDocumentType.TEMPLATE
+                        ? LucideLightIcons.layout_template
+                        : LucideLightIcons.file_text;
                   }
 
                   if (title == null || icon == null) {

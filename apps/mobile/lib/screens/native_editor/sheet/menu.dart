@@ -31,6 +31,7 @@ class MenuSheet extends StatelessWidget {
     required this.onOpenFindReplace,
     required this.onOpenSpellcheck,
     required this.onOpenAiFeedback,
+    required this.onOpenRelatedNotes,
     super.key,
   });
 
@@ -42,6 +43,7 @@ class MenuSheet extends StatelessWidget {
   final VoidCallback onOpenFindReplace;
   final VoidCallback onOpenSpellcheck;
   final VoidCallback onOpenAiFeedback;
+  final VoidCallback onOpenRelatedNotes;
 
   @override
   Widget build(BuildContext context) {
@@ -67,6 +69,7 @@ class MenuSheet extends StatelessWidget {
               );
             },
           ),
+          BottomMenuItem(icon: LucideLightIcons.sticky_note, label: '이 문서 관련 노트', onTap: onOpenRelatedNotes),
           BottomMenuItem(
             icon: LucideLightIcons.settings,
             label: '본문 설정',
