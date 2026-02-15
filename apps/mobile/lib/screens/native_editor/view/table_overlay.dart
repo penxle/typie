@@ -389,21 +389,20 @@ class _FocusedTableOverlay extends HookWidget {
           style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: colors.textSubtle),
         ),
         items: [
-          if (!isFirst)
-            BottomMenuItem(
-              icon: LucideLightIcons.arrow_up_to_line,
-              label: '위에 행 추가',
-              onTap: () {
-                onSelectedRowChanged(selectedRow + 1);
-                dispatch({'type': 'addTableRow', 'tableId': overlay.tableId, 'afterRow': selectedRow - 1});
-              },
-            ),
+          BottomMenuItem(
+            icon: LucideLightIcons.arrow_up_to_line,
+            label: '위에 행 추가',
+            onTap: () {
+              onSelectedRowChanged(selectedRow + 1);
+              dispatch({'type': 'addTableRow', 'tableId': overlay.tableId, 'row': selectedRow, 'before': true});
+            },
+          ),
           BottomMenuItem(
             icon: LucideLightIcons.arrow_down_to_line,
             label: '아래에 행 추가',
             onTap: () {
               onSelectedRowChanged(selectedRow);
-              dispatch({'type': 'addTableRow', 'tableId': overlay.tableId, 'afterRow': selectedRow});
+              dispatch({'type': 'addTableRow', 'tableId': overlay.tableId, 'row': selectedRow, 'before': false});
             },
           ),
           if (!isFirst)
@@ -480,21 +479,20 @@ class _FocusedTableOverlay extends HookWidget {
           style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: colors.textSubtle),
         ),
         items: [
-          if (!isFirst)
-            BottomMenuItem(
-              icon: LucideLightIcons.arrow_left_to_line,
-              label: '왼쪽에 열 추가',
-              onTap: () {
-                onSelectedColChanged(selectedCol + 1);
-                dispatch({'type': 'addTableColumn', 'tableId': overlay.tableId, 'afterCol': selectedCol - 1});
-              },
-            ),
+          BottomMenuItem(
+            icon: LucideLightIcons.arrow_left_to_line,
+            label: '왼쪽에 열 추가',
+            onTap: () {
+              onSelectedColChanged(selectedCol + 1);
+              dispatch({'type': 'addTableColumn', 'tableId': overlay.tableId, 'col': selectedCol, 'before': true});
+            },
+          ),
           BottomMenuItem(
             icon: LucideLightIcons.arrow_right_to_line,
             label: '오른쪽에 열 추가',
             onTap: () {
               onSelectedColChanged(selectedCol);
-              dispatch({'type': 'addTableColumn', 'tableId': overlay.tableId, 'afterCol': selectedCol});
+              dispatch({'type': 'addTableColumn', 'tableId': overlay.tableId, 'col': selectedCol, 'before': false});
             },
           ),
           if (!isFirst)

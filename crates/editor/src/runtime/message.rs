@@ -458,13 +458,13 @@ define_messages! {
     => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_set_column_widths(table_id, col_widths) },
 
-    AddTableRow { table_id: String, after_row: usize }
+    AddTableRow { table_id: String, row: usize, before: bool }
     => when When::key(ContextKey::CanEdit)
-    => handle(rt) { rt.handle_add_table_row(table_id, after_row) },
+    => handle(rt) { rt.handle_add_table_row(table_id, row, before) },
 
-    AddTableColumn { table_id: String, after_col: usize }
+    AddTableColumn { table_id: String, col: usize, before: bool }
     => when When::key(ContextKey::CanEdit)
-    => handle(rt) { rt.handle_add_table_column(table_id, after_col) },
+    => handle(rt) { rt.handle_add_table_column(table_id, col, before) },
 
     DeleteTableRow { table_id: String, row: usize }
     => when When::key(ContextKey::CanEdit)

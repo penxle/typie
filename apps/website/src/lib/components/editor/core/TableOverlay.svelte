@@ -246,22 +246,20 @@
               <span>오른쪽으로 이동</span>
             </MenuItem>
           {/if}
-          {#if i > 0}
-            <MenuItem
-              onclick={() => {
-                close();
-                editor.dispatch({ type: 'addTableColumn', tableId: overlay.tableId, afterCol: i - 1 }).scrollIntoView();
-                editor.focus();
-              }}
-            >
-              <Icon icon={ArrowLeftToLineIcon} size={14} />
-              <span>왼쪽에 열 추가</span>
-            </MenuItem>
-          {/if}
           <MenuItem
             onclick={() => {
               close();
-              editor.dispatch({ type: 'addTableColumn', tableId: overlay.tableId, afterCol: i }).scrollIntoView();
+              editor.dispatch({ type: 'addTableColumn', tableId: overlay.tableId, col: i, before: true }).scrollIntoView();
+              editor.focus();
+            }}
+          >
+            <Icon icon={ArrowLeftToLineIcon} size={14} />
+            <span>왼쪽에 열 추가</span>
+          </MenuItem>
+          <MenuItem
+            onclick={() => {
+              close();
+              editor.dispatch({ type: 'addTableColumn', tableId: overlay.tableId, col: i, before: false }).scrollIntoView();
               editor.focus();
             }}
           >
@@ -374,25 +372,22 @@
               <span>아래로 이동</span>
             </MenuItem>
           {/if}
-          {#if (overlay.startRowIndex ?? 0) + i > 0}
-            <MenuItem
-              onclick={() => {
-                close();
-                editor
-                  .dispatch({ type: 'addTableRow', tableId: overlay.tableId, afterRow: (overlay.startRowIndex ?? 0) + i - 1 })
-                  .scrollIntoView();
-                editor.focus();
-              }}
-            >
-              <Icon icon={ArrowUpToLineIcon} size={14} />
-              <span>위에 행 추가</span>
-            </MenuItem>
-          {/if}
+          <MenuItem
+            onclick={() => {
+              close();
+              const globalRowIndex = (overlay.startRowIndex ?? 0) + i;
+              editor.dispatch({ type: 'addTableRow', tableId: overlay.tableId, row: globalRowIndex, before: true }).scrollIntoView();
+              editor.focus();
+            }}
+          >
+            <Icon icon={ArrowUpToLineIcon} size={14} />
+            <span>위에 행 추가</span>
+          </MenuItem>
           <MenuItem
             onclick={() => {
               close();
               editor
-                .dispatch({ type: 'addTableRow', tableId: overlay.tableId, afterRow: (overlay.startRowIndex ?? 0) + i })
+                .dispatch({ type: 'addTableRow', tableId: overlay.tableId, row: (overlay.startRowIndex ?? 0) + i, before: false })
                 .scrollIntoView();
               editor.focus();
             }}
@@ -540,7 +535,9 @@
     })}
     aria-label="열 추가"
     onclick={() => {
-      editor.dispatch({ type: 'addTableColumn', tableId: overlay.tableId, afterCol: overlay.colWidths.length - 1 }).scrollIntoView();
+      editor
+        .dispatch({ type: 'addTableColumn', tableId: overlay.tableId, col: overlay.colWidths.length - 1, before: false })
+        .scrollIntoView();
       editor.focus();
     }}
     type="button"
@@ -589,7 +586,12 @@
       aria-label="행 추가"
       onclick={() => {
         editor
-          .dispatch({ type: 'addTableRow', tableId: overlay.tableId, afterRow: (overlay.totalRows ?? overlay.rowHeights.length) - 1 })
+          .dispatch({
+            type: 'addTableRow',
+            tableId: overlay.tableId,
+            row: (overlay.totalRows ?? overlay.rowHeights.length) - 1,
+            before: false,
+          })
           .scrollIntoView();
         editor.focus();
       }}
@@ -641,9 +643,16 @@
       aria-label="행 및 열 추가"
       onclick={() => {
         editor
-          .dispatch({ type: 'addTableRow', tableId: overlay.tableId, afterRow: (overlay.totalRows ?? overlay.rowHeights.length) - 1 })
+          .dispatch({
+            type: 'addTableRow',
+            tableId: overlay.tableId,
+            row: (overlay.totalRows ?? overlay.rowHeights.length) - 1,
+            before: false,
+          })
           .scrollIntoView();
-        editor.dispatch({ type: 'addTableColumn', tableId: overlay.tableId, afterCol: overlay.colWidths.length - 1 }).scrollIntoView();
+        editor
+          .dispatch({ type: 'addTableColumn', tableId: overlay.tableId, col: overlay.colWidths.length - 1, before: false })
+          .scrollIntoView();
         editor.focus();
       }}
       type="button"
