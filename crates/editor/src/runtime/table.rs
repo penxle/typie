@@ -1,3 +1,4 @@
+use crate::layout::cursor::{Cursor, NavigationContext};
 use crate::layout::{Element, PositionedNode};
 use crate::model::{Doc, NodeId, TABLE_BORDER_WIDTH, TableAlign, TableBorderStyle};
 use crate::runtime::Runtime;
@@ -9,6 +10,8 @@ use std::rc::Rc;
 impl Runtime {
     pub fn build_table_overlays(&self) -> Vec<TableOverlay> {
         let mut overlays = Vec::new();
+        let focused_page_idx =
+            focused_cursor_page(&self.state.selection, &self.state.doc, &self.pages);
 
         for (page_idx, page) in self.pages.iter().enumerate() {
             collect_table_overlays_from_tree(
@@ -17,6 +20,7 @@ impl Runtime {
                 page_idx,
                 &self.state.selection,
                 &self.state.doc,
+                focused_page_idx,
                 &mut overlays,
             );
         }
@@ -31,6 +35,7 @@ fn collect_table_overlays_from_tree(
     page_idx: usize,
     selection: &Selection,
     doc: &Rc<Doc>,
+    focused_page_idx: Option<usize>,
     overlays: &mut Vec<TableOverlay>,
 ) {
     let abs_pos = Point::new(
@@ -40,7 +45,8 @@ fn collect_table_overlays_from_tree(
 
     if let Some(ref element) = positioned.node.element {
         if let Element::TableBorder(table_border) = element {
-            let is_focused = is_cursor_in_table(selection.head.node_id, table_border.node_id, doc);
+            let is_focused = is_cursor_in_table(selection.head.node_id, table_border.node_id, doc)
+                && focused_page_idx == Some(page_idx);
 
             let mut col_positions = Vec::new();
             let mut x = TABLE_BORDER_WIDTH;
@@ -92,9 +98,26 @@ fn collect_table_overlays_from_tree(
 
     if let Some(children) = &positioned.node.children {
         for child in children {
-            collect_table_overlays_from_tree(child, abs_pos, page_idx, selection, doc, overlays);
+            collect_table_overlays_from_tree(
+                child,
+                abs_pos,
+                page_idx,
+                selection,
+                doc,
+                focused_page_idx,
+                overlays,
+            );
         }
     }
+}
+
+fn focused_cursor_page(
+    selection: &Selection,
+    doc: &Rc<Doc>,
+    pages: &[crate::layout::Page],
+) -> Option<usize> {
+    let ctx = NavigationContext::new(doc);
+    Cursor::bounds(&ctx, pages, selection.head).map(|(page_idx, _)| page_idx)
 }
 
 fn is_cursor_in_table(cursor_node_id: NodeId, table_id: NodeId, doc: &Rc<Doc>) -> bool {
