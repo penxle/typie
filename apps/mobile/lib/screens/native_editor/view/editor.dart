@@ -91,7 +91,7 @@ class EditorView extends HookWidget {
     final handleDragPosition = useValueNotifier<Offset?>(null);
     final pendingScroll = useValueNotifier<VoidCallback?>(null);
 
-    final sizeRef = useRef<(double, double)>((0, 0));
+    final lastSize = useRef<(double, double, double)>((0, 0, 0));
 
     final titleNotifier = useValueNotifier(title)..value = title;
     final subtitleNotifier = useValueNotifier(subtitle)..value = subtitle;
@@ -271,11 +271,7 @@ class EditorView extends HookWidget {
     );
 
     final tickerLoop = useMemoized(
-      () => TickerLoop(
-        getController: () => controllerRef.value,
-        tickerProvider: tickerProvider,
-        getSize: () => sizeRef.value,
-      ),
+      () => TickerLoop(getController: () => controllerRef.value, tickerProvider: tickerProvider),
       [tickerProvider],
     );
 
@@ -491,7 +487,19 @@ class EditorView extends HookWidget {
         pendingScroll: pendingScroll,
         child: LayoutBuilder(
           builder: (context, constraints) {
-            sizeRef.value = (constraints.maxWidth.floorToDouble(), constraints.maxHeight);
+            final width = constraints.maxWidth.floorToDouble();
+            final height = constraints.maxHeight;
+            final scaleFactor = MediaQuery.devicePixelRatioOf(context);
+            final currentSize = (width, height, scaleFactor);
+            if (lastSize.value != currentSize) {
+              lastSize.value = currentSize;
+              controller.editor.dispatch({
+                'type': 'resize',
+                'width': width,
+                'height': height,
+                'scaleFactor': scaleFactor,
+              });
+            }
             return Column(
               children: [
                 Expanded(

@@ -266,11 +266,18 @@ final class NativeEditor {
 
   final Pointer<EditorHandle> _handle;
   bool _disposed = false;
+  bool _needsTick = false;
 
   bool get isDisposed => _disposed;
+  bool get needsTick => _needsTick;
+
+  void resetNeedsTick() {
+    _needsTick = false;
+  }
 
   void dispatch(Map<String, dynamic> message) {
     _checkDisposed();
+    _needsTick = true;
 
     final json = jsonEncode(message);
     final jsonPtr = json.toNativeUtf8();
@@ -380,6 +387,7 @@ final class NativeEditor {
         throw EditorException(_getLastError() ?? 'Failed to import updates');
       }
     });
+    _needsTick = true;
   }
 
   void insertTemplateFragment(Uint8List snapshot) {
@@ -390,6 +398,7 @@ final class NativeEditor {
         throw EditorException(_getLastError() ?? 'Failed to insert template fragment');
       }
     });
+    _needsTick = true;
   }
 
   void importUpdatesBatch(List<Uint8List> updatesBatch) {
@@ -424,6 +433,7 @@ final class NativeEditor {
         ..free(ptrsArray)
         ..free(lensArray);
     }
+    _needsTick = true;
   }
 
   Map<String, dynamic>? getClipboardData() {
@@ -509,6 +519,7 @@ final class NativeEditor {
     } finally {
       calloc.free(jsonPtr);
     }
+    _needsTick = true;
   }
 
   List<Map<String, dynamic>> performSearch(String query, bool matchWholeWord) {
@@ -552,6 +563,7 @@ final class NativeEditor {
       if (result < 0) {
         throw EditorException(_getLastError() ?? 'Failed to replace text in block');
       }
+      _needsTick = true;
       return result == 1;
     } finally {
       calloc
@@ -571,6 +583,7 @@ final class NativeEditor {
       if (result < 0) {
         throw EditorException(_getLastError() ?? 'Failed to replace text in blocks');
       }
+      _needsTick = true;
     } finally {
       calloc.free(jsonPtr);
     }

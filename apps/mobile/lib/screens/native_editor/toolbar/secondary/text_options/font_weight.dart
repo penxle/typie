@@ -81,7 +81,9 @@ class NativeEditorFontWeightTextOptionsToolbar extends HookWidget {
       }
     }
 
-    if (allWeights.isEmpty) return defaultFontFamilyAndWeights;
+    if (allWeights.isEmpty) {
+      return defaultFontFamilyAndWeights;
+    }
 
     return (family: null, weights: allWeights.toList()..sort());
   }

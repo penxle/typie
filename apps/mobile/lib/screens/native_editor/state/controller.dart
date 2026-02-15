@@ -51,9 +51,29 @@ class EditorController extends ChangeNotifier {
   final ValueNotifier<String?> floatingContext = ValueNotifier(null);
   final ValueNotifier<String?> floatingNodeId = ValueNotifier(null);
 
+  bool _isBatching = false;
+  bool _needsNotify = false;
+
+  void beginBatchUpdate() {
+    _isBatching = true;
+    _needsNotify = false;
+  }
+
+  void endBatchUpdate() {
+    _isBatching = false;
+    if (_needsNotify) {
+      _needsNotify = false;
+      notifyListeners();
+    }
+  }
+
   void updateState(EditorState Function(EditorState) updater) {
     _state = updater(_state);
-    notifyListeners();
+    if (_isBatching) {
+      _needsNotify = true;
+    } else {
+      notifyListeners();
+    }
   }
 
   void dispatch(Map<String, dynamic> message) {
