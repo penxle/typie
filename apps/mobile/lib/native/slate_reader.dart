@@ -45,6 +45,7 @@ const selectionTypeFile = 7;
 const selectionTypeEmbed = 8;
 const selectionTypeArchived = 9;
 const selectionTypeBlockquote = 10;
+const selectionTypeTable = 11;
 
 const _unitTagMap = {_tagItalic: 'italic', _tagStrikethrough: 'strikethrough', _tagUnderline: 'underline'};
 const _f32TagMap = {_tagFontSize: 'font_size', _tagLetterSpacing: 'letter_spacing', _tagLineHeight: 'line_height'};

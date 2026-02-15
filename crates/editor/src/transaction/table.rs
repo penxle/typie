@@ -382,6 +382,22 @@ impl Transaction {
         Ok(true)
     }
 
+    pub fn select_table(&mut self, table_id: NodeId) -> Result<bool> {
+        let table_node = self.node(table_id).context("Table not found")?;
+        if !matches!(table_node.node(), Node::Table(_)) {
+            return Ok(false);
+        }
+
+        let parent = table_node.parent().context("Table parent not found")?;
+        let table_index = table_node.index().context("Table index not found")?;
+
+        let anchor = Position::new(parent.node_id(), table_index, Affinity::Downstream);
+        let head = Position::new(parent.node_id(), table_index + 1, Affinity::Upstream);
+        self.set_selection(Selection::new(anchor, head));
+
+        Ok(true)
+    }
+
     pub fn select_table_row(&mut self, table_id: NodeId, row: usize) -> Result<bool> {
         let table_node = self.node(table_id).context("Table not found")?;
 
@@ -782,5 +798,34 @@ mod tests {
         );
 
         assert_eq!(sel.anchor.node_id, p1, "Selection should move to p1");
+    }
+
+    #[test]
+    fn test_select_table_selects_table_node_range() {
+        let mut t = id!();
+        let mut p = id!();
+
+        let initial = state! {
+            doc {
+                paragraph {}
+                @t table {
+                    table_row {
+                        table_cell { @p paragraph { text { "cell" } } }
+                    }
+                }
+                paragraph {}
+            }
+            selection { (p, 0) }
+        };
+
+        let actual = transact!(initial, |tr| {
+            tr.select_table(t).unwrap();
+        });
+
+        let selection = actual.selection;
+        assert_eq!(selection.anchor.node_id, NodeId::ROOT);
+        assert_eq!(selection.head.node_id, NodeId::ROOT);
+        assert_eq!(selection.anchor.offset, 1);
+        assert_eq!(selection.head.offset, 2);
     }
 }

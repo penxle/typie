@@ -9,6 +9,7 @@ import 'package:typie/screens/native_editor/toolbar/floating/fold.dart';
 import 'package:typie/screens/native_editor/toolbar/floating/horizontal_rule.dart';
 import 'package:typie/screens/native_editor/toolbar/floating/image.dart';
 import 'package:typie/screens/native_editor/toolbar/floating/list.dart';
+import 'package:typie/screens/native_editor/toolbar/floating/table.dart';
 import 'package:typie/screens/native_editor/toolbar/scope.dart';
 
 class NativeEditorFloatingToolbar extends HookWidget {
@@ -24,6 +25,11 @@ class NativeEditorFloatingToolbar extends HookWidget {
     final selectedElement = floatingNodeId == null
         ? null
         : elements.where((element) => element.nodeId == floatingNodeId).firstOrNull;
+
+    final tableOverlays = useValueListenable(scope.controller.tableOverlays);
+    final selectedTable = floatingNodeId == null
+        ? null
+        : tableOverlays.where((overlay) => overlay.tableId == floatingNodeId).firstOrNull;
 
     final selectedElementToolbars = <String, Widget Function()>{
       'selected_image': () => NativeEditorImageFloatingToolbar(element: selectedElement!),
@@ -45,6 +51,8 @@ class NativeEditorFloatingToolbar extends HookWidget {
       'in_blockquote' => const NativeEditorBlockquoteFloatingToolbar(),
       'in_callout' => const NativeEditorCalloutFloatingToolbar(),
       'in_fold' => const NativeEditorFoldFloatingToolbar(),
+      'in_table' || 'selected_table' =>
+        selectedTable != null ? NativeEditorTableFloatingToolbar(table: selectedTable) : const SizedBox.shrink(),
       _ => const SizedBox.shrink(),
     };
   }
