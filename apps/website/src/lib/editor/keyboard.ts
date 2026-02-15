@@ -1,129 +1,159 @@
 import { IS_MAC } from './constants';
-import type { Direction, Message } from './types';
+import type { Editor } from './editor.svelte';
 
-const nav = (direction: Direction, extend: boolean): Message => ({
-  type: 'navigate',
-  direction,
-  extend,
-});
-
-export const getActionFromKeyEvent = (e: KeyboardEvent): Message | null => {
+export const handleKeyEvent = (editor: Editor, e: KeyboardEvent): boolean => {
   const wordModifier = IS_MAC ? e.altKey : !IS_MAC && e.ctrlKey;
 
   switch (e.key) {
     case 'ArrowLeft': {
       if (IS_MAC && e.metaKey) {
-        return nav('lineStart', e.shiftKey);
+        editor.dispatch({ type: 'navigate', direction: 'lineStart', extend: e.shiftKey });
       } else if (wordModifier) {
-        return nav('wordLeft', e.shiftKey);
+        editor.dispatch({ type: 'navigate', direction: 'wordLeft', extend: e.shiftKey });
       } else {
-        return nav('left', e.shiftKey);
+        editor.dispatch({ type: 'navigate', direction: 'left', extend: e.shiftKey });
       }
+
+      editor.scrollIntoView({ mode: e.shiftKey ? 'auto' : 'typewriter' });
+      return true;
     }
     case 'ArrowRight': {
       if (IS_MAC && e.metaKey) {
-        return nav('lineEnd', e.shiftKey);
+        editor.dispatch({ type: 'navigate', direction: 'lineEnd', extend: e.shiftKey });
       } else if (wordModifier) {
-        return nav('wordRight', e.shiftKey);
+        editor.dispatch({ type: 'navigate', direction: 'wordRight', extend: e.shiftKey });
       } else {
-        return nav('right', e.shiftKey);
+        editor.dispatch({ type: 'navigate', direction: 'right', extend: e.shiftKey });
       }
+
+      editor.scrollIntoView({ mode: e.shiftKey ? 'auto' : 'typewriter' });
+      return true;
     }
     case 'ArrowUp': {
       if (IS_MAC && e.metaKey) {
-        return nav('documentStart', e.shiftKey);
+        editor.dispatch({ type: 'navigate', direction: 'documentStart', extend: e.shiftKey });
       } else if (e.altKey) {
-        return nav('sentenceUp', e.shiftKey);
+        editor.dispatch({ type: 'navigate', direction: 'sentenceUp', extend: e.shiftKey });
       } else {
-        return nav('up', e.shiftKey);
+        editor.dispatch({ type: 'navigate', direction: 'up', extend: e.shiftKey });
       }
+
+      editor.scrollIntoView({ mode: e.shiftKey ? 'auto' : 'typewriter' });
+      return true;
     }
     case 'ArrowDown': {
       if (IS_MAC && e.metaKey) {
-        return nav('documentEnd', e.shiftKey);
+        editor.dispatch({ type: 'navigate', direction: 'documentEnd', extend: e.shiftKey });
       } else if (e.altKey) {
-        return nav('sentenceDown', e.shiftKey);
+        editor.dispatch({ type: 'navigate', direction: 'sentenceDown', extend: e.shiftKey });
       } else {
-        return nav('down', e.shiftKey);
+        editor.dispatch({ type: 'navigate', direction: 'down', extend: e.shiftKey });
       }
+
+      editor.scrollIntoView({ mode: e.shiftKey ? 'auto' : 'typewriter' });
+      return true;
     }
     case 'Home': {
       if (!IS_MAC && e.ctrlKey) {
-        return nav('documentStart', e.shiftKey);
+        editor.dispatch({ type: 'navigate', direction: 'documentStart', extend: e.shiftKey });
       } else {
-        return nav('lineStart', e.shiftKey);
+        editor.dispatch({ type: 'navigate', direction: 'lineStart', extend: e.shiftKey });
       }
+
+      editor.scrollIntoView({ mode: e.shiftKey ? 'auto' : 'typewriter' });
+      return true;
     }
     case 'End': {
       if (!IS_MAC && e.ctrlKey) {
-        return nav('documentEnd', e.shiftKey);
+        editor.dispatch({ type: 'navigate', direction: 'documentEnd', extend: e.shiftKey });
       } else {
-        return nav('lineEnd', e.shiftKey);
+        editor.dispatch({ type: 'navigate', direction: 'lineEnd', extend: e.shiftKey });
       }
+
+      editor.scrollIntoView({ mode: e.shiftKey ? 'auto' : 'typewriter' });
+      return true;
     }
     case 'PageUp': {
-      return nav('pageUp', e.shiftKey);
+      editor.dispatch({ type: 'navigate', direction: 'pageUp', extend: e.shiftKey });
+      editor.scrollIntoView({ mode: e.shiftKey ? 'auto' : 'typewriter' });
+      return true;
     }
     case 'PageDown': {
-      return nav('pageDown', e.shiftKey);
+      editor.dispatch({ type: 'navigate', direction: 'pageDown', extend: e.shiftKey });
+      editor.scrollIntoView({ mode: e.shiftKey ? 'auto' : 'typewriter' });
+      return true;
     }
     case 'Backspace': {
       if (IS_MAC && e.metaKey) {
-        return { type: 'deleteToLineStart' };
+        editor.dispatch({ type: 'deleteToLineStart' });
       } else if (wordModifier) {
-        return { type: 'deleteWordBackward' };
+        editor.dispatch({ type: 'deleteWordBackward' });
       } else {
-        return { type: 'deleteBackward' };
+        editor.dispatch({ type: 'deleteBackward' });
       }
+
+      editor.scrollIntoView({ mode: 'typewriter' });
+      return true;
     }
     case 'Delete': {
       if (wordModifier) {
-        return { type: 'deleteWordForward' };
+        editor.dispatch({ type: 'deleteWordForward' });
       } else {
-        return { type: 'deleteForward' };
+        editor.dispatch({ type: 'deleteForward' });
       }
+
+      editor.scrollIntoView({ mode: 'typewriter' });
+      return true;
     }
     case 'Enter': {
       if ((IS_MAC && e.metaKey) || (!IS_MAC && e.ctrlKey)) {
-        return { type: 'insertPageBreak' };
+        editor.dispatch({ type: 'insertPageBreak' });
       } else if (e.shiftKey) {
-        return { type: 'insertHardBreak' };
+        editor.dispatch({ type: 'insertHardBreak' });
       } else {
-        return { type: 'insertNewline' };
+        editor.dispatch({ type: 'insertNewline' });
       }
+
+      editor.scrollIntoView({ mode: 'typewriter' });
+      return true;
     }
     case 'a':
     case 'A': {
       if ((IS_MAC && e.metaKey) || (!IS_MAC && e.ctrlKey)) {
-        return { type: 'selectAll' };
+        editor.dispatch({ type: 'selectAll' }).scrollIntoView();
+        return true;
       }
       break;
     }
     case 'b':
     case 'B': {
       if ((IS_MAC && e.metaKey) || (!IS_MAC && e.ctrlKey)) {
-        return { type: 'toggleBold' };
+        editor.dispatch({ type: 'toggleBold' }).scrollIntoView();
+        return true;
       }
       break;
     }
     case 'i':
     case 'I': {
       if ((IS_MAC && e.metaKey) || (!IS_MAC && e.ctrlKey)) {
-        return { type: 'toggleStyle', style: { type: 'italic' } };
+        editor.dispatch({ type: 'toggleStyle', style: { type: 'italic' } }).scrollIntoView();
+        return true;
       }
       break;
     }
     case 'u':
     case 'U': {
       if ((IS_MAC && e.metaKey) || (!IS_MAC && e.ctrlKey)) {
-        return { type: 'toggleStyle', style: { type: 'underline' } };
+        editor.dispatch({ type: 'toggleStyle', style: { type: 'underline' } }).scrollIntoView();
+        return true;
       }
       break;
     }
     case 's':
     case 'S': {
       if ((e.shiftKey && IS_MAC && e.metaKey) || (!IS_MAC && e.ctrlKey)) {
-        return { type: 'toggleStyle', style: { type: 'strikethrough' } };
+        editor.dispatch({ type: 'toggleStyle', style: { type: 'strikethrough' } }).scrollIntoView();
+        return true;
       }
       break;
     }
@@ -131,30 +161,36 @@ export const getActionFromKeyEvent = (e: KeyboardEvent): Message | null => {
     case 'Z': {
       if ((IS_MAC && e.metaKey) || (!IS_MAC && e.ctrlKey)) {
         if (e.shiftKey) {
-          return { type: 'redo' };
+          editor.dispatch({ type: 'redo' }).scrollIntoView();
         } else {
-          return { type: 'undo' };
+          editor.dispatch({ type: 'undo' }).scrollIntoView();
         }
+        return true;
       }
       break;
     }
     case '\\': {
       if ((IS_MAC && e.metaKey) || (!IS_MAC && e.ctrlKey)) {
-        return { type: 'clearFormatting' };
+        editor.dispatch({ type: 'clearFormatting' }).scrollIntoView();
+        return true;
       }
       break;
     }
     case 'Tab': {
       if (e.shiftKey) {
-        return { type: 'outdent' };
+        editor.dispatch({ type: 'outdent' });
       } else {
-        return { type: 'indent' };
+        editor.dispatch({ type: 'indent' });
       }
+
+      editor.scrollIntoView({ mode: 'typewriter' });
+      return true;
     }
     case 'Escape': {
-      return { type: 'escape' };
+      editor.dispatch({ type: 'escape' }).scrollIntoView();
+      return true;
     }
   }
 
-  return null;
+  return false;
 };
