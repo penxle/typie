@@ -50,7 +50,6 @@ type DocumentJson = {
           page_margin_right: number;
         };
   };
-  styles: Record<string, unknown>;
   nodes: Record<string, LoroNode>;
 };
 
@@ -603,6 +602,15 @@ export function convertPostToDocumentJson(
   nodes[ROOT_ID] = {
     type: 'root',
     children: rootChildren,
+    cascade_attrs: {
+      'style:font_family': 'Pretendard',
+      'style:font_size': 12,
+      'style:font_weight': 400,
+      'style:text_color': 'black',
+      'style:background_color': 'none',
+      'style:letter_spacing': 0,
+      'paragraph:line_height': 1.6,
+    },
   };
 
   const json: DocumentJson = {
@@ -610,18 +618,6 @@ export function convertPostToDocumentJson(
       block_gap: blockGap,
       paragraph_indent: paragraphIndent,
       layout_mode: layoutMode,
-    },
-    styles: {
-      font_family: 'Pretendard',
-      font_size: 12,
-      font_weight: 400,
-      text_color: 'black',
-      background_color: 'none',
-      letter_spacing: 0,
-      line_height: 1.6,
-      italic: false,
-      strikethrough: false,
-      underline: false,
     },
     nodes,
   };

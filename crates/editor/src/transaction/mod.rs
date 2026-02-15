@@ -54,23 +54,6 @@ impl Transaction {
         self.recompute_pending_styles();
     }
 
-    /// Variant of `set_selection` for use after text deletion.
-    /// When the deletion removes the last text segment at the cursor position,
-    /// preserves the pre-deletion pending styles instead of falling back to
-    /// document defaults.
-    pub(crate) fn set_selection_after_delete(&mut self, selection: Selection) {
-        let pre_delete_styles = self.state.pending_styles.clone();
-        self.set_selection(selection);
-
-        let head = self.state.selection.head;
-        if !self.cursor_has_text_segment(head.node_id, head.offset) {
-            if self.state.pending_styles != pre_delete_styles {
-                self.state.pending_styles = pre_delete_styles;
-                self.push_effect(Effect::PendingStylesChanged);
-            }
-        }
-    }
-
     fn cursor_has_text_segment(&self, block_id: NodeId, offset: usize) -> bool {
         let Some(node) = self.node(block_id) else {
             return false;
@@ -98,6 +81,33 @@ impl Transaction {
 
     pub fn push_effect(&mut self, effect: Effect) {
         self.effects.push(effect);
+    }
+
+    pub(crate) fn resolve_attr_cascade(&self, node_id: NodeId) -> Vec<Attr> {
+        let mut result = Vec::new();
+        let Some(node) = self.node(node_id) else {
+            return result;
+        };
+        for ancestor in node.ancestors() {
+            if let Some(attrs) = ancestor.cascade_attrs() {
+                for attr in attrs {
+                    if !result.iter().any(|a: &Attr| a.key() == attr.key()) {
+                        result.push(attr);
+                    }
+                }
+            }
+        }
+        result
+    }
+
+    pub(crate) fn resolve_style_cascade(&self, node_id: NodeId) -> Vec<Style> {
+        Attr::extract_styles(&self.resolve_attr_cascade(node_id))
+    }
+
+    pub(crate) fn set_cascade_attrs(&self, node_id: NodeId, attrs: &[Attr]) -> Result<()> {
+        let node = self.node_mut(node_id).context("Node not found")?;
+        node.as_mut().set_cascade_attrs(attrs)?;
+        Ok(())
     }
 
     pub(crate) fn selection_codepoints(&self) -> Vec<u32> {

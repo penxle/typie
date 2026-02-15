@@ -907,9 +907,21 @@ impl Transaction {
         use crate::utils::collect_codepoints;
         use rustc_hash::FxHashMap;
 
-        let defaults = self.doc().default_styles();
-        let default_family = defaults.font_family().to_string();
-        let default_weight = defaults.font_weight();
+        let cascade = self.resolve_style_cascade(position.node_id);
+        let default_family = cascade
+            .iter()
+            .find_map(|s| match s {
+                Style::FontFamily(f) => Some(f.family.clone()),
+                _ => None,
+            })
+            .unwrap_or_else(|| DefaultStyles::default().font_family().to_string());
+        let default_weight = cascade
+            .iter()
+            .find_map(|s| match s {
+                Style::FontWeight(w) => Some(w.weight),
+                _ => None,
+            })
+            .unwrap_or_else(|| DefaultStyles::default().font_weight());
 
         let dest_overrides = self
             .doc()

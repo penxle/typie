@@ -1,3 +1,4 @@
+use crate::model::tree::CASCADE_ATTRS_KEY;
 use crate::model::{Codec, Node, NodeId};
 use anyhow::{Context, Result};
 use loro::{ExpandType, ExportMode, LoroDoc, LoroList, LoroMap, LoroValue, StyleConfig};
@@ -7,7 +8,6 @@ use std::collections::HashMap;
 #[derive(Serialize, Deserialize)]
 pub struct DocumentJson {
     pub settings: serde_json::Map<String, serde_json::Value>,
-    pub styles: serde_json::Map<String, serde_json::Value>,
     pub nodes: HashMap<String, NodeEntry>,
 }
 
@@ -19,6 +19,8 @@ pub struct NodeEntry {
     pub children: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cascade_attrs: Option<serde_json::Map<String, serde_json::Value>>,
 }
 
 fn loro_value_to_json(value: &LoroValue) -> serde_json::Value {
@@ -127,13 +129,6 @@ pub fn snapshot_to_json(snapshot: &[u8]) -> Result<DocumentJson> {
         _ => serde_json::Map::new(),
     };
 
-    let styles_map = loro.get_map("styles");
-    let styles_json = loro_value_to_json(&styles_map.get_deep_value());
-    let styles = match styles_json {
-        serde_json::Value::Object(m) => m,
-        _ => serde_json::Map::new(),
-    };
-
     let nodes_map = loro.get_map("nodes");
     let mut nodes = HashMap::new();
 
@@ -194,21 +189,31 @@ pub fn snapshot_to_json(snapshot: &[u8]) -> Result<DocumentJson> {
             .and_then(|v| v.into_string().ok())
             .map(|s| s.to_string());
 
+        let cascade_attrs = node_map
+            .get(CASCADE_ATTRS_KEY)
+            .and_then(|v| v.into_container().ok())
+            .and_then(|c| c.into_map().ok())
+            .map(|m| {
+                let json = loro_value_to_json(&m.get_deep_value());
+                match json {
+                    serde_json::Value::Object(map) => map,
+                    _ => serde_json::Map::new(),
+                }
+            })
+            .filter(|m| !m.is_empty());
+
         nodes.insert(
             id_str.clone(),
             NodeEntry {
                 node,
                 children: children_ids.clone(),
                 parent,
+                cascade_attrs,
             },
         );
     }
 
-    Ok(DocumentJson {
-        settings,
-        styles,
-        nodes,
-    })
+    Ok(DocumentJson { settings, nodes })
 }
 
 pub fn json_to_snapshot(doc_json: &DocumentJson) -> Result<Vec<u8>> {
@@ -223,14 +228,6 @@ pub fn json_to_snapshot(doc_json: &DocumentJson) -> Result<Vec<u8>> {
         &serde_json::Value::Object(doc_json.settings.clone()),
     )?;
 
-    if !doc_json.styles.is_empty() {
-        let styles_map = loro.get_map("styles");
-        apply_json_to_loro_map(
-            &styles_map,
-            &serde_json::Value::Object(doc_json.styles.clone()),
-        )?;
-    }
-
     let nodes_map = loro.get_map("nodes");
 
     for (id_str, entry) in &doc_json.nodes {
@@ -243,6 +240,11 @@ pub fn json_to_snapshot(doc_json: &DocumentJson) -> Result<Vec<u8>> {
 
         if let Some(parent) = &entry.parent {
             node_map.insert("parent", parent.as_str())?;
+        }
+
+        if let Some(cascade) = &entry.cascade_attrs {
+            let cascade_map = node_map.insert_container(CASCADE_ATTRS_KEY, LoroMap::new())?;
+            apply_json_to_loro_map(&cascade_map, &serde_json::Value::Object(cascade.clone()))?;
         }
 
         let children_list = node_map.insert_container("children", LoroList::new())?;

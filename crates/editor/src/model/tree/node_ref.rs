@@ -1,8 +1,11 @@
+use crate::model::attr::Attr;
 use crate::model::tree::{DocInner, NodeMut};
 use crate::model::*;
 use crate::schema::{NodeSpec, Schema};
 use std::cell::OnceCell;
 use std::rc::Rc;
+
+pub const CASCADE_ATTRS_KEY: &str = "cascade_attrs";
 
 #[derive(Debug)]
 pub struct NodeRef<'a> {
@@ -220,6 +223,25 @@ impl<'a> NodeRef<'a> {
 
     pub fn is_block(&self) -> bool {
         !self.spec().inline
+    }
+
+    pub fn cascade_attrs(&self) -> Option<Vec<Attr>> {
+        let map = self.inner.get_node_map(self.node_id)?;
+        let attrs_map = map
+            .get(CASCADE_ATTRS_KEY)?
+            .into_container()
+            .ok()?
+            .into_map()
+            .ok()?;
+        let deep = attrs_map.get_deep_value();
+        let entries = deep.into_map().ok()?;
+        let mut attrs = Vec::new();
+        for (key, value) in entries.iter() {
+            if let Some(attr) = Attr::from_key_value(key, value.clone()) {
+                attrs.push(attr);
+            }
+        }
+        if attrs.is_empty() { None } else { Some(attrs) }
     }
 
     pub fn schema(&self) -> &Schema {

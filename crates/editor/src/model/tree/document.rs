@@ -1,14 +1,14 @@
+use crate::model::tree::node_ref::CASCADE_ATTRS_KEY;
 use crate::model::tree::{BlockTextIterator, DocInner, NodeRef, TextSegmentIterator};
 use crate::model::*;
 use crate::schema::Schema;
 use anyhow::{Context, Result};
-use loro::{ExpandType, ExportMode, Frontiers, LoroDoc, LoroMap, LoroValue, StyleConfig};
+use loro::{ExpandType, ExportMode, Frontiers, LoroDoc, LoroMap, StyleConfig};
 use rustc_hash::FxHashSet;
 use serde::Deserialize;
 use std::rc::Rc;
 
 const SETTINGS_KEY: &str = "settings";
-const STYLES_KEY: &str = "styles";
 
 #[derive(Deserialize)]
 #[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
@@ -60,37 +60,6 @@ impl Doc {
         let mut settings = DocumentSettings::new();
         settings.encode(&map).unwrap();
 
-        {
-            let styles_map = loro.get_map(STYLES_KEY);
-            let defaults = DefaultStyles::default();
-            styles_map
-                .insert("font_family", defaults.font_family.as_str())
-                .unwrap();
-            styles_map
-                .insert("font_size", defaults.font_size as f64)
-                .unwrap();
-            styles_map
-                .insert("font_weight", defaults.font_weight as i64)
-                .unwrap();
-            styles_map
-                .insert("text_color", defaults.text_color.as_str())
-                .unwrap();
-            styles_map
-                .insert("background_color", defaults.background_color.as_str())
-                .unwrap();
-            styles_map
-                .insert("letter_spacing", defaults.letter_spacing as f64)
-                .unwrap();
-            styles_map
-                .insert("line_height", defaults.line_height as f64)
-                .unwrap();
-            styles_map.insert("italic", defaults.italic).unwrap();
-            styles_map
-                .insert("strikethrough", defaults.strikethrough)
-                .unwrap();
-            styles_map.insert("underline", defaults.underline).unwrap();
-        }
-
         let nodes = loro.get_map("nodes");
 
         let map = nodes
@@ -98,6 +67,18 @@ impl Doc {
             .unwrap();
         let mut root = Node::Root(RootNode::default());
         root.encode(&map).unwrap();
+
+        {
+            let defaults = DefaultStyles::default();
+            let cascade_map = map
+                .insert_container(CASCADE_ATTRS_KEY, LoroMap::new())
+                .unwrap();
+            for attr in defaults.to_attrs() {
+                cascade_map
+                    .insert(attr.key(), attr.to_loro_value())
+                    .unwrap();
+            }
+        }
 
         let inner = DocInner::new(loro, schema);
 
@@ -282,78 +263,18 @@ impl Doc {
     }
 
     pub fn update_default_styles(&self, styles: DefaultStyles) -> Result<()> {
-        let styles_map = self.inner.loro.get_map(STYLES_KEY);
-        styles_map.insert("font_family", styles.font_family.as_str())?;
-        styles_map.insert("font_size", styles.font_size as f64)?;
-        styles_map.insert("font_weight", styles.font_weight as i64)?;
-        styles_map.insert("text_color", styles.text_color.as_str())?;
-        styles_map.insert("background_color", styles.background_color.as_str())?;
-        styles_map.insert("letter_spacing", styles.letter_spacing as f64)?;
-        styles_map.insert("line_height", styles.line_height as f64)?;
-        styles_map.insert("italic", styles.italic)?;
-        styles_map.insert("strikethrough", styles.strikethrough)?;
-        styles_map.insert("underline", styles.underline)?;
+        if let Some(root) = self.node(NodeId::ROOT) {
+            root.as_mut().set_cascade_attrs(&styles.to_attrs())?;
+        }
         self.inner.loro.commit();
         Ok(())
     }
 
     pub fn default_styles(&self) -> DefaultStyles {
-        let styles_map = self.inner.loro.get_map(STYLES_KEY);
-
-        let get_string = |key: &str| -> String {
-            styles_map
-                .get(key)
-                .and_then(|v| v.into_value().ok())
-                .and_then(|v| match v {
-                    LoroValue::String(s) => Some(s.to_string()),
-                    _ => None,
-                })
-                .unwrap_or_else(|| panic!("styles map must contain default style key: {key}"))
-        };
-        let get_f32 = |key: &str| -> f32 {
-            styles_map
-                .get(key)
-                .and_then(|v| v.into_value().ok())
-                .and_then(|v| match v {
-                    LoroValue::Double(d) => Some(d as f32),
-                    LoroValue::I64(i) => Some(i as f32),
-                    _ => None,
-                })
-                .unwrap_or_else(|| panic!("styles map must contain default style key: {key}"))
-        };
-        let get_i64 = |key: &str| -> i64 {
-            styles_map
-                .get(key)
-                .and_then(|v| v.into_value().ok())
-                .and_then(|v| match v {
-                    LoroValue::I64(i) => Some(i),
-                    _ => None,
-                })
-                .unwrap_or_else(|| panic!("styles map must contain default style key: {key}"))
-        };
-        let get_bool = |key: &str| -> bool {
-            styles_map
-                .get(key)
-                .and_then(|v| v.into_value().ok())
-                .and_then(|v| match v {
-                    LoroValue::Bool(b) => Some(b),
-                    _ => None,
-                })
-                .unwrap_or_else(|| panic!("styles map must contain default style key: {key}"))
-        };
-
-        DefaultStyles {
-            font_family: get_string("font_family"),
-            font_size: get_f32("font_size"),
-            font_weight: get_i64("font_weight") as u16,
-            text_color: get_string("text_color"),
-            background_color: get_string("background_color"),
-            letter_spacing: get_f32("letter_spacing"),
-            line_height: get_f32("line_height"),
-            italic: get_bool("italic"),
-            strikethrough: get_bool("strikethrough"),
-            underline: get_bool("underline"),
-        }
+        self.node(NodeId::ROOT)
+            .and_then(|root| root.cascade_attrs())
+            .map(|attrs| DefaultStyles::from_attrs(&attrs))
+            .unwrap_or_default()
     }
 
     pub fn validate_node(&self, node_id: NodeId) -> Result<()> {

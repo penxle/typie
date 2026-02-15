@@ -1,5 +1,6 @@
 mod annotation;
 mod annotations;
+mod attr;
 mod codec;
 mod convert;
 mod decorations;
@@ -15,6 +16,7 @@ mod text;
 mod tree;
 
 pub use annotation::*;
+pub use attr::*;
 pub use codec::*;
 pub use convert::*;
 pub use decorations::*;

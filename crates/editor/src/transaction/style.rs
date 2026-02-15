@@ -7,18 +7,18 @@ use crate::transaction::Transaction;
 use anyhow::{Context, Result};
 
 pub(crate) fn compute_styles_at_cursor(tr: &Transaction, position: &Position) -> Vec<Style> {
-    let defaults = tr.doc().default_styles().to_styles();
+    let cascade = tr.resolve_style_cascade(position.node_id);
 
     let Some(node) = tr.node(position.node_id) else {
-        return defaults;
+        return cascade;
     };
 
     let Some((child_id, local_offset)) = find_child_at_offset(&node, position.offset) else {
-        return defaults;
+        return cascade;
     };
 
     let Some(child) = tr.node(child_id) else {
-        return defaults;
+        return cascade;
     };
 
     if let Node::Text(text_node) = child.node() {
@@ -28,16 +28,16 @@ pub(crate) fn compute_styles_at_cursor(tr: &Transaction, position: &Position) ->
         for segment in segments {
             let segment_len = segment.text.chars().count();
             if local_offset > current_offset && local_offset <= current_offset + segment_len {
-                return fill_missing_styles(segment.styles, &defaults);
+                return fill_missing_styles(segment.styles, &cascade);
             }
             if local_offset == 0 && current_offset == 0 {
-                return fill_missing_styles(segment.styles, &defaults);
+                return fill_missing_styles(segment.styles, &cascade);
             }
             current_offset += segment_len;
         }
     }
 
-    defaults
+    cascade
 }
 
 fn fill_missing_styles(mut styles: Vec<Style>, defaults: &[Style]) -> Vec<Style> {
@@ -77,6 +77,60 @@ fn apply_style_to_range(
         }
     }
 
+    update_cascade_attrs_on_empty_textblocks_in_range(tr, from, to, &[style.clone()])?;
+
+    Ok(())
+}
+
+fn collect_empty_textblocks_in_range(
+    tr: &Transaction,
+    from: Position,
+    to: Position,
+) -> Result<Vec<NodeId>> {
+    let mut block_ids = collect_blocks_in_range(tr.doc(), from, to)?;
+
+    if to.offset == 0 && from.node_id != to.node_id {
+        if let Some(block) = tr.node(to.node_id) {
+            if block.spec().is_textblock(tr.doc().schema())
+                && block_content_len(&block) == 0
+                && !block_ids.contains(&to.node_id)
+            {
+                block_ids.push(to.node_id);
+            }
+        }
+    }
+
+    block_ids.retain(|&id| {
+        tr.node(id)
+            .map(|b| b.spec().is_textblock(tr.doc().schema()) && block_content_len(&b) == 0)
+            .unwrap_or(false)
+    });
+
+    Ok(block_ids)
+}
+
+fn update_cascade_attrs_on_empty_textblocks_in_range(
+    tr: &mut Transaction,
+    from: Position,
+    to: Position,
+    styles: &[Style],
+) -> Result<()> {
+    let block_ids = collect_empty_textblocks_in_range(tr, from, to)?;
+
+    for block_id in block_ids {
+        let mut attrs = tr
+            .node(block_id)
+            .and_then(|b| b.cascade_attrs().map(|a| a.to_vec()))
+            .unwrap_or_default();
+
+        for style in styles {
+            attrs.retain(|a| !matches!(a, Attr::Style(s) if s.as_type() == style.as_type()));
+            attrs.push(Attr::Style(style.clone()));
+        }
+
+        tr.set_cascade_attrs(block_id, &attrs)?;
+    }
+
     Ok(())
 }
 
@@ -96,6 +150,33 @@ fn remove_style_from_range(
             tr.push_effect(Effect::NodeChanged {
                 node_id: text_node_id,
             });
+        }
+    }
+
+    remove_cascade_style_on_empty_textblocks_in_range(tr, from, to, style_type)?;
+
+    Ok(())
+}
+
+fn remove_cascade_style_on_empty_textblocks_in_range(
+    tr: &mut Transaction,
+    from: Position,
+    to: Position,
+    style_type: StyleType,
+) -> Result<()> {
+    let block_ids = collect_empty_textblocks_in_range(tr, from, to)?;
+
+    for block_id in block_ids {
+        let Some(existing) = tr.node(block_id).and_then(|b| b.cascade_attrs()) else {
+            continue;
+        };
+
+        let mut attrs: Vec<Attr> = existing.to_vec();
+        let before_len = attrs.len();
+        attrs.retain(|a| !matches!(a, Attr::Style(s) if s.as_type() == style_type));
+
+        if attrs.len() != before_len {
+            tr.set_cascade_attrs(block_id, &attrs)?;
         }
     }
 
@@ -256,7 +337,7 @@ fn apply_font_style_normalized(
 ) -> Result<()> {
     let ranges = collect_text_ranges_in_selection(tr, from, to)?;
     let available = get_available_fonts();
-    let default_family = tr.doc().default_styles().font_family().to_string();
+    let (default_family, _) = tr.resolved_font(from.node_id);
     let style_type = style.as_type();
 
     let mut actions: Vec<(NodeId, usize, usize, Vec<Style>)> = Vec::new();
@@ -344,6 +425,8 @@ fn apply_font_style_normalized(
         }
     }
 
+    update_cascade_attrs_on_empty_textblocks_in_range(tr, from, to, &[style.clone()])?;
+
     Ok(())
 }
 
@@ -417,6 +500,14 @@ fn collect_style_codepoints_in_selection(
 }
 
 impl Transaction {
+    fn update_cascade_attrs_if_empty_textblock(&self) {
+        let head = self.selection().head;
+        if !self.cursor_has_text_segment(head.node_id, head.offset) {
+            let _ = self
+                .set_cascade_attrs(head.node_id, &Attr::from_styles(&self.state.pending_styles));
+        }
+    }
+
     pub fn recompute_pending_styles(&mut self) {
         let new_styles = compute_styles_at_cursor(self, &self.selection().head);
         if self.state.pending_styles != new_styles {
@@ -461,6 +552,7 @@ impl Transaction {
                     }
 
                     self.push_effect(Effect::PendingStylesChanged);
+                    self.update_cascade_attrs_if_empty_textblock();
                 } else {
                     let mut grouped: rustc_hash::FxHashMap<u16, Vec<u32>> =
                         rustc_hash::FxHashMap::default();
@@ -517,6 +609,7 @@ impl Transaction {
                             weight: normalized_weight,
                         }));
                     self.push_effect(Effect::PendingStylesChanged);
+                    self.update_cascade_attrs_if_empty_textblock();
                 } else {
                     let mut grouped: rustc_hash::FxHashMap<(String, u16), Vec<u32>> =
                         rustc_hash::FxHashMap::default();
@@ -557,6 +650,7 @@ impl Transaction {
                         .retain(|s| s.as_type() != style_type);
                     self.state.pending_styles.push(style);
                     self.push_effect(Effect::PendingStylesChanged);
+                    self.update_cascade_attrs_if_empty_textblock();
                     return Ok(true);
                 }
 
@@ -591,6 +685,7 @@ impl Transaction {
             }
 
             self.push_effect(Effect::PendingStylesChanged);
+            self.update_cascade_attrs_if_empty_textblock();
 
             return Ok(true);
         }
@@ -609,9 +704,8 @@ impl Transaction {
     }
 
     pub fn reset_all_styles(&mut self) -> Result<bool> {
-        let defaults = self.doc().default_styles();
-        let default_styles = defaults.to_styles();
         let selection = self.selection().clone();
+        let default_styles = self.resolve_style_cascade(selection.head.node_id);
 
         if selection.is_collapsed() {
             self.state.pending_styles = default_styles;
@@ -639,7 +733,7 @@ impl Transaction {
 
         let family_name = match self.get_style_value(StyleType::FontFamily) {
             Some(Style::FontFamily(s)) => s.family.clone(),
-            _ => self.doc().default_styles().font_family().to_string(),
+            _ => self.resolved_font(self.selection().head.node_id).0,
         };
 
         let available = get_available_fonts();
@@ -699,13 +793,24 @@ impl Transaction {
         None
     }
 
-    pub(crate) fn current_font(&self) -> (String, u16) {
-        let styles = &self.state.pending_styles;
+    pub(crate) fn resolved_font(&self, node_id: NodeId) -> (String, u16) {
+        let cascade = self.resolve_style_cascade(node_id);
+        let mut family = cascade
+            .iter()
+            .find_map(|s| match s {
+                Style::FontFamily(f) => Some(f.family.clone()),
+                _ => None,
+            })
+            .unwrap_or_else(|| DefaultStyles::default().font_family().to_string());
+        let mut weight = cascade
+            .iter()
+            .find_map(|s| match s {
+                Style::FontWeight(w) => Some(w.weight),
+                _ => None,
+            })
+            .unwrap_or_else(|| DefaultStyles::default().font_weight());
 
-        let mut family = self.doc().default_styles().font_family().to_string();
-        let mut weight = self.doc().default_styles().font_weight();
-
-        for style in styles {
+        for style in &self.state.pending_styles {
             match style {
                 Style::FontFamily(f) => family = f.family.clone(),
                 Style::FontWeight(w) => weight = w.weight,
@@ -713,7 +818,7 @@ impl Transaction {
             }
         }
 
-        if let Some(node_ref) = self.doc().node(self.selection().head.node_id) {
+        if let Some(node_ref) = self.doc().node(node_id) {
             for style in &node_ref.node().style_overrides() {
                 match style {
                     Style::FontFamily(f) => family = f.family.clone(),
@@ -731,6 +836,7 @@ impl Transaction {
 mod tests {
     use super::*;
     use crate::runtime::Message;
+    use crate::state::Selection;
     use crate::test_utils::ScopedFontRegistration;
     use crate::types::Affinity;
 
@@ -2512,5 +2618,994 @@ mod tests {
             selection { (p, 0) -> (p, 5) }
         };
         assert_state_eq!(actual, expected);
+    }
+
+    #[test]
+    fn cascade_empty_paragraph_returns_root_styles() {
+        let mut p = id!();
+        let state = state! {
+            doc { @p paragraph {} }
+            selection { (p, 0) }
+        };
+        let tr = Transaction::new(&state);
+        let cascade = tr.resolve_style_cascade(p);
+
+        assert!(
+            cascade.iter().any(|s| matches!(s, Style::FontWeight(_))),
+            "Empty paragraph should inherit FontWeight from root, got: {:?}",
+            cascade
+        );
+        assert!(
+            cascade.iter().any(|s| matches!(s, Style::FontSize(_))),
+            "Empty paragraph should inherit FontSize from root, got: {:?}",
+            cascade
+        );
+        assert!(
+            cascade.iter().any(|s| matches!(s, Style::FontFamily(_))),
+            "Empty paragraph should inherit FontFamily from root, got: {:?}",
+            cascade
+        );
+    }
+
+    #[test]
+    fn cascade_paragraph_overrides_root() {
+        let mut p = id!();
+        let state = state! {
+            doc { @p paragraph {} }
+            selection { (p, 0) }
+        };
+        let tr = Transaction::new(&state);
+        tr.set_cascade_attrs(
+            p,
+            &Attr::from_styles(&[Style::FontWeight(FontWeightStyle { weight: 700 })]),
+        )
+        .unwrap();
+
+        let cascade = tr.resolve_style_cascade(p);
+        assert!(
+            cascade
+                .iter()
+                .any(|s| matches!(s, Style::FontWeight(fw) if fw.weight == 700)),
+            "Paragraph cascade should override root font_weight, got: {:?}",
+            cascade
+        );
+    }
+
+    #[test]
+    fn cascade_merges_paragraph_and_root() {
+        let mut p = id!();
+        let state = state! {
+            doc { @p paragraph {} }
+            selection { (p, 0) }
+        };
+        let tr = Transaction::new(&state);
+        tr.set_cascade_attrs(
+            p,
+            &Attr::from_styles(&[Style::FontWeight(FontWeightStyle { weight: 700 })]),
+        )
+        .unwrap();
+
+        let cascade = tr.resolve_style_cascade(p);
+
+        assert!(
+            cascade
+                .iter()
+                .any(|s| matches!(s, Style::FontWeight(fw) if fw.weight == 700)),
+        );
+        assert!(cascade.iter().any(|s| matches!(s, Style::FontSize(_))));
+        assert!(cascade.iter().any(|s| matches!(s, Style::FontFamily(_))));
+    }
+
+    #[test]
+    fn cascade_paragraph_with_no_cascade_attrs_passes_through_to_root() {
+        let mut p1 = id!();
+        let mut p2 = id!();
+        let state = state! {
+            doc {
+                @p1 paragraph {}
+                @p2 paragraph {}
+            }
+            selection { (p1, 0) }
+        };
+        let tr = Transaction::new(&state);
+
+        let c1 = tr.resolve_style_cascade(p1);
+        let c2 = tr.resolve_style_cascade(p2);
+
+        assert_eq!(c1.len(), c2.len());
+    }
+
+    #[test]
+    fn cascade_overwrite_replaces_previous() {
+        let mut p = id!();
+        let state = state! {
+            doc { @p paragraph {} }
+            selection { (p, 0) }
+        };
+        let tr = Transaction::new(&state);
+
+        tr.set_cascade_attrs(
+            p,
+            &Attr::from_styles(&[Style::FontWeight(FontWeightStyle { weight: 700 })]),
+        )
+        .unwrap();
+        tr.set_cascade_attrs(
+            p,
+            &Attr::from_styles(&[Style::FontWeight(FontWeightStyle { weight: 300 })]),
+        )
+        .unwrap();
+
+        let cascade = tr.resolve_style_cascade(p);
+        assert!(
+            cascade
+                .iter()
+                .any(|s| matches!(s, Style::FontWeight(fw) if fw.weight == 300)),
+            "Second set_cascade_attrs should overwrite, got: {:?}",
+            cascade
+        );
+        assert!(
+            !cascade
+                .iter()
+                .any(|s| matches!(s, Style::FontWeight(fw) if fw.weight == 700)),
+        );
+    }
+
+    #[test]
+    fn compute_styles_empty_paragraph_uses_cascade() {
+        let mut p = id!();
+        let state = state! {
+            doc { @p paragraph {} }
+            selection { (p, 0) }
+        };
+        let tr = Transaction::new(&state);
+        tr.set_cascade_attrs(
+            p,
+            &Attr::from_styles(&[Style::FontWeight(FontWeightStyle { weight: 700 })]),
+        )
+        .unwrap();
+
+        let styles = compute_styles_at_cursor(&tr, &Position::new(p, 0, Affinity::Downstream));
+
+        assert!(
+            styles
+                .iter()
+                .any(|s| matches!(s, Style::FontWeight(fw) if fw.weight == 700)),
+            "compute_styles_at_cursor in empty paragraph should use cascade, got: {:?}",
+            styles
+        );
+    }
+
+    #[test]
+    fn compute_styles_text_segment_fills_missing_from_cascade() {
+        let mut p = id!();
+        let state = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [italic()]) { "hello" }
+                }
+            }
+            selection { (p, 3) }
+        };
+        let tr = Transaction::new(&state);
+
+        let styles = compute_styles_at_cursor(&tr, &Position::new(p, 3, Affinity::Downstream));
+
+        assert!(styles.iter().any(|s| matches!(s, Style::Italic(_))));
+        assert!(styles.iter().any(|s| matches!(s, Style::FontWeight(_))));
+    }
+
+    #[test]
+    fn compute_styles_text_segment_overrides_cascade() {
+        let mut p = id!();
+        let state = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_weight(700)]) { "bold" }
+                }
+            }
+            selection { (p, 2) }
+        };
+        let tr = Transaction::new(&state);
+
+        let styles = compute_styles_at_cursor(&tr, &Position::new(p, 2, Affinity::Downstream));
+
+        assert!(
+            styles
+                .iter()
+                .any(|s| matches!(s, Style::FontWeight(fw) if fw.weight == 700)),
+        );
+    }
+
+    #[test]
+    fn set_cascade_attrs_on_inline_node_fails() {
+        let mut p = id!();
+        let state = state! {
+            doc {
+                @p paragraph {
+                    text { "hello" }
+                }
+            }
+            selection { (p, 0) }
+        };
+
+        let tr = Transaction::new(&state);
+        let paragraph = tr.node(p).unwrap();
+        let text_node_id = paragraph.first_child().unwrap().node_id();
+
+        let result = tr.set_cascade_attrs(
+            text_node_id,
+            &Attr::from_styles(&[Style::FontWeight(FontWeightStyle { weight: 700 })]),
+        );
+        assert!(
+            result.is_err(),
+            "set_cascade_attrs on inline node should fail"
+        );
+    }
+
+    #[test]
+    fn split_at_end_stores_cascade_on_new_paragraph() {
+        let mut p = id!();
+        let state = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_weight(700)]) { "hello" }
+                }
+            }
+            selection { (p, 5) }
+        };
+
+        let mut tr = Transaction::new(&state);
+        tr.split_paragraph().unwrap();
+
+        let head = tr.selection().head;
+        let node = tr.node(head.node_id).unwrap();
+        assert!(
+            node.cascade_attrs().is_some(),
+            "New paragraph after split should have cascade attrs"
+        );
+    }
+
+    #[test]
+    fn split_at_end_preserves_font_weight_in_pending() {
+        let mut p = id!();
+        let state = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_weight(700)]) { "hello" }
+                }
+            }
+            selection { (p, 5) }
+        };
+
+        let state = transact!(state, |tr| tr.split_paragraph().unwrap());
+
+        assert!(
+            state
+                .pending_styles
+                .iter()
+                .any(|s| matches!(s, Style::FontWeight(fw) if fw.weight == 700)),
+            "pending_styles after split should have font_weight(700), got: {:?}",
+            state.pending_styles
+        );
+    }
+
+    #[test]
+    fn split_empty_paragraph_preserves_cascade() {
+        let mut p = id!();
+        let state = state! {
+            doc { @p paragraph {} }
+            selection { (p, 0) }
+        };
+
+        let mut tr = Transaction::new(&state);
+        tr.set_style(Style::FontWeight(FontWeightStyle { weight: 700 }))
+            .unwrap();
+        tr.split_paragraph().unwrap();
+        let (state, _) = tr.commit().unwrap();
+
+        assert!(
+            state
+                .pending_styles
+                .iter()
+                .any(|s| matches!(s, Style::FontWeight(fw) if fw.weight == 700)),
+            "Split from empty bold paragraph should preserve font_weight(700), got: {:?}",
+            state.pending_styles
+        );
+    }
+
+    #[test]
+    fn split_in_middle_preserves_styles_on_new_paragraph() {
+        let mut p = id!();
+        let state = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_weight(700)]) { "hello" }
+                }
+            }
+            selection { (p, 3) }
+        };
+
+        let state = transact!(state, |tr| tr.split_paragraph().unwrap());
+
+        assert!(
+            state
+                .pending_styles
+                .iter()
+                .any(|s| matches!(s, Style::FontWeight(fw) if fw.weight == 700)),
+        );
+    }
+
+    #[test]
+    fn delete_backward_last_char_stores_cascade() {
+        let mut p = id!();
+        let state = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_weight(700)]) { "a" }
+                }
+            }
+            selection { (p, 1) }
+        };
+
+        let mut tr = Transaction::new(&state);
+        tr.delete_text_backward().unwrap();
+
+        let node = tr.node(p).unwrap();
+        let cascade = node
+            .cascade_attrs()
+            .map(|attrs| Attr::extract_styles(&attrs))
+            .expect("Should have cascade attrs");
+        assert!(
+            cascade
+                .iter()
+                .any(|s| matches!(s, Style::FontWeight(fw) if fw.weight == 700)),
+        );
+    }
+
+    #[test]
+    fn delete_backward_last_char_preserves_pending() {
+        let mut p = id!();
+        let state = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_weight(700)]) { "a" }
+                }
+            }
+            selection { (p, 1) }
+        };
+
+        let state = transact!(state, |tr| tr.delete_text_backward().unwrap());
+
+        assert!(
+            state
+                .pending_styles
+                .iter()
+                .any(|s| matches!(s, Style::FontWeight(fw) if fw.weight == 700)),
+            "pending_styles should preserve font_weight(700) after deleting last char, got: {:?}",
+            state.pending_styles
+        );
+    }
+
+    #[test]
+    fn delete_backward_partial_does_not_store_cascade() {
+        let mut p = id!();
+        let state = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_weight(700)]) { "ab" }
+                }
+            }
+            selection { (p, 2) }
+        };
+
+        let mut tr = Transaction::new(&state);
+        tr.delete_text_backward().unwrap();
+
+        let node = tr.node(p).unwrap();
+        assert!(
+            node.cascade_attrs().is_none(),
+            "Paragraph with remaining text should not have cascade attrs set"
+        );
+
+        let (state, _) = tr.commit().unwrap();
+        assert!(
+            state
+                .pending_styles
+                .iter()
+                .any(|s| matches!(s, Style::FontWeight(fw) if fw.weight == 700)),
+        );
+    }
+
+    #[test]
+    fn delete_forward_last_char_stores_cascade() {
+        let mut p = id!();
+        let state = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_weight(700)]) { "a" }
+                }
+            }
+            selection { (p, 0) }
+        };
+
+        let mut tr = Transaction::new(&state);
+        tr.delete_text_forward().unwrap();
+
+        let node = tr.node(p).unwrap();
+        let cascade = node
+            .cascade_attrs()
+            .map(|attrs| Attr::extract_styles(&attrs))
+            .expect("Should have cascade attrs");
+        assert!(
+            cascade
+                .iter()
+                .any(|s| matches!(s, Style::FontWeight(fw) if fw.weight == 700)),
+        );
+    }
+
+    #[test]
+    fn delete_forward_last_char_preserves_pending() {
+        let mut p = id!();
+        let state = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_weight(700)]) { "a" }
+                }
+            }
+            selection { (p, 0) }
+        };
+
+        let state = transact!(state, |tr| tr.delete_text_forward().unwrap());
+
+        assert!(
+            state
+                .pending_styles
+                .iter()
+                .any(|s| matches!(s, Style::FontWeight(fw) if fw.weight == 700)),
+            "got: {:?}",
+            state.pending_styles
+        );
+    }
+
+    #[test]
+    fn delete_selection_all_text_preserves_pending() {
+        let mut p = id!();
+        let state = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_weight(700)]) { "hello" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+
+        let state = transact!(state, |tr| tr.delete_selection().unwrap());
+
+        assert!(
+            state
+                .pending_styles
+                .iter()
+                .any(|s| matches!(s, Style::FontWeight(fw) if fw.weight == 700)),
+            "got: {:?}",
+            state.pending_styles
+        );
+    }
+
+    #[test]
+    fn set_style_collapsed_empty_paragraph_updates_cascade() {
+        let mut p = id!();
+        let state = state! {
+            doc { @p paragraph {} }
+            selection { (p, 0) }
+        };
+
+        let mut tr = Transaction::new(&state);
+        tr.set_style(Style::FontWeight(FontWeightStyle { weight: 700 }))
+            .unwrap();
+
+        let node = tr.node(p).unwrap();
+        let cascade = node
+            .cascade_attrs()
+            .map(|attrs| Attr::extract_styles(&attrs))
+            .expect("Should have cascade attrs");
+        assert!(
+            cascade
+                .iter()
+                .any(|s| matches!(s, Style::FontWeight(fw) if fw.weight == 700)),
+        );
+    }
+
+    #[test]
+    fn toggle_style_collapsed_empty_paragraph_updates_cascade() {
+        let mut p = id!();
+        let state = state! {
+            doc { @p paragraph {} }
+            selection { (p, 0) }
+        };
+
+        let mut tr = Transaction::new(&state);
+        tr.toggle_style(Style::Italic(ItalicStyle {})).unwrap();
+
+        let node = tr.node(p).unwrap();
+        let cascade = node
+            .cascade_attrs()
+            .map(|attrs| Attr::extract_styles(&attrs))
+            .expect("Should have cascade attrs");
+        assert!(
+            cascade.iter().any(|s| matches!(s, Style::Italic(_))),
+            "cascade attrs should contain Italic after toggle"
+        );
+    }
+
+    #[test]
+    fn set_style_collapsed_non_empty_paragraph_does_not_update_cascade() {
+        let mut p = id!();
+        let state = state! {
+            doc {
+                @p paragraph {
+                    text { "hello" }
+                }
+            }
+            selection { (p, 3) }
+        };
+
+        let mut tr = Transaction::new(&state);
+        tr.set_style(Style::FontWeight(FontWeightStyle { weight: 700 }))
+            .unwrap();
+
+        let node = tr.node(p).unwrap();
+        let cascade = node
+            .cascade_attrs()
+            .map(|attrs| Attr::extract_styles(&attrs));
+        if let Some(styles) = cascade {
+            assert!(
+                !styles
+                    .iter()
+                    .any(|s| matches!(s, Style::FontWeight(fw) if fw.weight == 700)),
+            );
+        }
+    }
+
+    #[test]
+    fn multiple_style_changes_in_empty_paragraph_all_reflected() {
+        let mut p = id!();
+        let state = state! {
+            doc { @p paragraph {} }
+            selection { (p, 0) }
+        };
+
+        let mut tr = Transaction::new(&state);
+        tr.set_style(Style::FontWeight(FontWeightStyle { weight: 700 }))
+            .unwrap();
+        tr.toggle_style(Style::Italic(ItalicStyle {})).unwrap();
+
+        let node = tr.node(p).unwrap();
+        let cascade = node
+            .cascade_attrs()
+            .map(|attrs| Attr::extract_styles(&attrs))
+            .expect("Should have cascade attrs");
+        assert!(
+            cascade
+                .iter()
+                .any(|s| matches!(s, Style::FontWeight(fw) if fw.weight == 700))
+        );
+        assert!(cascade.iter().any(|s| matches!(s, Style::Italic(_))));
+    }
+
+    #[test]
+    fn join_backward_empty_paragraphs_preserves_pending() {
+        let mut p1 = id!();
+        let mut p2 = id!();
+        let state = state! {
+            doc {
+                @p1 paragraph {}
+                @p2 paragraph {}
+            }
+            selection { (p2, 0) }
+        };
+
+        let mut tr = Transaction::new(&state);
+        tr.state
+            .pending_styles
+            .push(Style::FontWeight(FontWeightStyle { weight: 700 }));
+        tr.join_backward().unwrap();
+        let (view, _) = tr.commit().unwrap();
+
+        assert!(
+            view.pending_styles
+                .iter()
+                .any(|s| matches!(s, Style::FontWeight(fw) if fw.weight == 700)),
+            "got: {:?}",
+            view.pending_styles
+        );
+    }
+
+    #[test]
+    fn join_forward_empty_paragraphs_preserves_pending() {
+        let mut p1 = id!();
+        let mut p2 = id!();
+        let state = state! {
+            doc {
+                @p1 paragraph {}
+                @p2 paragraph {}
+            }
+            selection { (p1, 0) }
+        };
+
+        let mut tr = Transaction::new(&state);
+        tr.state
+            .pending_styles
+            .push(Style::FontWeight(FontWeightStyle { weight: 700 }));
+        tr.join_forward().unwrap();
+        let (view, _) = tr.commit().unwrap();
+
+        assert!(
+            view.pending_styles
+                .iter()
+                .any(|s| matches!(s, Style::FontWeight(fw) if fw.weight == 700)),
+            "got: {:?}",
+            view.pending_styles
+        );
+    }
+
+    #[test]
+    fn styled_text_enter_twice_move_up_preserves_style() {
+        let mut p = id!();
+        let state = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_weight(700)]) { "hello" }
+                }
+            }
+            selection { (p, 5) }
+        };
+
+        let state = transact!(state, |tr| tr.split_paragraph().unwrap());
+        assert!(
+            state
+                .pending_styles
+                .iter()
+                .any(|s| matches!(s, Style::FontWeight(fw) if fw.weight == 700)),
+        );
+
+        let state = transact!(state, |tr| tr.split_paragraph().unwrap());
+        assert!(
+            state
+                .pending_styles
+                .iter()
+                .any(|s| matches!(s, Style::FontWeight(fw) if fw.weight == 700)),
+        );
+
+        let mut tr = Transaction::new(&state);
+        let root = tr.node(NodeId::ROOT).unwrap();
+        let children: Vec<_> = root.children().collect();
+        assert_eq!(children.len(), 3);
+        let middle_id = children[1].node_id();
+
+        tr.set_selection(Selection::collapsed(Position::new(
+            middle_id,
+            0,
+            Affinity::Downstream,
+        )));
+        let (state, _) = tr.commit().unwrap();
+
+        assert!(
+            state
+                .pending_styles
+                .iter()
+                .any(|s| matches!(s, Style::FontWeight(fw) if fw.weight == 700)),
+            "Moving to middle empty paragraph should show font_weight(700), got: {:?}",
+            state.pending_styles
+        );
+    }
+
+    #[test]
+    fn bold_in_empty_paragraph_move_away_and_back_preserves() {
+        let mut p1 = id!();
+        let mut p2 = id!();
+        let state = state! {
+            doc {
+                @p1 paragraph {
+                    text { "normal" }
+                }
+                @p2 paragraph {}
+            }
+            selection { (p2, 0) }
+        };
+
+        let state = transact!(state, |tr| tr
+            .set_style(Style::FontWeight(FontWeightStyle { weight: 700 }))
+            .unwrap());
+
+        assert!(
+            state
+                .pending_styles
+                .iter()
+                .any(|s| matches!(s, Style::FontWeight(fw) if fw.weight == 700)),
+        );
+
+        let state = transact!(state, |tr| tr.set_selection(Selection::collapsed(
+            Position::new(p1, 3, Affinity::Downstream)
+        )));
+        assert!(
+            state
+                .pending_styles
+                .iter()
+                .any(|s| matches!(s, Style::FontWeight(fw) if fw.weight == 400)),
+        );
+
+        let state = transact!(state, |tr| tr.set_selection(Selection::collapsed(
+            Position::new(p2, 0, Affinity::Downstream)
+        )));
+        assert!(
+            state
+                .pending_styles
+                .iter()
+                .any(|s| matches!(s, Style::FontWeight(fw) if fw.weight == 700)),
+            "Returning to empty bold paragraph should show font_weight(700), got: {:?}",
+            state.pending_styles
+        );
+    }
+
+    #[test]
+    fn delete_all_text_then_move_back_preserves_style() {
+        let mut p1 = id!();
+        let mut p2 = id!();
+        let state = state! {
+            doc {
+                @p1 paragraph {
+                    text(styles: [font_weight(700)]) { "a" }
+                }
+                @p2 paragraph {
+                    text { "normal" }
+                }
+            }
+            selection { (p1, 1) }
+        };
+
+        let state = transact!(state, |tr| tr.delete_text_backward().unwrap());
+        assert!(
+            state
+                .pending_styles
+                .iter()
+                .any(|s| matches!(s, Style::FontWeight(fw) if fw.weight == 700)),
+        );
+
+        let state = transact!(state, |tr| tr.set_selection(Selection::collapsed(
+            Position::new(p2, 3, Affinity::Downstream)
+        )));
+        let state = transact!(state, |tr| tr.set_selection(Selection::collapsed(
+            Position::new(p1, 0, Affinity::Downstream)
+        )));
+
+        assert!(
+            state
+                .pending_styles
+                .iter()
+                .any(|s| matches!(s, Style::FontWeight(fw) if fw.weight == 700)),
+            "Returning to emptied bold paragraph should show font_weight(700), got: {:?}",
+            state.pending_styles
+        );
+    }
+
+    #[test]
+    fn enter_from_italic_text_preserves_italic() {
+        let mut p = id!();
+        let state = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [italic()]) { "hello" }
+                }
+            }
+            selection { (p, 5) }
+        };
+
+        let state = transact!(state, |tr| tr.split_paragraph().unwrap());
+
+        assert!(
+            state
+                .pending_styles
+                .iter()
+                .any(|s| matches!(s, Style::Italic(_))),
+            "New paragraph after split should preserve italic, got: {:?}",
+            state.pending_styles
+        );
+    }
+
+    #[test]
+    fn enter_from_multi_styled_text_preserves_all_styles() {
+        let mut p = id!();
+        let state = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_weight(700), italic()]) { "hello" }
+                }
+            }
+            selection { (p, 5) }
+        };
+
+        let state = transact!(state, |tr| tr.split_paragraph().unwrap());
+
+        assert!(
+            state
+                .pending_styles
+                .iter()
+                .any(|s| matches!(s, Style::FontWeight(fw) if fw.weight == 700)),
+        );
+        assert!(
+            state
+                .pending_styles
+                .iter()
+                .any(|s| matches!(s, Style::Italic(_))),
+        );
+    }
+
+    #[test]
+    fn root_cascade_attrs_includes_paragraph_attr() {
+        let state = state! {
+            doc { paragraph {} }
+            selection { (NodeId::ROOT, 0) }
+        };
+        let tr = Transaction::new(&state);
+        let attrs = tr.resolve_attr_cascade(NodeId::ROOT);
+
+        assert!(
+            Attr::extract_paragraph_attr(&attrs).is_some(),
+            "Root cascade_attrs should include ParagraphAttr, got: {:?}",
+            attrs
+        );
+        let para = Attr::extract_paragraph_attr(&attrs).unwrap();
+        assert!(
+            (para.line_height - 1.6).abs() < f32::EPSILON,
+            "Default line_height should be 1.6, got: {}",
+            para.line_height
+        );
+    }
+
+    #[test]
+    fn resolve_attr_cascade_includes_styles_and_paragraph_attrs() {
+        let mut p = id!();
+        let state = state! {
+            doc { @p paragraph {} }
+            selection { (p, 0) }
+        };
+        let tr = Transaction::new(&state);
+        let attrs = tr.resolve_attr_cascade(p);
+
+        let styles = Attr::extract_styles(&attrs);
+        assert!(
+            !styles.is_empty(),
+            "resolve_attr_cascade should include styles from root"
+        );
+        assert!(
+            styles.iter().any(|s| matches!(s, Style::FontFamily(_))),
+            "Should contain FontFamily style"
+        );
+
+        let para = Attr::extract_paragraph_attr(&attrs);
+        assert!(
+            para.is_some(),
+            "resolve_attr_cascade should include ParagraphAttr from root"
+        );
+    }
+
+    #[test]
+    fn set_style_range_updates_cascade_attrs_on_empty_paragraph() {
+        let mut p1 = id!();
+        let mut p2 = id!();
+        let mut p3 = id!();
+        let state = state! {
+            doc {
+                @p1 paragraph { text { "hello" } }
+                @p2 paragraph {}
+                @p3 paragraph { text { "world" } }
+            }
+            selection { (p1, 0) -> (p3, 5) }
+        };
+
+        let mut tr = Transaction::new(&state);
+        tr.set_style(Style::FontWeight(FontWeightStyle { weight: 700 }))
+            .unwrap();
+
+        let node = tr.node(p2).unwrap();
+        let cascade = node
+            .cascade_attrs()
+            .map(|attrs| Attr::extract_styles(&attrs));
+        assert!(
+            cascade.is_some(),
+            "Empty paragraph within range selection should have cascade_attrs set"
+        );
+        let styles = cascade.unwrap();
+        assert!(
+            styles
+                .iter()
+                .any(|s| matches!(s, Style::FontWeight(fw) if fw.weight == 700)),
+            "Empty paragraph's cascade_attrs should contain the applied FontWeight(700), got: {:?}",
+            styles
+        );
+    }
+
+    #[test]
+    fn toggle_style_range_removes_cascade_attrs_on_empty_paragraph() {
+        let mut p1 = id!();
+        let mut p2 = id!();
+        let mut p3 = id!();
+        let state = state! {
+            doc {
+                @p1 paragraph { text { "hello" } }
+                @p2 paragraph {}
+                @p3 paragraph { text { "world" } }
+            }
+            selection { (p1, 0) -> (p3, 5) }
+        };
+
+        let mut tr = Transaction::new(&state);
+        tr.toggle_style(Style::Italic(ItalicStyle {})).unwrap();
+
+        let node = tr.node(p2).unwrap();
+        let cascade = node
+            .cascade_attrs()
+            .map(|attrs| Attr::extract_styles(&attrs));
+        assert!(
+            cascade.is_some(),
+            "After apply: empty paragraph should have cascade_attrs"
+        );
+        assert!(
+            cascade
+                .unwrap()
+                .iter()
+                .any(|s| matches!(s, Style::Italic(_))),
+            "After apply: cascade_attrs should contain Italic"
+        );
+
+        let (state, _) = tr.commit().unwrap();
+        let mut tr = Transaction::new(&state);
+        tr.toggle_style(Style::Italic(ItalicStyle {})).unwrap();
+
+        let node = tr.node(p2).unwrap();
+        let has_italic = node
+            .cascade_attrs()
+            .map(|attrs| {
+                Attr::extract_styles(&attrs)
+                    .iter()
+                    .any(|s| matches!(s, Style::Italic(_)))
+            })
+            .unwrap_or(false);
+        assert!(
+            !has_italic,
+            "After remove: empty paragraph's cascade_attrs should not contain Italic"
+        );
+    }
+
+    #[test]
+    fn set_style_range_updates_cascade_attrs_on_two_empty_paragraphs() {
+        let mut p1 = id!();
+        let mut p2 = id!();
+        let state = state! {
+            doc {
+                @p1 paragraph {}
+                @p2 paragraph {}
+            }
+            selection { (p1, 0) -> (p2, 0) }
+        };
+
+        let mut tr = Transaction::new(&state);
+        tr.set_style(Style::FontWeight(FontWeightStyle { weight: 700 }))
+            .unwrap();
+
+        for (label, id) in [("p1", p1), ("p2", p2)] {
+            let node = tr.node(id).unwrap();
+            let cascade = node
+                .cascade_attrs()
+                .map(|attrs| Attr::extract_styles(&attrs));
+            assert!(cascade.is_some(), "{label} should have cascade_attrs set");
+            assert!(
+                cascade
+                    .unwrap()
+                    .iter()
+                    .any(|s| matches!(s, Style::FontWeight(fw) if fw.weight == 700)),
+                "{label}'s cascade_attrs should contain FontWeight(700)"
+            );
+        }
     }
 }

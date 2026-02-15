@@ -1,6 +1,9 @@
+use crate::model::attr::Attr;
 use crate::model::tree::DocInner;
+use crate::model::tree::node_ref::CASCADE_ATTRS_KEY;
 use crate::model::*;
 use anyhow::{Context, Result};
+use loro::LoroMap;
 
 #[derive(Debug)]
 pub struct NodeMut<'a> {
@@ -101,6 +104,33 @@ impl<'a> NodeMut<'a> {
             .context("Failed to get node map")?;
 
         map.insert("parent", parent_id.to_string())?;
+
+        Ok(())
+    }
+
+    pub fn set_cascade_attrs(&self, attrs: &[Attr]) -> Result<()> {
+        anyhow::ensure!(
+            !self.node_ref.is_inline(),
+            "Cannot set cascade_attrs on inline node"
+        );
+        let map = self
+            .inner
+            .get_node_map(self.node_ref.node_id())
+            .context("Node map not found")?;
+        let attrs_map = map
+            .get_or_create_container(CASCADE_ATTRS_KEY, LoroMap::new())
+            .context("Failed to create cascade_attrs map")?;
+
+        let deep = attrs_map.get_deep_value();
+        if let Ok(entries) = deep.into_map() {
+            for key in entries.keys() {
+                let _ = attrs_map.delete(key);
+            }
+        }
+
+        for attr in attrs {
+            attrs_map.insert(attr.key(), attr.to_loro_value())?;
+        }
 
         Ok(())
     }
