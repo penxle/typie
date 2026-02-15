@@ -54,6 +54,36 @@ impl Transaction {
         self.recompute_pending_styles();
     }
 
+    /// Variant of `set_selection` for use after text deletion.
+    /// When the deletion removes the last text segment at the cursor position,
+    /// preserves the pre-deletion pending styles instead of falling back to
+    /// document defaults.
+    pub(crate) fn set_selection_after_delete(&mut self, selection: Selection) {
+        let pre_delete_styles = self.state.pending_styles.clone();
+        self.set_selection(selection);
+
+        let head = self.state.selection.head;
+        if !self.cursor_has_text_segment(head.node_id, head.offset) {
+            if self.state.pending_styles != pre_delete_styles {
+                self.state.pending_styles = pre_delete_styles;
+                self.push_effect(Effect::PendingStylesChanged);
+            }
+        }
+    }
+
+    fn cursor_has_text_segment(&self, block_id: NodeId, offset: usize) -> bool {
+        let Some(node) = self.node(block_id) else {
+            return false;
+        };
+        let Some((child_id, _)) = find_child_at_offset(&node, offset) else {
+            return false;
+        };
+        let Some(child) = self.node(child_id) else {
+            return false;
+        };
+        matches!(child.node(), Node::Text(t) if !t.text.get_segments().is_empty())
+    }
+
     pub fn set_preferred_x(&mut self, preferred_x: Option<f32>) {
         self.state.preferred_x = preferred_x;
     }
