@@ -134,7 +134,11 @@ impl Transaction {
     }
 
     fn commit_internal(mut self, defer_loro_commit: bool) -> Result<(State, Vec<Effect>)> {
+        let pre_normalize_selection = self.state.selection;
         self.normalize()?;
+        if self.state.selection != pre_normalize_selection {
+            self.recompute_pending_styles();
+        }
         self.validate()?;
 
         if self.state.doc.frontiers() != self.initial.frontiers {
