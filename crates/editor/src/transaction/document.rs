@@ -914,14 +914,14 @@ impl Transaction {
                 Style::FontFamily(f) => Some(f.family.clone()),
                 _ => None,
             })
-            .unwrap_or_else(|| DefaultStyles::default().font_family().to_string());
+            .unwrap_or_else(|| DefaultAttrs::default().font_family().to_string());
         let default_weight = cascade
             .iter()
             .find_map(|s| match s {
                 Style::FontWeight(w) => Some(w.weight),
                 _ => None,
             })
-            .unwrap_or_else(|| DefaultStyles::default().font_weight());
+            .unwrap_or_else(|| DefaultAttrs::default().font_weight());
 
         let dest_overrides = self
             .doc()
@@ -2400,7 +2400,7 @@ enum SplitChild {
 
 #[cfg(test)]
 mod tests {
-    use crate::model::{DefaultStyles, Fragment, FragmentNode, Node, NodeId, Text, TextNode};
+    use crate::model::{DefaultAttrs, Fragment, FragmentNode, Node, NodeId, Text, TextNode};
     use crate::state::Position;
     use crate::types::Affinity;
 
@@ -2599,7 +2599,7 @@ mod tests {
         };
 
         let text_obj: Text = "World".into();
-        let defaults = DefaultStyles::default().to_styles();
+        let defaults = DefaultAttrs::default().to_styles();
         for style in &defaults {
             let _ = text_obj.apply_style(0..text_obj.char_len(), style);
         }

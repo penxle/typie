@@ -1,12 +1,16 @@
 use crate::model::style::Style;
 use loro::LoroValue;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ParagraphAttr {
     pub line_height: f32,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[serde(tag = "attr", rename_all = "snake_case")]
 pub enum Attr {
     Style(Style),
     Paragraph(ParagraphAttr),

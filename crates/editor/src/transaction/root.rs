@@ -1,4 +1,4 @@
-use crate::model::DefaultStyles;
+use crate::model::DefaultAttrs;
 use crate::runtime::Effect;
 use crate::transaction::Transaction;
 use anyhow::Result;
@@ -18,8 +18,8 @@ impl Transaction {
         Ok(true)
     }
 
-    pub fn set_default_styles(&mut self, styles: DefaultStyles) -> Result<bool> {
-        let _ = self.doc().update_default_styles(styles);
+    pub fn set_default_attrs(&mut self, attrs: DefaultAttrs) -> Result<bool> {
+        let _ = self.doc().update_default_attrs(attrs);
         self.push_effect(Effect::SettingsChanged);
         self.push_effect(Effect::DocChanged);
         Ok(true)

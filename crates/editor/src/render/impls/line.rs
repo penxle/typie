@@ -221,7 +221,7 @@ impl LineElement {
                     lcx.ranged_builder(&mut fcx, &ruby_seg.ruby_text, 1.0, false);
 
                 ruby_builder.push_default(StyleProperty::FontStack(FontStack::Single(
-                    FontFamily::Named(ctx.doc.default_styles().font_family().into()),
+                    FontFamily::Named(ctx.doc.default_attrs().font_family().into()),
                 )));
                 ruby_builder.push_default(StyleProperty::FontSize(RUBY_FONT_SIZE));
                 ruby_builder.push_default(StyleProperty::FontWeight(FontWeight::new(400.0)));
@@ -315,7 +315,7 @@ impl Render for LineElement {
                             let style = glyph_run.style();
 
                             let default_text_brush =
-                                format!("text.{}", ctx.doc.default_styles().text_color());
+                                format!("text.{}", ctx.doc.default_attrs().text_color());
                             let color =
                                 if style.brush.is_empty() || style.brush == default_text_brush {
                                     ctx.default_text_color
@@ -431,13 +431,13 @@ mod tests {
         let decorations = decorations_from_state(state);
         let paragraph = state.doc.node(para_id).unwrap();
         let settings = state.doc.settings();
-        let default_styles = state.doc.default_styles();
+        let default_attrs = state.doc.default_attrs();
         let cache = RefCell::new(LayoutCache::new());
         let view_states = ViewStates::default();
         let ctx = LayoutContext::new(
             &paragraph,
             &settings,
-            &default_styles,
+            &default_attrs,
             &decorations,
             1.0,
             &view_states,

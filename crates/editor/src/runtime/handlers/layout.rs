@@ -63,7 +63,7 @@ impl Runtime {
         };
 
         if let Node::Text(text_node) = node_ref.node() {
-            let defaults = self.doc().default_styles();
+            let defaults = self.doc().default_attrs();
             let overrides = node_ref
                 .parent()
                 .map(|p| p.node().style_overrides())

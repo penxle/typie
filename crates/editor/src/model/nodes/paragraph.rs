@@ -736,7 +736,7 @@ mod tests {
     use super::*;
     use crate::layout::LayoutCache;
     use crate::model::{
-        BackgroundColorStyle, Decorations, DefaultStyles, PendingStylesDecor, PreeditDecor,
+        BackgroundColorStyle, Decorations, DefaultAttrs, PendingStylesDecor, PreeditDecor,
     };
     use crate::runtime::ViewStates;
     use crate::types::BoxConstraints;
@@ -758,14 +758,14 @@ mod tests {
         let doc = &state.doc;
         let para = doc.node(p).unwrap();
         let settings = doc.settings();
-        let default_styles = DefaultStyles::default();
+        let default_attrs = DefaultAttrs::default();
         let decorations = Decorations::default();
         let cache = RefCell::new(LayoutCache::new());
         let view_states = ViewStates::default();
         let ctx = LayoutContext::new(
             &para,
             &settings,
-            &default_styles,
+            &default_attrs,
             &decorations,
             1.0,
             &view_states,
@@ -873,13 +873,13 @@ mod tests {
         let doc = &state.doc;
         let para = doc.node(p1).unwrap();
         let settings = doc.settings();
-        let default_styles = DefaultStyles::default();
+        let default_attrs = DefaultAttrs::default();
         let cache = RefCell::new(LayoutCache::new());
         let view_states = ViewStates::default();
         let ctx = LayoutContext::new(
             &para,
             &settings,
-            &default_styles,
+            &default_attrs,
             &decorations,
             1.0,
             &view_states,
@@ -921,13 +921,13 @@ mod tests {
         let doc = &state.doc;
         let para = doc.node(p).unwrap();
         let settings = doc.settings();
-        let default_styles = DefaultStyles::default();
+        let default_attrs = DefaultAttrs::default();
         let cache = RefCell::new(LayoutCache::new());
         let view_states = ViewStates::default();
         let ctx = LayoutContext::new(
             &para,
             &settings,
-            &default_styles,
+            &default_attrs,
             &decorations,
             1.0,
             &view_states,
@@ -969,13 +969,13 @@ mod tests {
         let doc = &state.doc;
         let para = doc.node(p).unwrap();
         let settings = doc.settings();
-        let default_styles = DefaultStyles::default();
+        let default_attrs = DefaultAttrs::default();
         let cache = RefCell::new(LayoutCache::new());
         let view_states = ViewStates::default();
         let ctx = LayoutContext::new(
             &para,
             &settings,
-            &default_styles,
+            &default_attrs,
             &decorations,
             1.0,
             &view_states,

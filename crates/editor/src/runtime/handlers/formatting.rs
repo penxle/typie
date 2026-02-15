@@ -51,8 +51,8 @@ impl Runtime {
         self.transact(|tr| tr.set_paragraph_indent(indent))
     }
 
-    pub(crate) fn handle_set_default_styles(&mut self, styles: DefaultStyles) -> Vec<Effect> {
-        self.transact(|tr| tr.set_default_styles(styles))
+    pub(crate) fn handle_set_default_attrs(&mut self, attrs: DefaultAttrs) -> Vec<Effect> {
+        self.transact(|tr| tr.set_default_attrs(attrs))
     }
 
     pub(crate) fn handle_insert_horizontal_rule(
@@ -81,8 +81,8 @@ impl Runtime {
                     changed = true;
 
                     let codepoints = tr.selection_codepoints();
-                    let family = tr.doc().default_styles().font_family().to_string();
-                    let weight = tr.doc().default_styles().font_weight();
+                    let family = tr.doc().default_attrs().font_family().to_string();
+                    let weight = tr.doc().default_attrs().font_weight();
                     tr.push_effect(Effect::FontDetected {
                         family,
                         weight,
@@ -143,7 +143,7 @@ mod tests {
 
         let mut fonts = std::collections::HashMap::new();
         fonts.insert(
-            DefaultStyles::default().font_family().to_string(),
+            DefaultAttrs::default().font_family().to_string(),
             vec![400, 700],
         );
         let _guard = ScopedFontRegistration::new(fonts);

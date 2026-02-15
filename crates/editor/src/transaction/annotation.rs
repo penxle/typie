@@ -52,7 +52,7 @@ impl Transaction {
         }
 
         if !ruby_codepoints.is_empty() {
-            let defaults = self.doc().default_styles();
+            let defaults = self.doc().default_attrs();
             self.push_effect(Effect::FontDetected {
                 family: defaults.font_family().to_string(),
                 weight: defaults.font_weight(),
@@ -97,7 +97,7 @@ impl Transaction {
         }
 
         if !ruby_codepoints.is_empty() {
-            let defaults = self.doc().default_styles();
+            let defaults = self.doc().default_attrs();
             self.push_effect(Effect::FontDetected {
                 family: defaults.font_family().to_string(),
                 weight: defaults.font_weight(),

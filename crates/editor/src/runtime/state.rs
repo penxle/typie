@@ -22,7 +22,7 @@ impl State {
             .node(NodeId::ROOT)
             .and_then(|root| root.cascade_attrs())
             .map(|attrs| Attr::extract_styles(&attrs))
-            .unwrap_or_else(|| DefaultStyles::default().to_styles());
+            .unwrap_or_else(|| DefaultAttrs::default().to_styles());
         Self {
             doc,
             selection,
