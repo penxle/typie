@@ -428,7 +428,7 @@ impl Transaction {
 
         self.delete_range(from, to)?;
 
-        self.set_selection(Selection::collapsed(Position::new(
+        self.set_selection_after_delete(Selection::collapsed(Position::new(
             target_block_id,
             prev_end_offset,
             Affinity::Downstream,
@@ -533,7 +533,7 @@ impl Transaction {
 
         self.delete_range(from, to)?;
 
-        self.set_selection(Selection::collapsed(Position::new(
+        self.set_selection_after_delete(Selection::collapsed(Position::new(
             current_block_id,
             current_end_offset,
             Affinity::Downstream,
@@ -1773,5 +1773,63 @@ mod tests {
         } else {
             panic!("Expected text node");
         }
+    }
+
+    #[test]
+    fn join_backward_preserves_pending_styles_when_empty_paragraphs() {
+        let mut p1 = id!();
+        let mut p2 = id!();
+
+        let state = state! {
+            doc {
+                @p1 paragraph {}
+                @p2 paragraph {}
+            }
+            selection { (p2, 0) }
+        };
+
+        let mut tr = Transaction::new(&state);
+        tr.state
+            .pending_styles
+            .push(Style::FontWeight(FontWeightStyle { weight: 700 }));
+        tr.join_backward().unwrap();
+        let (view, _) = tr.commit().unwrap();
+
+        assert!(
+            view.pending_styles
+                .iter()
+                .any(|m| matches!(m, Style::FontWeight(fw) if fw.weight == 700)),
+            "join_backward should preserve pending_styles when merging empty paragraphs, got: {:?}",
+            view.pending_styles
+        );
+    }
+
+    #[test]
+    fn join_forward_preserves_pending_styles_when_empty_paragraphs() {
+        let mut p1 = id!();
+        let mut p2 = id!();
+
+        let state = state! {
+            doc {
+                @p1 paragraph {}
+                @p2 paragraph {}
+            }
+            selection { (p1, 0) }
+        };
+
+        let mut tr = Transaction::new(&state);
+        tr.state
+            .pending_styles
+            .push(Style::FontWeight(FontWeightStyle { weight: 700 }));
+        tr.join_forward().unwrap();
+        let (view, _) = tr.commit().unwrap();
+
+        assert!(
+            view.pending_styles
+                .iter()
+                .any(|m| matches!(m, Style::FontWeight(fw) if fw.weight == 700)),
+            "join_forward should preserve pending_styles when merging empty paragraphs, got: {:?}",
+            view.pending_styles
+        );
     }
 }

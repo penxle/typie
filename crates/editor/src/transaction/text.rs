@@ -423,7 +423,7 @@ impl Transaction {
         let new_affinity =
             resolve_affinity_after_edit(self, head.node_id, from_global_offset, head.affinity);
 
-        self.set_selection(Selection::collapsed(Position::new(
+        self.set_selection_after_delete(Selection::collapsed(Position::new(
             head.node_id,
             from_global_offset,
             new_affinity,
@@ -500,7 +500,7 @@ impl Transaction {
         let new_affinity =
             resolve_affinity_after_edit(self, head.node_id, from_global_offset, head.affinity);
 
-        self.set_selection(Selection::collapsed(Position::new(
+        self.set_selection_after_delete(Selection::collapsed(Position::new(
             head.node_id,
             from_global_offset,
             new_affinity,
@@ -518,6 +518,8 @@ impl Transaction {
         if let StructureSelectionInfo::Rectangular { .. } = structure_selection {
             return self.delete_structure_selection(&structure_selection);
         }
+
+        let pre_delete_styles = self.state.pending_styles.clone();
 
         if let StructureSelectionInfo::Structural(block_ids) = structure_selection {
             let (mut from, mut to) = self.selection().as_sorted(self.doc())?;
@@ -552,6 +554,18 @@ impl Transaction {
         }
 
         let deleted = self.delete_selection_with_merge()?.deleted();
+
+        if deleted {
+            self.recompute_pending_styles();
+
+            let head = self.state.selection.head;
+            if !self.cursor_has_text_segment(head.node_id, head.offset) {
+                if self.state.pending_styles != pre_delete_styles {
+                    self.state.pending_styles = pre_delete_styles;
+                    self.push_effect(Effect::PendingStylesChanged);
+                }
+            }
+        }
 
         Ok(deleted)
     }
@@ -637,7 +651,7 @@ impl Transaction {
 
         self.delete_structural_range(from, to)?;
 
-        self.set_selection(Selection::collapsed(from));
+        self.set_selection_after_delete(Selection::collapsed(from));
 
         Ok(DeleteResult::Local {
             node_id: from.node_id,
@@ -3403,6 +3417,69 @@ mod tests {
     }
 
     #[test]
+    fn delete_across_isolating_boundary_preserves_pending_styles() {
+        let mut p1 = id!();
+        let mut n2 = id!();
+
+        let state = state! {
+            doc {
+                @p1 paragraph {
+                    text(styles: [font_weight(700)]) { "ab" }
+                }
+                fold {
+                    fold_title { text { "title" } }
+                    fold_content {
+                        @n2 paragraph { text { "content" } }
+                    }
+                }
+            }
+            selection { (p1, 1) -> (n2, 3) }
+        };
+
+        let mut tr = Transaction::new(&state);
+        tr.delete_selection().unwrap();
+        let (view, _) = tr.commit().unwrap();
+
+        assert!(
+            view.pending_styles
+                .iter()
+                .any(|m| matches!(m, Style::FontWeight(fw) if fw.weight == 700)),
+            "pending_styles should preserve font_weight after deleting across isolating boundary, got: {:?}",
+            view.pending_styles
+        );
+    }
+
+    #[test]
+    fn delete_selection_across_paragraphs_recomputes_pending_styles() {
+        let mut p1 = id!();
+        let mut p2 = id!();
+
+        let state = state! {
+            doc {
+                @p1 paragraph {
+                    text(styles: [font_weight(700)]) { "ab" }
+                }
+                @p2 paragraph {
+                    text { "cd" }
+                }
+            }
+            selection { (p1, 1) -> (p2, 1) }
+        };
+
+        let mut tr = Transaction::new(&state);
+        tr.delete_selection().unwrap();
+        let (view, _) = tr.commit().unwrap();
+
+        assert!(
+            view.pending_styles
+                .iter()
+                .any(|m| matches!(m, Style::FontWeight(fw) if fw.weight == 700)),
+            "pending_styles should recompute from remaining text segment after cross-paragraph deletion, got: {:?}",
+            view.pending_styles
+        );
+    }
+
+    #[test]
     fn insert_text_emits_codepoints_detected() {
         let mut p = id!();
 
@@ -3466,6 +3543,137 @@ mod tests {
                 .iter()
                 .any(|m| matches!(m, Style::FontWeight(fw) if fw.weight == 700)),
             "pending_styles should contain font_weight when bold text still remains, got: {:?}",
+            view.pending_styles
+        );
+    }
+
+    #[test]
+    fn delete_text_backward_preserves_pending_styles_when_last_segment_deleted() {
+        let mut p = id!();
+
+        let state = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_weight(700)]) { "a" }
+                }
+            }
+            selection { (p, 1) }
+        };
+
+        let mut tr = Transaction::new(&state);
+        tr.delete_text_backward().unwrap();
+        let (view, _) = tr.commit().unwrap();
+
+        assert!(
+            view.pending_styles
+                .iter()
+                .any(|m| matches!(m, Style::FontWeight(fw) if fw.weight == 700)),
+            "pending_styles should preserve font_weight after deleting last styled segment, got: {:?}",
+            view.pending_styles
+        );
+    }
+
+    #[test]
+    fn delete_text_backward_uses_adjacent_segment_styles() {
+        let mut p = id!();
+
+        let state = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [italic()]) { "ab" }
+                }
+            }
+            selection { (p, 2) }
+        };
+
+        let mut tr = Transaction::new(&state);
+        tr.set_style(Style::FontWeight(FontWeightStyle { weight: 700 }))
+            .unwrap();
+        tr.set_selection(Selection::collapsed(Position::new(
+            p,
+            2,
+            Affinity::Upstream,
+        )));
+        tr.insert_text("c").unwrap();
+
+        // now: "ab" [italic] + "c" [italic, bold] — cursor at offset 3
+        tr.delete_text_backward().unwrap();
+        let (view, _) = tr.commit().unwrap();
+
+        // "c" segment fully deleted → nearest adjacent is "ab" [italic]
+        assert!(
+            view.pending_styles
+                .iter()
+                .any(|m| matches!(m, Style::Italic(_))),
+            "pending_styles should pick up italic from adjacent segment, got: {:?}",
+            view.pending_styles
+        );
+    }
+
+    #[test]
+    fn delete_text_forward_preserves_pending_styles_when_last_segment_deleted() {
+        let mut p = id!();
+
+        let state = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_weight(700)]) { "a" }
+                }
+            }
+            selection { (p, 0) }
+        };
+
+        let mut tr = Transaction::new(&state);
+        tr.delete_text_forward().unwrap();
+        let (view, _) = tr.commit().unwrap();
+
+        assert!(
+            view.pending_styles
+                .iter()
+                .any(|m| matches!(m, Style::FontWeight(fw) if fw.weight == 700)),
+            "pending_styles should preserve font_weight after forward-deleting last styled segment, got: {:?}",
+            view.pending_styles
+        );
+    }
+
+    #[test]
+    fn delete_text_forward_uses_adjacent_segment_styles() {
+        let mut p = id!();
+
+        let state = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [italic()]) { "ab" }
+                }
+            }
+            selection { (p, 0) }
+        };
+
+        let mut tr = Transaction::new(&state);
+        tr.set_style(Style::FontWeight(FontWeightStyle { weight: 700 }))
+            .unwrap();
+        tr.set_selection(Selection::collapsed(Position::new(
+            p,
+            0,
+            Affinity::Downstream,
+        )));
+        tr.insert_text("c").unwrap();
+
+        // now: "c" [italic, bold] + "ab" [italic] — cursor at offset 1
+        tr.set_selection(Selection::collapsed(Position::new(
+            p,
+            0,
+            Affinity::Downstream,
+        )));
+        tr.delete_text_forward().unwrap();
+        let (view, _) = tr.commit().unwrap();
+
+        // "c" segment fully deleted → nearest adjacent is "ab" [italic]
+        assert!(
+            view.pending_styles
+                .iter()
+                .any(|m| matches!(m, Style::Italic(_))),
+            "pending_styles should pick up italic from adjacent segment, got: {:?}",
             view.pending_styles
         );
     }
