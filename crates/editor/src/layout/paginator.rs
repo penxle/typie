@@ -157,6 +157,10 @@ impl PaginationState {
     }
 
     fn extend_wrappers_to_page_bottom(&mut self, content_area_bottom: f32) {
+        if matches!(self.layout_mode, LayoutMode::Continuous { .. }) {
+            return;
+        }
+
         for parent in &self.parent_stack {
             let Some(idx) = parent.index_in_current_page else {
                 continue;
@@ -211,12 +215,14 @@ impl PaginationState {
             let adjusted_y = parent.absolute_position.y - page_start_y + top;
             let adjusted_x = parent.absolute_position.x + margin_x;
 
-            let (final_y, final_height, final_element) = if adjusted_y < top
+            let should_clip_top = matches!(self.layout_mode, LayoutMode::Paginated { .. })
+                && adjusted_y < top
                 && parent
                     .element
                     .as_ref()
-                    .is_some_and(|e| e.as_wrapper().is_some())
-            {
+                    .is_some_and(|e| e.as_wrapper().is_some());
+
+            let (final_y, final_height, final_element) = if should_clip_top {
                 let overflow = top - adjusted_y;
                 let new_height = parent.size.height - overflow;
                 let split_edges = SplitEdges {
@@ -371,6 +377,49 @@ impl Paginator {
         effective_bottom - state.page_start_y > state.content_height
     }
 
+    fn should_break_before_node(
+        node: &LayoutNode,
+        abs_y: f32,
+        node_bottom: f32,
+        state: &PaginationState,
+    ) -> bool {
+        let has_children = node.children.is_some();
+        let avoid_break = node.page_break_policy == PageBreakPolicy::Avoid;
+        let should_check_fit = !has_children || avoid_break;
+
+        // 큰 avoid 노드가 무한히 break를 트리거하는 것을 방지하기 위해 페이지 top에서는 break하지 않음
+        let is_at_start_of_page = state.current_page_nodes.len() <= state.parent_stack.len();
+        if is_at_start_of_page {
+            return false;
+        }
+
+        let wrapper_overflows = Self::wrapper_needs_page_break(node, abs_y, state);
+        let node_overflows = should_check_fit && state.should_create_new_page(node_bottom);
+        wrapper_overflows || node_overflows
+    }
+
+    fn maybe_apply_break_before_node(
+        node: &LayoutNode,
+        abs_y: f32,
+        node_bottom: f32,
+        state: &mut PaginationState,
+    ) {
+        if Self::should_break_before_node(node, abs_y, node_bottom, state) {
+            state.create_page();
+            state.start_new_page_at(abs_y);
+        }
+
+        if state.explicit_page_break_pending {
+            state.explicit_page_break_pending = false;
+            state.start_new_page_at(abs_y);
+        }
+    }
+
+    fn adjusted_position(state: &PaginationState, abs_x: f32, abs_y: f32) -> Point {
+        let adjusted_y = abs_y - state.page_start_y + state.top_margin();
+        Point::new(abs_x + state.margin_left, adjusted_y)
+    }
+
     fn collect_nodes(
         &self,
         positioned: &PositionedNode,
@@ -382,37 +431,11 @@ impl Paginator {
         let node = &positioned.node;
         let node_bottom = abs_y + node.size.height;
 
-        let has_children = node.children.is_some();
         let is_page_break = matches!(state.layout_mode, LayoutMode::Paginated { .. })
             && matches!(&node.element, Some(Element::Line(line)) if line.has_page_break);
 
-        let avoid_break = node.page_break_policy == PageBreakPolicy::Avoid;
-        let should_check_fit = !has_children || avoid_break;
-
-        // 큰 avoid 노드가 무한히 break를 트리거하는 것을 방지하기 위해 페이지 top에서는 break하지 않음
-        let is_at_start_of_page = state.current_page_nodes.len() <= state.parent_stack.len();
-
-        let wrapper_overflows =
-            !is_at_start_of_page && Self::wrapper_needs_page_break(&node, abs_y, state);
-        let node_overflows =
-            should_check_fit && !is_at_start_of_page && state.should_create_new_page(node_bottom);
-
-        if wrapper_overflows || node_overflows {
-            state.create_page();
-            state.start_new_page_at(abs_y);
-        }
-
-        if state.explicit_page_break_pending {
-            state.explicit_page_break_pending = false;
-            state.start_new_page_at(abs_y);
-        }
-
-        let top = state.top_margin();
-        let horizontal_margin = state.margin_left;
-
-        let adjusted_y = abs_y - state.page_start_y + top;
-
-        let adjusted_position = Point::new(abs_x + horizontal_margin, adjusted_y);
+        Self::maybe_apply_break_before_node(node, abs_y, node_bottom, state);
+        let adjusted_position = Self::adjusted_position(state, abs_x, abs_y);
 
         if let Some(children) = &node.children {
             let adjusted_node = PositionedNode {
@@ -444,6 +467,7 @@ impl Paginator {
                 self.collect_nodes(child, Point::new(abs_x, abs_y), state);
             }
             state.parent_stack.pop();
+            state.current_y = state.current_y.max(node_bottom);
         } else {
             let merged_hints = state
                 .parent_stack
@@ -477,7 +501,7 @@ impl Paginator {
                     node: Rc::clone(&positioned.node),
                 }
             };
-            state.current_y = node_bottom;
+            state.current_y = state.current_y.max(node_bottom);
             state.current_page_nodes.push(adjusted_node);
 
             if is_page_break {
@@ -491,11 +515,13 @@ impl Paginator {
 
 #[cfg(test)]
 mod tests {
-    use crate::layout::elements::{FoldContentElement, LineElement, LineMetric};
+    use crate::layout::elements::{
+        FoldContentElement, LineElement, LineMetric, TableBorderElement,
+    };
     use crate::layout::{
         Element, LayoutNode, PageBreakPolicy, Paginator, PositionedNode, SplitEdges,
     };
-    use crate::model::{LayoutMode, NodeId};
+    use crate::model::{LayoutMode, NodeId, TABLE_BORDER_WIDTH, TableAlign, TableBorderStyle};
     use crate::runtime::Message;
     use crate::types::{Point, Size};
     use std::rc::Rc;
@@ -1421,6 +1447,258 @@ mod tests {
         let pages = paginator.paginate_rc(Rc::new(root));
 
         assert_eq!(pages.len(), 1, "Continuous mode should ignore page break");
+    }
+
+    #[test]
+    fn test_paginator_continuous_wrapper_keeps_original_element_and_uses_clipping() {
+        let layout_mode = LayoutMode::Continuous { max_width: 100.0 };
+        let table_id = NodeId::new();
+
+        let parent_element = Element::TableBorder(TableBorderElement::new(
+            Size::new(80.0, 1302.0),
+            table_id,
+            TableBorderStyle::Solid,
+            TableAlign::Left,
+            3,
+            2,
+            vec![400.0, 400.0, 500.0],
+            vec![39.0, 39.0],
+            SplitEdges::default(),
+            0.0,
+            0.0,
+            0,
+            3,
+        ));
+
+        let node1 = Rc::new(LayoutNode {
+            size: Size::new(80.0, 500.0),
+            element: Some(Element::Line(create_dummy_line_element(false))),
+            children: None,
+            page_break_policy: Default::default(),
+            render_hints: Default::default(),
+            scope_id: None,
+        });
+
+        let node2 = Rc::new(LayoutNode {
+            size: Size::new(80.0, 500.0),
+            element: Some(Element::Line(create_dummy_line_element(false))),
+            children: None,
+            page_break_policy: Default::default(),
+            render_hints: Default::default(),
+            scope_id: None,
+        });
+
+        let children = vec![
+            PositionedNode {
+                position: Point::new(0.0, TABLE_BORDER_WIDTH),
+                node: node1,
+            },
+            PositionedNode {
+                position: Point::new(0.0, 900.0),
+                node: node2,
+            },
+        ];
+
+        let root = LayoutNode {
+            size: Size::new(80.0, 1302.0),
+            element: Some(parent_element),
+            children: Some(children),
+            page_break_policy: Default::default(),
+            render_hints: Default::default(),
+            scope_id: None,
+        };
+
+        let paginator = Paginator::new(100.0, 100.0, 0.0, 0.0, 0.0, layout_mode);
+        let pages = paginator.paginate_rc(Rc::new(root));
+        assert_eq!(pages.len(), 2);
+
+        let p1_children = pages[0].root.node.children.as_ref().unwrap();
+        let p1_table_node = p1_children
+            .iter()
+            .find(|n| matches!(n.node.element, Some(Element::TableBorder(_))))
+            .expect("page 1 should have table border");
+        assert!((p1_table_node.position.y - 0.0).abs() < 0.01);
+        let Some(Element::TableBorder(p1_table)) = p1_table_node.node.element.as_ref() else {
+            panic!("page 1 table border element missing");
+        };
+        assert!((p1_table.size.height - 1302.0).abs() < 0.01);
+        assert!((p1_table.offset - 0.0).abs() < 0.01);
+
+        let p2_children = pages[1].root.node.children.as_ref().unwrap();
+        let p2_table_node = p2_children
+            .iter()
+            .find(|n| matches!(n.node.element, Some(Element::TableBorder(_))))
+            .expect("page 2 should have table border");
+        assert!((p2_table_node.position.y - (-501.0)).abs() < 0.01);
+        let Some(Element::TableBorder(p2_table)) = p2_table_node.node.element.as_ref() else {
+            panic!("page 2 table border element missing");
+        };
+        assert!((p2_table.size.height - 1302.0).abs() < 0.01);
+        assert!((p2_table.offset - 0.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_paginator_continuous_fold_wrapper_keeps_original_bounds() {
+        let layout_mode = LayoutMode::Continuous { max_width: 100.0 };
+
+        let parent_element = Element::FoldContent(FoldContentElement::new(
+            Size::new(80.0, 1300.0),
+            SplitEdges::default(),
+            NodeId::new(),
+        ));
+
+        let node1 = Rc::new(LayoutNode {
+            size: Size::new(80.0, 500.0),
+            element: Some(Element::Line(create_dummy_line_element(false))),
+            children: None,
+            page_break_policy: Default::default(),
+            render_hints: Default::default(),
+            scope_id: None,
+        });
+
+        let node2 = Rc::new(LayoutNode {
+            size: Size::new(80.0, 500.0),
+            element: Some(Element::Line(create_dummy_line_element(false))),
+            children: None,
+            page_break_policy: Default::default(),
+            render_hints: Default::default(),
+            scope_id: None,
+        });
+
+        let children = vec![
+            PositionedNode {
+                position: Point::new(0.0, 16.0),
+                node: node1,
+            },
+            PositionedNode {
+                position: Point::new(0.0, 900.0),
+                node: node2,
+            },
+        ];
+
+        let root = LayoutNode {
+            size: Size::new(80.0, 1300.0),
+            element: Some(parent_element),
+            children: Some(children),
+            page_break_policy: Default::default(),
+            render_hints: Default::default(),
+            scope_id: None,
+        };
+
+        let paginator = Paginator::new(100.0, 100.0, 0.0, 0.0, 0.0, layout_mode);
+        let pages = paginator.paginate_rc(Rc::new(root));
+        assert_eq!(pages.len(), 2);
+
+        let p1_children = pages[0].root.node.children.as_ref().unwrap();
+        let p1_fold_node = p1_children
+            .iter()
+            .find(|n| matches!(n.node.element, Some(Element::FoldContent(_))))
+            .expect("page 1 should have fold wrapper");
+        assert!((p1_fold_node.position.y - 0.0).abs() < 0.01);
+        let Some(Element::FoldContent(p1_fold)) = p1_fold_node.node.element.as_ref() else {
+            panic!("page 1 fold element missing");
+        };
+        assert!((p1_fold.size.height - 1300.0).abs() < 0.01);
+        assert!(!p1_fold.split_edges.top);
+        assert!(!p1_fold.split_edges.bottom);
+
+        let p2_children = pages[1].root.node.children.as_ref().unwrap();
+        let p2_fold_node = p2_children
+            .iter()
+            .find(|n| matches!(n.node.element, Some(Element::FoldContent(_))))
+            .expect("page 2 should have fold wrapper");
+        assert!((p2_fold_node.position.y - (-516.0)).abs() < 0.01);
+        let Some(Element::FoldContent(p2_fold)) = p2_fold_node.node.element.as_ref() else {
+            panic!("page 2 fold element missing");
+        };
+        assert!((p2_fold.size.height - 1300.0).abs() < 0.01);
+        assert!(!p2_fold.split_edges.top);
+        assert!(!p2_fold.split_edges.bottom);
+    }
+
+    #[test]
+    fn test_paginator_continuous_keeps_parent_bottom_when_child_is_shorter() {
+        let layout_mode = LayoutMode::Continuous { max_width: 100.0 };
+
+        let background_leaf = Rc::new(LayoutNode {
+            size: Size::new(80.0, 40.0),
+            element: None,
+            children: None,
+            page_break_policy: Default::default(),
+            render_hints: Default::default(),
+            scope_id: None,
+        });
+
+        let short_child_leaf = Rc::new(LayoutNode {
+            size: Size::new(80.0, 24.0),
+            element: None,
+            children: None,
+            page_break_policy: Default::default(),
+            render_hints: Default::default(),
+            scope_id: None,
+        });
+
+        let short_child_container = Rc::new(LayoutNode {
+            size: Size::new(80.0, 24.0),
+            element: None,
+            children: Some(vec![PositionedNode {
+                position: Point::new(0.0, 0.0),
+                node: short_child_leaf,
+            }]),
+            page_break_policy: Default::default(),
+            render_hints: Default::default(),
+            scope_id: None,
+        });
+
+        let title_like_container = Rc::new(LayoutNode {
+            size: Size::new(80.0, 40.0),
+            element: None,
+            children: Some(vec![
+                PositionedNode {
+                    position: Point::new(0.0, 0.0),
+                    node: background_leaf,
+                },
+                PositionedNode {
+                    position: Point::new(0.0, 8.0),
+                    node: short_child_container,
+                },
+            ]),
+            page_break_policy: Default::default(),
+            render_hints: Default::default(),
+            scope_id: None,
+        });
+
+        let overflow_leaf = Rc::new(LayoutNode {
+            size: Size::new(80.0, 20.0),
+            element: None,
+            children: None,
+            page_break_policy: Default::default(),
+            render_hints: Default::default(),
+            scope_id: None,
+        });
+
+        let root = LayoutNode {
+            size: Size::new(80.0, 1050.0),
+            element: None,
+            children: Some(vec![
+                PositionedNode {
+                    position: Point::new(0.0, 0.0),
+                    node: title_like_container,
+                },
+                PositionedNode {
+                    position: Point::new(0.0, 1030.0),
+                    node: overflow_leaf,
+                },
+            ]),
+            page_break_policy: Default::default(),
+            render_hints: Default::default(),
+            scope_id: None,
+        };
+
+        let paginator = Paginator::new(100.0, 100.0, 0.0, 0.0, 0.0, layout_mode);
+        let pages = paginator.paginate_rc(Rc::new(root));
+        assert_eq!(pages.len(), 2);
+        assert!((pages[0].root.node.size.height - 40.0).abs() < 0.01);
     }
 
     #[test]
