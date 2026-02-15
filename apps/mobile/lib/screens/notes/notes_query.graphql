@@ -11,6 +11,11 @@ query NotesScreen_Query {
           title
           type
         }
+        ... on Document {
+          id
+          title
+          documentType: type
+        }
       }
     }
   }
@@ -31,6 +36,11 @@ query NotesScreen_Query {
           id
           title
           type
+        }
+        ... on Document {
+          id
+          title
+          documentType: type
         }
       }
     }

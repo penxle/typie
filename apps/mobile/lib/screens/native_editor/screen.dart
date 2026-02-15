@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 
 import 'package:auto_route/auto_route.dart';
 import 'package:ferry/ferry.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/context/bottom_sheet.dart';
@@ -21,6 +22,7 @@ import 'package:typie/screens/native_editor/__generated__/native_editor_query.da
 import 'package:typie/screens/native_editor/__generated__/native_editor_query.req.gql.dart';
 import 'package:typie/screens/native_editor/context.dart';
 import 'package:typie/screens/native_editor/init.dart';
+import 'package:typie/screens/native_editor/note.dart';
 import 'package:typie/screens/native_editor/sheet/ai_feedback.dart';
 import 'package:typie/screens/native_editor/sheet/find_replace.dart';
 import 'package:typie/screens/native_editor/sheet/menu.dart';
@@ -36,6 +38,8 @@ import 'package:typie/screens/native_editor/view/editor.dart';
 import 'package:typie/services/state.dart';
 import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/screen.dart';
+
+enum NativeEditorMode { editor, note }
 
 @RoutePage()
 class NativeEditorScreen extends StatelessWidget {
@@ -68,6 +72,10 @@ class _Content extends HookWidget {
   Widget build(BuildContext context) {
     final editorContext = useMemoized(EditorContext.new);
     final error = useState<String?>(null);
+    final pageController = usePageController();
+    final drag = useRef<Drag?>(null);
+    final mode = useValueNotifier<NativeEditorMode>(NativeEditorMode.editor);
+    final currentMode = useValueListenable(mode);
 
     final document = data.entity.node.when(document: (doc) => doc, orElse: () => null);
     final headingTitle = document?.title ?? '(제목 없음)';
@@ -87,7 +95,7 @@ class _Content extends HookWidget {
       return editorContext.dispose;
     }, []);
 
-    Widget buildBody() {
+    Widget buildEditorBody() {
       if (document == null) {
         return const SizedBox.shrink();
       }
@@ -127,117 +135,198 @@ class _Content extends HookWidget {
       );
     }
 
-    return Screen(
-      heading: Heading(
-        titleIcon: document?.type == GDocumentType.TEMPLATE
-            ? LucideLightIcons.layout_template
-            : LucideLabIcons.text_square,
-        titleIconColor: context.colors.accentBrand,
-        title: headingTitle,
-        backgroundColor: context.colors.surfaceDefault,
-        onTap: () => editorContext.controller?.clearFocus(),
-        actions: [
-          HeadingAction(
-            icon: LucideLightIcons.ellipsis,
-            onTap: () async {
-              editorContext.controller?.clearFocus();
-              if (document == null) {
-                return;
-              }
-              await context.showBottomSheet(
-                intercept: true,
-                child: MenuSheet(
-                  data: data,
-                  document: document,
-                  client: client,
-                  editor: editorContext.editor,
-                  editorController: editorContext.controller,
-                  onOpenFindReplace: () async {
-                    final controller = editorContext.controller;
-                    if (controller == null) {
-                      return;
-                    }
-                    await context.showBottomSheet(
-                      intercept: true,
-                      overlayOpacity: 0.05,
-                      child: FindReplaceSheet(controller: controller),
-                    );
-                  },
-                  onOpenSpellcheck: () async {
-                    final controller = editorContext.controller;
-                    final currentEditor = editorContext.editor;
-                    if (controller == null || currentEditor == null) {
-                      return;
-                    }
-
-                    if (data.me!.subscription == null) {
-                      final trialStarted = await context.showBottomSheet<bool>(
-                        intercept: true,
-                        child: const LimitBottomSheet(type: LimitBottomSheetType.spellCheck),
-                      );
-
-                      if (trialStarted ?? false) {
-                        unawaited(client.refetch(GNativeEditorScreen_QueryReq((b) => b.vars.slug = slug)));
-                      }
-
-                      return;
-                    }
-
-                    await context.showBottomSheet(
-                      intercept: true,
-                      overlayOpacity: 0.05,
-                      child: SpellcheckSheet(
-                        controller: controller,
-                        editor: currentEditor,
-                        documentId: document.id,
-                        client: client,
-                      ),
-                    );
-                  },
-                  onOpenAiFeedback: () async {
-                    final controller = editorContext.controller;
-                    final currentEditor = editorContext.editor;
-                    if (controller == null || currentEditor == null) {
-                      return;
-                    }
-
-                    if (data.me!.subscription == null) {
-                      final trialStarted = await context.showBottomSheet<bool>(
-                        intercept: true,
-                        child: const LimitBottomSheet(type: LimitBottomSheetType.aiFeedback),
-                      );
-
-                      if (trialStarted ?? false) {
-                        unawaited(client.refetch(GNativeEditorScreen_QueryReq((b) => b.vars.slug = slug)));
-                      }
-
-                      return;
-                    }
-
-                    final aiOptIn = (data.me!.preferences.asMap['aiOptIn'] as bool?) ?? false;
-
-                    await context.showBottomSheet(
-                      intercept: true,
-                      overlayOpacity: 0.05,
-                      child: AiFeedbackSheet(
-                        controller: controller,
-                        editor: currentEditor,
-                        documentId: document.id,
-                        client: client,
-                        aiOptIn: aiOptIn,
-                      ),
-                    );
-                  },
-                ),
-              );
+    return Material(
+      color: context.colors.surfaceDefault,
+      child: Stack(
+        children: [
+          PageView(
+            controller: pageController,
+            physics: const NeverScrollableScrollPhysics(),
+            onPageChanged: (value) {
+              mode.value = switch (value) {
+                0 => NativeEditorMode.editor,
+                1 => NativeEditorMode.note,
+                _ => throw UnimplementedError(),
+              };
             },
+            children: [
+              Screen(
+                heading: Heading(
+                  titleIcon: document?.type == GDocumentType.TEMPLATE
+                      ? LucideLightIcons.layout_template
+                      : LucideLabIcons.text_square,
+                  titleIconColor: context.colors.accentBrand,
+                  title: headingTitle,
+                  backgroundColor: context.colors.surfaceDefault,
+                  onTap: () => editorContext.controller?.clearFocus(),
+                  actions: [
+                    HeadingAction(
+                      icon: LucideLightIcons.ellipsis,
+                      onTap: () async {
+                        editorContext.controller?.clearFocus();
+                        if (document == null) {
+                          return;
+                        }
+                        await context.showBottomSheet(
+                          intercept: true,
+                          child: MenuSheet(
+                            data: data,
+                            document: document,
+                            client: client,
+                            editor: editorContext.editor,
+                            editorController: editorContext.controller,
+                            onOpenFindReplace: () async {
+                              final controller = editorContext.controller;
+                              if (controller == null) {
+                                return;
+                              }
+                              await context.showBottomSheet(
+                                intercept: true,
+                                overlayOpacity: 0.05,
+                                child: FindReplaceSheet(controller: controller),
+                              );
+                            },
+                            onOpenSpellcheck: () async {
+                              final controller = editorContext.controller;
+                              final currentEditor = editorContext.editor;
+                              if (controller == null || currentEditor == null) {
+                                return;
+                              }
+
+                              if (data.me!.subscription == null) {
+                                final trialStarted = await context.showBottomSheet<bool>(
+                                  intercept: true,
+                                  child: const LimitBottomSheet(type: LimitBottomSheetType.spellCheck),
+                                );
+
+                                if (trialStarted ?? false) {
+                                  unawaited(client.refetch(GNativeEditorScreen_QueryReq((b) => b.vars.slug = slug)));
+                                }
+
+                                return;
+                              }
+
+                              await context.showBottomSheet(
+                                intercept: true,
+                                overlayOpacity: 0.05,
+                                child: SpellcheckSheet(
+                                  controller: controller,
+                                  editor: currentEditor,
+                                  documentId: document.id,
+                                  client: client,
+                                ),
+                              );
+                            },
+                            onOpenAiFeedback: () async {
+                              final controller = editorContext.controller;
+                              final currentEditor = editorContext.editor;
+                              if (controller == null || currentEditor == null) {
+                                return;
+                              }
+
+                              if (data.me!.subscription == null) {
+                                final trialStarted = await context.showBottomSheet<bool>(
+                                  intercept: true,
+                                  child: const LimitBottomSheet(type: LimitBottomSheetType.aiFeedback),
+                                );
+
+                                if (trialStarted ?? false) {
+                                  unawaited(client.refetch(GNativeEditorScreen_QueryReq((b) => b.vars.slug = slug)));
+                                }
+
+                                return;
+                              }
+
+                              final aiOptIn = (data.me!.preferences.asMap['aiOptIn'] as bool?) ?? false;
+
+                              await context.showBottomSheet(
+                                intercept: true,
+                                overlayOpacity: 0.05,
+                                child: AiFeedbackSheet(
+                                  controller: controller,
+                                  editor: currentEditor,
+                                  documentId: document.id,
+                                  client: client,
+                                  aiOptIn: aiOptIn,
+                                ),
+                              );
+                            },
+                            onOpenRelatedNotes: () async {
+                              editorContext.controller?.clearFocus();
+                              await pageController.animateToPage(
+                                1,
+                                duration: const Duration(milliseconds: 300),
+                                curve: Curves.easeInOut,
+                              );
+                            },
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+                backgroundColor: context.colors.surfaceDefault,
+                keyboardDismiss: false,
+                responsive: false,
+                child: buildEditorBody(),
+              ),
+              DocumentNote(
+                entityId: data.entity.id,
+                isActive: currentMode == NativeEditorMode.note,
+                onBack: () async {
+                  await pageController.animateToPage(
+                    0,
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeInOut,
+                  );
+                },
+              ),
+            ],
+          ),
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: MediaQuery.paddingOf(context).top + 52,
+            child: GestureDetector(
+              onHorizontalDragDown: (details) {
+                drag.value?.cancel();
+                drag.value = null;
+              },
+              onHorizontalDragStart: (details) {
+                drag.value = pageController.position.drag(
+                  DragStartDetails(globalPosition: details.globalPosition, localPosition: details.localPosition),
+                  () {},
+                );
+              },
+              onHorizontalDragUpdate: (details) {
+                drag.value?.update(
+                  DragUpdateDetails(
+                    globalPosition: details.globalPosition,
+                    localPosition: details.localPosition,
+                    delta: Offset(details.delta.dx, 0),
+                    primaryDelta: details.delta.dx,
+                  ),
+                );
+              },
+              onHorizontalDragEnd: (details) {
+                drag.value?.end(
+                  DragEndDetails(
+                    velocity: Velocity(pixelsPerSecond: Offset(details.velocity.pixelsPerSecond.dx, 0)),
+                    primaryVelocity: details.velocity.pixelsPerSecond.dx,
+                  ),
+                );
+                drag.value = null;
+              },
+              onHorizontalDragCancel: () {
+                drag.value?.cancel();
+                drag.value = null;
+              },
+              behavior: HitTestBehavior.translucent,
+            ),
           ),
         ],
       ),
-      backgroundColor: context.colors.surfaceDefault,
-      keyboardDismiss: false,
-      responsive: false,
-      child: buildBody(),
     );
   }
 }
@@ -252,6 +341,8 @@ class _EditorContent extends HookWidget {
 
   @override
   Widget build(BuildContext context) {
+    useAutomaticKeepAlive();
+
     final editorContext = EditorScope.of(context);
     final app = useRef<NativeEditorApplication?>(null);
     final fontManager = useRef<FontManager?>(null);
