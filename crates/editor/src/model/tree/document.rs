@@ -278,6 +278,22 @@ impl Doc {
         Ok(())
     }
 
+    pub fn update_default_styles(&self, styles: DefaultStyles) -> Result<()> {
+        let styles_map = self.inner.loro.get_map(STYLES_KEY);
+        styles_map.insert("font_family", styles.font_family.as_str())?;
+        styles_map.insert("font_size", styles.font_size as f64)?;
+        styles_map.insert("font_weight", styles.font_weight as i64)?;
+        styles_map.insert("text_color", styles.text_color.as_str())?;
+        styles_map.insert("background_color", styles.background_color.as_str())?;
+        styles_map.insert("letter_spacing", styles.letter_spacing as f64)?;
+        styles_map.insert("line_height", styles.line_height as f64)?;
+        styles_map.insert("italic", styles.italic)?;
+        styles_map.insert("strikethrough", styles.strikethrough)?;
+        styles_map.insert("underline", styles.underline)?;
+        self.inner.loro.commit();
+        Ok(())
+    }
+
     pub fn default_styles(&self) -> DefaultStyles {
         let styles_map = self.inner.loro.get_map(STYLES_KEY);
 
@@ -330,6 +346,7 @@ impl Doc {
             text_color: get_string("text_color"),
             background_color: get_string("background_color"),
             letter_spacing: get_f32("letter_spacing"),
+            line_height: get_f32("line_height"),
             italic: get_bool("italic"),
             strikethrough: get_bool("strikethrough"),
             underline: get_bool("underline"),

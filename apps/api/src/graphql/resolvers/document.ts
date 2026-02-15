@@ -24,6 +24,7 @@ import {
   Notes,
   TableCode,
   UserPersonalIdentities,
+  UserPreferences,
   Users,
   validateDbId,
 } from '@/db';
@@ -647,6 +648,14 @@ builder.mutationFields((t) => ({
         .limit(1)
         .then(first);
 
+      const preference = await db
+        .select({ value: UserPreferences.value })
+        .from(UserPreferences)
+        .where(eq(UserPreferences.userId, ctx.session.userId))
+        .then(first);
+
+      const template = (preference?.value as Record<string, unknown> | undefined)?.template as Record<string, unknown> | undefined;
+
       const document = await db.transaction(async (tx) => {
         const entity = await tx
           .insert(Entities)
@@ -672,7 +681,7 @@ builder.mutationFields((t) => ({
           .returning()
           .then(firstOrThrow);
 
-        const emptyDoc = makeLoroDoc();
+        const emptyDoc = makeLoroDoc(template);
         const snapshot = emptyDoc.export({ mode: 'snapshot' });
         const version = emptyDoc.version().encode();
         const { json, text, characterCount, blobSize } = await extractLoroDocContents(emptyDoc);
