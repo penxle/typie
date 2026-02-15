@@ -51,6 +51,10 @@ impl Runtime {
         self.transact(|tr| tr.set_paragraph_indent(indent))
     }
 
+    pub(crate) fn handle_set_default_styles(&mut self, styles: DefaultStyles) -> Vec<Effect> {
+        self.transact(|tr| tr.set_default_styles(styles))
+    }
+
     pub(crate) fn handle_insert_horizontal_rule(
         &mut self,
         variant: HorizontalRuleVariant,

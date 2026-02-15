@@ -465,7 +465,7 @@
     disabled={!editor.can('clearFormatting')}
     icon={RemoveFormattingIcon}
     keys={['Mod', '\\']}
-    label="서식 해제"
+    label="기본 서식 적용"
     onclick={() => {
       editor.focus().dispatch({ type: 'clearFormatting' });
     }}

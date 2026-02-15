@@ -101,14 +101,8 @@ export function createFloatingActions(options?: CreateFloatingActionsOptions): C
       return;
     }
 
-    // NOTE: 다른 메뉴나 포탈 클릭 무시
-    const menus = document.querySelectorAll('[role="menu"]');
-    const visiblePortals = document.querySelectorAll('[data-portal]:not(:empty)');
-    if (
-      (menus.length > 0 || visiblePortals.length > 0) &&
-      referenceElement instanceof Element &&
-      !referenceElement.contains(event.target as Node)
-    ) {
+    // NOTE: 메뉴나 포탈 내부 클릭 무시
+    if (event.target instanceof Element && (event.target.closest('[role="menu"]') || event.target.closest('[data-portal]:not(:empty)'))) {
       return;
     }
 

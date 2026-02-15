@@ -32,6 +32,7 @@ export const DIRTY_CURSOR = 2;
 export const DIRTY_SELECTION = 3;
 export const DIRTY_ATTRS = 4;
 export const DIRTY_POINTER = 5;
+export const DIRTY_DEFAULT_STYLES = 6;
 export const DIRTY_PLACEHOLDER = 7;
 export const DIRTY_EXTERNAL_ELEMENTS = 8;
 export const DIRTY_ENABLED_ACTIONS = 9;
@@ -261,6 +262,12 @@ export class SlateReader {
     return readAttrEntries(this.#slabView, this.#slabPtr + offset, count);
   }
 
+  readDefaultStyles(): Attribute[] {
+    const count = this.#u32('default_styles_count');
+    const offset = this.#u32('default_styles_offset');
+    return readAttrEntries(this.#slabView, this.#slabPtr + offset, count);
+  }
+
   readPointerStyle(): string {
     return POINTER_STYLES[this.#u32('pointer_style')] ?? 'default';
   }
@@ -456,7 +463,7 @@ function readAttrEntries(view: DataView, offset: number, count: number): Attribu
       for (let j = 0; j < valueCount; j++) {
         const v = view.getFloat32(pos, true);
         pos += 4;
-        values.push(Number.isNaN(v) ? null : v);
+        values.push(Number.isNaN(v) ? null : Math.round(v * 100) / 100);
       }
       const type = F32_TAG_MAP[typeTag];
       if (type) attrs.push({ type, values } as Attribute);
