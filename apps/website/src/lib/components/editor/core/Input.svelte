@@ -71,11 +71,11 @@
     if (value.startsWith(lastInputValue) && value.length > lastInputValue.length) {
       // Append
       const newText = value.slice(lastInputValue.length);
-      editor.dispatch({ type: 'input', text: newText }).scrollIntoView();
+      editor.dispatch({ type: 'input', text: newText }).scrollIntoView({ mode: 'typewriter' });
     } else if (lastInputValue.length > 0 && value !== lastInputValue) {
       // Replace (macOS accent popup / text replacement)
       const deleteLength = lastInputValue.length;
-      editor.dispatch({ type: 'replaceBackward', length: deleteLength, text: value }).scrollIntoView();
+      editor.dispatch({ type: 'replaceBackward', length: deleteLength, text: value }).scrollIntoView({ mode: 'typewriter' });
     }
 
     if (value.length > 64) {
@@ -142,7 +142,7 @@
 
     e.preventDefault();
     setClipboardData(e.clipboardData, data);
-    editor.dispatch({ type: 'deleteBackward' }).scrollIntoView();
+    editor.dispatch({ type: 'deleteBackward' }).scrollIntoView({ mode: 'typewriter' });
   };
 
   const handlePaste = (e: ClipboardEvent) => {
@@ -158,9 +158,9 @@
     }
 
     if (html) {
-      editor.dispatch({ type: 'pasteHtml', html, text }).scrollIntoView();
+      editor.dispatch({ type: 'pasteHtml', html, text }).scrollIntoView({ mode: 'typewriter' });
     } else {
-      editor.dispatch({ type: 'pasteText', text }).scrollIntoView();
+      editor.dispatch({ type: 'pasteText', text }).scrollIntoView({ mode: 'typewriter' });
     }
   };
 
@@ -168,7 +168,7 @@
     if (editor.readOnly) return;
 
     const text = e.data || '';
-    editor.dispatch({ type: 'compositionStart', text }).scrollIntoView();
+    editor.dispatch({ type: 'compositionStart', text }).scrollIntoView({ mode: 'typewriter' });
   };
 
   const handleCompositionUpdate = (e: CompositionEvent) => {
@@ -189,7 +189,7 @@
     const text = e.data || '';
     if (ignoreEventText && text === ignoreEventText) {
       ignoreEventText = '';
-      editor.dispatch({ type: 'compositionEnd' }).scrollIntoView();
+      editor.dispatch({ type: 'compositionEnd' }).scrollIntoView({ mode: 'typewriter' });
       resetInputState();
       return;
     }
