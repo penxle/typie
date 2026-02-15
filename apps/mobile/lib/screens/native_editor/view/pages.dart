@@ -32,6 +32,8 @@ class PageList extends HookWidget {
     final isSelecting = state.state.isSelecting;
     final fromHandle = state.state.selection?.fromBounds;
     final toHandle = state.state.selection?.toBounds;
+    final tableOverlays = useValueListenable(scope.controller.tableOverlays);
+    final isTableCellSelectorSelection = tableOverlays.any((overlay) => overlay.isFocused && overlay.showCellSelector);
 
     final verticalScrollController = scope.verticalScrollController;
     final horizontalScrollController = scope.horizontalScrollController;
@@ -114,11 +116,15 @@ class PageList extends HookWidget {
 
     useEffect(() {
       final isCollapsed = fromHandle == null || toHandle == null;
+      final handleDragCanceledByTableSelection =
+          isTableCellSelectorSelection && !gesture.draggingCellHandle && gesture.draggingHandleType != null;
       final justFinishedSelecting = wasSelecting.value && !isSelecting;
       final selectionChanged = fromHandle != prevFromHandle.value || toHandle != prevToHandle.value;
 
-      if (isCollapsed) {
-        handleDragPosition.value = null;
+      final shouldResetTextHandleDrag =
+          !gesture.draggingCellHandle && (isCollapsed || handleDragCanceledByTableSelection);
+
+      if (shouldResetTextHandleDrag) {
         gesture
           ..draggingHandleType = null
           ..dragAnchorHandle = null
@@ -140,12 +146,35 @@ class PageList extends HookWidget {
       prevFromHandle.value = fromHandle;
       prevToHandle.value = toHandle;
       return null;
-    }, [fromHandle, toHandle, isSelecting]);
+    }, [fromHandle, toHandle, isSelecting, isTableCellSelectorSelection]);
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final viewWidth = constraints.maxWidth;
         final viewHeight = constraints.maxHeight;
+
+        Offset? viewportPositionFromGlobal(Offset globalPosition) {
+          final renderBox = context.findRenderObject() as RenderBox?;
+          return renderBox?.globalToLocal(globalPosition);
+        }
+
+        void endTextHandleDrag() {
+          if (gesture.draggingCellHandle) {
+            return;
+          }
+          final hadHandleDrag = gesture.draggingHandleType != null || handleDragPosition.value != null;
+          if (!hadHandleDrag) {
+            return;
+          }
+          gesture
+            ..draggingHandleType = null
+            ..dragAnchorHandle = null
+            ..stopAutoScroll();
+          handleDragPosition.value = null;
+          if (scope.controller.state.isSelecting) {
+            scope.controller.setSelecting(false);
+          }
+        }
 
         void onHandleDragDown(SelectionHandleType type, DragDownDetails details) {
           final renderBox = context.findRenderObject() as RenderBox?;
@@ -215,12 +244,7 @@ class PageList extends HookWidget {
         }
 
         void onHandleDragEnd(SelectionHandleType type, DragEndDetails details) {
-          gesture
-            ..draggingHandleType = null
-            ..dragAnchorHandle = null
-            ..stopAutoScroll();
-          handleDragPosition.value = null;
-          scope.controller.setSelecting(false);
+          endTextHandleDrag();
         }
 
         final geo = scope.geometry;
@@ -253,6 +277,9 @@ class PageList extends HookWidget {
                       GestureRecognizerFactoryWithHandlers<ConditionalLongPressGestureRecognizer>(
                         () => ConditionalLongPressGestureRecognizer(
                           condition: (globalPosition) {
+                            if (gesture.draggingCellHandle) {
+                              return false;
+                            }
                             final renderBox = context.findRenderObject() as RenderBox?;
                             if (renderBox == null) {
                               return true;
@@ -271,6 +298,9 @@ class PageList extends HookWidget {
                         (ConditionalLongPressGestureRecognizer instance) {
                           instance
                             ..onLongPressStart = (details) {
+                              if (gesture.draggingCellHandle) {
+                                return;
+                              }
                               scope.inputController.commitComposing();
                               final scrollOffset = verticalScrollController.hasClients
                                   ? verticalScrollController.offset
@@ -672,49 +702,62 @@ class PageList extends HookWidget {
 
             await scope.dndController.handleDrop(pageIdx: pageIdx, x: pointerX, y: localY, session: event.session);
           },
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              NotificationListener<ScrollMetricsNotification>(
-                onNotification: (_) {
-                  handleMetricsRevision.value++;
-                  return false;
-                },
-                child: gestureDetector,
-              ),
-              const TableOverlay(),
-              ListenableBuilder(
-                listenable: Listenable.merge([
-                  verticalScrollController,
-                  horizontalScrollController,
-                  handleMetricsRevision,
-                ]),
-                builder: (context, _) {
-                  final fromPos = gesture.getHandlePosition(fromHandle, geo);
-                  final toPos = gesture.getHandlePosition(toHandle, geo);
+          child: Listener(
+            behavior: HitTestBehavior.translucent,
+            onPointerUp: (_) => endTextHandleDrag(),
+            onPointerCancel: (_) => endTextHandleDrag(),
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                NotificationListener<ScrollMetricsNotification>(
+                  onNotification: (_) {
+                    handleMetricsRevision.value++;
+                    return false;
+                  },
+                  child: gestureDetector,
+                ),
+                TableOverlay(
+                  gesture: gesture,
+                  viewWidth: viewWidth,
+                  viewHeight: viewHeight,
+                  dropPosition: dropPosition,
+                  globalToViewport: viewportPositionFromGlobal,
+                ),
+                ListenableBuilder(
+                  listenable: Listenable.merge([
+                    verticalScrollController,
+                    horizontalScrollController,
+                    handleMetricsRevision,
+                  ]),
+                  builder: (context, _) {
+                    final fromPos = gesture.getHandlePosition(fromHandle, geo);
+                    final toPos = gesture.getHandlePosition(toHandle, geo);
 
-                  return Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      if (isFocused && fromHandle != null && fromPos != null)
-                        Positioned(
-                          left: fromPos.dx,
-                          top: fromPos.dy,
-                          child: buildSelectionHandle(fromHandle, SelectionHandleType.from),
-                        ),
-                      if (isFocused && toHandle != null && toPos != null)
-                        Positioned(
-                          left: toPos.dx,
-                          top: toPos.dy,
-                          child: buildSelectionHandle(toHandle, SelectionHandleType.to),
-                        ),
-                    ],
-                  );
-                },
-              ),
-              if (showContextMenu.value && longPressPosition.value == null && handleDragPosition.value == null)
-                SelectionContextMenu(clipboard: clipboard, onDismiss: () => showContextMenu.value = false),
-            ],
+                    return Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        if (isFocused && fromHandle != null && fromPos != null)
+                          if (!isTableCellSelectorSelection)
+                            Positioned(
+                              left: fromPos.dx,
+                              top: fromPos.dy,
+                              child: buildSelectionHandle(fromHandle, SelectionHandleType.from),
+                            ),
+                        if (isFocused && toHandle != null && toPos != null)
+                          if (!isTableCellSelectorSelection)
+                            Positioned(
+                              left: toPos.dx,
+                              top: toPos.dy,
+                              child: buildSelectionHandle(toHandle, SelectionHandleType.to),
+                            ),
+                      ],
+                    );
+                  },
+                ),
+                if (showContextMenu.value && longPressPosition.value == null && gesture.draggingHandleType == null)
+                  SelectionContextMenu(clipboard: clipboard, onDismiss: () => showContextMenu.value = false),
+              ],
+            ),
           ),
         );
       },

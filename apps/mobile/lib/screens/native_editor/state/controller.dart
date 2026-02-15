@@ -101,7 +101,11 @@ class EditorController extends ChangeNotifier {
   void setSelecting(bool selecting) {
     if (_state.isSelecting != selecting) {
       _state = _state.copyWith(isSelecting: selecting);
-      notifyListeners();
+      if (_isBatching) {
+        _needsNotify = true;
+      } else {
+        notifyListeners();
+      }
     }
   }
 

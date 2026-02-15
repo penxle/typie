@@ -496,7 +496,8 @@ class SlateReader {
       final startRowIndex = _slabU32(pos);
       final totalRows = _slabU32(pos + 4);
       final isFocused = _slabU32(pos + 8) != 0;
-      pos += 12;
+      final showCellSelector = _slabU32(pos + 12) != 0;
+      pos += 16;
 
       final colWidthsCount = _slabU32(pos);
       pos += 4;
@@ -531,6 +532,7 @@ class SlateReader {
           startRowIndex: startRowIndex,
           totalRows: totalRows,
           isFocused: isFocused,
+          showCellSelector: showCellSelector,
           colWidths: colWidths,
           colPositions: colPositions,
           rowHeights: rowHeights,
@@ -755,6 +757,7 @@ class _TableOverlayRaw {
     required this.startRowIndex,
     required this.totalRows,
     required this.isFocused,
+    required this.showCellSelector,
     required this.colWidths,
     required this.colPositions,
     required this.rowHeights,
@@ -772,6 +775,7 @@ class _TableOverlayRaw {
   final int startRowIndex;
   final int totalRows;
   final bool isFocused;
+  final bool showCellSelector;
   final List<double> colWidths;
   final List<double> colPositions;
   final List<double> rowHeights;

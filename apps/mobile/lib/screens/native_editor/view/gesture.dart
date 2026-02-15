@@ -39,6 +39,7 @@ class GestureController {
   (int, double, double)? _lastDispatchedPosition;
 
   SelectionHandleType? draggingHandleType;
+  bool draggingCellHandle = false;
   Offset? pointerDownTouchPosition;
   Offset? dragStartTouchPosition;
   Offset? dragStartHandleScreenPosition;

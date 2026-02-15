@@ -1,0 +1,12 @@
+const tableHandleGap = -9.0;
+const tableColumnHandleWidth = 24.0;
+const tableColumnHandleHeight = 18.0;
+const tableRowHandleWidth = 18.0;
+const tableRowHandleHeight = 24.0;
+const tableColumnResizeTouchWidth = 24.0;
+const tableColumnResizeVisualWidth = 3.0;
+const tableMinColumnWidth = 40.0;
+const tableCellSelectionBorderWidth = 2.0;
+const tableCellSelectionHandleRadius = 7.0;
+const tableCellSelectionHandleTouchSize = 36.0;
+const tableOverlaySheetOpenDelay = Duration(milliseconds: 40);

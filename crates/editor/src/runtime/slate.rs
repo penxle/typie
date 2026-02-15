@@ -780,6 +780,7 @@ impl Slab {
                 o.start_row_index as u32,
                 o.total_rows as u32,
                 o.is_focused as u32,
+                o.show_cell_selector as u32,
             ]);
             self.write_u32_slice(&[o.col_widths.len() as u32]);
             self.write_f32_slice(&o.col_widths);
