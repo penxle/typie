@@ -1,4 +1,4 @@
-use crate::model::{CONTINUOUS_PAGE_MARGIN, LayoutMode, Node, NodeId, Style};
+use crate::model::{Annotation, CONTINUOUS_PAGE_MARGIN, LayoutMode, Node, NodeId, Style};
 use crate::runtime::{Effect, Runtime};
 use crate::types::Theme;
 use rustc_hash::FxHashSet;
@@ -68,6 +68,8 @@ impl Runtime {
                 .parent()
                 .map(|p| p.node().style_overrides())
                 .unwrap_or_default();
+            let ruby_family = defaults.font_family().to_string();
+            let ruby_weight = defaults.font_weight();
 
             for seg in text_node.text.get_segments() {
                 let family = seg
@@ -103,6 +105,17 @@ impl Runtime {
                 for ch in seg.text.chars() {
                     codepoints.insert(ch as u32);
                     font_cps.insert(ch as u32);
+                }
+
+                for annotation in &seg.annotations {
+                    if let Annotation::Ruby(ruby_ann) = annotation {
+                        let ruby_font_cps =
+                            fonts.entry((ruby_family.clone(), ruby_weight)).or_default();
+                        for ch in ruby_ann.text.chars() {
+                            codepoints.insert(ch as u32);
+                            ruby_font_cps.insert(ch as u32);
+                        }
+                    }
                 }
             }
         }

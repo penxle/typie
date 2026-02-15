@@ -2,6 +2,7 @@ use crate::model::*;
 use crate::runtime::Effect;
 use crate::state::{Position, block_content_len, calculate_block_offsets, collect_blocks_in_range};
 use crate::transaction::Transaction;
+use crate::utils::collect_codepoints;
 use anyhow::{Context, Result};
 
 impl Transaction {
@@ -10,6 +11,11 @@ impl Transaction {
         if selection.is_collapsed() {
             anyhow::bail!("Cannot add annotation to collapsed selection");
         }
+
+        let ruby_codepoints = match &annotation {
+            Annotation::Ruby(ruby) => collect_codepoints(&ruby.text),
+            _ => Vec::new(),
+        };
 
         let ann_type = annotation.as_type();
         let spec = self.doc().schema().annotation_spec(ann_type);
@@ -45,6 +51,18 @@ impl Transaction {
             }
         }
 
+        if !ruby_codepoints.is_empty() {
+            let defaults = self.doc().default_styles();
+            self.push_effect(Effect::FontDetected {
+                family: defaults.font_family().to_string(),
+                weight: defaults.font_weight(),
+                codepoints: ruby_codepoints.clone(),
+            });
+            self.push_effect(Effect::CodepointDetected {
+                codepoints: ruby_codepoints,
+            });
+        }
+
         Ok(())
     }
 
@@ -53,6 +71,11 @@ impl Transaction {
         ann_type: AnnotationType,
         annotation: Annotation,
     ) -> Result<bool> {
+        let ruby_codepoints = match &annotation {
+            Annotation::Ruby(ruby) => collect_codepoints(&ruby.text),
+            _ => Vec::new(),
+        };
+
         let ranges = self.find_annotation_ranges(ann_type);
         if ranges.is_empty() {
             return Ok(false);
@@ -71,6 +94,18 @@ impl Transaction {
                     node_id: text_node_id,
                 });
             }
+        }
+
+        if !ruby_codepoints.is_empty() {
+            let defaults = self.doc().default_styles();
+            self.push_effect(Effect::FontDetected {
+                family: defaults.font_family().to_string(),
+                weight: defaults.font_weight(),
+                codepoints: ruby_codepoints.clone(),
+            });
+            self.push_effect(Effect::CodepointDetected {
+                codepoints: ruby_codepoints,
+            });
         }
 
         Ok(true)
