@@ -130,12 +130,13 @@ impl Runtime {
 
         let anchor = Position::new(anchor_id, anchor_offset, anchor_affinity);
         let head = Position::new(head_id, head_offset, head_affinity);
-        let selection = Selection::new(anchor, head);
+        let selection = self.validate_selection(Selection::new(anchor, head));
 
-        self.state.selection = self.validate_selection(selection);
-        self.state.preferred_x = None;
-
-        vec![Effect::SelectionChanged]
+        self.transact(move |tr| {
+            tr.set_selection(selection);
+            tr.set_preferred_x(None);
+            Ok(true)
+        })
     }
 
     pub(crate) fn handle_collapse_selection(&mut self, to_anchor: bool) -> Vec<Effect> {
