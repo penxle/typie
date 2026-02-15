@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/context/bottom_sheet.dart';
@@ -14,6 +15,9 @@ const _colHandleWidth = 24.0;
 const _colHandleHeight = 18.0;
 const _rowHandleWidth = 18.0;
 const _rowHandleHeight = 24.0;
+const _columnResizeTouchWidth = 24.0;
+const _columnResizeVisualWidth = 3.0;
+const _minColumnWidth = 40.0;
 const _sheetOpenDelay = Duration(milliseconds: 40);
 
 typedef _OverlayDispatch = void Function(Map<String, dynamic> message, {bool requestFocus});
@@ -205,6 +209,16 @@ class _FocusedTableOverlay extends HookWidget {
     return Stack(
       clipBehavior: Clip.none,
       children: [
+        _TableColumnResizer(
+          overlay: overlay,
+          selectedCol: currentCol,
+          pageWidth: pageWidth,
+          onCommit: (nextWidths) => dispatch({
+            'type': 'setColumnWidths',
+            'tableId': overlay.tableId,
+            'colWidths': nextWidths,
+          }, requestFocus: false),
+        ),
         Positioned(
           left: colHandleLeft,
           top: colHandleTop,
@@ -413,6 +427,132 @@ class _FocusedTableOverlay extends HookWidget {
   }
 }
 
+class _TableColumnResizer extends HookWidget {
+  const _TableColumnResizer({
+    required this.overlay,
+    required this.selectedCol,
+    required this.pageWidth,
+    required this.onCommit,
+  });
+
+  final TableOverlayInfo overlay;
+  final int selectedCol;
+  final double pageWidth;
+  final ValueChanged<List<double>> onCommit;
+
+  @override
+  Widget build(BuildContext context) {
+    final resizeDraft = useState<_ColumnResizeDraft?>(null);
+    final activeResizePointer = useState<int?>(null);
+
+    useEffect(() {
+      final draft = resizeDraft.value;
+      if (draft == null) {
+        return null;
+      }
+      final shouldReset =
+          draft.tableId != overlay.tableId ||
+          draft.colIndex >= overlay.colWidths.length ||
+          draft.initialWidths.length != overlay.colWidths.length;
+      if (shouldReset) {
+        resizeDraft.value = null;
+        activeResizePointer.value = null;
+      }
+      return null;
+    }, [resizeDraft.value, overlay.tableId, overlay.colWidths.length]);
+
+    final draft = resizeDraft.value;
+    final isResizing = draft != null;
+    final resizeCol = (isResizing ? draft.colIndex : selectedCol).clamp(0, overlay.colWidths.length - 1);
+    final resizeDelta = isResizing ? _clampColumnResizeDelta(draft.initialWidths, draft.colIndex, draft.deltaX) : 0.0;
+    final resizeHandleCenterX = overlay.bounds.x + _colRight(overlay, resizeCol) + resizeDelta;
+    final resizeHandleLeft = _clampDouble(
+      resizeHandleCenterX - _columnResizeTouchWidth / 2,
+      0,
+      math.max(0, pageWidth - _columnResizeTouchWidth),
+    );
+
+    void beginColumnResize(PointerDownEvent event) {
+      if (activeResizePointer.value != null) {
+        return;
+      }
+      activeResizePointer.value = event.pointer;
+      resizeDraft.value = _ColumnResizeDraft(
+        tableId: overlay.tableId,
+        colIndex: selectedCol,
+        startX: event.position.dx,
+        initialWidths: List<double>.from(overlay.colWidths),
+        deltaX: 0,
+      );
+    }
+
+    void updateColumnResize(PointerMoveEvent event) {
+      if (event.pointer != activeResizePointer.value) {
+        return;
+      }
+      final current = resizeDraft.value;
+      if (current == null) {
+        return;
+      }
+      resizeDraft.value = current.copyWith(deltaX: event.position.dx - current.startX);
+    }
+
+    void endColumnResize(PointerEvent event) {
+      if (event.pointer != activeResizePointer.value) {
+        return;
+      }
+      activeResizePointer.value = null;
+      final current = resizeDraft.value;
+      if (current == null) {
+        return;
+      }
+      final nextWidths = _applyColumnResizeDelta(current.initialWidths, current.colIndex, current.deltaX);
+      resizeDraft.value = null;
+      if (!_hasWidthChange(current.initialWidths, nextWidths)) {
+        return;
+      }
+      onCommit(nextWidths);
+    }
+
+    return Positioned(
+      left: resizeHandleLeft,
+      top: overlay.bounds.y,
+      child: RawGestureDetector(
+        behavior: HitTestBehavior.opaque,
+        gestures: {
+          EagerGestureRecognizer: GestureRecognizerFactoryWithHandlers<EagerGestureRecognizer>(
+            EagerGestureRecognizer.new,
+            (EagerGestureRecognizer instance) {},
+          ),
+        },
+        child: Listener(
+          behavior: HitTestBehavior.opaque,
+          onPointerDown: beginColumnResize,
+          onPointerMove: updateColumnResize,
+          onPointerUp: endColumnResize,
+          onPointerCancel: endColumnResize,
+          child: SizedBox(
+            width: _columnResizeTouchWidth,
+            height: overlay.bounds.height,
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: Container(
+                margin: const EdgeInsets.only(top: 2),
+                width: _columnResizeVisualWidth,
+                height: math.max(0, overlay.bounds.height - 4),
+                decoration: BoxDecoration(
+                  color: isResizing ? context.colors.accentBrand : context.colors.accentBrand.withValues(alpha: 0.35),
+                  borderRadius: BorderRadius.circular(_columnResizeVisualWidth),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _SelectorHandleButton extends StatelessWidget {
   const _SelectorHandleButton({required this.width, required this.height, required this.icon, required this.onTap});
 
@@ -450,6 +590,32 @@ class _TableCellIndex {
   final int col;
 }
 
+class _ColumnResizeDraft {
+  const _ColumnResizeDraft({
+    required this.tableId,
+    required this.colIndex,
+    required this.startX,
+    required this.initialWidths,
+    required this.deltaX,
+  });
+
+  final String tableId;
+  final int colIndex;
+  final double startX;
+  final List<double> initialWidths;
+  final double deltaX;
+
+  _ColumnResizeDraft copyWith({double? deltaX}) {
+    return _ColumnResizeDraft(
+      tableId: tableId,
+      colIndex: colIndex,
+      startX: startX,
+      initialWidths: initialWidths,
+      deltaX: deltaX ?? this.deltaX,
+    );
+  }
+}
+
 int _defaultRow(TableOverlayInfo overlay) {
   return overlay.startRowIndex.clamp(0, overlay.totalRows - 1);
 }
@@ -477,11 +643,65 @@ double _colLeft(TableOverlayInfo overlay, int colIndex) {
   return overlay.colPositions[colIndex - 1];
 }
 
+double _colRight(TableOverlayInfo overlay, int colIndex) {
+  if (colIndex < 0) {
+    return 0;
+  }
+  if (colIndex >= overlay.colPositions.length) {
+    return overlay.bounds.width;
+  }
+  return overlay.colPositions[colIndex];
+}
+
 double _rowTop(TableOverlayInfo overlay, int localRowIndex) {
   if (localRowIndex <= 0) {
     return 0;
   }
   return overlay.rowPositions[localRowIndex - 1];
+}
+
+double _clampColumnResizeDelta(List<double> widths, int colIndex, double deltaX) {
+  if (widths.isEmpty || colIndex < 0 || colIndex >= widths.length) {
+    return 0;
+  }
+
+  final minDelta = _minColumnWidth - widths[colIndex];
+  if (colIndex == widths.length - 1) {
+    return math.max(minDelta, deltaX);
+  }
+
+  final maxDelta = widths[colIndex + 1] - _minColumnWidth;
+  return _clampDouble(deltaX, minDelta, maxDelta);
+}
+
+List<double> _applyColumnResizeDelta(List<double> initialWidths, int colIndex, double deltaX) {
+  if (initialWidths.isEmpty || colIndex < 0 || colIndex >= initialWidths.length) {
+    return initialWidths;
+  }
+
+  final next = List<double>.from(initialWidths);
+  final clampedDelta = _clampColumnResizeDelta(initialWidths, colIndex, deltaX);
+
+  if (colIndex == next.length - 1) {
+    next[colIndex] = next[colIndex] + clampedDelta;
+    return next;
+  }
+
+  next[colIndex] = next[colIndex] + clampedDelta;
+  next[colIndex + 1] = next[colIndex + 1] - clampedDelta;
+  return next;
+}
+
+bool _hasWidthChange(List<double> before, List<double> after) {
+  if (before.length != after.length) {
+    return true;
+  }
+  for (var i = 0; i < before.length; i++) {
+    if ((before[i] - after[i]).abs() > 0.01) {
+      return true;
+    }
+  }
+  return false;
 }
 
 _TableCellIndex? _focusedCellFromCursor(TableOverlayInfo overlay, CursorInfo? cursor) {
