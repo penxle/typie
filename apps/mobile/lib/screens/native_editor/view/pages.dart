@@ -761,10 +761,10 @@ class _PageSlot extends HookWidget {
       return () => verticalScrollController.removeListener(updateVisibility);
     }, [verticalScrollController, pageTop, pageBottom]);
 
-    final slotHeight = pageBottom - pageTop;
+    final pageHeight = pageBottom - pageTop;
 
     if (!visible.value) {
-      return SizedBox(height: slotHeight);
+      return SizedBox(height: pageHeight + scope.geometry.gapAfterPage(pageIndex));
     }
 
     return PageItem(pageIndex: pageIndex);
