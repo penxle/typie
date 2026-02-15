@@ -16,9 +16,6 @@ class NativeEditorFontWeightTextOptionsToolbar extends HookWidget {
 
     final fontFamilyAttr = findAttr(attrs, 'font_family');
     final fontFamilyValues = (fontFamilyAttr?['values'] as List?)?.whereType<String>().toList() ?? [];
-    final currentFontFamily = fontFamilyValues.length == 1
-        ? fontFamilyValues[0]
-        : editorDefaultValues['fontFamily'] as String;
 
     final fontWeightAttr = findAttr(attrs, 'font_weight');
     final fontWeightValues = (fontWeightAttr?['values'] as List?)?.whereType<int>().toList() ?? [];
@@ -26,7 +23,7 @@ class NativeEditorFontWeightTextOptionsToolbar extends HookWidget {
         ? fontWeightValues[0]
         : (fontWeightValues.isEmpty ? editorDefaultValues['fontWeight'] as int : null);
 
-    final currentFontFamilyAndWeights = _getCurrentFontFamilyAndWeights(currentFontFamily);
+    final currentFontFamilyAndWeights = _getCurrentFontFamilyAndWeights(fontFamilyValues);
 
     final availableWeightItems = editorValues['fontWeight']!
         .where((item) => currentFontFamilyAndWeights.weights.contains(item['value'] as int))
@@ -50,9 +47,9 @@ class NativeEditorFontWeightTextOptionsToolbar extends HookWidget {
     );
   }
 
-  ({String family, List<int> weights}) _getCurrentFontFamilyAndWeights(String? fontFamilyOrId) {
+  ({String? family, List<int> weights}) _getCurrentFontFamilyAndWeights(List<String> fontFamilyValues) {
     final defaultFontFamilyAndWeights = (
-      family: editorDefaultValues['fontFamily'] as String,
+      family: editorDefaultValues['fontFamily'] as String?,
       weights:
           (editorValues['fontFamily']!.firstWhere((f) => f['value'] == editorDefaultValues['fontFamily'])['weights']
                   as List)
@@ -61,18 +58,31 @@ class NativeEditorFontWeightTextOptionsToolbar extends HookWidget {
             ..sort(),
     );
 
-    if (fontFamilyOrId == null) {
+    if (fontFamilyValues.isEmpty) {
       return defaultFontFamilyAndWeights;
     }
 
-    final systemFont = editorValues['fontFamily']!.firstWhereOrNull((f) => f['value'] == fontFamilyOrId);
-    if (systemFont != null) {
-      return (
-        family: systemFont['value'] as String,
-        weights: ((systemFont['weights'] as List?)?.cast<int>() ?? [])..sort(),
-      );
+    if (fontFamilyValues.length == 1) {
+      final systemFont = editorValues['fontFamily']!.firstWhereOrNull((f) => f['value'] == fontFamilyValues[0]);
+      if (systemFont != null) {
+        return (
+          family: systemFont['value'] as String?,
+          weights: ((systemFont['weights'] as List?)?.cast<int>() ?? [])..sort(),
+        );
+      }
+      return defaultFontFamilyAndWeights;
     }
 
-    return defaultFontFamilyAndWeights;
+    final allWeights = <int>{};
+    for (final familyValue in fontFamilyValues) {
+      final systemFont = editorValues['fontFamily']!.firstWhereOrNull((f) => f['value'] == familyValue);
+      if (systemFont != null) {
+        allWeights.addAll((systemFont['weights'] as List?)?.cast<int>() ?? []);
+      }
+    }
+
+    if (allWeights.isEmpty) return defaultFontFamilyAndWeights;
+
+    return (family: null, weights: allWeights.toList()..sort());
   }
 }
