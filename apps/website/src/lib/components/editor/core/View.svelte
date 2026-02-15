@@ -5,6 +5,7 @@
   import { setupTypewriter } from '$lib/editor/typewriter.svelte';
   import ContextMenu from './ContextMenu.svelte';
   import Cursor from './Cursor.svelte';
+  import DocumentOverlayLayer from './DocumentOverlayLayer.svelte';
   import DocumentPlaceholder from './DocumentPlaceholder.svelte';
   import Input from './Input.svelte';
   import LineHighlight from './LineHighlight.svelte';
@@ -121,6 +122,7 @@
   style:padding-right="{viewPadding}px"
   style:gap={isPaginated ? `${PAGE_GAP}px` : '0'}
   class={flex({
+    position: 'relative',
     direction: 'column',
     align: 'center',
     grow: '1',
@@ -179,6 +181,7 @@
   {#each editor.layout.pages, i}
     <Page page={i} bind:containerEl={containerEls[i]} />
   {/each}
+  <DocumentOverlayLayer />
 </div>
 
 {#if !editor.readOnly}

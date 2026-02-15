@@ -42,15 +42,13 @@ struct ContinuousTableOverlayAccum {
     border_style: String,
     align: String,
     first_page_idx: usize,
-    focused_page_idx: Option<usize>,
+    is_focused: bool,
     min_x: f32,
     max_right: f32,
     global_top: f32,
     global_bottom: f32,
     col_widths: Vec<f32>,
     row_heights: Vec<Option<f32>>,
-    total_rows: usize,
-    is_focused: bool,
 }
 
 impl ContinuousTableOverlayAccum {
@@ -63,24 +61,21 @@ impl ContinuousTableOverlayAccum {
             border_style: segment.border_style,
             align: segment.align,
             first_page_idx: segment.page_idx,
-            focused_page_idx: segment.is_focused.then_some(segment.page_idx),
+            is_focused: segment.is_focused,
             min_x: segment.bounds.x,
             max_right: segment.bounds.x + segment.bounds.width,
             global_top,
             global_bottom,
             col_widths: segment.col_widths,
             row_heights: vec![None; segment.total_rows],
-            total_rows: segment.total_rows,
-            is_focused: segment.is_focused,
         };
         this.apply_segment_rows(segment.start_row_index, &segment.row_heights);
         this
     }
 
     fn absorb(&mut self, segment: ContinuousTableOverlaySegment) {
-        if segment.total_rows > self.total_rows {
+        if segment.total_rows > self.row_heights.len() {
             self.row_heights.resize(segment.total_rows, None);
-            self.total_rows = segment.total_rows;
         }
 
         self.apply_segment_rows(segment.start_row_index, &segment.row_heights);
@@ -93,21 +88,18 @@ impl ContinuousTableOverlayAccum {
         let global_bottom = global_top + segment.bounds.height;
 
         self.first_page_idx = self.first_page_idx.min(segment.page_idx);
+        if segment.is_focused {
+            self.is_focused = true;
+        }
         self.min_x = self.min_x.min(segment.bounds.x);
         self.max_right = self.max_right.max(segment.bounds.x + segment.bounds.width);
         self.global_top = self.global_top.min(global_top);
         self.global_bottom = self.global_bottom.max(global_bottom);
-
-        if segment.is_focused {
-            self.is_focused = true;
-            self.focused_page_idx = Some(segment.page_idx);
-        }
     }
 
     fn into_overlay(self, page_offsets: &[f32]) -> TableOverlay {
         let anchor_page_idx = self
-            .focused_page_idx
-            .unwrap_or(self.first_page_idx)
+            .first_page_idx
             .min(page_offsets.len().saturating_sub(1));
         let anchor_offset = page_offsets[anchor_page_idx];
 
@@ -117,6 +109,10 @@ impl ContinuousTableOverlayAccum {
             .into_iter()
             .map(|h| h.unwrap_or(fallback_row_height))
             .collect::<Vec<_>>();
+        let row_positions = table_row_positions(&row_heights);
+        let col_positions = table_col_positions(&self.col_widths);
+        let total_rows = row_heights.len();
+        let is_focused = self.is_focused;
 
         TableOverlay {
             page_idx: anchor_page_idx,
@@ -129,13 +125,13 @@ impl ContinuousTableOverlayAccum {
             },
             border_style: self.border_style,
             align: self.align,
-            col_widths: self.col_widths.clone(),
-            col_positions: table_col_positions(&self.col_widths),
-            row_heights: row_heights.clone(),
-            row_positions: table_row_positions(&row_heights),
+            col_widths: self.col_widths,
+            col_positions,
+            row_heights,
+            row_positions,
             start_row_index: 0,
-            total_rows: self.total_rows,
-            is_focused: self.is_focused,
+            total_rows,
+            is_focused,
         }
     }
 
@@ -510,13 +506,13 @@ mod tests {
         assert_eq!(merged.len(), 1);
         let m = &merged[0];
         assert_eq!(m.table_id, "table-1");
-        assert_eq!(m.page_idx, 1);
+        assert_eq!(m.page_idx, 0);
         assert!(m.is_focused);
         assert_eq!(m.start_row_index, 0);
         assert_eq!(m.total_rows, 5);
         assert_eq!(m.row_heights, vec![40.0, 40.0, 40.0, 40.0, 40.0]);
         assert_eq!(m.row_positions, vec![40.0, 80.0, 120.0, 160.0, 200.0]);
-        assert!((m.bounds.y + 124.0).abs() < 0.01);
+        assert!((m.bounds.y - 900.0).abs() < 0.01);
         assert!((m.bounds.height - 208.0).abs() < 0.01);
     }
 }

@@ -8,6 +8,7 @@ import 'package:typie/context/theme.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/screens/native_editor/state/state.dart';
 import 'package:typie/screens/native_editor/table/models.dart';
+import 'package:typie/screens/native_editor/view/document_overlay_layer.dart';
 import 'package:typie/screens/native_editor/view/scope.dart';
 
 const _handleGap = -9.0;
@@ -19,22 +20,23 @@ const _columnResizeTouchWidth = 24.0;
 const _columnResizeVisualWidth = 3.0;
 const _minColumnWidth = 40.0;
 const _sheetOpenDelay = Duration(milliseconds: 40);
-
 typedef _OverlayDispatch = void Function(Map<String, dynamic> message, {bool requestFocus});
 
 class TableOverlay extends HookWidget {
-  const TableOverlay({required this.pageIndex, super.key});
-
-  final int pageIndex;
+  const TableOverlay({super.key});
 
   @override
   Widget build(BuildContext context) {
     final scope = ContentScope.of(context);
     final overlays = useValueListenable(scope.controller.tableOverlays);
+    final layout = scope.controller.state.layout;
+    if (layout == null || layout.pages.isEmpty) {
+      return const SizedBox.shrink();
+    }
 
     TableOverlayInfo? focused;
     for (final overlay in overlays) {
-      if (overlay.pageIdx == pageIndex && overlay.isFocused) {
+      if (overlay.isFocused) {
         focused = overlay;
         break;
       }
@@ -43,8 +45,25 @@ class TableOverlay extends HookWidget {
     if (focused == null) {
       return const SizedBox.shrink();
     }
+    final focusedOverlay = focused;
 
-    return Positioned.fill(child: _FocusedTableOverlay(overlay: focused));
+    return DocumentOverlayLayer(
+      builder: (context, viewport) {
+        if (!viewport.hasPage(focusedOverlay.pageIdx)) {
+          return const SizedBox.shrink();
+        }
+        final pageRect = viewport.pageRect(focusedOverlay.pageIdx);
+        final overlayWidth = math.max(pageRect.width, focusedOverlay.bounds.x + focusedOverlay.bounds.width + 24);
+        final overlayHeight = math.max(pageRect.height, focusedOverlay.bounds.y + focusedOverlay.bounds.height + 24);
+        return Positioned(
+          left: pageRect.left,
+          top: pageRect.top,
+          width: overlayWidth,
+          height: overlayHeight,
+          child: _FocusedTableOverlay(overlay: focusedOverlay),
+        );
+      },
+    );
   }
 }
 
@@ -59,8 +78,16 @@ class _FocusedTableOverlay extends HookWidget {
     useListenable(scope.controller);
 
     final page = scope.controller.state.layout?.pages.elementAtOrNull(overlay.pageIdx);
-    final pageWidth = page?.width ?? overlay.bounds.x + overlay.bounds.width + 24;
-    final pageHeight = page?.height ?? overlay.bounds.y + overlay.bounds.height + 24;
+    final layout = scope.controller.state.layout;
+    final renderBounds = overlay.bounds;
+    final pageWidth = math.max(
+      page?.width ?? renderBounds.x + renderBounds.width + 24,
+      renderBounds.x + renderBounds.width + 24,
+    );
+    final pageHeight = math.max(
+      page?.height ?? renderBounds.y + renderBounds.height + 24,
+      renderBounds.y + renderBounds.height + 24,
+    );
     final cursor = scope.controller.state.cursor;
     final hasOverlayGeometry =
         overlay.colWidths.isNotEmpty &&
@@ -74,7 +101,7 @@ class _FocusedTableOverlay extends HookWidget {
       if (!hasOverlayGeometry) {
         return null;
       }
-      final focused = _focusedCellFromCursor(overlay, cursor);
+      final focused = _focusedCellFromCursor(overlay, cursor, layout);
       selectedRow.value = focused?.row ?? _defaultRow(overlay);
       selectedCol.value = focused?.col ?? 0;
       return null;
@@ -94,7 +121,7 @@ class _FocusedTableOverlay extends HookWidget {
         if (!hasOverlayGeometry) {
           return null;
         }
-        final focused = _focusedCellFromCursor(overlay, cursor);
+        final focused = _focusedCellFromCursor(overlay, cursor, layout);
         if (focused == null) {
           return null;
         }
@@ -112,15 +139,17 @@ class _FocusedTableOverlay extends HookWidget {
         cursor?.y,
         cursor?.height,
         cursor?.visible,
-        overlay.bounds.x,
-        overlay.bounds.y,
-        overlay.bounds.width,
-        overlay.bounds.height,
+        renderBounds.x,
+        renderBounds.y,
+        renderBounds.width,
+        renderBounds.height,
         overlay.startRowIndex,
         overlay.totalRows,
         overlay.colPositions.length,
         overlay.rowPositions.length,
         hasOverlayGeometry,
+        layout?.isPaginated,
+        layout?.pages.length,
       ],
     );
 
@@ -162,24 +191,24 @@ class _FocusedTableOverlay extends HookWidget {
     final selectedRowHeight = isSelectedRowVisible ? overlay.rowHeights[selectedRowLocal] : 0.0;
 
     final colHandleLeft = _clampDouble(
-      overlay.bounds.x + selectedColLeft + (selectedColWidth - _colHandleWidth) / 2,
+      renderBounds.x + selectedColLeft + (selectedColWidth - _colHandleWidth) / 2,
       4,
       math.max(4, pageWidth - _colHandleWidth - 4),
     );
     final colHandleTop = _clampDouble(
-      overlay.bounds.y - _colHandleHeight - _handleGap,
+      renderBounds.y - _colHandleHeight - _handleGap,
       4,
       math.max(4, pageHeight - _colHandleHeight - 4),
     );
 
     final rowHandleLeft = _clampDouble(
-      overlay.bounds.x - _rowHandleWidth - _handleGap,
+      renderBounds.x - _rowHandleWidth - _handleGap,
       4,
       math.max(4, pageWidth - _rowHandleWidth - 4),
     );
     final rowHandleTop = isSelectedRowVisible
         ? _clampDouble(
-            overlay.bounds.y + selectedRowTop + (selectedRowHeight - _rowHandleHeight) / 2,
+            renderBounds.y + selectedRowTop + (selectedRowHeight - _rowHandleHeight) / 2,
             4,
             math.max(4, pageHeight - _rowHandleHeight - 4),
           )
@@ -211,6 +240,7 @@ class _FocusedTableOverlay extends HookWidget {
       children: [
         _TableColumnResizer(
           overlay: overlay,
+          renderBounds: renderBounds,
           selectedCol: currentCol,
           pageWidth: pageWidth,
           onCommit: (nextWidths) => dispatch({
@@ -430,12 +460,14 @@ class _FocusedTableOverlay extends HookWidget {
 class _TableColumnResizer extends HookWidget {
   const _TableColumnResizer({
     required this.overlay,
+    required this.renderBounds,
     required this.selectedCol,
     required this.pageWidth,
     required this.onCommit,
   });
 
   final TableOverlayInfo overlay;
+  final TableOverlayBounds renderBounds;
   final int selectedCol;
   final double pageWidth;
   final ValueChanged<List<double>> onCommit;
@@ -465,7 +497,7 @@ class _TableColumnResizer extends HookWidget {
     final isResizing = draft != null;
     final resizeCol = (isResizing ? draft.colIndex : selectedCol).clamp(0, overlay.colWidths.length - 1);
     final resizeDelta = isResizing ? _clampColumnResizeDelta(draft.initialWidths, draft.colIndex, draft.deltaX) : 0.0;
-    final resizeHandleCenterX = overlay.bounds.x + _colRight(overlay, resizeCol) + resizeDelta;
+    final resizeHandleCenterX = renderBounds.x + _colRight(overlay, resizeCol) + resizeDelta;
     final resizeHandleLeft = _clampDouble(
       resizeHandleCenterX - _columnResizeTouchWidth / 2,
       0,
@@ -516,7 +548,7 @@ class _TableColumnResizer extends HookWidget {
 
     return Positioned(
       left: resizeHandleLeft,
-      top: overlay.bounds.y,
+      top: renderBounds.y,
       child: RawGestureDetector(
         behavior: HitTestBehavior.opaque,
         gestures: {
@@ -533,13 +565,13 @@ class _TableColumnResizer extends HookWidget {
           onPointerCancel: endColumnResize,
           child: SizedBox(
             width: _columnResizeTouchWidth,
-            height: overlay.bounds.height,
+            height: renderBounds.height,
             child: Align(
               alignment: Alignment.topCenter,
               child: Container(
                 margin: const EdgeInsets.only(top: 2),
                 width: _columnResizeVisualWidth,
-                height: math.max(0, overlay.bounds.height - 4),
+                height: math.max(0, renderBounds.height - 4),
                 decoration: BoxDecoration(
                   color: isResizing ? context.colors.accentBrand : context.colors.accentBrand.withValues(alpha: 0.35),
                   borderRadius: BorderRadius.circular(_columnResizeVisualWidth),
@@ -704,8 +736,27 @@ bool _hasWidthChange(List<double> before, List<double> after) {
   return false;
 }
 
-_TableCellIndex? _focusedCellFromCursor(TableOverlayInfo overlay, CursorInfo? cursor) {
-  if (cursor == null || !cursor.visible || cursor.pageIdx != overlay.pageIdx) {
+double _pageTopOffset(LayoutInfo layout, int pageIdx) {
+  if (layout.pages.isEmpty) {
+    return 0;
+  }
+
+  final clamped = pageIdx.clamp(0, layout.pages.length - 1);
+  var top = 0.0;
+  for (var i = 0; i < clamped; i++) {
+    top += layout.pages[i].height;
+    if (layout.isPaginated && i < layout.pages.length - 1) {
+      top += 24.0;
+    }
+  }
+  return top;
+}
+
+_TableCellIndex? _focusedCellFromCursor(TableOverlayInfo overlay, CursorInfo? cursor, LayoutInfo? layout) {
+  if (cursor == null || !cursor.visible) {
+    return null;
+  }
+  if (layout == null) {
     return null;
   }
   if (overlay.colPositions.isEmpty || overlay.rowPositions.isEmpty) {
@@ -713,7 +764,22 @@ _TableCellIndex? _focusedCellFromCursor(TableOverlayInfo overlay, CursorInfo? cu
   }
 
   final localX = cursor.x - overlay.bounds.x;
-  final localY = cursor.y + cursor.height * 0.5 - overlay.bounds.y;
+  final localY = layout.isPaginated
+      ? (() {
+          if (cursor.pageIdx != overlay.pageIdx) {
+            return double.nan;
+          }
+          return cursor.y + cursor.height * 0.5 - overlay.bounds.y;
+        })()
+      : (() {
+          final overlayTop = _pageTopOffset(layout, overlay.pageIdx) + overlay.bounds.y;
+          final cursorMid = _pageTopOffset(layout, cursor.pageIdx) + cursor.y + cursor.height * 0.5;
+          return cursorMid - overlayTop;
+        })();
+
+  if (localY.isNaN) {
+    return null;
+  }
   if (localX < 0 || localY < 0 || localX > overlay.bounds.width || localY > overlay.bounds.height) {
     return null;
   }

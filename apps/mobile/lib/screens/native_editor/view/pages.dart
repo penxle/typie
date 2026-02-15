@@ -13,6 +13,7 @@ import 'package:typie/screens/native_editor/view/gesture.dart';
 import 'package:typie/screens/native_editor/view/page.dart';
 import 'package:typie/screens/native_editor/view/scope.dart';
 import 'package:typie/screens/native_editor/view/selection.dart';
+import 'package:typie/screens/native_editor/view/table_overlay.dart';
 import 'package:typie/screens/native_editor/view/title.dart';
 import 'package:typie/services/preference.dart';
 
@@ -681,6 +682,7 @@ class PageList extends HookWidget {
                 },
                 child: gestureDetector,
               ),
+              const TableOverlay(),
               ListenableBuilder(
                 listenable: Listenable.merge([
                   verticalScrollController,
