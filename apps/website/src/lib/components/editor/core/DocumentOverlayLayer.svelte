@@ -1,10 +1,13 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
+  import { tick } from 'svelte';
   import { SvelteMap } from 'svelte/reactivity';
   import { getEditorContext } from '$lib/editor/context.svelte';
   import TableOverlay from './TableOverlay.svelte';
 
   const { editor } = getEditorContext();
+
+  let layoutRefreshVersion = $state(0);
 
   const tableOverlaysByPage = $derived.by(() => {
     const grouped = new SvelteMap<number, typeof editor.tableOverlays>();
@@ -17,6 +20,22 @@
       }
     }
     return [...grouped.entries()];
+  });
+
+  $effect(() => {
+    void editor.layout.layoutMode;
+
+    let disposed = false;
+
+    void (async () => {
+      await tick();
+      if (disposed) return;
+      layoutRefreshVersion += 1;
+    })();
+
+    return () => {
+      disposed = true;
+    };
   });
 
   function pageOffset(pageIdx: number): { left: number; top: number } | null {
@@ -43,25 +62,27 @@
       zIndex: '2',
     })}
   >
-    {#each tableOverlaysByPage as [pageIdx, overlays] (`table-page-${pageIdx}`)}
-      {@const page = editor.layout.pages[pageIdx]}
-      {@const offset = pageOffset(pageIdx)}
-      {#if page && offset}
-        <div
-          style:left={`${offset.left}px`}
-          style:top={`${offset.top}px`}
-          style:width={`${page.width}px`}
-          style:height={`${page.height}px`}
-          class={css({
-            position: 'absolute',
-            pointerEvents: 'none',
-          })}
-        >
-          {#each overlays as overlay (`${overlay.tableId}-${overlay.startRowIndex}`)}
-            <TableOverlay {editor} {overlay} />
-          {/each}
-        </div>
-      {/if}
-    {/each}
+    {#key layoutRefreshVersion}
+      {#each tableOverlaysByPage as [pageIdx, overlays] (`table-page-${pageIdx}`)}
+        {@const page = editor.layout.pages[pageIdx]}
+        {@const offset = pageOffset(pageIdx)}
+        {#if page && offset}
+          <div
+            style:left={`${offset.left}px`}
+            style:top={`${offset.top}px`}
+            style:width={`${page.width}px`}
+            style:height={`${page.height}px`}
+            class={css({
+              position: 'absolute',
+              pointerEvents: 'none',
+            })}
+          >
+            {#each overlays as overlay (`${overlay.tableId}-${overlay.startRowIndex}`)}
+              <TableOverlay {editor} {overlay} />
+            {/each}
+          </div>
+        {/if}
+      {/each}
+    {/key}
   </div>
 {/if}
