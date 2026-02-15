@@ -433,6 +433,52 @@ mod tests {
     }
 
     #[test]
+    fn drag_and_drop_into_fold_title_selects_dropped_text() {
+        // Paragraph 텍스트를 FoldTitle로 드래그 앤 드롭하면,
+        // 드롭된 텍스트 전체가 선택되어야 한다.
+        let mut p = id!();
+        let mut ft = id!();
+
+        let initial = state! {
+            doc {
+                @p paragraph {
+                    text { "본문 텍스트" }
+                }
+                fold {
+                    @ft fold_title {}
+                    fold_content {
+                        paragraph {}
+                    }
+                }
+            }
+            selection { (p, 0) -> (p, 6) }
+        };
+
+        let actual = transact!(initial, |tr| {
+            tr.drag_and_drop(Position::new(ft, 0, Affinity::Downstream))
+                .unwrap();
+        });
+
+        let sel = actual.selection;
+        let (anchor_offset, head_offset) = if sel.anchor_before_head(&actual.doc) {
+            (sel.anchor.offset, sel.head.offset)
+        } else {
+            (sel.head.offset, sel.anchor.offset)
+        };
+
+        assert_eq!(
+            anchor_offset, 0,
+            "selection start should be 0, but was {}",
+            anchor_offset,
+        );
+        assert_eq!(
+            head_offset, 6,
+            "selection end should be 6, but was {}",
+            head_offset,
+        );
+    }
+
+    #[test]
     fn test_drag_and_drop_rectangular_table_selection() {
         let mut t = id!();
         let mut p_out = id!();
