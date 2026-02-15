@@ -100,21 +100,39 @@ fn border_dash(style: TableBorderStyle) -> Option<StrokeDash> {
     }
 }
 
-fn continuous_draw_spec(element: &TableBorderElement) -> BorderDrawSpec {
+fn continuous_draw_spec(element: &TableBorderElement, transform: Transform) -> BorderDrawSpec {
     let half = TABLE_BORDER_WIDTH / 2.0;
     let range = continuous_border_range(element);
+    let draw_top = !is_split_top_fragment(transform);
+    let horizontal_top = if draw_top {
+        range.top
+    } else {
+        top_clip_for_split_fragment(transform).unwrap_or(range.top)
+    };
 
     BorderDrawSpec {
         left: element.x_offset + half,
         right: element.x_offset + element.size.width - half,
-        horizontal_top: range.top,
+        horizontal_top,
         horizontal_bottom: range.bottom,
         vertical_top: range.top,
         vertical_bottom: range.bottom,
         row_start: TABLE_BORDER_WIDTH - element.offset,
-        draw_top: true,
+        draw_top,
         draw_bottom: true,
     }
+}
+
+fn is_split_top_fragment(transform: Transform) -> bool {
+    transform.sy.abs() > f32::EPSILON && transform.ty < -0.001 * transform.sy.abs()
+}
+
+fn top_clip_for_split_fragment(transform: Transform) -> Option<f32> {
+    if transform.sy.abs() <= f32::EPSILON {
+        return None;
+    }
+    let element_top = transform.ty / transform.sy;
+    Some(-element_top + TABLE_BORDER_WIDTH / 2.0)
 }
 
 fn paginated_draw_spec(element: &TableBorderElement, layout_mode: &LayoutMode) -> BorderDrawSpec {
@@ -152,10 +170,19 @@ fn draw_outer_lines(pb: &mut PathBuilder, spec: BorderDrawSpec) {
 }
 
 fn draw_row_lines(pb: &mut PathBuilder, spec: BorderDrawSpec, row_heights: &[f32]) {
+    const EDGE_EPSILON: f32 = 0.001;
     let mut y = spec.row_start;
+    let min_y = if spec.draw_top {
+        spec.vertical_top
+    } else {
+        spec.horizontal_top
+    };
     for (idx, row_height) in row_heights.iter().enumerate() {
         y += *row_height;
-        if idx < row_heights.len() - 1 {
+        if idx < row_heights.len() - 1
+            && y > min_y + EDGE_EPSILON
+            && y < spec.vertical_bottom - EDGE_EPSILON
+        {
             pb.move_to(spec.left, y);
             pb.line_to(spec.right, y);
         }
@@ -207,11 +234,10 @@ impl Render for TableBorderElement {
 
                 let mut pb = PathBuilder::new();
 
-                let spec = match ctx.doc.settings().layout_mode {
-                    LayoutMode::Continuous { .. } => continuous_draw_spec(self),
-                    LayoutMode::Paginated { .. } => {
-                        paginated_draw_spec(self, &ctx.doc.settings().layout_mode)
-                    }
+                let layout_mode = ctx.doc.settings().layout_mode;
+                let spec = match layout_mode {
+                    LayoutMode::Continuous { .. } => continuous_draw_spec(self, transform),
+                    LayoutMode::Paginated { .. } => paginated_draw_spec(self, &layout_mode),
                 };
 
                 draw_outer_lines(&mut pb, spec);
@@ -379,5 +405,39 @@ mod tests {
 
         assert_eq!(range.top, TABLE_BORDER_WIDTH / 2.0 - 40.0);
         assert_eq!(range.bottom, 121.5 - 40.0);
+    }
+
+    #[test]
+    fn continuous_draw_spec_encodes_row_clip_without_cutting_verticals() {
+        let spec = continuous_draw_spec(
+            &TableBorderElement {
+                size: crate::types::Size::new(200.0, 120.0),
+                node_id: crate::model::NodeId::new(),
+                border_style: TableBorderStyle::Solid,
+                align: crate::model::TableAlign::Left,
+                rows: 3,
+                cols: 2,
+                row_heights: vec![40.0, 40.0, 40.0],
+                col_widths: vec![99.0, 99.0],
+                split_edges: SplitEdges::default(),
+                offset: 0.0,
+                x_offset: 0.0,
+                start_row_index: 0,
+                total_rows: 3,
+            },
+            Transform::from_scale(2.0, 2.0).pre_translate(0.0, -501.0),
+        );
+
+        assert!(!spec.draw_top);
+        assert!((spec.horizontal_top - 501.5).abs() < 0.01);
+        assert_eq!(spec.vertical_top, TABLE_BORDER_WIDTH / 2.0);
+    }
+
+    #[test]
+    fn top_clip_for_split_fragment_respects_transform_translation() {
+        let transform = Transform::from_scale(2.0, 2.0).pre_translate(0.0, -501.0);
+        let top_clip = top_clip_for_split_fragment(transform).unwrap();
+
+        assert!((top_clip - 501.5).abs() < 0.01);
     }
 }
