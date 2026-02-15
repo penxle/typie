@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui' as ui;
 
 import 'package:flutter/scheduler.dart';
 import 'package:typie/native/slate_reader.dart';
@@ -7,17 +6,14 @@ import 'package:typie/screens/native_editor/handler/command.dart';
 import 'package:typie/screens/native_editor/state/controller.dart';
 
 class TickerLoop {
-  TickerLoop({required this.getController, required this.tickerProvider, required this.getSize});
+  TickerLoop({required this.getController, required this.tickerProvider});
 
   static const _tickInterval = Duration(milliseconds: 16);
 
   final EditorController Function() getController;
   final TickerProvider tickerProvider;
-  final (double, double) Function() getSize;
 
   Ticker? _ticker;
-  (double, double, double)? _lastSize;
-  double _cachedScaleFactor = 0;
   Duration _lastTickTime = Duration.zero;
   bool _flushPending = false;
 
@@ -27,7 +23,6 @@ class TickerLoop {
       return;
     }
     _lastTickTime = Duration.zero;
-    _cachedScaleFactor = ui.PlatformDispatcher.instance.views.first.devicePixelRatio;
     unawaited(_ticker!.start());
   }
 
@@ -43,19 +38,13 @@ class TickerLoop {
 
     final controller = getController();
     final editor = controller.editor;
-    if (editor.isDisposed) {
+    if (editor.isDisposed || !editor.needsTick) {
       return;
     }
 
-    final (width, height) = getSize();
-    final currentSize = (width, height, _cachedScaleFactor);
-
-    if (_lastSize != currentSize) {
-      _lastSize = currentSize;
-      editor.dispatch({'type': 'resize', 'width': width, 'height': height, 'scaleFactor': _cachedScaleFactor});
-    }
-
-    editor.tick();
+    editor
+      ..tick()
+      ..resetNeedsTick();
 
     final slatePtr = editor.getSlatePtr();
     final slateLen = editor.getSlateLen();

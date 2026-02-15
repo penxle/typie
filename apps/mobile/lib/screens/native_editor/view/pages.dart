@@ -810,8 +810,6 @@ class _MeasuredTitleFields extends HookWidget {
     final title = useValueListenable(scope.title);
     final subtitle = useValueListenable(scope.subtitle);
 
-    WidgetsBinding.instance.addPostFrameCallback((_) => measureHeight());
-
     return LayoutBuilder(
       builder: (context, constraints) {
         return TitleFields(

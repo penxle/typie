@@ -27,64 +27,69 @@ class CommandHandler {
       return;
     }
 
-    if (dirty & (1 << 15) != 0) {
-      _handleDocChanged(controller);
-    }
+    controller.beginBatchUpdate();
+    try {
+      if (dirty & (1 << 15) != 0) {
+        _handleDocChanged(controller);
+      }
 
-    if (dirty & (1 << 16) != 0) {
-      _handleRenderRequired(controller);
-    }
+      if (dirty & (1 << 16) != 0) {
+        _handleRenderRequired(controller);
+      }
 
-    if (dirty & (1 << 0) != 0) {
-      _handleSettingsChanged(controller, reader);
-    }
+      if (dirty & (1 << 0) != 0) {
+        _handleSettingsChanged(controller, reader);
+      }
 
-    if (dirty & (1 << 1) != 0) {
-      _handlePagesChanged(controller, reader);
-    }
+      if (dirty & (1 << 1) != 0) {
+        _handlePagesChanged(controller, reader);
+      }
 
-    if (dirty & (1 << 2) != 0) {
-      _handleCursorChanged(controller, reader);
-    }
+      if (dirty & (1 << 2) != 0) {
+        _handleCursorChanged(controller, reader);
+      }
 
-    if (dirty & (1 << 3) != 0) {
-      _handleSelectionChanged(controller, reader);
-    }
+      if (dirty & (1 << 3) != 0) {
+        _handleSelectionChanged(controller, reader);
+      }
 
-    if (dirty & (1 << 4) != 0) {
-      _handleAttrsChanged(controller, reader);
-    }
+      if (dirty & (1 << 4) != 0) {
+        _handleAttrsChanged(controller, reader);
+      }
 
-    if (dirty & (1 << 7) != 0) {
-      _handlePlaceholderChanged(controller, reader);
-    }
+      if (dirty & (1 << 7) != 0) {
+        _handlePlaceholderChanged(controller, reader);
+      }
 
-    if (dirty & (1 << 8) != 0) {
-      _handleExternalElements(controller, reader);
-    }
+      if (dirty & (1 << 8) != 0) {
+        _handleExternalElements(controller, reader);
+      }
 
-    if (dirty & (1 << 11) != 0) {
-      _handleTrackedItemsChanged(controller, reader);
-    }
+      if (dirty & (1 << 11) != 0) {
+        _handleTrackedItemsChanged(controller, reader);
+      }
 
-    if (dirty & (1 << 14) != 0) {
-      _handleTableOverlaysChanged(controller, reader);
-    }
+      if (dirty & (1 << 14) != 0) {
+        _handleTableOverlaysChanged(controller, reader);
+      }
 
-    if (dirty & (1 << 17) != 0) {
-      _handleFontRequired(controller, reader);
-    }
+      if (dirty & (1 << 17) != 0) {
+        _handleFontRequired(controller, reader);
+      }
 
-    if (dirty & (1 << 18) != 0) {
-      _handleFallbackFontRequired(controller, reader);
-    }
+      if (dirty & (1 << 18) != 0) {
+        _handleFallbackFontRequired(controller, reader);
+      }
 
-    if (dirty & (1 << 19) != 0) {
-      _handleExitedDocumentStart(controller);
-    }
+      if (dirty & (1 << 19) != 0) {
+        _handleExitedDocumentStart(controller);
+      }
 
-    if (dirty & (1 << 20) != 0) {
-      _handleHtmlPasted(controller, reader);
+      if (dirty & (1 << 20) != 0) {
+        _handleHtmlPasted(controller, reader);
+      }
+    } finally {
+      controller.endBatchUpdate();
     }
   }
 

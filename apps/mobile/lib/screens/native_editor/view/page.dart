@@ -24,19 +24,19 @@ class PageItem extends HookWidget {
   Widget build(BuildContext context) {
     final scope = ContentScope.of(context);
     final pref = useService<Pref>();
-    final state = useListenable(scope.controller);
+    final editorState = scope.controller.state;
 
-    final layout = state.state.layout!;
-    final cursor = state.state.cursor;
+    final layout = editorState.layout!;
+    final cursor = editorState.cursor;
     final pageCursor = cursor?.pageIdx == pageIndex ? cursor : null;
-    final isFocused = state.state.isFocused;
+    final isFocused = editorState.isFocused;
     final layoutMode = layout.layoutMode;
     final margins = layoutMode is PaginatedLayoutMode ? layoutMode : null;
     final bottomGap = layout.isPaginated && pageIndex < layout.pages.length - 1 ? ContentGeometry.pageGap : 0.0;
     final pageHeight = layout.pages.elementAtOrNull(pageIndex)?.height;
 
     final editor = scope.editor;
-    final renderVersion = state.state.renderVersion;
+    final renderVersion = editorState.renderVersion;
     final lineHighlightEnabled = pref.lineHighlightEnabled;
 
     final renderer = useRef<EditorTextureRenderer?>(null);
@@ -130,9 +130,9 @@ class PageItem extends HookWidget {
           children: [
             LineHighlight(cursorInfo: displayCursor.value, isFocused: isFocused, enabled: lineHighlightEnabled),
             SizedBox.expand(child: Texture(textureId: textureId.value!)),
-            _SearchHighlightOverlay(pageIndex: pageIndex, overlays: state.state.search.overlays),
-            _SpellcheckOverlay(pageIndex: pageIndex, overlays: state.state.spellcheck.overlays),
-            _AiFeedbackOverlay(pageIndex: pageIndex, overlays: state.state.aiFeedback.overlays),
+            _SearchHighlightOverlay(pageIndex: pageIndex, overlays: editorState.search.overlays),
+            _SpellcheckOverlay(pageIndex: pageIndex, overlays: editorState.spellcheck.overlays),
+            _AiFeedbackOverlay(pageIndex: pageIndex, overlays: editorState.aiFeedback.overlays),
             Cursor(cursorInfo: displayCursor.value, isFocused: isFocused),
             ElementOverlay(pageIndex: pageIndex),
             if (layout.isPaginated && margins != null)
