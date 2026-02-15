@@ -525,22 +525,23 @@ class _CustomItemsList extends HookWidget {
         );
       },
       onReorder: (oldIndex, newIndex) async {
-        if (oldIndex < newIndex) {
-          newIndex -= 1;
+        var adjustedIndex = newIndex;
+        if (oldIndex < adjustedIndex) {
+          adjustedIndex -= 1;
         }
-        if (oldIndex == newIndex) {
+        if (oldIndex == adjustedIndex) {
           return;
         }
 
         final reordered = List<_NormalizedItem>.from(displayItems);
         final item = reordered.removeAt(oldIndex);
-        reordered.insert(newIndex, item);
+        reordered.insert(adjustedIndex, item);
 
         optimisticOrder.value = reordered.map((e) => e.textReplacementId).toList();
         forceRebuild.value++;
 
-        final lowerOrder = newIndex > 0 ? reordered[newIndex - 1].order : null;
-        final upperOrder = newIndex < reordered.length - 1 ? reordered[newIndex + 1].order : null;
+        final lowerOrder = adjustedIndex > 0 ? reordered[adjustedIndex - 1].order : null;
+        final upperOrder = adjustedIndex < reordered.length - 1 ? reordered[adjustedIndex + 1].order : null;
 
         await client.request(
           GTextReplacementsScreen_MoveTextReplacement_MutationReq(

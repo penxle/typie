@@ -1,3 +1,5 @@
+#![cfg_attr(feature = "native", allow(unused))]
+
 #[macro_use]
 mod utils;
 
