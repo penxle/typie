@@ -805,6 +805,8 @@ impl Transaction {
             return Ok(InsertResult::None);
         }
 
+        self.detect_fragment_fonts(&fragment, position);
+
         let target_is_paragraph = self
             .doc()
             .node(position.node_id)
@@ -899,6 +901,81 @@ impl Transaction {
             head,
             is_selectable,
         })
+    }
+
+    fn detect_fragment_fonts(&mut self, fragment: &Fragment, position: Position) {
+        use crate::utils::collect_codepoints;
+        use rustc_hash::FxHashMap;
+
+        let defaults = self.doc().default_styles();
+        let default_family = defaults.font_family().to_string();
+        let default_weight = defaults.font_weight();
+
+        let dest_overrides = self
+            .doc()
+            .node(position.node_id)
+            .map(|n| n.node().style_overrides())
+            .unwrap_or_default();
+
+        let dest_override_family = dest_overrides.iter().find_map(|s| match s {
+            Style::FontFamily(f) => Some(f.family.clone()),
+            _ => None,
+        });
+        let dest_override_weight = dest_overrides.iter().find_map(|s| match s {
+            Style::FontWeight(w) => Some(w.weight),
+            _ => None,
+        });
+
+        let mut font_codepoints: FxHashMap<(String, u16), Vec<u32>> = FxHashMap::default();
+        let mut all_codepoints = Vec::new();
+
+        for (_, node) in fragment.iter() {
+            if let Node::Text(text_node) = node.data() {
+                for segment in text_node.text.get_segments() {
+                    let codepoints = collect_codepoints(&segment.text);
+                    if codepoints.is_empty() {
+                        continue;
+                    }
+
+                    let family = dest_override_family
+                        .clone()
+                        .or_else(|| {
+                            segment.styles.iter().find_map(|s| match s {
+                                Style::FontFamily(f) => Some(f.family.clone()),
+                                _ => None,
+                            })
+                        })
+                        .unwrap_or_else(|| default_family.clone());
+                    let weight = dest_override_weight
+                        .or_else(|| {
+                            segment.styles.iter().find_map(|s| match s {
+                                Style::FontWeight(w) => Some(w.weight),
+                                _ => None,
+                            })
+                        })
+                        .unwrap_or(default_weight);
+
+                    all_codepoints.extend_from_slice(&codepoints);
+                    font_codepoints
+                        .entry((family, weight))
+                        .or_default()
+                        .extend_from_slice(&codepoints);
+                }
+            }
+        }
+
+        for ((family, weight), codepoints) in font_codepoints {
+            self.push_effect(Effect::FontDetected {
+                family,
+                weight,
+                codepoints,
+            });
+        }
+        if !all_codepoints.is_empty() {
+            self.push_effect(Effect::CodepointDetected {
+                codepoints: all_codepoints,
+            });
+        }
     }
 
     fn handle_fragment_merges(
