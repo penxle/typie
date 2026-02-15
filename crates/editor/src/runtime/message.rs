@@ -479,6 +479,10 @@ define_messages! {
     => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_set_table_align(table_id, align) },
 
+    SelectTable { table_id: String }
+    => when When::True
+    => handle(rt) { rt.handle_select_table(table_id) },
+
     SelectTableRow { table_id: String, row: usize }
     => when When::True
     => handle(rt) { rt.handle_select_table_row(table_id, row) },

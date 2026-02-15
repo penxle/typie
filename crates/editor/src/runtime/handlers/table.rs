@@ -89,6 +89,14 @@ impl Runtime {
         self.transact(|tr| tr.set_table_align(node_id, align))
     }
 
+    pub(crate) fn handle_select_table(&mut self, table_id: String) -> Vec<Effect> {
+        let Some(node_id) = NodeId::from_string(&table_id) else {
+            return vec![];
+        };
+
+        self.transact(|tr| tr.select_table(node_id))
+    }
+
     pub(crate) fn handle_select_table_row(&mut self, table_id: String, row: usize) -> Vec<Effect> {
         let Some(node_id) = NodeId::from_string(&table_id) else {
             return vec![];
