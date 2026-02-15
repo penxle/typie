@@ -31,24 +31,45 @@
   const currentFontFamilyAndWeights = $derived.by(() => {
     const defaultFontFamilyWeights = fontFamilies.find((f) => f.value === defaultFontFamily)?.weights ?? [400];
     const defaultFontFamilyAndWeights = {
-      family: defaultFontFamily,
+      family: defaultFontFamily as string | undefined,
       weights: defaultFontFamilyWeights.toSorted((a, b) => a - b),
     };
 
     const fontFamilyAttr = editor.getAttr('font_family');
     const fontFamilyValues = fontFamilyAttr?.values.filter((v): v is string => v != null) ?? [];
-    const fontFamily = fontFamilyValues.length === 1 ? fontFamilyValues[0] : undefined;
-    if (!fontFamily) return defaultFontFamilyAndWeights;
 
-    const systemFontFamily = fontFamilies.find((f) => f.value === fontFamily);
-    if (systemFontFamily) {
-      return {
-        family: systemFontFamily.value,
-        weights: systemFontFamily.weights.toSorted((a, b) => a - b),
-      };
+    if (fontFamilyValues.length === 0) return defaultFontFamilyAndWeights;
+
+    if (fontFamilyValues.length === 1) {
+      const fontFamily = fontFamilyValues[0];
+      const systemFontFamily = fontFamilies.find((f) => f.value === fontFamily);
+      if (systemFontFamily) {
+        return {
+          family: systemFontFamily.value as string | undefined,
+          weights: systemFontFamily.weights.toSorted((a, b) => a - b),
+        };
+      }
+      return defaultFontFamilyAndWeights;
     }
 
-    return defaultFontFamilyAndWeights;
+    const allWeights: number[] = [];
+    for (const familyValue of fontFamilyValues) {
+      const systemFamily = fontFamilies.find((f) => f.value === familyValue);
+      if (systemFamily) {
+        for (const w of systemFamily.weights) {
+          if (!allWeights.includes(w)) {
+            allWeights.push(w);
+          }
+        }
+      }
+    }
+
+    if (allWeights.length === 0) return defaultFontFamilyAndWeights;
+
+    return {
+      family: undefined as string | undefined,
+      weights: [...allWeights].toSorted((a, b) => a - b),
+    };
   });
 
   const fontWeightAttr = $derived(editor.getAttr('font_weight'));
