@@ -78,7 +78,6 @@ bun run dev:email # Email template preview (port 3001)
 
 ## Code Style
 
-- Do not write comments in code.
 - TypeScript strict mode everywhere.
 - `workspace:*` for internal package dependencies.
 - Bun as package manager and API runtime.
