@@ -1,5 +1,5 @@
 import { getAppContext } from '@typie/ui/context';
-import { CONTINUOUS_PAGE_MARGIN, PAGE_GAP } from './constants';
+import { PAGE_GAP } from './constants';
 import { getEditorContext } from './context.svelte';
 
 export function setupTypewriter(getTargetEl: () => HTMLElement | undefined, defaultPadding: number) {
@@ -66,8 +66,8 @@ export function setupTypewriter(getTargetEl: () => HTMLElement | undefined, defa
     const position = app.preference.current.typewriterPosition;
     const availableRange = scrollContainerHeight - cursorHeight;
 
-    const spaceNeededBelowCursorTop = (1 - position) * availableRange + 2 * cursorHeight;
-    const contentBelowCursorTop = totalScrollableContentHeight - cursorTopInDocument + CONTINUOUS_PAGE_MARGIN;
+    const spaceNeededBelowCursorTop = (1 - position) * availableRange + cursorHeight;
+    const contentBelowCursorTop = totalScrollableContentHeight - cursorTopInDocument;
 
     const extraPaddingNeeded = spaceNeededBelowCursorTop - contentBelowCursorTop;
     return Math.max(defaultPadding, extraPaddingNeeded);
