@@ -84,6 +84,12 @@ export function setTextReplacementRules(rules: { id: string; matchPattern: strin
   }
 }
 
+export function setAutoSurroundEnabled(enabled: boolean): void {
+  if (sharedApplication) {
+    sharedApplication.setAutoSurroundEnabled(enabled);
+  }
+}
+
 const CLICK_INTERVAL = 500;
 const CLICK_DISTANCE = 5;
 
@@ -1192,12 +1198,6 @@ export class Editor {
 
   isReadOnly(): boolean {
     return this.#wasmEditor?.isReadOnly() ?? this.readOnly;
-  }
-
-  setAutoSurroundEnabled(enabled: boolean): void {
-    this.ready.then(() => {
-      this.#wasmEditor?.setAutoSurroundEnabled(enabled);
-    });
   }
 
   setTrackedItems(group: number, items: { id: string; nodeId: string; startOffset: number; endOffset: number }[]): void {
