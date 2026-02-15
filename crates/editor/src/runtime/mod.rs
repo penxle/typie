@@ -150,7 +150,6 @@ pub struct Runtime {
 
     cached_plain_text: Option<String>,
 
-    auto_surround_enabled: bool,
     tracked_items: Vec<TrackedItem>,
     is_focused: bool,
     last_table_overlays: Vec<TableOverlay>,
@@ -205,7 +204,6 @@ impl Runtime {
             undo_selections: Vec::new(),
             redo_selections: Vec::new(),
             cached_plain_text: None,
-            auto_surround_enabled: true,
             tracked_items: Vec::new(),
             is_focused: true,
             last_table_overlays: Vec::new(),
@@ -265,15 +263,6 @@ impl Runtime {
 
     pub fn is_read_only(&self) -> bool {
         self.state.read_only
-    }
-
-    pub fn set_auto_surround_enabled(&mut self, enabled: bool) {
-        self.auto_surround_enabled = enabled;
-    }
-
-    #[allow(dead_code)]
-    pub fn is_auto_surround_enabled(&self) -> bool {
-        self.auto_surround_enabled
     }
 
     pub fn import_updates(&mut self, updates: &[u8]) -> Result<()> {

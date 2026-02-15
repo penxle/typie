@@ -16,7 +16,7 @@
   import { env } from '$env/dynamic/public';
   import { graphql } from '$graphql';
   import { AdminImpersonateBanner } from '$lib/components/admin';
-  import { setTextReplacementRules } from '$lib/editor/editor.svelte';
+  import { setAutoSurroundEnabled, setTextReplacementRules } from '$lib/editor/editor.svelte';
   import { setupSplitViewContext } from './[slug]/@split-view/context.svelte';
   import { setupDragDropContext } from './[slug]/@split-view/drag-context.svelte';
   import { setupEditorRegistry } from './[slug]/@split-view/editor-registry.svelte';
@@ -261,6 +261,10 @@
 
   $effect(() => {
     setTextReplacementRules(JSON.parse(textReplacementRulesJson));
+  });
+
+  $effect(() => {
+    setAutoSurroundEnabled(app.preference.current.autoSurroundEnabled);
   });
 
   $effect(() => {
