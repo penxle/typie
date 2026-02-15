@@ -112,12 +112,12 @@ To do this, follow these steps precisely:
    - Issues found → REQUEST_CHANGES
 
    **B. Re-review after prior APPROVE (`approved_code_changed`):**
-   - No new issues → submit a COMMENT review (not APPROVE) with just the diff checksum to update it. Body: `"Re-reviewed after code update. No new issues found.\n<!-- diff-checksum: <HASH> -->"`. This prevents stale checksums from triggering infinite re-reviews.
+   - No new issues → submit a COMMENT review (not APPROVE) with just the diff checksum to update it. Body: `"<!-- diff-checksum: <HASH> -->"`. This prevents stale checksums from triggering infinite re-reviews.
    - New issues found → REQUEST_CHANGES
 
    **C. Re-review after prior REQUEST_CHANGES (`changes_requested_code_changed`):**
    - All prior issues fixed AND no new issues → APPROVE
-   - Some prior issues still present, no new issues → submit a COMMENT review with just the diff checksum to update it. Body: `"Re-reviewed after code update. Previously flagged issues remain unresolved.\n<!-- diff-checksum: <HASH> -->"`. Do NOT submit another REQUEST_CHANGES — the existing one and its unresolved threads are sufficient.
+   - Some prior issues still present, no new issues → submit a COMMENT review with just the diff checksum to update it. Body: `"<!-- diff-checksum: <HASH> -->"`. Do NOT submit another REQUEST_CHANGES — the existing one and its unresolved threads are sufficient.
    - New issues found (regardless of prior issue status) → REQUEST_CHANGES (only for NEW issues not already flagged; do not re-post comments for unresolved prior issues)
 
    **Diff checksum**: Before submitting any review, compute the current PR diff checksum:
@@ -141,8 +141,7 @@ To do this, follow these steps precisely:
    gh api repos/{owner}/{repo}/pulls/{pull_number}/reviews \
      --method POST \
      -f 'event=REQUEST_CHANGES' \
-     -f 'body=Found N issue(s).
-   <!-- diff-checksum: <HASH> -->' \
+     -f 'body=<!-- diff-checksum: <HASH> -->' \
      --input <(echo '{
        "comments": [
          {
