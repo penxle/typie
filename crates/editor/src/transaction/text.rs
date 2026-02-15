@@ -179,7 +179,7 @@ impl Transaction {
 
         let codepoints = collect_codepoints(s);
         if !codepoints.is_empty() {
-            let (family, weight) = self.current_font();
+            let (family, weight) = self.resolved_font(self.selection().head.node_id);
             self.push_effect(Effect::FontDetected {
                 family,
                 weight,
@@ -369,6 +369,7 @@ impl Transaction {
         }
 
         let head = selection.head;
+        let pre_styles = self.state.pending_styles.clone();
 
         let paragraph = self.node(head.node_id).context("Paragraph not found")?;
 
@@ -420,10 +421,14 @@ impl Transaction {
 
         self.delete_range(from, to)?;
 
+        if !self.cursor_has_text_segment(head.node_id, from_global_offset) {
+            let _ = self.set_cascade_attrs(head.node_id, &Attr::from_styles(&pre_styles));
+        }
+
         let new_affinity =
             resolve_affinity_after_edit(self, head.node_id, from_global_offset, head.affinity);
 
-        self.set_selection_after_delete(Selection::collapsed(Position::new(
+        self.set_selection(Selection::collapsed(Position::new(
             head.node_id,
             from_global_offset,
             new_affinity,
@@ -442,6 +447,7 @@ impl Transaction {
         }
 
         let head = selection.head;
+        let pre_styles = self.state.pending_styles.clone();
 
         let paragraph = self.node(head.node_id).context("Paragraph not found")?;
 
@@ -497,10 +503,14 @@ impl Transaction {
 
         self.delete_range(from, to)?;
 
+        if !self.cursor_has_text_segment(head.node_id, from_global_offset) {
+            let _ = self.set_cascade_attrs(head.node_id, &Attr::from_styles(&pre_styles));
+        }
+
         let new_affinity =
             resolve_affinity_after_edit(self, head.node_id, from_global_offset, head.affinity);
 
-        self.set_selection_after_delete(Selection::collapsed(Position::new(
+        self.set_selection(Selection::collapsed(Position::new(
             head.node_id,
             from_global_offset,
             new_affinity,
@@ -560,6 +570,8 @@ impl Transaction {
 
             let head = self.state.selection.head;
             if !self.cursor_has_text_segment(head.node_id, head.offset) {
+                let _ =
+                    self.set_cascade_attrs(head.node_id, &Attr::from_styles(&pre_delete_styles));
                 if self.state.pending_styles != pre_delete_styles {
                     self.state.pending_styles = pre_delete_styles;
                     self.push_effect(Effect::PendingStylesChanged);
@@ -651,7 +663,7 @@ impl Transaction {
 
         self.delete_structural_range(from, to)?;
 
-        self.set_selection_after_delete(Selection::collapsed(from));
+        self.set_selection(Selection::collapsed(from));
 
         Ok(DeleteResult::Local {
             node_id: from.node_id,

@@ -1,3 +1,4 @@
+use crate::model::attr::{Attr, ParagraphAttr};
 use crate::model::style::Style;
 use crate::model::styles::*;
 use macros::Codec;
@@ -125,6 +126,41 @@ impl DefaultStyles {
 
     pub fn text_color(&self) -> &str {
         &self.text_color
+    }
+
+    pub fn from_styles(styles: &[Style]) -> Self {
+        let mut result = Self::default();
+        for style in styles {
+            match style {
+                Style::FontFamily(s) => result.font_family = s.family.clone(),
+                Style::FontSize(s) => result.font_size = s.size,
+                Style::FontWeight(s) => result.font_weight = s.weight,
+                Style::TextColor(s) => result.text_color = s.color.clone(),
+                Style::BackgroundColor(s) => result.background_color = s.color.clone(),
+                Style::LetterSpacing(s) => result.letter_spacing = s.spacing,
+                Style::Italic(_) => result.italic = true,
+                Style::Strikethrough(_) => result.strikethrough = true,
+                Style::Underline(_) => result.underline = true,
+            }
+        }
+        result
+    }
+
+    pub fn to_attrs(&self) -> Vec<Attr> {
+        let mut attrs: Vec<Attr> = self.to_styles().into_iter().map(Attr::Style).collect();
+        attrs.push(Attr::Paragraph(ParagraphAttr {
+            line_height: self.line_height,
+        }));
+        attrs
+    }
+
+    pub fn from_attrs(attrs: &[Attr]) -> Self {
+        let styles = Attr::extract_styles(attrs);
+        let mut result = Self::from_styles(&styles);
+        if let Some(para) = Attr::extract_paragraph_attr(attrs) {
+            result.line_height = para.line_height;
+        }
+        result
     }
 
     pub fn to_styles(&self) -> Vec<Style> {

@@ -128,18 +128,6 @@ export const makeLoroDoc = (template?: TemplatePreset) => {
     layoutMode.set('max_width', template?.maxWidth ?? 600);
   }
 
-  const styles = doc.getMap('styles');
-  styles.set('font_family', template?.fontFamily ?? 'Pretendard');
-  styles.set('font_size', template?.fontSize ?? 12);
-  styles.set('font_weight', template?.fontWeight ?? 400);
-  styles.set('text_color', template?.textColor ?? 'black');
-  styles.set('background_color', template?.backgroundColor ?? 'none');
-  styles.set('letter_spacing', template?.letterSpacing ?? 0);
-  styles.set('line_height', template?.lineHeight ?? 1.6);
-  styles.set('italic', false);
-  styles.set('strikethrough', false);
-  styles.set('underline', false);
-
   const paragraphId = faker.string.uuid().replaceAll('-', '');
 
   const nodes = doc.getMap('nodes');
@@ -148,6 +136,15 @@ export const makeLoroDoc = (template?: TemplatePreset) => {
   rootNode.set('type', 'root');
   const rootChildren = rootNode.setContainer('children', new LoroList());
   rootChildren.insert(0, paragraphId);
+
+  const cascadeAttrs = rootNode.setContainer('cascade_attrs', new LoroMap());
+  cascadeAttrs.set('style:font_family', template?.fontFamily ?? 'Pretendard');
+  cascadeAttrs.set('style:font_size', template?.fontSize ?? 12);
+  cascadeAttrs.set('style:font_weight', template?.fontWeight ?? 400);
+  cascadeAttrs.set('style:text_color', template?.textColor ?? 'black');
+  cascadeAttrs.set('style:background_color', template?.backgroundColor ?? 'none');
+  cascadeAttrs.set('style:letter_spacing', template?.letterSpacing ?? 0);
+  cascadeAttrs.set('paragraph:line_height', template?.lineHeight ?? 1.6);
 
   const paragraphNode = nodes.setContainer(paragraphId, new LoroMap());
   paragraphNode.set('type', 'paragraph');

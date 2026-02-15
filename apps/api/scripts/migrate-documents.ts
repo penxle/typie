@@ -220,7 +220,17 @@ function fixTextNewlines(nodes: Record<string, Record<string, unknown>>): boolea
 
 function isAlreadyMigrated(doc: LoroDoc): boolean {
   const stylesMap = doc.getMap('styles');
-  return stylesMap.size > 0;
+  if (stylesMap.size > 0) return true;
+
+  try {
+    const nodesMap = doc.getMap('nodes');
+    const rootMap = nodesMap.get('00000000000000000000000000000000') as LoroMap | undefined;
+    if (rootMap && rootMap.get('cascade_attrs') != null) return true;
+  } catch {
+    // ignore
+  }
+
+  return false;
 }
 
 await (async () => {
@@ -259,12 +269,25 @@ await (async () => {
 
       if (isAlreadyMigrated(doc)) {
         const currentJson = (await snapshotToJson(row.snapshot)) as Record<string, unknown>;
-        const styles = currentJson.styles as Record<string, unknown>;
         const nodes = currentJson.nodes as Record<string, Record<string, unknown>>;
         let needsFix = false;
 
-        if (!('line_height' in styles)) {
-          styles.line_height = 1.6;
+        const rootNode = nodes['00000000000000000000000000000000'];
+        if (rootNode && !rootNode.cascade_attrs) {
+          rootNode.cascade_attrs = {
+            'style:font_family': 'Pretendard',
+            'style:font_size': 12,
+            'style:font_weight': 400,
+            'style:text_color': 'black',
+            'style:background_color': 'none',
+            'style:letter_spacing': 0,
+            'paragraph:line_height': 1.6,
+          };
+          needsFix = true;
+        }
+
+        if ('styles' in currentJson) {
+          delete currentJson.styles;
           needsFix = true;
         }
 
@@ -340,20 +363,21 @@ await (async () => {
 
         fixTextNewlines(transformedNodes as Record<string, Record<string, unknown>>);
 
+        const rootNode = transformedNodes['00000000000000000000000000000000'] as Record<string, unknown> | undefined;
+        if (rootNode) {
+          rootNode.cascade_attrs = {
+            'style:font_family': 'Pretendard',
+            'style:font_size': 12,
+            'style:font_weight': 400,
+            'style:text_color': 'black',
+            'style:background_color': 'none',
+            'style:letter_spacing': 0,
+            'paragraph:line_height': 1.6,
+          };
+        }
+
         newDocJson = {
           settings,
-          styles: {
-            font_family: 'Pretendard',
-            font_size: 12,
-            font_weight: 400,
-            text_color: 'black',
-            background_color: 'none',
-            letter_spacing: 0,
-            line_height: 1.6,
-            italic: false,
-            strikethrough: false,
-            underline: false,
-          },
           nodes: transformedNodes,
         };
       }

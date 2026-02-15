@@ -18,7 +18,11 @@ pub struct State {
 impl State {
     pub fn new(doc: Rc<Doc>, selection: Selection) -> Self {
         let frontiers = doc.frontiers();
-        let pending_styles = doc.default_styles().to_styles();
+        let pending_styles = doc
+            .node(NodeId::ROOT)
+            .and_then(|root| root.cascade_attrs())
+            .map(|attrs| Attr::extract_styles(&attrs))
+            .unwrap_or_else(|| DefaultStyles::default().to_styles());
         Self {
             doc,
             selection,

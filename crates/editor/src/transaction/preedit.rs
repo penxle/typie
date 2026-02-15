@@ -13,7 +13,7 @@ impl Transaction {
 
         let codepoints = collect_codepoints(&text);
         if !codepoints.is_empty() {
-            let (family, weight) = self.current_font();
+            let (family, weight) = self.resolved_font(self.selection().head.node_id);
             self.push_effect(Effect::FontDetected {
                 family,
                 weight,

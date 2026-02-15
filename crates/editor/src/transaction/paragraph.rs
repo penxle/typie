@@ -281,7 +281,8 @@ impl Transaction {
 
         if let Some((_, new_pos)) = self.split_block_at(selection.head)? {
             self.set_selection(Selection::collapsed(new_pos));
-            self.state.pending_styles = styles;
+            self.state.pending_styles = styles.clone();
+            let _ = self.set_cascade_attrs(new_pos.node_id, &Attr::from_styles(&styles));
             Ok(true)
         } else {
             Ok(false)
@@ -330,6 +331,11 @@ impl Transaction {
             Some(block_id)
         };
 
+        let attrs = self.resolve_attr_cascade(parent_id);
+        let line_height = Attr::extract_paragraph_attr(&attrs)
+            .map(|p| p.line_height)
+            .unwrap_or(1.6);
+
         let parent = self.node_mut(parent_id).context("Parent not found")?;
         let insert_index = if let Some(prev_id) = prev {
             let prev_node = self.node(prev_id).context("Previous node not found")?;
@@ -338,9 +344,13 @@ impl Transaction {
             let block = self.node(block_id).context("Block not found")?;
             block.index().context("Block has no index")?
         };
-        let new_block_id = parent
-            .as_mut()
-            .insert_child(insert_index, Node::Paragraph(ParagraphNode::default()))?;
+        let new_block_id = parent.as_mut().insert_child(
+            insert_index,
+            Node::Paragraph(ParagraphNode {
+                line_height,
+                ..Default::default()
+            }),
+        )?;
         self.set_selection(Selection::collapsed(Position::new(
             new_block_id,
             0,
@@ -423,12 +433,18 @@ impl Transaction {
             offset
         };
 
+        let pre_styles = self.state.pending_styles.clone();
+
         let from = Position::new(target_block_id, prev_end_offset, Affinity::Downstream);
         let to = Position::new(current_block_id, 0, Affinity::Downstream);
 
         self.delete_range(from, to)?;
 
-        self.set_selection_after_delete(Selection::collapsed(Position::new(
+        if !self.cursor_has_text_segment(target_block_id, prev_end_offset) {
+            let _ = self.set_cascade_attrs(target_block_id, &Attr::from_styles(&pre_styles));
+        }
+
+        self.set_selection(Selection::collapsed(Position::new(
             target_block_id,
             prev_end_offset,
             Affinity::Downstream,
@@ -528,12 +544,18 @@ impl Transaction {
             offset
         };
 
+        let pre_styles = self.state.pending_styles.clone();
+
         let from = Position::new(current_block_id, current_end_offset, Affinity::Downstream);
         let to = Position::new(target_block_id, 0, Affinity::Downstream);
 
         self.delete_range(from, to)?;
 
-        self.set_selection_after_delete(Selection::collapsed(Position::new(
+        if !self.cursor_has_text_segment(current_block_id, current_end_offset) {
+            let _ = self.set_cascade_attrs(current_block_id, &Attr::from_styles(&pre_styles));
+        }
+
+        self.set_selection(Selection::collapsed(Position::new(
             current_block_id,
             current_end_offset,
             Affinity::Downstream,
@@ -1831,5 +1853,32 @@ mod tests {
             "join_forward should preserve pending_styles when merging empty paragraphs, got: {:?}",
             view.pending_styles
         );
+    }
+
+    #[test]
+    fn insert_paragraph_on_nontextblock_uses_cascade_line_height() {
+        let initial = state! {
+            doc {
+                image()
+                paragraph {}
+            }
+            selection { (NodeId::ROOT, 0) -> (NodeId::ROOT, 1) }
+        };
+
+        let actual = transact!(initial, |tr| tr
+            .insert_paragraph_on_nontextblock_selection()
+            .unwrap());
+
+        let root = actual.doc.node(NodeId::ROOT).unwrap();
+        let first_child = root.first_child().unwrap();
+        if let Node::Paragraph(para) = first_child.node() {
+            assert!(
+                (para.line_height - 1.6).abs() < f32::EPSILON,
+                "Inserted paragraph should inherit line_height from cascade, got: {}",
+                para.line_height
+            );
+        } else {
+            panic!("First child should be the inserted paragraph");
+        }
     }
 }
