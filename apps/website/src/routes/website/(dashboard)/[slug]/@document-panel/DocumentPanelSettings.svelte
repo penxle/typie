@@ -66,7 +66,7 @@
 
   const app = getAppContext();
 
-  const defaultStyles = $derived(editor.defaultStyles);
+  const defaultAttrs = $derived(editor.defaultAttrs);
 
   const fontFamilyItems = $derived([
     ...values.fontFamily.map((f) => ({ value: f.value, label: f.label })),
@@ -74,7 +74,7 @@
   ]);
 
   const currentFontFamilyWeights = $derived.by(() => {
-    const ff = defaultStyles?.fontFamily;
+    const ff = defaultAttrs?.fontFamily;
     if (!ff) return values.fontFamily[0].weights.toSorted((a, b) => a - b);
 
     const systemFont = values.fontFamily.find((f) => f.value === ff);
@@ -120,23 +120,31 @@
     return closest;
   };
 
-  const handleDefaultStyleChange = (updates: Partial<NonNullable<typeof editor.defaultStyles>>) => {
-    const current = editor.defaultStyles;
+  const handleDefaultAttrChange = (updates: Partial<NonNullable<typeof editor.defaultAttrs>>) => {
+    const current = editor.defaultAttrs;
     if (!current) return;
+
+    const merged = {
+      fontFamily: updates.fontFamily ?? current.fontFamily,
+      fontSize: updates.fontSize ?? current.fontSize,
+      fontWeight: updates.fontWeight ?? current.fontWeight,
+      textColor: updates.textColor ?? current.textColor,
+      backgroundColor: updates.backgroundColor ?? current.backgroundColor,
+      letterSpacing: updates.letterSpacing ?? current.letterSpacing,
+      lineHeight: updates.lineHeight ?? current.lineHeight,
+    };
+
     editor.dispatch({
-      type: 'setDefaultStyles',
-      styles: {
-        fontFamily: updates.fontFamily ?? current.fontFamily,
-        fontSize: updates.fontSize ?? current.fontSize,
-        fontWeight: updates.fontWeight ?? current.fontWeight,
-        textColor: updates.textColor ?? current.textColor,
-        backgroundColor: updates.backgroundColor ?? current.backgroundColor,
-        letterSpacing: updates.letterSpacing ?? current.letterSpacing,
-        lineHeight: updates.lineHeight ?? current.lineHeight,
-        italic: false,
-        strikethrough: false,
-        underline: false,
-      },
+      type: 'setDefaultAttrs',
+      attrs: [
+        { attr: 'style', type: 'font_family', family: merged.fontFamily },
+        { attr: 'style', type: 'font_size', size: merged.fontSize },
+        { attr: 'style', type: 'font_weight', weight: merged.fontWeight },
+        { attr: 'style', type: 'text_color', color: merged.textColor },
+        { attr: 'style', type: 'background_color', color: merged.backgroundColor },
+        { attr: 'style', type: 'letter_spacing', spacing: merged.letterSpacing },
+        { attr: 'paragraph', lineHeight: merged.lineHeight },
+      ],
     });
   };
 
@@ -181,23 +189,23 @@
   });
 
   $effect(() => {
-    if (defaultStyles && !fontSizeOpened && !fontSizeIsFocused) {
-      fontSizeInputValue = String(defaultStyles.fontSize);
+    if (defaultAttrs && !fontSizeOpened && !fontSizeIsFocused) {
+      fontSizeInputValue = String(defaultAttrs.fontSize);
     }
   });
 
   const applyFontSize = () => {
     const parsed = Number.parseFloat(fontSizeInputValue);
-    if (!Number.isNaN(parsed) && defaultStyles && parsed !== defaultStyles.fontSize) {
-      handleDefaultStyleChange({ fontSize: clamp(parsed, MIN_FONT_SIZE, MAX_FONT_SIZE) });
+    if (!Number.isNaN(parsed) && defaultAttrs && parsed !== defaultAttrs.fontSize) {
+      handleDefaultAttrChange({ fontSize: clamp(parsed, MIN_FONT_SIZE, MAX_FONT_SIZE) });
     }
   };
 
   const handleFontSizeFocus = () => {
     fontSizeIsFocused = true;
     fontSizeOpened = true;
-    if (defaultStyles) {
-      fontSizeInputValue = String(defaultStyles.fontSize);
+    if (defaultAttrs) {
+      fontSizeInputValue = String(defaultAttrs.fontSize);
     }
     fontSizeInputElement?.select();
   };
@@ -222,15 +230,15 @@
       fontSizeInputElement?.blur();
       fontSizeOpened = false;
     } else if (e.key === 'Escape') {
-      if (defaultStyles) {
-        fontSizeInputValue = String(defaultStyles.fontSize);
+      if (defaultAttrs) {
+        fontSizeInputValue = String(defaultAttrs.fontSize);
       }
       fontSizeInputElement?.blur();
       fontSizeOpened = false;
     } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
       e.preventDefault();
       e.stopPropagation();
-      const current = Number.parseFloat(fontSizeInputValue) || defaultStyles?.fontSize || 12;
+      const current = Number.parseFloat(fontSizeInputValue) || defaultAttrs?.fontSize || 12;
       const sortedSizes = values.fontSize.map(({ value }) => value).toSorted((a, b) => a - b);
       const currentIndex = sortedSizes.findIndex((size) => size >= current);
 
@@ -244,7 +252,7 @@
       const newValue = sortedSizes[newIndex];
       if (newValue !== undefined) {
         fontSizeInputValue = String(newValue);
-        handleDefaultStyleChange({ fontSize: newValue });
+        handleDefaultAttrChange({ fontSize: newValue });
         tick().then(() => {
           fontSizeInputElement?.select();
         });
@@ -417,7 +425,7 @@
   </div>
 
   <div class={flex({ flexDirection: 'column', gap: '16px', overflowY: 'auto', paddingY: '16px' })}>
-    {#if defaultStyles}
+    {#if defaultAttrs}
       <div class={css({ paddingX: '20px', fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>기본 스타일</div>
 
       <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '16px', paddingX: '20px' })}>
@@ -439,10 +447,10 @@
           items={fontFamilyItems}
           label=""
           onchange={(value) => {
-            const closestWeight = getClosestWeight(value, defaultStyles.fontWeight);
-            handleDefaultStyleChange({ fontFamily: value, fontWeight: closestWeight });
+            const closestWeight = getClosestWeight(value, defaultAttrs.fontWeight);
+            handleDefaultAttrChange({ fontFamily: value, fontWeight: closestWeight });
           }}
-          value={defaultStyles.fontFamily}
+          value={defaultAttrs.fontFamily}
         >
           {#snippet renderItem(item)}
             <div style:font-family={item.value}>{item.label}</div>
@@ -469,12 +477,12 @@
           items={fontWeightItems}
           label=""
           onchange={(value) => {
-            handleDefaultStyleChange({ fontWeight: value });
+            handleDefaultAttrChange({ fontWeight: value });
           }}
-          value={defaultStyles.fontWeight}
+          value={defaultAttrs.fontWeight}
         >
           {#snippet renderItem(item)}
-            <div style:font-family={defaultStyles.fontFamily} style:font-weight={item.value}>
+            <div style:font-family={defaultAttrs.fontFamily} style:font-weight={item.value}>
               {item.label}
             </div>
           {/snippet}
@@ -517,7 +525,7 @@
             onblur={handleFontSizeBlur}
             onfocus={handleFontSizeFocus}
             onkeydown={handleFontSizeKeydown}
-            placeholder={String(defaultStyles.fontSize)}
+            placeholder={String(defaultAttrs.fontSize)}
             type="text"
             bind:value={fontSizeInputValue}
           />
@@ -564,9 +572,9 @@
             <DropdownMenu autoFocus={false} onclose={() => (fontSizeOpened = false)} opened={fontSizeOpened}>
               {#each values.fontSize as { label, value } (value)}
                 <DropdownMenuItem
-                  active={defaultStyles.fontSize === value}
+                  active={defaultAttrs.fontSize === value}
                   onclick={() => {
-                    handleDefaultStyleChange({ fontSize: value });
+                    handleDefaultAttrChange({ fontSize: value });
                     fontSizeOpened = false;
                   }}
                 >
@@ -586,9 +594,9 @@
         <Select
           items={values.letterSpacing.map((s) => ({ value: s.value, label: s.label }))}
           onselect={(value) => {
-            handleDefaultStyleChange({ letterSpacing: value });
+            handleDefaultAttrChange({ letterSpacing: value });
           }}
-          value={defaultStyles.letterSpacing}
+          value={defaultAttrs.letterSpacing}
         />
       </div>
 
@@ -600,9 +608,9 @@
         <Select
           items={values.lineHeight.map((s) => ({ value: s.value, label: s.label }))}
           onselect={(value) => {
-            handleDefaultStyleChange({ lineHeight: value });
+            handleDefaultAttrChange({ lineHeight: value });
           }}
-          value={defaultStyles.lineHeight}
+          value={defaultAttrs.lineHeight}
         />
       </div>
 
@@ -626,11 +634,11 @@
           use:textColorAnchorAction
         >
           <div
-            style:background-color={values.textColor.find(({ value }) => value === defaultStyles.textColor)?.color}
+            style:background-color={values.textColor.find(({ value }) => value === defaultAttrs.textColor)?.color}
             class={css({ borderWidth: '1px', borderRadius: 'full', size: '16px', flexShrink: '0' })}
           ></div>
           <span class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.subtle' })}>
-            {values.textColor.find(({ value }) => value === defaultStyles.textColor)?.label ?? defaultStyles.textColor}
+            {values.textColor.find(({ value }) => value === defaultAttrs.textColor)?.label ?? defaultAttrs.textColor}
           </span>
         </button>
         {#if textColorOpened}
@@ -649,11 +657,11 @@
           >
             <ToolbarColorGrid
               columns={11}
-              currentValue={defaultStyles.textColor as (typeof values.textColor)[number]['value']}
+              currentValue={defaultAttrs.textColor as (typeof values.textColor)[number]['value']}
               items={values.textColor}
               onClose={() => (textColorOpened = false)}
               onSelect={(value) => {
-                handleDefaultStyleChange({ textColor: value });
+                handleDefaultAttrChange({ textColor: value });
                 textColorOpened = false;
               }}
               opened={textColorOpened}
@@ -682,12 +690,12 @@
           use:bgColorAnchorAction
         >
           <div
-            style:background-color={defaultStyles.backgroundColor === 'none'
+            style:background-color={defaultAttrs.backgroundColor === 'none'
               ? 'transparent'
-              : values.textBackgroundColor.find(({ value }) => value === defaultStyles.backgroundColor)?.color}
+              : values.textBackgroundColor.find(({ value }) => value === defaultAttrs.backgroundColor)?.color}
             class={css({ borderWidth: '1px', borderRadius: '4px', size: '16px', flexShrink: '0', position: 'relative' })}
           >
-            {#if defaultStyles.backgroundColor === 'none'}
+            {#if defaultAttrs.backgroundColor === 'none'}
               <div
                 class={css({
                   position: 'absolute',
@@ -702,8 +710,7 @@
             {/if}
           </div>
           <span class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.subtle' })}>
-            {values.textBackgroundColor.find(({ value }) => value === defaultStyles.backgroundColor)?.label ??
-              defaultStyles.backgroundColor}
+            {values.textBackgroundColor.find(({ value }) => value === defaultAttrs.backgroundColor)?.label ?? defaultAttrs.backgroundColor}
           </span>
         </button>
         {#if bgColorOpened}
@@ -722,11 +729,11 @@
           >
             <ToolbarColorGrid
               columns={8}
-              currentValue={defaultStyles.backgroundColor as (typeof values.textBackgroundColor)[number]['value']}
+              currentValue={defaultAttrs.backgroundColor as (typeof values.textBackgroundColor)[number]['value']}
               items={values.textBackgroundColor}
               onClose={() => (bgColorOpened = false)}
               onSelect={(value) => {
-                handleDefaultStyleChange({ backgroundColor: value });
+                handleDefaultAttrChange({ backgroundColor: value });
                 bgColorOpened = false;
               }}
               opened={bgColorOpened}

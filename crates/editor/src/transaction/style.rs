@@ -801,14 +801,14 @@ impl Transaction {
                 Style::FontFamily(f) => Some(f.family.clone()),
                 _ => None,
             })
-            .unwrap_or_else(|| DefaultStyles::default().font_family().to_string());
+            .unwrap_or_else(|| DefaultAttrs::default().font_family().to_string());
         let mut weight = cascade
             .iter()
             .find_map(|s| match s {
                 Style::FontWeight(w) => Some(w.weight),
                 _ => None,
             })
-            .unwrap_or_else(|| DefaultStyles::default().font_weight());
+            .unwrap_or_else(|| DefaultAttrs::default().font_weight());
 
         for style in &self.state.pending_styles {
             match style {
@@ -1790,7 +1790,7 @@ mod tests {
     fn toggle_bold_style() {
         let mut p = id!();
 
-        let font_family = DefaultStyles::default().font_family().to_string();
+        let font_family = DefaultAttrs::default().font_family().to_string();
         let mut fonts = std::collections::HashMap::new();
         fonts.insert(font_family.clone(), vec![400, 700]);
         let _guard = ScopedFontRegistration::new(fonts);
@@ -1839,7 +1839,7 @@ mod tests {
     fn toggle_bold_style_backward_selection() {
         let mut p = id!();
 
-        let font_family = DefaultStyles::default().font_family().to_string();
+        let font_family = DefaultAttrs::default().font_family().to_string();
         let mut fonts = std::collections::HashMap::new();
         fonts.insert(font_family.clone(), vec![400, 700]);
         let _guard = ScopedFontRegistration::new(fonts);

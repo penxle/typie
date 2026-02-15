@@ -7,7 +7,7 @@ import { ensureAllFontBases, ensureRequiredFallbackFont, ensureRequiredFont } fr
 import {
   DIRTY_ATTRS,
   DIRTY_CURSOR,
-  DIRTY_DEFAULT_STYLES,
+  DIRTY_DEFAULT_ATTRS,
   DIRTY_DOC_CHANGED,
   DIRTY_ENABLED_ACTIONS,
   DIRTY_EXITED_DOCUMENT_START,
@@ -168,7 +168,7 @@ export class Editor {
     blockGap: 0,
   });
 
-  defaultStyles = $state<{
+  defaultAttrs = $state<{
     fontFamily: string;
     fontSize: number;
     fontWeight: number;
@@ -378,8 +378,8 @@ export class Editor {
       this.layout.layoutMode = s.layoutMode;
     }
 
-    if (slate.isDirty(DIRTY_DEFAULT_STYLES)) {
-      const attrs = slate.readDefaultStyles();
+    if (slate.isDirty(DIRTY_DEFAULT_ATTRS)) {
+      const attrs = slate.readDefaultAttrs();
       const ds: Record<string, string | number> = {};
       for (const attr of attrs) {
         const v = attr.values[0];
@@ -415,7 +415,7 @@ export class Editor {
           }
         }
       }
-      this.defaultStyles = ds as NonNullable<typeof this.defaultStyles>;
+      this.defaultAttrs = ds as NonNullable<typeof this.defaultAttrs>;
     }
 
     if (slate.isDirty(DIRTY_PAGES)) {

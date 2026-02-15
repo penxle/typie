@@ -109,7 +109,7 @@ struct PendingUpdates {
     link_overlays: bool,
     tracked_items: bool,
     table_overlays: bool,
-    default_styles: bool,
+    default_attrs: bool,
     html_pasted: Option<(String, Position, Position)>,
 }
 
@@ -197,7 +197,7 @@ impl Runtime {
                 tracked_items: false,
                 table_overlays: true,
                 html_pasted: None,
-                default_styles: true,
+                default_attrs: true,
             },
             message_queue: Vec::new(),
             pointer: PointerState::default(),
@@ -331,7 +331,7 @@ impl Runtime {
     pub fn insert_template_fragment(&mut self, snapshot: Vec<u8>) -> Result<()> {
         let template_doc = std::rc::Rc::new(Doc::from_snapshot(snapshot));
         let template_settings = template_doc.settings();
-        let template_default_styles = template_doc.default_styles();
+        let template_default_attrs = template_doc.default_attrs();
         let fragment = Fragment::from_doc(&template_doc)?;
 
         let effects = self.transact(|tr| {
@@ -340,7 +340,7 @@ impl Runtime {
                 s.paragraph_indent = template_settings.paragraph_indent;
                 s.layout_mode = template_settings.layout_mode;
             })?;
-            tr.doc().update_default_styles(template_default_styles)?;
+            tr.doc().update_default_attrs(template_default_attrs)?;
 
             tr.delete_selection()?;
             tr.paste_fragment(fragment, None)?;
@@ -367,7 +367,7 @@ impl Runtime {
         self.pending.external_elements = true;
         self.pending.settings = true;
         self.pending.enabled_actions = true;
-        self.pending.default_styles = true;
+        self.pending.default_attrs = true;
     }
 
     pub fn replace_text_in_block(
@@ -639,11 +639,11 @@ impl Runtime {
         };
 
         let root_ref = self.doc().node(NodeId::ROOT).unwrap();
-        let default_styles = self.doc().default_styles();
+        let default_attrs = self.doc().default_attrs();
         let ctx = LayoutContext::new(
             &root_ref,
             &settings,
-            &default_styles,
+            &default_attrs,
             &decorations,
             self.scale_factor,
             &self.view_states,
@@ -873,10 +873,10 @@ impl Runtime {
             self.pending.settings = false;
         }
 
-        if self.pending.default_styles {
-            let styles = self.doc().default_styles();
-            self.slab.write_default_styles(&mut self.slate, &styles);
-            self.pending.default_styles = false;
+        if self.pending.default_attrs {
+            let attrs = self.doc().default_attrs();
+            self.slab.write_default_attrs(&mut self.slate, &attrs);
+            self.pending.default_attrs = false;
         }
 
         if self.pending.layout {
@@ -1424,7 +1424,7 @@ impl Runtime {
                     self.pending.cursor = true;
                     self.pending.settings = true;
                     self.pending.external_elements = true;
-                    self.pending.default_styles = true;
+                    self.pending.default_attrs = true;
                 }
                 Effect::DropTargetChanged { target } => {
                     self.pending.drop_indicator = target.and_then(|position| {

@@ -1,5 +1,5 @@
 use crate::layout::{Layout, LayoutCache, LayoutNode};
-use crate::model::{Decorations, DefaultStyles, DocumentSettings, NodeRef};
+use crate::model::{Decorations, DefaultAttrs, DocumentSettings, NodeRef};
 use crate::runtime::ViewStates;
 use crate::types::BoxConstraints;
 use std::cell::RefCell;
@@ -8,7 +8,7 @@ use std::rc::Rc;
 pub struct LayoutContext<'a> {
     pub node: &'a NodeRef<'a>,
     pub settings: &'a DocumentSettings,
-    pub default_styles: &'a DefaultStyles,
+    pub default_attrs: &'a DefaultAttrs,
     pub decorations: &'a Decorations,
     pub scale_factor: f64,
     pub view_states: &'a ViewStates,
@@ -19,7 +19,7 @@ impl<'a> LayoutContext<'a> {
     pub fn new(
         node: &'a NodeRef<'a>,
         settings: &'a DocumentSettings,
-        default_styles: &'a DefaultStyles,
+        default_attrs: &'a DefaultAttrs,
         decorations: &'a Decorations,
         scale_factor: f64,
         view_states: &'a ViewStates,
@@ -28,7 +28,7 @@ impl<'a> LayoutContext<'a> {
         Self {
             node,
             settings,
-            default_styles,
+            default_attrs,
             decorations,
             scale_factor,
             view_states,
@@ -40,7 +40,7 @@ impl<'a> LayoutContext<'a> {
         Self {
             node,
             settings: self.settings,
-            default_styles: self.default_styles,
+            default_attrs: self.default_attrs,
             decorations: self.decorations,
             scale_factor: self.scale_factor,
             view_states: self.view_states,
@@ -136,13 +136,13 @@ mod tests {
         let constraints = BoxConstraints::new(0.0, 400.0, 0.0, f32::INFINITY);
         let cache = RefCell::new(LayoutCache::new());
         let view_states = ViewStates::default();
-        let default_styles = DefaultStyles::default();
+        let default_attrs = DefaultAttrs::default();
 
         let decorations = Decorations::default();
         let ctx = LayoutContext::new(
             &root,
             &settings,
-            &default_styles,
+            &default_attrs,
             &decorations,
             1.0,
             &view_states,
@@ -174,7 +174,7 @@ mod tests {
         let ctx_with_preedit = LayoutContext::new(
             &root,
             &settings,
-            &default_styles,
+            &default_attrs,
             &decorations_with_preedit,
             1.0,
             &view_states,

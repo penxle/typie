@@ -77,7 +77,7 @@ impl Layout for FoldTitleNode {
 
             let setup_defaults = |builder: &mut parley::RangedBuilder<'_, String>| {
                 builder.push_default(StyleProperty::FontStack(FontStack::Single(
-                    FontFamily::Named(ctx.default_styles.font_family().into()),
+                    FontFamily::Named(ctx.default_attrs.font_family().into()),
                 )));
                 builder.push_default(StyleProperty::FontSize(14.0));
                 builder.push_default(StyleProperty::FontWeight(FontWeight::new(

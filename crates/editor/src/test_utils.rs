@@ -771,7 +771,7 @@ macro_rules! __doc_create_node_with_id {
                 })
             ).unwrap();
 
-            $crate::test_utils::__apply_default_styles($tr.doc(), $id);
+            $crate::test_utils::__apply_default_attrs($tr.doc(), $id);
 
             if let Some(node) = $tr.doc().node($id) {
                 if let $crate::model::Node::Text(text_node) = node.node() {
@@ -812,7 +812,7 @@ macro_rules! __doc_create_node_with_id {
                 })
             ).unwrap();
 
-            $crate::test_utils::__apply_default_styles($tr.doc(), $id);
+            $crate::test_utils::__apply_default_attrs($tr.doc(), $id);
 
             if let Some(node) = $tr.doc().node($id) {
                 if let $crate::model::Node::Text(text_node) = node.node() {
@@ -853,7 +853,7 @@ macro_rules! __doc_create_node_with_id {
                 })
             ).unwrap();
 
-            $crate::test_utils::__apply_default_styles($tr.doc(), $id);
+            $crate::test_utils::__apply_default_attrs($tr.doc(), $id);
 
             if let Some(node) = $tr.doc().node($id) {
                 if let $crate::model::Node::Text(text_node) = node.node() {
@@ -893,7 +893,7 @@ macro_rules! __doc_create_node_with_id {
                 })
             ).unwrap();
 
-            $crate::test_utils::__apply_default_styles($tr.doc(), $id);
+            $crate::test_utils::__apply_default_attrs($tr.doc(), $id);
 
             let styles = __parse_styles!($($styles)*);
             if !styles.is_empty() {
@@ -930,7 +930,7 @@ macro_rules! __doc_create_node_with_id {
                 })
             ).unwrap();
 
-            $crate::test_utils::__apply_default_styles($tr.doc(), $id);
+            $crate::test_utils::__apply_default_attrs($tr.doc(), $id);
 
             let styles = __parse_styles!($($styles)*);
             if !styles.is_empty() {
@@ -963,7 +963,7 @@ macro_rules! __doc_create_node_with_id {
                     ..Default::default()
                 })
             ).unwrap();
-            $crate::test_utils::__apply_default_styles($tr.doc(), $id);
+            $crate::test_utils::__apply_default_attrs($tr.doc(), $id);
         }
     };
 
@@ -1391,8 +1391,8 @@ macro_rules! __fragment_create_node_with_id {
             let mut pending_annotations: Vec<(usize, usize, $crate::model::Annotation)> = Vec::new();
             __parse_text_segments_with_pending!(text, pending_styles, pending_annotations, $first => [$($first_styles)*] $(, $($rest_segments)*)?);
 
-            let __defaults = $crate::model::DefaultStyles::default().to_styles();
-            $crate::test_utils::__apply_default_styles_to_text(&text, &__defaults);
+            let __defaults = $crate::model::DefaultAttrs::default().to_styles();
+            $crate::test_utils::__apply_default_attrs_to_text(&text, &__defaults);
 
             for (start, end, style) in pending_styles {
                 let _ = text.apply_style(start..end, &style);
@@ -1421,8 +1421,8 @@ macro_rules! __fragment_create_node_with_id {
             let mut annotation_ranges: Vec<(std::ops::Range<usize>, $crate::model::Annotation)> = Vec::new();
             __parse_text_segments_collect!(text, style_ranges, annotation_ranges, $first, $($rest_segments)+);
 
-            let __defaults = $crate::model::DefaultStyles::default().to_styles();
-            $crate::test_utils::__apply_default_styles_to_text(&text, &__defaults);
+            let __defaults = $crate::model::DefaultAttrs::default().to_styles();
+            $crate::test_utils::__apply_default_attrs_to_text(&text, &__defaults);
 
             for (range, styles) in style_ranges {
                 for style in styles {
@@ -1451,8 +1451,8 @@ macro_rules! __fragment_create_node_with_id {
             let text = $crate::model::Text::from($text.to_string());
             let text_len = text.char_len();
 
-            let __defaults = $crate::model::DefaultStyles::default().to_styles();
-            $crate::test_utils::__apply_default_styles_to_text(&text, &__defaults);
+            let __defaults = $crate::model::DefaultAttrs::default().to_styles();
+            $crate::test_utils::__apply_default_attrs_to_text(&text, &__defaults);
 
             let styles = __parse_styles!($($styles)*);
             for style in styles {
@@ -1478,8 +1478,8 @@ macro_rules! __fragment_create_node_with_id {
             let text = $crate::model::Text::from($text.to_string());
             let text_len = text.char_len();
 
-            let __defaults = $crate::model::DefaultStyles::default().to_styles();
-            $crate::test_utils::__apply_default_styles_to_text(&text, &__defaults);
+            let __defaults = $crate::model::DefaultAttrs::default().to_styles();
+            $crate::test_utils::__apply_default_attrs_to_text(&text, &__defaults);
 
             let styles = __parse_styles!($($styles)*);
             for style in styles {
@@ -1503,8 +1503,8 @@ macro_rules! __fragment_create_node_with_id {
         {
             let text = $crate::model::Text::from($text.to_string());
 
-            let __defaults = $crate::model::DefaultStyles::default().to_styles();
-            $crate::test_utils::__apply_default_styles_to_text(&text, &__defaults);
+            let __defaults = $crate::model::DefaultAttrs::default().to_styles();
+            $crate::test_utils::__apply_default_attrs_to_text(&text, &__defaults);
 
             $nodes.push((
                 $id,
@@ -1786,17 +1786,17 @@ fn position_to_path_position(
 }
 
 #[allow(unused)]
-pub fn __apply_default_styles(doc: &crate::model::Doc, node_id: crate::model::NodeId) {
-    let defaults = doc.default_styles().to_styles();
+pub fn __apply_default_attrs(doc: &crate::model::Doc, node_id: crate::model::NodeId) {
+    let defaults = doc.default_attrs().to_styles();
     if let Some(node) = doc.node(node_id) {
         if let crate::model::Node::Text(text_node) = node.node() {
-            __apply_default_styles_to_text(&text_node.text, &defaults);
+            __apply_default_attrs_to_text(&text_node.text, &defaults);
         }
     }
 }
 
 #[allow(unused)]
-pub fn __apply_default_styles_to_text(text: &crate::model::Text, defaults: &[crate::model::Style]) {
+pub fn __apply_default_attrs_to_text(text: &crate::model::Text, defaults: &[crate::model::Style]) {
     let len = text.char_len();
     if len > 0 {
         for style in defaults {

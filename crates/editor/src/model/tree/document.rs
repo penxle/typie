@@ -69,7 +69,7 @@ impl Doc {
         root.encode(&map).unwrap();
 
         {
-            let defaults = DefaultStyles::default();
+            let defaults = DefaultAttrs::default();
             let cascade_map = map
                 .insert_container(CASCADE_ATTRS_KEY, LoroMap::new())
                 .unwrap();
@@ -262,18 +262,18 @@ impl Doc {
         Ok(())
     }
 
-    pub fn update_default_styles(&self, styles: DefaultStyles) -> Result<()> {
+    pub fn update_default_attrs(&self, attrs: DefaultAttrs) -> Result<()> {
         if let Some(root) = self.node(NodeId::ROOT) {
-            root.as_mut().set_cascade_attrs(&styles.to_attrs())?;
+            root.as_mut().set_cascade_attrs(&attrs.to_attrs())?;
         }
         self.inner.loro.commit();
         Ok(())
     }
 
-    pub fn default_styles(&self) -> DefaultStyles {
+    pub fn default_attrs(&self) -> DefaultAttrs {
         self.node(NodeId::ROOT)
             .and_then(|root| root.cascade_attrs())
-            .map(|attrs| DefaultStyles::from_attrs(&attrs))
+            .map(|attrs| DefaultAttrs::from_attrs(&attrs))
             .unwrap_or_default()
     }
 

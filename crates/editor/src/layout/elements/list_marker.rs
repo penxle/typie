@@ -110,7 +110,7 @@ impl ListMarkerElement {
 
             builder.push_default(StyleProperty::FontSize(MARKER_FONT_SIZE));
             builder.push_default(StyleProperty::FontStack(FontStack::Single(
-                FontFamily::Named(ctx.doc.default_styles().font_family().into()),
+                FontFamily::Named(ctx.doc.default_attrs().font_family().into()),
             )));
             builder.push_default(StyleProperty::FontFeatures(
                 parley::style::FontSettings::List(std::borrow::Cow::Borrowed(&[swash::Setting {
