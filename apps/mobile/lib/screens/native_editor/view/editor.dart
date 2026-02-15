@@ -385,7 +385,7 @@ class EditorView extends HookWidget {
           final capturedCursor = cursor;
           final useTypewriter =
               cursor.visible && pref.typewriterEnabled && controller.pendingScrollMode == ScrollMode.typewriter;
-          final useAutoScroll = controller.pendingScrollMode == ScrollMode.auto;
+          final useAutoScroll = !useTypewriter;
           if (controller.pendingScrollMode != null) {
             controller.pendingScrollMode = null;
           }
