@@ -14,10 +14,12 @@ class CommandHandler {
   static const _inBulletListContext = 'in_bullet_list';
   static const _inOrderedListContext = 'in_ordered_list';
   static const _inBlockquoteContext = 'in_blockquote';
+  static const _inTableContext = 'in_table';
   static const _selectedImageContext = 'selected_image';
   static const _selectedFileContext = 'selected_file';
   static const _selectedEmbedContext = 'selected_embed';
   static const _selectedArchivedContext = 'selected_archived';
+  static const _selectedTableContext = 'selected_table';
 
   static void handleSlate(EditorController controller, SlateReader reader) {
     final dirty = reader.dirty;
@@ -245,42 +247,81 @@ class CommandHandler {
   static void _updateFloatingSelection(EditorController controller, SlateReader reader) {
     final selectedBlockIds = reader.selectionBlockIds;
     final selectedBlockTypes = reader.selectionBlockTypes;
+    final commonAncestorIds = reader.selectionCommonAncestorIds;
     final commonAncestorTypes = reader.selectionCommonAncestorTypes;
-    final resolved = _resolveFloatingSelection(selectedBlockIds, selectedBlockTypes, commonAncestorTypes);
+    final anchorNodeId = reader.readNodeIdField('selection_anchor_node_id');
+    final headNodeId = reader.readNodeIdField('selection_head_node_id');
+    final anchorOffset = reader.getU32('selection_anchor_offset');
+    final headOffset = reader.getU32('selection_head_offset');
+    final isSingleBlockRange = anchorNodeId == headNodeId && (anchorOffset - headOffset).abs() == 1;
+    final resolved = _resolveFloatingSelection(
+      selectedBlockIds,
+      selectedBlockTypes,
+      commonAncestorIds,
+      commonAncestorTypes,
+      canResolveSelectedContext: isSingleBlockRange,
+    );
     controller.setFloatingSelection(context: resolved.context, nodeId: resolved.nodeId);
   }
 
   static ({String? context, String? nodeId}) _resolveFloatingSelection(
     List<String> selectedBlockIds,
     List<int> selectedBlockTypes,
-    List<int> commonAncestorTypes,
-  ) {
-    if (selectedBlockIds.length == 1 && selectedBlockTypes.length == 1) {
-      final selectedContext = switch (selectedBlockTypes.first) {
+    List<String> commonAncestorIds,
+    List<int> commonAncestorTypes, {
+    required bool canResolveSelectedContext,
+  }) {
+    int? selectedType;
+    String? selectedNodeId;
+    var hasMixedSelected = false;
+    for (var i = 0; i < selectedBlockIds.length; i++) {
+      final type = selectedBlockTypes[i];
+      if (type == selectionTypeNone) {
+        continue;
+      }
+
+      final nodeId = selectedBlockIds[i];
+      if (selectedType == null) {
+        selectedType = type;
+        selectedNodeId = nodeId;
+        continue;
+      }
+
+      if (selectedType != type || selectedNodeId != nodeId) {
+        hasMixedSelected = true;
+        break;
+      }
+    }
+
+    if (canResolveSelectedContext && selectedType != null && selectedNodeId != null && !hasMixedSelected) {
+      final selectedContext = switch (selectedType) {
         selectionTypeHorizontalRule => _selectedHorizontalRuleContext,
         selectionTypeImage => _selectedImageContext,
         selectionTypeFile => _selectedFileContext,
         selectionTypeEmbed => _selectedEmbedContext,
         selectionTypeArchived => _selectedArchivedContext,
+        selectionTypeTable => _selectedTableContext,
         _ => null,
       };
 
       if (selectedContext != null) {
-        return (context: selectedContext, nodeId: selectedBlockIds.first);
+        return (context: selectedContext, nodeId: selectedNodeId);
       }
     }
 
-    for (final nodeType in commonAncestorTypes) {
+    for (var i = 0; i < commonAncestorTypes.length; i++) {
+      final nodeType = commonAncestorTypes[i];
       final inContext = switch (nodeType) {
         selectionTypeBulletList => _inBulletListContext,
         selectionTypeOrderedList => _inOrderedListContext,
         selectionTypeBlockquote => _inBlockquoteContext,
         selectionTypeCallout => _inCalloutContext,
         selectionTypeFold => _inFoldContext,
+        selectionTypeTable => _inTableContext,
         _ => null,
       };
       if (inContext != null) {
-        return (context: inContext, nodeId: null);
+        return (context: inContext, nodeId: commonAncestorIds[i]);
       }
     }
 

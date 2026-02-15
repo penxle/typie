@@ -64,6 +64,7 @@ pub const SELECTION_TYPE_FILE: u32 = 7;
 pub const SELECTION_TYPE_EMBED: u32 = 8;
 pub const SELECTION_TYPE_ARCHIVED: u32 = 9;
 pub const SELECTION_TYPE_BLOCKQUOTE: u32 = 10;
+pub const SELECTION_TYPE_TABLE: u32 = 11;
 
 pub const AFFINITY_UPSTREAM: u32 = 0;
 pub const AFFINITY_DOWNSTREAM: u32 = 1;
@@ -88,6 +89,7 @@ pub fn selection_type(node_type: NodeType) -> u32 {
         NodeType::Embed => SELECTION_TYPE_EMBED,
         NodeType::Archived => SELECTION_TYPE_ARCHIVED,
         NodeType::Blockquote => SELECTION_TYPE_BLOCKQUOTE,
+        NodeType::Table => SELECTION_TYPE_TABLE,
         _ => SELECTION_TYPE_NONE,
     }
 }
