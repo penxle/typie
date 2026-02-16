@@ -114,7 +114,7 @@ EditorFloatingFadeController useEditorFloatingFade() {
     } else {
       // NOTE: 자동 페이드 끔
       idleTimer.value?.cancel();
-      unawaited(opacity.reverse());
+      unawaited(opacity.forward());
       isFadedOut.value = false;
     }
     return null;

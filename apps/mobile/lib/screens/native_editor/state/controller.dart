@@ -50,6 +50,8 @@ class EditorController extends ChangeNotifier {
   EditorState get state => _state;
   final ValueNotifier<String?> floatingContext = ValueNotifier(null);
   final ValueNotifier<String?> floatingNodeId = ValueNotifier(null);
+  final ValueNotifier<NativeEditorCharacterCounts?> characterCounts = ValueNotifier(null);
+  final ValueNotifier<int> characterCountsVersion = ValueNotifier(0);
 
   bool _isBatching = false;
   bool _needsNotify = false;
@@ -133,10 +135,27 @@ class EditorController extends ChangeNotifier {
     }
   }
 
+  void refreshCharacterCounts() {
+    if (editor.isDisposed) {
+      return;
+    }
+    try {
+      characterCounts.value = editor.getCharacterCounts();
+    } on EditorException {
+      // ignore
+    }
+  }
+
+  void markCharacterCountsDirty() {
+    characterCountsVersion.value++;
+  }
+
   @override
   void dispose() {
     floatingContext.dispose();
     floatingNodeId.dispose();
+    characterCounts.dispose();
+    characterCountsVersion.dispose();
     tableOverlays.dispose();
     super.dispose();
   }
