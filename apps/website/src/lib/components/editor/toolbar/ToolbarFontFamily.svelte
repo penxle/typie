@@ -58,14 +58,17 @@
   items={allFontFamilies}
   label="폰트 패밀리"
   onEscape={() => editor.focus()}
-  onchange={(fontFamilyValue) => {
+  onchange={(fontFamilyValue, options) => {
     const weightAttr = editor.getAttr('font_weight');
     const weightValues = weightAttr?.values.filter((v): v is number => v != null) ?? [];
     const currentWeight = weightValues.length === 1 ? weightValues[0] : defaultFontWeight;
     const defaultWeight = getDefaultWeight(fontFamilyValue, currentWeight);
 
-    editor.focus().dispatch({ type: 'toggleStyle', style: { type: 'font_family', family: fontFamilyValue } });
+    editor.dispatch({ type: 'toggleStyle', style: { type: 'font_family', family: fontFamilyValue } });
     editor.dispatch({ type: 'toggleStyle', style: { type: 'font_weight', weight: defaultWeight } });
+    if (options?.shouldFocus) {
+      editor.focus();
+    }
   }}
   placeholder="-"
   value={currentFontFamilyValue}
