@@ -5,9 +5,7 @@ use crate::model::{
 use crate::state::position::Position;
 use crate::state::position_helpers::compare_positions;
 use crate::state::position_helpers::find_child_at_offset;
-use crate::state::table_helpers::{
-    TableSelection, collect_cells_in_range, compute_table_selection,
-};
+use crate::state::table_helpers::{collect_cells_in_range, compute_table_selection};
 use crate::state::{BlockTraverser, Selection};
 use crate::types::Affinity;
 use anyhow::{Context, Result};
@@ -775,13 +773,8 @@ pub enum StructureSelectionInfo {
 }
 
 pub fn compute_structure_selection(doc: &Doc, selection: &Selection) -> StructureSelectionInfo {
-    if let Some(table_selection) = compute_table_selection(doc, selection) {
-        return match table_selection {
-            TableSelection::Full(table_id) => StructureSelectionInfo::Structural(vec![table_id]),
-            TableSelection::Rectangular { table_id, range } => {
-                StructureSelectionInfo::Rectangular { table_id, range }
-            }
-        };
+    if let Some((table_id, range)) = compute_table_selection(doc, selection) {
+        return StructureSelectionInfo::Rectangular { table_id, range };
     }
 
     let blocks = collect_relevant_blocks(doc, selection).unwrap_or_default();
@@ -1157,7 +1150,7 @@ mod tests {
     }
 
     #[test]
-    fn test_compute_cell_selection_rectangular_becomes_full_table() {
+    fn test_compute_cell_selection_full_table_is_rectangular() {
         let mut t = id!();
         let mut p_start = id!();
         let mut p_end = id!();
@@ -1181,11 +1174,12 @@ mod tests {
         let cell_selection = compute_structure_selection(&state.doc, &state.selection);
 
         match cell_selection {
-            StructureSelectionInfo::Structural(tables) => {
-                assert_eq!(tables.len(), 1);
-                assert_eq!(tables[0], t);
+            StructureSelectionInfo::Rectangular { table_id, range } => {
+                assert_eq!(table_id, t);
+                assert_eq!(range.0, (0, 1), "Row range mismatch");
+                assert_eq!(range.1, (0, 1), "Col range mismatch");
             }
-            _ => panic!("Expected FullTables selection, got {:?}", cell_selection),
+            _ => panic!("Expected Rectangular selection, got {:?}", cell_selection),
         }
     }
 
