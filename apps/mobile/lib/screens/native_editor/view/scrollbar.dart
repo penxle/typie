@@ -6,6 +6,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/screens/native_editor/state/state.dart';
 import 'package:typie/screens/native_editor/view/scope.dart';
+import 'package:typie/screens/native_editor/view/scroll.dart';
 import 'package:typie/services/preference.dart';
 
 const _hideDelay = Duration(milliseconds: 1000);
@@ -112,7 +113,7 @@ class EditorScrollbar extends HookWidget {
 
     final geometry = scope.geometry;
     final hasVerticalClients =
-        verticalScrollController.hasClients && verticalScrollController.position.hasContentDimensions;
+        verticalScrollController.hasSingleClient && verticalScrollController.position.hasContentDimensions;
 
     double calculateTotalContentHeight() {
       final viewportHeight = hasVerticalClients ? verticalScrollController.position.viewportDimension : viewHeight;
@@ -125,7 +126,7 @@ class EditorScrollbar extends HookWidget {
     }
 
     final hasHorizontalScroll =
-        horizontalScrollController.hasClients &&
+        horizontalScrollController.hasSingleClient &&
         horizontalScrollController.position.hasContentDimensions &&
         horizontalScrollController.position.maxScrollExtent > 0;
 
@@ -269,7 +270,7 @@ class EditorScrollbar extends HookWidget {
                   isVisible.value = true;
                 },
                 onPanUpdate: (details) {
-                  if (!isDraggingV.value || !verticalScrollController.hasClients) {
+                  if (!isDraggingV.value || !verticalScrollController.hasSingleClient) {
                     return;
                   }
                   final currentMaxExtent = verticalScrollController.position.maxScrollExtent;
@@ -367,7 +368,7 @@ class EditorScrollbar extends HookWidget {
                   isVisible.value = true;
                 },
                 onPanUpdate: (details) {
-                  if (!isDraggingH.value || !horizontalScrollController.hasClients) {
+                  if (!isDraggingH.value || !horizontalScrollController.hasSingleClient) {
                     return;
                   }
                   final currentMaxExtent = horizontalScrollController.position.maxScrollExtent;

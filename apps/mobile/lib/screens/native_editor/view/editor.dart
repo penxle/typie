@@ -242,7 +242,7 @@ class EditorView extends HookWidget {
 
     useEffect(() {
       void scrollToTop() {
-        if (verticalScrollController.hasClients) {
+        if (verticalScrollController.hasSingleClient) {
           suppressScrollbarTimer.value?.cancel();
           suppressScrollbarShow.value = true;
           unawaited(
@@ -327,7 +327,7 @@ class EditorView extends HookWidget {
 
         if (!wasVisible && height > 0) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (!verticalScrollController.hasClients) {
+            if (!verticalScrollController.hasSingleClient) {
               return;
             }
             final cursor = controller.state.cursor;
@@ -388,7 +388,9 @@ class EditorView extends HookWidget {
       }
 
       if (cursor.visible) {
-        final horizontalScrollOffset = horizontalScrollController.hasClients ? horizontalScrollController.offset : 0.0;
+        final horizontalScrollOffset = horizontalScrollController.hasSingleClient
+            ? horizontalScrollController.offset
+            : 0.0;
         final geo = ContentGeometry(
           layout: currentLayout!,
           pages: controller.state.pages,
@@ -676,8 +678,10 @@ class _DocumentPlaceholder extends StatelessWidget {
         return AnimatedBuilder(
           animation: Listenable.merge([verticalScrollController, horizontalScrollController, scrollMetricsRevision]),
           builder: (context, child) {
-            final verticalScroll = verticalScrollController.hasClients ? verticalScrollController.offset : 0.0;
-            final horizontalScroll = horizontalScrollController.hasClients ? horizontalScrollController.offset : 0.0;
+            final verticalScroll = verticalScrollController.hasSingleClient ? verticalScrollController.offset : 0.0;
+            final horizontalScroll = horizontalScrollController.hasSingleClient
+                ? horizontalScrollController.offset
+                : 0.0;
 
             final top = placeholder.y! + titleAreaHeight.value - verticalScroll;
             final left = placeholder.x! + geo.horizontalPadding - horizontalScroll;

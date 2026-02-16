@@ -6,6 +6,7 @@ import 'package:typie/native/editor_native.dart';
 import 'package:typie/screens/native_editor/state/controller.dart';
 import 'package:typie/screens/native_editor/state/state.dart';
 import 'package:typie/screens/native_editor/view/geometry.dart';
+import 'package:typie/screens/native_editor/view/scroll.dart';
 
 class GestureController {
   GestureController({
@@ -74,7 +75,7 @@ class GestureController {
       var scrolledY = activePosition?.dy ?? 0;
       var scrolledX = activePosition?.dx ?? 0;
 
-      if (_verticalDirection != 0 && verticalScrollController.hasClients) {
+      if (_verticalDirection != 0 && verticalScrollController.hasSingleClient) {
         final proximity = 1.0 - (_verticalEdgeDistance / _edgeThreshold).clamp(0.0, 1.0);
         final scrollSpeed = _minScrollSpeed + proximity * (_maxScrollSpeed - _minScrollSpeed);
 
@@ -95,7 +96,7 @@ class GestureController {
         }
       }
 
-      if (_horizontalDirection != 0 && horizontalScrollController.hasClients) {
+      if (_horizontalDirection != 0 && horizontalScrollController.hasSingleClient) {
         final proximity = 1.0 - (_horizontalEdgeDistance / _edgeThreshold).clamp(0.0, 1.0);
         final scrollSpeed = _minScrollSpeed + proximity * (_maxScrollSpeed - _minScrollSpeed);
 
@@ -128,7 +129,7 @@ class GestureController {
           return;
         }
 
-        final hOffset = horizontalScrollController.hasClients ? horizontalScrollController.offset : 0.0;
+        final hOffset = horizontalScrollController.hasSingleClient ? horizontalScrollController.offset : 0.0;
         final pointerX = scrolledX + hOffset - getHorizontalPadding();
 
         final currentPosition = (pageIdx, pointerX, localY);
@@ -225,8 +226,8 @@ class GestureController {
       return null;
     }
     final offsets = geo.computeCumulativePageOffsets();
-    final scrollOffset = verticalScrollController.hasClients ? verticalScrollController.offset : 0.0;
-    final hScrollOffset = horizontalScrollController.hasClients ? horizontalScrollController.offset : 0.0;
+    final scrollOffset = verticalScrollController.hasSingleClient ? verticalScrollController.offset : 0.0;
+    final hScrollOffset = horizontalScrollController.hasSingleClient ? horizontalScrollController.offset : 0.0;
     final pageTopOffset = geo.titleAreaHeight + offsets[handle.pageIdx];
     final y = pageTopOffset + handle.y - scrollOffset;
     final x = geo.horizontalPadding + handle.x - hScrollOffset;

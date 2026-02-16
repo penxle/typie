@@ -5,6 +5,11 @@ import 'package:flutter/widgets.dart';
 import 'package:typie/screens/native_editor/state/state.dart';
 import 'package:typie/screens/native_editor/view/geometry.dart';
 
+extension SafeScrollAccess on ScrollController {
+  /// [position]/[offset] 접근 전에 사용. 여러 scroll view에 attach된 경우 false 반환.
+  bool get hasSingleClient => hasClients && positions.length == 1;
+}
+
 void scrollToCursor({
   required ScrollController verticalController,
   required ScrollController horizontalController,
@@ -30,7 +35,7 @@ void _scrollVertical({
   required bool typewriterEnabled,
   required double typewriterPosition,
 }) {
-  if (!controller.hasClients) {
+  if (!controller.hasSingleClient) {
     return;
   }
 
@@ -71,7 +76,7 @@ void _scrollHorizontal({
   required ContentGeometry geometry,
   required CursorInfo cursor,
 }) {
-  if (!controller.hasClients || controller.position.maxScrollExtent <= 0) {
+  if (!controller.hasSingleClient || controller.position.maxScrollExtent <= 0) {
     return;
   }
 
@@ -112,7 +117,7 @@ void scrollToOverlayTarget({
   final offsets = geometry.computeCumulativePageOffsets();
   final absoluteY = geometry.titleAreaHeight + offsets[pageIdx] + targetY;
 
-  if (verticalScrollController.hasClients) {
+  if (verticalScrollController.hasSingleClient) {
     final viewportHeight = verticalScrollController.position.viewportDimension;
     final targetOffset = (absoluteY - viewportHeight / 3).clamp(0.0, verticalScrollController.position.maxScrollExtent);
     unawaited(
@@ -124,7 +129,7 @@ void scrollToOverlayTarget({
     );
   }
 
-  if (horizontalScrollController.hasClients && horizontalScrollController.position.maxScrollExtent > 0) {
+  if (horizontalScrollController.hasSingleClient && horizontalScrollController.position.maxScrollExtent > 0) {
     const scrollMargin = 60.0;
     final matchX = targetX + geometry.horizontalPadding;
     final matchRight = matchX + targetWidth;

@@ -12,6 +12,7 @@ import 'package:typie/screens/native_editor/view/editor_draggable.dart';
 import 'package:typie/screens/native_editor/view/gesture.dart';
 import 'package:typie/screens/native_editor/view/page.dart';
 import 'package:typie/screens/native_editor/view/scope.dart';
+import 'package:typie/screens/native_editor/view/scroll.dart';
 import 'package:typie/screens/native_editor/view/selection.dart';
 import 'package:typie/screens/native_editor/view/table_overlay.dart';
 import 'package:typie/screens/native_editor/view/title.dart';
@@ -45,7 +46,7 @@ class PageList extends HookWidget {
     (int pageIdx, double localY) getPageAtPosition(double y) {
       final geo = scope.geometry;
       final offsets = geo.computeCumulativePageOffsets();
-      final scrollOffset = scope.verticalScrollController.hasClients ? scope.verticalScrollController.offset : 0.0;
+      final scrollOffset = scope.verticalScrollController.hasSingleClient ? scope.verticalScrollController.offset : 0.0;
       final absoluteY = y + scrollOffset;
 
       if (absoluteY < geo.titleAreaHeight) {
@@ -86,7 +87,7 @@ class PageList extends HookWidget {
         controller: scope.controller,
         getPageAtPosition: getPageAtPosition,
         getPointerX: (localX) {
-          final offset = horizontalScrollController.hasClients ? horizontalScrollController.offset : 0.0;
+          final offset = horizontalScrollController.hasSingleClient ? horizontalScrollController.offset : 0.0;
           return localX + offset - scope.geometry.horizontalPadding;
         },
         getHorizontalPadding: () => scope.geometry.horizontalPadding,
@@ -256,7 +257,7 @@ class PageList extends HookWidget {
             : const _NonGestureBouncingScrollPhysics();
 
         final contentBottomPadding = geo.bottomPadding(
-          viewportHeight: verticalScrollController.hasClients
+          viewportHeight: verticalScrollController.hasSingleClient
               ? verticalScrollController.position.viewportDimension
               : viewHeight,
           cursor: cursor,
@@ -285,7 +286,7 @@ class PageList extends HookWidget {
                               return true;
                             }
                             final localPosition = renderBox.globalToLocal(globalPosition);
-                            final scrollOffset = verticalScrollController.hasClients
+                            final scrollOffset = verticalScrollController.hasSingleClient
                                 ? verticalScrollController.offset
                                 : 0.0;
                             final viewportY = localPosition.dy - scrollOffset;
@@ -302,7 +303,7 @@ class PageList extends HookWidget {
                                 return;
                               }
                               scope.inputController.commitComposing();
-                              final scrollOffset = verticalScrollController.hasClients
+                              final scrollOffset = verticalScrollController.hasSingleClient
                                   ? verticalScrollController.offset
                                   : 0.0;
                               final viewportPosition = Offset(
@@ -328,7 +329,7 @@ class PageList extends HookWidget {
                                 ..lastTapTime = null;
                             }
                             ..onLongPressMoveUpdate = (details) {
-                              final scrollOffset = verticalScrollController.hasClients
+                              final scrollOffset = verticalScrollController.hasSingleClient
                                   ? verticalScrollController.offset
                                   : 0.0;
                               final viewportPosition = Offset(
@@ -581,20 +582,20 @@ class PageList extends HookWidget {
             if (isSelecting) {
               return;
             }
-            if (verticalScrollController.hasClients) {
+            if (verticalScrollController.hasSingleClient) {
               verticalScrollController.position.hold(() {});
             }
-            if (horizontalScrollController.hasClients) {
+            if (horizontalScrollController.hasSingleClient) {
               horizontalScrollController.position.hold(() {});
             }
           },
           onPanStart: (details) {
-            if (verticalScrollController.hasClients) {
+            if (verticalScrollController.hasSingleClient) {
               gesture.verticalDrag = verticalScrollController.position.drag(details, () {
                 gesture.verticalDrag = null;
               });
             }
-            if (needsHorizontalScroll && horizontalScrollController.hasClients) {
+            if (needsHorizontalScroll && horizontalScrollController.hasSingleClient) {
               gesture.horizontalDrag = horizontalScrollController.position.drag(details, () {
                 gesture.horizontalDrag = null;
               });
@@ -778,7 +779,7 @@ class _PageSlot extends HookWidget {
     final verticalScrollController = scope.verticalScrollController;
 
     bool computeVisibility() {
-      if (!verticalScrollController.hasClients) {
+      if (!verticalScrollController.hasSingleClient) {
         return true;
       }
       final scrollOffset = verticalScrollController.offset;
