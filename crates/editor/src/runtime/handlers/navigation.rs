@@ -3,6 +3,7 @@ use crate::model::NodeId;
 use crate::runtime::{Direction, Effect, Runtime};
 use crate::state::position_helpers::move_from_block_position;
 use crate::state::{Position, Selection, leaf_block_end, leaf_block_start};
+use crate::transaction::{sentence_range_at, word_range_at};
 use crate::types::Affinity;
 
 impl Runtime {
@@ -110,6 +111,104 @@ impl Runtime {
         } else {
             vec![]
         }
+    }
+
+    pub(crate) fn handle_select_word(&mut self) -> Vec<Effect> {
+        let selection = self.state.selection;
+        if selection.is_collapsed() {
+            let position = selection.head;
+            return self.transact(move |tr| {
+                tr.select_word_at(position)?;
+                tr.set_preferred_x(None);
+                Ok(true)
+            });
+        }
+        let Ok((from, to)) = selection.as_sorted(&self.state.doc) else {
+            return vec![];
+        };
+        if from.node_id != to.node_id {
+            return vec![];
+        }
+        let from_word = word_range_at(&self.state.doc, from);
+        let to_inner = Position::new(
+            to.node_id,
+            to.offset.saturating_sub(1),
+            Affinity::Downstream,
+        );
+        let to_word = if to.offset > 0 {
+            word_range_at(&self.state.doc, to_inner)
+        } else {
+            from_word
+        };
+        let (ws, we) = match (from_word, to_word) {
+            (Some((ws1, we1)), Some((ws2, we2))) if ws1 == ws2 && we1 == we2 => (ws1, we1),
+            _ => return vec![],
+        };
+        let anchor = Position::new(from.node_id, ws, Affinity::Downstream);
+        let head = Position::new(from.node_id, we, Affinity::Upstream);
+        self.transact(move |tr| {
+            tr.set_selection(Selection::new(anchor, head));
+            tr.set_preferred_x(None);
+            Ok(true)
+        })
+    }
+
+    pub(crate) fn handle_select_sentence(&mut self) -> Vec<Effect> {
+        let selection = self.state.selection;
+        if selection.is_collapsed() {
+            let position = selection.head;
+            return self.transact(move |tr| {
+                tr.select_sentence_at(position)?;
+                tr.set_preferred_x(None);
+                Ok(true)
+            });
+        }
+        let Ok((from, to)) = selection.as_sorted(&self.state.doc) else {
+            return vec![];
+        };
+        if from.node_id != to.node_id {
+            return vec![];
+        }
+        let from_sent = sentence_range_at(&self.state.doc, from);
+        let to_inner = Position::new(
+            to.node_id,
+            to.offset.saturating_sub(1),
+            Affinity::Downstream,
+        );
+        let to_sent = if to.offset > 0 {
+            sentence_range_at(&self.state.doc, to_inner)
+        } else {
+            from_sent
+        };
+        let (ss, se) = match (from_sent, to_sent) {
+            (Some((ss1, se1)), Some((ss2, se2))) if ss1 == ss2 && se1 == se2 => (ss1, se1),
+            _ => return vec![],
+        };
+        let anchor = Position::new(from.node_id, ss, Affinity::Downstream);
+        let head = Position::new(from.node_id, se, Affinity::Upstream);
+        self.transact(move |tr| {
+            tr.set_selection(Selection::new(anchor, head));
+            tr.set_preferred_x(None);
+            Ok(true)
+        })
+    }
+
+    pub(crate) fn handle_select_paragraph(&mut self) -> Vec<Effect> {
+        let selection = self.state.selection;
+        if selection.is_collapsed() {
+            let position = selection.head;
+            return self.transact(move |tr| {
+                tr.select_paragraph_at(position)?;
+                tr.set_preferred_x(None);
+                Ok(true)
+            });
+        }
+        let position = selection.head;
+        self.transact(move |tr| {
+            tr.select_paragraph_at(position)?;
+            tr.set_preferred_x(None);
+            Ok(true)
+        })
     }
 
     pub(crate) fn handle_set_selection(

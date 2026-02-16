@@ -16,6 +16,7 @@ mod style;
 mod table;
 mod text;
 
+pub use selection::{paragraph_range_at, sentence_range_at, word_range_at};
 pub use text::DeleteResult;
 
 use crate::model::*;

@@ -172,6 +172,8 @@ define_slate! {
         pub selection_head_width: f32,
         pub selection_head_height: f32,
 
+        pub selection_expandable: u32,
+
         pub pointer_style: u32,
         pub pointer_state: u32,
 

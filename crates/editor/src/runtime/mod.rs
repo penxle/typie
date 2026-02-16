@@ -29,7 +29,7 @@ use crate::state::selection_helpers::{
 use crate::state::{
     Position, Preedit, Selection, find_child_at_offset, find_text_at_offset, position_in_selection,
 };
-use crate::transaction::Transaction;
+use crate::transaction::{Transaction, paragraph_range_at, sentence_range_at, word_range_at};
 use crate::types::{Affinity, BoxConstraints, PointerStyle, Rect, Size};
 use anyhow::Result;
 pub use cmd::*;
@@ -582,6 +582,108 @@ impl Runtime {
             .unwrap_or(slate::SELECTION_TYPE_NONE)
     }
 
+    fn compute_selection_expandable(&self, selection: Selection) -> u32 {
+        const EXPAND_WORD: u32 = 1;
+        const EXPAND_SENTENCE: u32 = 2;
+        const EXPAND_PARAGRAPH: u32 = 4;
+        const EXPAND_ALL: u32 = 8;
+
+        let Ok((from, to)) = selection.as_sorted(&self.state.doc) else {
+            return EXPAND_WORD | EXPAND_SENTENCE | EXPAND_PARAGRAPH | EXPAND_ALL;
+        };
+
+        let mut flags = 0u32;
+
+        if selection.is_collapsed() {
+            let head = selection.head;
+
+            if let Some((ws, we)) = word_range_at(&self.state.doc, head) {
+                if ws != we {
+                    flags |= EXPAND_WORD;
+                }
+            }
+
+            if let Some((ss, se)) = sentence_range_at(&self.state.doc, head) {
+                if ss != se {
+                    flags |= EXPAND_SENTENCE;
+                }
+            }
+
+            if let Some((_, ps, pe)) = paragraph_range_at(&self.state.doc, head) {
+                if pe > ps {
+                    flags |= EXPAND_PARAGRAPH;
+                }
+            }
+        } else if from.node_id == to.node_id {
+            let min_off = from.offset;
+            let max_off = to.offset;
+            let to_inner = Position::new(
+                to.node_id,
+                to.offset.saturating_sub(1),
+                Affinity::Downstream,
+            );
+
+            // Word: only expandable if both endpoints are in the same word
+            {
+                let from_word = word_range_at(&self.state.doc, from);
+                let to_word = if to.offset > 0 {
+                    word_range_at(&self.state.doc, to_inner)
+                } else {
+                    from_word
+                };
+                if let (Some((ws1, we1)), Some((ws2, we2))) = (from_word, to_word) {
+                    if ws1 == ws2 && we1 == we2 && (ws1 < min_off || we1 > max_off) {
+                        flags |= EXPAND_WORD;
+                    }
+                }
+            }
+
+            // Sentence: only expandable if both endpoints are in the same sentence
+            {
+                let from_sent = sentence_range_at(&self.state.doc, from);
+                let to_sent = if to.offset > 0 {
+                    sentence_range_at(&self.state.doc, to_inner)
+                } else {
+                    from_sent
+                };
+                if let (Some((ss1, se1)), Some((ss2, se2))) = (from_sent, to_sent) {
+                    if ss1 == ss2 && se1 == se2 && (ss1 < min_off || se1 > max_off) {
+                        flags |= EXPAND_SENTENCE;
+                    }
+                }
+            }
+
+            // Paragraph: check if current selection is smaller than paragraph
+            if let Some((para_id, ps, pe)) = paragraph_range_at(&self.state.doc, from) {
+                if para_id != from.node_id || ps < min_off || pe > max_off {
+                    flags |= EXPAND_PARAGRAPH;
+                }
+            }
+        } else {
+            // Cross-block selection: word/sentence/paragraph at head would shrink
+            // But paragraph might expand if it covers more than current selection
+            // For simplicity: only "all" can expand for cross-block selections
+        }
+
+        // All: check against document boundaries
+        let ctx = NavigationContext::new(&self.state.doc);
+        if let (Some(start_sel), Some(end_sel)) = (
+            Cursor::move_to_document_start(&ctx, &self.pages),
+            Cursor::move_to_document_end(&ctx, &self.pages),
+        ) {
+            if let (Ok((ds, _)), Ok((_, de))) = (
+                start_sel.as_sorted(&self.state.doc),
+                end_sel.as_sorted(&self.state.doc),
+            ) {
+                if from != ds || to != de {
+                    flags |= EXPAND_ALL;
+                }
+            }
+        }
+
+        flags
+    }
+
     fn set_width(&mut self, width: f32) {
         if self.width != width {
             self.layout_cache.borrow_mut().invalidate_all();
@@ -1001,6 +1103,7 @@ impl Runtime {
                 anchor_handle.as_ref(),
                 head_handle.as_ref(),
             );
+            self.slate.selection_expandable = self.compute_selection_expandable(selection);
             self.pending.selection = false;
         }
 
