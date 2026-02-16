@@ -34,6 +34,8 @@ fragment EntityScreen_Entity_entity on Entity {
     ... on Document {
       id
       title
+      nullableTitle
+      subtitle
       documentType: type
       excerpt
       updatedAt
