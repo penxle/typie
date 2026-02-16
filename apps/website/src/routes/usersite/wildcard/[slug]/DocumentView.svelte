@@ -345,7 +345,7 @@
         <ContentProtect>
           <EditorComponent {editor} readOnly snapshot={bodySnapshot} useWindowScroll>
             {#snippet header()}
-              <div class={css({ paddingTop: { base: '24px', md: '48px' } })}>
+              <div class={css({ paddingTop: { base: '48px', md: '80px' } })}>
                 <nav class={flex({ alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginBottom: '20px' })}>
                   <a class={flex({ alignItems: 'center', gap: '6px' })} href={$entityView.site.url}>
                     {#if $entityView.site.logo}
@@ -376,7 +376,7 @@
                 </div>
 
                 {#if document.subtitle}
-                  <div class={css({ marginTop: '4px', fontSize: { base: '14px', lg: '16px' }, fontWeight: 'medium' })}>
+                  <div class={css({ marginTop: '8px', fontSize: { base: '14px', lg: '16px' }, fontWeight: 'medium' })}>
                     {document.subtitle}
                   </div>
                 {/if}
@@ -398,7 +398,7 @@
                   </div>
                 </div>
 
-                <HorizontalDivider style={css.raw({ marginBottom: '20px' })} />
+                <HorizontalDivider style={css.raw({ marginBottom: '24px' })} />
               </div>
             {/snippet}
 
@@ -431,8 +431,8 @@
       {:else}
         <EditorComponent {editor} readOnly snapshot={bodySnapshot} useWindowScroll>
           {#snippet header()}
-            <div class={css({ paddingTop: { base: '24px', md: '48px' } })}>
-              <nav class={flex({ alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginBottom: { base: '4px', lg: '8px' } })}>
+            <div class={css({ paddingTop: { base: '48px', md: '80px' } })}>
+              <nav class={flex({ alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginBottom: '20px' })}>
                 <a class={flex({ alignItems: 'center', gap: '6px' })} href={$entityView.site.url}>
                   {#if $entityView.site.logo}
                     <Img
@@ -462,12 +462,12 @@
               </div>
 
               {#if document.subtitle}
-                <div class={css({ marginTop: '4px', fontSize: { base: '14px', lg: '16px' }, fontWeight: 'medium' })}>
+                <div class={css({ marginTop: '8px', fontSize: { base: '14px', lg: '16px' }, fontWeight: 'medium' })}>
                   {document.subtitle}
                 </div>
               {/if}
 
-              <div class={flex({ align: 'center', justify: 'space-between', marginTop: '20px', paddingBottom: '10px' })}>
+              <div class={flex({ align: 'center', justify: 'space-between', marginTop: '24px', paddingBottom: '16px' })}>
                 <div class={flex({ align: 'center', gap: '8px', fontSize: '13px', color: 'text.faint' })}>
                   {#if document.allowReaction && document.reactions.length > 0}
                     <div class={flex({ align: 'center', gap: '3px' })}>
@@ -484,7 +484,7 @@
                 </div>
               </div>
 
-              <HorizontalDivider style={css.raw({ marginBottom: '20px' })} />
+              <HorizontalDivider style={css.raw({ marginBottom: '24px' })} />
             </div>
           {/snippet}
 
