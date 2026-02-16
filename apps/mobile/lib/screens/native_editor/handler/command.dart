@@ -94,6 +94,7 @@ class CommandHandler {
 
   static void _handleDocChanged(EditorController controller) {
     controller.onDocChanged?.call();
+    controller.markCharacterCountsDirty();
   }
 
   static void _handleRenderRequired(EditorController controller) {

@@ -7,6 +7,7 @@ import 'package:gap/gap.dart';
 import 'package:typie/context/bottom_sheet.dart';
 import 'package:typie/context/theme.dart';
 import 'package:typie/graphql/client.dart';
+import 'package:typie/hooks/debounce.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/screens/native_editor/__generated__/native_editor_query.data.gql.dart';
@@ -17,6 +18,7 @@ import 'package:typie/screens/native_editor/controller/keyboard.dart';
 import 'package:typie/screens/native_editor/controller/ticker.dart';
 import 'package:typie/screens/native_editor/controller/upload.dart';
 import 'package:typie/screens/native_editor/external/models.dart';
+import 'package:typie/screens/native_editor/floating/widgets/character_count_floating.dart';
 import 'package:typie/screens/native_editor/sheet/template.dart';
 import 'package:typie/screens/native_editor/state/controller.dart';
 import 'package:typie/screens/native_editor/state/scroll_mode.dart';
@@ -152,6 +154,14 @@ class EditorView extends HookWidget {
 
     final pref = useService<Pref>();
     final floatingCursorOrigin = useRef<CursorInfo?>(null);
+
+    final characterCountsVersion = useValueListenable(controller.characterCountsVersion);
+    final characterCountsDebounce = useDebounce<void>(const Duration(milliseconds: 150));
+
+    useEffect(() {
+      characterCountsDebounce.call(controller.refreshCharacterCounts, 'character-counts');
+      return null;
+    }, [characterCountsVersion, controller]);
 
     useEffect(() {
       controller
@@ -576,6 +586,7 @@ class EditorView extends HookWidget {
                           ),
                         ),
                       ),
+                      if (pref.characterCountFloatingEnabled) const NativeCharacterCountFloating(),
                       const Positioned(bottom: 20, right: 20, child: NativeEditorFloatingToolbar()),
                       if (state.state.pasteOptions != null)
                         Positioned(
