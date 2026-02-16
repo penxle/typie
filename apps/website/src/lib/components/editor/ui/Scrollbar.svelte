@@ -7,6 +7,7 @@
   };
 
   const HIDE_DELAY = 1000;
+  const USER_SCROLL_WINDOW_MS = 220;
   const MIN_THUMB_SIZE = 30;
   const TRACK_PADDING = 2;
   const INDICATOR_HEIGHT = 24;
@@ -30,7 +31,9 @@
   let isHoveringV = $state(false);
   let isHoveringH = $state(false);
   let isVisible = $state(false);
+  let visibleScrollSource = $state<'user' | 'auto'>('user');
   let hideTimer: ReturnType<typeof setTimeout> | undefined;
+  let lastUserScrollInputAt = 0;
   let dragStartY = 0;
   let dragStartX = 0;
   let dragStartScrollTop = 0;
@@ -49,20 +52,28 @@
       containerRect = scrollContainer.getBoundingClientRect();
     };
 
+    const isRecentUserScroll = () => Date.now() - lastUserScrollInputAt <= USER_SCROLL_WINDOW_MS;
+
+    const handleScroll = () => {
+      syncState();
+      showTemporarily(isRecentUserScroll() || isDraggingV || isDraggingH ? 'user' : 'auto');
+    };
+
     const handleUserScroll = () => {
-      showTemporarily();
+      lastUserScrollInputAt = Date.now();
+      showTemporarily('user');
     };
 
     const resizeObserver = new ResizeObserver(syncState);
     resizeObserver.observe(scrollContainer);
 
-    scrollContainer.addEventListener('scroll', syncState);
+    scrollContainer.addEventListener('scroll', handleScroll);
     scrollContainer.addEventListener('wheel', handleUserScroll, { passive: true });
     scrollContainer.addEventListener('touchmove', handleUserScroll, { passive: true });
     syncState();
 
     return () => {
-      scrollContainer.removeEventListener('scroll', syncState);
+      scrollContainer.removeEventListener('scroll', handleScroll);
       scrollContainer.removeEventListener('wheel', handleUserScroll);
       scrollContainer.removeEventListener('touchmove', handleUserScroll);
       resizeObserver.disconnect();
@@ -70,8 +81,9 @@
     };
   });
 
-  function showTemporarily() {
+  function showTemporarily(source: 'user' | 'auto' = 'auto') {
     isVisible = true;
+    visibleScrollSource = source;
     clearTimeout(hideTimer);
     if (!isDraggingV && !isDraggingH && !isHoveringV && !isHoveringH) {
       hideTimer = setTimeout(() => (isVisible = false), HIDE_DELAY);
@@ -80,24 +92,22 @@
 
   function handleHoverStartV() {
     isHoveringV = true;
-    isVisible = true;
-    clearTimeout(hideTimer);
+    showTemporarily('user');
   }
 
   function handleHoverEndV() {
     isHoveringV = false;
-    showTemporarily();
+    showTemporarily('user');
   }
 
   function handleHoverStartH() {
     isHoveringH = true;
-    isVisible = true;
-    clearTimeout(hideTimer);
+    showTemporarily('user');
   }
 
   function handleHoverEndH() {
     isHoveringH = false;
-    showTemporarily();
+    showTemporarily('user');
   }
 
   const canScrollV = $derived(scrollHeight > clientHeight);
@@ -118,6 +128,7 @@
 
   const indicatorTop = $derived(containerRect ? containerRect.top + thumbTop + thumbHeight / 2 - INDICATOR_HEIGHT / 2 : 0);
   const indicatorRight = $derived(containerRect ? window.innerWidth - containerRect.right + INDICATOR_GAP : 0);
+  const isUserScrollVisible = $derived(visibleScrollSource === 'user');
 
   const displayText = $derived.by(() => {
     if (editor.layout.layoutMode.type === 'paginated') {
@@ -136,6 +147,8 @@
 
   function handleTrackClickV(e: MouseEvent) {
     if (!scrollContainer || e.target !== e.currentTarget) return;
+    lastUserScrollInputAt = Date.now();
+    showTemporarily('user');
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const clickY = e.clientY - rect.top - TRACK_PADDING;
     const ratio = Math.max(0, Math.min(1, (clickY - thumbHeight / 2) / (trackHeight - thumbHeight)));
@@ -144,6 +157,8 @@
 
   function handleTrackClickH(e: MouseEvent) {
     if (!scrollContainer || e.target !== e.currentTarget) return;
+    lastUserScrollInputAt = Date.now();
+    showTemporarily('user');
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const clickX = e.clientX - rect.left - TRACK_PADDING;
     const ratio = Math.max(0, Math.min(1, (clickX - thumbWidth / 2) / (trackWidth - thumbWidth)));
@@ -156,11 +171,14 @@
     e.stopPropagation();
 
     isDraggingV = true;
+    lastUserScrollInputAt = Date.now();
+    showTemporarily('user');
     dragStartY = e.clientY;
     dragStartScrollTop = scrollContainer.scrollTop;
 
     const onMove = (e: MouseEvent) => {
       if (!scrollContainer) return;
+      lastUserScrollInputAt = Date.now();
       const delta = ((e.clientY - dragStartY) / (trackHeight - thumbHeight)) * maxScrollV;
       scrollContainer.scrollTop = dragStartScrollTop + delta;
     };
@@ -169,7 +187,7 @@
       isDraggingV = false;
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
-      showTemporarily();
+      showTemporarily('user');
     };
 
     document.addEventListener('mousemove', onMove);
@@ -182,11 +200,14 @@
     e.stopPropagation();
 
     isDraggingH = true;
+    lastUserScrollInputAt = Date.now();
+    showTemporarily('user');
     dragStartX = e.clientX;
     dragStartScrollLeft = scrollContainer.scrollLeft;
 
     const onMove = (e: MouseEvent) => {
       if (!scrollContainer) return;
+      lastUserScrollInputAt = Date.now();
       const delta = ((e.clientX - dragStartX) / (trackWidth - thumbWidth)) * maxScrollH;
       scrollContainer.scrollLeft = dragStartScrollLeft + delta;
     };
@@ -195,7 +216,7 @@
       isDraggingH = false;
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
-      showTemporarily();
+      showTemporarily('user');
     };
 
     document.addEventListener('mousemove', onMove);
@@ -203,7 +224,7 @@
   }
 </script>
 
-{#if canScrollV && containerRect}
+{#if canScrollV && containerRect && isUserScrollVisible}
   <div
     style:top="{indicatorTop}px"
     style:right="{indicatorRight}px"
@@ -221,7 +242,7 @@
       fontVariantNumeric: 'tabular-nums',
       transition: 'opacity',
       transitionDuration: '300ms',
-      ...(!isVisible && { opacity: '0' }),
+      opacity: isVisible ? '100' : '0',
     })}
   >
     {displayText}
@@ -240,7 +261,7 @@
       width: '12px',
       transition: 'opacity',
       transitionDuration: '300ms',
-      ...(!isVisible && !isDraggingV && { opacity: '0' }),
+      opacity: isVisible || isDraggingV ? (isUserScrollVisible ? '100' : '65') : '0',
     })}
     aria-controls="scroll-content"
     aria-valuemax={maxScrollV}
@@ -261,10 +282,10 @@
         width: '8px',
         cursor: 'pointer',
         borderRadius: 'full',
-        backgroundColor: 'black/50',
+        backgroundColor: isUserScrollVisible ? 'black/50' : 'black/22',
         transition: 'colors',
-        _hover: { backgroundColor: 'black/70' },
-        _active: { backgroundColor: 'black/80' },
+        _hover: { backgroundColor: isUserScrollVisible ? 'black/70' : 'black/35' },
+        _active: { backgroundColor: isUserScrollVisible ? 'black/80' : 'black/45' },
       })}
       aria-valuemax={maxScrollV}
       aria-valuemin={0}
@@ -288,7 +309,7 @@
       height: '12px',
       transition: 'opacity',
       transitionDuration: '300ms',
-      ...(!isVisible && !isDraggingH && { opacity: '0' }),
+      opacity: isVisible || isDraggingH ? (isUserScrollVisible ? '100' : '65') : '0',
     })}
     aria-controls="scroll-content"
     aria-orientation="horizontal"
@@ -310,10 +331,10 @@
         height: '8px',
         cursor: 'pointer',
         borderRadius: 'full',
-        backgroundColor: 'black/50',
+        backgroundColor: isUserScrollVisible ? 'black/50' : 'black/22',
         transition: 'colors',
-        _hover: { backgroundColor: 'black/70' },
-        _active: { backgroundColor: 'black/80' },
+        _hover: { backgroundColor: isUserScrollVisible ? 'black/70' : 'black/35' },
+        _active: { backgroundColor: isUserScrollVisible ? 'black/80' : 'black/45' },
       })}
       aria-valuemax={maxScrollH}
       aria-valuemin={0}
