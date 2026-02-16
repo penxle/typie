@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/screens/native_editor/view/geometry.dart';
 import 'package:typie/screens/native_editor/view/scope.dart';
+import 'package:typie/screens/native_editor/view/scroll.dart';
 
 typedef DocumentOverlayBuilder = Widget Function(BuildContext context, DocumentOverlayViewport viewport);
 
@@ -51,10 +52,10 @@ class DocumentOverlayLayer extends HookWidget {
 
     final geometry = ContentGeometry(layout: layout, pages: pages, titleAreaHeight: titleAreaHeight);
     final pageOffsets = geometry.computeCumulativePageOffsets();
-    final verticalScrollOffset = scope.verticalScrollController.hasClients
+    final verticalScrollOffset = scope.verticalScrollController.hasSingleClient
         ? scope.verticalScrollController.offset
         : 0.0;
-    final horizontalScrollOffset = scope.horizontalScrollController.hasClients
+    final horizontalScrollOffset = scope.horizontalScrollController.hasSingleClient
         ? scope.horizontalScrollController.offset
         : 0.0;
 

@@ -4,6 +4,7 @@ import 'package:typie/context/theme.dart';
 import 'package:typie/screens/native_editor/controller/clipboard.dart';
 import 'package:typie/screens/native_editor/sheet/paste_option.dart';
 import 'package:typie/screens/native_editor/view/scope.dart';
+import 'package:typie/screens/native_editor/view/scroll.dart';
 import 'package:typie/service.dart';
 import 'package:typie/services/preference.dart';
 
@@ -52,12 +53,12 @@ class SelectionContextMenu extends StatelessWidget {
     final vController = scope.verticalScrollController;
     final hController = scope.horizontalScrollController;
 
-    if (!vController.hasClients) {
+    if (!vController.hasSingleClient) {
       return null;
     }
 
     final scrollOffset = vController.offset;
-    final hScrollOffset = hController.hasClients ? hController.offset : 0.0;
+    final hScrollOffset = hController.hasSingleClient ? hController.offset : 0.0;
 
     final state = scope.controller.state;
     final fromHandle = state.selection?.fromBounds;
