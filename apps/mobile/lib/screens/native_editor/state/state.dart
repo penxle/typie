@@ -53,12 +53,19 @@ abstract class EditorSelection with _$EditorSelection {
     @Default(0) int cmp,
     SelectionEndpointBounds? anchorBounds,
     SelectionEndpointBounds? headBounds,
+    @Default(0) int expandable,
   }) = _EditorSelection;
 
   const EditorSelection._();
 
   SelectionEndpointBounds? get fromBounds => cmp < 0 ? headBounds : anchorBounds;
   SelectionEndpointBounds? get toBounds => cmp < 0 ? anchorBounds : headBounds;
+
+  bool get canExpandWord => expandable & 1 != 0;
+  bool get canExpandSentence => expandable & 2 != 0;
+  bool get canExpandParagraph => expandable & 4 != 0;
+  bool get canExpandAll => expandable & 8 != 0;
+  bool get canExpand => expandable != 0;
 }
 
 typedef SelectionHandleInfo = SelectionEndpointBounds;

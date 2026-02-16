@@ -1,7 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/widgets.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/context/theme.dart';
+import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/screens/native_editor/controller/clipboard.dart';
 import 'package:typie/screens/native_editor/view/scope.dart';
 import 'package:typie/screens/native_editor/view/scroll.dart';
@@ -134,7 +136,7 @@ class _MenuPositionDelegate extends SingleChildLayoutDelegate {
   }
 }
 
-class _MenuBubble extends StatelessWidget {
+class _MenuBubble extends HookWidget {
   const _MenuBubble({required this.clipboard, required this.onDismiss});
 
   final EditorClipboard clipboard;
@@ -144,55 +146,158 @@ class _MenuBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     final scope = ContentScope.of(context);
     final colors = context.colors;
-    final hasSelection = scope.controller.state.selection?.collapsed == false;
+    final selection = scope.controller.state.selection;
+    final hasSelection = selection?.collapsed == false;
+    final isExpanded = useState(false);
 
-    return Container(
-      decoration: BoxDecoration(
-        color: colors.surfaceDefault,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: colors.borderDefault),
-        boxShadow: const [BoxShadow(color: Color(0x1A000000), blurRadius: 8, offset: Offset(0, 2))],
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (hasSelection) ...[
-            _MenuButton(
-              label: '복사',
-              onTap: () async {
-                await clipboard.copy(scope.editor);
-                onDismiss();
-              },
-            ),
-            _MenuButton(
-              label: '잘라내기',
-              onTap: () async {
-                await clipboard.cut(scope.editor, scope.editor.dispatch);
-                onDismiss();
-              },
-            ),
-          ],
+    final controller = useAnimationController(duration: const Duration(milliseconds: 150));
+    final curve = useMemoized(
+      () => CurvedAnimation(parent: controller, curve: Curves.easeOut, reverseCurve: Curves.easeIn),
+      [controller],
+    );
+
+    useEffect(() {
+      if (isExpanded.value) {
+        unawaited(controller.forward());
+      } else {
+        unawaited(controller.reverse());
+      }
+      return null;
+    }, [isExpanded.value]);
+
+    final mainOpacity = Tween<double>(begin: 1, end: 0);
+    final mainOffset = Tween<double>(begin: 0, end: -10);
+    final subOpacity = Tween<double>(begin: 0, end: 1);
+    final subOffset = Tween<double>(begin: 10, end: 0);
+
+    final mainMenu = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (hasSelection) ...[
           _MenuButton(
-            label: '붙여넣기',
-            onTap: () {
-              unawaited(
-                EditorClipboard().getPastePayload().then((payload) {
-                  scope.editor.dispatch(payload);
-                  scope.controller.scrollIntoView();
-                  onDismiss();
-                }),
-              );
+            label: '복사',
+            onTap: () async {
+              await clipboard.copy(scope.editor);
+              onDismiss();
             },
           ),
           _MenuButton(
-            label: '전체 선택',
-            onTap: () {
-              scope.editor.dispatch({'type': 'selectAll'});
-              scope.controller.scrollIntoView();
+            label: '잘라내기',
+            onTap: () async {
+              await clipboard.cut(scope.editor, scope.editor.dispatch);
               onDismiss();
             },
           ),
         ],
+        _MenuButton(
+          label: '붙여넣기',
+          onTap: () {
+            unawaited(
+              EditorClipboard().getPastePayload().then((payload) {
+                scope.editor.dispatch(payload);
+                scope.controller.scrollIntoView();
+                onDismiss();
+              }),
+            );
+          },
+        ),
+        if (selection?.canExpand ?? true) _MenuButton(label: '선택 확장', onTap: () => isExpanded.value = true),
+      ],
+    );
+
+    final subMenu = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => isExpanded.value = false,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            child: Icon(LucideLightIcons.chevron_left, size: 14, color: colors.textDefault),
+          ),
+        ),
+        if (selection?.canExpandWord ?? true)
+          _MenuButton(
+            label: '단어',
+            onTap: () {
+              scope.editor.dispatch({'type': 'selectWord'});
+              isExpanded.value = false;
+            },
+          ),
+        if (selection?.canExpandSentence ?? true)
+          _MenuButton(
+            label: '문장',
+            onTap: () {
+              scope.editor.dispatch({'type': 'selectSentence'});
+              isExpanded.value = false;
+            },
+          ),
+        if (selection?.canExpandParagraph ?? true)
+          _MenuButton(
+            label: '문단',
+            onTap: () {
+              scope.editor.dispatch({'type': 'selectParagraph'});
+              isExpanded.value = false;
+            },
+          ),
+        if (selection?.canExpandAll ?? true)
+          _MenuButton(
+            label: '전체',
+            onTap: () {
+              scope.editor.dispatch({'type': 'selectAll'});
+              isExpanded.value = false;
+            },
+          ),
+      ],
+    );
+
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 150),
+      curve: Curves.easeOut,
+      clipBehavior: Clip.none,
+      child: Container(
+        decoration: BoxDecoration(
+          color: colors.surfaceDefault,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: colors.borderDefault),
+          boxShadow: const [BoxShadow(color: Color(0x1A000000), blurRadius: 8, offset: Offset(0, 2))],
+        ),
+        clipBehavior: Clip.hardEdge,
+        child: AnimatedBuilder(
+          animation: controller,
+          builder: (context, _) {
+            final target = isExpanded.value ? subMenu : mainMenu;
+            final outgoing = isExpanded.value ? mainMenu : subMenu;
+            final outgoingOpacity = isExpanded.value ? mainOpacity : subOpacity;
+            final outgoingOffset = isExpanded.value ? mainOffset : subOffset;
+            final targetOpacity = isExpanded.value ? subOpacity : mainOpacity;
+            final targetOffset = isExpanded.value ? subOffset : mainOffset;
+            final outgoingVisible = !(isExpanded.value ? controller.isCompleted : controller.isDismissed);
+
+            return Stack(
+              alignment: Alignment.centerLeft,
+              children: [
+                // 대상 뷰: non-positioned → Stack 크기 결정, AnimatedSize가 부드럽게 전환
+                Transform.translate(
+                  offset: Offset(targetOffset.evaluate(curve), 0),
+                  child: Opacity(opacity: targetOpacity.evaluate(curve), child: target),
+                ),
+                // 나가는 뷰: OverflowBox로 자연 크기 유지, Container clip으로 잘림
+                if (outgoingVisible)
+                  Positioned.fill(
+                    child: OverflowBox(
+                      maxWidth: double.infinity,
+                      alignment: Alignment.centerLeft,
+                      child: Transform.translate(
+                        offset: Offset(outgoingOffset.evaluate(curve), 0),
+                        child: Opacity(opacity: outgoingOpacity.evaluate(curve), child: outgoing),
+                      ),
+                    ),
+                  ),
+              ],
+            );
+          },
+        ),
       ),
     );
   }

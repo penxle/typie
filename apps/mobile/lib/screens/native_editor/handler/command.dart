@@ -202,9 +202,17 @@ class CommandHandler {
             );
     }
 
+    final expandable = reader.getU32('selection_expandable');
+
     controller.updateState(
       (state) => state.copyWith(
-        selection: EditorSelection(collapsed: collapsed, cmp: cmp, anchorBounds: anchorBounds, headBounds: headBounds),
+        selection: EditorSelection(
+          collapsed: collapsed,
+          cmp: cmp,
+          anchorBounds: anchorBounds,
+          headBounds: headBounds,
+          expandable: expandable,
+        ),
         pasteOptions: null,
       ),
     );

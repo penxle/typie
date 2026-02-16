@@ -263,6 +263,18 @@ define_messages! {
     => when When::True
     => handle(rt) { rt.handle_select_all() },
 
+    SelectWord
+    => when When::True
+    => handle(rt) { rt.handle_select_word() },
+
+    SelectSentence
+    => when When::True
+    => handle(rt) { rt.handle_select_sentence() },
+
+    SelectParagraph
+    => when When::True
+    => handle(rt) { rt.handle_select_paragraph() },
+
     DeleteSelection
     => when When::key(ContextKey::RangeSelection)
         .and(When::key(ContextKey::CanEdit))
