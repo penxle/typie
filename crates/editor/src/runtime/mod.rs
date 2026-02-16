@@ -376,6 +376,7 @@ impl Runtime {
         self.pending.settings = true;
         self.pending.enabled_actions = true;
         self.pending.default_attrs = true;
+        self.pending.placeholder = true;
     }
 
     pub fn replace_text_in_block(
