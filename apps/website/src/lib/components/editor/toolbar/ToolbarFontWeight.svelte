@@ -94,8 +94,11 @@
   items={weightItems}
   label="폰트 굵기"
   onEscape={() => editor.focus()}
-  onchange={(weight) => {
-    editor.focus().dispatch({ type: 'toggleStyle', style: { type: 'font_weight', weight } });
+  onchange={(weight, options) => {
+    editor.dispatch({ type: 'toggleStyle', style: { type: 'font_weight', weight } });
+    if (options?.shouldFocus) {
+      editor.focus();
+    }
   }}
   placeholder="-"
   value={currentWeight}
