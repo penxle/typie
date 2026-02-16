@@ -19,12 +19,12 @@ class DocumentOverlayViewport {
   final double horizontalScrollOffset;
 
   bool hasPage(int pageIdx) {
-    return pageIdx >= 0 && pageIdx < geometry.layout.pages.length;
+    return pageIdx >= 0 && pageIdx < geometry.pages.length;
   }
 
   Rect pageRect(int pageIdx) {
-    final clamped = pageIdx.clamp(0, geometry.layout.pages.length - 1);
-    final page = geometry.layout.pages[clamped];
+    final clamped = pageIdx.clamp(0, geometry.pages.length - 1);
+    final page = geometry.pages[clamped];
     final left = geometry.horizontalPadding - horizontalScrollOffset;
     final top = geometry.titleAreaHeight + pageOffsets[clamped] - verticalScrollOffset;
     return Rect.fromLTWH(left, top, page.width, page.height);
@@ -44,11 +44,12 @@ class DocumentOverlayLayer extends HookWidget {
     useListenable(scope.horizontalScrollController);
     final titleAreaHeight = useValueListenable(scope.titleAreaHeight);
     final layout = state.state.layout;
-    if (layout == null || layout.pages.isEmpty) {
+    final pages = state.state.pages;
+    if (layout == null || pages.isEmpty) {
       return const SizedBox.shrink();
     }
 
-    final geometry = ContentGeometry(layout: layout, titleAreaHeight: titleAreaHeight);
+    final geometry = ContentGeometry(layout: layout, pages: pages, titleAreaHeight: titleAreaHeight);
     final pageOffsets = geometry.computeCumulativePageOffsets();
     final verticalScrollOffset = scope.verticalScrollController.hasClients
         ? scope.verticalScrollController.offset

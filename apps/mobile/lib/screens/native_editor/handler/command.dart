@@ -109,10 +109,10 @@ class CommandHandler {
     final layoutModeTag = reader.slabU32(lmPos);
     lmPos += 4;
 
-    final LayoutModeInfo layoutMode;
+    final Layout layout;
 
     if (layoutModeTag == 0) {
-      layoutMode = LayoutModeInfo.paginated(
+      layout = Layout.paginated(
         pageWidth: reader.slabF32(lmPos),
         pageHeight: reader.slabF32(lmPos + 4),
         pageMarginTop: reader.slabF32(lmPos + 8),
@@ -121,15 +121,13 @@ class CommandHandler {
         pageMarginRight: reader.slabF32(lmPos + 20),
       );
     } else {
-      layoutMode = LayoutModeInfo.continuous(maxWidth: reader.slabF32(lmPos));
+      layout = Layout.continuous(maxWidth: reader.slabF32(lmPos));
     }
 
     controller.updateState(
       (state) => state.copyWith(
         settings: state.settings.copyWith(paragraphIndent: paragraphIndent, blockGap: blockGap),
-        layout: state.layout != null
-            ? LayoutInfo(isPaginated: layoutModeTag == 0, pages: state.layout!.pages, layoutMode: layoutMode)
-            : null,
+        layout: layout,
       ),
     );
   }
@@ -140,21 +138,11 @@ class CommandHandler {
     final raw = reader.readF32List(pagesOffset, pagesCount * 2);
     final pages = [for (var i = 0; i < pagesCount; i++) PageSize(width: raw[i * 2], height: raw[i * 2 + 1])];
 
-    final hadLayout = controller.state.layout != null;
-    final currentLayout = controller.state.layout;
+    final hadPages = controller.state.pages.isNotEmpty;
 
-    controller.updateState(
-      (state) => state.copyWith(
-        layout: LayoutInfo(
-          isPaginated: currentLayout?.isPaginated ?? false,
-          pages: pages,
-          layoutMode: currentLayout?.layoutMode ?? const LayoutModeInfo.continuous(maxWidth: 600),
-        ),
-        renderVersion: Object(),
-      ),
-    );
+    controller.updateState((state) => state.copyWith(pages: pages, renderVersion: Object()));
 
-    if (!hadLayout && pages.isNotEmpty) {
+    if (!hadPages && pages.isNotEmpty) {
       controller.onEditorReady?.call();
     }
   }

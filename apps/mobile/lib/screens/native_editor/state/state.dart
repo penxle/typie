@@ -94,28 +94,22 @@ abstract class CursorInfo with _$CursorInfo {
 }
 
 @freezed
-abstract class LayoutModeInfo with _$LayoutModeInfo {
-  const factory LayoutModeInfo.paginated({
+abstract class Layout with _$Layout {
+  const factory Layout.paginated({
     required double pageWidth,
     required double pageHeight,
     required double pageMarginTop,
     required double pageMarginBottom,
     required double pageMarginLeft,
     required double pageMarginRight,
-  }) = PaginatedLayoutMode;
+  }) = PaginatedLayout;
 
-  const factory LayoutModeInfo.continuous({required double maxWidth}) = ContinuousLayoutMode;
+  const factory Layout.continuous({required double maxWidth}) = ContinuousLayout;
 }
 
 @freezed
 abstract class PageSize with _$PageSize {
   const factory PageSize({required double width, required double height}) = _PageSize;
-}
-
-@freezed
-abstract class LayoutInfo with _$LayoutInfo {
-  const factory LayoutInfo({required bool isPaginated, required List<PageSize> pages, LayoutModeInfo? layoutMode}) =
-      _LayoutInfo;
 }
 
 @freezed
@@ -228,7 +222,8 @@ abstract class DropIndicatorInfo with _$DropIndicatorInfo {
 @freezed
 abstract class EditorState with _$EditorState {
   const factory EditorState({
-    LayoutInfo? layout,
+    Layout? layout,
+    @Default([]) List<PageSize> pages,
     CursorInfo? cursor,
     @Default(false) bool isFocused,
     @Default(false) bool isSelecting,

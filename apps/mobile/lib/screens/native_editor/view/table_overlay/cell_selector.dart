@@ -117,6 +117,7 @@ class TableCellSelectorController {
     required this.gesture,
     required this.overlay,
     required this.layout,
+    required this.pages,
     required this.selection,
     required this.renderBounds,
     required this.fallbackRow,
@@ -131,6 +132,7 @@ class TableCellSelectorController {
          overlay: overlay,
          selection: selection,
          layout: layout,
+         pages: pages,
          renderBounds: renderBounds,
          dragDraft: dragDraftState.value,
          fallbackRow: fallbackRow,
@@ -141,7 +143,8 @@ class TableCellSelectorController {
   final ContentScope scope;
   final GestureController gesture;
   final TableOverlayInfo overlay;
-  final LayoutInfo? layout;
+  final Layout? layout;
+  final List<PageSize> pages;
   final EditorSelection? selection;
   final TableOverlayBounds renderBounds;
   final int fallbackRow;
@@ -204,7 +207,7 @@ class TableCellSelectorController {
       gesture.dragAnchorHandle = null;
       return;
     }
-    final anchorPoint = tableCellCenterPagePoint(overlay: overlay, layout: layout!, cell: anchor);
+    final anchorPoint = tableCellCenterPagePoint(overlay: overlay, layout: layout!, pages: pages, cell: anchor);
     gesture.dragAnchorHandle = anchorPoint == null
         ? null
         : SelectionEndpointBounds(
@@ -306,8 +309,8 @@ class TableCellSelectorController {
     if (layout == null) {
       return;
     }
-    final anchorPoint = tableCellCenterPagePoint(overlay: overlay, layout: layout!, cell: anchor);
-    final headPoint = tableCellCenterPagePoint(overlay: overlay, layout: layout!, cell: head);
+    final anchorPoint = tableCellCenterPagePoint(overlay: overlay, layout: layout!, pages: pages, cell: anchor);
+    final headPoint = tableCellCenterPagePoint(overlay: overlay, layout: layout!, pages: pages, cell: head);
     if (anchorPoint == null || headPoint == null) {
       return;
     }
@@ -339,13 +342,19 @@ void resetCellSelectionDragIfTableChanged({
 TableCellSelectorState _resolveTableCellSelectorState({
   required TableOverlayInfo overlay,
   required EditorSelection? selection,
-  required LayoutInfo? layout,
+  required Layout? layout,
+  required List<PageSize> pages,
   required TableOverlayBounds renderBounds,
   required CellSelectionDragDraft? dragDraft,
   required int fallbackRow,
   required int fallbackCol,
 }) {
-  final stateRange = _tableSelectionRangeFromSelection(overlay: overlay, selection: selection, layout: layout);
+  final stateRange = _tableSelectionRangeFromSelection(
+    overlay: overlay,
+    selection: selection,
+    layout: layout,
+    pages: pages,
+  );
   final fallbackRange = TableSelectionRange.single(row: fallbackRow, col: fallbackCol);
   final activeRange = (dragDraft?.range ?? stateRange ?? fallbackRange).clamp(
     maxRow: overlay.totalRows - 1,
@@ -374,7 +383,8 @@ bool _shouldShowCellSelector({
 TableSelectionRange? _tableSelectionRangeFromSelection({
   required TableOverlayInfo overlay,
   required EditorSelection? selection,
-  required LayoutInfo? layout,
+  required Layout? layout,
+  required List<PageSize> pages,
 }) {
   if (selection == null || layout == null) {
     return null;
@@ -383,8 +393,8 @@ TableSelectionRange? _tableSelectionRangeFromSelection({
     return null;
   }
 
-  final anchor = tableCellFromSelectionEndpoint(overlay, selection.anchorBounds, layout);
-  final head = tableCellFromSelectionEndpoint(overlay, selection.headBounds, layout);
+  final anchor = tableCellFromSelectionEndpoint(overlay, selection.anchorBounds, layout, pages);
+  final head = tableCellFromSelectionEndpoint(overlay, selection.headBounds, layout, pages);
   if (anchor == null || head == null) {
     return null;
   }

@@ -5,6 +5,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/context/bottom_sheet.dart';
 import 'package:typie/context/theme.dart';
 import 'package:typie/icons/lucide_light.dart';
+import 'package:typie/screens/native_editor/state/state.dart';
 import 'package:typie/screens/native_editor/table/models.dart';
 import 'package:typie/screens/native_editor/view/document_overlay_layer.dart';
 import 'package:typie/screens/native_editor/view/gesture.dart';
@@ -46,7 +47,8 @@ class TableOverlay extends HookWidget {
     final scope = ContentScope.of(context);
     final overlays = useValueListenable(scope.controller.tableOverlays);
     final layout = scope.controller.state.layout;
-    if (layout == null || layout.pages.isEmpty) {
+    final pages = scope.controller.state.pages;
+    if (layout == null || pages.isEmpty) {
       return const SizedBox.shrink();
     }
 
@@ -113,7 +115,8 @@ class _FocusedTableOverlay extends HookWidget {
     final scope = ContentScope.of(context);
     useListenable(scope.controller);
 
-    final page = scope.controller.state.layout?.pages.elementAtOrNull(overlay.pageIdx);
+    final pages = scope.controller.state.pages;
+    final page = pages.elementAtOrNull(overlay.pageIdx);
     final layout = scope.controller.state.layout;
     final renderBounds = overlay.bounds;
     final pageWidth = math.max(
@@ -141,7 +144,7 @@ class _FocusedTableOverlay extends HookWidget {
       if (!hasOverlayGeometry) {
         return null;
       }
-      final focused = tableFocusedCellFromCursor(overlay, cursor, layout);
+      final focused = tableFocusedCellFromCursor(overlay, cursor, layout, pages);
       selectedRow.value = focused?.row ?? tableDefaultRow(overlay);
       selectedCol.value = focused?.col ?? 0;
       return null;
@@ -161,7 +164,7 @@ class _FocusedTableOverlay extends HookWidget {
         if (!hasOverlayGeometry) {
           return null;
         }
-        final focused = tableFocusedCellFromCursor(overlay, cursor, layout);
+        final focused = tableFocusedCellFromCursor(overlay, cursor, layout, pages);
         if (focused == null) {
           return null;
         }
@@ -188,8 +191,8 @@ class _FocusedTableOverlay extends HookWidget {
         overlay.colPositions.length,
         overlay.rowPositions.length,
         hasOverlayGeometry,
-        layout?.isPaginated,
-        layout?.pages.length,
+        layout is PaginatedLayout,
+        pages.length,
       ],
     );
 
@@ -268,6 +271,7 @@ class _FocusedTableOverlay extends HookWidget {
       gesture: gesture,
       overlay: overlay,
       layout: layout,
+      pages: pages,
       selection: selection,
       renderBounds: renderBounds,
       fallbackRow: currentRow,
