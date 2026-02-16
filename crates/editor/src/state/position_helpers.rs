@@ -160,7 +160,7 @@ pub fn position_in_selection(doc: &Doc, pos: Position, selection: &Selection) ->
                 current_id = node.parent().map(|n| n.node_id());
             }
 
-            false
+            return false;
         }
         StructureSelectionInfo::Structural(block_ids) => {
             let mut current_id = Some(pos.node_id);
@@ -174,19 +174,17 @@ pub fn position_in_selection(doc: &Doc, pos: Position, selection: &Selection) ->
                 };
                 current_id = node.parent().map(|n| n.node_id());
             }
-
-            false
         }
-        _ => {
-            let Ok((from, to)) = selection.as_sorted(doc) else {
-                return false;
-            };
-
-            let after_start = compare_positions(doc, from, pos).unwrap() != Ordering::Greater;
-            let before_end = compare_positions(doc, pos, to).unwrap() != Ordering::Greater;
-            after_start && before_end
-        }
+        _ => {}
     }
+
+    let Ok((from, to)) = selection.as_sorted(doc) else {
+        return false;
+    };
+
+    let after_start = compare_positions(doc, from, pos).unwrap() != Ordering::Greater;
+    let before_end = compare_positions(doc, pos, to).unwrap() != Ordering::Greater;
+    after_start && before_end
 }
 
 fn position_path(doc: &Doc, pos: Position) -> Result<Vec<usize>> {
@@ -472,6 +470,12 @@ mod tests {
         assert!(
             super::position_in_selection(&state.doc, table_start, &state.selection),
             "Table node position should be considered inside full-table Structural selection"
+        );
+
+        let after_table = Position::new(p_end, 0, Affinity::Downstream);
+        assert!(
+            super::position_in_selection(&state.doc, after_table, &state.selection),
+            "Range position outside block_ids should still be considered inside selection"
         );
     }
 }

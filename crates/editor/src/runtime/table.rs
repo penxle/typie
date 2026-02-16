@@ -5,7 +5,7 @@ use crate::model::{Doc, LayoutMode, NodeId, TABLE_BORDER_WIDTH, TableAlign, Tabl
 use crate::runtime::Runtime;
 use crate::runtime::cmd::TableOverlay;
 use crate::state::Selection;
-use crate::state::table_helpers::{TableSelection, compute_table_selection};
+use crate::state::table_helpers::compute_table_selection;
 use crate::types::{Point, Rect};
 use std::collections::{HashMap, hash_map::Entry};
 use std::rc::Rc;
@@ -445,11 +445,7 @@ fn focused_cursor_page(selection: &Selection, doc: &Rc<Doc>, pages: &[Page]) -> 
 }
 
 fn selected_table_overlay_table_id(selection: &Selection, doc: &Doc) -> Option<NodeId> {
-    match compute_table_selection(doc, selection) {
-        Some(TableSelection::Full(table_id)) => Some(table_id),
-        Some(TableSelection::Rectangular { table_id, .. }) => Some(table_id),
-        _ => None,
-    }
+    compute_table_selection(doc, selection).map(|(table_id, _)| table_id)
 }
 
 fn is_cursor_in_table(cursor_node_id: NodeId, table_id: NodeId, doc: &Rc<Doc>) -> bool {

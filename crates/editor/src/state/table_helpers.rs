@@ -2,16 +2,12 @@ use crate::model::{Doc, NodeId, NodeType};
 use crate::state::Selection;
 use std::cmp::{max, min};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum TableSelection {
-    Full(NodeId),
-    Rectangular {
-        table_id: NodeId,
-        range: ((usize, usize), (usize, usize)),
-    },
-}
+pub type TableCellRange = ((usize, usize), (usize, usize));
 
-pub fn compute_table_selection(doc: &Doc, selection: &Selection) -> Option<TableSelection> {
+pub fn compute_table_selection(
+    doc: &Doc,
+    selection: &Selection,
+) -> Option<(NodeId, TableCellRange)> {
     let anchor_info = find_table_cell(doc, selection.anchor.node_id);
     let head_info = find_table_cell(doc, selection.head.node_id);
 
@@ -31,35 +27,11 @@ pub fn compute_table_selection(doc: &Doc, selection: &Selection) -> Option<Table
         let start_col = min(c1, c2);
         let end_col = max(c1, c2);
 
-        if let Some(table) = doc.node(t1) {
-            let num_rows = table.children().count();
-            let num_cols = table
-                .children()
-                .next()
-                .map(|row| row.children().count())
-                .unwrap_or(0);
-
-            if start_row == 0
-                && end_row == num_rows.saturating_sub(1)
-                && start_col == 0
-                && end_col == num_cols.saturating_sub(1)
-            {
-                return Some(TableSelection::Full(t1));
-            }
-        }
-
-        Some(TableSelection::Rectangular {
-            table_id: t1,
-            range: ((start_row, end_row), (start_col, end_col)),
-        })
+        Some((t1, ((start_row, end_row), (start_col, end_col))))
     }
 }
 
-pub fn collect_cells_in_range(
-    doc: &Doc,
-    table_id: NodeId,
-    range: ((usize, usize), (usize, usize)),
-) -> Vec<NodeId> {
+pub fn collect_cells_in_range(doc: &Doc, table_id: NodeId, range: TableCellRange) -> Vec<NodeId> {
     let mut cells = Vec::new();
     if let Some(table) = doc.node(table_id) {
         for (r_idx, row) in table.children().enumerate() {
