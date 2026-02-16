@@ -54,8 +54,16 @@ void _scrollVertical({
     final maxScrollExtent = math.max<double>(0, totalContentHeight - viewportHeight);
 
     final clampedTarget = targetScroll.clamp(0.0, maxScrollExtent);
-    if ((controller.offset - clampedTarget).abs() > 0.5) {
-      controller.jumpTo(clampedTarget);
+    final delta = (controller.offset - clampedTarget).abs();
+    if (delta > 0.5) {
+      final durationMs = math.max(90, math.min(180, (delta * 0.25).round()));
+      unawaited(
+        controller.animateTo(
+          clampedTarget,
+          duration: Duration(milliseconds: durationMs),
+          curve: Curves.easeOutCubic,
+        ),
+      );
     }
     return;
   }
