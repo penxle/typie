@@ -148,6 +148,8 @@
             ... on Document {
               id
               title
+              nullableTitle
+              subtitle
 
               characterCountChange {
                 additions
