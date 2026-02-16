@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/hooks/service.dart';
+import 'package:typie/screens/native_editor/state/state.dart';
 import 'package:typie/screens/native_editor/view/scope.dart';
 import 'package:typie/services/preference.dart';
 
@@ -33,6 +34,7 @@ class EditorScrollbar extends HookWidget {
     final verticalScrollController = scope.verticalScrollController;
     final horizontalScrollController = scope.horizontalScrollController;
     final layout = state.state.layout!;
+    final pages = state.state.pages;
     final cursor = state.state.cursor;
     useValueListenable(scope.titleAreaHeight);
     final typewriterEnabled = pref.typewriterEnabled;
@@ -191,9 +193,9 @@ class EditorScrollbar extends HookWidget {
       var mostVisible = 0;
       var maxVisibility = 0.0;
 
-      for (var i = 0; i < layout.pages.length; i++) {
+      for (var i = 0; i < pages.length; i++) {
         final pageTop = cumHeight;
-        final pageHeight = layout.pages.elementAtOrNull(i)?.height ?? 0.0;
+        final pageHeight = pages.elementAtOrNull(i)?.height ?? 0.0;
         final pageBottom = cumHeight + pageHeight;
         cumHeight = pageBottom + geometry.gapAfterPage(i);
 
@@ -210,9 +212,9 @@ class EditorScrollbar extends HookWidget {
     }
 
     String getDisplayText() {
-      if (layout.isPaginated) {
+      if (layout is PaginatedLayout) {
         final mostVisiblePage = calculateMostVisiblePage();
-        return '${mostVisiblePage + 1}/${layout.pages.length}';
+        return '${mostVisiblePage + 1}/${pages.length}';
       }
       return '${(scrollRatioV * 100).round()}%';
     }

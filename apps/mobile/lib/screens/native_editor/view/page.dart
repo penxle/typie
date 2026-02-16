@@ -27,13 +27,14 @@ class PageItem extends HookWidget {
     final editorState = scope.controller.state;
 
     final layout = editorState.layout!;
+    final pages = editorState.pages;
     final cursor = editorState.cursor;
     final pageCursor = cursor?.pageIdx == pageIndex ? cursor : null;
     final isFocused = editorState.isFocused;
-    final layoutMode = layout.layoutMode;
-    final margins = layoutMode is PaginatedLayoutMode ? layoutMode : null;
-    final bottomGap = layout.isPaginated && pageIndex < layout.pages.length - 1 ? ContentGeometry.pageGap : 0.0;
-    final pageHeight = layout.pages.elementAtOrNull(pageIndex)?.height;
+    final isPaginated = layout is PaginatedLayout;
+    final margins = layout is PaginatedLayout ? layout : null;
+    final bottomGap = isPaginated && pageIndex < pages.length - 1 ? ContentGeometry.pageGap : 0.0;
+    final pageHeight = pages.elementAtOrNull(pageIndex)?.height;
 
     final editor = scope.editor;
     final renderVersion = editorState.renderVersion;
@@ -108,7 +109,7 @@ class PageItem extends HookWidget {
 
     final hasTexture = textureId.value != null && textureSize.value != null;
 
-    final pageDecoration = layout.isPaginated
+    final pageDecoration = isPaginated
         ? BoxDecoration(
             color: context.colors.surfaceDefault,
             boxShadow: [
@@ -135,7 +136,7 @@ class PageItem extends HookWidget {
             _AiFeedbackOverlay(pageIndex: pageIndex, overlays: editorState.aiFeedback.overlays),
             Cursor(cursorInfo: displayCursor.value, isFocused: isFocused),
             ElementOverlay(pageIndex: pageIndex),
-            if (layout.isPaginated && margins != null)
+            if (isPaginated && margins != null)
               Positioned.fill(
                 child: IgnorePointer(
                   child: CustomPaint(

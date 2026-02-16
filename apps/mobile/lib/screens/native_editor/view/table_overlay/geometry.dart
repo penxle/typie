@@ -82,40 +82,42 @@ double tableRowContentTopInset(TableOverlayInfo overlay) {
   return overlay.startRowIndex == 0 ? 1.0 : 0.0;
 }
 
-double tablePageTopOffset(LayoutInfo layout, int pageIdx) {
-  if (layout.pages.isEmpty) {
+double tablePageTopOffset(Layout layout, List<PageSize> pages, int pageIdx) {
+  if (pages.isEmpty) {
     return 0;
   }
 
-  final clamped = pageIdx.clamp(0, layout.pages.length - 1);
+  final isPaginated = layout is PaginatedLayout;
+  final clamped = pageIdx.clamp(0, pages.length - 1);
   var top = 0.0;
   for (var i = 0; i < clamped; i++) {
-    top += layout.pages[i].height;
-    if (layout.isPaginated && i < layout.pages.length - 1) {
+    top += pages[i].height;
+    if (isPaginated && i < pages.length - 1) {
       top += 24.0;
     }
   }
   return top;
 }
 
-int tablePageIndexForGlobalY(LayoutInfo layout, double globalY) {
-  if (layout.pages.isEmpty) {
+int tablePageIndexForGlobalY(Layout layout, List<PageSize> pages, double globalY) {
+  if (pages.isEmpty) {
     return 0;
   }
 
+  final isPaginated = layout is PaginatedLayout;
   var top = 0.0;
-  for (var i = 0; i < layout.pages.length; i++) {
-    final bottom = top + layout.pages[i].height;
-    if (globalY <= bottom || i == layout.pages.length - 1) {
+  for (var i = 0; i < pages.length; i++) {
+    final bottom = top + pages[i].height;
+    if (globalY <= bottom || i == pages.length - 1) {
       return i;
     }
-    if (layout.isPaginated && i < layout.pages.length - 1) {
+    if (isPaginated && i < pages.length - 1) {
       top = bottom + 24.0;
     } else {
       top = bottom;
     }
   }
-  return layout.pages.length - 1;
+  return pages.length - 1;
 }
 
 TableCellIndex tableCellAtOverlayOffset({
@@ -142,7 +144,8 @@ TableCellIndex tableCellAtOverlayOffset({
 
 PagePoint? tableCellCenterPagePoint({
   required TableOverlayInfo overlay,
-  required LayoutInfo layout,
+  required Layout layout,
+  required List<PageSize> pages,
   required TableCellIndex cell,
 }) {
   final localRow = cell.row - overlay.startRowIndex;
@@ -156,19 +159,20 @@ PagePoint? tableCellCenterPagePoint({
   final x = overlay.bounds.x + tableColLeft(overlay, cell.col) + overlay.colWidths[cell.col] * 0.5;
   final localY = tableRowTop(overlay, localRow) + overlay.rowHeights[localRow] * 0.5;
 
-  if (layout.isPaginated) {
+  if (layout is PaginatedLayout) {
     return PagePoint(pageIdx: overlay.pageIdx, x: x, y: overlay.bounds.y + localY);
   }
 
-  final globalY = tablePageTopOffset(layout, overlay.pageIdx) + overlay.bounds.y + localY;
-  final pageIdx = tablePageIndexForGlobalY(layout, globalY);
-  return PagePoint(pageIdx: pageIdx, x: x, y: globalY - tablePageTopOffset(layout, pageIdx));
+  final globalY = tablePageTopOffset(layout, pages, overlay.pageIdx) + overlay.bounds.y + localY;
+  final pageIdx = tablePageIndexForGlobalY(layout, pages, globalY);
+  return PagePoint(pageIdx: pageIdx, x: x, y: globalY - tablePageTopOffset(layout, pages, pageIdx));
 }
 
 TableCellIndex? tableCellFromSelectionEndpoint(
   TableOverlayInfo overlay,
   SelectionEndpointBounds? endpoint,
-  LayoutInfo layout,
+  Layout layout,
+  List<PageSize> pages,
 ) {
   if (endpoint == null) {
     return null;
@@ -176,6 +180,7 @@ TableCellIndex? tableCellFromSelectionEndpoint(
   return tableCellFromPagePoint(
     overlay: overlay,
     layout: layout,
+    pages: pages,
     pageIdx: endpoint.pageIdx,
     x: endpoint.x + endpoint.width * 0.5,
     y: endpoint.y + endpoint.height * 0.5,
@@ -184,7 +189,8 @@ TableCellIndex? tableCellFromSelectionEndpoint(
 
 TableCellIndex? tableCellFromPagePoint({
   required TableOverlayInfo overlay,
-  required LayoutInfo layout,
+  required Layout layout,
+  required List<PageSize> pages,
   required int pageIdx,
   required double x,
   required double y,
@@ -194,7 +200,8 @@ TableCellIndex? tableCellFromPagePoint({
   }
 
   final localX = x - overlay.bounds.x;
-  final localY = layout.isPaginated
+  final isPaginated = layout is PaginatedLayout;
+  final localY = isPaginated
       ? (() {
           if (pageIdx != overlay.pageIdx) {
             return double.nan;
@@ -202,8 +209,8 @@ TableCellIndex? tableCellFromPagePoint({
           return y - overlay.bounds.y;
         })()
       : (() {
-          final overlayTop = tablePageTopOffset(layout, overlay.pageIdx) + overlay.bounds.y;
-          final pointGlobalY = tablePageTopOffset(layout, pageIdx) + y;
+          final overlayTop = tablePageTopOffset(layout, pages, overlay.pageIdx) + overlay.bounds.y;
+          final pointGlobalY = tablePageTopOffset(layout, pages, pageIdx) + y;
           return pointGlobalY - overlayTop;
         })();
 
@@ -226,7 +233,12 @@ TableCellIndex? tableCellFromPagePoint({
   );
 }
 
-TableCellIndex? tableFocusedCellFromCursor(TableOverlayInfo overlay, CursorInfo? cursor, LayoutInfo? layout) {
+TableCellIndex? tableFocusedCellFromCursor(
+  TableOverlayInfo overlay,
+  CursorInfo? cursor,
+  Layout? layout,
+  List<PageSize> pages,
+) {
   if (cursor == null || !cursor.visible) {
     return null;
   }
@@ -236,6 +248,7 @@ TableCellIndex? tableFocusedCellFromCursor(TableOverlayInfo overlay, CursorInfo?
   return tableCellFromPagePoint(
     overlay: overlay,
     layout: layout,
+    pages: pages,
     pageIdx: cursor.pageIdx,
     x: cursor.x,
     y: cursor.y + cursor.height * 0.5,

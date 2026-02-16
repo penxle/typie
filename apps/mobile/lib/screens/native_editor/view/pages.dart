@@ -26,7 +26,7 @@ class PageList extends HookWidget {
     final pref = useService<Pref>();
     final state = useListenable(scope.controller);
 
-    final layout = state.state.layout!;
+    final pages = state.state.pages;
     final cursor = state.state.cursor;
     final isFocused = state.state.isFocused;
     final isSelecting = state.state.isSelecting;
@@ -65,7 +65,7 @@ class PageList extends HookWidget {
         }
       }
 
-      final pageIdx = (low - 1).clamp(0, geo.layout.pages.length - 1);
+      final pageIdx = (low - 1).clamp(0, geo.pages.length - 1);
       final localY = adjustedY - offsets[pageIdx];
       return (pageIdx, localY);
     }
@@ -249,7 +249,7 @@ class PageList extends HookWidget {
 
         final geo = scope.geometry;
         final offsets = geo.computeCumulativePageOffsets();
-        final contentWidth = (layout.pages.firstOrNull?.width ?? 0) + geo.horizontalPadding * 2;
+        final contentWidth = (pages.firstOrNull?.width ?? 0) + geo.horizontalPadding * 2;
         final needsHorizontalScroll = contentWidth > viewWidth;
         final horizontalPhysics = isSelecting || !needsHorizontalScroll
             ? const NeverScrollableScrollPhysics()
@@ -389,7 +389,7 @@ class PageList extends HookWidget {
                         scrollDirection: Axis.horizontal,
                         physics: horizontalPhysics,
                         child: Container(
-                          width: (geo.layout.pages.firstOrNull?.width ?? 0) + geo.horizontalPadding * 2,
+                          width: (geo.pages.firstOrNull?.width ?? 0) + geo.horizontalPadding * 2,
                           padding: EdgeInsets.only(
                             left: geo.horizontalPadding,
                             right: geo.horizontalPadding,
@@ -397,12 +397,12 @@ class PageList extends HookWidget {
                           ),
                           child: Column(
                             children: [
-                              for (var i = 0; i < layout.pages.length; i++) ...[
+                              for (var i = 0; i < pages.length; i++) ...[
                                 _PageSlot(
                                   key: ValueKey(i),
                                   pageIndex: i,
                                   pageTop: geo.titleAreaHeight + offsets[i],
-                                  pageBottom: geo.titleAreaHeight + offsets[i] + layout.pages[i].height,
+                                  pageBottom: geo.titleAreaHeight + offsets[i] + pages[i].height,
                                 ),
                               ],
                             ],
@@ -411,7 +411,7 @@ class PageList extends HookWidget {
                       )
                     else
                       Container(
-                        width: (geo.layout.pages.firstOrNull?.width ?? 0) + geo.horizontalPadding * 2,
+                        width: (geo.pages.firstOrNull?.width ?? 0) + geo.horizontalPadding * 2,
                         padding: EdgeInsets.only(
                           left: geo.horizontalPadding,
                           right: geo.horizontalPadding,
@@ -419,12 +419,12 @@ class PageList extends HookWidget {
                         ),
                         child: Column(
                           children: [
-                            for (var i = 0; i < layout.pages.length; i++) ...[
+                            for (var i = 0; i < pages.length; i++) ...[
                               _PageSlot(
                                 key: ValueKey(i),
                                 pageIndex: i,
                                 pageTop: geo.titleAreaHeight + offsets[i],
-                                pageBottom: geo.titleAreaHeight + offsets[i] + layout.pages[i].height,
+                                pageBottom: geo.titleAreaHeight + offsets[i] + pages[i].height,
                               ),
                             ],
                           ],

@@ -188,7 +188,11 @@ class EditorView extends HookWidget {
             return;
           }
 
-          final geo = ContentGeometry(layout: layout, titleAreaHeight: titleAreaHeight.value);
+          final geo = ContentGeometry(
+            layout: layout,
+            pages: controller.state.pages,
+            titleAreaHeight: titleAreaHeight.value,
+          );
 
           final newContentX = origin.x + dx;
           final originAbsoluteY = geo.cursorTopInPages(origin);
@@ -206,7 +210,7 @@ class EditorView extends HookWidget {
             }
           }
 
-          final pageIdx = (low - 1).clamp(0, layout.pages.length - 1);
+          final pageIdx = (low - 1).clamp(0, controller.state.pages.length - 1);
           final localY = newAbsoluteY - offsets[pageIdx];
 
           final pointerEvent = <String, dynamic>{
@@ -301,7 +305,11 @@ class EditorView extends HookWidget {
       scrollToCursor(
         verticalController: verticalScrollController,
         horizontalController: horizontalScrollController,
-        geometry: ContentGeometry(titleAreaHeight: titleAreaHeight.value, layout: controller.state.layout!),
+        geometry: ContentGeometry(
+          titleAreaHeight: titleAreaHeight.value,
+          layout: controller.state.layout!,
+          pages: controller.state.pages,
+        ),
         cursor: c,
         typewriterEnabled: typewriter,
         typewriterPosition: typewriter ? pref.typewriterPosition : 0.5,
@@ -381,7 +389,11 @@ class EditorView extends HookWidget {
 
       if (cursor.visible) {
         final horizontalScrollOffset = horizontalScrollController.hasClients ? horizontalScrollController.offset : 0.0;
-        final geo = ContentGeometry(layout: currentLayout!, titleAreaHeight: titleAreaHeight.value);
+        final geo = ContentGeometry(
+          layout: currentLayout!,
+          pages: controller.state.pages,
+          titleAreaHeight: titleAreaHeight.value,
+        );
         final screenY = geo.cursorTopInPages(cursor);
         final screenX = cursor.x - horizontalScrollOffset;
         inputController.updateCursor(screenX, screenY, cursor.height, cursor.precedingCharWidths);
@@ -426,7 +438,11 @@ class EditorView extends HookWidget {
       scrollToOverlayTarget(
         verticalScrollController: verticalScrollController,
         horizontalScrollController: horizontalScrollController,
-        geometry: ContentGeometry(titleAreaHeight: titleAreaHeight.value, layout: currentLayout),
+        geometry: ContentGeometry(
+          titleAreaHeight: titleAreaHeight.value,
+          layout: currentLayout,
+          pages: controller.state.pages,
+        ),
         pageIdx: pageIdx,
         targetX: x,
         targetY: y,
@@ -550,7 +566,7 @@ class EditorView extends HookWidget {
                               return EditorMagnifier(
                                 position: pos,
                                 focalPoint: pos,
-                                pageSize: Size(currentLayout.pages.firstOrNull?.width ?? 0, constraints.maxHeight),
+                                pageSize: Size(controller.state.pages.firstOrNull?.width ?? 0, constraints.maxHeight),
                               );
                             },
                           );
@@ -651,7 +667,11 @@ class _DocumentPlaceholder extends StatelessWidget {
           return const SizedBox.shrink();
         }
 
-        final geo = ContentGeometry(layout: layout, titleAreaHeight: titleAreaHeight.value);
+        final geo = ContentGeometry(
+          layout: layout,
+          pages: controller.state.pages,
+          titleAreaHeight: titleAreaHeight.value,
+        );
 
         return AnimatedBuilder(
           animation: Listenable.merge([verticalScrollController, horizontalScrollController, scrollMetricsRevision]),

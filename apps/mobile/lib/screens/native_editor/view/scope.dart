@@ -48,7 +48,11 @@ class ContentScope extends InheritedWidget {
   NativeEditor get editor => controller.editor;
 
   ContentGeometry get geometry {
-    return ContentGeometry(layout: controller.state.layout!, titleAreaHeight: titleAreaHeight.value);
+    return ContentGeometry(
+      layout: controller.state.layout!,
+      pages: controller.state.pages,
+      titleAreaHeight: titleAreaHeight.value,
+    );
   }
 
   static ContentScope of(BuildContext context) {

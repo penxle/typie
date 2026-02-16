@@ -47,8 +47,8 @@ class SettingsSheet extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final state = useListenable(controller);
-    final layoutMode = state.state.layout?.layoutMode;
-    final isPaginated = layoutMode is PaginatedLayoutMode;
+    final layoutMode = state.state.layout;
+    final isPaginated = layoutMode is PaginatedLayout;
     final settings = state.state.settings;
 
     void handleLayoutModeChange(String mode) {
@@ -112,7 +112,7 @@ class SettingsSheet extends HookWidget {
         },
         builder: (context, form) {
           final int currentMaxWidth;
-          if (layoutMode case final ContinuousLayoutMode mode) {
+          if (layoutMode case final ContinuousLayout mode) {
             currentMaxWidth = mode.maxWidth.toInt();
           } else {
             currentMaxWidth = 600;
@@ -133,7 +133,7 @@ class SettingsSheet extends HookWidget {
                   ],
                 ),
               ),
-              if (layoutMode case final PaginatedLayoutMode paginatedMode) ...[
+              if (layoutMode case final PaginatedLayout paginatedMode) ...[
                 _PageSizeSection(layoutMode: paginatedMode, dispatch: controller.dispatch),
                 _PageMarginSection(layoutMode: paginatedMode, dispatch: controller.dispatch),
                 HorizontalDivider(color: context.colors.borderDefault),
@@ -213,7 +213,7 @@ class _Option extends StatelessWidget {
   }
 }
 
-String _getPageSizePreset(PaginatedLayoutMode layoutMode) {
+String _getPageSizePreset(PaginatedLayout layoutMode) {
   final widthMm = _pxToMm(layoutMode.pageWidth);
   final heightMm = _pxToMm(layoutMode.pageHeight);
 
@@ -225,7 +225,7 @@ String _getPageSizePreset(PaginatedLayoutMode layoutMode) {
   return 'custom';
 }
 
-double _getMaxMargin(String side, PaginatedLayoutMode layoutMode) {
+double _getMaxMargin(String side, PaginatedLayout layoutMode) {
   final widthMm = _pxToMm(layoutMode.pageWidth);
   final heightMm = _pxToMm(layoutMode.pageHeight);
   final marginTopMm = _pxToMm(layoutMode.pageMarginTop);
@@ -245,7 +245,7 @@ double _getMaxMargin(String side, PaginatedLayoutMode layoutMode) {
 class _PageSizeSection extends StatelessWidget {
   const _PageSizeSection({required this.layoutMode, required this.dispatch});
 
-  final PaginatedLayoutMode layoutMode;
+  final PaginatedLayout layoutMode;
   final void Function(Map<String, dynamic>) dispatch;
 
   @override
@@ -431,7 +431,7 @@ class _PageSizeSection extends StatelessWidget {
 class _PageMarginSection extends StatelessWidget {
   const _PageMarginSection({required this.layoutMode, required this.dispatch});
 
-  final PaginatedLayoutMode layoutMode;
+  final PaginatedLayout layoutMode;
   final void Function(Map<String, dynamic>) dispatch;
 
   Widget _marginButton(BuildContext context, String side, String label, double valueMm) {
