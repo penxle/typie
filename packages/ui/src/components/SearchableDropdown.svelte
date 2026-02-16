@@ -160,6 +160,8 @@
         onchange(newItem.value);
         tick().then(() => {
           inputElement?.select();
+          const menuItems = floatingElement?.querySelectorAll('button[type="button"]');
+          (menuItems?.[newIndex] as HTMLElement)?.scrollIntoView({ block: 'nearest' });
         });
       }
     }
