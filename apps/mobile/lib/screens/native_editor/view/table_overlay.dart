@@ -19,13 +19,6 @@ import 'table_overlay/handles.dart';
 
 typedef OverlayDispatch = void Function(Map<String, dynamic> message);
 
-List<Widget> _optionalWidget(Widget? widget) {
-  if (widget == null) {
-    return const [];
-  }
-  return [widget];
-}
-
 class TableOverlay extends HookWidget {
   const TableOverlay({
     required this.gesture,
@@ -113,7 +106,6 @@ class _FocusedTableOverlay extends HookWidget {
   Widget build(BuildContext context) {
     final selectionHandleColor = context.colors.textDefault;
     final scope = ContentScope.of(context);
-    useListenable(scope.controller);
 
     final pages = scope.controller.state.pages;
     final page = pages.elementAtOrNull(overlay.pageIdx);
@@ -285,6 +277,7 @@ class _FocusedTableOverlay extends HookWidget {
     );
     final hasResizableColumn = overlay.colWidthsAsPx.isNotEmpty;
     final resizeCol = hasResizableColumn ? cellSelector.rightEdgeCol.clamp(0, overlay.colWidthsAsPx.length - 1) : 0;
+    final selectionOutlineWidget = buildCellSelectionOutlineWidget(cellSelector, selectionHandleColor);
     final cellHandleWidget = buildCellSelectionHandleWidget(cellSelector, selectionHandleColor);
 
     void moveHandleRowTo(int row) {
@@ -329,7 +322,7 @@ class _FocusedTableOverlay extends HookWidget {
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          ...buildCellSelectionOutlineWidgets(cellSelector, selectionHandleColor),
+          ...[selectionOutlineWidget].whereType<Widget>(),
           if (hasResizableColumn)
             TableColumnResizer(
               overlay: overlay,
@@ -371,7 +364,7 @@ class _FocusedTableOverlay extends HookWidget {
                 onTap: openRowMenu,
               ),
             ),
-          ..._optionalWidget(cellHandleWidget),
+          ...[cellHandleWidget].whereType<Widget>(),
         ],
       ),
     );

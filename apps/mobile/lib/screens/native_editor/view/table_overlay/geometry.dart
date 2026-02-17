@@ -34,12 +34,24 @@ double tableClampDouble(double value, double min, double max) {
 }
 
 int tableIndexForOffset(List<double> positions, double offset) {
-  for (var i = 0; i < positions.length; i++) {
-    if (offset < positions[i]) {
-      return i;
+  if (positions.isEmpty || !offset.isFinite) {
+    return 0;
+  }
+  if (offset <= 0) {
+    return 0;
+  }
+
+  var lo = 0;
+  var hi = positions.length - 1;
+  while (lo < hi) {
+    final mid = (lo + hi) >> 1;
+    if (offset < positions[mid]) {
+      hi = mid;
+    } else {
+      lo = mid + 1;
     }
   }
-  return positions.length - 1;
+  return lo;
 }
 
 double tableColLeft(TableOverlayInfo overlay, int colIndex) {
