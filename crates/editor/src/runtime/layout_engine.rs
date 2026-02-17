@@ -1,5 +1,6 @@
 use super::layout_invalidation::LayoutInvalidationBatch;
 use super::view_state::{NodeViewState, ViewStates};
+use crate::diagnostics::{FrameDiagnostics, LayoutPassRecorder};
 #[cfg(test)]
 use crate::layout::LayoutNode;
 use crate::layout::{LayoutCache, LayoutContext, Page, Paginator};
@@ -19,10 +20,12 @@ pub(crate) struct LayoutEngine {
     pages: Vec<Page>,
     layout_cache: RefCell<LayoutCache>,
     view_states: ViewStates,
+    diagnostics: FrameDiagnostics,
+    layout_debug_enabled: bool,
 }
 
 impl LayoutEngine {
-    pub(crate) fn new(width: f32, scale_factor: f64) -> Self {
+    pub(crate) fn new(width: f32, scale_factor: f64, diagnostics: FrameDiagnostics) -> Self {
         Self {
             viewport_width: width,
             viewport_height: 0.0,
@@ -31,6 +34,8 @@ impl LayoutEngine {
             pages: Vec::new(),
             layout_cache: RefCell::new(LayoutCache::new()),
             view_states: ViewStates::default(),
+            diagnostics,
+            layout_debug_enabled: false,
         }
     }
 
@@ -69,6 +74,13 @@ impl LayoutEngine {
 
     pub(crate) fn page_count(&self) -> usize {
         self.pages.len()
+    }
+
+    pub(crate) fn set_layout_debug_enabled(&mut self, enabled: bool) {
+        self.layout_debug_enabled = enabled;
+        if !enabled {
+            self.diagnostics.clear_layout_pass();
+        }
     }
 
     #[cfg(test)]
@@ -183,15 +195,31 @@ impl LayoutEngine {
         ));
 
         let root_ref = doc.node(NodeId::ROOT).expect("root must exist");
-        let ctx = LayoutContext::new(
-            &root_ref,
-            settings,
-            default_attrs,
-            decorations,
-            self.scale_factor,
-            &self.view_states,
-            &self.layout_cache,
-        );
+        let trace = self
+            .layout_debug_enabled
+            .then(|| RefCell::new(LayoutPassRecorder::new()));
+        let ctx = if let Some(trace_ref) = trace.as_ref() {
+            LayoutContext::new_with_trace(
+                &root_ref,
+                settings,
+                default_attrs,
+                decorations,
+                self.scale_factor,
+                &self.view_states,
+                &self.layout_cache,
+                Some(trace_ref),
+            )
+        } else {
+            LayoutContext::new(
+                &root_ref,
+                settings,
+                default_attrs,
+                decorations,
+                self.scale_factor,
+                &self.view_states,
+                &self.layout_cache,
+            )
+        };
 
         let root_layout = ctx.layout(&root_ref, constraints);
         self.layout_cache.borrow_mut().clear_prev();
@@ -205,5 +233,10 @@ impl LayoutEngine {
             settings.layout_mode,
         );
         self.pages = paginator.paginate_rc(root_layout);
+        if let Some(trace) = trace {
+            self.diagnostics.commit_layout_pass(trace.into_inner());
+        } else {
+            self.diagnostics.clear_layout_pass();
+        }
     }
 }

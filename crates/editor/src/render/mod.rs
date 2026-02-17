@@ -1,25 +1,28 @@
 mod cache;
+mod debug_overlay;
 mod geometry;
 pub mod glyph;
 mod impls;
+mod paint_diagnostics;
 
 pub use glyph::GlyphRenderer;
 
+use crate::diagnostics::FrameDiagnostics;
 use crate::layout::query::{DragImageBounds, DragImagePageBounds};
 use crate::layout::{Element, Page, PositionedNode, RenderHints};
 use crate::model::{Doc, LayoutMode, SelectionDecor};
 use crate::runtime::DropIndicator;
 use crate::types::{Point, Theme};
-use cache::{CacheDebugFrame, PageLayoutSnapshot, PageRenderCache, PageRenderSnapshot};
+use cache::{PageRenderCache, PageRenderSnapshot};
+use debug_overlay::render_debug_overlay;
 use geometry::{CacheRect, PixelRect, clear_layout_rect, merge_and_clamp_rects};
+use paint_diagnostics::{PaintDebugFrame, PaintDiagnosticsState, collect_layout_dirty_rects};
 use rustc_hash::FxHashMap;
 use tiny_skia::{Color, Pixmap, PixmapMut, PixmapPaint, Rect, Transform};
 
 const DIRTY_RECT_EPSILON: f32 = 0.5;
 const FULL_REPAINT_COVERAGE_THRESHOLD: f32 = 0.7;
 const FULL_REPAINT_RECT_THRESHOLD: usize = 32;
-const DEBUG_MARKER_SIZE_PX: f32 = 8.0;
-const DEBUG_MARKER_MARGIN_PX: f32 = 2.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RenderPhase {
@@ -89,12 +92,14 @@ pub struct Renderer {
     theme: Theme,
     is_focused: bool,
     page_cache: FxHashMap<usize, PageRenderCache>,
-    debug_render: bool,
-    debug_layout: bool,
+    render_debug_enabled: bool,
+    layout_debug_enabled: bool,
+    paint_diagnostics: PaintDiagnosticsState,
+    diagnostics: FrameDiagnostics,
 }
 
 impl Renderer {
-    pub fn new(scale_factor: f64) -> Self {
+    pub fn new(scale_factor: f64, diagnostics: FrameDiagnostics) -> Self {
         let pixmap = Pixmap::new(1, 1).unwrap();
 
         Self {
@@ -104,8 +109,10 @@ impl Renderer {
             theme: Theme::default(),
             is_focused: true,
             page_cache: FxHashMap::default(),
-            debug_render: false,
-            debug_layout: false,
+            render_debug_enabled: false,
+            layout_debug_enabled: false,
+            paint_diagnostics: PaintDiagnosticsState::default(),
+            diagnostics,
         }
     }
 
@@ -122,6 +129,7 @@ impl Renderer {
         self.scale_factor = scale_factor;
         if scale_changed {
             self.page_cache.clear();
+            self.paint_diagnostics.clear();
         }
     }
 
@@ -129,6 +137,7 @@ impl Renderer {
         if self.theme != theme {
             self.theme = theme;
             self.page_cache.clear();
+            self.paint_diagnostics.clear();
         }
     }
 
@@ -137,16 +146,17 @@ impl Renderer {
     }
 
     pub fn set_render_debug(&mut self, enabled: bool) {
-        self.debug_render = enabled;
+        self.render_debug_enabled = enabled;
     }
 
     pub fn set_layout_debug(&mut self, enabled: bool) {
-        self.debug_layout = enabled;
+        self.layout_debug_enabled = enabled;
     }
 
     pub fn prune_page_cache(&mut self, valid_page_count: usize) {
         self.page_cache
             .retain(|page_idx, _| *page_idx < valid_page_count);
+        self.paint_diagnostics.retain_pages(valid_page_count);
     }
 
     pub fn width(&self) -> u16 {
@@ -188,12 +198,12 @@ impl Renderer {
             doc,
         );
         if let Some(frame) = debug_frame.as_ref() {
-            Self::render_debug_overlay(
+            render_debug_overlay(
                 &mut pixmap,
                 self.scale_factor,
                 frame,
-                self.debug_render,
-                self.debug_layout,
+                self.render_debug_enabled,
+                self.layout_debug_enabled,
             );
         }
 
@@ -247,12 +257,12 @@ impl Renderer {
             doc,
         );
         if let Some(frame) = debug_frame.as_ref() {
-            Self::render_debug_overlay(
+            render_debug_overlay(
                 &mut pixmap,
                 self.scale_factor,
                 frame,
-                self.debug_render,
-                self.debug_layout,
+                self.render_debug_enabled,
+                self.layout_debug_enabled,
             );
         }
 
@@ -264,18 +274,15 @@ impl Renderer {
         page: &Page,
         page_idx: usize,
         doc: &Doc,
-    ) -> Option<CacheDebugFrame> {
+    ) -> Option<PaintDebugFrame> {
         let mut debug_frame =
-            (self.debug_render || self.debug_layout).then(CacheDebugFrame::default);
+            (self.render_debug_enabled || self.layout_debug_enabled).then(PaintDebugFrame::default);
         let width = self.pixmap.width();
         let height = self.pixmap.height();
         let scale = self.scale_factor as f32;
         let canvas_width = width as f32 / scale;
         let canvas_height = height as f32 / scale;
         let render_snapshot = PageRenderSnapshot::from_page(page);
-        let layout_snapshot = self
-            .debug_layout
-            .then(|| PageLayoutSnapshot::from_page(page));
 
         let mut cache = self
             .page_cache
@@ -329,43 +336,48 @@ impl Renderer {
             frame.cache_reused = true;
         }
 
-        if let Some(layout_snapshot) = layout_snapshot {
-            let mut layout_rects = if !cache.layout_snapshot_initialized {
-                CacheRect::from_canvas(canvas_width, canvas_height)
-                    .map(|rect| vec![rect])
-                    .unwrap_or_default()
-            } else {
-                cache.layout_snapshot.dirty_rects(&layout_snapshot)
-            };
-            layout_rects = merge_and_clamp_rects(
-                layout_rects,
-                canvas_width,
-                canvas_height,
-                DIRTY_RECT_EPSILON,
-            );
+        if self.layout_debug_enabled {
+            if let Some(layout_pass) = self.diagnostics.layout_pass_snapshot() {
+                let revision = layout_pass.revision;
+                let mut layout_rects = if self
+                    .paint_diagnostics
+                    .is_layout_revision_reused(page_idx, revision)
+                {
+                    Vec::new()
+                } else {
+                    collect_layout_dirty_rects(page, layout_pass.recomputed_nodes.as_ref())
+                };
+                layout_rects = merge_and_clamp_rects(
+                    layout_rects,
+                    canvas_width,
+                    canvas_height,
+                    DIRTY_RECT_EPSILON,
+                );
 
-            let full_area = canvas_width * canvas_height;
-            let layout_area: f32 = layout_rects.iter().map(|rect| rect.area()).sum();
-            let should_full_relayout = layout_rects.len() > FULL_REPAINT_RECT_THRESHOLD
-                || (full_area > 0.0 && layout_area / full_area >= FULL_REPAINT_COVERAGE_THRESHOLD);
-            let layout_rects = if should_full_relayout {
-                CacheRect::from_canvas(canvas_width, canvas_height)
-                    .map(|rect| vec![rect])
-                    .unwrap_or_default()
-            } else {
-                layout_rects
-            };
+                let full_area = canvas_width * canvas_height;
+                let layout_area: f32 = layout_rects.iter().map(|rect| rect.area()).sum();
+                let should_full_relayout = layout_rects.len() > FULL_REPAINT_RECT_THRESHOLD
+                    || (full_area > 0.0
+                        && layout_area / full_area >= FULL_REPAINT_COVERAGE_THRESHOLD);
+                let layout_rects = if should_full_relayout {
+                    CacheRect::from_canvas(canvas_width, canvas_height)
+                        .map(|rect| vec![rect])
+                        .unwrap_or_default()
+                } else {
+                    layout_rects
+                };
 
-            if let Some(frame) = debug_frame.as_mut() {
-                frame.layout_rects = layout_rects;
-                frame.full_relayout = should_full_relayout;
-                frame.layout_reused = frame.layout_rects.is_empty();
+                if let Some(frame) = debug_frame.as_mut() {
+                    frame.layout_rects = layout_rects;
+                    frame.full_relayout = should_full_relayout;
+                    frame.layout_reused = frame.layout_rects.is_empty();
+                }
+
+                self.paint_diagnostics
+                    .mark_layout_revision(page_idx, revision);
+            } else if let Some(frame) = debug_frame.as_mut() {
+                frame.layout_reused = false;
             }
-
-            cache.layout_snapshot = layout_snapshot;
-            cache.layout_snapshot_initialized = true;
-        } else if let Some(frame) = debug_frame.as_mut() {
-            frame.layout_reused = false;
         }
 
         cache.snapshot = render_snapshot;
@@ -504,171 +516,6 @@ impl Renderer {
                 ..selection_ctx
             };
             Self::render_drop_indicator(pixmap, indicator, page_idx, transform, &overlay_ctx);
-        }
-    }
-
-    fn render_debug_overlay(
-        pixmap: &mut PixmapMut,
-        scale_factor: f64,
-        frame: &CacheDebugFrame,
-        show_render: bool,
-        show_layout: bool,
-    ) {
-        let scale = scale_factor as f32;
-        let transform = Transform::from_scale(scale, scale);
-
-        if show_render && !frame.render_rects.is_empty() {
-            let (fill_color, stroke_color) = if frame.full_repaint {
-                (
-                    Color::from_rgba8(255, 77, 77, 36),
-                    Color::from_rgba8(255, 77, 77, 220),
-                )
-            } else {
-                (
-                    Color::from_rgba8(255, 179, 0, 28),
-                    Color::from_rgba8(255, 179, 0, 220),
-                )
-            };
-
-            let mut fill_paint = tiny_skia::Paint::default();
-            fill_paint.set_color(fill_color);
-            for rect in &frame.render_rects {
-                if let Some(layout_rect) = Rect::from_xywh(rect.x, rect.y, rect.width, rect.height)
-                {
-                    pixmap.fill_rect(layout_rect, &fill_paint, transform, None);
-                }
-            }
-
-            for rect in &frame.render_rects {
-                Self::draw_debug_rect_outline(pixmap, *rect, stroke_color, transform, scale);
-            }
-        }
-
-        if show_layout && !frame.layout_rects.is_empty() {
-            let (fill_color, stroke_color) = if frame.full_relayout {
-                (
-                    Color::from_rgba8(59, 130, 246, 24),
-                    Color::from_rgba8(59, 130, 246, 220),
-                )
-            } else {
-                (
-                    Color::from_rgba8(14, 165, 233, 20),
-                    Color::from_rgba8(14, 165, 233, 220),
-                )
-            };
-
-            let mut fill_paint = tiny_skia::Paint::default();
-            fill_paint.set_color(fill_color);
-            for rect in &frame.layout_rects {
-                if let Some(layout_rect) = Rect::from_xywh(rect.x, rect.y, rect.width, rect.height)
-                {
-                    pixmap.fill_rect(layout_rect, &fill_paint, transform, None);
-                }
-            }
-
-            for rect in &frame.layout_rects {
-                Self::draw_debug_rect_outline(pixmap, *rect, stroke_color, transform, scale);
-            }
-        }
-
-        let render_marker_color = if !show_render {
-            None
-        } else if frame.cache_reused {
-            Some(Color::from_rgba8(16, 185, 129, 255))
-        } else if frame.full_repaint {
-            Some(Color::from_rgba8(255, 77, 77, 255))
-        } else if !frame.render_rects.is_empty() {
-            Some(Color::from_rgba8(255, 179, 0, 255))
-        } else {
-            None
-        };
-
-        if let Some(color) = render_marker_color {
-            Self::draw_debug_marker(pixmap, color, transform, scale, 0);
-        }
-
-        let layout_marker_color = if !show_layout {
-            None
-        } else if frame.layout_reused {
-            Some(Color::from_rgba8(16, 185, 129, 255))
-        } else if frame.full_relayout {
-            Some(Color::from_rgba8(59, 130, 246, 255))
-        } else if !frame.layout_rects.is_empty() {
-            Some(Color::from_rgba8(14, 165, 233, 255))
-        } else {
-            None
-        };
-
-        if let Some(color) = layout_marker_color {
-            Self::draw_debug_marker(pixmap, color, transform, scale, 1);
-        }
-    }
-
-    fn draw_debug_rect_outline(
-        pixmap: &mut PixmapMut,
-        rect: CacheRect,
-        color: Color,
-        transform: Transform,
-        scale: f32,
-    ) {
-        let mut paint = tiny_skia::Paint::default();
-        paint.set_color(color);
-
-        let mut thickness = (1.0 / scale).max(0.25);
-        thickness = thickness.min(rect.width * 0.5).min(rect.height * 0.5);
-        if thickness <= 0.0 {
-            return;
-        }
-
-        let top = Rect::from_xywh(rect.x, rect.y, rect.width, thickness);
-        let bottom = Rect::from_xywh(
-            rect.x,
-            rect.y + rect.height - thickness,
-            rect.width,
-            thickness,
-        );
-        let left = Rect::from_xywh(rect.x, rect.y, thickness, rect.height);
-        let right = Rect::from_xywh(
-            rect.x + rect.width - thickness,
-            rect.y,
-            thickness,
-            rect.height,
-        );
-
-        for segment in [top, bottom, left, right].into_iter().flatten() {
-            pixmap.fill_rect(segment, &paint, transform, None);
-        }
-    }
-
-    fn draw_debug_marker(
-        pixmap: &mut PixmapMut,
-        color: Color,
-        transform: Transform,
-        scale: f32,
-        slot: usize,
-    ) {
-        let size = (DEBUG_MARKER_SIZE_PX / scale).max(0.5 / scale);
-        let margin = DEBUG_MARKER_MARGIN_PX / scale;
-        let x = margin + slot as f32 * (size + margin);
-        let y = margin;
-
-        if let Some(marker_rect) = Rect::from_xywh(x, y, size, size) {
-            let mut fill = tiny_skia::Paint::default();
-            fill.set_color(color);
-            pixmap.fill_rect(marker_rect, &fill, transform, None);
-
-            Self::draw_debug_rect_outline(
-                pixmap,
-                CacheRect {
-                    x,
-                    y,
-                    width: size,
-                    height: size,
-                },
-                Color::from_rgba8(0, 0, 0, 220),
-                transform,
-                scale,
-            );
         }
     }
 
@@ -1065,6 +912,7 @@ impl Renderer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::diagnostics::LayoutPassRecorder;
     use crate::layout::elements::{
         CalloutBackgroundElement, CalloutIconElement, FoldContentElement, LineElement, LineMetric,
         ListMarkerElement, ListMarkerType, SplitEdges, TableBorderElement, TableCellElement,
@@ -1072,6 +920,7 @@ mod tests {
     use crate::layout::{LayoutNode, PageBreakPolicy};
     use crate::model::{CalloutVariant, NodeId, TableAlign, TableBorderStyle};
     use crate::types::Size;
+    use rustc_hash::FxHashSet;
     use std::rc::Rc;
 
     fn root_with_children(children: Option<Vec<PositionedNode>>, size: Size) -> Page {
@@ -1242,45 +1091,114 @@ mod tests {
     }
 
     #[test]
-    fn layout_snapshot_marks_wrapper_relayout_even_when_render_snapshot_is_stable() {
+    fn layout_debug_rects_follow_recomputed_node_ids() {
         let fold_id = NodeId::new();
 
-        let make_page = || {
-            root_with_children(
-                Some(vec![PositionedNode {
-                    position: Point::new(8.0, 12.0),
-                    node: Rc::new(LayoutNode {
-                        size: Size::new(240.0, 80.0),
-                        element: Some(Element::FoldContent(FoldContentElement::new(
-                            Size::new(240.0, 80.0),
-                            SplitEdges::default(),
-                            fold_id,
-                        ))),
-                        children: None,
-                        page_break_policy: PageBreakPolicy::default(),
-                        render_hints: RenderHints::default(),
-                        scope_id: None,
-                    }),
-                }]),
-                Size::new(300.0, 200.0),
-            )
-        };
-
-        let page1 = make_page();
-        let page2 = make_page();
-
-        let render_snapshot1 = PageRenderSnapshot::from_page(&page1);
-        let render_snapshot2 = PageRenderSnapshot::from_page(&page2);
-        assert!(
-            render_snapshot1.dirty_rects(&render_snapshot2).is_empty(),
-            "render snapshot은 stable key로 동일 wrapper를 재사용해야 함"
+        let page = root_with_children(
+            Some(vec![PositionedNode {
+                position: Point::new(8.0, 12.0),
+                node: Rc::new(LayoutNode {
+                    size: Size::new(240.0, 80.0),
+                    element: Some(Element::FoldContent(FoldContentElement::new(
+                        Size::new(240.0, 80.0),
+                        SplitEdges::default(),
+                        fold_id,
+                    ))),
+                    children: None,
+                    page_break_policy: PageBreakPolicy::default(),
+                    render_hints: RenderHints::default(),
+                    scope_id: None,
+                }),
+            }]),
+            Size::new(300.0, 200.0),
         );
 
-        let layout_snapshot1 = PageLayoutSnapshot::from_page(&page1);
-        let layout_snapshot2 = PageLayoutSnapshot::from_page(&page2);
+        let none = FxHashSet::default();
         assert!(
-            !layout_snapshot1.dirty_rects(&layout_snapshot2).is_empty(),
-            "layout snapshot은 Rc 재생성을 relayout으로 표시해야 함"
+            collect_layout_dirty_rects(&page, &none).is_empty(),
+            "recompute된 node id가 없으면 layout debug rect도 없어야 함"
+        );
+
+        let mut recomputed = FxHashSet::default();
+        recomputed.insert(fold_id);
+        let rects = collect_layout_dirty_rects(&page, &recomputed);
+        assert!(
+            !rects.is_empty(),
+            "recompute된 node id가 있으면 layout debug rect가 표시돼야 함"
+        );
+    }
+
+    #[test]
+    fn layout_debug_rects_coalesce_nested_recomputed_nodes() {
+        let parent_id = NodeId::new();
+        let child_id = NodeId::new();
+
+        let child = Rc::new(LayoutNode {
+            size: Size::new(60.0, 24.0),
+            element: Some(Element::FoldContent(FoldContentElement::new(
+                Size::new(60.0, 24.0),
+                SplitEdges::default(),
+                child_id,
+            ))),
+            children: None,
+            page_break_policy: PageBreakPolicy::default(),
+            render_hints: RenderHints::default(),
+            scope_id: None,
+        });
+
+        let parent = Rc::new(LayoutNode {
+            size: Size::new(180.0, 80.0),
+            element: Some(Element::FoldContent(FoldContentElement::new(
+                Size::new(180.0, 80.0),
+                SplitEdges::default(),
+                parent_id,
+            ))),
+            children: Some(vec![PositionedNode {
+                position: Point::new(12.0, 16.0),
+                node: Rc::clone(&child),
+            }]),
+            page_break_policy: PageBreakPolicy::default(),
+            render_hints: RenderHints::default(),
+            scope_id: None,
+        });
+
+        let page = root_with_children(
+            Some(vec![PositionedNode {
+                position: Point::new(8.0, 12.0),
+                node: parent,
+            }]),
+            Size::new(300.0, 200.0),
+        );
+
+        let mut recomputed = FxHashSet::default();
+        recomputed.insert(parent_id);
+        recomputed.insert(child_id);
+
+        let rects = collect_layout_dirty_rects(&page, &recomputed);
+        assert_eq!(
+            rects.len(),
+            1,
+            "중첩된 recompute는 상위 노드 rect 하나로 축약되어야 함"
+        );
+        assert!(
+            rects[0].approx_eq(
+                CacheRect::from_xywh(8.0, 12.0, 180.0, 80.0).expect("valid parent rect")
+            ),
+            "상위 노드가 dirty rect로 선택되어야 함"
+        );
+
+        let mut child_only = FxHashSet::default();
+        child_only.insert(child_id);
+        let child_rects = collect_layout_dirty_rects(&page, &child_only);
+        assert_eq!(
+            child_rects.len(),
+            1,
+            "자식만 recompute되면 자식 rect를 유지해야 함"
+        );
+        assert!(
+            child_rects[0]
+                .approx_eq(CacheRect::from_xywh(20.0, 28.0, 60.0, 24.0).expect("valid child rect")),
+            "자식 단독 recompute는 자식 위치를 정확히 표시해야 함"
         );
     }
 
@@ -1333,39 +1251,90 @@ mod tests {
     }
 
     #[test]
-    fn layout_snapshot_tracks_table_cell_relayout() {
+    fn layout_debug_rects_track_table_cell_node() {
         let cell_id = NodeId::new();
 
-        let make_page = || {
-            root_with_children(
-                Some(vec![PositionedNode {
-                    position: Point::new(20.0, 24.0),
-                    node: Rc::new(LayoutNode {
-                        size: Size::new(120.0, 48.0),
-                        element: Some(Element::TableCell(TableCellElement::new(
-                            Size::new(120.0, 48.0),
-                            cell_id,
-                        ))),
-                        children: None,
-                        page_break_policy: PageBreakPolicy::default(),
-                        render_hints: RenderHints::default(),
-                        scope_id: Some(cell_id),
-                    }),
-                }]),
-                Size::new(300.0, 200.0),
-            )
-        };
-
-        let page1 = make_page();
-        let page2 = make_page();
-
-        let snapshot1 = PageLayoutSnapshot::from_page(&page1);
-        let snapshot2 = PageLayoutSnapshot::from_page(&page2);
-
-        assert!(
-            !snapshot1.dirty_rects(&snapshot2).is_empty(),
-            "layout snapshot은 TableCell 재생성을 relayout으로 표시해야 함"
+        let page = root_with_children(
+            Some(vec![PositionedNode {
+                position: Point::new(20.0, 24.0),
+                node: Rc::new(LayoutNode {
+                    size: Size::new(120.0, 48.0),
+                    element: Some(Element::TableCell(TableCellElement::new(
+                        Size::new(120.0, 48.0),
+                        cell_id,
+                    ))),
+                    children: None,
+                    page_break_policy: PageBreakPolicy::default(),
+                    render_hints: RenderHints::default(),
+                    scope_id: Some(cell_id),
+                }),
+            }]),
+            Size::new(300.0, 200.0),
         );
+
+        let mut recomputed = FxHashSet::default();
+        recomputed.insert(cell_id);
+        let rects = collect_layout_dirty_rects(&page, &recomputed);
+        assert!(
+            !rects.is_empty(),
+            "table cell node가 recompute되면 layout debug rect가 표시돼야 함"
+        );
+
+        recomputed.clear();
+        recomputed.insert(NodeId::new());
+        assert!(
+            collect_layout_dirty_rects(&page, &recomputed).is_empty(),
+            "다른 node id만 recompute되면 table cell rect는 표시되면 안 됨"
+        );
+    }
+
+    #[test]
+    fn layout_debug_reuses_same_revision() {
+        let fold_id = NodeId::new();
+        let page = root_with_children(
+            Some(vec![PositionedNode {
+                position: Point::new(8.0, 12.0),
+                node: Rc::new(LayoutNode {
+                    size: Size::new(240.0, 80.0),
+                    element: Some(Element::FoldContent(FoldContentElement::new(
+                        Size::new(240.0, 80.0),
+                        SplitEdges::default(),
+                        fold_id,
+                    ))),
+                    children: None,
+                    page_break_policy: PageBreakPolicy::default(),
+                    render_hints: RenderHints::default(),
+                    scope_id: None,
+                }),
+            }]),
+            Size::new(300.0, 200.0),
+        );
+        let doc = Doc::new();
+        let diagnostics = FrameDiagnostics::new();
+        let mut renderer = Renderer::new(1.0, diagnostics.clone());
+        renderer.set_layout_debug(true);
+        renderer.set_size(300.0, 200.0, 1.0);
+
+        let mut pass = LayoutPassRecorder::new();
+        pass.record_recomputed(fold_id);
+        diagnostics.commit_layout_pass(pass);
+
+        let frame1 = renderer
+            .prepare_base_layer(&page, 0, &doc)
+            .expect("debug frame should exist when layout debug is enabled");
+        assert!(
+            !frame1.layout_rects.is_empty(),
+            "첫 revision에서는 layout rect가 표시되어야 함"
+        );
+
+        let frame2 = renderer
+            .prepare_base_layer(&page, 0, &doc)
+            .expect("debug frame should exist when layout debug is enabled");
+        assert!(
+            frame2.layout_rects.is_empty(),
+            "같은 revision에서는 layout rect를 반복 표시하면 안 됨"
+        );
+        assert!(frame2.layout_reused, "같은 revision은 reused로 표시돼야 함");
     }
 
     #[test]
@@ -1443,7 +1412,7 @@ mod tests {
         let page2 = callout_page_with_icon(callout_id);
 
         let doc = Doc::new();
-        let mut renderer = Renderer::new(1.0);
+        let mut renderer = Renderer::new(1.0, FrameDiagnostics::new());
         renderer.set_size(220.0, 160.0, 1.0);
 
         let width = renderer.width() as usize;
@@ -1515,7 +1484,7 @@ mod tests {
 
     #[test]
     fn prune_page_cache_removes_entries_outside_page_count() {
-        let mut renderer = Renderer::new(1.0);
+        let mut renderer = Renderer::new(1.0, FrameDiagnostics::new());
 
         renderer
             .page_cache

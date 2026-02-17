@@ -6,6 +6,7 @@ mod utils;
 #[macro_use]
 mod test_utils;
 
+mod diagnostics;
 mod ffi;
 mod font;
 mod global;

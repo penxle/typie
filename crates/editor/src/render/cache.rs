@@ -13,11 +13,6 @@ pub(super) struct PageRenderSnapshot {
     nodes: FxHashMap<SnapshotNodeKey, CacheRect>,
 }
 
-#[derive(Default, Clone)]
-pub(super) struct PageLayoutSnapshot {
-    nodes: FxHashMap<SnapshotNodeKey, CacheRect>,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum SnapshotNodeKey {
     Ptr(usize),
@@ -35,28 +30,10 @@ enum SnapshotNodeKey {
     },
 }
 
-#[derive(Clone, Copy)]
-enum SnapshotKind {
-    Render,
-    Layout,
-}
-
 impl PageRenderSnapshot {
     pub(super) fn from_page(page: &Page) -> Self {
         let mut nodes = FxHashMap::default();
-        collect_snapshot(&page.root, Point::zero(), SnapshotKind::Render, &mut nodes);
-        Self { nodes }
-    }
-
-    pub(super) fn dirty_rects(&self, next: &Self) -> Vec<CacheRect> {
-        dirty_rects_between(&self.nodes, &next.nodes)
-    }
-}
-
-impl PageLayoutSnapshot {
-    pub(super) fn from_page(page: &Page) -> Self {
-        let mut nodes = FxHashMap::default();
-        collect_snapshot(&page.root, Point::zero(), SnapshotKind::Layout, &mut nodes);
+        collect_snapshot(&page.root, Point::zero(), &mut nodes);
         Self { nodes }
     }
 
@@ -66,20 +43,14 @@ impl PageLayoutSnapshot {
 }
 
 impl SnapshotNodeKey {
-    fn for_positioned(positioned: &PositionedNode, kind: SnapshotKind) -> Option<Self> {
+    fn for_positioned(positioned: &PositionedNode) -> Option<Self> {
         let element = positioned.node.element.as_ref()?;
-
-        match kind {
-            SnapshotKind::Layout => Some(Self::Ptr(Rc::as_ptr(&positioned.node) as usize)),
-            SnapshotKind::Render => Self::for_render(positioned, element),
-        }
-    }
-
-    fn for_render(positioned: &PositionedNode, element: &Element) -> Option<Self> {
         element.as_render()?;
+
         if matches!(element, Element::TableCell(_)) {
             return None;
         }
+
         if let Element::Line(line) = element {
             return Some(Self::RenderLine {
                 block_id: line.block_id,
@@ -95,14 +66,14 @@ impl SnapshotNodeKey {
             });
         }
 
-        if element.as_wrapper().is_some() {
-            if let Some(node_id) = element.block_id() {
-                return Some(Self::RenderStableElement {
-                    kind: std::mem::discriminant(element),
-                    node_id,
-                    signature: stable_element_signature(element),
-                });
-            }
+        if element.as_wrapper().is_some()
+            && let Some(node_id) = element.block_id()
+        {
+            return Some(Self::RenderStableElement {
+                kind: std::mem::discriminant(element),
+                node_id,
+                signature: stable_element_signature(element),
+            });
         }
 
         Some(Self::Ptr(Rc::as_ptr(&positioned.node) as usize))
@@ -130,7 +101,6 @@ fn stable_element_signature(element: &Element) -> u64 {
 fn collect_snapshot(
     positioned: &PositionedNode,
     offset: Point,
-    kind: SnapshotKind,
     out: &mut FxHashMap<SnapshotNodeKey, CacheRect>,
 ) {
     let pos = Point::new(
@@ -138,20 +108,20 @@ fn collect_snapshot(
         offset.y + positioned.position.y,
     );
 
-    if let Some(key) = SnapshotNodeKey::for_positioned(positioned, kind) {
-        if let Some(bounds) = CacheRect::from_xywh(
+    if let Some(key) = SnapshotNodeKey::for_positioned(positioned)
+        && let Some(bounds) = CacheRect::from_xywh(
             pos.x,
             pos.y,
             positioned.node.size.width,
             positioned.node.size.height,
-        ) {
-            out.insert(key, bounds);
-        }
+        )
+    {
+        out.insert(key, bounds);
     }
 
     if let Some(children) = &positioned.node.children {
         for child in children {
-            collect_snapshot(child, pos, kind, out);
+            collect_snapshot(child, pos, out);
         }
     }
 }
@@ -188,8 +158,6 @@ pub(super) struct PageRenderCache {
     pub(super) scale_factor: f64,
     pub(super) snapshot: PageRenderSnapshot,
     pub(super) snapshot_initialized: bool,
-    pub(super) layout_snapshot: PageLayoutSnapshot,
-    pub(super) layout_snapshot_initialized: bool,
     pub(super) base_pixmap: Pixmap,
 }
 
@@ -202,19 +170,7 @@ impl PageRenderCache {
             scale_factor,
             snapshot: PageRenderSnapshot::default(),
             snapshot_initialized: false,
-            layout_snapshot: PageLayoutSnapshot::default(),
-            layout_snapshot_initialized: false,
             base_pixmap,
         }
     }
-}
-
-#[derive(Default)]
-pub(super) struct CacheDebugFrame {
-    pub(super) render_rects: Vec<CacheRect>,
-    pub(super) full_repaint: bool,
-    pub(super) cache_reused: bool,
-    pub(super) layout_rects: Vec<CacheRect>,
-    pub(super) full_relayout: bool,
-    pub(super) layout_reused: bool,
 }

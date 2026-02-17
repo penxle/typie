@@ -1,3 +1,4 @@
+use crate::diagnostics::LayoutPassRecorder;
 use crate::layout::{Layout, LayoutCache, LayoutNode};
 use crate::model::{Decorations, DefaultAttrs, DocumentSettings, NodeRef};
 use crate::runtime::ViewStates;
@@ -13,6 +14,7 @@ pub struct LayoutContext<'a> {
     pub scale_factor: f64,
     pub view_states: &'a ViewStates,
     cache: &'a RefCell<LayoutCache>,
+    trace: Option<&'a RefCell<LayoutPassRecorder>>,
 }
 
 impl<'a> LayoutContext<'a> {
@@ -25,6 +27,28 @@ impl<'a> LayoutContext<'a> {
         view_states: &'a ViewStates,
         cache: &'a RefCell<LayoutCache>,
     ) -> Self {
+        Self::new_with_trace(
+            node,
+            settings,
+            default_attrs,
+            decorations,
+            scale_factor,
+            view_states,
+            cache,
+            None,
+        )
+    }
+
+    pub fn new_with_trace(
+        node: &'a NodeRef<'a>,
+        settings: &'a DocumentSettings,
+        default_attrs: &'a DefaultAttrs,
+        decorations: &'a Decorations,
+        scale_factor: f64,
+        view_states: &'a ViewStates,
+        cache: &'a RefCell<LayoutCache>,
+        trace: Option<&'a RefCell<LayoutPassRecorder>>,
+    ) -> Self {
         Self {
             node,
             settings,
@@ -33,6 +57,7 @@ impl<'a> LayoutContext<'a> {
             scale_factor,
             view_states,
             cache,
+            trace,
         }
     }
 
@@ -45,6 +70,7 @@ impl<'a> LayoutContext<'a> {
             scale_factor: self.scale_factor,
             view_states: self.view_states,
             cache: self.cache,
+            trace: self.trace,
         }
     }
 
@@ -53,6 +79,10 @@ impl<'a> LayoutContext<'a> {
 
         if let Some(cached) = self.cache.borrow().get(node_id) {
             return cached;
+        }
+
+        if let Some(trace) = self.trace {
+            trace.borrow_mut().record_recomputed(node_id);
         }
 
         let prev = self.cache.borrow_mut().take_prev(node_id);
