@@ -82,15 +82,21 @@ class FontManager {
   List<FontFamily> fontFamilies = [];
 
   Future<void> _preloadEnqueue(String key, double priority, Future<void> Function() fn) {
-    if (_loaded.contains(key)) return Future.value();
+    if (_loaded.contains(key)) {
+      return Future.value();
+    }
 
     final existing = _preloadPromises[key];
-    if (existing != null) return existing;
+    if (existing != null) {
+      return existing;
+    }
 
     final completer = Completer<void>();
     final item = _PreloadItem(key: key, priority: priority, fn: fn, completer: completer);
     var i = _preloadPending.indexWhere((p) => p.priority < priority);
-    if (i == -1) i = _preloadPending.length;
+    if (i == -1) {
+      i = _preloadPending.length;
+    }
     _preloadPending.insert(i, item);
 
     _preloadPromises[key] = completer.future;
@@ -103,26 +109,28 @@ class FontManager {
       final item = _preloadPending.removeAt(0);
 
       if (_loaded.contains(item.key)) {
-        _preloadPromises.remove(item.key);
+        unawaited(_preloadPromises.remove(item.key));
         item.completer.complete();
         continue;
       }
 
       _preloadInflight++;
-      item
-          .fn()
-          .then((_) {
-            _preloadPromises.remove(item.key);
-            item.completer.complete();
-            _preloadInflight--;
-            _preloadFlush();
-          })
-          .catchError((Object err) {
-            _preloadPromises.remove(item.key);
-            item.completer.completeError(err);
-            _preloadInflight--;
-            _preloadFlush();
-          });
+      unawaited(
+        item
+            .fn()
+            .then((_) {
+              unawaited(_preloadPromises.remove(item.key));
+              item.completer.complete();
+              _preloadInflight--;
+              _preloadFlush();
+            })
+            .catchError((Object err) {
+              unawaited(_preloadPromises.remove(item.key));
+              item.completer.completeError(err);
+              _preloadInflight--;
+              _preloadFlush();
+            }),
+      );
     }
   }
 
@@ -366,16 +374,18 @@ class FontManager {
         final key = 'chunk:$family:${font.weight}:$i';
         if (!_loaded.contains(key)) {
           final idx = i; // capture for closure
-          _preloadEnqueue(key, idx / manifest.chunkCount, () async {
-            try {
-              await _loadOnce(key, () async {
-                final data = await _fetchFont('${font.url}/${manifest.hash}/chunks/$idx.bin');
-                _app.addFontChunk(family, font.weight, data);
-              });
-            } catch (_) {
-              // best-effort: silently ignore preload failures
-            }
-          });
+          unawaited(
+            _preloadEnqueue(key, idx / manifest.chunkCount, () async {
+              try {
+                await _loadOnce(key, () async {
+                  final data = await _fetchFont('${font.url}/${manifest.hash}/chunks/$idx.bin');
+                  _app.addFontChunk(family, font.weight, data);
+                });
+              } catch (_) {
+                // best-effort: silently ignore preload failures
+              }
+            }),
+          );
         }
       }
     } catch (_) {
