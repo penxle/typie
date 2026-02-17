@@ -1,12 +1,28 @@
 use crate::layout::cursor::{Cursor, NavigationContext};
 use crate::model::NodeId;
 use crate::runtime::{Direction, Effect, Runtime};
+use crate::state::ancestor_helpers::lowest_common_ancestor_id;
 use crate::state::position_helpers::move_from_block_position;
 use crate::state::{Position, Selection, leaf_block_end, leaf_block_start};
 use crate::transaction::{sentence_range_at, word_range_at};
 use crate::types::Affinity;
 
 impl Runtime {
+    fn common_isolating_ancestor_id(&self, selection: &Selection) -> Option<NodeId> {
+        let common_ancestor_id = lowest_common_ancestor_id(
+            &self.state.doc,
+            selection.anchor.node_id,
+            selection.head.node_id,
+        )?;
+
+        self.state
+            .doc
+            .node(common_ancestor_id)?
+            .ancestors()
+            .find(|ancestor| ancestor.spec().isolating)
+            .map(|ancestor| ancestor.node_id())
+    }
+
     pub(crate) fn handle_navigate(
         &mut self,
         direction: Direction,
@@ -77,22 +93,18 @@ impl Runtime {
     }
 
     pub(crate) fn handle_select_all(&mut self) -> Vec<Effect> {
-        let head = &self.state.selection.head;
-
-        if let Some(head_node) = self.state.doc.node(head.node_id) {
-            let isolating_ancestor = head_node.ancestors().find(|a| a.spec().isolating);
-
-            if let Some(isolating) = isolating_ancestor {
+        if let Some(isolating_id) = self.common_isolating_ancestor_id(&self.state.selection) {
+            if let Some(isolating) = self.state.doc.node(isolating_id) {
                 let start = leaf_block_start(&isolating);
                 let end = leaf_block_end(&isolating);
 
-                let (from, to) = self.state.selection.as_sorted(&self.state.doc).unwrap();
-
-                if start != from || end != to {
-                    return self.transact(move |tr| {
-                        tr.set_selection(Selection::new(start, end));
-                        Ok(true)
-                    });
+                if let Ok((from, to)) = self.state.selection.as_sorted(&self.state.doc) {
+                    if start != from || end != to {
+                        return self.transact(move |tr| {
+                            tr.set_selection(Selection::new(start, end));
+                            Ok(true)
+                        });
+                    }
                 }
             }
         }
@@ -719,6 +731,42 @@ mod tests {
         assert_eq!(selection.anchor.offset, 0);
         assert_eq!(selection.head.node_id, ft);
         assert_eq!(selection.head.offset, 10);
+    }
+
+    #[test]
+    fn select_all_on_rectangular_table_selection_does_not_collapse_to_head_cell() {
+        let mut p_anchor = id!();
+        let mut p_head = id!();
+        let mut p_last = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                table {
+                    table_row {
+                        table_cell { @p_anchor paragraph { text { "A" } } }
+                        table_cell { paragraph { text { "B" } } }
+                        table_cell { paragraph { text { "C" } } }
+                    }
+                    table_row {
+                        table_cell { paragraph { text { "D" } } }
+                        table_cell { @p_head paragraph {} }
+                        table_cell { @p_last paragraph { text { "E" } } }
+                    }
+                }
+            }
+            selection { (p_anchor, 0) -> (p_head, 0) }
+        };
+
+        rt.layout();
+        rt.update(Message::SelectAll);
+
+        let selection = &rt.state().selection;
+        assert_eq!(selection.anchor.node_id, p_anchor);
+        assert_eq!(selection.anchor.offset, 0);
+        assert_eq!(selection.head.node_id, p_last);
+        assert_eq!(selection.head.offset, 1);
+        assert!(!selection.is_collapsed());
     }
 
     #[test]
