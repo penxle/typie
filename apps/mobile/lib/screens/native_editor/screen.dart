@@ -420,12 +420,14 @@ class _EditorContent extends HookWidget {
           manager.fontFamilies = document.fontFamilies
               .map(
                 (f) => FontFamily(
+                  id: f.id,
                   familyName: f.familyName,
                   displayName: f.displayName,
                   state: f.state.name,
                   fonts: f.fonts
                       .map(
                         (font) => Font(
+                          id: font.id,
                           weight: font.weight,
                           subfamilyDisplayName: font.subfamilyDisplayName,
                           url: font.url,
