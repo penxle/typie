@@ -87,6 +87,57 @@ function fillDefaultStyles(styles: LoroStyle[]): LoroStyle[] {
 
 const defaultFamilyNames = new Set(DEFAULT_FONT_FAMILIES.map((f) => f.familyName));
 
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function normalizeRatios(widths: number[]): number[] | null {
+  if (widths.length === 0) return null;
+
+  const safe = widths.map((width) => (isFiniteNumber(width) && width > 0 ? width : 0));
+  const total = safe.reduce((sum, width) => sum + width, 0);
+  if (total <= 0) return null;
+
+  const ratios = safe.map((width) => width / total);
+  const ratioSum = ratios.reduce((sum, value) => sum + value, 0);
+  if (ratioSum <= 0) return null;
+
+  return ratios.map((value) => value / ratioSum);
+}
+
+function resolveTableColRatios(rawWidths: (number | undefined)[], contentWidth: number): number[] | null {
+  const colCount = rawWidths.length;
+  if (colCount === 0) return null;
+
+  const sanitized = rawWidths.map((width) => (isFiniteNumber(width) && width > 0 ? width : undefined));
+  const knownWidths = sanitized.filter((width): width is number => width != null);
+  const totalKnown = knownWidths.reduce((sum, width) => sum + width, 0);
+  const remainingCount = colCount - knownWidths.length;
+  const safeContentWidth = isFiniteNumber(contentWidth) ? Math.max(0, contentWidth) : 0;
+
+  let widths: number[];
+
+  if (remainingCount > 0) {
+    const remainingWidth = safeContentWidth - totalKnown;
+    let fallbackWidth = remainingCount > 0 ? remainingWidth / remainingCount : 0;
+    if (!isFiniteNumber(fallbackWidth) || fallbackWidth <= 0) {
+      if (safeContentWidth > 0) {
+        fallbackWidth = safeContentWidth / colCount;
+      } else if (totalKnown > 0) {
+        fallbackWidth = totalKnown / colCount;
+      } else {
+        fallbackWidth = 1;
+      }
+    }
+
+    widths = sanitized.map((width) => width ?? fallbackWidth);
+  } else {
+    widths = sanitized.map((width) => width ?? 0);
+  }
+
+  return normalizeRatios(widths);
+}
+
 async function convertPmMarks(pmMarks: JSONContent['marks']): Promise<{ styles: LoroStyle[]; annotations: LoroAnnotation[] }> {
   const styles: LoroStyle[] = [];
   const annotations: LoroAnnotation[] = [];
@@ -192,6 +243,7 @@ async function convertNode(
   parentId: string,
   nodes: Record<string, LoroNode>,
   archivedNodes: ArchivedNodeEntry[],
+  contentWidth: number,
 ): Promise<string | null> {
   const nodeId = generateNodeId();
 
@@ -258,7 +310,7 @@ async function convertNode(
       const children: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = await convertNode(child, nodeId, nodes, archivedNodes);
+          const childId = await convertNode(child, nodeId, nodes, archivedNodes, contentWidth);
           if (childId) children.push(childId);
         }
       }
@@ -278,7 +330,7 @@ async function convertNode(
       const children: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = await convertNode(child, nodeId, nodes, archivedNodes);
+          const childId = await convertNode(child, nodeId, nodes, archivedNodes, contentWidth);
           if (childId) children.push(childId);
         }
       }
@@ -296,7 +348,7 @@ async function convertNode(
       const children: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = await convertNode(child, nodeId, nodes, archivedNodes);
+          const childId = await convertNode(child, nodeId, nodes, archivedNodes, contentWidth);
           if (childId) children.push(childId);
         }
       }
@@ -313,7 +365,7 @@ async function convertNode(
       const children: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = await convertNode(child, nodeId, nodes, archivedNodes);
+          const childId = await convertNode(child, nodeId, nodes, archivedNodes, contentWidth);
           if (childId) children.push(childId);
         }
       }
@@ -330,7 +382,7 @@ async function convertNode(
       const children: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = await convertNode(child, nodeId, nodes, archivedNodes);
+          const childId = await convertNode(child, nodeId, nodes, archivedNodes, contentWidth);
           if (childId) children.push(childId);
         }
       }
@@ -378,7 +430,7 @@ async function convertNode(
       const children: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = await convertNode(child, nodeId, nodes, archivedNodes);
+          const childId = await convertNode(child, nodeId, nodes, archivedNodes, contentWidth);
           if (childId) children.push(childId);
         }
       }
@@ -390,12 +442,66 @@ async function convertNode(
         none: 'none',
       };
 
-      nodes[nodeId] = {
+      const loroNode: LoroNode = {
         type: 'table',
         border_style: borderStyleMap[pmNode.attrs?.borderStyle as string] ?? 'solid',
+        align: 'left',
         children,
         parent: parentId,
+        proportion: 1,
       };
+
+      const firstRow = pmNode.content?.find((child) => child.type === 'table_row');
+      const firstRowCells = firstRow?.content?.filter((child) => child.type === 'table_cell') ?? [];
+      const rawWidths = firstRowCells.map((cell) => {
+        const colwidth = cell.attrs?.colwidth;
+        return Array.isArray(colwidth) ? colwidth[0] : undefined;
+      });
+
+      const explicitWidths = rawWidths.map((width) => (isFiniteNumber(width) && width > 0 ? width : undefined));
+      const hasAnyExplicit = explicitWidths.some((width) => width != null);
+      const hasAllExplicit = explicitWidths.length > 0 && explicitWidths.every((width) => width != null);
+
+      if (hasAllExplicit) {
+        const totalWidth = explicitWidths.reduce((sum, width) => sum + (width ?? 0), 0);
+        if (isFiniteNumber(contentWidth) && contentWidth > 0 && isFiniteNumber(totalWidth) && totalWidth > 0) {
+          loroNode.proportion = Math.min(1, Math.max(0, totalWidth / contentWidth));
+        }
+      }
+
+      let ratios: number[] | null = null;
+
+      if (hasAnyExplicit) {
+        ratios = resolveTableColRatios(rawWidths, contentWidth);
+        if (!ratios && hasAllExplicit) {
+          ratios = normalizeRatios(explicitWidths.map((width) => width ?? 0));
+        }
+      }
+
+      if (ratios) {
+        for (const rowId of children) {
+          const rowNode = nodes[rowId];
+          if (!rowNode || rowNode.type !== 'table_row' || !Array.isArray(rowNode.children)) {
+            continue;
+          }
+
+          for (const [index, cellId] of rowNode.children.entries()) {
+            const ratio = ratios[index];
+            if (ratio == null || typeof cellId !== 'string') {
+              continue;
+            }
+
+            const cellNode = nodes[cellId];
+            if (!cellNode || cellNode.type !== 'table_cell') {
+              continue;
+            }
+
+            cellNode.col_width = ratio;
+          }
+        }
+      }
+
+      nodes[nodeId] = loroNode;
       return nodeId;
     }
 
@@ -403,7 +509,7 @@ async function convertNode(
       const children: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = await convertNode(child, nodeId, nodes, archivedNodes);
+          const childId = await convertNode(child, nodeId, nodes, archivedNodes, contentWidth);
           if (childId) children.push(childId);
         }
       }
@@ -420,23 +526,16 @@ async function convertNode(
       const children: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = await convertNode(child, nodeId, nodes, archivedNodes);
+          const childId = await convertNode(child, nodeId, nodes, archivedNodes, contentWidth);
           if (childId) children.push(childId);
         }
       }
-
-      const colwidth = pmNode.attrs?.colwidth;
-      const colWidth = Array.isArray(colwidth) ? (colwidth[0] as number | undefined) : undefined;
 
       const loroNode: LoroNode = {
         type: 'table_cell',
         children,
         parent: parentId,
       };
-
-      if (colWidth != null) {
-        loroNode.col_width = colWidth;
-      }
 
       nodes[nodeId] = loroNode;
       return nodeId;
@@ -500,7 +599,7 @@ async function convertNode(
       const contentChildren: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = await convertNode(child, foldContentId, nodes, archivedNodes);
+          const childId = await convertNode(child, foldContentId, nodes, archivedNodes, contentWidth);
           if (childId) contentChildren.push(childId);
         }
       }
@@ -602,6 +701,11 @@ export async function convertPostToDocumentJson(
     };
   }
 
+  const contentWidth =
+    layoutMode.type === 'paginated'
+      ? Math.max(0, layoutMode.page_width - layoutMode.page_margin_left - layoutMode.page_margin_right)
+      : Math.max(0, layoutMode.max_width);
+
   const nodes: Record<string, LoroNode> = {};
   const archivedNodes: ArchivedNodeEntry[] = [];
 
@@ -609,7 +713,7 @@ export async function convertPostToDocumentJson(
   const blocks = bodyNode?.content ?? [];
 
   for (const block of blocks) {
-    const childId = await convertNode(block, ROOT_ID, nodes, archivedNodes);
+    const childId = await convertNode(block, ROOT_ID, nodes, archivedNodes, contentWidth);
     if (childId) rootChildren.push(childId);
   }
 
