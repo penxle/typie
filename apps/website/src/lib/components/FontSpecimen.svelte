@@ -1,7 +1,8 @@
 <script lang="ts" module>
-  import { SvelteMap } from 'svelte/reactivity';
+  import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 
   const cache = new SvelteMap<string, string | null>();
+  const loading = new SvelteSet<string>();
 </script>
 
 <script lang="ts">
@@ -22,7 +23,9 @@
   const html = $derived(key ? cache.get(key) : null);
 
   $effect(() => {
-    if (!key || cache.has(key)) return;
+    if (!key || cache.has(key) || loading.has(key)) return;
+
+    loading.add(key);
 
     const loadSpecimen = async () => {
       try {
@@ -32,6 +35,8 @@
         if (err instanceof HTTPError && err.response.status === 422) {
           cache.set(key, null);
         }
+      } finally {
+        loading.delete(key);
       }
     };
 
