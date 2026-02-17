@@ -29,7 +29,7 @@ impl BlockquoteQuoteElement {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Hash)]
 pub struct BlockquoteMessageElement {
     pub size: Size,
     pub block_id: NodeId,

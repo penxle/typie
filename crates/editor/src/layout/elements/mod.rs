@@ -36,7 +36,7 @@ impl WrapperPadding {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 pub struct SplitEdges {
     pub top: bool,
     pub bottom: bool,

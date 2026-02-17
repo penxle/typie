@@ -132,6 +132,8 @@ export class Editor {
   #rafId: number | null = null;
   #flushPending = false;
   #needsTick = false;
+  #renderDebugEnabled = false;
+  #layoutDebugEnabled = false;
   #onDocChanged?: () => void;
   #onExitedDocumentStart?: () => void;
   #searchQuery = '';
@@ -311,6 +313,8 @@ export class Editor {
     const scaleFactor = window.devicePixelRatio * (window.visualViewport?.scale || 1);
     const wasmEditor = app.createEditor(scaleFactor, options.snapshot);
     this.#wasmEditor = wasmEditor;
+    wasmEditor.setRenderDebug(this.#renderDebugEnabled);
+    wasmEditor.setLayoutDebug(this.#layoutDebugEnabled);
 
     const memory = getMemory() as WebAssembly.Memory;
     const rawOffsets = wasmEditor.getSlateOffsets();
@@ -1279,6 +1283,18 @@ export class Editor {
   setReadOnly(readOnly: boolean): void {
     this.readOnly = readOnly;
     this.#wasmEditor?.setReadOnly(readOnly);
+  }
+
+  setRenderDebug(enabled: boolean): void {
+    this.#renderDebugEnabled = enabled;
+    this.#wasmEditor?.setRenderDebug(enabled);
+    this.#needsTick = true;
+  }
+
+  setLayoutDebug(enabled: boolean): void {
+    this.#layoutDebugEnabled = enabled;
+    this.#wasmEditor?.setLayoutDebug(enabled);
+    this.#needsTick = true;
   }
 
   isReadOnly(): boolean {

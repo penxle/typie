@@ -300,10 +300,9 @@ impl Render for LineElement {
             }
             RenderPhase::Selection => {
                 self.render_line_selection(pixmap, transform, point, ctx);
+                self.render_page_break(pixmap, transform, point, ctx);
             }
             RenderPhase::Content => {
-                self.render_page_break(pixmap, transform, point, ctx);
-
                 let scale = ctx.scale_factor as f32;
                 let run_y = self.metric.top + line_metrics.ascent;
 

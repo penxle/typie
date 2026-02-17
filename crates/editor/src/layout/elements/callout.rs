@@ -6,7 +6,7 @@ use crate::types::Size;
 pub const CALLOUT_PADDING_X: f32 = 12.0;
 pub const CALLOUT_PADDING_Y: f32 = 16.0;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Hash)]
 pub struct CalloutBackgroundElement {
     pub size: Size,
     pub variant: CalloutVariant,

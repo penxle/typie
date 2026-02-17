@@ -1,4 +1,5 @@
 use serde::Serialize;
+use std::hash::{Hash, Hasher};
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 #[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
@@ -34,6 +35,13 @@ impl Size {
             width: 0.0,
             height: 0.0,
         }
+    }
+}
+
+impl Hash for Size {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.width.to_bits().hash(state);
+        self.height.to_bits().hash(state);
     }
 }
 

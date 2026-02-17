@@ -492,6 +492,16 @@ impl Editor {
         self.runtime.set_read_only(read_only);
     }
 
+    #[wasm_bindgen(js_name = setRenderDebug)]
+    pub fn set_render_debug(&mut self, enabled: bool) {
+        self.runtime.set_render_debug(enabled);
+    }
+
+    #[wasm_bindgen(js_name = setLayoutDebug)]
+    pub fn set_layout_debug(&mut self, enabled: bool) {
+        self.runtime.set_layout_debug(enabled);
+    }
+
     #[wasm_bindgen(js_name = isReadOnly)]
     pub fn is_read_only(&self) -> bool {
         self.runtime.is_read_only()
