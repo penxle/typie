@@ -6,6 +6,7 @@ CRATE_DIR="$(dirname "$SCRIPT_DIR")"
 WORKSPACE_DIR="$(cd "$CRATE_DIR/../.." && pwd)"
 
 ASSETS_DIR="$CRATE_DIR/assets"
+PKG_DIR="$CRATE_DIR/pkg"
 MOBILE_ASSETS_DIR="$WORKSPACE_DIR/apps/mobile/assets/native"
 
 generate_icu_data() {
