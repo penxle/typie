@@ -13,7 +13,7 @@ use crate::layout::{Element, Page, PositionedNode, RenderHints};
 use crate::model::{Doc, LayoutMode, SelectionDecor};
 use crate::runtime::DropIndicator;
 use crate::types::{Point, Theme};
-use cache::{PageRenderCache, PageRenderSnapshot};
+use cache::{PageRenderCache, PageRenderSnapshot, same_scale_factor};
 use debug_overlay::render_debug_overlay;
 use geometry::{CacheRect, PixelRect, clear_layout_rect, merge_and_clamp_rects};
 use paint_diagnostics::{PaintDebugFrame, PaintDiagnosticsState, collect_layout_dirty_rects};
@@ -21,6 +21,7 @@ use rustc_hash::FxHashMap;
 use tiny_skia::{Color, Pixmap, PixmapMut, PixmapPaint, Rect, Transform};
 
 const DIRTY_RECT_EPSILON: f32 = 0.5;
+const DIRTY_RECT_COALESCE_EPSILON: f32 = 8.0;
 const FULL_REPAINT_COVERAGE_THRESHOLD: f32 = 0.7;
 const FULL_REPAINT_RECT_THRESHOLD: usize = 32;
 
@@ -119,7 +120,7 @@ impl Renderer {
     pub fn set_size(&mut self, width: f32, height: f32, scale_factor: f64) {
         let new_width = (width as f64 * scale_factor).round() as u32;
         let new_height = (height as f64 * scale_factor).round() as u32;
-        let scale_changed = (self.scale_factor - scale_factor).abs() > f64::EPSILON;
+        let scale_changed = !same_scale_factor(self.scale_factor, scale_factor);
 
         if self.pixmap.width() != new_width || self.pixmap.height() != new_height {
             if let Some(new_pixmap) = Pixmap::new(new_width.max(1), new_height.max(1)) {
@@ -284,15 +285,16 @@ impl Renderer {
         let canvas_height = height as f32 / scale;
         let render_snapshot = PageRenderSnapshot::from_page(page);
 
-        let mut cache = self
-            .page_cache
-            .remove(&page_idx)
-            .filter(|entry| {
-                entry.width == width
-                    && entry.height == height
-                    && (entry.scale_factor - self.scale_factor).abs() <= f64::EPSILON
-            })
-            .unwrap_or_else(|| PageRenderCache::new(width, height, self.scale_factor));
+        let previous_cache = self.page_cache.remove(&page_idx);
+        let mut resize_dirty_rects = Vec::new();
+        let mut cache = match previous_cache {
+            Some(entry) if entry.matches(width, height, self.scale_factor) => entry,
+            Some(entry) if entry.matches_for_height_resize(width, self.scale_factor) => {
+                resize_dirty_rects = entry.exposed_rects_on_resize(width, height, scale);
+                entry.resize_preserving_overlap(width, height, self.scale_factor)
+            }
+            Some(_) | None => PageRenderCache::new(width, height, self.scale_factor),
+        };
 
         let mut dirty_rects = if !cache.snapshot_initialized {
             CacheRect::from_canvas(canvas_width, canvas_height)
@@ -301,14 +303,12 @@ impl Renderer {
         } else {
             cache.snapshot.dirty_rects(&render_snapshot)
         };
-        dirty_rects =
-            merge_and_clamp_rects(dirty_rects, canvas_width, canvas_height, DIRTY_RECT_EPSILON);
+        dirty_rects.extend(resize_dirty_rects);
+        dirty_rects = normalize_dirty_rects(dirty_rects, canvas_width, canvas_height);
 
         if !dirty_rects.is_empty() {
-            let full_area = canvas_width * canvas_height;
-            let dirty_area: f32 = dirty_rects.iter().map(|rect| rect.area()).sum();
-            let should_full_repaint = dirty_rects.len() > FULL_REPAINT_RECT_THRESHOLD
-                || (full_area > 0.0 && dirty_area / full_area >= FULL_REPAINT_COVERAGE_THRESHOLD);
+            let should_full_repaint =
+                should_promote_full_repaint(&dirty_rects, canvas_width, canvas_height);
             let render_rects = if should_full_repaint {
                 CacheRect::from_canvas(canvas_width, canvas_height)
                     .map(|rect| vec![rect])
@@ -347,18 +347,9 @@ impl Renderer {
                 } else {
                     collect_layout_dirty_rects(page, layout_pass.recomputed_nodes.as_ref())
                 };
-                layout_rects = merge_and_clamp_rects(
-                    layout_rects,
-                    canvas_width,
-                    canvas_height,
-                    DIRTY_RECT_EPSILON,
-                );
-
-                let full_area = canvas_width * canvas_height;
-                let layout_area: f32 = layout_rects.iter().map(|rect| rect.area()).sum();
-                let should_full_relayout = layout_rects.len() > FULL_REPAINT_RECT_THRESHOLD
-                    || (full_area > 0.0
-                        && layout_area / full_area >= FULL_REPAINT_COVERAGE_THRESHOLD);
+                layout_rects = normalize_dirty_rects(layout_rects, canvas_width, canvas_height);
+                let should_full_relayout =
+                    should_promote_full_repaint(&layout_rects, canvas_width, canvas_height);
                 let layout_rects = if should_full_relayout {
                     CacheRect::from_canvas(canvas_width, canvas_height)
                         .map(|rect| vec![rect])
@@ -909,6 +900,30 @@ impl Renderer {
     }
 }
 
+fn normalize_dirty_rects(
+    rects: Vec<CacheRect>,
+    canvas_width: f32,
+    canvas_height: f32,
+) -> Vec<CacheRect> {
+    let mut merged = merge_and_clamp_rects(rects, canvas_width, canvas_height, DIRTY_RECT_EPSILON);
+    if merged.len() > FULL_REPAINT_RECT_THRESHOLD {
+        merged = merge_and_clamp_rects(
+            merged,
+            canvas_width,
+            canvas_height,
+            DIRTY_RECT_COALESCE_EPSILON,
+        );
+    }
+    merged
+}
+
+fn should_promote_full_repaint(rects: &[CacheRect], canvas_width: f32, canvas_height: f32) -> bool {
+    let full_area = canvas_width * canvas_height;
+    let dirty_area: f32 = rects.iter().map(|rect| rect.area()).sum();
+    rects.len() > FULL_REPAINT_RECT_THRESHOLD
+        || (full_area > 0.0 && dirty_area / full_area >= FULL_REPAINT_COVERAGE_THRESHOLD)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1432,6 +1447,83 @@ mod tests {
         assert_eq!(
             first, second,
             "dirty rect 밖 픽셀은 부분 렌더 후에도 변하면 안 됨"
+        );
+    }
+
+    #[test]
+    fn dense_line_shift_rects_are_coalesced_before_full_promotion() {
+        let mut rects = Vec::new();
+        for i in 0..40 {
+            rects.push(
+                CacheRect::from_xywh(20.0, 32.0 + i as f32 * 14.0, 260.0, 12.0)
+                    .expect("valid rect"),
+            );
+        }
+
+        let normalized = normalize_dirty_rects(rects, 300.0, 900.0);
+        assert!(
+            normalized.len() < FULL_REPAINT_RECT_THRESHOLD,
+            "dense line shift dirty rects should be coalesced before full repaint threshold"
+        );
+        assert!(
+            !should_promote_full_repaint(&normalized, 300.0, 900.0),
+            "line shift region that covers about half the page should stay partial repaint"
+        );
+    }
+
+    #[test]
+    fn height_only_resize_reuses_snapshot_and_repaints_exposed_strip() {
+        let callout_id = NodeId::new();
+        let make_page = |height: f32| {
+            root_with_children(
+                Some(vec![PositionedNode {
+                    position: Point::new(20.0, 24.0),
+                    node: Rc::new(LayoutNode {
+                        size: Size::new(260.0, 72.0),
+                        element: Some(Element::CalloutBackground(CalloutBackgroundElement::new(
+                            Size::new(260.0, 72.0),
+                            CalloutVariant::Info,
+                            callout_id,
+                            SplitEdges::default(),
+                        ))),
+                        children: None,
+                        page_break_policy: PageBreakPolicy::default(),
+                        render_hints: RenderHints::default(),
+                        scope_id: None,
+                    }),
+                }]),
+                Size::new(300.0, height),
+            )
+        };
+
+        let page1 = make_page(200.0);
+        let page2 = make_page(260.0);
+
+        let doc = Doc::new();
+        let mut renderer = Renderer::new(1.0, FrameDiagnostics::new());
+        renderer.set_render_debug(true);
+
+        renderer.set_size(300.0, 200.0, 1.0);
+        let _ = renderer
+            .prepare_base_layer(&page1, 0, &doc)
+            .expect("debug frame should exist");
+
+        renderer.set_size(300.0, 260.0, 1.0);
+        let frame = renderer
+            .prepare_base_layer(&page2, 0, &doc)
+            .expect("debug frame should exist");
+
+        assert!(
+            !frame.full_repaint,
+            "height-only resize should not force full repaint when snapshot can be reused"
+        );
+        assert!(
+            !frame.render_rects.is_empty(),
+            "newly exposed strip should be marked dirty and repainted"
+        );
+        assert!(
+            frame.render_rects.iter().any(|rect| rect.y >= 199.0),
+            "dirty rect should include the exposed bottom strip after height growth"
         );
     }
 
