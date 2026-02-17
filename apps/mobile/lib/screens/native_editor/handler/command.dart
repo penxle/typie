@@ -76,10 +76,6 @@ class CommandHandler {
         _handleFontRequired(controller, reader);
       }
 
-      if (dirty & (1 << 18) != 0) {
-        _handleFallbackFontRequired(controller, reader);
-      }
-
       if (dirty & (1 << 19) != 0) {
         _handleExitedDocumentStart(controller);
       }
@@ -445,30 +441,31 @@ class CommandHandler {
 
     final requests = reader.readFontRequests();
     for (final req in requests) {
+      final font = manager.findFont(req.family, req.weight);
+      if (font == null) {
+        continue;
+      }
+
       unawaited(
-        manager.ensureRequiredFont(req.family, req.weight, req.codepoints).then((_) {
+        manager.ensureRequiredFont(req.family, font, req.codepoints).then((_) {
           controller.dispatch({'type': 'fontsLoaded'});
+          unawaited(manager.preloadRemainingChunks(req.family, font));
         }),
       );
-    }
-  }
 
-  static void _handleFallbackFontRequired(EditorController controller, SlateReader reader) {
-    final manager = controller.fontManager;
-    if (manager == null) {
-      return;
+      unawaited(
+        manager
+            .filterUncoveredCodepoints(font, req.codepoints)
+            .then((uncovered) {
+              if (uncovered.isNotEmpty) {
+                return manager.ensureRequiredFallbackFont(req.weight, uncovered);
+              }
+            })
+            .then((_) {
+              controller.dispatch({'type': 'fontsLoaded'});
+            }),
+      );
     }
-
-    final codepoints = reader.readFallbackCodepoints();
-    if (codepoints.isEmpty) {
-      return;
-    }
-
-    unawaited(
-      manager.ensureRequiredFallbackFont(codepoints).then((_) {
-        controller.dispatch({'type': 'fontsLoaded'});
-      }),
-    );
   }
 
   static void _handleExitedDocumentStart(EditorController controller) {

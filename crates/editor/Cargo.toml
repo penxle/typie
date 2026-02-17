@@ -28,6 +28,7 @@ jni = { version = "0.21", optional = true }
 macros = { path = "./macros" }
 tiny-skia = "0.11"
 skrifa = "0.40"
+write-fonts = "0.45"
 image = { version = "0.25", default-features = false, features = ["png"] }
 parley = { version = "0.7.0", default-features = false, features = ["std"] }
 fontique = { version = "0.7.0", default-features = false, features = ["icu_properties"] }

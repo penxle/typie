@@ -54,7 +54,6 @@
         ...DocumentPanel_Ai_user
         ...DocumentPanel_Info_user
         ...DocumentPanel_Spellcheck_user
-        ...DocumentPanel_Settings_user
       }
     `),
   );
@@ -153,7 +152,7 @@
 
   {#if isExpanded}
     {#if app.preference.current.panelTabByViewId[splitViewId] === 'settings'}
-      <DocumentPanelSettings {$user} {editor} />
+      <DocumentPanelSettings {editor} />
     {:else if app.preference.current.panelTabByViewId[splitViewId] === 'info'}
       <DocumentPanelInfo {$document} {$user} {editor} />
     {:else if app.preference.current.panelTabByViewId[splitViewId] === 'note'}

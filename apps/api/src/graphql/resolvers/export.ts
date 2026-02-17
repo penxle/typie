@@ -20,6 +20,7 @@ import { generateDocumentPdf } from '@/export/document';
 import { generatePostDocx } from '@/export/docx/docx';
 import { extractFontIds, FontMapper } from '@/export/docx/utils/font-mapping';
 import { generatePostPDF } from '@/export/pdf';
+import { getDocumentFontFamilies } from '@/utils/document';
 import { builder } from '../builder';
 
 /**
@@ -145,12 +146,16 @@ builder.mutationFields((t) => ({
         .where(eq(DocumentContents.documentId, document.id))
         .then(firstOrThrowWith(new NotFoundError()));
 
-      const user = await db.select({ name: Users.name }).from(Users).where(eq(Users.id, entity.userId)).then(firstOrThrow);
+      const [user, fonts] = await Promise.all([
+        db.select({ name: Users.name }).from(Users).where(eq(Users.id, entity.userId)).then(firstOrThrow),
+        getDocumentFontFamilies(entity.userId),
+      ]);
 
       const pdfBuffer = await generateDocumentPdf({
         snapshot: content.snapshot,
         title: document.title || '(제목 없음)',
         author: user.name,
+        fonts,
         pageLayout: {
           width: input.width,
           height: input.height,
@@ -202,7 +207,7 @@ builder.mutationFields((t) => ({
           const fontFamilies = await db
             .select({
               id: FontFamilies.id,
-              name: FontFamilies.name,
+              name: FontFamilies.familyName,
             })
             .from(FontFamilies)
             .where(inArray(FontFamilies.id, fontFamilyIds));
@@ -221,7 +226,6 @@ builder.mutationFields((t) => ({
             .select({
               id: Fonts.id,
               familyId: Fonts.familyId,
-              familyName: Fonts.familyName,
               fullName: Fonts.fullName,
               postScriptName: Fonts.postScriptName,
               weight: Fonts.weight,
@@ -230,11 +234,10 @@ builder.mutationFields((t) => ({
             .where(and(inArray(Fonts.familyId, fontFamilyIds), eq(Fonts.state, FontState.ACTIVE)));
 
           for (const font of fontsInFamilies) {
-            const familyName = familyNameMap.get(font.familyId) || font.familyName;
             fontMapper.addCustomFont({
               id: font.familyId,
               fullName: font.fullName,
-              familyName,
+              familyName: familyNameMap.get(font.familyId),
               postScriptName: font.postScriptName,
               weight: font.weight,
             });
@@ -245,7 +248,7 @@ builder.mutationFields((t) => ({
           const customFonts = await db
             .select({
               id: Fonts.id,
-              familyName: Fonts.familyName,
+              familyId: Fonts.familyId,
               fullName: Fonts.fullName,
               postScriptName: Fonts.postScriptName,
               weight: Fonts.weight,
@@ -253,10 +256,20 @@ builder.mutationFields((t) => ({
             .from(Fonts)
             .where(and(inArray(Fonts.id, directFontIds), eq(Fonts.state, FontState.ACTIVE)));
 
+          const directFamilyIds = [...new Set(customFonts.map((f) => f.familyId))];
+          const directFamilies =
+            directFamilyIds.length > 0
+              ? await db
+                  .select({ id: FontFamilies.id, name: FontFamilies.familyName })
+                  .from(FontFamilies)
+                  .where(inArray(FontFamilies.id, directFamilyIds))
+              : [];
+          const directFamilyNameMap = new Map(directFamilies.map((f) => [f.id, f.name]));
+
           for (const font of customFonts) {
             fontMapper.addCustomFont({
               id: font.id,
-              familyName: font.familyName,
+              familyName: directFamilyNameMap.get(font.familyId),
               fullName: font.fullName,
               postScriptName: font.postScriptName,
               weight: font.weight,

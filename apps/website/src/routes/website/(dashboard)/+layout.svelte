@@ -16,7 +16,7 @@
   import { env } from '$env/dynamic/public';
   import { graphql } from '$graphql';
   import { AdminImpersonateBanner } from '$lib/components/admin';
-  import { setAutoSurroundEnabled, setTextReplacementRules } from '$lib/editor/editor.svelte';
+  import { setAutoSurroundEnabled, setAvailableFonts, setTextReplacementRules } from '$lib/editor/editor.svelte';
   import { setupSplitViewContext } from './[slug]/@split-view/context.svelte';
   import { setupDragDropContext } from './[slug]/@split-view/drag-context.svelte';
   import { setupEditorRegistry } from './[slug]/@split-view/editor-registry.svelte';
@@ -78,6 +78,21 @@
 
         usage {
           totalCharacterCount
+        }
+
+        documentFontFamilies {
+          id
+          familyName
+          displayName
+          source
+          state
+
+          fonts {
+            id
+            weight
+            state
+            subfamilyDisplayName
+          }
         }
 
         textReplacements {
@@ -263,6 +278,20 @@
 
   $effect(() => {
     setTextReplacementRules(JSON.parse(textReplacementRulesJson));
+  });
+
+  const availableFontsJson = $derived.by(() =>
+    stringify(
+      Object.fromEntries(
+        $query.me.documentFontFamilies
+          .filter((f) => f.state === 'ACTIVE')
+          .map((f) => [f.familyName, f.fonts.filter((font) => font.state === 'ACTIVE').map((font) => font.weight)]),
+      ),
+    ),
+  );
+
+  $effect(() => {
+    setAvailableFonts(JSON.parse(availableFontsJson));
   });
 
   $effect(() => {

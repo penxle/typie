@@ -161,6 +161,21 @@ class NativeEditorApplication {
     }
   }
 
+  void setAvailableFonts(Map<String, List<int>> fonts) {
+    _checkDisposed();
+
+    final json = jsonEncode(fonts);
+    final jsonPtr = json.toNativeUtf8();
+
+    final result = _bindings.editor_application_set_available_fonts(_handle, jsonPtr.cast());
+
+    calloc.free(jsonPtr);
+
+    if (result != 0) {
+      throw EditorException(_getLastError() ?? 'Failed to set available fonts');
+    }
+  }
+
   void setFallbackFonts(List<String> names) {
     _checkDisposed();
 

@@ -128,16 +128,6 @@
             id
             ...Img_image
           }
-
-          fonts {
-            id
-            weight
-            url
-
-            family {
-              id
-            }
-          }
         }
 
         ...UsersiteWildcardSlugPage_DocumentActionMenu_entityView
@@ -268,15 +258,6 @@
     }
   });
 
-  const fontFaces = $derived(
-    $entityView.site.fonts
-      .flatMap((font) => [
-        `@font-face { font-family: ${font.id}; src: url(${font.url}) format('woff2'); font-weight: ${font.weight}; font-display: block; }`,
-        `@font-face { font-family: ${font.family.id}; src: url(${font.url}) format('woff2'); font-weight: ${font.weight}; font-display: block; }`,
-      ])
-      .join('\n'),
-  );
-
   const authorizeUrl = $derived(
     qs.stringifyUrl({
       url: `${env.PUBLIC_AUTH_URL}/authorize`,
@@ -327,9 +308,6 @@
 
 <svelte:head>
   <meta name="robots" content="noindex, nofollow" />
-
-  <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-  {@html '<style type="text/css"' + `>${fontFaces}</` + 'style>'}
 </svelte:head>
 
 {#if document}

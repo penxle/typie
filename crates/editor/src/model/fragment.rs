@@ -1,6 +1,7 @@
-use crate::font::get_available_fonts;
+use crate::global::get_available_fonts;
 use crate::model::{
     Doc, FontWeightStyle, Node, NodeId, NodeRef, ParagraphNode, Style, Text, TextNode, TextSegment,
+    nearest_weight,
 };
 use crate::schema::Schema;
 use crate::state::position_helpers::find_child_at_offset;
@@ -740,7 +741,7 @@ impl Fragment {
                             if let Style::FontWeight(fw) = &seg.styles[idx] {
                                 if let Some(weights) = available.get(family) {
                                     if !weights.contains(&fw.weight) {
-                                        let nearest = nearest_weight(fw.weight, weights);
+                                        let nearest = nearest_weight(weights, fw.weight);
                                         let mut new_styles = seg.styles.clone();
                                         new_styles[idx] =
                                             Style::FontWeight(FontWeightStyle { weight: nearest });
@@ -1180,14 +1181,6 @@ impl Fragment {
 
         ancestors
     }
-}
-
-fn nearest_weight(target: u16, weights: &[u16]) -> u16 {
-    weights
-        .iter()
-        .copied()
-        .min_by_key(|&w| (w as i32 - target as i32).abs())
-        .unwrap_or(target)
 }
 
 #[cfg(test)]

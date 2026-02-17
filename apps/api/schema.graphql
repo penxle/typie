@@ -21,6 +21,10 @@ type AdminUsersResult {
   users: [User!]!
 }
 
+input ArchiveFontFamilyInput {
+  fontFamilyId: ID!
+}
+
 input ArchiveFontInput {
   fontId: ID!
 }
@@ -165,6 +169,7 @@ type Document implements IDocument {
   createdAt: DateTime!
   entity: Entity!
   excerpt: String!
+  fontFamilies: [DocumentFontFamily!]!
   generation: Int!
   id: ID!
   layoutMode: JSON!
@@ -199,6 +204,23 @@ enum DocumentContentRating {
   ALL
   R15
   R19
+}
+
+type DocumentFont {
+  id: ID!
+  state: FontState!
+  subfamilyDisplayName: String
+  url: String!
+  weight: Int!
+}
+
+type DocumentFontFamily {
+  displayName: String!
+  familyName: String!
+  fonts: [DocumentFont!]!
+  id: ID!
+  source: FontFamilySource!
+  state: FontFamilyState!
 }
 
 type DocumentLiteraryAnalysisPayload {
@@ -278,6 +300,7 @@ type DocumentView implements IDocument {
   createdAt: DateTime!
   entity: EntityView!
   excerpt: String!
+  fontFamilies: [DocumentFontFamily!]!
   hasPassword: Boolean!
   id: ID!
   nullableTitle: String
@@ -474,16 +497,22 @@ type Font implements Blob {
   family: FontFamily!
   fullName: String
   id: ID!
-  name: String!
   size: Int!
+  subfamilyDisplayName: String
   url: String!
   weight: Int!
 }
 
 type FontFamily {
+  displayName: String!
+  familyName: String!
   fonts: [Font!]!
   id: ID!
-  name: String!
+}
+
+enum FontFamilySource {
+  DEFAULT
+  USER
 }
 
 enum FontFamilyState {
@@ -506,6 +535,7 @@ interface IDocument {
   assets: [DocumentAsset!]!
   createdAt: DateTime!
   excerpt: String!
+  fontFamilies: [DocumentFontFamily!]!
   id: ID!
   nullableTitle: String
   subtitle: String
@@ -661,6 +691,7 @@ type Mutation {
   adminImpersonate(input: AdminImpersonateInput!): Boolean!
   adminStopImpersonation: Boolean!
   archiveFont(input: ArchiveFontInput!): Font!
+  archiveFontFamily(input: ArchiveFontFamilyInput!): FontFamily!
   authorizeSignUpEmail(input: AuthorizeSignUpEmailInput!): String!
   authorizeSingleSignOn(input: AuthorizeSingleSignOnInput!): String!
   cancelPlanChange: Subscription_!
@@ -1389,6 +1420,7 @@ type User {
   characterCountChanges: [CharacterCountChange!]!
   createdAt: DateTime!
   credit: Int!
+  documentFontFamilies: [DocumentFontFamily!]!
   email: String!
   fontFamilies: [FontFamily!]!
   hasPassword: Boolean!

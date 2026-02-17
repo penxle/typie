@@ -81,7 +81,7 @@ class TextToolbar extends HookWidget {
                     .firstWhereOrNull(
                       (e) => e.id == proseMirrorState?.getMarkAttributes('text_style')?['fontFamily'] as String?,
                     )
-                    ?.name ??
+                    ?.displayName ??
                 '(알 수 없음)',
             onTap: () {
               scope.secondaryToolbarMode.value = SecondaryToolbarMode.fontFamily;

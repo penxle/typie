@@ -9,6 +9,20 @@ pub struct FontWeightStyle {
     pub weight: u16,
 }
 
+/// 주어진 후보 중 target에 가장 가까운 weight를 반환한다.
+/// 거리가 동일하면 더 높은 weight를 선택한다.
+pub fn nearest_weight(weights: &[u16], target: u16) -> u16 {
+    weights
+        .iter()
+        .copied()
+        .min_by(|&a, &b| {
+            let da = (a as i32 - target as i32).abs();
+            let db = (b as i32 - target as i32).abs();
+            da.cmp(&db).then(b.cmp(&a))
+        })
+        .unwrap_or(target)
+}
+
 impl StyleHtmlCodec for FontWeightStyle {
     fn to_dom(&self) -> DomSpec {
         DomSpec::el("span")

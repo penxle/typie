@@ -2,6 +2,7 @@ import { asc, inArray } from 'drizzle-orm';
 import stringify from 'fast-json-stable-stringify';
 import { db, decodeDbId } from '@/db';
 import * as T from '@/db/schemas/tables';
+import { FontFamilySource, FontFamilyState, FontState } from '@/enums';
 import { builder } from './builder';
 import type { DataLoaderOptions } from '@pothos/plugin-dataloader';
 import type { AnyPgColumn, AnyPgTable, PgTable, TableConfig } from 'drizzle-orm/pg-core';
@@ -105,3 +106,24 @@ export const CharacterCountChange = builder.simpleObject('CharacterCountChange',
 });
 
 export const PlanRule = builder.objectRef<Partial<PlanRules>>('PlanRule');
+
+export const DocumentFont = builder.simpleObject('DocumentFont', {
+  fields: (t) => ({
+    id: t.id(),
+    weight: t.int(),
+    subfamilyDisplayName: t.string({ nullable: true }),
+    url: t.string(),
+    state: t.field({ type: FontState }),
+  }),
+});
+
+export const DocumentFontFamily = builder.simpleObject('DocumentFontFamily', {
+  fields: (t) => ({
+    id: t.id(),
+    displayName: t.string(),
+    familyName: t.string(),
+    source: t.field({ type: FontFamilySource }),
+    state: t.field({ type: FontFamilyState }),
+    fonts: t.field({ type: [DocumentFont] }),
+  }),
+});

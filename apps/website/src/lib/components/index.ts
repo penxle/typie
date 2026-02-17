@@ -1,3 +1,4 @@
+export { default as FontSpecimen } from './FontSpecimen.svelte';
 export { default as Img } from './Img.svelte';
 export { default as LoadableImg } from './LoadableImg.svelte';
 export { default as SettingsCard } from './SettingsCard.svelte';

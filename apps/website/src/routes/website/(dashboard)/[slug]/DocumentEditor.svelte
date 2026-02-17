@@ -24,6 +24,7 @@
   import { Editor } from '$lib/editor/editor.svelte';
   import { IndexeddbPersistence } from '$lib/editor/persistence';
   import DocumentMenu from '../@context-menu/DocumentMenu.svelte';
+  import FontUploadModal from '../FontUploadModal.svelte';
   import PlanUpgradeModal from '../PlanUpgradeModal.svelte';
   import DocumentPanel from './@document-panel/DocumentPanel.svelte';
   import CloseSplitView from './@split-view/CloseSplitView.svelte';
@@ -138,6 +139,21 @@
                 }
               }
 
+              fontFamilies {
+                id
+                familyName
+                displayName
+                state
+
+                fonts {
+                  id
+                  weight
+                  subfamilyDisplayName
+                  url
+                  state
+                }
+              }
+
               ...DocumentPanel_document
             }
           }
@@ -197,6 +213,12 @@
   const assets = $derived(document?.assets);
 
   $effect(() => {
+    if (document?.fontFamilies?.length) {
+      editor.fontFamilies = document.fontFamilies;
+    }
+  });
+
+  $effect(() => {
     if (assets) {
       for (const asset of assets) {
         if (asset.__typename === 'Image') {
@@ -240,6 +262,8 @@
   let connectionStatus = $state<'connecting' | 'connected' | 'disconnected'>('connecting');
   let lastHeartbeatAt = $state(dayjs());
   let planUpgradeModalOpen = $state(false);
+  let fontUploadModalOpen = $state(false);
+  let fontPlanUpgradeModalOpen = $state(false);
   let showFindReplace = $state(false);
 
   const selectionsStore = new LocalStore<Record<string, { selection?: unknown; type?: string; element?: string; timestamp: number }>>(
@@ -746,7 +770,17 @@
 
       <div class={flex({ position: 'relative', flexGrow: '1', overflowY: 'hidden' })}>
         <div class={flex({ position: 'relative', flexDirection: 'column', flexGrow: '1', overflowX: 'auto' })}>
-          <BottomToolbar onSearchClick={() => (showFindReplace = !showFindReplace)} />
+          <BottomToolbar
+            onFontUploadClick={() => {
+              if (entity.user.subscription) {
+                fontUploadModalOpen = true;
+              } else {
+                fontPlanUpgradeModalOpen = true;
+                mixpanel.track('open_plan_upgrade_modal', { via: 'font_family_upload' });
+              }
+            }}
+            onSearchClick={() => (showFindReplace = !showFindReplace)}
+          />
 
           <div
             style:position={currentViewZenModeEnabled ? 'fixed' : 'relative'}
@@ -951,6 +985,11 @@
     FULL ACCESS로 업그레이드하면
     <br />
     모든 프리미엄 기능을 무제한으로 사용할 수 있어요.
+  </PlanUpgradeModal>
+
+  <FontUploadModal userId={$query.me.id} bind:open={fontUploadModalOpen} />
+  <PlanUpgradeModal $user={$query.me} bind:open={fontPlanUpgradeModalOpen}>
+    폰트 업로드 기능은 FULL ACCESS 플랜에서 사용할 수 있어요.
   </PlanUpgradeModal>
 
   {#if $query.me.sites[0]}

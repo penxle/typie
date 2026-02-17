@@ -9,7 +9,9 @@ type InvalidateTarget =
   | { __typename: string; id: string | number }
   | { __typename: string; id: string | number; field: string; args?: Record<string, unknown> }
   | { __typename: 'Query' }
-  | { __typename: 'Query'; field: string; args?: Record<string, unknown> };
+  | { __typename: 'Query'; field: string; args?: Record<string, unknown> }
+  | { __typename: string }
+  | { __typename: string; field: string; args?: Record<string, unknown> };
 
 export const cacheOperations = {
   async invalidate(...targets: InvalidateTarget[]): Promise<void> {
@@ -25,15 +27,18 @@ export const cacheOperations = {
         } else {
           affectedQueries = cache.invalidate(RootFieldKey);
         }
-      } else if ('field' in target && 'id' in target) {
+      } else if ('id' in target && 'field' in target) {
         const storageKey = `${target.__typename}:${target.id}` as StorageKey;
         const fieldKey = makeFieldKeyWithArgs(target.field, target.args);
         affectedQueries = cache.invalidate(storageKey, fieldKey);
       } else if ('id' in target) {
         const storageKey = `${target.__typename}:${target.id}` as StorageKey;
         affectedQueries = cache.invalidate(storageKey);
+      } else if ('field' in target) {
+        const fieldKey = makeFieldKeyWithArgs(target.field, target.args);
+        affectedQueries = cache.invalidateByTypename(target.__typename, fieldKey);
       } else {
-        affectedQueries = new Set();
+        affectedQueries = cache.invalidateByTypename(target.__typename);
       }
 
       for (const queryKey of affectedQueries) {

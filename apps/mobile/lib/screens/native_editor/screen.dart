@@ -403,6 +403,11 @@ class _EditorContent extends HookWidget {
           .toList();
       setTextReplacementRules(rules);
 
+      final availableFonts = <String, List<int>>{
+        for (final f in data.me!.documentFontFamilies) f.familyName: f.fonts.map((font) => font.weight).toList(),
+      };
+      setAvailableFonts(availableFonts);
+
       Future<void> init() async {
         try {
           final snapshotBase64 = document.snapshot.value;
@@ -411,6 +416,27 @@ class _EditorContent extends HookWidget {
           final (application, manager) = await getOrInitializeApplication();
           app.value = application;
           fontManager.value = manager;
+
+          manager.fontFamilies = document.fontFamilies
+              .map(
+                (f) => FontFamily(
+                  familyName: f.familyName,
+                  displayName: f.displayName,
+                  state: f.state.name,
+                  fonts: f.fonts
+                      .map(
+                        (font) => Font(
+                          weight: font.weight,
+                          subfamilyDisplayName: font.subfamilyDisplayName,
+                          url: font.url,
+                          state: font.state.name,
+                        ),
+                      )
+                      .toList(),
+                ),
+              )
+              .toList();
+
           editor.value = application.createEditor(scaleFactor, snapshot: snapshot)
             ..dispatch({
               'type': 'initialize',

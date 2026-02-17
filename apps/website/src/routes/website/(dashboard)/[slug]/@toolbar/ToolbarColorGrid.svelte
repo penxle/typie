@@ -7,16 +7,15 @@
 
   type Props = {
     items: readonly Item[];
-    currentValue: Item['value'];
+    currentValue?: string;
     columns: number;
     shape?: 'circle' | 'square';
-    showNone?: boolean;
     onSelect: (value: Item['value']) => void;
     onClose?: () => void;
     opened?: boolean;
   };
 
-  let { items, currentValue, columns, shape = 'circle', showNone = false, onSelect, onClose, opened = true }: Props = $props();
+  let { items, currentValue, columns, shape = 'circle', onSelect, onClose, opened = true }: Props = $props();
 
   let containerElement: HTMLDivElement | undefined = $state();
 
@@ -140,7 +139,7 @@
       }}
       type="button"
     >
-      {#if showNone && value === 'none'}
+      {#if value === 'none'}
         <div
           class={css({
             position: 'absolute',

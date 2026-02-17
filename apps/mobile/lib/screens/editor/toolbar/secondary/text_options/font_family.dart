@@ -60,7 +60,7 @@ class FontFamilyTextOptionsToolbar extends HookWidget {
 
     final allItems = [
       ...editorValues['fontFamily']!,
-      ...?data?.me?.fontFamilies.map((fontFamily) => {'value': fontFamily.id, 'label': fontFamily.name}),
+      ...?data?.me?.fontFamilies.map((fontFamily) => {'value': fontFamily.id, 'label': fontFamily.displayName}),
     ];
 
     return TextOptionsToolbar(

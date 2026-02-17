@@ -1,4 +1,4 @@
-use crate::font::{add_font_base, add_font_chunk, set_fallback_fonts};
+use crate::global::{add_font_base, add_font_chunk, set_available_fonts, set_fallback_fonts};
 use crate::global::{clear_text_replacement_rules, set_text_replacement_rules};
 use crate::icu_data::{get_general_category_map, load_icu_data};
 use crate::layout::query::is_selection_hit;
@@ -318,6 +318,23 @@ pub extern "C" fn editor_application_add_font_chunk(
             let family = parse_cstr(family, "Font family")?;
             let data = unsafe { slice_from_raw(data, data_len, "Font data")? };
             add_font_chunk(family, weight, data);
+            Ok(())
+        },
+        -1
+    )
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn editor_application_set_available_fonts(
+    _app: *mut EditorApplication,
+    fonts_json: *const c_char,
+) -> i32 {
+    ffi!(
+        {
+            let json = parse_cstr(fonts_json, "Fonts JSON")?;
+            let fonts: std::collections::HashMap<String, Vec<u16>> =
+                serde_json::from_str(json).map_err(|e| format!("Failed to parse JSON: {e}"))?;
+            set_available_fonts(fonts);
             Ok(())
         },
         -1

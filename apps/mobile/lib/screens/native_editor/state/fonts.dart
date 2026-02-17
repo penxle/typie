@@ -8,28 +8,26 @@ import 'package:path_provider/path_provider.dart';
 import 'package:typie/native/editor_native.dart';
 import 'package:typie/service.dart';
 
-class FontVariant {
-  const FontVariant({required this.weight, required this.path});
+class Font {
+  const Font({required this.weight, this.subfamilyDisplayName, required this.url, this.state});
 
   final int weight;
-  final String path;
+  final String? subfamilyDisplayName;
+  final String url;
+  final String? state;
 }
 
-class FontConfig {
-  const FontConfig({required this.family, required this.variants});
+class FontFamily {
+  const FontFamily({required this.familyName, required this.displayName, required this.fonts, this.state});
 
-  final String family;
-  final List<FontVariant> variants;
+  final String familyName;
+  final String displayName;
+  final List<Font> fonts;
+  final String? state;
 }
 
-class FallbackFontConfig extends FontConfig {
-  const FallbackFontConfig({required super.family, required this.priority, required super.variants});
-
-  final int priority;
-}
-
-class FontManifestEntry {
-  FontManifestEntry({required this.hash, required this.chunkCount, required this.chunkMap, this.chunkMapSup});
+class FontManifest {
+  FontManifest({required this.hash, required this.chunkCount, required this.chunkMap, this.chunkMapSup});
 
   final String hash;
   final int chunkCount;
@@ -46,106 +44,14 @@ class FontManifestEntry {
   }
 }
 
-const cdnBase = 'https://cdn.typie.net/editor/fonts';
+const _cdnBase = 'https://cdn.typie.net/editor/fonts';
 const _fontCacheDir = 'fonts';
-
-const defaultFonts = <FontConfig>[
-  FontConfig(
-    family: 'Pretendard',
-    variants: [
-      FontVariant(weight: 100, path: 'Pretendard-Thin'),
-      FontVariant(weight: 200, path: 'Pretendard-ExtraLight'),
-      FontVariant(weight: 300, path: 'Pretendard-Light'),
-      FontVariant(weight: 400, path: 'Pretendard-Regular'),
-      FontVariant(weight: 500, path: 'Pretendard-Medium'),
-      FontVariant(weight: 600, path: 'Pretendard-SemiBold'),
-      FontVariant(weight: 700, path: 'Pretendard-Bold'),
-      FontVariant(weight: 800, path: 'Pretendard-ExtraBold'),
-      FontVariant(weight: 900, path: 'Pretendard-Black'),
-    ],
-  ),
-  FontConfig(
-    family: 'KoPubWorldDotum',
-    variants: [
-      FontVariant(weight: 300, path: 'KoPubWorldDotum-Light'),
-      FontVariant(weight: 500, path: 'KoPubWorldDotum-Medium'),
-      FontVariant(weight: 700, path: 'KoPubWorldDotum-Bold'),
-    ],
-  ),
-  FontConfig(
-    family: 'NanumBarunGothic',
-    variants: [
-      FontVariant(weight: 200, path: 'NanumBarunGothic-UltraLight'),
-      FontVariant(weight: 300, path: 'NanumBarunGothic-Light'),
-      FontVariant(weight: 400, path: 'NanumBarunGothic-Regular'),
-      FontVariant(weight: 700, path: 'NanumBarunGothic-Bold'),
-    ],
-  ),
-  FontConfig(
-    family: 'RIDIBatang',
-    variants: [FontVariant(weight: 400, path: 'RIDIBatang-Regular')],
-  ),
-  FontConfig(
-    family: 'KoPubWorldBatang',
-    variants: [
-      FontVariant(weight: 300, path: 'KoPubWorldBatang-Light'),
-      FontVariant(weight: 500, path: 'KoPubWorldBatang-Medium'),
-      FontVariant(weight: 700, path: 'KoPubWorldBatang-Bold'),
-    ],
-  ),
-  FontConfig(
-    family: 'NanumMyeongjo',
-    variants: [
-      FontVariant(weight: 400, path: 'NanumMyeongjo-Regular'),
-      FontVariant(weight: 700, path: 'NanumMyeongjo-Bold'),
-      FontVariant(weight: 800, path: 'NanumMyeongjo-ExtraBold'),
-    ],
-  ),
+const _phantomFontFamilies = [
+  (familyName: 'Noto (Phantom)', path: 'assets/native/Noto-Phantom.bin'),
+  (familyName: 'Noto Emoji (Phantom)', path: 'assets/native/Noto-Phantom-Emoji.bin'),
 ];
-
-const _fallbackFonts = <FallbackFontConfig>[
-  FallbackFontConfig(
-    family: 'Pretendard (Fallback)',
-    priority: 100,
-    variants: [FontVariant(weight: 400, path: 'Pretendard-Regular')],
-  ),
-  FallbackFontConfig(
-    family: 'Noto Sans JP',
-    priority: 200,
-    variants: [
-      FontVariant(weight: 400, path: 'NotoSansJP-Regular'),
-      FontVariant(weight: 700, path: 'NotoSansJP-Bold'),
-    ],
-  ),
-  FallbackFontConfig(
-    family: 'Noto Sans SC',
-    priority: 300,
-    variants: [
-      FontVariant(weight: 400, path: 'NotoSansSC-Regular'),
-      FontVariant(weight: 700, path: 'NotoSansSC-Bold'),
-    ],
-  ),
-  FallbackFontConfig(
-    family: 'NotoColorEmoji',
-    priority: 400,
-    variants: [FontVariant(weight: 400, path: 'NotoColorEmoji')],
-  ),
-  FallbackFontConfig(
-    family: 'Noto (Phantom)',
-    priority: 65534,
-    variants: [FontVariant(weight: 400, path: 'Noto-Phantom')],
-  ),
-  FallbackFontConfig(
-    family: 'Noto Emoji (Phantom)',
-    priority: 65535,
-    variants: [FontVariant(weight: 400, path: 'Noto-Phantom-Emoji')],
-  ),
-];
-
-const _allFonts = <FontConfig>[...defaultFonts, ..._fallbackFonts];
 
 String? _cacheBasePath;
-Map<String, FontManifestEntry>? _manifest;
 
 Future<String> _getCacheBasePath() async {
   if (_cacheBasePath != null) {
@@ -157,27 +63,6 @@ Future<String> _getCacheBasePath() async {
   return _cacheBasePath!;
 }
 
-Future<Map<String, FontManifestEntry>> _getManifest() async {
-  if (_manifest != null) {
-    return _manifest!;
-  }
-  final jsonStr = await rootBundle.loadString('assets/native/fonts.json');
-  final raw = jsonDecode(jsonStr) as Map<String, dynamic>;
-  _manifest = raw.map((key, value) {
-    final v = value as Map<String, dynamic>;
-    return MapEntry(
-      key,
-      FontManifestEntry(
-        hash: v['hash'] as String,
-        chunkCount: v['chunk_count'] as int,
-        chunkMap: v['chunk_map'] as String?,
-        chunkMapSup: (v['chunk_map_sup'] as List<dynamic>?)?.cast<int>(),
-      ),
-    );
-  });
-  return _manifest!;
-}
-
 class FontManager {
   FontManager(this._app);
 
@@ -185,6 +70,69 @@ class FontManager {
   final _loaded = <String>{};
   final _pending = <String, Future<void>>{};
   final _fetching = <String, Future<Uint8List>>{};
+  final _manifestCache = <String, FontManifest>{};
+  final _manifestFetching = <String, Future<FontManifest>>{};
+  static const _preloadConcurrency = 4;
+  final _preloadPending = <_PreloadItem>[];
+  int _preloadInflight = 0;
+  final _preloadPromises = <String, Future<void>>{};
+  List<FontFamily>? _fallbackFontFamilies;
+  Future<List<FontFamily>>? _fallbacksLoading;
+
+  List<FontFamily> fontFamilies = [];
+
+  Future<void> _preloadEnqueue(String key, double priority, Future<void> Function() fn) {
+    if (_loaded.contains(key)) return Future.value();
+
+    final existing = _preloadPromises[key];
+    if (existing != null) return existing;
+
+    final completer = Completer<void>();
+    final item = _PreloadItem(key: key, priority: priority, fn: fn, completer: completer);
+    var i = _preloadPending.indexWhere((p) => p.priority < priority);
+    if (i == -1) i = _preloadPending.length;
+    _preloadPending.insert(i, item);
+
+    _preloadPromises[key] = completer.future;
+    _preloadFlush();
+    return completer.future;
+  }
+
+  void _preloadFlush() {
+    while (_preloadInflight < _preloadConcurrency && _preloadPending.isNotEmpty) {
+      final item = _preloadPending.removeAt(0);
+
+      if (_loaded.contains(item.key)) {
+        _preloadPromises.remove(item.key);
+        item.completer.complete();
+        continue;
+      }
+
+      _preloadInflight++;
+      item
+          .fn()
+          .then((_) {
+            _preloadPromises.remove(item.key);
+            item.completer.complete();
+            _preloadInflight--;
+            _preloadFlush();
+          })
+          .catchError((Object err) {
+            _preloadPromises.remove(item.key);
+            item.completer.completeError(err);
+            _preloadInflight--;
+            _preloadFlush();
+          });
+    }
+  }
+
+  Font? findFont(String family, int weight) {
+    return fontFamilies
+        .where((f) => f.familyName == family)
+        .expand((f) => f.fonts)
+        .where((f) => f.weight == weight)
+        .firstOrNull;
+  }
 
   Future<Uint8List> _fetchFont(String url) async {
     final basePath = await _getCacheBasePath();
@@ -218,9 +166,84 @@ class FontManager {
     return future;
   }
 
-  Future<void> _loadOnce(String key, Future<void> Function() fn) async {
+  Future<FontManifest> _fetchManifest(String url) {
+    final cached = _manifestCache[url];
+    if (cached != null) {
+      return Future.value(cached);
+    }
+
+    final inflight = _manifestFetching[url];
+    if (inflight != null) {
+      return inflight;
+    }
+
+    final future = () async {
+      try {
+        final response = await serviceLocator<Dio>().get<String>('$url/manifest.json');
+        final v = jsonDecode(response.data!) as Map<String, dynamic>;
+        final manifest = FontManifest(
+          hash: v['hash'] as String,
+          chunkCount: v['chunk_count'] as int,
+          chunkMap: v['chunk_map'] as String?,
+          chunkMapSup: (v['chunk_map_sup'] as List<dynamic>?)?.cast<int>(),
+        );
+        _manifestCache[url] = manifest;
+        return manifest;
+      } finally {
+        unawaited(_manifestFetching.remove(url));
+      }
+    }();
+
+    _manifestFetching[url] = future;
+    return future;
+  }
+
+  Future<List<FontFamily>> _loadFallbackFontFamilies() {
+    if (_fallbackFontFamilies != null) {
+      return Future.value(_fallbackFontFamilies!);
+    }
+    if (_fallbacksLoading != null) {
+      return _fallbacksLoading!;
+    }
+
+    final future = () async {
+      try {
+        final raw = await rootBundle.loadString('assets/native/fallbacks.json');
+        final data = jsonDecode(raw) as List<dynamic>;
+        final families = <FontFamily>[];
+        for (final entry in data) {
+          final e = entry as Map<String, dynamic>;
+          final familyName = e['familyName'] as String;
+          final fonts = <Font>[];
+          for (final f in e['fonts'] as List<dynamic>) {
+            final fm = f as Map<String, dynamic>;
+            final url = '$_cdnBase/${fm['path'] as String}';
+            fonts.add(Font(weight: fm['weight'] as int, url: url));
+            _manifestCache[url] = FontManifest(
+              hash: fm['hash'] as String,
+              chunkCount: fm['chunk_count'] as int,
+              chunkMap: fm['chunk_map'] as String?,
+              chunkMapSup: (fm['chunk_map_sup'] as List<dynamic>?)?.cast<int>(),
+            );
+          }
+          families.add(
+            FontFamily(familyName: familyName, displayName: (e['displayName'] as String?) ?? familyName, fonts: fonts),
+          );
+        }
+        _fallbackFontFamilies = families;
+        return families;
+      } finally {
+        _fallbacksLoading = null;
+      }
+    }();
+
+    _fallbacksLoading = future;
+    return future;
+  }
+
+  Future<void> _loadOnce(String key, Future<void> Function() fn) {
     if (_loaded.contains(key)) {
-      return;
+      return Future.value();
     }
 
     final existing = _pending[key];
@@ -229,126 +252,187 @@ class FontManager {
     }
 
     final future = () async {
-      await fn();
-      _loaded.add(key);
+      try {
+        await fn();
+        _loaded.add(key);
+      } finally {
+        unawaited(_pending.remove(key));
+      }
     }();
 
     _pending[key] = future;
-    try {
-      await future;
-    } finally {
-      unawaited(_pending.remove(key));
-    }
+    return future;
   }
 
-  List<int> _findChunkIndices(FontManifestEntry fm, List<int> codepoints) {
-    final data = fm.decodedChunkMap;
-    if (data == null) {
-      return [];
-    }
-
-    final indices = <int>{};
-    for (final cp in codepoints) {
-      if (cp <= 0xFFFF) {
-        final l2Idx = data[cp >> 8];
-        if (l2Idx == 0xFF) {
-          continue;
-        }
-        final chunk = data[256 + l2Idx * 256 + (cp & 0xFF)];
-        if (chunk != 0xFF) {
-          indices.add(chunk);
-        }
-      } else if (fm.chunkMapSup != null) {
-        final idx = _findSupplementaryChunk(fm.chunkMapSup!, cp);
-        if (idx >= 0) {
-          indices.add(idx);
-        }
+  int _lookupChunkIndex(Uint8List data, List<int>? sup, int cp) {
+    if (cp <= 0xFFFF) {
+      final l2 = data[cp >> 8];
+      if (l2 == 0xFF) {
+        return -1;
       }
+      final chunk = data[256 + l2 * 256 + (cp & 0xFF)];
+      return chunk == 0xFF ? -1 : chunk;
     }
-    return indices.toList();
-  }
-
-  int _findSupplementaryChunk(List<int> sup, int cp) {
-    var lo = 0;
-    var hi = sup.length ~/ 2 - 1;
-    while (lo <= hi) {
-      final mid = (lo + hi) ~/ 2;
-      final key = sup[mid * 2];
-      if (cp < key) {
-        hi = mid - 1;
-      } else if (cp > key) {
-        lo = mid + 1;
-      } else {
-        return sup[mid * 2 + 1];
+    if (sup != null) {
+      var lo = 0;
+      var hi = sup.length ~/ 2 - 1;
+      while (lo <= hi) {
+        final mid = (lo + hi) ~/ 2;
+        final key = sup[mid * 2];
+        if (cp < key) {
+          hi = mid - 1;
+        } else if (cp > key) {
+          lo = mid + 1;
+        } else {
+          return sup[mid * 2 + 1];
+        }
       }
     }
     return -1;
   }
 
-  Future<void> ensureAllFontBases() async {
-    final manifest = await _getManifest();
-    final futures = <Future<void>>[];
-
-    for (final config in _allFonts) {
-      for (final variant in config.variants) {
-        final fm = manifest[variant.path];
-        if (fm == null) {
-          continue;
-        }
-
-        futures.add(
-          _loadOnce('base:${config.family}:${variant.weight}', () async {
-            final data = await _fetchFont('$cdnBase/${variant.path}/${fm.hash}/base.bin');
-            _app.addFontBase(config.family, variant.weight, data);
-          }),
-        );
-      }
+  bool _hasCodepoint(FontManifest manifest, int cp) {
+    final data = manifest.decodedChunkMap;
+    if (data == null) {
+      return false;
     }
-
-    await Future.wait(futures.map((f) => f.catchError((_) {})));
-
-    final fallbacks = List<FallbackFontConfig>.from(_fallbackFonts)..sort((a, b) => a.priority.compareTo(b.priority));
-    _app.setFallbackFonts(fallbacks.map((c) => c.family).toList());
+    return _lookupChunkIndex(data, manifest.chunkMapSup, cp) >= 0;
   }
 
-  Future<void> _loadChunks(List<FontConfig> configs, List<int> codepoints) async {
-    final manifest = await _getManifest();
-    final futures = <Future<void>>[];
+  List<int> _findChunkIndices(FontManifest manifest, List<int> codepoints) {
+    final data = manifest.decodedChunkMap;
+    if (data == null) {
+      return [];
+    }
+    final indices = <int>{};
+    for (final cp in codepoints) {
+      final idx = _lookupChunkIndex(data, manifest.chunkMapSup, cp);
+      if (idx >= 0) {
+        indices.add(idx);
+      }
+    }
+    return indices.toList();
+  }
 
-    for (final config in configs) {
-      for (final variant in config.variants) {
-        final fm = manifest[variant.path];
-        if (fm == null) {
-          continue;
-        }
+  Future<void> _loadBase(String family, Font font) async {
+    await _loadOnce('base:$family:${font.weight}', () async {
+      final manifest = await _fetchManifest(font.url);
+      final data = await _fetchFont('${font.url}/${manifest.hash}/base.bin');
+      _app.addFontBase(family, font.weight, data);
+    });
+  }
 
-        for (final idx in _findChunkIndices(fm, codepoints)) {
-          futures.add(
-            _loadOnce('chunk:${config.family}:${variant.weight}:$idx', () async {
-              final data = await _fetchFont('$cdnBase/${variant.path}/${fm.hash}/chunks/$idx.bin');
-              _app.addFontChunk(config.family, variant.weight, data);
+  Future<void> _loadChunks(String family, Font font, List<int> codepoints) async {
+    final manifest = await _fetchManifest(font.url);
+
+    await Future.wait(
+      _findChunkIndices(manifest, codepoints)
+          .map(
+            (idx) => _loadOnce('chunk:$family:${font.weight}:$idx', () async {
+              final data = await _fetchFont('${font.url}/${manifest.hash}/chunks/$idx.bin');
+              _app.addFontChunk(family, font.weight, data);
             }),
-          );
+          )
+          .map((f) => f.catchError((_) {})),
+    );
+  }
+
+  Future<void> initFonts() async {
+    await Future.wait(
+      _phantomFontFamilies.map((f) async {
+        final data = await rootBundle.load(f.path);
+        _app.addFontBase(f.familyName, 400, data.buffer.asUint8List());
+      }),
+    );
+
+    final fallbacks = await _loadFallbackFontFamilies();
+    _app.setFallbackFonts([...fallbacks.map((f) => f.familyName), ..._phantomFontFamilies.map((f) => f.familyName)]);
+  }
+
+  Future<List<int>> filterUncoveredCodepoints(Font font, List<int> codepoints) async {
+    final manifest = await _fetchManifest(font.url);
+    return codepoints.where((cp) => !_hasCodepoint(manifest, cp)).toList();
+  }
+
+  Future<void> ensureRequiredFont(String family, Font font, List<int> codepoints) async {
+    await _loadBase(family, font);
+    await _loadChunks(family, font, codepoints);
+  }
+
+  Future<void> preloadRemainingChunks(String family, Font font) async {
+    try {
+      final manifest = await _fetchManifest(font.url);
+      for (var i = manifest.chunkCount - 1; i >= 0; i--) {
+        final key = 'chunk:$family:${font.weight}:$i';
+        if (!_loaded.contains(key)) {
+          final idx = i; // capture for closure
+          _preloadEnqueue(key, idx / manifest.chunkCount, () async {
+            try {
+              await _loadOnce(key, () async {
+                final data = await _fetchFont('${font.url}/${manifest.hash}/chunks/$idx.bin');
+                _app.addFontChunk(family, font.weight, data);
+              });
+            } catch (_) {
+              // best-effort: silently ignore preload failures
+            }
+          });
         }
       }
+    } catch (_) {
+      // best-effort
+    }
+  }
+
+  Future<void> ensureRequiredFallbackFont(int weight, List<int> codepoints) async {
+    final fallbacks = await _loadFallbackFontFamilies();
+
+    final tasks = <({String family, Font font, List<int> codepoints})>[];
+    var remaining = codepoints;
+
+    for (final fallbackFontFamily in fallbacks) {
+      if (remaining.isEmpty) {
+        break;
+      }
+
+      final fallbackFont = fallbackFontFamily.fonts.where((f) => f.weight == weight).firstOrNull;
+      if (fallbackFont == null) {
+        continue;
+      }
+
+      final manifest = _manifestCache[fallbackFont.url];
+      if (manifest == null) {
+        continue;
+      }
+
+      final covered = remaining.where((cp) => _hasCodepoint(manifest, cp)).toList();
+      if (covered.isEmpty) {
+        continue;
+      }
+
+      tasks.add((family: fallbackFontFamily.familyName, font: fallbackFont, codepoints: covered));
+
+      final coveredSet = covered.toSet();
+      remaining = remaining.where((cp) => !coveredSet.contains(cp)).toList();
     }
 
-    await Future.wait(futures.map((f) => f.catchError((_) {})));
+    await Future.wait(
+      tasks.map((t) async {
+        await _loadBase(t.family, t.font);
+        await _loadChunks(t.family, t.font, t.codepoints);
+        _app.setFallbackFonts([
+          ...fallbacks.map((f) => f.familyName),
+          ..._phantomFontFamilies.map((f) => f.familyName),
+        ]);
+      }),
+    );
   }
+}
 
-  Future<void> ensureRequiredFont(String family, int weight, List<int> codepoints) async {
-    final config = defaultFonts.where((c) => c.family == family).firstOrNull;
-    final variant = config?.variants.where((v) => v.weight == weight).firstOrNull;
-    if (variant == null) {
-      return;
-    }
+class _PreloadItem {
+  _PreloadItem({required this.key, required this.priority, required this.fn, required this.completer});
 
-    await _loadChunks([
-      FontConfig(family: family, variants: [variant]),
-    ], codepoints);
-  }
-
-  Future<void> ensureRequiredFallbackFont(List<int> codepoints) async {
-    await _loadChunks(List<FontConfig>.from(_fallbackFonts), codepoints);
-  }
+  final String key;
+  final double priority;
+  final Future<void> Function() fn;
+  final Completer<void> completer;
 }

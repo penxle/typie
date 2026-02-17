@@ -47,7 +47,6 @@ export const DIRTY_TABLE_OVERLAYS = 14;
 export const DIRTY_DOC_CHANGED = 15;
 export const DIRTY_RENDER_REQUIRED = 16;
 export const DIRTY_FONT_REQUIRED = 17;
-export const DIRTY_FALLBACK_FONT_REQUIRED = 18;
 export const DIRTY_EXITED_DOCUMENT_START = 19;
 export const DIRTY_HTML_PASTED = 20;
 
@@ -331,12 +330,6 @@ export class SlateReader {
     const count = this.#u32('font_requests_count');
     const offset = this.#u32('font_requests_offset');
     return readFontRequests(this.#slabView, this.#slabPtr + offset, count);
-  }
-
-  readFallbackCodepoints(): number[] {
-    const count = this.#u32('fallback_codepoints_count');
-    const offset = this.#u32('fallback_codepoints_offset');
-    return readU32Array(this.#slabView, this.#slabPtr + offset, count);
   }
 
   readHtmlPasted(): { text: string; from: Position; to: Position } {

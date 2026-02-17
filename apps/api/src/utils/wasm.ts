@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { Application } from '@typie/editor';
 
-const editorPkgDir = path.dirname(Bun.resolveSync('@typie/editor/pkg/editor.js', import.meta.dir));
+const editorPkgDir = path.dirname(Bun.resolveSync('@typie/editor', import.meta.dir));
 
 const WASM_PATH = path.join(editorPkgDir, 'editor_bg.wasm');
 const GLUE_PATH = path.join(editorPkgDir, 'editor_bg.js');
@@ -14,10 +14,29 @@ type WasmExports = {
   [key: string]: unknown;
 };
 
+export type FontMetadata = {
+  weight: number;
+  style: 'normal' | 'italic' | 'oblique';
+  familyName?: string;
+  displayName?: string;
+  fullName?: string;
+  postScriptName: string;
+  subfamilyDisplayName?: string;
+};
+
+export type EncodedFont = {
+  base: Uint8Array;
+  chunks: Uint8Array[];
+};
+
 type GlueModule = {
   Application: new () => Application;
   snapshotToJson: (snapshot: Uint8Array) => unknown;
   jsonToSnapshot: (json: unknown) => Uint8Array;
+  getFontMetadata: (data: Uint8Array) => FontMetadata;
+  outlineTextToSvg: (fontData: Uint8Array, text: string) => string;
+  getFontCodepoints: (ttfData: Uint8Array) => number[];
+  encodeFont: (ttfData: Uint8Array, chunkCodepointsJson: string) => EncodedFont;
   getMemory: () => WebAssembly.Memory;
   __wbg_set_wasm: (exports: WasmExports) => void;
 };
@@ -62,6 +81,26 @@ export async function snapshotToJson(snapshot: Uint8Array): Promise<unknown> {
 export async function jsonToSnapshot(json: unknown): Promise<Uint8Array> {
   const glue = await getGlue();
   return glue.jsonToSnapshot(json);
+}
+
+export async function getFontMetadata(data: Uint8Array): Promise<FontMetadata> {
+  const glue = await getGlue();
+  return glue.getFontMetadata(data);
+}
+
+export async function outlineTextToSvg(fontData: Uint8Array, text: string): Promise<string> {
+  const glue = await getGlue();
+  return glue.outlineTextToSvg(fontData, text);
+}
+
+export async function getFontCodepoints(ttfData: Uint8Array): Promise<number[]> {
+  const glue = await getGlue();
+  return glue.getFontCodepoints(ttfData);
+}
+
+export async function encodeFont(ttfData: Uint8Array, chunkCodepointsJson: string): Promise<EncodedFont> {
+  const glue = await getGlue();
+  return glue.encodeFont(ttfData, chunkCodepointsJson);
 }
 
 export async function createWasmApplication(): Promise<{

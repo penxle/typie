@@ -215,7 +215,6 @@
           onSelect={(value) => editor?.current.chain().focus().setTextBackgroundColor(value).run()}
           {opened}
           shape="square"
-          showNone
         />
       {/snippet}
     </ToolbarDropdownButton>

@@ -1,4 +1,4 @@
-<script generics="Item extends { label: string; value: string | null; color: string | null }" lang="ts">
+<script generics="Item extends { label: string; value: string; color: string | null }" lang="ts">
   import { css } from '@typie/styled-system/css';
   import { center } from '@typie/styled-system/patterns';
   import { token } from '@typie/styled-system/tokens';
@@ -7,16 +7,15 @@
 
   type Props = {
     items: readonly Item[];
-    currentValue: Item['value'];
+    currentValue?: string;
     columns: number;
     shape?: 'circle' | 'square';
-    showNone?: boolean;
     onSelect: (value: Item['value']) => void;
     onClose?: () => void;
     opened?: boolean;
   };
 
-  let { items, currentValue, columns, shape = 'circle', showNone = false, onSelect, onClose, opened = true }: Props = $props();
+  let { items, currentValue, columns, shape = 'circle', onSelect, onClose, opened = true }: Props = $props();
 
   let containerElement: HTMLDivElement | undefined = $state();
 
@@ -116,8 +115,8 @@
 >
   {#each items as { label, value, color } (value)}
     <button
-      style:background-color={value === null ? 'transparent' : color}
-      style:outline-color={value === null || value === 'white' ? token('colors.border.default') : color}
+      style:background-color={value === 'none' ? 'transparent' : color}
+      style:outline-color={value === 'none' || value === 'white' ? token('colors.border.default') : color}
       class={center({
         borderWidth: '1px',
         borderRadius: shape === 'circle' ? 'full' : '4px',
@@ -137,7 +136,7 @@
       }}
       type="button"
     >
-      {#if showNone && value === null}
+      {#if value === 'none'}
         <div
           class={css({
             position: 'absolute',

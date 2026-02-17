@@ -27,7 +27,9 @@
   import LetterSpacingIcon from '~icons/typie/letter-spacing';
   import LineHeightIcon from '~icons/typie/line-height';
   import { fragment, graphql } from '$graphql';
-  import { SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
+  import { FontSpecimen, SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
+  import { getRepresentativeFont } from '$lib/editor/fonts';
+  import { values as editorValues } from '$lib/editor/values';
   import ToolbarColorGrid from '../[slug]/@toolbar/ToolbarColorGrid.svelte';
   import type { PageLayout, PageLayoutPreset } from '@typie/ui/utils';
   import type { DashboardLayout_PreferenceModal_PresetTab_user } from '$graphql';
@@ -45,13 +47,19 @@
         id
         preferences
 
-        fontFamilies {
+        documentFontFamilies {
           id
-          name
+          familyName
+          displayName
+          source
+          state
 
           fonts {
             id
             weight
+            state
+            subfamilyDisplayName
+            url
           }
         }
       }
@@ -87,62 +95,48 @@
   const fontSize = $derived(template.fontSize ?? defaultValues.fontSize);
   const fontWeight = $derived(template.fontWeight ?? defaultValues.fontWeight);
 
-  const fontFamilyItems = $derived([
-    ...values.fontFamily.map((f) => ({ value: f.value, label: f.label })),
-    ...$user.fontFamilies.map((f) => ({ value: f.id, label: f.name })),
-  ]);
+  const fontFamilyItems = $derived(
+    $user.documentFontFamilies.filter((f) => f.state === 'ACTIVE').map((f) => ({ value: f.id, label: f.displayName })),
+  );
 
-  const currentFontFamilyWeights = $derived.by(() => {
-    const systemFontFamily = values.fontFamily.find((f) => f.value === fontFamily);
-    if (systemFontFamily) {
-      return systemFontFamily.weights.toSorted((a, b) => a - b);
-    }
-
-    const userFontFamily = $user.fontFamilies.find((f) => f.id === fontFamily);
-    if (userFontFamily) {
-      return userFontFamily.fonts.map((f) => f.weight).toSorted((a, b) => a - b);
-    }
-
-    return values.fontFamily[0].weights.toSorted((a, b) => a - b);
+  const currentFontFamilyFonts = $derived.by(() => {
+    const family = $user.documentFontFamilies.find((f) => f.id === fontFamily);
+    if (!family) return [];
+    return [...new Map(family.fonts.filter((f) => f.state === 'ACTIVE').map((f) => [f.weight, f])).values()].toSorted(
+      (a, b) => a.weight - b.weight,
+    );
   });
 
   const fontWeightItems = $derived(
-    currentFontFamilyWeights.map((weight) => ({
-      value: weight,
-      label: values.fontWeight.find(({ value }) => value === weight)?.label || String(weight),
+    currentFontFamilyFonts.map((font) => ({
+      value: font.weight,
+      label:
+        values.fontWeight.find(({ value }) => value === font.weight)?.label ||
+        (font.subfamilyDisplayName ? `${font.subfamilyDisplayName} (${font.weight})` : String(font.weight)),
     })),
   );
 
-  const getDefaultWeight = (fontFamilyOrId: string, fontWeight: number) => {
-    let weights: number[];
+  const representativeFontMap = $derived(new Map($user.documentFontFamilies.map((f) => [f.id, getRepresentativeFont(f.fonts)])));
 
-    const systemFontFamily = values.fontFamily.find((f) => f.value === fontFamilyOrId);
-    if (systemFontFamily) {
-      weights = systemFontFamily.weights.toSorted((a, b) => a - b);
-    } else {
-      const userFontFamily = $user.fontFamilies.find((f) => f.id === fontFamilyOrId);
-      if (!userFontFamily) return null;
+  const weightFontIdMap = $derived(new Map(currentFontFamilyFonts.map((f) => [f.weight, f.id])));
 
-      weights = userFontFamily.fonts.map((f) => f.weight).toSorted((a, b) => a - b);
-    }
+  const getClosestWeight = (familyId: string, targetWeight: number) => {
+    const family = $user.documentFontFamilies.find((f) => f.id === familyId);
+    if (!family) return targetWeight;
 
-    if (weights.length === 0) return null;
-
-    if (weights.includes(fontWeight)) {
-      return fontWeight;
-    }
+    const weights = [...new Set(family.fonts.filter((f) => f.state === 'ACTIVE').map((f) => f.weight))].toSorted((a, b) => a - b);
+    if (weights.length === 0) return targetWeight;
+    if (weights.includes(targetWeight)) return targetWeight;
 
     let closest = weights[0];
-    let minDiff = Math.abs(fontWeight - weights[0]);
-
-    for (const weight of weights) {
-      const diff = Math.abs(fontWeight - weight);
-      if (diff < minDiff) {
+    let minDiff = Math.abs(targetWeight - weights[0]);
+    for (const w of weights) {
+      const diff = Math.abs(targetWeight - w);
+      if (diff <= minDiff) {
         minDiff = diff;
-        closest = weight;
+        closest = w;
       }
     }
-
     return closest;
   };
 
@@ -194,9 +188,6 @@
     },
   });
 
-  const MIN_FONT_SIZE = 8;
-  const MAX_FONT_SIZE = 72;
-
   let fontSizeAnchorElement: HTMLDivElement | undefined = $state();
   let fontSizeFloatingElement: HTMLDivElement | undefined = $state();
 
@@ -240,7 +231,7 @@
   const applyFontSize = () => {
     const parsed = Number.parseFloat(fontSizeInputValue);
     if (!Number.isNaN(parsed) && parsed !== fontSize) {
-      const clamped = clamp(parsed, MIN_FONT_SIZE, MAX_FONT_SIZE);
+      const clamped = clamp(parsed, editorValues.minFontSize, editorValues.maxFontSize);
       updateTemplate({ fontSize: clamped });
     }
   };
@@ -372,13 +363,14 @@
             items={fontFamilyItems}
             label=""
             onchange={(value) => {
-              const defaultWeight = getDefaultWeight(value, fontWeight) ?? defaultValues.fontWeight;
-              updateTemplate({ fontFamily: value, fontWeight: defaultWeight });
+              const closestWeight = getClosestWeight(value, fontWeight);
+              updateTemplate({ fontFamily: value, fontWeight: closestWeight });
             }}
             value={fontFamily}
           >
             {#snippet renderItem(item)}
-              <div style:font-family={item.value}>{item.label}</div>
+              {@const font = representativeFontMap.get(item.value)}
+              <FontSpecimen fontId={font?.id} text={item.label} weight={font?.weight} />
             {/snippet}
           </SearchableDropdown>
         {/snippet}
@@ -410,9 +402,7 @@
             value={fontWeight}
           >
             {#snippet renderItem(item)}
-              <div style:font-family={fontFamily} style:font-weight={item.value}>
-                {item.label}
-              </div>
+              <FontSpecimen fontId={weightFontIdMap.get(item.value)} text={item.label} weight={item.value} />
             {/snippet}
           </SearchableDropdown>
         {/snippet}
@@ -714,7 +704,6 @@
                 }}
                 opened={bgColorOpened}
                 shape="square"
-                showNone
               />
             </div>
           {/if}

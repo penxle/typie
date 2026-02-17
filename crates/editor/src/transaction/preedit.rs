@@ -17,9 +17,8 @@ impl Transaction {
             self.push_effect(Effect::FontDetected {
                 family,
                 weight,
-                codepoints: codepoints.clone(),
+                codepoints,
             });
-            self.push_effect(Effect::CodepointDetected { codepoints });
         }
 
         self.state.preedit = Some(Preedit {

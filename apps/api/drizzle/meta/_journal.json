@@ -393,6 +393,27 @@
       "when": 1770979792866,
       "tag": "0055_dark_ender_wiggin",
       "breakpoints": false
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1771254573268,
+      "tag": "0056_lethal_tag",
+      "breakpoints": false
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1771312750112,
+      "tag": "0057_perpetual_inertia",
+      "breakpoints": false
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1771313670415,
+      "tag": "0058_perpetual_johnny_storm",
+      "breakpoints": false
     }
   ]
 }

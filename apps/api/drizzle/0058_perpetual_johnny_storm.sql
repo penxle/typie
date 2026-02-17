@@ -1,0 +1,1 @@
+ALTER TABLE "fonts" ADD CONSTRAINT "fonts_family_id_post_script_name_unique" UNIQUE("family_id","post_script_name");

@@ -15,48 +15,35 @@ impl Runtime {
             Effect::LayoutChanged,
         ];
 
-        let (fonts, codepoints) = self.collect_doc_fonts_and_codepoints();
+        let fonts = self.collect_doc_fonts();
 
         for (family, weight, font_codepoints) in fonts {
             effects.push(Effect::FontDetected {
                 family,
                 weight,
-                // codepoints: std::iter::chain(font_codepoints.into_iter(), std::iter::once(0x200B))
-                //     .collect(),
                 codepoints: font_codepoints.into_iter().collect(),
             });
         }
 
-        effects.push(Effect::CodepointDetected {
-            // codepoints: std::iter::chain(codepoints.into_iter(), std::iter::once(0x200B)).collect(),
-            codepoints: codepoints.into_iter().collect(),
-        });
-
         effects
     }
 
-    fn collect_doc_fonts_and_codepoints(
-        &self,
-    ) -> (Vec<(String, u16, FxHashSet<u32>)>, FxHashSet<u32>) {
+    fn collect_doc_fonts(&self) -> Vec<(String, u16, FxHashSet<u32>)> {
         let mut fonts: rustc_hash::FxHashMap<(String, u16), FxHashSet<u32>> =
             rustc_hash::FxHashMap::default();
-        let mut codepoints: FxHashSet<u32> = FxHashSet::default();
 
-        self.collect_from_node(NodeId::ROOT, &mut fonts, &mut codepoints);
+        self.collect_from_node(NodeId::ROOT, &mut fonts);
 
-        let fonts = fonts
+        fonts
             .into_iter()
             .map(|((family, weight), cps)| (family, weight, cps))
-            .collect();
-
-        (fonts, codepoints)
+            .collect()
     }
 
     fn collect_from_node(
         &self,
         node_id: NodeId,
         fonts: &mut rustc_hash::FxHashMap<(String, u16), FxHashSet<u32>>,
-        codepoints: &mut FxHashSet<u32>,
     ) {
         let Some(node_ref) = self.doc().node(node_id) else {
             return;
@@ -103,7 +90,6 @@ impl Runtime {
 
                 let font_cps = fonts.entry((family, weight)).or_default();
                 for ch in seg.text.chars() {
-                    codepoints.insert(ch as u32);
                     font_cps.insert(ch as u32);
                 }
 
@@ -112,7 +98,6 @@ impl Runtime {
                         let ruby_font_cps =
                             fonts.entry((ruby_family.clone(), ruby_weight)).or_default();
                         for ch in ruby_ann.text.chars() {
-                            codepoints.insert(ch as u32);
                             ruby_font_cps.insert(ch as u32);
                         }
                     }
@@ -121,7 +106,7 @@ impl Runtime {
         }
 
         for child in node_ref.children() {
-            self.collect_from_node(child.node_id(), fonts, codepoints);
+            self.collect_from_node(child.node_id(), fonts);
         }
     }
 

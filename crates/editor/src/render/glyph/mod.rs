@@ -325,6 +325,6 @@ fn calculate_font_hash(font_data: &[u8]) -> u64 {
     let mut hasher = rustc_hash::FxHasher::default();
     font_data.as_ptr().hash(&mut hasher);
     font_data.len().hash(&mut hasher);
-    crate::font::font_version(font_data.as_ptr()).hash(&mut hasher);
+    crate::global::font_version(font_data.as_ptr()).hash(&mut hasher);
     hasher.finish()
 }

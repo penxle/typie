@@ -57,6 +57,7 @@ import {
   makeLoroDoc,
 } from '@/utils';
 import { compressZstd, decompressZstd } from '@/utils/compression';
+import { getDocumentFontFamilies } from '@/utils/document';
 import { assertSitePermission } from '@/utils/permission';
 import { assertPlanRule } from '@/utils/plan';
 import { jsonToSnapshot, snapshotToJson } from '@/utils/wasm';
@@ -65,6 +66,7 @@ import {
   CharacterCountChange,
   Document,
   DocumentArchivedNode,
+  DocumentFontFamily,
   DocumentReaction,
   DocumentVersion,
   DocumentView,
@@ -142,6 +144,20 @@ IDocument.implement({
         const { imageIds, fileIds, embedIds } = extractAssetIdsFromLoroDoc(doc);
 
         return [...imageIds, ...fileIds, ...embedIds];
+      },
+    }),
+
+    fontFamilies: t.field({
+      type: [DocumentFontFamily],
+      resolve: async (self) => {
+        const entity = await db
+          .select({ userId: Entities.userId })
+          .from(Entities)
+          .innerJoin(Documents, eq(Documents.entityId, Entities.id))
+          .where(eq(Documents.id, self.id))
+          .then(firstOrThrow);
+
+        return await getDocumentFontFamilies(entity.userId);
       },
     }),
   }),

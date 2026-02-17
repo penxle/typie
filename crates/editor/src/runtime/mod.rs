@@ -99,7 +99,6 @@ struct PendingUpdates {
     external_elements: bool,
     pointer_style: Option<PointerStyle>,
     fonts: FxHashMap<(String, u16), Vec<u32>>,
-    codepoints: Vec<u32>,
     render: bool,
     drop_indicator: Option<DropIndicator>,
     enabled_actions: bool,
@@ -136,7 +135,6 @@ pub struct Runtime {
     view_states: ViewStates,
 
     loaded_font_codepoints: FxHashMap<(String, u16), FxHashSet<u32>>,
-    loaded_codepoints: FxHashSet<u32>,
 
     selection_cache: Option<SelectionSnapshot>,
     pending: PendingUpdates,
@@ -174,7 +172,6 @@ impl Runtime {
             layout_cache: RefCell::new(LayoutCache::new()),
             view_states: ViewStates::default(),
             loaded_font_codepoints: FxHashMap::default(),
-            loaded_codepoints: FxHashSet::default(),
             selection_cache: None,
             pending: PendingUpdates {
                 doc: true,
@@ -186,7 +183,6 @@ impl Runtime {
                 external_elements: true,
                 pointer_style: None,
                 fonts: FxHashMap::default(),
-                codepoints: Vec::new(),
                 render: true,
                 drop_indicator: None,
                 enabled_actions: true,
@@ -1180,12 +1176,6 @@ impl Runtime {
             self.slab.write_font_requests(&mut self.slate, &fonts);
         }
 
-        let codepoints = std::mem::take(&mut self.pending.codepoints);
-        if !codepoints.is_empty() {
-            self.slab
-                .write_fallback_codepoints(&mut self.slate, &codepoints);
-        }
-
         if had_layout {
             self.slate.mark_render_required();
         }
@@ -1397,14 +1387,6 @@ impl Runtime {
                     for cp in codepoints {
                         if loaded.insert(cp) {
                             pending.push(cp);
-                        }
-                    }
-                }
-                Effect::CodepointDetected { codepoints } => {
-                    for cp in codepoints {
-                        if !self.loaded_codepoints.contains(&cp) {
-                            self.loaded_codepoints.insert(cp);
-                            self.pending.codepoints.push(cp);
                         }
                     }
                 }

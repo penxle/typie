@@ -3,17 +3,20 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { CopyObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import { createPresignedPost } from '@aws-sdk/s3-presigned-post';
-import { getFontMetadata, toWoff2 } from '@typie/fondue';
 import { and, eq } from 'drizzle-orm';
 import ffmpeg from 'fluent-ffmpeg';
 import qs from 'query-string';
 import sharp from 'sharp';
 import { rgbaToThumbHash } from 'thumbhash';
+import { compress as toWoff2 } from 'wawoff2';
 import { db, Files, first, firstOrThrow, FontFamilies, Fonts, Images, TableCode, validateDbId } from '@/db';
 import { FontFamilyState } from '@/enums';
 import { stack } from '@/env';
 import { TypieError } from '@/errors';
 import * as aws from '@/external/aws';
+import { compressZstd } from '@/utils/compression';
+import { processFont } from '@/utils/font';
+import { getFontMetadata } from '@/utils/wasm';
 import { builder } from '../builder';
 import { Blob, File, Font, Image, isTypeOf } from '../objects';
 
@@ -375,44 +378,86 @@ builder.mutationFields((t) => ({
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       const buffer = await object.Body!.transformToByteArray();
 
-      const metadata = getFontMetadata(buffer);
+      const metadata = await getFontMetadata(buffer);
 
       if (metadata.style !== 'normal') {
         throw new TypieError({ code: 'invalid_font_style' });
       }
 
-      const filePath = path.join(path.dirname(input.path), `${path.basename(input.path, path.extname(input.path))}.woff2`);
-      const woff2 = toWoff2(buffer);
+      const familyName = metadata.familyName ?? metadata.fullName ?? metadata.postScriptName;
+      const filePath = path.join(path.dirname(input.path), path.basename(input.path, path.extname(input.path)));
+      const woff2 = await toWoff2(Buffer.from(buffer));
 
-      const name =
-        metadata.familyName ??
-        metadata.fullName ??
-        metadata.postScriptName ??
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        path.basename(decodeURIComponent(object.Metadata!.name), path.extname(decodeURIComponent(object.Metadata!.name)));
+      const tagging = qs.stringify({
+        UserId: ctx.session.userId,
+        Environment: stack,
+      });
 
       await aws.s3.send(
         new PutObjectCommand({
           Bucket: 'typie-usercontents',
-          Key: `fonts/${filePath}`,
+          Key: `fonts/${filePath}/web.woff2`,
           Body: woff2,
           ContentType: 'font/woff2',
-          Tagging: qs.stringify({
-            UserId: ctx.session.userId,
-            Environment: stack,
-          }),
+          Tagging: tagging,
         }),
       );
 
-      let familyId: string | null = null;
-      const familyName = metadata.familyName || name;
+      const fontName = metadata.postScriptName;
+      const { manifest, base, chunks } = await processFont(fontName, buffer);
+
+      const s3Base = `fonts/${filePath}`;
+      const compressed = await compressZstd(buffer);
+
+      await Promise.all([
+        aws.s3.send(
+          new PutObjectCommand({
+            Bucket: 'typie-usercontents',
+            Key: `${s3Base}/original.bin`,
+            Body: compressed,
+            ContentType: 'application/octet-stream',
+            Tagging: tagging,
+          }),
+        ),
+        aws.s3.send(
+          new PutObjectCommand({
+            Bucket: 'typie-usercontents',
+            Key: `${s3Base}/manifest.json`,
+            Body: JSON.stringify(manifest),
+            ContentType: 'application/json',
+            Tagging: tagging,
+          }),
+        ),
+        aws.s3.send(
+          new PutObjectCommand({
+            Bucket: 'typie-usercontents',
+            Key: `${s3Base}/${manifest.hash}/base.bin`,
+            Body: base,
+            ContentType: 'application/octet-stream',
+            Tagging: tagging,
+          }),
+        ),
+        ...chunks.map((chunk, i) =>
+          aws.s3.send(
+            new PutObjectCommand({
+              Bucket: 'typie-usercontents',
+              Key: `${s3Base}/${manifest.hash}/chunks/${i}.bin`,
+              Body: chunk,
+              ContentType: 'application/octet-stream',
+              Tagging: tagging,
+            }),
+          ),
+        ),
+      ]);
 
       return await db.transaction(async (tx) => {
         const fontFamily = await tx
           .select({ id: FontFamilies.id, state: FontFamilies.state })
           .from(FontFamilies)
-          .where(and(eq(FontFamilies.userId, ctx.session.userId), eq(FontFamilies.name, familyName)))
+          .where(and(eq(FontFamilies.userId, ctx.session.userId), eq(FontFamilies.familyName, familyName)))
           .then(first);
+
+        let familyId: string | null = null;
 
         if (fontFamily) {
           familyId = fontFamily.id;
@@ -425,7 +470,8 @@ builder.mutationFields((t) => ({
             .insert(FontFamilies)
             .values({
               userId: ctx.session.userId,
-              name: familyName,
+              familyName,
+              displayName: metadata.displayName ?? familyName,
             })
             .returning({ id: FontFamilies.id })
             .then(firstOrThrow);
@@ -436,7 +482,7 @@ builder.mutationFields((t) => ({
         const existingFont = await tx
           .select({ id: Fonts.id })
           .from(Fonts)
-          .where(and(eq(Fonts.familyId, familyId), eq(Fonts.weight, metadata.weight)))
+          .where(and(eq(Fonts.familyId, familyId), eq(Fonts.postScriptName, metadata.postScriptName)))
           .then(first);
 
         if (existingFont) {
@@ -447,9 +493,9 @@ builder.mutationFields((t) => ({
           .insert(Fonts)
           .values({
             familyId,
-            name,
             fullName: metadata.fullName,
             postScriptName: metadata.postScriptName,
+            subfamilyDisplayName: metadata.subfamilyDisplayName,
             weight: metadata.weight,
             size: woff2.length,
             path: filePath,

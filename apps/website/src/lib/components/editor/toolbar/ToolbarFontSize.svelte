@@ -7,33 +7,11 @@
   import { fly } from 'svelte/transition';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import { getEditorContext } from '$lib/editor/context.svelte';
+  import { values } from '$lib/editor/values';
 
   const { editor } = getEditorContext();
 
-  const MIN_FONT_SIZE = 1;
-  const MAX_FONT_SIZE = 200;
-
-  const fontSizes = [
-    { label: '8', value: 8 },
-    { label: '9', value: 9 },
-    { label: '10', value: 10 },
-    { label: '11', value: 11 },
-    { label: '12', value: 12 },
-    { label: '14', value: 14 },
-    { label: '16', value: 16 },
-    { label: '18', value: 18 },
-    { label: '20', value: 20 },
-    { label: '22', value: 22 },
-    { label: '24', value: 24 },
-    { label: '30', value: 30 },
-    { label: '36', value: 36 },
-    { label: '48', value: 48 },
-    { label: '60', value: 60 },
-    { label: '72', value: 72 },
-    { label: '96', value: 96 },
-  ];
-
-  const defaultFontSize = 12;
+  const fontSizes = values.fontSize.map((v) => ({ label: String(v), value: v }));
 
   let anchorElement: HTMLDivElement | undefined = $state();
   let floatingElement: HTMLDivElement | undefined = $state();
@@ -85,7 +63,7 @@
 
     const parsed = Number.parseFloat(inputValue);
     if (!Number.isNaN(parsed) && parsed !== currentFontSize) {
-      const clamped = clamp(parsed, MIN_FONT_SIZE, MAX_FONT_SIZE);
+      const clamped = clamp(parsed, values.minFontSize, values.maxFontSize);
       editor.dispatch({ type: 'toggleStyle', style: { type: 'font_size', size: clamped } });
     }
     void shouldFocus;
@@ -117,14 +95,15 @@
       close();
       editor.focus();
     } else if (e.key === 'Escape') {
-      inputValue = String(currentFontSize ?? defaultFontSize);
+      inputValue = currentFontSize === undefined ? '' : String(currentFontSize);
       inputElement?.blur();
       close();
       editor.focus();
     } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
       e.preventDefault();
       e.stopPropagation();
-      const current = Number.parseFloat(inputValue) || currentFontSize || defaultFontSize;
+      const current = Number.parseFloat(inputValue) || currentFontSize;
+      if (!current) return;
       const sortedSizes = fontSizes.map(({ value }) => value).toSorted((a, b) => a - b);
       const currentIndex = sortedSizes.findIndex((size) => size >= current);
 

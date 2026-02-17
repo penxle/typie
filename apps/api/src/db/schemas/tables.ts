@@ -223,13 +223,14 @@ export const FontFamilies = pgTable(
     userId: text('user_id')
       .notNull()
       .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-    name: text('name').notNull(),
+    familyName: text('family_name').notNull(),
+    displayName: text('display_name').notNull(),
     state: E._FontFamilyState('state').notNull().default('ACTIVE'),
     createdAt: datetime('created_at')
       .notNull()
       .default(sql`now()`),
   },
-  (t) => [unique().on(t.userId, t.name)],
+  (t) => [unique().on(t.userId, t.familyName)],
 );
 
 export const Fonts = pgTable(
@@ -241,10 +242,9 @@ export const Fonts = pgTable(
     familyId: text('family_id')
       .notNull()
       .references(() => FontFamilies.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-    name: text('name').notNull(),
-    familyName: text('family_name'),
     fullName: text('full_name'),
     postScriptName: text('post_script_name'),
+    subfamilyDisplayName: text('subfamily_display_name'),
     weight: integer('weight').notNull(),
     size: integer('size').notNull(),
     path: text('path').notNull(),
@@ -253,7 +253,7 @@ export const Fonts = pgTable(
       .notNull()
       .default(sql`now()`),
   },
-  (t) => [index().on(t.familyId, t.state)],
+  (t) => [index().on(t.familyId, t.state), unique().on(t.familyId, t.postScriptName)],
 );
 
 export const Embeds = pgTable('embeds', {

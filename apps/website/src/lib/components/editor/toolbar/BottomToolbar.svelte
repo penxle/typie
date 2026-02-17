@@ -3,10 +3,6 @@
   import { center, flex } from '@typie/styled-system/patterns';
   import { DropdownMenu, DropdownMenuItem, VerticalDivider } from '@typie/ui/components';
   import { getAppContext, getThemeContext } from '@typie/ui/context';
-  import AlignCenterIcon from '~icons/lucide/align-center';
-  import AlignJustifyIcon from '~icons/lucide/align-justify';
-  import AlignLeftIcon from '~icons/lucide/align-left';
-  import AlignRightIcon from '~icons/lucide/align-right';
   import BoldIcon from '~icons/lucide/bold';
   import ItalicIcon from '~icons/lucide/italic';
   import LinkIcon from '~icons/lucide/link';
@@ -21,6 +17,7 @@
   import RubyIcon from '~icons/typie/ruby';
   import { getEditorContext } from '$lib/editor/context.svelte';
   import { THEME_COLORS } from '$lib/editor/theme';
+  import { values } from '$lib/editor/values';
   import ToolbarButton from './ToolbarButton.svelte';
   import ToolbarColorGrid from './ToolbarColorGrid.svelte';
   import ToolbarDropdownButton from './ToolbarDropdownButton.svelte';
@@ -37,9 +34,10 @@
   type Props = {
     style?: SystemStyleObject;
     onSearchClick?: () => void;
+    onFontUploadClick?: () => void;
   };
 
-  let { style, onSearchClick }: Props = $props();
+  let { style, onSearchClick, onFontUploadClick }: Props = $props();
 
   const app = getAppContext();
   const theme = getThemeContext();
@@ -49,97 +47,33 @@
     (theme.effectiveTheme === 'light' ? `light-${theme.lightVariant}` : `dark-${theme.darkVariant}`) as ThemeVariant,
   );
 
-  const defaultTextColor = 'black';
-  const defaultTextBackgroundColor = 'none';
-  const defaultLineHeight = 1.6;
-  const defaultLetterSpacing = 0;
-  const defaultTextAlign: TextAlign = 'left';
-
   const tc = $derived(THEME_COLORS[themeVariant]);
 
-  const textColors = $derived([
-    { label: '블랙', value: 'black', color: tc['text.black'] },
-    { label: '다크 그레이', value: 'darkgray', color: tc['text.darkgray'] },
-    { label: '그레이', value: 'gray', color: tc['text.gray'] },
-    { label: '라이트 그레이', value: 'lightgray', color: tc['text.lightgray'] },
-    { label: '화이트', value: 'white', color: tc['text.white'] },
-    { label: '레드', value: 'red', color: tc['text.red'] },
-    { label: '오렌지', value: 'orange', color: tc['text.orange'] },
-    { label: '앰버', value: 'amber', color: tc['text.amber'] },
-    { label: '옐로', value: 'yellow', color: tc['text.yellow'] },
-    { label: '라임', value: 'lime', color: tc['text.lime'] },
-    { label: '그린', value: 'green', color: tc['text.green'] },
-    { label: '에메랄드', value: 'emerald', color: tc['text.emerald'] },
-    { label: '틸', value: 'teal', color: tc['text.teal'] },
-    { label: '시안', value: 'cyan', color: tc['text.cyan'] },
-    { label: '스카이', value: 'sky', color: tc['text.sky'] },
-    { label: '블루', value: 'blue', color: tc['text.blue'] },
-    { label: '인디고', value: 'indigo', color: tc['text.indigo'] },
-    { label: '바이올렛', value: 'violet', color: tc['text.violet'] },
-    { label: '퍼플', value: 'purple', color: tc['text.purple'] },
-    { label: '마젠타', value: 'fuchsia', color: tc['text.fuchsia'] },
-    { label: '핑크', value: 'pink', color: tc['text.pink'] },
-    { label: '로즈', value: 'rose', color: tc['text.rose'] },
-  ]);
+  const textColors = $derived(values.textColor.map((c) => ({ label: c.label, value: c.value, color: tc[c.themeKey] })));
 
-  const textBackgroundColors = $derived([
-    { label: '배경 없음', value: null, color: null },
-    { label: '그레이', value: 'gray', color: tc['bg.gray'] },
-    { label: '레드', value: 'red', color: tc['bg.red'] },
-    { label: '오렌지', value: 'orange', color: tc['bg.orange'] },
-    { label: '옐로', value: 'yellow', color: tc['bg.yellow'] },
-    { label: '그린', value: 'green', color: tc['bg.green'] },
-    { label: '블루', value: 'blue', color: tc['bg.blue'] },
-    { label: '퍼플', value: 'purple', color: tc['bg.purple'] },
-  ]);
-
-  const lineHeights = [
-    { label: '80%', value: 0.8 },
-    { label: '100%', value: 1 },
-    { label: '120%', value: 1.2 },
-    { label: '140%', value: 1.4 },
-    { label: '160%', value: 1.6 },
-    { label: '180%', value: 1.8 },
-    { label: '200%', value: 2 },
-    { label: '220%', value: 2.2 },
-  ];
-
-  const letterSpacings = [
-    { label: '-10%', value: -0.1 },
-    { label: '-5%', value: -0.05 },
-    { label: '0%', value: 0 },
-    { label: '5%', value: 0.05 },
-    { label: '10%', value: 0.1 },
-    { label: '20%', value: 0.2 },
-    { label: '40%', value: 0.4 },
-  ];
-
-  const textAligns: { label: string; value: TextAlign; icon: typeof AlignLeftIcon }[] = [
-    { label: '왼쪽 정렬', value: 'left', icon: AlignLeftIcon },
-    { label: '가운데 정렬', value: 'center', icon: AlignCenterIcon },
-    { label: '오른쪽 정렬', value: 'right', icon: AlignRightIcon },
-    { label: '양쪽 정렬', value: 'justify', icon: AlignJustifyIcon },
-  ];
+  const textBackgroundColors = $derived(
+    values.textBackgroundColor.map((c) => ({ label: c.label, value: c.value, color: c.themeKey ? tc[c.themeKey] : null })),
+  );
 
   const textColorAttr = $derived(editor.getAttr('text_color'));
   const textColorValues = $derived(textColorAttr?.values.filter((v): v is string => v != null) ?? []);
-  const currentTextColor = $derived(textColorValues.length === 1 ? textColorValues[0] : defaultTextColor);
+  const currentTextColor = $derived(textColorValues.length === 1 ? textColorValues[0] : undefined);
 
   const bgColorAttr = $derived(editor.getAttr('background_color'));
   const bgColorValues = $derived(bgColorAttr?.values.filter((v): v is string => v != null) ?? []);
-  const currentTextBackgroundColor = $derived(bgColorValues.length === 1 ? bgColorValues[0] : defaultTextBackgroundColor);
+  const currentTextBackgroundColor = $derived(bgColorValues.length === 1 ? bgColorValues[0] : undefined);
 
   const lineHeightAttr = $derived(editor.getAttr('line_height'));
   const lineHeightValues = $derived(lineHeightAttr?.values.filter((v): v is number => v != null) ?? []);
-  const currentLineHeight = $derived(lineHeightValues.length === 1 ? lineHeightValues[0] : defaultLineHeight);
+  const currentLineHeight = $derived(lineHeightValues.length === 1 ? lineHeightValues[0] : undefined);
 
   const letterSpacingAttr = $derived(editor.getAttr('letter_spacing'));
   const letterSpacingValues = $derived(letterSpacingAttr?.values.filter((v): v is number => v != null) ?? []);
-  const currentLetterSpacing = $derived(letterSpacingValues.length === 1 ? letterSpacingValues[0] : defaultLetterSpacing);
+  const currentLetterSpacing = $derived(letterSpacingValues.length === 1 ? letterSpacingValues[0] : undefined);
 
   const alignAttr = $derived(editor.getAttr('text_align'));
   const alignValues = $derived(alignAttr?.values.filter((v): v is TextAlign => v != null) ?? []);
-  const currentTextAlign = $derived(alignValues.length === 1 ? alignValues[0] : defaultTextAlign);
+  const currentTextAlign = $derived(alignValues.length === 1 ? alignValues[0] : undefined);
 
   const fontWeightAttr = $derived(editor.getAttr('font_weight'));
   const fontWeightValues = $derived(fontWeightAttr?.values.filter((v): v is number => v != null) ?? []);
@@ -154,8 +88,6 @@
   const rubyValues = $derived(editor.getAttr('ruby')?.values ?? []);
   const isRubyActive = $derived(rubyValues.length === 1 && rubyValues[0] != null);
   const isRubyMixed = $derived(rubyValues.length >= 2);
-
-  const currentTextAlignIcon = $derived(textAligns.find((a) => a.value === currentTextAlign)?.icon ?? AlignLeftIcon);
 </script>
 
 <div
@@ -284,16 +216,15 @@
           items={textBackgroundColors}
           onClose={close}
           onSelect={(value) => {
-            editor.focus().dispatch({ type: 'toggleStyle', style: { type: 'background_color', color: value ?? 'none' } });
+            editor.focus().dispatch({ type: 'toggleStyle', style: { type: 'background_color', color: value } });
           }}
           {opened}
           shape="square"
-          showNone
         />
       {/snippet}
     </ToolbarDropdownButton>
 
-    <ToolbarFontFamily />
+    <ToolbarFontFamily onUploadClick={onFontUploadClick} />
     <ToolbarFontWeight />
     <ToolbarFontSize />
   </div>
@@ -391,12 +322,12 @@
   <div class={flex({ alignItems: 'center', gap: '4px' })}>
     <ToolbarDropdownButton disabled={!editor.can('setTextAlign')} label="문단 정렬" onEscape={() => editor.focus()} size="small">
       {#snippet anchor()}
-        <ToolbarIcon icon={currentTextAlignIcon} />
+        <ToolbarIcon icon={values.textAlign.find((a) => a.value === currentTextAlign)?.icon ?? values.textAlign[0].icon} />
       {/snippet}
 
       {#snippet floating({ close })}
         <DropdownMenu>
-          {#each textAligns as { label, value } (value)}
+          {#each values.textAlign as { label, value } (value)}
             <DropdownMenuItem
               style={css.raw({ fontSize: '14px' })}
               active={currentTextAlign === value}
@@ -419,7 +350,7 @@
 
       {#snippet floating({ close })}
         <DropdownMenu>
-          {#each lineHeights as { label, value } (value)}
+          {#each values.lineHeight as { label, value } (value)}
             <DropdownMenuItem
               style={css.raw({ fontSize: '14px' })}
               active={currentLineHeight === value}
@@ -442,10 +373,10 @@
 
       {#snippet floating({ close })}
         <DropdownMenu>
-          {#each letterSpacings as { label, value } (value)}
+          {#each values.letterSpacing as { label, value } (value)}
             <DropdownMenuItem
               style={css.raw({ fontSize: '14px' })}
-              active={Math.abs(currentLetterSpacing - value) < 0.001}
+              active={currentLetterSpacing !== undefined && Math.abs(currentLetterSpacing - value) < 0.001}
               onclick={() => {
                 editor.focus().dispatch({ type: 'toggleStyle', style: { type: 'letter_spacing', spacing: value } });
                 close();

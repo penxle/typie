@@ -120,8 +120,10 @@ class NativeEditorTextToolbar extends HookWidget {
             color: context.colors.textSubtle,
             text: isFontFamilyMixed
                 ? '-'
-                : editorValues['fontFamily']?.firstWhereOrNull((e) => e['value'] == activeFontFamily)?['label']
-                          as String? ??
+                : scope.controller.fontManager?.fontFamilies
+                          .where((f) => f.familyName == activeFontFamily)
+                          .firstOrNull
+                          ?.displayName ??
                       activeFontFamily ??
                       '(알 수 없음)',
             onTap: () {
@@ -134,6 +136,13 @@ class NativeEditorTextToolbar extends HookWidget {
                 ? '-'
                 : editorValues['fontWeight']?.firstWhereOrNull((e) => e['value'] == activeFontWeight)?['label']
                           as String? ??
+                      scope.controller.fontManager?.fontFamilies
+                          .where((f) => f.familyName == activeFontFamily)
+                          .firstOrNull
+                          ?.fonts
+                          .where((f) => f.weight == activeFontWeight)
+                          .firstOrNull
+                          ?.subfamilyDisplayName ??
                       activeFontWeight?.toString() ??
                       '(알 수 없음)',
             onTap: () {

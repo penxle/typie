@@ -6,6 +6,7 @@ NativeEditorApplication? _sharedApplication;
 FontManager? _sharedFontManager;
 Future<(NativeEditorApplication, FontManager)>? _initPromise;
 List<Map<String, dynamic>>? _pendingTextReplacementRules;
+Map<String, List<int>>? _pendingAvailableFonts;
 
 Future<(NativeEditorApplication, FontManager)> getOrInitializeApplication() async {
   if (_sharedApplication != null && _sharedFontManager != null) {
@@ -25,6 +26,11 @@ void setTextReplacementRules(List<Map<String, dynamic>> rules) {
   _sharedApplication?.setTextReplacementRules(rules);
 }
 
+void setAvailableFonts(Map<String, List<int>> fonts) {
+  _pendingAvailableFonts = fonts;
+  _sharedApplication?.setAvailableFonts(fonts);
+}
+
 Future<(NativeEditorApplication, FontManager)> _initApplication() async {
   final icuData = await rootBundle.load('assets/native/icu_data.postcard');
 
@@ -32,10 +38,14 @@ Future<(NativeEditorApplication, FontManager)> _initApplication() async {
 
   final fontManager = FontManager(app);
 
-  await fontManager.ensureAllFontBases();
+  await fontManager.initFonts();
 
   if (_pendingTextReplacementRules != null) {
     app.setTextReplacementRules(_pendingTextReplacementRules!);
+  }
+
+  if (_pendingAvailableFonts != null) {
+    app.setAvailableFonts(_pendingAvailableFonts!);
   }
 
   _sharedApplication = app;

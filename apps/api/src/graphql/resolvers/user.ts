@@ -61,12 +61,14 @@ import { TypieError } from '@/errors';
 import * as aws from '@/external/aws';
 import * as portone from '@/external/portone';
 import { evaluateCouponCondition } from '@/utils/coupon';
+import { getDocumentFontFamilies } from '@/utils/document';
 import { delay } from '@/utils/promise';
 import { getUserUsage } from '@/utils/user';
 import { redeemCodeSchema, userSchema } from '@/validation';
 import { builder } from '../builder';
 import {
   CharacterCountChange,
+  DocumentFontFamily,
   Entity,
   FontFamily,
   Image,
@@ -427,7 +429,14 @@ User.implement({
           .from(FontFamilies)
           .where(and(eq(FontFamilies.userId, self.id), eq(FontFamilies.state, FontFamilyState.ACTIVE)));
 
-        return fontFamilies.toSorted((a, b) => a.name.localeCompare(b.name));
+        return fontFamilies.toSorted((a, b) => a.familyName.localeCompare(b.familyName));
+      },
+    }),
+
+    documentFontFamilies: t.field({
+      type: [DocumentFontFamily],
+      resolve: async (self) => {
+        return await getDocumentFontFamilies(self.id);
       },
     }),
 

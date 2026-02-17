@@ -144,6 +144,21 @@ export class Cache {
     });
   }
 
+  invalidateByTypename(typename: string, fieldKey?: FieldKey): Set<QueryKey> {
+    const affectedQueries = new Set<QueryKey>();
+
+    for (const key of Object.keys(this.#storage)) {
+      if (key.startsWith(`${typename}:`)) {
+        const queries = this.invalidate(key as StorageKey, fieldKey);
+        for (const queryKey of queries) {
+          affectedQueries.add(queryKey);
+        }
+      }
+    }
+
+    return affectedQueries;
+  }
+
   invalidate(storageKey: StorageKey, fieldKey?: FieldKey): Set<QueryKey> {
     const affectedQueries = new Set<QueryKey>();
 
