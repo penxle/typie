@@ -435,10 +435,16 @@ class FontManager {
         break;
       }
 
-      final fallbackFont = fallbackFontFamily.fonts.where((f) => f.weight == weight).firstOrNull;
-      if (fallbackFont == null) {
+      if (fallbackFontFamily.fonts.isEmpty) {
         continue;
       }
+      final fallbackFont = fallbackFontFamily.fonts.reduce((prev, curr) {
+        final prevDiff = (prev.weight - weight).abs();
+        final currDiff = (curr.weight - weight).abs();
+        if (currDiff < prevDiff) return curr;
+        if (currDiff == prevDiff && curr.weight > prev.weight) return curr;
+        return prev;
+      });
 
       final manifest = _manifestCache[fallbackFont.url];
       if (manifest == null) {
