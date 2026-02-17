@@ -311,8 +311,14 @@ export async function ensureRequiredFallbackFont(app: Application, weight: numbe
   for (const fallbackFontFamily of fallbackFontFamilies) {
     if (remaining.length === 0) break;
 
-    const fallbackFont = fallbackFontFamily.fonts.find((f) => f.weight === weight);
-    if (!fallbackFont) continue;
+    if (fallbackFontFamily.fonts.length === 0) continue;
+    const fallbackFont = fallbackFontFamily.fonts.reduce((prev, curr) => {
+      const prevDiff = Math.abs(prev.weight - weight);
+      const currDiff = Math.abs(curr.weight - weight);
+      if (currDiff < prevDiff) return curr;
+      if (currDiff === prevDiff && curr.weight > prev.weight) return curr;
+      return prev;
+    });
 
     const covered = remaining.filter((cp) => hasCodepoint(fallbackFont, cp));
     if (covered.length === 0) continue;
