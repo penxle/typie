@@ -1333,6 +1333,42 @@ mod tests {
     }
 
     #[test]
+    fn layout_snapshot_tracks_table_cell_relayout() {
+        let cell_id = NodeId::new();
+
+        let make_page = || {
+            root_with_children(
+                Some(vec![PositionedNode {
+                    position: Point::new(20.0, 24.0),
+                    node: Rc::new(LayoutNode {
+                        size: Size::new(120.0, 48.0),
+                        element: Some(Element::TableCell(TableCellElement::new(
+                            Size::new(120.0, 48.0),
+                            cell_id,
+                        ))),
+                        children: None,
+                        page_break_policy: PageBreakPolicy::default(),
+                        render_hints: RenderHints::default(),
+                        scope_id: Some(cell_id),
+                    }),
+                }]),
+                Size::new(300.0, 200.0),
+            )
+        };
+
+        let page1 = make_page();
+        let page2 = make_page();
+
+        let snapshot1 = PageLayoutSnapshot::from_page(&page1);
+        let snapshot2 = PageLayoutSnapshot::from_page(&page2);
+
+        assert!(
+            !snapshot1.dirty_rects(&snapshot2).is_empty(),
+            "layout snapshot은 TableCell 재생성을 relayout으로 표시해야 함"
+        );
+    }
+
+    #[test]
     fn snapshot_reuses_line_in_scoped_node_when_layout_is_unchanged() {
         let block_id = NodeId::new();
         let scope_id = NodeId::new();

@@ -13,6 +13,7 @@ pub enum Effect {
     SelectionChanged,
     PendingStylesChanged,
     SettingsChanged,
+    FullLayoutInvalidation,
     LayoutChanged,
     PreeditChanged {
         node_id: Option<NodeId>,

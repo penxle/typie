@@ -23,9 +23,7 @@ impl Runtime {
             return vec![];
         }
 
-        self.layout_cache.borrow_mut().invalidate_all();
-
-        vec![Effect::LayoutChanged]
+        vec![Effect::NodeChanged { node_id }]
     }
 
     pub(crate) fn handle_cycle_callout_variant_in_selection(&mut self) -> Vec<Effect> {

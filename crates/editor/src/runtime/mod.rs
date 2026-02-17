@@ -3,6 +3,8 @@ mod context;
 mod dnd;
 mod effect;
 mod handlers;
+mod layout_engine;
+mod layout_invalidation;
 mod message;
 mod pointer;
 pub mod search;
@@ -16,9 +18,9 @@ mod view_state;
 use crate::inspect::{
     inspect_fragment_as_macro, inspect_page_element, inspect_state, inspect_state_as_macro,
 };
+use crate::layout::Page;
 use crate::layout::cursor::{Cursor, NavigationContext};
 use crate::layout::query::{find_drag_image_bounds, is_selectable_block_hit};
-use crate::layout::{LayoutCache, LayoutContext, Page, Paginator};
 use crate::model::*;
 use crate::render::{DragImageResult, RenderInfo, RenderResult, Renderer};
 use crate::state::ancestor_helpers::lowest_common_ancestor_id;
@@ -30,19 +32,20 @@ use crate::state::{
     Position, Preedit, Selection, find_child_at_offset, find_text_at_offset, position_in_selection,
 };
 use crate::transaction::{Transaction, paragraph_range_at, sentence_range_at, word_range_at};
-use crate::types::{Affinity, BoxConstraints, PointerStyle, Rect, Size};
+use crate::types::{Affinity, PointerStyle, Rect};
 use anyhow::Result;
 pub use cmd::*;
 pub use context::*;
 pub use dnd::*;
 pub use effect::*;
+use layout_engine::LayoutEngine;
+use layout_invalidation::{LayoutInvalidationBatch, LayoutInvalidationOp};
 use loro::UndoManager;
 pub use message::*;
 pub use pointer::*;
 use rustc_hash::{FxHashMap, FxHashSet};
 use slate::{Slab, Slate};
 pub use state::*;
-use std::cell::RefCell;
 pub use text_replacement::RawTextReplacementRule;
 pub use tracked_items::{RawTrackedItem, TrackedItem};
 pub use view_state::*;
@@ -122,17 +125,11 @@ struct SelectionSnapshot {
 }
 
 pub struct Runtime {
-    viewport_width: f32,
-    viewport_height: f32,
-    width: f32,
-    scale_factor: f64,
+    layout_engine: LayoutEngine,
     renderer: Renderer,
-    pages: Vec<Page>,
 
     state: State,
     undo_manager: UndoManager,
-    layout_cache: RefCell<LayoutCache>,
-    view_states: ViewStates,
 
     loaded_font_codepoints: FxHashMap<(String, u16), FxHashSet<u32>>,
 
@@ -161,16 +158,10 @@ impl Runtime {
         undo_manager.set_merge_interval(1000);
 
         Self {
-            viewport_width: width,
-            viewport_height: 0.0,
-            width,
-            scale_factor,
+            layout_engine: LayoutEngine::new(width, scale_factor),
             renderer: Renderer::new(scale_factor),
             state,
-            pages: Vec::new(),
             undo_manager,
-            layout_cache: RefCell::new(LayoutCache::new()),
-            view_states: ViewStates::default(),
             loaded_font_codepoints: FxHashMap::default(),
             selection_cache: None,
             pending: PendingUpdates {
@@ -241,7 +232,7 @@ impl Runtime {
     }
 
     pub fn pages(&self) -> &[Page] {
-        &self.pages
+        self.layout_engine.pages()
     }
 
     pub fn state(&self) -> &State {
@@ -369,7 +360,11 @@ impl Runtime {
     fn handle_external_doc_change(&mut self) {
         // TODO: 최적화?
         self.state.doc.clear_children_cache();
-        self.layout_cache.borrow_mut().invalidate_all();
+        let mut invalidation = LayoutInvalidationBatch::new();
+        invalidation.push(LayoutInvalidationOp::Full);
+        self.layout_engine
+            .apply_invalidation(self.state.doc.as_ref(), &invalidation);
+
         self.selection_cache = None;
         self.cached_plain_text = None;
         self.text_replacement_undo = None;
@@ -675,8 +670,8 @@ impl Runtime {
         // All: check against document boundaries
         let ctx = NavigationContext::new(&self.state.doc);
         if let (Some(start_sel), Some(end_sel)) = (
-            Cursor::move_to_document_start(&ctx, &self.pages),
-            Cursor::move_to_document_end(&ctx, &self.pages),
+            Cursor::move_to_document_start(&ctx, self.pages()),
+            Cursor::move_to_document_end(&ctx, self.pages()),
         ) {
             if let (Ok((ds, _)), Ok((_, de))) = (
                 start_sel.as_sorted(&self.state.doc),
@@ -691,58 +686,12 @@ impl Runtime {
         flags
     }
 
-    fn set_width(&mut self, width: f32) {
-        if self.width != width {
-            self.layout_cache.borrow_mut().invalidate_all();
-        }
-        self.width = width;
-    }
-
-    fn set_scale_factor(&mut self, scale_factor: f64) {
-        self.scale_factor = scale_factor;
-    }
-
     pub fn layout(&mut self) {
-        let settings = self.doc().settings();
-
-        let (page_width, page_height, margin_top, margin_bottom, margin_left, margin_right) =
-            match settings.layout_mode {
-                LayoutMode::Paginated {
-                    page_width,
-                    page_height,
-                    page_margin_top,
-                    page_margin_bottom,
-                    page_margin_left,
-                    page_margin_right,
-                } => (
-                    page_width,
-                    page_height,
-                    page_margin_top,
-                    page_margin_bottom,
-                    page_margin_left,
-                    page_margin_right,
-                ),
-                LayoutMode::Continuous { max_width } => {
-                    let page_margin = CONTINUOUS_PAGE_MARGIN;
-                    let page_width = self.width.min(max_width + 2.0 * page_margin);
-                    (
-                        page_width,
-                        f32::INFINITY,
-                        page_margin,
-                        page_margin,
-                        page_margin,
-                        page_margin,
-                    )
-                }
-            };
-
-        let constraints = BoxConstraints::loose(Size::new(
-            page_width - margin_left - margin_right,
-            page_height - margin_top - margin_bottom,
-        ));
+        let doc = self.state.doc.as_ref();
+        let settings = doc.settings();
+        let default_attrs = doc.default_attrs();
 
         let preedit = self.preedit();
-
         let decorations = Decorations {
             preedit: preedit.map(|preedit| PreeditDecor {
                 node_id: preedit.node_id,
@@ -755,79 +704,54 @@ impl Runtime {
             },
         };
 
-        let root_ref = self.doc().node(NodeId::ROOT).unwrap();
-        let default_attrs = self.doc().default_attrs();
-        let ctx = LayoutContext::new(
-            &root_ref,
-            &settings,
-            &default_attrs,
-            &decorations,
-            self.scale_factor,
-            &self.view_states,
-            &self.layout_cache,
-        );
+        self.layout_engine
+            .recompute(doc, &settings, &default_attrs, &decorations);
+        self.renderer
+            .prune_page_cache(self.layout_engine.page_count());
+    }
 
-        let root_layout = ctx.layout(&root_ref, constraints);
-
-        self.layout_cache.borrow_mut().clear_prev();
-
-        let paginator = Paginator::new(
-            page_width,
-            page_height,
-            margin_top,
-            margin_bottom,
-            margin_left,
-            settings.layout_mode,
-        );
-        self.pages = paginator.paginate_rc(root_layout);
-        self.renderer.prune_page_cache(self.pages.len());
+    fn page_height_for_rendering(layout_mode: LayoutMode, page: &Page) -> f32 {
+        match layout_mode {
+            LayoutMode::Paginated { page_height, .. } => page_height.ceil(),
+            LayoutMode::Continuous { .. } => page.root.node.size.height.ceil(),
+        }
     }
 
     pub fn render_page(&mut self, page_index: usize) -> Option<RenderResult> {
         let snapshot = self.selection_snapshot();
 
-        let doc = &self.state.doc;
-        let selection = &self.state.selection;
+        let doc = self.state.doc.as_ref();
+        let selection = self.state.selection;
 
         let selections = if let Some(snapshot) = snapshot.as_ref() {
-            build_selection_decorations(doc, selection, Some(&snapshot.block_ids))
+            build_selection_decorations(doc, &selection, Some(&snapshot.block_ids))
         } else {
-            build_selection_decorations(doc, selection, None)
+            build_selection_decorations(doc, &selection, None)
         };
-
-        let page = self.pages.get(page_index)?;
 
         let layout_mode = doc.settings().layout_mode;
-        let page_height = match layout_mode {
-            LayoutMode::Paginated { page_height, .. } => page_height.ceil(),
-            LayoutMode::Continuous { .. } => page.root.node.size.height.ceil(),
-        };
-
-        self.renderer
-            .set_size(self.width.ceil(), page_height, self.scale_factor);
-        self.renderer.set_focused(self.is_focused);
+        let page = self.layout_engine.pages().get(page_index)?;
+        let page_height = Self::page_height_for_rendering(layout_mode, page);
+        let page_width = self.layout_engine.width().ceil();
+        let scale_factor = self.layout_engine.scale_factor();
 
         let drop_indicator = self.pending.drop_indicator.as_ref();
+        let renderer = &mut self.renderer;
+        renderer.set_size(page_width, page_height, scale_factor);
+        renderer.set_focused(self.is_focused);
 
-        Some(
-            self.renderer
-                .render(page, page_index, &selections, drop_indicator, doc),
-        )
+        Some(renderer.render(page, page_index, &selections, drop_indicator, doc))
     }
 
     #[allow(dead_code)]
     pub fn get_render_info(&mut self, page_index: usize) -> Option<RenderInfo> {
-        let doc = &self.state.doc;
-        let page = self.pages.get(page_index)?;
-
-        let layout_mode = doc.settings().layout_mode;
-        let page_height = match layout_mode {
-            LayoutMode::Paginated { page_height, .. } => page_height.ceil(),
-            LayoutMode::Continuous { .. } => page.root.node.size.height.ceil(),
-        };
-
+        let layout_mode = self.doc().settings().layout_mode;
+        let page = self.layout_engine.pages().get(page_index)?;
+        let page_height = Self::page_height_for_rendering(layout_mode, page);
+        let page_width = self.layout_engine.width().ceil();
+        let scale_factor = self.layout_engine.scale_factor();
         self.renderer
-            .set_size(self.width.ceil(), page_height, self.scale_factor);
+            .set_size(page_width, page_height, scale_factor);
 
         let width = self.renderer.width();
         let height = self.renderer.height();
@@ -844,33 +768,28 @@ impl Runtime {
     pub fn render_page_to(&mut self, page_index: usize, dst: &mut [u8]) -> bool {
         let snapshot = self.selection_snapshot();
 
-        let doc = &self.state.doc;
-        let selection = &self.state.selection;
+        let doc = self.state.doc.as_ref();
+        let selection = self.state.selection;
 
         let selections = if let Some(snapshot) = snapshot.as_ref() {
-            build_selection_decorations(doc, selection, Some(&snapshot.block_ids))
+            build_selection_decorations(doc, &selection, Some(&snapshot.block_ids))
         } else {
-            build_selection_decorations(doc, selection, None)
-        };
-
-        let Some(page) = self.pages.get(page_index) else {
-            return false;
+            build_selection_decorations(doc, &selection, None)
         };
 
         let layout_mode = doc.settings().layout_mode;
-        let page_height = match layout_mode {
-            LayoutMode::Paginated { page_height, .. } => page_height.ceil(),
-            LayoutMode::Continuous { .. } => page.root.node.size.height.ceil(),
+        let Some(page) = self.layout_engine.pages().get(page_index) else {
+            return false;
         };
-
-        self.renderer
-            .set_size(self.width.ceil(), page_height, self.scale_factor);
-        self.renderer.set_focused(self.is_focused);
-
+        let page_height = Self::page_height_for_rendering(layout_mode, page);
+        let page_width = self.layout_engine.width().ceil();
+        let scale_factor = self.layout_engine.scale_factor();
         let drop_indicator = self.pending.drop_indicator.as_ref();
+        let renderer = &mut self.renderer;
 
-        self.renderer
-            .render_to(page, page_index, &selections, drop_indicator, doc, dst)
+        renderer.set_size(page_width, page_height, scale_factor);
+        renderer.set_focused(self.is_focused);
+        renderer.render_to(page, page_index, &selections, drop_indicator, doc, dst)
     }
 
     pub fn render_drag_image(
@@ -878,15 +797,16 @@ impl Runtime {
         visible_pages: &[usize],
         drag_page_idx: usize,
     ) -> Option<DragImageResult> {
-        let doc = &self.state.doc;
-        let selection = &self.state.selection;
+        let doc = self.state.doc.as_ref();
+        let selection = self.state.selection;
+        let pages = self.layout_engine.pages();
 
-        let bounds = find_drag_image_bounds(doc, selection, &self.pages)?;
+        let bounds = find_drag_image_bounds(doc, &selection, pages)?;
 
-        let selections = build_selection_decorations(doc, selection, None);
+        let selections = build_selection_decorations(doc, &selection, None);
 
         self.renderer.render_drag_image(
-            &self.pages,
+            pages,
             &bounds,
             &selections,
             doc,
@@ -936,7 +856,7 @@ impl Runtime {
     }
 
     pub fn get_pointer_style(&self, page_idx: usize, x: f32, y: f32) -> PointerStyle {
-        let Some(page) = self.pages.get(page_idx) else {
+        let Some(page) = self.pages().get(page_idx) else {
             return PointerStyle::Default;
         };
 
@@ -1004,17 +924,18 @@ impl Runtime {
             let page_width = match layout_mode {
                 LayoutMode::Paginated { page_width, .. } => page_width.ceil(),
                 LayoutMode::Continuous { max_width } => self
-                    .width
+                    .layout_engine
+                    .width()
                     .min(max_width + 2.0 * CONTINUOUS_PAGE_MARGIN)
                     .ceil(),
             };
 
             let page_heights: Vec<f32> = match layout_mode {
                 LayoutMode::Paginated { page_height, .. } => {
-                    vec![page_height.ceil(); self.pages.len()]
+                    vec![page_height.ceil(); self.pages().len()]
                 }
                 LayoutMode::Continuous { .. } => self
-                    .pages
+                    .pages()
                     .iter()
                     .map(|p| p.root.node.size.height.ceil())
                     .collect(),
@@ -1039,12 +960,12 @@ impl Runtime {
         if self.pending.cursor {
             let selection = self.state.selection;
             let ctx = NavigationContext::new(&self.state.doc);
-            let (page_idx, bounds, visible) = Cursor::bounds(&ctx, &self.pages, selection.head)
+            let (page_idx, bounds, visible) = Cursor::bounds(&ctx, self.pages(), selection.head)
                 .map(|(idx, rect)| (Some(idx), Some(rect), selection.is_collapsed()))
                 .unwrap_or((None, None, false));
 
             let preceding_char_widths = if selection.is_collapsed() {
-                Cursor::preceding_char_widths(&ctx, &self.pages, selection.head, 64)
+                Cursor::preceding_char_widths(&ctx, self.pages(), selection.head, 64)
             } else {
                 None
             };
@@ -1080,9 +1001,9 @@ impl Runtime {
 
             let ctx = NavigationContext::new(&self.state.doc);
             let anchor_handle =
-                Cursor::selection_handle_bounds(&ctx, &self.pages, selection.anchor)
+                Cursor::selection_handle_bounds(&ctx, self.pages(), selection.anchor)
                     .map(|(page_idx, bounds)| SelectionHandleBounds { page_idx, bounds });
-            let head_handle = Cursor::selection_handle_bounds(&ctx, &self.pages, selection.head)
+            let head_handle = Cursor::selection_handle_bounds(&ctx, self.pages(), selection.head)
                 .map(|(page_idx, bounds)| SelectionHandleBounds { page_idx, bounds });
             let selected_block_ids = if collapsed {
                 Vec::new()
@@ -1229,7 +1150,7 @@ impl Runtime {
 
         if self.pending.tracked_items {
             let overlays = tracked_items::build_tracked_item_overlays(
-                &self.pages,
+                self.pages(),
                 &self.tracked_items,
                 &self.state.doc,
             );
@@ -1275,7 +1196,7 @@ impl Runtime {
             .map(|snapshot| snapshot.block_set)
             .unwrap_or_default();
 
-        for (page_idx, p) in self.pages.iter().enumerate() {
+        for (page_idx, p) in self.pages().iter().enumerate() {
             for (pos, ext) in p.external_elements() {
                 elements.push(ExternalElement {
                     page_idx,
@@ -1299,7 +1220,7 @@ impl Runtime {
         let link_ranges = self.doc().get_link_ranges();
         let mut overlays = Vec::new();
 
-        for (page_idx, page) in self.pages.iter().enumerate() {
+        for (page_idx, page) in self.pages().iter().enumerate() {
             for (href, bounds) in page.get_link_overlays(&link_ranges) {
                 overlays.push(cmd::LinkOverlay {
                     page_idx,
@@ -1313,7 +1234,7 @@ impl Runtime {
     }
 
     fn get_first_paragraph_bounds(&self) -> Option<Rect> {
-        let page = self.pages.first()?;
+        let page = self.pages().first()?;
         let (pos, _element) = page.first_element()?;
 
         let settings = self.doc().settings();
@@ -1327,7 +1248,10 @@ impl Runtime {
             } => (page_width, page_margin_left, page_margin_right),
             LayoutMode::Continuous { max_width } => {
                 let page_margin = CONTINUOUS_PAGE_MARGIN;
-                let page_width = self.width.min(max_width + 2.0 * page_margin);
+                let page_width = self
+                    .layout_engine
+                    .width()
+                    .min(max_width + 2.0 * page_margin);
                 (page_width, page_margin, page_margin)
             }
         };
@@ -1353,7 +1277,7 @@ impl Runtime {
     }
 
     pub fn inspect_page_element(&self, page_idx: usize, x: f32, y: f32) -> Option<String> {
-        let page = self.pages.get(page_idx)?;
+        let page = self.pages().get(page_idx)?;
 
         inspect_page_element(page, x, y)
     }
@@ -1383,6 +1307,8 @@ impl Runtime {
     }
 
     fn process_effects(&mut self, effects: Vec<Effect>) {
+        let mut invalidation = LayoutInvalidationBatch::new();
+
         for effect in effects {
             match effect {
                 Effect::FontDetected {
@@ -1417,14 +1343,7 @@ impl Runtime {
                     self.pending.table_overlays = true;
                 }
                 Effect::NodeChanged { node_id } => {
-                    if let Some(node) = self.doc().node(node_id) {
-                        let ancestors: Vec<_> = node.ancestors().map(|n| n.node_id()).collect();
-                        self.layout_cache
-                            .borrow_mut()
-                            .invalidate_with_ancestors(node_id, ancestors.into_iter());
-                    } else {
-                        self.layout_cache.borrow_mut().invalidate(node_id);
-                    }
+                    invalidation.push(LayoutInvalidationOp::NodeAndAncestors { node_id });
                     self.selection_cache = None;
                     self.pending.layout = true;
                     self.pending.render = true;
@@ -1434,18 +1353,7 @@ impl Runtime {
                     self.pending.external_elements = true;
                 }
                 Effect::SubtreeChanged { node_id } => {
-                    if let Some(node) = self.doc().node(node_id) {
-                        let descendants: Vec<_> = node.descendants().map(|n| n.node_id()).collect();
-                        self.layout_cache
-                            .borrow_mut()
-                            .invalidate_with_descendants(node_id, descendants.into_iter());
-                        let ancestors: Vec<_> = node.ancestors().map(|n| n.node_id()).collect();
-                        for ancestor_id in ancestors {
-                            self.layout_cache.borrow_mut().invalidate(ancestor_id);
-                        }
-                    } else {
-                        self.layout_cache.borrow_mut().invalidate(node_id);
-                    }
+                    invalidation.push(LayoutInvalidationOp::SubtreeAndAncestors { node_id });
                     self.selection_cache = None;
                     self.pending.layout = true;
                     self.pending.render = true;
@@ -1470,14 +1378,7 @@ impl Runtime {
                 Effect::PendingStylesChanged => {
                     self.pending.active_styles = true;
                     let nid = self.state.selection.head.node_id;
-                    if let Some(node) = self.doc().node(nid) {
-                        let ancestors: Vec<_> = node.ancestors().map(|n| n.node_id()).collect();
-                        self.layout_cache
-                            .borrow_mut()
-                            .invalidate_with_ancestors(nid, ancestors.into_iter());
-                    } else {
-                        self.layout_cache.borrow_mut().invalidate(nid);
-                    }
+                    invalidation.push(LayoutInvalidationOp::NodeAndAncestors { node_id: nid });
                     self.pending.layout = true;
                     self.pending.render = true;
                     self.pending.cursor = true;
@@ -1495,6 +1396,9 @@ impl Runtime {
                     self.pending.placeholder = true;
                     self.pending.table_overlays = true;
                 }
+                Effect::FullLayoutInvalidation => {
+                    invalidation.push(LayoutInvalidationOp::Full);
+                }
                 Effect::PointerStyleChanged { style } => {
                     self.pending.pointer_style = Some(style);
                 }
@@ -1506,14 +1410,7 @@ impl Runtime {
                 }
                 Effect::PreeditChanged { node_id } => {
                     if let Some(nid) = node_id {
-                        if let Some(node) = self.doc().node(nid) {
-                            let ancestors: Vec<_> = node.ancestors().map(|n| n.node_id()).collect();
-                            self.layout_cache
-                                .borrow_mut()
-                                .invalidate_with_ancestors(nid, ancestors.into_iter());
-                        } else {
-                            self.layout_cache.borrow_mut().invalidate(nid);
-                        }
+                        invalidation.push(LayoutInvalidationOp::NodeAndAncestors { node_id: nid });
                     }
 
                     self.pending.layout = true;
@@ -1523,7 +1420,7 @@ impl Runtime {
                     self.pending.placeholder = true;
                 }
                 Effect::SettingsChanged => {
-                    self.layout_cache.borrow_mut().invalidate_all();
+                    invalidation.push(LayoutInvalidationOp::Full);
                     self.pending.layout = true;
                     self.pending.render = true;
                     self.pending.cursor = true;
@@ -1534,7 +1431,7 @@ impl Runtime {
                 Effect::DropTargetChanged { target } => {
                     self.pending.drop_indicator = target.and_then(|position| {
                         let ctx = NavigationContext::new(&self.state.doc);
-                        DropIndicator::from_position(&ctx, &self.pages, position)
+                        DropIndicator::from_position(&ctx, self.pages(), position)
                     });
                     self.pending.render = true;
                 }
@@ -1548,6 +1445,11 @@ impl Runtime {
                     self.pending.html_pasted = Some((text, from, to));
                 }
             }
+        }
+
+        if !invalidation.is_empty() {
+            self.layout_engine
+                .apply_invalidation(self.state.doc.as_ref(), &invalidation);
         }
     }
 
@@ -1623,7 +1525,12 @@ impl Runtime {
 
     #[cfg(test)]
     pub fn is_layout_cached(&self, node_id: NodeId) -> bool {
-        self.layout_cache.borrow().get(node_id).is_some()
+        self.layout_engine.is_layout_cached(node_id)
+    }
+
+    #[cfg(test)]
+    pub fn cached_layout(&self, node_id: NodeId) -> Option<std::rc::Rc<crate::layout::LayoutNode>> {
+        self.layout_engine.cached_layout(node_id)
     }
 
     fn validate_selection(&self, selection: Selection) -> Selection {
@@ -1720,7 +1627,7 @@ mod tests {
         let target_pos = Position::new(p, target_offset, Affinity::default());
 
         let ctx = NavigationContext::new(&runtime.state.doc);
-        let (page_idx, rect) = Cursor::bounds(&ctx, &runtime.pages, target_pos.clone())
+        let (page_idx, rect) = Cursor::bounds(&ctx, runtime.pages(), target_pos.clone())
             .expect("Failed to get cursor bounds for target position");
 
         let click_x = rect.x;
@@ -1772,7 +1679,7 @@ mod tests {
 
         let target_pos = Position::new(p, end_of_second, Affinity::default());
         let ctx = NavigationContext::new(&runtime.state.doc);
-        let (page_idx, rect) = Cursor::bounds(&ctx, &runtime.pages, target_pos.clone())
+        let (page_idx, rect) = Cursor::bounds(&ctx, runtime.pages(), target_pos.clone())
             .expect("Failed to get cursor bounds for target position");
 
         let click_x = rect.x;
@@ -1887,7 +1794,7 @@ mod tests {
         let image_pos = Position::new(NodeId::ROOT, 1, Affinity::default());
         let ctx = NavigationContext::new(rt.doc());
         let (page_idx, rect) =
-            Cursor::bounds(&ctx, &rt.pages(), image_pos).expect("Failed to get image bounds");
+            Cursor::bounds(&ctx, rt.pages(), image_pos).expect("Failed to get image bounds");
 
         let click_x = rect.x + rect.width / 2.0;
         let click_y = rect.y + rect.height / 2.0;
@@ -2101,9 +2008,7 @@ mod tests {
         runtime.layout();
 
         let p_layout_initial = runtime
-            .layout_cache
-            .borrow()
-            .get(p)
+            .cached_layout(p)
             .expect("Paragraph layout should be cached");
         assert!(runtime.is_layout_cached(p));
 
@@ -2119,14 +2024,161 @@ mod tests {
         runtime.layout();
 
         let p_layout_after = runtime
-            .layout_cache
-            .borrow()
-            .get(p)
+            .cached_layout(p)
             .expect("Paragraph layout should be cached");
 
         assert!(
             !Rc::ptr_eq(&p_layout_initial, &p_layout_after),
             "Layout should be recomputed (fix verified)"
+        );
+    }
+
+    #[test]
+    fn layout_changed_effect_does_not_invalidate_layout_cache() {
+        let mut p = id!();
+        let mut runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {
+                    text { "Hello" }
+                }
+            }
+            selection { (p, 0) }
+        };
+
+        runtime.layout();
+        assert!(
+            runtime.is_layout_cached(p),
+            "precondition: paragraph layout should be cached"
+        );
+
+        runtime.process_effects(vec![Effect::LayoutChanged]);
+
+        assert!(
+            runtime.is_layout_cached(p),
+            "LayoutChanged should not invalidate layout cache by itself"
+        );
+    }
+
+    #[test]
+    fn settings_changed_effect_invalidates_layout_cache() {
+        let mut p = id!();
+        let mut runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {
+                    text { "Hello" }
+                }
+            }
+            selection { (p, 0) }
+        };
+
+        runtime.layout();
+        assert!(
+            runtime.is_layout_cached(p),
+            "precondition: paragraph layout should be cached"
+        );
+
+        runtime.process_effects(vec![Effect::SettingsChanged]);
+
+        assert!(
+            !runtime.is_layout_cached(p),
+            "SettingsChanged should invalidate layout cache"
+        );
+    }
+
+    #[test]
+    fn full_layout_invalidation_effect_invalidates_layout_cache() {
+        let mut p = id!();
+        let mut runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {
+                    text { "Hello" }
+                }
+            }
+            selection { (p, 0) }
+        };
+
+        runtime.layout();
+        assert!(
+            runtime.is_layout_cached(p),
+            "precondition: paragraph layout should be cached"
+        );
+
+        runtime.process_effects(vec![Effect::FullLayoutInvalidation]);
+
+        assert!(
+            !runtime.is_layout_cached(p),
+            "FullLayoutInvalidation should invalidate layout cache"
+        );
+    }
+
+    #[test]
+    fn subtree_changed_root_invalidates_layout_cache() {
+        let mut p = id!();
+        let mut runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {
+                    text { "Hello" }
+                }
+            }
+            selection { (p, 0) }
+        };
+
+        runtime.layout();
+        assert!(
+            runtime.is_layout_cached(p),
+            "precondition: paragraph layout should be cached"
+        );
+
+        runtime.process_effects(vec![Effect::SubtreeChanged {
+            node_id: NodeId::ROOT,
+        }]);
+
+        assert!(
+            !runtime.is_layout_cached(p),
+            "SubtreeChanged(ROOT) should invalidate full layout cache"
+        );
+    }
+
+    #[test]
+    fn mixed_effects_merge_to_subtree_invalidation() {
+        let mut list = id!();
+        let mut item = id!();
+        let mut p = id!();
+        let mut runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @list ordered_list {
+                    @item list_item {
+                        paragraph {
+                            text { "1" }
+                        }
+                    }
+                }
+                @p paragraph {
+                    text { "tail" }
+                }
+            }
+            selection { (p, 0) }
+        };
+
+        runtime.layout();
+        assert!(
+            runtime.is_layout_cached(item),
+            "precondition: list item layout should be cached"
+        );
+
+        runtime.process_effects(vec![
+            Effect::NodeChanged { node_id: list },
+            Effect::SubtreeChanged { node_id: list },
+        ]);
+
+        assert!(
+            !runtime.is_layout_cached(item),
+            "subtree invalidation should win over node invalidation for the same node"
         );
     }
 

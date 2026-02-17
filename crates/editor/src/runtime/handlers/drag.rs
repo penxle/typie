@@ -34,7 +34,7 @@ impl Runtime {
             return vec![];
         }
 
-        let Some(page) = self.pages.get(page_idx) else {
+        let Some(page) = self.pages().get(page_idx) else {
             self.pointer.drop_target = None;
             return vec![Effect::DropTargetChanged { target: None }];
         };
@@ -72,7 +72,7 @@ impl Runtime {
             return Some(pos);
         }
 
-        let page = self.pages.get(page_idx)?;
+        let page = self.pages().get(page_idx)?;
         let ctx = NavigationContext::new(&self.state.doc);
         let hit_selection = Cursor::hit_test_dnd(&ctx, page, x, y)?;
         Some(hit_selection.head)
@@ -198,8 +198,8 @@ mod tests {
 
     fn find_position_coordinates(rt: &mut Runtime, position: Position) -> (usize, f32, f32) {
         let ctx = NavigationContext::new(&rt.state.doc);
-        let (page_idx, rect) =
-            Cursor::bounds(&ctx, &rt.pages, position).expect("Bounds should be found for position");
+        let (page_idx, rect) = Cursor::bounds(&ctx, rt.pages(), position)
+            .expect("Bounds should be found for position");
         (
             page_idx,
             rect.x + rect.width / 2.0,
@@ -209,7 +209,7 @@ mod tests {
 
     fn find_gap_coordinates(rt: &mut Runtime, position: Position) -> (usize, f32, f32) {
         let ctx = NavigationContext::new(&rt.state.doc);
-        let drop_indicator = DropIndicator::from_position(&ctx, &rt.pages, position)
+        let drop_indicator = DropIndicator::from_position(&ctx, rt.pages(), position)
             .expect("Drop indicator should be found for position");
         match drop_indicator {
             DropIndicator::Inline {
@@ -595,7 +595,7 @@ mod tests {
 
         let (img_x, img_y) = {
             let ctx = NavigationContext::new(&rt.state.doc);
-            let bounds = crate::layout::query::find_node_bounds(ctx.doc, &rt.pages, img)
+            let bounds = crate::layout::query::find_node_bounds(ctx.doc, rt.pages(), img)
                 .expect("Image bounds should exist");
             (
                 bounds.x + bounds.width / 2.0,

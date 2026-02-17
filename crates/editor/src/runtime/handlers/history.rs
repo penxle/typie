@@ -10,13 +10,16 @@ impl Runtime {
 
         let _ = self.undo_manager.undo();
         self.state.doc.clear_children_cache();
-        self.layout_cache.borrow_mut().invalidate_all();
 
         if let Some(selection) = self.undo_selections.pop() {
             self.state.selection = self.validate_selection(selection);
         }
 
-        vec![Effect::DocChanged, Effect::SelectionChanged]
+        vec![
+            Effect::FullLayoutInvalidation,
+            Effect::DocChanged,
+            Effect::SelectionChanged,
+        ]
     }
 
     pub(crate) fn handle_redo(&mut self) -> Vec<Effect> {
@@ -28,13 +31,16 @@ impl Runtime {
 
         let _ = self.undo_manager.redo();
         self.state.doc.clear_children_cache();
-        self.layout_cache.borrow_mut().invalidate_all();
 
         if let Some(selection) = self.redo_selections.pop() {
             self.state.selection = self.validate_selection(selection);
         }
 
-        vec![Effect::DocChanged, Effect::SelectionChanged]
+        vec![
+            Effect::FullLayoutInvalidation,
+            Effect::DocChanged,
+            Effect::SelectionChanged,
+        ]
     }
 }
 

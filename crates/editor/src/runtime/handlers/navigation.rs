@@ -50,7 +50,8 @@ impl Runtime {
             if let Some(x) = self.state.preferred_x {
                 Some(x)
             } else {
-                Cursor::bounds(&ctx, &self.pages, self.state.selection.head).map(|(_, rect)| rect.x)
+                Cursor::bounds(&ctx, self.pages(), self.state.selection.head)
+                    .map(|(_, rect)| rect.x)
             }
         } else {
             self.state.preferred_x
@@ -62,7 +63,7 @@ impl Runtime {
             direction,
             extend_selection,
             cached_preferred_x,
-            self.viewport_height,
+            self.layout_engine.viewport_height(),
         );
 
         let new_preferred_x = if invalidate_preferred_x {
@@ -85,7 +86,7 @@ impl Runtime {
         }
 
         let ctx = NavigationContext::new(&self.state.doc);
-        let Some(doc_start_selection) = Cursor::move_to_document_start(&ctx, &self.pages) else {
+        let Some(doc_start_selection) = Cursor::move_to_document_start(&ctx, self.pages()) else {
             return false;
         };
 
@@ -110,8 +111,8 @@ impl Runtime {
         }
 
         let ctx = NavigationContext::new(&self.state.doc);
-        let doc_start = Cursor::move_to_document_start(&ctx, &self.pages);
-        let doc_end = Cursor::move_to_document_end(&ctx, &self.pages);
+        let doc_start = Cursor::move_to_document_start(&ctx, self.pages());
+        let doc_end = Cursor::move_to_document_end(&ctx, self.pages());
 
         if let (Some(start_sel), Some(end_sel)) = (doc_start, doc_end) {
             let (start, _) = start_sel.as_sorted(&self.state.doc).unwrap();
@@ -278,7 +279,7 @@ impl Runtime {
         cached_preferred_x: Option<f32>,
         viewport_height: f32,
     ) -> (Position, Position) {
-        let pages = &self.pages;
+        let pages = self.pages();
 
         let move_from = |position: Position| -> Selection {
             let span = match direction {

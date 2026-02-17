@@ -15,92 +15,73 @@ pub(super) struct PageRenderSnapshot {
 
 #[derive(Default, Clone)]
 pub(super) struct PageLayoutSnapshot {
-    nodes: FxHashMap<usize, CacheRect>,
+    nodes: FxHashMap<SnapshotNodeKey, CacheRect>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum SnapshotNodeKey {
     Ptr(usize),
-    LineElement {
+    RenderLine {
         block_id: NodeId,
         line_idx: usize,
         layout_ptr: usize,
         scope_id: Option<NodeId>,
         default_text_color_hash: Option<u64>,
     },
-    StableElement {
+    RenderStableElement {
         kind: Discriminant<Element>,
         node_id: NodeId,
         signature: u64,
     },
 }
 
+#[derive(Clone, Copy)]
+enum SnapshotKind {
+    Render,
+    Layout,
+}
+
 impl PageRenderSnapshot {
     pub(super) fn from_page(page: &Page) -> Self {
         let mut nodes = FxHashMap::default();
-        Self::collect(&page.root, Point::zero(), &mut nodes);
+        collect_snapshot(&page.root, Point::zero(), SnapshotKind::Render, &mut nodes);
         Self { nodes }
     }
 
     pub(super) fn dirty_rects(&self, next: &Self) -> Vec<CacheRect> {
-        let mut dirty_rects = Vec::new();
+        dirty_rects_between(&self.nodes, &next.nodes)
+    }
+}
 
-        for (ptr, prev_bounds) in &self.nodes {
-            match next.nodes.get(ptr) {
-                Some(next_bounds) if prev_bounds.approx_eq(*next_bounds) => {}
-                Some(next_bounds) => {
-                    dirty_rects.push(*prev_bounds);
-                    dirty_rects.push(*next_bounds);
-                }
-                None => dirty_rects.push(*prev_bounds),
-            }
-        }
-
-        for (ptr, next_bounds) in &next.nodes {
-            if !self.nodes.contains_key(ptr) {
-                dirty_rects.push(*next_bounds);
-            }
-        }
-
-        dirty_rects
+impl PageLayoutSnapshot {
+    pub(super) fn from_page(page: &Page) -> Self {
+        let mut nodes = FxHashMap::default();
+        collect_snapshot(&page.root, Point::zero(), SnapshotKind::Layout, &mut nodes);
+        Self { nodes }
     }
 
-    fn collect(
-        positioned: &PositionedNode,
-        offset: Point,
-        out: &mut FxHashMap<SnapshotNodeKey, CacheRect>,
-    ) {
-        let pos = Point::new(
-            offset.x + positioned.position.x,
-            offset.y + positioned.position.y,
-        );
-
-        if let Some(key) = Self::snapshot_key(positioned) {
-            if let Some(bounds) = CacheRect::from_xywh(
-                pos.x,
-                pos.y,
-                positioned.node.size.width,
-                positioned.node.size.height,
-            ) {
-                out.insert(key, bounds);
-            }
-        }
-
-        if let Some(children) = &positioned.node.children {
-            for child in children {
-                Self::collect(child, pos, out);
-            }
-        }
+    pub(super) fn dirty_rects(&self, next: &Self) -> Vec<CacheRect> {
+        dirty_rects_between(&self.nodes, &next.nodes)
     }
+}
 
-    fn snapshot_key(positioned: &PositionedNode) -> Option<SnapshotNodeKey> {
+impl SnapshotNodeKey {
+    fn for_positioned(positioned: &PositionedNode, kind: SnapshotKind) -> Option<Self> {
         let element = positioned.node.element.as_ref()?;
+
+        match kind {
+            SnapshotKind::Layout => Some(Self::Ptr(Rc::as_ptr(&positioned.node) as usize)),
+            SnapshotKind::Render => Self::for_render(positioned, element),
+        }
+    }
+
+    fn for_render(positioned: &PositionedNode, element: &Element) -> Option<Self> {
         element.as_render()?;
         if matches!(element, Element::TableCell(_)) {
             return None;
         }
         if let Element::Line(line) = element {
-            return Some(SnapshotNodeKey::LineElement {
+            return Some(Self::RenderLine {
                 block_id: line.block_id,
                 line_idx: line.line_idx,
                 layout_ptr: Rc::as_ptr(&line.layout) as usize,
@@ -110,95 +91,95 @@ impl PageRenderSnapshot {
                     .render_hints
                     .default_text_color
                     .as_ref()
-                    .map(|value| Self::hash_str(value.as_str())),
+                    .map(|value| hash_str(value.as_str())),
             });
         }
 
         if element.as_wrapper().is_some() {
             if let Some(node_id) = element.block_id() {
-                return Some(SnapshotNodeKey::StableElement {
+                return Some(Self::RenderStableElement {
                     kind: std::mem::discriminant(element),
                     node_id,
-                    signature: Self::stable_element_signature(element),
+                    signature: stable_element_signature(element),
                 });
             }
         }
 
-        Some(SnapshotNodeKey::Ptr(Rc::as_ptr(&positioned.node) as usize))
-    }
-
-    fn hash_str(value: &str) -> u64 {
-        let mut hasher = FxHasher::default();
-        value.hash(&mut hasher);
-        hasher.finish()
-    }
-
-    fn stable_element_signature(element: &Element) -> u64 {
-        let mut hasher = FxHasher::default();
-        let hashed = element.hash_render_cache_signature(&mut hasher);
-        debug_assert!(
-            hashed,
-            "stable_element_signature called for non-wrapper element: {:?}",
-            element
-        );
-
-        hasher.finish()
+        Some(Self::Ptr(Rc::as_ptr(&positioned.node) as usize))
     }
 }
 
-impl PageLayoutSnapshot {
-    pub(super) fn from_page(page: &Page) -> Self {
-        let mut nodes = FxHashMap::default();
-        Self::collect(&page.root, Point::zero(), &mut nodes);
-        Self { nodes }
+fn hash_str(value: &str) -> u64 {
+    let mut hasher = FxHasher::default();
+    value.hash(&mut hasher);
+    hasher.finish()
+}
+
+fn stable_element_signature(element: &Element) -> u64 {
+    let mut hasher = FxHasher::default();
+    let hashed = element.hash_render_cache_signature(&mut hasher);
+    debug_assert!(
+        hashed,
+        "stable_element_signature called for non-wrapper element: {:?}",
+        element
+    );
+
+    hasher.finish()
+}
+
+fn collect_snapshot(
+    positioned: &PositionedNode,
+    offset: Point,
+    kind: SnapshotKind,
+    out: &mut FxHashMap<SnapshotNodeKey, CacheRect>,
+) {
+    let pos = Point::new(
+        offset.x + positioned.position.x,
+        offset.y + positioned.position.y,
+    );
+
+    if let Some(key) = SnapshotNodeKey::for_positioned(positioned, kind) {
+        if let Some(bounds) = CacheRect::from_xywh(
+            pos.x,
+            pos.y,
+            positioned.node.size.width,
+            positioned.node.size.height,
+        ) {
+            out.insert(key, bounds);
+        }
     }
 
-    pub(super) fn dirty_rects(&self, next: &Self) -> Vec<CacheRect> {
-        let mut dirty_rects = Vec::new();
-
-        for (ptr, prev_bounds) in &self.nodes {
-            match next.nodes.get(ptr) {
-                Some(next_bounds) if prev_bounds.approx_eq(*next_bounds) => {}
-                Some(next_bounds) => {
-                    dirty_rects.push(*prev_bounds);
-                    dirty_rects.push(*next_bounds);
-                }
-                None => dirty_rects.push(*prev_bounds),
-            }
+    if let Some(children) = &positioned.node.children {
+        for child in children {
+            collect_snapshot(child, pos, kind, out);
         }
+    }
+}
 
-        for (ptr, next_bounds) in &next.nodes {
-            if !self.nodes.contains_key(ptr) {
+fn dirty_rects_between<K: Eq + Hash>(
+    prev: &FxHashMap<K, CacheRect>,
+    next: &FxHashMap<K, CacheRect>,
+) -> Vec<CacheRect> {
+    let mut dirty_rects = Vec::new();
+
+    for (key, prev_bounds) in prev {
+        match next.get(key) {
+            Some(next_bounds) if prev_bounds.approx_eq(*next_bounds) => {}
+            Some(next_bounds) => {
+                dirty_rects.push(*prev_bounds);
                 dirty_rects.push(*next_bounds);
             }
-        }
-
-        dirty_rects
-    }
-
-    fn collect(positioned: &PositionedNode, offset: Point, out: &mut FxHashMap<usize, CacheRect>) {
-        let pos = Point::new(
-            offset.x + positioned.position.x,
-            offset.y + positioned.position.y,
-        );
-
-        if positioned.node.element.is_some() {
-            if let Some(bounds) = CacheRect::from_xywh(
-                pos.x,
-                pos.y,
-                positioned.node.size.width,
-                positioned.node.size.height,
-            ) {
-                out.insert(Rc::as_ptr(&positioned.node) as usize, bounds);
-            }
-        }
-
-        if let Some(children) = &positioned.node.children {
-            for child in children {
-                Self::collect(child, pos, out);
-            }
+            None => dirty_rects.push(*prev_bounds),
         }
     }
+
+    for (key, next_bounds) in next {
+        if !prev.contains_key(key) {
+            dirty_rects.push(*next_bounds);
+        }
+    }
+
+    dirty_rects
 }
 
 pub(super) struct PageRenderCache {

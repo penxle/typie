@@ -1,5 +1,5 @@
 use crate::model::{ImageNode, Node, NodeId};
-use crate::runtime::{Effect, NodeViewState, Runtime};
+use crate::runtime::{Effect, Runtime};
 
 impl Runtime {
     pub(crate) fn handle_insert_image(&mut self, upload_id: Option<String>) -> Vec<Effect> {
@@ -76,27 +76,14 @@ impl Runtime {
             return vec![];
         };
 
-        let current_height = self
-            .view_states
-            .get(&node_id)
-            .and_then(|s| s.external_height());
+        let current_height = self.layout_engine.external_height(node_id);
 
         if current_height == Some(height) {
             return vec![];
         }
 
-        self.view_states
-            .insert(node_id, NodeViewState::ExternalHeight { height });
+        self.layout_engine.set_external_height(node_id, height);
 
-        if let Some(node) = self.doc().node(node_id) {
-            let ancestors: Vec<_> = node.ancestors().map(|n| n.node_id()).collect();
-            self.layout_cache
-                .borrow_mut()
-                .invalidate_with_ancestors(node_id, ancestors.into_iter());
-        } else {
-            self.layout_cache.borrow_mut().invalidate(node_id);
-        }
-
-        vec![Effect::LayoutChanged]
+        vec![Effect::NodeChanged { node_id }]
     }
 }

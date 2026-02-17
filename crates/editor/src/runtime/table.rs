@@ -221,17 +221,17 @@ impl ContinuousOverlayBuilder {
 impl Runtime {
     pub fn build_table_overlays(&self) -> Vec<TableOverlay> {
         let focused_page_idx =
-            focused_cursor_page(&self.state.selection, &self.state.doc, &self.pages);
+            focused_cursor_page(&self.state.selection, &self.state.doc, self.pages());
 
         match self.doc().settings().layout_mode {
             LayoutMode::Paginated { .. } => collect_paginated_table_overlays(
-                &self.pages,
+                self.pages(),
                 &self.state.selection,
                 &self.state.doc,
                 focused_page_idx,
             ),
             LayoutMode::Continuous { .. } => collect_continuous_table_overlays(
-                &self.pages,
+                self.pages(),
                 &self.state.selection,
                 &self.state.doc,
                 focused_page_idx,

@@ -29,7 +29,7 @@ impl Runtime {
         button: PointerButton,
         modifier: Modifier,
     ) -> Vec<Effect> {
-        let Some(page) = self.pages.get(page_idx) else {
+        let Some(page) = self.pages().get(page_idx) else {
             return vec![];
         };
 
@@ -266,7 +266,7 @@ impl Runtime {
     }
 
     fn handle_selection_drag(&mut self, page_idx: usize, x: f32, y: f32) -> Vec<Effect> {
-        let Some(page) = self.pages.get(page_idx) else {
+        let Some(page) = self.pages().get(page_idx) else {
             return vec![];
         };
 
@@ -323,7 +323,7 @@ impl Runtime {
                 page_idx: start_page_idx,
             } => match context {
                 PressContext::Interactive(kind) => {
-                    if let Some(page) = self.pages.get(*start_page_idx) {
+                    if let Some(page) = self.pages().get(*start_page_idx) {
                         if page.find_interactive_at(*start_x, *start_y).as_ref() == Some(kind) {
                             effects.extend(self.handle_interaction(kind.clone()));
                             self.reset_pointer();
@@ -369,10 +369,10 @@ impl Runtime {
         head_x: f32,
         head_y: f32,
     ) -> Vec<Effect> {
-        let Some(anchor_page) = self.pages.get(anchor_page_idx) else {
+        let Some(anchor_page) = self.pages().get(anchor_page_idx) else {
             return vec![];
         };
-        let Some(head_page) = self.pages.get(head_page_idx) else {
+        let Some(head_page) = self.pages().get(head_page_idx) else {
             return vec![];
         };
 
