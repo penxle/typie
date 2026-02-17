@@ -9,8 +9,9 @@ import 'package:typie/native/editor_native.dart';
 import 'package:typie/service.dart';
 
 class Font {
-  const Font({required this.weight, this.subfamilyDisplayName, required this.url, this.state});
+  const Font({required this.id, required this.weight, this.subfamilyDisplayName, required this.url, this.state});
 
+  final String id;
   final int weight;
   final String? subfamilyDisplayName;
   final String url;
@@ -18,12 +19,37 @@ class Font {
 }
 
 class FontFamily {
-  const FontFamily({required this.familyName, required this.displayName, required this.fonts, this.state});
+  const FontFamily({
+    required this.id,
+    required this.familyName,
+    required this.displayName,
+    required this.fonts,
+    this.state,
+  });
 
+  final String id;
   final String familyName;
   final String displayName;
   final List<Font> fonts;
   final String? state;
+}
+
+Font? getRepresentativeFont(List<Font> fonts) {
+  final active = fonts.where((f) => f.state == 'ACTIVE').toList();
+  if (active.isEmpty) {
+    return null;
+  }
+  return active.reduce((prev, curr) {
+    final prevDiff = (prev.weight - 400).abs();
+    final currDiff = (curr.weight - 400).abs();
+    if (currDiff < prevDiff) {
+      return curr;
+    }
+    if (currDiff == prevDiff && curr.weight > prev.weight) {
+      return curr;
+    }
+    return prev;
+  });
 }
 
 class FontManifest {
@@ -226,7 +252,7 @@ class FontManager {
           for (final f in e['fonts'] as List<dynamic>) {
             final fm = f as Map<String, dynamic>;
             final url = '$_cdnBase/${fm['path'] as String}';
-            fonts.add(Font(weight: fm['weight'] as int, url: url));
+            fonts.add(Font(id: '', weight: fm['weight'] as int, url: url));
             _manifestCache[url] = FontManifest(
               hash: fm['hash'] as String,
               chunkCount: fm['chunk_count'] as int,
@@ -235,7 +261,12 @@ class FontManager {
             );
           }
           families.add(
-            FontFamily(familyName: familyName, displayName: (e['displayName'] as String?) ?? familyName, fonts: fonts),
+            FontFamily(
+              id: '',
+              familyName: familyName,
+              displayName: (e['displayName'] as String?) ?? familyName,
+              fonts: fonts,
+            ),
           );
         }
         _fallbackFontFamilies = families;
