@@ -473,7 +473,7 @@ impl Transaction {
         }
 
         let width_model = TableWidthModel::new(ratio_widths.len(), content_width);
-        let proportion = width_model.proportion_for_actual_table_width(width, &ratio_widths);
+        let proportion = width_model.proportion_for_actual_table_width(width);
         self.set_table_proportion(table_id, proportion)
     }
 
