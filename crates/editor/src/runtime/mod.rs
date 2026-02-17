@@ -15,6 +15,7 @@ pub mod text_replacement;
 pub mod tracked_items;
 mod view_state;
 
+use crate::diagnostics::FrameDiagnostics;
 use crate::inspect::{
     inspect_fragment_as_macro, inspect_page_element, inspect_state, inspect_state_as_macro,
 };
@@ -156,10 +157,11 @@ impl Runtime {
     pub fn new(width: f32, scale_factor: f64, state: State) -> Self {
         let mut undo_manager = UndoManager::new(state.doc.loro_doc());
         undo_manager.set_merge_interval(1000);
+        let diagnostics = FrameDiagnostics::new();
 
         Self {
-            layout_engine: LayoutEngine::new(width, scale_factor),
-            renderer: Renderer::new(scale_factor),
+            layout_engine: LayoutEngine::new(width, scale_factor, diagnostics.clone()),
+            renderer: Renderer::new(scale_factor, diagnostics),
             state,
             undo_manager,
             loaded_font_codepoints: FxHashMap::default(),
@@ -260,7 +262,11 @@ impl Runtime {
     }
 
     pub fn set_layout_debug(&mut self, enabled: bool) {
+        self.layout_engine.set_layout_debug_enabled(enabled);
         self.renderer.set_layout_debug(enabled);
+        if enabled {
+            self.pending.layout = true;
+        }
         self.pending.render = true;
     }
 
