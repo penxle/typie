@@ -1,7 +1,7 @@
 import { faker } from '@faker-js/faker';
 import { Node } from '@tiptap/pm/model';
 import { eq } from 'drizzle-orm';
-import { DEFAULT_FONT_FAMILIES } from '@/const';
+import { DEFAULT_FONT_FAMILIES, defaultValues } from '@/const';
 import { createDbId, db, FontFamilies, Fonts, TableCode } from '@/db';
 import { PostLayoutMode } from '@/enums';
 import { schema } from '@/pm';
@@ -66,12 +66,12 @@ const MM_TO_PX = 96 / 25.4;
 const PX_TO_PT = 72 / 96;
 
 const DEFAULT_STYLES: LoroStyle[] = [
-  { type: 'font_family', family: 'Pretendard' },
-  { type: 'font_size', size: 12 },
-  { type: 'font_weight', weight: 400 },
-  { type: 'text_color', color: 'black' },
-  { type: 'background_color', color: 'none' },
-  { type: 'letter_spacing', spacing: 0 },
+  { type: 'font_family', family: defaultValues.fontFamily },
+  { type: 'font_size', size: defaultValues.fontSize },
+  { type: 'font_weight', weight: defaultValues.fontWeight },
+  { type: 'text_color', color: defaultValues.textColor },
+  { type: 'background_color', color: defaultValues.backgroundColor },
+  { type: 'letter_spacing', spacing: defaultValues.letterSpacing },
 ];
 
 function fillDefaultStyles(styles: LoroStyle[]): LoroStyle[] {
@@ -629,13 +629,13 @@ export async function convertPostToDocumentJson(
     type: 'root',
     children: rootChildren,
     cascade_attrs: {
-      'style:font_family': 'Pretendard',
-      'style:font_size': 12,
-      'style:font_weight': 400,
-      'style:text_color': 'black',
-      'style:background_color': 'none',
-      'style:letter_spacing': 0,
-      'paragraph:line_height': 1.6,
+      'style:font_family': defaultValues.fontFamily,
+      'style:font_size': defaultValues.fontSize,
+      'style:font_weight': defaultValues.fontWeight,
+      'style:text_color': defaultValues.textColor,
+      'style:background_color': defaultValues.backgroundColor,
+      'style:letter_spacing': defaultValues.letterSpacing,
+      'paragraph:line_height': defaultValues.lineHeight,
     },
   };
 

@@ -11,8 +11,6 @@
 
   const { editor } = getEditorContext();
 
-  const fontSizes = values.fontSize.map((v) => ({ label: String(v), value: v }));
-
   let anchorElement: HTMLDivElement | undefined = $state();
   let floatingElement: HTMLDivElement | undefined = $state();
 
@@ -104,7 +102,7 @@
       e.stopPropagation();
       const current = Number.parseFloat(inputValue) || currentFontSize;
       if (!current) return;
-      const sortedSizes = fontSizes.map(({ value }) => value).toSorted((a, b) => a - b);
+      const sortedSizes = values.fontSize.map(({ value }) => value).toSorted((a, b) => a - b);
       const currentIndex = sortedSizes.findIndex((size) => size >= current);
 
       let newIndex: number;
@@ -235,7 +233,7 @@
         }}
         {opened}
       >
-        {#each fontSizes as { label, value } (value)}
+        {#each values.fontSize as { label, value } (value)}
           <DropdownMenuItem
             active={currentFontSize === value}
             onclick={() => {

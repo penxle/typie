@@ -16,7 +16,7 @@
     Tooltip,
   } from '@typie/ui/components';
   import { getAppContext, getThemeContext } from '@typie/ui/context';
-  import { clamp, PAGE_LAYOUT_OPTIONS, PAGE_SIZE_MAP } from '@typie/ui/utils';
+  import { clamp } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import { tick } from 'svelte';
   import { fly } from 'svelte/transition';
@@ -35,6 +35,7 @@
   import { FontSpecimen } from '$lib/components';
   import { getRepresentativeFont } from '$lib/editor/fonts';
   import { THEME_COLORS } from '$lib/editor/theme';
+  import { createPaginatedLayout } from '$lib/editor/utils';
   import { values } from '$lib/editor/values';
   import ToolbarColorGrid from '../@toolbar/ToolbarColorGrid.svelte';
   import type { Editor } from '$lib/editor/editor.svelte';
@@ -68,7 +69,7 @@
     currentFontFamilyFonts.map((font) => ({
       value: font.weight,
       label:
-        values.fontWeight[font.weight] ??
+        values.fontWeight.find((f) => f.value === font.weight)?.label ??
         (font.subfamilyDisplayName ? `${font.subfamilyDisplayName} (${font.weight})` : String(font.weight)),
     })),
   );
@@ -221,7 +222,7 @@
       e.preventDefault();
       e.stopPropagation();
       const current = Number.parseFloat(fontSizeInputValue) || defaultAttrs?.fontSize || 12;
-      const sortedSizes = [...values.fontSize].toSorted((a, b) => a - b);
+      const sortedSizes = values.fontSize.map(({ value }) => value).toSorted((a, b) => a - b);
       const currentIndex = sortedSizes.findIndex((size) => size >= current);
 
       let newIndex: number;
@@ -245,8 +246,6 @@
   const layoutMode = $derived(editor.layout.layoutMode);
   const isPaginated = $derived(layoutMode.type === 'paginated');
 
-  type PageSizePreset = keyof typeof PAGE_SIZE_MAP | 'custom';
-
   const mmToPx = (mm: number) => Math.round((mm * 96) / 25.4);
   const pxToMm = (px: number) => Math.round((px * 25.4) / 96);
 
@@ -254,8 +253,8 @@
     if (layoutMode.type !== 'paginated') return 'a4';
     const widthMm = pxToMm(layoutMode.pageWidth);
     const heightMm = pxToMm(layoutMode.pageHeight);
-    const found = Object.entries(PAGE_SIZE_MAP).find(([, size]) => size.width === widthMm && size.height === heightMm);
-    return (found?.[0] as PageSizePreset) ?? 'custom';
+    const found = values.pageLayout.find((p) => p.width === widthMm && p.height === heightMm);
+    return found?.value ?? 'custom';
   });
 
   const currentWidthMm = $derived(layoutMode.type === 'paginated' ? pxToMm(layoutMode.pageWidth) : 210);
@@ -272,17 +271,17 @@
 
   const handleLayoutModeChange = (mode: 'continuous' | 'paginated') => {
     if (mode === 'paginated') {
-      const preset = PAGE_SIZE_MAP.a4;
+      const layout = createPaginatedLayout('a4');
       editor.dispatch({
         type: 'setLayoutMode',
         mode: {
           type: 'paginated',
-          pageWidth: mmToPx(preset.width),
-          pageHeight: mmToPx(preset.height),
-          pageMarginTop: mmToPx(25),
-          pageMarginBottom: mmToPx(25),
-          pageMarginLeft: mmToPx(25),
-          pageMarginRight: mmToPx(25),
+          pageWidth: mmToPx(layout.width),
+          pageHeight: mmToPx(layout.height),
+          pageMarginTop: mmToPx(layout.marginTop),
+          pageMarginBottom: mmToPx(layout.marginBottom),
+          pageMarginLeft: mmToPx(layout.marginLeft),
+          pageMarginRight: mmToPx(layout.marginRight),
         },
       });
     } else {
@@ -296,7 +295,7 @@
 
   const handlePagePresetChange = (value: string) => {
     if (value === 'custom') return;
-    const preset = PAGE_SIZE_MAP[value as keyof typeof PAGE_SIZE_MAP];
+    const preset = values.pageLayout.find((p) => p.value === value);
     if (preset && layoutMode.type === 'paginated') {
       editor.dispatch({
         type: 'setLayoutMode',
@@ -548,7 +547,7 @@
             in:fly={{ y: -5, duration: 150 }}
           >
             <DropdownMenu autoFocus={false} onclose={() => (fontSizeOpened = false)} opened={fontSizeOpened}>
-              {#each values.fontSize as value (value)}
+              {#each values.fontSize as { label, value } (value)}
                 <DropdownMenuItem
                   active={defaultAttrs.fontSize === value}
                   onclick={() => {
@@ -556,7 +555,7 @@
                     fontSizeOpened = false;
                   }}
                 >
-                  {value}
+                  {label}
                 </DropdownMenuItem>
               {/each}
             </DropdownMenu>
@@ -748,7 +747,11 @@
           <Icon style={css.raw({ color: 'text.faint' })} icon={FileIcon} />
           <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>페이지 크기 (mm)</div>
         </div>
-        <Select items={PAGE_LAYOUT_OPTIONS} onselect={handlePagePresetChange} value={selectedPagePreset} />
+        <Select
+          items={[...values.pageLayout, { label: '직접 지정', value: 'custom' }]}
+          onselect={handlePagePresetChange}
+          value={selectedPagePreset}
+        />
         <div class={flex({ flexDirection: 'column', gap: '8px' })}>
           <div class={grid({ columns: 2, columnGap: '12px', rowGap: '8px', paddingLeft: '8px' })}>
             <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '4px' })}>

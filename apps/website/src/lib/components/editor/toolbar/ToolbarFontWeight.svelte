@@ -53,12 +53,12 @@
     const items = currentFontFamilyAndFonts.fonts.map((font) => ({
       value: font.weight,
       label:
-        values.fontWeight[font.weight] ??
+        values.fontWeight.find((f) => f.value === font.weight)?.label ??
         (font.subfamilyDisplayName ? `${font.subfamilyDisplayName} (${font.weight})` : String(font.weight)),
     }));
 
     if (currentWeight != null && !items.some((w) => w.value === currentWeight)) {
-      items.push({ value: currentWeight, label: values.fontWeight[currentWeight] ?? String(currentWeight) });
+      items.push({ value: currentWeight, label: values.fontWeight.find((f) => f.value === currentWeight)?.label ?? String(currentWeight) });
       items.sort((a, b) => a.value - b.value);
     }
 
@@ -77,7 +77,10 @@
   disabled={!editor.can('toggleStyle')}
   getLabel={(value) => {
     const font = currentFontFamilyAndFonts.fonts.find((f) => f.weight === value);
-    return values.fontWeight[value] ?? (font?.subfamilyDisplayName ? `${font.subfamilyDisplayName} (${value})` : '(알 수 없는 굵기)');
+    return (
+      values.fontWeight.find((f) => f.value === value)?.label ??
+      (font?.subfamilyDisplayName ? `${font.subfamilyDisplayName} (${value})` : '(알 수 없는 굵기)')
+    );
   }}
   items={weightItems}
   label="폰트 굵기"

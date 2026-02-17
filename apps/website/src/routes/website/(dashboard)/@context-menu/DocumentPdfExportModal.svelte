@@ -3,7 +3,7 @@
   import { flex, grid } from '@typie/styled-system/patterns';
   import { Button, Checkbox, HorizontalDivider, Icon, Modal, Select, TextInput } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
-  import { clamp, createDefaultPageLayout, getMaxMargin, PAGE_LAYOUT_OPTIONS, PAGE_SIZE_MAP } from '@typie/ui/utils';
+  import { clamp, getMaxMargin } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import FileIcon from '~icons/lucide/file';
   import MoveHorizontalIcon from '~icons/lucide/move-horizontal';
@@ -14,8 +14,10 @@
   import PanelTopDashedIcon from '~icons/lucide/panel-top-dashed';
   import RulerDimensionLineIcon from '~icons/lucide/ruler-dimension-line';
   import { graphql } from '$graphql';
+  import { createPaginatedLayout } from '$lib/editor/utils';
+  import { values } from '$lib/editor/values';
   import type { LayoutMode } from '@typie/editor';
-  import type { PageLayout, PageLayoutPreset } from '@typie/ui/utils';
+  import type { PageLayout, PageLayoutPreset } from '$lib/editor/utils';
 
   const PX_TO_MM = 25.4 / 96;
 
@@ -34,7 +36,7 @@
   let loaded = $state(false);
   let isExporting = $state(false);
   let useCurrentSettings = $state(false);
-  let pageLayout = $state<PageLayout>(app.preference.current.lastPdfPageLayout ?? createDefaultPageLayout('a4'));
+  let pageLayout = $state<PageLayout>(app.preference.current.lastPdfPageLayout ?? createPaginatedLayout('a4'));
 
   const documentQuery = graphql(`
     query DocumentPdfExportModal_Document_Query($slug: String!) @client {
@@ -90,7 +92,7 @@
       } else {
         pageLayout = app.preference.current.lastPdfPageLayout
           ? { ...app.preference.current.lastPdfPageLayout }
-          : createDefaultPageLayout('a4');
+          : createPaginatedLayout('a4');
       }
     }
   });
@@ -172,14 +174,12 @@
               </div>
               <Select
                 disabled={useCurrentSettings}
-                items={PAGE_LAYOUT_OPTIONS}
-                onselect={(value: PageLayoutPreset | 'custom') => {
+                items={[...values.pageLayout, { label: '직접 지정', value: 'custom' }]}
+                onselect={(value: string) => {
                   if (value === 'custom') return;
-                  pageLayout = createDefaultPageLayout(value);
+                  pageLayout = createPaginatedLayout(value as PageLayoutPreset);
                 }}
-                value={(Object.entries(PAGE_SIZE_MAP).find(
-                  ([, dimension]) => dimension.width === pageLayout.width && dimension.height === pageLayout.height,
-                )?.[0] as PageLayoutPreset) ?? ('custom' as const)}
+                value={values.pageLayout.find((p) => p.width === pageLayout.width && p.height === pageLayout.height)?.value ?? 'custom'}
               />
             </div>
 
