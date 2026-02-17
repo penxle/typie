@@ -1,7 +1,10 @@
 use crate::layout::cursor::{Cursor, NavigationContext};
 use crate::layout::elements::TableBorderElement;
 use crate::layout::{Page, PositionedNode};
-use crate::model::{Doc, LayoutMode, NodeId, TABLE_BORDER_WIDTH, TableAlign, TableBorderStyle};
+use crate::model::{
+    Doc, LayoutMode, Node, NodeId, TABLE_BORDER_WIDTH, TableAlign, TableBorderStyle,
+    TableWidthModel,
+};
 use crate::runtime::Runtime;
 use crate::runtime::cmd::TableOverlay;
 use crate::state::Selection;
@@ -18,7 +21,11 @@ struct ContinuousTableOverlaySegment {
     page_offset: f32,
     border_style: String,
     align: String,
+    content_width: f32,
+    min_proportion_width: f32,
+    max_proportion_width: f32,
     col_widths: Vec<f32>,
+    col_widths_as_px: Vec<f32>,
     row_heights: Vec<f32>,
     start_row_index: usize,
     total_rows: usize,
@@ -32,7 +39,11 @@ struct TableOverlayPayload {
     bounds: Rect,
     border_style: String,
     align: String,
+    content_width: f32,
+    min_proportion_width: f32,
+    max_proportion_width: f32,
     col_widths: Vec<f32>,
+    col_widths_as_px: Vec<f32>,
     row_heights: Vec<f32>,
     start_row_index: usize,
     total_rows: usize,
@@ -43,6 +54,9 @@ struct ContinuousTableOverlayAccum {
     table_id: String,
     border_style: String,
     align: String,
+    content_width: f32,
+    min_proportion_width: f32,
+    max_proportion_width: f32,
     first_page_idx: usize,
     is_focused: bool,
     show_cell_selector: bool,
@@ -51,6 +65,7 @@ struct ContinuousTableOverlayAccum {
     global_top: f32,
     global_bottom: f32,
     col_widths: Vec<f32>,
+    col_widths_as_px: Vec<f32>,
     row_heights: Vec<Option<f32>>,
 }
 
@@ -63,6 +78,9 @@ impl ContinuousTableOverlayAccum {
             table_id: segment.table_id,
             border_style: segment.border_style,
             align: segment.align,
+            content_width: segment.content_width,
+            min_proportion_width: segment.min_proportion_width,
+            max_proportion_width: segment.max_proportion_width,
             first_page_idx: segment.page_idx,
             is_focused: segment.is_focused,
             show_cell_selector: segment.show_cell_selector,
@@ -71,6 +89,7 @@ impl ContinuousTableOverlayAccum {
             global_top,
             global_bottom,
             col_widths: segment.col_widths,
+            col_widths_as_px: segment.col_widths_as_px,
             row_heights: vec![None; segment.total_rows],
         };
         this.apply_segment_rows(segment.start_row_index, &segment.row_heights);
@@ -84,6 +103,9 @@ impl ContinuousTableOverlayAccum {
 
         self.apply_segment_rows(segment.start_row_index, &segment.row_heights);
 
+        if segment.col_widths_as_px.len() > self.col_widths_as_px.len() {
+            self.col_widths_as_px = segment.col_widths_as_px;
+        }
         if segment.col_widths.len() > self.col_widths.len() {
             self.col_widths = segment.col_widths;
         }
@@ -92,6 +114,9 @@ impl ContinuousTableOverlayAccum {
         let global_bottom = global_top + segment.bounds.height;
 
         self.first_page_idx = self.first_page_idx.min(segment.page_idx);
+        self.content_width = self.content_width.max(segment.content_width);
+        self.min_proportion_width = self.min_proportion_width.max(segment.min_proportion_width);
+        self.max_proportion_width = self.max_proportion_width.max(segment.max_proportion_width);
         if segment.is_focused {
             self.is_focused = true;
         }
@@ -117,7 +142,7 @@ impl ContinuousTableOverlayAccum {
             .map(|h| h.unwrap_or(fallback_row_height))
             .collect::<Vec<_>>();
         let row_positions = table_row_positions(&row_heights);
-        let col_positions = table_col_positions(&self.col_widths);
+        let col_positions = table_col_positions(&self.col_widths_as_px);
         let total_rows = row_heights.len();
         let is_focused = self.is_focused;
         let show_cell_selector = self.show_cell_selector;
@@ -133,7 +158,11 @@ impl ContinuousTableOverlayAccum {
             },
             border_style: self.border_style,
             align: self.align,
+            content_width: self.content_width,
+            min_proportion_width: self.min_proportion_width,
             col_widths: self.col_widths,
+            col_widths_as_px: self.col_widths_as_px,
+            max_proportion_width: self.max_proportion_width,
             col_positions,
             row_heights,
             row_positions,
@@ -211,6 +240,59 @@ impl Runtime {
     }
 }
 
+fn first_row_col_ratios(doc: &Doc, table_id: NodeId, col_count: usize) -> Option<Vec<f32>> {
+    if let Some(table_node) = doc.node(table_id) {
+        if let Some(first_row) = table_node.children().next() {
+            let widths: Vec<Option<f32>> = first_row
+                .children()
+                .map(|cell| match cell.node() {
+                    Node::TableCell(cell_node) => cell_node.col_width,
+                    _ => None,
+                })
+                .collect();
+
+            if widths.len() >= col_count
+                && widths.iter().take(col_count).all(|width| width.is_some())
+            {
+                let ratios = widths
+                    .into_iter()
+                    .take(col_count)
+                    .map(|width| width.unwrap_or(0.0))
+                    .collect::<Vec<_>>();
+                return TableWidthModel::validate_ratio_widths(&ratios, col_count);
+            }
+        }
+    }
+
+    None
+}
+
+fn table_col_ratios(doc: &Doc, table_id: NodeId, col_count: usize) -> Vec<f32> {
+    if col_count == 0 {
+        return Vec::new();
+    }
+    first_row_col_ratios(doc, table_id, col_count)
+        .unwrap_or_else(|| vec![1.0 / col_count as f32; col_count])
+}
+
+fn table_min_proportion_width(col_count: usize, max_width: f32, col_widths: &[f32]) -> f32 {
+    if col_count == 0 {
+        return 0.0;
+    }
+
+    let width_model = TableWidthModel::new(col_count, max_width.max(0.0));
+    width_model.actual_table_width_for_proportion(0.0, col_widths)
+}
+
+fn table_max_proportion_width(col_count: usize, max_width: f32, _col_widths: &[f32]) -> f32 {
+    if col_count == 0 {
+        return 0.0;
+    }
+
+    // Upper bound for proportion-resize should be the layout content width itself.
+    max_width.max(0.0)
+}
+
 fn collect_paginated_table_overlays(
     pages: &[Page],
     selection: &Selection,
@@ -221,23 +303,37 @@ fn collect_paginated_table_overlays(
     let cell_selector_table_id = selected_table_overlay_table_id(selection, doc.as_ref());
 
     for (page_idx, page) in pages.iter().enumerate() {
-        visit_table_borders(&page.root, Point::zero(), &mut |abs_pos, table_border| {
-            let is_focused = is_table_focused_on_page(
-                selection,
-                doc,
-                focused_page_idx,
-                page_idx,
-                table_border.node_id,
-            );
-            let show_cell_selector = cell_selector_table_id == Some(table_border.node_id);
-            overlays.push(to_paginated_overlay(
-                page_idx,
-                abs_pos,
-                table_border,
-                is_focused,
-                show_cell_selector,
-            ));
-        });
+        visit_table_borders(
+            &page.root,
+            Point::zero(),
+            &mut |abs_pos, table_border, table_max_width| {
+                let is_focused = is_table_focused_on_page(
+                    selection,
+                    doc,
+                    focused_page_idx,
+                    page_idx,
+                    table_border.node_id,
+                );
+                let show_cell_selector = cell_selector_table_id == Some(table_border.node_id);
+                let col_widths =
+                    table_col_ratios(doc.as_ref(), table_border.node_id, table_border.cols);
+                let min_proportion_width =
+                    table_min_proportion_width(table_border.cols, table_max_width, &col_widths);
+                let max_proportion_width =
+                    table_max_proportion_width(table_border.cols, table_max_width, &col_widths);
+                overlays.push(to_paginated_overlay(
+                    page_idx,
+                    abs_pos,
+                    table_border,
+                    is_focused,
+                    show_cell_selector,
+                    table_max_width,
+                    min_proportion_width,
+                    max_proportion_width,
+                    col_widths,
+                ));
+            },
+        );
     }
 
     overlays
@@ -259,24 +355,38 @@ fn collect_continuous_table_overlays(
 
     for (page_idx, page) in pages.iter().enumerate() {
         let page_offset = page_offsets[page_idx];
-        visit_table_borders(&page.root, Point::zero(), &mut |abs_pos, table_border| {
-            let is_focused = is_table_focused_on_page(
-                selection,
-                doc,
-                focused_page_idx,
-                page_idx,
-                table_border.node_id,
-            );
-            let show_cell_selector = cell_selector_table_id == Some(table_border.node_id);
-            builder.push(to_continuous_segment(
-                page_idx,
-                page_offset,
-                abs_pos,
-                table_border,
-                is_focused,
-                show_cell_selector,
-            ));
-        });
+        visit_table_borders(
+            &page.root,
+            Point::zero(),
+            &mut |abs_pos, table_border, table_max_width| {
+                let is_focused = is_table_focused_on_page(
+                    selection,
+                    doc,
+                    focused_page_idx,
+                    page_idx,
+                    table_border.node_id,
+                );
+                let show_cell_selector = cell_selector_table_id == Some(table_border.node_id);
+                let col_widths =
+                    table_col_ratios(doc.as_ref(), table_border.node_id, table_border.cols);
+                let min_proportion_width =
+                    table_min_proportion_width(table_border.cols, table_max_width, &col_widths);
+                let max_proportion_width =
+                    table_max_proportion_width(table_border.cols, table_max_width, &col_widths);
+                builder.push(to_continuous_segment(
+                    page_idx,
+                    page_offset,
+                    abs_pos,
+                    table_border,
+                    is_focused,
+                    show_cell_selector,
+                    table_max_width,
+                    min_proportion_width,
+                    max_proportion_width,
+                    col_widths,
+                ));
+            },
+        );
     }
 
     builder.finish(&page_offsets)
@@ -285,7 +395,7 @@ fn collect_continuous_table_overlays(
 fn visit_table_borders(
     positioned: &PositionedNode,
     offset: Point,
-    visitor: &mut impl FnMut(Point, &TableBorderElement),
+    visitor: &mut impl FnMut(Point, &TableBorderElement, f32),
 ) {
     let abs_pos = Point::new(
         offset.x + positioned.position.x,
@@ -295,7 +405,7 @@ fn visit_table_borders(
     if let Some(crate::layout::Element::TableBorder(table_border)) =
         positioned.node.element.as_ref()
     {
-        visitor(abs_pos, table_border);
+        visitor(abs_pos, table_border, positioned.node.size.width);
     }
 
     if let Some(children) = &positioned.node.children {
@@ -311,9 +421,20 @@ fn to_paginated_overlay(
     table_border: &TableBorderElement,
     is_focused: bool,
     show_cell_selector: bool,
+    content_width: f32,
+    min_proportion_width: f32,
+    max_proportion_width: f32,
+    col_widths: Vec<f32>,
 ) -> TableOverlay {
-    let payload = table_overlay_payload(abs_pos, table_border);
-    let col_positions = table_col_positions(&payload.col_widths);
+    let payload = table_overlay_payload(
+        abs_pos,
+        table_border,
+        content_width,
+        min_proportion_width,
+        max_proportion_width,
+        col_widths,
+    );
+    let col_positions = table_col_positions(&payload.col_widths_as_px);
     let row_positions = table_row_positions(&payload.row_heights);
 
     TableOverlay {
@@ -322,7 +443,11 @@ fn to_paginated_overlay(
         bounds: payload.bounds,
         border_style: payload.border_style,
         align: payload.align,
+        content_width: payload.content_width,
+        min_proportion_width: payload.min_proportion_width,
+        max_proportion_width: payload.max_proportion_width,
         col_widths: payload.col_widths,
+        col_widths_as_px: payload.col_widths_as_px,
         col_positions,
         row_heights: payload.row_heights,
         row_positions,
@@ -340,8 +465,19 @@ fn to_continuous_segment(
     table_border: &TableBorderElement,
     is_focused: bool,
     show_cell_selector: bool,
+    content_width: f32,
+    min_proportion_width: f32,
+    max_proportion_width: f32,
+    col_widths: Vec<f32>,
 ) -> ContinuousTableOverlaySegment {
-    let payload = table_overlay_payload(abs_pos, table_border);
+    let payload = table_overlay_payload(
+        abs_pos,
+        table_border,
+        content_width,
+        min_proportion_width,
+        max_proportion_width,
+        col_widths,
+    );
 
     ContinuousTableOverlaySegment {
         page_idx,
@@ -350,7 +486,11 @@ fn to_continuous_segment(
         page_offset,
         border_style: payload.border_style,
         align: payload.align,
+        content_width: payload.content_width,
+        min_proportion_width: payload.min_proportion_width,
+        max_proportion_width: payload.max_proportion_width,
         col_widths: payload.col_widths,
+        col_widths_as_px: payload.col_widths_as_px,
         row_heights: payload.row_heights,
         start_row_index: payload.start_row_index,
         total_rows: payload.total_rows,
@@ -368,13 +508,24 @@ fn table_bounds(abs_pos: Point, table_border: &TableBorderElement) -> Rect {
     }
 }
 
-fn table_overlay_payload(abs_pos: Point, table_border: &TableBorderElement) -> TableOverlayPayload {
+fn table_overlay_payload(
+    abs_pos: Point,
+    table_border: &TableBorderElement,
+    content_width: f32,
+    min_proportion_width: f32,
+    max_proportion_width: f32,
+    col_widths: Vec<f32>,
+) -> TableOverlayPayload {
     TableOverlayPayload {
         table_id: table_border.node_id.to_string(),
         bounds: table_bounds(abs_pos, table_border),
         border_style: table_border_style_str(table_border.border_style).to_string(),
         align: table_align_str(table_border.align).to_string(),
-        col_widths: table_border.col_widths.clone(),
+        content_width,
+        min_proportion_width,
+        max_proportion_width,
+        col_widths,
+        col_widths_as_px: table_border.col_widths.clone(),
         row_heights: table_border.row_heights.clone(),
         start_row_index: table_border.start_row_index,
         total_rows: table_border.total_rows,
@@ -490,7 +641,11 @@ mod tests {
             page_offset,
             border_style: "solid".to_string(),
             align: "left".to_string(),
-            col_widths: vec![80.0, 80.0],
+            content_width: 200.0,
+            min_proportion_width: 100.0,
+            max_proportion_width: 220.0,
+            col_widths: vec![0.5, 0.5],
+            col_widths_as_px: vec![80.0, 80.0],
             row_heights,
             start_row_index,
             total_rows,

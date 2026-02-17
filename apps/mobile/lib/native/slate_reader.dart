@@ -498,6 +498,17 @@ class SlateReader {
       final isFocused = _slabU32(pos + 8) != 0;
       final showCellSelector = _slabU32(pos + 12) != 0;
       pos += 16;
+      final contentWidth = _slabF32(pos);
+      pos += 4;
+      final minProportionWidth = _slabF32(pos);
+      pos += 4;
+      final maxProportionWidth = _slabF32(pos);
+      pos += 4;
+
+      final colWidthsAsPxCount = _slabU32(pos);
+      pos += 4;
+      final colWidthsAsPx = readF32List(pos, colWidthsAsPxCount);
+      pos += colWidthsAsPxCount * 4;
 
       final colWidthsCount = _slabU32(pos);
       pos += 4;
@@ -533,6 +544,10 @@ class SlateReader {
           totalRows: totalRows,
           isFocused: isFocused,
           showCellSelector: showCellSelector,
+          contentWidth: contentWidth,
+          minProportionWidth: minProportionWidth,
+          maxProportionWidth: maxProportionWidth,
+          colWidthsAsPx: colWidthsAsPx,
           colWidths: colWidths,
           colPositions: colPositions,
           rowHeights: rowHeights,
@@ -758,6 +773,10 @@ class _TableOverlayRaw {
     required this.totalRows,
     required this.isFocused,
     required this.showCellSelector,
+    required this.contentWidth,
+    required this.minProportionWidth,
+    required this.maxProportionWidth,
+    required this.colWidthsAsPx,
     required this.colWidths,
     required this.colPositions,
     required this.rowHeights,
@@ -776,6 +795,10 @@ class _TableOverlayRaw {
   final int totalRows;
   final bool isFocused;
   final bool showCellSelector;
+  final double contentWidth;
+  final double minProportionWidth;
+  final double maxProportionWidth;
+  final List<double> colWidthsAsPx;
   final List<double> colWidths;
   final List<double> colPositions;
   final List<double> rowHeights;

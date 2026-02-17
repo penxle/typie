@@ -2,7 +2,7 @@ use crate::layout::elements::TableCellElement;
 use crate::layout::{Element, Layout, LayoutContext, LayoutNode, PageBreakPolicy, PositionedNode};
 use crate::model::Node;
 use crate::model::html::{DomSpec, NodeHtmlCodec, NodeParseRule};
-use crate::model::nodes::table::TABLE_BORDER_WIDTH;
+use crate::model::nodes::table::{TABLE_BORDER_WIDTH, TableWidthModel};
 use crate::types::{BoxConstraints, Point, Size};
 use macros::Codec;
 use serde::{Deserialize, Serialize};
@@ -25,7 +25,7 @@ impl NodeHtmlCodec for TableRowNode {
 }
 
 impl Layout for TableRowNode {
-    fn layout(&self, ctx: &LayoutContext, _constraints: BoxConstraints) -> LayoutNode {
+    fn layout(&self, ctx: &LayoutContext, constraints: BoxConstraints) -> LayoutNode {
         let cells: Vec<_> = ctx.node.children().collect();
         if cells.is_empty() {
             return LayoutNode {
@@ -38,35 +38,42 @@ impl Layout for TableRowNode {
             };
         }
 
-        let col_widths: Vec<f32> = if let Some(table) = ctx.node.parent() {
+        let col_count = cells.len();
+        let custom_widths: Option<Vec<f32>> = if let Some(table) = ctx.node.parent() {
             if let Some(first_row) = table.children().next() {
-                first_row
+                let widths: Vec<Option<f32>> = first_row
                     .children()
                     .map(|cell| {
                         if let Node::TableCell(cell_node) = cell.node() {
-                            cell_node
-                                .col_width
-                                .unwrap_or(crate::model::nodes::table::DEFAULT_CELL_WIDTH)
+                            cell_node.col_width
                         } else {
-                            crate::model::nodes::table::DEFAULT_CELL_WIDTH
+                            None
                         }
                     })
-                    .collect()
+                    .collect();
+
+                if widths.iter().all(|width| width.is_some()) {
+                    Some(widths.into_iter().map(|width| width.unwrap()).collect())
+                } else {
+                    None
+                }
             } else {
-                vec![crate::model::nodes::table::DEFAULT_CELL_WIDTH; cells.len()]
+                None
             }
         } else {
-            vec![crate::model::nodes::table::DEFAULT_CELL_WIDTH; cells.len()]
+            None
         };
+
+        let width_model = TableWidthModel::new(col_count, constraints.max_width);
+        let table_inner_width = width_model.inner_width_from_table_width(constraints.max_width);
+        let col_widths =
+            width_model.calculate_col_widths(custom_widths.as_deref(), table_inner_width);
 
         let mut cell_layouts = Vec::new();
         let mut max_height: f32 = 0.0;
 
         for (col_idx, cell) in cells.iter().enumerate() {
-            let cell_width = col_widths
-                .get(col_idx)
-                .copied()
-                .unwrap_or(crate::model::nodes::table::DEFAULT_CELL_WIDTH);
+            let cell_width = col_widths.get(col_idx).copied().unwrap_or(0.0);
 
             let cell_constraints = BoxConstraints::new(cell_width, cell_width, 0.0, f32::MAX);
             let cell_layout = ctx.layout(cell, cell_constraints);

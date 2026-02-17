@@ -1,6 +1,6 @@
 use crate::model::{
-    DEFAULT_CELL_WIDTH, Node, NodeId, NodeType, ParagraphNode, TableAlign, TableBorderStyle,
-    TableCellNode, TableNode, TableRowNode,
+    Node, NodeId, NodeType, ParagraphNode, TableAlign, TableBorderStyle, TableCellNode, TableNode,
+    TableRowNode, TableWidthModel,
 };
 use crate::runtime::Effect;
 use crate::state::selection_helpers::StructureSelectionInfo;
@@ -107,7 +107,13 @@ impl Transaction {
             return Ok(false);
         }
 
-        for (cell_id, &width) in first_row_cells.iter().zip(col_widths.iter()) {
+        let Some(valid_widths) =
+            TableWidthModel::validate_ratio_widths(&col_widths, first_row_cells.len())
+        else {
+            return Ok(false);
+        };
+
+        for (cell_id, width) in first_row_cells.iter().zip(valid_widths.into_iter()) {
             let cell_mut = self.node_mut(*cell_id).context("Cell not found")?;
 
             cell_mut.as_mut().update(|node| {
@@ -183,20 +189,33 @@ impl Transaction {
 
         let first_row = self.node(row_ids[0]).context("First row not found")?;
         let col_count = first_row.children().count();
+        let existing_first_row_widths: Option<Vec<f32>> = {
+            let widths: Vec<Option<f32>> = first_row
+                .children()
+                .map(|cell| {
+                    if let Node::TableCell(cell_node) = cell.node() {
+                        cell_node.col_width
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            if widths.iter().all(|width| width.is_some()) {
+                Some(widths.into_iter().map(|width| width.unwrap()).collect())
+            } else {
+                None
+            }
+        };
+
         let insert_index = if before {
             col.min(col_count)
         } else {
             col.saturating_add(1).min(col_count)
         };
 
-        let mut first_row_new_cell_id: Option<NodeId> = None;
-        for (row_idx, row_id) in row_ids.iter().enumerate() {
+        for row_id in &row_ids {
             let cell_id = NodeId::new();
             let para_id = NodeId::new();
-
-            if row_idx == 0 {
-                first_row_new_cell_id = Some(cell_id);
-            }
 
             let row_mut = self.node_mut(*row_id).context("Row not found")?;
             row_mut.as_mut().insert_child_with_id(
@@ -213,13 +232,23 @@ impl Transaction {
             )?;
         }
 
-        if let Some(cell_id) = first_row_new_cell_id {
-            let cell_mut = self.node_mut(cell_id).context("Cell not found")?;
-            cell_mut.as_mut().update(|node| {
-                if let Node::TableCell(cell_node) = node {
-                    cell_node.col_width = Some(DEFAULT_CELL_WIDTH);
-                }
-            })?;
+        if let Some(existing_widths) = existing_first_row_widths {
+            let next_widths =
+                TableWidthModel::inserted_ratio_widths(&existing_widths, insert_index);
+
+            let first_row_cell_ids: Vec<_> = {
+                let first_row = self.node(row_ids[0]).context("First row not found")?;
+                first_row.children().map(|cell| cell.node_id()).collect()
+            };
+
+            for (cell_id, width) in first_row_cell_ids.into_iter().zip(next_widths.into_iter()) {
+                let cell_mut = self.node_mut(cell_id).context("Cell not found")?;
+                cell_mut.as_mut().update(|node| {
+                    if let Node::TableCell(cell_node) = node {
+                        cell_node.col_width = Some(width);
+                    }
+                })?;
+            }
         }
 
         self.push_effect(Effect::SubtreeChanged { node_id: table_id });
@@ -304,6 +333,23 @@ impl Transaction {
         if col >= col_count || col_count <= 1 {
             return Ok(false);
         }
+        let existing_first_row_widths: Option<Vec<f32>> = {
+            let widths: Vec<Option<f32>> = first_row
+                .children()
+                .map(|cell| {
+                    if let Node::TableCell(cell_node) = cell.node() {
+                        cell_node.col_width
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            if widths.iter().all(|width| width.is_some()) {
+                Some(widths.into_iter().map(|width| width.unwrap()).collect())
+            } else {
+                None
+            }
+        };
 
         let selection = self.selection();
         let is_selected = {
@@ -337,12 +383,33 @@ impl Transaction {
             }
         }
 
-        for row_id in row_ids {
+        for row_id in row_ids.iter().copied() {
             let row_node = self.node(row_id).context("Row not found")?;
             let cell_id = row_node.children().nth(col).map(|c| c.node_id());
 
             if let Some(cell_id) = cell_id {
                 self.delete_node_recursive(cell_id)?;
+            }
+        }
+
+        if let Some(existing_widths) = existing_first_row_widths {
+            let next_widths = TableWidthModel::removed_ratio_widths(&existing_widths, col);
+
+            if let Some(first_row_id) = row_ids.first() {
+                let first_row_cell_ids: Vec<_> = {
+                    let first_row = self.node(*first_row_id).context("First row not found")?;
+                    first_row.children().map(|cell| cell.node_id()).collect()
+                };
+
+                for (cell_id, width) in first_row_cell_ids.into_iter().zip(next_widths.into_iter())
+                {
+                    let cell_mut = self.node_mut(cell_id).context("Cell not found")?;
+                    cell_mut.as_mut().update(|node| {
+                        if let Node::TableCell(cell_node) = node {
+                            cell_node.col_width = Some(width);
+                        }
+                    })?;
+                }
             }
         }
 
@@ -385,6 +452,45 @@ impl Transaction {
         })?;
 
         self.push_effect(Effect::NodeChanged { node_id: table_id });
+        self.push_effect(Effect::LayoutChanged);
+
+        Ok(true)
+    }
+
+    pub fn set_table_width(
+        &mut self,
+        table_id: NodeId,
+        width: f32,
+        content_width: f32,
+    ) -> Result<bool> {
+        if !width.is_finite() || width < 0.0 || !content_width.is_finite() || content_width <= 0.0 {
+            return Ok(false);
+        }
+
+        let ratio_widths = self.resolved_first_row_ratio_widths(table_id)?;
+        if ratio_widths.is_empty() {
+            return Ok(false);
+        }
+
+        let width_model = TableWidthModel::new(ratio_widths.len(), content_width);
+        let proportion = width_model.proportion_for_actual_table_width(width, &ratio_widths);
+        self.set_table_proportion(table_id, proportion)
+    }
+
+    pub fn set_table_proportion(&mut self, table_id: NodeId, proportion: f32) -> Result<bool> {
+        if !proportion.is_finite() || !(0.0..=1.0).contains(&proportion) {
+            return Ok(false);
+        }
+
+        let table_mut = self.node_mut(table_id).context("Table not found")?;
+
+        table_mut.as_mut().update(|node| {
+            if let Node::Table(table_node) = node {
+                table_node.proportion = proportion;
+            }
+        })?;
+
+        self.push_effect(Effect::SubtreeChanged { node_id: table_id });
         self.push_effect(Effect::LayoutChanged);
 
         Ok(true)
@@ -508,6 +614,27 @@ impl Transaction {
                 }
             })
             .collect())
+    }
+
+    fn resolved_first_row_ratio_widths(&self, table_id: NodeId) -> Result<Vec<f32>> {
+        let col_widths = self.first_row_col_widths(table_id)?;
+        let col_count = col_widths.len();
+        if col_count == 0 {
+            return Ok(Vec::new());
+        }
+
+        if col_widths.iter().all(|width| width.is_some()) {
+            let raw_widths = col_widths
+                .into_iter()
+                .map(|width| width.unwrap_or(0.0))
+                .collect::<Vec<_>>();
+            if let Some(validated) = TableWidthModel::validate_ratio_widths(&raw_widths, col_count)
+            {
+                return Ok(validated);
+            }
+        }
+
+        Ok(vec![1.0 / col_count as f32; col_count])
     }
 
     fn apply_first_row_col_widths(
@@ -772,6 +899,53 @@ mod tests {
     }
 
     #[test]
+    fn test_add_column_preserves_ratio_model() {
+        let mut t = id!();
+        let mut p00 = id!();
+
+        let initial = state! {
+            doc {
+                @t table {
+                    table_row {
+                        table_cell { @p00 paragraph { text { "r0c0" } } }
+                        table_cell { paragraph { text { "r0c1" } } }
+                    }
+                    table_row {
+                        table_cell { paragraph { text { "r1c0" } } }
+                        table_cell { paragraph { text { "r1c1" } } }
+                    }
+                }
+            }
+            selection { (p00, 0) }
+        };
+
+        let actual = transact!(initial, |tr| {
+            tr.set_column_widths(t, vec![0.3, 0.7]).unwrap();
+            tr.add_table_column(t, 1, false).unwrap();
+        });
+
+        let doc = actual.doc;
+        let table = doc.node(t).unwrap();
+        let first_row = table.first_child().unwrap();
+        let widths: Vec<f32> = first_row
+            .children()
+            .map(|cell| {
+                if let Node::TableCell(cell_node) = cell.node() {
+                    cell_node.col_width.unwrap()
+                } else {
+                    panic!("Expected table cell");
+                }
+            })
+            .collect();
+
+        assert_eq!(widths.len(), 3);
+        assert!((widths[0] - 0.2).abs() < 0.001);
+        assert!((widths[1] - 0.46666667).abs() < 0.001);
+        assert!((widths[2] - 0.33333334).abs() < 0.001);
+        assert!((widths.iter().sum::<f32>() - 1.0).abs() < 0.001);
+    }
+
+    #[test]
     fn test_delete_cell_selection_full_table() {
         let mut t = id!();
         let mut p_before = id!();
@@ -950,6 +1124,54 @@ mod tests {
     }
 
     #[test]
+    fn test_delete_column_preserves_ratio_model() {
+        let mut t = id!();
+        let mut p00 = id!();
+
+        let initial = state! {
+            doc {
+                @t table {
+                    table_row {
+                        table_cell { @p00 paragraph { text { "r0c0" } } }
+                        table_cell { paragraph { text { "r0c1" } } }
+                        table_cell { paragraph { text { "r0c2" } } }
+                    }
+                    table_row {
+                        table_cell { paragraph { text { "r1c0" } } }
+                        table_cell { paragraph { text { "r1c1" } } }
+                        table_cell { paragraph { text { "r1c2" } } }
+                    }
+                }
+            }
+            selection { (p00, 0) }
+        };
+
+        let actual = transact!(initial, |tr| {
+            tr.set_column_widths(t, vec![0.2, 0.3, 0.5]).unwrap();
+            tr.delete_table_column(t, 1).unwrap();
+        });
+
+        let doc = actual.doc;
+        let table = doc.node(t).unwrap();
+        let first_row = table.first_child().unwrap();
+        let widths: Vec<f32> = first_row
+            .children()
+            .map(|cell| {
+                if let Node::TableCell(cell_node) = cell.node() {
+                    cell_node.col_width.unwrap()
+                } else {
+                    panic!("Expected table cell");
+                }
+            })
+            .collect();
+
+        assert_eq!(widths.len(), 2);
+        assert!((widths[0] - 0.2857143).abs() < 0.001);
+        assert!((widths[1] - 0.71428573).abs() < 0.001);
+        assert!((widths.iter().sum::<f32>() - 1.0).abs() < 0.001);
+    }
+
+    #[test]
     fn test_move_table_row_preserves_column_widths_when_first_row_changes() {
         let mut t = id!();
         let mut p00 = id!();
@@ -972,7 +1194,7 @@ mod tests {
         };
 
         let actual = transact!(initial, |tr| {
-            tr.set_column_widths(t, vec![120.0, 180.0]).unwrap();
+            tr.set_column_widths(t, vec![0.4, 0.6]).unwrap();
             tr.move_table_row(t, 0, 1).unwrap();
         });
 
@@ -999,7 +1221,65 @@ mod tests {
             })
             .collect();
 
-        assert_eq!(widths, vec![Some(120.0), Some(180.0)]);
+        assert_eq!(widths, vec![Some(0.4), Some(0.6)]);
+    }
+
+    #[test]
+    fn test_set_table_proportion() {
+        let mut t = id!();
+        let mut p = id!();
+
+        let initial = state! {
+            doc {
+                @t table {
+                    table_row {
+                        table_cell { @p paragraph { text { "cell" } } }
+                    }
+                }
+            }
+            selection { (p, 0) }
+        };
+
+        let actual = transact!(initial, |tr| {
+            tr.set_table_proportion(t, 0.8).unwrap();
+        });
+
+        let table = actual.doc.node(t).unwrap();
+        if let Node::Table(table_node) = table.node() {
+            assert_eq!(table_node.proportion, 0.8);
+        } else {
+            panic!("Expected table node");
+        }
+    }
+
+    #[test]
+    fn test_set_table_proportion_rejects_invalid_values() {
+        let mut t = id!();
+        let mut p = id!();
+
+        let initial = state! {
+            doc {
+                @t table {
+                    table_row {
+                        table_cell { @p paragraph { text { "cell" } } }
+                    }
+                }
+            }
+            selection { (p, 0) }
+        };
+
+        let actual = transact!(initial, |tr| {
+            assert!(!tr.set_table_proportion(t, -0.1).unwrap());
+            assert!(!tr.set_table_proportion(t, 1.1).unwrap());
+            assert!(!tr.set_table_proportion(t, f32::NAN).unwrap());
+        });
+
+        let table = actual.doc.node(t).unwrap();
+        if let Node::Table(table_node) = table.node() {
+            assert_eq!(table_node.proportion, 1.0);
+        } else {
+            panic!("Expected table node");
+        }
     }
 
     #[test]

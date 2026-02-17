@@ -585,6 +585,7 @@ mod tests {
                     Node::Table(TableNode {
                         border_style: TableBorderStyle::Solid,
                         align: TableAlign::Center,
+                        proportion: 0.75,
                     }),
                     None,
                 ),
@@ -597,7 +598,7 @@ mod tests {
                 cell_id,
                 FragmentNode::new(
                     Node::TableCell(TableCellNode {
-                        col_width: Some(200.0),
+                        col_width: Some(0.5),
                     }),
                     Some(row_id),
                 ),
@@ -626,6 +627,7 @@ mod tests {
         if let Node::Table(t) = parsed.node(top[0]).unwrap().data() {
             assert_eq!(t.border_style, TableBorderStyle::Solid);
             assert_eq!(t.align, TableAlign::Center);
+            assert_eq!(t.proportion, 0.75);
         } else {
             panic!("Expected Table");
         }

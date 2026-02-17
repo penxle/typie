@@ -29,6 +29,8 @@
   };
 
   const MIN_CELL_WIDTH = 40;
+  const TABLE_BORDER_WIDTH = 1;
+  const TABLE_RESIZE_LIMIT_EPSILON = 0.5;
 
   let { editor, overlay }: Props = $props();
 
@@ -54,26 +56,79 @@
       addRowButtonHovered ||
       addBothButtonHovered,
   );
-  const isLastColumnHovered = $derived(hoveredColIndex === overlay.colWidths.length - 1 || addColButtonHovered || addBothButtonHovered);
+  const isLastColumnHovered = $derived(hoveredColIndex === overlay.colWidthsAsPx.length - 1 || addColButtonHovered || addBothButtonHovered);
 
   function getVisualColX(colIndex: number, baseX: number): number {
     if (!resizing || resizing.colIndex !== colIndex) {
       return baseX;
     }
 
-    const isLastCol = colIndex === overlay.colWidths.length - 1;
-    let clampedDeltaX = resizing.deltaX;
-
-    if (isLastCol) {
-      const minDelta = MIN_CELL_WIDTH - resizing.initialWidths[colIndex];
-      clampedDeltaX = Math.max(minDelta, resizing.deltaX);
-    } else {
-      const minDelta = MIN_CELL_WIDTH - resizing.initialWidths[colIndex];
-      const maxDelta = resizing.initialWidths[colIndex + 1] - MIN_CELL_WIDTH;
-      clampedDeltaX = Math.max(minDelta, Math.min(maxDelta, resizing.deltaX));
+    if (colIndex >= resizing.initialWidths.length - 1) {
+      const clampedDeltaX = clampProportionResizeDelta(resizing.initialWidths, resizing.deltaX);
+      return baseX + clampedDeltaX;
     }
 
+    const minDelta = MIN_CELL_WIDTH - resizing.initialWidths[colIndex];
+    const maxDelta = resizing.initialWidths[colIndex + 1] - MIN_CELL_WIDTH;
+    const clampedDeltaX = Math.max(minDelta, Math.min(maxDelta, resizing.deltaX));
+
     return baseX + clampedDeltaX;
+  }
+
+  function getContentWidth(): number {
+    if ((overlay.contentWidth ?? 0) > 0) {
+      return overlay.contentWidth;
+    }
+    const layoutMode = editor.layout.layoutMode;
+    if (layoutMode.type === 'paginated') {
+      return Math.max(0, layoutMode.pageWidth - layoutMode.pageMarginLeft - layoutMode.pageMarginRight);
+    }
+    return Math.max(0, layoutMode.maxWidth);
+  }
+
+  function minTableWidth(colCount: number): number {
+    if (colCount <= 0) {
+      return 0;
+    }
+    return MIN_CELL_WIDTH * colCount + TABLE_BORDER_WIDTH * (colCount + 1);
+  }
+
+  function clampProportionResizeDelta(initialWidths: number[], deltaX: number): number {
+    if (initialWidths.length === 0) {
+      return 0;
+    }
+
+    const contentWidth = getContentWidth();
+    if (contentWidth <= 0) {
+      return 0;
+    }
+
+    const currentTableWidth = overlay.bounds.width;
+    const minWidth = Math.max(minTableWidth(initialWidths.length), overlay.minProportionWidth ?? 0);
+    const maxWidth = Math.max(minWidth, overlay.maxProportionWidth ?? contentWidth);
+
+    if (minWidth > maxWidth) {
+      return 0;
+    }
+
+    const effectiveMinWidth = currentTableWidth <= minWidth + TABLE_RESIZE_LIMIT_EPSILON ? currentTableWidth : minWidth;
+    const minDelta = effectiveMinWidth - currentTableWidth;
+    const maxDelta = maxWidth - currentTableWidth;
+    return clamp(deltaX, minDelta, maxDelta);
+  }
+
+  function toRatioWidths(widths: number[]): number[] {
+    if (widths.length === 0) {
+      return [];
+    }
+
+    const safe = widths.map((width) => (Number.isFinite(width) && width > 0 ? width : 0));
+    const total = safe.reduce((sum, width) => sum + width, 0);
+    if (total <= 0) {
+      return widths.map(() => 1 / widths.length);
+    }
+
+    return safe.map((width) => width / total);
   }
 
   function getColLeft(colIndex: number): number {
@@ -84,7 +139,7 @@
   }
 
   function getColWidth(colIndex: number): number {
-    return overlay.colWidths[colIndex];
+    return overlay.colWidthsAsPx[colIndex];
   }
 
   function getRowTop(rowIndex: number): number {
@@ -145,7 +200,7 @@
   onpointerleave={() => (isTableHovered = false)}
 >
   {#each overlay.rowHeights, rowIndex (rowIndex)}
-    {#each overlay.colWidths, colIndex (colIndex)}
+    {#each overlay.colWidthsAsPx, colIndex (colIndex)}
       {@const left = getColLeft(colIndex)}
       {@const top = getRowTop(rowIndex)}
       {@const width = getColWidth(colIndex)}
@@ -166,7 +221,7 @@
     {/each}
   {/each}
 
-  {#each overlay.colWidths as width, i (i)}
+  {#each overlay.colWidthsAsPx as width, i (i)}
     {@const left = getColLeft(i)}
     {@const isVisible = hoveredColIndex === i || menuOpenColIndex === i}
     <div
@@ -234,7 +289,7 @@
               <span>왼쪽으로 이동</span>
             </MenuItem>
           {/if}
-          {#if i < overlay.colWidths.length - 1}
+          {#if i < overlay.colWidthsAsPx.length - 1}
             <MenuItem
               onclick={() => {
                 close();
@@ -269,7 +324,7 @@
           <MenuItem
             onclick={() => {
               close();
-              if (overlay.colWidths.length <= 1) {
+              if (overlay.colWidthsAsPx.length <= 1) {
                 editor.dispatch({ type: 'deleteNode', nodeId: overlay.tableId }).scrollIntoView();
               } else {
                 editor.dispatch({ type: 'deleteTableColumn', tableId: overlay.tableId, col: i }).scrollIntoView();
@@ -279,7 +334,7 @@
             variant="danger"
           >
             <Icon icon={Trash2Icon} size={14} />
-            <span>{overlay.colWidths.length <= 1 ? '테이블 삭제' : '열 삭제'}</span>
+            <span>{overlay.colWidthsAsPx.length <= 1 ? '테이블 삭제' : '열 삭제'}</span>
           </MenuItem>
         {/snippet}
       </Menu>
@@ -418,7 +473,7 @@
   {/each}
 
   {#each overlay.colPositions as colX, colIndex (colIndex)}
-    {@const isLastCol = colIndex === overlay.colWidths.length - 1}
+    {@const isLastCol = colIndex === overlay.colWidthsAsPx.length - 1}
     {@const visualX = getVisualColX(colIndex, colX)}
     {@const isResizing = resizing?.colIndex === colIndex}
     <button
@@ -445,7 +500,7 @@
         const target = e.currentTarget as HTMLElement;
         target.setPointerCapture(e.pointerId);
         const startX = e.clientX;
-        const initialWidths = [...overlay.colWidths];
+        const initialWidths = [...overlay.colWidthsAsPx];
 
         resizing = {
           colIndex,
@@ -467,22 +522,38 @@
           target.removeEventListener('pointerup', onUp);
 
           if (resizing) {
-            const newWidths = [...resizing.initialWidths];
-            let clampedDeltaX = resizing.deltaX;
-
-            if (isLastCol) {
-              const minDelta = MIN_CELL_WIDTH - resizing.initialWidths[colIndex];
-              clampedDeltaX = clamp(resizing.deltaX, minDelta, Infinity);
-              newWidths[colIndex] = resizing.initialWidths[colIndex] + clampedDeltaX;
+            if (colIndex >= resizing.initialWidths.length - 1) {
+              const contentWidth = getContentWidth();
+              if (contentWidth > 0) {
+                const currentTableWidth = overlay.bounds.width;
+                const clampedDeltaX = clampProportionResizeDelta(resizing.initialWidths, resizing.deltaX);
+                if (Math.abs(clampedDeltaX) <= 0.01) {
+                  resizing = null;
+                  editor.focus();
+                  return;
+                }
+                const nextTableWidth = currentTableWidth + clampedDeltaX;
+                editor.dispatch({
+                  type: 'setTableWidth',
+                  tableId: overlay.tableId,
+                  width: nextTableWidth,
+                  contentWidth,
+                });
+              }
             } else {
+              const newWidths = [...resizing.initialWidths];
               const minDelta = MIN_CELL_WIDTH - resizing.initialWidths[colIndex];
               const maxDelta = resizing.initialWidths[colIndex + 1] - MIN_CELL_WIDTH;
-              clampedDeltaX = clamp(resizing.deltaX, minDelta, maxDelta);
+              const clampedDeltaX = clamp(resizing.deltaX, minDelta, maxDelta);
               newWidths[colIndex] = resizing.initialWidths[colIndex] + clampedDeltaX;
               newWidths[colIndex + 1] = resizing.initialWidths[colIndex + 1] - clampedDeltaX;
-            }
 
-            editor.dispatch({ type: 'setColumnWidths', tableId: overlay.tableId, colWidths: newWidths });
+              editor.dispatch({
+                type: 'setColumnWidths',
+                tableId: overlay.tableId,
+                colWidths: toRatioWidths(newWidths),
+              });
+            }
           }
 
           resizing = null;
@@ -536,7 +607,12 @@
     aria-label="열 추가"
     onclick={() => {
       editor
-        .dispatch({ type: 'addTableColumn', tableId: overlay.tableId, col: overlay.colWidths.length - 1, before: false })
+        .dispatch({
+          type: 'addTableColumn',
+          tableId: overlay.tableId,
+          col: overlay.colWidthsAsPx.length - 1,
+          before: false,
+        })
         .scrollIntoView();
       editor.focus();
     }}
@@ -651,7 +727,12 @@
           })
           .scrollIntoView();
         editor
-          .dispatch({ type: 'addTableColumn', tableId: overlay.tableId, col: overlay.colWidths.length - 1, before: false })
+          .dispatch({
+            type: 'addTableColumn',
+            tableId: overlay.tableId,
+            col: overlay.colWidthsAsPx.length - 1,
+            before: false,
+          })
           .scrollIntoView();
         editor.focus();
       }}

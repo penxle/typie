@@ -187,10 +187,14 @@ fn format_node(node: NodeRef, indent_level: usize, labeler: &Labeler, output: &m
             );
         }
         Node::Table(table) => {
-            let attrs = format_attributes(&[(
-                "border_style",
-                format!("TableBorderStyle::{:?}", table.border_style),
-            )]);
+            let attrs = vec![
+                (
+                    "border_style",
+                    format!("TableBorderStyle::{:?}", table.border_style),
+                ),
+                ("proportion", format_number(table.proportion)),
+            ];
+            let attrs = format_attributes(&attrs);
             format_container_node(
                 &format!("{prefix}table{attrs}"),
                 node,
@@ -654,10 +658,14 @@ fn format_fragment_node(
             );
         }
         Node::Table(table) => {
-            let attrs = format_attributes(&[(
-                "border_style",
-                format!("TableBorderStyle::{:?}", table.border_style),
-            )]);
+            let attrs = vec![
+                (
+                    "border_style",
+                    format!("TableBorderStyle::{:?}", table.border_style),
+                ),
+                ("proportion", format_number(table.proportion)),
+            ];
+            let attrs = format_attributes(&attrs);
             format_fragment_container_node(
                 &format!("table{attrs}"),
                 id,

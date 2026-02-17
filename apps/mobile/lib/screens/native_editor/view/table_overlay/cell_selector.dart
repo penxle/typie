@@ -188,7 +188,7 @@ class TableCellSelectorController {
     TableCellIndex clampToVisible(TableCellIndex cell) {
       return TableCellIndex(
         row: cell.row.clamp(minVisibleRow, maxVisibleRow),
-        col: cell.col.clamp(0, overlay.colWidths.length - 1),
+        col: cell.col.clamp(0, overlay.colWidthsAsPx.length - 1),
       );
     }
 
@@ -285,7 +285,7 @@ class TableCellSelectorController {
       localX: local.dx - renderBounds.x,
       localY: local.dy - renderBounds.y,
     );
-    final nextHead = nextCell.clamp(maxRow: overlay.totalRows - 1, maxCol: overlay.colWidths.length - 1);
+    final nextHead = nextCell.clamp(maxRow: overlay.totalRows - 1, maxCol: overlay.colWidthsAsPx.length - 1);
 
     if (nextHead.row == draft.head.row && nextHead.col == draft.head.col) {
       return;
@@ -358,7 +358,7 @@ TableCellSelectorState _resolveTableCellSelectorState({
   final fallbackRange = TableSelectionRange.single(row: fallbackRow, col: fallbackCol);
   final activeRange = (dragDraft?.range ?? stateRange ?? fallbackRange).clamp(
     maxRow: overlay.totalRows - 1,
-    maxCol: overlay.colWidths.length - 1,
+    maxCol: overlay.colWidthsAsPx.length - 1,
   );
   final visual = _tableSelectionVisual(overlay: overlay, renderBounds: renderBounds, range: activeRange);
   final shouldShow = _shouldShowCellSelector(overlay: overlay, selection: selection, stateRange: stateRange);
@@ -389,7 +389,7 @@ TableSelectionRange? _tableSelectionRangeFromSelection({
   if (selection == null || layout == null) {
     return null;
   }
-  if (overlay.colWidths.isEmpty || overlay.rowHeights.isEmpty) {
+  if (overlay.colWidthsAsPx.isEmpty || overlay.rowHeights.isEmpty) {
     return null;
   }
 
@@ -402,7 +402,7 @@ TableSelectionRange? _tableSelectionRangeFromSelection({
   return TableSelectionRange(
     anchor: anchor,
     head: head,
-  ).clamp(maxRow: overlay.totalRows - 1, maxCol: overlay.colWidths.length - 1);
+  ).clamp(maxRow: overlay.totalRows - 1, maxCol: overlay.colWidthsAsPx.length - 1);
 }
 
 TableSelectionVisual? _tableSelectionVisual({
@@ -410,7 +410,7 @@ TableSelectionVisual? _tableSelectionVisual({
   required TableOverlayBounds renderBounds,
   required TableSelectionRange range,
 }) {
-  if (overlay.colWidths.isEmpty || overlay.rowHeights.isEmpty || overlay.rowPositions.isEmpty) {
+  if (overlay.colWidthsAsPx.isEmpty || overlay.rowHeights.isEmpty || overlay.rowPositions.isEmpty) {
     return null;
   }
 
@@ -429,8 +429,8 @@ TableSelectionVisual? _tableSelectionVisual({
   final localRowStart = visibleRowStart - overlay.startRowIndex;
   final localRowEnd = visibleRowEnd - overlay.startRowIndex;
 
-  final colStart = range.colStart.clamp(0, overlay.colWidths.length - 1);
-  final colEnd = range.colEnd.clamp(0, overlay.colWidths.length - 1);
+  final colStart = range.colStart.clamp(0, overlay.colWidthsAsPx.length - 1);
+  final colEnd = range.colEnd.clamp(0, overlay.colWidthsAsPx.length - 1);
   final left = renderBounds.x + tableColLeft(overlay, colStart);
   final right = renderBounds.x + tableColRight(overlay, colEnd);
   final top = renderBounds.y + tableRowTop(overlay, localRowStart);
@@ -442,7 +442,7 @@ TableSelectionVisual? _tableSelectionVisual({
 
   Offset? handleCenter;
   final handleRow = range.head.row.clamp(0, overlay.totalRows - 1);
-  final handleCol = range.head.col.clamp(0, overlay.colWidths.length - 1);
+  final handleCol = range.head.col.clamp(0, overlay.colWidthsAsPx.length - 1);
   final handleLocalRow = handleRow - overlay.startRowIndex;
   if (handleLocalRow >= 0 && handleLocalRow < overlay.rowPositions.length) {
     final handleX = range.head.col >= range.anchor.col

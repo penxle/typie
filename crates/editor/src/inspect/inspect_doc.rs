@@ -192,7 +192,10 @@ fn format_node_info(node: &NodeRef) -> String {
             format!("Callout {} variant={:?}", id, callout_node.variant)
         }
         Node::Table(table_node) => {
-            format!("Table {} border_style={:?}", id, table_node.border_style)
+            format!(
+                "Table {} border_style={:?} proportion={}",
+                id, table_node.border_style, table_node.proportion
+            )
         }
         Node::TableRow(_) => {
             format!("TableRow {}", id)

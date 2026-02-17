@@ -18,6 +18,10 @@ class TableOverlayInfo {
     required this.totalRows,
     required this.isFocused,
     required this.showCellSelector,
+    required this.contentWidth,
+    required this.minProportionWidth,
+    required this.maxProportionWidth,
+    required this.colWidthsAsPx,
     required this.colWidths,
     required this.colPositions,
     required this.rowHeights,
@@ -33,6 +37,10 @@ class TableOverlayInfo {
   final int totalRows;
   final bool isFocused;
   final bool showCellSelector;
+  final double contentWidth;
+  final double minProportionWidth;
+  final double maxProportionWidth;
+  final List<double> colWidthsAsPx;
   final List<double> colWidths;
   final List<double> colPositions;
   final List<double> rowHeights;
