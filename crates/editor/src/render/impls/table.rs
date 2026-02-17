@@ -1,7 +1,7 @@
 use crate::layout::elements::{SplitEdges, TableBorderElement, TableCellElement};
 use crate::model::{LayoutMode, TABLE_BORDER_WIDTH, TableBorderStyle};
 use crate::render::{GlyphRenderer, Render, RenderContext, RenderPhase};
-use tiny_skia::{Paint, PathBuilder, PixmapMut, Stroke, StrokeDash, Transform};
+use tiny_skia::{Paint, PathBuilder, PixmapMut, Rect, Stroke, StrokeDash, Transform};
 
 #[derive(Debug, Clone, Copy)]
 struct BorderVisibility {
@@ -216,6 +216,15 @@ impl Render for TableBorderElement {
         ctx: &RenderContext,
     ) {
         match ctx.phase {
+            RenderPhase::Background => {
+                let mut paint = Paint::default();
+                paint.set_color(ctx.theme.color("ui.surface.default"));
+                if let Some(rect) =
+                    Rect::from_xywh(self.x_offset, 0.0, self.size.width, self.size.height)
+                {
+                    pixmap.fill_rect(rect, &paint, transform, None);
+                }
+            }
             RenderPhase::Content => {
                 if matches!(self.border_style, TableBorderStyle::None) {
                     return;
@@ -272,15 +281,7 @@ impl Render for TableCellElement {
             .iter()
             .any(|s| s.is_cell() && s.node_id() == self.node_id);
         match ctx.phase {
-            RenderPhase::Background => {
-                let mut paint = Paint::default();
-                paint.set_color(ctx.theme.color("ui.surface.default"));
-                if let Some(rect) =
-                    tiny_skia::Rect::from_xywh(0.0, 0.0, self.size.width, self.size.height)
-                {
-                    pixmap.fill_rect(rect, &paint, transform, None);
-                }
-            }
+            RenderPhase::Background => {}
             RenderPhase::Selection => {
                 if is_selected {
                     let color = if ctx.is_focused {
@@ -291,8 +292,7 @@ impl Render for TableCellElement {
                     let mut paint = Paint::default();
                     paint.set_color(color);
 
-                    if let Some(rect) =
-                        tiny_skia::Rect::from_xywh(0.0, 0.0, self.size.width, self.size.height)
+                    if let Some(rect) = Rect::from_xywh(0.0, 0.0, self.size.width, self.size.height)
                     {
                         pixmap.fill_rect(rect, &paint, transform, None);
                     }

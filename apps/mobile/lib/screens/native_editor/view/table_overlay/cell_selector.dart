@@ -10,27 +10,25 @@ import 'constants.dart';
 import 'geometry.dart';
 import 'handles.dart';
 
-List<Widget> buildCellSelectionOutlineWidgets(TableCellSelectorController controller, Color color) {
+Widget? buildCellSelectionOutlineWidget(TableCellSelectorController controller, Color color) {
   if (!controller.shouldShow || controller.visual == null) {
-    return const [];
+    return null;
   }
   final visual = controller.visual!;
 
-  return <Widget>[
-    Positioned(
-      left: visual.rect.left,
-      top: visual.rect.top,
-      width: visual.rect.width,
-      height: visual.rect.height,
-      child: IgnorePointer(
-        child: Container(
-          decoration: BoxDecoration(
-            border: Border.all(color: color, width: tableCellSelectionBorderWidth),
-          ),
+  return Positioned(
+    left: visual.rect.left,
+    top: visual.rect.top,
+    width: visual.rect.width,
+    height: visual.rect.height,
+    child: IgnorePointer(
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border.all(color: color, width: tableCellSelectionBorderWidth),
         ),
       ),
     ),
-  ];
+  );
 }
 
 Widget? buildCellSelectionHandleWidget(TableCellSelectorController controller, Color color) {

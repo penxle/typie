@@ -50,6 +50,7 @@
   let addColButtonHovered = $state(false);
   let addRowButtonHovered = $state(false);
   let addBothButtonHovered = $state(false);
+  let tableOverlayRoot: HTMLDivElement | null = null;
 
   const isLastRowHovered = $derived(
     (hoveredRowIndex !== null && (overlay.startRowIndex ?? 0) + hoveredRowIndex === (overlay.totalRows ?? overlay.rowHeights.length) - 1) ||
@@ -131,6 +132,28 @@
     return safe.map((width) => width / total);
   }
 
+  function findOverlayIndex(boundaries: number[], value: number): number | null {
+    if (boundaries.length === 0 || !Number.isFinite(value)) {
+      return null;
+    }
+
+    if (value <= 0) {
+      return 0;
+    }
+
+    let lo = 0;
+    let hi = boundaries.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (value < boundaries[mid]) {
+        hi = mid;
+      } else {
+        lo = mid + 1;
+      }
+    }
+    return lo;
+  }
+
   function getColLeft(colIndex: number): number {
     if (colIndex === 0) {
       return 0;
@@ -153,12 +176,21 @@
     return overlay.rowHeights[rowIndex];
   }
 
-  function handleCellHover(rowIndex: number, colIndex: number) {
-    hoveredRowIndex = rowIndex;
-    hoveredColIndex = colIndex;
+  function handleTablePointerMove(e: PointerEvent) {
+    const layer = e.currentTarget as HTMLElement;
+    const rect = layer.getBoundingClientRect();
+    const localX = e.clientX - rect.left;
+    const localY = e.clientY - rect.top;
+
+    hoveredColIndex = findOverlayIndex(overlay.colPositions, localX);
+    hoveredRowIndex = findOverlayIndex(overlay.rowPositions, localY);
   }
 
-  function handleCellLeave() {
+  function handleTablePointerLeave(event: PointerEvent) {
+    const relatedTarget = event.relatedTarget;
+    if (tableOverlayRoot && relatedTarget instanceof Node && tableOverlayRoot.contains(relatedTarget)) {
+      return;
+    }
     hoveredRowIndex = null;
     hoveredColIndex = null;
   }
@@ -168,6 +200,20 @@
   let buttonHovered = $state(false);
 
   const isButtonVisible = $derived(isTableHovered || overlay.isFocused || menuOpen || buttonHovered);
+  const activeColIndex = $derived.by(() => {
+    const idx = menuOpenColIndex ?? hoveredColIndex;
+    if (idx === null || idx < 0 || idx >= overlay.colWidthsAsPx.length) {
+      return null;
+    }
+    return idx;
+  });
+  const activeRowIndex = $derived.by(() => {
+    const idx = menuOpenRowIndex ?? hoveredRowIndex;
+    if (idx === null || idx < 0 || idx >= overlay.rowHeights.length) {
+      return null;
+    }
+    return idx;
+  });
 
   $effect(() => {
     if (menuOpenColIndex !== null || menuOpenRowIndex !== null || menuOpen) {
@@ -186,6 +232,7 @@
 </script>
 
 <div
+  bind:this={tableOverlayRoot}
   style:left="{overlay.bounds.x}px"
   style:top="{overlay.bounds.y}px"
   style:width="{overlay.bounds.width}px"
@@ -199,31 +246,23 @@
   onpointerenter={() => (isTableHovered = true)}
   onpointerleave={() => (isTableHovered = false)}
 >
-  {#each overlay.rowHeights, rowIndex (rowIndex)}
-    {#each overlay.colWidthsAsPx, colIndex (colIndex)}
-      {@const left = getColLeft(colIndex)}
-      {@const top = getRowTop(rowIndex)}
-      {@const width = getColWidth(colIndex)}
-      {@const height = getRowHeight(rowIndex)}
-      <div
-        style:left="{left}px"
-        style:top="{top}px"
-        style:width="{width}px"
-        style:height="{height}px"
-        class={css({
-          position: 'absolute',
-          pointerEvents: 'auto',
-          cursor: 'text',
-        })}
-        onpointerenter={() => handleCellHover(rowIndex, colIndex)}
-        onpointerleave={handleCellLeave}
-      ></div>
-    {/each}
-  {/each}
+  <div
+    style:left="0"
+    style:top="0"
+    style:width="{overlay.bounds.width}px"
+    style:height="{overlay.bounds.height}px"
+    class={css({
+      position: 'absolute',
+      pointerEvents: 'auto',
+      cursor: 'text',
+    })}
+    onpointerleave={handleTablePointerLeave}
+    onpointermove={handleTablePointerMove}
+  ></div>
 
-  {#each overlay.colWidthsAsPx as width, i (i)}
-    {@const left = getColLeft(i)}
-    {@const isVisible = hoveredColIndex === i || menuOpenColIndex === i}
+  {#if activeColIndex !== null}
+    {@const left = getColLeft(activeColIndex)}
+    {@const width = getColWidth(activeColIndex)}
     <div
       style:left="{left}px"
       style:top="0"
@@ -237,14 +276,12 @@
         pointerEvents: 'auto',
         cursor: 'text',
       })}
-      onpointerenter={() => (hoveredColIndex = i)}
-      onpointerleave={() => (hoveredColIndex = null)}
     >
       <Menu
         offset={4}
         onopen={() => {
-          menuOpenColIndex = i;
-          editor.dispatch({ type: 'selectTableColumn', tableId: overlay.tableId, col: i });
+          menuOpenColIndex = activeColIndex;
+          editor.dispatch({ type: 'selectTableColumn', tableId: overlay.tableId, col: activeColIndex });
         }}
         ontransitionend={() => {
           menuOpenColIndex = null;
@@ -254,7 +291,7 @@
         {#snippet button({ open })}
           <button
             class={center({
-              display: open || isVisible ? 'flex' : 'none',
+              display: open || activeColIndex !== null ? 'flex' : 'none',
               width: '24px',
               height: '18px',
               backgroundColor: open ? 'interactive.hover' : 'surface.default',
@@ -277,11 +314,18 @@
         {/snippet}
 
         {#snippet children({ close })}
-          {#if i > 0}
+          {#if activeColIndex > 0}
             <MenuItem
               onclick={() => {
                 close();
-                editor.dispatch({ type: 'moveTableColumn', tableId: overlay.tableId, fromCol: i, toCol: i - 1 }).scrollIntoView();
+                editor
+                  .dispatch({
+                    type: 'moveTableColumn',
+                    tableId: overlay.tableId,
+                    fromCol: activeColIndex,
+                    toCol: activeColIndex - 1,
+                  })
+                  .scrollIntoView();
                 editor.focus();
               }}
             >
@@ -289,11 +333,18 @@
               <span>왼쪽으로 이동</span>
             </MenuItem>
           {/if}
-          {#if i < overlay.colWidthsAsPx.length - 1}
+          {#if activeColIndex < overlay.colWidthsAsPx.length - 1}
             <MenuItem
               onclick={() => {
                 close();
-                editor.dispatch({ type: 'moveTableColumn', tableId: overlay.tableId, fromCol: i, toCol: i + 1 }).scrollIntoView();
+                editor
+                  .dispatch({
+                    type: 'moveTableColumn',
+                    tableId: overlay.tableId,
+                    fromCol: activeColIndex,
+                    toCol: activeColIndex + 1,
+                  })
+                  .scrollIntoView();
                 editor.focus();
               }}
             >
@@ -304,7 +355,7 @@
           <MenuItem
             onclick={() => {
               close();
-              editor.dispatch({ type: 'addTableColumn', tableId: overlay.tableId, col: i, before: true }).scrollIntoView();
+              editor.dispatch({ type: 'addTableColumn', tableId: overlay.tableId, col: activeColIndex, before: true }).scrollIntoView();
               editor.focus();
             }}
           >
@@ -314,7 +365,7 @@
           <MenuItem
             onclick={() => {
               close();
-              editor.dispatch({ type: 'addTableColumn', tableId: overlay.tableId, col: i, before: false }).scrollIntoView();
+              editor.dispatch({ type: 'addTableColumn', tableId: overlay.tableId, col: activeColIndex, before: false }).scrollIntoView();
               editor.focus();
             }}
           >
@@ -327,7 +378,7 @@
               if (overlay.colWidthsAsPx.length <= 1) {
                 editor.dispatch({ type: 'deleteNode', nodeId: overlay.tableId }).scrollIntoView();
               } else {
-                editor.dispatch({ type: 'deleteTableColumn', tableId: overlay.tableId, col: i }).scrollIntoView();
+                editor.dispatch({ type: 'deleteTableColumn', tableId: overlay.tableId, col: activeColIndex }).scrollIntoView();
               }
               editor.focus();
             }}
@@ -339,11 +390,12 @@
         {/snippet}
       </Menu>
     </div>
-  {/each}
+  {/if}
 
-  {#each overlay.rowHeights as height, i (i)}
-    {@const top = getRowTop(i)}
-    {@const isVisible = hoveredRowIndex === i || menuOpenRowIndex === i}
+  {#if activeRowIndex !== null}
+    {@const top = getRowTop(activeRowIndex)}
+    {@const height = getRowHeight(activeRowIndex)}
+    {@const globalRowIndex = (overlay.startRowIndex ?? 0) + activeRowIndex}
     <div
       style:left="0"
       style:top="{top}px"
@@ -356,14 +408,11 @@
         width: '18px',
         pointerEvents: 'auto',
       })}
-      onpointerenter={() => (hoveredRowIndex = i)}
-      onpointerleave={() => (hoveredRowIndex = null)}
     >
       <Menu
         offset={4}
         onopen={() => {
-          const globalRowIndex = (overlay.startRowIndex ?? 0) + i;
-          menuOpenRowIndex = i;
+          menuOpenRowIndex = activeRowIndex;
           editor.dispatch({ type: 'selectTableRow', tableId: overlay.tableId, row: globalRowIndex }).scrollIntoView();
         }}
         ontransitionend={() => {
@@ -374,7 +423,7 @@
         {#snippet button({ open })}
           <button
             class={center({
-              display: open || isVisible ? 'flex' : 'none',
+              display: open || activeRowIndex !== null ? 'flex' : 'none',
               width: '18px',
               height: '24px',
               backgroundColor: open ? 'interactive.hover' : 'surface.default',
@@ -397,11 +446,10 @@
         {/snippet}
 
         {#snippet children({ close })}
-          {#if (overlay.startRowIndex ?? 0) + i > 0}
+          {#if globalRowIndex > 0}
             <MenuItem
               onclick={() => {
                 close();
-                const globalRowIndex = (overlay.startRowIndex ?? 0) + i;
                 editor
                   .dispatch({ type: 'moveTableRow', tableId: overlay.tableId, fromRow: globalRowIndex, toRow: globalRowIndex - 1 })
                   .scrollIntoView();
@@ -412,11 +460,10 @@
               <span>위로 이동</span>
             </MenuItem>
           {/if}
-          {#if (overlay.startRowIndex ?? 0) + i < (overlay.totalRows ?? overlay.rowHeights.length) - 1}
+          {#if globalRowIndex < (overlay.totalRows ?? overlay.rowHeights.length) - 1}
             <MenuItem
               onclick={() => {
                 close();
-                const globalRowIndex = (overlay.startRowIndex ?? 0) + i;
                 editor
                   .dispatch({ type: 'moveTableRow', tableId: overlay.tableId, fromRow: globalRowIndex, toRow: globalRowIndex + 1 })
                   .scrollIntoView();
@@ -430,7 +477,6 @@
           <MenuItem
             onclick={() => {
               close();
-              const globalRowIndex = (overlay.startRowIndex ?? 0) + i;
               editor.dispatch({ type: 'addTableRow', tableId: overlay.tableId, row: globalRowIndex, before: true }).scrollIntoView();
               editor.focus();
             }}
@@ -441,9 +487,7 @@
           <MenuItem
             onclick={() => {
               close();
-              editor
-                .dispatch({ type: 'addTableRow', tableId: overlay.tableId, row: (overlay.startRowIndex ?? 0) + i, before: false })
-                .scrollIntoView();
+              editor.dispatch({ type: 'addTableRow', tableId: overlay.tableId, row: globalRowIndex, before: false }).scrollIntoView();
               editor.focus();
             }}
           >
@@ -456,9 +500,7 @@
               if ((overlay.totalRows ?? overlay.rowHeights.length) <= 1) {
                 editor.dispatch({ type: 'deleteNode', nodeId: overlay.tableId }).scrollIntoView();
               } else {
-                editor
-                  .dispatch({ type: 'deleteTableRow', tableId: overlay.tableId, row: (overlay.startRowIndex ?? 0) + i })
-                  .scrollIntoView();
+                editor.dispatch({ type: 'deleteTableRow', tableId: overlay.tableId, row: globalRowIndex }).scrollIntoView();
               }
               editor.focus();
             }}
@@ -470,7 +512,7 @@
         {/snippet}
       </Menu>
     </div>
-  {/each}
+  {/if}
 
   {#each overlay.colPositions as colX, colIndex (colIndex)}
     {@const isLastCol = colIndex === overlay.colWidthsAsPx.length - 1}
