@@ -275,16 +275,16 @@ fn table_col_ratios(doc: &Doc, table_id: NodeId, col_count: usize) -> Vec<f32> {
         .unwrap_or_else(|| vec![1.0 / col_count as f32; col_count])
 }
 
-fn table_min_proportion_width(col_count: usize, max_width: f32, col_widths: &[f32]) -> f32 {
+fn table_min_proportion_width(col_count: usize, max_width: f32) -> f32 {
     if col_count == 0 {
         return 0.0;
     }
 
     let width_model = TableWidthModel::new(col_count, max_width.max(0.0));
-    width_model.actual_table_width_for_proportion(0.0, col_widths)
+    width_model.actual_table_width_for_proportion(0.0)
 }
 
-fn table_max_proportion_width(col_count: usize, max_width: f32, _col_widths: &[f32]) -> f32 {
+fn table_max_proportion_width(col_count: usize, max_width: f32) -> f32 {
     if col_count == 0 {
         return 0.0;
     }
@@ -318,9 +318,9 @@ fn collect_paginated_table_overlays(
                 let col_widths =
                     table_col_ratios(doc.as_ref(), table_border.node_id, table_border.cols);
                 let min_proportion_width =
-                    table_min_proportion_width(table_border.cols, table_max_width, &col_widths);
+                    table_min_proportion_width(table_border.cols, table_max_width);
                 let max_proportion_width =
-                    table_max_proportion_width(table_border.cols, table_max_width, &col_widths);
+                    table_max_proportion_width(table_border.cols, table_max_width);
                 overlays.push(to_paginated_overlay(
                     page_idx,
                     abs_pos,
@@ -370,9 +370,9 @@ fn collect_continuous_table_overlays(
                 let col_widths =
                     table_col_ratios(doc.as_ref(), table_border.node_id, table_border.cols);
                 let min_proportion_width =
-                    table_min_proportion_width(table_border.cols, table_max_width, &col_widths);
+                    table_min_proportion_width(table_border.cols, table_max_width);
                 let max_proportion_width =
-                    table_max_proportion_width(table_border.cols, table_max_width, &col_widths);
+                    table_max_proportion_width(table_border.cols, table_max_width);
                 builder.push(to_continuous_segment(
                     page_idx,
                     page_offset,
