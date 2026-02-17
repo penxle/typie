@@ -22,9 +22,6 @@ pub enum Effect {
         weight: u16,
         codepoints: Vec<u32>,
     },
-    CodepointDetected {
-        codepoints: Vec<u32>,
-    },
     ExternalElementChanged,
     PointerStyleChanged {
         style: PointerStyle,

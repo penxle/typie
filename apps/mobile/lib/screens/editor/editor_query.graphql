@@ -5,7 +5,8 @@ query EditorScreen_Query($slug: String!, $siteId: ID!) {
 
     fontFamilies {
       id
-      name
+      familyName
+      displayName
 
       fonts {
         id

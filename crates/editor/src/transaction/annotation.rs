@@ -56,9 +56,6 @@ impl Transaction {
             self.push_effect(Effect::FontDetected {
                 family: defaults.font_family().to_string(),
                 weight: defaults.font_weight(),
-                codepoints: ruby_codepoints.clone(),
-            });
-            self.push_effect(Effect::CodepointDetected {
                 codepoints: ruby_codepoints,
             });
         }
@@ -101,9 +98,6 @@ impl Transaction {
             self.push_effect(Effect::FontDetected {
                 family: defaults.font_family().to_string(),
                 weight: defaults.font_weight(),
-                codepoints: ruby_codepoints.clone(),
-            });
-            self.push_effect(Effect::CodepointDetected {
                 codepoints: ruby_codepoints,
             });
         }

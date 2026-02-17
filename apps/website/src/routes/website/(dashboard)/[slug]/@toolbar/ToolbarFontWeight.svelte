@@ -22,7 +22,6 @@
 
         fontFamilies {
           id
-          name
 
           fonts {
             id

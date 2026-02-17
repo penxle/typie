@@ -37,6 +37,12 @@ export const EntityVisibility = {
   PRIVATE: 'PRIVATE',
 } as const;
 
+export type FontFamilySource = keyof typeof FontFamilySource;
+export const FontFamilySource = {
+  DEFAULT: 'DEFAULT',
+  USER: 'USER',
+} as const;
+
 export type FontState = keyof typeof FontState;
 export const FontState = {
   ACTIVE: 'ACTIVE',

@@ -319,14 +319,6 @@ class SlateReader {
     return (values, offset + 4 + count * 4);
   }
 
-  List<int> readFallbackCodepoints() {
-    final count = getU32('fallback_codepoints_count');
-    if (count == 0) {
-      return const [];
-    }
-    return readU32List(getU32('fallback_codepoints_offset'), count);
-  }
-
   List<_ExternalElementRaw> readExternalElements() {
     final count = getU32('external_elements_count');
     if (count == 0) {

@@ -1,9 +1,9 @@
 import { Application, getMemory } from '@typie/editor';
-import icuPostcardUrl from '@typie/editor/pkg/icu_data.postcard?url';
+import icuPostcardUrl from '@typie/editor/icu/data.postcard?url';
 import { nanoid } from 'nanoid';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { PAGE_GAP } from './constants';
-import { ensureAllFontBases, ensureRequiredFallbackFont, ensureRequiredFont } from './fonts';
+import { ensureRequiredFallbackFont, ensureRequiredFont, filterUncoveredCodepoints, initFonts, preloadRemainingChunks } from './fonts';
 import {
   DIRTY_ATTRS,
   DIRTY_CURSOR,
@@ -12,7 +12,6 @@ import {
   DIRTY_ENABLED_ACTIONS,
   DIRTY_EXITED_DOCUMENT_START,
   DIRTY_EXTERNAL_ELEMENTS,
-  DIRTY_FALLBACK_FONT_REQUIRED,
   DIRTY_FONT_REQUIRED,
   DIRTY_HTML_PASTED,
   DIRTY_LINK_OVERLAYS,
@@ -29,6 +28,7 @@ import {
 import { calculateImageDisplaySize, calculateRelativePosition, findNearestPageCoordinate, getPageElement, idleCallback } from './utils';
 import type { DocExportMode, Editor as WasmEditor, Modifier, PointerButton } from '@typie/editor';
 import type { ScrollViewport } from '@typie/ui/utils';
+import type { FontFamily } from './fonts';
 import type { TableOverlay, TrackedItemOverlay } from './slate';
 import type { ThemeColors } from './theme';
 import type {
@@ -50,6 +50,7 @@ import type {
 let sharedApplication: Application | null = null;
 let applicationInitPromise: Promise<Application> | null = null;
 let pendingTextReplacementRules: { id: string; matchPattern: string; substitute: string; regex: boolean }[] | null = null;
+let pendingAvailableFonts: Record<string, number[]> | null = null;
 
 async function getOrInitializeApplication(): Promise<Application> {
   if (sharedApplication) {
@@ -65,10 +66,14 @@ async function getOrInitializeApplication(): Promise<Application> {
 
     const icuPostcard = await fetch(icuPostcardUrl).then((res) => res.arrayBuffer());
     app.loadIcuData(new Uint8Array(icuPostcard));
-    await ensureAllFontBases(app);
+    await initFonts(app);
 
     if (pendingTextReplacementRules) {
       app.setTextReplacementRules(pendingTextReplacementRules);
+    }
+
+    if (pendingAvailableFonts) {
+      app.setAvailableFonts(pendingAvailableFonts);
     }
 
     sharedApplication = app;
@@ -82,6 +87,13 @@ export function setTextReplacementRules(rules: { id: string; matchPattern: strin
   pendingTextReplacementRules = rules;
   if (sharedApplication) {
     sharedApplication.setTextReplacementRules(rules);
+  }
+}
+
+export function setAvailableFonts(fonts: Record<string, number[]>): void {
+  pendingAvailableFonts = fonts;
+  if (sharedApplication) {
+    sharedApplication.setAvailableFonts(fonts);
   }
 }
 
@@ -135,6 +147,8 @@ export class Editor {
       this.#readyResolve = resolve;
     });
   }
+
+  fontFamilies = $state<FontFamily[]>([]);
 
   renderVersion = $state(0);
 
@@ -473,10 +487,6 @@ export class Editor {
       }
     }
 
-    if (slate.isDirty(DIRTY_FALLBACK_FONT_REQUIRED)) {
-      this.#handleFallbackFontRequired(slate.readFallbackCodepoints());
-    }
-
     if (slate.isDirty(DIRTY_ENABLED_ACTIONS)) {
       this.enabledActions = new SvelteSet(slate.readEnabledActions());
     }
@@ -567,8 +577,24 @@ export class Editor {
   #handleFontRequired(family: string, weight: number, codepoints: number[]): void {
     if (!this.#application) return;
 
-    ensureRequiredFont(this.#application, family, weight, codepoints).then(() => {
+    const font = this.fontFamilies.find((f) => f.familyName === family)?.fonts.find((f) => f.weight === weight);
+    if (!font) return;
+
+    const app = this.#application;
+
+    ensureRequiredFont(app, family, font, codepoints).then(() => {
       this.dispatch({ type: 'fontsLoaded' });
+      if (!this.readOnly) {
+        preloadRemainingChunks(app, family, font);
+      }
+    });
+
+    filterUncoveredCodepoints(font, codepoints).then((uncovered) => {
+      if (uncovered.length > 0) {
+        ensureRequiredFallbackFont(app, weight, uncovered).then(() => {
+          this.dispatch({ type: 'fontsLoaded' });
+        });
+      }
     });
   }
 
@@ -600,14 +626,6 @@ export class Editor {
       const targetScroll = targetY - viewportCenter + bound.height / 2;
       scroller.scrollTo({ top: Math.max(0, targetScroll), behavior: 'smooth' });
     }
-  }
-
-  #handleFallbackFontRequired(codepoints: number[]): void {
-    if (codepoints.length === 0 || !this.#application) return;
-
-    ensureRequiredFallbackFont(this.#application, codepoints).then(() => {
-      this.dispatch({ type: 'fontsLoaded' });
-    });
   }
 
   handleRepasteAsText(): void {

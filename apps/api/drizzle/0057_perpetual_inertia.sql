@@ -1,0 +1,1 @@
+ALTER TABLE "fonts" ADD COLUMN "subfamily_display_name" text;

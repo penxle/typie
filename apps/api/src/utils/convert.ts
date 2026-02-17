@@ -1,6 +1,8 @@
 import { faker } from '@faker-js/faker';
 import { Node } from '@tiptap/pm/model';
-import { createDbId, TableCode } from '@/db';
+import { eq } from 'drizzle-orm';
+import { DEFAULT_FONT_FAMILIES } from '@/const';
+import { createDbId, db, FontFamilies, Fonts, TableCode } from '@/db';
 import { PostLayoutMode } from '@/enums';
 import { schema } from '@/pm';
 import type { JSONContent } from '@tiptap/core';
@@ -83,7 +85,9 @@ function fillDefaultStyles(styles: LoroStyle[]): LoroStyle[] {
   return filled;
 }
 
-function convertPmMarks(pmMarks: JSONContent['marks']): { styles: LoroStyle[]; annotations: LoroAnnotation[] } {
+const defaultFamilyNames = new Set(DEFAULT_FONT_FAMILIES.map((f) => f.familyName));
+
+async function convertPmMarks(pmMarks: JSONContent['marks']): Promise<{ styles: LoroStyle[]; annotations: LoroAnnotation[] }> {
   const styles: LoroStyle[] = [];
   const annotations: LoroAnnotation[] = [];
 
@@ -127,7 +131,29 @@ function convertPmMarks(pmMarks: JSONContent['marks']): { styles: LoroStyle[]; a
           styles.push({ type: 'background_color', color: pmMark.attrs.textBackgroundColor as string });
         }
         if (pmMark.attrs?.fontFamily) {
-          styles.push({ type: 'font_family', family: pmMark.attrs.fontFamily as string });
+          const fontFamily = pmMark.attrs.fontFamily as string;
+          if (defaultFamilyNames.has(fontFamily)) {
+            styles.push({ type: 'font_family', family: fontFamily });
+          } else if (fontFamily.startsWith('FONT0')) {
+            const result = await db
+              .select({ familyName: FontFamilies.familyName })
+              .from(Fonts)
+              .innerJoin(FontFamilies, eq(Fonts.familyId, FontFamilies.id))
+              .where(eq(Fonts.id, fontFamily))
+              .then((r) => r[0]);
+            if (result) {
+              styles.push({ type: 'font_family', family: result.familyName });
+            }
+          } else if (fontFamily.startsWith('FNTF0')) {
+            const result = await db
+              .select({ familyName: FontFamilies.familyName })
+              .from(FontFamilies)
+              .where(eq(FontFamilies.id, fontFamily))
+              .then((r) => r[0]);
+            if (result) {
+              styles.push({ type: 'font_family', family: result.familyName });
+            }
+          }
         }
         if (pmMark.attrs?.fontSize) {
           styles.push({ type: 'font_size', size: Number(pmMark.attrs.fontSize) * PX_TO_PT });
@@ -143,14 +169,14 @@ function convertPmMarks(pmMarks: JSONContent['marks']): { styles: LoroStyle[]; a
   return { styles, annotations };
 }
 
-function mergeInlineContent(content: JSONContent[] | undefined, extraStyles: LoroStyle[]): TextSegment[] {
+async function mergeInlineContent(content: JSONContent[] | undefined, extraStyles: LoroStyle[]): Promise<TextSegment[]> {
   if (!content || content.length === 0) return [];
 
   const segments: TextSegment[] = [];
 
   for (const inline of content) {
     if (inline.type === 'text' && inline.text) {
-      const converted = convertPmMarks(inline.marks);
+      const converted = await convertPmMarks(inline.marks);
       const styles = fillDefaultStyles([...converted.styles, ...extraStyles]);
       const segment: TextSegment = { text: inline.text, styles };
       if (converted.annotations.length > 0) segment.annotations = converted.annotations;
@@ -161,12 +187,12 @@ function mergeInlineContent(content: JSONContent[] | undefined, extraStyles: Lor
   return segments;
 }
 
-function convertNode(
+async function convertNode(
   pmNode: JSONContent,
   parentId: string,
   nodes: Record<string, LoroNode>,
   archivedNodes: ArchivedNodeEntry[],
-): string | null {
+): Promise<string | null> {
   const nodeId = generateNodeId();
 
   switch (pmNode.type) {
@@ -177,8 +203,8 @@ function convertNode(
       const children: string[] = [];
       let pendingInlines: JSONContent[] = [];
 
-      const flushText = () => {
-        const segments = mergeInlineContent(pendingInlines, extraStyles);
+      const flushText = async () => {
+        const segments = await mergeInlineContent(pendingInlines, extraStyles);
         if (segments.length > 0) {
           const textNodeId = generateNodeId();
           nodes[textNodeId] = {
@@ -194,7 +220,7 @@ function convertNode(
 
       for (const inline of pmNode.content ?? []) {
         if (inline.type === 'hard_break') {
-          flushText();
+          await flushText();
           const hardBreakId = generateNodeId();
           nodes[hardBreakId] = {
             type: 'hard_break',
@@ -207,7 +233,7 @@ function convertNode(
         }
       }
 
-      flushText();
+      await flushText();
 
       nodes[nodeId] = {
         type: 'paragraph',
@@ -232,7 +258,7 @@ function convertNode(
       const children: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = convertNode(child, nodeId, nodes, archivedNodes);
+          const childId = await convertNode(child, nodeId, nodes, archivedNodes);
           if (childId) children.push(childId);
         }
       }
@@ -252,7 +278,7 @@ function convertNode(
       const children: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = convertNode(child, nodeId, nodes, archivedNodes);
+          const childId = await convertNode(child, nodeId, nodes, archivedNodes);
           if (childId) children.push(childId);
         }
       }
@@ -270,7 +296,7 @@ function convertNode(
       const children: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = convertNode(child, nodeId, nodes, archivedNodes);
+          const childId = await convertNode(child, nodeId, nodes, archivedNodes);
           if (childId) children.push(childId);
         }
       }
@@ -287,7 +313,7 @@ function convertNode(
       const children: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = convertNode(child, nodeId, nodes, archivedNodes);
+          const childId = await convertNode(child, nodeId, nodes, archivedNodes);
           if (childId) children.push(childId);
         }
       }
@@ -304,7 +330,7 @@ function convertNode(
       const children: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = convertNode(child, nodeId, nodes, archivedNodes);
+          const childId = await convertNode(child, nodeId, nodes, archivedNodes);
           if (childId) children.push(childId);
         }
       }
@@ -352,7 +378,7 @@ function convertNode(
       const children: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = convertNode(child, nodeId, nodes, archivedNodes);
+          const childId = await convertNode(child, nodeId, nodes, archivedNodes);
           if (childId) children.push(childId);
         }
       }
@@ -377,7 +403,7 @@ function convertNode(
       const children: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = convertNode(child, nodeId, nodes, archivedNodes);
+          const childId = await convertNode(child, nodeId, nodes, archivedNodes);
           if (childId) children.push(childId);
         }
       }
@@ -394,7 +420,7 @@ function convertNode(
       const children: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = convertNode(child, nodeId, nodes, archivedNodes);
+          const childId = await convertNode(child, nodeId, nodes, archivedNodes);
           if (childId) children.push(childId);
         }
       }
@@ -474,7 +500,7 @@ function convertNode(
       const contentChildren: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = convertNode(child, foldContentId, nodes, archivedNodes);
+          const childId = await convertNode(child, foldContentId, nodes, archivedNodes);
           if (childId) contentChildren.push(childId);
         }
       }
@@ -545,14 +571,14 @@ function convertNode(
   }
 }
 
-export function convertPostToDocumentJson(
+export async function convertPostToDocumentJson(
   body: JSONContent,
   options: {
     maxWidth: number;
     layoutMode: PostLayoutMode;
     pageLayout: PageLayout | null;
   },
-): { json: DocumentJson; archivedNodes: ArchivedNodeEntry[] } {
+): Promise<{ json: DocumentJson; archivedNodes: ArchivedNodeEntry[] }> {
   const bodyNode = body.content?.[0];
   const paragraphIndent = bodyNode?.attrs?.paragraphIndent ?? 1;
   const blockGap = bodyNode?.attrs?.blockGap ?? 1;
@@ -583,7 +609,7 @@ export function convertPostToDocumentJson(
   const blocks = bodyNode?.content ?? [];
 
   for (const block of blocks) {
-    const childId = convertNode(block, ROOT_ID, nodes, archivedNodes);
+    const childId = await convertNode(block, ROOT_ID, nodes, archivedNodes);
     if (childId) rootChildren.push(childId);
   }
 

@@ -939,7 +939,6 @@ impl Transaction {
         });
 
         let mut font_codepoints: FxHashMap<(String, u16), Vec<u32>> = FxHashMap::default();
-        let mut all_codepoints = Vec::new();
 
         for (_, node) in fragment.iter() {
             if let Node::Text(text_node) = node.data() {
@@ -967,7 +966,6 @@ impl Transaction {
                         })
                         .unwrap_or(default_weight);
 
-                    all_codepoints.extend_from_slice(&codepoints);
                     font_codepoints
                         .entry((family, weight))
                         .or_default()
@@ -981,11 +979,6 @@ impl Transaction {
                 family,
                 weight,
                 codepoints,
-            });
-        }
-        if !all_codepoints.is_empty() {
-            self.push_effect(Effect::CodepointDetected {
-                codepoints: all_codepoints,
             });
         }
     }

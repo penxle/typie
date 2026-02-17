@@ -8,13 +8,13 @@ Font.implement({
   isTypeOf: isTypeOf(TableCode.FONTS),
   interfaces: [Blob],
   fields: (t) => ({
-    name: t.exposeString('name'),
     fullName: t.exposeString('fullName', { nullable: true }),
+    subfamilyDisplayName: t.exposeString('subfamilyDisplayName', { nullable: true }),
     weight: t.exposeInt('weight'),
 
     family: t.expose('familyId', { type: FontFamily }),
 
-    url: t.string({ resolve: (font) => `https://typie.net/fonts/${font.path}` }),
+    url: t.string({ resolve: (font) => `https://typie.net/fonts/${font.path}/web.woff2` }),
   }),
 });
 
@@ -22,7 +22,8 @@ FontFamily.implement({
   isTypeOf: isTypeOf(TableCode.FONT_FAMILIES),
   fields: (t) => ({
     id: t.exposeID('id'),
-    name: t.exposeString('name'),
+    familyName: t.exposeString('familyName'),
+    displayName: t.exposeString('displayName'),
 
     fonts: t.field({
       type: [Font],
@@ -38,6 +39,23 @@ FontFamily.implement({
 });
 
 builder.mutationFields((t) => ({
+  archiveFontFamily: t.withAuth({ session: true }).fieldWithInput({
+    type: FontFamily,
+    input: { fontFamilyId: t.input.id({ validate: validateDbId(TableCode.FONT_FAMILIES) }) },
+    resolve: async (_, { input }, ctx) => {
+      await db
+        .select({ id: FontFamilies.id })
+        .from(FontFamilies)
+        .where(and(eq(FontFamilies.id, input.fontFamilyId), eq(FontFamilies.userId, ctx.session.userId)))
+        .then(firstOrThrow);
+
+      await db.update(Fonts).set({ state: FontState.ARCHIVED }).where(eq(Fonts.familyId, input.fontFamilyId));
+      await db.update(FontFamilies).set({ state: FontFamilyState.ARCHIVED }).where(eq(FontFamilies.id, input.fontFamilyId));
+
+      return input.fontFamilyId;
+    },
+  }),
+
   archiveFont: t.withAuth({ session: true }).fieldWithInput({
     type: Font,
     input: { fontId: t.input.id({ validate: validateDbId(TableCode.FONTS) }) },

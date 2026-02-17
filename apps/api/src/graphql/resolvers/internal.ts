@@ -216,7 +216,7 @@ builder.mutationFields((t) => ({
       await assertPlanRule({ userId: ctx.session.userId, rule: 'maxTotalCharacterCount' });
       await assertPlanRule({ userId: ctx.session.userId, rule: 'maxTotalBlobSize' });
 
-      const { json, archivedNodes } = convertPostToDocumentJson(postContents.body, {
+      const { json, archivedNodes } = await convertPostToDocumentJson(postContents.body, {
         maxWidth: post.maxWidth,
         layoutMode: postContents.layoutMode,
         pageLayout: postContents.pageLayout,

@@ -963,7 +963,7 @@ mod tests {
         let codepoints: Vec<u32> = effects
             .iter()
             .filter_map(|e| match e {
-                Effect::CodepointDetected { codepoints } => Some(codepoints.clone()),
+                Effect::FontDetected { codepoints, .. } => Some(codepoints.clone()),
                 _ => None,
             })
             .flatten()
@@ -1016,7 +1016,7 @@ mod tests {
         let codepoints: Vec<u32> = effects
             .iter()
             .filter_map(|e| match e {
-                Effect::CodepointDetected { codepoints } => Some(codepoints.clone()),
+                Effect::FontDetected { codepoints, .. } => Some(codepoints.clone()),
                 _ => None,
             })
             .flatten()

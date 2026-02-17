@@ -48,8 +48,8 @@ macro_rules! try_transact {
     }};
 }
 
-use crate::font::{register_font, set_fallback_fonts};
 use crate::global::GLOBALS;
+use crate::global::{register_font, set_fallback_fonts};
 use crate::icu_data::load_icu_data;
 
 #[allow(unused)]
@@ -1991,20 +1991,19 @@ pub struct ScopedFontRegistration {
 
 #[allow(unused)]
 impl ScopedFontRegistration {
-    pub fn new(fonts: std::collections::HashMap<String, Vec<u16>>) -> Self {
+    pub fn new(font_map: std::collections::HashMap<String, Vec<u16>>) -> Self {
         let mut keys = Vec::new();
         GLOBALS.with(|globals| {
             let globals = globals.borrow();
-            let mut lazy_fonts = globals.lazy_fonts.borrow_mut();
-            for (family, weights) in &fonts {
+            let mut fonts = globals.fonts.borrow_mut();
+            for (family, weights) in &font_map {
                 for &weight in weights {
                     let key = (family.clone(), weight);
-                    if !lazy_fonts.contains_key(&key) {
-                        lazy_fonts.insert(
+                    if !fonts.contains_key(&key) {
+                        fonts.insert(
                             key.clone(),
-                            crate::font::LazyFont {
-                                family_id: fontique::FamilyId::new(),
-                                data: std::sync::Arc::new(crate::font::SharedFontData::new(
+                            crate::global::Font {
+                                data: std::sync::Arc::new(crate::global::SharedFontData::new(
                                     Vec::new(),
                                 )),
                                 split_offset: 0,
@@ -2013,6 +2012,10 @@ impl ScopedFontRegistration {
                         keys.push(key);
                     }
                 }
+            }
+            let mut available = globals.available_fonts.borrow_mut();
+            for (family, weights) in &font_map {
+                available.insert(family.clone(), weights.clone());
             }
         });
         Self { keys }
@@ -2023,9 +2026,16 @@ impl Drop for ScopedFontRegistration {
     fn drop(&mut self) {
         GLOBALS.with(|globals| {
             let globals = globals.borrow();
-            let mut lazy_fonts = globals.lazy_fonts.borrow_mut();
+            let mut fonts = globals.fonts.borrow_mut();
+            let mut available = globals.available_fonts.borrow_mut();
             for key in &self.keys {
-                lazy_fonts.remove(key);
+                fonts.remove(key);
+                if let Some(weights) = available.get_mut(&key.0) {
+                    weights.retain(|&w| w != key.1);
+                    if weights.is_empty() {
+                        available.remove(&key.0);
+                    }
+                }
             }
         });
     }

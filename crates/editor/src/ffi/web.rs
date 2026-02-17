@@ -1,4 +1,4 @@
-use crate::font::{add_font_base, add_font_chunk, set_fallback_fonts};
+use crate::global::{add_font_base, add_font_chunk, set_available_fonts, set_fallback_fonts};
 use crate::global::{
     clear_text_replacement_rules, set_auto_surround_enabled, set_text_replacement_rules,
 };
@@ -33,6 +33,36 @@ pub fn get_memory() -> JsValue {
 pub fn validate_regex(pattern: &str) -> bool {
     let anchored = format!("(?:{pattern})$");
     fancy_regex::Regex::new(&anchored).is_ok()
+}
+
+#[wasm_bindgen(js_name = getFontMetadata)]
+pub fn get_font_metadata(data: Vec<u8>) -> Result<JsValue, JsValue> {
+    let metadata = crate::font::get_font_metadata(&data).map_err(|e| JsValue::from_str(&e))?;
+    Ok(to_js_value(&metadata))
+}
+
+#[wasm_bindgen(js_name = outlineTextToSvg)]
+pub fn outline_text_to_svg(font_data: Vec<u8>, text: &str) -> Result<String, JsValue> {
+    crate::font::outline_text_to_svg(&font_data, text).map_err(|e| JsValue::from_str(&e))
+}
+
+#[wasm_bindgen(js_name = getFontCodepoints)]
+pub fn get_font_codepoints(ttf_data: Vec<u8>) -> Result<JsValue, JsValue> {
+    let codepoints = crate::font::encode::get_font_codepoints(&ttf_data)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    Ok(to_js_value(&codepoints))
+}
+
+#[wasm_bindgen(js_name = encodeFont)]
+pub fn encode_font_wasm(
+    ttf_data: Vec<u8>,
+    chunk_codepoints_json: &str,
+) -> Result<JsValue, JsValue> {
+    let chunk_codepoints: Vec<Vec<u32>> = serde_json::from_str(chunk_codepoints_json)
+        .map_err(|e| JsValue::from_str(&format!("chunk_codepoints parse: {e}")))?;
+    let result = crate::font::encode::encode_font(&ttf_data, &chunk_codepoints)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    Ok(to_js_value(&result))
 }
 
 #[wasm_bindgen(js_name = snapshotToJson)]
@@ -72,6 +102,15 @@ impl Application {
     #[wasm_bindgen(js_name = addFontChunk)]
     pub fn add_font_chunk(&self, family: &str, weight: u16, data: Vec<u8>) {
         add_font_chunk(family, weight, &data);
+    }
+
+    #[wasm_bindgen(js_name = setAvailableFonts)]
+    pub fn set_available_fonts(&self, fonts: JsValue) {
+        if let Ok(fonts) =
+            serde_wasm_bindgen::from_value::<std::collections::HashMap<String, Vec<u16>>>(fonts)
+        {
+            set_available_fonts(fonts);
+        }
     }
 
     #[wasm_bindgen(js_name = setFallbackFonts)]

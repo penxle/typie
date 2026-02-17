@@ -1,71 +1,66 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
-  import { SearchableDropdown } from '@typie/ui/components';
+  import { flex } from '@typie/styled-system/patterns';
+  import { Icon, SearchableDropdown } from '@typie/ui/components';
+  import PlusIcon from '~icons/lucide/plus';
+  import { FontSpecimen } from '$lib/components';
   import { getEditorContext } from '$lib/editor/context.svelte';
+  import { getRepresentativeFont } from '$lib/editor/fonts';
+
+  type Props = {
+    onUploadClick?: () => void;
+  };
+
+  let { onUploadClick }: Props = $props();
 
   const { editor } = getEditorContext();
-
-  const fontFamilies = [
-    { label: '프리텐다드', value: 'Pretendard', weights: [100, 200, 300, 400, 500, 600, 700, 800, 900] },
-    { label: '코펍월드돋움', value: 'KoPubWorldDotum', weights: [500, 700] },
-    { label: '나눔바른고딕', value: 'NanumBarunGothic', weights: [400, 700] },
-    { label: '리디바탕', value: 'RIDIBatang', weights: [400] },
-    { label: '코펍월드바탕', value: 'KoPubWorldBatang', weights: [500, 700] },
-    { label: '나눔명조', value: 'NanumMyeongjo', weights: [400, 700] },
-  ];
-
-  const defaultFontWeight = 400;
 
   const fontFamilyAttr = $derived(editor.getAttr('font_family'));
   const fontFamilyValues = $derived(fontFamilyAttr?.values.filter((v): v is string => v != null) ?? []);
   const currentFontFamilyValue = $derived(fontFamilyValues.length === 1 ? fontFamilyValues[0] : undefined);
 
-  const allFontFamilies = $derived(fontFamilies.map((f) => ({ value: f.value, label: f.label })));
-
-  const getDefaultWeight = (fontFamilyValue: string, fontWeight: number) => {
-    const systemFontFamily = fontFamilies.find((f) => f.value === fontFamilyValue);
-    if (!systemFontFamily) return defaultFontWeight;
-
-    const weights = systemFontFamily.weights.toSorted((a, b) => a - b);
-    if (weights.length === 0) return defaultFontWeight;
-
-    if (weights.includes(fontWeight)) {
-      return fontWeight;
-    }
-
-    let closest = weights[0];
-    let minDiff = Math.abs(fontWeight - weights[0]);
-
-    for (const weight of weights) {
-      const diff = Math.abs(fontWeight - weight);
-      if (diff < minDiff) {
-        minDiff = diff;
-        closest = weight;
+  const fontFamilyItems = $derived.by(() => {
+    const active = editor.fontFamilies.filter((f) => f.state === 'ACTIVE');
+    if (currentFontFamilyValue && !active.some((f) => f.familyName === currentFontFamilyValue)) {
+      const current = editor.fontFamilies.find((f) => f.familyName === currentFontFamilyValue);
+      if (current) {
+        return [...active, current];
       }
     }
+    return active;
+  });
 
-    return closest;
-  };
+  const representativeFontMap = $derived(new Map(editor.fontFamilies.map((f) => [f.familyName, getRepresentativeFont(f.fonts)])));
 </script>
+
+{#snippet uploadFontFamilyItem()}
+  <div class={flex({ alignItems: 'center', gap: '4px' })}>
+    <Icon
+      style={css.raw({ color: 'text.faint', transitionProperty: '[none]', _groupHover: { color: 'text.brand' } })}
+      icon={PlusIcon}
+      size={14}
+    />
+    <span class={css({ color: 'text.subtle', _groupHover: { color: 'text.brand' } })}>직접 업로드</span>
+  </div>
+{/snippet}
 
 <SearchableDropdown
   style={css.raw({ width: '120px' })}
   disabled={!editor.can('toggleStyle')}
-  getLabel={(value) => {
-    const item = allFontFamilies.find((f) => f.value === value);
-    return item?.label ?? '(알 수 없는 폰트)';
-  }}
-  items={allFontFamilies}
+  extraItems={onUploadClick
+    ? [
+        {
+          onclick: () => onUploadClick?.(),
+          content: uploadFontFamilyItem,
+        },
+      ]
+    : undefined}
+  getLabel={(value) => editor.fontFamilies.find((f) => f.familyName === value)?.displayName ?? '(알 수 없는 폰트)'}
+  items={fontFamilyItems.map((f) => ({ value: f.familyName, label: f.displayName }))}
   label="폰트 패밀리"
   onEscape={() => editor.focus()}
-  onchange={(fontFamilyValue, options) => {
-    const weightAttr = editor.getAttr('font_weight');
-    const weightValues = weightAttr?.values.filter((v): v is number => v != null) ?? [];
-    const currentWeight = weightValues.length === 1 ? weightValues[0] : defaultFontWeight;
-    const defaultWeight = getDefaultWeight(fontFamilyValue, currentWeight);
-
-    editor.dispatch({ type: 'toggleStyle', style: { type: 'font_family', family: fontFamilyValue } });
-    editor.dispatch({ type: 'toggleStyle', style: { type: 'font_weight', weight: defaultWeight } });
+  onchange={(familyName, options) => {
+    editor.dispatch({ type: 'toggleStyle', style: { type: 'font_family', family: familyName } });
     if (options?.shouldFocus) {
       editor.focus();
     }
@@ -74,6 +69,7 @@
   value={currentFontFamilyValue}
 >
   {#snippet renderItem(item)}
-    <div style:font-family={item.value}>{item.label}</div>
+    {@const font = representativeFontMap.get(item.value)}
+    <FontSpecimen fontId={font?.id} text={item.label} weight={font?.weight} />
   {/snippet}
 </SearchableDropdown>

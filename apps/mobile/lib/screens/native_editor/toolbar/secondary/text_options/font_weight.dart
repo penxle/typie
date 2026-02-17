@@ -1,4 +1,3 @@
-import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/screens/native_editor/toolbar/buttons/label.dart';
@@ -23,14 +22,30 @@ class NativeEditorFontWeightTextOptionsToolbar extends HookWidget {
         ? fontWeightValues[0]
         : (fontWeightValues.isEmpty ? editorDefaultValues['fontWeight'] as int : null);
 
-    final currentFontFamilyAndWeights = _getCurrentFontFamilyAndWeights(fontFamilyValues);
+    final currentFonts = _getCurrentFonts(scope, fontFamilyValues, fontWeightValues);
 
-    final availableWeightItems = editorValues['fontWeight']!
-        .where((item) => currentFontFamilyAndWeights.weights.contains(item['value'] as int))
-        .toList();
+    final weightLabelMap = <int, String>{};
+    for (final item in editorValues['fontWeight']!) {
+      weightLabelMap[item['value'] as int] = item['label'] as String;
+    }
+
+    final weightItems = currentFonts.map((font) {
+      return {
+        'value': font.weight,
+        'label':
+            weightLabelMap[font.weight] ??
+            (font.subfamilyDisplayName != null ? '${font.subfamilyDisplayName} (${font.weight})' : '${font.weight}'),
+      };
+    }).toList();
+
+    if (activeValue != null && !weightItems.any((w) => w['value'] == activeValue)) {
+      weightItems
+        ..add({'value': activeValue, 'label': weightLabelMap[activeValue] ?? '$activeValue'})
+        ..sort((a, b) => (a['value']! as int).compareTo(b['value']! as int));
+    }
 
     return NativeEditorTextOptionsToolbar(
-      items: availableWeightItems,
+      items: weightItems,
       activeValue: activeValue,
       builder: (context, item, isActive) {
         return LabelToolbarButton(
@@ -47,44 +62,43 @@ class NativeEditorFontWeightTextOptionsToolbar extends HookWidget {
     );
   }
 
-  ({String? family, List<int> weights}) _getCurrentFontFamilyAndWeights(List<String> fontFamilyValues) {
-    final defaultFontFamilyAndWeights = (
-      family: editorDefaultValues['fontFamily'] as String?,
-      weights:
-          (editorValues['fontFamily']!.firstWhere((f) => f['value'] == editorDefaultValues['fontFamily'])['weights']
-                  as List)
-              .cast<int>()
-              .toList()
-            ..sort(),
-    );
-
-    if (fontFamilyValues.isEmpty) {
-      return defaultFontFamilyAndWeights;
-    }
+  List<({int weight, String? subfamilyDisplayName})> _getCurrentFonts(
+    NativeEditorToolbarScope scope,
+    List<String> fontFamilyValues,
+    List<int> fontWeightValues,
+  ) {
+    final fontFamilies = scope.controller.fontManager?.fontFamilies ?? [];
 
     if (fontFamilyValues.length == 1) {
-      final systemFont = editorValues['fontFamily']!.firstWhereOrNull((f) => f['value'] == fontFamilyValues[0]);
-      if (systemFont != null) {
-        return (
-          family: systemFont['value'] as String?,
-          weights: ((systemFont['weights'] as List?)?.cast<int>() ?? [])..sort(),
-        );
-      }
-      return defaultFontFamilyAndWeights;
-    }
-
-    final allWeights = <int>{};
-    for (final familyValue in fontFamilyValues) {
-      final systemFont = editorValues['fontFamily']!.firstWhereOrNull((f) => f['value'] == familyValue);
-      if (systemFont != null) {
-        allWeights.addAll((systemFont['weights'] as List?)?.cast<int>() ?? []);
+      final family = fontFamilies.where((f) => f.familyName == fontFamilyValues[0]).firstOrNull;
+      if (family != null) {
+        final activeFontsByWeight = <int, ({int weight, String? subfamilyDisplayName})>{};
+        for (final f in family.fonts) {
+          if (f.state == 'ACTIVE' || fontWeightValues.contains(f.weight)) {
+            activeFontsByWeight.putIfAbsent(
+              f.weight,
+              () => (weight: f.weight, subfamilyDisplayName: f.subfamilyDisplayName),
+            );
+          }
+        }
+        final activeFonts = activeFontsByWeight.values.toList()..sort((a, b) => a.weight.compareTo(b.weight));
+        return activeFonts;
       }
     }
 
-    if (allWeights.isEmpty) {
-      return defaultFontFamilyAndWeights;
+    final fontsByWeight = <int, ({int weight, String? subfamilyDisplayName})>{};
+    for (final familyName in fontFamilyValues) {
+      final family = fontFamilies.where((f) => f.familyName == familyName).firstOrNull;
+      if (family != null) {
+        for (final font in family.fonts) {
+          if (font.state == 'ACTIVE') {
+            fontsByWeight[font.weight] = (weight: font.weight, subfamilyDisplayName: font.subfamilyDisplayName);
+          }
+        }
+      }
     }
 
-    return (family: null, weights: allWeights.toList()..sort());
+    final fonts = fontsByWeight.values.toList()..sort((a, b) => a.weight.compareTo(b.weight));
+    return fonts;
   }
 }

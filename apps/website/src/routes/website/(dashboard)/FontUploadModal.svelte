@@ -5,12 +5,14 @@
   import { tooltip } from '@typie/ui/actions';
   import { HorizontalDivider, Icon, Modal, RingSpinner } from '@typie/ui/components';
   import { Dialog } from '@typie/ui/notification';
+  import { SvelteMap } from 'svelte/reactivity';
   import { TypieError } from '@/errors';
   import GemIcon from '~icons/lucide/gem';
   import InfoIcon from '~icons/lucide/info';
   import TypeIcon from '~icons/lucide/type';
   import UploadIcon from '~icons/lucide/upload';
   import { graphql } from '$graphql';
+  import { values } from '$lib/editor/values';
   import { uploadBlob } from '$lib/utils';
 
   type Props = {
@@ -24,7 +26,13 @@
     mutation FontUploadModal_PersistBlobAsFont_Mutation($input: PersistBlobAsFontInput!) {
       persistBlobAsFont(input: $input) {
         id
-        name
+        subfamilyDisplayName
+        weight
+
+        family {
+          id
+          displayName
+        }
       }
     }
   `);
@@ -45,7 +53,15 @@
     inflight = true;
     uploadProgress = { current: 0, total: files.length };
 
-    const results: { name: string; success: boolean; error?: string }[] = [];
+    const results: {
+      name: string;
+      success: boolean;
+      error?: string;
+      familyId?: string;
+      familyDisplayName?: string;
+      weight?: number;
+      subfamilyDisplayName?: string | null;
+    }[] = [];
 
     // NOTE: 업로드 폭탄을 방지하기 위해 하나씩 업로드
     for (const file of files) {
@@ -54,8 +70,17 @@
         const path = await uploadBlob(file);
         const resp = await persistBlobAsFont({ path });
         cache.invalidate({ __typename: 'User', id: userId, field: 'fontFamilies' });
+        cache.invalidate({ __typename: 'User', id: userId, field: 'documentFontFamilies' });
+        cache.invalidate({ __typename: 'Document', field: 'fontFamilies' });
 
-        results.push({ name: resp.name, success: true });
+        results.push({
+          name: resp.family.displayName,
+          familyId: resp.family.id,
+          familyDisplayName: resp.family.displayName,
+          weight: resp.weight,
+          subfamilyDisplayName: resp.subfamilyDisplayName,
+          success: true,
+        });
       } catch (err) {
         let errorMessage = '폰트 업로드에 실패했어요.';
         if (err instanceof TypieError) {
@@ -71,52 +96,53 @@
 
     inflight = false;
 
-    const successCount = results.filter((r) => r.success).length;
-    const failureCount = results.filter((r) => !r.success).length;
+    const successResults = results.filter((r) => r.success);
+    const failureResults = results.filter((r) => !r.success);
 
-    if (successCount > 0 && failureCount === 0) {
-      if (successCount === 1) {
+    const getWeightLabel = (font: { weight: number; subfamilyDisplayName?: string | null }) => {
+      return (
+        values.fontWeight[font.weight] ??
+        (font.subfamilyDisplayName ? `${font.subfamilyDisplayName} (${font.weight})` : String(font.weight))
+      );
+    };
+
+    const formatFontGroups = (items: typeof successResults) => {
+      const grouped = new SvelteMap<string, { displayName: string; subs: string[] }>();
+      for (const r of items) {
+        const id = r.familyId ?? '';
+        if (!grouped.has(id)) grouped.set(id, { displayName: r.familyDisplayName ?? '', subs: [] });
+        grouped.get(id)?.subs.push(getWeightLabel({ weight: r.weight ?? 0, subfamilyDisplayName: r.subfamilyDisplayName }));
+      }
+      return [...grouped.values()].map(({ displayName, subs }) => `• ${displayName} (${subs.join(', ')})`).join('\n');
+    };
+
+    if (successResults.length > 0 && failureResults.length === 0) {
+      Dialog.alert({
+        title: '폰트 업로드 완료',
+        message: `${successResults.length}개의 폰트가 추가되었어요.\n\n${formatFontGroups(successResults)}\n\n업로드한 폰트는 설정 > 폰트 탭에서 관리할 수 있어요.`,
+      });
+      open = false;
+    } else {
+      const failureMessages = failureResults.map((r) => `• ${r.name}: ${r.error}`).join('\n');
+
+      if (successResults.length === 0) {
         Dialog.alert({
-          title: '폰트 업로드 완료',
-          message: `"${results[0].name}" 폰트가 추가되었어요. 업로드한 폰트는 설정 > 폰트 탭에서 관리할 수 있어요.`,
+          title: '폰트 업로드 실패',
+          message: `${failureResults.length}개의 폰트 업로드에 실패했어요.\n\n${failureMessages}`,
         });
       } else {
-        const fontNames = results
-          .filter((r) => r.success)
-          .map((r) => r.name)
-          .join(', ');
         Dialog.alert({
-          title: '폰트 업로드 완료',
-          message: `${successCount}개의 폰트(${fontNames})가 추가되었어요. 업로드한 폰트는 설정 > 폰트 탭에서 관리할 수 있어요.`,
+          title: '폰트 업로드 일부 완료',
+          message: `${successResults.length}개의 폰트가 추가되었어요.\n\n${formatFontGroups(successResults)}\n\n${failureResults.length}개의 폰트 업로드에 실패했어요.\n\n${failureMessages}\n\n업로드된 폰트는 설정 > 폰트 탭에서 관리할 수 있어요.`,
         });
       }
-      open = false;
-    } else if (successCount === 0) {
-      const errorMessages = results.map((r) => `• ${r.name}: ${r.error}`).join('\n');
-      Dialog.alert({
-        title: '폰트 업로드 실패',
-        message: `모든 폰트 업로드에 실패했어요.\n\n${errorMessages}`,
-      });
-    } else {
-      const successNames = results
-        .filter((r) => r.success)
-        .map((r) => `"${r.name}"`)
-        .join(', ');
-      const failureMessages = results
-        .filter((r) => !r.success)
-        .map((r) => `• ${r.name}: ${r.error}`)
-        .join('\n');
-      Dialog.alert({
-        title: '폰트 업로드 일부 완료',
-        message: `${successCount}개의 폰트(${successNames})가 추가되었어요.\n\n다음 ${failureCount}개의 폰트는 업로드에 실패했어요:\n${failureMessages}\n\n업로드된 폰트는 설정 > 폰트 탭에서 관리할 수 있어요.`,
-      });
     }
   };
 
   const handleUpload = async () => {
     const picker = document.createElement('input');
     picker.type = 'file';
-    picker.accept = '.ttf,.otf';
+    picker.accept = '.ttf';
     picker.multiple = true;
 
     picker.addEventListener('change', async () => {
@@ -143,12 +169,12 @@
     const files = e.dataTransfer?.files;
     if (!files) return;
 
-    const fontFiles = [...files].filter((file) => /\.(ttf|otf)$/i.test(file.name));
+    const fontFiles = [...files].filter((file) => /\.ttf$/i.test(file.name));
 
     if (fontFiles.length === 0) {
       Dialog.alert({
         title: '올바른 폰트 파일이 아니에요',
-        message: 'TTF 또는 OTF 파일만 업로드할 수 있어요.',
+        message: 'TTF 파일만 업로드할 수 있어요.',
       });
       return;
     }
@@ -201,7 +227,7 @@
       </div>
 
       <ul class={css({ listStyle: 'disc', paddingLeft: '20px', fontSize: '13px', color: 'text.faint' })}>
-        <li>TTF, OTF 확장자를 가진 폰트 파일을 업로드할 수 있어요.</li>
+        <li>TTF 확장자를 가진 폰트 파일을 업로드할 수 있어요.</li>
         <li>기울어진 폰트는 업로드할 수 없어요.</li>
         <li>업로드된 폰트는 내 글이라면 어디서나 이용할 수 있어요.</li>
         <li>기존에 업로드한 폰트 목록은 설정 &gt; 폰트 탭에서 관리할 수 있어요.</li>
@@ -252,7 +278,7 @@
             <div class={css({ fontSize: '14px', fontWeight: 'medium', color: isDragging ? 'text.brand' : 'text.subtle' })}>
               클릭하거나 파일을 드래그해서 업로드
             </div>
-            <div class={css({ fontSize: '12px', color: 'text.subtle' })}>TTF, OTF 파일 (여러 개 가능)</div>
+            <div class={css({ fontSize: '12px', color: 'text.subtle' })}>TTF 파일 (여러 개 가능)</div>
           </div>
         {/if}
       </div>

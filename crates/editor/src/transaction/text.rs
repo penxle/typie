@@ -183,9 +183,8 @@ impl Transaction {
             self.push_effect(Effect::FontDetected {
                 family,
                 weight,
-                codepoints: codepoints.clone(),
+                codepoints,
             });
-            self.push_effect(Effect::CodepointDetected { codepoints });
         }
 
         let selection = self.selection().clone();
@@ -3509,7 +3508,7 @@ mod tests {
         let codepoints: Vec<u32> = effects
             .iter()
             .filter_map(|e| match e {
-                Effect::CodepointDetected { codepoints } => Some(codepoints.clone()),
+                Effect::FontDetected { codepoints, .. } => Some(codepoints.clone()),
                 _ => None,
             })
             .flatten()

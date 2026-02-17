@@ -1,8 +1,9 @@
 import { createWasmApplication } from '@/utils/wasm';
-import { ensureAllFontBases, ensureRequiredFallbackFont, ensureRequiredFont } from './fonts';
+import { ensureRequiredFallbackFont, ensureRequiredFont, filterUncoveredCodepoints, initFonts } from './fonts';
 import { createPdfFromPages } from './pdf';
 import { renderDocumentPages } from './render';
 import type { Theme } from '@typie/editor';
+import type { FontFamily } from './fonts';
 
 const SCALE_FACTOR = 2;
 const MAX_TICKS = 1000;
@@ -38,19 +39,20 @@ export type GenerateDocumentPdfParams = {
   snapshot: Uint8Array;
   title: string;
   author: string;
+  fonts: FontFamily[];
   pageLayout: PageLayout;
   timeout?: number;
 };
 
 export async function generateDocumentPdf(params: GenerateDocumentPdfParams): Promise<Uint8Array> {
-  const { snapshot, title, author, pageLayout, timeout = 30_000 } = params;
+  const { snapshot, title, author, fonts, pageLayout, timeout = 30_000 } = params;
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout);
 
   try {
     const result = await Promise.race([
-      generateDocumentPdfInternal(snapshot, title, author, pageLayout),
+      generateDocumentPdfInternal(snapshot, title, author, fonts, pageLayout),
       new Promise<never>((_, reject) => {
         controller.signal.addEventListener('abort', () => {
           reject(new Error('PDF generation timed out'));
@@ -67,13 +69,14 @@ async function generateDocumentPdfInternal(
   snapshot: Uint8Array,
   title: string,
   author: string,
+  fonts: FontFamily[],
   pageLayout: PageLayout,
 ): Promise<Uint8Array> {
   const { app, getMemory, icuData, cleanup } = await createWasmApplication();
 
   try {
     app.loadIcuData(icuData);
-    await ensureAllFontBases(app);
+    await initFonts(app);
 
     const editor = app.createEditor(SCALE_FACTOR, snapshot);
 
@@ -105,7 +108,6 @@ async function generateDocumentPdfInternal(
       const DIRTY_PAGES = 1;
       const DIRTY_RENDER_REQUIRED = 16;
       const DIRTY_FONT_REQUIRED = 17;
-      const DIRTY_FALLBACK_FONT_REQUIRED = 18;
 
       for (let tick = 0; tick < MAX_TICKS; tick++) {
         editor.tick();
@@ -146,18 +148,18 @@ async function generateDocumentPdfInternal(
               codepoints.push(view.getUint32(pos + j * 4, true));
             }
             pos += cpCount * 4;
-            fontPromises.push(ensureRequiredFont(app, family, weight, codepoints));
+            const font = fonts.find((f) => f.familyName === family)?.fonts.find((f) => f.weight === weight);
+            if (font) {
+              fontPromises.push(
+                ensureRequiredFont(app, family, font, codepoints),
+                filterUncoveredCodepoints(font, codepoints).then((uncovered) =>
+                  uncovered.length > 0 ? ensureRequiredFallbackFont(app, weight, uncovered) : undefined,
+                ),
+              );
+            } else {
+              fontPromises.push(ensureRequiredFallbackFont(app, weight, codepoints));
+            }
           }
-        }
-
-        if (dirtyLo & (1 << DIRTY_FALLBACK_FONT_REQUIRED)) {
-          const count = view.getUint32(slatePtr + offsets.fallback_codepoints_count, true);
-          const offset = slabPtr + view.getUint32(slatePtr + offsets.fallback_codepoints_offset, true);
-          const codepoints: number[] = [];
-          for (let i = 0; i < count; i++) {
-            codepoints.push(view.getUint32(offset + i * 4, true));
-          }
-          fontPromises.push(ensureRequiredFallbackFont(app, codepoints));
         }
 
         if (dirtyLo & (1 << DIRTY_RENDER_REQUIRED)) {

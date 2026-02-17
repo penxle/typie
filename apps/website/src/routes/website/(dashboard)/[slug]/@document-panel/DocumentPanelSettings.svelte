@@ -15,8 +15,7 @@
     TextInput,
     Tooltip,
   } from '@typie/ui/components';
-  import { getAppContext } from '@typie/ui/context';
-  import { values } from '@typie/ui/tiptap';
+  import { getAppContext, getThemeContext } from '@typie/ui/context';
   import { clamp, PAGE_LAYOUT_OPTIONS, PAGE_SIZE_MAP } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import { tick } from 'svelte';
@@ -33,78 +32,56 @@
   import TypeIcon from '~icons/lucide/type';
   import LetterSpacingIcon from '~icons/typie/letter-spacing';
   import LineHeightIcon from '~icons/typie/line-height';
-  import { fragment, graphql } from '$graphql';
+  import { FontSpecimen } from '$lib/components';
+  import { getRepresentativeFont } from '$lib/editor/fonts';
+  import { THEME_COLORS } from '$lib/editor/theme';
+  import { values } from '$lib/editor/values';
   import ToolbarColorGrid from '../@toolbar/ToolbarColorGrid.svelte';
-  import type { DocumentPanel_Settings_user } from '$graphql';
   import type { Editor } from '$lib/editor/editor.svelte';
+  import type { ThemeVariant } from '$lib/editor/theme';
 
   type Props = {
     editor: Editor;
-    $user: DocumentPanel_Settings_user;
   };
 
-  let { editor, $user: _user }: Props = $props();
-
-  const user = fragment(
-    _user,
-    graphql(`
-      fragment DocumentPanel_Settings_user on User {
-        id
-
-        fontFamilies {
-          id
-          name
-
-          fonts {
-            id
-            weight
-          }
-        }
-      }
-    `),
-  );
+  let { editor }: Props = $props();
 
   const app = getAppContext();
+  const theme = getThemeContext();
+
+  const themeVariant = $derived(
+    (theme.effectiveTheme === 'light' ? `light-${theme.lightVariant}` : `dark-${theme.darkVariant}`) as ThemeVariant,
+  );
+  const tc = $derived(THEME_COLORS[themeVariant]);
 
   const defaultAttrs = $derived(editor.defaultAttrs);
 
-  const fontFamilyItems = $derived([
-    ...values.fontFamily.map((f) => ({ value: f.value, label: f.label })),
-    ...$user.fontFamilies.map((f) => ({ value: f.id, label: f.name })),
-  ]);
-
-  const currentFontFamilyWeights = $derived.by(() => {
-    const ff = defaultAttrs?.fontFamily;
-    if (!ff) return values.fontFamily[0].weights.toSorted((a, b) => a - b);
-
-    const systemFont = values.fontFamily.find((f) => f.value === ff);
-    if (systemFont) return systemFont.weights.toSorted((a, b) => a - b);
-
-    const userFont = $user.fontFamilies.find((f) => f.id === ff);
-    if (userFont) return userFont.fonts.map((f) => f.weight).toSorted((a, b) => a - b);
-
-    return values.fontFamily[0].weights.toSorted((a, b) => a - b);
+  const currentFontFamilyFonts = $derived.by(() => {
+    const docFont = editor.fontFamilies.find((f) => f.familyName === defaultAttrs?.fontFamily);
+    if (!docFont) return [];
+    return [...new Map(docFont.fonts.filter((f) => f.state === 'ACTIVE').map((f) => [f.weight, f])).values()].toSorted(
+      (a, b) => a.weight - b.weight,
+    );
   });
 
   const fontWeightItems = $derived(
-    currentFontFamilyWeights.map((weight) => ({
-      value: weight,
-      label: values.fontWeight.find(({ value }) => value === weight)?.label || String(weight),
+    currentFontFamilyFonts.map((font) => ({
+      value: font.weight,
+      label:
+        values.fontWeight[font.weight] ??
+        (font.subfamilyDisplayName ? `${font.subfamilyDisplayName} (${font.weight})` : String(font.weight)),
     })),
   );
 
-  const getClosestWeight = (fontFamilyOrId: string, targetWeight: number) => {
-    let weights: number[];
+  const representativeFontMap = $derived(new Map(editor.fontFamilies.map((f) => [f.familyName, getRepresentativeFont(f.fonts)])));
 
-    const systemFont = values.fontFamily.find((f) => f.value === fontFamilyOrId);
-    if (systemFont) {
-      weights = systemFont.weights.toSorted((a, b) => a - b);
-    } else {
-      const userFont = $user.fontFamilies.find((f) => f.id === fontFamilyOrId);
-      if (!userFont) return targetWeight;
-      weights = userFont.fonts.map((f) => f.weight).toSorted((a, b) => a - b);
-    }
+  const weightFontIdMap = $derived(new Map(currentFontFamilyFonts.map((f) => [f.weight, f.id])));
 
+  const getClosestWeight = (familyName: string, targetWeight: number) => {
+    const docFont = editor.fontFamilies.find((f) => f.familyName === familyName);
+    if (!docFont) return targetWeight;
+
+    const weights = [...new Set(docFont.fonts.filter((f) => f.state === 'ACTIVE').map((f) => f.weight))].toSorted((a, b) => a - b);
     if (weights.length === 0) return targetWeight;
     if (weights.includes(targetWeight)) return targetWeight;
 
@@ -112,7 +89,7 @@
     let minDiff = Math.abs(targetWeight - weights[0]);
     for (const w of weights) {
       const diff = Math.abs(targetWeight - w);
-      if (diff < minDiff) {
+      if (diff <= minDiff) {
         minDiff = diff;
         closest = w;
       }
@@ -148,6 +125,14 @@
     });
   };
 
+  const textColorItems = $derived(values.textColor.map((c) => ({ label: c.label, value: c.value, color: tc[c.themeKey] })));
+
+  const bgColorItems = $derived(
+    values.textBackgroundColor.map((c) => ({ label: c.label, value: c.value, color: c.themeKey ? tc[c.themeKey] : null })),
+  );
+
+  const bgItem = $derived(bgColorItems.find(({ value }) => value === defaultAttrs?.backgroundColor));
+
   let textColorOpened = $state(false);
   let bgColorOpened = $state(false);
   let fontSizeOpened = $state(false);
@@ -167,9 +152,6 @@
       bgColorOpened = false;
     },
   });
-
-  const MIN_FONT_SIZE = 1;
-  const MAX_FONT_SIZE = 200;
 
   let fontSizeAnchorElement: HTMLDivElement | undefined = $state();
   let fontSizeFloatingElement: HTMLDivElement | undefined = $state();
@@ -197,7 +179,7 @@
   const applyFontSize = () => {
     const parsed = Number.parseFloat(fontSizeInputValue);
     if (!Number.isNaN(parsed) && defaultAttrs && parsed !== defaultAttrs.fontSize) {
-      handleDefaultAttrChange({ fontSize: clamp(parsed, MIN_FONT_SIZE, MAX_FONT_SIZE) });
+      handleDefaultAttrChange({ fontSize: clamp(parsed, values.minFontSize, values.maxFontSize) });
     }
   };
 
@@ -239,7 +221,7 @@
       e.preventDefault();
       e.stopPropagation();
       const current = Number.parseFloat(fontSizeInputValue) || defaultAttrs?.fontSize || 12;
-      const sortedSizes = values.fontSize.map(({ value }) => value).toSorted((a, b) => a - b);
+      const sortedSizes = [...values.fontSize].toSorted((a, b) => a - b);
       const currentIndex = sortedSizes.findIndex((size) => size >= current);
 
       let newIndex: number;
@@ -440,11 +422,8 @@
             paddingX: '8px',
             '& > input': { textAlign: 'right', fontSize: '12px', fontWeight: 'medium' },
           })}
-          getLabel={(value) => {
-            const item = fontFamilyItems.find((f) => f.value === value);
-            return item?.label ?? '(알 수 없는 폰트)';
-          }}
-          items={fontFamilyItems}
+          getLabel={(value) => editor.fontFamilies.find((f) => f.familyName === value)?.displayName ?? '(알 수 없는 폰트)'}
+          items={editor.fontFamilies.filter((f) => f.state === 'ACTIVE').map((f) => ({ value: f.familyName, label: f.displayName }))}
           label=""
           onchange={(value) => {
             const closestWeight = getClosestWeight(value, defaultAttrs.fontWeight);
@@ -453,7 +432,8 @@
           value={defaultAttrs.fontFamily}
         >
           {#snippet renderItem(item)}
-            <div style:font-family={item.value}>{item.label}</div>
+            {@const font = representativeFontMap.get(item.value)}
+            <FontSpecimen fontId={font?.id} text={item.label} weight={font?.weight} />
           {/snippet}
         </SearchableDropdown>
       </div>
@@ -482,9 +462,7 @@
           value={defaultAttrs.fontWeight}
         >
           {#snippet renderItem(item)}
-            <div style:font-family={defaultAttrs.fontFamily} style:font-weight={item.value}>
-              {item.label}
-            </div>
+            <FontSpecimen fontId={weightFontIdMap.get(item.value)} text={item.label} weight={item.value} />
           {/snippet}
         </SearchableDropdown>
       </div>
@@ -570,7 +548,7 @@
             in:fly={{ y: -5, duration: 150 }}
           >
             <DropdownMenu autoFocus={false} onclose={() => (fontSizeOpened = false)} opened={fontSizeOpened}>
-              {#each values.fontSize as { label, value } (value)}
+              {#each values.fontSize as value (value)}
                 <DropdownMenuItem
                   active={defaultAttrs.fontSize === value}
                   onclick={() => {
@@ -578,7 +556,7 @@
                     fontSizeOpened = false;
                   }}
                 >
-                  {label}
+                  {value}
                 </DropdownMenuItem>
               {/each}
             </DropdownMenu>
@@ -634,11 +612,11 @@
           use:textColorAnchorAction
         >
           <div
-            style:background-color={values.textColor.find(({ value }) => value === defaultAttrs.textColor)?.color}
+            style:background-color={textColorItems.find(({ value }) => value === defaultAttrs.textColor)?.color}
             class={css({ borderWidth: '1px', borderRadius: 'full', size: '16px', flexShrink: '0' })}
           ></div>
           <span class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.subtle' })}>
-            {values.textColor.find(({ value }) => value === defaultAttrs.textColor)?.label ?? defaultAttrs.textColor}
+            {textColorItems.find(({ value }) => value === defaultAttrs.textColor)?.label ?? defaultAttrs.textColor}
           </span>
         </button>
         {#if textColorOpened}
@@ -657,8 +635,8 @@
           >
             <ToolbarColorGrid
               columns={11}
-              currentValue={defaultAttrs.textColor as (typeof values.textColor)[number]['value']}
-              items={values.textColor}
+              currentValue={defaultAttrs.textColor}
+              items={textColorItems}
               onClose={() => (textColorOpened = false)}
               onSelect={(value) => {
                 handleDefaultAttrChange({ textColor: value });
@@ -690,9 +668,7 @@
           use:bgColorAnchorAction
         >
           <div
-            style:background-color={defaultAttrs.backgroundColor === 'none'
-              ? 'transparent'
-              : values.textBackgroundColor.find(({ value }) => value === defaultAttrs.backgroundColor)?.color}
+            style:background-color={bgItem?.color ?? 'transparent'}
             class={css({ borderWidth: '1px', borderRadius: '4px', size: '16px', flexShrink: '0', position: 'relative' })}
           >
             {#if defaultAttrs.backgroundColor === 'none'}
@@ -710,7 +686,7 @@
             {/if}
           </div>
           <span class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.subtle' })}>
-            {values.textBackgroundColor.find(({ value }) => value === defaultAttrs.backgroundColor)?.label ?? defaultAttrs.backgroundColor}
+            {bgItem?.label ?? defaultAttrs.backgroundColor}
           </span>
         </button>
         {#if bgColorOpened}
@@ -729,8 +705,8 @@
           >
             <ToolbarColorGrid
               columns={8}
-              currentValue={defaultAttrs.backgroundColor as (typeof values.textBackgroundColor)[number]['value']}
-              items={values.textBackgroundColor}
+              currentValue={defaultAttrs.backgroundColor}
+              items={bgColorItems}
               onClose={() => (bgColorOpened = false)}
               onSelect={(value) => {
                 handleDefaultAttrChange({ backgroundColor: value });
@@ -738,7 +714,6 @@
               }}
               opened={bgColorOpened}
               shape="square"
-              showNone
             />
           </div>
         {/if}

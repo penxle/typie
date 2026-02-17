@@ -31,7 +31,7 @@
 
         fontFamilies {
           id
-          name
+          displayName
 
           fonts {
             id
@@ -61,7 +61,7 @@
 
   const allFontFamilies = $derived.by(() => {
     const systemFonts = values.fontFamily.map((f) => ({ value: f.value, label: f.label }));
-    const userFonts = $user.subscription ? $user.fontFamilies.map((f) => ({ value: f.id, label: f.name })) : [];
+    const userFonts = $user.subscription ? $user.fontFamilies.map((f) => ({ value: f.id, label: f.displayName })) : [];
     return [...systemFonts, ...userFonts];
   });
 

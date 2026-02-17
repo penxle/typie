@@ -6,7 +6,9 @@
   import { Dialog } from '@typie/ui/notification';
   import PlusIcon from '~icons/lucide/plus';
   import { fragment, graphql } from '$graphql';
-  import { SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
+  import { FontSpecimen, SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
+  import { getRepresentativeFont } from '$lib/editor/fonts';
+  import { values } from '$lib/editor/values';
   import FontUploadModal from '../FontUploadModal.svelte';
   import PlanUpgradeModal from '../PlanUpgradeModal.svelte';
   import type { DashboardLayout_PreferenceModal_FontTab_user } from '$graphql';
@@ -24,13 +26,19 @@
         id
         ...DashboardLayout_PlanUpgradeModal_user
 
-        fontFamilies {
+        documentFontFamilies {
           id
-          name
+          familyName
+          displayName
+          source
+          state
 
           fonts {
             id
             weight
+            state
+            subfamilyDisplayName
+            url
           }
         }
 
@@ -41,8 +49,33 @@
     `),
   );
 
+  const userFontFamilies = $derived(
+    $user.documentFontFamilies
+      .filter((f) => f.source === 'USER' && f.state === 'ACTIVE')
+      .map((family) => ({
+        ...family,
+        fonts: [
+          ...new Map(
+            family.fonts
+              .filter((f) => f.state === 'ACTIVE')
+              .toSorted((a, b) => a.weight - b.weight)
+              .map((f) => [f.weight, f]),
+          ).values(),
+        ],
+      }))
+      .filter((family) => family.fonts.length > 0),
+  );
+
   let uploadModalOpen = $state(false);
   let planUpgradeOpen = $state(false);
+
+  const archiveFontFamily = graphql(`
+    mutation DashboardLayout_PreferenceModal_FontTab_ArchiveFontFamily_Mutation($input: ArchiveFontFamilyInput!) {
+      archiveFontFamily(input: $input) {
+        id
+      }
+    }
+  `);
 
   const archiveFont = graphql(`
     mutation DashboardLayout_PreferenceModal_FontTab_ArchiveFont_Mutation($input: ArchiveFontInput!) {
@@ -51,10 +84,15 @@
       }
     }
   `);
+
+  const getWeightLabel = (font: { weight: number; subfamilyDisplayName?: string | null }) => {
+    return (
+      values.fontWeight[font.weight] ?? (font.subfamilyDisplayName ? `${font.subfamilyDisplayName} (${font.weight})` : String(font.weight))
+    );
+  };
 </script>
 
 <div class={flex({ direction: 'column', gap: '40px', maxWidth: '640px' })}>
-  <!-- Tab Header -->
   <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
     <h1 class={css({ fontSize: '20px', fontWeight: 'semibold', color: 'text.default' })}>폰트</h1>
     <button
@@ -84,38 +122,70 @@
     </button>
   </div>
 
-  <!-- Font Management Section -->
-  <div>
-    {#if $user.fontFamilies.length > 0}
-      <SettingsCard>
-        {#each $user.fontFamilies as { id: familyId, name, fonts }, familyIndex (familyId)}
-          {#each fonts as { id, weight }, fontIndex (id)}
-            {#if familyIndex > 0 || fontIndex > 0}
+  {#if userFontFamilies.length > 0}
+    {#each userFontFamilies as family (family.id)}
+      <div>
+        <div class={flex({ alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' })}>
+          <h2 class={css({ fontSize: '16px', fontWeight: 'semibold', color: 'text.default' })}>
+            <FontSpecimen
+              fontId={getRepresentativeFont(family.fonts)?.id}
+              text={family.displayName}
+              weight={getRepresentativeFont(family.fonts)?.weight}
+            />
+          </h2>
+          <button
+            class={css({
+              borderRadius: '6px',
+              paddingX: '12px',
+              paddingY: '6px',
+              fontSize: '13px',
+              fontWeight: 'medium',
+              color: 'text.subtle',
+              transition: 'common',
+              _hover: { backgroundColor: 'surface.muted' },
+            })}
+            onclick={() => {
+              Dialog.confirm({
+                title: '폰트 패밀리 삭제',
+                message: `"${family.displayName}" 폰트 패밀리 전체를 삭제하시겠어요?`,
+                action: 'danger',
+                actionLabel: '삭제',
+                actionHandler: async () => {
+                  await archiveFontFamily({ fontFamilyId: family.id });
+                  cache.invalidate({ __typename: 'User', id: $user.id, field: 'fontFamilies' });
+                  cache.invalidate({ __typename: 'User', id: $user.id, field: 'documentFontFamilies' });
+                  cache.invalidate({ __typename: 'Document', field: 'fontFamilies' });
+                },
+              });
+            }}
+            type="button"
+          >
+            전체 삭제
+          </button>
+        </div>
+
+        <SettingsCard>
+          {#each family.fonts as font, fontIndex (font.id)}
+            {#if fontIndex > 0}
               <SettingsDivider />
             {/if}
             <SettingsRow>
               {#snippet label()}
-                <span style:font-family={familyId} style:font-weight={weight}>
-                  {name}
-                </span>
-                <span class={css({ color: 'text.subtle' })}>
-                  ({name})
-                </span>
-              {/snippet}
-              {#snippet description()}
-                굵기: {weight}
+                <FontSpecimen fontId={font.id} text={getWeightLabel(font)} weight={font.weight} />
               {/snippet}
               {#snippet value()}
                 <Button
                   onclick={() => {
                     Dialog.confirm({
                       title: '폰트 삭제',
-                      message: `"${name}" 폰트를 삭제하시겠어요?`,
+                      message: `"${family.displayName} ${getWeightLabel(font)}" 폰트를 삭제하시겠어요?`,
                       action: 'danger',
                       actionLabel: '삭제',
                       actionHandler: async () => {
-                        await archiveFont({ fontId: id });
+                        await archiveFont({ fontId: font.id });
+                        cache.invalidate({ __typename: 'User', id: $user.id, field: 'documentFontFamilies' });
                         cache.invalidate({ __typename: 'User', id: $user.id, field: 'fontFamilies' });
+                        cache.invalidate({ __typename: 'Document', field: 'fontFamilies' });
                       },
                     });
                   }}
@@ -127,16 +197,18 @@
               {/snippet}
             </SettingsRow>
           {/each}
-        {/each}
-      </SettingsCard>
-    {:else}
-      <SettingsCard>
-        <div class={css({ padding: '20px', fontSize: '13px', color: 'text.subtle', textAlign: 'center' })}>
-          아직 직접 업로드한 폰트가 없어요.
-        </div>
-      </SettingsCard>
-    {/if}
-  </div>
+        </SettingsCard>
+      </div>
+    {/each}
+  {:else}
+    <SettingsCard>
+      <div class={css({ paddingX: '20px', paddingY: '40px', fontSize: '13px', color: 'text.subtle', textAlign: 'center' })}>
+        아직 직접 업로드한 폰트가 없어요.
+        <br />
+        우측 상단의 직접 업로드 버튼이나 문서 에디터의 폰트 패밀리 메뉴에서 추가할 수 있어요.
+      </div>
+    </SettingsCard>
+  {/if}
 </div>
 
 <FontUploadModal userId={$user.id} bind:open={uploadModalOpen} />

@@ -26,7 +26,6 @@ pub const DIRTY_TABLE_OVERLAYS: u64 = 1 << 14;
 pub const DIRTY_DOC_CHANGED: u64 = 1 << 15;
 pub const DIRTY_RENDER_REQUIRED: u64 = 1 << 16;
 pub const DIRTY_FONT_REQUIRED: u64 = 1 << 17;
-pub const DIRTY_FALLBACK_FONT_REQUIRED: u64 = 1 << 18;
 pub const DIRTY_EXITED_DOCUMENT_START: u64 = 1 << 19;
 pub const DIRTY_HTML_PASTED: u64 = 1 << 20;
 
@@ -201,8 +200,6 @@ define_slate! {
 
         pub font_requests_offset: u32,
         pub font_requests_count: u32,
-        pub fallback_codepoints_offset: u32,
-        pub fallback_codepoints_count: u32,
         pub html_pasted_offset: u32,
         pub html_pasted_len: u32,
 
@@ -706,13 +703,6 @@ impl Slab {
             slate.font_requests_count = count;
             slate.dirty |= DIRTY_FONT_REQUIRED;
         }
-    }
-
-    pub fn write_fallback_codepoints(&mut self, slate: &mut Slate, codepoints: &[u32]) {
-        let (off, cnt) = self.write_u32_slice(codepoints);
-        slate.fallback_codepoints_offset = off;
-        slate.fallback_codepoints_count = cnt;
-        slate.dirty |= DIRTY_FALLBACK_FONT_REQUIRED;
     }
 
     pub fn write_enabled_actions(&mut self, slate: &mut Slate, actions: &[String]) {

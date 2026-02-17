@@ -3,15 +3,18 @@
   "version": "0.0.1",
   "private": true,
   "type": "module",
+  "exports": {
+    ".": {
+      "types": "./pkg/editor.d.ts",
+      "default": "./pkg/editor.js"
+    },
+    "./font/fallbacks.json": "./assets/fallbacks.json",
+    "./font/Noto-Phantom.bin": "./assets/Noto-Phantom.bin",
+    "./font/Noto-Phantom-Emoji.bin": "./assets/Noto-Phantom-Emoji.bin",
+    "./icu/data.postcard": "./assets/icu_data.postcard"
+  },
   "main": "pkg/editor.js",
   "types": "pkg/editor.d.ts",
-  "typesVersions": {
-    "*": {
-      "pkg/fonts.json": [
-        "types/fonts.json.d.ts"
-      ]
-    }
-  },
   "files": [
     "pkg"
   ],

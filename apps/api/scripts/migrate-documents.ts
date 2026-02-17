@@ -362,10 +362,20 @@ await (async () => {
       const doc = new LoroDoc();
       doc.import(row.snapshot);
 
+      // Fix table nodes missing proportion field (added in a later migration)
+      const allNodesMap = doc.getMap('nodes');
+      for (const nodeId of allNodesMap.keys()) {
+        const nodeMap = allNodesMap.get(nodeId) as LoroMap;
+        if ((nodeMap.get('type') as string) === 'table' && nodeMap.get('proportion') == null) {
+          nodeMap.set('proportion', 1);
+        }
+      }
+
       let newDocJson;
 
       if (isAlreadyMigrated(doc)) {
-        const currentJson = (await snapshotToJson(row.snapshot)) as Record<string, unknown>;
+        const fixedSnapshot = new Uint8Array(doc.export({ mode: 'snapshot' }));
+        const currentJson = (await snapshotToJson(fixedSnapshot)) as Record<string, unknown>;
         const nodes = currentJson.nodes as Record<string, Record<string, unknown>>;
         let needsFix = false;
 

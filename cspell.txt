@@ -24,6 +24,7 @@ crdt
 creds
 cxzv
 dearmor
+dedup
 disablepictureinpicture
 dmarc
 dotenv
@@ -46,6 +47,7 @@ indexeddb
 initdb
 inview
 ipaddr
+jaccard
 kakao
 karpenter
 khtml
@@ -105,6 +107,7 @@ safi
 sark
 scard
 serde
+sfnt
 setex
 shiki
 sindresorhus
