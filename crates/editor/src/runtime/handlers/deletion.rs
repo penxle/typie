@@ -50,13 +50,13 @@ impl Runtime {
         }
 
         let ctx = NavigationContext::new(&self.state.doc);
-        let Some((_, rect)) = Cursor::bounds(&ctx, &self.pages, self.state.selection.head) else {
+        let Some((_, rect)) = Cursor::bounds(&ctx, self.pages(), self.state.selection.head) else {
             return vec![];
         };
         let preferred_y = rect.y;
 
         let Some(end_selection) =
-            Cursor::move_word_left(&ctx, &self.pages, self.state.selection.head, preferred_y)
+            Cursor::move_word_left(&ctx, self.pages(), self.state.selection.head, preferred_y)
         else {
             return vec![];
         };
@@ -79,13 +79,13 @@ impl Runtime {
         }
 
         let ctx = NavigationContext::new(&self.state.doc);
-        let Some((_, rect)) = Cursor::bounds(&ctx, &self.pages, self.state.selection.head) else {
+        let Some((_, rect)) = Cursor::bounds(&ctx, self.pages(), self.state.selection.head) else {
             return vec![];
         };
         let preferred_y = rect.y + rect.height;
 
         let Some(end_selection) =
-            Cursor::move_word_right(&ctx, &self.pages, self.state.selection.head, preferred_y)
+            Cursor::move_word_right(&ctx, self.pages(), self.state.selection.head, preferred_y)
         else {
             return vec![];
         };
@@ -104,13 +104,13 @@ impl Runtime {
         }
 
         let ctx = NavigationContext::new(&self.state.doc);
-        let Some((_, rect)) = Cursor::bounds(&ctx, &self.pages, self.state.selection.head) else {
+        let Some((_, rect)) = Cursor::bounds(&ctx, self.pages(), self.state.selection.head) else {
             return vec![];
         };
         let preferred_y = rect.y;
 
         let Some(end_selection) =
-            Cursor::move_sentence_up(&ctx, &self.pages, self.state.selection.head, preferred_y)
+            Cursor::move_sentence_up(&ctx, self.pages(), self.state.selection.head, preferred_y)
         else {
             return vec![];
         };
@@ -130,7 +130,7 @@ impl Runtime {
 
         let ctx = NavigationContext::new(&self.state.doc);
         let Some(line_start_selection) =
-            Cursor::move_to_line_start(&ctx, &self.pages, self.state.selection.head)
+            Cursor::move_to_line_start(&ctx, self.pages(), self.state.selection.head)
         else {
             return vec![];
         };

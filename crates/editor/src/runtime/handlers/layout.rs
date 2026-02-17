@@ -114,7 +114,7 @@ impl Runtime {
         let _ = self.state.doc.update_settings(|s| s.layout_mode = mode);
 
         let new_width = self.calculate_page_width(mode);
-        self.set_width(new_width);
+        self.layout_engine.set_width(new_width);
 
         vec![
             Effect::LayoutChanged,
@@ -129,21 +129,21 @@ impl Runtime {
         viewport_height: f32,
         scale_factor: f64,
     ) -> Vec<Effect> {
-        let viewport_changed = self.viewport_width != viewport_width;
-        self.viewport_width = viewport_width;
-        self.viewport_height = viewport_height;
+        let viewport_changed = self.layout_engine.viewport_width() != viewport_width;
+        self.layout_engine
+            .set_viewport(viewport_width, viewport_height);
 
         let layout_mode = self.doc().settings().layout_mode;
         let new_width = self.calculate_page_width(layout_mode);
 
-        let width_changed = self.width != new_width;
-        let scale_changed = self.scale_factor != scale_factor;
+        let width_changed = self.layout_engine.width() != new_width;
+        let scale_changed = self.layout_engine.scale_factor() != scale_factor;
 
-        self.set_width(new_width);
-        self.set_scale_factor(scale_factor);
+        self.layout_engine.set_width(new_width);
+        self.layout_engine.set_scale_factor(scale_factor);
 
         if width_changed || scale_changed || viewport_changed {
-            vec![Effect::LayoutChanged]
+            vec![Effect::FullLayoutInvalidation, Effect::LayoutChanged]
         } else {
             vec![]
         }
@@ -155,7 +155,7 @@ impl Runtime {
             LayoutMode::Continuous { max_width } => {
                 let margin = CONTINUOUS_PAGE_MARGIN;
                 let max_page_width = max_width + 2.0 * margin;
-                self.viewport_width.min(max_page_width)
+                self.layout_engine.viewport_width().min(max_page_width)
             }
         }
     }
@@ -166,8 +166,7 @@ impl Runtime {
     }
 
     pub(crate) fn handle_fonts_loaded(&mut self) -> Vec<Effect> {
-        self.layout_cache.borrow_mut().invalidate_all();
-        vec![Effect::LayoutChanged]
+        vec![Effect::FullLayoutInvalidation, Effect::LayoutChanged]
     }
 
     pub(crate) fn handle_set_focused(&mut self, focused: bool) -> Vec<Effect> {

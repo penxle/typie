@@ -1,5 +1,5 @@
 use crate::model::{Node, NodeId};
-use crate::runtime::{Effect, NodeViewState, Runtime};
+use crate::runtime::{Effect, Runtime};
 use crate::state::{Selection, leaf_block_end};
 
 impl Runtime {
@@ -47,11 +47,7 @@ impl Runtime {
     }
 
     pub(crate) fn toggle_view_state(&mut self, node_id: NodeId) -> Vec<Effect> {
-        let current_expanded = self
-            .view_states
-            .get(&node_id)
-            .map(|s| s.fold_expanded())
-            .unwrap_or(false);
+        let current_expanded = self.layout_engine.fold_expanded(node_id);
 
         let mut effects = if current_expanded {
             self.remap_selection_out_of_fold_content(node_id)
@@ -66,16 +62,10 @@ impl Runtime {
             Vec::new()
         };
 
-        self.view_states.insert(
-            node_id,
-            NodeViewState::Fold {
-                expanded: !current_expanded,
-            },
-        );
+        self.layout_engine
+            .set_fold_state(node_id, !current_expanded);
 
-        self.layout_cache.borrow_mut().invalidate_all();
-
-        effects.push(Effect::LayoutChanged);
+        effects.push(Effect::SubtreeChanged { node_id });
         effects
     }
 
