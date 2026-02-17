@@ -18,9 +18,7 @@ class NativeEditorFontWeightTextOptionsToolbar extends HookWidget {
 
     final fontWeightAttr = findAttr(attrs, 'font_weight');
     final fontWeightValues = (fontWeightAttr?['values'] as List?)?.whereType<int>().toList() ?? [];
-    final activeValue = fontWeightValues.length == 1
-        ? fontWeightValues[0]
-        : (fontWeightValues.isEmpty ? editorDefaultValues['fontWeight'] as int : null);
+    final activeValue = fontWeightValues.length == 1 ? fontWeightValues[0] : null;
 
     final currentFonts = _getCurrentFonts(scope, fontFamilyValues, fontWeightValues);
 
@@ -75,10 +73,7 @@ class NativeEditorFontWeightTextOptionsToolbar extends HookWidget {
         final activeFontsByWeight = <int, ({int weight, String? subfamilyDisplayName})>{};
         for (final f in family.fonts) {
           if (f.state == 'ACTIVE' || fontWeightValues.contains(f.weight)) {
-            activeFontsByWeight.putIfAbsent(
-              f.weight,
-              () => (weight: f.weight, subfamilyDisplayName: f.subfamilyDisplayName),
-            );
+            activeFontsByWeight[f.weight] = (weight: f.weight, subfamilyDisplayName: f.subfamilyDisplayName);
           }
         }
         final activeFonts = activeFontsByWeight.values.toList()..sort((a, b) => a.weight.compareTo(b.weight));

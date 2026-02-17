@@ -119,7 +119,7 @@ class NativeEditorTextToolbar extends HookWidget {
           LabelToolbarButton(
             color: context.colors.textSubtle,
             text: isFontFamilyMixed
-                ? '-'
+                ? '(다양한 폰트 패밀리)'
                 : scope.controller.fontManager?.fontFamilies
                           .where((f) => f.familyName == activeFontFamily)
                           .firstOrNull
@@ -133,18 +133,22 @@ class NativeEditorTextToolbar extends HookWidget {
           LabelToolbarButton(
             color: context.colors.textSubtle,
             text: isFontWeightMixed
-                ? '-'
+                ? '(다양한 폰트 굵기)'
                 : editorValues['fontWeight']?.firstWhereOrNull((e) => e['value'] == activeFontWeight)?['label']
                           as String? ??
-                      scope.controller.fontManager?.fontFamilies
-                          .where((f) => f.familyName == activeFontFamily)
-                          .firstOrNull
-                          ?.fonts
-                          .where((f) => f.weight == activeFontWeight)
-                          .firstOrNull
-                          ?.subfamilyDisplayName ??
-                      activeFontWeight?.toString() ??
-                      '(알 수 없음)',
+                      () {
+                        final font = scope.controller.fontManager?.fontFamilies
+                            .where((f) => f.familyName == activeFontFamily)
+                            .firstOrNull
+                            ?.fonts
+                            .where((f) => f.weight == activeFontWeight)
+                            .lastOrNull;
+                        if (font?.subfamilyDisplayName != null) {
+                          return '${font!.subfamilyDisplayName} ($activeFontWeight)';
+                        }
+                        return null;
+                      }() ??
+                      '(알 수 없는 굵기)',
             onTap: () {
               scope.secondaryToolbarMode.value = SecondaryToolbarMode.fontWeight;
             },
@@ -152,7 +156,7 @@ class NativeEditorTextToolbar extends HookWidget {
           LabelToolbarButton(
             color: context.colors.textSubtle,
             text: isFontSizeMixed
-                ? '-'
+                ? '(다양한 폰트 크기)'
                 : () {
                     final size = activeFontSize;
                     if (size == null) {
