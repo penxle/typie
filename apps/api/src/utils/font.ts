@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { optimize } from 'svgo';
 import { compressZstd } from './compression';
-import { encodeFont as wasmEncodeFont, getFontCodepoints as wasmGetFontCodepoints, outlineTextToSvg as wasmOutlineTextToSvg } from './wasm';
+import { wasm } from './wasm';
 
 const MAGIC = new Uint8Array([0x54, 0x50, 0x46, 0x54]);
 const VERSION = 1;
@@ -220,9 +220,9 @@ function buildChunkMaps(chunkCps: number[][]): { chunkMap: string | null; chunkM
 }
 
 export async function processFont(name: string, ttfData: Uint8Array): Promise<ProcessedFont> {
-  const [codepoints, strategies] = await Promise.all([wasmGetFontCodepoints(ttfData), loadStrategies()]);
+  const [codepoints, strategies] = await Promise.all([wasm.getFontCodepoints(ttfData), loadStrategies()]);
   const { chunks: chunkCps, strategy } = chunkCodepoints(name, codepoints, strategies);
-  const encoded = await wasmEncodeFont(ttfData, JSON.stringify(chunkCps));
+  const encoded = await wasm.encodeFont(ttfData, JSON.stringify(chunkCps));
 
   const [base, ...chunks] = await Promise.all([packFont(encoded.base), ...encoded.chunks.map((c) => packFont(c))]);
 
@@ -249,7 +249,7 @@ export async function processFont(name: string, ttfData: Uint8Array): Promise<Pr
 }
 
 export async function outlineTextToSvg(fontData: Uint8Array, text: string): Promise<string> {
-  const raw = await wasmOutlineTextToSvg(fontData, text);
+  const raw = await wasm.outlineTextToSvg(fontData, text);
   const { data } = optimize(raw, { multipass: true });
   return data;
 }

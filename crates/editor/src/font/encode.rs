@@ -12,9 +12,13 @@ use write_fonts::FontBuilder;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi))]
 pub struct EncodedFont {
     #[serde(with = "serde_bytes")]
+    #[cfg_attr(feature = "wasm", tsify(type = "Uint8Array"))]
     pub base: Vec<u8>,
+    #[cfg_attr(feature = "wasm", tsify(type = "Uint8Array[]"))]
     pub chunks: Vec<serde_bytes::ByteBuf>,
 }
 

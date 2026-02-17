@@ -16,7 +16,7 @@
   import { env } from '$env/dynamic/public';
   import { graphql } from '$graphql';
   import { AdminImpersonateBanner } from '$lib/components/admin';
-  import { setAutoSurroundEnabled, setAvailableFonts, setTextReplacementRules } from '$lib/editor/editor.svelte';
+  import { wasm } from '$lib/wasm';
   import { setupSplitViewContext } from './[slug]/@split-view/context.svelte';
   import { setupDragDropContext } from './[slug]/@split-view/drag-context.svelte';
   import { setupEditorRegistry } from './[slug]/@split-view/editor-registry.svelte';
@@ -277,7 +277,7 @@
   );
 
   $effect(() => {
-    setTextReplacementRules(JSON.parse(textReplacementRulesJson));
+    wasm.setTextReplacementRules(JSON.parse(textReplacementRulesJson));
   });
 
   const availableFontsJson = $derived.by(() =>
@@ -291,11 +291,11 @@
   );
 
   $effect(() => {
-    setAvailableFonts(JSON.parse(availableFontsJson));
+    wasm.setAvailableFonts(JSON.parse(availableFontsJson));
   });
 
   $effect(() => {
-    setAutoSurroundEnabled(app.preference.current.autoSurroundEnabled);
+    wasm.setAutoSurroundEnabled(app.preference.current.autoSurroundEnabled);
   });
 
   $effect(() => {

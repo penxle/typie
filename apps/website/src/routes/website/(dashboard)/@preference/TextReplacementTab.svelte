@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { validateRegex } from '@typie/editor';
   import { cache } from '@typie/sark/internal';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
@@ -13,6 +12,7 @@
   import TrashIcon from '~icons/lucide/trash';
   import { fragment, graphql } from '$graphql';
   import { SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
+  import { wasm } from '$lib/wasm';
   import type { DashboardLayout_PreferenceModal_TextReplacementTab_user } from '$graphql';
 
   type Props = {
@@ -244,7 +244,7 @@
       formError = '찾을 텍스트와 삽입할 텍스트가 같아요.';
       return false;
     }
-    if (formRegex && !validateRegex(formMatch)) {
+    if (formRegex && !wasm.validateRegex(formMatch)) {
       formError = '유효하지 않은 정규식이에요.';
       return false;
     }

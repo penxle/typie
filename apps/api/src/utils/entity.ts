@@ -8,7 +8,7 @@ import * as Y from 'yjs';
 import { db, Files, Images } from '@/db';
 import { PostLayoutMode } from '@/enums';
 import { schema, textSerializers } from '@/pm';
-import { snapshotToJson } from '@/utils/wasm';
+import { wasm } from '@/utils/wasm';
 import type { JSONContent } from '@tiptap/core';
 
 type MakeYDocParams = {
@@ -236,7 +236,7 @@ export const getLoroDocCharacterCount = (text: string) => {
 
 export const extractLoroDocContents = async (doc: LoroDoc) => {
   const snapshot = new Uint8Array(doc.export({ mode: 'snapshot' }));
-  const json = await snapshotToJson(snapshot);
+  const json = await wasm.snapshotToJson(snapshot);
   const text = extractTextFromLoroDoc(doc);
   const characterCount = getLoroDocCharacterCount(text);
   const { imageIds, fileIds } = extractAssetIdsFromLoroDoc(doc);

@@ -1,4 +1,4 @@
-import { getMemory } from '@typie/editor';
+import { wasm } from '$lib/wasm';
 
 const VERTEX_SHADER = `#version 300 es
 in vec2 a_position;
@@ -120,7 +120,7 @@ export class WebGLRenderer {
   render(ptr: number, len: number, width: number, height: number): void {
     const { gl, program, texture, vao } = this;
 
-    const memory = getMemory() as WebAssembly.Memory;
+    const memory = wasm.getMemory() as WebAssembly.Memory;
     const data = new Uint8Array(memory.buffer, ptr, len);
 
     gl.canvas.width = width;

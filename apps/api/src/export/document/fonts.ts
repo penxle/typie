@@ -59,8 +59,8 @@ function createAsyncCache<T>() {
 
 const fontData = createAsyncCache<Uint8Array>();
 const fontManifests = createAsyncCache<FontManifest>();
-const loaded = new Set<string>();
-const loading = new Map<string, Promise<void>>();
+const instanceLoaded = new WeakMap<Application, Set<string>>();
+const instanceLoading = new WeakMap<Application, Map<string, Promise<void>>>();
 const decodedChunkMaps = new Map<FontManifest, Uint8Array>();
 
 function fetchFont(url: string): Promise<Uint8Array> {
@@ -79,8 +79,19 @@ function fetchManifest(url: string): Promise<FontManifest> {
   });
 }
 
-function loadOnce(key: string, fn: () => Promise<void>): Promise<void> {
+function loadOnce(app: Application, key: string, fn: () => Promise<void>): Promise<void> {
+  let loaded = instanceLoaded.get(app);
+  if (!loaded) {
+    loaded = new Set();
+    instanceLoaded.set(app, loaded);
+  }
   if (loaded.has(key)) return Promise.resolve();
+
+  let loading = instanceLoading.get(app);
+  if (!loading) {
+    loading = new Map();
+    instanceLoading.set(app, loading);
+  }
 
   let promise = loading.get(key);
   if (!promise) {
@@ -148,7 +159,7 @@ function findChunkIndices(manifest: FontManifest, codepoints: number[]): number[
 }
 
 async function loadBase(app: Application, family: string, font: Font): Promise<void> {
-  await loadOnce(`base:${family}:${font.weight}`, async () => {
+  await loadOnce(app, `base:${family}:${font.weight}`, async () => {
     const manifest = await fetchManifest(font.url);
     const buffer = await fetchFont(`${font.url}/${manifest.hash}/base.bin`);
     app.addFontBase(family, font.weight, buffer);
@@ -160,7 +171,7 @@ async function loadChunks(app: Application, family: string, font: Font, codepoin
 
   await Promise.allSettled(
     findChunkIndices(manifest, codepoints).map((idx) =>
-      loadOnce(`chunk:${family}:${font.weight}:${idx}`, async () => {
+      loadOnce(app, `chunk:${family}:${font.weight}:${idx}`, async () => {
         const buffer = await fetchFont(`${font.url}/${manifest.hash}/chunks/${idx}.bin`);
         app.addFontChunk(family, font.weight, buffer);
       }),

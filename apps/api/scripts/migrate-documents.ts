@@ -5,7 +5,7 @@ import { LoroDoc, LoroMap, LoroText } from 'loro-crdt';
 import { db, DocumentContents, pg } from '@/db';
 import { DocumentSyncType } from '@/enums';
 import { pubsub } from '@/pubsub';
-import { jsonToSnapshot, snapshotToJson } from '@/utils/wasm';
+import { wasm } from '@/utils/wasm';
 
 process.env.SCRIPT = 'true';
 
@@ -375,7 +375,7 @@ await (async () => {
 
       if (isAlreadyMigrated(doc)) {
         const fixedSnapshot = new Uint8Array(doc.export({ mode: 'snapshot' }));
-        const currentJson = (await snapshotToJson(fixedSnapshot)) as Record<string, unknown>;
+        const currentJson = (await wasm.snapshotToJson(fixedSnapshot)) as Record<string, unknown>;
         const nodes = currentJson.nodes as Record<string, Record<string, unknown>>;
         let needsFix = false;
 
@@ -499,8 +499,8 @@ await (async () => {
         };
       }
 
-      const newSnapshot = await jsonToSnapshot(newDocJson);
-      const newJson = await snapshotToJson(newSnapshot);
+      const newSnapshot = await wasm.jsonToSnapshot(newDocJson);
+      const newJson = await wasm.snapshotToJson(newSnapshot);
 
       const newDoc = new LoroDoc();
       newDoc.import(newSnapshot);

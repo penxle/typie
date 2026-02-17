@@ -4,7 +4,9 @@ use skrifa::raw::TableProvider;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct FontMetadata {
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi))]
+pub struct FontMetadata {
     pub weight: u16,
     pub style: &'static str,
     pub family_name: Option<String>,
