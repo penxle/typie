@@ -263,6 +263,16 @@ impl Runtime {
         self.state.read_only
     }
 
+    pub fn set_render_debug(&mut self, enabled: bool) {
+        self.renderer.set_render_debug(enabled);
+        self.pending.render = true;
+    }
+
+    pub fn set_layout_debug(&mut self, enabled: bool) {
+        self.renderer.set_layout_debug(enabled);
+        self.pending.render = true;
+    }
+
     pub fn import_updates(&mut self, updates: &[u8]) -> Result<()> {
         let old_frontiers = self.state.doc.frontiers();
         self.state.doc.import_updates(updates)?;
@@ -770,6 +780,7 @@ impl Runtime {
             settings.layout_mode,
         );
         self.pages = paginator.paginate_rc(root_layout);
+        self.renderer.prune_page_cache(self.pages.len());
     }
 
     pub fn render_page(&mut self, page_index: usize) -> Option<RenderResult> {

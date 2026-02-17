@@ -5,6 +5,7 @@ use crate::layout::interactive::Interactive;
 use crate::model::{NodeId, TABLE_BORDER_WIDTH};
 use crate::render::Render;
 use crate::types::{BoxConstraints, Point, PointerStyle, Size};
+use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 
 pub use crate::layout::elements::SplitEdges;
@@ -181,6 +182,37 @@ impl Element {
             Element::FoldContent(e) => Some(e),
             Element::TableBorder(e) => Some(e),
             _ => None,
+        }
+    }
+
+    pub fn hash_render_cache_signature<H: Hasher>(&self, state: &mut H) -> bool {
+        match self {
+            Element::CalloutBackground(e) => {
+                e.hash(state);
+                true
+            }
+            Element::BlockquoteMessage(e) => {
+                e.hash(state);
+                true
+            }
+            Element::FoldContent(e) => {
+                e.hash(state);
+                true
+            }
+            Element::TableBorder(e) => {
+                e.hash(state);
+                true
+            }
+            Element::Line(_)
+            | Element::External(_)
+            | Element::Blockquote(_)
+            | Element::BlockquoteQuote(_)
+            | Element::CalloutIcon(_)
+            | Element::HorizontalRule(_)
+            | Element::ListMarker(_)
+            | Element::FoldTitle(_)
+            | Element::FoldTitleBackground(_)
+            | Element::TableCell(_) => false,
         }
     }
 

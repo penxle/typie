@@ -17,6 +17,7 @@
   import FolderIcon from '~icons/lucide/folder';
   import Maximize2Icon from '~icons/lucide/maximize-2';
   import XIcon from '~icons/lucide/x';
+  import { dev } from '$app/environment';
   import { fragment, graphql } from '$graphql';
   import { BottomToolbar, Editor as EditorComponent, TopToolbar } from '$lib/components/editor';
   import { IS_MAC } from '$lib/editor/constants';
@@ -265,6 +266,9 @@
   let fontUploadModalOpen = $state(false);
   let fontPlanUpgradeModalOpen = $state(false);
   let showFindReplace = $state(false);
+  let renderDebugEnabled = $state(false);
+  let layoutDebugEnabled = $state(false);
+  const showRenderDebugToggle = dev;
 
   const selectionsStore = new LocalStore<Record<string, { selection?: unknown; type?: string; element?: string; timestamp: number }>>(
     'typie:selections',
@@ -704,6 +708,74 @@
               }}
             ></div>
           </div>
+
+          {#if showRenderDebugToggle}
+            <button
+              class={flex({
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '24px',
+                paddingX: '7px',
+                borderRadius: '4px',
+                fontSize: '10px',
+                fontWeight: 'semibold',
+                whiteSpace: 'nowrap',
+                color: layoutDebugEnabled ? 'text.subtle' : 'text.faint',
+                backgroundColor: layoutDebugEnabled ? 'surface.muted' : 'transparent',
+                transition: 'common',
+                _hover: {
+                  color: 'text.subtle',
+                  backgroundColor: 'surface.muted',
+                },
+              })}
+              aria-pressed={layoutDebugEnabled}
+              onclick={() => {
+                layoutDebugEnabled = !layoutDebugEnabled;
+                editor.setLayoutDebug(layoutDebugEnabled);
+              }}
+              type="button"
+              use:tooltip={{
+                message: layoutDebugEnabled ? '레이아웃 디버거 끄기' : '레이아웃 디버거 켜기',
+                placement: 'left',
+                offset: 12,
+              }}
+            >
+              LAYOUT
+            </button>
+
+            <button
+              class={flex({
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '24px',
+                paddingX: '7px',
+                borderRadius: '4px',
+                fontSize: '10px',
+                fontWeight: 'semibold',
+                whiteSpace: 'nowrap',
+                color: renderDebugEnabled ? 'text.subtle' : 'text.faint',
+                backgroundColor: renderDebugEnabled ? 'surface.muted' : 'transparent',
+                transition: 'common',
+                _hover: {
+                  color: 'text.subtle',
+                  backgroundColor: 'surface.muted',
+                },
+              })}
+              aria-pressed={renderDebugEnabled}
+              onclick={() => {
+                renderDebugEnabled = !renderDebugEnabled;
+                editor.setRenderDebug(renderDebugEnabled);
+              }}
+              type="button"
+              use:tooltip={{
+                message: renderDebugEnabled ? '렌더 디버거 끄기' : '렌더 디버거 켜기',
+                placement: 'left',
+                offset: 12,
+              }}
+            >
+              RENDER
+            </button>
+          {/if}
 
           {#if $query.me.id === entity.user.id}
             <Menu>

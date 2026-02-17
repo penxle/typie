@@ -100,14 +100,25 @@ fn border_dash(style: TableBorderStyle) -> Option<StrokeDash> {
     }
 }
 
-fn continuous_draw_spec(element: &TableBorderElement, transform: Transform) -> BorderDrawSpec {
+fn absolute_element_top(transform: Transform, render_origin_y: f32) -> Option<f32> {
+    if transform.sy.abs() <= f32::EPSILON {
+        return None;
+    }
+    Some(transform.ty / transform.sy + render_origin_y)
+}
+
+fn continuous_draw_spec(
+    element: &TableBorderElement,
+    transform: Transform,
+    render_origin_y: f32,
+) -> BorderDrawSpec {
     let half = TABLE_BORDER_WIDTH / 2.0;
     let range = continuous_border_range(element);
-    let draw_top = !is_split_top_fragment(transform);
+    let draw_top = !is_split_top_fragment(transform, render_origin_y);
     let horizontal_top = if draw_top {
         range.top
     } else {
-        top_clip_for_split_fragment(transform).unwrap_or(range.top)
+        top_clip_for_split_fragment(transform, render_origin_y).unwrap_or(range.top)
     };
 
     BorderDrawSpec {
@@ -123,15 +134,12 @@ fn continuous_draw_spec(element: &TableBorderElement, transform: Transform) -> B
     }
 }
 
-fn is_split_top_fragment(transform: Transform) -> bool {
-    transform.sy.abs() > f32::EPSILON && transform.ty < -0.001 * transform.sy.abs()
+fn is_split_top_fragment(transform: Transform, render_origin_y: f32) -> bool {
+    absolute_element_top(transform, render_origin_y).is_some_and(|top| top < -0.001)
 }
 
-fn top_clip_for_split_fragment(transform: Transform) -> Option<f32> {
-    if transform.sy.abs() <= f32::EPSILON {
-        return None;
-    }
-    let element_top = transform.ty / transform.sy;
+fn top_clip_for_split_fragment(transform: Transform, render_origin_y: f32) -> Option<f32> {
+    let element_top = absolute_element_top(transform, render_origin_y)?;
     Some(-element_top + TABLE_BORDER_WIDTH / 2.0)
 }
 
@@ -245,7 +253,9 @@ impl Render for TableBorderElement {
 
                 let layout_mode = ctx.doc.settings().layout_mode;
                 let spec = match layout_mode {
-                    LayoutMode::Continuous { .. } => continuous_draw_spec(self, transform),
+                    LayoutMode::Continuous { .. } => {
+                        continuous_draw_spec(self, transform, ctx.render_origin.y)
+                    }
                     LayoutMode::Paginated { .. } => paginated_draw_spec(self, &layout_mode),
                 };
 
@@ -426,6 +436,7 @@ mod tests {
                 total_rows: 3,
             },
             Transform::from_scale(2.0, 2.0).pre_translate(0.0, -501.0),
+            0.0,
         );
 
         assert!(!spec.draw_top);
@@ -436,8 +447,34 @@ mod tests {
     #[test]
     fn top_clip_for_split_fragment_respects_transform_translation() {
         let transform = Transform::from_scale(2.0, 2.0).pre_translate(0.0, -501.0);
-        let top_clip = top_clip_for_split_fragment(transform).unwrap();
+        let top_clip = top_clip_for_split_fragment(transform, 0.0).unwrap();
 
         assert!((top_clip - 501.5).abs() < 0.01);
+    }
+
+    #[test]
+    fn tile_origin_does_not_trigger_false_split_top() {
+        let spec = continuous_draw_spec(
+            &TableBorderElement {
+                size: crate::types::Size::new(200.0, 120.0),
+                node_id: crate::model::NodeId::new(),
+                border_style: TableBorderStyle::Solid,
+                align: crate::model::TableAlign::Left,
+                rows: 3,
+                cols: 2,
+                row_heights: vec![40.0, 40.0, 40.0],
+                col_widths: vec![99.0, 99.0],
+                split_edges: SplitEdges::default(),
+                offset: 0.0,
+                x_offset: 0.0,
+                start_row_index: 0,
+                total_rows: 3,
+            },
+            Transform::from_scale(2.0, 2.0).pre_translate(0.0, -120.0),
+            120.0,
+        );
+
+        assert!(spec.draw_top);
+        assert!((spec.horizontal_top - TABLE_BORDER_WIDTH / 2.0).abs() < 0.01);
     }
 }

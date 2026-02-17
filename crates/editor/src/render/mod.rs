@@ -1,3 +1,5 @@
+mod cache;
+mod geometry;
 pub mod glyph;
 mod impls;
 
@@ -8,7 +10,16 @@ use crate::layout::{Element, Page, PositionedNode, RenderHints};
 use crate::model::{Doc, LayoutMode, SelectionDecor};
 use crate::runtime::DropIndicator;
 use crate::types::{Point, Theme};
-use tiny_skia::{Color, Pixmap, PixmapMut, Rect, Transform};
+use cache::{CacheDebugFrame, PageLayoutSnapshot, PageRenderCache, PageRenderSnapshot};
+use geometry::{CacheRect, PixelRect, clear_layout_rect, merge_and_clamp_rects};
+use rustc_hash::FxHashMap;
+use tiny_skia::{Color, Pixmap, PixmapMut, PixmapPaint, Rect, Transform};
+
+const DIRTY_RECT_EPSILON: f32 = 0.5;
+const FULL_REPAINT_COVERAGE_THRESHOLD: f32 = 0.7;
+const FULL_REPAINT_RECT_THRESHOLD: usize = 32;
+const DEBUG_MARKER_SIZE_PX: f32 = 8.0;
+const DEBUG_MARKER_MARGIN_PX: f32 = 2.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RenderPhase {
@@ -25,6 +36,7 @@ pub struct RenderContext<'a> {
     pub default_text_color: Option<Color>,
     pub is_focused: bool,
     pub phase: RenderPhase,
+    pub render_origin: Point,
 }
 
 pub trait Render {
@@ -76,6 +88,9 @@ pub struct Renderer {
     glyph_renderer: GlyphRenderer,
     theme: Theme,
     is_focused: bool,
+    page_cache: FxHashMap<usize, PageRenderCache>,
+    debug_render: bool,
+    debug_layout: bool,
 }
 
 impl Renderer {
@@ -88,12 +103,16 @@ impl Renderer {
             glyph_renderer: GlyphRenderer::new(),
             theme: Theme::default(),
             is_focused: true,
+            page_cache: FxHashMap::default(),
+            debug_render: false,
+            debug_layout: false,
         }
     }
 
     pub fn set_size(&mut self, width: f32, height: f32, scale_factor: f64) {
         let new_width = (width as f64 * scale_factor).round() as u32;
         let new_height = (height as f64 * scale_factor).round() as u32;
+        let scale_changed = (self.scale_factor - scale_factor).abs() > f64::EPSILON;
 
         if self.pixmap.width() != new_width || self.pixmap.height() != new_height {
             if let Some(new_pixmap) = Pixmap::new(new_width.max(1), new_height.max(1)) {
@@ -101,14 +120,33 @@ impl Renderer {
             }
         }
         self.scale_factor = scale_factor;
+        if scale_changed {
+            self.page_cache.clear();
+        }
     }
 
     pub fn set_theme(&mut self, theme: Theme) {
-        self.theme = theme;
+        if self.theme != theme {
+            self.theme = theme;
+            self.page_cache.clear();
+        }
     }
 
     pub fn set_focused(&mut self, focused: bool) {
         self.is_focused = focused;
+    }
+
+    pub fn set_render_debug(&mut self, enabled: bool) {
+        self.debug_render = enabled;
+    }
+
+    pub fn set_layout_debug(&mut self, enabled: bool) {
+        self.debug_layout = enabled;
+    }
+
+    pub fn prune_page_cache(&mut self, valid_page_count: usize) {
+        self.page_cache
+            .retain(|page_idx, _| *page_idx < valid_page_count);
     }
 
     pub fn width(&self) -> u16 {
@@ -127,45 +165,36 @@ impl Renderer {
         drop_indicator: Option<&DropIndicator>,
         doc: &Doc,
     ) -> RenderResult {
-        self.pixmap.data_mut().fill(0);
-
-        let scale = self.scale_factor as f32;
-        let transform = Transform::from_scale(scale, scale);
-
-        let stages = [
-            RenderPhase::Background,
-            RenderPhase::Selection,
-            RenderPhase::Content,
-        ];
+        let debug_frame = self.prepare_base_layer(page, page_idx, doc);
+        if let Some(cache) = self.page_cache.get(&page_idx) {
+            self.pixmap
+                .data_mut()
+                .copy_from_slice(cache.base_pixmap.data());
+        } else {
+            self.pixmap.data_mut().fill(0);
+        }
 
         let mut pixmap = self.pixmap.as_mut();
-
-        for phase in stages {
-            let ctx = RenderContext {
-                scale_factor: self.scale_factor,
-                selections,
-                theme: &self.theme,
-                doc,
-                default_text_color: None,
-                is_focused: self.is_focused,
-                phase,
-            };
-
-            Self::render_node(
+        Self::render_selection_overlay(
+            &mut pixmap,
+            &mut self.glyph_renderer,
+            self.scale_factor,
+            &self.theme,
+            self.is_focused,
+            page,
+            page_idx,
+            selections,
+            drop_indicator,
+            doc,
+        );
+        if let Some(frame) = debug_frame.as_ref() {
+            Self::render_debug_overlay(
                 &mut pixmap,
-                &mut self.glyph_renderer,
-                &page.root,
-                Point::zero(),
-                transform,
-                &ctx,
-                &RenderHints::default(),
+                self.scale_factor,
+                frame,
+                self.debug_render,
+                self.debug_layout,
             );
-
-            if phase == RenderPhase::Content {
-                if let Some(indicator) = drop_indicator {
-                    Self::render_drop_indicator(&mut pixmap, indicator, page_idx, transform, &ctx);
-                }
-            }
         }
 
         let data = self.pixmap.data();
@@ -198,46 +227,449 @@ impl Renderer {
             return false;
         };
 
-        pixmap.data_mut().fill(0);
+        let debug_frame = self.prepare_base_layer(page, page_idx, doc);
+        if let Some(cache) = self.page_cache.get(&page_idx) {
+            pixmap.data_mut().copy_from_slice(cache.base_pixmap.data());
+        } else {
+            pixmap.data_mut().fill(0);
+        }
 
+        Self::render_selection_overlay(
+            &mut pixmap,
+            &mut self.glyph_renderer,
+            self.scale_factor,
+            &self.theme,
+            self.is_focused,
+            page,
+            page_idx,
+            selections,
+            drop_indicator,
+            doc,
+        );
+        if let Some(frame) = debug_frame.as_ref() {
+            Self::render_debug_overlay(
+                &mut pixmap,
+                self.scale_factor,
+                frame,
+                self.debug_render,
+                self.debug_layout,
+            );
+        }
+
+        true
+    }
+
+    fn prepare_base_layer(
+        &mut self,
+        page: &Page,
+        page_idx: usize,
+        doc: &Doc,
+    ) -> Option<CacheDebugFrame> {
+        let mut debug_frame =
+            (self.debug_render || self.debug_layout).then(CacheDebugFrame::default);
+        let width = self.pixmap.width();
+        let height = self.pixmap.height();
         let scale = self.scale_factor as f32;
-        let transform = Transform::from_scale(scale, scale);
+        let canvas_width = width as f32 / scale;
+        let canvas_height = height as f32 / scale;
+        let render_snapshot = PageRenderSnapshot::from_page(page);
+        let layout_snapshot = self
+            .debug_layout
+            .then(|| PageLayoutSnapshot::from_page(page));
 
-        let stages = [
-            RenderPhase::Background,
-            RenderPhase::Selection,
-            RenderPhase::Content,
-        ];
+        let mut cache = self
+            .page_cache
+            .remove(&page_idx)
+            .filter(|entry| {
+                entry.width == width
+                    && entry.height == height
+                    && (entry.scale_factor - self.scale_factor).abs() <= f64::EPSILON
+            })
+            .unwrap_or_else(|| PageRenderCache::new(width, height, self.scale_factor));
 
-        for phase in stages {
+        let mut dirty_rects = if !cache.snapshot_initialized {
+            CacheRect::from_canvas(canvas_width, canvas_height)
+                .map(|rect| vec![rect])
+                .unwrap_or_default()
+        } else {
+            cache.snapshot.dirty_rects(&render_snapshot)
+        };
+        dirty_rects =
+            merge_and_clamp_rects(dirty_rects, canvas_width, canvas_height, DIRTY_RECT_EPSILON);
+
+        if !dirty_rects.is_empty() {
+            let full_area = canvas_width * canvas_height;
+            let dirty_area: f32 = dirty_rects.iter().map(|rect| rect.area()).sum();
+            let should_full_repaint = dirty_rects.len() > FULL_REPAINT_RECT_THRESHOLD
+                || (full_area > 0.0 && dirty_area / full_area >= FULL_REPAINT_COVERAGE_THRESHOLD);
+            let render_rects = if should_full_repaint {
+                CacheRect::from_canvas(canvas_width, canvas_height)
+                    .map(|rect| vec![rect])
+                    .unwrap_or_default()
+            } else {
+                dirty_rects
+            };
+            if let Some(frame) = debug_frame.as_mut() {
+                frame.render_rects = render_rects.clone();
+                frame.full_repaint = should_full_repaint;
+                frame.cache_reused = false;
+            }
+
+            if should_full_repaint {
+                cache.base_pixmap.data_mut().fill(0);
+                let mut cache_pixmap = cache.base_pixmap.as_mut();
+                self.render_base_phases(&mut cache_pixmap, page, doc, None, Point::zero());
+            } else {
+                for rect in &render_rects {
+                    clear_layout_rect(&mut cache.base_pixmap, *rect, scale);
+                    self.render_base_phases_clipped(&mut cache.base_pixmap, page, doc, *rect);
+                }
+            }
+        } else if let Some(frame) = debug_frame.as_mut() {
+            frame.cache_reused = true;
+        }
+
+        if let Some(layout_snapshot) = layout_snapshot {
+            let mut layout_rects = if !cache.layout_snapshot_initialized {
+                CacheRect::from_canvas(canvas_width, canvas_height)
+                    .map(|rect| vec![rect])
+                    .unwrap_or_default()
+            } else {
+                cache.layout_snapshot.dirty_rects(&layout_snapshot)
+            };
+            layout_rects = merge_and_clamp_rects(
+                layout_rects,
+                canvas_width,
+                canvas_height,
+                DIRTY_RECT_EPSILON,
+            );
+
+            let full_area = canvas_width * canvas_height;
+            let layout_area: f32 = layout_rects.iter().map(|rect| rect.area()).sum();
+            let should_full_relayout = layout_rects.len() > FULL_REPAINT_RECT_THRESHOLD
+                || (full_area > 0.0 && layout_area / full_area >= FULL_REPAINT_COVERAGE_THRESHOLD);
+            let layout_rects = if should_full_relayout {
+                CacheRect::from_canvas(canvas_width, canvas_height)
+                    .map(|rect| vec![rect])
+                    .unwrap_or_default()
+            } else {
+                layout_rects
+            };
+
+            if let Some(frame) = debug_frame.as_mut() {
+                frame.layout_rects = layout_rects;
+                frame.full_relayout = should_full_relayout;
+                frame.layout_reused = frame.layout_rects.is_empty();
+            }
+
+            cache.layout_snapshot = layout_snapshot;
+            cache.layout_snapshot_initialized = true;
+        } else if let Some(frame) = debug_frame.as_mut() {
+            frame.layout_reused = false;
+        }
+
+        cache.snapshot = render_snapshot;
+        cache.snapshot_initialized = true;
+        self.page_cache.insert(page_idx, cache);
+        debug_frame
+    }
+
+    fn render_base_phases(
+        &mut self,
+        pixmap: &mut PixmapMut,
+        page: &Page,
+        doc: &Doc,
+        clip: Option<CacheRect>,
+        origin: Point,
+    ) {
+        let scale = self.scale_factor as f32;
+        let transform = Transform::from_scale(scale, scale).pre_translate(-origin.x, -origin.y);
+
+        for phase in [RenderPhase::Background, RenderPhase::Content] {
             let ctx = RenderContext {
                 scale_factor: self.scale_factor,
-                selections,
+                selections: &[],
                 theme: &self.theme,
                 doc,
                 default_text_color: None,
                 is_focused: self.is_focused,
                 phase,
+                render_origin: origin,
             };
 
             Self::render_node(
-                &mut pixmap,
+                pixmap,
                 &mut self.glyph_renderer,
                 &page.root,
                 Point::zero(),
                 transform,
                 &ctx,
                 &RenderHints::default(),
+                clip,
             );
+        }
+    }
 
-            if phase == RenderPhase::Content {
-                if let Some(indicator) = drop_indicator {
-                    Self::render_drop_indicator(&mut pixmap, indicator, page_idx, transform, &ctx);
+    fn render_base_phases_clipped(
+        &mut self,
+        base_pixmap: &mut Pixmap,
+        page: &Page,
+        doc: &Doc,
+        clip_rect: CacheRect,
+    ) {
+        let scale = self.scale_factor as f32;
+        let Some(pixel_rect) = PixelRect::from_layout_rect(
+            clip_rect,
+            scale,
+            base_pixmap.width(),
+            base_pixmap.height(),
+        ) else {
+            return;
+        };
+
+        let clipped_layout_rect = pixel_rect.to_layout_rect(scale);
+        let Some(mut tile_pixmap) = Pixmap::new(pixel_rect.width, pixel_rect.height) else {
+            let mut base = base_pixmap.as_mut();
+            self.render_base_phases(
+                &mut base,
+                page,
+                doc,
+                Some(clipped_layout_rect),
+                Point::zero(),
+            );
+            return;
+        };
+
+        {
+            let mut tile = tile_pixmap.as_mut();
+            self.render_base_phases(
+                &mut tile,
+                page,
+                doc,
+                Some(clipped_layout_rect),
+                Point::new(clipped_layout_rect.x, clipped_layout_rect.y),
+            );
+        }
+
+        let paint = PixmapPaint::default();
+        base_pixmap.draw_pixmap(
+            pixel_rect.x as i32,
+            pixel_rect.y as i32,
+            tile_pixmap.as_ref(),
+            &paint,
+            Transform::identity(),
+            None,
+        );
+    }
+
+    fn render_selection_overlay(
+        pixmap: &mut PixmapMut,
+        glyph_renderer: &mut GlyphRenderer,
+        scale_factor: f64,
+        theme: &Theme,
+        is_focused: bool,
+        page: &Page,
+        page_idx: usize,
+        selections: &[SelectionDecor],
+        drop_indicator: Option<&DropIndicator>,
+        doc: &Doc,
+    ) {
+        let scale = scale_factor as f32;
+        let transform = Transform::from_scale(scale, scale);
+        let selection_ctx = RenderContext {
+            scale_factor,
+            selections,
+            theme,
+            doc,
+            default_text_color: None,
+            is_focused,
+            phase: RenderPhase::Selection,
+            render_origin: Point::zero(),
+        };
+
+        Self::render_node(
+            pixmap,
+            glyph_renderer,
+            &page.root,
+            Point::zero(),
+            transform,
+            &selection_ctx,
+            &RenderHints::default(),
+            None,
+        );
+
+        if let Some(indicator) = drop_indicator {
+            let overlay_ctx = RenderContext {
+                phase: RenderPhase::Content,
+                ..selection_ctx
+            };
+            Self::render_drop_indicator(pixmap, indicator, page_idx, transform, &overlay_ctx);
+        }
+    }
+
+    fn render_debug_overlay(
+        pixmap: &mut PixmapMut,
+        scale_factor: f64,
+        frame: &CacheDebugFrame,
+        show_render: bool,
+        show_layout: bool,
+    ) {
+        let scale = scale_factor as f32;
+        let transform = Transform::from_scale(scale, scale);
+
+        if show_render && !frame.render_rects.is_empty() {
+            let (fill_color, stroke_color) = if frame.full_repaint {
+                (
+                    Color::from_rgba8(255, 77, 77, 36),
+                    Color::from_rgba8(255, 77, 77, 220),
+                )
+            } else {
+                (
+                    Color::from_rgba8(255, 179, 0, 28),
+                    Color::from_rgba8(255, 179, 0, 220),
+                )
+            };
+
+            let mut fill_paint = tiny_skia::Paint::default();
+            fill_paint.set_color(fill_color);
+            for rect in &frame.render_rects {
+                if let Some(layout_rect) = Rect::from_xywh(rect.x, rect.y, rect.width, rect.height)
+                {
+                    pixmap.fill_rect(layout_rect, &fill_paint, transform, None);
                 }
+            }
+
+            for rect in &frame.render_rects {
+                Self::draw_debug_rect_outline(pixmap, *rect, stroke_color, transform, scale);
             }
         }
 
-        true
+        if show_layout && !frame.layout_rects.is_empty() {
+            let (fill_color, stroke_color) = if frame.full_relayout {
+                (
+                    Color::from_rgba8(59, 130, 246, 24),
+                    Color::from_rgba8(59, 130, 246, 220),
+                )
+            } else {
+                (
+                    Color::from_rgba8(14, 165, 233, 20),
+                    Color::from_rgba8(14, 165, 233, 220),
+                )
+            };
+
+            let mut fill_paint = tiny_skia::Paint::default();
+            fill_paint.set_color(fill_color);
+            for rect in &frame.layout_rects {
+                if let Some(layout_rect) = Rect::from_xywh(rect.x, rect.y, rect.width, rect.height)
+                {
+                    pixmap.fill_rect(layout_rect, &fill_paint, transform, None);
+                }
+            }
+
+            for rect in &frame.layout_rects {
+                Self::draw_debug_rect_outline(pixmap, *rect, stroke_color, transform, scale);
+            }
+        }
+
+        let render_marker_color = if !show_render {
+            None
+        } else if frame.cache_reused {
+            Some(Color::from_rgba8(16, 185, 129, 255))
+        } else if frame.full_repaint {
+            Some(Color::from_rgba8(255, 77, 77, 255))
+        } else if !frame.render_rects.is_empty() {
+            Some(Color::from_rgba8(255, 179, 0, 255))
+        } else {
+            None
+        };
+
+        if let Some(color) = render_marker_color {
+            Self::draw_debug_marker(pixmap, color, transform, scale, 0);
+        }
+
+        let layout_marker_color = if !show_layout {
+            None
+        } else if frame.layout_reused {
+            Some(Color::from_rgba8(16, 185, 129, 255))
+        } else if frame.full_relayout {
+            Some(Color::from_rgba8(59, 130, 246, 255))
+        } else if !frame.layout_rects.is_empty() {
+            Some(Color::from_rgba8(14, 165, 233, 255))
+        } else {
+            None
+        };
+
+        if let Some(color) = layout_marker_color {
+            Self::draw_debug_marker(pixmap, color, transform, scale, 1);
+        }
+    }
+
+    fn draw_debug_rect_outline(
+        pixmap: &mut PixmapMut,
+        rect: CacheRect,
+        color: Color,
+        transform: Transform,
+        scale: f32,
+    ) {
+        let mut paint = tiny_skia::Paint::default();
+        paint.set_color(color);
+
+        let mut thickness = (1.0 / scale).max(0.25);
+        thickness = thickness.min(rect.width * 0.5).min(rect.height * 0.5);
+        if thickness <= 0.0 {
+            return;
+        }
+
+        let top = Rect::from_xywh(rect.x, rect.y, rect.width, thickness);
+        let bottom = Rect::from_xywh(
+            rect.x,
+            rect.y + rect.height - thickness,
+            rect.width,
+            thickness,
+        );
+        let left = Rect::from_xywh(rect.x, rect.y, thickness, rect.height);
+        let right = Rect::from_xywh(
+            rect.x + rect.width - thickness,
+            rect.y,
+            thickness,
+            rect.height,
+        );
+
+        for segment in [top, bottom, left, right].into_iter().flatten() {
+            pixmap.fill_rect(segment, &paint, transform, None);
+        }
+    }
+
+    fn draw_debug_marker(
+        pixmap: &mut PixmapMut,
+        color: Color,
+        transform: Transform,
+        scale: f32,
+        slot: usize,
+    ) {
+        let size = (DEBUG_MARKER_SIZE_PX / scale).max(0.5 / scale);
+        let margin = DEBUG_MARKER_MARGIN_PX / scale;
+        let x = margin + slot as f32 * (size + margin);
+        let y = margin;
+
+        if let Some(marker_rect) = Rect::from_xywh(x, y, size, size) {
+            let mut fill = tiny_skia::Paint::default();
+            fill.set_color(color);
+            pixmap.fill_rect(marker_rect, &fill, transform, None);
+
+            Self::draw_debug_rect_outline(
+                pixmap,
+                CacheRect {
+                    x,
+                    y,
+                    width: size,
+                    height: size,
+                },
+                Color::from_rgba8(0, 0, 0, 220),
+                transform,
+                scale,
+            );
+        }
     }
 
     fn render_drop_indicator(
@@ -290,12 +722,25 @@ impl Renderer {
         transform: Transform,
         ctx: &RenderContext<'_>,
         inherited_hints: &RenderHints,
+        clip: Option<CacheRect>,
     ) {
         let scale = transform.sy;
         let pos = Point::new(
             offset.x + positioned.position.x,
             ((offset.y + positioned.position.y) * scale).round() / scale,
         );
+
+        if let Some(clip_rect) = clip {
+            if let Some(node_rect) = CacheRect::from_xywh(
+                pos.x,
+                pos.y,
+                positioned.node.size.width,
+                positioned.node.size.height,
+            ) && !node_rect.intersects(clip_rect)
+            {
+                return;
+            }
+        }
 
         let merged_hints = positioned.node.render_hints.merge(inherited_hints);
 
@@ -326,6 +771,7 @@ impl Renderer {
                     transform,
                     render_ctx,
                     &merged_hints,
+                    clip,
                 );
             }
         }
@@ -371,6 +817,7 @@ impl Renderer {
                 default_text_color: None,
                 is_focused: true,
                 phase: RenderPhase::Content,
+                render_origin: Point::new(pb.bounds.x, pb.bounds.y),
             };
 
             Self::render_page_part_inner(
@@ -474,6 +921,7 @@ impl Renderer {
             transform,
             ctx,
             &RenderHints::default(),
+            None,
         );
 
         let mut clip_rects = Vec::new();
@@ -611,5 +1059,443 @@ impl Renderer {
                 Self::collect_clip_rects(child, pos, selections, bounds_origin, scale, out);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::layout::elements::{
+        CalloutBackgroundElement, CalloutIconElement, FoldContentElement, LineElement, LineMetric,
+        ListMarkerElement, ListMarkerType, SplitEdges, TableBorderElement, TableCellElement,
+    };
+    use crate::layout::{LayoutNode, PageBreakPolicy};
+    use crate::model::{CalloutVariant, NodeId, TableAlign, TableBorderStyle};
+    use crate::types::Size;
+    use std::rc::Rc;
+
+    fn root_with_children(children: Option<Vec<PositionedNode>>, size: Size) -> Page {
+        Page::from_root(PositionedNode {
+            position: Point::zero(),
+            node: Rc::new(LayoutNode {
+                size,
+                element: None,
+                children,
+                page_break_policy: PageBreakPolicy::default(),
+                render_hints: RenderHints::default(),
+                scope_id: None,
+            }),
+        })
+    }
+
+    fn marker_node(size: Size) -> Rc<LayoutNode> {
+        Rc::new(LayoutNode {
+            size,
+            element: Some(Element::ListMarker(ListMarkerElement::new(
+                ListMarkerType::Bullet,
+                8.0,
+                6.0,
+                size.width,
+            ))),
+            children: None,
+            page_break_policy: PageBreakPolicy::default(),
+            render_hints: RenderHints::default(),
+            scope_id: None,
+        })
+    }
+
+    fn callout_page_with_icon(callout_id: NodeId) -> Page {
+        let icon_node = Rc::new(LayoutNode {
+            size: Size::new(20.0, 20.0),
+            element: Some(Element::CalloutIcon(CalloutIconElement::new(
+                Size::new(20.0, 20.0),
+                CalloutVariant::Info,
+                callout_id,
+            ))),
+            children: None,
+            page_break_policy: PageBreakPolicy::default(),
+            render_hints: RenderHints::default(),
+            scope_id: None,
+        });
+
+        let callout_node = Rc::new(LayoutNode {
+            size: Size::new(140.0, 80.0),
+            element: Some(Element::CalloutBackground(CalloutBackgroundElement::new(
+                Size::new(140.0, 80.0),
+                CalloutVariant::Info,
+                callout_id,
+                SplitEdges::default(),
+            ))),
+            children: Some(vec![PositionedNode {
+                position: Point::new(12.0, 12.0),
+                node: icon_node,
+            }]),
+            page_break_policy: PageBreakPolicy::default(),
+            render_hints: RenderHints::default(),
+            scope_id: None,
+        });
+
+        root_with_children(
+            Some(vec![PositionedNode {
+                position: Point::new(20.0, 20.0),
+                node: callout_node,
+            }]),
+            Size::new(220.0, 160.0),
+        )
+    }
+
+    fn rgba_at(buf: &[u8], width: usize, x: usize, y: usize) -> [u8; 4] {
+        let idx = (y * width + x) * 4;
+        [buf[idx], buf[idx + 1], buf[idx + 2], buf[idx + 3]]
+    }
+
+    #[test]
+    fn snapshot_ignores_non_renderable_nodes() {
+        let page1 = root_with_children(None, Size::new(300.0, 200.0));
+        let page2 = root_with_children(None, Size::new(300.0, 200.0));
+
+        let snapshot1 = PageRenderSnapshot::from_page(&page1);
+        let snapshot2 = PageRenderSnapshot::from_page(&page2);
+
+        assert!(
+            snapshot1.dirty_rects(&snapshot2).is_empty(),
+            "render 없는 루트 노드 차이로 dirty rect가 생기면 안 됨"
+        );
+    }
+
+    #[test]
+    fn snapshot_reuses_renderable_child_when_root_rc_changes() {
+        let shared_child = marker_node(Size::new(12.0, 12.0));
+
+        let page1 = root_with_children(
+            Some(vec![PositionedNode {
+                position: Point::new(16.0, 20.0),
+                node: Rc::clone(&shared_child),
+            }]),
+            Size::new(300.0, 200.0),
+        );
+        let page2 = root_with_children(
+            Some(vec![PositionedNode {
+                position: Point::new(16.0, 20.0),
+                node: Rc::clone(&shared_child),
+            }]),
+            Size::new(300.0, 200.0),
+        );
+
+        let snapshot1 = PageRenderSnapshot::from_page(&page1);
+        let snapshot2 = PageRenderSnapshot::from_page(&page2);
+
+        assert!(
+            snapshot1.dirty_rects(&snapshot2).is_empty(),
+            "페이지 루트 포인터가 바뀌어도 동일한 렌더 노드는 dirty로 잡히면 안 됨"
+        );
+    }
+
+    #[test]
+    fn snapshot_reuses_wrapper_by_stable_identity() {
+        let fold_id = NodeId::new();
+
+        let page1 = root_with_children(
+            Some(vec![PositionedNode {
+                position: Point::new(8.0, 12.0),
+                node: Rc::new(LayoutNode {
+                    size: Size::new(240.0, 80.0),
+                    element: Some(Element::FoldContent(FoldContentElement::new(
+                        Size::new(240.0, 80.0),
+                        SplitEdges::default(),
+                        fold_id,
+                    ))),
+                    children: None,
+                    page_break_policy: PageBreakPolicy::default(),
+                    render_hints: RenderHints::default(),
+                    scope_id: None,
+                }),
+            }]),
+            Size::new(300.0, 200.0),
+        );
+        let page2 = root_with_children(
+            Some(vec![PositionedNode {
+                position: Point::new(8.0, 12.0),
+                node: Rc::new(LayoutNode {
+                    size: Size::new(240.0, 80.0),
+                    element: Some(Element::FoldContent(FoldContentElement::new(
+                        Size::new(240.0, 80.0),
+                        SplitEdges::default(),
+                        fold_id,
+                    ))),
+                    children: None,
+                    page_break_policy: PageBreakPolicy::default(),
+                    render_hints: RenderHints::default(),
+                    scope_id: None,
+                }),
+            }]),
+            Size::new(300.0, 200.0),
+        );
+
+        let snapshot1 = PageRenderSnapshot::from_page(&page1);
+        let snapshot2 = PageRenderSnapshot::from_page(&page2);
+
+        assert!(
+            snapshot1.dirty_rects(&snapshot2).is_empty(),
+            "wrapper가 매 프레임 재생성되어도 안정 키로 cache diff가 유지돼야 함"
+        );
+    }
+
+    #[test]
+    fn layout_snapshot_marks_wrapper_relayout_even_when_render_snapshot_is_stable() {
+        let fold_id = NodeId::new();
+
+        let make_page = || {
+            root_with_children(
+                Some(vec![PositionedNode {
+                    position: Point::new(8.0, 12.0),
+                    node: Rc::new(LayoutNode {
+                        size: Size::new(240.0, 80.0),
+                        element: Some(Element::FoldContent(FoldContentElement::new(
+                            Size::new(240.0, 80.0),
+                            SplitEdges::default(),
+                            fold_id,
+                        ))),
+                        children: None,
+                        page_break_policy: PageBreakPolicy::default(),
+                        render_hints: RenderHints::default(),
+                        scope_id: None,
+                    }),
+                }]),
+                Size::new(300.0, 200.0),
+            )
+        };
+
+        let page1 = make_page();
+        let page2 = make_page();
+
+        let render_snapshot1 = PageRenderSnapshot::from_page(&page1);
+        let render_snapshot2 = PageRenderSnapshot::from_page(&page2);
+        assert!(
+            render_snapshot1.dirty_rects(&render_snapshot2).is_empty(),
+            "render snapshot은 stable key로 동일 wrapper를 재사용해야 함"
+        );
+
+        let layout_snapshot1 = PageLayoutSnapshot::from_page(&page1);
+        let layout_snapshot2 = PageLayoutSnapshot::from_page(&page2);
+        assert!(
+            !layout_snapshot1.dirty_rects(&layout_snapshot2).is_empty(),
+            "layout snapshot은 Rc 재생성을 relayout으로 표시해야 함"
+        );
+    }
+
+    #[test]
+    fn snapshot_ignores_selection_only_table_cell_element() {
+        let cell_id = NodeId::new();
+
+        let page1 = root_with_children(
+            Some(vec![PositionedNode {
+                position: Point::new(20.0, 24.0),
+                node: Rc::new(LayoutNode {
+                    size: Size::new(120.0, 48.0),
+                    element: Some(Element::TableCell(TableCellElement::new(
+                        Size::new(120.0, 48.0),
+                        cell_id,
+                    ))),
+                    children: None,
+                    page_break_policy: PageBreakPolicy::default(),
+                    render_hints: RenderHints::default(),
+                    scope_id: Some(cell_id),
+                }),
+            }]),
+            Size::new(300.0, 200.0),
+        );
+        let page2 = root_with_children(
+            Some(vec![PositionedNode {
+                position: Point::new(20.0, 24.0),
+                node: Rc::new(LayoutNode {
+                    size: Size::new(120.0, 48.0),
+                    element: Some(Element::TableCell(TableCellElement::new(
+                        Size::new(120.0, 48.0),
+                        cell_id,
+                    ))),
+                    children: None,
+                    page_break_policy: PageBreakPolicy::default(),
+                    render_hints: RenderHints::default(),
+                    scope_id: Some(cell_id),
+                }),
+            }]),
+            Size::new(300.0, 200.0),
+        );
+
+        let snapshot1 = PageRenderSnapshot::from_page(&page1);
+        let snapshot2 = PageRenderSnapshot::from_page(&page2);
+
+        assert!(
+            snapshot1.dirty_rects(&snapshot2).is_empty(),
+            "selection-only 요소(TableCell)는 base layer dirty 판단에서 제외돼야 함"
+        );
+    }
+
+    #[test]
+    fn snapshot_reuses_line_in_scoped_node_when_layout_is_unchanged() {
+        let block_id = NodeId::new();
+        let scope_id = NodeId::new();
+        let shared_layout = Rc::new(parley::Layout::default());
+
+        let make_line_node = || {
+            Rc::new(LayoutNode {
+                size: Size::new(180.0, 20.0),
+                element: Some(Element::Line(LineElement::build(
+                    block_id,
+                    Size::new(180.0, 20.0),
+                    0,
+                    Rc::clone(&shared_layout),
+                    LineMetric {
+                        top: 0.0,
+                        left: 0.0,
+                        height: 20.0,
+                        leading: 0.0,
+                        baseline: 14.0,
+                        ascent: 14.0,
+                        content_width: 120.0,
+                        start_offset: 0,
+                        end_offset: 5,
+                        clusters: vec![],
+                        break_reason: parley::layout::BreakReason::None,
+                        grapheme_offsets: vec![0, 5],
+                    },
+                    None,
+                    false,
+                    Rc::from("hello"),
+                    vec![],
+                    vec![],
+                    false,
+                ))),
+                children: None,
+                page_break_policy: PageBreakPolicy::default(),
+                render_hints: RenderHints {
+                    default_text_color: Some("ui.text.default".to_string()),
+                },
+                scope_id: Some(scope_id),
+            })
+        };
+
+        let page1 = root_with_children(
+            Some(vec![PositionedNode {
+                position: Point::new(20.0, 24.0),
+                node: make_line_node(),
+            }]),
+            Size::new(300.0, 200.0),
+        );
+        let page2 = root_with_children(
+            Some(vec![PositionedNode {
+                position: Point::new(20.0, 24.0),
+                node: make_line_node(),
+            }]),
+            Size::new(300.0, 200.0),
+        );
+
+        let snapshot1 = PageRenderSnapshot::from_page(&page1);
+        let snapshot2 = PageRenderSnapshot::from_page(&page2);
+
+        assert!(
+            snapshot1.dirty_rects(&snapshot2).is_empty(),
+            "scope/힌트 보정으로 라인 노드 Rc가 바뀌어도 동일 라인은 dirty로 잡히면 안 됨"
+        );
+    }
+
+    #[test]
+    fn partial_render_does_not_overdraw_outside_dirty_rect() {
+        let callout_id = NodeId::new();
+        let page1 = callout_page_with_icon(callout_id);
+        let page2 = callout_page_with_icon(callout_id);
+
+        let doc = Doc::new();
+        let mut renderer = Renderer::new(1.0);
+        renderer.set_size(220.0, 160.0, 1.0);
+
+        let width = renderer.width() as usize;
+        let height = renderer.height() as usize;
+        let mut buffer = vec![0u8; width * height * 4];
+
+        assert!(renderer.render_to(&page1, 0, &[], None, &doc, &mut buffer));
+        let first = rgba_at(&buffer, width, 120, 70);
+        assert!(
+            first[3] > 0,
+            "샘플 픽셀이 투명하면 callout 배경이 실제로 그려졌는지 검증할 수 없음"
+        );
+
+        assert!(renderer.render_to(&page2, 0, &[], None, &doc, &mut buffer));
+        let second = rgba_at(&buffer, width, 120, 70);
+
+        assert_eq!(
+            first, second,
+            "dirty rect 밖 픽셀은 부분 렌더 후에도 변하면 안 됨"
+        );
+    }
+
+    #[test]
+    fn snapshot_marks_table_border_dirty_when_columns_change_without_bounds_change() {
+        let table_id = NodeId::new();
+
+        let make_page = |cols: usize, col_widths: Vec<f32>| {
+            root_with_children(
+                Some(vec![PositionedNode {
+                    position: Point::new(20.0, 24.0),
+                    node: Rc::new(LayoutNode {
+                        size: Size::new(300.0, 120.0),
+                        element: Some(Element::TableBorder(TableBorderElement::new(
+                            Size::new(300.0, 120.0),
+                            table_id,
+                            TableBorderStyle::Solid,
+                            TableAlign::Left,
+                            2,
+                            cols,
+                            vec![59.0, 59.0],
+                            col_widths,
+                            SplitEdges::default(),
+                            0.0,
+                            0.0,
+                            0,
+                            2,
+                        ))),
+                        children: None,
+                        page_break_policy: PageBreakPolicy::default(),
+                        render_hints: RenderHints::default(),
+                        scope_id: None,
+                    }),
+                }]),
+                Size::new(360.0, 200.0),
+            )
+        };
+
+        let page1 = make_page(3, vec![98.0, 98.0, 98.0]);
+        let page2 = make_page(2, vec![148.0, 148.0]);
+
+        let snapshot1 = PageRenderSnapshot::from_page(&page1);
+        let snapshot2 = PageRenderSnapshot::from_page(&page2);
+
+        assert!(
+            !snapshot1.dirty_rects(&snapshot2).is_empty(),
+            "테이블 열/폭이 바뀌면 bounds가 같아도 dirty로 잡혀야 함"
+        );
+    }
+
+    #[test]
+    fn prune_page_cache_removes_entries_outside_page_count() {
+        let mut renderer = Renderer::new(1.0);
+
+        renderer
+            .page_cache
+            .insert(0, PageRenderCache::new(64, 64, 1.0));
+        renderer
+            .page_cache
+            .insert(1, PageRenderCache::new(64, 64, 1.0));
+        renderer
+            .page_cache
+            .insert(3, PageRenderCache::new(64, 64, 1.0));
+
+        renderer.prune_page_cache(2);
+
+        assert_eq!(renderer.page_cache.len(), 2);
+        assert!(renderer.page_cache.contains_key(&0));
+        assert!(renderer.page_cache.contains_key(&1));
+        assert!(!renderer.page_cache.contains_key(&3));
     }
 }
