@@ -1,7 +1,7 @@
-import { Application, getMemory } from '@typie/editor';
 import icuPostcardUrl from '@typie/editor/icu/data.postcard?url';
 import { nanoid } from 'nanoid';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
+import { wasm } from '$lib/wasm';
 import { PAGE_GAP } from './constants';
 import { ensureRequiredFallbackFont, ensureRequiredFont, filterUncoveredCodepoints, initFonts, preloadRemainingChunks } from './fonts';
 import {
@@ -47,60 +47,17 @@ import type {
   SpellcheckErrorData,
 } from './types';
 
-let sharedApplication: Application | null = null;
-let applicationInitPromise: Promise<Application> | null = null;
-let pendingTextReplacementRules: { id: string; matchPattern: string; substitute: string; regex: boolean }[] | null = null;
-let pendingAvailableFonts: Record<string, number[]> | null = null;
+let initPromise: Promise<void> | null = null;
 
-async function getOrInitializeApplication(): Promise<Application> {
-  if (sharedApplication) {
-    return sharedApplication;
+function ensureInitialized(): Promise<void> {
+  if (!initPromise) {
+    initPromise = (async () => {
+      const icuPostcard = await fetch(icuPostcardUrl).then((res) => res.arrayBuffer());
+      wasm.loadIcuData(new Uint8Array(icuPostcard));
+      await initFonts(wasm);
+    })();
   }
-
-  if (applicationInitPromise) {
-    return applicationInitPromise;
-  }
-
-  applicationInitPromise = (async () => {
-    const app = new Application();
-
-    const icuPostcard = await fetch(icuPostcardUrl).then((res) => res.arrayBuffer());
-    app.loadIcuData(new Uint8Array(icuPostcard));
-    await initFonts(app);
-
-    if (pendingTextReplacementRules) {
-      app.setTextReplacementRules(pendingTextReplacementRules);
-    }
-
-    if (pendingAvailableFonts) {
-      app.setAvailableFonts(pendingAvailableFonts);
-    }
-
-    sharedApplication = app;
-    return app;
-  })();
-
-  return applicationInitPromise;
-}
-
-export function setTextReplacementRules(rules: { id: string; matchPattern: string; substitute: string; regex: boolean }[]): void {
-  pendingTextReplacementRules = rules;
-  if (sharedApplication) {
-    sharedApplication.setTextReplacementRules(rules);
-  }
-}
-
-export function setAvailableFonts(fonts: Record<string, number[]>): void {
-  pendingAvailableFonts = fonts;
-  if (sharedApplication) {
-    sharedApplication.setAvailableFonts(fonts);
-  }
-}
-
-export function setAutoSurroundEnabled(enabled: boolean): void {
-  if (sharedApplication) {
-    sharedApplication.setAutoSurroundEnabled(enabled);
-  }
+  return initPromise;
 }
 
 const CLICK_INTERVAL = 500;
@@ -125,7 +82,6 @@ export type EditorOptions = {
 };
 
 export class Editor {
-  #application: Application | null = null;
   #wasmEditor: WasmEditor | null = null;
   #slateReader: SlateReader | null = null;
   #running = false;
@@ -307,16 +263,15 @@ export class Editor {
     this.#onExitedDocumentStart = options.onExitedDocumentStart;
     this.#onSelectionChanged = options.onSelectionChanged;
 
-    const app = await getOrInitializeApplication();
-    this.#application = app;
+    await ensureInitialized();
 
     const scaleFactor = window.devicePixelRatio * (window.visualViewport?.scale || 1);
-    const wasmEditor = app.createEditor(scaleFactor, options.snapshot);
+    const wasmEditor = wasm.createEditor(scaleFactor, options.snapshot);
     this.#wasmEditor = wasmEditor;
     wasmEditor.setRenderDebug(this.#renderDebugEnabled);
     wasmEditor.setLayoutDebug(this.#layoutDebugEnabled);
 
-    const memory = getMemory() as WebAssembly.Memory;
+    const memory = wasm.getMemory() as WebAssembly.Memory;
     const rawOffsets = wasmEditor.getSlateOffsets();
     const offsets: Record<string, number> = {};
     for (const [key, value] of rawOffsets) {
@@ -579,23 +534,19 @@ export class Editor {
   }
 
   #handleFontRequired(family: string, weight: number, codepoints: number[]): void {
-    if (!this.#application) return;
-
     const font = this.fontFamilies.find((f) => f.familyName === family)?.fonts.find((f) => f.weight === weight);
     if (!font) return;
 
-    const app = this.#application;
-
-    ensureRequiredFont(app, family, font, codepoints).then(() => {
+    ensureRequiredFont(wasm, family, font, codepoints).then(() => {
       this.dispatch({ type: 'fontsLoaded' });
       if (!this.readOnly) {
-        preloadRemainingChunks(app, family, font);
+        preloadRemainingChunks(wasm, family, font);
       }
     });
 
     filterUncoveredCodepoints(font, codepoints).then((uncovered) => {
       if (uncovered.length > 0) {
-        ensureRequiredFallbackFont(app, weight, uncovered).then(() => {
+        ensureRequiredFallbackFont(wasm, weight, uncovered).then(() => {
           this.dispatch({ type: 'fontsLoaded' });
         });
       }
@@ -1079,7 +1030,7 @@ export class Editor {
 
     const { ptr, len, width, height, offsetX, offsetY, scaleFactor } = dragImageInfo;
 
-    const wasmMemory = getMemory() as WebAssembly.Memory;
+    const wasmMemory = wasm.getMemory() as WebAssembly.Memory;
     if (!wasmMemory) return null;
 
     const buffer = new Uint8ClampedArray(wasmMemory.buffer, ptr, len);

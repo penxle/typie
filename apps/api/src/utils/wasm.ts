@@ -1,12 +1,12 @@
 import { readFile } from 'node:fs/promises';
-import path from 'node:path';
 import type { Application } from '@typie/editor';
 
-const editorPkgDir = path.dirname(Bun.resolveSync('@typie/editor', import.meta.dir));
+// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+const base = import.meta.resolve!('@typie/editor');
+const WASM_PATH = new URL('editor_bg.wasm', base).pathname;
+const GLUE_PATH = new URL('editor_bg.js', base).pathname;
 
-const WASM_PATH = path.join(editorPkgDir, 'editor_bg.wasm');
-const GLUE_PATH = path.join(editorPkgDir, 'editor_bg.js');
-const ICU_DATA_PATH = path.join(editorPkgDir, 'icu_data.postcard');
+const POOL_SIZE = 10;
 
 type WasmExports = {
   memory: WebAssembly.Memory;
@@ -14,43 +14,28 @@ type WasmExports = {
   [key: string]: unknown;
 };
 
-export type FontMetadata = {
-  weight: number;
-  style: 'normal' | 'italic' | 'oblique';
-  familyName?: string;
-  displayName?: string;
-  fullName?: string;
-  postScriptName: string;
-  subfamilyDisplayName?: string;
-};
-
-export type EncodedFont = {
-  base: Uint8Array;
-  chunks: Uint8Array[];
-};
-
 type GlueModule = {
   Application: new () => Application;
-  snapshotToJson: (snapshot: Uint8Array) => unknown;
-  jsonToSnapshot: (json: unknown) => Uint8Array;
-  getFontMetadata: (data: Uint8Array) => FontMetadata;
-  outlineTextToSvg: (fontData: Uint8Array, text: string) => string;
-  getFontCodepoints: (ttfData: Uint8Array) => number[];
-  encodeFont: (ttfData: Uint8Array, chunkCodepointsJson: string) => EncodedFont;
-  getMemory: () => WebAssembly.Memory;
   __wbg_set_wasm: (exports: WasmExports) => void;
 };
 
-let glueModule: GlueModule | null = null;
+const glueSource = await readFile(GLUE_PATH, 'utf8');
+const strippedGlueSource = glueSource.replaceAll(/^export /gm, '');
 
-async function getGlue(): Promise<GlueModule> {
-  if (glueModule) {
-    return glueModule;
-  }
+const glueExportNames: string[] = [];
+const exportRe = /^export (?:function|class)\s+(\w+)/gm;
+let match;
+while ((match = exportRe.exec(glueSource)) !== null) {
+  glueExportNames.push(match[1]);
+}
 
-  const wasmBuffer = await readFile(WASM_PATH);
-  const module = await WebAssembly.compile(wasmBuffer);
-  const glue = (await import(GLUE_PATH)) as unknown as GlueModule;
+function createGlueInstance(): GlueModule {
+  const factory = new Function(`"use strict";\n${strippedGlueSource}\nreturn{${glueExportNames.join(',')}};`);
+  return factory() as GlueModule;
+}
+
+async function createInstance(module: WebAssembly.Module): Promise<Application> {
+  const glue = createGlueInstance();
 
   const instance = (await WebAssembly.instantiate(module, {
     './editor_bg.js': glue as unknown as WebAssembly.ModuleImports,
@@ -60,64 +45,49 @@ async function getGlue(): Promise<GlueModule> {
   glue.__wbg_set_wasm(exports);
   exports.__wbindgen_start();
 
-  glueModule = glue;
-  return glue;
+  return new glue.Application();
 }
 
-let icuData: Uint8Array | null = null;
+const available: Application[] = [];
+const waiting: ((app: Application) => void)[] = [];
+let poolReady: Promise<void> | null = null;
 
-async function getIcuData(): Promise<Uint8Array> {
-  if (!icuData) {
-    icuData = new Uint8Array(await readFile(ICU_DATA_PATH));
+async function initPool(): Promise<void> {
+  const wasmBuffer = await readFile(WASM_PATH);
+  const module = await WebAssembly.compile(wasmBuffer);
+  const instances = await Promise.all(Array.from({ length: POOL_SIZE }, () => createInstance(module)));
+  available.push(...instances);
+}
+
+async function use<T>(fn: (app: Application) => T): Promise<Awaited<T>> {
+  if (!poolReady) {
+    poolReady = initPool().catch((err) => {
+      poolReady = null;
+      throw err;
+    });
   }
-  return icuData;
+  await poolReady;
+
+  const app = available.pop() ?? (await new Promise<Application>((resolve) => waiting.push(resolve)));
+  try {
+    return await fn(app);
+  } finally {
+    const next = waiting.shift();
+    if (next) next(app);
+    else available.push(app);
+  }
 }
 
-export async function snapshotToJson(snapshot: Uint8Array): Promise<unknown> {
-  const glue = await getGlue();
-  return glue.snapshotToJson(snapshot);
-}
+type Async<T> = {
+  [K in keyof T]: T[K] extends (...args: infer A) => infer R ? (...args: A) => Promise<Awaited<R>> : T[K];
+} & {
+  use<R>(fn: (app: T) => R): Promise<Awaited<R>>;
+};
 
-export async function jsonToSnapshot(json: unknown): Promise<Uint8Array> {
-  const glue = await getGlue();
-  return glue.jsonToSnapshot(json);
-}
-
-export async function getFontMetadata(data: Uint8Array): Promise<FontMetadata> {
-  const glue = await getGlue();
-  return glue.getFontMetadata(data);
-}
-
-export async function outlineTextToSvg(fontData: Uint8Array, text: string): Promise<string> {
-  const glue = await getGlue();
-  return glue.outlineTextToSvg(fontData, text);
-}
-
-export async function getFontCodepoints(ttfData: Uint8Array): Promise<number[]> {
-  const glue = await getGlue();
-  return glue.getFontCodepoints(ttfData);
-}
-
-export async function encodeFont(ttfData: Uint8Array, chunkCodepointsJson: string): Promise<EncodedFont> {
-  const glue = await getGlue();
-  return glue.encodeFont(ttfData, chunkCodepointsJson);
-}
-
-export async function createWasmApplication(): Promise<{
-  app: Application;
-  getMemory: () => WebAssembly.Memory;
-  icuData: Uint8Array;
-  cleanup: () => void;
-}> {
-  const [glue, icu] = await Promise.all([getGlue(), getIcuData()]);
-  const app = new glue.Application();
-
-  return {
-    app,
-    getMemory: glue.getMemory,
-    icuData: icu,
-    cleanup: () => {
-      app.free();
-    },
-  };
-}
+export const wasm: Async<Application> = new Proxy({} as Async<Application>, {
+  get: (_, prop: string | symbol) => {
+    if (prop === 'use') return use;
+    return async (...args: unknown[]) =>
+      use((app) => (app as unknown as Record<string | symbol, (...a: unknown[]) => unknown>)[prop](...args));
+  },
+});

@@ -4,6 +4,7 @@ mod svg;
 mod utils;
 
 pub(crate) use svg::outline_text_to_svg;
+pub use utils::FontMetadata;
 pub(crate) use utils::get_font_metadata;
 
 pub(crate) const TPFT_MAGIC: &[u8; 4] = b"TPFT";

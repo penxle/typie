@@ -60,7 +60,7 @@ import { compressZstd, decompressZstd } from '@/utils/compression';
 import { getDocumentFontFamilies } from '@/utils/document';
 import { assertSitePermission } from '@/utils/permission';
 import { assertPlanRule } from '@/utils/plan';
-import { jsonToSnapshot, snapshotToJson } from '@/utils/wasm';
+import { wasm } from '@/utils/wasm';
 import { builder } from '../builder';
 import {
   CharacterCountChange,
@@ -891,8 +891,8 @@ builder.mutationFields((t) => ({
           .returning()
           .then(firstOrThrow);
 
-        const json = await snapshotToJson(new Uint8Array(document.content.snapshot));
-        const freshSnapshot = await jsonToSnapshot(json);
+        const json = await wasm.snapshotToJson(new Uint8Array(document.content.snapshot));
+        const freshSnapshot = await wasm.jsonToSnapshot(json);
         const freshDoc = new LoroDoc();
         freshDoc.import(freshSnapshot);
         const freshVersion = freshDoc.version().encode();

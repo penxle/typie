@@ -16,7 +16,7 @@ import { TypieError } from '@/errors';
 import * as aws from '@/external/aws';
 import { compressZstd } from '@/utils/compression';
 import { processFont } from '@/utils/font';
-import { getFontMetadata } from '@/utils/wasm';
+import { wasm } from '@/utils/wasm';
 import { builder } from '../builder';
 import { Blob, File, Font, Image, isTypeOf } from '../objects';
 
@@ -378,7 +378,7 @@ builder.mutationFields((t) => ({
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       const buffer = await object.Body!.transformToByteArray();
 
-      const metadata = await getFontMetadata(buffer);
+      const metadata = await wasm.getFontMetadata(buffer);
 
       if (metadata.style !== 'normal') {
         throw new TypieError({ code: 'invalid_font_style' });

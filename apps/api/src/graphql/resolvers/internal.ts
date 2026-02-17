@@ -36,7 +36,7 @@ import { compressZstd } from '@/utils/compression';
 import { convertPostToDocumentJson } from '@/utils/convert';
 import { assertSitePermission } from '@/utils/permission';
 import { assertPlanRule } from '@/utils/plan';
-import { jsonToSnapshot } from '@/utils/wasm';
+import { wasm } from '@/utils/wasm';
 import { builder } from '../builder';
 import { Document, PostView } from '../objects';
 
@@ -222,7 +222,7 @@ builder.mutationFields((t) => ({
         pageLayout: postContents.pageLayout,
       });
 
-      const snapshot = await jsonToSnapshot(json);
+      const snapshot = await wasm.jsonToSnapshot(json);
       const doc = new LoroDoc();
       doc.import(snapshot);
       const version = doc.version().encode();

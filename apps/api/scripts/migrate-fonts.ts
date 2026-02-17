@@ -8,7 +8,7 @@ import { stack } from '@/env';
 import * as aws from '@/external/aws';
 import { compressZstd } from '@/utils/compression';
 import { processFont } from '@/utils/font';
-import { getFontMetadata } from '@/utils/wasm';
+import { wasm } from '@/utils/wasm';
 
 const rows = await db
   .select({
@@ -69,7 +69,7 @@ for (const [i, row] of rows.entries()) {
   }
 
   // 4. Extract font metadata
-  const metadata = await getFontMetadata(sfnt);
+  const metadata = await wasm.getFontMetadata(sfnt);
   console.log(`  metadata: ${metadata.postScriptName} weight=${metadata.weight}`);
 
   // 5. Process font (chunking, manifest generation)

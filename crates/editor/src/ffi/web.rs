@@ -1,3 +1,5 @@
+use crate::font::FontMetadata;
+use crate::font::encode::EncodedFont;
 use crate::global::{add_font_base, add_font_chunk, set_available_fonts, set_fallback_fonts};
 use crate::global::{
     clear_text_replacement_rules, set_auto_surround_enabled, set_text_replacement_rules,
@@ -19,63 +21,15 @@ use std::rc::Rc;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 
+#[derive(Serialize)]
+#[serde(transparent)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi))]
+pub struct Codepoints(Vec<u32>);
+
 fn to_js_value<T: Serialize>(value: &T) -> JsValue {
     let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
     value.serialize(&serializer).unwrap()
-}
-
-#[wasm_bindgen(js_name = getMemory)]
-pub fn get_memory() -> JsValue {
-    wasm_bindgen::memory()
-}
-
-#[wasm_bindgen(js_name = validateRegex)]
-pub fn validate_regex(pattern: &str) -> bool {
-    let anchored = format!("(?:{pattern})$");
-    fancy_regex::Regex::new(&anchored).is_ok()
-}
-
-#[wasm_bindgen(js_name = getFontMetadata)]
-pub fn get_font_metadata(data: Vec<u8>) -> Result<JsValue, JsValue> {
-    let metadata = crate::font::get_font_metadata(&data).map_err(|e| JsValue::from_str(&e))?;
-    Ok(to_js_value(&metadata))
-}
-
-#[wasm_bindgen(js_name = outlineTextToSvg)]
-pub fn outline_text_to_svg(font_data: Vec<u8>, text: &str) -> Result<String, JsValue> {
-    crate::font::outline_text_to_svg(&font_data, text).map_err(|e| JsValue::from_str(&e))
-}
-
-#[wasm_bindgen(js_name = getFontCodepoints)]
-pub fn get_font_codepoints(ttf_data: Vec<u8>) -> Result<JsValue, JsValue> {
-    let codepoints = crate::font::encode::get_font_codepoints(&ttf_data)
-        .map_err(|e| JsValue::from_str(&e.to_string()))?;
-    Ok(to_js_value(&codepoints))
-}
-
-#[wasm_bindgen(js_name = encodeFont)]
-pub fn encode_font_wasm(
-    ttf_data: Vec<u8>,
-    chunk_codepoints_json: &str,
-) -> Result<JsValue, JsValue> {
-    let chunk_codepoints: Vec<Vec<u32>> = serde_json::from_str(chunk_codepoints_json)
-        .map_err(|e| JsValue::from_str(&format!("chunk_codepoints parse: {e}")))?;
-    let result = crate::font::encode::encode_font(&ttf_data, &chunk_codepoints)
-        .map_err(|e| JsValue::from_str(&e.to_string()))?;
-    Ok(to_js_value(&result))
-}
-
-#[wasm_bindgen(js_name = snapshotToJson)]
-pub fn snapshot_to_json_wasm(snapshot: Vec<u8>) -> Result<JsValue, JsValue> {
-    let doc_json = snapshot_to_json(&snapshot).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    Ok(to_js_value(&doc_json))
-}
-
-#[wasm_bindgen(js_name = jsonToSnapshot)]
-pub fn json_to_snapshot_wasm(json: JsValue) -> Result<Vec<u8>, JsValue> {
-    let doc_json: DocumentJson =
-        serde_wasm_bindgen::from_value(json).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    json_to_snapshot(&doc_json).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 #[wasm_bindgen]
@@ -87,6 +41,11 @@ impl Application {
     pub fn new() -> Self {
         console_error_panic_hook::set_once();
         Self
+    }
+
+    #[wasm_bindgen(js_name = getMemory)]
+    pub fn get_memory(&self) -> JsValue {
+        wasm_bindgen::memory()
     }
 
     #[wasm_bindgen(js_name = loadIcuData)]
@@ -146,6 +105,55 @@ impl Application {
         } else {
             Editor::new(scale_factor)
         }
+    }
+
+    #[wasm_bindgen(js_name = validateRegex)]
+    pub fn validate_regex(&self, pattern: &str) -> bool {
+        let anchored = format!("(?:{pattern})$");
+        fancy_regex::Regex::new(&anchored).is_ok()
+    }
+
+    #[wasm_bindgen(js_name = getFontMetadata)]
+    pub fn get_font_metadata(&self, data: Vec<u8>) -> Result<FontMetadata, JsValue> {
+        crate::font::get_font_metadata(&data).map_err(|e| JsValue::from_str(&e))
+    }
+
+    #[wasm_bindgen(js_name = outlineTextToSvg)]
+    pub fn outline_text_to_svg(&self, font_data: Vec<u8>, text: &str) -> Result<String, JsValue> {
+        crate::font::outline_text_to_svg(&font_data, text).map_err(|e| JsValue::from_str(&e))
+    }
+
+    #[wasm_bindgen(js_name = getFontCodepoints)]
+    pub fn get_font_codepoints(&self, ttf_data: Vec<u8>) -> Result<Codepoints, JsValue> {
+        let codepoints = crate::font::encode::get_font_codepoints(&ttf_data)
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+        Ok(Codepoints(codepoints))
+    }
+
+    #[wasm_bindgen(js_name = encodeFont)]
+    pub fn encode_font(
+        &self,
+        ttf_data: Vec<u8>,
+        chunk_codepoints_json: &str,
+    ) -> Result<EncodedFont, JsValue> {
+        let chunk_codepoints: Vec<Vec<u32>> = serde_json::from_str(chunk_codepoints_json)
+            .map_err(|e| JsValue::from_str(&format!("chunk_codepoints parse: {e}")))?;
+        crate::font::encode::encode_font(&ttf_data, &chunk_codepoints)
+            .map_err(|e| JsValue::from_str(&e.to_string()))
+    }
+
+    #[wasm_bindgen(js_name = snapshotToJson)]
+    pub fn snapshot_to_json(&self, snapshot: Vec<u8>) -> Result<JsValue, JsValue> {
+        let doc_json =
+            snapshot_to_json(&snapshot).map_err(|e| JsValue::from_str(&e.to_string()))?;
+        Ok(to_js_value(&doc_json))
+    }
+
+    #[wasm_bindgen(js_name = jsonToSnapshot)]
+    pub fn json_to_snapshot(&self, json: JsValue) -> Result<Vec<u8>, JsValue> {
+        let doc_json: DocumentJson =
+            serde_wasm_bindgen::from_value(json).map_err(|e| JsValue::from_str(&e.to_string()))?;
+        json_to_snapshot(&doc_json).map_err(|e| JsValue::from_str(&e.to_string()))
     }
 }
 

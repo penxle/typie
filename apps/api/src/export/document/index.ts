@@ -1,9 +1,26 @@
-import { createWasmApplication } from '@/utils/wasm';
+import { readFile } from 'node:fs/promises';
+import { wasm } from '@/utils/wasm';
 import { ensureRequiredFallbackFont, ensureRequiredFont, filterUncoveredCodepoints, initFonts } from './fonts';
 import { createPdfFromPages } from './pdf';
 import { renderDocumentPages } from './render';
-import type { Theme } from '@typie/editor';
+import type { Application, Theme } from '@typie/editor';
 import type { FontFamily } from './fonts';
+
+// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+const ICU_DATA_PATH = new URL('icu_data.postcard', import.meta.resolve!('@typie/editor')).pathname;
+let icuDataCache: Uint8Array | null = null;
+async function getIcuData(): Promise<Uint8Array> {
+  if (!icuDataCache) icuDataCache = new Uint8Array(await readFile(ICU_DATA_PATH));
+  return icuDataCache;
+}
+
+const initialized = new WeakSet<Application>();
+async function ensureInstanceReady(app: Application): Promise<void> {
+  if (initialized.has(app)) return;
+  app.loadIcuData(await getIcuData());
+  await initFonts(app);
+  initialized.add(app);
+}
 
 const SCALE_FACTOR = 2;
 const MAX_TICKS = 1000;
@@ -72,13 +89,10 @@ async function generateDocumentPdfInternal(
   fonts: FontFamily[],
   pageLayout: PageLayout,
 ): Promise<Uint8Array> {
-  const { app, getMemory, icuData, cleanup } = await createWasmApplication();
+  return wasm.use(async (wasm) => {
+    await ensureInstanceReady(wasm);
 
-  try {
-    app.loadIcuData(icuData);
-    await initFonts(app);
-
-    const editor = app.createEditor(SCALE_FACTOR, snapshot);
+    const editor = wasm.createEditor(SCALE_FACTOR, snapshot);
 
     try {
       editor.dispatch({
@@ -103,7 +117,8 @@ async function generateDocumentPdfInternal(
       let needsRender = false;
 
       const offsets = Object.fromEntries(editor.getSlateOffsets());
-      const memory = getMemory() as WebAssembly.Memory;
+      const getMemory = () => wasm.getMemory() as WebAssembly.Memory;
+      const memory = getMemory();
 
       const DIRTY_PAGES = 1;
       const DIRTY_RENDER_REQUIRED = 16;
@@ -151,13 +166,13 @@ async function generateDocumentPdfInternal(
             const font = fonts.find((f) => f.familyName === family)?.fonts.find((f) => f.weight === weight);
             if (font) {
               fontPromises.push(
-                ensureRequiredFont(app, family, font, codepoints),
+                ensureRequiredFont(wasm, family, font, codepoints),
                 filterUncoveredCodepoints(font, codepoints).then((uncovered) =>
-                  uncovered.length > 0 ? ensureRequiredFallbackFont(app, weight, uncovered) : undefined,
+                  uncovered.length > 0 ? ensureRequiredFallbackFont(wasm, weight, uncovered) : undefined,
                 ),
               );
             } else {
-              fontPromises.push(ensureRequiredFallbackFont(app, weight, codepoints));
+              fontPromises.push(ensureRequiredFallbackFont(wasm, weight, codepoints));
             }
           }
         }
@@ -186,7 +201,5 @@ async function generateDocumentPdfInternal(
     } finally {
       editor.free();
     }
-  } finally {
-    cleanup();
-  }
+  });
 }

@@ -12,6 +12,10 @@ static GENERAL_CATEGORY_DATA: OnceLock<CodePointMapData<GeneralCategory>> = Once
 
 #[cfg(feature = "wasm")]
 pub fn load_icu_data(data: &[u8]) -> Result<(), JsValue> {
+    if ICU_DATA_PROVIDER.get().is_some() {
+        return Ok(());
+    }
+
     let provider =
         BlobDataProvider::try_new_from_static_blob(Box::leak(data.to_vec().into_boxed_slice()))
             .map_err(|e| JsValue::from_str(&format!("Failed to initialize ICU data: {:?}", e)))?;
@@ -23,6 +27,10 @@ pub fn load_icu_data(data: &[u8]) -> Result<(), JsValue> {
 
 #[cfg(feature = "native")]
 pub fn load_icu_data(data: &[u8]) -> Result<(), String> {
+    if ICU_DATA_PROVIDER.get().is_some() {
+        return Ok(());
+    }
+
     let provider =
         BlobDataProvider::try_new_from_static_blob(Box::leak(data.to_vec().into_boxed_slice()))
             .map_err(|e| format!("Failed to initialize ICU data: {:?}", e))?;
