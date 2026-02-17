@@ -1,3 +1,28 @@
+import { values } from '$lib/editor/values';
+
+export type PageLayoutPreset = (typeof values.pageLayout)[number]['value'];
+export type PageLayout = {
+  width: number;
+  height: number;
+  marginTop: number;
+  marginBottom: number;
+  marginLeft: number;
+  marginRight: number;
+};
+
+export const createPaginatedLayout = (preset: PageLayoutPreset = 'a4') => {
+  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+  const layout = values.pageLayout.find((p) => p.value === preset)!;
+  return {
+    width: layout.width,
+    height: layout.height,
+    marginTop: layout.margin.top,
+    marginBottom: layout.margin.bottom,
+    marginLeft: layout.margin.left,
+    marginRight: layout.margin.right,
+  };
+};
+
 export const getPageElement = (element: HTMLElement): HTMLElement | null => {
   let currentElement = element;
   while (true) {

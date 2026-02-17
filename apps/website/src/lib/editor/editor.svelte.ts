@@ -1,6 +1,7 @@
 import icuPostcardUrl from '@typie/editor/icu/data.postcard?url';
 import { nanoid } from 'nanoid';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
+import { defaultValues } from '@/const';
 import { wasm } from '$lib/wasm';
 import { PAGE_GAP } from './constants';
 import { ensureRequiredFallbackFont, ensureRequiredFont, filterUncoveredCodepoints, initFonts, preloadRemainingChunks } from './fonts';
@@ -114,7 +115,7 @@ export class Editor {
     pages: [] as { width: number; height: number }[],
     layoutMode: {
       type: 'continuous',
-      maxWidth: 600,
+      maxWidth: defaultValues.maxWidth,
     } as LayoutMode,
   });
 
@@ -136,8 +137,8 @@ export class Editor {
   }
 
   settings = $state({
-    paragraphIndent: 1,
-    blockGap: 0,
+    paragraphIndent: defaultValues.paragraphIndent as number,
+    blockGap: defaultValues.blockGap as number,
   });
 
   defaultAttrs = $state<{

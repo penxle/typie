@@ -4,19 +4,38 @@ import AlignLeftIcon from '~icons/lucide/align-left';
 import AlignRightIcon from '~icons/lucide/align-right';
 
 export const values = {
-  fontWeight: {
-    100: '가장 가늘게',
-    200: '아주 가늘게',
-    300: '가늘게',
-    400: '보통',
-    500: '중간',
-    600: '약간 굵게',
-    700: '굵게',
-    800: '아주 굵게',
-    900: '가장 굵게',
-  } as Record<number, string>,
+  fontWeight: [
+    { label: '가장 가늘게', value: 100 },
+    { label: '아주 가늘게', value: 200 },
+    { label: '가늘게', value: 300 },
+    { label: '보통', value: 400 },
+    { label: '중간', value: 500 },
+    { label: '약간 굵게', value: 600 },
+    { label: '굵게', value: 700 },
+    { label: '아주 굵게', value: 800 },
+    { label: '가장 굵게', value: 900 },
+  ],
 
-  fontSize: [8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 30, 36, 48, 60, 72, 96] as const,
+  fontSize: [
+    { label: '8', value: 8 },
+    { label: '9', value: 9 },
+    { label: '10', value: 10 },
+    { label: '11', value: 11 },
+    { label: '12', value: 12 },
+    { label: '14', value: 14 },
+    { label: '16', value: 16 },
+    { label: '18', value: 18 },
+    { label: '20', value: 20 },
+    { label: '22', value: 22 },
+    { label: '24', value: 24 },
+    { label: '30', value: 30 },
+    { label: '36', value: 36 },
+    { label: '48', value: 48 },
+    { label: '60', value: 60 },
+    { label: '72', value: 72 },
+    { label: '96', value: 96 },
+  ],
+
   minFontSize: 1,
   maxFontSize: 200,
 
@@ -83,4 +102,31 @@ export const values = {
     { label: '오른쪽 정렬', value: 'right', icon: AlignRightIcon },
     { label: '양쪽 정렬', value: 'justify', icon: AlignJustifyIcon },
   ] as const,
+
+  paragraphIndent: [
+    { label: '없음', value: 0 },
+    { label: '0.5칸', value: 0.5 },
+    { label: '1칸', value: 1 },
+    { label: '2칸', value: 2 },
+  ],
+
+  maxWidth: [
+    { label: '400px', value: 400 },
+    { label: '600px', value: 600 },
+    { label: '800px', value: 800 },
+  ],
+
+  blockGap: [
+    { label: '없음', value: 0 },
+    { label: '0.5줄', value: 0.5 },
+    { label: '1줄', value: 1 },
+    { label: '2줄', value: 2 },
+  ],
+
+  pageLayout: [
+    { label: 'A4 (210mm × 297mm)', value: 'a4', width: 210, height: 297, margin: { top: 25, bottom: 25, left: 25, right: 25 } },
+    { label: 'A5 (148mm × 210mm)', value: 'a5', width: 148, height: 210, margin: { top: 20, bottom: 20, left: 20, right: 20 } },
+    { label: 'B5 (176mm × 250mm)', value: 'b5', width: 176, height: 250, margin: { top: 15, bottom: 15, left: 15, right: 15 } },
+    { label: 'B6 (125mm × 176mm)', value: 'b6', width: 125, height: 176, margin: { top: 10, bottom: 10, left: 10, right: 10 } },
+  ],
 } as const;

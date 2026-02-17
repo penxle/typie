@@ -87,7 +87,8 @@
 
   const getWeightLabel = (font: { weight: number; subfamilyDisplayName?: string | null }) => {
     return (
-      values.fontWeight[font.weight] ?? (font.subfamilyDisplayName ? `${font.subfamilyDisplayName} (${font.weight})` : String(font.weight))
+      values.fontWeight.find((f) => f.value === font.weight)?.label ??
+      (font.subfamilyDisplayName ? `${font.subfamilyDisplayName} (${font.weight})` : String(font.weight))
     );
   };
 </script>

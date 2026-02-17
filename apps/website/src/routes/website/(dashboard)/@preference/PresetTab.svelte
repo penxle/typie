@@ -4,12 +4,13 @@
   import { flex } from '@typie/styled-system/patterns';
   import { createFloatingActions } from '@typie/ui/actions';
   import { Icon, SearchableDropdown, SegmentButtons, Select, TextInput } from '@typie/ui/components';
+  import { getThemeContext } from '@typie/ui/context';
   import { Dialog } from '@typie/ui/notification';
-  import { defaultValues, values } from '@typie/ui/tiptap';
-  import { clamp, createDefaultPageLayout, getMaxMargin, PAGE_LAYOUT_OPTIONS, PAGE_SIZE_MAP } from '@typie/ui/utils';
+  import { clamp, getMaxMargin } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import { tick } from 'svelte';
   import { fly } from 'svelte/transition';
+  import { defaultValues } from '@/const';
   import { PostLayoutMode } from '@/enums';
   import AlignVerticalSpaceAroundIcon from '~icons/lucide/align-vertical-space-around';
   import ArrowRightToLineIcon from '~icons/lucide/arrow-right-to-line';
@@ -29,16 +30,25 @@
   import { fragment, graphql } from '$graphql';
   import { FontSpecimen, SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
   import { getRepresentativeFont } from '$lib/editor/fonts';
-  import { values as editorValues } from '$lib/editor/values';
+  import { THEME_COLORS } from '$lib/editor/theme';
+  import { createPaginatedLayout } from '$lib/editor/utils';
+  import { values } from '$lib/editor/values';
   import ToolbarColorGrid from '../[slug]/@toolbar/ToolbarColorGrid.svelte';
-  import type { PageLayout, PageLayoutPreset } from '@typie/ui/utils';
   import type { DashboardLayout_PreferenceModal_PresetTab_user } from '$graphql';
+  import type { ThemeVariant } from '$lib/editor/theme';
+  import type { PageLayout, PageLayoutPreset } from '$lib/editor/utils';
 
   type Props = {
     $user: DashboardLayout_PreferenceModal_PresetTab_user;
   };
 
   let { $user: _user }: Props = $props();
+
+  const theme = getThemeContext();
+  const themeVariant = $derived(
+    (theme.effectiveTheme === 'light' ? `light-${theme.lightVariant}` : `dark-${theme.darkVariant}`) as ThemeVariant,
+  );
+  const tc = $derived(THEME_COLORS[themeVariant]);
 
   const user = fragment(
     _user,
@@ -96,11 +106,11 @@
   const fontWeight = $derived(template.fontWeight ?? defaultValues.fontWeight);
 
   const fontFamilyItems = $derived(
-    $user.documentFontFamilies.filter((f) => f.state === 'ACTIVE').map((f) => ({ value: f.id, label: f.displayName })),
+    $user.documentFontFamilies.filter((f) => f.state === 'ACTIVE').map((f) => ({ value: f.familyName, label: f.displayName })),
   );
 
   const currentFontFamilyFonts = $derived.by(() => {
-    const family = $user.documentFontFamilies.find((f) => f.id === fontFamily);
+    const family = $user.documentFontFamilies.find((f) => f.familyName === fontFamily);
     if (!family) return [];
     return [...new Map(family.fonts.filter((f) => f.state === 'ACTIVE').map((f) => [f.weight, f])).values()].toSorted(
       (a, b) => a.weight - b.weight,
@@ -116,12 +126,12 @@
     })),
   );
 
-  const representativeFontMap = $derived(new Map($user.documentFontFamilies.map((f) => [f.id, getRepresentativeFont(f.fonts)])));
+  const representativeFontMap = $derived(new Map($user.documentFontFamilies.map((f) => [f.familyName, getRepresentativeFont(f.fonts)])));
 
   const weightFontIdMap = $derived(new Map(currentFontFamilyFonts.map((f) => [f.weight, f.id])));
 
-  const getClosestWeight = (familyId: string, targetWeight: number) => {
-    const family = $user.documentFontFamilies.find((f) => f.id === familyId);
+  const getClosestWeight = (familyName: string, targetWeight: number) => {
+    const family = $user.documentFontFamilies.find((f) => f.familyName === familyName);
     if (!family) return targetWeight;
 
     const weights = [...new Set(family.fonts.filter((f) => f.state === 'ACTIVE').map((f) => f.weight))].toSorted((a, b) => a - b);
@@ -141,7 +151,7 @@
   };
 
   const textColor = $derived(template.textColor ?? defaultValues.textColor);
-  const backgroundColor = $derived(template.backgroundColor ?? defaultValues.textBackgroundColor);
+  const backgroundColor = $derived(template.backgroundColor ?? defaultValues.backgroundColor);
   const letterSpacing = $derived(template.letterSpacing ?? defaultValues.letterSpacing);
   const lineHeight = $derived(template.lineHeight ?? defaultValues.lineHeight);
   const layoutMode = $derived(template.layoutMode ?? PostLayoutMode.SCROLL);
@@ -149,6 +159,11 @@
   const pageLayout = $derived(template.pageLayout ?? null);
   const paragraphIndent = $derived(template.paragraphIndent ?? defaultValues.paragraphIndent);
   const blockGap = $derived(template.blockGap ?? defaultValues.blockGap);
+
+  const textColorItems = $derived(values.textColor.map((c) => ({ label: c.label, value: c.value, color: tc[c.themeKey] })));
+  const bgColorItems = $derived(
+    values.textBackgroundColor.map((c) => ({ label: c.label, value: c.value, color: c.themeKey ? tc[c.themeKey] : null })),
+  );
 
   const isPageLayoutEnabled = $derived(layoutMode === PostLayoutMode.PAGE);
 
@@ -231,7 +246,7 @@
   const applyFontSize = () => {
     const parsed = Number.parseFloat(fontSizeInputValue);
     if (!Number.isNaN(parsed) && parsed !== fontSize) {
-      const clamped = clamp(parsed, editorValues.minFontSize, editorValues.maxFontSize);
+      const clamped = clamp(parsed, values.minFontSize, values.maxFontSize);
       updateTemplate({ fontSize: clamped });
     }
   };
@@ -594,11 +609,11 @@
             use:textColorAnchorAction
           >
             <div
-              style:background-color={values.textColor.find(({ value }) => value === textColor)?.color}
+              style:background-color={textColorItems.find(({ value }) => value === textColor)?.color}
               class={css({ borderWidth: '1px', borderRadius: 'full', size: '16px', flexShrink: '0' })}
             ></div>
             <span class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.subtle' })}>
-              {values.textColor.find(({ value }) => value === textColor)?.label ?? textColor}
+              {textColorItems.find(({ value }) => value === textColor)?.label ?? textColor}
             </span>
           </button>
           {#if textColorOpened}
@@ -617,8 +632,8 @@
             >
               <ToolbarColorGrid
                 columns={11}
-                currentValue={textColor as (typeof values.textColor)[number]['value']}
-                items={values.textColor}
+                currentValue={textColor}
+                items={textColorItems}
                 onClose={() => (textColorOpened = false)}
                 onSelect={(value) => {
                   updateTemplate({ textColor: value });
@@ -656,9 +671,7 @@
             use:bgColorAnchorAction
           >
             <div
-              style:background-color={backgroundColor === 'none'
-                ? 'transparent'
-                : values.textBackgroundColor.find(({ value }) => value === backgroundColor)?.color}
+              style:background-color={bgColorItems.find(({ value }) => value === backgroundColor)?.color ?? 'transparent'}
               class={css({ borderWidth: '1px', borderRadius: '4px', size: '16px', flexShrink: '0', position: 'relative' })}
             >
               {#if backgroundColor === 'none'}
@@ -676,7 +689,7 @@
               {/if}
             </div>
             <span class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.subtle' })}>
-              {values.textBackgroundColor.find(({ value }) => value === backgroundColor)?.label ?? backgroundColor}
+              {bgColorItems.find(({ value }) => value === backgroundColor)?.label ?? backgroundColor}
             </span>
           </button>
           {#if bgColorOpened}
@@ -695,8 +708,8 @@
             >
               <ToolbarColorGrid
                 columns={8}
-                currentValue={backgroundColor as (typeof values.textBackgroundColor)[number]['value']}
-                items={values.textBackgroundColor}
+                currentValue={backgroundColor}
+                items={bgColorItems}
                 onClose={() => (bgColorOpened = false)}
                 onSelect={(value) => {
                   updateTemplate({ backgroundColor: value });
@@ -734,7 +747,7 @@
                 if (value === PostLayoutMode.PAGE && !pageLayout) {
                   updateTemplate({
                     layoutMode: value,
-                    pageLayout: createDefaultPageLayout('a4'),
+                    pageLayout: createPaginatedLayout('a4'),
                   });
                 } else {
                   updateTemplate({ layoutMode: value });
@@ -759,15 +772,13 @@
           {#snippet value()}
             <div class={flex({ gap: '8px', alignItems: 'center' })}>
               <Select
-                items={PAGE_LAYOUT_OPTIONS}
-                onselect={(value: PageLayoutPreset | 'custom') => {
+                items={[...values.pageLayout, { label: '직접 지정', value: 'custom' }]}
+                onselect={(value: string) => {
                   if (value !== 'custom') {
-                    updateTemplate({ pageLayout: createDefaultPageLayout(value) });
+                    updateTemplate({ pageLayout: createPaginatedLayout(value as PageLayoutPreset) });
                   }
                 }}
-                value={(Object.entries(PAGE_SIZE_MAP).find(
-                  ([, dimension]) => dimension.width === pageLayout.width && dimension.height === pageLayout.height,
-                )?.[0] as PageLayoutPreset) ?? ('custom' as const)}
+                value={values.pageLayout.find((p) => p.width === pageLayout.width && p.height === pageLayout.height)?.value ?? 'custom'}
               />
               <div class={flex({ gap: '6px', alignItems: 'center' })}>
                 <TextInput

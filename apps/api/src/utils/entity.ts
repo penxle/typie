@@ -5,6 +5,7 @@ import { inArray } from 'drizzle-orm';
 import { LoroDoc, LoroList, LoroMap } from 'loro-crdt';
 import { prosemirrorToYXmlFragment } from 'y-prosemirror';
 import * as Y from 'yjs';
+import { defaultValues } from '@/const';
 import { db, Files, Images } from '@/db';
 import { PostLayoutMode } from '@/enums';
 import { schema, textSerializers } from '@/pm';
@@ -111,8 +112,8 @@ export const makeLoroDoc = (template?: TemplatePreset) => {
   const doc = new LoroDoc();
 
   const settings = doc.getMap('settings');
-  settings.set('block_gap', template?.blockGap ?? 1);
-  settings.set('paragraph_indent', template?.paragraphIndent ?? 1);
+  settings.set('block_gap', template?.blockGap ?? defaultValues.blockGap);
+  settings.set('paragraph_indent', template?.paragraphIndent ?? defaultValues.paragraphIndent);
 
   const layoutMode = settings.setContainer('layout_mode', new LoroMap());
   if (template?.layoutMode === PostLayoutMode.PAGE && template.pageLayout) {
@@ -125,7 +126,7 @@ export const makeLoroDoc = (template?: TemplatePreset) => {
     layoutMode.set('page_margin_right', mmToPx(template.pageLayout.marginRight));
   } else {
     layoutMode.set('type', 'continuous');
-    layoutMode.set('max_width', template?.maxWidth ?? 600);
+    layoutMode.set('max_width', template?.maxWidth ?? defaultValues.maxWidth);
   }
 
   const paragraphId = faker.string.uuid().replaceAll('-', '');
@@ -138,18 +139,18 @@ export const makeLoroDoc = (template?: TemplatePreset) => {
   rootChildren.insert(0, paragraphId);
 
   const cascadeAttrs = rootNode.setContainer('cascade_attrs', new LoroMap());
-  cascadeAttrs.set('style:font_family', template?.fontFamily ?? 'Pretendard');
-  cascadeAttrs.set('style:font_size', template?.fontSize ?? 12);
-  cascadeAttrs.set('style:font_weight', template?.fontWeight ?? 400);
-  cascadeAttrs.set('style:text_color', template?.textColor ?? 'black');
-  cascadeAttrs.set('style:background_color', template?.backgroundColor ?? 'none');
-  cascadeAttrs.set('style:letter_spacing', template?.letterSpacing ?? 0);
-  cascadeAttrs.set('paragraph:line_height', template?.lineHeight ?? 1.6);
+  cascadeAttrs.set('style:font_family', template?.fontFamily ?? defaultValues.fontFamily);
+  cascadeAttrs.set('style:font_size', template?.fontSize ?? defaultValues.fontSize);
+  cascadeAttrs.set('style:font_weight', template?.fontWeight ?? defaultValues.fontWeight);
+  cascadeAttrs.set('style:text_color', template?.textColor ?? defaultValues.textColor);
+  cascadeAttrs.set('style:background_color', template?.backgroundColor ?? defaultValues.backgroundColor);
+  cascadeAttrs.set('style:letter_spacing', template?.letterSpacing ?? defaultValues.letterSpacing);
+  cascadeAttrs.set('paragraph:line_height', template?.lineHeight ?? defaultValues.lineHeight);
 
   const paragraphNode = nodes.setContainer(paragraphId, new LoroMap());
   paragraphNode.set('type', 'paragraph');
-  paragraphNode.set('align', 'left');
-  paragraphNode.set('line_height', template?.lineHeight ?? 1.6);
+  paragraphNode.set('align', defaultValues.textAlign);
+  paragraphNode.set('line_height', template?.lineHeight ?? defaultValues.lineHeight);
   paragraphNode.set('parent', ROOT_ID);
   paragraphNode.setContainer('children', new LoroList());
 
