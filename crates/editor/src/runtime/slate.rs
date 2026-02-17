@@ -784,6 +784,10 @@ impl Slab {
                 o.is_focused as u32,
                 o.show_cell_selector as u32,
             ]);
+            self.write_f32_slice(&[o.content_width, o.min_proportion_width]);
+            self.write_f32_slice(&[o.max_proportion_width]);
+            self.write_u32_slice(&[o.col_widths_as_px.len() as u32]);
+            self.write_f32_slice(&o.col_widths_as_px);
             self.write_u32_slice(&[o.col_widths.len() as u32]);
             self.write_f32_slice(&o.col_widths);
             self.write_u32_slice(&[o.col_positions.len() as u32]);

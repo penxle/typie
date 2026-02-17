@@ -2,11 +2,11 @@ use crate::layout::elements::{SplitEdges, TableBorderElement};
 use crate::layout::{Element, Layout, LayoutContext, LayoutNode, PageBreakPolicy, PositionedNode};
 use crate::model::Node;
 use crate::model::html::{DomSpec, NodeHtmlCodec, NodeParseRule};
-use crate::model::nodes::table::{TABLE_BORDER_WIDTH, calculate_col_widths};
+use crate::model::nodes::table::{TABLE_BORDER_WIDTH, TableWidthModel};
 use crate::types::{BoxConstraints, Point, Size};
 use macros::Codec;
 use serde::{Deserialize, Serialize};
-use std::hash::Hash;
+use std::hash::{Hash, Hasher};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize, Codec)]
 #[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
@@ -72,13 +72,19 @@ impl TableBorderStyle {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Hash, Serialize, Deserialize, Codec)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Codec)]
 #[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 pub struct TableNode {
     #[serde(default)]
     pub border_style: TableBorderStyle,
     #[serde(default)]
     pub align: TableAlign,
+    #[serde(default = "default_proportion")]
+    pub proportion: f32,
+}
+
+fn default_proportion() -> f32 {
+    1.0
 }
 
 impl Default for TableNode {
@@ -86,7 +92,16 @@ impl Default for TableNode {
         Self {
             border_style: TableBorderStyle::Solid,
             align: TableAlign::Left,
+            proportion: default_proportion(),
         }
+    }
+}
+
+impl Hash for TableNode {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.border_style.hash(state);
+        self.align.hash(state);
+        self.proportion.to_bits().hash(state);
     }
 }
 
@@ -107,6 +122,8 @@ impl NodeHtmlCodec for TableNode {
             }
         }
 
+        builder = builder.attr("data-proportion", self.proportion.to_string());
+
         Some(builder.hole())
     }
 
@@ -123,10 +140,17 @@ impl NodeHtmlCodec for TableNode {
                 Some("right") => TableAlign::Right,
                 _ => TableAlign::Left,
             };
+            let proportion = elem
+                .value()
+                .attr("data-proportion")
+                .and_then(|value| value.parse::<f32>().ok())
+                .filter(|value| value.is_finite() && (0.0..=1.0).contains(value))
+                .unwrap_or_else(default_proportion);
 
             Some(Node::Table(TableNode {
                 border_style,
                 align,
+                proportion,
             }))
         })]
     }
@@ -181,9 +205,16 @@ impl Layout for TableNode {
             }
         });
 
-        let col_widths = calculate_col_widths(col_count, custom_widths.as_deref());
-        let actual_table_width =
-            col_widths.iter().sum::<f32>() + TABLE_BORDER_WIDTH * (col_count as f32 + 1.0);
+        let table_proportion = self.proportion.clamp(0.0, 1.0);
+        let width_model = TableWidthModel::new(col_count, max_width);
+        let table_width_floor = width_model.min_table_width().min(max_width.max(0.0));
+        let table_width_constraint = width_model
+            .target_table_width(table_proportion)
+            .max(table_width_floor);
+        let table_inner_width = width_model.inner_width_from_table_width(table_width_constraint);
+        let col_widths =
+            width_model.calculate_col_widths(custom_widths.as_deref(), table_inner_width);
+        let actual_table_width = col_widths.iter().sum::<f32>() + width_model.border_width();
 
         let x_offset = if actual_table_width < max_width {
             match self.align {
@@ -200,8 +231,12 @@ impl Layout for TableNode {
         let mut y = TABLE_BORDER_WIDTH;
 
         for row in &rows {
-            let row_constraints =
-                BoxConstraints::new(actual_table_width, actual_table_width, 0.0, f32::MAX);
+            let row_constraints = BoxConstraints::new(
+                table_width_constraint,
+                table_width_constraint,
+                0.0,
+                f32::MAX,
+            );
             let row_layout = ctx.layout(row, row_constraints);
             let row_height = row_layout.size.height;
 

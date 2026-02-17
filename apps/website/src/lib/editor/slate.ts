@@ -17,6 +17,10 @@ export type TableOverlay = {
   bounds: Rect;
   borderStyle: string;
   align: string;
+  contentWidth: number;
+  minProportionWidth: number;
+  maxProportionWidth: number;
+  colWidthsAsPx: number[];
   colWidths: number[];
   colPositions: number[];
   rowHeights: number[];
@@ -697,6 +701,17 @@ function readTableOverlays(view: DataView, offset: number, count: number): Table
     const isFocused = view.getUint32(pos + 8, true) !== 0;
     const showCellSelector = view.getUint32(pos + 12, true) !== 0;
     pos += 16;
+    const contentWidth = view.getFloat32(pos, true);
+    pos += 4;
+    const minProportionWidth = view.getFloat32(pos, true);
+    pos += 4;
+    const maxProportionWidth = view.getFloat32(pos, true);
+    pos += 4;
+
+    const cwpCnt = view.getUint32(pos, true);
+    pos += 4;
+    const colWidthsAsPx = readF32Array(view, pos, cwpCnt);
+    pos += cwpCnt * 4;
 
     const cwCnt = view.getUint32(pos, true);
     pos += 4;
@@ -724,6 +739,10 @@ function readTableOverlays(view: DataView, offset: number, count: number): Table
       bounds,
       borderStyle,
       align,
+      contentWidth,
+      minProportionWidth,
+      maxProportionWidth,
+      colWidthsAsPx,
       colWidths,
       colPositions,
       rowHeights,

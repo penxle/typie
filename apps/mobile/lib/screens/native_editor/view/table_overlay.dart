@@ -129,7 +129,7 @@ class _FocusedTableOverlay extends HookWidget {
     );
     final cursor = scope.controller.state.cursor;
     final hasOverlayGeometry =
-        overlay.colWidths.isNotEmpty &&
+        overlay.colWidthsAsPx.isNotEmpty &&
         overlay.totalRows > 0 &&
         overlay.rowHeights.isNotEmpty &&
         overlay.rowPositions.isNotEmpty;
@@ -155,9 +155,9 @@ class _FocusedTableOverlay extends HookWidget {
         return null;
       }
       selectedRow.value = selectedRow.value.clamp(0, overlay.totalRows - 1);
-      selectedCol.value = selectedCol.value.clamp(0, overlay.colWidths.length - 1);
+      selectedCol.value = selectedCol.value.clamp(0, overlay.colWidthsAsPx.length - 1);
       return null;
-    }, [overlay.totalRows, overlay.colWidths.length, hasOverlayGeometry]);
+    }, [overlay.totalRows, overlay.colWidthsAsPx.length, hasOverlayGeometry]);
 
     useEffect(
       () {
@@ -223,15 +223,15 @@ class _FocusedTableOverlay extends HookWidget {
     }
 
     void selectCol(int col) {
-      final clamped = col.clamp(0, overlay.colWidths.length - 1);
+      final clamped = col.clamp(0, overlay.colWidthsAsPx.length - 1);
       selectedCol.value = clamped;
       dispatch({'type': 'selectTableColumn', 'tableId': overlay.tableId, 'col': clamped});
     }
 
     final currentRow = selectedRow.value.clamp(0, overlay.totalRows - 1);
-    final currentCol = selectedCol.value.clamp(0, overlay.colWidths.length - 1);
+    final currentCol = selectedCol.value.clamp(0, overlay.colWidthsAsPx.length - 1);
     final selectedColLeft = tableColLeft(overlay, currentCol);
-    final selectedColWidth = overlay.colWidths[currentCol];
+    final selectedColWidth = overlay.colWidthsAsPx[currentCol];
 
     final selectedRowLocal = currentRow - overlay.startRowIndex;
     final isSelectedRowVisible =
@@ -283,7 +283,8 @@ class _FocusedTableOverlay extends HookWidget {
       dropPosition: dropPosition,
       globalToViewport: globalToViewport,
     );
-    final resizeCol = cellSelector.rightEdgeCol;
+    final hasResizableColumn = overlay.colWidthsAsPx.isNotEmpty;
+    final resizeCol = hasResizableColumn ? cellSelector.rightEdgeCol.clamp(0, overlay.colWidthsAsPx.length - 1) : 0;
     final cellHandleWidget = buildCellSelectionHandleWidget(cellSelector, selectionHandleColor);
 
     void moveHandleRowTo(int row) {
@@ -329,16 +330,26 @@ class _FocusedTableOverlay extends HookWidget {
         clipBehavior: Clip.none,
         children: [
           ...buildCellSelectionOutlineWidgets(cellSelector, selectionHandleColor),
-          TableColumnResizer(
-            overlay: overlay,
-            renderBounds: renderBounds,
-            selectedCol: resizeCol,
-            pageWidth: pageWidth,
-            onCommit: (nextWidths) {
-              dispatch({'type': 'setColumnWidths', 'tableId': overlay.tableId, 'colWidths': nextWidths});
-              scope.controller.scrollIntoView();
-            },
-          ),
+          if (hasResizableColumn)
+            TableColumnResizer(
+              overlay: overlay,
+              renderBounds: renderBounds,
+              selectedCol: resizeCol,
+              pageWidth: pageWidth,
+              onCommitColumnWidths: (nextWidths) {
+                dispatch({'type': 'setColumnWidths', 'tableId': overlay.tableId, 'colWidths': nextWidths});
+                scope.controller.scrollIntoView();
+              },
+              onCommitTableWidth: (width) {
+                dispatch({
+                  'type': 'setTableWidth',
+                  'tableId': overlay.tableId,
+                  'width': width,
+                  'contentWidth': overlay.contentWidth,
+                });
+                scope.controller.scrollIntoView();
+              },
+            ),
           Positioned(
             left: colHandleLeft,
             top: colHandleTop,
@@ -465,8 +476,8 @@ class _FocusedTableOverlay extends HookWidget {
     required ValueChanged<int> onSelectedColChanged,
   }) async {
     final isFirst = selectedCol == 0;
-    final isLast = selectedCol == overlay.colWidths.length - 1;
-    final isOnlyColumn = overlay.colWidths.length <= 1;
+    final isLast = selectedCol == overlay.colWidthsAsPx.length - 1;
+    final isOnlyColumn = overlay.colWidthsAsPx.length <= 1;
 
     scope.inputController.dismissKeyboard();
     await Future<void>.delayed(tableOverlaySheetOpenDelay);
@@ -536,7 +547,7 @@ class _FocusedTableOverlay extends HookWidget {
               if (isOnlyColumn) {
                 dispatch({'type': 'deleteNode', 'nodeId': overlay.tableId});
               } else {
-                onSelectedColChanged(selectedCol < overlay.colWidths.length - 1 ? selectedCol : selectedCol - 1);
+                onSelectedColChanged(selectedCol < overlay.colWidthsAsPx.length - 1 ? selectedCol : selectedCol - 1);
                 dispatch({'type': 'deleteTableColumn', 'tableId': overlay.tableId, 'col': selectedCol});
               }
             },

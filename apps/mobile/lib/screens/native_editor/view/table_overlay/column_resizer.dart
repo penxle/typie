@@ -9,13 +9,17 @@ import 'package:typie/screens/native_editor/table/models.dart';
 import 'constants.dart';
 import 'geometry.dart';
 
+const tableBorderWidth = 1.0;
+const tableResizeLimitEpsilon = 0.5;
+
 class TableColumnResizer extends HookWidget {
   const TableColumnResizer({
     required this.overlay,
     required this.renderBounds,
     required this.selectedCol,
     required this.pageWidth,
-    required this.onCommit,
+    required this.onCommitColumnWidths,
+    required this.onCommitTableWidth,
     super.key,
   });
 
@@ -23,12 +27,15 @@ class TableColumnResizer extends HookWidget {
   final TableOverlayBounds renderBounds;
   final int selectedCol;
   final double pageWidth;
-  final ValueChanged<List<double>> onCommit;
+  final ValueChanged<List<double>> onCommitColumnWidths;
+  final ValueChanged<double> onCommitTableWidth;
 
   @override
   Widget build(BuildContext context) {
     final resizeDraft = useState<ColumnResizeDraft?>(null);
     final activeResizePointer = useState<int?>(null);
+    final maxResizableCol = overlay.colWidthsAsPx.length - 1;
+    final contentWidth = overlay.contentWidth;
 
     useEffect(() {
       final draft = resizeDraft.value;
@@ -37,19 +44,28 @@ class TableColumnResizer extends HookWidget {
       }
       final shouldReset =
           draft.tableId != overlay.tableId ||
-          draft.colIndex >= overlay.colWidths.length ||
-          draft.initialWidths.length != overlay.colWidths.length;
+          overlay.colWidthsAsPx.isEmpty ||
+          draft.colIndex > maxResizableCol ||
+          draft.initialWidths.length != overlay.colWidthsAsPx.length;
       if (shouldReset) {
         resizeDraft.value = null;
         activeResizePointer.value = null;
       }
       return null;
-    }, [resizeDraft.value, overlay.tableId, overlay.colWidths.length]);
+    }, [maxResizableCol, resizeDraft.value, overlay.tableId, overlay.colWidthsAsPx.length]);
+
+    if (overlay.colWidthsAsPx.isEmpty) {
+      return const SizedBox.shrink();
+    }
 
     final draft = resizeDraft.value;
     final isResizing = draft != null;
-    final resizeCol = (isResizing ? draft.colIndex : selectedCol).clamp(0, overlay.colWidths.length - 1);
-    final resizeDelta = isResizing ? clampColumnResizeDelta(draft.initialWidths, draft.colIndex, draft.deltaX) : 0.0;
+    final resizeCol = (isResizing ? draft.colIndex : selectedCol).clamp(0, maxResizableCol);
+    final resizeDelta = isResizing
+        ? (draft.colIndex == maxResizableCol
+              ? clampTableResizeDelta(overlay, renderBounds.width, draft.deltaX, contentWidth)
+              : clampColumnResizeDelta(draft.initialWidths, draft.colIndex, draft.deltaX))
+        : 0.0;
     final resizeHandleCenterX = renderBounds.x + tableColRight(overlay, resizeCol) + resizeDelta;
     final resizeHandleLeft = tableClampDouble(
       resizeHandleCenterX - tableColumnResizeTouchWidth / 2,
@@ -64,9 +80,9 @@ class TableColumnResizer extends HookWidget {
       activeResizePointer.value = event.pointer;
       resizeDraft.value = ColumnResizeDraft(
         tableId: overlay.tableId,
-        colIndex: selectedCol,
+        colIndex: selectedCol.clamp(0, maxResizableCol),
         startX: event.position.dx,
-        initialWidths: List<double>.from(overlay.colWidths),
+        initialWidths: List<double>.from(overlay.colWidthsAsPx),
         deltaX: 0,
       );
     }
@@ -91,12 +107,27 @@ class TableColumnResizer extends HookWidget {
       if (current == null) {
         return;
       }
-      final nextWidths = applyColumnResizeDelta(current.initialWidths, current.colIndex, current.deltaX);
       resizeDraft.value = null;
+
+      if (current.colIndex == maxResizableCol) {
+        if (contentWidth <= 0) {
+          return;
+        }
+        final clampedDelta = clampTableResizeDelta(overlay, renderBounds.width, current.deltaX, contentWidth);
+        if (clampedDelta.abs() <= 0.01) {
+          return;
+        }
+        final currentTableWidth = renderBounds.width;
+        final nextTableWidth = currentTableWidth + clampedDelta;
+        onCommitTableWidth(nextTableWidth);
+        return;
+      }
+
+      final nextWidths = applyColumnResizeDelta(current.initialWidths, current.colIndex, current.deltaX);
       if (!hasWidthChange(current.initialWidths, nextWidths)) {
         return;
       }
-      onCommit(nextWidths);
+      onCommitColumnWidths(toRatioWidths(nextWidths));
     }
 
     return Positioned(
@@ -164,36 +195,72 @@ class ColumnResizeDraft {
   }
 }
 
+double minTableWidthForColumns(int colCount) {
+  if (colCount <= 0) {
+    return 0;
+  }
+  return tableMinColumnWidth * colCount + tableBorderWidth * (colCount + 1);
+}
+
 double clampColumnResizeDelta(List<double> widths, int colIndex, double deltaX) {
-  if (widths.isEmpty || colIndex < 0 || colIndex >= widths.length) {
+  if (widths.isEmpty || colIndex < 0 || colIndex >= widths.length - 1) {
     return 0;
   }
 
   final minDelta = tableMinColumnWidth - widths[colIndex];
-  if (colIndex == widths.length - 1) {
-    return math.max(minDelta, deltaX);
-  }
-
   final maxDelta = widths[colIndex + 1] - tableMinColumnWidth;
   return tableClampDouble(deltaX, minDelta, maxDelta);
 }
 
+double clampTableResizeDelta(TableOverlayInfo overlay, double currentTableWidth, double deltaX, double contentWidth) {
+  final colCount = overlay.colWidthsAsPx.length;
+  if (colCount <= 0 || contentWidth <= 0) {
+    return 0;
+  }
+
+  final minTableWidth = math.max(minTableWidthForColumns(colCount), overlay.minProportionWidth);
+  final maxTableWidth = math.max(
+    minTableWidth,
+    overlay.maxProportionWidth > 0 ? overlay.maxProportionWidth : contentWidth,
+  );
+  if (minTableWidth > maxTableWidth) {
+    return 0;
+  }
+
+  final effectiveMinTableWidth = currentTableWidth <= minTableWidth + tableResizeLimitEpsilon
+      ? currentTableWidth
+      : minTableWidth;
+  final minDelta = effectiveMinTableWidth - currentTableWidth;
+  final maxDelta = maxTableWidth - currentTableWidth;
+  return tableClampDouble(deltaX, minDelta, maxDelta);
+}
+
 List<double> applyColumnResizeDelta(List<double> initialWidths, int colIndex, double deltaX) {
-  if (initialWidths.isEmpty || colIndex < 0 || colIndex >= initialWidths.length) {
+  if (initialWidths.isEmpty || colIndex < 0 || colIndex >= initialWidths.length - 1) {
     return initialWidths;
   }
 
   final next = List<double>.from(initialWidths);
   final clampedDelta = clampColumnResizeDelta(initialWidths, colIndex, deltaX);
 
-  if (colIndex == next.length - 1) {
-    next[colIndex] = next[colIndex] + clampedDelta;
-    return next;
-  }
-
   next[colIndex] = next[colIndex] + clampedDelta;
   next[colIndex + 1] = next[colIndex + 1] - clampedDelta;
   return next;
+}
+
+List<double> toRatioWidths(List<double> widths) {
+  if (widths.isEmpty) {
+    return const [];
+  }
+
+  final safe = widths.map((width) => width.isFinite && width > 0 ? width : 0).toList(growable: false);
+  final total = safe.fold<double>(0, (sum, width) => sum + width);
+  if (total <= 0) {
+    final fallback = 1 / widths.length;
+    return List<double>.filled(widths.length, fallback);
+  }
+
+  return safe.map((width) => width / total).toList(growable: false);
 }
 
 bool hasWidthChange(List<double> before, List<double> after) {

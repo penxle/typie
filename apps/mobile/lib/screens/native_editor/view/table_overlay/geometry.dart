@@ -138,7 +138,7 @@ TableCellIndex tableCellAtOverlayOffset({
 
   return TableCellIndex(
     row: (overlay.startRowIndex + localRow).clamp(0, overlay.totalRows - 1),
-    col: localCol.clamp(0, overlay.colWidths.length - 1),
+    col: localCol.clamp(0, overlay.colWidthsAsPx.length - 1),
   );
 }
 
@@ -152,11 +152,11 @@ PagePoint? tableCellCenterPagePoint({
   if (localRow < 0 || localRow >= overlay.rowHeights.length) {
     return null;
   }
-  if (cell.col < 0 || cell.col >= overlay.colWidths.length) {
+  if (cell.col < 0 || cell.col >= overlay.colWidthsAsPx.length) {
     return null;
   }
 
-  final x = overlay.bounds.x + tableColLeft(overlay, cell.col) + overlay.colWidths[cell.col] * 0.5;
+  final x = overlay.bounds.x + tableColLeft(overlay, cell.col) + overlay.colWidthsAsPx[cell.col] * 0.5;
   final localY = tableRowTop(overlay, localRow) + overlay.rowHeights[localRow] * 0.5;
 
   if (layout is PaginatedLayout) {
@@ -229,7 +229,7 @@ TableCellIndex? tableCellFromPagePoint({
 
   return TableCellIndex(
     row: (overlay.startRowIndex + localRow).clamp(0, overlay.totalRows - 1),
-    col: localCol.clamp(0, overlay.colWidths.length - 1),
+    col: localCol.clamp(0, overlay.colWidthsAsPx.length - 1),
   );
 }
 

@@ -494,6 +494,18 @@ define_messages! {
     => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_set_table_align(table_id, align) },
 
+    SetTableProportion { table_id: String, proportion: f32 }
+    => when When::key(ContextKey::CanEdit)
+    => handle(rt) { rt.handle_set_table_proportion(table_id, proportion) },
+
+    SetTableWidth {
+        table_id: String,
+        width: f32,
+        content_width: f32,
+    }
+    => when When::key(ContextKey::CanEdit)
+    => handle(rt) { rt.handle_set_table_width(table_id, width, content_width) },
+
     SelectTable { table_id: String }
     => when When::True
     => handle(rt) { rt.handle_select_table(table_id) },

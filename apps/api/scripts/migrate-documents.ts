@@ -153,6 +153,101 @@ function normalizeNode(nodeJson: Record<string, unknown>): Record<string, unknow
 }
 
 const generateNodeId = () => crypto.randomUUID().replaceAll('-', '');
+const DEFAULT_TABLE_CELL_WIDTH_PX = 80;
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+type ColWidthMigrationResult = {
+  changed: boolean;
+  migratedTableCount: number;
+  skippedMixedTableCount: number;
+};
+
+function migrateTableColWidths(nodes: Record<string, Record<string, unknown>>): ColWidthMigrationResult {
+  let changed = false;
+  let migratedTableCount = 0;
+  let skippedMixedTableCount = 0;
+
+  for (const tableNode of Object.values(nodes)) {
+    if (tableNode.type !== 'table' || !Array.isArray(tableNode.children) || tableNode.children.length === 0) {
+      continue;
+    }
+
+    const firstRowId = tableNode.children[0];
+    if (typeof firstRowId !== 'string') {
+      continue;
+    }
+
+    const firstRowNode = nodes[firstRowId];
+    if (!firstRowNode || firstRowNode.type !== 'table_row' || !Array.isArray(firstRowNode.children)) {
+      continue;
+    }
+
+    const firstRowCells = firstRowNode.children
+      .map((cellId) => (typeof cellId === 'string' ? nodes[cellId] : undefined))
+      .filter((cell): cell is Record<string, unknown> => !!cell && cell.type === 'table_cell');
+
+    if (firstRowCells.length === 0) {
+      continue;
+    }
+
+    let hasLegacyPx = false;
+    let hasAlreadyMigratedRatio = false;
+
+    for (const cellNode of firstRowCells) {
+      const colWidth = cellNode.col_width;
+      if (!isFiniteNumber(colWidth)) {
+        continue;
+      }
+
+      if (colWidth > 1) {
+        hasLegacyPx = true;
+      } else {
+        hasAlreadyMigratedRatio = true;
+      }
+    }
+
+    if (!hasLegacyPx) {
+      continue;
+    }
+
+    if (hasAlreadyMigratedRatio) {
+      skippedMixedTableCount++;
+      continue;
+    }
+
+    const widthsPx = firstRowCells.map((cellNode) => {
+      const colWidth = cellNode.col_width;
+      if (isFiniteNumber(colWidth) && colWidth > 1) {
+        return colWidth;
+      }
+      return DEFAULT_TABLE_CELL_WIDTH_PX;
+    });
+
+    const totalWidthPx = widthsPx.reduce((sum, width) => sum + width, 0);
+    if (totalWidthPx <= 0) {
+      continue;
+    }
+
+    for (const [index, cellNode] of firstRowCells.entries()) {
+      const migratedWidth = widthsPx[index] / totalWidthPx;
+      if (cellNode.col_width !== migratedWidth) {
+        cellNode.col_width = migratedWidth;
+        changed = true;
+      }
+    }
+
+    migratedTableCount++;
+  }
+
+  return {
+    changed,
+    migratedTableCount,
+    skippedMixedTableCount,
+  };
+}
 
 function fixTextNewlines(nodes: Record<string, Record<string, unknown>>): boolean {
   let fixed = false;
@@ -252,6 +347,8 @@ await (async () => {
   let migrated = 0;
   let skipped = 0;
   let errors = 0;
+  let migratedTables = 0;
+  let skippedMixedTables = 0;
 
   for (const { id, documentId } of ids) {
     try {
@@ -316,6 +413,13 @@ await (async () => {
           needsFix = true;
         }
 
+        const tableMigrationResult = migrateTableColWidths(nodes);
+        if (tableMigrationResult.changed) {
+          needsFix = true;
+        }
+        migratedTables += tableMigrationResult.migratedTableCount;
+        skippedMixedTables += tableMigrationResult.skippedMixedTableCount;
+
         if (!needsFix && !force) {
           skipped++;
           continue;
@@ -362,6 +466,9 @@ await (async () => {
         }
 
         fixTextNewlines(transformedNodes as Record<string, Record<string, unknown>>);
+        const tableMigrationResult = migrateTableColWidths(transformedNodes as Record<string, Record<string, unknown>>);
+        migratedTables += tableMigrationResult.migratedTableCount;
+        skippedMixedTables += tableMigrationResult.skippedMixedTableCount;
 
         const rootNode = transformedNodes['00000000000000000000000000000000'] as Record<string, unknown> | undefined;
         if (rootNode) {
@@ -421,6 +528,7 @@ await (async () => {
   }
 
   console.log(`Migration complete. Migrated: ${migrated}, Skipped: ${skipped}, Errors: ${errors}`);
+  console.log(`Table col_width migration: migrated tables=${migratedTables}, skipped mixed tables=${skippedMixedTables}`);
 
   await pg.end();
   process.exit(0);
