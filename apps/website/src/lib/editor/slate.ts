@@ -314,7 +314,7 @@ export class SlateReader {
     return readLinkOverlays(this.#slabView, this.#slabPtr + offset, count);
   }
 
-  readTrackedItems(): TrackedItemOverlay[] {
+  readTrackedItems(): TrackedItem[] {
     const count = this.#u32('tracked_items_count');
     const offset = this.#u32('tracked_items_offset');
     return readTrackedItems(this.#slabView, this.#slabPtr + offset, count);
@@ -626,7 +626,7 @@ function readLinkOverlays(view: DataView, offset: number, count: number): { page
   return overlays;
 }
 
-export type TrackedItemOverlay = {
+export type TrackedItem = {
   pageIdx: number;
   group: number;
   id: string;
@@ -636,8 +636,8 @@ export type TrackedItemOverlay = {
   bounds: TextBound[];
 };
 
-function readTrackedItems(view: DataView, offset: number, count: number): TrackedItemOverlay[] {
-  const overlays: TrackedItemOverlay[] = [];
+function readTrackedItems(view: DataView, offset: number, count: number): TrackedItem[] {
+  const items: TrackedItem[] = [];
   let pos = offset;
   for (let i = 0; i < count; i++) {
     const pageIdx = view.getUint32(pos, true);
@@ -662,9 +662,9 @@ function readTrackedItems(view: DataView, offset: number, count: number): Tracke
     const { bounds, end: afterBounds } = readTextBounds(view, pos, boundsCount);
     pos = afterBounds;
 
-    overlays.push({ pageIdx, group, id, nodeId, startOffset, endOffset, bounds });
+    items.push({ pageIdx, group, id, nodeId, startOffset, endOffset, bounds });
   }
-  return overlays;
+  return items;
 }
 
 function readTableOverlays(view: DataView, offset: number, count: number): TableOverlay[] {

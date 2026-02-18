@@ -4,6 +4,7 @@ use crate::runtime::Runtime;
 use crate::state::position_helpers::{calculate_offset_before_child, find_text_at_offset};
 use crate::types::TextBound;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
@@ -173,6 +174,26 @@ impl Runtime {
                 end_cursor,
             });
         }
+
+        self.pending.tracked_items = true;
+    }
+
+    pub fn remove_tracked_items(&mut self, group: u32, ids: &[String]) {
+        if ids.is_empty() {
+            return;
+        }
+
+        let target_group = match group {
+            0 => TrackedItemGroup::Spellcheck,
+            1 => TrackedItemGroup::AiFeedback,
+            2 => TrackedItemGroup::Search,
+            _ => return,
+        };
+
+        let id_set: HashSet<&str> = ids.iter().map(|id| id.as_str()).collect();
+
+        self.tracked_items
+            .retain(|item| item.group != target_group || !id_set.contains(item.id.as_str()));
 
         self.pending.tracked_items = true;
     }

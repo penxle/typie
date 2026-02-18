@@ -160,26 +160,16 @@ class SpellcheckSheet extends HookWidget {
                         (error) => _SpellcheckErrorItem(
                           error: error,
                           onCorrect: (correction) {
-                            editor.replaceTextInBlock(
-                              error['nodeId'] as String,
-                              error['startOffset'] as int,
-                              error['endOffset'] as int,
-                              correction,
-                            );
+                            final errorId = error['id'] as String;
+                            final range = controller.trackedItemRange(0, errorId);
+                            final nodeId = range?.nodeId ?? (error['nodeId'] as String);
+                            final startOffset = range?.startOffset ?? (error['startOffset'] as int);
+                            final endOffset = range?.endOffset ?? (error['endOffset'] as int);
 
-                            errors.value = errors.value.where((e) => e['id'] != error['id']).toList();
+                            editor.replaceTextInBlock(nodeId, startOffset, endOffset, correction);
 
-                            final rawErrors = errors.value
-                                .map(
-                                  (e) => <String, dynamic>{
-                                    'id': e['id'],
-                                    'nodeId': e['nodeId'],
-                                    'startOffset': e['startOffset'],
-                                    'endOffset': e['endOffset'],
-                                  },
-                                )
-                                .toList();
-                            editor.setTrackedItems(0, rawErrors);
+                            errors.value = errors.value.where((e) => e['id'] != errorId).toList();
+                            editor.removeTrackedItems(0, [errorId]);
                           },
                           onTap: controller.scrollIntoView,
                         ),

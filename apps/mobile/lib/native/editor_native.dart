@@ -537,6 +537,23 @@ final class NativeEditor {
     _needsTick = true;
   }
 
+  void removeTrackedItems(int group, List<String> ids) {
+    _checkDisposed();
+
+    final json = jsonEncode(ids);
+    final jsonPtr = json.toNativeUtf8().cast<Char>();
+
+    try {
+      final result = _bindings.editor_remove_tracked_items(_handle, group, jsonPtr);
+      if (result < 0) {
+        throw EditorException(_getLastError() ?? 'Failed to remove tracked items');
+      }
+    } finally {
+      calloc.free(jsonPtr);
+    }
+    _needsTick = true;
+  }
+
   List<Map<String, dynamic>> performSearch(String query, bool matchWholeWord) {
     _checkDisposed();
 

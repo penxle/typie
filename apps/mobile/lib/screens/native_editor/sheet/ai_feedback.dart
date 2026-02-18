@@ -172,7 +172,7 @@ class AiFeedbackSheet extends HookWidget {
       if (activeFeedbackId.value == id) {
         activeFeedbackId.value = null;
       }
-      updateOverlays();
+      editor.removeTrackedItems(1, [id]);
     }
 
     final bottomPadding = MediaQuery.paddingOf(context).bottom;

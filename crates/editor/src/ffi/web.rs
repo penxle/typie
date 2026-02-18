@@ -520,6 +520,11 @@ impl Editor {
         self.runtime.set_tracked_items(group, raw_items);
     }
 
+    #[wasm_bindgen(js_name = removeTrackedItems)]
+    pub fn remove_tracked_items(&mut self, group: u32, ids: Vec<String>) {
+        self.runtime.remove_tracked_items(group, &ids);
+    }
+
     #[wasm_bindgen(js_name = getTextWithMappings)]
     pub fn get_text_with_mappings(&self) -> Result<JsValue, JsValue> {
         #[derive(serde::Serialize)]

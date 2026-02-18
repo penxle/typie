@@ -371,8 +371,15 @@ class CommandHandler {
     final spellcheckOverlays = <SpellcheckOverlayInfo>[];
     final aiFeedbackOverlays = <AiFeedbackOverlayInfo>[];
     final searchOverlays = <SearchOverlayInfo>[];
+    final rangesByGroup = <int, Map<String, TrackedItemRange>>{};
 
     for (final item in rawItems) {
+      rangesByGroup.putIfAbsent(item.group, () => <String, TrackedItemRange>{})[item.id] = TrackedItemRange(
+        nodeId: item.nodeId,
+        startOffset: item.startOffset,
+        endOffset: item.endOffset,
+      );
+
       if (item.group == 0) {
         final bounds = item.bounds
             .map((b) => SpellcheckOverlayBound(x: b.x, y: b.y, width: b.width, height: b.height, ascent: b.ascent))
@@ -395,13 +402,15 @@ class CommandHandler {
       }
     }
 
-    controller.updateState(
-      (state) => state.copyWith(
-        spellcheck: SpellcheckState(overlays: spellcheckOverlays),
-        aiFeedback: AiFeedbackState(overlays: aiFeedbackOverlays),
-        search: state.search.copyWith(overlays: searchOverlays),
-      ),
-    );
+    controller
+      ..updateState(
+        (state) => state.copyWith(
+          spellcheck: SpellcheckState(overlays: spellcheckOverlays),
+          aiFeedback: AiFeedbackState(overlays: aiFeedbackOverlays),
+          search: state.search.copyWith(overlays: searchOverlays),
+        ),
+      )
+      ..setTrackedItemRanges(rangesByGroup);
   }
 
   static void _handleTableOverlaysChanged(EditorController controller, SlateReader reader) {

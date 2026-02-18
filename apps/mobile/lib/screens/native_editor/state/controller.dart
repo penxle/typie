@@ -7,6 +7,14 @@ import 'package:typie/screens/native_editor/state/scroll_mode.dart';
 import 'package:typie/screens/native_editor/state/state.dart';
 import 'package:typie/screens/native_editor/table/models.dart';
 
+class TrackedItemRange {
+  const TrackedItemRange({required this.nodeId, required this.startOffset, required this.endOffset});
+
+  final String nodeId;
+  final int startOffset;
+  final int endOffset;
+}
+
 class EditorController extends ChangeNotifier {
   EditorController({
     required this.editor,
@@ -52,6 +60,16 @@ class EditorController extends ChangeNotifier {
   final ValueNotifier<String?> floatingNodeId = ValueNotifier(null);
   final ValueNotifier<NativeEditorCharacterCounts?> characterCounts = ValueNotifier(null);
   final ValueNotifier<int> characterCountsVersion = ValueNotifier(0);
+
+  Map<int, Map<String, TrackedItemRange>> _trackedItemRanges = {};
+
+  TrackedItemRange? trackedItemRange(int group, String id) {
+    return _trackedItemRanges[group]?[id];
+  }
+
+  void setTrackedItemRanges(Map<int, Map<String, TrackedItemRange>> ranges) {
+    _trackedItemRanges = ranges;
+  }
 
   bool _isBatching = false;
   bool _needsNotify = false;

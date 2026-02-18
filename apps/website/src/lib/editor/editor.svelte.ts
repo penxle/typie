@@ -30,10 +30,10 @@ import { calculateImageDisplaySize, calculateRelativePosition, findNearestPageCo
 import type { DocExportMode, Editor as WasmEditor, Modifier, PointerButton } from '@typie/editor';
 import type { ScrollViewport } from '@typie/ui/utils';
 import type { FontFamily } from './fonts';
-import type { TableOverlay, TrackedItemOverlay } from './slate';
+import type { TableOverlay, TrackedItem } from './slate';
 import type { ThemeColors } from './theme';
 import type {
-  AiFeedbackData,
+  AiFeedback,
   ArchivedAsset,
   Attribute,
   EmbedAsset,
@@ -45,7 +45,7 @@ import type {
   Position,
   Rect,
   Selection,
-  SpellcheckErrorData,
+  SpellcheckError,
 } from './types';
 
 let initPromise: Promise<void> | null = null;
@@ -92,10 +92,9 @@ export class Editor {
   #needsTick = false;
   #renderDebugEnabled = false;
   #layoutDebugEnabled = false;
+  #tickResolvers: (() => void)[] = [];
   #onDocChanged?: () => void;
   #onExitedDocumentStart?: () => void;
-  #searchQuery = '';
-  #searchMatchWholeWord = false;
   #onSelectionChanged?: (anchor: Position, head: Position) => void;
   #readyResolve?: () => void;
   ready: Promise<void>;
@@ -197,17 +196,11 @@ export class Editor {
 
   linkOverlays = $state<{ pageIdx: number; href: string; bounds: Rect[] }[]>([]);
 
-  spellcheckOverlays = $state<TrackedItemOverlay[]>([]);
-  activeSpellcheckErrorId = $state<string | null>(null);
-  fullSpellcheckErrors = $state<SpellcheckErrorData[]>([]);
+  trackedItems = $state<TrackedItem[]>([]);
 
-  aiFeedbackOverlays = $state<TrackedItemOverlay[]>([]);
-  activeAiFeedbackItemId = $state<string | null>(null);
-  fullAiFeedbackItems = $state<AiFeedbackData[]>([]);
-
-  searchMatches = $state<{ id: string; nodeId: string; startOffset: number; endOffset: number }[]>([]);
-  activeSearchMatchId = $state<string | null>(null);
-  searchOverlays = $state<TrackedItemOverlay[]>([]);
+  spellcheckErrors = $state<SpellcheckError[]>([]);
+  aiFeedbacks = $state<AiFeedback[]>([]);
+  searchMatches = $state<{ id: string; active: boolean }[]>([]);
 
   tableOverlays = $state<TableOverlay[]>([]);
 
@@ -327,6 +320,14 @@ export class Editor {
       }
     }
 
+    if (this.#tickResolvers.length > 0) {
+      const resolvers = this.#tickResolvers;
+      this.#tickResolvers = [];
+      for (const resolve of resolvers) {
+        resolve();
+      }
+    }
+
     this.#rafId = requestAnimationFrame(this.#tick);
   };
 
@@ -335,9 +336,6 @@ export class Editor {
       this.#onDocChanged?.();
       this.pendingScrollMode = 'typewriter';
       this.characterCountsVersion++;
-      if (this.#searchQuery) {
-        this.#performSearchAndUpdateTrackedItems();
-      }
     }
 
     if (slate.isDirty(DIRTY_RENDER_REQUIRED)) {
@@ -417,7 +415,7 @@ export class Editor {
       this.selection = sel;
       this.characterCountsVersion++;
       this.#onSelectionChanged?.(sel.anchor, sel.head);
-      this.#updateActiveTrackedItems(sel.head);
+      this.#updateActiveTrackedItems();
     }
 
     if (slate.isDirty(DIRTY_ATTRS)) {
@@ -461,46 +459,16 @@ export class Editor {
     }
 
     if (slate.isDirty(DIRTY_TRACKED_ITEMS)) {
-      const items = slate.readTrackedItems();
+      this.trackedItems = slate.readTrackedItems();
 
-      const spellcheckItems: TrackedItemOverlay[] = [];
-      const feedbackItems: TrackedItemOverlay[] = [];
-      const searchItems: TrackedItemOverlay[] = [];
-      for (const item of items) {
-        if (item.group === 0) {
-          spellcheckItems.push(item);
-        } else if (item.group === 1) {
-          feedbackItems.push(item);
-        } else if (item.group === 2) {
-          searchItems.push(item);
-        }
-      }
+      const spellcheckIds = new SvelteSet(this.trackedItems.filter((v) => v.group === 0).map((v) => v.id));
+      this.spellcheckErrors = this.spellcheckErrors.filter((v) => spellcheckIds.has(v.id));
 
-      this.spellcheckOverlays = spellcheckItems;
-      const spellcheckValidIds = new SvelteSet(spellcheckItems.map((o) => o.id));
-      if (this.fullSpellcheckErrors.length > 0) {
-        this.fullSpellcheckErrors = this.fullSpellcheckErrors.filter((e: SpellcheckErrorData) => spellcheckValidIds.has(e.id));
-      }
+      const aiFeedbackIds = new SvelteSet(this.trackedItems.filter((v) => v.group === 1).map((v) => v.id));
+      this.aiFeedbacks = this.aiFeedbacks.filter((v) => aiFeedbackIds.has(v.id));
 
-      if (this.activeSpellcheckErrorId && !spellcheckValidIds.has(this.activeSpellcheckErrorId)) {
-        this.activeSpellcheckErrorId = null;
-      }
-
-      this.aiFeedbackOverlays = feedbackItems;
-      const feedbackValidIds = new SvelteSet(feedbackItems.map((o) => o.id));
-      if (this.fullAiFeedbackItems.length > 0) {
-        this.fullAiFeedbackItems = this.fullAiFeedbackItems.filter((e: AiFeedbackData) => feedbackValidIds.has(e.id));
-      }
-
-      if (this.activeAiFeedbackItemId && !feedbackValidIds.has(this.activeAiFeedbackItemId)) {
-        this.activeAiFeedbackItemId = null;
-      }
-
-      this.searchOverlays = searchItems;
-      const activeSearchOverlay = this.activeSearchMatchId ? searchItems.find((o) => o.id === this.activeSearchMatchId) : null;
-      if (activeSearchOverlay && activeSearchOverlay.bounds.length > 0) {
-        this.#scrollOverlayIntoView(activeSearchOverlay);
-      }
+      const searchMatchIds = new SvelteSet(this.trackedItems.filter((v) => v.group === 2).map((v) => v.id));
+      this.searchMatches = this.searchMatches.filter((v) => searchMatchIds.has(v.id));
     }
 
     if (slate.isDirty(DIRTY_TABLE_OVERLAYS)) {
@@ -533,40 +501,49 @@ export class Editor {
     });
   }
 
-  #updateActiveTrackedItems(head: Position): void {
-    const newSpellcheckId =
-      this.spellcheckOverlays.find((o) => o.nodeId === head.nodeId && head.offset >= o.startOffset && head.offset <= o.endOffset)?.id ??
-      null;
-    if (this.activeSpellcheckErrorId !== newSpellcheckId) {
-      this.activeSpellcheckErrorId = newSpellcheckId;
+  #updateActiveTrackedItems(): void {
+    if (!this.selection?.collapsed) {
+      return;
     }
 
-    const newFeedbackId =
-      this.aiFeedbackOverlays.find((o) => o.nodeId === head.nodeId && head.offset >= o.startOffset && head.offset <= o.endOffset)?.id ??
-      null;
-    if (this.activeAiFeedbackItemId !== newFeedbackId) {
-      this.activeAiFeedbackItemId = newFeedbackId;
-    }
-  }
+    const anchor = this.selection.anchor;
 
-  #scrollOverlayIntoView(overlay: TrackedItemOverlay): void {
-    const pageEl = this.pageContainerEls[overlay.pageIdx];
-    const scroller = this.scrollContainerEl;
-    if (pageEl && scroller && overlay.bounds.length > 0) {
-      const pageRect = pageEl.getBoundingClientRect();
-      const scrollerRect = scroller.getBoundingClientRect();
-      const bound = overlay.bounds[0];
-      const targetY = pageRect.top + bound.y - scrollerRect.top + scroller.scrollTop;
-      const viewportCenter = scroller.clientHeight / 2;
-      const targetScroll = targetY - viewportCenter + bound.height / 2;
-      scroller.scrollTo({ top: Math.max(0, targetScroll), behavior: 'smooth' });
+    for (const item of this.trackedItems) {
+      const target =
+        item.group === 0 ? this.spellcheckErrors : item.group === 1 ? this.aiFeedbacks : item.group === 2 ? this.searchMatches : null;
+
+      if (!target) {
+        continue;
+      }
+
+      if (item.nodeId === anchor.nodeId && anchor.offset >= item.startOffset && anchor.offset <= item.endOffset) {
+        const t = target.find((v) => v.id === item.id);
+        if (t) {
+          t.active = true;
+        }
+      } else {
+        const t = target.find((v) => v.id === item.id);
+        if (t) {
+          t.active = false;
+        }
+      }
     }
   }
 
   scrollTrackedItemIntoView(id: string): void {
-    const overlay = [...this.spellcheckOverlays, ...this.aiFeedbackOverlays, ...this.searchOverlays].find((o) => o.id === id);
-    if (overlay && overlay.bounds.length > 0) {
-      this.#scrollOverlayIntoView(overlay);
+    const item = this.trackedItems.find((v) => v.id === id);
+    if (item && item.bounds.length > 0) {
+      const pageEl = this.pageContainerEls[item.pageIdx];
+      const scroller = this.scrollContainerEl;
+      if (pageEl && scroller && item.bounds.length > 0) {
+        const pageRect = pageEl.getBoundingClientRect();
+        const scrollerRect = scroller.getBoundingClientRect();
+        const bound = item.bounds[0];
+        const targetY = pageRect.top + bound.y - scrollerRect.top + scroller.scrollTop;
+        const viewportCenter = scroller.clientHeight / 2;
+        const targetScroll = targetY - viewportCenter + bound.height / 2;
+        scroller.scrollTo({ top: Math.max(0, targetScroll), behavior: 'smooth' });
+      }
     }
   }
 
@@ -575,6 +552,12 @@ export class Editor {
 
     this.dispatch({ type: 'repasteAsText' }).scrollIntoView({ mode: 'typewriter' });
     this.focus();
+  }
+
+  settled(): Promise<void> {
+    return new Promise((resolve) => {
+      this.#tickResolvers.push(resolve);
+    });
   }
 
   dispatch(message: Message): Editor {
@@ -1227,10 +1210,27 @@ export class Editor {
   }
 
   setTrackedItems(group: number, items: { id: string; nodeId: string; startOffset: number; endOffset: number }[]): void {
-    this.ready.then(() => {
-      this.#wasmEditor?.setTrackedItems(group, items);
+    if (this.#wasmEditor) {
+      this.#wasmEditor.setTrackedItems(group, items);
       this.#needsTick = true;
-    });
+    } else {
+      this.ready.then(() => {
+        this.#wasmEditor?.setTrackedItems(group, items);
+        this.#needsTick = true;
+      });
+    }
+  }
+
+  removeTrackedItems(group: number, ids: string[]): void {
+    if (this.#wasmEditor) {
+      this.#wasmEditor.removeTrackedItems(group, ids);
+      this.#needsTick = true;
+    } else {
+      this.ready.then(() => {
+        this.#wasmEditor?.removeTrackedItems(group, ids);
+        this.#needsTick = true;
+      });
+    }
   }
 
   replaceTextInBlock(blockId: string, startOffset: number, endOffset: number, replacement: string): boolean {
@@ -1275,99 +1275,100 @@ export class Editor {
     }, 150);
   }
 
-  #performSearchAndUpdateTrackedItems(): void {
-    if (!this.#wasmEditor) return;
-
-    const matches = this.#wasmEditor.performSearch(this.#searchQuery, this.#searchMatchWholeWord) as {
-      nodeId: string;
-      startOffset: number;
-      endOffset: number;
-    }[];
-
-    const items = matches.map((m, i) => ({
-      id: `search-${i}`,
-      nodeId: m.nodeId,
-      startOffset: m.startOffset,
-      endOffset: m.endOffset,
-    }));
-
-    this.searchMatches = items;
-
-    if (items.length > 0) {
-      const prevId = this.activeSearchMatchId;
-      if (!prevId || !items.some((it) => it.id === prevId)) {
-        this.activeSearchMatchId = items[0].id;
-      }
-    } else {
-      this.activeSearchMatchId = null;
-    }
-
-    this.#wasmEditor.setTrackedItems(
-      2,
-      items.map((it) => ({ id: it.id, nodeId: it.nodeId, startOffset: it.startOffset, endOffset: it.endOffset })),
-    );
-  }
-
   search(query: string, options?: { matchWholeWord?: boolean }): void {
-    this.#searchQuery = query;
-    this.#searchMatchWholeWord = options?.matchWholeWord ?? false;
+    if (!this.#wasmEditor) return;
 
     if (!query) {
       this.clearSearch();
       return;
     }
 
-    this.#performSearchAndUpdateTrackedItems();
-    this.activeSearchMatchId = this.searchMatches.length > 0 ? this.searchMatches[0].id : null;
-    this.#scrollActiveSearchIntoView();
+    const matches = this.#wasmEditor.performSearch(query, options?.matchWholeWord ?? false) as {
+      nodeId: string;
+      startOffset: number;
+      endOffset: number;
+    }[];
+
+    const items = matches.map((m) => ({
+      id: nanoid(),
+      nodeId: m.nodeId,
+      startOffset: m.startOffset,
+      endOffset: m.endOffset,
+    }));
+
+    this.searchMatches = items.map((v) => ({ id: v.id, active: false }));
+    if (this.searchMatches.length > 0) {
+      this.searchMatches[0].active = true;
+    }
+
+    this.#wasmEditor.setTrackedItems(
+      2,
+      items.map((it) => ({ id: it.id, nodeId: it.nodeId, startOffset: it.startOffset, endOffset: it.endOffset })),
+    );
+
+    this.settled().then(() => {
+      if (this.searchMatches.length > 0) {
+        this.scrollTrackedItemIntoView(this.searchMatches[0].id);
+      }
+    });
   }
 
   clearSearch(): void {
-    this.#searchQuery = '';
     this.searchMatches = [];
-    this.activeSearchMatchId = null;
-    this.searchOverlays = [];
     this.#wasmEditor?.setTrackedItems(2, []);
   }
 
   findNext(): void {
-    if (this.searchMatches.length === 0) return;
-    const currentIdx = this.searchMatches.findIndex((m) => m.id === this.activeSearchMatchId);
-    const nextIdx = (currentIdx + 1) % this.searchMatches.length;
-    this.activeSearchMatchId = this.searchMatches[nextIdx].id;
-    this.#scrollActiveSearchIntoView();
+    let found = false;
+    for (const match of this.searchMatches) {
+      match.active = found;
+
+      if (found) {
+        this.scrollTrackedItemIntoView(match.id);
+      }
+
+      if (match.active) {
+        found = true;
+      }
+    }
   }
 
   findPrevious(): void {
-    if (this.searchMatches.length === 0) return;
-    const currentIdx = this.searchMatches.findIndex((m) => m.id === this.activeSearchMatchId);
-    const prevIdx = currentIdx <= 0 ? this.searchMatches.length - 1 : currentIdx - 1;
-    this.activeSearchMatchId = this.searchMatches[prevIdx].id;
-    this.#scrollActiveSearchIntoView();
+    let found = false;
+    for (const match of this.searchMatches.toReversed()) {
+      match.active = found;
+
+      if (found) {
+        this.scrollTrackedItemIntoView(match.id);
+      }
+
+      if (match.active) {
+        found = true;
+      }
+    }
   }
 
   replace(replacement: string): void {
-    const match = this.searchMatches.find((m) => m.id === this.activeSearchMatchId);
+    const match = this.searchMatches.find((v) => v.active);
     if (!match || !this.#wasmEditor) return;
-    this.#wasmEditor.replaceTextInBlock(match.nodeId, match.startOffset, match.endOffset, replacement);
+
+    const item = this.trackedItems.find((v) => v.group === 2 && v.id === match.id);
+    if (!item) return;
+
+    this.#wasmEditor.replaceTextInBlock(item.nodeId, item.startOffset, item.endOffset, replacement);
+    this.#wasmEditor.removeTrackedItems(2, [item.id]);
     this.#needsTick = true;
-    this.#performSearchAndUpdateTrackedItems();
-    this.#scrollActiveSearchIntoView();
   }
 
   replaceAll(replacement: string): void {
     if (this.searchMatches.length === 0 || !this.#wasmEditor) return;
-    const items = this.searchMatches.map((m) => [m.nodeId, m.startOffset, m.endOffset, replacement]);
-    this.#wasmEditor.replaceTextInBlocks(items);
-    this.#needsTick = true;
-    this.#performSearchAndUpdateTrackedItems();
-  }
 
-  #scrollActiveSearchIntoView(): void {
-    const overlay = this.searchOverlays.find((o) => o.id === this.activeSearchMatchId);
-    if (overlay && overlay.bounds.length > 0) {
-      this.#scrollOverlayIntoView(overlay);
-    }
+    const ids = new SvelteSet(this.searchMatches.map((v) => v.id));
+    const items = this.trackedItems.filter((v) => v.group === 2 && ids.has(v.id));
+
+    this.#wasmEditor.replaceTextInBlocks(items.map((v) => [v.nodeId, v.startOffset, v.endOffset, replacement]));
+    this.#wasmEditor.removeTrackedItems(2, [...ids]);
+    this.#needsTick = true;
   }
 
   scrollIntoView({ mode = 'auto' }: { mode?: 'auto' | 'typewriter' } = {}): Editor {
