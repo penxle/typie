@@ -486,13 +486,6 @@ export class Editor {
         this.activeSpellcheckErrorId = null;
       }
 
-      const activeSpellcheckOverlay = this.activeSpellcheckErrorId
-        ? spellcheckItems.find((o) => o.id === this.activeSpellcheckErrorId)
-        : null;
-      if (activeSpellcheckOverlay && activeSpellcheckOverlay.bounds.length > 0) {
-        this.#scrollOverlayIntoView(activeSpellcheckOverlay);
-      }
-
       this.aiFeedbackOverlays = feedbackItems;
       const feedbackValidIds = new SvelteSet(feedbackItems.map((o) => o.id));
       if (this.fullAiFeedbackItems.length > 0) {
@@ -501,11 +494,6 @@ export class Editor {
 
       if (this.activeAiFeedbackItemId && !feedbackValidIds.has(this.activeAiFeedbackItemId)) {
         this.activeAiFeedbackItemId = null;
-      }
-
-      const activeFeedbackOverlay = this.activeAiFeedbackItemId ? feedbackItems.find((o) => o.id === this.activeAiFeedbackItemId) : null;
-      if (activeFeedbackOverlay && activeFeedbackOverlay.bounds.length > 0) {
-        this.#scrollOverlayIntoView(activeFeedbackOverlay);
       }
 
       this.searchOverlays = searchItems;
@@ -572,6 +560,13 @@ export class Editor {
       const viewportCenter = scroller.clientHeight / 2;
       const targetScroll = targetY - viewportCenter + bound.height / 2;
       scroller.scrollTo({ top: Math.max(0, targetScroll), behavior: 'smooth' });
+    }
+  }
+
+  scrollTrackedItemIntoView(id: string): void {
+    const overlay = [...this.spellcheckOverlays, ...this.aiFeedbackOverlays, ...this.searchOverlays].find((o) => o.id === id);
+    if (overlay && overlay.bounds.length > 0) {
+      this.#scrollOverlayIntoView(overlay);
     }
   }
 

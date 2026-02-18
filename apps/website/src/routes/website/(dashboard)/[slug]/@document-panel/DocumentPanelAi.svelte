@@ -163,6 +163,7 @@
   const scrollToFeedback = (feedback: AiFeedbackData) => {
     if (!editor) return;
     editor.activeAiFeedbackItemId = feedback.id;
+    editor.scrollTrackedItemIntoView(feedback.id);
   };
 
   const removeFeedback = (feedbackId: string) => {
