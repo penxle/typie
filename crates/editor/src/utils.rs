@@ -66,6 +66,7 @@ macro_rules! error {
     }
 }
 
+#[cfg(test)]
 pub fn byte_to_char_offset(text: &str, byte_offset: usize) -> usize {
     bytecount::num_chars(text[..text.floor_char_boundary(byte_offset)].as_bytes())
 }
@@ -77,6 +78,34 @@ pub fn char_to_byte_offset(text: &str, char_offset: usize) -> usize {
         .unwrap_or(text.len())
 }
 
+pub fn build_char_to_byte_offsets(text: &str) -> Vec<usize> {
+    let mut offsets: Vec<usize> = text
+        .char_indices()
+        .map(|(byte_offset, _)| byte_offset)
+        .collect();
+    offsets.push(text.len());
+    offsets
+}
+
+pub fn char_to_byte_offset_with_map(char_to_byte: &[usize], char_offset: usize) -> usize {
+    char_to_byte
+        .get(char_offset)
+        .copied()
+        .or_else(|| char_to_byte.last().copied())
+        .unwrap_or(0)
+}
+
+pub fn byte_to_char_offset_with_map(char_to_byte: &[usize], byte_offset: usize) -> usize {
+    let Some(&text_len) = char_to_byte.last() else {
+        return 0;
+    };
+    let bounded = byte_offset.min(text_len);
+    match char_to_byte.binary_search(&bounded) {
+        Ok(char_offset) => char_offset,
+        Err(insert_idx) => insert_idx.saturating_sub(1),
+    }
+}
+
 pub fn compute_word_boundaries(text: &str) -> Vec<usize> {
     let provider = get_icu_provider();
     let deserializing_provider = provider.as_deserializing();
@@ -85,11 +114,12 @@ pub fn compute_word_boundaries(text: &str) -> Vec<usize> {
         WordBreakOptions::default(),
     )
     .expect("Failed to create WordSegmenter");
+    let char_to_byte = build_char_to_byte_offsets(text);
 
     segmenter
         .as_borrowed()
         .segment_str(text)
-        .map(|byte_offset| byte_to_char_offset(text, byte_offset))
+        .map(|byte_offset| byte_to_char_offset_with_map(&char_to_byte, byte_offset))
         .collect()
 }
 
@@ -102,11 +132,12 @@ pub fn compute_sentence_boundaries(text: &str) -> Vec<usize> {
     let segmenter =
         SentenceSegmenter::try_new_unstable(&deserializing_provider, Default::default())
             .expect("Failed to create SentenceSegmenter");
+    let char_to_byte = build_char_to_byte_offsets(text);
 
     segmenter
         .as_borrowed()
         .segment_str(text)
-        .map(|byte_offset| byte_to_char_offset(text, byte_offset))
+        .map(|byte_offset| byte_to_char_offset_with_map(&char_to_byte, byte_offset))
         .collect()
 }
 
@@ -118,11 +149,12 @@ pub fn compute_grapheme_boundaries(text: &str) -> Vec<usize> {
     let deserializing_provider = provider.as_deserializing();
     let segmenter = GraphemeClusterSegmenter::try_new_unstable(&deserializing_provider)
         .expect("Failed to create GraphemeClusterSegmenter");
+    let char_to_byte = build_char_to_byte_offsets(text);
 
     segmenter
         .as_borrowed()
         .segment_str(text)
-        .map(|byte_offset| byte_to_char_offset(text, byte_offset))
+        .map(|byte_offset| byte_to_char_offset_with_map(&char_to_byte, byte_offset))
         .collect()
 }
 
