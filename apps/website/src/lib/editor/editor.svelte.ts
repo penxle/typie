@@ -813,7 +813,9 @@ export class Editor {
 
     if (!(e.target instanceof HTMLElement)) return;
 
-    e.target.releasePointerCapture(e.pointerId);
+    if (e.target.hasPointerCapture(e.pointerId)) {
+      e.target.releasePointerCapture(e.pointerId);
+    }
 
     const targetEl = document.elementFromPoint(e.clientX, e.clientY);
     if (!(targetEl instanceof HTMLElement)) return;
