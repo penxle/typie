@@ -13,6 +13,7 @@ import { redis } from '@/cache';
 import { env } from '@/env';
 import { defineJob } from '../types';
 import type { Options } from '@anthropic-ai/claude-agent-sdk';
+import type { BetaContentBlock } from '@anthropic-ai/sdk/resources/beta';
 import type { Nodes } from 'mdast';
 
 type SlackAppMentionEventPayload = {
@@ -481,7 +482,7 @@ export const ProcessBmoMentionJob = defineJob('bmo:process-mention', async (even
               latestAssistantText = block.text;
             }
           }
-          const hasToolUse = message.message.content.some((b) => b.type === 'tool_use');
+          const hasToolUse = message.message.content.some((b: BetaContentBlock) => b.type === 'tool_use');
           if (hasToolUse && latestAssistantText) {
             if (currentTurnTextEntry) {
               currentTurnTextEntry.text = latestAssistantText;

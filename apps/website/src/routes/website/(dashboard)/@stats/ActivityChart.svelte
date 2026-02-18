@@ -320,6 +320,7 @@
               hoverData = undefined;
               isHoveringCompressedBar = false;
             }}
+            role="presentation"
           >
             {#if barHeights.showWave}
               <div

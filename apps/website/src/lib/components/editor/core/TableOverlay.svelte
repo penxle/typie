@@ -245,6 +245,7 @@
   data-table-overlay={overlay.tableId}
   onpointerenter={() => (isTableHovered = true)}
   onpointerleave={() => (isTableHovered = false)}
+  role="presentation"
 >
   <div
     style:left="0"
@@ -258,6 +259,7 @@
     })}
     onpointerleave={handleTablePointerLeave}
     onpointermove={handleTablePointerMove}
+    role="presentation"
   ></div>
 
   {#if activeColIndex !== null}
@@ -625,6 +627,7 @@
   onpointerdown={(e) => e.stopPropagation()}
   onpointerenter={() => (addColButtonHovered = true)}
   onpointerleave={() => (addColButtonHovered = false)}
+  role="presentation"
 >
   <button
     class={center({
@@ -679,6 +682,7 @@
   onpointerdown={(e) => e.stopPropagation()}
   onpointerenter={() => (addRowButtonHovered = true)}
   onpointerleave={() => (addRowButtonHovered = false)}
+  role="presentation"
 >
   {#if (overlay.startRowIndex ?? 0) + overlay.rowHeights.length === (overlay.totalRows ?? overlay.rowHeights.length)}
     <button
@@ -736,6 +740,7 @@
   onpointerdown={(e) => e.stopPropagation()}
   onpointerenter={() => (addBothButtonHovered = true)}
   onpointerleave={() => (addBothButtonHovered = false)}
+  role="presentation"
 >
   {#if (overlay.startRowIndex ?? 0) + overlay.rowHeights.length === (overlay.totalRows ?? overlay.rowHeights.length)}
     <button
@@ -811,6 +816,7 @@
   onpointerdown={(e) => e.stopPropagation()}
   onpointerenter={() => (buttonHovered = true)}
   onpointerleave={() => (buttonHovered = false)}
+  role="presentation"
 >
   <Menu offset={4} onopen={() => (menuOpen = true)} ontransitionend={() => (menuOpen = false)} placement="bottom">
     {#snippet button({ open })}
