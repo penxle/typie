@@ -108,6 +108,14 @@ resource "aws_iam_user_policy" "api" {
       },
       {
         Effect = "Allow"
+        Action = ["s3:GetObject"]
+        Resource = [
+          "arn:aws:s3:::typie-cdn",
+          "arn:aws:s3:::typie-cdn/*"
+        ]
+      },
+      {
+        Effect = "Allow"
         Action = [
           "ses:SendEmail",
           "ce:GetCostAndUsage"
