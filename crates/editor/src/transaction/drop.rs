@@ -194,8 +194,10 @@ impl Transaction {
             return Ok(false);
         }
 
+        let cascade = self.resolve_style_cascade(target.node_id);
         let is_block_drop = is_block_position(self.doc(), target);
-        let fragment = prepare_fragment(fragment, self.doc().schema(), self.doc(), is_block_drop);
+        let fragment = prepare_fragment(fragment, self.doc().schema(), self.doc(), is_block_drop)
+            .fill_missing_styles(&cascade);
 
         self.set_selection(Selection::collapsed(target));
         let result = self.insert_fragment(target, fragment)?;
@@ -546,5 +548,95 @@ mod tests {
         } else {
             panic!("Cell B should have text");
         }
+    }
+
+    #[test]
+    fn drop_external_plain_text_fragment_fills_cascade_styles() {
+        let mut p = id!();
+
+        let target = state! {
+            doc {
+                @p paragraph {}
+            }
+            selection { (p, 0) }
+        };
+
+        let fragment = Fragment::from_text("hello", &[]);
+
+        let actual = transact!(target, |tr| {
+            tr.drop_external(Position::new(p, 0, Affinity::Downstream), fragment)
+                .unwrap();
+        });
+
+        let expected = state! {
+            doc {
+                @p paragraph {
+                    text { "hello" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+
+        assert_state_eq!(actual, expected);
+    }
+
+    #[test]
+    fn drop_external_html_plain_text_fills_cascade_styles() {
+        let mut p = id!();
+
+        let target = state! {
+            doc {
+                @p paragraph {}
+            }
+            selection { (p, 0) }
+        };
+
+        let fragment = Fragment::from_html("world").unwrap();
+
+        let actual = transact!(target, |tr| {
+            tr.drop_external(Position::new(p, 0, Affinity::Downstream), fragment)
+                .unwrap();
+        });
+
+        let expected = state! {
+            doc {
+                @p paragraph {
+                    text { "world" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+
+        assert_state_eq!(actual, expected);
+    }
+
+    #[test]
+    fn drop_external_html_bold_preserves_bold_and_fills_cascade() {
+        let mut p = id!();
+
+        let target = state! {
+            doc {
+                @p paragraph {}
+            }
+            selection { (p, 0) }
+        };
+
+        let fragment = Fragment::from_html("<b>bold</b>").unwrap();
+
+        let actual = transact!(target, |tr| {
+            tr.drop_external(Position::new(p, 0, Affinity::Downstream), fragment)
+                .unwrap();
+        });
+
+        let expected = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_weight(700)]) { "bold" }
+                }
+            }
+            selection { (p, 0) -> (p, 4) }
+        };
+
+        assert_state_eq!(actual, expected);
     }
 }

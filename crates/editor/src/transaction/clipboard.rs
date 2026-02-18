@@ -34,7 +34,9 @@ impl Transaction {
 
         let styles = self.state.pending_styles.clone();
 
-        let fragment = fragment.with_fresh_ids_for_doc(self.doc());
+        let fragment = fragment
+            .with_fresh_ids_for_doc(self.doc())
+            .fill_missing_styles(&styles);
         let result = self.insert_fragment(self.selection().head, fragment)?;
         if let Some(selection) = result.as_selection() {
             self.set_selection(selection);
@@ -1437,5 +1439,98 @@ mod tests {
             "selection should be collapsed after paste, but was {:?}",
             actual.selection,
         );
+    }
+
+    #[test]
+    fn paste_html_plain_text_fills_default_styles_from_pending() {
+        let mut p = id!();
+
+        let target = state! {
+            doc {
+                @p paragraph {}
+            }
+            selection { (p, 0) }
+        };
+
+        let fragment = Fragment::from_html("hello").unwrap();
+
+        let actual = transact!(target, |tr| {
+            tr.paste_fragment(fragment, None).unwrap();
+        });
+
+        // state! 매크로는 text 노드에 DefaultAttrs 6종을 자동 적용 → 동일해야 함
+        let expected = state! {
+            doc {
+                @p paragraph {
+                    text { "hello" }
+                }
+            }
+            selection { (p, 5) }
+        };
+
+        assert_state_eq!(actual, expected);
+    }
+
+    #[test]
+    fn paste_html_bold_preserves_bold_and_fills_rest() {
+        // <b>bold</b> 붙여넣기 → FontWeight(700) 유지 + 나머지 5종 기본값 보충
+        let mut p = id!();
+
+        let target = state! {
+            doc {
+                @p paragraph {}
+            }
+            selection { (p, 0) }
+        };
+
+        let fragment = Fragment::from_html("<b>bold</b>").unwrap();
+
+        let actual = transact!(target, |tr| {
+            tr.paste_fragment(fragment, None).unwrap();
+        });
+
+        let expected = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_weight(700)]) { "bold" }
+                }
+            }
+            selection { (p, 4) }
+        };
+
+        assert_state_eq!(actual, expected);
+    }
+
+    #[test]
+    fn paste_html_mixed_bold_and_plain_fills_both_correctly() {
+        // <b>bold</b> plain → bold 세그먼트는 700 유지, plain 세그먼트는 400 보충
+        let mut p = id!();
+
+        let target = state! {
+            doc {
+                @p paragraph {}
+            }
+            selection { (p, 0) }
+        };
+
+        let fragment = Fragment::from_html("<b>bold</b> plain").unwrap();
+
+        let actual = transact!(target, |tr| {
+            tr.paste_fragment(fragment, None).unwrap();
+        });
+
+        let expected = state! {
+            doc {
+                @p paragraph {
+                    text {
+                        "bold" => [font_weight(700)],
+                        " plain"
+                    }
+                }
+            }
+            selection { (p, 10) }
+        };
+
+        assert_state_eq!(actual, expected);
     }
 }
