@@ -115,6 +115,21 @@
               }
             }
 
+            fontFamilies {
+              id
+              familyName
+              displayName
+              state
+
+              fonts {
+                id
+                weight
+                subfamilyDisplayName
+                url
+                state
+              }
+            }
+
             ...UsersiteWildcardSlugPage_DocumentEmojiReaction_documentView
           }
         }
@@ -321,7 +336,7 @@
     {#if bodySnapshot}
       {#if document.protectContent}
         <ContentProtect>
-          <EditorComponent {editor} readOnly snapshot={bodySnapshot} useWindowScroll>
+          <EditorComponent {editor} fontFamilies={document.fontFamilies} readOnly snapshot={bodySnapshot} useWindowScroll>
             {#snippet header()}
               <div class={css({ paddingTop: { base: '48px', md: '80px' } })}>
                 <nav class={flex({ alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginBottom: '20px' })}>
@@ -407,7 +422,7 @@
           </EditorComponent>
         </ContentProtect>
       {:else}
-        <EditorComponent {editor} readOnly snapshot={bodySnapshot} useWindowScroll>
+        <EditorComponent {editor} fontFamilies={document.fontFamilies} readOnly snapshot={bodySnapshot} useWindowScroll>
           {#snippet header()}
             <div class={css({ paddingTop: { base: '48px', md: '80px' } })}>
               <nav class={flex({ alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginBottom: '20px' })}>

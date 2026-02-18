@@ -20,6 +20,7 @@
   import Scrollbar from './ui/Scrollbar.svelte';
   import VerticalRuler from './ui/VerticalRuler.svelte';
   import type { Snippet } from 'svelte';
+  import type { FontFamily } from '$lib/editor/fonts';
   import type { LayoutMode, Position } from '$lib/editor/types';
 
   type Props = {
@@ -29,6 +30,7 @@
     readOnly?: boolean;
     useWindowScroll?: boolean;
     editor?: Editor;
+    fontFamilies: FontFamily[];
     onDocChanged?: () => void;
     onSelectionChanged?: (anchor: Position, head: Position) => void;
     onExitedDocumentStart?: () => void;
@@ -45,6 +47,7 @@
     readOnly = false,
     useWindowScroll = false,
     editor: externalEditor,
+    fontFamilies,
     onDocChanged,
     onSelectionChanged,
     onExitedDocumentStart,
@@ -90,6 +93,7 @@
       editor.initialize({
         theme: getEditorTheme(theme.effectiveTheme, theme.lightVariant, theme.darkVariant),
         snapshot,
+        fontFamilies,
         readOnly,
         onDocChanged,
         onSelectionChanged,
