@@ -7,6 +7,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 #[derive(Default)]
 pub(super) struct PaintDebugFrame {
     pub(super) render_rects: Vec<CacheRect>,
+    pub(super) overflow_rects: Vec<CacheRect>,
     pub(super) full_repaint: bool,
     pub(super) cache_reused: bool,
     pub(super) layout_rects: Vec<CacheRect>,

@@ -736,7 +736,9 @@ impl Runtime {
         };
 
         let layout_mode = doc.settings().layout_mode;
-        let page = self.layout_engine.pages().get(page_index)?;
+        let pages = self.layout_engine.pages();
+        let page = pages.get(page_index)?;
+        let next_page = pages.get(page_index + 1);
         let page_height = Self::page_height_for_rendering(layout_mode, page);
         let page_width = self.layout_engine.width().ceil();
         let scale_factor = self.layout_engine.scale_factor();
@@ -746,7 +748,14 @@ impl Runtime {
         renderer.set_size(page_width, page_height, scale_factor);
         renderer.set_focused(self.is_focused);
 
-        Some(renderer.render(page, page_index, &selections, drop_indicator, doc))
+        Some(renderer.render(
+            page,
+            page_index,
+            next_page,
+            &selections,
+            drop_indicator,
+            doc,
+        ))
     }
 
     #[allow(dead_code)]
@@ -784,9 +793,11 @@ impl Runtime {
         };
 
         let layout_mode = doc.settings().layout_mode;
-        let Some(page) = self.layout_engine.pages().get(page_index) else {
+        let pages = self.layout_engine.pages();
+        let Some(page) = pages.get(page_index) else {
             return false;
         };
+        let next_page = pages.get(page_index + 1);
         let page_height = Self::page_height_for_rendering(layout_mode, page);
         let page_width = self.layout_engine.width().ceil();
         let scale_factor = self.layout_engine.scale_factor();
@@ -795,7 +806,15 @@ impl Runtime {
 
         renderer.set_size(page_width, page_height, scale_factor);
         renderer.set_focused(self.is_focused);
-        renderer.render_to(page, page_index, &selections, drop_indicator, doc, dst)
+        renderer.render_to(
+            page,
+            page_index,
+            next_page,
+            &selections,
+            drop_indicator,
+            doc,
+            dst,
+        )
     }
 
     pub fn render_drag_image(

@@ -9,6 +9,7 @@ use std::rc::Rc;
 use tiny_skia::Pixmap;
 
 const SCALE_FACTOR_MATCH_EPSILON: f64 = 1e-6;
+const RUBY_TOP_OVERHANG_PADDING: f32 = 16.0;
 
 #[derive(Default, Clone)]
 pub(super) struct PageRenderSnapshot {
@@ -111,12 +112,7 @@ fn collect_snapshot(
     );
 
     if let Some(key) = SnapshotNodeKey::for_positioned(positioned)
-        && let Some(bounds) = CacheRect::from_xywh(
-            pos.x,
-            pos.y,
-            positioned.node.size.width,
-            positioned.node.size.height,
-        )
+        && let Some(bounds) = node_paint_bounds(positioned, pos)
     {
         out.insert(key, bounds);
     }
@@ -126,6 +122,21 @@ fn collect_snapshot(
             collect_snapshot(child, pos, out);
         }
     }
+}
+
+pub(super) fn node_paint_bounds(positioned: &PositionedNode, pos: Point) -> Option<CacheRect> {
+    let mut y = pos.y;
+    let mut height = positioned.node.size.height;
+
+    if let Some(Element::Line(line)) = positioned.node.element.as_ref()
+        && !line.ruby_segments.is_empty()
+    {
+        let top_overhang = RUBY_TOP_OVERHANG_PADDING;
+        y -= top_overhang;
+        height += top_overhang;
+    }
+
+    CacheRect::from_xywh(pos.x, y, positioned.node.size.width, height)
 }
 
 fn dirty_rects_between<K: Eq + Hash>(
