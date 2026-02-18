@@ -151,6 +151,7 @@
   const scrollToError = (error: SpellcheckErrorData) => {
     if (!editor) return;
     editor.activeSpellcheckErrorId = error.id;
+    editor.scrollTrackedItemIntoView(error.id);
   };
 
   const selectErrorRange = (error: SpellcheckErrorData) => {
