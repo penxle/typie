@@ -26,6 +26,12 @@ impl<'a> NodeMut<'a> {
         node_id: NodeId,
         mut node: Node,
     ) -> Result<NodeId> {
+        anyhow::ensure!(
+            !self.inner.is_reachable(node_id),
+            "Node {} already exists in the document",
+            node_id
+        );
+
         let child_map = self
             .inner
             .create_node_map(node_id)
@@ -38,24 +44,6 @@ impl<'a> NodeMut<'a> {
             .inner
             .get_or_create_children_list(self.node_ref.node_id())
             .context("Failed to get or create children list")?;
-
-        for i in 0..children.len() {
-            let child = children.get(i).context("Failed to get child")?;
-            if node_id
-                == child
-                    .into_value()
-                    .ok()
-                    .and_then(|v| v.into_string().ok())
-                    .and_then(|s| NodeId::from_string(&s))
-                    .context("Failed to convert child ID to NodeId")?
-            {
-                anyhow::bail!(
-                    "Duplicate child: node {} is already a child of {}",
-                    node_id,
-                    self.node_ref.node_id()
-                );
-            }
-        }
 
         children.insert(index, node_id.to_string())?;
         self.inner
@@ -84,6 +72,13 @@ impl<'a> NodeMut<'a> {
     pub fn move_to(&mut self, parent_id: NodeId, index: usize) -> Result<()> {
         let current_parent_id = self.node_ref.parent_id();
         let node_id = self.node_ref.node_id();
+
+        anyhow::ensure!(
+            node_id != parent_id && !self.inner.is_ancestor_of(node_id, parent_id),
+            "Cycle detected: node {} cannot be moved under {}",
+            node_id,
+            parent_id
+        );
 
         if let Some(current_parent_id) = current_parent_id {
             let children = self

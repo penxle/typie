@@ -128,6 +128,27 @@ impl DocInner {
         }
     }
 
+    pub fn is_ancestor_of(&self, ancestor_id: NodeId, node_id: NodeId) -> bool {
+        let mut visited = FxHashSet::default();
+        let mut current = node_id;
+        while visited.insert(current) {
+            let Some(map) = self.get_node_map(current) else {
+                return false;
+            };
+            let parent_id = map
+                .get("parent")
+                .and_then(|v| v.into_value().ok())
+                .and_then(|v| v.into_string().ok())
+                .and_then(|s| NodeId::from_string(&s));
+            match parent_id {
+                Some(pid) if pid == ancestor_id => return true,
+                Some(pid) => current = pid,
+                None => return false,
+            }
+        }
+        false
+    }
+
     pub fn invalidate_children_cache_for(&self, node_id: NodeId) {
         self.children_cache.borrow_mut().remove(&node_id);
     }
