@@ -179,16 +179,17 @@ fn draw_outer_lines(pb: &mut PathBuilder, spec: BorderDrawSpec) {
 
 fn draw_row_lines(pb: &mut PathBuilder, spec: BorderDrawSpec, row_heights: &[f32]) {
     const EDGE_EPSILON: f32 = 0.001;
-    let mut y = spec.row_start;
-    let min_y = if spec.draw_top {
+    let half = TABLE_BORDER_WIDTH / 2.0;
+    let clip_top = if spec.draw_top {
         spec.vertical_top
     } else {
-        spec.horizontal_top
+        spec.horizontal_top - half
     };
+    let mut y = spec.row_start;
     for (idx, row_height) in row_heights.iter().enumerate() {
         y += *row_height;
         if idx < row_heights.len() - 1
-            && y > min_y + EDGE_EPSILON
+            && y + half > clip_top + EDGE_EPSILON
             && y < spec.vertical_bottom - EDGE_EPSILON
         {
             pb.move_to(spec.left, y);
@@ -476,5 +477,35 @@ mod tests {
 
         assert!(spec.draw_top);
         assert!((spec.horizontal_top - TABLE_BORDER_WIDTH / 2.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn split_top_fragment_preserves_boundary_row_line_visibility() {
+        let spec = continuous_draw_spec(
+            &TableBorderElement {
+                size: crate::types::Size::new(200.0, 902.0),
+                node_id: crate::model::NodeId::new(),
+                border_style: TableBorderStyle::Solid,
+                align: crate::model::TableAlign::Left,
+                rows: 2,
+                cols: 2,
+                row_heights: vec![500.0, 400.0],
+                col_widths: vec![99.0, 99.0],
+                split_edges: SplitEdges::default(),
+                offset: 0.0,
+                x_offset: 0.0,
+                start_row_index: 0,
+                total_rows: 2,
+            },
+            Transform::from_scale(1.0, 1.0).pre_translate(0.0, -501.0),
+            0.0,
+        );
+
+        let mut pb = PathBuilder::new();
+        draw_row_lines(&mut pb, spec, &[500.0, 400.0]);
+        assert!(
+            pb.finish().is_some(),
+            "경계(y=501)와 겹치는 내부 가로선은 split fragment에서도 그려져야 함"
+        );
     }
 }
