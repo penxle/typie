@@ -6,10 +6,10 @@ use crate::state::{Position, block_content_len, calculate_block_offsets, collect
 use crate::transaction::Transaction;
 use anyhow::{Context, Result};
 
-pub(crate) fn compute_styles_at_cursor(tr: &Transaction, position: &Position) -> Vec<Style> {
-    let cascade = tr.resolve_style_cascade(position.node_id);
+pub(crate) fn compute_styles_at_cursor(doc: &Doc, position: &Position) -> Vec<Style> {
+    let cascade = resolve_style_cascade(doc, position.node_id);
 
-    let Some(node) = tr.node(position.node_id) else {
+    let Some(node) = doc.node(position.node_id) else {
         return cascade;
     };
 
@@ -17,7 +17,7 @@ pub(crate) fn compute_styles_at_cursor(tr: &Transaction, position: &Position) ->
         return cascade;
     };
 
-    let Some(child) = tr.node(child_id) else {
+    let Some(child) = doc.node(child_id) else {
         return cascade;
     };
 
@@ -38,6 +38,23 @@ pub(crate) fn compute_styles_at_cursor(tr: &Transaction, position: &Position) ->
     }
 
     cascade
+}
+
+pub(crate) fn resolve_style_cascade(doc: &Doc, node_id: NodeId) -> Vec<Style> {
+    let mut attrs: Vec<Attr> = Vec::new();
+    let Some(node) = doc.node(node_id) else {
+        return Vec::new();
+    };
+    for ancestor in node.ancestors() {
+        if let Some(ancestor_attrs) = ancestor.cascade_attrs() {
+            for attr in ancestor_attrs {
+                if !attrs.iter().any(|a: &Attr| a.key() == attr.key()) {
+                    attrs.push(attr);
+                }
+            }
+        }
+    }
+    Attr::extract_styles(&attrs)
 }
 
 fn fill_missing_styles(mut styles: Vec<Style>, defaults: &[Style]) -> Vec<Style> {
@@ -497,7 +514,7 @@ impl Transaction {
     }
 
     pub fn recompute_pending_styles(&mut self) {
-        let new_styles = compute_styles_at_cursor(self, &self.selection().head);
+        let new_styles = compute_styles_at_cursor(self.doc(), &self.selection().head);
         if self.state.pending_styles != new_styles {
             self.state.pending_styles = new_styles;
             self.push_effect(Effect::PendingStylesChanged);
@@ -2817,7 +2834,7 @@ mod tests {
         )
         .unwrap();
 
-        let styles = compute_styles_at_cursor(&tr, &Position::new(p, 0, Affinity::Downstream));
+        let styles = compute_styles_at_cursor(tr.doc(), &Position::new(p, 0, Affinity::Downstream));
 
         assert!(
             styles
@@ -2841,7 +2858,7 @@ mod tests {
         };
         let tr = Transaction::new(&state);
 
-        let styles = compute_styles_at_cursor(&tr, &Position::new(p, 3, Affinity::Downstream));
+        let styles = compute_styles_at_cursor(tr.doc(), &Position::new(p, 3, Affinity::Downstream));
 
         assert!(styles.iter().any(|s| matches!(s, Style::Italic(_))));
         assert!(styles.iter().any(|s| matches!(s, Style::FontWeight(_))));
@@ -2860,7 +2877,7 @@ mod tests {
         };
         let tr = Transaction::new(&state);
 
-        let styles = compute_styles_at_cursor(&tr, &Position::new(p, 2, Affinity::Downstream));
+        let styles = compute_styles_at_cursor(tr.doc(), &Position::new(p, 2, Affinity::Downstream));
 
         assert!(
             styles
