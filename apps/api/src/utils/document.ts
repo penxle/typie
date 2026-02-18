@@ -74,5 +74,5 @@ export async function getDocumentFontFamilies(userId: string): Promise<DocumentF
     })),
   }));
 
-  return [...defaults, ...userFamilies];
+  return [...defaults, ...userFamilies.toSorted((a, b) => a.displayName.localeCompare(b.displayName))];
 }
