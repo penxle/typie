@@ -167,7 +167,7 @@
       const key = e.key.toLowerCase();
       if (cmdKey && key === 'a') {
         e.preventDefault();
-        editor.dispatch({ type: 'selectAll' }).scrollIntoView();
+        editor.dispatch({ type: 'selectAll' });
       } else if (cmdKey && key === 'c' && editor.protectContent) {
         e.preventDefault();
       }

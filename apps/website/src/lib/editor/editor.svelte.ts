@@ -980,7 +980,7 @@ export class Editor {
   }
 
   handleSelectAll(): void {
-    this.dispatch({ type: 'selectAll' }).scrollIntoView();
+    this.dispatch({ type: 'selectAll' });
     this.closeContextMenu();
   }
 

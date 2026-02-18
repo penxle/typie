@@ -503,33 +503,38 @@ class PageList extends HookWidget {
               'button': 'primary',
               'modifier': {'shift': isShiftHeader, 'ctrl': false, 'alt': false, 'meta': false},
             });
-          scope.controller.scrollIntoView();
 
-          if (clickCount == 1) {
-            unawaited(
-              scope.controller.waitForNextTick().then((_) {
-                if (!context.mounted) {
-                  return;
-                }
-
-                final newState = scope.controller.state;
-                final isCollapsed = newState.selection?.collapsed ?? true;
-
-                final isSameCursor =
-                    isCollapsed &&
-                    newState.cursor != null &&
-                    prevCursor != null &&
-                    newState.cursor!.isSamePosition(prevCursor);
-
-                if (isSameCursor) {
-                  final isInteractive = scope.editor.isInteractiveHit(pageIdx, pointerX, localY);
-                  if (!isInteractive && !wasContextMenuOpen.value) {
-                    showContextMenu.value = true;
-                  }
-                }
-              }),
-            );
+          if (clickCount != 1) {
+            scope.controller.scrollIntoView();
+            return;
           }
+
+          unawaited(
+            scope.controller.waitForNextTick().then((_) {
+              if (!context.mounted) {
+                return;
+              }
+
+              final newState = scope.controller.state;
+              final isCollapsed = newState.selection?.collapsed ?? true;
+
+              final isSameCursor =
+                  isCollapsed &&
+                  newState.cursor != null &&
+                  prevCursor != null &&
+                  newState.cursor!.isSamePosition(prevCursor);
+
+              if (isSameCursor) {
+                final isInteractive = scope.editor.isInteractiveHit(pageIdx, pointerX, localY);
+                if (!isInteractive && !wasContextMenuOpen.value) {
+                  showContextMenu.value = true;
+                }
+                return;
+              }
+
+              scope.controller.scrollIntoView();
+            }),
+          );
         }
 
         Widget buildSelectionHandle(SelectionHandleInfo handle, SelectionHandleType type) {
