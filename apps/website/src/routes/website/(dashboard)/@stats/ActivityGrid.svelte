@@ -212,6 +212,7 @@
       onpointerleave={() => {
         hoverActivity = undefined;
       }}
+      role="presentation"
     ></div>
   {/each}
 </div>

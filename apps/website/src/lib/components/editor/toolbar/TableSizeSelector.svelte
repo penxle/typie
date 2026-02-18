@@ -26,6 +26,7 @@
     hoveredRow = 0;
     hoveredCol = 0;
   }}
+  role="presentation"
 >
   <div
     class={css({
