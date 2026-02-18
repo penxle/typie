@@ -390,6 +390,7 @@ class EditorView extends HookWidget {
       }
 
       if (cursor.visible) {
+        final verticalScrollOffset = verticalScrollController.hasSingleClient ? verticalScrollController.offset : 0.0;
         final horizontalScrollOffset = horizontalScrollController.hasSingleClient
             ? horizontalScrollController.offset
             : 0.0;
@@ -398,8 +399,8 @@ class EditorView extends HookWidget {
           pages: controller.state.pages,
           titleAreaHeight: titleAreaHeight.value,
         );
-        final screenY = geo.cursorTopInPages(cursor);
-        final screenX = cursor.x - horizontalScrollOffset;
+        final screenY = geo.titleAreaHeight + geo.cursorTopInPages(cursor) - verticalScrollOffset;
+        final screenX = geo.horizontalPadding + cursor.x - horizontalScrollOffset;
         inputController.updateCursor(screenX, screenY, cursor.height, cursor.precedingCharWidths);
       }
 
@@ -576,11 +577,7 @@ class EditorView extends HookWidget {
                           );
                         },
                       ),
-                      Positioned(
-                        top: 0,
-                        left: 0,
-                        width: 1,
-                        height: 1,
+                      Positioned.fill(
                         child: IgnorePointer(
                           child: InputView(
                             key: inputKey,

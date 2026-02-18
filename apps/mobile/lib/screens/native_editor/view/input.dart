@@ -45,6 +45,7 @@ class InputView extends StatefulWidget {
 
 class InputViewState extends State<InputView> {
   MethodChannel? _channel;
+  Offset _cursorAnchor = Offset.zero;
 
   void activateInput() {
     unawaited(_channel?.invokeMethod('activate', <String, dynamic>{}));
@@ -59,10 +60,18 @@ class InputViewState extends State<InputView> {
   }
 
   void updateCursor(double x, double y, double height, [List<double>? precedingCharWidths]) {
+    if (Platform.isIOS) {
+      final nextAnchor = Offset(x, y);
+      if (nextAnchor != _cursorAnchor) {
+        setState(() {
+          _cursorAnchor = nextAnchor;
+        });
+      }
+    }
     unawaited(
       _channel?.invokeMethod('updateCursor', <String, dynamic>{
-        'x': x,
-        'y': y,
+        'x': Platform.isIOS ? 0 : x,
+        'y': Platform.isIOS ? 0 : y,
         'height': height,
         'precedingCharWidths': precedingCharWidths,
       }),
@@ -118,10 +127,21 @@ class InputViewState extends State<InputView> {
     const viewType = 'co.typie.editor_input';
 
     if (Platform.isIOS) {
-      return UiKitView(
-        viewType: viewType,
-        hitTestBehavior: PlatformViewHitTestBehavior.transparent,
-        onPlatformViewCreated: _onPlatformViewCreated,
+      return Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(
+            left: _cursorAnchor.dx,
+            top: _cursorAnchor.dy,
+            width: 1,
+            height: 1,
+            child: UiKitView(
+              viewType: viewType,
+              hitTestBehavior: PlatformViewHitTestBehavior.transparent,
+              onPlatformViewCreated: _onPlatformViewCreated,
+            ),
+          ),
+        ],
       );
     }
 
