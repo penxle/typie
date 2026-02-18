@@ -2,6 +2,7 @@ use crate::model::attr::Attr;
 use crate::model::tree::{DocInner, NodeMut};
 use crate::model::*;
 use crate::schema::{NodeSpec, Schema};
+use rustc_hash::FxHashSet;
 use std::cell::OnceCell;
 use std::rc::Rc;
 
@@ -120,6 +121,8 @@ impl<'a> NodeRef<'a> {
 
     pub fn ancestors(&self) -> NodeRefIter<'_> {
         let mut node_ids = vec![self.node_id];
+        let mut visited = FxHashSet::default();
+        visited.insert(self.node_id);
 
         let mut current_id = self.node_id;
         loop {
@@ -134,6 +137,9 @@ impl<'a> NodeRef<'a> {
                 .and_then(|v| NodeId::from_string(&v));
 
             if let Some(parent_id) = parent_id {
+                if !visited.insert(parent_id) {
+                    break;
+                }
                 node_ids.push(parent_id);
                 current_id = parent_id;
             } else {
@@ -150,13 +156,17 @@ impl<'a> NodeRef<'a> {
 
     pub fn descendants(&self) -> NodeRefIter<'_> {
         let mut node_ids = Vec::new();
+        let mut visited = FxHashSet::default();
+        visited.insert(self.node_id);
         let mut queue = vec![self.node_id];
 
         while let Some(current_id) = queue.pop() {
             let children = self.inner.get_children_ids_cached(current_id);
             for &child_id in children.iter() {
-                node_ids.push(child_id);
-                queue.push(child_id);
+                if visited.insert(child_id) {
+                    node_ids.push(child_id);
+                    queue.push(child_id);
+                }
             }
         }
 
@@ -177,6 +187,8 @@ impl<'a> NodeRef<'a> {
 
     pub fn path(&self) -> Vec<usize> {
         let mut node_ids = vec![self.node_id];
+        let mut visited = FxHashSet::default();
+        visited.insert(self.node_id);
 
         let mut current_id = self.node_id;
         loop {
@@ -191,6 +203,9 @@ impl<'a> NodeRef<'a> {
                 .and_then(|v| NodeId::from_string(&v));
 
             if let Some(parent_id) = parent_id {
+                if !visited.insert(parent_id) {
+                    break;
+                }
                 node_ids.push(parent_id);
                 current_id = parent_id;
             } else {
