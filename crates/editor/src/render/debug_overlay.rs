@@ -15,7 +15,7 @@ pub(super) fn render_debug_overlay(
     let scale = scale_factor as f32;
     let transform = Transform::from_scale(scale, scale);
 
-    if show_render && !frame.render_rects.is_empty() {
+    if show_render && (!frame.render_rects.is_empty() || !frame.overflow_rects.is_empty()) {
         let (fill_color, stroke_color) = if frame.full_repaint {
             (
                 Color::from_rgba8(255, 77, 77, 36),
@@ -35,9 +35,21 @@ pub(super) fn render_debug_overlay(
                 pixmap.fill_rect(layout_rect, &fill_paint, transform, None);
             }
         }
-
         for rect in &frame.render_rects {
             draw_debug_rect_outline(pixmap, *rect, stroke_color, transform, scale);
+        }
+
+        let overflow_fill_color = Color::from_rgba8(236, 72, 153, 24);
+        let overflow_stroke_color = Color::from_rgba8(236, 72, 153, 220);
+        let mut overflow_fill_paint = tiny_skia::Paint::default();
+        overflow_fill_paint.set_color(overflow_fill_color);
+        for rect in &frame.overflow_rects {
+            if let Some(layout_rect) = Rect::from_xywh(rect.x, rect.y, rect.width, rect.height) {
+                pixmap.fill_rect(layout_rect, &overflow_fill_paint, transform, None);
+            }
+        }
+        for rect in &frame.overflow_rects {
+            draw_debug_rect_outline(pixmap, *rect, overflow_stroke_color, transform, scale);
         }
     }
 
@@ -61,7 +73,6 @@ pub(super) fn render_debug_overlay(
                 pixmap.fill_rect(layout_rect, &fill_paint, transform, None);
             }
         }
-
         for rect in &frame.layout_rects {
             draw_debug_rect_outline(pixmap, *rect, stroke_color, transform, scale);
         }
@@ -69,11 +80,11 @@ pub(super) fn render_debug_overlay(
 
     let render_marker_color = if !show_render {
         None
-    } else if frame.cache_reused {
+    } else if frame.cache_reused && frame.overflow_rects.is_empty() {
         Some(Color::from_rgba8(16, 185, 129, 255))
     } else if frame.full_repaint {
         Some(Color::from_rgba8(255, 77, 77, 255))
-    } else if !frame.render_rects.is_empty() {
+    } else if !frame.render_rects.is_empty() || !frame.overflow_rects.is_empty() {
         Some(Color::from_rgba8(255, 179, 0, 255))
     } else {
         None

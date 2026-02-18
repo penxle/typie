@@ -13,7 +13,7 @@ use crate::layout::{Element, Page, PositionedNode, RenderHints};
 use crate::model::{Doc, LayoutMode, SelectionDecor};
 use crate::runtime::DropIndicator;
 use crate::types::{Point, Theme};
-use cache::{PageRenderCache, PageRenderSnapshot, same_scale_factor};
+use cache::{PageRenderCache, PageRenderSnapshot, node_paint_bounds, same_scale_factor};
 use debug_overlay::render_debug_overlay;
 use geometry::{CacheRect, PixelRect, clear_layout_rect, merge_and_clamp_rects};
 use paint_diagnostics::{PaintDebugFrame, PaintDiagnosticsState, collect_layout_dirty_rects};
@@ -24,6 +24,7 @@ const DIRTY_RECT_EPSILON: f32 = 0.5;
 const DIRTY_RECT_COALESCE_EPSILON: f32 = 8.0;
 const FULL_REPAINT_COVERAGE_THRESHOLD: f32 = 0.7;
 const FULL_REPAINT_RECT_THRESHOLD: usize = 32;
+const PAGE_EDGE_OVERFLOW_BAND: f32 = 16.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RenderPhase {
@@ -172,11 +173,12 @@ impl Renderer {
         &mut self,
         page: &Page,
         page_idx: usize,
+        next_page: Option<&Page>,
         selections: &[SelectionDecor],
         drop_indicator: Option<&DropIndicator>,
         doc: &Doc,
     ) -> RenderResult {
-        let debug_frame = self.prepare_base_layer(page, page_idx, doc);
+        let mut debug_frame = self.prepare_base_layer(page, page_idx, doc);
         if let Some(cache) = self.page_cache.get(&page_idx) {
             self.pixmap
                 .data_mut()
@@ -186,27 +188,22 @@ impl Renderer {
         }
 
         let mut pixmap = self.pixmap.as_mut();
-        Self::render_selection_overlay(
+        Self::render_overlay_layers(
             &mut pixmap,
             &mut self.glyph_renderer,
             self.scale_factor,
             &self.theme,
             self.is_focused,
+            self.render_debug_enabled,
+            self.layout_debug_enabled,
             page,
             page_idx,
+            next_page,
             selections,
             drop_indicator,
             doc,
+            &mut debug_frame,
         );
-        if let Some(frame) = debug_frame.as_ref() {
-            render_debug_overlay(
-                &mut pixmap,
-                self.scale_factor,
-                frame,
-                self.render_debug_enabled,
-                self.layout_debug_enabled,
-            );
-        }
 
         let data = self.pixmap.data();
         RenderResult {
@@ -222,6 +219,7 @@ impl Renderer {
         &mut self,
         page: &Page,
         page_idx: usize,
+        next_page: Option<&Page>,
         selections: &[SelectionDecor],
         drop_indicator: Option<&DropIndicator>,
         doc: &Doc,
@@ -238,36 +236,100 @@ impl Renderer {
             return false;
         };
 
-        let debug_frame = self.prepare_base_layer(page, page_idx, doc);
+        let mut debug_frame = self.prepare_base_layer(page, page_idx, doc);
         if let Some(cache) = self.page_cache.get(&page_idx) {
             pixmap.data_mut().copy_from_slice(cache.base_pixmap.data());
         } else {
             pixmap.data_mut().fill(0);
         }
 
-        Self::render_selection_overlay(
+        Self::render_overlay_layers(
             &mut pixmap,
             &mut self.glyph_renderer,
             self.scale_factor,
             &self.theme,
             self.is_focused,
+            self.render_debug_enabled,
+            self.layout_debug_enabled,
+            page,
+            page_idx,
+            next_page,
+            selections,
+            drop_indicator,
+            doc,
+            &mut debug_frame,
+        );
+
+        true
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn render_overlay_layers(
+        pixmap: &mut PixmapMut,
+        glyph_renderer: &mut GlyphRenderer,
+        scale_factor: f64,
+        theme: &Theme,
+        is_focused: bool,
+        render_debug_enabled: bool,
+        layout_debug_enabled: bool,
+        page: &Page,
+        page_idx: usize,
+        next_page: Option<&Page>,
+        selections: &[SelectionDecor],
+        drop_indicator: Option<&DropIndicator>,
+        doc: &Doc,
+        debug_frame: &mut Option<PaintDebugFrame>,
+    ) {
+        if let Some(next_page) = next_page {
+            if debug_frame.is_some() {
+                let mut overflow_rects = Vec::new();
+                Self::render_next_page_overflow(
+                    pixmap,
+                    glyph_renderer,
+                    scale_factor,
+                    theme,
+                    next_page,
+                    doc,
+                    Some(&mut overflow_rects),
+                );
+                if let Some(frame) = debug_frame.as_mut() {
+                    frame.overflow_rects = overflow_rects;
+                }
+            } else {
+                Self::render_next_page_overflow(
+                    pixmap,
+                    glyph_renderer,
+                    scale_factor,
+                    theme,
+                    next_page,
+                    doc,
+                    None,
+                );
+            }
+        }
+
+        Self::render_selection_overlay(
+            pixmap,
+            glyph_renderer,
+            scale_factor,
+            theme,
+            is_focused,
             page,
             page_idx,
             selections,
             drop_indicator,
             doc,
         );
+
         if let Some(frame) = debug_frame.as_ref() {
             render_debug_overlay(
-                &mut pixmap,
-                self.scale_factor,
+                pixmap,
+                scale_factor,
                 frame,
-                self.render_debug_enabled,
-                self.layout_debug_enabled,
+                render_debug_enabled,
+                layout_debug_enabled,
             );
         }
-
-        true
     }
 
     fn prepare_base_layer(
@@ -569,12 +631,8 @@ impl Renderer {
         );
 
         if let Some(clip_rect) = clip {
-            if let Some(node_rect) = CacheRect::from_xywh(
-                pos.x,
-                pos.y,
-                positioned.node.size.width,
-                positioned.node.size.height,
-            ) && !node_rect.intersects(clip_rect)
+            if let Some(node_rect) = node_paint_bounds(positioned, pos)
+                && !node_rect.intersects(clip_rect)
             {
                 return;
             }
@@ -592,11 +650,11 @@ impl Renderer {
         };
         let render_ctx = &child_ctx_data;
 
-        if let Some(ref element) = positioned.node.element {
-            if let Some(render) = element.as_render() {
-                let element_transform = transform.pre_translate(pos.x, pos.y);
-                render.render(pixmap, glyph_renderer, element_transform, render_ctx);
-            }
+        if let Some(ref element) = positioned.node.element
+            && let Some(render) = element.as_render()
+        {
+            let element_transform = transform.pre_translate(pos.x, pos.y);
+            render.render(pixmap, glyph_renderer, element_transform, render_ctx);
         }
 
         if let Some(children) = &positioned.node.children {
@@ -610,6 +668,128 @@ impl Renderer {
                     render_ctx,
                     &merged_hints,
                     clip,
+                );
+            }
+        }
+    }
+
+    fn render_next_page_overflow(
+        pixmap: &mut PixmapMut,
+        glyph_renderer: &mut GlyphRenderer,
+        scale_factor: f64,
+        theme: &Theme,
+        next_page: &Page,
+        doc: &Doc,
+        debug_rects: Option<&mut Vec<CacheRect>>,
+    ) {
+        let scale = scale_factor as f32;
+        let page_height = pixmap.height() as f32 / scale;
+        let page_width = pixmap.width() as f32 / scale;
+        let Some(clip) = next_page_overflow_cull_clip(page_width, page_height) else {
+            return;
+        };
+        let transform = Transform::from_scale(scale, scale);
+        let ctx = RenderContext {
+            scale_factor,
+            selections: &[],
+            theme,
+            doc,
+            default_text_color: None,
+            is_focused: true,
+            phase: RenderPhase::Content,
+            render_origin: Point::zero(),
+        };
+
+        for phase in [RenderPhase::Background, RenderPhase::Content] {
+            let phase_ctx = RenderContext { phase, ..ctx };
+            Self::render_node(
+                pixmap,
+                glyph_renderer,
+                &next_page.root,
+                Point::new(0.0, page_height),
+                transform,
+                &phase_ctx,
+                &RenderHints::default(),
+                Some(clip),
+            );
+        }
+
+        if let Some(debug_rects) = debug_rects {
+            debug_rects.extend(Self::collect_next_page_overflow_debug_rects(
+                next_page,
+                page_width,
+                page_height,
+                clip,
+            ));
+        }
+    }
+
+    fn collect_next_page_overflow_debug_rects(
+        next_page: &Page,
+        page_width: f32,
+        page_height: f32,
+        cull_clip: CacheRect,
+    ) -> Vec<CacheRect> {
+        let mut rects = Vec::new();
+        Self::collect_overflow_debug_rects_recursive(
+            &next_page.root,
+            Point::new(0.0, page_height),
+            cull_clip,
+            page_width,
+            page_height,
+            &mut rects,
+        );
+        normalize_dirty_rects(rects, page_width, page_height)
+    }
+
+    fn collect_overflow_debug_rects_recursive(
+        positioned: &PositionedNode,
+        offset: Point,
+        cull_clip: CacheRect,
+        page_width: f32,
+        page_height: f32,
+        out: &mut Vec<CacheRect>,
+    ) {
+        let pos = Point::new(
+            offset.x + positioned.position.x,
+            offset.y + positioned.position.y,
+        );
+
+        if let Some(node_rect) = node_paint_bounds(positioned, pos) {
+            if !node_rect.intersects(cull_clip) {
+                return;
+            }
+
+            if positioned
+                .node
+                .element
+                .as_ref()
+                .and_then(|element| element.as_render())
+                .is_some()
+            {
+                let left = node_rect.x.max(cull_clip.x);
+                let top = node_rect.y.max(cull_clip.y);
+                let right = node_rect.right().min(cull_clip.right());
+                let bottom = node_rect.bottom().min(cull_clip.bottom());
+
+                if let Some(intersection) =
+                    CacheRect::from_xywh(left, top, right - left, bottom - top)
+                    && let Some(visible_rect) = intersection.clamp(page_width, page_height)
+                {
+                    out.push(visible_rect);
+                }
+            }
+        }
+
+        if let Some(children) = &positioned.node.children {
+            for child in children {
+                Self::collect_overflow_debug_rects_recursive(
+                    child,
+                    pos,
+                    cull_clip,
+                    page_width,
+                    page_height,
+                    out,
                 );
             }
         }
@@ -924,13 +1104,25 @@ fn should_promote_full_repaint(rects: &[CacheRect], canvas_width: f32, canvas_he
         || (full_area > 0.0 && dirty_area / full_area >= FULL_REPAINT_COVERAGE_THRESHOLD)
 }
 
+fn next_page_overflow_cull_clip(page_width: f32, page_height: f32) -> Option<CacheRect> {
+    // 다음 페이지 루트(y == page_height)가 clip 교차 검사에서 탈락하지 않도록
+    // 경계 아래쪽까지 band를 확장하고, 실제 픽셀 클리핑은 pixmap에 맡긴다.
+    CacheRect::from_xywh(
+        0.0,
+        (page_height - PAGE_EDGE_OVERFLOW_BAND).max(0.0),
+        page_width,
+        PAGE_EDGE_OVERFLOW_BAND * 2.0,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::diagnostics::LayoutPassRecorder;
     use crate::layout::elements::{
         CalloutBackgroundElement, CalloutIconElement, FoldContentElement, LineElement, LineMetric,
-        ListMarkerElement, ListMarkerType, SplitEdges, TableBorderElement, TableCellElement,
+        ListMarkerElement, ListMarkerType, RubySegment, SplitEdges, TableBorderElement,
+        TableCellElement,
     };
     use crate::layout::{LayoutNode, PageBreakPolicy};
     use crate::model::{CalloutVariant, NodeId, TableAlign, TableBorderStyle};
@@ -1421,6 +1613,261 @@ mod tests {
     }
 
     #[test]
+    fn snapshot_expands_dirty_rect_upward_for_ruby_line() {
+        let block_id = NodeId::new();
+        let shared_layout = Rc::new(parley::Layout::default());
+        let line_y = 24.0;
+
+        let make_line_node = |ruby_segments: Vec<RubySegment>| {
+            Rc::new(LayoutNode {
+                size: Size::new(180.0, 20.0),
+                element: Some(Element::Line(LineElement::build(
+                    block_id,
+                    Size::new(180.0, 20.0),
+                    0,
+                    Rc::clone(&shared_layout),
+                    LineMetric {
+                        top: 0.0,
+                        left: 0.0,
+                        height: 20.0,
+                        leading: 0.0,
+                        baseline: 14.0,
+                        ascent: 14.0,
+                        content_width: 120.0,
+                        start_offset: 0,
+                        end_offset: 2,
+                        clusters: vec![],
+                        break_reason: parley::layout::BreakReason::None,
+                        grapheme_offsets: vec![0, 2],
+                    },
+                    None,
+                    false,
+                    Rc::from("ab"),
+                    ruby_segments,
+                    vec![],
+                    false,
+                ))),
+                children: None,
+                page_break_policy: PageBreakPolicy::default(),
+                render_hints: RenderHints::default(),
+                scope_id: None,
+            })
+        };
+
+        let page_without_ruby = root_with_children(
+            Some(vec![PositionedNode {
+                position: Point::new(20.0, line_y),
+                node: make_line_node(vec![]),
+            }]),
+            Size::new(300.0, 200.0),
+        );
+        let page_with_ruby = root_with_children(
+            Some(vec![PositionedNode {
+                position: Point::new(20.0, line_y),
+                node: make_line_node(vec![RubySegment {
+                    start_offset: 0,
+                    end_offset: 1,
+                    ruby_text: "루".to_string(),
+                }]),
+            }]),
+            Size::new(300.0, 200.0),
+        );
+
+        let snapshot1 = PageRenderSnapshot::from_page(&page_without_ruby);
+        let snapshot2 = PageRenderSnapshot::from_page(&page_with_ruby);
+        let rects = snapshot1.dirty_rects(&snapshot2);
+
+        assert!(
+            !rects.is_empty(),
+            "루비 추가 시 라인 snapshot dirty rect가 비어 있으면 안 됨"
+        );
+        assert!(
+            rects.iter().any(|rect| rect.y < line_y),
+            "루비 상단 영역이 partial repaint 대상에 포함돼야 함"
+        );
+    }
+
+    #[test]
+    fn clip_intersection_uses_ruby_overhang_bounds() {
+        let block_id = NodeId::new();
+        let shared_layout = Rc::new(parley::Layout::default());
+        let line_y = 24.0;
+
+        let make_positioned_line = |ruby_segments: Vec<RubySegment>| PositionedNode {
+            position: Point::new(20.0, line_y),
+            node: Rc::new(LayoutNode {
+                size: Size::new(180.0, 20.0),
+                element: Some(Element::Line(LineElement::build(
+                    block_id,
+                    Size::new(180.0, 20.0),
+                    0,
+                    Rc::clone(&shared_layout),
+                    LineMetric {
+                        top: 0.0,
+                        left: 0.0,
+                        height: 20.0,
+                        leading: 0.0,
+                        baseline: 14.0,
+                        ascent: 14.0,
+                        content_width: 120.0,
+                        start_offset: 0,
+                        end_offset: 2,
+                        clusters: vec![],
+                        break_reason: parley::layout::BreakReason::None,
+                        grapheme_offsets: vec![0, 2],
+                    },
+                    None,
+                    false,
+                    Rc::from("ab"),
+                    ruby_segments,
+                    vec![],
+                    false,
+                ))),
+                children: None,
+                page_break_policy: PageBreakPolicy::default(),
+                render_hints: RenderHints::default(),
+                scope_id: None,
+            }),
+        };
+
+        let clip = CacheRect::from_xywh(0.0, line_y - 8.0, 300.0, 6.0).expect("valid clip rect");
+        let with_ruby = make_positioned_line(vec![RubySegment {
+            start_offset: 0,
+            end_offset: 1,
+            ruby_text: "루".to_string(),
+        }]);
+        let without_ruby = make_positioned_line(vec![]);
+
+        let with_ruby_bounds =
+            node_paint_bounds(&with_ruby, with_ruby.position).expect("line bounds should exist");
+        let without_ruby_bounds = node_paint_bounds(&without_ruby, without_ruby.position)
+            .expect("line bounds should exist");
+
+        assert!(
+            with_ruby_bounds.intersects(clip),
+            "루비 상단 overhang 영역만 clip 돼도 라인 렌더가 스킵되면 안 됨"
+        );
+        assert!(
+            !without_ruby_bounds.intersects(clip),
+            "루비가 없는 라인은 overhang clip과 교차하지 않아야 함"
+        );
+    }
+
+    #[test]
+    fn next_page_ruby_clip_intersects_boundary_root() {
+        let page_width = 300.0;
+        let page_height = 200.0;
+        let boundary_root = CacheRect::from_xywh(0.0, page_height, page_width, page_height)
+            .expect("valid root rect");
+
+        let narrow_clip = CacheRect::from_xywh(
+            0.0,
+            page_height - PAGE_EDGE_OVERFLOW_BAND,
+            page_width,
+            PAGE_EDGE_OVERFLOW_BAND,
+        )
+        .expect("valid narrow clip");
+        assert!(
+            !boundary_root.intersects(narrow_clip),
+            "경계에 딱 붙은 다음 페이지 루트는 좁은 clip에서는 탈락한다"
+        );
+
+        let expanded_clip =
+            next_page_overflow_cull_clip(page_width, page_height).expect("expanded clip");
+        assert!(
+            boundary_root.intersects(expanded_clip),
+            "다음 페이지 루트(y == page_height)는 오버플로우 clip과 교차해야 한다"
+        );
+    }
+
+    #[test]
+    fn overflow_debug_rects_include_visible_ruby_overhang() {
+        let block_id = NodeId::new();
+        let shared_layout = Rc::new(parley::Layout::default());
+        let page_width = 300.0;
+        let page_height = 200.0;
+
+        let make_next_page = |ruby_segments: Vec<RubySegment>| {
+            root_with_children(
+                Some(vec![PositionedNode {
+                    position: Point::new(20.0, 0.0),
+                    node: Rc::new(LayoutNode {
+                        size: Size::new(180.0, 20.0),
+                        element: Some(Element::Line(LineElement::build(
+                            block_id,
+                            Size::new(180.0, 20.0),
+                            0,
+                            Rc::clone(&shared_layout),
+                            LineMetric {
+                                top: 0.0,
+                                left: 0.0,
+                                height: 20.0,
+                                leading: 0.0,
+                                baseline: 14.0,
+                                ascent: 14.0,
+                                content_width: 120.0,
+                                start_offset: 0,
+                                end_offset: 2,
+                                clusters: vec![],
+                                break_reason: parley::layout::BreakReason::None,
+                                grapheme_offsets: vec![0, 2],
+                            },
+                            None,
+                            false,
+                            Rc::from("ab"),
+                            ruby_segments,
+                            vec![],
+                            false,
+                        ))),
+                        children: None,
+                        page_break_policy: PageBreakPolicy::default(),
+                        render_hints: RenderHints::default(),
+                        scope_id: None,
+                    }),
+                }]),
+                Size::new(page_width, page_height),
+            )
+        };
+
+        let with_ruby = make_next_page(vec![RubySegment {
+            start_offset: 0,
+            end_offset: 1,
+            ruby_text: "루".to_string(),
+        }]);
+        let without_ruby = make_next_page(vec![]);
+        let clip =
+            next_page_overflow_cull_clip(page_width, page_height).expect("next page overflow clip");
+
+        let with_rects = Renderer::collect_next_page_overflow_debug_rects(
+            &with_ruby,
+            page_width,
+            page_height,
+            clip,
+        );
+        let without_rects = Renderer::collect_next_page_overflow_debug_rects(
+            &without_ruby,
+            page_width,
+            page_height,
+            clip,
+        );
+
+        assert!(
+            !with_rects.is_empty(),
+            "루비가 있으면 현재 페이지 상단 오버플로우 디버그 rect가 수집돼야 함"
+        );
+        assert!(
+            with_rects
+                .iter()
+                .any(|rect| rect.y < page_height && rect.bottom() <= page_height),
+            "수집된 rect는 현재 페이지의 가시 영역 내에 있어야 함"
+        );
+        assert!(
+            without_rects.is_empty(),
+            "루비가 없으면 현재 페이지에 보이는 next-page overflow rect가 없어야 함"
+        );
+    }
+
+    #[test]
     fn partial_render_does_not_overdraw_outside_dirty_rect() {
         let callout_id = NodeId::new();
         let page1 = callout_page_with_icon(callout_id);
@@ -1434,14 +1881,14 @@ mod tests {
         let height = renderer.height() as usize;
         let mut buffer = vec![0u8; width * height * 4];
 
-        assert!(renderer.render_to(&page1, 0, &[], None, &doc, &mut buffer));
+        assert!(renderer.render_to(&page1, 0, None, &[], None, &doc, &mut buffer));
         let first = rgba_at(&buffer, width, 120, 70);
         assert!(
             first[3] > 0,
             "샘플 픽셀이 투명하면 callout 배경이 실제로 그려졌는지 검증할 수 없음"
         );
 
-        assert!(renderer.render_to(&page2, 0, &[], None, &doc, &mut buffer));
+        assert!(renderer.render_to(&page2, 0, None, &[], None, &doc, &mut buffer));
         let second = rgba_at(&buffer, width, 120, 70);
 
         assert_eq!(
