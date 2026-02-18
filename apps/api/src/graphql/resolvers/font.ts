@@ -8,6 +8,8 @@ Font.implement({
   isTypeOf: isTypeOf(TableCode.FONTS),
   interfaces: [Blob],
   fields: (t) => ({
+    name: t.string({ resolve: (font) => font.fullName ?? '', deprecationReason: 'Replaced by `fullName`' }),
+
     fullName: t.exposeString('fullName', { nullable: true }),
     subfamilyDisplayName: t.exposeString('subfamilyDisplayName', { nullable: true }),
     weight: t.exposeInt('weight'),
@@ -22,6 +24,9 @@ FontFamily.implement({
   isTypeOf: isTypeOf(TableCode.FONT_FAMILIES),
   fields: (t) => ({
     id: t.exposeID('id'),
+
+    name: t.exposeString('displayName', { deprecationReason: 'Replaced by `displayName`' }),
+
     familyName: t.exposeString('familyName'),
     displayName: t.exposeString('displayName'),
 
