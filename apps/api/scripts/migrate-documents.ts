@@ -328,12 +328,14 @@ function isAlreadyMigrated(doc: LoroDoc): boolean {
   return false;
 }
 
+const CONCURRENCY = 10;
+
 await (async () => {
   if (force) {
     console.log('Force mode enabled — re-migrating all documents');
   }
 
-  console.log('Starting mark → style/annotation migration...');
+  console.log(`Starting mark → style/annotation migration... (concurrency: ${CONCURRENCY})`);
 
   const ids = await db
     .select({
@@ -350,13 +352,13 @@ await (async () => {
   let migratedTables = 0;
   let skippedMixedTables = 0;
 
-  for (const { id, documentId } of ids) {
+  async function migrateDocument({ id, documentId }: { id: string; documentId: string }) {
     try {
       const [row] = await db.select({ snapshot: DocumentContents.snapshot }).from(DocumentContents).where(eq(DocumentContents.id, id));
 
       if (!row) {
         skipped++;
-        continue;
+        return;
       }
 
       const doc = new LoroDoc();
@@ -432,7 +434,7 @@ await (async () => {
 
         if (!needsFix && !force) {
           skipped++;
-          continue;
+          return;
         }
 
         newDocJson = currentJson;
@@ -536,6 +538,18 @@ await (async () => {
       errors++;
     }
   }
+
+  const pool = new Set<Promise<void>>();
+  for (const item of ids) {
+    const promise: Promise<void> = migrateDocument(item).then(() => {
+      pool.delete(promise);
+    });
+    pool.add(promise);
+    if (pool.size >= CONCURRENCY) {
+      await Promise.race(pool);
+    }
+  }
+  await Promise.all(pool);
 
   console.log(`Migration complete. Migrated: ${migrated}, Skipped: ${skipped}, Errors: ${errors}`);
   console.log(`Table col_width migration: migrated tables=${migratedTables}, skipped mixed tables=${skippedMixedTables}`);
