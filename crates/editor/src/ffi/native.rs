@@ -1189,6 +1189,31 @@ pub extern "C" fn editor_set_tracked_items(
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn editor_remove_tracked_items(
+    editor: *mut EditorHandle,
+    group: u32,
+    ids_json: *const c_char,
+) -> i32 {
+    ffi!(
+        {
+            if editor.is_null() {
+                return Err("Editor is null".into());
+            }
+
+            let json_str = parse_cstr(ids_json, "ids_json")?;
+            let ids: Vec<String> =
+                serde_json::from_str(json_str).map_err(|e| format!("Failed to parse ids: {e}"))?;
+
+            let editor = unsafe { &mut *(editor as *mut EditorInner) };
+            editor.runtime.remove_tracked_items(group, &ids);
+
+            Ok(())
+        },
+        -1
+    )
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn editor_perform_search(
     editor: *mut EditorHandle,
     query: *const c_char,

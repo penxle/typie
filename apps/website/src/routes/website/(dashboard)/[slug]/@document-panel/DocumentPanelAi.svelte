@@ -14,7 +14,6 @@
   import { fragment, graphql } from '$graphql';
   import type { DocumentPanel_Ai_document, DocumentPanel_Ai_user } from '$graphql';
   import type { Editor } from '$lib/editor/editor.svelte';
-  import type { AiFeedbackData } from '$lib/editor/types';
 
   type Props = {
     $document: DocumentPanel_Ai_document;
@@ -57,8 +56,7 @@
   let listContainer = $state<HTMLElement>();
   let progress = $state<{ current: number; total: number; phase: string } | null>(null);
 
-  const feedbacks = $derived(editor.fullAiFeedbackItems);
-  const activeItemId = $derived(editor.activeAiFeedbackItemId);
+  const activeFeedback = $derived(editor.aiFeedbacks.find((v) => v.active));
 
   const literaryAnalysisDocumentStream = graphql(`
     subscription DocumentPanel_Ai_LiteraryAnalysisDocumentStream($text: String!, $mappings: [DocumentTextMappingInput!]!) {
@@ -82,6 +80,7 @@
   `);
 
   let currentUnsubscribe: (() => void) | null = null;
+  let trackedEntries: { id: string; nodeId: string; startOffset: number; endOffset: number }[] = [];
 
   const scrollToBottom = async () => {
     if (!listContainer) return;
@@ -91,18 +90,6 @@
     if (isAtBottom) {
       listContainer.scrollTop = listContainer.scrollHeight;
     }
-  };
-
-  const updateOverlays = () => {
-    editor.setTrackedItems(
-      1,
-      editor.fullAiFeedbackItems.map((e) => ({
-        id: e.id,
-        nodeId: e.nodeId,
-        startOffset: e.startOffset,
-        endOffset: e.endOffset,
-      })),
-    );
   };
 
   const runAnalysis = async () => {
@@ -125,8 +112,9 @@
     inflight = true;
     hasChecked = true;
     checkFailed = false;
-    editor.fullAiFeedbackItems = [];
+    editor.aiFeedbacks = [];
     editor.setTrackedItems(1, []);
+    trackedEntries = [];
     progress = null;
 
     currentUnsubscribe = literaryAnalysisDocumentStream.subscribe(
@@ -134,17 +122,26 @@
       (payload) => {
         if (payload.type === 'feedback' && payload.feedback) {
           const item = payload.feedback;
-          const newItem: AiFeedbackData = {
-            id: nanoid(),
+          const newId = nanoid();
+
+          editor.aiFeedbacks = [
+            ...editor.aiFeedbacks,
+            {
+              id: newId,
+              startText: item.startText,
+              endText: item.endText,
+              feedback: item.feedback,
+              active: false,
+            },
+          ];
+
+          trackedEntries.push({
+            id: newId,
             nodeId: item.nodeId,
             startOffset: item.startOffset,
             endOffset: item.endOffset,
-            startText: item.startText,
-            endText: item.endText,
-            feedback: item.feedback,
-          };
-          editor.fullAiFeedbackItems = [...editor.fullAiFeedbackItems, newItem];
-          updateOverlays();
+          });
+          editor.setTrackedItems(1, trackedEntries);
           scrollToBottom();
         } else if (payload.type === 'progress' && payload.progress) {
           progress = payload.progress;
@@ -160,38 +157,37 @@
     );
   };
 
-  const scrollToFeedback = (feedback: AiFeedbackData) => {
-    if (!editor) return;
-    editor.activeAiFeedbackItemId = feedback.id;
-    editor.scrollTrackedItemIntoView(feedback.id);
+  const setActiveFeedback = (feedbackId: string) => {
+    for (const feedback of editor.aiFeedbacks) {
+      feedback.active = feedback.id === feedbackId;
+    }
+
+    editor.scrollTrackedItemIntoView(feedbackId);
   };
 
   const removeFeedback = (feedbackId: string) => {
-    editor.fullAiFeedbackItems = editor.fullAiFeedbackItems.filter((f) => f.id !== feedbackId);
-    updateOverlays();
+    editor.removeTrackedItems(1, [feedbackId]);
   };
 
-  const handleKeyDown = (e: KeyboardEvent, feedback: AiFeedbackData) => {
+  const handleKeyDown = (e: KeyboardEvent, feedbackId: string) => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
-      if (activeItemId !== feedback.id) {
-        scrollToFeedback(feedback);
-      }
+      setActiveFeedback(feedbackId);
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      const currentIndex = feedbacks.findIndex((f) => f.id === feedback.id);
-      const prevFeedback = feedbacks[currentIndex - 1];
+      const currentIndex = editor.aiFeedbacks.findIndex((f) => f.id === feedbackId);
+      const prevFeedback = editor.aiFeedbacks[currentIndex - 1];
       if (prevFeedback) {
-        scrollToFeedback(prevFeedback);
+        setActiveFeedback(prevFeedback.id);
         const prevElement = globalThis.document.querySelector(`[data-panel-ai-feedback="${prevFeedback.id}"]`) as HTMLElement;
         prevElement?.focus();
       }
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
-      const currentIndex = feedbacks.findIndex((f) => f.id === feedback.id);
-      const nextFeedback = feedbacks[currentIndex + 1];
+      const currentIndex = editor.aiFeedbacks.findIndex((f) => f.id === feedbackId);
+      const nextFeedback = editor.aiFeedbacks[currentIndex + 1];
       if (nextFeedback) {
-        scrollToFeedback(nextFeedback);
+        setActiveFeedback(nextFeedback.id);
         const nextElement = globalThis.document.querySelector(`[data-panel-ai-feedback="${nextFeedback.id}"]`) as HTMLElement;
         nextElement?.focus();
       }
@@ -205,8 +201,8 @@
   });
 
   $effect(() => {
-    if (activeItemId) {
-      const el = listContainer?.querySelector(`[data-panel-ai-feedback="${activeItemId}"]`) as HTMLElement | null;
+    if (activeFeedback) {
+      const el = listContainer?.querySelector(`[data-panel-ai-feedback="${activeFeedback.id}"]`) as HTMLElement | null;
       el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     }
   });
@@ -252,7 +248,7 @@
   >
     <div class={flex({ alignItems: 'center', gap: '6px' })}>
       AI 피드백
-      {#if hasChecked && !checkFailed && feedbacks.length > 0}
+      {#if hasChecked && !checkFailed && editor.aiFeedbacks.length > 0}
         <div
           class={css({
             borderRadius: '4px',
@@ -264,7 +260,7 @@
             backgroundColor: 'accent.brand.subtle',
           })}
         >
-          {feedbacks.length}
+          {editor.aiFeedbacks.length}
         </div>
       {/if}
     </div>
@@ -366,19 +362,19 @@
         overflowY: 'auto',
       })}
     >
-      {#if !inflight && feedbacks.length === 0}
+      {#if !inflight && editor.aiFeedbacks.length === 0}
         <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '8px', paddingY: '24px' })}>
           <Icon style={css.raw({ color: 'text.faint' })} icon={CircleCheckIcon} size={32} />
           <div class={css({ fontSize: '16px', color: 'text.faint' })}>피드백이 없습니다</div>
         </div>
       {/if}
 
-      {#each feedbacks as feedback (feedback.id)}
+      {#each editor.aiFeedbacks as feedback, i (i)}
         <div
           class={css({
             position: 'relative',
             borderWidth: '1px',
-            borderColor: activeItemId === feedback.id ? 'accent.brand.default!' : 'border.default',
+            borderColor: activeFeedback?.id === feedback.id ? 'accent.brand.default!' : 'border.default',
             borderRadius: '8px',
             padding: '12px',
             cursor: 'pointer',
@@ -394,13 +390,13 @@
           })}
           data-panel-ai-feedback={feedback.id}
           onclick={() => {
-            if (activeItemId === feedback.id) {
+            if (activeFeedback?.id === feedback.id) {
               editor.focus();
             } else {
-              scrollToFeedback(feedback);
+              setActiveFeedback(feedback.id);
             }
           }}
-          onkeydown={(e) => handleKeyDown(e, feedback)}
+          onkeydown={(e) => handleKeyDown(e, feedback.id)}
           role="button"
           tabindex="0"
           in:fly={{ y: 8, duration: 200 }}
@@ -449,7 +445,7 @@
               class={css({
                 fontSize: '12px',
                 color: 'text.faint',
-                lineClamp: activeItemId === feedback.id ? 'none' : '2',
+                lineClamp: activeFeedback?.id === feedback.id ? 'none' : '2',
               })}
             >
               {feedback.feedback}

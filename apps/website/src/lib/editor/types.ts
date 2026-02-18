@@ -61,24 +61,20 @@ export type Attribute =
   | { type: 'link'; values: (LinkAnnotationValue | null)[] }
   | { type: 'ruby'; values: (RubyAnnotationValue | null)[] };
 
-export type AiFeedbackData = {
+export type AiFeedback = {
   id: string;
-  nodeId: string;
-  startOffset: number;
-  endOffset: number;
   startText: string;
   endText: string;
   feedback: string;
+  active: boolean;
 };
 
-export type SpellcheckErrorData = {
+export type SpellcheckError = {
   id: string;
-  nodeId: string;
-  startOffset: number;
-  endOffset: number;
   context: string;
   corrections: string[];
   explanation: string;
+  active: boolean;
 };
 
 export type ImageAsset = {

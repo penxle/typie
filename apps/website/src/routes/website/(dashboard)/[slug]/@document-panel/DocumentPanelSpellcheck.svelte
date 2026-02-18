@@ -13,7 +13,6 @@
   import { fragment, graphql } from '$graphql';
   import type { DocumentPanel_Spellcheck_document, DocumentPanel_Spellcheck_user } from '$graphql';
   import type { Editor } from '$lib/editor/editor.svelte';
-  import type { SpellcheckErrorData } from '$lib/editor/types';
 
   type Props = {
     $document: DocumentPanel_Spellcheck_document;
@@ -46,12 +45,11 @@
 
   let inflight = $state(false);
   let mounted = $state(false);
-  const errors = $derived(editor.fullSpellcheckErrors);
   let hasChecked = $state(false);
   let checkFailed = $state(false);
   let listContainer = $state<HTMLElement>();
 
-  const activeError = $derived(editor.activeSpellcheckErrorId ? errors.find((e) => e.id === editor.activeSpellcheckErrorId) : undefined);
+  const activeError = $derived(editor.spellcheckErrors.find((v) => v.active));
   let anchor: ReturnType<typeof createFloatingActions>['anchor'] | undefined = $state();
   let floating: ReturnType<typeof createFloatingActions>['floating'] | undefined = $state();
   let scrollContainer: Element | undefined = $state();
@@ -92,108 +90,106 @@
         text: spellcheckData.text,
         mappings: spellcheckData.mappings,
       });
-      editor.fullSpellcheckErrors = resp.map((error) => ({
+
+      editor.spellcheckErrors = resp.map((error) => ({
         id: error.id,
-        nodeId: error.nodeId,
-        startOffset: error.startOffset,
-        endOffset: error.endOffset,
         context: error.context,
         corrections: error.corrections,
         explanation: error.explanation,
+        active: false,
       }));
 
-      updateOverlays();
-    } catch (err) {
-      console.error('Spellcheck failed:', err);
+      editor.setTrackedItems(
+        0,
+        resp.map((e) => ({
+          id: e.id,
+          nodeId: e.nodeId,
+          startOffset: e.startOffset,
+          endOffset: e.endOffset,
+        })),
+      );
+    } catch {
       checkFailed = true;
-      editor.fullSpellcheckErrors = [];
       editor.setTrackedItems(0, []);
     } finally {
       inflight = false;
     }
   };
 
-  const updateOverlays = () => {
-    editor.setTrackedItems(
-      0,
-      editor.fullSpellcheckErrors.map((e) => ({
-        id: e.id,
-        nodeId: e.nodeId,
-        startOffset: e.startOffset,
-        endOffset: e.endOffset,
-      })),
-    );
-  };
-
   const removeError = (errorId: string) => {
-    editor.fullSpellcheckErrors = editor.fullSpellcheckErrors.filter((e) => e.id !== errorId);
-    updateOverlays();
+    editor.removeTrackedItems(0, [errorId]);
   };
 
-  const removeErrorsByContext = (context: string) => {
-    editor.fullSpellcheckErrors = editor.fullSpellcheckErrors.filter((e) => e.context !== context);
-    updateOverlays();
+  const removeSameError = (errorId: string) => {
+    const error = editor.spellcheckErrors.find((v) => v.id === errorId);
+    if (!error) {
+      return;
+    }
+
+    const targetIds = editor.spellcheckErrors.filter((v) => v.context === error.context).map((e) => e.id);
+    if (targetIds.length > 0) {
+      editor.removeTrackedItems(0, targetIds);
+    }
   };
 
   const applyCorrection = (errorId: string, correction: string) => {
     if (!editor) return;
 
-    const overlay = editor.spellcheckOverlays.find((o) => o.id === errorId);
-    if (!overlay) return;
+    const item = editor.trackedItems.find((v) => v.group === 0 && v.id === errorId);
+    if (!item) return;
 
-    const success = editor.replaceTextInBlock(overlay.nodeId, overlay.startOffset, overlay.endOffset, correction);
+    const success = editor.replaceTextInBlock(item.nodeId, item.startOffset, item.endOffset, correction);
     if (success) {
-      editor.fullSpellcheckErrors = editor.fullSpellcheckErrors.filter((e) => e.id !== errorId);
-      updateOverlays();
+      editor.removeTrackedItems(0, [errorId]);
     }
   };
 
-  const scrollToError = (error: SpellcheckErrorData) => {
-    if (!editor) return;
-    editor.activeSpellcheckErrorId = error.id;
-    editor.scrollTrackedItemIntoView(error.id);
+  const setActiveError = (errorId: string) => {
+    for (const error of editor.spellcheckErrors) {
+      error.active = error.id === errorId;
+    }
+
+    editor.scrollTrackedItemIntoView(errorId);
   };
 
-  const selectErrorRange = (error: SpellcheckErrorData) => {
-    scrollToError(error);
+  const selectErrorRange = (errorId: string) => {
+    setActiveError(errorId);
 
-    const overlay = editor.spellcheckOverlays.find((o) => o.id === error.id);
-    if (overlay) {
-      editor.dispatch({
-        type: 'setSelection',
-        anchorNodeId: overlay.nodeId,
-        anchorOffset: overlay.startOffset,
-        anchorAffinity: 'downstream',
-        headNodeId: overlay.nodeId,
-        headOffset: overlay.endOffset,
-        headAffinity: 'downstream',
-      });
-    }
+    const item = editor.trackedItems.find((v) => v.group === 0 && v.id === errorId);
+    if (!item) return;
+
+    editor.dispatch({
+      type: 'setSelection',
+      anchorNodeId: item.nodeId,
+      anchorOffset: item.startOffset,
+      anchorAffinity: 'downstream',
+      headNodeId: item.nodeId,
+      headOffset: item.endOffset,
+      headAffinity: 'upstream',
+    });
 
     editor.focus();
   };
 
-  const handleKeyDown = (e: KeyboardEvent, error: SpellcheckErrorData) => {
+  const handleKeyDown = (e: KeyboardEvent, errorId: string) => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
-      if (activeError?.id !== error.id) {
-        scrollToError(error);
-      }
+      setActiveError(errorId);
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      const currentIndex = errors.findIndex((err) => err.id === error.id);
-      const prevError = errors[currentIndex - 1];
+      const currentIndex = editor.spellcheckErrors.findIndex((v) => v.id === errorId);
+      const prevError = editor.spellcheckErrors[currentIndex - 1];
       if (prevError) {
-        scrollToError(prevError);
+        setActiveError(prevError.id);
         const prevElement = globalThis.document.querySelector(`[data-panel-spellcheck-error="${prevError.id}"]`) as HTMLElement;
         prevElement?.focus();
       }
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
-      const currentIndex = errors.findIndex((err) => err.id === error.id);
-      const nextError = errors[currentIndex + 1];
+      const currentIndex = editor.spellcheckErrors.findIndex((v) => v.id === errorId);
+      const nextError = editor.spellcheckErrors[currentIndex + 1];
       if (nextError) {
-        scrollToError(nextError);
+        setActiveError(nextError.id);
         const nextElement = globalThis.document.querySelector(`[data-panel-spellcheck-error="${nextError.id}"]`) as HTMLElement;
         nextElement?.focus();
       }
@@ -215,8 +211,8 @@
   });
 
   $effect(() => {
-    if (editor.activeSpellcheckErrorId) {
-      const el = listContainer?.querySelector(`[data-panel-spellcheck-error="${editor.activeSpellcheckErrorId}"]`) as HTMLElement | null;
+    if (activeError) {
+      const el = listContainer?.querySelector(`[data-panel-spellcheck-error="${activeError.id}"]`) as HTMLElement | null;
       el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     }
   });
@@ -290,7 +286,7 @@
   >
     <div class={flex({ alignItems: 'center', gap: '6px' })}>
       맞춤법 검사
-      {#if hasChecked && !checkFailed && errors.length > 0}
+      {#if hasChecked && !checkFailed && editor.spellcheckErrors.length > 0}
         <div
           class={css({
             borderRadius: '4px',
@@ -302,7 +298,7 @@
             backgroundColor: 'accent.danger.subtle',
           })}
         >
-          {errors.length}
+          {editor.spellcheckErrors.length}
         </div>
       {/if}
     </div>
@@ -334,7 +330,7 @@
       <div class={css({ fontSize: '16px', color: 'text.faint' })}>맞춤법 검사에 실패했습니다</div>
       <div class={css({ fontSize: '14px', color: 'text.faint' })}>잠시 후 다시 시도해주세요</div>
     </div>
-  {:else if hasChecked && errors.length === 0}
+  {:else if hasChecked && editor.spellcheckErrors.length === 0}
     <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '8px', paddingY: '40px' })}>
       <Icon style={css.raw({ color: 'text.faint' })} icon={CircleCheckIcon} size={32} />
       <div class={css({ fontSize: '16px', color: 'text.faint' })}>맞춤법 오류가 없습니다!</div>
@@ -351,7 +347,7 @@
         overflowY: 'auto',
       })}
     >
-      {#each errors as error (error.id)}
+      {#each editor.spellcheckErrors as error, i (i)}
         <div
           class={css({
             position: 'relative',
@@ -373,16 +369,16 @@
           data-panel-spellcheck-error={error.id}
           onclick={(e) => {
             if (activeError?.id !== error.id) {
-              scrollToError(error);
+              setActiveError(error.id);
             }
             (e.currentTarget as HTMLElement).focus();
           }}
-          onkeydown={(e) => handleKeyDown(e, error)}
+          onkeydown={(e) => handleKeyDown(e, error.id)}
           role="button"
           tabindex="0"
         >
           <div class={flex({ position: 'absolute', top: '8px', right: '8px', gap: '4px' })}>
-            {#if errors.some((e) => e.context === error.context && e.id !== error.id)}
+            {#if editor.spellcheckErrors.some((e) => e.context === error.context && e.id !== error.id)}
               <button
                 class={css({
                   padding: '4px',
@@ -400,11 +396,11 @@
                 })}
                 onclick={(e) => {
                   e.stopPropagation();
-                  removeErrorsByContext(error.context);
+                  removeSameError(error.id);
                 }}
                 type="button"
                 use:tooltip={{
-                  message: '같은 단어 모두 무시',
+                  message: '같은 단어 모두 무시하기',
                   placement: 'top',
                 }}
               >
@@ -509,7 +505,7 @@
                 })}
                 onclick={(e) => {
                   e.stopPropagation();
-                  selectErrorRange(error);
+                  selectErrorRange(error.id);
                 }}
                 type="button"
               >

@@ -13,12 +13,8 @@
 
   let { editor }: Props = $props();
 
-  const activeOverlay = $derived(
-    editor.activeSpellcheckErrorId ? editor.spellcheckOverlays.find((o) => o.id === editor.activeSpellcheckErrorId) : null,
-  );
-  const activeError = $derived(
-    editor.activeSpellcheckErrorId ? editor.fullSpellcheckErrors.find((e) => e.id === editor.activeSpellcheckErrorId) : null,
-  );
+  const activeError = $derived(editor.spellcheckErrors.find((v) => v.active));
+  const activeItem = $derived(editor.trackedItems.find((v) => v.id === activeError?.id));
 
   const scroller = $derived.by(() => editor.scrollContainerEl);
 
@@ -55,16 +51,16 @@
   });
 
   $effect(() => {
-    if (activeOverlay?.bounds?.[0]) {
-      const pageIdx = activeOverlay.pageIdx;
+    if (activeItem?.bounds?.[0]) {
+      const pageIdx = activeItem.pageIdx;
 
       const virtualEl = {
         getBoundingClientRect: () => {
           const pageEl = editor.pageContainerEls[pageIdx];
-          if (!pageEl || activeOverlay.bounds.length === 0) return new DOMRect();
+          if (!pageEl || activeItem.bounds.length === 0) return new DOMRect();
 
           const pageRect = pageEl.getBoundingClientRect();
-          const rects = activeOverlay.bounds.map((b) => new DOMRect(pageRect.left + b.x, pageRect.top + b.y, b.width, b.height));
+          const rects = activeItem.bounds.map((b) => new DOMRect(pageRect.left + b.x, pageRect.top + b.y, b.width, b.height));
 
           let minX = Infinity;
           let minY = Infinity;
@@ -85,7 +81,7 @@
           if (!pageEl) return [];
 
           const pageRect = pageEl.getBoundingClientRect();
-          return activeOverlay.bounds.map((b) => new DOMRect(pageRect.left + b.x, pageRect.top + b.y, b.width, b.height));
+          return activeItem.bounds.map((b) => new DOMRect(pageRect.left + b.x, pageRect.top + b.y, b.width, b.height));
         },
       };
       anchor(virtualEl);
@@ -93,41 +89,25 @@
   });
 
   const applyCorrection = (correction: string) => {
-    if (!activeError || !activeOverlay || !editor) return;
+    if (!activeItem) return;
 
-    const success = editor.replaceTextInBlock(activeOverlay.nodeId, activeOverlay.startOffset, activeOverlay.endOffset, correction);
+    const success = editor.replaceTextInBlock(activeItem.nodeId, activeItem.startOffset, activeItem.endOffset, correction);
     if (success) {
-      editor.fullSpellcheckErrors = editor.fullSpellcheckErrors.filter((e) => e.id !== activeError.id);
-      editor.setTrackedItems(
-        0,
-        editor.fullSpellcheckErrors.map((e) => ({
-          id: e.id,
-          nodeId: e.nodeId,
-          startOffset: e.startOffset,
-          endOffset: e.endOffset,
-        })),
-      );
+      editor.removeTrackedItems(0, [activeItem.id]);
     }
+
     editor.focus();
   };
 
   const removeError = () => {
     if (!activeError) return;
-    editor.fullSpellcheckErrors = editor.fullSpellcheckErrors.filter((e) => e.id !== activeError.id);
-    editor.setTrackedItems(
-      0,
-      editor.fullSpellcheckErrors.map((e) => ({
-        id: e.id,
-        nodeId: e.nodeId,
-        startOffset: e.startOffset,
-        endOffset: e.endOffset,
-      })),
-    );
+
+    editor.removeTrackedItems(0, [activeError.id]);
     editor.focus();
   };
 </script>
 
-{#if activeError && activeOverlay}
+{#if activeError && activeItem}
   <div
     class={flex({
       alignItems: 'center',

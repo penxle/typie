@@ -2,6 +2,7 @@ import dayjs from 'dayjs';
 import { and, asc, count, desc, eq, gt, gte, inArray, isNull, lt, sum } from 'drizzle-orm';
 import { filter, pipe, Repeater } from 'graphql-yoga';
 import { LoroDoc, VersionVector } from 'loro-crdt';
+import { nanoid } from 'nanoid';
 import { match } from 'ts-pattern';
 import { redis } from '@/cache';
 import {
@@ -1292,14 +1293,13 @@ builder.mutationFields((t) => ({
         return { nodeId: startMapping.nodeId, startOffset, endOffset };
       };
 
-      let errorId = 0;
       return errors
         .map((error) => {
           const range = mapRange(error.start, error.end);
           if (!range) return null;
 
           return {
-            id: `err-${errorId++}`,
+            id: nanoid(),
             nodeId: range.nodeId,
             startOffset: range.startOffset,
             endOffset: range.endOffset,

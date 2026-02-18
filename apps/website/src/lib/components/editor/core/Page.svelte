@@ -167,8 +167,8 @@
         {/each}
       {/if}
 
-      {#each editor.spellcheckOverlays.filter((o) => o.pageIdx === page) as overlay, i (`${i}-${overlay.id}`)}
-        {#each overlay.bounds as bound, j (`${j}-${overlay.id}`)}
+      {#each editor.trackedItems.filter((v) => v.group === 0 && v.pageIdx === page) as item (item.id)}
+        {#each item.bounds as bound, i (i)}
           <div
             style:left={`${bound.x}px`}
             style:top={`${bound.y + bound.ascent + 2}px`}
@@ -183,14 +183,14 @@
               backgroundRepeat: 'repeat-x',
               backgroundPosition: 'bottom',
             })}
-            data-spellcheck-overlay={overlay.id}
+            data-spellcheck-overlay={item.id}
           ></div>
         {/each}
       {/each}
 
-      {#each editor.aiFeedbackOverlays.filter((o) => o.pageIdx === page) as overlay, i (`ai-${i}-${overlay.id}`)}
-        {#if editor.activeAiFeedbackItemId === overlay.id}
-          {#each overlay.bounds as bound, j (`ai-bound-${j}-${overlay.id}`)}
+      {#each editor.trackedItems.filter((v) => v.group === 1 && v.pageIdx === page) as item (item.id)}
+        {#if editor.aiFeedbacks.find((v) => v.id === item.id)?.active}
+          {#each item.bounds as bound, i (i)}
             <div
               style:left={`${bound.x}px`}
               style:top={`${bound.y}px`}
@@ -208,14 +208,16 @@
         {/if}
       {/each}
 
-      {#each editor.searchOverlays.filter((o) => o.pageIdx === page) as overlay, i (`search-${i}-${overlay.id}`)}
-        {#each overlay.bounds as bound, j (`search-${i}-${j}`)}
+      {#each editor.trackedItems.filter((v) => v.group === 2 && v.pageIdx === page) as item (item)}
+        {#each item.bounds as bound, i (i)}
           <div
             style:left={`${bound.x}px`}
             style:top={`${bound.y}px`}
             style:width={`${bound.width}px`}
             style:height={`${bound.height}px`}
-            style:background-color={overlay.id === editor.activeSearchMatchId ? 'rgba(255, 165, 0, 0.5)' : 'rgba(255, 255, 0, 0.5)'}
+            style:background-color={editor.searchMatches.find((v) => v.id === item.id)?.active
+              ? 'rgba(255, 165, 0, 0.5)'
+              : 'rgba(255, 255, 0, 0.5)'}
             class={css({
               position: 'absolute',
               pointerEvents: 'none',

@@ -387,6 +387,7 @@ impl Runtime {
         self.pending.enabled_actions = true;
         self.pending.default_attrs = true;
         self.pending.placeholder = true;
+        self.pending.tracked_items = true;
     }
 
     pub fn replace_text_in_block(
@@ -444,6 +445,7 @@ impl Runtime {
             reapply_styles(&text_node, start_internal, replacement_len, &styles);
         }
 
+        self.state.pending_loro_commit = true;
         self.handle_external_doc_change();
 
         Ok(())
@@ -512,6 +514,7 @@ impl Runtime {
             }
         }
 
+        self.state.pending_loro_commit = true;
         self.handle_external_doc_change();
 
         Ok(())
@@ -1621,6 +1624,81 @@ mod tests {
     use super::*;
     use crate::state::position_helpers::calculate_offset_before_child;
     use std::rc::Rc;
+
+    #[test]
+    fn test_tracked_items_shift_after_replace_text_in_block() {
+        let mut p = id!();
+        let mut runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {
+                    text { "hello world" }
+                }
+            }
+            selection { (p, 0) }
+        };
+
+        runtime.set_tracked_items(
+            0,
+            vec![RawTrackedItem {
+                id: "item-1".to_string(),
+                node_id: p,
+                start_offset: 6,
+                end_offset: 11,
+            }],
+        );
+
+        let before = runtime.tracked_items[0]
+            .resolve_range(runtime.doc())
+            .expect("tracked item should resolve before replacement");
+        assert_eq!(before.1, 6);
+        assert_eq!(before.2, 11);
+
+        runtime
+            .replace_text_in_block(p, 6, 6, "big ")
+            .expect("replace_text_in_block should succeed");
+
+        let after = runtime.tracked_items[0]
+            .resolve_range(runtime.doc())
+            .expect("tracked item should resolve after replacement");
+        assert_eq!(after.1, 10);
+        assert_eq!(after.2, 15);
+    }
+
+    #[test]
+    fn test_tracked_items_shift_after_replace_text_in_blocks() {
+        let mut p = id!();
+        let mut runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {
+                    text { "hello world" }
+                }
+            }
+            selection { (p, 0) }
+        };
+
+        runtime.set_tracked_items(
+            0,
+            vec![RawTrackedItem {
+                id: "item-1".to_string(),
+                node_id: p,
+                start_offset: 6,
+                end_offset: 11,
+            }],
+        );
+
+        let replacements = vec![(p, 6, 6, "big ")];
+        runtime
+            .replace_text_in_blocks(&replacements)
+            .expect("replace_text_in_blocks should succeed");
+
+        let after = runtime.tracked_items[0]
+            .resolve_range(runtime.doc())
+            .expect("tracked item should resolve after replacement");
+        assert_eq!(after.1, 10);
+        assert_eq!(after.2, 15);
+    }
 
     #[test]
     fn selection_across_empty_paragraphs_only_draws_first() {

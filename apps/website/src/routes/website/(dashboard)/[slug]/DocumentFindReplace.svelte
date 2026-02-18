@@ -185,8 +185,7 @@
     <div class={flex({ alignItems: 'center', height: '30px' })}>
       <div class={css({ flex: '1', paddingLeft: '4px', width: '60px', fontSize: '12px', fontWeight: 'medium', color: 'text.subtle' })}>
         {#if editor.searchMatches.length > 0}
-          {editor.activeSearchMatchId ? editor.searchMatches.findIndex((m) => m.id === editor.activeSearchMatchId) + 1 : 0} / {editor
-            .searchMatches.length}
+          {editor.searchMatches.findIndex((m) => m.active) + 1} / {editor.searchMatches.length}
         {:else}
           결과 없음
         {/if}
