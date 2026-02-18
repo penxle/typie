@@ -76,6 +76,7 @@ const getEmptyDragImage = () => {
 export type EditorOptions = {
   theme: ThemeColors;
   snapshot?: Uint8Array;
+  fontFamilies: FontFamily[];
   readOnly?: boolean;
   onDocChanged?: () => void;
   onExitedDocumentStart?: () => void;
@@ -258,6 +259,10 @@ export class Editor {
   async initialize(options: EditorOptions): Promise<void> {
     if (this.#wasmEditor) {
       return;
+    }
+
+    if (options.fontFamilies?.length) {
+      this.fontFamilies = options.fontFamilies;
     }
 
     this.#onDocChanged = options.onDocChanged;

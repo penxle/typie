@@ -9,6 +9,7 @@
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
   import { nanoid } from 'nanoid';
+  import { untrack } from 'svelte';
   import { match } from 'ts-pattern';
   import { DocumentSyncType } from '@/enums';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
@@ -140,21 +141,6 @@
                 }
               }
 
-              fontFamilies {
-                id
-                familyName
-                displayName
-                state
-
-                fonts {
-                  id
-                  weight
-                  subfamilyDisplayName
-                  url
-                  state
-                }
-              }
-
               ...DocumentPanel_document
             }
           }
@@ -195,6 +181,29 @@
     }
   `);
 
+  const fontFamiliesQuery = graphql(`
+    query DocumentEditor_FontFamilies_Query($slug: String!) @client {
+      document(slug: $slug) {
+        id
+
+        fontFamilies {
+          id
+          familyName
+          displayName
+          state
+
+          fonts {
+            id
+            weight
+            subfamilyDisplayName
+            url
+            state
+          }
+        }
+      }
+    }
+  `);
+
   const app = getAppContext();
   const splitView = getSplitViewContext();
   const viewContext = getViewContext();
@@ -213,9 +222,19 @@
   const serverVersion = $derived(ctx.serverVersion);
   const assets = $derived(document?.assets);
 
+  const fontFamilies = $derived($fontFamiliesQuery?.document.fontFamilies ?? []);
+
   $effect(() => {
-    if (document?.fontFamilies?.length) {
-      editor.fontFamilies = document.fontFamilies;
+    void slug;
+
+    untrack(() => {
+      fontFamiliesQuery.load({ slug });
+    });
+  });
+
+  $effect(() => {
+    if (fontFamilies.length > 0) {
+      editor.fontFamilies = fontFamilies;
     }
   });
 
@@ -601,7 +620,7 @@
 
 <svelte:window onkeydown={handleGlobalKeydown} />
 
-{#if document && entity}
+{#if document && entity && fontFamilies.length > 0}
   {#if focused}
     <Helmet title={`${title || '(제목 없음)'} 작성 중`} />
   {/if}
@@ -871,6 +890,7 @@
           >
             <EditorComponent
               {editor}
+              {fontFamilies}
               onDocChanged={handleDocChanged}
               onEditorReady={handleEditorReady}
               onExitedDocumentStart={() => subtitleEl?.focus()}
