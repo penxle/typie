@@ -120,7 +120,7 @@ export const handleKeyEvent = (editor: Editor, e: KeyboardEvent): boolean => {
     case 'a':
     case 'A': {
       if ((IS_MAC && e.metaKey) || (!IS_MAC && e.ctrlKey)) {
-        editor.dispatch({ type: 'selectAll' }).scrollIntoView();
+        editor.dispatch({ type: 'selectAll' });
         return true;
       }
       break;

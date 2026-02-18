@@ -193,6 +193,8 @@ class InputController {
         'style': {'type': 'strikethrough'},
       });
       scrollIntoView();
+    } else if (action == 'selectAll') {
+      dispatch({'type': action});
     } else {
       dispatch({'type': action});
       scrollIntoView();

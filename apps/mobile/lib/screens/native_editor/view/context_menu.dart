@@ -221,6 +221,7 @@ class _MenuBubble extends HookWidget {
             label: '단어',
             onTap: () {
               scope.editor.dispatch({'type': 'selectWord'});
+              scope.controller.scrollIntoView();
               isExpanded.value = false;
             },
           ),
@@ -229,6 +230,7 @@ class _MenuBubble extends HookWidget {
             label: '문장',
             onTap: () {
               scope.editor.dispatch({'type': 'selectSentence'});
+              scope.controller.scrollIntoView();
               isExpanded.value = false;
             },
           ),
@@ -237,6 +239,7 @@ class _MenuBubble extends HookWidget {
             label: '문단',
             onTap: () {
               scope.editor.dispatch({'type': 'selectParagraph'});
+              scope.controller.scrollIntoView();
               isExpanded.value = false;
             },
           ),
