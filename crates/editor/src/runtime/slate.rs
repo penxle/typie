@@ -5,8 +5,8 @@ use crate::model::{
 };
 use crate::runtime::tracked_items::TrackedItemOverlay;
 use crate::runtime::{ExternalElement, LinkOverlay, SelectionHandleBounds, TableOverlay};
+use crate::state::Selection;
 use crate::state::selection_helpers::{BlockAttr, SelectionAttributes};
-use crate::state::{Position, Selection};
 use crate::types::{Affinity, PointerStyle, Rect, TextBound};
 use rustc_hash::FxHashMap;
 
@@ -27,7 +27,7 @@ pub const DIRTY_DOC_CHANGED: u64 = 1 << 15;
 pub const DIRTY_RENDER_REQUIRED: u64 = 1 << 16;
 pub const DIRTY_FONT_REQUIRED: u64 = 1 << 17;
 pub const DIRTY_EXITED_DOCUMENT_START: u64 = 1 << 19;
-pub const DIRTY_HTML_PASTED: u64 = 1 << 20;
+pub const DIRTY_REPASTE: u64 = 1 << 20;
 
 pub const ATTR_TAG_BACKGROUND_COLOR: u32 = 0;
 pub const ATTR_TAG_TEXT_COLOR: u32 = 1;
@@ -205,6 +205,8 @@ define_slate! {
 
         pub default_attrs_offset: u32,
         pub default_attrs_count: u32,
+
+        pub repaste_enabled: u32,
     }
 }
 
@@ -230,6 +232,11 @@ impl Slate {
     pub fn write_pointer_state(&mut self, state: u32) {
         self.pointer_state = state;
         self.dirty |= DIRTY_POINTER;
+    }
+
+    pub fn write_repaste_enabled(&mut self, enabled: bool) {
+        self.repaste_enabled = if enabled { 1 } else { 0 };
+        self.dirty |= DIRTY_REPASTE
     }
 }
 
@@ -790,35 +797,6 @@ impl Slab {
         slate.table_overlays_offset = start;
         slate.table_overlays_count = overlays.len() as u32;
         slate.dirty |= DIRTY_TABLE_OVERLAYS;
-    }
-
-    pub fn write_html_pasted(
-        &mut self,
-        slate: &mut Slate,
-        text: &str,
-        from: Position,
-        to: Position,
-    ) {
-        let from_affinity = match from.affinity {
-            Affinity::Upstream => AFFINITY_UPSTREAM,
-            Affinity::Downstream => AFFINITY_DOWNSTREAM,
-        };
-        let to_affinity = match to.affinity {
-            Affinity::Upstream => AFFINITY_UPSTREAM,
-            Affinity::Downstream => AFFINITY_DOWNSTREAM,
-        };
-        let start = self.alloc(0, 4);
-        let str_off = self.write_str(text);
-        let from_node = node_id_to_bytes(from.node_id);
-        self.write_bytes(&from_node);
-        self.write_u32_slice(&[from.offset as u32, from_affinity]);
-        let to_node = node_id_to_bytes(to.node_id);
-        self.write_bytes(&to_node);
-        self.write_u32_slice(&[to.offset as u32, to_affinity]);
-        slate.html_pasted_offset = start;
-        slate.html_pasted_len = text.len() as u32;
-        slate.dirty |= DIRTY_HTML_PASTED;
-        let _ = str_off;
     }
 
     pub fn write_default_attrs(&mut self, slate: &mut Slate, attrs: &DefaultAttrs) {

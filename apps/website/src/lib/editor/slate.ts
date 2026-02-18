@@ -48,7 +48,7 @@ export const DIRTY_DOC_CHANGED = 15;
 export const DIRTY_RENDER_REQUIRED = 16;
 export const DIRTY_FONT_REQUIRED = 17;
 export const DIRTY_EXITED_DOCUMENT_START = 19;
-export const DIRTY_HTML_PASTED = 20;
+export const DIRTY_REPASTE = 20;
 
 export const POINTER_STATE_IDLE = 0;
 export const POINTER_STATE_PRESSED = 1;
@@ -332,9 +332,11 @@ export class SlateReader {
     return readFontRequests(this.#slabView, this.#slabPtr + offset, count);
   }
 
-  readHtmlPasted(): { text: string; from: Position; to: Position } {
-    const offset = this.#u32('html_pasted_offset');
-    return readHtmlPasted(this.#slabView, this.#slabPtr + offset);
+  readRepaste(): { enabled: boolean } {
+    const enabled = this.#u32('repaste_enabled');
+    return {
+      enabled: enabled != 0,
+    };
   }
 }
 
@@ -780,38 +782,4 @@ function readNodeIdFromSlab(view: DataView, offset: number): { nodeId: string; e
       .padStart(2, '0');
   }
   return { nodeId: hex, end: offset + 4 + align4(byteLen) };
-}
-
-function readHtmlPasted(view: DataView, offset: number): { text: string; from: Position; to: Position } {
-  let pos = offset;
-
-  const { value: text, end: afterText } = readStr(view, pos);
-  pos = afterText;
-
-  const { nodeId: fromNodeId, end: afterFromNode } = readNodeIdFromSlab(view, pos);
-  pos = afterFromNode;
-
-  const fromOffset = view.getUint32(pos, true);
-  const fromAffinity = view.getUint32(pos + 4, true);
-  pos += 8;
-
-  const { nodeId: toNodeId, end: afterToNode } = readNodeIdFromSlab(view, pos);
-  pos = afterToNode;
-
-  const toOffset = view.getUint32(pos, true);
-  const toAffinity = view.getUint32(pos + 4, true);
-
-  return {
-    text,
-    from: {
-      nodeId: fromNodeId,
-      offset: fromOffset,
-      affinity: AFFINITY_MAP[fromAffinity] ?? 'downstream',
-    },
-    to: {
-      nodeId: toNodeId,
-      offset: toOffset,
-      affinity: AFFINITY_MAP[toAffinity] ?? 'downstream',
-    },
-  };
 }

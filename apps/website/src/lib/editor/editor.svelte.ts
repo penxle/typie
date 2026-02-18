@@ -14,12 +14,12 @@ import {
   DIRTY_EXITED_DOCUMENT_START,
   DIRTY_EXTERNAL_ELEMENTS,
   DIRTY_FONT_REQUIRED,
-  DIRTY_HTML_PASTED,
   DIRTY_LINK_OVERLAYS,
   DIRTY_PAGES,
   DIRTY_PLACEHOLDER,
   DIRTY_POINTER,
   DIRTY_RENDER_REQUIRED,
+  DIRTY_REPASTE,
   DIRTY_SELECTION,
   DIRTY_SETTINGS,
   DIRTY_TABLE_OVERLAYS,
@@ -99,8 +99,6 @@ export class Editor {
   #onSelectionChanged?: (anchor: Position, head: Position) => void;
   #readyResolve?: () => void;
   ready: Promise<void>;
-
-  onPaste?: (html: string, text: string) => boolean;
 
   constructor() {
     this.ready = new Promise((resolve) => {
@@ -213,11 +211,7 @@ export class Editor {
 
   tableOverlays = $state<TableOverlay[]>([]);
 
-  pasteOptions = $state<{
-    text: string;
-    from: Position;
-    to: Position;
-  } | null>(null);
+  repasteAsTextEnabled = $state(false);
 
   pageVisibility = new SvelteMap<number, number>();
 
@@ -419,10 +413,6 @@ export class Editor {
     }
 
     if (slate.isDirty(DIRTY_SELECTION)) {
-      if (this.pasteOptions) {
-        this.pasteOptions = null;
-      }
-
       const sel = slate.readSelection();
       this.selection = sel;
       this.characterCountsVersion++;
@@ -529,13 +519,9 @@ export class Editor {
       this.tableOverlays = slate.readTableOverlays();
     }
 
-    if (slate.isDirty(DIRTY_HTML_PASTED)) {
-      const pasted = slate.readHtmlPasted();
-      this.pasteOptions = {
-        text: pasted.text,
-        from: pasted.from,
-        to: pasted.to,
-      };
+    if (slate.isDirty(DIRTY_REPASTE)) {
+      const repaste = slate.readRepaste();
+      this.repasteAsTextEnabled = repaste.enabled;
     }
   }
 
@@ -590,26 +576,10 @@ export class Editor {
   }
 
   handleRepasteAsText(): void {
-    if (!this.pasteOptions) return;
+    if (!this.repasteAsTextEnabled) return;
 
-    const { text, from, to } = this.pasteOptions;
-
-    this.dispatch({
-      type: 'setSelection',
-      anchorNodeId: from.nodeId,
-      anchorOffset: from.offset,
-      anchorAffinity: from.affinity,
-      headNodeId: to.nodeId,
-      headOffset: to.offset,
-      headAffinity: to.affinity,
-    });
-
-    this.dispatch({
-      type: 'pasteText',
-      text,
-    }).scrollIntoView();
-
-    this.pasteOptions = null;
+    this.dispatch({ type: 'repasteAsText' }).scrollIntoView({ mode: 'typewriter' });
+    this.focus();
   }
 
   dispatch(message: Message): Editor {
@@ -953,20 +923,21 @@ export class Editor {
         }
       }
 
-      if (html) {
-        if (this.onPaste?.(html, text)) {
-          this.closeContextMenu();
-          return;
-        }
-        this.dispatch({ type: 'pasteHtml', html, text }).scrollIntoView();
-      } else {
-        this.dispatch({ type: 'pasteText', text }).scrollIntoView();
-      }
+      this.paste({ html, text });
     } catch {
       const text = await navigator.clipboard.readText();
-      this.dispatch({ type: 'pasteText', text }).scrollIntoView();
+      this.paste({ text });
     }
+
     this.closeContextMenu();
+  }
+
+  paste({ html, text }: { html?: string; text: string }) {
+    if (html) {
+      this.dispatch({ type: 'pasteHtml', html, text }).scrollIntoView({ mode: 'typewriter' });
+    } else if (text !== '') {
+      this.dispatch({ type: 'pasteText', text }).scrollIntoView({ mode: 'typewriter' });
+    }
   }
 
   async handlePasteTextOnly(): Promise<void> {

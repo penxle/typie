@@ -93,6 +93,7 @@ pooler
 ptrs
 rabbitmq
 remeda
+repaste
 resizer
 resvg
 retriable
@@ -107,8 +108,8 @@ safi
 sark
 scard
 serde
-sfnt
 setex
+sfnt
 shiki
 sindresorhus
 smembers
@@ -139,11 +140,11 @@ wbindgen
 wonka
 xact
 xcarchive
-zadd
-zcard
-zremrangebyscore
 xlarge
 xsmall
 xxlarge
+zadd
+zcard
 zeed
+zremrangebyscore
 zstd

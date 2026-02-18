@@ -152,6 +152,10 @@ define_messages! {
     => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_paste_text(text) },
 
+    RepasteAsText
+    => when When::key(ContextKey::CanEdit)
+    => handle(rt) { rt.handle_repaste_as_text() },
+
     CompositionStart { text: String }
     => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_composition_update(&text) },

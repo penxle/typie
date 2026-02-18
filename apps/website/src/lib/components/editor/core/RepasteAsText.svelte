@@ -7,7 +7,7 @@
   const { editor } = getEditorContext();
 
   let element = $state<HTMLButtonElement>();
-  const show = $derived(!!editor.pasteOptions);
+  let show = $derived(editor.repasteAsTextEnabled);
 
   $effect(() => {
     if (!element) return;
@@ -29,7 +29,7 @@
   $effect(() => {
     if (show) {
       return pushEscapeHandler(() => {
-        editor.pasteOptions = null;
+        show = false;
         return true;
       });
     }

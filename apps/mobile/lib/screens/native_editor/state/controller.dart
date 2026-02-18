@@ -84,6 +84,15 @@ class EditorController extends ChangeNotifier {
     }
   }
 
+  void handleRepasteAsText() {
+    if (!_state.repasteAsTextEnabled) {
+      return;
+    }
+    dispatch({'type': 'repasteAsText'});
+    scrollIntoView(mode: ScrollMode.typewriter);
+    requestFocus();
+  }
+
   void scrollIntoView({ScrollMode mode = ScrollMode.auto}) {
     pendingScrollMode = mode;
   }

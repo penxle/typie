@@ -1,4 +1,6 @@
+use crate::model::Style;
 use crate::runtime::text_replacement::ReplacementUndoState;
+use crate::state::Selection;
 use crate::{model::NodeId, state::Position, types::PointerStyle};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -36,8 +38,32 @@ pub enum Effect {
         undo_state: ReplacementUndoState,
     },
     HtmlPasted {
+        selection: Selection,
         text: String,
-        from: Position,
-        to: Position,
+        styles: Vec<Style>,
     },
+}
+
+impl Effect {
+    pub fn priority(&self) -> u8 {
+        match self {
+            Effect::DocChanged => 0,
+            Effect::NodeChanged { .. } => 1,
+            Effect::SubtreeChanged { .. } => 2,
+            Effect::SelectionChanged => 3,
+            Effect::PendingStylesChanged => 4,
+            Effect::SettingsChanged => 5,
+            Effect::FullLayoutInvalidation => 6,
+            Effect::LayoutChanged => 7,
+            Effect::PreeditChanged { .. } => 8,
+            Effect::FontDetected { .. } => 9,
+            Effect::ExternalElementChanged => 10,
+            Effect::PointerStyleChanged { .. } => 11,
+            Effect::DropTargetChanged { .. } => 12,
+            Effect::StructureChanged => 13,
+            Effect::ExitedDocumentStart => 14,
+            Effect::TextReplacementApplied { .. } => 15,
+            Effect::HtmlPasted { .. } => 16,
+        }
+    }
 }
