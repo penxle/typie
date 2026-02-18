@@ -176,6 +176,14 @@ export const transformLoad = (artifacts: Artifact[], source: string, filePath: s
       params: [AST.b.identifier('event')],
       async: true,
       body: AST.b.blockStatement([
+        AST.b.expressionStatement(
+          AST.b.awaitExpression(
+            AST.b.callExpression.from({
+              callee: AST.b.memberExpression(AST.b.identifier('event'), AST.b.identifier('parent')),
+              arguments: [],
+            }),
+          ),
+        ),
         AST.b.variableDeclaration.from({
           kind: 'const',
           declarations: queries.map((query) =>
