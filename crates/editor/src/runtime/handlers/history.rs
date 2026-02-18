@@ -1,4 +1,5 @@
 use crate::runtime::{Effect, Runtime};
+use crate::transaction::compute_styles_at_cursor;
 
 impl Runtime {
     pub(crate) fn handle_undo(&mut self) -> Vec<Effect> {
@@ -13,12 +14,15 @@ impl Runtime {
 
         if let Some(selection) = self.undo_selections.pop() {
             self.state.selection = self.validate_selection(selection);
+            let new_styles = compute_styles_at_cursor(&self.state.doc, &self.state.selection.head);
+            self.state.pending_styles = new_styles;
         }
 
         vec![
             Effect::FullLayoutInvalidation,
             Effect::DocChanged,
             Effect::SelectionChanged,
+            Effect::PendingStylesChanged,
         ]
     }
 
@@ -34,12 +38,15 @@ impl Runtime {
 
         if let Some(selection) = self.redo_selections.pop() {
             self.state.selection = self.validate_selection(selection);
+            let new_styles = compute_styles_at_cursor(&self.state.doc, &self.state.selection.head);
+            self.state.pending_styles = new_styles;
         }
 
         vec![
             Effect::FullLayoutInvalidation,
             Effect::DocChanged,
             Effect::SelectionChanged,
+            Effect::PendingStylesChanged,
         ]
     }
 }
