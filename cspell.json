@@ -35,6 +35,7 @@
     "apps/infrastructure/scripts",
     "packages/styled-system/styled-system",
     ".claude/**",
+    "AGENTS.md",
     "CLAUDE.md",
     "crates/editor/assets/**"
   ],
