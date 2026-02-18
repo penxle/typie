@@ -114,7 +114,9 @@
   });
 
   $effect(() => {
-    editor.dispatch({ type: 'resize', width, height: containerClientHeight, scaleFactor });
+    if (width > 0 && containerClientHeight > 0 && scaleFactor > 0) {
+      editor.dispatch({ type: 'resize', width, height: containerClientHeight, scaleFactor });
+    }
   });
 
   $effect(() => {
