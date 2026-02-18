@@ -103,10 +103,9 @@ impl Runtime {
                 self.transact(move |tr| tr.drag_and_drop(drop_position))
             }
         } else if let Some(text) = text {
-            let pending = self.state().pending_styles.clone();
             let fragment = html
                 .and_then(|h| Fragment::from_html(&h).ok())
-                .unwrap_or_else(|| Fragment::from_text(&text, &pending));
+                .unwrap_or_else(|| Fragment::from_text(&text, &[]));
             self.transact(move |tr| tr.drop_external(drop_position, fragment))
         } else {
             return self.handle_drag_end_internal();
@@ -1705,6 +1704,104 @@ mod tests {
                 paragraph {}
             }
             selection { (p1, 5) -> (p1, 9) }
+        };
+
+        assert_state_eq!(rt.state(), expected);
+    }
+
+    #[test]
+    fn external_text_drop_applies_cascade_styles_to_inserted_text() {
+        let mut p = id!();
+        let mut n = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph { text { "existing" } }
+            }
+            selection { (p, 0) }
+        };
+        rt.layout();
+
+        drag_and_drop_external(
+            &mut rt,
+            Position::new(NodeId::ROOT, 1, Affinity::default()),
+            Some("dropped".to_string()),
+            None,
+        );
+
+        let expected = state! {
+            doc {
+                paragraph { text { "existing" } }
+                @n paragraph { text { "dropped" } }
+            }
+            selection { (n, 0) -> (n, 7) }
+        };
+
+        assert_state_eq!(rt.state(), expected);
+    }
+
+    #[test]
+    fn external_html_drop_plain_text_applies_cascade_styles() {
+        let mut p = id!();
+        let mut n = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph { text { "existing" } }
+            }
+            selection { (p, 0) }
+        };
+        rt.layout();
+
+        drag_and_drop_external(
+            &mut rt,
+            Position::new(NodeId::ROOT, 1, Affinity::default()),
+            Some("hello".to_string()),
+            Some("hello".to_string()),
+        );
+
+        let expected = state! {
+            doc {
+                paragraph { text { "existing" } }
+                @n paragraph { text { "hello" } }
+            }
+            selection { (n, 0) -> (n, 5) }
+        };
+
+        assert_state_eq!(rt.state(), expected);
+    }
+
+    #[test]
+    fn external_html_drop_bold_preserves_bold_and_fills_cascade() {
+        let mut p = id!();
+        let mut n = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph { text { "existing" } }
+            }
+            selection { (p, 0) }
+        };
+        rt.layout();
+
+        drag_and_drop_external(
+            &mut rt,
+            Position::new(NodeId::ROOT, 1, Affinity::default()),
+            Some("bold".to_string()),
+            Some("<b>bold</b>".to_string()),
+        );
+
+        let expected = state! {
+            doc {
+                paragraph { text { "existing" } }
+                @n paragraph {
+                    text(styles: [font_weight(700)]) { "bold" }
+                }
+            }
+            selection { (n, 0) -> (n, 4) }
         };
 
         assert_state_eq!(rt.state(), expected);

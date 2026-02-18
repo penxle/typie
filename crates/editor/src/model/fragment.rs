@@ -705,6 +705,67 @@ impl Fragment {
         (left, right)
     }
 
+    pub fn fill_missing_styles(self, defaults: &[Style]) -> Self {
+        if defaults.is_empty() {
+            return self;
+        }
+
+        let mut new_nodes = IndexMap::with_capacity(self.nodes.len());
+
+        for (id, node) in &self.nodes {
+            match node.data() {
+                Node::Text(text_node) => {
+                    let segments = text_node.text.get_segments();
+                    let mut modified = false;
+                    let mut new_segments = Vec::with_capacity(segments.len());
+
+                    for seg in &segments {
+                        let missing: Vec<Style> = defaults
+                            .iter()
+                            .filter(|d| !seg.styles.iter().any(|s| s.as_type() == d.as_type()))
+                            .cloned()
+                            .collect();
+
+                        if missing.is_empty() {
+                            new_segments.push(seg.clone());
+                        } else {
+                            let mut new_styles = seg.styles.clone();
+                            new_styles.extend(missing);
+                            new_segments.push(TextSegment {
+                                text: seg.text.clone(),
+                                styles: new_styles,
+                                annotations: seg.annotations.clone(),
+                            });
+                            modified = true;
+                        }
+                    }
+
+                    if modified {
+                        let new_text = Text::from_segments(&new_segments);
+                        new_nodes.insert(
+                            *id,
+                            FragmentNode::new(
+                                Node::Text(TextNode { text: new_text }),
+                                node.parent(),
+                            ),
+                        );
+                    } else {
+                        new_nodes.insert(*id, node.clone());
+                    }
+                }
+                _ => {
+                    new_nodes.insert(*id, node.clone());
+                }
+            }
+        }
+
+        Self {
+            nodes: new_nodes,
+            open_start: self.open_start,
+            open_end: self.open_end,
+        }
+    }
+
     pub fn normalize_font_weights(self) -> Self {
         let available = get_available_fonts();
         if available.is_empty() {
@@ -1668,6 +1729,229 @@ mod tests {
             assert_eq!(text_node.text.as_str(), " World");
         } else {
             panic!("Expected text node");
+        }
+    }
+
+    #[test]
+    fn fill_missing_styles_empty_defaults_is_noop() {
+        let fragment = Fragment::from_text("hello", &[]);
+        let segs_before: Vec<_> = fragment
+            .iter()
+            .filter_map(|(_, n)| {
+                if let Node::Text(t) = n.data() {
+                    Some(t.text.get_segments())
+                } else {
+                    None
+                }
+            })
+            .flatten()
+            .collect();
+
+        let result = fragment.fill_missing_styles(&[]);
+
+        let segs_after: Vec<_> = result
+            .iter()
+            .filter_map(|(_, n)| {
+                if let Node::Text(t) = n.data() {
+                    Some(t.text.get_segments())
+                } else {
+                    None
+                }
+            })
+            .flatten()
+            .collect();
+
+        assert_eq!(
+            segs_before, segs_after,
+            "empty defaults must not mutate the fragment"
+        );
+    }
+
+    #[test]
+    fn fill_missing_styles_adds_all_missing_to_unstyled_text() {
+        use crate::model::{FontFamilyStyle, FontSizeStyle, FontWeightStyle, Style};
+
+        let fragment = Fragment::from_text("hello", &[]);
+        let defaults = vec![
+            Style::FontFamily(FontFamilyStyle {
+                family: "Pretendard".to_string(),
+            }),
+            Style::FontSize(FontSizeStyle { size: 12.0 }),
+            Style::FontWeight(FontWeightStyle { weight: 400 }),
+        ];
+
+        let result = fragment.fill_missing_styles(&defaults);
+
+        for (_, node) in result.iter() {
+            if let Node::Text(t) = node.data() {
+                for seg in t.text.get_segments() {
+                    assert!(
+                        seg.styles.iter().any(|s| matches!(s, Style::FontFamily(_))),
+                        "FontFamily must be added to unstyled text"
+                    );
+                    assert!(
+                        seg.styles.iter().any(|s| matches!(s, Style::FontSize(_))),
+                        "FontSize must be added to unstyled text"
+                    );
+                    assert!(
+                        seg.styles.iter().any(|s| matches!(s, Style::FontWeight(_))),
+                        "FontWeight must be added to unstyled text"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn fill_missing_styles_preserves_existing_style_value() {
+        use crate::model::{FontSizeStyle, FontWeightStyle, Style};
+
+        let fragment = Fragment::from_text(
+            "bold",
+            &[Style::FontWeight(FontWeightStyle { weight: 700 })],
+        );
+        let defaults = vec![
+            Style::FontWeight(FontWeightStyle { weight: 400 }),
+            Style::FontSize(FontSizeStyle { size: 12.0 }),
+        ];
+
+        let result = fragment.fill_missing_styles(&defaults);
+
+        for (_, node) in result.iter() {
+            if let Node::Text(t) = node.data() {
+                for seg in t.text.get_segments() {
+                    let fw = seg.styles.iter().find_map(|s| {
+                        if let Style::FontWeight(w) = s {
+                            Some(w.weight)
+                        } else {
+                            None
+                        }
+                    });
+                    assert_eq!(
+                        fw,
+                        Some(700),
+                        "existing FontWeight(700) must not be overwritten by default 400"
+                    );
+                    assert!(
+                        seg.styles.iter().any(|s| matches!(s, Style::FontSize(_))),
+                        "missing FontSize must be added"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn fill_missing_styles_no_duplicate_style_types() {
+        use crate::model::{FontWeightStyle, Style};
+
+        let fragment = Fragment::from_text(
+            "hello",
+            &[Style::FontWeight(FontWeightStyle { weight: 400 })],
+        );
+        let defaults = vec![Style::FontWeight(FontWeightStyle { weight: 400 })];
+
+        let result = fragment.fill_missing_styles(&defaults);
+
+        for (_, node) in result.iter() {
+            if let Node::Text(t) = node.data() {
+                for seg in t.text.get_segments() {
+                    let count = seg
+                        .styles
+                        .iter()
+                        .filter(|s| matches!(s, Style::FontWeight(_)))
+                        .count();
+                    assert_eq!(count, 1, "FontWeight must not be duplicated");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn fill_missing_styles_leaves_non_text_nodes_untouched() {
+        use crate::model::{FontSizeStyle, Style};
+
+        let para_id = NodeId::new();
+        let fragment = Fragment::builder()
+            .add((
+                para_id,
+                FragmentNode::new(Node::Paragraph(ParagraphNode::default()), None),
+            ))
+            .build();
+
+        let defaults = vec![Style::FontSize(FontSizeStyle { size: 12.0 })];
+        let result = fragment.fill_missing_styles(&defaults);
+
+        assert_eq!(result.child_count(), 1);
+        let (_, node) = result.nodes.get_index(0).unwrap();
+        assert!(
+            matches!(node.data(), Node::Paragraph(_)),
+            "non-text nodes must remain unchanged after fill_missing_styles"
+        );
+    }
+
+    #[test]
+    fn fill_missing_styles_fills_each_text_node_independently() {
+        use crate::model::{FontSizeStyle, FontWeightStyle, Style};
+
+        let node1_id = NodeId::new();
+        let text1 = Text::from("bold");
+        let _ = text1.apply_style(0..4, &Style::FontWeight(FontWeightStyle { weight: 700 }));
+        let node1 = FragmentNode::new(Node::Text(TextNode { text: text1 }), None);
+
+        let node2_id = NodeId::new();
+        let text2 = Text::from("plain");
+        let node2 = FragmentNode::new(Node::Text(TextNode { text: text2 }), None);
+
+        let fragment = Fragment::builder()
+            .add((node1_id, node1))
+            .add((node2_id, node2))
+            .build();
+
+        let defaults = vec![
+            Style::FontWeight(FontWeightStyle { weight: 400 }),
+            Style::FontSize(FontSizeStyle { size: 12.0 }),
+        ];
+
+        let result = fragment.fill_missing_styles(&defaults);
+        let nodes: Vec<_> = result.iter().collect();
+
+        if let Node::Text(t) = nodes[0].1.data() {
+            for seg in t.text.get_segments() {
+                let fw = seg.styles.iter().find_map(|s| {
+                    if let Style::FontWeight(w) = s {
+                        Some(w.weight)
+                    } else {
+                        None
+                    }
+                });
+                assert_eq!(fw, Some(700), "bold node must keep FontWeight(700)");
+                assert!(
+                    seg.styles.iter().any(|s| matches!(s, Style::FontSize(_))),
+                    "bold node must receive missing FontSize"
+                );
+            }
+        }
+
+        if let Node::Text(t) = nodes[1].1.data() {
+            for seg in t.text.get_segments() {
+                let fw = seg.styles.iter().find_map(|s| {
+                    if let Style::FontWeight(w) = s {
+                        Some(w.weight)
+                    } else {
+                        None
+                    }
+                });
+                assert_eq!(
+                    fw,
+                    Some(400),
+                    "plain node must receive default FontWeight(400)"
+                );
+                assert!(
+                    seg.styles.iter().any(|s| matches!(s, Style::FontSize(_))),
+                    "plain node must receive default FontSize"
+                );
+            }
         }
     }
 
