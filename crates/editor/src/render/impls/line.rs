@@ -14,6 +14,46 @@ fn create_solid_paint(color: Color) -> Paint<'static> {
 }
 
 impl LineElement {
+    fn preedit_underline_rect(&self, point: Point) -> Option<Rect> {
+        let preedit = self.preedit.as_ref()?;
+        if preedit.node_id != self.block_id {
+            return None;
+        }
+
+        let preedit_len = bytecount::num_chars(preedit.text.as_bytes());
+        if preedit_len == 0 {
+            return None;
+        }
+
+        let preedit_start = preedit.offset;
+        let preedit_end = preedit_start + preedit_len;
+
+        let mut min_x = f32::MAX;
+        let mut max_x = f32::MIN;
+        let mut found_overlap = false;
+
+        for cluster in &self.metric.clusters {
+            if cluster.start_offset < preedit_end && cluster.end_offset > preedit_start {
+                found_overlap = true;
+                let cluster_x = self.metric.left + cluster.x;
+                min_x = min_x.min(cluster_x);
+                max_x = max_x.max(cluster_x + cluster.width);
+            }
+        }
+
+        if !found_overlap {
+            return None;
+        }
+
+        let width = (max_x - min_x).max(1.0);
+        Rect::from_xywh(
+            point.x + min_x,
+            point.y + self.metric.top + self.metric.height,
+            width,
+            1.0,
+        )
+    }
+
     fn render_line_selection(
         &self,
         pixmap: &mut PixmapMut,
@@ -91,34 +131,7 @@ impl LineElement {
         point: Point,
         ctx: &RenderContext,
     ) {
-        let Some(preedit) = &self.preedit else {
-            return;
-        };
-
-        if preedit.node_id != self.block_id {
-            return;
-        }
-
-        let first = self
-            .metric
-            .clusters
-            .iter()
-            .find(|g| g.start_offset >= preedit.offset);
-
-        let last = self.metric.clusters.iter().rev().find(|g| {
-            g.end_offset <= preedit.offset + bytecount::num_chars(preedit.text.as_bytes())
-        });
-
-        let (Some(first), Some(last)) = (first, last) else {
-            return;
-        };
-
-        let Some(rect) = Rect::from_xywh(
-            point.x + self.metric.left + first.x,
-            point.y + self.metric.top + self.metric.height,
-            last.x + last.width - first.x,
-            1.0,
-        ) else {
+        let Some(rect) = self.preedit_underline_rect(point) else {
             return;
         };
 
@@ -287,7 +300,7 @@ impl Render for LineElement {
         transform: Transform,
         ctx: &RenderContext<'_>,
     ) {
-        let Some(line) = self.layout.lines().nth(self.line_idx) else {
+        let Some(line) = self.layout.get(self.line_idx) else {
             return;
         };
 
@@ -407,7 +420,7 @@ impl Render for LineElement {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::layout::elements::LineMetric;
+    use crate::layout::elements::{ClusterMetric, LineMetric};
     use crate::layout::{Element, Layout, LayoutCache, LayoutContext, LayoutNode};
     use crate::model::{Decorations, NodeId, SelectionDecor};
     use crate::runtime::{State, ViewStates};
@@ -448,6 +461,55 @@ mod tests {
 
     fn selection_rects(line: &LineElement, selections: &[SelectionDecor]) -> Vec<Rect> {
         line.compute_selection_rects(Point::zero(), selections)
+    }
+
+    #[test]
+    fn test_preedit_underline_renders_for_partial_cluster_overlap() {
+        let block_id = NodeId::new();
+        let line = LineElement::build(
+            block_id,
+            Size::new(200.0, 20.0),
+            0,
+            std::rc::Rc::new(parley::Layout::default()),
+            LineMetric {
+                top: 0.0,
+                left: 0.0,
+                height: 16.0,
+                leading: 0.0,
+                baseline: 12.0,
+                ascent: 12.0,
+                content_width: 20.0,
+                start_offset: 0,
+                end_offset: 2,
+                clusters: vec![ClusterMetric {
+                    start_offset: 0,
+                    end_offset: 2,
+                    x: 4.0,
+                    width: 10.0,
+                }],
+                break_reason: parley::layout::BreakReason::None,
+                grapheme_offsets: vec![0, 2],
+            },
+            Some(crate::model::PreeditDecor {
+                node_id: block_id,
+                offset: 1,
+                text: "ㅎ".to_string(),
+            }),
+            false,
+            std::rc::Rc::from("ab"),
+            vec![],
+            vec![],
+            false,
+        );
+
+        let rect = line
+            .preedit_underline_rect(Point::zero())
+            .expect("partial overlap cluster에서도 preedit 밑줄이 필요함");
+        assert!(
+            rect.width() > 0.0,
+            "preedit 밑줄 width는 양수여야 함: {}",
+            rect.width()
+        );
     }
 
     #[test]
