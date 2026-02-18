@@ -551,47 +551,9 @@ class SlateReader {
     return result;
   }
 
-  _HtmlPastedRaw? readHtmlPasted() {
-    final textLen = getU32('html_pasted_len');
-    if (textLen == 0) {
-      return null;
-    }
-
-    var pos = getU32('html_pasted_offset');
-
-    final text = readStr(pos);
-    pos += _strByteLen(pos);
-
-    final fromNodeByteLen = _slabU32(pos);
-    pos += 4;
-    final fromNodeBytes = _slabData.sublist(pos, pos + fromNodeByteLen);
-    pos += fromNodeByteLen;
-    final alignPad1 = (4 - (pos % 4)) % 4;
-    pos += alignPad1;
-
-    final fromOffset = _slabU32(pos);
-    final fromAffinity = _slabU32(pos + 4);
-    pos += 8;
-
-    final toNodeByteLen = _slabU32(pos);
-    pos += 4;
-    final toNodeBytes = _slabData.sublist(pos, pos + toNodeByteLen);
-    pos += toNodeByteLen;
-    final alignPad2 = (4 - (pos % 4)) % 4;
-    pos += alignPad2;
-
-    final toOffset = _slabU32(pos);
-    final toAffinity = _slabU32(pos + 4);
-
-    return _HtmlPastedRaw(
-      text: text,
-      fromNodeId: _bytesToHex(fromNodeBytes),
-      fromOffset: fromOffset,
-      fromAffinity: fromAffinity == 1 ? 'downstream' : 'upstream',
-      toNodeId: _bytesToHex(toNodeBytes),
-      toOffset: toOffset,
-      toAffinity: toAffinity == 1 ? 'downstream' : 'upstream',
-    );
+  ({bool enabled}) readRepaste() {
+    final enabled = getU32('repaste_enabled');
+    return (enabled: enabled != 0);
   }
 
   List<_LinkOverlayRaw> readLinkOverlays() {
@@ -721,26 +683,6 @@ class _TrackedItemOverlayRaw {
   final int startOffset;
   final int endOffset;
   final List<_TextBoundRaw> bounds;
-}
-
-class _HtmlPastedRaw {
-  const _HtmlPastedRaw({
-    required this.text,
-    required this.fromNodeId,
-    required this.fromOffset,
-    required this.fromAffinity,
-    required this.toNodeId,
-    required this.toOffset,
-    required this.toAffinity,
-  });
-
-  final String text;
-  final String fromNodeId;
-  final int fromOffset;
-  final String fromAffinity;
-  final String toNodeId;
-  final int toOffset;
-  final String toAffinity;
 }
 
 class _LinkOverlayRaw {

@@ -2,13 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:typie/context/theme.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/screens/native_editor/state/controller.dart';
-import 'package:typie/screens/native_editor/state/state.dart';
 
-class PasteOptionWidget extends StatelessWidget {
-  const PasteOptionWidget({required this.controller, required this.info, super.key});
+class RepasteAsTextWidget extends StatelessWidget {
+  const RepasteAsTextWidget({required this.controller, super.key});
 
   final EditorController controller;
-  final PasteOptionsInfo info;
 
   @override
   Widget build(BuildContext context) {
@@ -18,21 +16,7 @@ class PasteOptionWidget extends StatelessWidget {
         padding: const EdgeInsets.only(bottom: 20),
         child: Center(
           child: GestureDetector(
-            onTap: () {
-              controller
-                ..dispatch({
-                  'type': 'setSelection',
-                  'anchorNodeId': info.from['nodeId'],
-                  'anchorOffset': info.from['offset'],
-                  'anchorAffinity': info.from['affinity'],
-                  'headNodeId': info.to['nodeId'],
-                  'headOffset': info.to['offset'],
-                  'headAffinity': info.to['affinity'],
-                })
-                ..dispatch({'type': 'pasteText', 'text': info.text})
-                ..scrollIntoView()
-                ..updateState((s) => s.copyWith(pasteOptions: null));
-            },
+            onTap: controller.handleRepasteAsText,
             behavior: HitTestBehavior.opaque,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),

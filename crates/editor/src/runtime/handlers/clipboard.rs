@@ -24,4 +24,16 @@ impl Runtime {
             tr.paste_text(text)
         })
     }
+
+    pub(crate) fn handle_repaste_as_text(&mut self) -> Vec<Effect> {
+        let Some((selection, text, styles)) = self.repaste_text.take() else {
+            return vec![];
+        };
+
+        let Ok((from, to)) = selection.as_sorted(&self.state.doc) else {
+            return vec![];
+        };
+
+        self.transact(|tr| tr.replace_range(from, to, Fragment::from_text(&text, &styles)))
+    }
 }

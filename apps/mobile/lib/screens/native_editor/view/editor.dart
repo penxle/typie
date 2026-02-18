@@ -30,7 +30,7 @@ import 'package:typie/screens/native_editor/view/geometry.dart';
 import 'package:typie/screens/native_editor/view/input.dart';
 import 'package:typie/screens/native_editor/view/magnifier.dart';
 import 'package:typie/screens/native_editor/view/pages.dart';
-import 'package:typie/screens/native_editor/view/paste_option.dart';
+import 'package:typie/screens/native_editor/view/repaste_as_text.dart';
 import 'package:typie/screens/native_editor/view/scope.dart';
 import 'package:typie/screens/native_editor/view/scroll.dart';
 import 'package:typie/screens/native_editor/view/scrollbar.dart';
@@ -171,9 +171,11 @@ class EditorView extends HookWidget {
       inputController
         ..onPasteHandler = () async {
           final payload = await EditorClipboard().getPastePayload();
-          controller
-            ..dispatch(payload)
-            ..scrollIntoView(mode: ScrollMode.typewriter);
+          if (payload != null) {
+            controller
+              ..dispatch(payload)
+              ..scrollIntoView(mode: ScrollMode.typewriter);
+          }
         }
         ..floatingCursorBeginHandler = () {
           floatingCursorOrigin.value = controller.state.cursor;
@@ -606,13 +608,8 @@ class EditorView extends HookWidget {
                       ),
                       if (pref.characterCountFloatingEnabled) const NativeCharacterCountFloating(),
                       const Positioned(bottom: 20, right: 20, child: NativeEditorFloatingToolbar()),
-                      if (state.state.pasteOptions != null)
-                        Positioned(
-                          left: 0,
-                          right: 0,
-                          bottom: 0,
-                          child: PasteOptionWidget(controller: controller, info: state.state.pasteOptions!),
-                        ),
+                      if (state.state.repasteAsTextEnabled)
+                        Positioned(left: 0, right: 0, bottom: 0, child: RepasteAsTextWidget(controller: controller)),
                       EditorScrollbar(
                         viewHeight: constraints.maxHeight,
                         viewWidth: constraints.maxWidth,

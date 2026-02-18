@@ -113,7 +113,7 @@ struct PendingUpdates {
     tracked_items: bool,
     table_overlays: bool,
     default_attrs: bool,
-    html_pasted: Option<(String, Position, Position)>,
+    repaste: bool,
 }
 
 #[derive(Clone)]
@@ -151,6 +151,8 @@ pub struct Runtime {
     is_focused: bool,
     last_table_overlays: Vec<TableOverlay>,
     text_replacement_undo: Option<text_replacement::ReplacementUndoState>,
+
+    repaste_text: Option<(Selection, String, Vec<Style>)>,
 }
 
 impl Runtime {
@@ -185,8 +187,8 @@ impl Runtime {
                 link_overlays: false,
                 tracked_items: false,
                 table_overlays: true,
-                html_pasted: None,
                 default_attrs: true,
+                repaste: false,
             },
             message_queue: Vec::new(),
             pointer: PointerState::default(),
@@ -199,6 +201,7 @@ impl Runtime {
             is_focused: true,
             last_table_overlays: Vec::new(),
             text_replacement_undo: None,
+            repaste_text: None,
         }
     }
 
@@ -1192,9 +1195,10 @@ impl Runtime {
             self.pending.table_overlays = false;
         }
 
-        if let Some((text, from, to)) = self.pending.html_pasted.take() {
-            self.slab
-                .write_html_pasted(&mut self.slate, &text, from, to);
+        if self.pending.repaste {
+            self.slate
+                .write_repaste_enabled(self.repaste_text.is_some());
+            self.pending.repaste = false;
         }
     }
 
@@ -1331,7 +1335,8 @@ impl Runtime {
         self.process_effects(effects);
     }
 
-    fn process_effects(&mut self, effects: Vec<Effect>) {
+    fn process_effects(&mut self, mut effects: Vec<Effect>) {
+        effects.sort_by_key(|e| e.priority());
         let mut invalidation = LayoutInvalidationBatch::new();
 
         for effect in effects {
@@ -1356,6 +1361,7 @@ impl Runtime {
                     self.selection_cache = None;
                     self.cached_plain_text = None;
                     self.text_replacement_undo = None;
+                    self.repaste_text = None;
                     self.pending.doc = true;
                     self.pending.layout = true;
                     self.pending.render = true;
@@ -1366,6 +1372,7 @@ impl Runtime {
                     self.pending.enabled_actions = true;
                     self.pending.placeholder = true;
                     self.pending.table_overlays = true;
+                    self.pending.repaste = true;
                 }
                 Effect::NodeChanged { node_id } => {
                     invalidation.push(LayoutInvalidationOp::NodeAndAncestors { node_id });
@@ -1391,6 +1398,7 @@ impl Runtime {
                 Effect::SelectionChanged => {
                     self.selection_cache = None;
                     self.text_replacement_undo = None;
+                    self.repaste_text = None;
                     self.pending.cursor = true;
                     self.pending.selection = true;
                     self.pending.active_styles = true;
@@ -1399,6 +1407,7 @@ impl Runtime {
                     self.pending.enabled_actions = true;
                     self.pending.placeholder = true;
                     self.pending.table_overlays = true;
+                    self.pending.repaste = true;
                 }
                 Effect::PendingStylesChanged => {
                     self.pending.active_styles = true;
@@ -1438,11 +1447,15 @@ impl Runtime {
                         invalidation.push(LayoutInvalidationOp::NodeAndAncestors { node_id: nid });
                     }
 
+                    self.text_replacement_undo = None;
+                    self.repaste_text = None;
+
                     self.pending.layout = true;
                     self.pending.render = true;
                     self.pending.cursor = true;
                     self.pending.selection = true;
                     self.pending.placeholder = true;
+                    self.pending.repaste = true;
                 }
                 Effect::SettingsChanged => {
                     invalidation.push(LayoutInvalidationOp::Full);
@@ -1466,8 +1479,13 @@ impl Runtime {
                 Effect::TextReplacementApplied { undo_state } => {
                     self.text_replacement_undo = Some(undo_state);
                 }
-                Effect::HtmlPasted { text, from, to } => {
-                    self.pending.html_pasted = Some((text, from, to));
+                Effect::HtmlPasted {
+                    selection,
+                    text,
+                    styles,
+                } => {
+                    self.repaste_text = Some((selection, text, styles));
+                    self.pending.repaste = true;
                 }
             }
         }

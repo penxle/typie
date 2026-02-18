@@ -10,7 +10,7 @@
   import Input from './Input.svelte';
   import LineHighlight from './LineHighlight.svelte';
   import Page from './Page.svelte';
-  import PasteOptions from './PasteOptions.svelte';
+  import RepasteAsText from './RepasteAsText.svelte';
 
   type Props = {
     defaultPaddingBottom?: number;
@@ -188,7 +188,7 @@
   <DocumentPlaceholder />
   <LineHighlight />
   <Cursor />
-  <PasteOptions />
+  <RepasteAsText />
 {/if}
 
 {#if !editor.readOnly}

@@ -81,7 +81,7 @@ class CommandHandler {
       }
 
       if (dirty & (1 << 20) != 0) {
-        _handleHtmlPasted(controller, reader);
+        _handleRepaste(controller, reader);
       }
     } finally {
       controller.endBatchUpdate();
@@ -209,7 +209,6 @@ class CommandHandler {
           headBounds: headBounds,
           expandable: expandable,
         ),
-        pasteOptions: null,
       ),
     );
     _updateFloatingSelection(controller, reader);
@@ -472,20 +471,8 @@ class CommandHandler {
     controller.onExitedDocumentStart?.call();
   }
 
-  static void _handleHtmlPasted(EditorController controller, SlateReader reader) {
-    final pasted = reader.readHtmlPasted();
-    if (pasted == null) {
-      return;
-    }
-
-    controller.updateState(
-      (state) => state.copyWith(
-        pasteOptions: PasteOptionsInfo(
-          text: pasted.text,
-          from: {'nodeId': pasted.fromNodeId, 'offset': pasted.fromOffset, 'affinity': pasted.fromAffinity},
-          to: {'nodeId': pasted.toNodeId, 'offset': pasted.toOffset, 'affinity': pasted.toAffinity},
-        ),
-      ),
-    );
+  static void _handleRepaste(EditorController controller, SlateReader reader) {
+    final repaste = reader.readRepaste();
+    controller.updateState((state) => state.copyWith(repasteAsTextEnabled: repaste.enabled));
   }
 }

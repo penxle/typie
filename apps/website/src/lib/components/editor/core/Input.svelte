@@ -153,15 +153,7 @@
     const html = e.clipboardData?.getData('text/html') || undefined;
     const text = e.clipboardData?.getData('text/plain') ?? '';
 
-    if (html && editor.onPaste?.(html, text)) {
-      return;
-    }
-
-    if (html) {
-      editor.dispatch({ type: 'pasteHtml', html, text }).scrollIntoView({ mode: 'typewriter' });
-    } else {
-      editor.dispatch({ type: 'pasteText', text }).scrollIntoView({ mode: 'typewriter' });
-    }
+    editor.paste({ html, text });
   };
 
   const handleCompositionStart = (e: CompositionEvent) => {

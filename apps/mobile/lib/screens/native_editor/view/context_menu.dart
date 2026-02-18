@@ -194,8 +194,10 @@ class _MenuBubble extends HookWidget {
           onTap: () {
             unawaited(
               EditorClipboard().getPastePayload().then((payload) {
-                scope.editor.dispatch(payload);
-                scope.controller.scrollIntoView();
+                if (payload != null) {
+                  scope.editor.dispatch(payload);
+                  scope.controller.scrollIntoView();
+                }
                 onDismiss();
               }),
             );

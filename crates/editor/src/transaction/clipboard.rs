@@ -32,6 +32,8 @@ impl Transaction {
             return Ok(false);
         }
 
+        let styles = self.state.pending_styles.clone();
+
         let fragment = fragment.with_fresh_ids_for_doc(self.doc());
         let result = self.insert_fragment(self.selection().head, fragment)?;
         if let Some(selection) = result.as_selection() {
@@ -39,9 +41,12 @@ impl Transaction {
         }
 
         if let Some(text) = text.filter(|t| !t.is_empty()) {
-            if let Some(range) = result.as_range_selection() {
-                let (from, to) = range.as_sorted(self.doc())?;
-                self.push_effect(Effect::HtmlPasted { text, from, to });
+            if let Some(selection) = result.as_range_selection() {
+                self.push_effect(Effect::HtmlPasted {
+                    selection,
+                    text,
+                    styles,
+                });
             }
         }
 

@@ -170,8 +170,10 @@ class InputController {
       } else {
         unawaited(
           EditorClipboard().getPastePayload().then((payload) {
-            dispatch(payload);
-            scrollIntoView(mode: ScrollMode.typewriter);
+            if (payload != null) {
+              dispatch(payload);
+              scrollIntoView(mode: ScrollMode.typewriter);
+            }
           }),
         );
       }

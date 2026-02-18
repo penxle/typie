@@ -106,7 +106,10 @@ impl Transaction {
         fragment: Fragment,
     ) -> Result<bool> {
         if from == to {
-            self.insert_fragment(from, fragment)?;
+            let result = self.insert_fragment(from, fragment)?;
+            if let InsertResult::Inserted { head, .. } = result {
+                self.set_selection_position(head);
+            }
             return Ok(true);
         }
 
@@ -159,8 +162,12 @@ impl Transaction {
                                 Position::new(from.node_id, offset, from.affinity)
                             };
 
-                            self.insert_fragment(selection_pos, fragment)?;
-                            self.set_selection_position(selection_pos);
+                            let result = self.insert_fragment(selection_pos, fragment)?;
+                            if let InsertResult::Inserted { head, .. } = result {
+                                self.set_selection_position(head);
+                            } else {
+                                self.set_selection_position(selection_pos);
+                            }
                             return Ok(true);
                         }
                     } else {
@@ -540,8 +547,12 @@ impl Transaction {
         let to_byte_offset = text.text.char_to_byte(to_char_offset);
 
         self.delete_text_range(text_node_id, Some(from_byte_offset), Some(to_byte_offset))?;
-        self.insert_fragment(position, fragment)?;
-        self.set_selection_position(position);
+        let result = self.insert_fragment(position, fragment)?;
+        if let InsertResult::Inserted { head, .. } = result {
+            self.set_selection_position(head);
+        } else {
+            self.set_selection_position(position);
+        }
         Ok(())
     }
 
@@ -667,9 +678,11 @@ impl Transaction {
             (from, None)
         };
 
-        self.insert_fragment(selection_pos, fragment)?;
+        let result = self.insert_fragment(selection_pos, fragment)?;
         if let Some(sel) = node_selection {
             self.set_selection(sel);
+        } else if let InsertResult::Inserted { head, .. } = result {
+            self.set_selection_position(head);
         } else {
             self.set_selection_position(selection_pos);
         }
@@ -707,6 +720,10 @@ impl Transaction {
                         fragment_to_use,
                     )?;
 
+                    // Preserve the selection set by the recursive replace_range before any
+                    // structural cleanup that could delete the node the selection points to.
+                    let preserved_selection = *self.selection();
+
                     if let Some(child_node) = self.doc().node(child_id) {
                         if !child_node.spec().content.allows_empty()
                             && child_node.first_child().is_none()
@@ -716,6 +733,7 @@ impl Transaction {
                         }
                     }
 
+                    self.set_selection(preserved_selection);
                     return Ok(());
                 }
             }
@@ -789,9 +807,12 @@ impl Transaction {
             from
         };
 
-        self.set_selection_position(final_selection_pos);
-
-        self.insert_fragment(final_selection_pos, fragment)?;
+        let result = self.insert_fragment(final_selection_pos, fragment)?;
+        if let InsertResult::Inserted { head, .. } = result {
+            self.set_selection_position(head);
+        } else {
+            self.set_selection_position(final_selection_pos);
+        }
 
         Ok(())
     }
@@ -1838,6 +1859,7 @@ impl Transaction {
 
     fn set_selection_position(&mut self, position: Position) {
         self.state.selection = Selection::collapsed(position);
+        self.recompute_pending_styles();
     }
 
     fn delete_ancestor_siblings(
