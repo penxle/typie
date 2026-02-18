@@ -77,7 +77,7 @@ impl<'a> NodeRef<'a> {
     pub fn next_sibling(&self) -> Option<NodeRef<'_>> {
         let parent_id = self.parent_id()?;
         let children = self.inner.get_children_ids_cached(parent_id);
-        let idx = children.iter().position(|&id| id == self.node_id)?;
+        let idx = children.iter().rposition(|&id| id == self.node_id)?;
         let next_id = *children.get(idx + 1)?;
         Self::new(self.inner, next_id)
     }

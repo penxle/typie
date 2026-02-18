@@ -39,6 +39,24 @@ impl<'a> NodeMut<'a> {
             .get_or_create_children_list(self.node_ref.node_id())
             .context("Failed to get or create children list")?;
 
+        for i in 0..children.len() {
+            let child = children.get(i).context("Failed to get child")?;
+            if node_id
+                == child
+                    .into_value()
+                    .ok()
+                    .and_then(|v| v.into_string().ok())
+                    .and_then(|s| NodeId::from_string(&s))
+                    .context("Failed to convert child ID to NodeId")?
+            {
+                anyhow::bail!(
+                    "Duplicate child: node {} is already a child of {}",
+                    node_id,
+                    self.node_ref.node_id()
+                );
+            }
+        }
+
         children.insert(index, node_id.to_string())?;
         self.inner
             .invalidate_children_cache_for(self.node_ref.node_id());
@@ -94,6 +112,24 @@ impl<'a> NodeMut<'a> {
             .inner
             .get_or_create_children_list(parent_id)
             .context("Failed to get or create new parent's children list")?;
+
+        for i in 0..new_children.len() {
+            let child = new_children.get(i).context("Failed to get child")?;
+            if node_id
+                == child
+                    .into_value()
+                    .ok()
+                    .and_then(|v| v.into_string().ok())
+                    .and_then(|s| NodeId::from_string(&s))
+                    .context("Failed to convert child ID to NodeId")?
+            {
+                anyhow::bail!(
+                    "Duplicate child: node {} is already a child of {}",
+                    node_id,
+                    parent_id
+                );
+            }
+        }
 
         new_children.insert(index, node_id.to_string())?;
         self.inner.invalidate_children_cache_for(parent_id);
