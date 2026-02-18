@@ -76,6 +76,7 @@
               position: 'absolute',
               pointerEvents: 'none',
             })}
+            data-page-index={pageIdx}
           >
             {#each overlays as overlay (`${overlay.tableId}-${overlay.startRowIndex}`)}
               <TableOverlay {editor} {overlay} />
