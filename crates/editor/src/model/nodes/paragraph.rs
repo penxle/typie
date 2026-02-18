@@ -5,7 +5,10 @@ use crate::model::html::{DomSpec, NodeHtmlCodec, NodeParseRule, parse_styles};
 use crate::model::{Annotation, Node, PendingStylesDecor, PreeditDecor, Style};
 use crate::schema::Expand;
 use crate::types::{BoxConstraints, Point, Size};
-use crate::utils::{LengthUnit, char_to_byte_offset, convert_length};
+use crate::utils::{
+    LengthUnit, build_char_to_byte_offsets, char_to_byte_offset, char_to_byte_offset_with_map,
+    convert_length,
+};
 use macros::Codec;
 use parley::style::*;
 use serde::{Deserialize, Serialize};
@@ -426,6 +429,7 @@ impl Layout for ParagraphNode {
         }
 
         let pending_styles = pending_styles_for_node(ctx);
+        let char_to_byte = build_char_to_byte_offsets(&text);
 
         let line_height = self.line_height;
         let layout = GLOBALS.with(|globals| {
@@ -504,8 +508,8 @@ impl Layout for ParagraphNode {
                                     preedit_info,
                                     &Expand::None,
                                 );
-                                let range = char_to_byte_offset(&text, start)
-                                    ..char_to_byte_offset(&text, end);
+                                let range = char_to_byte_offset_with_map(&char_to_byte, start)
+                                    ..char_to_byte_offset_with_map(&char_to_byte, end);
 
                                 apply_style_to_builder(
                                     &mut builder,
@@ -521,8 +525,8 @@ impl Layout for ParagraphNode {
                                     preedit_info,
                                     &Expand::None,
                                 );
-                                let range = char_to_byte_offset(&text, start)
-                                    ..char_to_byte_offset(&text, end);
+                                let range = char_to_byte_offset_with_map(&char_to_byte, start)
+                                    ..char_to_byte_offset_with_map(&char_to_byte, end);
 
                                 apply_annotation_to_builder(&mut builder, annotation, range);
                             }
@@ -543,8 +547,8 @@ impl Layout for ParagraphNode {
                 if let Some(ps) = pending_styles {
                     let preedit_start = preedit.offset;
                     let preedit_end = preedit_start + preedit.text.chars().count();
-                    let range = char_to_byte_offset(&text, preedit_start)
-                        ..char_to_byte_offset(&text, preedit_end);
+                    let range = char_to_byte_offset_with_map(&char_to_byte, preedit_start)
+                        ..char_to_byte_offset_with_map(&char_to_byte, preedit_end);
 
                     let preedit_font_size = ps
                         .styles

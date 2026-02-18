@@ -3,8 +3,9 @@ use crate::model::{NodeId, PreeditDecor, SelectionDecor};
 use crate::state::{Position, Selection};
 use crate::types::{Affinity, Point, Rect, Size};
 use crate::utils::{
-    byte_to_char_offset, char_to_byte_offset, compute_grapheme_boundaries,
-    compute_sentence_boundaries, compute_word_boundaries, resolve_explicit_break_line_end,
+    build_char_to_byte_offsets, byte_to_char_offset_with_map, char_to_byte_offset,
+    compute_grapheme_boundaries, compute_sentence_boundaries, compute_word_boundaries,
+    resolve_explicit_break_line_end,
 };
 use rustc_hash::FxHashSet;
 use std::fmt;
@@ -1191,6 +1192,7 @@ pub fn build_metrics(
 ) -> Vec<LineMetric> {
     let mut lines = Vec::new();
 
+    let char_to_byte = build_char_to_byte_offsets(text);
     let global_grapheme_offsets = compute_grapheme_boundaries(text);
 
     let mut top = 0.0;
@@ -1233,8 +1235,11 @@ pub fn build_metrics(
                         let text_range = cluster.text_range();
 
                         clusters.push(ClusterMetric {
-                            start_offset: byte_to_char_offset(&text, text_range.start),
-                            end_offset: byte_to_char_offset(&text, text_range.end),
+                            start_offset: byte_to_char_offset_with_map(
+                                &char_to_byte,
+                                text_range.start,
+                            ),
+                            end_offset: byte_to_char_offset_with_map(&char_to_byte, text_range.end),
                             x: snap_to_pixel(advance_x - inline_prefix, scale_factor),
                             width: cluster.advance(),
                         });
@@ -1253,8 +1258,8 @@ pub fn build_metrics(
         }
 
         let text_range = line.text_range();
-        let line_start_char = byte_to_char_offset(&text, text_range.start);
-        let line_end_char = byte_to_char_offset(&text, text_range.end);
+        let line_start_char = byte_to_char_offset_with_map(&char_to_byte, text_range.start);
+        let line_end_char = byte_to_char_offset_with_map(&char_to_byte, text_range.end);
 
         let mut grapheme_offsets = Vec::new();
 
