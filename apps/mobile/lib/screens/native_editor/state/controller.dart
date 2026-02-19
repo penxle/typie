@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/foundation.dart';
 import 'package:typie/native/editor_native.dart';
 import 'package:typie/screens/native_editor/state/fonts.dart';
@@ -136,21 +134,6 @@ class EditorController extends ChangeNotifier {
         notifyListeners();
       }
     }
-  }
-
-  final List<Completer<void>> _tickCompleters = [];
-
-  Future<void> waitForNextTick() {
-    final completer = Completer<void>();
-    _tickCompleters.add(completer);
-    return completer.future;
-  }
-
-  void notifyTick() {
-    for (final completer in _tickCompleters) {
-      completer.complete();
-    }
-    _tickCompleters.clear();
   }
 
   void setFloatingSelection({required String? context, required String? nodeId}) {
