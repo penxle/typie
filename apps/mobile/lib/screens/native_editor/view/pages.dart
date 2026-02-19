@@ -281,17 +281,12 @@ class PageList extends HookWidget {
                             if (gesture.draggingCellHandle) {
                               return false;
                             }
-                            final renderBox = context.findRenderObject() as RenderBox?;
-                            if (renderBox == null) {
+                            final viewportPosition = viewportPositionFromGlobal(globalPosition);
+                            if (viewportPosition == null) {
                               return true;
                             }
-                            final localPosition = renderBox.globalToLocal(globalPosition);
-                            final scrollOffset = verticalScrollController.hasSingleClient
-                                ? verticalScrollController.offset
-                                : 0.0;
-                            final viewportY = localPosition.dy - scrollOffset;
-                            final (pageIdx, localY) = getPageAtPosition(viewportY);
-                            final pointerX = gesture.getPointerX(localPosition.dx);
+                            final (pageIdx, localY) = getPageAtPosition(viewportPosition.dy);
+                            final pointerX = gesture.getPointerX(viewportPosition.dx);
                             return scope.editor.isSelectionHit(pageIdx, pointerX, localY);
                           },
                           duration: const Duration(milliseconds: 500),
@@ -302,14 +297,11 @@ class PageList extends HookWidget {
                               if (gesture.draggingCellHandle) {
                                 return;
                               }
+                              final viewportPosition = viewportPositionFromGlobal(details.globalPosition);
+                              if (viewportPosition == null) {
+                                return;
+                              }
                               scope.inputController.commitComposing();
-                              final scrollOffset = verticalScrollController.hasSingleClient
-                                  ? verticalScrollController.offset
-                                  : 0.0;
-                              final viewportPosition = Offset(
-                                details.localPosition.dx,
-                                details.localPosition.dy - scrollOffset,
-                              );
 
                               longPressPosition.value = viewportPosition;
                               scope.isLongPressing.value = true;
@@ -329,19 +321,16 @@ class PageList extends HookWidget {
                                 ..lastTapTime = null;
                             }
                             ..onLongPressMoveUpdate = (details) {
-                              final scrollOffset = verticalScrollController.hasSingleClient
-                                  ? verticalScrollController.offset
-                                  : 0.0;
-                              final viewportPosition = Offset(
-                                details.localPosition.dx,
-                                details.localPosition.dy - scrollOffset,
-                              );
+                              final viewportPosition = viewportPositionFromGlobal(details.globalPosition);
+                              if (viewportPosition == null) {
+                                return;
+                              }
 
                               final (pageIdx, localY) = getPageAtPosition(viewportPosition.dy);
                               longPressPosition.value = viewportPosition;
 
                               if (pageIdx >= 0) {
-                                final pointerX = gesture.getPointerX(details.localPosition.dx);
+                                final pointerX = gesture.getPointerX(viewportPosition.dx);
                                 editor
                                   ..dispatch({
                                     'type': 'pointerDown',
