@@ -673,6 +673,72 @@ impl Renderer {
         }
     }
 
+    fn should_render_next_page_overflow(positioned: &PositionedNode) -> bool {
+        matches!(
+            positioned.node.element.as_ref(),
+            Some(Element::Line(line)) if !line.ruby_segments.is_empty()
+        )
+    }
+
+    fn render_node_for_next_page_overflow(
+        pixmap: &mut PixmapMut,
+        glyph_renderer: &mut GlyphRenderer,
+        positioned: &PositionedNode,
+        offset: Point,
+        transform: Transform,
+        ctx: &RenderContext<'_>,
+        inherited_hints: &RenderHints,
+        cull_clip: CacheRect,
+    ) {
+        let scale = transform.sy;
+        let pos = Point::new(
+            offset.x + positioned.position.x,
+            ((offset.y + positioned.position.y) * scale).round() / scale,
+        );
+
+        let node_rect = node_paint_bounds(positioned, pos);
+        if let Some(node_rect) = node_rect
+            && !node_rect.intersects(cull_clip)
+        {
+            return;
+        }
+
+        let merged_hints = positioned.node.render_hints.merge(inherited_hints);
+
+        let child_ctx_data = RenderContext {
+            default_text_color: merged_hints
+                .default_text_color
+                .as_ref()
+                .map(|color_key| ctx.theme.color(color_key))
+                .or(ctx.default_text_color),
+            ..*ctx
+        };
+        let render_ctx = &child_ctx_data;
+
+        if Self::should_render_next_page_overflow(positioned)
+            && let Some(element) = positioned.node.element.as_ref()
+            && let Some(render) = element.as_render()
+        {
+            let element_transform = transform.pre_translate(pos.x, pos.y);
+            render.render(pixmap, glyph_renderer, element_transform, render_ctx);
+        }
+
+        if let Some(children) = &positioned.node.children {
+            for child in children {
+                Self::render_node_for_next_page_overflow(
+                    pixmap,
+                    glyph_renderer,
+                    child,
+                    pos,
+                    transform,
+                    render_ctx,
+                    &merged_hints,
+                    cull_clip,
+                );
+            }
+        }
+    }
+
     fn render_next_page_overflow(
         pixmap: &mut PixmapMut,
         glyph_renderer: &mut GlyphRenderer,
@@ -685,10 +751,18 @@ impl Renderer {
         let scale = scale_factor as f32;
         let page_height = pixmap.height() as f32 / scale;
         let page_width = pixmap.width() as f32 / scale;
-        let Some(clip) = next_page_overflow_cull_clip(page_width, page_height) else {
+        let Some(cull_clip) = next_page_overflow_cull_clip(page_width, page_height) else {
             return;
         };
-        let transform = Transform::from_scale(scale, scale);
+        let Some(pixel_rect) =
+            PixelRect::from_layout_rect(cull_clip, scale, pixmap.width(), pixmap.height())
+        else {
+            return;
+        };
+        let hard_clip_layout_rect = pixel_rect.to_layout_rect(scale);
+        let Some(mut tile_pixmap) = Pixmap::new(pixel_rect.width, pixel_rect.height) else {
+            return;
+        };
         let ctx = RenderContext {
             scale_factor,
             selections: &[],
@@ -700,26 +774,34 @@ impl Renderer {
             render_origin: Point::zero(),
         };
 
-        for phase in [RenderPhase::Background, RenderPhase::Content] {
-            let phase_ctx = RenderContext { phase, ..ctx };
-            Self::render_node(
-                pixmap,
-                glyph_renderer,
-                &next_page.root,
-                Point::new(0.0, page_height),
-                transform,
-                &phase_ctx,
-                &RenderHints::default(),
-                Some(clip),
-            );
-        }
+        let transform = Transform::from_scale(scale, scale)
+            .pre_translate(-hard_clip_layout_rect.x, -hard_clip_layout_rect.y);
+        Self::render_node_for_next_page_overflow(
+            &mut tile_pixmap.as_mut(),
+            glyph_renderer,
+            &next_page.root,
+            Point::new(0.0, page_height),
+            transform,
+            &ctx,
+            &RenderHints::default(),
+            cull_clip,
+        );
+        let paint = PixmapPaint::default();
+        pixmap.draw_pixmap(
+            pixel_rect.x as i32,
+            pixel_rect.y as i32,
+            tile_pixmap.as_ref(),
+            &paint,
+            Transform::identity(),
+            None,
+        );
 
         if let Some(debug_rects) = debug_rects {
             debug_rects.extend(Self::collect_next_page_overflow_debug_rects(
                 next_page,
                 page_width,
                 page_height,
-                clip,
+                cull_clip,
             ));
         }
     }
@@ -760,13 +842,7 @@ impl Renderer {
                 return;
             }
 
-            if positioned
-                .node
-                .element
-                .as_ref()
-                .and_then(|element| element.as_render())
-                .is_some()
-            {
+            if Self::should_render_next_page_overflow(positioned) {
                 let left = node_rect.x.max(cull_clip.x);
                 let top = node_rect.y.max(cull_clip.y);
                 let right = node_rect.right().min(cull_clip.right());

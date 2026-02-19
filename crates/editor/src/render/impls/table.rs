@@ -185,11 +185,16 @@ fn draw_row_lines(pb: &mut PathBuilder, spec: BorderDrawSpec, row_heights: &[f32
     } else {
         spec.horizontal_top - half
     };
-    let mut y = spec.row_start;
+    let mut y = spec.row_start - half;
     for (idx, row_height) in row_heights.iter().enumerate() {
         y += *row_height;
+        let visible_from_top = if spec.draw_top {
+            y + half > clip_top + EDGE_EPSILON
+        } else {
+            y > clip_top + EDGE_EPSILON
+        };
         if idx < row_heights.len() - 1
-            && y + half > clip_top + EDGE_EPSILON
+            && visible_from_top
             && y < spec.vertical_bottom - EDGE_EPSILON
         {
             pb.move_to(spec.left, y);
@@ -480,7 +485,7 @@ mod tests {
     }
 
     #[test]
-    fn split_top_fragment_preserves_boundary_row_line_visibility() {
+    fn split_top_fragment_skips_boundary_row_line_to_avoid_double_stroke() {
         let spec = continuous_draw_spec(
             &TableBorderElement {
                 size: crate::types::Size::new(200.0, 902.0),
@@ -504,8 +509,8 @@ mod tests {
         let mut pb = PathBuilder::new();
         draw_row_lines(&mut pb, spec, &[500.0, 400.0]);
         assert!(
-            pb.finish().is_some(),
-            "경계(y=501)와 겹치는 내부 가로선은 split fragment에서도 그려져야 함"
+            pb.finish().is_none(),
+            "split top fragment should not draw a row line centered on the page seam"
         );
     }
 }
