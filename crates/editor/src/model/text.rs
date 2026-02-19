@@ -70,6 +70,10 @@ impl Text {
         }
     }
 
+    pub fn from_loro_text(loro_text: LoroText) -> Self {
+        Text { loro_text }
+    }
+
     pub fn into_loro_text(&self) -> LoroText {
         self.loro_text.clone()
     }
@@ -273,6 +277,19 @@ impl Text {
         self.loro_text
             .mark(range, key, LoroValue::Null)
             .context("Failed to remove style")
+    }
+
+    pub fn styles_at_offset(&self, offset: usize) -> Vec<Style> {
+        let mut current_offset = 0;
+        for segment in self.get_segments() {
+            let segment_len = segment.text.chars().count();
+            let segment_end = current_offset + segment_len;
+            if offset >= current_offset && offset < segment_end {
+                return segment.styles;
+            }
+            current_offset = segment_end;
+        }
+        Vec::new()
     }
 
     pub fn get_segments(&self) -> Vec<TextSegment> {
