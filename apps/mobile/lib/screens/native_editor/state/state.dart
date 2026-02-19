@@ -58,8 +58,8 @@ abstract class EditorSelection with _$EditorSelection {
 
   const EditorSelection._();
 
-  SelectionEndpointBounds? get fromBounds => cmp < 0 ? headBounds : anchorBounds;
-  SelectionEndpointBounds? get toBounds => cmp < 0 ? anchorBounds : headBounds;
+  SelectionEndpointBounds? get fromBounds => collapsed ? null : (cmp < 0 ? headBounds : anchorBounds);
+  SelectionEndpointBounds? get toBounds => collapsed ? null : (cmp < 0 ? anchorBounds : headBounds);
 
   bool get canExpandWord => expandable & 1 != 0;
   bool get canExpandSentence => expandable & 2 != 0;

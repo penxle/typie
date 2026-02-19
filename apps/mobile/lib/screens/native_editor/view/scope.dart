@@ -52,6 +52,7 @@ class ContentScope extends InheritedWidget {
       layout: controller.state.layout!,
       pages: controller.state.pages,
       titleAreaHeight: titleAreaHeight.value,
+      selection: controller.state.selection,
     );
   }
 

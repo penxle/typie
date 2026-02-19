@@ -1,5 +1,5 @@
 import { getAppContext } from '@typie/ui/context';
-import { PAGE_GAP } from './constants';
+import { CONTINUOUS_PAGE_MARGIN } from './constants';
 import { getEditorContext } from './context.svelte';
 
 export function setupTypewriter(getTargetEl: () => HTMLElement | undefined, defaultPadding: number) {
@@ -83,40 +83,25 @@ export function setupTypewriter(getTargetEl: () => HTMLElement | undefined, defa
       return defaultPadding;
     }
 
-    const isPaginated = editor.layout.layoutMode.type === 'paginated';
+    const layoutMode = editor.layout.layoutMode;
+    const trailingBottomMargin = layoutMode.type === 'paginated' ? layoutMode.pageMarginBottom : CONTINUOUS_PAGE_MARGIN;
     const cursorHeight = editor.cursor.bounds?.height ?? 0;
-
-    const totalContentHeight =
-      editor.layout.pages.reduce((sum, p) => sum + p.height, 0) + (isPaginated ? (editor.layout.pages.length - 1) * PAGE_GAP : 0);
-
-    const bounds = editor.cursor.bounds;
-    const pageIdx = editor.cursor.pageIdx;
-    let cursorTopInDocument = 0;
-    if (bounds && pageIdx !== undefined) {
-      for (let i = 0; i < pageIdx; i++) {
-        cursorTopInDocument += editor.layout.pages[i]?.height ?? 0;
-        if (isPaginated) cursorTopInDocument += PAGE_GAP;
-      }
-      cursorTopInDocument += bounds.y;
-      if (!isPaginated) cursorTopInDocument += defaultPadding;
-    }
-
-    const totalScrollableContentHeight = totalContentHeight + (isPaginated ? 0 : defaultPadding);
-
-    const position = app.preference.current.typewriterPosition;
+    const collapsedSelectionHeight = editor.selection?.collapsed
+      ? (editor.selection.headBounds?.bounds.height ?? cursorHeight)
+      : cursorHeight;
+    const cursorLeading = Math.max(0, collapsedSelectionHeight - cursorHeight);
+    const position = app.preference.current.typewriterPosition ?? 0.5;
     const availableRange = scrollContainerHeight - cursorHeight;
-
     const spaceNeededBelowCursorTop = (1 - position) * availableRange + cursorHeight;
-    const contentBelowCursorTop = totalScrollableContentHeight - cursorTopInDocument;
+    const intrinsicSpaceBelowLastLine = trailingBottomMargin + cursorHeight + cursorLeading;
+    const requiredPadding = spaceNeededBelowCursorTop - intrinsicSpaceBelowLastLine;
 
-    const extraPaddingNeeded = spaceNeededBelowCursorTop - contentBelowCursorTop;
-    return Math.max(defaultPadding, extraPaddingNeeded);
+    return Math.max(defaultPadding, requiredPadding);
   }
 
   $effect(() => {
     void editor.cursor.bounds;
-    void editor.cursor.pageIdx;
-    void editor.layout.pages;
+    void editor.selection;
     void editor.layout.layoutMode;
     void app.preference.current.typewriterEnabled;
     void app.preference.current.typewriterPosition;
