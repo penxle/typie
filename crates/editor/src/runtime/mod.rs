@@ -51,39 +51,6 @@ pub use text_replacement::RawTextReplacementRule;
 pub use tracked_items::{RawTrackedItem, TrackedItem};
 pub use view_state::*;
 
-fn get_styles_at_offset(text_node: &loro::LoroText, offset: usize) -> Vec<Style> {
-    let rich_value = text_node.get_richtext_value();
-    let mut styles = Vec::new();
-    if let loro::LoroValue::List(list) = rich_value {
-        let mut current_offset = 0;
-        for item in list.iter() {
-            if let loro::LoroValue::Map(map) = item {
-                let text = map
-                    .get("insert")
-                    .and_then(|v| v.as_string())
-                    .cloned()
-                    .unwrap_or_default();
-                let segment_len = text.chars().count();
-                let segment_end = current_offset + segment_len;
-
-                if offset >= current_offset && offset < segment_end {
-                    if let Some(loro::LoroValue::Map(attrs)) = map.get("attributes") {
-                        for (key, value) in attrs.iter() {
-                            if let Some(style) = Style::from_key_value(key, value.clone()) {
-                                styles.push(style);
-                            }
-                        }
-                    }
-                    break;
-                }
-
-                current_offset = segment_end;
-            }
-        }
-    }
-    styles
-}
-
 fn reapply_styles(text_node: &loro::LoroText, offset: usize, len: usize, styles: &[Style]) {
     for style in styles {
         let key = style.key();
@@ -432,7 +399,7 @@ impl Runtime {
 
         let end_internal_offset = end_offset - start_offset + start_internal;
 
-        let styles = get_styles_at_offset(&text_node, start_internal);
+        let styles = Text::from_loro_text(text_node.clone()).styles_at_offset(start_internal);
 
         let _ = text_node.splice(
             start_internal,
@@ -500,7 +467,7 @@ impl Runtime {
 
             let end_internal_offset = end_offset - start_offset + start_internal;
 
-            let styles = get_styles_at_offset(&text_node, start_internal);
+            let styles = Text::from_loro_text(text_node.clone()).styles_at_offset(start_internal);
 
             let _ = text_node.splice(
                 start_internal,
