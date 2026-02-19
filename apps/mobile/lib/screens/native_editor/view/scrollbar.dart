@@ -5,8 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/screens/native_editor/state/state.dart';
+import 'package:typie/screens/native_editor/toolbar/scope.dart';
 import 'package:typie/screens/native_editor/view/scope.dart';
 import 'package:typie/screens/native_editor/view/scroll.dart';
+import 'package:typie/services/keyboard.dart';
 import 'package:typie/services/preference.dart';
 
 const _hideDelay = Duration(milliseconds: 1000);
@@ -33,9 +35,14 @@ class EditorScrollbar extends HookWidget {
     final scope = ContentScope.of(context);
     final pref = useService<Pref>();
     final state = useListenable(scope.controller);
+    final toolbarScope = NativeEditorToolbarScope.of(context);
 
     final verticalScrollController = scope.verticalScrollController;
     final horizontalScrollController = scope.horizontalScrollController;
+    final keyboardType = useValueListenable(toolbarScope.keyboardType);
+    final isKeyboardVisible = useValueListenable(toolbarScope.isKeyboardVisible);
+    final isEditorFocused = useValueListenable(toolbarScope.isEditorFocused);
+    final bottomToolbarMode = useValueListenable(toolbarScope.bottomToolbarMode);
     final layout = state.state.layout!;
     final pages = state.state.pages;
     final cursor = state.state.cursor;
@@ -161,7 +168,10 @@ class EditorScrollbar extends HookWidget {
         : viewWidth;
 
     final safeTop = safePadding.top;
-    final safeBottom = safePadding.bottom;
+    final toolbarVisible =
+        isEditorFocused &&
+        !(keyboardType == KeyboardType.software && !isKeyboardVisible && bottomToolbarMode == BottomToolbarMode.hidden);
+    final safeBottom = (!isKeyboardVisible && !toolbarVisible) ? safePadding.bottom : 0.0;
     final trackHeight =
         actualViewHeight - _trackPadding * 2 - safeTop - safeBottom - (hasHorizontalScroll ? _trackWidth : 0);
     final thumbRatio = viewportDimension > 0 ? viewportDimension / (viewportDimension + maxScrollExtent) : 1.0;
