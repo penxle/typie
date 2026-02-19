@@ -298,7 +298,7 @@ class EditorView extends HookWidget {
 
     useEffect(() {
       ticker.start();
-      return ticker.stop;
+      return ticker.dispose;
     }, [ticker]);
 
     final keyboard = useService<Keyboard>();
