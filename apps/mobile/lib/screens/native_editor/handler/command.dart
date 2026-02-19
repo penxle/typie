@@ -171,32 +171,27 @@ class CommandHandler {
     final cmp = reader.getI32('selection_cmp');
     final collapsed = cmp == 0;
 
-    SelectionEndpointBounds? anchorBounds;
-    SelectionEndpointBounds? headBounds;
+    final anchorPageIdx = reader.getI32('selection_anchor_page_idx');
+    final anchorBounds = anchorPageIdx < 0
+        ? null
+        : SelectionEndpointBounds(
+            pageIdx: anchorPageIdx,
+            x: reader.getF32('selection_anchor_x'),
+            y: reader.getF32('selection_anchor_y'),
+            width: reader.getF32('selection_anchor_width'),
+            height: reader.getF32('selection_anchor_height'),
+          );
 
-    if (!collapsed) {
-      final anchorPageIdx = reader.getI32('selection_anchor_page_idx');
-      anchorBounds = anchorPageIdx < 0
-          ? null
-          : SelectionEndpointBounds(
-              pageIdx: anchorPageIdx,
-              x: reader.getF32('selection_anchor_x'),
-              y: reader.getF32('selection_anchor_y'),
-              width: reader.getF32('selection_anchor_width'),
-              height: reader.getF32('selection_anchor_height'),
-            );
-
-      final headPageIdx = reader.getI32('selection_head_page_idx');
-      headBounds = headPageIdx < 0
-          ? null
-          : SelectionEndpointBounds(
-              pageIdx: headPageIdx,
-              x: reader.getF32('selection_head_x'),
-              y: reader.getF32('selection_head_y'),
-              width: reader.getF32('selection_head_width'),
-              height: reader.getF32('selection_head_height'),
-            );
-    }
+    final headPageIdx = reader.getI32('selection_head_page_idx');
+    final headBounds = headPageIdx < 0
+        ? null
+        : SelectionEndpointBounds(
+            pageIdx: headPageIdx,
+            x: reader.getF32('selection_head_x'),
+            y: reader.getF32('selection_head_y'),
+            width: reader.getF32('selection_head_width'),
+            height: reader.getF32('selection_head_height'),
+          );
 
     final expandable = reader.getU32('selection_expandable');
 

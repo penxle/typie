@@ -30,7 +30,8 @@ impl Layout for RootNode {
 
         let block_gap = ctx.settings.block_gap;
 
-        for child in &children {
+        let child_count = children.len();
+        for (idx, child) in children.iter().enumerate() {
             let child_layout = ctx.layout(child, constraints);
 
             let positioned = PositionedNode {
@@ -38,7 +39,11 @@ impl Layout for RootNode {
                 node: child_layout,
             };
 
-            y_offset += positioned.node.size.height + (block_gap * 16.0);
+            y_offset += positioned.node.size.height;
+            let is_last = idx == child_count - 1;
+            if !is_last {
+                y_offset += block_gap * 16.0;
+            }
             max_width = max_width.max(positioned.node.size.width);
 
             child_nodes.push(positioned);

@@ -3,18 +3,22 @@ import 'dart:math' as math;
 import 'package:typie/screens/native_editor/state/state.dart';
 
 class ContentGeometry {
-  const ContentGeometry({required this.layout, required this.pages, required this.titleAreaHeight});
+  const ContentGeometry({required this.layout, required this.pages, required this.titleAreaHeight, this.selection});
 
   final Layout layout;
   final List<PageSize> pages;
   final double titleAreaHeight;
+  final EditorSelection? selection;
 
   static const pageGap = 24.0;
   static const pagePadding = 40.0;
+  static const continuousPageMargin = 20.0;
 
   bool get isPaginated => layout is PaginatedLayout;
   double get horizontalPadding => isPaginated ? pagePadding : 0.0;
   double get defaultBottomPadding => isPaginated ? pagePadding : 200.0;
+  double get trailingBottomMargin =>
+      layout is PaginatedLayout ? (layout as PaginatedLayout).pageMarginBottom : continuousPageMargin;
 
   double gapAfterPage(int index) => isPaginated && index < pages.length - 1 ? pageGap : 0.0;
 
@@ -38,6 +42,13 @@ class ContentGeometry {
 
   double cursorTopInContent(CursorInfo cursor) => cursorTopInPages(cursor) + titleAreaHeight;
 
+  double? get collapsedSelectionHandleHeight {
+    if (!(selection?.collapsed ?? false)) {
+      return null;
+    }
+    return selection?.headBounds?.height ?? selection?.anchorBounds?.height;
+  }
+
   List<double> computeCumulativePageOffsets() {
     final offsets = <double>[0];
     for (var i = 0; i < pages.length; i++) {
@@ -57,12 +68,14 @@ class ContentGeometry {
       return defaultBottomPadding;
     }
 
-    final cursorTopInDoc = cursorTopInPages(cursor);
-    final spaceNeededBelow = (1 - typewriterPosition) * (viewportHeight - cursor.height) + 2 * cursor.height;
-    final contentBelow = pagesContentHeight - cursorTopInDoc;
-    final extraPadding = spaceNeededBelow - contentBelow;
+    final cursorHeight = cursor.height;
+    final handleHeight = collapsedSelectionHandleHeight ?? cursorHeight;
+    final cursorLeading = math.max(0, handleHeight - cursorHeight);
+    final spaceNeededBelowCursorTop = (1 - typewriterPosition) * (viewportHeight - cursorHeight) + cursorHeight;
+    final intrinsicSpaceBelowLastLine = trailingBottomMargin + cursorHeight + cursorLeading;
+    final requiredPadding = spaceNeededBelowCursorTop - intrinsicSpaceBelowLastLine;
 
-    return math.max(defaultBottomPadding, extraPadding);
+    return math.max(defaultBottomPadding, requiredPadding);
   }
 
   double totalContentHeight({

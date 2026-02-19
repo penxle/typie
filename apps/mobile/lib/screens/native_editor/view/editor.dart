@@ -311,6 +311,7 @@ class EditorView extends HookWidget {
           titleAreaHeight: titleAreaHeight.value,
           layout: controller.state.layout!,
           pages: controller.state.pages,
+          selection: controller.state.selection,
         ),
         cursor: c,
         typewriterEnabled: typewriter,
