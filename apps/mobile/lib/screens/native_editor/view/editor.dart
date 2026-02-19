@@ -483,141 +483,144 @@ class EditorView extends HookWidget {
       return const SizedBox.shrink();
     }
 
-    return NativeEditorToolbarScope(
-      controller: controller,
-      keyboardHeight: keyboardHeight,
-      isKeyboardVisible: isKeyboardVisible,
-      keyboardType: keyboardType,
-      isEditorFocused: isEditorFocused,
-      bottomToolbarMode: bottomToolbarMode,
-      secondaryToolbarMode: secondaryToolbarMode,
-      selection: selection,
-      attrs: attrs,
-      floatingContext: controller.floatingContext,
-      floatingNodeId: controller.floatingNodeId,
-      externalElements: externalElements,
-      uploadManager: uploadManager,
-      dispatch: controller.dispatch,
-      requestFocus: inputController.requestFocus,
-      clearFocus: inputController.clearFocus,
-      dismissKeyboard: inputController.dismissKeyboard,
-      commitComposing: inputController.commitComposing,
-      child: ContentScope(
+    return Listener(
+      onPointerDown: (_) => inputController.commitComposing(),
+      child: NativeEditorToolbarScope(
         controller: controller,
-        ticker: ticker,
-        dndController: dndController,
-        verticalScrollController: verticalScrollController,
-        horizontalScrollController: horizontalScrollController,
-        inputController: inputController,
-        isLongPressing: isLongPressing,
-        longPressPosition: longPressPosition,
-        handleDragPosition: handleDragPosition,
-        titleAreaHeight: titleAreaHeight,
-        title: titleNotifier,
-        subtitle: subtitleNotifier,
-        onTitleChanged: onTitleChanged,
-        onSubtitleChanged: onSubtitleChanged,
-        titleFocusNode: titleFocusNode,
-        subtitleFocusNode: subtitleFocusNode,
-        pendingScroll: pendingScroll,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final width = constraints.maxWidth.floorToDouble();
-            final height = constraints.maxHeight;
-            final scaleFactor = MediaQuery.devicePixelRatioOf(context);
-            final currentSize = (width, height, scaleFactor);
-            if (lastSize.value != currentSize) {
-              lastSize.value = currentSize;
-              controller.editor.dispatch({
-                'type': 'resize',
-                'width': width,
-                'height': height,
-                'scaleFactor': scaleFactor,
-              });
-            }
-            return Column(
-              children: [
-                Expanded(
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      NotificationListener<ScrollMetricsNotification>(
-                        onNotification: (_) {
-                          scrollMetricsRevision.value++;
-                          return false;
-                        },
-                        child: const PageList(),
-                      ),
-                      _DocumentPlaceholder(
-                        controller: controller,
-                        verticalScrollController: verticalScrollController,
-                        horizontalScrollController: horizontalScrollController,
-                        titleAreaHeight: titleAreaHeight,
-                        scrollMetricsRevision: scrollMetricsRevision,
-                        documentTemplates: documentTemplates,
-                        client: client,
-                      ),
-                      ValueListenableBuilder<Offset?>(
-                        valueListenable: longPressPosition,
-                        builder: (context, longPress, _) {
-                          return ValueListenableBuilder<Offset?>(
-                            valueListenable: handleDragPosition,
-                            builder: (context, handleDrag, _) {
-                              final pos = handleDrag ?? longPress;
-                              if (pos == null) {
-                                return const SizedBox.shrink();
-                              }
-                              return EditorMagnifier(
-                                position: pos,
-                                focalPoint: pos,
-                                pageSize: Size(controller.state.pages.firstOrNull?.width ?? 0, constraints.maxHeight),
-                              );
-                            },
-                          );
-                        },
-                      ),
-                      Positioned.fill(
-                        child: IgnorePointer(
-                          child: InputView(
-                            key: inputKey,
-                            onInsertText: inputController.onInsertText,
-                            onDeleteBackward: inputController.onDeleteBackward,
-                            onSetMarkedText: inputController.onSetMarkedText,
-                            onUnmarkText: inputController.onUnmarkText,
-                            onCancelMarkedText: inputController.onCancelMarkedText,
-                            onPerformAction: inputController.onPerformAction,
-                            onShortcut: inputController.onShortcut,
-                            onFloatingCursorBegin: inputController.onFloatingCursorBegin,
-                            onFloatingCursorUpdate: inputController.onFloatingCursorUpdate,
-                            onFloatingCursorEnd: inputController.onFloatingCursorEnd,
-                            onFocusLost: inputController.onFocusLost,
-                            onReady: inputController.onInputReady,
-                            onReplaceBackward: inputController.onReplaceBackward,
-                            onNavigate: (direction, extend) {
-                              inputController.commitComposing();
-                              controller
-                                ..dispatch({'type': 'navigate', 'direction': direction, 'extend': extend})
-                                ..scrollIntoView(mode: extend ? ScrollMode.auto : ScrollMode.typewriter);
-                            },
+        keyboardHeight: keyboardHeight,
+        isKeyboardVisible: isKeyboardVisible,
+        keyboardType: keyboardType,
+        isEditorFocused: isEditorFocused,
+        bottomToolbarMode: bottomToolbarMode,
+        secondaryToolbarMode: secondaryToolbarMode,
+        selection: selection,
+        attrs: attrs,
+        floatingContext: controller.floatingContext,
+        floatingNodeId: controller.floatingNodeId,
+        externalElements: externalElements,
+        uploadManager: uploadManager,
+        dispatch: controller.dispatch,
+        requestFocus: inputController.requestFocus,
+        clearFocus: inputController.clearFocus,
+        dismissKeyboard: inputController.dismissKeyboard,
+        commitComposing: inputController.commitComposing,
+        child: ContentScope(
+          controller: controller,
+          ticker: ticker,
+          dndController: dndController,
+          verticalScrollController: verticalScrollController,
+          horizontalScrollController: horizontalScrollController,
+          inputController: inputController,
+          isLongPressing: isLongPressing,
+          longPressPosition: longPressPosition,
+          handleDragPosition: handleDragPosition,
+          titleAreaHeight: titleAreaHeight,
+          title: titleNotifier,
+          subtitle: subtitleNotifier,
+          onTitleChanged: onTitleChanged,
+          onSubtitleChanged: onSubtitleChanged,
+          titleFocusNode: titleFocusNode,
+          subtitleFocusNode: subtitleFocusNode,
+          pendingScroll: pendingScroll,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final width = constraints.maxWidth.floorToDouble();
+              final height = constraints.maxHeight;
+              final scaleFactor = MediaQuery.devicePixelRatioOf(context);
+              final currentSize = (width, height, scaleFactor);
+              if (lastSize.value != currentSize) {
+                lastSize.value = currentSize;
+                controller.editor.dispatch({
+                  'type': 'resize',
+                  'width': width,
+                  'height': height,
+                  'scaleFactor': scaleFactor,
+                });
+              }
+              return Column(
+                children: [
+                  Expanded(
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        NotificationListener<ScrollMetricsNotification>(
+                          onNotification: (_) {
+                            scrollMetricsRevision.value++;
+                            return false;
+                          },
+                          child: const PageList(),
+                        ),
+                        _DocumentPlaceholder(
+                          controller: controller,
+                          verticalScrollController: verticalScrollController,
+                          horizontalScrollController: horizontalScrollController,
+                          titleAreaHeight: titleAreaHeight,
+                          scrollMetricsRevision: scrollMetricsRevision,
+                          documentTemplates: documentTemplates,
+                          client: client,
+                        ),
+                        ValueListenableBuilder<Offset?>(
+                          valueListenable: longPressPosition,
+                          builder: (context, longPress, _) {
+                            return ValueListenableBuilder<Offset?>(
+                              valueListenable: handleDragPosition,
+                              builder: (context, handleDrag, _) {
+                                final pos = handleDrag ?? longPress;
+                                if (pos == null) {
+                                  return const SizedBox.shrink();
+                                }
+                                return EditorMagnifier(
+                                  position: pos,
+                                  focalPoint: pos,
+                                  pageSize: Size(controller.state.pages.firstOrNull?.width ?? 0, constraints.maxHeight),
+                                );
+                              },
+                            );
+                          },
+                        ),
+                        Positioned.fill(
+                          child: IgnorePointer(
+                            child: InputView(
+                              key: inputKey,
+                              onInsertText: inputController.onInsertText,
+                              onDeleteBackward: inputController.onDeleteBackward,
+                              onSetMarkedText: inputController.onSetMarkedText,
+                              onUnmarkText: inputController.onUnmarkText,
+                              onCancelMarkedText: inputController.onCancelMarkedText,
+                              onPerformAction: inputController.onPerformAction,
+                              onShortcut: inputController.onShortcut,
+                              onFloatingCursorBegin: inputController.onFloatingCursorBegin,
+                              onFloatingCursorUpdate: inputController.onFloatingCursorUpdate,
+                              onFloatingCursorEnd: inputController.onFloatingCursorEnd,
+                              onFocusLost: inputController.onFocusLost,
+                              onReady: inputController.onInputReady,
+                              onReplaceBackward: inputController.onReplaceBackward,
+                              onNavigate: (direction, extend) {
+                                inputController.commitComposing();
+                                controller
+                                  ..dispatch({'type': 'navigate', 'direction': direction, 'extend': extend})
+                                  ..scrollIntoView(mode: extend ? ScrollMode.auto : ScrollMode.typewriter);
+                              },
+                            ),
                           ),
                         ),
-                      ),
-                      if (pref.characterCountFloatingEnabled) const NativeCharacterCountFloating(),
-                      const Positioned(bottom: 20, right: 20, child: NativeEditorFloatingToolbar()),
-                      if (state.state.repasteAsTextEnabled)
-                        Positioned(left: 0, right: 0, bottom: 0, child: RepasteAsTextWidget(controller: controller)),
-                      EditorScrollbar(
-                        viewHeight: constraints.maxHeight,
-                        viewWidth: constraints.maxWidth,
-                        suppressShowOnScroll: suppressScrollbarShow,
-                      ),
-                    ],
+                        if (pref.characterCountFloatingEnabled) const NativeCharacterCountFloating(),
+                        const Positioned(bottom: 20, right: 20, child: NativeEditorFloatingToolbar()),
+                        if (state.state.repasteAsTextEnabled)
+                          Positioned(left: 0, right: 0, bottom: 0, child: RepasteAsTextWidget(controller: controller)),
+                        EditorScrollbar(
+                          viewHeight: constraints.maxHeight,
+                          viewWidth: constraints.maxWidth,
+                          suppressShowOnScroll: suppressScrollbarShow,
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                const NativeEditorToolbar(),
-              ],
-            );
-          },
+                  const NativeEditorToolbar(),
+                ],
+              );
+            },
+          ),
         ),
       ),
     );
