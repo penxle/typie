@@ -1,13 +1,12 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
-  import { cubicOut } from 'svelte/easing';
   import { getEditorContext } from '$lib/editor/context.svelte';
 
   const { editor } = getEditorContext();
+  const CURSOR_VIEWPORT_GUARD_PX = 60;
 
   let element = $state<HTMLDivElement>();
   let prevCursorPos: { x: number; y: number } | null = null;
-  let animationId: number | null = null;
 
   function resetAnimation() {
     if (!element) return;
@@ -20,9 +19,9 @@
     });
   }
 
-  function scrollIntoView(animate: boolean, position = 0.5) {
+  function keepCursorInViewport() {
     if (!element) return;
-    if (!animate && editor.pointerState !== 0) return;
+    if (editor.pointerState >= 2) return;
 
     const scroller = editor.scrollContainerEl;
     if (!scroller) return;
@@ -30,24 +29,15 @@
     const scrollerRect = scroller.getBoundingClientRect();
     const cursorRect = element.getBoundingClientRect();
 
-    const margin = 40;
-    const scrollerTop = scrollerRect.top + margin;
-    const scrollerBottom = scrollerRect.bottom - margin;
+    const scrollerTop = scrollerRect.top + CURSOR_VIEWPORT_GUARD_PX;
+    const scrollerBottom = scrollerRect.bottom - CURSOR_VIEWPORT_GUARD_PX;
 
     let delta = 0;
 
-    if (animate) {
-      const cursorTop = cursorRect.top;
-      const cursorHeight = cursorRect.height;
-      const availableHeight = scrollerRect.height - cursorHeight;
-      const targetOffset = scrollerRect.top + availableHeight * position;
-      delta = cursorTop - targetOffset;
-    } else {
-      if (cursorRect.top < scrollerTop) {
-        delta = cursorRect.top - scrollerTop;
-      } else if (cursorRect.bottom > scrollerBottom) {
-        delta = cursorRect.bottom - scrollerBottom;
-      }
+    if (cursorRect.top < scrollerTop) {
+      delta = cursorRect.top - scrollerTop;
+    } else if (cursorRect.bottom > scrollerBottom) {
+      delta = cursorRect.bottom - scrollerBottom;
     }
 
     const maxScrollTop = scroller.scrollHeight - scroller.clientHeight;
@@ -63,34 +53,7 @@
       return;
     }
 
-    if (animate) {
-      const startScrollTop = scroller.scrollTop;
-      const duration = 150;
-      const startTime = performance.now();
-
-      const animateScroll = (currentTime: number) => {
-        const elapsed = currentTime - startTime;
-        const progress = Math.min(elapsed / duration, 1);
-        const eased = cubicOut(progress);
-
-        scroller.scrollTop = startScrollTop + delta * eased;
-
-        if (progress < 1) {
-          animationId = requestAnimationFrame(animateScroll);
-        } else {
-          animationId = null;
-        }
-      };
-
-      if (animationId) {
-        cancelAnimationFrame(animationId);
-        animationId = null;
-      }
-
-      animationId = requestAnimationFrame(animateScroll);
-    } else {
-      scroller.scrollBy({ top: delta, behavior: 'instant' });
-    }
+    scroller.scrollBy({ top: delta, behavior: 'instant' });
   }
 
   $effect(() => {
@@ -120,10 +83,11 @@
         prevCursorPos = { x: bounds.x, y: bounds.y };
       }
 
+      requestAnimationFrame(() => {
+        keepCursorInViewport();
+      });
+
       if (scrollToCursor) {
-        requestAnimationFrame(() => {
-          scrollIntoView(false);
-        });
         editor.pendingScrollMode = null;
       }
     } else {
