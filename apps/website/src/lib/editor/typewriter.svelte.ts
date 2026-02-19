@@ -7,7 +7,7 @@ import { getEditorContext } from './context.svelte';
 
 export function setupTypewriter(getTargetEl: () => HTMLElement | undefined, defaultPadding: number) {
   const TYPEWRITER_SCROLL_DEBOUNCE_MS = 40;
-  const CURSOR_VIEWPORT_GUARD_PX = 16;
+  const CURSOR_VIEWPORT_GUARD_PX = 60;
 
   const { editor } = getEditorContext();
   const scrollTop = new Tween(0);
@@ -64,8 +64,7 @@ export function setupTypewriter(getTargetEl: () => HTMLElement | undefined, defa
     const cursorHeight = bounds.height;
 
     const scrollerRect = scroller.getBoundingClientRect();
-    const position = app.preference.current.typewriterPosition;
-
+    const position = app.preference.current.typewriterPosition ?? 0.5;
     const availableRange = scrollerRect.height - cursorHeight;
     const targetY = scrollerRect.top + availableRange * position;
     const delta = cursorTop - targetY;
@@ -189,11 +188,8 @@ export function setupTypewriter(getTargetEl: () => HTMLElement | undefined, defa
   });
 
   $effect(() => {
-    if (!app.preference.current.typewriterEnabled || app.preference.current.typewriterPosition === undefined) {
-      return;
-    }
-
-    if (editor.pendingScrollMode !== 'typewriter') {
+    const pendingMode = editor.pendingScrollMode;
+    if (!pendingMode) {
       return;
     }
 
@@ -204,6 +200,12 @@ export function setupTypewriter(getTargetEl: () => HTMLElement | undefined, defa
     }
 
     keepCursorInViewport(metrics);
-    scheduleDebouncedTypewriterScroll();
+
+    const shouldAnimateTypewriter =
+      pendingMode === 'typewriter' && app.preference.current.typewriterEnabled && app.preference.current.typewriterPosition !== undefined;
+
+    if (shouldAnimateTypewriter) {
+      scheduleDebouncedTypewriterScroll();
+    }
   });
 }
