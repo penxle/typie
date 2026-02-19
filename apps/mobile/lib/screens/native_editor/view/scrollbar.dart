@@ -19,6 +19,8 @@ const _indicatorGap = 14.0;
 const _thumbHitPadding = 20.0;
 const _thumbHitWidth = 44.0;
 
+enum _ScrollVisibilitySource { user, auto }
+
 class EditorScrollbar extends HookWidget {
   const EditorScrollbar({required this.viewHeight, required this.viewWidth, this.suppressShowOnScroll, super.key});
 
@@ -42,6 +44,7 @@ class EditorScrollbar extends HookWidget {
     final typewriterPosition = pref.typewriterPosition;
 
     final isVisible = useState(false);
+    final visibleScrollSource = useState(_ScrollVisibilitySource.user);
     final isDraggingV = useState(false);
     final isDraggingH = useState(false);
     final hideTimer = useRef<Timer?>(null);
@@ -69,8 +72,9 @@ class EditorScrollbar extends HookWidget {
       });
     }
 
-    void showTemporarily() {
+    void showTemporarily({_ScrollVisibilitySource source = _ScrollVisibilitySource.auto}) {
       isVisible.value = true;
+      visibleScrollSource.value = source;
       if (!isDraggingV.value && !isDraggingH.value) {
         scheduleHide();
       }
@@ -81,18 +85,20 @@ class EditorScrollbar extends HookWidget {
         if (!isDraggingV.value) {
           rebuildTrigger.value++;
         }
-        if (suppressShowOnScroll?.value != true) {
-          showTemporarily();
-        }
+        final source = (suppressShowOnScroll?.value ?? false)
+            ? _ScrollVisibilitySource.auto
+            : _ScrollVisibilitySource.user;
+        showTemporarily(source: source);
       }
 
       void onHorizontalScroll() {
         if (!isDraggingH.value) {
           rebuildTrigger.value++;
         }
-        if (suppressShowOnScroll?.value != true) {
-          showTemporarily();
-        }
+        final source = (suppressShowOnScroll?.value ?? false)
+            ? _ScrollVisibilitySource.auto
+            : _ScrollVisibilitySource.user;
+        showTemporarily(source: source);
       }
 
       verticalScrollController.addListener(onScroll);
@@ -110,6 +116,7 @@ class EditorScrollbar extends HookWidget {
     }, [verticalScrollController, horizontalScrollController]);
 
     final _ = rebuildTrigger.value;
+    final isUserScrollVisible = visibleScrollSource.value == _ScrollVisibilitySource.user;
 
     final geometry = scope.geometry;
     final hasVerticalClients =
@@ -229,13 +236,14 @@ class EditorScrollbar extends HookWidget {
             bottom: safeBottom + (hasHorizontalScroll ? _trackWidth : 0),
             width: _trackWidth,
             child: AnimatedOpacity(
-              opacity: isVisible.value || isDraggingV.value ? 1.0 : 0.0,
+              opacity: isVisible.value || isDraggingV.value ? (isUserScrollVisible ? 1.0 : 0.65) : 0.0,
               duration: const Duration(milliseconds: 300),
               child: IgnorePointer(
                 child: _VerticalScrollbarThumb(
                   thumbTop: thumbTop,
                   thumbHeight: thumbHeight,
                   isDragging: isDraggingV.value,
+                  isUserScrollVisible: isUserScrollVisible,
                 ),
               ),
             ),
@@ -255,11 +263,11 @@ class EditorScrollbar extends HookWidget {
                   dragStartThumbTop.value = thumbTop;
                   dragStartY.value = details.globalPosition.dy;
                   cancelHideTimer();
-                  isVisible.value = true;
+                  showTemporarily(source: _ScrollVisibilitySource.user);
                 },
                 onTapUp: (_) {
                   isDraggingV.value = false;
-                  scheduleHide();
+                  showTemporarily(source: _ScrollVisibilitySource.user);
                 },
                 onTapCancel: () {},
                 onPanStart: (details) {
@@ -267,7 +275,7 @@ class EditorScrollbar extends HookWidget {
                   dragStartThumbTop.value = thumbTop;
                   dragStartY.value = details.globalPosition.dy;
                   cancelHideTimer();
-                  isVisible.value = true;
+                  showTemporarily(source: _ScrollVisibilitySource.user);
                 },
                 onPanUpdate: (details) {
                   if (!isDraggingV.value || !verticalScrollController.hasSingleClient) {
@@ -282,16 +290,16 @@ class EditorScrollbar extends HookWidget {
                 },
                 onPanEnd: (_) {
                   isDraggingV.value = false;
-                  scheduleHide();
+                  showTemporarily(source: _ScrollVisibilitySource.user);
                 },
                 onPanCancel: () {
                   isDraggingV.value = false;
-                  scheduleHide();
+                  showTemporarily(source: _ScrollVisibilitySource.user);
                 },
               ),
             ),
           ),
-        if (hasVerticalScroll)
+        if (hasVerticalScroll && isUserScrollVisible)
           Positioned(
             right: _indicatorGap,
             top: safeTop + thumbTop + thumbHeight / 2 - _indicatorHeight / 2,
@@ -327,13 +335,14 @@ class EditorScrollbar extends HookWidget {
             bottom: 0,
             height: _trackWidth,
             child: AnimatedOpacity(
-              opacity: isVisible.value || isDraggingH.value ? 1.0 : 0.0,
+              opacity: isVisible.value || isDraggingH.value ? (isUserScrollVisible ? 1.0 : 0.65) : 0.0,
               duration: const Duration(milliseconds: 300),
               child: IgnorePointer(
                 child: _HorizontalScrollbarThumb(
                   thumbLeft: thumbLeft,
                   thumbWidth: thumbWidthH,
                   isDragging: isDraggingH.value,
+                  isUserScrollVisible: isUserScrollVisible,
                 ),
               ),
             ),
@@ -353,11 +362,11 @@ class EditorScrollbar extends HookWidget {
                   dragStartThumbLeft.value = thumbLeft;
                   dragStartX.value = details.globalPosition.dx;
                   cancelHideTimer();
-                  isVisible.value = true;
+                  showTemporarily(source: _ScrollVisibilitySource.user);
                 },
                 onTapUp: (_) {
                   isDraggingH.value = false;
-                  scheduleHide();
+                  showTemporarily(source: _ScrollVisibilitySource.user);
                 },
                 onTapCancel: () {},
                 onPanStart: (details) {
@@ -365,7 +374,7 @@ class EditorScrollbar extends HookWidget {
                   dragStartThumbLeft.value = thumbLeft;
                   dragStartX.value = details.globalPosition.dx;
                   cancelHideTimer();
-                  isVisible.value = true;
+                  showTemporarily(source: _ScrollVisibilitySource.user);
                 },
                 onPanUpdate: (details) {
                   if (!isDraggingH.value || !horizontalScrollController.hasSingleClient) {
@@ -380,11 +389,11 @@ class EditorScrollbar extends HookWidget {
                 },
                 onPanEnd: (_) {
                   isDraggingH.value = false;
-                  scheduleHide();
+                  showTemporarily(source: _ScrollVisibilitySource.user);
                 },
                 onPanCancel: () {
                   isDraggingH.value = false;
-                  scheduleHide();
+                  showTemporarily(source: _ScrollVisibilitySource.user);
                 },
               ),
             ),
@@ -395,11 +404,17 @@ class EditorScrollbar extends HookWidget {
 }
 
 class _VerticalScrollbarThumb extends StatelessWidget {
-  const _VerticalScrollbarThumb({required this.thumbTop, required this.thumbHeight, required this.isDragging});
+  const _VerticalScrollbarThumb({
+    required this.thumbTop,
+    required this.thumbHeight,
+    required this.isDragging,
+    required this.isUserScrollVisible,
+  });
 
   final double thumbTop;
   final double thumbHeight;
   final bool isDragging;
+  final bool isUserScrollVisible;
 
   @override
   Widget build(BuildContext context) {
@@ -413,7 +428,9 @@ class _VerticalScrollbarThumb extends StatelessWidget {
             width: _thumbWidth,
             height: thumbHeight,
             decoration: BoxDecoration(
-              color: isDragging ? Colors.black.withValues(alpha: 0.8) : Colors.black.withValues(alpha: 0.5),
+              color: isDragging
+                  ? Colors.black.withValues(alpha: isUserScrollVisible ? 0.8 : 0.45)
+                  : Colors.black.withValues(alpha: isUserScrollVisible ? 0.5 : 0.22),
               borderRadius: BorderRadius.circular(4),
             ),
           ),
@@ -424,11 +441,17 @@ class _VerticalScrollbarThumb extends StatelessWidget {
 }
 
 class _HorizontalScrollbarThumb extends StatelessWidget {
-  const _HorizontalScrollbarThumb({required this.thumbLeft, required this.thumbWidth, required this.isDragging});
+  const _HorizontalScrollbarThumb({
+    required this.thumbLeft,
+    required this.thumbWidth,
+    required this.isDragging,
+    required this.isUserScrollVisible,
+  });
 
   final double thumbLeft;
   final double thumbWidth;
   final bool isDragging;
+  final bool isUserScrollVisible;
 
   @override
   Widget build(BuildContext context) {
@@ -442,7 +465,9 @@ class _HorizontalScrollbarThumb extends StatelessWidget {
             width: thumbWidth,
             height: _thumbWidth,
             decoration: BoxDecoration(
-              color: isDragging ? Colors.black.withValues(alpha: 0.8) : Colors.black.withValues(alpha: 0.5),
+              color: isDragging
+                  ? Colors.black.withValues(alpha: isUserScrollVisible ? 0.8 : 0.45)
+                  : Colors.black.withValues(alpha: isUserScrollVisible ? 0.5 : 0.22),
               borderRadius: BorderRadius.circular(4),
             ),
           ),
