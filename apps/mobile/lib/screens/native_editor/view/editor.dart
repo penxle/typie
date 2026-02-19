@@ -157,6 +157,7 @@ class EditorView extends HookWidget {
 
     final characterCountsVersion = useValueListenable(controller.characterCountsVersion);
     final characterCountsDebounce = useDebounce<void>(const Duration(milliseconds: 150));
+    final typewriterScrollDebounce = useDebounce<void>(const Duration(milliseconds: 40));
 
     useEffect(() {
       characterCountsDebounce.call(controller.refreshCharacterCounts, 'character-counts');
@@ -303,7 +304,7 @@ class EditorView extends HookWidget {
 
     final keyboard = useService<Keyboard>();
 
-    void scrollToCursorWith(CursorInfo c, {bool typewriter = false}) {
+    void scrollToCursorWith(CursorInfo c, {bool typewriter = false, bool typewriterAnimate = true}) {
       scrollToCursor(
         verticalController: verticalScrollController,
         horizontalController: horizontalScrollController,
@@ -315,6 +316,7 @@ class EditorView extends HookWidget {
         cursor: c,
         typewriterEnabled: typewriter,
         typewriterPosition: typewriter ? pref.typewriterPosition : 0.5,
+        typewriterAnimate: typewriterAnimate,
       );
     }
 
@@ -423,12 +425,23 @@ class EditorView extends HookWidget {
           }
           if (useTypewriter || useAutoScroll) {
             pendingScroll.value = () {
-              suppressScrollbarTimer.value?.cancel();
-              suppressScrollbarShow.value = true;
-              scrollToCursorWith(capturedCursor, typewriter: useTypewriter);
-              suppressScrollbarTimer.value = Timer(const Duration(milliseconds: 150), () {
-                suppressScrollbarShow.value = false;
-              });
+              void runScroll({bool typewriterAnimate = true}) {
+                suppressScrollbarTimer.value?.cancel();
+                suppressScrollbarShow.value = true;
+                scrollToCursorWith(capturedCursor, typewriter: useTypewriter, typewriterAnimate: typewriterAnimate);
+                suppressScrollbarTimer.value = Timer(const Duration(milliseconds: 150), () {
+                  suppressScrollbarShow.value = false;
+                });
+              }
+
+              if (useTypewriter) {
+                runScroll(typewriterAnimate: false);
+                typewriterScrollDebounce.call(runScroll, 'typewriter-scroll');
+                return;
+              }
+
+              typewriterScrollDebounce.cancel('typewriter-scroll');
+              runScroll();
             };
           }
         }
