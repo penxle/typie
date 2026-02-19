@@ -281,18 +281,27 @@ final class NativeEditor {
 
   final Pointer<EditorHandle> _handle;
   bool _disposed = false;
-  bool _needsTick = false;
+  bool _awake = false;
+
+  VoidCallback? onWakeUp;
 
   bool get isDisposed => _disposed;
-  bool get needsTick => _needsTick;
+  bool get awake => _awake;
 
-  void resetNeedsTick() {
-    _needsTick = false;
+  void _wakeUp() {
+    if (!_awake) {
+      _awake = true;
+      onWakeUp?.call();
+    }
+  }
+
+  void resetAwake() {
+    _awake = false;
   }
 
   void dispatch(Map<String, dynamic> message) {
     _checkDisposed();
-    _needsTick = true;
+    _wakeUp();
 
     final json = jsonEncode(message);
     final jsonPtr = json.toNativeUtf8();
@@ -402,7 +411,7 @@ final class NativeEditor {
         throw EditorException(_getLastError() ?? 'Failed to import updates');
       }
     });
-    _needsTick = true;
+    _wakeUp();
   }
 
   void insertTemplateFragment(Uint8List snapshot) {
@@ -413,7 +422,7 @@ final class NativeEditor {
         throw EditorException(_getLastError() ?? 'Failed to insert template fragment');
       }
     });
-    _needsTick = true;
+    _wakeUp();
   }
 
   void importUpdatesBatch(List<Uint8List> updatesBatch) {
@@ -448,7 +457,7 @@ final class NativeEditor {
         ..free(ptrsArray)
         ..free(lensArray);
     }
-    _needsTick = true;
+    _wakeUp();
   }
 
   Map<String, dynamic>? getClipboardData() {
@@ -534,7 +543,7 @@ final class NativeEditor {
     } finally {
       calloc.free(jsonPtr);
     }
-    _needsTick = true;
+    _wakeUp();
   }
 
   void removeTrackedItems(int group, List<String> ids) {
@@ -551,7 +560,7 @@ final class NativeEditor {
     } finally {
       calloc.free(jsonPtr);
     }
-    _needsTick = true;
+    _wakeUp();
   }
 
   List<Map<String, dynamic>> performSearch(String query, bool matchWholeWord) {
@@ -595,7 +604,7 @@ final class NativeEditor {
       if (result < 0) {
         throw EditorException(_getLastError() ?? 'Failed to replace text in block');
       }
-      _needsTick = true;
+      _wakeUp();
       return result == 1;
     } finally {
       calloc
@@ -615,7 +624,7 @@ final class NativeEditor {
       if (result < 0) {
         throw EditorException(_getLastError() ?? 'Failed to replace text in blocks');
       }
-      _needsTick = true;
+      _wakeUp();
     } finally {
       calloc.free(jsonPtr);
     }

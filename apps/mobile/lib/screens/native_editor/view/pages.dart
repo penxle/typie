@@ -499,7 +499,7 @@ class PageList extends HookWidget {
           }
 
           unawaited(
-            scope.controller.waitForNextTick().then((_) {
+            scope.ticker.settled().then((_) {
               if (!context.mounted) {
                 return;
               }

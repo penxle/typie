@@ -5,46 +5,51 @@ import 'package:typie/native/slate_reader.dart';
 import 'package:typie/screens/native_editor/handler/command.dart';
 import 'package:typie/screens/native_editor/state/controller.dart';
 
-class TickerLoop {
-  TickerLoop({required this.getController, required this.tickerProvider});
-
-  static const _tickInterval = Duration(milliseconds: 16);
+class EditorTicker {
+  EditorTicker({required this.getController, required this.tickerProvider});
 
   final EditorController Function() getController;
   final TickerProvider tickerProvider;
 
   Ticker? _ticker;
-  Duration _lastTickTime = Duration.zero;
   bool _flushPending = false;
+  List<Completer<void>> _settledCompleters = [];
+
+  Future<void> settled() {
+    final completer = Completer<void>();
+    _settledCompleters.add(completer);
+    return completer.future;
+  }
 
   void start() {
     _ticker ??= tickerProvider.createTicker(_onTick);
-    if (_ticker!.isActive) {
-      return;
-    }
-    _lastTickTime = Duration.zero;
-    unawaited(_ticker!.start());
+    getController().editor.onWakeUp = _ensureActive;
+    _ensureActive();
   }
 
   void stop() {
     _ticker?.stop();
   }
 
-  void _onTick(Duration elapsed) {
-    if (elapsed - _lastTickTime < _tickInterval) {
+  void _ensureActive() {
+    final ticker = _ticker;
+    if (ticker == null || ticker.isActive) {
       return;
     }
-    _lastTickTime = elapsed;
+    unawaited(ticker.start());
+  }
 
+  void _onTick(Duration elapsed) {
     final controller = getController();
     final editor = controller.editor;
-    if (editor.isDisposed || !editor.needsTick) {
+    if (editor.isDisposed || !editor.awake) {
+      stop();
       return;
     }
 
     editor
       ..tick()
-      ..resetNeedsTick();
+      ..resetAwake();
 
     final slatePtr = editor.getSlatePtr();
     final slateLen = editor.getSlateLen();
@@ -55,24 +60,29 @@ class TickerLoop {
     CommandHandler.handleSlate(controller, reader);
 
     if (!editor.isDisposed) {
-      controller.notifyTick();
+      if (_settledCompleters.isNotEmpty) {
+        final completers = _settledCompleters;
+        _settledCompleters = [];
+        for (final completer in completers) {
+          completer.complete();
+        }
+      }
 
       if (!_flushPending) {
         _flushPending = true;
-        unawaited(
-          SchedulerBinding.instance.scheduleTask(() {
-            _flushPending = false;
-            if (editor.isDisposed) {
-              return;
-            }
-            editor.flush();
-          }, Priority.idle),
-        );
+        SchedulerBinding.instance.addPostFrameCallback((_) {
+          _flushPending = false;
+          if (editor.isDisposed) {
+            return;
+          }
+          editor.flush();
+        });
       }
     }
   }
 
   void dispose() {
     stop();
+    _ticker?.dispose();
   }
 }

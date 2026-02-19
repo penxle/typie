@@ -291,15 +291,15 @@ class EditorView extends HookWidget {
       [controller, inputController],
     );
 
-    final tickerLoop = useMemoized(
-      () => TickerLoop(getController: () => controllerRef.value, tickerProvider: tickerProvider),
+    final ticker = useMemoized(
+      () => EditorTicker(getController: () => controllerRef.value, tickerProvider: tickerProvider),
       [tickerProvider],
     );
 
     useEffect(() {
-      tickerLoop.start();
-      return tickerLoop.stop;
-    }, [tickerLoop]);
+      ticker.start();
+      return ticker.stop;
+    }, [ticker]);
 
     final keyboard = useService<Keyboard>();
 
@@ -504,6 +504,7 @@ class EditorView extends HookWidget {
       commitComposing: inputController.commitComposing,
       child: ContentScope(
         controller: controller,
+        ticker: ticker,
         dndController: dndController,
         verticalScrollController: verticalScrollController,
         horizontalScrollController: horizontalScrollController,

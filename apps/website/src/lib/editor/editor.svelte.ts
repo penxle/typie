@@ -89,10 +89,10 @@ export class Editor {
   #running = false;
   #rafId: number | null = null;
   #flushPending = false;
-  #needsTick = false;
+  #awake = false;
   #renderDebugEnabled = false;
   #layoutDebugEnabled = false;
-  #tickResolvers: (() => void)[] = [];
+  #settledResolvers: (() => void)[] = [];
   #onDocChanged?: () => void;
   #onExitedDocumentStart?: () => void;
   #onSelectionChanged?: (anchor: Position, head: Position) => void;
@@ -288,7 +288,7 @@ export class Editor {
   #start(): void {
     if (this.#running) return;
     this.#running = true;
-    this.#tick();
+    this.#ensureActive();
   }
 
   #stop(): void {
@@ -299,11 +299,25 @@ export class Editor {
     }
   }
 
+  #wakeUp(): void {
+    if (!this.#awake) {
+      this.#awake = true;
+      this.#ensureActive();
+    }
+  }
+
+  #ensureActive(): void {
+    if (this.#running && this.#rafId === null) {
+      this.#rafId = requestAnimationFrame(this.#tick);
+    }
+  }
+
   #tick = (): void => {
+    this.#rafId = null;
     if (!this.#running) return;
 
-    if (this.#wasmEditor && this.#slateReader && this.#needsTick) {
-      this.#needsTick = false;
+    if (this.#wasmEditor && this.#slateReader && this.#awake) {
+      this.#awake = false;
       this.#wasmEditor.tick();
       this.#slateReader.refresh(this.#wasmEditor.getSlatePtr(), this.#wasmEditor.getSlabPtr());
       if (this.#slateReader.hasDirty) {
@@ -320,15 +334,17 @@ export class Editor {
       }
     }
 
-    if (this.#tickResolvers.length > 0) {
-      const resolvers = this.#tickResolvers;
-      this.#tickResolvers = [];
+    if (this.#settledResolvers.length > 0) {
+      const resolvers = this.#settledResolvers;
+      this.#settledResolvers = [];
       for (const resolve of resolvers) {
         resolve();
       }
     }
 
-    this.#rafId = requestAnimationFrame(this.#tick);
+    if (this.#awake) {
+      this.#rafId = requestAnimationFrame(this.#tick);
+    }
   };
 
   #readSlate(slate: SlateReader): void {
@@ -556,13 +572,13 @@ export class Editor {
 
   settled(): Promise<void> {
     return new Promise((resolve) => {
-      this.#tickResolvers.push(resolve);
+      this.#settledResolvers.push(resolve);
     });
   }
 
   dispatch(message: Message): Editor {
     this.#wasmEditor?.enqueueMessage(message);
-    this.#needsTick = true;
+    this.#wakeUp();
 
     return this;
   }
@@ -585,27 +601,27 @@ export class Editor {
 
   importUpdates(updates: Uint8Array): void {
     this.#wasmEditor?.importUpdates(updates);
-    this.#needsTick = true;
+    this.#wakeUp();
   }
 
   insertTemplateFragment(snapshot: Uint8Array): void {
     this.#wasmEditor?.insertTemplateFragment(snapshot);
-    this.#needsTick = true;
+    this.#wakeUp();
   }
 
   importUpdatesBatch(updatesBatch: Uint8Array[]): void {
     this.#wasmEditor?.importUpdatesBatch(updatesBatch);
-    this.#needsTick = true;
+    this.#wakeUp();
   }
 
   checkout(version: Uint8Array): void {
     this.#wasmEditor?.checkout(version);
-    this.#needsTick = true;
+    this.#wakeUp();
   }
 
   checkoutToLatest(): void {
     this.#wasmEditor?.checkoutToLatest();
-    this.#needsTick = true;
+    this.#wakeUp();
   }
 
   isDetached(): boolean {
@@ -618,7 +634,7 @@ export class Editor {
 
   revertTo(version: Uint8Array): void {
     this.#wasmEditor?.revertTo(version);
-    this.#needsTick = true;
+    this.#wakeUp();
   }
 
   inspectState(): string | undefined {
@@ -1196,13 +1212,13 @@ export class Editor {
   setRenderDebug(enabled: boolean): void {
     this.#renderDebugEnabled = enabled;
     this.#wasmEditor?.setRenderDebug(enabled);
-    this.#needsTick = true;
+    this.#wakeUp();
   }
 
   setLayoutDebug(enabled: boolean): void {
     this.#layoutDebugEnabled = enabled;
     this.#wasmEditor?.setLayoutDebug(enabled);
-    this.#needsTick = true;
+    this.#wakeUp();
   }
 
   isReadOnly(): boolean {
@@ -1212,11 +1228,11 @@ export class Editor {
   setTrackedItems(group: number, items: { id: string; nodeId: string; startOffset: number; endOffset: number }[]): void {
     if (this.#wasmEditor) {
       this.#wasmEditor.setTrackedItems(group, items);
-      this.#needsTick = true;
+      this.#wakeUp();
     } else {
       this.ready.then(() => {
         this.#wasmEditor?.setTrackedItems(group, items);
-        this.#needsTick = true;
+        this.#wakeUp();
       });
     }
   }
@@ -1224,18 +1240,18 @@ export class Editor {
   removeTrackedItems(group: number, ids: string[]): void {
     if (this.#wasmEditor) {
       this.#wasmEditor.removeTrackedItems(group, ids);
-      this.#needsTick = true;
+      this.#wakeUp();
     } else {
       this.ready.then(() => {
         this.#wasmEditor?.removeTrackedItems(group, ids);
-        this.#needsTick = true;
+        this.#wakeUp();
       });
     }
   }
 
   replaceTextInBlock(blockId: string, startOffset: number, endOffset: number, replacement: string): boolean {
     const result = this.#wasmEditor?.replaceTextInBlock(blockId, startOffset, endOffset, replacement) ?? false;
-    this.#needsTick = true;
+    this.#wakeUp();
     return result;
   }
 
@@ -1357,7 +1373,7 @@ export class Editor {
 
     this.#wasmEditor.replaceTextInBlock(item.nodeId, item.startOffset, item.endOffset, replacement);
     this.#wasmEditor.removeTrackedItems(2, [item.id]);
-    this.#needsTick = true;
+    this.#wakeUp();
   }
 
   replaceAll(replacement: string): void {
@@ -1368,7 +1384,7 @@ export class Editor {
 
     this.#wasmEditor.replaceTextInBlocks(items.map((v) => [v.nodeId, v.startOffset, v.endOffset, replacement]));
     this.#wasmEditor.removeTrackedItems(2, [...ids]);
-    this.#needsTick = true;
+    this.#wakeUp();
   }
 
   scrollIntoView({ mode = 'auto' }: { mode?: 'auto' | 'typewriter' } = {}): Editor {
