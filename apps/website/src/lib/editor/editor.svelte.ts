@@ -1317,7 +1317,7 @@ export class Editor {
       this.searchMatches[0].active = true;
     }
 
-    this.#wasmEditor.setTrackedItems(
+    this.setTrackedItems(
       2,
       items.map((it) => ({ id: it.id, nodeId: it.nodeId, startOffset: it.startOffset, endOffset: it.endOffset })),
     );
@@ -1331,7 +1331,7 @@ export class Editor {
 
   clearSearch(): void {
     this.searchMatches = [];
-    this.#wasmEditor?.setTrackedItems(2, []);
+    this.setTrackedItems(2, []);
   }
 
   findNext(): void {
