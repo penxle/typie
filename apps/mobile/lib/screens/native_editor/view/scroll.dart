@@ -19,7 +19,6 @@ void scrollToCursor({
   required CursorInfo cursor,
   bool typewriterEnabled = false,
   double typewriterPosition = 0.5,
-  bool typewriterAnimate = true,
 }) {
   _scrollVertical(
     controller: verticalController,
@@ -27,14 +26,8 @@ void scrollToCursor({
     cursor: cursor,
     typewriterEnabled: typewriterEnabled,
     typewriterPosition: typewriterPosition,
-    typewriterAnimate: typewriterAnimate,
   );
-
-  if (typewriterEnabled && !typewriterAnimate) {
-    return;
-  }
-
-  _scrollHorizontal(controller: horizontalController, geometry: geometry, cursor: cursor);
+  _scrollHorizontal(controller: horizontalController, geometry: geometry, cursor: cursor, animate: !typewriterEnabled);
 }
 
 void _scrollVertical({
@@ -43,7 +36,6 @@ void _scrollVertical({
   required CursorInfo cursor,
   required bool typewriterEnabled,
   required double typewriterPosition,
-  required bool typewriterAnimate,
 }) {
   if (!controller.hasSingleClient) {
     return;
@@ -63,32 +55,13 @@ void _scrollVertical({
     );
     final maxScrollExtent = math.max<double>(0, totalContentHeight - viewportHeight);
 
-    _jumpToKeepCursorInScrollMargin(
-      controller: controller,
-      cursorTop: cursorGlobalY,
-      cursorHeight: cursor.height,
-      viewportHeight: viewportHeight,
-      maxScrollExtent: maxScrollExtent,
-    );
-
-    if (!typewriterAnimate) {
-      return;
-    }
-
     final clampedTarget = targetScroll.clamp(0.0, maxScrollExtent);
     final distance = (controller.offset - clampedTarget).abs();
     if (distance <= 1) {
       return;
     }
 
-    final durationMs = math.max(90, math.min(180, (distance * 0.25).round()));
-    unawaited(
-      controller.animateTo(
-        clampedTarget,
-        duration: Duration(milliseconds: durationMs),
-        curve: Curves.easeOutCubic,
-      ),
-    );
+    controller.jumpTo(clampedTarget);
     return;
   }
 
@@ -122,6 +95,7 @@ void _scrollHorizontal({
   required ScrollController controller,
   required ContentGeometry geometry,
   required CursorInfo cursor,
+  bool animate = true,
 }) {
   if (!controller.hasSingleClient || controller.position.maxScrollExtent <= 0) {
     return;
@@ -134,21 +108,19 @@ void _scrollHorizontal({
   final cursorRight = cursorX + 2;
 
   if (cursorRight > scrollOffset + viewportWidth - scrollMargin) {
-    unawaited(
-      controller.animateTo(
-        cursorRight - viewportWidth + scrollMargin,
-        duration: const Duration(milliseconds: 100),
-        curve: Curves.easeOut,
-      ),
-    );
+    final target = (cursorRight - viewportWidth + scrollMargin).clamp(0.0, controller.position.maxScrollExtent);
+    if (animate) {
+      unawaited(controller.animateTo(target, duration: const Duration(milliseconds: 100), curve: Curves.easeOut));
+    } else {
+      controller.jumpTo(target);
+    }
   } else if (cursorX < scrollOffset + scrollMargin) {
-    unawaited(
-      controller.animateTo(
-        (cursorX - scrollMargin).clamp(0, controller.position.maxScrollExtent),
-        duration: const Duration(milliseconds: 100),
-        curve: Curves.easeOut,
-      ),
-    );
+    final target = (cursorX - scrollMargin).clamp(0.0, controller.position.maxScrollExtent);
+    if (animate) {
+      unawaited(controller.animateTo(target, duration: const Duration(milliseconds: 100), curve: Curves.easeOut));
+    } else {
+      controller.jumpTo(target);
+    }
   }
 }
 

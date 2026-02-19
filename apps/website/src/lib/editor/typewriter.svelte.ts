@@ -1,16 +1,9 @@
 import { getAppContext } from '@typie/ui/context';
-import { debounce } from '@typie/ui/utils';
-import { cubicOut } from 'svelte/easing';
-import { Tween } from 'svelte/motion';
 import { PAGE_GAP } from './constants';
 import { getEditorContext } from './context.svelte';
 
 export function setupTypewriter(getTargetEl: () => HTMLElement | undefined, defaultPadding: number) {
-  const TYPEWRITER_SCROLL_DEBOUNCE_MS = 40;
-
   const { editor } = getEditorContext();
-  const scrollTop = new Tween(0);
-  let scrollTweenTarget = $state<HTMLElement>();
 
   if (editor.readOnly) {
     $effect(() => {
@@ -26,19 +19,14 @@ export function setupTypewriter(getTargetEl: () => HTMLElement | undefined, defa
 
   let scrollContainerHeight = $state(0);
 
-  const animateScrollBy = (scroller: HTMLElement, delta: number) => {
+  const scrollBy = (scroller: HTMLElement, delta: number) => {
     const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
-    const startScrollTop = scroller.scrollTop;
-    const targetScrollTop = Math.max(0, Math.min(maxScrollTop, startScrollTop + delta));
-    const distance = targetScrollTop - startScrollTop;
-    if (Math.abs(distance) <= 1) {
+    const targetScrollTop = Math.max(0, Math.min(maxScrollTop, scroller.scrollTop + delta));
+    if (Math.abs(targetScrollTop - scroller.scrollTop) <= 1) {
       return;
     }
 
-    const duration = Math.min(180, Math.max(90, Math.abs(distance) * 0.25));
-    scrollTweenTarget = scroller;
-    void scrollTop.set(startScrollTop, { duration: 0 });
-    void scrollTop.set(targetScrollTop, { duration, easing: cubicOut });
+    scroller.scrollTop = targetScrollTop;
   };
 
   const computeTypewriterScrollMetrics = () => {
@@ -70,28 +58,6 @@ export function setupTypewriter(getTargetEl: () => HTMLElement | undefined, defa
 
     return { scroller, scrollerRect, cursorTop, cursorHeight, delta };
   };
-
-  const scheduleDebouncedTypewriterScroll = debounce(() => {
-    const metrics = computeTypewriterScrollMetrics();
-    if (!metrics || Math.abs(metrics.delta) <= 1) {
-      return;
-    }
-    animateScrollBy(metrics.scroller, metrics.delta);
-  }, TYPEWRITER_SCROLL_DEBOUNCE_MS);
-
-  $effect(() => {
-    const scroller = scrollTweenTarget;
-    if (!scroller) {
-      return;
-    }
-
-    const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
-    const nextScrollTop = Math.max(0, Math.min(maxScrollTop, scrollTop.current));
-
-    if (Math.abs(scroller.scrollTop - nextScrollTop) > 0.1) {
-      scroller.scrollTop = nextScrollTop;
-    }
-  });
 
   $effect(() => {
     const scroller = editor.scrollContainerEl;
@@ -175,7 +141,11 @@ export function setupTypewriter(getTargetEl: () => HTMLElement | undefined, defa
       app.preference.current.typewriterEnabled &&
       app.preference.current.typewriterPosition !== undefined
     ) {
-      scheduleDebouncedTypewriterScroll();
+      const metrics = computeTypewriterScrollMetrics();
+      if (!metrics || Math.abs(metrics.delta) <= 1) {
+        return;
+      }
+      scrollBy(metrics.scroller, metrics.delta);
     }
   });
 }
