@@ -8,7 +8,7 @@ use crate::state::selection_helpers::{
     StructureSelectionInfo, block_content_len, compute_structure_selection,
 };
 use crate::state::{Position, Selection};
-use crate::transaction::Transaction;
+use crate::transaction::{Transaction, compute_styles_at_char_position, compute_styles_at_cursor};
 use crate::types::Affinity;
 use crate::utils::{
     collect_codepoints, find_next_grapheme_boundary, find_prev_grapheme_boundary,
@@ -368,7 +368,6 @@ impl Transaction {
         }
 
         let head = selection.head;
-        let pre_styles = self.state.pending_styles.clone();
 
         let paragraph = self.node(head.node_id).context("Paragraph not found")?;
 
@@ -415,13 +414,18 @@ impl Transaction {
             }
         };
 
+        let deleted_styles = compute_styles_at_char_position(
+            self.doc(),
+            &Position::new(head.node_id, from_global_offset, head.affinity),
+        );
+
         let from = Position::new(head.node_id, from_global_offset, head.affinity);
         let to = Position::new(head.node_id, to_global_offset, head.affinity);
 
         self.delete_range(from, to)?;
 
         if !self.cursor_has_text_segment(head.node_id, from_global_offset) {
-            let _ = self.set_cascade_attrs(head.node_id, &Attr::from_styles(&pre_styles));
+            let _ = self.set_cascade_attrs(head.node_id, &Attr::from_styles(&deleted_styles));
         }
 
         let new_affinity =
@@ -432,6 +436,11 @@ impl Transaction {
             from_global_offset,
             new_affinity,
         )));
+
+        if self.state.pending_styles != deleted_styles {
+            self.state.pending_styles = deleted_styles;
+            self.push_effect(Effect::PendingStylesChanged);
+        }
 
         self.push_effect(Effect::NodeChanged {
             node_id: head.node_id,
@@ -446,7 +455,6 @@ impl Transaction {
         }
 
         let head = selection.head;
-        let pre_styles = self.state.pending_styles.clone();
 
         let paragraph = self.node(head.node_id).context("Paragraph not found")?;
 
@@ -497,13 +505,18 @@ impl Transaction {
             }
         };
 
+        let deleted_styles = compute_styles_at_char_position(
+            self.doc(),
+            &Position::new(head.node_id, from_global_offset, head.affinity),
+        );
+
         let from = Position::new(head.node_id, from_global_offset, head.affinity);
         let to = Position::new(head.node_id, to_global_offset, head.affinity);
 
         self.delete_range(from, to)?;
 
         if !self.cursor_has_text_segment(head.node_id, from_global_offset) {
-            let _ = self.set_cascade_attrs(head.node_id, &Attr::from_styles(&pre_styles));
+            let _ = self.set_cascade_attrs(head.node_id, &Attr::from_styles(&deleted_styles));
         }
 
         let new_affinity =
@@ -514,6 +527,11 @@ impl Transaction {
             from_global_offset,
             new_affinity,
         )));
+
+        if self.state.pending_styles != deleted_styles {
+            self.state.pending_styles = deleted_styles;
+            self.push_effect(Effect::PendingStylesChanged);
+        }
 
         self.push_effect(Effect::NodeChanged {
             node_id: head.node_id,
@@ -528,7 +546,11 @@ impl Transaction {
             return self.delete_structure_selection(&structure_selection);
         }
 
-        let pre_delete_styles = self.state.pending_styles.clone();
+        let deleted_styles = self
+            .selection()
+            .as_sorted(self.doc())
+            .map(|(from, _)| compute_styles_at_char_position(self.doc(), &from))
+            .unwrap_or_else(|_| compute_styles_at_cursor(self.doc(), &self.selection().head));
 
         if let StructureSelectionInfo::Structural(block_ids) = structure_selection {
             let (mut from, mut to) = self.selection().as_sorted(self.doc())?;
@@ -569,12 +591,11 @@ impl Transaction {
 
             let head = self.state.selection.head;
             if !self.cursor_has_text_segment(head.node_id, head.offset) {
-                let _ =
-                    self.set_cascade_attrs(head.node_id, &Attr::from_styles(&pre_delete_styles));
-                if self.state.pending_styles != pre_delete_styles {
-                    self.state.pending_styles = pre_delete_styles;
-                    self.push_effect(Effect::PendingStylesChanged);
-                }
+                let _ = self.set_cascade_attrs(head.node_id, &Attr::from_styles(&deleted_styles));
+            }
+            if self.state.pending_styles != deleted_styles {
+                self.state.pending_styles = deleted_styles;
+                self.push_effect(Effect::PendingStylesChanged);
             }
         }
 
@@ -3685,6 +3706,164 @@ mod tests {
                 .iter()
                 .any(|m| matches!(m, Style::Italic(_))),
             "pending_styles should pick up italic from adjacent segment, got: {:?}",
+            view.pending_styles
+        );
+    }
+
+    #[test]
+    fn delete_text_backward_uses_deleted_segment_styles_over_remaining() {
+        let mut p = id!();
+
+        let state = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_weight(700)]) { "a" }
+                    text(styles: [italic()]) { "b" }
+                }
+            }
+            selection { (p, 1) }
+        };
+
+        let mut tr = Transaction::new(&state);
+        tr.delete_text_backward().unwrap();
+        let (view, _) = tr.commit().unwrap();
+
+        // "a" [bold] deleted, "b" [italic] remains → pending_styles = deleted segment's [bold]
+        assert!(
+            view.pending_styles
+                .iter()
+                .any(|m| matches!(m, Style::FontWeight(fw) if fw.weight == 700)),
+            "pending_styles should use deleted segment's bold, got: {:?}",
+            view.pending_styles
+        );
+    }
+
+    #[test]
+    fn delete_text_backward_ignores_style_override_uses_segment_styles() {
+        let mut p = id!();
+
+        let state = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_weight(700)]) { "a" }
+                }
+            }
+            selection { (p, 1) }
+        };
+
+        let mut tr = Transaction::new(&state);
+        // toggle italic → pending_styles = [bold, italic]
+        tr.set_style(Style::Italic(ItalicStyle {})).unwrap();
+        tr.delete_text_backward().unwrap();
+        let (view, _) = tr.commit().unwrap();
+
+        // segment was [bold] only → italic override should be discarded
+        assert!(
+            view.pending_styles
+                .iter()
+                .any(|m| matches!(m, Style::FontWeight(fw) if fw.weight == 700)),
+            "pending_styles should contain bold from segment, got: {:?}",
+            view.pending_styles
+        );
+        assert!(
+            !view
+                .pending_styles
+                .iter()
+                .any(|m| matches!(m, Style::Italic(_))),
+            "pending_styles should NOT contain manually toggled italic, got: {:?}",
+            view.pending_styles
+        );
+    }
+
+    #[test]
+    fn delete_text_forward_uses_deleted_segment_styles_over_remaining() {
+        let mut p = id!();
+
+        let state = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [italic()]) { "a" }
+                    text(styles: [font_weight(700)]) { "b" }
+                }
+            }
+            selection { (p, 1) }
+        };
+
+        let mut tr = Transaction::new(&state);
+        tr.delete_text_forward().unwrap();
+        let (view, _) = tr.commit().unwrap();
+
+        // "b" [bold] deleted, "a" [italic] remains → pending_styles = deleted segment's [bold]
+        assert!(
+            view.pending_styles
+                .iter()
+                .any(|m| matches!(m, Style::FontWeight(fw) if fw.weight == 700)),
+            "pending_styles should use deleted segment's bold, got: {:?}",
+            view.pending_styles
+        );
+    }
+
+    #[test]
+    fn delete_text_forward_ignores_style_override_uses_segment_styles() {
+        let mut p = id!();
+
+        let state = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_weight(700)]) { "a" }
+                }
+            }
+            selection { (p, 0) }
+        };
+
+        let mut tr = Transaction::new(&state);
+        // toggle italic → pending_styles includes italic
+        tr.set_style(Style::Italic(ItalicStyle {})).unwrap();
+        tr.delete_text_forward().unwrap();
+        let (view, _) = tr.commit().unwrap();
+
+        // segment was [bold] only → italic override should be discarded
+        assert!(
+            view.pending_styles
+                .iter()
+                .any(|m| matches!(m, Style::FontWeight(fw) if fw.weight == 700)),
+            "pending_styles should contain bold from segment, got: {:?}",
+            view.pending_styles
+        );
+        assert!(
+            !view
+                .pending_styles
+                .iter()
+                .any(|m| matches!(m, Style::Italic(_))),
+            "pending_styles should NOT contain manually toggled italic, got: {:?}",
+            view.pending_styles
+        );
+    }
+
+    #[test]
+    fn delete_selection_uses_deleted_segment_styles_over_remaining() {
+        let mut p = id!();
+
+        let state = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_weight(700)]) { "ab" }
+                    text(styles: [italic()]) { "cd" }
+                }
+            }
+            selection { (p, 0) -> (p, 2) }
+        };
+
+        let mut tr = Transaction::new(&state);
+        tr.delete_selection().unwrap();
+        let (view, _) = tr.commit().unwrap();
+
+        // "ab" [bold] deleted, "cd" [italic] remains → pending_styles = deleted segment's [bold]
+        assert!(
+            view.pending_styles
+                .iter()
+                .any(|m| matches!(m, Style::FontWeight(fw) if fw.weight == 700)),
+            "pending_styles should use deleted segment's bold, got: {:?}",
             view.pending_styles
         );
     }

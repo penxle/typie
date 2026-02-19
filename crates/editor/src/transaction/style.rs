@@ -40,6 +40,40 @@ pub(crate) fn compute_styles_at_cursor(doc: &Doc, position: &Position) -> Vec<St
     cascade
 }
 
+/// Character-at semantics: returns the styles of the segment containing the character
+/// at the given offset (>= start, < end), unlike `compute_styles_at_cursor` which
+/// uses cursor semantics (> start, <= end).
+pub(crate) fn compute_styles_at_char_position(doc: &Doc, position: &Position) -> Vec<Style> {
+    let cascade = resolve_style_cascade(doc, position.node_id);
+
+    let Some(node) = doc.node(position.node_id) else {
+        return cascade;
+    };
+
+    let Some((child_id, local_offset)) = find_child_at_offset(&node, position.offset) else {
+        return cascade;
+    };
+
+    let Some(child) = doc.node(child_id) else {
+        return cascade;
+    };
+
+    if let Node::Text(text_node) = child.node() {
+        let segments = text_node.text.get_segments();
+        let mut current_offset = 0;
+
+        for segment in segments {
+            let segment_len = segment.text.chars().count();
+            if local_offset >= current_offset && local_offset < current_offset + segment_len {
+                return fill_missing_styles(segment.styles, &cascade);
+            }
+            current_offset += segment_len;
+        }
+    }
+
+    cascade
+}
+
 pub(crate) fn resolve_style_cascade(doc: &Doc, node_id: NodeId) -> Vec<Style> {
     let mut attrs: Vec<Attr> = Vec::new();
     let Some(node) = doc.node(node_id) else {
