@@ -5,6 +5,8 @@ import 'package:flutter/widgets.dart';
 import 'package:typie/screens/native_editor/state/state.dart';
 import 'package:typie/screens/native_editor/view/geometry.dart';
 
+const _scrollMargin = 60.0;
+
 extension SafeScrollAccess on ScrollController {
   /// [position]/[offset] 접근 전에 사용. 여러 scroll view에 attach된 경우 false 반환.
   bool get hasSingleClient => hasClients && positions.length == 1;
@@ -17,6 +19,7 @@ void scrollToCursor({
   required CursorInfo cursor,
   bool typewriterEnabled = false,
   double typewriterPosition = 0.5,
+  bool typewriterAnimate = true,
 }) {
   _scrollVertical(
     controller: verticalController,
@@ -24,7 +27,13 @@ void scrollToCursor({
     cursor: cursor,
     typewriterEnabled: typewriterEnabled,
     typewriterPosition: typewriterPosition,
+    typewriterAnimate: typewriterAnimate,
   );
+
+  if (typewriterEnabled && !typewriterAnimate) {
+    return;
+  }
+
   _scrollHorizontal(controller: horizontalController, geometry: geometry, cursor: cursor);
 }
 
@@ -34,6 +43,7 @@ void _scrollVertical({
   required CursorInfo cursor,
   required bool typewriterEnabled,
   required double typewriterPosition,
+  required bool typewriterAnimate,
 }) {
   if (!controller.hasSingleClient) {
     return;
@@ -53,29 +63,58 @@ void _scrollVertical({
     );
     final maxScrollExtent = math.max<double>(0, totalContentHeight - viewportHeight);
 
-    final clampedTarget = targetScroll.clamp(0.0, maxScrollExtent);
-    final delta = (controller.offset - clampedTarget).abs();
-    if (delta > 0.5) {
-      final durationMs = math.max(90, math.min(180, (delta * 0.25).round()));
-      unawaited(
-        controller.animateTo(
-          clampedTarget,
-          duration: Duration(milliseconds: durationMs),
-          curve: Curves.easeOutCubic,
-        ),
-      );
+    _jumpToKeepCursorInScrollMargin(
+      controller: controller,
+      cursorTop: cursorGlobalY,
+      cursorHeight: cursor.height,
+      viewportHeight: viewportHeight,
+      maxScrollExtent: maxScrollExtent,
+    );
+
+    if (!typewriterAnimate) {
+      return;
     }
+
+    final clampedTarget = targetScroll.clamp(0.0, maxScrollExtent);
+    final distance = (controller.offset - clampedTarget).abs();
+    if (distance <= 1) {
+      return;
+    }
+
+    final durationMs = math.max(90, math.min(180, (distance * 0.25).round()));
+    unawaited(
+      controller.animateTo(
+        clampedTarget,
+        duration: Duration(milliseconds: durationMs),
+        curve: Curves.easeOutCubic,
+      ),
+    );
     return;
   }
 
-  const scrollMargin = 60.0;
-  final scrollOffset = controller.offset;
-  final cursorBottom = cursorGlobalY + cursor.height;
+  _jumpToKeepCursorInScrollMargin(
+    controller: controller,
+    cursorTop: cursorGlobalY,
+    cursorHeight: cursor.height,
+    viewportHeight: viewportHeight,
+    maxScrollExtent: controller.position.maxScrollExtent,
+  );
+}
 
-  if (cursorBottom > scrollOffset + viewportHeight - scrollMargin) {
-    controller.jumpTo(cursorBottom - viewportHeight + scrollMargin);
-  } else if (cursorGlobalY < scrollOffset + scrollMargin) {
-    controller.jumpTo((cursorGlobalY - scrollMargin).clamp(0, controller.position.maxScrollExtent));
+void _jumpToKeepCursorInScrollMargin({
+  required ScrollController controller,
+  required double cursorTop,
+  required double cursorHeight,
+  required double viewportHeight,
+  required double maxScrollExtent,
+}) {
+  final scrollOffset = controller.offset;
+  final cursorBottom = cursorTop + cursorHeight;
+
+  if (cursorBottom > scrollOffset + viewportHeight - _scrollMargin) {
+    controller.jumpTo((cursorBottom - viewportHeight + _scrollMargin).clamp(0.0, maxScrollExtent));
+  } else if (cursorTop < scrollOffset + _scrollMargin) {
+    controller.jumpTo((cursorTop - _scrollMargin).clamp(0.0, maxScrollExtent));
   }
 }
 
@@ -88,7 +127,7 @@ void _scrollHorizontal({
     return;
   }
 
-  const scrollMargin = 60.0;
+  const scrollMargin = _scrollMargin;
   final cursorX = cursor.x + geometry.horizontalPadding;
   final scrollOffset = controller.offset;
   final viewportWidth = controller.position.viewportDimension;
