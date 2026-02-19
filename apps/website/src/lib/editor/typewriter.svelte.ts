@@ -7,7 +7,6 @@ import { getEditorContext } from './context.svelte';
 
 export function setupTypewriter(getTargetEl: () => HTMLElement | undefined, defaultPadding: number) {
   const TYPEWRITER_SCROLL_DEBOUNCE_MS = 40;
-  const CURSOR_VIEWPORT_GUARD_PX = 60;
 
   const { editor } = getEditorContext();
   const scrollTop = new Tween(0);
@@ -70,30 +69,6 @@ export function setupTypewriter(getTargetEl: () => HTMLElement | undefined, defa
     const delta = cursorTop - targetY;
 
     return { scroller, scrollerRect, cursorTop, cursorHeight, delta };
-  };
-
-  const keepCursorInViewport = (metrics: { scroller: HTMLElement; scrollerRect: DOMRect; cursorTop: number; cursorHeight: number }) => {
-    const { scroller, scrollerRect, cursorTop, cursorHeight } = metrics;
-    const cursorBottom = cursorTop + cursorHeight;
-    const safeTop = scrollerRect.top + CURSOR_VIEWPORT_GUARD_PX;
-    const safeBottom = scrollerRect.bottom - CURSOR_VIEWPORT_GUARD_PX;
-
-    let nextScrollTop = scroller.scrollTop;
-    if (cursorTop < safeTop) {
-      nextScrollTop -= safeTop - cursorTop;
-    } else if (cursorBottom > safeBottom) {
-      nextScrollTop += cursorBottom - safeBottom;
-    }
-
-    const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
-    const clamped = Math.max(0, Math.min(maxScrollTop, nextScrollTop));
-    if (Math.abs(clamped - scroller.scrollTop) <= 1) {
-      return;
-    }
-
-    scroller.scrollTop = clamped;
-    scrollTweenTarget = scroller;
-    void scrollTop.set(clamped, { duration: 0 });
   };
 
   const scheduleDebouncedTypewriterScroll = debounce(() => {
@@ -194,17 +169,12 @@ export function setupTypewriter(getTargetEl: () => HTMLElement | undefined, defa
     }
 
     editor.pendingScrollMode = null;
-    const metrics = computeTypewriterScrollMetrics();
-    if (!metrics) {
-      return;
-    }
 
-    keepCursorInViewport(metrics);
-
-    const shouldAnimateTypewriter =
-      pendingMode === 'typewriter' && app.preference.current.typewriterEnabled && app.preference.current.typewriterPosition !== undefined;
-
-    if (shouldAnimateTypewriter) {
+    if (
+      pendingMode === 'typewriter' &&
+      app.preference.current.typewriterEnabled &&
+      app.preference.current.typewriterPosition !== undefined
+    ) {
       scheduleDebouncedTypewriterScroll();
     }
   });
