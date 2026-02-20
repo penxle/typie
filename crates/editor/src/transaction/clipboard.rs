@@ -1761,6 +1761,52 @@ mod tests {
     }
 
     #[test]
+    fn paste_deep_open_fragment_places_cursor_at_end_of_last_leaf_textblock() {
+        let mut target = id!();
+        let mut para = id!();
+
+        let initial = state! {
+            doc {
+                @target paragraph {}
+            }
+            selection { (target, 0) }
+        };
+
+        let fragment = fragment! {
+            open_start: 1,
+            open_end: 3,
+
+            paragraph {}
+            bullet_list {
+                list_item {
+                    @para paragraph {
+                        text { "ㅁㄴㅇ" }
+                    }
+                }
+            }
+        };
+
+        let actual = transact!(initial, |tr| {
+            tr.paste_fragment(fragment, None).unwrap();
+        });
+
+        assert!(
+            actual.selection.is_collapsed(),
+            "Selection should be collapsed after paste, but was {:?}",
+            actual.selection
+        );
+        assert_eq!(
+            actual.selection.head.node_id, para,
+            "Cursor should be in the inserted paragraph"
+        );
+        assert_eq!(
+            actual.selection.head.offset, 3,
+            "Cursor should be at end of pasted text (offset 3), but was {}",
+            actual.selection.head.offset
+        );
+    }
+
+    #[test]
     fn repaste_as_text_after_pasting_deep_open_fragment() {
         let mut p = id!();
 

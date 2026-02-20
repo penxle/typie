@@ -2146,12 +2146,13 @@ impl Transaction {
                     self.insert_fragment_children_recursive(node_id, &fragment)?;
                     insert_at += 1;
 
-                    last_para_id = node_id;
                     let inserted_node = self
                         .doc()
                         .node(node_id)
                         .context("Inserted node not found")?;
-                    last_para_content_len = block_content_len(&inserted_node);
+                    let end_pos = leaf_block_end(&inserted_node);
+                    last_para_id = end_pos.node_id;
+                    last_para_content_len = end_pos.offset;
 
                     if is_last && !right_children.is_empty() {
                         let new_para_id = NodeId::new();
