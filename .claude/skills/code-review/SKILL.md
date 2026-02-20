@@ -25,21 +25,28 @@ To do this, follow these steps precisely:
    - If so, the **type** of the last actionable review (`APPROVED` or `CHANGES_REQUESTED` — ignore `COMMENTED` for determining review type)
    - The **commit SHA** that Claude's last review was submitted against (`commit.oid` on the review)
    - The **current HEAD SHA** of the PR branch
-   - The **diff checksum** from Claude's most recent review of any type (including `COMMENTED`) — check all of Claude's reviews from newest to oldest and use the first one containing `<!-- diff-checksum: ... -->` in the body. COMMENT reviews are used to update the checksum without changing the review state (see step 9B/9C).
+   - The **diff checksum** stored as a commit status on the reviewed commit (context: `claude/diff-checksum`, value in `description` field). Query it:
+
+     ```bash
+     gh api repos/{owner}/{repo}/commits/{REVIEWED_COMMIT_SHA}/statuses --jq '.[] | select(.context == "claude/diff-checksum") | .description'
+     ```
 
    Compare the reviewed commit SHA to the current HEAD SHA. If they differ, the HEAD has changed — but this does NOT necessarily mean the code has changed. Rebases, base branch updates (e.g., GitHub UI "Update branch" button, Graphite bot), or local rebase + force push can change the HEAD SHA without altering the PR's actual changes.
 
    To determine if the **code actually changed**, compare the PR diff at the time of the last review vs now. Run:
-   `gh pr diff <PR>` and compare it against the diff that was reviewed. Since we cannot retrieve the old diff directly, use a content-based heuristic: compute a checksum of the current PR diff (`gh pr diff <PR> | sha256sum`) and compare it to the checksum stored in Claude's last review body (see step 9 for how this is stored). If the checksums match, the code is unchanged despite the HEAD SHA change.
+   `gh pr diff <PR>` and compare it against the diff that was reviewed. Since we cannot retrieve the old diff directly, use a content-based heuristic: compute a checksum of the current PR diff (`gh pr diff <PR> | sha256sum`) and compare it to the checksum stored as a commit status on the reviewed commit. If the checksums match, the code is unchanged despite the HEAD SHA change.
 
-   If Claude's last review body does not contain a diff checksum (e.g., reviews from before this workflow was added), treat any HEAD SHA change as a code change.
+   If no diff checksum status exists on the reviewed commit (e.g., reviews from before this workflow was added), treat any HEAD SHA change as a code change.
 
    Return one of these states:
    - `no_prior_review` — Claude has never reviewed this PR → proceed with full review
    - `approved_no_change` — Claude approved, code unchanged (same HEAD or same diff checksum) → **stop, do not proceed**
    - `approved_code_changed` — Claude approved, code actually changed → proceed (re-review mode)
-   - `changes_requested_no_change` — Claude requested changes, code unchanged → **stop, do not proceed**
+   - `changes_requested_no_change` — Claude requested changes, code unchanged, unresolved threads remain → **stop, do not proceed**
+   - `changes_requested_all_resolved` — Claude requested changes, code unchanged, but ALL of Claude's review threads are resolved → **skip to step 9D** (approve)
    - `changes_requested_code_changed` — Claude requested changes, code actually changed → proceed (re-review mode: check fixes + new changes)
+
+   To distinguish `changes_requested_no_change` from `changes_requested_all_resolved`, the agent must check thread resolution status via the GraphQL query below when the prior review was `CHANGES_REQUESTED` and the code is unchanged. If every Claude-authored review thread is resolved, return `changes_requested_all_resolved`.
 
    Also return (if applicable — i.e., for any re-review state where Claude has a prior review):
    - The list of review comment bodies, paths, and lines from Claude's last review (for cross-referencing in step 5 to avoid duplicate flags)
@@ -112,26 +119,32 @@ To do this, follow these steps precisely:
    - Issues found → REQUEST_CHANGES
 
    **B. Re-review after prior APPROVE (`approved_code_changed`):**
-   - No new issues → submit a COMMENT review (not APPROVE) with just the diff checksum to update it. Body: `"<!-- diff-checksum: <HASH> -->"`. This prevents stale checksums from triggering infinite re-reviews.
+   - No new issues → do NOT submit a review. Just update the diff checksum (see below). This prevents stale checksums from triggering infinite re-reviews.
    - New issues found → REQUEST_CHANGES
 
    **C. Re-review after prior REQUEST_CHANGES (`changes_requested_code_changed`):**
    - All prior issues fixed AND no new issues → APPROVE
-   - Some prior issues still present, no new issues → submit a COMMENT review with just the diff checksum to update it. Body: `"<!-- diff-checksum: <HASH> -->"`. Do NOT submit another REQUEST_CHANGES — the existing one and its unresolved threads are sufficient.
+   - Some prior issues still present, no new issues → do NOT submit a review. Just update the diff checksum. The existing REQUEST_CHANGES and its unresolved threads are sufficient.
    - New issues found (regardless of prior issue status) → REQUEST_CHANGES (only for NEW issues not already flagged; do not re-post comments for unresolved prior issues)
 
-   **Diff checksum**: Before submitting any review, compute the current PR diff checksum:
+   **D. All threads resolved without code change (`changes_requested_all_resolved`):**
+   - APPROVE. All previously flagged issues have been resolved by the author (e.g., false positives acknowledged, issues addressed outside of the PR diff). No re-review of the diff is needed.
+
+   **Diff checksum**: After every step 9 action (including no-ops in 9B/9C), compute the current PR diff checksum and store it as a **commit status** on the current HEAD SHA. This is invisible in the PR UI and is used by future re-reviews (step 1b) to detect whether the code actually changed despite HEAD SHA changes (e.g., rebases).
 
    ```bash
-   gh pr diff <PR_NUMBER> | sha256sum | awk '{print $1}'
+   CHECKSUM=$(gh pr diff <PR_NUMBER> | sha256sum | awk '{print $1}')
+   HEAD_SHA=$(gh pr view <PR_NUMBER> --json headRefOid -q .headRefOid)
+   gh api repos/{owner}/{repo}/statuses/$HEAD_SHA \
+     -f state=success \
+     -f context=claude/diff-checksum \
+     -f "description=$CHECKSUM"
    ```
-
-   Include it in the review body as a metadata line: `<!-- diff-checksum: <HASH> -->`. This is used by future re-reviews (step 1b) to detect whether the code actually changed despite HEAD SHA changes (e.g., rebases).
 
    **To APPROVE:**
 
    ```
-   gh pr review <PR_NUMBER> --approve --body "<!-- diff-checksum: <HASH> -->"
+   gh pr review <PR_NUMBER> --approve
    ```
 
    **To REQUEST_CHANGES:**
@@ -141,7 +154,6 @@ To do this, follow these steps precisely:
    gh api repos/{owner}/{repo}/pulls/{pull_number}/reviews \
      --method POST \
      -f 'event=REQUEST_CHANGES' \
-     -f 'body=<!-- diff-checksum: <HASH> -->' \
      --input <(echo '{
        "comments": [
          {
