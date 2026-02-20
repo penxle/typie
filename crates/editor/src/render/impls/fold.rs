@@ -17,7 +17,7 @@ impl Render for FoldTitleElement {
     ) {
         match ctx.phase {
             RenderPhase::Content => {
-                let color = ctx.theme.color("ui.text.subtle");
+                let color = ctx.theme.color("ui.text.faint");
                 let mut paint = Paint::default();
                 paint.set_color(color);
                 paint.anti_alias = true;
@@ -78,7 +78,7 @@ impl Render for FoldTitleBackgroundElement {
             RenderPhase::Background => {
                 if let Some(ref path) = path {
                     let mut paint = Paint::default();
-                    paint.set_color(ctx.theme.color("ui.surface.subtle"));
+                    paint.set_color(ctx.theme.color("ui.surface.muted"));
                     paint.anti_alias = true;
                     pixmap.fill_path(&path, &paint, tiny_skia::FillRule::Winding, transform, None);
                 }
