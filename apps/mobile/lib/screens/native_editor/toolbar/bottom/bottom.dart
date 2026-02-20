@@ -16,16 +16,22 @@ class NativeEditorBottomToolbar extends HookWidget {
   Widget build(BuildContext context) {
     final scope = NativeEditorToolbarScope.of(context);
     final keyboardHeight = useValueListenable(scope.keyboardHeight);
+    final isKeyboardVisible = useValueListenable(scope.isKeyboardVisible);
     final keyboardType = useValueListenable(scope.keyboardType);
     final bottomToolbarMode = useValueListenable(scope.bottomToolbarMode);
 
     final mediaQuery = MediaQuery.of(context);
+    final expandedHeightFallback = mediaQuery.viewPadding.bottom + mediaQuery.size.height * 0.2;
+    final softwareExpandedHeight = keyboardHeight > 0 ? keyboardHeight : expandedHeightFallback;
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
       curve: Curves.ease,
       height: switch (keyboardType) {
-        KeyboardType.software => keyboardHeight,
+        KeyboardType.software => switch (bottomToolbarMode) {
+          BottomToolbarMode.hidden => isKeyboardVisible ? keyboardHeight : mediaQuery.viewPadding.bottom,
+          _ => isKeyboardVisible ? keyboardHeight : softwareExpandedHeight,
+        },
         KeyboardType.hardware => switch (bottomToolbarMode) {
           BottomToolbarMode.hidden => mediaQuery.viewPadding.bottom,
           _ => mediaQuery.viewPadding.bottom + mediaQuery.size.height * 0.2,

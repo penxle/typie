@@ -15,6 +15,7 @@ class InputController {
     required this.onFocusChanged,
     required this.scrollIntoView,
     required ValueGetter<BottomToolbarMode> getBottomToolbarMode,
+    this.onInputAttempt,
   }) : _getBottomToolbarMode = getBottomToolbarMode;
 
   final GlobalKey<InputViewState> inputKey;
@@ -23,6 +24,7 @@ class InputController {
   final void Function(bool focused) onFocusChanged;
   final void Function({ScrollMode mode}) scrollIntoView;
   final ValueGetter<BottomToolbarMode> _getBottomToolbarMode;
+  final VoidCallback? onInputAttempt;
 
   bool _isActive = false;
   bool get isActive => _isActive;
@@ -88,12 +90,14 @@ class InputController {
   }
 
   void onInsertText(String text) {
+    onInputAttempt?.call();
     _deleteStartTime = null;
     dispatch({'type': 'input', 'text': text});
     scrollIntoView(mode: ScrollMode.typewriter);
   }
 
   void onDeleteBackward() {
+    onInputAttempt?.call();
     final now = DateTime.now();
     final lastSignal = _lastDeleteSignal;
     _lastDeleteSignal = now;
@@ -118,6 +122,7 @@ class InputController {
   }
 
   void onSetMarkedText(String text) {
+    onInputAttempt?.call();
     isComposing = true;
     dispatch({'type': 'compositionUpdate', 'text': text});
     scrollIntoView(mode: ScrollMode.typewriter);
@@ -137,6 +142,7 @@ class InputController {
   }
 
   void onPerformAction(String action) {
+    onInputAttempt?.call();
     if (action == 'newline') {
       dispatch({'type': 'insertNewline'});
       scrollIntoView(mode: ScrollMode.typewriter);
@@ -144,6 +150,7 @@ class InputController {
   }
 
   void onShortcut(String action) {
+    onInputAttempt?.call();
     final direction = switch (action) {
       'navigateLeft' => 'left',
       'navigateRight' => 'right',
@@ -230,6 +237,7 @@ class InputController {
   }
 
   void onReplaceBackward(int length, String text) {
+    onInputAttempt?.call();
     dispatch({'type': 'replaceBackward', 'length': length, 'text': text});
     scrollIntoView(mode: ScrollMode.typewriter);
   }
