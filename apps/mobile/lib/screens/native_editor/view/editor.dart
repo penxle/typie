@@ -144,6 +144,11 @@ class EditorView extends HookWidget {
         onFocusChanged: controller.setFocused,
         scrollIntoView: controller.scrollIntoView,
         getBottomToolbarMode: () => bottomToolbarMode.value,
+        onInputAttempt: () {
+          if (bottomToolbarMode.value != BottomToolbarMode.hidden) {
+            bottomToolbarMode.value = BottomToolbarMode.hidden;
+          }
+        },
       ),
       [controller],
     );

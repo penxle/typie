@@ -8,7 +8,6 @@ import 'package:typie/screens/native_editor/state/state.dart';
 import 'package:typie/screens/native_editor/toolbar/scope.dart';
 import 'package:typie/screens/native_editor/view/scope.dart';
 import 'package:typie/screens/native_editor/view/scroll.dart';
-import 'package:typie/services/keyboard.dart';
 import 'package:typie/services/preference.dart';
 
 const _hideDelay = Duration(milliseconds: 1000);
@@ -39,10 +38,8 @@ class EditorScrollbar extends HookWidget {
 
     final verticalScrollController = scope.verticalScrollController;
     final horizontalScrollController = scope.horizontalScrollController;
-    final keyboardType = useValueListenable(toolbarScope.keyboardType);
     final isKeyboardVisible = useValueListenable(toolbarScope.isKeyboardVisible);
     final isEditorFocused = useValueListenable(toolbarScope.isEditorFocused);
-    final bottomToolbarMode = useValueListenable(toolbarScope.bottomToolbarMode);
     final layout = state.state.layout!;
     final pages = state.state.pages;
     final cursor = state.state.cursor;
@@ -168,9 +165,7 @@ class EditorScrollbar extends HookWidget {
         : viewWidth;
 
     final safeTop = safePadding.top;
-    final toolbarVisible =
-        isEditorFocused &&
-        !(keyboardType == KeyboardType.software && !isKeyboardVisible && bottomToolbarMode == BottomToolbarMode.hidden);
+    final toolbarVisible = isEditorFocused;
     final safeBottom = (!isKeyboardVisible && !toolbarVisible) ? safePadding.bottom : 0.0;
     final trackHeight =
         actualViewHeight - _trackPadding * 2 - safeTop - safeBottom - (hasHorizontalScroll ? _trackWidth : 0);
