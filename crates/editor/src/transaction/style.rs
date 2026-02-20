@@ -7,18 +7,16 @@ use crate::transaction::Transaction;
 use anyhow::{Context, Result};
 
 pub(crate) fn compute_styles_at_cursor(doc: &Doc, position: &Position) -> Vec<Style> {
-    let cascade = resolve_style_cascade(doc, position.node_id);
-
     let Some(node) = doc.node(position.node_id) else {
-        return cascade;
+        return resolve_style_cascade(doc, position.node_id);
     };
 
     let Some((child_id, local_offset)) = find_child_at_offset(&node, position.offset) else {
-        return cascade;
+        return resolve_style_cascade(doc, position.node_id);
     };
 
     let Some(child) = doc.node(child_id) else {
-        return cascade;
+        return resolve_style_cascade(doc, position.node_id);
     };
 
     if let Node::Text(text_node) = child.node() {
@@ -28,16 +26,16 @@ pub(crate) fn compute_styles_at_cursor(doc: &Doc, position: &Position) -> Vec<St
         for segment in segments {
             let segment_len = segment.text.chars().count();
             if local_offset > current_offset && local_offset <= current_offset + segment_len {
-                return fill_missing_styles(segment.styles, &cascade);
+                return segment.styles;
             }
             if local_offset == 0 && current_offset == 0 {
-                return fill_missing_styles(segment.styles, &cascade);
+                return segment.styles;
             }
             current_offset += segment_len;
         }
     }
 
-    cascade
+    resolve_style_cascade(doc, position.node_id)
 }
 
 /// Character-at semantics: returns the styles of the segment containing the character
@@ -4131,22 +4129,27 @@ mod tests {
     }
 
     #[test]
-    fn compute_styles_text_segment_fills_missing_from_cascade() {
+    fn compute_styles_text_segment_does_not_cascade() {
         let mut p = id!();
         let state = state! {
             doc {
                 @p paragraph {
-                    text(styles: [italic()]) { "hello" }
+                    text { "hello" }
                 }
             }
             selection { (p, 3) }
         };
         let tr = Transaction::new(&state);
+        tr.set_cascade_attrs(p, &Attr::from_styles(&[Style::Bold(BoldStyle {})]))
+            .unwrap();
 
         let styles = compute_styles_at_cursor(tr.doc(), &Position::new(p, 3, Affinity::Downstream));
 
-        assert!(styles.iter().any(|s| matches!(s, Style::Italic(_))));
-        assert!(styles.iter().any(|s| matches!(s, Style::FontWeight(_))));
+        assert!(
+            !styles.iter().any(|s| matches!(s, Style::Bold(_))),
+            "Should not cascade Bold from paragraph when text segment exists, got: {:?}",
+            styles
+        );
     }
 
     #[test]
