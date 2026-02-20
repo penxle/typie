@@ -43,7 +43,10 @@ impl Transaction {
         }
 
         if let Some(text) = text.filter(|t| !t.is_empty()) {
-            if let Some(selection) = result.as_range_selection() {
+            if let Some(selection) = result
+                .as_inline_range_selection(self.doc())
+                .or_else(|| result.as_range_selection())
+            {
                 self.push_effect(Effect::HtmlPasted {
                     selection,
                     text,
@@ -1755,5 +1758,73 @@ mod tests {
         };
 
         assert_state_eq!(actual, expected);
+    }
+
+    #[test]
+    fn repaste_as_text_after_pasting_deep_open_fragment() {
+        let mut p = id!();
+
+        let initial = state! {
+            doc {
+                @p paragraph {}
+            }
+            selection { (p, 0) }
+        };
+
+        let fragment = fragment! {
+            open_start: 1,
+            open_end: 5,
+
+            paragraph {}
+            bullet_list {
+                list_item {
+                    paragraph {
+                        text { "A" }
+                    }
+                    bullet_list {
+                        list_item {
+                            paragraph {
+                                text { "B" }
+                            }
+                        }
+                        list_item {
+                            paragraph {
+                                text { "C" }
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        let pasted_text = fragment.to_plain_text();
+        let (after_paste, effects) = transact_with_effect!(initial, |tr| tr
+            .paste_fragment(fragment, Some(pasted_text.clone()))
+            .unwrap());
+
+        let (selection, text, styles) = effects
+            .into_iter()
+            .find_map(|effect| match effect {
+                Effect::HtmlPasted {
+                    selection,
+                    text,
+                    styles,
+                } => Some((selection, text, styles)),
+                _ => None,
+            })
+            .expect("paste_fragment should emit HtmlPasted");
+
+        let (from, to) = selection
+            .as_sorted(&after_paste.doc)
+            .expect("HtmlPasted selection should be valid");
+
+        let after_repaste = transact!(after_paste, |tr| tr
+            .replace_range(from, to, Fragment::from_text(&text, &styles))
+            .unwrap());
+
+        assert!(
+            after_repaste.doc.to_plain_text().contains("A"),
+            "repaste-as-text should keep pasted plain text"
+        );
     }
 }
