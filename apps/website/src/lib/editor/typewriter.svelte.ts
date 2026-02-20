@@ -6,6 +6,7 @@ export function setupTypewriter(getTargetEl: () => HTMLElement | undefined, defa
   const { editor } = getEditorContext();
 
   if (editor.readOnly) {
+    editor.setTypewriterAvailability(false, false);
     $effect(() => {
       const el = getTargetEl();
       if (el) {
@@ -16,6 +17,7 @@ export function setupTypewriter(getTargetEl: () => HTMLElement | undefined, defa
   }
 
   const app = getAppContext();
+  editor.setTypewriterAvailability(app.preference.current.typewriterEnabled, app.preference.current.typewriterPosition !== undefined);
 
   let scrollContainerHeight = $state(0);
 
@@ -58,6 +60,12 @@ export function setupTypewriter(getTargetEl: () => HTMLElement | undefined, defa
 
     return { scroller, scrollerRect, cursorTop, cursorHeight, delta };
   };
+
+  $effect(() => {
+    const enabled = app.preference.current.typewriterEnabled;
+    const hasPosition = app.preference.current.typewriterPosition !== undefined;
+    editor.setTypewriterAvailability(enabled, hasPosition);
+  });
 
   $effect(() => {
     const scroller = editor.scrollContainerEl;
@@ -114,23 +122,14 @@ export function setupTypewriter(getTargetEl: () => HTMLElement | undefined, defa
   });
 
   $effect(() => {
-    const pendingMode = editor.pendingScrollMode;
-    if (!pendingMode) {
+    if (editor.pendingScrollConsumer !== 'typewriter') {
       return;
     }
-
-    editor.pendingScrollMode = null;
-
-    if (
-      pendingMode === 'typewriter' &&
-      app.preference.current.typewriterEnabled &&
-      app.preference.current.typewriterPosition !== undefined
-    ) {
-      const metrics = computeTypewriterScrollMetrics();
-      if (!metrics || Math.abs(metrics.delta) <= 1) {
-        return;
-      }
-      scrollBy(metrics.scroller, metrics.delta);
+    editor.consumePendingScroll('typewriter');
+    const metrics = computeTypewriterScrollMetrics();
+    if (!metrics || Math.abs(metrics.delta) <= 1) {
+      return;
     }
+    scrollBy(metrics.scroller, metrics.delta);
   });
 }

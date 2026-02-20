@@ -60,7 +60,7 @@
     if (!element) return;
 
     const { pageIdx, bounds, visible } = editor.cursor;
-    const scrollToCursor = editor.pendingScrollMode === 'auto';
+    const scrollToCursor = editor.pendingScrollConsumer === 'cursor';
     const containerEls = editor.pageContainerEls;
     const inputEl = editor.inputElement;
 
@@ -83,12 +83,14 @@
         prevCursorPos = { x: bounds.x, y: bounds.y };
       }
 
-      requestAnimationFrame(() => {
-        keepCursorInViewport();
-      });
-
       if (scrollToCursor) {
-        editor.pendingScrollMode = null;
+        requestAnimationFrame(() => {
+          if (editor.pendingScrollConsumer !== 'cursor') {
+            return;
+          }
+          keepCursorInViewport();
+          editor.consumePendingScroll('cursor');
+        });
       }
     } else {
       element.style.visibility = 'hidden';
