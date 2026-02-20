@@ -16,7 +16,7 @@ class GestureController {
     required this.controller,
     required this.getPageAtPosition,
     required this.getPointerX,
-    required this.getHorizontalPadding,
+    required this.getViewportWidth,
   });
 
   final ScrollController verticalScrollController;
@@ -25,7 +25,7 @@ class GestureController {
   final EditorController controller;
   final (int, double) Function(double y) getPageAtPosition;
   final double Function(double localX) getPointerX;
-  final double Function() getHorizontalPadding;
+  final double Function() getViewportWidth;
 
   static const _edgeThreshold = 60.0;
   static const _minScrollSpeed = 4.0;
@@ -129,8 +129,7 @@ class GestureController {
           return;
         }
 
-        final hOffset = horizontalScrollController.hasSingleClient ? horizontalScrollController.offset : 0.0;
-        final pointerX = scrolledX + hOffset - getHorizontalPadding();
+        final pointerX = getPointerX(scrolledX);
 
         final currentPosition = (pageIdx, pointerX, localY);
         if (_lastDispatchedPosition == currentPosition) {
@@ -230,7 +229,7 @@ class GestureController {
     final hScrollOffset = horizontalScrollController.hasSingleClient ? horizontalScrollController.offset : 0.0;
     final pageTopOffset = geo.titleAreaHeight + offsets[handle.pageIdx];
     final y = pageTopOffset + handle.y - scrollOffset;
-    final x = geo.horizontalPadding + handle.x - hScrollOffset;
+    final x = geo.contentStartX(viewportWidth: getViewportWidth(), horizontalScrollOffset: hScrollOffset) + handle.x;
     return Offset(x, y);
   }
 
