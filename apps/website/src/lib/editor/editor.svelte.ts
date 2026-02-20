@@ -206,6 +206,7 @@ export class Editor {
   tableOverlays = $state<TableOverlay[]>([]);
 
   remarkOverlays = $state<RemarkOverlay[]>([]);
+  remarkFocus = $state<{ nodeId: string; remarkId: string } | null>(null);
   currentBlock = $state<{ nodeId: string; pageIdx: number; bounds: Rect } | null>(null);
 
   repasteAsTextEnabled = $state(false);

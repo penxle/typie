@@ -74,7 +74,8 @@
   const { anchor, floating } = createFloatingActions({
     placement: 'bottom-start',
     offset: 4,
-    onClickOutside: () => {
+    onClickOutside: (event: Event) => {
+      if (event.target instanceof HTMLElement && event.target.closest('[data-remark-panel-item]')) return;
       close();
     },
   });
@@ -158,6 +159,49 @@
         }
       });
   }
+
+  let wasOpenBeforeFocus = $state(false);
+  $effect.pre(() => {
+    if (!editor.remarkFocus) {
+      wasOpenBeforeFocus = open;
+    }
+  });
+
+  $effect(() => {
+    const focus = editor.remarkFocus;
+    if (focus && open && focus.nodeId === nodeId) {
+      tick().then(() => {
+        const el = listEl?.querySelector(`[data-remark-id="${focus.remarkId}"]`);
+        if (el instanceof HTMLElement && listEl) {
+          const listRect = listEl.getBoundingClientRect();
+          const elRect = el.getBoundingClientRect();
+          const scrollTarget = el.offsetTop - listRect.height / 2 + elRect.height / 2;
+          listEl.scrollTo({ top: Math.max(0, scrollTarget), behavior: 'smooth' });
+
+          const shake = () => {
+            el.animate(
+              [
+                { transform: 'translateX(0)' },
+                { transform: 'translateX(-3px)' },
+                { transform: 'translateX(3px)' },
+                { transform: 'translateX(-2px)' },
+                { transform: 'translateX(2px)' },
+                { transform: 'translateX(0)' },
+              ],
+              { duration: 400, iterations: 1, easing: 'ease-in-out' },
+            );
+          };
+
+          if (wasOpenBeforeFocus) {
+            shake();
+          } else {
+            setTimeout(shake, 300);
+          }
+        }
+        editor.remarkFocus = null;
+      });
+    }
+  });
 </script>
 
 <button
@@ -327,22 +371,24 @@
         })}
       >
         {#each remarks as remark (remark.remarkId)}
-          <RemarkCard
-            createdAt={remark.createdAt}
-            {editor}
-            nodeId={remark.nodeId}
-            onDirtyChange={(id, dirty) => {
-              if (dirty) {
-                dirtyRemarkIds.add(id);
-              } else {
-                dirtyRemarkIds.delete(id);
-              }
-            }}
-            readOnly={editor.readOnly}
-            remarkId={remark.remarkId}
-            text={remark.text}
-            userId={remark.userId}
-          />
+          <div class={css({ marginX: '-10px', marginY: '-6px', paddingX: '10px', paddingY: '6px' })} data-remark-id={remark.remarkId}>
+            <RemarkCard
+              createdAt={remark.createdAt}
+              {editor}
+              nodeId={remark.nodeId}
+              onDirtyChange={(id, dirty) => {
+                if (dirty) {
+                  dirtyRemarkIds.add(id);
+                } else {
+                  dirtyRemarkIds.delete(id);
+                }
+              }}
+              readOnly={editor.readOnly}
+              remarkId={remark.remarkId}
+              text={remark.text}
+              userId={remark.userId}
+            />
+          </div>
         {/each}
       </div>
     {/if}
