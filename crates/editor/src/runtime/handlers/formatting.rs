@@ -581,4 +581,182 @@ mod tests {
         }
         assert!(found_bold_d);
     }
+
+    #[test]
+    fn test_remove_annotation_collapsed_removes_only_cursor_annotation() {
+        let mut p1 = id!();
+        let mut p2 = id!();
+
+        let mut runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p1 paragraph {
+                    text { "hello " , "world" @[link("http://a.com")] }
+                }
+                @p2 paragraph {
+                    text { "foo " , "bar" @[link("http://b.com")] }
+                }
+            }
+            selection { (p1, 7) }
+        };
+
+        // Cursor is inside "world" link (offset 7 = 'o' of "world")
+        runtime.update(Message::RemoveAnnotation {
+            annotation_type: AnnotationType::Link,
+        });
+
+        // p1's link annotation should be removed
+        let p1_node = runtime.state().doc.node(p1).unwrap();
+        for child in p1_node.children() {
+            if let Node::Text(text_node) = child.node() {
+                for seg in text_node.text.get_segments() {
+                    assert!(
+                        seg.annotations.is_empty(),
+                        "p1 should have no annotations after RemoveAnnotation, but found: {:?}",
+                        seg.annotations
+                    );
+                }
+            }
+        }
+
+        // p2's link annotation should still be present
+        let p2_node = runtime.state().doc.node(p2).unwrap();
+        let mut found_link = false;
+        for child in p2_node.children() {
+            if let Node::Text(text_node) = child.node() {
+                for seg in text_node.text.get_segments() {
+                    if seg
+                        .annotations
+                        .iter()
+                        .any(|a| a.as_type() == AnnotationType::Link)
+                    {
+                        found_link = true;
+                    }
+                }
+            }
+        }
+        assert!(
+            found_link,
+            "p2 should still have link annotation, but it was removed"
+        );
+    }
+
+    #[test]
+    fn test_remove_annotation_collapsed_no_annotation_at_cursor_does_nothing() {
+        let mut p = id!();
+
+        let mut runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {
+                    text { "hello " , "world" @[link("http://a.com")] }
+                }
+            }
+            selection { (p, 2) }
+        };
+
+        // Cursor at offset 2 = 'l' of "hello ", no annotation here
+        runtime.update(Message::RemoveAnnotation {
+            annotation_type: AnnotationType::Link,
+        });
+
+        // Link on "world" should still be present
+        let p_node = runtime.state().doc.node(p).unwrap();
+        let mut found_link = false;
+        for child in p_node.children() {
+            if let Node::Text(text_node) = child.node() {
+                for seg in text_node.text.get_segments() {
+                    if seg
+                        .annotations
+                        .iter()
+                        .any(|a| a.as_type() == AnnotationType::Link)
+                    {
+                        found_link = true;
+                    }
+                }
+            }
+        }
+        assert!(
+            found_link,
+            "link annotation should remain when cursor is outside it"
+        );
+    }
+
+    #[test]
+    fn test_remove_annotation_collapsed_two_links_in_same_paragraph_removes_only_cursor_one() {
+        let mut p = id!();
+
+        let mut runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {
+                    text { "aaa" @[link("http://first.com")], " ", "bbb" @[link("http://second.com")] }
+                }
+            }
+            selection { (p, 5) }
+        };
+
+        // "aaa" = offsets 0..3, " " = offset 3, "bbb" = offsets 4..7
+        // Cursor at offset 5 = second 'b' of "bbb" (inside second link)
+        runtime.update(Message::RemoveAnnotation {
+            annotation_type: AnnotationType::Link,
+        });
+
+        let p_node = runtime.state().doc.node(p).unwrap();
+        let mut first_link_present = false;
+        let mut second_link_present = false;
+        for child in p_node.children() {
+            if let Node::Text(text_node) = child.node() {
+                for seg in text_node.text.get_segments() {
+                    for ann in &seg.annotations {
+                        if let Annotation::Link(link) = ann {
+                            if link.href == "http://first.com" {
+                                first_link_present = true;
+                            }
+                            if link.href == "http://second.com" {
+                                second_link_present = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assert!(first_link_present, "first link should remain");
+        assert!(
+            !second_link_present,
+            "second link at cursor should be removed"
+        );
+    }
+
+    #[test]
+    fn test_remove_annotation_collapsed_at_annotation_start_boundary() {
+        let mut p = id!();
+
+        let mut runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {
+                    text { "hello " , "world" @[link("http://a.com")] }
+                }
+            }
+            selection { (p, 6) }
+        };
+
+        // Cursor at offset 6 = 'w' of "world" (start of annotation)
+        runtime.update(Message::RemoveAnnotation {
+            annotation_type: AnnotationType::Link,
+        });
+
+        let p_node = runtime.state().doc.node(p).unwrap();
+        for child in p_node.children() {
+            if let Node::Text(text_node) = child.node() {
+                for seg in text_node.text.get_segments() {
+                    assert!(
+                        seg.annotations.is_empty(),
+                        "annotation should be removed when cursor is at its start boundary"
+                    );
+                }
+            }
+        }
+    }
 }
