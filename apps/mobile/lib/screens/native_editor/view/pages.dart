@@ -119,6 +119,8 @@ class PageList extends HookWidget {
     final prevFromHandle = useRef<SelectionHandleInfo?>(null);
     final prevToHandle = useRef<SelectionHandleInfo?>(null);
     final wasSelecting = useRef(false);
+    final doubleTapDragStart = useRef<Offset?>(null);
+    final isDoubleTapDragging = useRef(false);
 
     useEffect(() {
       final isCollapsed = fromHandle == null || toHandle == null;
@@ -135,8 +137,11 @@ class PageList extends HookWidget {
           ..draggingHandleType = null
           ..dragAnchorHandle = null
           ..stopAutoScroll();
+        if (!isDoubleTapDragging.value) {
+          doubleTapDragStart.value = null;
+        }
         showContextMenu.value = false;
-      } else if (!isSelecting) {
+      } else if (!isSelecting && !isDoubleTapDragging.value) {
         if (justFinishedSelecting) {
           showContextMenu.value = true;
         } else if (selectionChanged) {
@@ -144,7 +149,7 @@ class PageList extends HookWidget {
         }
       }
 
-      if (isSelecting) {
+      if (isSelecting || isDoubleTapDragging.value) {
         showContextMenu.value = false;
       }
 
@@ -167,6 +172,20 @@ class PageList extends HookWidget {
           return renderBox?.globalToLocal(globalPosition);
         }
 
+        bool isConsecutiveTap({required Offset localPosition, required DateTime now}) {
+          const maxTapIntervalMs = 300;
+          const maxTapDistance = 20.0;
+          final prevTime = gesture.lastTapTime;
+          final prevPosition = gesture.lastTapPosition;
+          if (prevTime == null || prevPosition == null) {
+            return false;
+          }
+
+          final timeDiff = now.difference(prevTime).inMilliseconds;
+          final distance = (localPosition - prevPosition).distance;
+          return timeDiff < maxTapIntervalMs && distance < maxTapDistance;
+        }
+
         void endTextHandleDrag() {
           if (gesture.draggingCellHandle) {
             return;
@@ -182,6 +201,121 @@ class PageList extends HookWidget {
           handleDragPosition.value = null;
           if (scope.controller.state.isSelecting) {
             scope.controller.setSelecting(false);
+          }
+        }
+
+        bool dispatchDoubleTapSelection(Offset localPosition) {
+          final (pageIdx, localY) = getPageAtPosition(localPosition.dy);
+          if (pageIdx < 0) {
+            return false;
+          }
+
+          showContextMenu.value = false;
+          scope.inputController.commitComposing();
+          scope.inputController.openInput();
+
+          final pointerX = gesture.getPointerX(localPosition.dx);
+          editor
+            ..dispatch({
+              'type': 'pointerDown',
+              'pageIdx': pageIdx,
+              'x': pointerX,
+              'y': localY,
+              'clickCount': 2,
+              'button': 'primary',
+              'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
+            })
+            ..dispatch({
+              'type': 'pointerUp',
+              'pageIdx': pageIdx,
+              'x': pointerX,
+              'y': localY,
+              'button': 'primary',
+              'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
+            });
+
+          gesture
+            ..lastTapTime = DateTime.now()
+            ..lastTapPosition = localPosition;
+
+          scope.controller.scrollIntoView();
+          return true;
+        }
+
+        void startDoubleTapDrag(Offset localPosition) {
+          gesture
+            ..tapTimer?.cancel()
+            ..tapTimer = null
+            ..tapDispatched = true
+            ..draggingHandleType = SelectionHandleType.to
+            ..dragAnchorHandle = null
+            ..stopAutoScroll();
+
+          longPressPosition.value = null;
+          scope.isLongPressing.value = false;
+          showContextMenu.value = false;
+          isDoubleTapDragging.value = true;
+          doubleTapDragStart.value = localPosition;
+          handleDragPosition.value = null;
+          scope.controller.setSelecting(true);
+        }
+
+        void endDoubleTapDrag() {
+          isDoubleTapDragging.value = false;
+          doubleTapDragStart.value = null;
+          endTextHandleDrag();
+        }
+
+        void updateDoubleTapDragSelection(Offset localPosition) {
+          if (!isDoubleTapDragging.value) {
+            return;
+          }
+
+          final startPosition = doubleTapDragStart.value;
+          if (startPosition != null && (localPosition - startPosition).distance < 4) {
+            return;
+          }
+
+          handleDragPosition.value = localPosition;
+
+          if (gesture.dragAnchorHandle == null) {
+            final selection = scope.controller.state.selection;
+            final from = selection?.fromBounds;
+            final to = selection?.toBounds;
+            if (startPosition != null && from != null && to != null) {
+              final delta = localPosition - startPosition;
+              final towardSelectionEnd = delta.dy > 8 || (delta.dy.abs() <= 8 && delta.dx >= 0);
+              gesture
+                ..draggingHandleType = towardSelectionEnd ? SelectionHandleType.to : SelectionHandleType.from
+                ..dragAnchorHandle = towardSelectionEnd ? from : to;
+            }
+          }
+
+          final anchorHandle = gesture.dragAnchorHandle;
+          final (pageIdx, localY) = getPageAtPosition(localPosition.dy);
+          if (anchorHandle != null && pageIdx >= 0) {
+            final pointerX = gesture.getPointerX(localPosition.dx);
+            editor.dispatch({
+              'type': 'extendSelectionTo',
+              'anchorPageIdx': anchorHandle.pageIdx,
+              'anchorX': anchorHandle.x,
+              'anchorY': anchorHandle.y + anchorHandle.height / 2,
+              'headPageIdx': pageIdx,
+              'headX': pointerX,
+              'headY': localY,
+            });
+          }
+
+          if (anchorHandle != null) {
+            gesture.handleAutoScroll(
+              y: localPosition.dy,
+              x: localPosition.dx,
+              viewWidth: viewWidth,
+              viewHeight: viewHeight,
+              handleDragPosition: handleDragPosition,
+              longPressPosition: longPressPosition,
+              dropPosition: dropPosition,
+            );
           }
         }
 
@@ -289,6 +423,9 @@ class PageList extends HookWidget {
                             if (gesture.draggingCellHandle) {
                               return false;
                             }
+                            if (isDoubleTapDragging.value) {
+                              return true;
+                            }
                             final viewportPosition = viewportPositionFromGlobal(globalPosition);
                             if (viewportPosition == null) {
                               return true;
@@ -303,6 +440,9 @@ class PageList extends HookWidget {
                           instance
                             ..onLongPressStart = (details) {
                               if (gesture.draggingCellHandle) {
+                                return;
+                              }
+                              if (isDoubleTapDragging.value) {
                                 return;
                               }
                               final viewportPosition = viewportPositionFromGlobal(details.globalPosition);
@@ -329,6 +469,9 @@ class PageList extends HookWidget {
                                 ..lastTapTime = null;
                             }
                             ..onLongPressMoveUpdate = (details) {
+                              if (isDoubleTapDragging.value) {
+                                return;
+                              }
                               final viewportPosition = viewportPositionFromGlobal(details.globalPosition);
                               if (viewportPosition == null) {
                                 return;
@@ -371,6 +514,9 @@ class PageList extends HookWidget {
                               );
                             }
                             ..onLongPressEnd = (details) {
+                              if (isDoubleTapDragging.value) {
+                                return;
+                              }
                               longPressPosition.value = null;
                               gesture.stopAutoScroll();
                               scope.isLongPressing.value = false;
@@ -448,17 +594,7 @@ class PageList extends HookWidget {
           scope.inputController.openInput();
 
           final now = DateTime.now();
-          final prevTime = gesture.lastTapTime;
-          final prevPosition = gesture.lastTapPosition;
-
-          var clickCount = 1;
-          if (prevTime != null && prevPosition != null) {
-            final timeDiff = now.difference(prevTime).inMilliseconds;
-            final distance = (localPosition - prevPosition).distance;
-            if (timeDiff < 300 && distance < 20) {
-              clickCount = 2;
-            }
-          }
+          final clickCount = isConsecutiveTap(localPosition: localPosition, now: now) ? 2 : 1;
 
           gesture
             ..lastTapTime = now
@@ -547,6 +683,12 @@ class PageList extends HookWidget {
 
         final gestureDetector = GestureDetector(
           behavior: HitTestBehavior.opaque,
+          onDoubleTapDown: (details) {
+            if (!dispatchDoubleTapSelection(details.localPosition)) {
+              return;
+            }
+            startDoubleTapDrag(details.localPosition);
+          },
           onTapDown: (details) {
             gesture.tapDispatched = false;
             wasContextMenuOpen.value = showContextMenu.value;
@@ -569,6 +711,9 @@ class PageList extends HookWidget {
             });
           },
           onTapUp: (details) {
+            if (isDoubleTapDragging.value) {
+              return;
+            }
             gesture.tapTimer?.cancel();
             gesture.tapTimer = null;
             if (!gesture.tapDispatched) {
@@ -576,6 +721,9 @@ class PageList extends HookWidget {
             }
           },
           onTapCancel: () {
+            if (isDoubleTapDragging.value) {
+              return;
+            }
             gesture.tapTimer?.cancel();
             gesture.tapTimer = null;
           },
@@ -592,6 +740,9 @@ class PageList extends HookWidget {
             }
           },
           onPanStart: (details) {
+            if (isDoubleTapDragging.value) {
+              return;
+            }
             if (verticalScrollController.hasSingleClient) {
               gesture.verticalDrag = verticalScrollController.position.drag(details, () {
                 gesture.verticalDrag = null;
@@ -622,6 +773,9 @@ class PageList extends HookWidget {
             );
           },
           onPanEnd: (details) {
+            if (isDoubleTapDragging.value) {
+              return;
+            }
             gesture.verticalDrag?.end(
               DragEndDetails(
                 velocity: Velocity(pixelsPerSecond: Offset(0, details.velocity.pixelsPerSecond.dy)),
@@ -639,6 +793,9 @@ class PageList extends HookWidget {
               ..horizontalDrag = null;
           },
           onPanCancel: () {
+            if (isDoubleTapDragging.value) {
+              return;
+            }
             gesture.verticalDrag?.cancel();
             gesture.horizontalDrag?.cancel();
             gesture
@@ -707,8 +864,25 @@ class PageList extends HookWidget {
           },
           child: Listener(
             behavior: HitTestBehavior.translucent,
-            onPointerUp: (_) => endTextHandleDrag(),
-            onPointerCancel: (_) => endTextHandleDrag(),
+            onPointerMove: (event) {
+              if (isDoubleTapDragging.value) {
+                updateDoubleTapDragSelection(event.localPosition);
+              }
+            },
+            onPointerUp: (_) {
+              if (isDoubleTapDragging.value) {
+                endDoubleTapDrag();
+                return;
+              }
+              endTextHandleDrag();
+            },
+            onPointerCancel: (_) {
+              if (isDoubleTapDragging.value) {
+                endDoubleTapDrag();
+                return;
+              }
+              endTextHandleDrag();
+            },
             child: Stack(
               clipBehavior: Clip.none,
               children: [
@@ -757,7 +931,10 @@ class PageList extends HookWidget {
                     );
                   },
                 ),
-                if (showContextMenu.value && longPressPosition.value == null && gesture.draggingHandleType == null)
+                if (showContextMenu.value &&
+                    longPressPosition.value == null &&
+                    gesture.draggingHandleType == null &&
+                    !isDoubleTapDragging.value)
                   SelectionContextMenu(clipboard: clipboard, onDismiss: () => showContextMenu.value = false),
               ],
             ),

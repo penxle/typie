@@ -8,6 +8,7 @@ import 'package:typie/screens/native_editor/external/models.dart';
 import 'package:typie/screens/native_editor/toolbar/scope.dart';
 import 'package:typie/screens/native_editor/view/gesture.dart';
 import 'package:typie/screens/native_editor/view/scope.dart';
+import 'package:typie/screens/native_editor/view/scroll.dart';
 
 class EditorDraggable extends StatelessWidget {
   const EditorDraggable({super.key, required this.child, required this.gesture});
@@ -20,6 +21,10 @@ class EditorDraggable extends StatelessWidget {
     final scope = ContentScope.of(context);
     return DragItemWidget(
       dragItemProvider: (request) {
+        if (gesture.draggingHandleType != null) {
+          return null;
+        }
+
         final renderBox = context.findRenderObject() as RenderBox?;
         if (renderBox == null) {
           return null;
