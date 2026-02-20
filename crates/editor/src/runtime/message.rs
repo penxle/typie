@@ -457,10 +457,6 @@ define_messages! {
     => when When::True
     => handle(rt) { rt.handle_escape() },
 
-    ToggleFoldExpansion { node_id: String }
-    => when When::True
-    => handle(rt) { rt.handle_toggle_fold_expansion(node_id) },
-
     InsertFold
     => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_insert_fold() },

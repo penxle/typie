@@ -523,6 +523,7 @@ mod tests {
     };
     use crate::model::{LayoutMode, NodeId, TABLE_BORDER_WIDTH, TableAlign, TableBorderStyle};
     use crate::runtime::Message;
+    use crate::test_utils::click_fold_toggle;
     use crate::types::{Point, Size};
     use std::rc::Rc;
 
@@ -1830,9 +1831,7 @@ mod tests {
             selection { (title_id, 0) }
         };
 
-        runtime.update(Message::ToggleFoldExpansion {
-            node_id: fold_id.to_string(),
-        });
+        click_fold_toggle(&mut runtime, fold_id);
 
         runtime.layout();
         let pages = runtime.pages();
@@ -1891,12 +1890,8 @@ mod tests {
         };
 
         // Expand folds
-        runtime.update(Message::ToggleFoldExpansion {
-            node_id: outer_fold_id.to_string(),
-        });
-        runtime.update(Message::ToggleFoldExpansion {
-            node_id: inner_fold_id.to_string(),
-        });
+        click_fold_toggle(&mut runtime, outer_fold_id);
+        click_fold_toggle(&mut runtime, inner_fold_id);
 
         runtime.layout();
         let pages = runtime.pages();

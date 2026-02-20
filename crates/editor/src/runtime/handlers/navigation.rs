@@ -413,6 +413,7 @@ mod tests {
     use super::*;
     use crate::runtime::Message;
     use crate::runtime::message::{Modifier, PointerButton};
+    use crate::test_utils::click_fold_toggle;
 
     #[test]
     fn test_horizontal_rule_shift_up_extends_selection() {
@@ -1099,9 +1100,7 @@ mod tests {
         };
 
         rt.layout();
-        rt.update(Message::ToggleFoldExpansion {
-            node_id: fold.to_string(),
-        });
+        click_fold_toggle(&mut rt, fold);
         rt.layout();
         rt.update(Message::Navigate {
             direction: Direction::Right,
@@ -1201,9 +1200,7 @@ mod tests {
         };
 
         rt.layout();
-        rt.update(Message::ToggleFoldExpansion {
-            node_id: fold.to_string(),
-        });
+        click_fold_toggle(&mut rt, fold);
         rt.layout();
         rt.update(Message::Navigate {
             direction: Direction::Right,
