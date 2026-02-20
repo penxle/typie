@@ -10,6 +10,7 @@
   import DocumentPanelAi from './DocumentPanelAi.svelte';
   import DocumentPanelInfo from './DocumentPanelInfo.svelte';
   import DocumentPanelNote from './DocumentPanelNote.svelte';
+  import DocumentPanelRemark from './DocumentPanelRemark.svelte';
   import DocumentPanelSettings from './DocumentPanelSettings.svelte';
   import DocumentPanelSpellcheck from './DocumentPanelSpellcheck.svelte';
   import DocumentPanelTimeline from './DocumentPanelTimeline.svelte';
@@ -163,6 +164,8 @@
       <DocumentPanelSpellcheck {$document} {$user} {editor} />
     {:else if app.preference.current.panelTabByViewId[splitViewId] === 'ai'}
       <DocumentPanelAi {$document} {$user} {editor} />
+    {:else if app.preference.current.panelTabByViewId[splitViewId] === 'remarks'}
+      <DocumentPanelRemark {editor} />
     {:else}
       <div
         class={flex({

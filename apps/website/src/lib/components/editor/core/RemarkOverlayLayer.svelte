@@ -85,6 +85,12 @@
     return [...groups.values()];
   });
 
+  $effect(() => {
+    if (editor.remarkFocus) {
+      openGroupNodeId = editor.remarkFocus.nodeId;
+    }
+  });
+
   const currentBlockHasRemarks = $derived(editor.currentBlock ? remarkGroups.some((g) => g.nodeId === editor.currentBlock?.nodeId) : false);
 </script>
 

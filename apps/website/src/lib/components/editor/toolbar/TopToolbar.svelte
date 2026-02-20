@@ -3,7 +3,6 @@
   import { flex } from '@typie/styled-system/patterns';
   import { DropdownMenu, DropdownMenuItem, VerticalDivider } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
-  import BookmarkIcon from '~icons/lucide/bookmark';
   import ChevronsDownUpIcon from '~icons/lucide/chevrons-down-up';
   import ClockFadingIcon from '~icons/lucide/clock-fading';
   import FilePlusIcon from '~icons/lucide/file-plus';
@@ -14,6 +13,7 @@
   import LightbulbIcon from '~icons/lucide/lightbulb';
   import ListIcon from '~icons/lucide/list';
   import ListOrderedIcon from '~icons/lucide/list-ordered';
+  import MessageSquareTextIcon from '~icons/lucide/message-square-text';
   import PaperclipIcon from '~icons/lucide/paperclip';
   import QuoteIcon from '~icons/lucide/quote';
   import SettingsIcon from '~icons/lucide/settings';
@@ -247,7 +247,7 @@
   <div class={flex({ alignItems: 'center', gap: '4px' })}>
     <ToolbarPanelTabButton {$user} icon={InfoIcon} label="정보" tab="info" />
     <ToolbarPanelTabButton {$user} icon={StickyNoteIcon} label="노트" tab="note" />
-    <ToolbarPanelTabButton {$user} icon={BookmarkIcon} label="북마크" tab="anchors" />
+    <ToolbarPanelTabButton {$user} icon={MessageSquareTextIcon} label="코멘트" tab="remarks" />
     <ToolbarPanelTabButton {$user} icon={SpellCheckIcon} label="맞춤법" needSubscription tab="spellcheck" />
     <ToolbarPanelTabButton {$user} icon={LightbulbIcon} label="AI 피드백" needSubscription tab="ai" />
     <ToolbarPanelTabButton {$user} icon={ClockFadingIcon} label="타임라인" tab="timeline" />
