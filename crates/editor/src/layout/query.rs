@@ -401,10 +401,13 @@ pub fn is_selectable_block_hit(doc: &Doc, hit_selection: &Selection) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use crate::layout::cursor::{Cursor, NavigationContext};
     use crate::layout::elements::CalloutIconElement;
     use crate::layout::{Element, LayoutNode, Page, PageBreakPolicy, PositionedNode, RenderHints};
     use crate::model::{CalloutVariant, NodeId};
-    use crate::types::{Point, Size};
+    use crate::runtime::{Message, Modifier, PointerButton};
+    use crate::state::Position;
+    use crate::types::{Affinity, Point, PointerStyle, Size};
     use std::rc::Rc;
 
     #[test]
@@ -442,29 +445,132 @@ mod tests {
         let page = Page::from_root(page_root);
 
         assert!(
-            page.find_interactive_at(15.0, 15.0).is_some(),
+            page.find_interactive_at(15.0, 15.0, false).is_some(),
             "Should hit inside icon"
         );
         assert!(
-            page.find_interactive_at(10.0, 10.0).is_some(),
+            page.find_interactive_at(10.0, 10.0, false).is_some(),
             "Should hit top-left corner"
         );
         assert!(
-            page.find_interactive_at(30.0, 30.0).is_some(),
+            page.find_interactive_at(30.0, 30.0, false).is_some(),
             "Should hit bottom-right corner"
         );
 
         assert!(
-            page.find_interactive_at(5.0, 5.0).is_none(),
+            page.find_interactive_at(5.0, 5.0, false).is_none(),
             "Should not hit before icon"
         );
         assert!(
-            page.find_interactive_at(31.0, 15.0).is_none(),
+            page.find_interactive_at(31.0, 15.0, false).is_none(),
             "Should not hit right of icon"
         );
         assert!(
-            page.find_interactive_at(15.0, 31.0).is_none(),
+            page.find_interactive_at(15.0, 31.0, false).is_none(),
             "Should not hit below icon"
+        );
+    }
+
+    #[test]
+    fn test_interactive_hit_over_cursor_navigable_in_read_only() {
+        let mut fold = id!();
+        let mut title = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @fold fold {
+                    @title fold_title {
+                        text { "Title" }
+                    }
+                    fold_content {
+                        paragraph {
+                            text { "Body" }
+                        }
+                    }
+                }
+            }
+            selection { (title, 0) }
+        };
+
+        rt.layout();
+
+        let target_pos = Position::new(title, 2, Affinity::default());
+        let ctx = NavigationContext::new(rt.doc());
+        let (page_idx, rect) = Cursor::bounds(&ctx, rt.pages(), target_pos)
+            .expect("Failed to get cursor bounds for fold title");
+        let click_x = rect.x;
+        let click_y = rect.y + rect.height / 2.0;
+
+        let fold_has_content = |rt: &crate::runtime::Runtime| {
+            rt.cached_layout(fold)
+                .and_then(|layout| layout.children.clone())
+                .is_some_and(|children| {
+                    children.iter().any(|child| {
+                        matches!(child.node.element.as_ref(), Some(Element::FoldContent(_)))
+                    })
+                })
+        };
+
+        assert!(
+            !fold_has_content(&rt),
+            "precondition: fold should start collapsed"
+        );
+        assert_eq!(
+            rt.get_pointer_style(page_idx, click_x, click_y),
+            PointerStyle::Text,
+            "editable mode should keep text cursor on fold title text area"
+        );
+
+        rt.update(Message::PointerDown {
+            page_idx,
+            x: click_x,
+            y: click_y,
+            click_count: 1,
+            modifier: Modifier::default(),
+            button: PointerButton::Primary,
+        });
+        rt.update(Message::PointerUp {
+            page_idx,
+            x: click_x,
+            y: click_y,
+            modifier: Modifier::default(),
+            button: PointerButton::Primary,
+        });
+        rt.layout();
+
+        assert!(
+            !fold_has_content(&rt),
+            "editable mode should not toggle when clicking fold title text area"
+        );
+
+        rt.set_read_only(true);
+        assert_eq!(
+            rt.get_pointer_style(page_idx, click_x, click_y),
+            PointerStyle::Pointer,
+            "read-only mode should use pointer cursor on fold title text area"
+        );
+
+        rt.update(Message::PointerDown {
+            page_idx,
+            x: click_x,
+            y: click_y,
+            click_count: 1,
+            modifier: Modifier::default(),
+            button: PointerButton::Primary,
+        });
+        rt.update(Message::PointerUp {
+            page_idx,
+            x: click_x,
+            y: click_y,
+            modifier: Modifier::default(),
+            button: PointerButton::Primary,
+        });
+        rt.layout();
+
+        assert!(
+            fold_has_content(&rt),
+            "read-only mode should toggle when clicking fold title text area"
         );
     }
 }
