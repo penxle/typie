@@ -1036,6 +1036,32 @@ impl Runtime {
                 head_handle.as_ref(),
             );
             self.slate.selection_expandable = self.compute_selection_expandable(selection);
+
+            let anchor_node = self.doc().node(selection.anchor.node_id);
+            if let Some(anchor_node) = anchor_node {
+                let block_node = if anchor_node.is_inline() {
+                    anchor_node.parent()
+                } else {
+                    match anchor_node.child(selection.anchor.offset) {
+                        Some(c) if c.is_block() => Some(c),
+                        _ => Some(anchor_node),
+                    }
+                };
+                if let Some(block) = block_node {
+                    let block_id = block.node_id();
+                    self.slate.current_block_node_id = *block_id.as_uuid().as_bytes();
+                    if let Some(nb) = find_node_bounds(self.doc(), self.pages(), block_id) {
+                        self.slate.current_block_page_idx = nb.page_idx as i32;
+                        self.slate.current_block_x = nb.x;
+                        self.slate.current_block_y = nb.y;
+                        self.slate.current_block_width = nb.width;
+                        self.slate.current_block_height = nb.height;
+                    } else {
+                        self.slate.current_block_page_idx = -1;
+                    }
+                }
+            }
+
             self.pending.selection = false;
         }
 

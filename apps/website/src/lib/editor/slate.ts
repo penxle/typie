@@ -31,6 +31,16 @@ export type TableOverlay = {
   showCellSelector: boolean;
 };
 
+export type RemarkOverlay = {
+  nodeId: string;
+  remarkId: string;
+  userId: string;
+  text: string;
+  createdAt: number;
+  pageIdx: number;
+  bounds: Rect;
+};
+
 export const DIRTY_SETTINGS = 0;
 export const DIRTY_PAGES = 1;
 export const DIRTY_CURSOR = 2;
@@ -49,6 +59,7 @@ export const DIRTY_RENDER_REQUIRED = 16;
 export const DIRTY_FONT_REQUIRED = 17;
 export const DIRTY_EXITED_DOCUMENT_START = 19;
 export const DIRTY_REPASTE = 20;
+export const DIRTY_REMARKS = 21;
 
 export const POINTER_STATE_IDLE = 0;
 export const POINTER_STATE_PRESSED = 1;
@@ -336,6 +347,27 @@ export class SlateReader {
     const enabled = this.#u32('repaste_enabled');
     return {
       enabled: enabled != 0,
+    };
+  }
+
+  readRemarks(): RemarkOverlay[] {
+    const count = this.#u32('remarks_count');
+    const offset = this.#u32('remarks_offset');
+    return readRemarkOverlays(this.#slabView, this.#slabPtr + offset, count);
+  }
+
+  readCurrentBlock(): { nodeId: string; pageIdx: number; bounds: Rect } | null {
+    const pageIdx = this.#i32('current_block_page_idx');
+    if (pageIdx < 0) return null;
+    return {
+      nodeId: this.#nodeId('current_block_node_id'),
+      pageIdx,
+      bounds: {
+        x: this.#f32('current_block_x'),
+        y: this.#f32('current_block_y'),
+        width: this.#f32('current_block_width'),
+        height: this.#f32('current_block_height'),
+      },
     };
   }
 }
@@ -776,6 +808,43 @@ function readFontRequests(view: DataView, offset: number, count: number): { fami
     requests.push({ family, weight, codepoints });
   }
   return requests;
+}
+
+function readRemarkOverlays(view: DataView, offset: number, count: number): RemarkOverlay[] {
+  const overlays: RemarkOverlay[] = [];
+  let pos = offset;
+  for (let i = 0; i < count; i++) {
+    const { nodeId, end: afterNodeId } = readNodeIdFromSlab(view, pos);
+    pos = afterNodeId;
+
+    const { nodeId: remarkId, end: afterRemarkId } = readNodeIdFromSlab(view, pos);
+    pos = afterRemarkId;
+
+    const { value: userId, end: afterUserId } = readStr(view, pos);
+    pos = afterUserId;
+
+    const { value: text, end: afterText } = readStr(view, pos);
+    pos = afterText;
+
+    const hi = view.getUint32(pos, true);
+    const lo = view.getUint32(pos + 4, true);
+    const createdAt = hi * 0x1_00_00_00_00 + lo;
+    pos += 8;
+
+    const pageIdx = view.getUint32(pos, true);
+    pos += 4;
+
+    const bounds: Rect = {
+      x: view.getFloat32(pos, true),
+      y: view.getFloat32(pos + 4, true),
+      width: view.getFloat32(pos + 8, true),
+      height: view.getFloat32(pos + 12, true),
+    };
+    pos += 16;
+
+    overlays.push({ nodeId, remarkId, userId, text, createdAt, pageIdx, bounds });
+  }
+  return overlays;
 }
 
 function readNodeIdFromSlab(view: DataView, offset: number): { nodeId: string; end: number } {
