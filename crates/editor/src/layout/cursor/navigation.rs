@@ -779,7 +779,10 @@ fn find_horizontal_target<'a>(
         let (boundary_x, boundary_y) = if let Some(scope_entry) = page.scope_entry(scope_id) {
             match direction {
                 HorizontalDirection::Left => (scope_entry.pos.x, pos.y),
-                HorizontalDirection::Right => (scope_entry.pos.x + scope_entry.size.width, pos.y),
+                HorizontalDirection::Right => (
+                    scope_entry.pos.x + scope_entry.size.width,
+                    scope_entry.pos.y + scope_entry.size.height,
+                ),
             }
         } else {
             (pos.x, preferred_y)

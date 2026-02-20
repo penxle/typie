@@ -1029,6 +1029,163 @@ mod tests {
     }
 
     #[test]
+    fn test_arrow_right_from_fold_end_in_table_moves_to_next_cell_not_other_table() {
+        let mut fold = id!();
+        let mut from = id!();
+        let mut expected = id!();
+        let mut other_table_cell = id!();
+
+        let mut rt = runtime! {
+            viewport { paginated { width: 400.0, height: 800.0, margin: 20.0 } }
+            doc {
+                table {
+                    table_row {
+                        table_cell {
+                            @fold fold {
+                                fold_title {}
+                                fold_content {
+                                    @from paragraph { text { "A" } }
+                                }
+                            }
+                        }
+                        table_cell {
+                            @expected paragraph { text { "B" } }
+                        }
+                    }
+                }
+                table(align: crate::model::TableAlign::Right, proportion: 0.7,) {
+                    table_row {
+                        table_cell {
+                            @other_table_cell paragraph { text { "C" } }
+                        }
+                    }
+                }
+            }
+            selection { (from, 1, Affinity::Upstream) }
+        };
+
+        rt.layout();
+        rt.update(Message::ToggleFoldExpansion {
+            node_id: fold.to_string(),
+        });
+        rt.layout();
+        rt.update(Message::Navigate {
+            direction: Direction::Right,
+            extend: false,
+        });
+
+        let selection = &rt.state().selection;
+        assert_eq!(
+            selection.head.node_id, expected,
+            "Right at fold_content end should move to the next cell in the same table"
+        );
+        assert_eq!(selection.head.offset, 0);
+        assert_ne!(selection.head.node_id, other_table_cell);
+        assert!(selection.is_collapsed());
+    }
+
+    #[test]
+    fn test_arrow_right_from_r1c2_wraps_to_r2c1_in_2x2_table() {
+        let mut r1c2 = id!();
+        let mut r2c1 = id!();
+
+        let mut rt = runtime! {
+            viewport { paginated { width: 500.0, height: 800.0, margin: 20.0 } }
+            doc {
+                table {
+                    table_row {
+                        table_cell {
+                            paragraph { text { "A" } }
+                        }
+                        table_cell {
+                            @r1c2 paragraph { text { "B" } }
+                        }
+                    }
+                    table_row {
+                        table_cell {
+                            @r2c1 paragraph { text { "C" } }
+                        }
+                        table_cell {
+                            paragraph { text { "D" } }
+                        }
+                    }
+                }
+            }
+            selection { (r1c2, 1, Affinity::Upstream) }
+        };
+
+        rt.layout();
+        rt.update(Message::Navigate {
+            direction: Direction::Right,
+            extend: false,
+        });
+
+        let selection = &rt.state().selection;
+        assert_eq!(
+            selection.head.node_id, r2c1,
+            "Right from row1 col2 should wrap to row2 col1"
+        );
+        assert_eq!(selection.head.offset, 0);
+        assert!(selection.is_collapsed());
+    }
+
+    #[test]
+    fn test_arrow_right_from_r1c2_wraps_to_r2c1_when_r1c1_has_expanded_fold() {
+        let mut fold = id!();
+        let mut r1c2 = id!();
+        let mut r2c1 = id!();
+
+        let mut rt = runtime! {
+            viewport { paginated { width: 500.0, height: 900.0, margin: 20.0 } }
+            doc {
+                table {
+                    table_row {
+                        table_cell {
+                            @fold fold {
+                                fold_title {}
+                                fold_content {
+                                    paragraph { text { "A1" } }
+                                    paragraph { text { "A2" } }
+                                }
+                            }
+                        }
+                        table_cell {
+                            @r1c2 paragraph { text { "B" } }
+                        }
+                    }
+                    table_row {
+                        table_cell {
+                            @r2c1 paragraph { text { "C" } }
+                        }
+                        table_cell {
+                            paragraph { text { "D" } }
+                        }
+                    }
+                }
+            }
+            selection { (r1c2, 1, Affinity::Upstream) }
+        };
+
+        rt.layout();
+        rt.update(Message::ToggleFoldExpansion {
+            node_id: fold.to_string(),
+        });
+        rt.layout();
+        rt.update(Message::Navigate {
+            direction: Direction::Right,
+            extend: false,
+        });
+
+        let selection = &rt.state().selection;
+        assert_eq!(
+            selection.head.node_id, r2c1,
+            "Right from row1 col2 should wrap to row2 col1 even when row1 col1 has a fold"
+        );
+        assert_eq!(selection.head.offset, 0);
+        assert!(selection.is_collapsed());
+    }
+
+    #[test]
     fn move_down_adjacent_images() {
         let mut rt = runtime! {
             viewport { 800, 600, 1.0 }

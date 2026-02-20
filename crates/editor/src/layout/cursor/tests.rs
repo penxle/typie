@@ -4281,3 +4281,105 @@ fn test_paragraph_indent_with_no_space_long_text() {
         rect.x
     );
 }
+
+#[test]
+fn test_find_target_right_fallback_below_prefers_leftmost_scope_on_same_y() {
+    let mut current = id!();
+    let mut below_left = id!();
+    let mut below_right = id!();
+
+    let mut rt = runtime! {
+        viewport { paginated { width: 500.0, height: 900.0, margin: PAGE_MARGIN } }
+        doc {
+            table {
+                table_row {
+                    table_cell {
+                        @current paragraph { text { "Current" } }
+                    }
+                }
+            }
+            table {
+                table_row {
+                    table_cell {
+                        @below_left paragraph { text { "Below Left" } }
+                    }
+                    table_cell {
+                        @below_right paragraph { text { "Below Right" } }
+                    }
+                }
+            }
+        }
+        selection { (current, 0) }
+    };
+
+    rt.layout();
+    let pages = rt.pages();
+    let page = &pages[0];
+
+    let current_scope = rt.state().doc.get_parent_id(current).unwrap();
+    let below_left_scope = rt.state().doc.get_parent_id(below_left).unwrap();
+
+    let current_scope_entry = page.scope_entry(current_scope).unwrap();
+    let x = current_scope_entry.pos.x + current_scope_entry.size.width;
+    let y = current_scope_entry.pos.y;
+
+    let target = page
+        .find_target_right(x, y, Some(current_scope))
+        .expect("Should find a scope below");
+
+    assert_eq!(
+        target.scope_id, below_left_scope,
+        "When below candidates are same y-distance, right fallback should pick the left-most scope"
+    );
+}
+
+#[test]
+fn test_find_target_left_fallback_above_prefers_rightmost_scope_on_same_y() {
+    let mut above_left = id!();
+    let mut above_right = id!();
+    let mut current = id!();
+
+    let mut rt = runtime! {
+        viewport { paginated { width: 500.0, height: 900.0, margin: PAGE_MARGIN } }
+        doc {
+            table {
+                table_row {
+                    table_cell {
+                        @above_left paragraph { text { "Above Left" } }
+                    }
+                    table_cell {
+                        @above_right paragraph { text { "Above Right" } }
+                    }
+                }
+            }
+            table {
+                table_row {
+                    table_cell {
+                        @current paragraph { text { "Current" } }
+                    }
+                }
+            }
+        }
+        selection { (current, 0) }
+    };
+
+    rt.layout();
+    let pages = rt.pages();
+    let page = &pages[0];
+
+    let current_scope = rt.state().doc.get_parent_id(current).unwrap();
+    let above_right_scope = rt.state().doc.get_parent_id(above_right).unwrap();
+
+    let current_scope_entry = page.scope_entry(current_scope).unwrap();
+    let x = current_scope_entry.pos.x;
+    let y = current_scope_entry.pos.y;
+
+    let target = page
+        .find_target_left(x, y, Some(current_scope))
+        .expect("Should find a scope above");
+
+    assert_eq!(
+        target.scope_id, above_right_scope,
+        "When above candidates are same y-distance, left fallback should pick the right-most scope"
+    );
+}
