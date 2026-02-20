@@ -100,6 +100,15 @@ class EditorDraggable extends StatelessWidget {
 
     final geo = scope.geometry;
     final offsets = geo.computeCumulativePageOffsets();
+    final renderBox = context.findRenderObject() as RenderBox?;
+    final viewportWidth = (renderBox?.hasSize ?? false) ? renderBox!.size.width : MediaQuery.sizeOf(context).width;
+    final horizontalScrollOffset = scope.horizontalScrollController.hasSingleClient
+        ? scope.horizontalScrollController.offset
+        : 0.0;
+    final contentStartX = geo.contentStartX(
+      viewportWidth: viewportWidth,
+      horizontalScrollOffset: horizontalScrollOffset,
+    );
 
     final unionRect = Rect.fromLTWH(
       imageRecord.offsetX,
@@ -111,7 +120,7 @@ class EditorDraggable extends StatelessWidget {
     return SnapshotSettings(
       translation: (rect, point) {
         final pageY = offsets[imageRecord.pageIdx];
-        final targetX = geo.horizontalPadding + unionRect.left;
+        final targetX = contentStartX + unionRect.left;
         final targetY = geo.titleAreaHeight + pageY + unionRect.top;
 
         return Offset(targetX, targetY);
