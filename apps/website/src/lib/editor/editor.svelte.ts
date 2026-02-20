@@ -501,19 +501,17 @@ export class Editor {
     const font = this.fontFamilies.find((f) => f.familyName === family)?.fonts.find((f) => f.weight === weight);
     if (!font) return;
 
-    ensureRequiredFont(wasm, family, font, codepoints).then(() => {
-      this.dispatch({ type: 'fontsLoaded' });
-      if (!this.readOnly) {
-        preloadRemainingChunks(wasm, family, font);
-      }
-    });
-
-    filterUncoveredCodepoints(font, codepoints).then((uncovered) => {
-      if (uncovered.length > 0) {
-        ensureRequiredFallbackFont(wasm, weight, uncovered).then(() => {
-          this.dispatch({ type: 'fontsLoaded' });
-        });
-      }
+    Promise.all([
+      ensureRequiredFont(wasm, family, font, codepoints).then(() => {
+        if (!this.readOnly) {
+          preloadRemainingChunks(wasm, family, font);
+        }
+      }),
+      filterUncoveredCodepoints(font, codepoints).then((uncovered) =>
+        uncovered.length > 0 ? ensureRequiredFallbackFont(wasm, weight, uncovered) : undefined,
+      ),
+    ]).then(() => {
+      this.dispatch({ type: 'fontsLoaded', family, weight });
     });
   }
 

@@ -165,8 +165,20 @@ impl Runtime {
         vec![Effect::LayoutChanged]
     }
 
-    pub(crate) fn handle_fonts_loaded(&mut self) -> Vec<Effect> {
-        vec![Effect::FullLayoutInvalidation, Effect::LayoutChanged]
+    pub(crate) fn handle_fonts_loaded(&mut self, family: String, weight: u16) -> Vec<Effect> {
+        if let Some(nodes) = self.missing_font_nodes.remove(&(family.clone(), weight)) {
+            if nodes.contains(&NodeId::ROOT) {
+                return vec![Effect::FullLayoutInvalidation, Effect::LayoutChanged];
+            }
+
+            if !nodes.is_empty() {
+                return nodes
+                    .into_iter()
+                    .map(|node_id| Effect::NodeChanged { node_id })
+                    .collect();
+            }
+        }
+        Vec::new()
     }
 
     pub(crate) fn handle_set_focused(&mut self, focused: bool) -> Vec<Effect> {

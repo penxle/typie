@@ -446,9 +446,12 @@ define_messages! {
     => when When::True
     => handle(rt) { rt.handle_set_theme(theme) },
 
-    FontsLoaded
+    FontsLoaded {
+        family: String,
+        weight: u16,
+    }
     => when When::True
-    => handle(rt) { rt.handle_fonts_loaded() },
+    => handle(rt) { rt.handle_fonts_loaded(family, weight) },
 
     Escape
     => when When::True
