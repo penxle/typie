@@ -14,13 +14,18 @@
 
     const { pageIdx, bounds } = editor.cursor;
     const containerEls = editor.pageContainerEls;
+    const extensionAreaEl = editor.extensionArea.containerEl;
+    const pageEl = containerEls[pageIdx];
 
-    if (show && bounds && containerEls[pageIdx]) {
-      containerEls[pageIdx].append(element);
+    if (show && bounds && pageEl && extensionAreaEl) {
+      extensionAreaEl.append(element);
+
+      const pageRect = pageEl.getBoundingClientRect();
+      const extensionRect = extensionAreaEl.getBoundingClientRect();
 
       element.style.display = 'flex';
-      element.style.left = `${bounds.x}px`;
-      element.style.top = `${bounds.y + bounds.height + 4}px`;
+      element.style.left = `${pageRect.left - extensionRect.left + bounds.x}px`;
+      element.style.top = `${pageRect.top - extensionRect.top + bounds.y + bounds.height + 4}px`;
     } else {
       element.style.display = 'none';
     }
@@ -37,7 +42,6 @@
 
   const buttonStyle = css({
     position: 'absolute',
-    zIndex: '1',
     display: 'flex',
     alignItems: 'center',
     gap: '4px',
