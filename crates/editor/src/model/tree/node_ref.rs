@@ -7,6 +7,7 @@ use std::cell::OnceCell;
 use std::rc::Rc;
 
 pub const CASCADE_ATTRS_KEY: &str = "cascade_attrs";
+pub const REMARKS_KEY: &str = "remarks";
 
 #[derive(Debug)]
 pub struct NodeRef<'a> {
@@ -257,6 +258,49 @@ impl<'a> NodeRef<'a> {
             }
         }
         if attrs.is_empty() { None } else { Some(attrs) }
+    }
+
+    pub fn remarks(&self) -> Vec<Remark> {
+        let Some(map) = self.inner.get_node_map(self.node_id) else {
+            return Vec::new();
+        };
+        let Some(remarks_map) = map
+            .get(REMARKS_KEY)
+            .and_then(|v| v.into_container().ok())
+            .and_then(|c| c.into_map().ok())
+        else {
+            return Vec::new();
+        };
+        let deep = remarks_map.get_deep_value();
+        let Ok(entries) = deep.into_map() else {
+            return Vec::new();
+        };
+        let mut remarks = Vec::new();
+        for (id_str, value) in entries.iter() {
+            let Some(id) = NodeId::from_string(id_str) else {
+                continue;
+            };
+            let loro::LoroValue::Map(fields) = value else {
+                continue;
+            };
+            let Some(loro::LoroValue::String(user_id)) = fields.get("user_id") else {
+                continue;
+            };
+            let Some(loro::LoroValue::String(text)) = fields.get("text") else {
+                continue;
+            };
+            let Some(loro::LoroValue::I64(created_at)) = fields.get("created_at") else {
+                continue;
+            };
+            remarks.push(Remark {
+                id,
+                user_id: user_id.to_string(),
+                text: text.to_string(),
+                created_at: *created_at,
+            });
+        }
+        remarks.sort_by_key(|r| r.created_at);
+        remarks
     }
 
     pub fn schema(&self) -> &Schema {

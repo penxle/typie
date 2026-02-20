@@ -21,7 +21,7 @@ use crate::inspect::{
 };
 use crate::layout::Page;
 use crate::layout::cursor::{Cursor, NavigationContext};
-use crate::layout::query::{find_drag_image_bounds, is_selectable_block_hit};
+use crate::layout::query::{find_drag_image_bounds, find_node_bounds, is_selectable_block_hit};
 use crate::model::*;
 use crate::render::{DragImageResult, RenderInfo, RenderResult, Renderer};
 use crate::state::ancestor_helpers::lowest_common_ancestor_id;
@@ -81,6 +81,7 @@ struct PendingUpdates {
     table_overlays: bool,
     default_attrs: bool,
     repaste: bool,
+    remarks: bool,
 }
 
 #[derive(Clone)]
@@ -156,6 +157,7 @@ impl Runtime {
                 table_overlays: true,
                 default_attrs: true,
                 repaste: false,
+                remarks: true,
             },
             message_queue: Vec::new(),
             pointer: PointerState::default(),
@@ -1170,6 +1172,12 @@ impl Runtime {
                 .write_repaste_enabled(self.repaste_text.is_some());
             self.pending.repaste = false;
         }
+
+        if self.pending.remarks {
+            let overlays = self.build_remark_overlays();
+            self.slab.write_remarks(&mut self.slate, &overlays);
+            self.pending.remarks = false;
+        }
     }
 
     fn evaluate_enabled_actions(&self) -> Vec<String> {
@@ -1213,6 +1221,29 @@ impl Runtime {
         }
 
         elements
+    }
+
+    fn build_remark_overlays(&self) -> Vec<cmd::RemarkOverlay> {
+        let mut overlays = Vec::new();
+        for (node_id, remark) in self.doc().all_remarks() {
+            if let Some(nb) = find_node_bounds(self.doc(), self.pages(), node_id) {
+                overlays.push(cmd::RemarkOverlay {
+                    page_idx: nb.page_idx,
+                    node_id,
+                    remark_id: remark.id,
+                    user_id: remark.user_id,
+                    text: remark.text,
+                    created_at: remark.created_at,
+                    bounds: Rect {
+                        x: nb.x,
+                        y: nb.y,
+                        width: nb.width,
+                        height: nb.height,
+                    },
+                });
+            }
+        }
+        overlays
     }
 
     fn build_link_overlays(&self) -> Vec<cmd::LinkOverlay> {
@@ -1343,6 +1374,7 @@ impl Runtime {
                     self.pending.placeholder = true;
                     self.pending.table_overlays = true;
                     self.pending.repaste = true;
+                    self.pending.remarks = true;
                 }
                 Effect::NodeChanged { node_id } => {
                     invalidation.push(LayoutInvalidationOp::NodeAndAncestors { node_id });
@@ -1364,6 +1396,7 @@ impl Runtime {
                     self.pending.active_styles = true;
                     self.pending.external_elements = true;
                     self.pending.table_overlays = true;
+                    self.pending.remarks = true;
                 }
                 Effect::SelectionChanged => {
                     self.selection_cache = None;
@@ -1399,6 +1432,7 @@ impl Runtime {
                     self.pending.external_elements = true;
                     self.pending.placeholder = true;
                     self.pending.table_overlays = true;
+                    self.pending.remarks = true;
                 }
                 Effect::FullLayoutInvalidation => {
                     invalidation.push(LayoutInvalidationOp::Full);

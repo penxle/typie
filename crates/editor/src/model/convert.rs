@@ -1,4 +1,4 @@
-use crate::model::tree::CASCADE_ATTRS_KEY;
+use crate::model::tree::{CASCADE_ATTRS_KEY, REMARKS_KEY};
 use crate::model::{Codec, Node, NodeId};
 use anyhow::{Context, Result};
 use loro::{ExpandType, ExportMode, LoroDoc, LoroList, LoroMap, LoroValue, StyleConfig};
@@ -21,6 +21,8 @@ pub struct NodeEntry {
     pub parent: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cascade_attrs: Option<serde_json::Map<String, serde_json::Value>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remarks: Option<serde_json::Map<String, serde_json::Value>>,
 }
 
 fn loro_value_to_json(value: &LoroValue) -> serde_json::Value {
@@ -202,6 +204,19 @@ pub fn snapshot_to_json(snapshot: &[u8]) -> Result<DocumentJson> {
             })
             .filter(|m| !m.is_empty());
 
+        let remarks = node_map
+            .get(REMARKS_KEY)
+            .and_then(|v| v.into_container().ok())
+            .and_then(|c| c.into_map().ok())
+            .map(|m| {
+                let json = loro_value_to_json(&m.get_deep_value());
+                match json {
+                    serde_json::Value::Object(map) => map,
+                    _ => serde_json::Map::new(),
+                }
+            })
+            .filter(|m| !m.is_empty());
+
         nodes.insert(
             id_str.clone(),
             NodeEntry {
@@ -209,6 +224,7 @@ pub fn snapshot_to_json(snapshot: &[u8]) -> Result<DocumentJson> {
                 children: children_ids.clone(),
                 parent,
                 cascade_attrs,
+                remarks,
             },
         );
     }
@@ -247,6 +263,16 @@ pub fn json_to_snapshot(doc_json: &DocumentJson) -> Result<Vec<u8>> {
             apply_json_to_loro_map(&cascade_map, &serde_json::Value::Object(cascade.clone()))?;
         }
 
+        if let Some(remarks) = &entry.remarks {
+            let remarks_map = node_map.insert_container(REMARKS_KEY, LoroMap::new())?;
+            for (remark_id, remark_value) in remarks {
+                if let serde_json::Value::Object(fields) = remark_value {
+                    let entry_map = remarks_map.insert_container(remark_id, LoroMap::new())?;
+                    apply_json_to_loro_map(&entry_map, &serde_json::Value::Object(fields.clone()))?;
+                }
+            }
+        }
+
         let children_list = node_map.insert_container("children", LoroList::new())?;
         for child_id in &entry.children {
             children_list.push(child_id.as_str())?;
@@ -263,7 +289,7 @@ pub fn json_to_snapshot(doc_json: &DocumentJson) -> Result<Vec<u8>> {
 mod tests {
     use super::*;
     use crate::model::{
-        Doc, DocExportMode, FontWeightStyle, ItalicStyle, Node, ParagraphNode, Style, Text,
+        Doc, DocExportMode, FontWeightStyle, ItalicStyle, Node, ParagraphNode, Remark, Style, Text,
         TextNode, TextSegment,
     };
 
@@ -411,5 +437,54 @@ mod tests {
         let new_doc = Doc::from_snapshot(new_snapshot);
 
         assert_eq!(doc.to_plain_text(), new_doc.to_plain_text());
+    }
+
+    #[test]
+    fn test_roundtrip_doc_with_remarks() {
+        let doc = Doc::new();
+        let root = doc.node(NodeId::ROOT).unwrap();
+        let para_id = root
+            .as_mut()
+            .insert_child(0, Node::Paragraph(ParagraphNode::default()))
+            .unwrap();
+
+        let para = doc.node(para_id).unwrap();
+        para.as_mut()
+            .insert_child(
+                0,
+                Node::Text(TextNode {
+                    text: Text::from("hello"),
+                }),
+            )
+            .unwrap();
+
+        let remark = Remark {
+            id: NodeId::new(),
+            user_id: "user1".to_string(),
+            text: "a comment".to_string(),
+            created_at: 1700000000000,
+        };
+        para.as_mut().add_remark(&remark).unwrap();
+
+        let snapshot = doc.export(DocExportMode::Snapshot).unwrap();
+        let json = snapshot_to_json(&snapshot).unwrap();
+
+        let para_entry = json.nodes.get(&para_id.to_string()).unwrap();
+        assert!(para_entry.remarks.is_some());
+        let remarks_map = para_entry.remarks.as_ref().unwrap();
+        assert_eq!(remarks_map.len(), 1);
+
+        let serialized = serde_json::to_string(&json).unwrap();
+        let deserialized: DocumentJson = serde_json::from_str(&serialized).unwrap();
+        let new_snapshot = json_to_snapshot(&deserialized).unwrap();
+        let new_doc = Doc::from_snapshot(new_snapshot);
+
+        let new_para = new_doc.node(para_id).unwrap();
+        let remarks = new_para.remarks();
+        assert_eq!(remarks.len(), 1);
+        assert_eq!(remarks[0].id, remark.id);
+        assert_eq!(remarks[0].user_id, "user1");
+        assert_eq!(remarks[0].text, "a comment");
+        assert_eq!(remarks[0].created_at, 1700000000000);
     }
 }

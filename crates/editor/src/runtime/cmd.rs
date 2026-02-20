@@ -1,4 +1,5 @@
 use crate::layout::elements::ExternalElementData;
+use crate::model::{NodeId, RemarkId};
 use crate::types::{Rect, TextBound};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -42,4 +43,15 @@ pub struct TableOverlay {
     pub total_rows: usize,
     pub is_focused: bool,
     pub show_cell_selector: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RemarkOverlay {
+    pub page_idx: usize,
+    pub node_id: NodeId,
+    pub remark_id: RemarkId,
+    pub user_id: String,
+    pub text: String,
+    pub created_at: i64,
+    pub bounds: Rect,
 }

@@ -172,6 +172,25 @@ impl Doc {
         NodeRef::new(&self.inner, id)
     }
 
+    pub fn all_remarks(&self) -> Vec<(NodeId, Remark)> {
+        let mut result = Vec::new();
+        let mut stack = vec![NodeId::ROOT];
+        while let Some(id) = stack.pop() {
+            let Some(node_ref) = self.node(id) else {
+                continue;
+            };
+            // remarks() is already sorted by created_at within a node
+            for remark in node_ref.remarks() {
+                result.push((id, remark));
+            }
+            let children = self.get_children_ids(id);
+            for &child_id in children.iter().rev() {
+                stack.push(child_id);
+            }
+        }
+        result
+    }
+
     pub fn to_plain_text(&self) -> String {
         let mut text = String::new();
 

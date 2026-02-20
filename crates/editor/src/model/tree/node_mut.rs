@@ -1,6 +1,6 @@
 use crate::model::attr::Attr;
 use crate::model::tree::DocInner;
-use crate::model::tree::node_ref::CASCADE_ATTRS_KEY;
+use crate::model::tree::node_ref::{CASCADE_ATTRS_KEY, REMARKS_KEY};
 use crate::model::*;
 use anyhow::{Context, Result};
 use loro::LoroMap;
@@ -163,6 +163,60 @@ impl<'a> NodeMut<'a> {
             attrs_map.insert(attr.key(), attr.to_loro_value())?;
         }
 
+        Ok(())
+    }
+
+    pub fn add_remark(&self, remark: &Remark) -> Result<()> {
+        anyhow::ensure!(
+            !self.node_ref.is_inline(),
+            "Cannot add remark on inline node"
+        );
+        let map = self
+            .inner
+            .get_node_map(self.node_ref.node_id())
+            .context("Node map not found")?;
+        let remarks_map = map
+            .get_or_create_container(REMARKS_KEY, LoroMap::new())
+            .context("Failed to create remarks map")?;
+        let entry = remarks_map
+            .insert_container(&remark.id.to_string(), LoroMap::new())
+            .context("Failed to create remark entry")?;
+        entry.insert("user_id", remark.user_id.as_str())?;
+        entry.insert("text", remark.text.as_str())?;
+        entry.insert("created_at", remark.created_at)?;
+        Ok(())
+    }
+
+    pub fn update_remark(&self, remark_id: RemarkId, text: &str) -> Result<()> {
+        let map = self
+            .inner
+            .get_node_map(self.node_ref.node_id())
+            .context("Node map not found")?;
+        let remarks_map = map
+            .get(REMARKS_KEY)
+            .and_then(|v| v.into_container().ok())
+            .and_then(|c| c.into_map().ok())
+            .context("Remarks map not found")?;
+        let entry = remarks_map
+            .get(&remark_id.to_string())
+            .and_then(|v| v.into_container().ok())
+            .and_then(|c| c.into_map().ok())
+            .context("Remark not found")?;
+        entry.insert("text", text)?;
+        Ok(())
+    }
+
+    pub fn remove_remark(&self, remark_id: RemarkId) -> Result<()> {
+        let map = self
+            .inner
+            .get_node_map(self.node_ref.node_id())
+            .context("Node map not found")?;
+        let remarks_map = map
+            .get(REMARKS_KEY)
+            .and_then(|v| v.into_container().ok())
+            .and_then(|c| c.into_map().ok())
+            .context("Remarks map not found")?;
+        remarks_map.delete(&remark_id.to_string())?;
         Ok(())
     }
 
