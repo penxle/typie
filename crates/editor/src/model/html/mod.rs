@@ -42,7 +42,7 @@ impl Fragment {
     }
 
     pub fn from_html(html: &str) -> Result<Self> {
-        let doc = HtmlDoc::parse_fragment(html);
+        let doc = HtmlDoc::parse_document(html);
         let mut builder = Fragment::builder();
 
         let (open_start, open_end) = parse_meta(&doc);
@@ -52,10 +52,10 @@ impl Fragment {
         let style_rules = collect_style_parse_rules();
         let annotation_rules = collect_annotation_parse_rules();
 
-        let root = doc.root_element();
+        let body = find_body(&doc).unwrap_or_else(|| doc.root_element());
         let pending_text_id = Cell::new(None);
         parse_children(
-            &root,
+            &body,
             None,
             None,
             &mut builder,
@@ -75,6 +75,11 @@ impl Fragment {
             .normalize_font_weights()
             .merge_adjacent_text_nodes())
     }
+}
+
+fn find_body<'a>(doc: &'a HtmlDoc) -> Option<ElementRef<'a>> {
+    let sel = Selector::parse("body").unwrap();
+    doc.select(&sel).next()
 }
 
 fn parse_meta(doc: &HtmlDoc) -> (usize, usize) {
@@ -136,7 +141,12 @@ fn parse_children(
             }
             ScraperNode::Text(t) => {
                 let s = t.text.to_string();
-                if !s.is_empty() {
+                let is_textblock_parent = parent_type
+                    .map(|pt| schema.node_spec(pt).is_textblock(schema))
+                    .unwrap_or(false);
+                let is_whitespace_only = s.chars().all(|c| c.is_ascii_whitespace());
+                let skip = is_whitespace_only && (!is_textblock_parent || s.contains('\n'));
+                if !s.is_empty() && !skip {
                     let id = pending_text_id.take();
                     add_text(
                         &s,
@@ -280,15 +290,24 @@ fn add_text(
     annotations: Vec<Annotation>,
     node_id: Option<NodeId>,
 ) {
-    let text = Text::from(content);
-    let len = text.char_len();
-    for s in &styles {
-        let _ = text.apply_style(0..len, s);
+    let parts: Vec<&str> = content.split('\n').collect();
+    for (i, part) in parts.iter().enumerate() {
+        if i > 0 {
+            add_node(parent_id, builder, Node::HardBreak(HardBreakNode {}), None);
+        }
+        if !part.is_empty() {
+            let text = Text::from(*part);
+            let len = text.char_len();
+            for s in &styles {
+                let _ = text.apply_style(0..len, s);
+            }
+            for ann in &annotations {
+                let _ = text.apply_annotation(0..len, ann);
+            }
+            let id = if i == 0 { node_id } else { None };
+            add_node(parent_id, builder, Node::Text(TextNode { text }), id);
+        }
     }
-    for ann in &annotations {
-        let _ = text.apply_annotation(0..len, ann);
-    }
-    add_node(parent_id, builder, Node::Text(TextNode { text }), node_id);
 }
 
 #[cfg(test)]
@@ -1030,5 +1049,145 @@ mod tests {
         } else {
             panic!("Expected Text node");
         }
+    }
+
+    #[test]
+    fn test_from_html_with_html_body_wrapper_and_meta() {
+        let html = r#"<html><body><meta name="typ-frag" data-open-start="1" data-open-end="2"><p>Hello</p></body></html>"#;
+        let parsed = Fragment::from_html(html).unwrap();
+
+        assert_eq!(parsed.open_start, 1);
+        assert_eq!(parsed.open_end, 2);
+
+        let top = parsed.top_level_node_ids();
+        assert_eq!(top.len(), 1);
+        assert_node_type(&parsed, top[0], "Paragraph");
+    }
+
+    #[test]
+    fn test_from_html_with_html_body_wrapper_and_comments() {
+        let html = r#"<html><body><!-- header --><p>Hello</p><!-- separator --><p>World</p><!-- footer --></body></html>"#;
+        let parsed = Fragment::from_html(html).unwrap();
+
+        let top = parsed.top_level_node_ids();
+        assert_eq!(top.len(), 2, "Expected 2 paragraphs, got {}", top.len());
+
+        for id in &top {
+            assert_node_type(&parsed, *id, "Paragraph");
+        }
+
+        let c1 = parsed.children_of_node(top[0]);
+        if let Node::Text(t) = c1[0].1.data() {
+            assert_eq!(t.text.get_segments()[0].text, "Hello");
+        } else {
+            panic!("Expected Text node");
+        }
+
+        let c2 = parsed.children_of_node(top[1]);
+        if let Node::Text(t) = c2[0].1.data() {
+            assert_eq!(t.text.get_segments()[0].text, "World");
+        } else {
+            panic!("Expected Text node");
+        }
+    }
+
+    #[test]
+    fn test_from_html_with_html_body_wrapper() {
+        let html = r#"<html><body><p>Hello</p><p>World</p></body></html>"#;
+        let parsed = Fragment::from_html(html).unwrap();
+
+        let top = parsed.top_level_node_ids();
+        assert_eq!(top.len(), 2, "Expected 2 paragraphs, got {}", top.len());
+
+        for id in &top {
+            assert_node_type(&parsed, *id, "Paragraph");
+        }
+
+        let c1 = parsed.children_of_node(top[0]);
+        if let Node::Text(t) = c1[0].1.data() {
+            assert_eq!(t.text.get_segments()[0].text, "Hello");
+        } else {
+            panic!("Expected Text node");
+        }
+
+        let c2 = parsed.children_of_node(top[1]);
+        if let Node::Text(t) = c2[0].1.data() {
+            assert_eq!(t.text.get_segments()[0].text, "World");
+        } else {
+            panic!("Expected Text node");
+        }
+    }
+
+    #[test]
+    fn test_from_html_newline_in_text_becomes_hard_break() {
+        let html = r#"<p>Hello
+World</p>"#;
+        let parsed = Fragment::from_html(html).unwrap();
+
+        let top = parsed.top_level_node_ids();
+        assert_eq!(top.len(), 1);
+
+        let children = parsed.children_of_node(top[0]);
+        assert_eq!(
+            children.len(),
+            3,
+            "Expected Text + HardBreak + Text, got {} children",
+            children.len(),
+        );
+
+        assert!(
+            matches!(children[0].1.data(), Node::Text(t) if t.text.to_string() == "Hello"),
+            "First child should be Text(\"Hello\")"
+        );
+        assert!(
+            matches!(children[1].1.data(), Node::HardBreak(_)),
+            "Second child should be HardBreak"
+        );
+        assert!(
+            matches!(children[2].1.data(), Node::Text(t) if t.text.to_string() == "World"),
+            "Third child should be Text(\"World\")"
+        );
+    }
+
+    #[test]
+    fn test_from_html_multiple_newlines_become_hard_breaks() {
+        let html = r#"<p>A
+B
+C</p>"#;
+        let parsed = Fragment::from_html(html).unwrap();
+
+        let top = parsed.top_level_node_ids();
+        let children = parsed.children_of_node(top[0]);
+
+        // A, HardBreak, B, HardBreak, C
+        assert_eq!(
+            children.len(),
+            5,
+            "Expected 5 children (3 texts + 2 hard breaks), got {}",
+            children.len(),
+        );
+
+        assert!(matches!(children[0].1.data(), Node::Text(t) if t.text.to_string() == "A"));
+        assert!(matches!(children[1].1.data(), Node::HardBreak(_)));
+        assert!(matches!(children[2].1.data(), Node::Text(t) if t.text.to_string() == "B"));
+        assert!(matches!(children[3].1.data(), Node::HardBreak(_)));
+        assert!(matches!(children[4].1.data(), Node::Text(t) if t.text.to_string() == "C"));
+    }
+
+    #[test]
+    fn test_from_html_whitespace_only_text_in_paragraph_ignored() {
+        let html = "<p>\n</p>";
+        let parsed = Fragment::from_html(html).unwrap();
+
+        let top = parsed.top_level_node_ids();
+        assert_eq!(top.len(), 1);
+
+        let children = parsed.children_of_node(top[0]);
+        assert_eq!(
+            children.len(),
+            0,
+            "Whitespace-only text in paragraph should be ignored, got {} children",
+            children.len(),
+        );
     }
 }
