@@ -111,10 +111,11 @@ impl Runtime {
     }
 
     pub(crate) fn handle_set_layout_mode(&mut self, mode: LayoutMode) -> Vec<Effect> {
-        let _ = self.state.doc.update_settings(|s| s.layout_mode = mode);
+        if self.doc().settings().layout_mode == mode {
+            return vec![];
+        }
 
-        let new_width = self.calculate_page_width(mode);
-        self.layout_engine.set_width(new_width);
+        let _ = self.state.doc.update_settings(|s| s.layout_mode = mode);
 
         vec![
             Effect::LayoutChanged,
@@ -134,12 +135,8 @@ impl Runtime {
             .set_viewport(viewport_width, viewport_height);
 
         let layout_mode = self.doc().settings().layout_mode;
-        let new_width = self.calculate_page_width(layout_mode);
-
-        let width_changed = self.layout_engine.width() != new_width;
+        let width_changed = self.sync_layout_width(layout_mode);
         let scale_changed = self.layout_engine.scale_factor() != scale_factor;
-
-        self.layout_engine.set_width(new_width);
         self.layout_engine.set_scale_factor(scale_factor);
 
         if width_changed || scale_changed || viewport_changed {
@@ -149,15 +146,20 @@ impl Runtime {
         }
     }
 
-    fn calculate_page_width(&self, layout_mode: LayoutMode) -> f32 {
-        match layout_mode {
+    pub(crate) fn sync_layout_width(&mut self, layout_mode: LayoutMode) -> bool {
+        let new_width = match layout_mode {
             LayoutMode::Paginated { page_width, .. } => page_width,
             LayoutMode::Continuous { max_width } => {
                 let margin = CONTINUOUS_PAGE_MARGIN;
                 let max_page_width = max_width + 2.0 * margin;
                 self.layout_engine.viewport_width().min(max_page_width)
             }
+        };
+        let width_changed = self.layout_engine.width() != new_width;
+        if width_changed {
+            self.layout_engine.set_width(new_width);
         }
+        width_changed
     }
 
     pub(crate) fn handle_set_theme(&mut self, theme: Theme) -> Vec<Effect> {
