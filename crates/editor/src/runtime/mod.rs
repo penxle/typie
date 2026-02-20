@@ -1479,6 +1479,8 @@ impl Runtime {
                     self.pending.repaste = true;
                 }
                 Effect::SettingsChanged => {
+                    let layout_mode = self.doc().settings().layout_mode;
+                    self.sync_layout_width(layout_mode);
                     invalidation.push(LayoutInvalidationOp::Full);
                     self.pending.layout = true;
                     self.pending.render = true;
@@ -2746,5 +2748,62 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn insert_template_fragment_updates_layout_width_from_template_settings() {
+        let mut p = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {}
+            }
+            selection { (p, 0) }
+        };
+
+        rt.update(Message::SetLayoutMode {
+            mode: LayoutMode::Paginated {
+                page_width: 320.0,
+                page_height: 600.0,
+                page_margin_top: 40.0,
+                page_margin_bottom: 40.0,
+                page_margin_left: 40.0,
+                page_margin_right: 40.0,
+            },
+        });
+        assert_eq!(rt.layout_engine.width(), 320.0);
+
+        let template_doc = Rc::new(Doc::new());
+        let root = template_doc.node(NodeId::ROOT).unwrap();
+        let tp_id = root
+            .as_mut()
+            .insert_child(0, Node::Paragraph(ParagraphNode::default()))
+            .unwrap();
+        let tp = template_doc.node(tp_id).unwrap();
+        tp.as_mut()
+            .insert_child(
+                0,
+                Node::Text(TextNode {
+                    text: Text::from("template"),
+                }),
+            )
+            .unwrap();
+        let _ = template_doc.update_settings(|s| {
+            s.layout_mode = LayoutMode::Paginated {
+                page_width: 900.0,
+                page_height: 1200.0,
+                page_margin_top: 80.0,
+                page_margin_bottom: 80.0,
+                page_margin_left: 80.0,
+                page_margin_right: 80.0,
+            };
+        });
+        template_doc.loro_doc().commit();
+
+        let snapshot = template_doc.export(DocExportMode::Snapshot).unwrap();
+        rt.insert_template_fragment(snapshot).unwrap();
+
+        assert_eq!(rt.layout_engine.width(), 900.0);
     }
 }
