@@ -280,20 +280,6 @@
     wasm.setTextReplacementRules(JSON.parse(textReplacementRulesJson));
   });
 
-  const availableFontsJson = $derived.by(() =>
-    stringify(
-      Object.fromEntries(
-        $query.me.documentFontFamilies
-          .filter((f) => f.state === 'ACTIVE')
-          .map((f) => [f.familyName, f.fonts.filter((font) => font.state === 'ACTIVE').map((font) => font.weight)]),
-      ),
-    ),
-  );
-
-  $effect(() => {
-    wasm.setAvailableFonts(JSON.parse(availableFontsJson));
-  });
-
   $effect(() => {
     wasm.setAutoSurroundEnabled(app.preference.current.autoSurroundEnabled);
   });

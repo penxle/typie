@@ -9,6 +9,7 @@
   import mixpanel from 'mixpanel-browser';
   import { nanoid } from 'nanoid';
   import qs from 'query-string';
+  import { untrack } from 'svelte';
   import { z } from 'zod';
   import { TypieError } from '@/errors';
   import LockIcon from '~icons/lucide/lock';
@@ -21,6 +22,7 @@
   import { Editor as EditorComponent } from '$lib/components/editor';
   import { setupEditorContext } from '$lib/editor/context.svelte';
   import { Editor } from '$lib/editor/editor.svelte';
+  import { wasm } from '$lib/wasm';
   import ContentNavigation from './ContentNavigation.svelte';
   import DocumentActionMenu from './DocumentActionMenu.svelte';
   import DocumentEmojiReaction from './DocumentEmojiReaction.svelte';
@@ -115,21 +117,6 @@
               }
             }
 
-            fontFamilies {
-              id
-              familyName
-              displayName
-              state
-
-              fonts {
-                id
-                weight
-                subfamilyDisplayName
-                url
-                state
-              }
-            }
-
             ...UsersiteWildcardSlugPage_DocumentEmojiReaction_documentView
           }
         }
@@ -193,6 +180,37 @@
     }
   `);
 
+  const fontFamiliesQuery = graphql(`
+    query DocumentView_FontFamilies_Query($origin: String!, $slug: String!) @client {
+      entityView(origin: $origin, slug: $slug) {
+        id
+
+        node {
+          __typename
+
+          ... on DocumentView {
+            id
+
+            fontFamilies {
+              id
+              familyName
+              displayName
+              state
+
+              fonts {
+                id
+                weight
+                subfamilyDisplayName
+                url
+                state
+              }
+            }
+          }
+        }
+      }
+    }
+  `);
+
   const form = createForm({
     schema: z.object({
       password: z.string(),
@@ -230,6 +248,30 @@
 
   $effect(() => {
     editor.protectContent = document?.protectContent ?? false;
+  });
+
+  $effect(() => {
+    void $entityView.slug;
+
+    untrack(() => {
+      fontFamiliesQuery.load({ origin: page.url.origin, slug: $entityView.slug });
+    });
+  });
+
+  const fontFamilies = $derived(
+    $fontFamiliesQuery?.entityView.node.__typename === 'DocumentView' ? ($fontFamiliesQuery.entityView.node.fontFamilies ?? []) : [],
+  );
+
+  $effect(() => {
+    if (fontFamilies.length > 0) {
+      const availableFonts = Object.fromEntries(
+        fontFamilies
+          .filter((f) => f.state === 'ACTIVE')
+          .map((f) => [f.familyName, f.fonts.filter((font) => font.state === 'ACTIVE').map((font) => font.weight)]),
+      );
+      wasm.setAvailableFonts(availableFonts);
+      editor.fontFamilies = fontFamilies;
+    }
   });
 
   const bodySnapshot = $derived(
@@ -325,7 +367,7 @@
   <meta name="robots" content="noindex, nofollow" />
 </svelte:head>
 
-{#if document}
+{#if document && fontFamilies.length > 0}
   <Helmet
     description={document.excerpt}
     image={{ size: 'large', src: `${env.PUBLIC_API_URL}/og/${$entityView.id}` }}
@@ -336,7 +378,7 @@
     {#if bodySnapshot}
       {#if document.protectContent}
         <ContentProtect>
-          <EditorComponent {editor} fontFamilies={document.fontFamilies} readOnly snapshot={bodySnapshot} useWindowScroll>
+          <EditorComponent {editor} {fontFamilies} readOnly snapshot={bodySnapshot} useWindowScroll>
             {#snippet header()}
               <div class={css({ paddingTop: { base: '48px', md: '80px' } })}>
                 <nav class={flex({ alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginBottom: '20px' })}>
@@ -422,7 +464,7 @@
           </EditorComponent>
         </ContentProtect>
       {:else}
-        <EditorComponent {editor} fontFamilies={document.fontFamilies} readOnly snapshot={bodySnapshot} useWindowScroll>
+        <EditorComponent {editor} {fontFamilies} readOnly snapshot={bodySnapshot} useWindowScroll>
           {#snippet header()}
             <div class={css({ paddingTop: { base: '48px', md: '80px' } })}>
               <nav class={flex({ alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginBottom: '20px' })}>
