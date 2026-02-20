@@ -134,7 +134,7 @@ export const tooltip: Action<HTMLElement, Parameter> = (
       });
 
       return () => {
-        unmount(component, { outro: true });
+        unmount(component);
       };
     }
   });

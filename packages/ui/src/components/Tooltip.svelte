@@ -52,7 +52,7 @@
     )}
     role="tooltip"
     use:floating
-    transition:scale|global={{ start: 0.9, duration: 200 }}
+    in:scale|global={{ start: 0.9, duration: 200 }}
   >
     {#if typeof message === 'string'}
       {message}

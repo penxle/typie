@@ -46,7 +46,7 @@
     })}
     role="tooltip"
     use:floating={{ appendTo: document.querySelector('.tooltip-container') as Element | null }}
-    transition:scale|global={{ start: 0.9, duration: 200 }}
+    in:scale|global={{ start: 0.9, duration: 200 }}
   >
     <span>{message}</span>
 
