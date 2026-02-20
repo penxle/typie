@@ -17,7 +17,7 @@ class NativeEditorLetterSpacingTextOptionsToolbar extends HookWidget {
     final letterSpacingValues = (letterSpacingAttr?['values'] as List?)?.whereType<num>().toList() ?? [];
     final activeValue = letterSpacingValues.length == 1
         ? letterSpacingValues[0]
-        : (letterSpacingValues.isEmpty ? editorDefaultValues['letterSpacing'] : null);
+        : (letterSpacingValues.isEmpty ? editorDefaultValues['letterSpacing'] as num : null);
 
     return NativeEditorTextOptionsToolbar(
       items: editorValues['letterSpacing']!,

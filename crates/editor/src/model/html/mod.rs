@@ -482,7 +482,7 @@ mod tests {
                 FragmentNode::new(
                     Node::Paragraph(ParagraphNode {
                         align: TextAlign::Center,
-                        line_height: 2.0,
+                        line_height: 200,
                     }),
                     None,
                 ),
@@ -505,7 +505,7 @@ mod tests {
 
         if let Node::Paragraph(p) = parsed.node(top[0]).unwrap().data() {
             assert_eq!(p.align, TextAlign::Center);
-            assert!((p.line_height - 2.0).abs() < 0.01);
+            assert_eq!(p.line_height, 200);
         } else {
             panic!("Expected Paragraph");
         }

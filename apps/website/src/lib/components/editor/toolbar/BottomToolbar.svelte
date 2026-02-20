@@ -378,7 +378,7 @@
           {#each values.letterSpacing as { label, value } (value)}
             <DropdownMenuItem
               style={css.raw({ fontSize: '14px' })}
-              active={currentLetterSpacing !== undefined && Math.abs(currentLetterSpacing - value) < 0.001}
+              active={currentLetterSpacing === value}
               onclick={() => {
                 editor.focus().dispatch({ type: 'toggleStyle', style: { type: 'letter_spacing', spacing: value } });
                 close();

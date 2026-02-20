@@ -9,8 +9,8 @@ import 'package:typie/screens/native_editor/toolbar/values.dart';
 import 'package:typie/widgets/forms/form.dart';
 import 'package:typie/widgets/forms/text_field.dart';
 
-const minFontSize = 1;
-const maxFontSize = 200;
+const minFontSize = 100;
+const maxFontSize = 20000;
 
 class NativeEditorFontSizeTextOptionsToolbar extends HookWidget {
   const NativeEditorFontSizeTextOptionsToolbar({super.key});
@@ -32,14 +32,15 @@ class NativeEditorFontSizeTextOptionsToolbar extends HookWidget {
       if (activeValue == null) {
         return items;
       }
-      final activeNum = activeValue;
+      final num activeNum = activeValue;
 
       if (!items.any((item) => item['value'] == activeNum)) {
         var insertIndex = items.indexWhere((item) => (item['value'] as num) > activeNum);
         if (insertIndex == -1) {
           insertIndex = items.length;
         }
-        final label = activeNum % 1 == 0 ? activeNum.toInt().toString() : activeNum.toString();
+        final displayValue = activeNum / 100;
+        final label = displayValue % 1 == 0 ? displayValue.toInt().toString() : displayValue.toString();
         items.insert(insertIndex, {'label': label, 'value': activeNum});
       }
 
@@ -60,12 +61,15 @@ class NativeEditorFontSizeTextOptionsToolbar extends HookWidget {
                 intercept: true,
                 child: HookForm(
                   onSubmit: (form) async {
-                    final value = num.tryParse(form.data['fontSize'] as String? ?? '');
-                    if (value != null && value >= minFontSize && value <= maxFontSize) {
-                      scope.dispatch({
-                        'type': 'toggleStyle',
-                        'style': {'type': 'font_size', 'size': value},
-                      });
+                    final parsed = num.tryParse(form.data['fontSize'] as String? ?? '');
+                    if (parsed != null) {
+                      final value = (parsed * 100).round();
+                      if (value >= minFontSize && value <= maxFontSize) {
+                        scope.dispatch({
+                          'type': 'toggleStyle',
+                          'style': {'type': 'font_size', 'size': value},
+                        });
+                      }
                     }
                   },
                   builder: (context, form) {
@@ -75,9 +79,9 @@ class NativeEditorFontSizeTextOptionsToolbar extends HookWidget {
                         await form.submit();
                       },
                       child: HookFormTextField.collapsed(
-                        initialValue: activeValue?.toString() ?? '',
+                        initialValue: activeValue != null ? (activeValue / 100).toString() : '',
                         name: 'fontSize',
-                        placeholder: '$minFontSize-$maxFontSize',
+                        placeholder: '${minFontSize ~/ 100}-${maxFontSize ~/ 100}',
                         style: const TextStyle(fontSize: 16),
                         autofocus: true,
                         submitOnEnter: false,

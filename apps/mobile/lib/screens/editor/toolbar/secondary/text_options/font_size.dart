@@ -9,8 +9,8 @@ import 'package:typie/screens/editor/values.dart';
 import 'package:typie/widgets/forms/form.dart';
 import 'package:typie/widgets/forms/text_field.dart';
 
-const minFontSize = 1;
-const maxFontSize = 200;
+const minFontSize = 100;
+const maxFontSize = 20000;
 
 class FontSizeTextOptionsToolbar extends HookWidget {
   const FontSizeTextOptionsToolbar({super.key});
@@ -35,7 +35,8 @@ class FontSizeTextOptionsToolbar extends HookWidget {
         if (insertIndex == -1) {
           insertIndex = items.length;
         }
-        final label = activeNum % 1 == 0 ? activeNum.toInt().toString() : activeNum.toString();
+        final displayValue = activeNum / 100;
+        final label = displayValue % 1 == 0 ? displayValue.toInt().toString() : displayValue.toString();
         items.insert(insertIndex, {'label': label, 'value': activeNum});
       }
 
@@ -56,9 +57,12 @@ class FontSizeTextOptionsToolbar extends HookWidget {
                 intercept: true,
                 child: HookForm(
                   onSubmit: (form) async {
-                    final value = num.tryParse(form.data['fontSize'] as String? ?? '');
-                    if (value != null && value >= minFontSize && value <= maxFontSize) {
-                      await scope.command('text_style', attrs: {'fontSize': value});
+                    final parsed = num.tryParse(form.data['fontSize'] as String? ?? '');
+                    if (parsed != null) {
+                      final value = (parsed * 100).round();
+                      if (value >= minFontSize && value <= maxFontSize) {
+                        await scope.command('text_style', attrs: {'fontSize': value});
+                      }
                     }
                   },
                   builder: (context, form) {
@@ -68,9 +72,9 @@ class FontSizeTextOptionsToolbar extends HookWidget {
                         await form.submit();
                       },
                       child: HookFormTextField.collapsed(
-                        initialValue: activeValue.toString(),
+                        initialValue: (activeValue / 100).toString(),
                         name: 'fontSize',
-                        placeholder: '$minFontSize-$maxFontSize',
+                        placeholder: '${minFontSize ~/ 100}-${maxFontSize ~/ 100}',
                         style: const TextStyle(fontSize: 16),
                         autofocus: true,
                         submitOnEnter: false,

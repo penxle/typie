@@ -55,16 +55,16 @@ impl Hash for LayoutMode {
 
 #[derive(Debug, Clone, Codec)]
 pub struct DocumentSettings {
-    pub block_gap: f32,
-    pub paragraph_indent: f32,
+    pub block_gap: u32,
+    pub paragraph_indent: u32,
     pub layout_mode: LayoutMode,
 }
 
 impl DocumentSettings {
     pub fn new() -> Self {
         Self {
-            block_gap: 1.0,
-            paragraph_indent: 1.0,
+            block_gap: 100,
+            paragraph_indent: 100,
             layout_mode: LayoutMode::default(),
         }
     }
@@ -72,8 +72,8 @@ impl DocumentSettings {
 
 impl Hash for DocumentSettings {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.block_gap.to_bits().hash(state);
-        self.paragraph_indent.to_bits().hash(state);
+        self.block_gap.hash(state);
+        self.paragraph_indent.hash(state);
         self.layout_mode.hash(state);
     }
 }

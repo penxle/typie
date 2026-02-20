@@ -177,8 +177,8 @@ export class SlateReader {
           };
 
     return {
-      paragraphIndent: this.#f32('paragraph_indent'),
-      blockGap: this.#f32('block_gap'),
+      paragraphIndent: this.#u32('paragraph_indent'),
+      blockGap: this.#u32('block_gap'),
       layoutMode,
     };
   }
@@ -446,6 +446,7 @@ const VK_F32 = 1;
 const VK_U32 = 2;
 const VK_STRING = 3;
 const VK_COMPOSITE = 4;
+const VK_I32 = 5;
 
 const ALIGN_LEFT = 0;
 const ALIGN_CENTER = 1;
@@ -465,12 +466,16 @@ const UNIT_TAG_MAP: Record<number, string> = {
   [TAG_STRIKETHROUGH]: 'strikethrough',
   [TAG_UNDERLINE]: 'underline',
 };
-const F32_TAG_MAP: Record<number, string> = {
+const F32_TAG_MAP: Record<number, string> = {};
+const U32_TAG_MAP: Record<number, string> = {
+  [TAG_FONT_WEIGHT]: 'font_weight',
+  [TAG_TEXT_ALIGN]: 'text_align',
   [TAG_FONT_SIZE]: 'font_size',
-  [TAG_LETTER_SPACING]: 'letter_spacing',
   [TAG_LINE_HEIGHT]: 'line_height',
 };
-const U32_TAG_MAP: Record<number, string> = { [TAG_FONT_WEIGHT]: 'font_weight', [TAG_TEXT_ALIGN]: 'text_align' };
+const I32_TAG_MAP: Record<number, string> = {
+  [TAG_LETTER_SPACING]: 'letter_spacing',
+};
 const STRING_TAG_MAP: Record<number, string> = {
   [TAG_BACKGROUND_COLOR]: 'background_color',
   [TAG_TEXT_COLOR]: 'text_color',
@@ -520,6 +525,15 @@ function readAttrEntries(view: DataView, offset: number, count: number): Attribu
           attrs.push({ type, values } as Attribute);
         }
       }
+    } else if (valueKind === VK_I32) {
+      const values: (number | null)[] = [];
+      for (let j = 0; j < valueCount; j++) {
+        const v = view.getInt32(pos, true);
+        pos += 4;
+        values.push(v === -2_147_483_648 ? null : v);
+      }
+      const type = I32_TAG_MAP[typeTag];
+      if (type) attrs.push({ type, values } as Attribute);
     } else if (valueKind === VK_STRING) {
       const values: (string | null)[] = [];
       for (let j = 0; j < valueCount; j++) {

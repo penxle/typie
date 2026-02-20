@@ -83,11 +83,11 @@ class SettingsSheet extends HookWidget {
     }
 
     void handleParagraphIndentChange(num indent) {
-      controller.dispatch({'type': 'setParagraphIndent', 'indent': indent.toDouble()});
+      controller.dispatch({'type': 'setParagraphIndent', 'indent': indent});
     }
 
     void handleBlockGapChange(num gap) {
-      controller.dispatch({'type': 'setBlockGap', 'gap': gap.toDouble()});
+      controller.dispatch({'type': 'setBlockGap', 'gap': gap});
     }
 
     return AppBottomSheet(
@@ -160,9 +160,9 @@ class SettingsSheet extends HookWidget {
                   initialValue: settings.paragraphIndent,
                   items: const [
                     HookFormSelectItem(label: '없음', value: 0),
-                    HookFormSelectItem(label: '0.5칸', value: 0.5),
-                    HookFormSelectItem(label: '1칸', value: 1),
-                    HookFormSelectItem(label: '2칸', value: 2),
+                    HookFormSelectItem(label: '0.5칸', value: 50),
+                    HookFormSelectItem(label: '1칸', value: 100),
+                    HookFormSelectItem(label: '2칸', value: 200),
                   ],
                 ),
               ),
@@ -174,9 +174,9 @@ class SettingsSheet extends HookWidget {
                   initialValue: settings.blockGap,
                   items: const [
                     HookFormSelectItem(label: '없음', value: 0),
-                    HookFormSelectItem(label: '0.5줄', value: 0.5),
-                    HookFormSelectItem(label: '1줄', value: 1),
-                    HookFormSelectItem(label: '2줄', value: 2),
+                    HookFormSelectItem(label: '0.5줄', value: 50),
+                    HookFormSelectItem(label: '1줄', value: 100),
+                    HookFormSelectItem(label: '2줄', value: 200),
                   ],
                 ),
               ),

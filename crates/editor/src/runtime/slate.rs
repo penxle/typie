@@ -50,6 +50,7 @@ pub const VK_F32: u32 = 1;
 pub const VK_U32: u32 = 2;
 pub const VK_STRING: u32 = 3;
 pub const VK_COMPOSITE: u32 = 4;
+pub const VK_I32: u32 = 5;
 
 pub const ALIGN_LEFT: u32 = 0;
 pub const ALIGN_CENTER: u32 = 1;
@@ -129,8 +130,8 @@ define_slate! {
 
         pub layout_mode_offset: u32,
 
-        pub paragraph_indent: f32,
-        pub block_gap: f32,
+        pub paragraph_indent: u32,
+        pub block_gap: u32,
 
         pub pages_offset: u32,
         pub pages_count: u32,
@@ -312,6 +313,19 @@ impl Slab {
         (offset, values.len() as u32)
     }
 
+    pub fn write_i32_slice(&mut self, values: &[i32]) -> (u32, u32) {
+        if values.is_empty() {
+            return (0, 0);
+        }
+        let byte_len = values.len() * 4;
+        let offset = self.alloc(byte_len, 4);
+        let dst = &mut self.data[offset as usize..offset as usize + byte_len];
+        for (i, &v) in values.iter().enumerate() {
+            dst[i * 4..(i + 1) * 4].copy_from_slice(&v.to_le_bytes());
+        }
+        (offset, values.len() as u32)
+    }
+
     pub fn write_node_id_slice(&mut self, ids: &[crate::model::NodeId]) -> (u32, u32) {
         if ids.is_empty() {
             return (0, 0);
@@ -370,14 +384,14 @@ impl Slab {
                     }
                 }
                 BlockAttr::LineHeight(_) => {
-                    self.write_u32_slice(&[ATTR_TAG_LINE_HEIGHT, VK_F32, count]);
+                    self.write_u32_slice(&[ATTR_TAG_LINE_HEIGHT, VK_U32, count]);
                     for val in &collected.values {
                         if let BlockAttr::LineHeight(lh) = val {
-                            self.write_f32_slice(&[*lh]);
+                            self.write_u32_slice(&[*lh]);
                         }
                     }
                     if collected.has_absent {
-                        self.write_null_sentinel(VK_F32);
+                        self.write_null_sentinel(VK_U32);
                     }
                 }
             }
@@ -442,7 +456,7 @@ impl Slab {
                 self.write_str(&s.color);
             }
             Style::FontSize(s) => {
-                self.write_f32_slice(&[s.size]);
+                self.write_u32_slice(&[s.size]);
             }
             Style::FontFamily(s) => {
                 self.write_str(&s.family);
@@ -454,7 +468,7 @@ impl Slab {
                 self.write_u32_slice(&[1]);
             }
             Style::LetterSpacing(s) => {
-                self.write_f32_slice(&[s.spacing]);
+                self.write_i32_slice(&[s.spacing]);
             }
             Style::Strikethrough(_) => {
                 self.write_u32_slice(&[1]);
@@ -472,6 +486,9 @@ impl Slab {
             }
             VK_F32 => {
                 self.write_f32_slice(&[f32::NAN]);
+            }
+            VK_I32 => {
+                self.write_i32_slice(&[i32::MIN]);
             }
             _ => {}
         }
@@ -502,8 +519,8 @@ impl Slab {
     pub fn write_settings(
         &mut self,
         slate: &mut Slate,
-        paragraph_indent: f32,
-        block_gap: f32,
+        paragraph_indent: u32,
+        block_gap: u32,
         layout_mode: LayoutMode,
     ) {
         slate.paragraph_indent = paragraph_indent;
@@ -848,8 +865,8 @@ impl Slab {
                     count += 1;
                 }
                 Attr::Paragraph(p) => {
-                    self.write_u32_slice(&[ATTR_TAG_LINE_HEIGHT, VK_F32, 1]);
-                    self.write_f32_slice(&[p.line_height]);
+                    self.write_u32_slice(&[ATTR_TAG_LINE_HEIGHT, VK_U32, 1]);
+                    self.write_u32_slice(&[p.line_height]);
                     count += 1;
                 }
             }
@@ -880,11 +897,11 @@ fn style_type_to_value_kind(st: &StyleType) -> u32 {
         StyleType::BackgroundColor => VK_STRING,
         StyleType::Bold => VK_UNIT,
         StyleType::TextColor => VK_STRING,
-        StyleType::FontSize => VK_F32,
+        StyleType::FontSize => VK_U32,
         StyleType::FontFamily => VK_STRING,
         StyleType::FontWeight => VK_U32,
         StyleType::Italic => VK_UNIT,
-        StyleType::LetterSpacing => VK_F32,
+        StyleType::LetterSpacing => VK_I32,
         StyleType::Strikethrough => VK_UNIT,
         StyleType::Underline => VK_UNIT,
     }

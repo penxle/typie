@@ -1767,7 +1767,7 @@ mod tests {
             Style::FontFamily(FontFamilyStyle {
                 family: "Pretendard".to_string(),
             }),
-            Style::FontSize(FontSizeStyle { size: 12.0 }),
+            Style::FontSize(FontSizeStyle { size: 1200 }),
             Style::FontWeight(FontWeightStyle { weight: 400 }),
         ];
 
@@ -1803,7 +1803,7 @@ mod tests {
         );
         let defaults = vec![
             Style::FontWeight(FontWeightStyle { weight: 400 }),
-            Style::FontSize(FontSizeStyle { size: 12.0 }),
+            Style::FontSize(FontSizeStyle { size: 1200 }),
         ];
 
         let result = fragment.fill_missing_styles(&defaults);
@@ -1870,7 +1870,7 @@ mod tests {
             ))
             .build();
 
-        let defaults = vec![Style::FontSize(FontSizeStyle { size: 12.0 })];
+        let defaults = vec![Style::FontSize(FontSizeStyle { size: 1200 })];
         let result = fragment.fill_missing_styles(&defaults);
 
         assert_eq!(result.child_count(), 1);
@@ -1901,7 +1901,7 @@ mod tests {
 
         let defaults = vec![
             Style::FontWeight(FontWeightStyle { weight: 400 }),
-            Style::FontSize(FontSizeStyle { size: 12.0 }),
+            Style::FontSize(FontSizeStyle { size: 1200 }),
         ];
 
         let result = fragment.fill_missing_styles(&defaults);

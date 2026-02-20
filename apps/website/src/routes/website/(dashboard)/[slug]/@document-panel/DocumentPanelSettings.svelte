@@ -173,14 +173,14 @@
 
   $effect(() => {
     if (defaultAttrs && !fontSizeOpened && !fontSizeIsFocused) {
-      fontSizeInputValue = String(defaultAttrs.fontSize);
+      fontSizeInputValue = String(defaultAttrs.fontSize / 100);
     }
   });
 
   const applyFontSize = () => {
     const parsed = Number.parseFloat(fontSizeInputValue);
-    if (!Number.isNaN(parsed) && defaultAttrs && parsed !== defaultAttrs.fontSize) {
-      handleDefaultAttrChange({ fontSize: clamp(parsed, values.minFontSize, values.maxFontSize) });
+    if (!Number.isNaN(parsed) && defaultAttrs && Math.round(parsed * 100) !== defaultAttrs.fontSize) {
+      handleDefaultAttrChange({ fontSize: clamp(Math.round(parsed * 100), values.minFontSize, values.maxFontSize) });
     }
   };
 
@@ -188,7 +188,7 @@
     fontSizeIsFocused = true;
     fontSizeOpened = true;
     if (defaultAttrs) {
-      fontSizeInputValue = String(defaultAttrs.fontSize);
+      fontSizeInputValue = String(defaultAttrs.fontSize / 100);
     }
     fontSizeInputElement?.select();
   };
@@ -214,14 +214,15 @@
       fontSizeOpened = false;
     } else if (e.key === 'Escape') {
       if (defaultAttrs) {
-        fontSizeInputValue = String(defaultAttrs.fontSize);
+        fontSizeInputValue = String(defaultAttrs.fontSize / 100);
       }
       fontSizeInputElement?.blur();
       fontSizeOpened = false;
     } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
       e.preventDefault();
       e.stopPropagation();
-      const current = Number.parseFloat(fontSizeInputValue) || defaultAttrs?.fontSize || 12;
+      const currentInput = Number.parseFloat(fontSizeInputValue);
+      const current = (currentInput ? Math.round(currentInput * 100) : defaultAttrs?.fontSize) || 1200;
       const sortedSizes = values.fontSize.map(({ value }) => value).toSorted((a, b) => a - b);
       const currentIndex = sortedSizes.findIndex((size) => size >= current);
 
@@ -234,7 +235,7 @@
 
       const newValue = sortedSizes[newIndex];
       if (newValue !== undefined) {
-        fontSizeInputValue = String(newValue);
+        fontSizeInputValue = String(newValue / 100);
         handleDefaultAttrChange({ fontSize: newValue });
         tick().then(() => {
           fontSizeInputElement?.select();
@@ -502,7 +503,7 @@
             onblur={handleFontSizeBlur}
             onfocus={handleFontSizeFocus}
             onkeydown={handleFontSizeKeydown}
-            placeholder={String(defaultAttrs.fontSize)}
+            placeholder={String(defaultAttrs.fontSize / 100)}
             type="text"
             bind:value={fontSizeInputValue}
           />
@@ -870,9 +871,9 @@
         <SegmentButtons
           items={[
             { label: '없음', value: 0 },
-            { label: '0.5칸', value: 0.5 },
-            { label: '1칸', value: 1 },
-            { label: '2칸', value: 2 },
+            { label: '0.5칸', value: 50 },
+            { label: '1칸', value: 100 },
+            { label: '2칸', value: 200 },
           ]}
           onselect={(value) => {
             editor.dispatch({ type: 'setParagraphIndent', indent: value });
@@ -892,9 +893,9 @@
         <SegmentButtons
           items={[
             { label: '없음', value: 0 },
-            { label: '0.5줄', value: 0.5 },
-            { label: '1줄', value: 1 },
-            { label: '2줄', value: 2 },
+            { label: '0.5줄', value: 50 },
+            { label: '1줄', value: 100 },
+            { label: '2줄', value: 200 },
           ]}
           onselect={(value) => {
             editor.dispatch({ type: 'setBlockGap', gap: value });

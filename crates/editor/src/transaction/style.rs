@@ -4838,8 +4838,8 @@ mod tests {
         );
         let para = Attr::extract_paragraph_attr(&attrs).unwrap();
         assert!(
-            (para.line_height - 1.6).abs() < f32::EPSILON,
-            "Default line_height should be 1.6, got: {}",
+            para.line_height == 160,
+            "Default line_height should be 160, got: {}",
             para.line_height
         );
     }

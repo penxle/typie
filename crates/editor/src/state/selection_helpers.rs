@@ -16,14 +16,14 @@ use std::mem::discriminant;
 #[derive(Debug, Clone)]
 pub enum BlockAttr {
     TextAlign(TextAlign),
-    LineHeight(f32),
+    LineHeight(u32),
 }
 
 impl PartialEq for BlockAttr {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::TextAlign(a), Self::TextAlign(b)) => a == b,
-            (Self::LineHeight(a), Self::LineHeight(b)) => (a - b).abs() < f32::EPSILON,
+            (Self::LineHeight(a), Self::LineHeight(b)) => a == b,
             _ => false,
         }
     }

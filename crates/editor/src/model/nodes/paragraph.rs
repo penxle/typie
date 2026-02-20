@@ -193,7 +193,7 @@ fn apply_style_to_builder(
     builder: &mut parley::RangedBuilder<'_, String>,
     style: &Style,
     range: std::ops::Range<usize>,
-    font_size: f32,
+    font_size: u32,
 ) {
     match style {
         Style::FontFamily(m) => builder.push(
@@ -203,7 +203,11 @@ fn apply_style_to_builder(
             range,
         ),
         Style::FontSize(m) => builder.push(
-            StyleProperty::FontSize(convert_length(m.size, LengthUnit::Pt, LengthUnit::Px)),
+            StyleProperty::FontSize(convert_length(
+                m.size as f32 / 100.0,
+                LengthUnit::Pt,
+                LengthUnit::Px,
+            )),
             range,
         ),
         Style::FontWeight(m) => builder.push(
@@ -211,9 +215,10 @@ fn apply_style_to_builder(
             range,
         ),
         Style::LetterSpacing(m) => {
-            let font_size_px = convert_length(font_size, LengthUnit::Pt, LengthUnit::Px);
+            let font_size_px =
+                convert_length(font_size as f32 / 100.0, LengthUnit::Pt, LengthUnit::Px);
             builder.push(
-                StyleProperty::LetterSpacing(m.spacing * font_size_px),
+                StyleProperty::LetterSpacing((m.spacing as f32 / 100.0) * font_size_px),
                 range,
             )
         }
@@ -278,17 +283,17 @@ impl std::str::FromStr for TextAlign {
     }
 }
 
-fn default_line_height() -> f32 {
-    1.6
+fn default_line_height() -> u32 {
+    160
 }
 
-const LINE_HEIGHTS: &[f32] = &[0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0, 2.2];
+const LINE_HEIGHTS: &[u32] = &[80, 100, 120, 140, 160, 180, 200, 220];
 
-fn snap_line_height(v: f32) -> f32 {
+fn snap_line_height(v: u32) -> u32 {
     let mut best = LINE_HEIGHTS[0];
-    let mut best_dist = f32::MAX;
+    let mut best_dist = u32::MAX;
     for &lh in LINE_HEIGHTS {
-        let d = (v - lh).abs();
+        let d = if v >= lh { v - lh } else { lh - v };
         if d < best_dist {
             best_dist = d;
             best = lh;
@@ -303,7 +308,7 @@ pub struct ParagraphNode {
     #[serde(default)]
     pub align: TextAlign,
     #[serde(default = "default_line_height")]
-    pub line_height: f32,
+    pub line_height: u32,
 }
 
 impl Default for ParagraphNode {
@@ -318,7 +323,7 @@ impl Default for ParagraphNode {
 impl std::hash::Hash for ParagraphNode {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.align.hash(state);
-        self.line_height.to_bits().hash(state);
+        self.line_height.hash(state);
     }
 }
 
@@ -328,8 +333,8 @@ impl ParagraphNode {
         if self.align != TextAlign::Left {
             s.push(format!("text-align:{}", self.align));
         }
-        if (self.line_height - 1.6).abs() > 0.01 {
-            s.push(format!("line-height:{}", self.line_height));
+        if self.line_height != 160 {
+            s.push(format!("line-height:{}", self.line_height as f32 / 100.0));
         }
         s.join(";")
     }
@@ -356,7 +361,9 @@ impl NodeHtmlCodec for ParagraphNode {
                         n.align = a.parse().unwrap_or_default();
                     }
                     if let Some(lh) = m.get("line-height") {
-                        n.line_height = snap_line_height(lh.parse().unwrap_or(1.6));
+                        n.line_height = snap_line_height(
+                            (lh.parse::<f32>().unwrap_or(1.6) * 100.0).round() as u32,
+                        );
                     }
                 }
                 Some(Node::Paragraph(n))
@@ -395,7 +402,9 @@ impl NodeHtmlCodec for ParagraphNode {
                             n.align = a.parse().unwrap_or_default();
                         }
                         if let Some(lh) = m.get("line-height") {
-                            n.line_height = snap_line_height(lh.parse().unwrap_or(1.6));
+                            n.line_height = snap_line_height(
+                                (lh.parse::<f32>().unwrap_or(1.6) * 100.0).round() as u32,
+                            );
                         }
                     }
                     Some(Node::Paragraph(n))
@@ -432,7 +441,7 @@ impl Layout for ParagraphNode {
         let pending_styles = pending_styles_for_node(ctx);
         let char_to_byte = build_char_to_byte_offsets(&text);
 
-        let line_height = self.line_height;
+        let line_height = self.line_height as f32 / 100.0;
         let layout = GLOBALS.with(|globals| {
             use parley::style::*;
 
@@ -456,7 +465,7 @@ impl Layout for ParagraphNode {
                 .map(|parent| matches!(parent.node(), Node::Root(_)))
                 .unwrap_or(false);
             let indent = if parent_is_root {
-                (ctx.settings.paragraph_indent * 16.0).max(0.0)
+                (ctx.settings.paragraph_indent as f32 / 100.0 * 16.0).max(0.0)
             } else {
                 0.0
             };
@@ -501,7 +510,7 @@ impl Layout for ParagraphNode {
                                         None
                                     }
                                 })
-                                .unwrap_or(12.0);
+                                .unwrap_or(1200);
 
                             let has_embolden =
                                 segment.styles.iter().any(|s| matches!(s, Style::Bold(_)));
@@ -571,7 +580,7 @@ impl Layout for ParagraphNode {
                                 None
                             }
                         })
-                        .unwrap_or(12.0);
+                        .unwrap_or(1200);
 
                     for style in &ps.styles {
                         apply_style_to_builder(
@@ -597,7 +606,7 @@ impl Layout for ParagraphNode {
                                 None
                             }
                         })
-                        .unwrap_or(12.0);
+                        .unwrap_or(1200);
                     for style in &ps.styles {
                         apply_style_to_builder(&mut builder, style, range.clone(), font_size);
                     }
@@ -639,7 +648,7 @@ impl Layout for ParagraphNode {
                                 None
                             }
                         })
-                        .unwrap_or(12.0);
+                        .unwrap_or(1200);
                     for style in styles {
                         apply_style_to_builder(&mut dummy_builder, style, range.clone(), font_size);
                     }
@@ -750,7 +759,7 @@ mod tests {
         let state = state! {
             doc {
                 @p paragraph {
-                    text(styles: [font_size(24.0)]) { "ㅁㄴㅇㄹ" }
+                    text(styles: [font_size(2400)]) { "ㅁㄴㅇㄹ" }
                 }
             }
             selection { (p, 0) }

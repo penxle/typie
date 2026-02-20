@@ -41,16 +41,16 @@ type DefaultFontFamily = {
 
 export const defaultValues = {
   fontFamily: 'Pretendard',
-  fontSize: 12,
+  fontSize: 1200,
   fontWeight: 400,
   textColor: 'black',
   backgroundColor: 'none',
   letterSpacing: 0,
-  lineHeight: 1.6,
+  lineHeight: 160,
   textAlign: 'left',
   maxWidth: 600,
-  paragraphIndent: 1,
-  blockGap: 1,
+  paragraphIndent: 100,
+  blockGap: 100,
 } as const;
 
 // spell-checker:disable

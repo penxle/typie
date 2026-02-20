@@ -127,7 +127,11 @@ impl BlockquoteNode {
             let child_layout = ctx.layout(child, child_constraints);
 
             let is_last = idx == child_count - 1;
-            let extra_height = if is_last { 0.0 } else { block_gap * 16.0 };
+            let extra_height = if is_last {
+                0.0
+            } else {
+                block_gap as f32 / 100.0 * 16.0
+            };
             let line_height = (child_layout.size.height + extra_height).max(LINE_WIDTH);
             let child_height = child_layout.size.height;
             let child_width = child_layout.size.width;
@@ -154,7 +158,12 @@ impl BlockquoteNode {
                 node: child_layout,
             });
 
-            y_offset += child_height + (if is_last { 0.0 } else { block_gap * 16.0 });
+            y_offset += child_height
+                + (if is_last {
+                    0.0
+                } else {
+                    block_gap as f32 / 100.0 * 16.0
+                });
             max_width = max_width.max(child_width);
         }
 
@@ -215,7 +224,12 @@ impl BlockquoteNode {
                 node: child_layout,
             });
 
-            y_offset += child_height + (if is_last { 0.0 } else { block_gap * 16.0 });
+            y_offset += child_height
+                + (if is_last {
+                    0.0
+                } else {
+                    block_gap as f32 / 100.0 * 16.0
+                });
             max_width = max_width.max(child_width);
         }
 
@@ -258,7 +272,12 @@ impl BlockquoteNode {
                 node: child_layout,
             });
 
-            y_offset += child_height + (if is_last { 0.0 } else { block_gap * 16.0 });
+            y_offset += child_height
+                + (if is_last {
+                    0.0
+                } else {
+                    block_gap as f32 / 100.0 * 16.0
+                });
             actual_content_width = actual_content_width.max(child_width);
         }
 

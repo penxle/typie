@@ -121,7 +121,7 @@ abstract class PageSize with _$PageSize {
 
 @freezed
 abstract class DocumentSettings with _$DocumentSettings {
-  const factory DocumentSettings({@Default(1.0) double paragraphIndent, @Default(1.0) double blockGap}) =
+  const factory DocumentSettings({@Default(100) double paragraphIndent, @Default(100) double blockGap}) =
       _DocumentSettings;
 }
 

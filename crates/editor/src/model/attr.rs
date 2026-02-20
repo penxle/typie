@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ParagraphAttr {
-    pub line_height: f32,
+    pub line_height: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -28,18 +28,15 @@ impl Attr {
     pub fn to_loro_value(&self) -> LoroValue {
         match self {
             Attr::Style(s) => s.to_loro_value(),
-            Attr::Paragraph(p) => LoroValue::Double(p.line_height as f64),
+            Attr::Paragraph(p) => LoroValue::I64(p.line_height as i64),
         }
     }
 
     pub fn from_key_value(key: &str, value: LoroValue) -> Option<Self> {
         if key == "paragraph:line_height" {
             match value {
-                LoroValue::Double(v) => Some(Attr::Paragraph(ParagraphAttr {
-                    line_height: v as f32,
-                })),
                 LoroValue::I64(v) => Some(Attr::Paragraph(ParagraphAttr {
-                    line_height: v as f32,
+                    line_height: v as u32,
                 })),
                 _ => None,
             }

@@ -99,7 +99,7 @@ impl NodeHtmlCodec for CalloutNode {
 
 impl Layout for CalloutNode {
     fn layout(&self, ctx: &LayoutContext, constraints: BoxConstraints) -> LayoutNode {
-        let block_gap = ctx.settings.block_gap * 16.0;
+        let block_gap = ctx.settings.block_gap as f32 / 100.0 * 16.0;
         let content_offset_x = PADDING_X + ICON_WIDTH + ICON_CONTENT_GAP;
         let content_width = (constraints.max_width - content_offset_x - PADDING_X).max(0.0);
 

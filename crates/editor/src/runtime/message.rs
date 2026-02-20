@@ -378,7 +378,7 @@ define_messages! {
     => handle(rt) { rt.handle_redo() },
 
 
-    SetLineHeight { height: f32 }
+    SetLineHeight { height: u32 }
     => when When::key(ContextKey::CanEdit)
         .and(When::key(ContextKey::HasParagraphTextInSelection).or(When::key(ContextKey::InParagraph)))
     => handle(rt) { rt.handle_set_line_height(height) },
@@ -389,11 +389,11 @@ define_messages! {
         .and(When::key(ContextKey::HasParagraphTextInSelection).or(When::key(ContextKey::InParagraph)))
     => handle(rt) { rt.handle_set_text_align(align) },
 
-    SetBlockGap { gap: f32 }
+    SetBlockGap { gap: u32 }
     => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_set_block_gap(gap) },
 
-    SetParagraphIndent { indent: f32 }
+    SetParagraphIndent { indent: u32 }
     => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_set_paragraph_indent(indent) },
 
