@@ -450,23 +450,18 @@ class CommandHandler {
       }
 
       unawaited(
-        manager.ensureRequiredFont(req.family, font, req.codepoints).then((_) {
-          controller.dispatch({'type': 'fontsLoaded'});
-          unawaited(manager.preloadRemainingChunks(req.family, font));
+        Future.wait([
+          manager.ensureRequiredFont(req.family, font, req.codepoints).then((_) {
+            unawaited(manager.preloadRemainingChunks(req.family, font));
+          }),
+          manager.filterUncoveredCodepoints(font, req.codepoints).then((uncovered) async {
+            if (uncovered.isNotEmpty) {
+              await manager.ensureRequiredFallbackFont(req.weight, uncovered);
+            }
+          }),
+        ]).then((_) {
+          controller.dispatch({'type': 'fontsLoaded', 'family': req.family, 'weight': req.weight});
         }),
-      );
-
-      unawaited(
-        manager
-            .filterUncoveredCodepoints(font, req.codepoints)
-            .then((uncovered) {
-              if (uncovered.isNotEmpty) {
-                return manager.ensureRequiredFallbackFont(req.weight, uncovered);
-              }
-            })
-            .then((_) {
-              controller.dispatch({'type': 'fontsLoaded'});
-            }),
       );
     }
   }

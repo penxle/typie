@@ -142,6 +142,7 @@ async function generateDocumentPdfInternal(
         }
 
         const fontPromises: Promise<void>[] = [];
+        const loadedFontKeys = new Map<string, { family: string; weight: number }>();
 
         if (dirtyLo & (1 << DIRTY_PAGES)) {
           pageCount = view.getUint32(slatePtr + offsets.pages_count, true);
@@ -155,6 +156,7 @@ async function generateDocumentPdfInternal(
             const family = new TextDecoder().decode(new Uint8Array(memory.buffer, pos + 4, byteLen));
             pos += 4 + ((byteLen + 3) & ~3);
             const weight = view.getUint32(pos, true);
+            loadedFontKeys.set(`${family}:${weight}`, { family, weight });
             pos += 4;
             const cpCount = view.getUint32(pos, true);
             pos += 4;
@@ -183,7 +185,9 @@ async function generateDocumentPdfInternal(
 
         if (fontPromises.length > 0) {
           await Promise.all(fontPromises);
-          editor.dispatch({ type: 'fontsLoaded' });
+          for (const { family, weight } of loadedFontKeys.values()) {
+            editor.dispatch({ type: 'fontsLoaded', family, weight });
+          }
         }
 
         if (needsRender && pageCount > 0) {

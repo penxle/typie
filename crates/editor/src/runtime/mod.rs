@@ -101,6 +101,7 @@ pub struct Runtime {
     undo_manager: UndoManager,
 
     loaded_font_codepoints: FxHashMap<(String, u16), FxHashSet<u32>>,
+    missing_font_nodes: FxHashMap<(String, u16), FxHashSet<NodeId>>,
 
     selection_cache: Option<SelectionSnapshot>,
     pending: PendingUpdates,
@@ -135,6 +136,7 @@ impl Runtime {
             state,
             undo_manager,
             loaded_font_codepoints: FxHashMap::default(),
+            missing_font_nodes: FxHashMap::default(),
             selection_cache: None,
             pending: PendingUpdates {
                 doc: true,
@@ -1339,6 +1341,7 @@ impl Runtime {
     fn process_effects(&mut self, mut effects: Vec<Effect>) {
         effects.sort_by_key(|e| e.priority());
         let mut invalidation = LayoutInvalidationBatch::new();
+        let mut font_affected_nodes: FxHashSet<NodeId> = FxHashSet::default();
 
         for effect in effects {
             match effect {
@@ -1347,14 +1350,24 @@ impl Runtime {
                     weight,
                     codepoints,
                 } => {
-                    let loaded = self
-                        .loaded_font_codepoints
-                        .entry((family.clone(), weight))
-                        .or_default();
-                    let pending = self.pending.fonts.entry((family, weight)).or_default();
+                    let key = (family.clone(), weight);
+                    let loaded = self.loaded_font_codepoints.entry(key.clone()).or_default();
+                    let pending = self.pending.fonts.entry(key.clone()).or_default();
+                    let mut newly_detected = Vec::new();
                     for cp in codepoints {
                         if loaded.insert(cp) {
                             pending.push(cp);
+                            newly_detected.push(cp);
+                        }
+                    }
+
+                    if !newly_detected.is_empty() {
+                        let nodes_for_font = self.missing_font_nodes.entry(key).or_default();
+                        if font_affected_nodes.is_empty() {
+                            // fallback
+                            nodes_for_font.insert(NodeId::ROOT);
+                        } else {
+                            nodes_for_font.extend(font_affected_nodes.iter().copied());
                         }
                     }
                 }
@@ -1377,6 +1390,7 @@ impl Runtime {
                     self.pending.remarks = true;
                 }
                 Effect::NodeChanged { node_id } => {
+                    font_affected_nodes.insert(node_id);
                     invalidation.push(LayoutInvalidationOp::NodeAndAncestors { node_id });
                     self.selection_cache = None;
                     self.pending.layout = true;
@@ -1387,6 +1401,7 @@ impl Runtime {
                     self.pending.external_elements = true;
                 }
                 Effect::SubtreeChanged { node_id } => {
+                    font_affected_nodes.insert(node_id);
                     invalidation.push(LayoutInvalidationOp::SubtreeAndAncestors { node_id });
                     self.selection_cache = None;
                     self.pending.layout = true;
@@ -1415,6 +1430,7 @@ impl Runtime {
                 Effect::PendingStylesChanged => {
                     self.pending.active_styles = true;
                     let nid = self.state.selection.head.node_id;
+                    font_affected_nodes.insert(nid);
                     invalidation.push(LayoutInvalidationOp::NodeAndAncestors { node_id: nid });
                     self.pending.layout = true;
                     self.pending.render = true;
@@ -1448,6 +1464,7 @@ impl Runtime {
                 }
                 Effect::PreeditChanged { node_id } => {
                     if let Some(nid) = node_id {
+                        font_affected_nodes.insert(nid);
                         invalidation.push(LayoutInvalidationOp::NodeAndAncestors { node_id: nid });
                     }
 
