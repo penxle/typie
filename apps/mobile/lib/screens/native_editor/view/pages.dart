@@ -9,6 +9,7 @@ import 'package:typie/screens/native_editor/controller/clipboard.dart';
 import 'package:typie/screens/native_editor/state/state.dart';
 import 'package:typie/screens/native_editor/view/context_menu.dart';
 import 'package:typie/screens/native_editor/view/editor_draggable.dart';
+import 'package:typie/screens/native_editor/view/geometry.dart';
 import 'package:typie/screens/native_editor/view/gesture.dart';
 import 'package:typie/screens/native_editor/view/page.dart';
 import 'package:typie/screens/native_editor/view/scope.dart';
@@ -48,8 +49,9 @@ class PageList extends HookWidget {
       final offsets = geo.computeCumulativePageOffsets();
       final scrollOffset = scope.verticalScrollController.hasSingleClient ? scope.verticalScrollController.offset : 0.0;
       final absoluteY = y + scrollOffset;
+      final extensionAreaTop = (geo.titleAreaHeight - ContentGeometry.pagePadding).clamp(0.0, double.infinity);
 
-      if (absoluteY < geo.titleAreaHeight) {
+      if (absoluteY < extensionAreaTop) {
         return (-1, absoluteY);
       }
 
