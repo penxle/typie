@@ -27,11 +27,74 @@ impl Runtime {
     }
 
     pub(crate) fn handle_replace_backward(&mut self, length: usize, text: &str) -> Vec<Effect> {
-        self.transact(|tr| {
+        let pending_styles = self.state.pending_styles.clone();
+
+        let mut effects = self.transact(|tr| {
             for _ in 0..length {
                 tr.delete_text_backward()?;
             }
-            tr.insert_text(text)
-        })
+            Ok(true)
+        });
+
+        if self.state.pending_styles != pending_styles {
+            self.state.pending_styles = pending_styles;
+            effects.push(Effect::PendingStylesChanged);
+        }
+
+        effects.extend(self.transact(|tr| tr.insert_text(text)));
+        effects
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::model::{ItalicStyle, Style};
+    use crate::runtime::Message;
+    use crate::types::Affinity;
+
+    #[test]
+    fn replace_backward_preserves_pending_style_across_mixed_deleted_styles() {
+        let mut p = id!();
+
+        let mut runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {
+                    text { "a" }
+                }
+            }
+            selection { (p, 1) }
+        };
+
+        runtime.update(Message::ToggleStyle {
+            style: Style::Italic(ItalicStyle {}),
+        });
+        runtime.update(Message::Input {
+            text: "b".to_string(),
+        });
+        runtime.update(Message::ReplaceBackward {
+            length: 2,
+            text: "x".to_string(),
+        });
+
+        let expected = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [italic()]) { "x" }
+                }
+            }
+            selection { (p, 1, Affinity::Upstream) }
+        };
+        assert_state_eq!(runtime.state(), expected);
+
+        assert!(
+            runtime
+                .state()
+                .pending_styles
+                .iter()
+                .any(|s| matches!(s, Style::Italic(_))),
+            "pending style should preserve italic after replacement, got: {:?}",
+            runtime.state().pending_styles
+        );
     }
 }
