@@ -34,7 +34,7 @@ impl Runtime {
         };
 
         if button.is_primary() && !modifier.shift {
-            if let Some(kind) = page.find_interactive_at(x, y) {
+            if let Some(kind) = page.find_interactive_at(x, y, self.is_read_only()) {
                 let should_interact = if self.is_read_only() {
                     kind.allow_in_read_only()
                 } else {
@@ -324,7 +324,11 @@ impl Runtime {
             } => match context {
                 PressContext::Interactive(kind) => {
                     if let Some(page) = self.pages().get(*start_page_idx) {
-                        if page.find_interactive_at(*start_x, *start_y).as_ref() == Some(kind) {
+                        if page
+                            .find_interactive_at(*start_x, *start_y, self.is_read_only())
+                            .as_ref()
+                            == Some(kind)
+                        {
                             effects.extend(self.handle_interaction(kind.clone()));
                             self.reset_pointer();
                             return effects;

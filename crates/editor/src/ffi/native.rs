@@ -798,7 +798,10 @@ pub extern "C" fn editor_is_interactive_hit(
 
             let editor = unsafe { &*(editor as *const EditorInner) };
             Ok(if let Some(page) = editor.runtime.pages().get(page_idx) {
-                if page.find_interactive_at(x, y).is_some() {
+                if page
+                    .find_interactive_at(x, y, editor.runtime.is_read_only())
+                    .is_some()
+                {
                     1
                 } else {
                     0

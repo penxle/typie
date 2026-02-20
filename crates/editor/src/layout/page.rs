@@ -775,14 +775,14 @@ impl Page {
     }
 
     pub fn get_pointer_style(&self, x: f32, y: f32, read_only: bool) -> PointerStyle {
-        if let Some(entry) = self.spatial_index().locate_at_point(&[x, y]) {
-            return entry.element().cursor_visual();
-        }
-
-        if let Some(kind) = Self::traverse_for_interactive(&self.root, Point::zero(), x, y) {
+        if let Some(kind) = self.find_interactive_at(x, y, read_only) {
             if !read_only || kind.allow_in_read_only() {
                 return PointerStyle::Pointer;
             }
+        }
+
+        if let Some(entry) = self.spatial_index().locate_at_point(&[x, y]) {
+            return entry.element().cursor_visual();
         }
 
         Self::traverse_for_pointer_style(&self.root, Point::zero(), x, y)
@@ -819,8 +819,8 @@ impl Page {
         None
     }
 
-    pub fn find_interactive_at(&self, x: f32, y: f32) -> Option<InteractionKind> {
-        if self.is_over_cursor_navigable(x, y) {
+    pub fn find_interactive_at(&self, x: f32, y: f32, read_only: bool) -> Option<InteractionKind> {
+        if !read_only && self.is_over_cursor_navigable(x, y) {
             return None;
         }
         Self::traverse_for_interactive(&self.root, Point::zero(), x, y)
