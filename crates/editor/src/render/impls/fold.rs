@@ -33,9 +33,9 @@ impl Render for FoldTitleElement {
                 let cy = self.size.height / 2.0;
 
                 let path = if self.expanded {
-                    svg_icon_path!("lucide/chevron-down", CHEVRON_SIZE, cx, cy)
-                } else {
                     svg_icon_path!("lucide/chevron-up", CHEVRON_SIZE, cx, cy)
+                } else {
+                    svg_icon_path!("lucide/chevron-down", CHEVRON_SIZE, cx, cy)
                 };
 
                 if let Some(path) = path {
