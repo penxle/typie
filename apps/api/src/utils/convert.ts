@@ -242,7 +242,7 @@ async function convertPmMarks(pmMarks: JSONContent['marks']): Promise<{ styles: 
           }
         }
         if (pmMark.attrs?.fontSize) {
-          styles.push({ type: 'font_size', size: Number(pmMark.attrs.fontSize) * PX_TO_PT });
+          styles.push({ type: 'font_size', size: Math.round(Number(pmMark.attrs.fontSize) * PX_TO_PT * 100) });
         }
         if (pmMark.attrs?.fontWeight) {
           styles.push({ type: 'font_weight', weight: Number(pmMark.attrs.fontWeight) });
@@ -332,7 +332,8 @@ async function convertNode(
   switch (pmNode.type) {
     case 'paragraph': {
       const letterSpacing = pmNode.attrs?.letterSpacing ?? 0;
-      const extraStyles: LoroStyle[] = letterSpacing === 0 ? [] : [{ type: 'letter_spacing', spacing: letterSpacing }];
+      const letterSpacingInt = Math.round(letterSpacing * 100);
+      const extraStyles: LoroStyle[] = letterSpacingInt === 0 ? [] : [{ type: 'letter_spacing', spacing: letterSpacingInt }];
 
       const children: string[] = [];
       let pendingInlines: JSONContent[] = [];
@@ -372,7 +373,7 @@ async function convertNode(
       nodes[nodeId] = {
         type: 'paragraph',
         align: pmNode.attrs?.textAlign ?? 'left',
-        line_height: pmNode.attrs?.lineHeight ?? 1.6,
+        line_height: Math.round((pmNode.attrs?.lineHeight ?? 1.6) * 100),
         children,
         parent: parentId,
       };
@@ -763,8 +764,8 @@ export async function convertPostToDocumentJson(
   },
 ): Promise<{ json: DocumentJson; archivedNodes: ArchivedNodeEntry[] }> {
   const bodyNode = body.content?.[0];
-  const paragraphIndent = bodyNode?.attrs?.paragraphIndent ?? 1;
-  const blockGap = bodyNode?.attrs?.blockGap ?? 1;
+  const paragraphIndent = Math.round((bodyNode?.attrs?.paragraphIndent ?? 1) * 100);
+  const blockGap = Math.round((bodyNode?.attrs?.blockGap ?? 1) * 100);
 
   let layoutMode: DocumentJson['settings']['layout_mode'];
 
@@ -807,7 +808,7 @@ export async function convertPostToDocumentJson(
     nodes[emptyParagraphId] = {
       type: 'paragraph',
       align: 'left',
-      line_height: 1.6,
+      line_height: 160,
       children: [],
       parent: ROOT_ID,
     };

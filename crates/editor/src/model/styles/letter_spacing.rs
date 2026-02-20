@@ -9,20 +9,20 @@ use std::hash::{Hash, Hasher};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Codec)]
 #[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 pub struct LetterSpacingStyle {
-    pub spacing: f32,
+    pub spacing: i32,
 }
 
 impl Hash for LetterSpacingStyle {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.spacing.to_bits().hash(state);
+        self.spacing.hash(state);
     }
 }
 
-const LETTER_SPACINGS: &[f32] = &[-0.1, -0.05, 0.0, 0.05, 0.1, 0.2, 0.4];
+const LETTER_SPACINGS: &[i32] = &[-10, -5, 0, 5, 10, 20, 40];
 
-fn snap_letter_spacing(v: f32) -> f32 {
+fn snap_letter_spacing(v: i32) -> i32 {
     let mut best = LETTER_SPACINGS[0];
-    let mut best_dist = f32::MAX;
+    let mut best_dist = i32::MAX;
     for &ls in LETTER_SPACINGS {
         let d = (v - ls).abs();
         if d < best_dist {
@@ -36,7 +36,7 @@ fn snap_letter_spacing(v: f32) -> f32 {
 impl StyleHtmlCodec for LetterSpacingStyle {
     fn to_dom(&self) -> DomSpec {
         DomSpec::el("span")
-            .style(format!("letter-spacing:{}em", self.spacing))
+            .style(format!("letter-spacing:{}em", self.spacing as f32 / 100.0))
             .hole()
     }
 
@@ -48,7 +48,7 @@ impl StyleHtmlCodec for LetterSpacingStyle {
                     .and_then(|ls| parse_as(ls, LengthUnit::Em))
                     .map(|spacing| {
                         Style::LetterSpacing(LetterSpacingStyle {
-                            spacing: snap_letter_spacing(spacing),
+                            spacing: snap_letter_spacing((spacing * 100.0).round() as i32),
                         })
                     })
             })

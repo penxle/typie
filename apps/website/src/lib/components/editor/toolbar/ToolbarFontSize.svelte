@@ -34,10 +34,11 @@
   const fontSizeAttr = $derived(editor.getAttr('font_size'));
   const fontSizeValues = $derived(fontSizeAttr?.values.filter((v): v is number => v != null) ?? []);
   const currentFontSize = $derived(fontSizeValues.length === 1 ? fontSizeValues[0] : undefined);
+  const displayFontSize = $derived(currentFontSize === undefined ? undefined : currentFontSize / 100);
 
   $effect(() => {
     if (!opened && document.activeElement !== inputElement) {
-      inputValue = currentFontSize === undefined ? '' : String(currentFontSize);
+      inputValue = displayFontSize === undefined ? '' : String(displayFontSize);
     }
   });
 
@@ -52,7 +53,7 @@
   const handleFocus = () => {
     isFocused = true;
     open();
-    inputValue = currentFontSize === undefined ? '' : String(currentFontSize);
+    inputValue = displayFontSize === undefined ? '' : String(displayFontSize);
     inputElement?.select();
   };
 
@@ -60,8 +61,8 @@
     if (!inputValue) return;
 
     const parsed = Number.parseFloat(inputValue);
-    if (!Number.isNaN(parsed) && parsed !== currentFontSize) {
-      const clamped = clamp(parsed, values.minFontSize, values.maxFontSize);
+    if (!Number.isNaN(parsed) && parsed * 100 !== currentFontSize) {
+      const clamped = clamp(Math.round(parsed * 100), values.minFontSize, values.maxFontSize);
       editor.dispatch({ type: 'toggleStyle', style: { type: 'font_size', size: clamped } });
     }
     void shouldFocus;
@@ -93,14 +94,15 @@
       close();
       editor.focus();
     } else if (e.key === 'Escape') {
-      inputValue = currentFontSize === undefined ? '' : String(currentFontSize);
+      inputValue = displayFontSize === undefined ? '' : String(displayFontSize);
       inputElement?.blur();
       close();
       editor.focus();
     } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
       e.preventDefault();
       e.stopPropagation();
-      const current = Number.parseFloat(inputValue) || currentFontSize;
+      const currentInput = Number.parseFloat(inputValue);
+      const current = (currentInput ? Math.round(currentInput * 100) : currentFontSize) ?? 0;
       if (!current) return;
       const sortedSizes = values.fontSize.map(({ value }) => value).toSorted((a, b) => a - b);
       const currentIndex = sortedSizes.findIndex((size) => size >= current);
@@ -126,7 +128,7 @@
 
       const newValue = sortedSizes[newIndex];
       if (newValue !== undefined) {
-        inputValue = String(newValue);
+        inputValue = String(newValue / 100);
         editor.dispatch({ type: 'toggleStyle', style: { type: 'font_size', size: newValue } });
         tick().then(() => {
           inputElement?.select();
@@ -174,7 +176,7 @@
       onblur={handleBlur}
       onfocus={handleFocus}
       onkeydown={handleKeydown}
-      placeholder={currentFontSize === undefined ? '-' : String(currentFontSize)}
+      placeholder={displayFontSize === undefined ? '-' : String(displayFontSize)}
       type="text"
       bind:value={inputValue}
     />

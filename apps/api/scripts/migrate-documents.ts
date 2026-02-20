@@ -82,7 +82,7 @@ function convertAttribute(key: string, value: unknown): { style?: NewStyle; anno
 
 const DEFAULT_STYLES: NewStyle[] = [
   { type: 'font_family', family: 'Pretendard' },
-  { type: 'font_size', size: 12 },
+  { type: 'font_size', size: 1200 },
   { type: 'font_weight', weight: 400 },
   { type: 'text_color', color: 'black' },
   { type: 'background_color', color: 'none' },
@@ -332,6 +332,60 @@ function migrateTableColWidths(nodes: Record<string, Record<string, unknown>>): 
   };
 }
 
+function migrateStyleValues(nodes: Record<string, Record<string, unknown>>): boolean {
+  let changed = false;
+  for (const node of Object.values(nodes)) {
+    if (node.type !== 'text' || !Array.isArray(node.text)) continue;
+    for (const seg of node.text as NewTextSegment[]) {
+      if (!seg.styles) continue;
+      for (const style of seg.styles) {
+        if (style.type === 'font_size') {
+          const s = style as { type: 'font_size'; size: number };
+          if (s.size < 500) {
+            s.size = Math.round(s.size * 100);
+            changed = true;
+          }
+        }
+        if (style.type === 'letter_spacing') {
+          const s = style as { type: 'letter_spacing'; spacing: number };
+          if (Math.abs(s.spacing) < 5 && s.spacing !== 0) {
+            s.spacing = Math.round(s.spacing * 100);
+            changed = true;
+          }
+        }
+      }
+    }
+  }
+  return changed;
+}
+
+function migrateNodeAttrs(nodes: Record<string, Record<string, unknown>>): boolean {
+  let changed = false;
+  for (const node of Object.values(nodes)) {
+    if (node.type === 'paragraph' || node.type === 'fold_title') {
+      const lh = node.line_height;
+      if (typeof lh === 'number' && lh < 10) {
+        node.line_height = Math.round(lh * 100);
+        changed = true;
+      }
+    }
+  }
+  return changed;
+}
+
+function migrateSettings(settings: Record<string, unknown>): boolean {
+  let changed = false;
+  if (typeof settings.block_gap === 'number' && settings.block_gap < 10) {
+    settings.block_gap = Math.round(settings.block_gap * 100);
+    changed = true;
+  }
+  if (typeof settings.paragraph_indent === 'number' && settings.paragraph_indent < 10) {
+    settings.paragraph_indent = Math.round(settings.paragraph_indent * 100);
+    changed = true;
+  }
+  return changed;
+}
+
 function fixTextNewlines(nodes: Record<string, Record<string, unknown>>): boolean {
   let fixed = false;
   const replacements = new Map<string, string[]>();
@@ -471,12 +525,12 @@ await (async () => {
         if (rootNode && !rootNode.cascade_attrs) {
           rootNode.cascade_attrs = {
             'style:font_family': 'Pretendard',
-            'style:font_size': 12,
+            'style:font_size': 1200,
             'style:font_weight': 400,
             'style:text_color': 'black',
             'style:background_color': 'none',
             'style:letter_spacing': 0,
-            'paragraph:line_height': 1.6,
+            'paragraph:line_height': 160,
           };
           needsFix = true;
         }
@@ -507,6 +561,18 @@ await (async () => {
               needsFix = true;
             }
           }
+        }
+
+        if (migrateStyleValues(nodes)) {
+          needsFix = true;
+        }
+
+        if (migrateNodeAttrs(nodes)) {
+          needsFix = true;
+        }
+
+        if ('settings' in currentJson && migrateSettings(currentJson.settings as Record<string, unknown>)) {
+          needsFix = true;
         }
 
         if (fixTextNewlines(nodes)) {
@@ -572,6 +638,9 @@ await (async () => {
         }
 
         fixTextNewlines(transformedNodes as Record<string, Record<string, unknown>>);
+        migrateStyleValues(transformedNodes as Record<string, Record<string, unknown>>);
+        migrateNodeAttrs(transformedNodes as Record<string, Record<string, unknown>>);
+        migrateSettings(settings);
         const tableMigrationResult = migrateTableColWidths(transformedNodes as Record<string, Record<string, unknown>>);
         migratedTables += tableMigrationResult.migratedTableCount;
         skippedMixedTables += tableMigrationResult.skippedMixedTableCount;
@@ -580,12 +649,12 @@ await (async () => {
         if (rootNode) {
           rootNode.cascade_attrs = {
             'style:font_family': 'Pretendard',
-            'style:font_size': 12,
+            'style:font_size': 1200,
             'style:font_weight': 400,
             'style:text_color': 'black',
             'style:background_color': 'none',
             'style:letter_spacing': 0,
-            'paragraph:line_height': 1.6,
+            'paragraph:line_height': 160,
           };
         }
 

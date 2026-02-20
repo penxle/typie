@@ -26,7 +26,7 @@ impl NodeHtmlCodec for FoldContentNode {
 
 impl Layout for FoldContentNode {
     fn layout(&self, ctx: &LayoutContext, constraints: BoxConstraints) -> LayoutNode {
-        let block_gap = ctx.settings.block_gap * 16.0;
+        let block_gap = ctx.settings.block_gap as f32 / 100.0 * 16.0;
         let children: Vec<_> = ctx.node.children().collect();
         let child_count = children.len();
 

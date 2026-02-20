@@ -10,11 +10,11 @@ use serde::{Deserialize, Serialize};
 pub struct DefaultAttrs(Vec<Attr>);
 
 const DEFAULT_FONT_FAMILY: &str = "Pretendard";
-const DEFAULT_FONT_SIZE: f32 = 12.0;
+const DEFAULT_FONT_SIZE: u32 = 1200;
 const DEFAULT_FONT_WEIGHT: u16 = 400;
 const DEFAULT_TEXT_COLOR: &str = "black";
-const DEFAULT_LETTER_SPACING: f32 = 0.0;
-const DEFAULT_LINE_HEIGHT: f32 = 1.6;
+const DEFAULT_LETTER_SPACING: i32 = 0;
+const DEFAULT_LINE_HEIGHT: u32 = 160;
 
 impl Default for DefaultAttrs {
     fn default() -> Self {

@@ -334,7 +334,7 @@ impl Transaction {
         let attrs = self.resolve_attr_cascade(parent_id);
         let line_height = Attr::extract_paragraph_attr(&attrs)
             .map(|p| p.line_height)
-            .unwrap_or(1.6);
+            .unwrap_or(160);
 
         let parent = self.node_mut(parent_id).context("Parent not found")?;
         let insert_index = if let Some(prev_id) = prev {
@@ -596,7 +596,7 @@ impl Transaction {
         Ok(true)
     }
 
-    pub fn set_line_height(&mut self, line_height: f32) -> Result<bool> {
+    pub fn set_line_height(&mut self, line_height: u32) -> Result<bool> {
         let selection = self.selection().clone();
         let (from, to) = selection.as_sorted(self.doc())?;
 
@@ -640,7 +640,7 @@ impl Transaction {
                 let default_line_height = default_para_attr
                     .as_ref()
                     .map(|p| p.line_height)
-                    .unwrap_or(1.6);
+                    .unwrap_or(160);
 
                 let para_node = self
                     .node_mut(para_id)
@@ -652,7 +652,7 @@ impl Transaction {
                             p.align = TextAlign::default();
                             para_changed = true;
                         }
-                        if (p.line_height - default_line_height).abs() > f32::EPSILON {
+                        if p.line_height != default_line_height {
                             p.line_height = default_line_height;
                             para_changed = true;
                         }
@@ -1899,7 +1899,7 @@ mod tests {
         let first_child = root.first_child().unwrap();
         if let Node::Paragraph(para) = first_child.node() {
             assert!(
-                (para.line_height - 1.6).abs() < f32::EPSILON,
+                para.line_height == 160,
                 "Inserted paragraph should inherit line_height from cascade, got: {}",
                 para.line_height
             );

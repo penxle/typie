@@ -17,7 +17,7 @@ const CONTENT_OFFSET: f32 = TOGGLE_ICON_WIDTH + TOGGLE_ICON_PADDING;
 pub const FOLD_TITLE_FONT_WEIGHT: u16 = 500;
 
 fn default_line_height() -> f32 {
-    1.6
+    1.6 // fold_title uses raw f32 for parley (not stored in document)
 }
 
 fn preedit_for_node<'a>(ctx: &'a LayoutContext<'a>) -> Option<&'a PreeditDecor> {

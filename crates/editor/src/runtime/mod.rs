@@ -1297,7 +1297,7 @@ impl Runtime {
         let (pos, _element) = page.first_element()?;
 
         let settings = self.doc().settings();
-        let paragraph_indent = settings.paragraph_indent * 16.0;
+        let paragraph_indent = settings.paragraph_indent as f32 / 100.0 * 16.0;
         let (page_width, margin_left, margin_right) = match settings.layout_mode {
             LayoutMode::Paginated {
                 page_width,
@@ -2220,7 +2220,7 @@ mod tests {
 
         runtime
             .doc()
-            .update_settings(|s| s.paragraph_indent = 1.0)
+            .update_settings(|s| s.paragraph_indent = 100)
             .unwrap();
         runtime.layout();
 

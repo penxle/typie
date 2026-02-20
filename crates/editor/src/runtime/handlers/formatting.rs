@@ -35,7 +35,7 @@ impl Runtime {
         self.transact(|tr| tr.toggle_ordered_list())
     }
 
-    pub(crate) fn handle_set_line_height(&mut self, height: f32) -> Vec<Effect> {
+    pub(crate) fn handle_set_line_height(&mut self, height: u32) -> Vec<Effect> {
         self.transact(|tr| tr.set_line_height(height))
     }
 
@@ -43,11 +43,11 @@ impl Runtime {
         self.transact(|tr| tr.set_text_align(align))
     }
 
-    pub(crate) fn handle_set_block_gap(&mut self, gap: f32) -> Vec<Effect> {
+    pub(crate) fn handle_set_block_gap(&mut self, gap: u32) -> Vec<Effect> {
         self.transact(|tr| tr.set_block_gap(gap))
     }
 
-    pub(crate) fn handle_set_paragraph_indent(&mut self, indent: f32) -> Vec<Effect> {
+    pub(crate) fn handle_set_paragraph_indent(&mut self, indent: u32) -> Vec<Effect> {
         self.transact(|tr| tr.set_paragraph_indent(indent))
     }
 
@@ -387,7 +387,7 @@ mod tests {
         let mut runtime = runtime! {
             viewport { 800, 600, 1.0 }
             doc {
-                @p paragraph(line_height: 1.0,) {
+                @p paragraph(line_height: 100,) {
                     text { "hello" }
                 }
             }
@@ -395,7 +395,7 @@ mod tests {
         };
 
         let custom_defaults = DefaultAttrs::default();
-        let custom_line_height: f32 = 2.0;
+        let custom_line_height: u32 = 200;
         let mut attrs: Vec<Attr> = custom_defaults
             .to_attrs()
             .into_iter()
@@ -414,11 +414,10 @@ mod tests {
 
         let node = runtime.state().doc.node(p).unwrap();
         if let Node::Paragraph(para) = node.node() {
-            assert!(
-                (para.line_height - custom_line_height).abs() < f32::EPSILON,
+            assert_eq!(
+                para.line_height, custom_line_height,
                 "expected line_height {} (document default) after ClearFormatting, got {}",
-                custom_line_height,
-                para.line_height
+                custom_line_height, para.line_height
             );
         } else {
             panic!("expected Paragraph node");
@@ -432,15 +431,15 @@ mod tests {
         let mut runtime = runtime! {
             viewport { 800, 600, 1.0 }
             doc {
-                @p1 paragraph(line_height: 1.0,) {
+                @p1 paragraph(line_height: 100,) {
                     text { "hello" }
                 }
-                @p2 paragraph(line_height: 1.0,) {}
+                @p2 paragraph(line_height: 100,) {}
             }
             selection { (p1, 0) }
         };
 
-        let custom_line_height: f32 = 2.0;
+        let custom_line_height: u32 = 200;
         let mut attrs: Vec<Attr> = DefaultAttrs::default()
             .to_attrs()
             .into_iter()
@@ -459,11 +458,10 @@ mod tests {
 
         let node = runtime.state().doc.node(p2).unwrap();
         if let Node::Paragraph(para) = node.node() {
-            assert!(
-                (para.line_height - custom_line_height).abs() < f32::EPSILON,
+            assert_eq!(
+                para.line_height, custom_line_height,
                 "empty paragraph line_height: expected {}, got {}",
-                custom_line_height,
-                para.line_height
+                custom_line_height, para.line_height
             );
         } else {
             panic!("expected Paragraph node");

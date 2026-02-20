@@ -768,7 +768,10 @@ fn test_consecutive_hard_breaks_visuals() {
     assert!(rect_1.y > rect_0.y, "Second line should be below first");
     assert!(rect_2.y > rect_1.y, "Third line should be below second");
 
-    assert_eq!(rect_0.x, PAGE_MARGIN + settings.paragraph_indent * 16.0,);
+    assert_eq!(
+        rect_0.x,
+        PAGE_MARGIN + settings.paragraph_indent as f32 / 100.0 * 16.0,
+    );
     assert_eq!(
         rect_1.x, PAGE_MARGIN,
         "Second line start should be at left margin"
@@ -1013,7 +1016,10 @@ fn test_cursor_respects_paragraph_indent_before_hard_break_in_empty_paragraph() 
     )
     .unwrap();
 
-    assert_eq!(rect.x, PAGE_MARGIN + settings.paragraph_indent * 16.0);
+    assert_eq!(
+        rect.x,
+        PAGE_MARGIN + settings.paragraph_indent as f32 / 100.0 * 16.0
+    );
 }
 
 #[test]
@@ -1035,7 +1041,7 @@ fn test_paragraph_indent_only_for_root_children() {
         selection { (root_paragraph, 0) }
     };
 
-    rt.update(Message::SetParagraphIndent { indent: 2.0 });
+    rt.update(Message::SetParagraphIndent { indent: 200 });
     rt.layout();
 
     let pages = rt.pages();
@@ -1047,7 +1053,10 @@ fn test_paragraph_indent_only_for_root_children() {
         Position::new(root_paragraph, 0, Affinity::Downstream),
     )
     .unwrap();
-    assert_eq!(root_rect.x, PAGE_MARGIN + settings.paragraph_indent * 16.0);
+    assert_eq!(
+        root_rect.x,
+        PAGE_MARGIN + settings.paragraph_indent as f32 / 100.0 * 16.0
+    );
 
     let (_, quoted_rect) = Cursor::bounds(
         &ctx(&rt.state()),
@@ -2044,7 +2053,7 @@ fn test_document_end() {
     };
 
     rt.doc()
-        .update_settings(|s| s.block_gap = 0.0)
+        .update_settings(|s| s.block_gap = 0)
         .expect("block gap 설정 실패");
 
     let pages = rt.pages();
@@ -2080,7 +2089,7 @@ fn test_document_start_in_continuous_mode() {
     };
 
     rt.doc()
-        .update_settings(|s| s.block_gap = 0.0)
+        .update_settings(|s| s.block_gap = 0)
         .expect("block gap 설정 실패");
 
     let pages = rt.pages();
@@ -4259,12 +4268,12 @@ fn test_paragraph_indent_with_no_space_long_text() {
         selection { (p, 0) }
     };
 
-    rt.update(Message::SetParagraphIndent { indent: 2.0 });
+    rt.update(Message::SetParagraphIndent { indent: 200 });
     rt.layout();
 
     let pages = rt.pages();
     let settings = rt.doc().settings();
-    let expected_indent = settings.paragraph_indent * 16.0;
+    let expected_indent = settings.paragraph_indent as f32 / 100.0 * 16.0;
 
     let (_, rect) = Cursor::bounds(
         &ctx(&rt.state()),

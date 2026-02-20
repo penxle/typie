@@ -15,7 +15,9 @@ class NativeEditorLineHeightTextOptionsToolbar extends HookWidget {
 
     final lineHeightAttr = findAttr(attrs, 'line_height');
     final lineHeightValues = (lineHeightAttr?['values'] as List?)?.whereType<num>().toList() ?? [];
-    final activeValue = lineHeightValues.length == 1 ? lineHeightValues[0] : editorDefaultValues['lineHeight'];
+    final activeValue = lineHeightValues.length == 1
+        ? lineHeightValues[0]
+        : (lineHeightValues.isEmpty ? editorDefaultValues['lineHeight'] : null);
 
     return NativeEditorTextOptionsToolbar(
       items: editorValues['lineHeight']!,

@@ -42,7 +42,7 @@ impl Layout for RootNode {
             y_offset += positioned.node.size.height;
             let is_last = idx == child_count - 1;
             if !is_last {
-                y_offset += block_gap * 16.0;
+                y_offset += block_gap as f32 / 100.0 * 16.0;
             }
             max_width = max_width.max(positioned.node.size.width);
 
