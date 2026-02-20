@@ -157,6 +157,7 @@ impl ListMarkerElement {
                             &paint,
                             transform,
                             None,
+                            false,
                             &glyphs,
                         );
                     }

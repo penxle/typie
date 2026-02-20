@@ -401,6 +401,7 @@ const TAG_FONT_FAMILY = 3;
 const TAG_FONT_WEIGHT = 4;
 const TAG_ITALIC = 5;
 const TAG_LETTER_SPACING = 6;
+const TAG_BOLD = 7;
 const TAG_STRIKETHROUGH = 9;
 const TAG_UNDERLINE = 10;
 const TAG_TEXT_ALIGN = 20;
@@ -426,7 +427,12 @@ const TEXT_ALIGN_MAP: Record<number, TextAlign> = {
   [ALIGN_JUSTIFY]: 'justify',
 };
 
-const UNIT_TAG_MAP: Record<number, string> = { [TAG_ITALIC]: 'italic', [TAG_STRIKETHROUGH]: 'strikethrough', [TAG_UNDERLINE]: 'underline' };
+const UNIT_TAG_MAP: Record<number, string> = {
+  [TAG_BOLD]: 'bold',
+  [TAG_ITALIC]: 'italic',
+  [TAG_STRIKETHROUGH]: 'strikethrough',
+  [TAG_UNDERLINE]: 'underline',
+};
 const F32_TAG_MAP: Record<number, string> = {
   [TAG_FONT_SIZE]: 'font_size',
   [TAG_LETTER_SPACING]: 'letter_spacing',

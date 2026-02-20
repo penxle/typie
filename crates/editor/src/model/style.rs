@@ -9,6 +9,7 @@ use std::hash::{Hash, Hasher};
 #[serde(rename_all = "snake_case")]
 pub enum StyleType {
     BackgroundColor,
+    Bold,
     TextColor,
     FontSize,
     FontFamily,
@@ -23,6 +24,7 @@ impl StyleType {
     pub fn all() -> &'static [StyleType] {
         &[
             StyleType::BackgroundColor,
+            StyleType::Bold,
             StyleType::TextColor,
             StyleType::FontSize,
             StyleType::FontFamily,
@@ -37,6 +39,7 @@ impl StyleType {
     pub fn key(&self) -> &'static str {
         match self {
             StyleType::BackgroundColor => "style:background_color",
+            StyleType::Bold => "style:bold",
             StyleType::TextColor => "style:text_color",
             StyleType::FontSize => "style:font_size",
             StyleType::FontFamily => "style:font_family",
@@ -54,6 +57,7 @@ impl StyleType {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Style {
     BackgroundColor(BackgroundColorStyle),
+    Bold(BoldStyle),
     TextColor(TextColorStyle),
     FontSize(FontSizeStyle),
     FontFamily(FontFamilyStyle),
@@ -68,6 +72,7 @@ impl Style {
     pub fn as_type(&self) -> StyleType {
         match self {
             Style::BackgroundColor(_) => StyleType::BackgroundColor,
+            Style::Bold(_) => StyleType::Bold,
             Style::TextColor(_) => StyleType::TextColor,
             Style::FontSize(_) => StyleType::FontSize,
             Style::FontFamily(_) => StyleType::FontFamily,
@@ -86,6 +91,7 @@ impl Style {
     pub fn to_loro_value(&self) -> loro::LoroValue {
         match self {
             Style::BackgroundColor(inner) => inner.to_value().expect("style must serialize"),
+            Style::Bold(inner) => inner.to_value().expect("style must serialize"),
             Style::TextColor(inner) => inner.to_value().expect("style must serialize"),
             Style::FontSize(inner) => inner.to_value().expect("style must serialize"),
             Style::FontFamily(inner) => inner.to_value().expect("style must serialize"),
@@ -103,6 +109,7 @@ impl Style {
             "background_color" => BackgroundColorStyle::from_value(value)
                 .ok()
                 .map(Style::BackgroundColor),
+            "bold" => BoldStyle::from_value(value).ok().map(Style::Bold),
             "text_color" => TextColorStyle::from_value(value).ok().map(Style::TextColor),
             "font_size" => FontSizeStyle::from_value(value).ok().map(Style::FontSize),
             "font_family" => FontFamilyStyle::from_value(value)
@@ -128,6 +135,7 @@ impl StyleHtmlCodec for Style {
     fn to_dom(&self) -> DomSpec {
         match self {
             Style::BackgroundColor(s) => StyleHtmlCodec::to_dom(s),
+            Style::Bold(s) => StyleHtmlCodec::to_dom(s),
             Style::TextColor(s) => StyleHtmlCodec::to_dom(s),
             Style::FontSize(s) => StyleHtmlCodec::to_dom(s),
             Style::FontFamily(s) => StyleHtmlCodec::to_dom(s),
@@ -147,6 +155,7 @@ impl Hash for Style {
         std::mem::discriminant(self).hash(state);
         match self {
             Style::BackgroundColor(s) => s.hash(state),
+            Style::Bold(s) => s.hash(state),
             Style::TextColor(s) => s.hash(state),
             Style::FontSize(s) => s.hash(state),
             Style::FontFamily(s) => s.hash(state),

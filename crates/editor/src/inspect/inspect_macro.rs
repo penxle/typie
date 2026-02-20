@@ -337,6 +337,7 @@ fn format_attributes(attrs: &[(&str, String)]) -> String {
 fn style_to_macro(style: &Style) -> String {
     match style {
         Style::BackgroundColor(s) => format!("bg_color(\"{}\")", escape_str(&s.color)),
+        Style::Bold(_) => "bold()".to_string(),
         Style::TextColor(s) => format!("text_color(\"{}\")", escape_str(&s.color)),
         Style::FontSize(s) => format!("font_size({})", format_number(s.size)),
         Style::FontFamily(s) => format!("font_family(\"{}\")", escape_str(&s.family)),

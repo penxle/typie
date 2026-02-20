@@ -8,7 +8,7 @@ impl Runtime {
 
     pub(crate) fn handle_toggle_style(&mut self, style: Style) -> Vec<Effect> {
         self.transact(|tr| match &style {
-            Style::Italic(_) | Style::Strikethrough(_) | Style::Underline(_) => {
+            Style::Bold(_) | Style::Italic(_) | Style::Strikethrough(_) | Style::Underline(_) => {
                 tr.toggle_style(style)
             }
             _ => tr.set_style(style),

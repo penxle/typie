@@ -63,7 +63,9 @@ class NativeEditorTextToolbar extends HookWidget {
         : (fontSizeValues.isEmpty ? editorDefaultValues['fontSize'] as num : null);
     final isFontSizeMixed = fontSizeValues.length > 1;
 
-    final isBold = !isFontWeightMixed && activeFontWeight != null && activeFontWeight >= 700;
+    final boldAttr = findAttr(attrs, 'bold');
+    final hasBoldMarker = boldAttr != null && !(boldAttr['values'] as List).contains(null);
+    final isBold = hasBoldMarker || (!isFontWeightMixed && activeFontWeight != null && activeFontWeight >= 700);
 
     final italicAttr = findAttr(attrs, 'italic');
     final isItalic = italicAttr != null && !(italicAttr['values'] as List).contains(null);

@@ -31,6 +31,7 @@ pub const DIRTY_REPASTE: u64 = 1 << 20;
 pub const DIRTY_REMARKS: u64 = 1 << 21;
 
 pub const ATTR_TAG_BACKGROUND_COLOR: u32 = 0;
+pub const ATTR_TAG_BOLD: u32 = 7;
 pub const ATTR_TAG_TEXT_COLOR: u32 = 1;
 pub const ATTR_TAG_FONT_SIZE: u32 = 2;
 pub const ATTR_TAG_FONT_FAMILY: u32 = 3;
@@ -426,6 +427,9 @@ impl Slab {
         match style {
             Style::BackgroundColor(s) => {
                 self.write_str(&s.color);
+            }
+            Style::Bold(_) => {
+                self.write_u32_slice(&[1]);
             }
             Style::TextColor(s) => {
                 self.write_str(&s.color);
@@ -852,6 +856,7 @@ impl Slab {
 fn style_type_to_tag(st: &StyleType) -> u32 {
     match st {
         StyleType::BackgroundColor => ATTR_TAG_BACKGROUND_COLOR,
+        StyleType::Bold => ATTR_TAG_BOLD,
         StyleType::TextColor => ATTR_TAG_TEXT_COLOR,
         StyleType::FontSize => ATTR_TAG_FONT_SIZE,
         StyleType::FontFamily => ATTR_TAG_FONT_FAMILY,
@@ -866,6 +871,7 @@ fn style_type_to_tag(st: &StyleType) -> u32 {
 fn style_type_to_value_kind(st: &StyleType) -> u32 {
     match st {
         StyleType::BackgroundColor => VK_STRING,
+        StyleType::Bold => VK_UNIT,
         StyleType::TextColor => VK_STRING,
         StyleType::FontSize => VK_F32,
         StyleType::FontFamily => VK_STRING,

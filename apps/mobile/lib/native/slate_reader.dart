@@ -11,6 +11,7 @@ Map<String, int> _getOffsets() {
 }
 
 const _tagItalic = 5;
+const _tagBold = 7;
 const _tagStrikethrough = 9;
 const _tagUnderline = 10;
 const _tagFontSize = 2;
@@ -47,7 +48,12 @@ const selectionTypeArchived = 9;
 const selectionTypeBlockquote = 10;
 const selectionTypeTable = 11;
 
-const _unitTagMap = {_tagItalic: 'italic', _tagStrikethrough: 'strikethrough', _tagUnderline: 'underline'};
+const _unitTagMap = {
+  _tagBold: 'bold',
+  _tagItalic: 'italic',
+  _tagStrikethrough: 'strikethrough',
+  _tagUnderline: 'underline',
+};
 const _f32TagMap = {_tagFontSize: 'font_size', _tagLetterSpacing: 'letter_spacing', _tagLineHeight: 'line_height'};
 const _u32TagMap = {_tagFontWeight: 'font_weight', _tagTextAlign: 'text_align'};
 const _stringTagMap = {

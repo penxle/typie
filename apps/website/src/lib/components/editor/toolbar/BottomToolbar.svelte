@@ -78,7 +78,9 @@
   const fontWeightAttr = $derived(editor.getAttr('font_weight'));
   const fontWeightValues = $derived(fontWeightAttr?.values.filter((v): v is number => v != null) ?? []);
   const selectedFontWeight = $derived(fontWeightValues.length === 1 ? fontWeightValues[0] : undefined);
-  const isBoldActive = $derived(selectedFontWeight !== undefined && selectedFontWeight >= 700);
+  const isBoldActive = $derived(
+    editor.getAttr('bold')?.values.includes(null) === false || (selectedFontWeight !== undefined && selectedFontWeight >= 700),
+  );
   const isItalicActive = $derived(editor.getAttr('italic')?.values.includes(null) === false);
   const isStrikethroughActive = $derived(editor.getAttr('strikethrough')?.values.includes(null) === false);
   const isUnderlineActive = $derived(editor.getAttr('underline')?.values.includes(null) === false);
