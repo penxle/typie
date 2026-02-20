@@ -73,6 +73,7 @@ import {
   FontFamily,
   Image,
   isTypeOf,
+  IUser,
   Post,
   Referral,
   Site,
@@ -82,19 +83,32 @@ import {
   UserPersonalIdentity,
   UserSingleSignOn,
   UserTrial,
+  UserView,
 } from '../objects';
 
 /**
  * * Types
  */
 
-User.implement({
-  isTypeOf: isTypeOf(TableCode.USERS),
+IUser.implement({
   fields: (t) => ({
     id: t.exposeID('id'),
     name: t.exposeString('name'),
-    email: t.exposeString('email'),
     avatar: t.expose('avatarId', { type: Image }),
+  }),
+});
+
+UserView.implement({
+  isTypeOf: isTypeOf(TableCode.USERS),
+  interfaces: [IUser],
+  fields: () => ({}),
+});
+
+User.implement({
+  isTypeOf: isTypeOf(TableCode.USERS),
+  interfaces: [IUser],
+  fields: (t) => ({
+    email: t.exposeString('email'),
     role: t.expose('role', { type: UserRole }),
     state: t.expose('state', { type: UserState }),
     createdAt: t.expose('createdAt', { type: 'DateTime' }),
@@ -542,6 +556,14 @@ builder.queryFields((t) => ({
     nullable: true,
     resolve: async (_, __, ctx) => {
       return ctx.session?.userId;
+    },
+  }),
+
+  userView: t.field({
+    type: UserView,
+    args: { id: t.arg.id() },
+    resolve: (_, args) => {
+      return args.id;
     },
   }),
 }));
