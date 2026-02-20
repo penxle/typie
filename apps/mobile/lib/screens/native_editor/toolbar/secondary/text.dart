@@ -164,7 +164,7 @@ class NativeEditorTextToolbar extends HookWidget {
                     if (size == null) {
                       return '-';
                     }
-                    return size % 1 == 0 ? size.toInt().toString() : size.toString();
+                    return (size / 100).toInt().toString();
                   }(),
             onTap: () {
               scope.secondaryToolbarMode.value = SecondaryToolbarMode.fontSize;

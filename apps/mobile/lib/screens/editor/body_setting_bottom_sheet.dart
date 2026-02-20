@@ -224,13 +224,13 @@ class BodySettingBottomSheet extends HookWidget {
                 trailing: HookFormSelect(
                   name: 'paragraphIndent',
                   initialValue: (proseMirrorState?.nodes.isNotEmpty ?? false)
-                      ? (proseMirrorState!.nodes.first.attrs?['paragraphIndent'] ?? 100)
-                      : 100,
+                      ? (proseMirrorState!.nodes.first.attrs?['paragraphIndent'] ?? 1)
+                      : 1,
                   items: const [
                     HookFormSelectItem(label: '없음', value: 0),
-                    HookFormSelectItem(label: '0.5칸', value: 50),
-                    HookFormSelectItem(label: '1칸', value: 100),
-                    HookFormSelectItem(label: '2칸', value: 200),
+                    HookFormSelectItem(label: '0.5칸', value: 0.5),
+                    HookFormSelectItem(label: '1칸', value: 1),
+                    HookFormSelectItem(label: '2칸', value: 2),
                   ],
                 ),
               ),
@@ -240,13 +240,13 @@ class BodySettingBottomSheet extends HookWidget {
                 trailing: HookFormSelect(
                   name: 'blockGap',
                   initialValue: (proseMirrorState?.nodes.isNotEmpty ?? false)
-                      ? (proseMirrorState!.nodes.first.attrs?['blockGap'] ?? 100)
-                      : 100,
+                      ? (proseMirrorState!.nodes.first.attrs?['blockGap'] ?? 1)
+                      : 1,
                   items: const [
                     HookFormSelectItem(label: '없음', value: 0),
-                    HookFormSelectItem(label: '0.5줄', value: 50),
-                    HookFormSelectItem(label: '1줄', value: 100),
-                    HookFormSelectItem(label: '2줄', value: 200),
+                    HookFormSelectItem(label: '0.5줄', value: 0.5),
+                    HookFormSelectItem(label: '1줄', value: 1),
+                    HookFormSelectItem(label: '2줄', value: 2),
                   ],
                 ),
               ),
