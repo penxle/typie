@@ -98,8 +98,8 @@ class CommandHandler {
   }
 
   static void _handleSettingsChanged(EditorController controller, SlateReader reader) {
-    final paragraphIndent = reader.getF32('paragraph_indent');
-    final blockGap = reader.getF32('block_gap');
+    final paragraphIndent = reader.getU32('paragraph_indent').toDouble();
+    final blockGap = reader.getU32('block_gap').toDouble();
 
     var lmPos = reader.getU32('layout_mode_offset');
     final layoutModeTag = reader.slabU32(lmPos);
