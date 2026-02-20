@@ -350,7 +350,6 @@ export class Editor {
   #readSlate(slate: SlateReader): void {
     if (slate.isDirty(DIRTY_DOC_CHANGED)) {
       this.#onDocChanged?.();
-      this.pendingScrollMode = 'typewriter';
       this.characterCountsVersion++;
     }
 
