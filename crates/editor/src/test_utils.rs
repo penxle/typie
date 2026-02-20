@@ -246,6 +246,15 @@ macro_rules! runtime {
 macro_rules! __parse_styles {
     () => { vec![] };
 
+    (bold() $(, $($rest:tt)*)?) => {
+        {
+            #[allow(unused_mut)]
+            let mut styles = vec![$crate::model::Style::Bold($crate::model::BoldStyle {})];
+            $(styles.extend(__parse_styles!($($rest)*));)?
+            styles
+        }
+    };
+
     (italic() $(, $($rest:tt)*)?) => {
         {
             #[allow(unused_mut)]

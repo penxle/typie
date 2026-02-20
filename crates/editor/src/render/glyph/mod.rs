@@ -28,6 +28,7 @@ const DARKEN_PARAMS: [(f32, f32); 4] = [
 
 const DEFAULT_STEM_WIDTH_PER_1000: f32 = 75.0;
 const DARKEN_STRENGTH: f32 = 0.25;
+const EMBOLDEN_STRENGTH: f32 = 1.25;
 
 #[derive(Clone, Copy)]
 pub struct Glyph {
@@ -42,6 +43,7 @@ struct GlyphCacheKey {
     glyph_id: u32,
     size_q4: u32,
     has_skew: bool,
+    embolden: bool,
     subpixel_x: u8,
     subpixel_y: u8,
 }
@@ -71,6 +73,7 @@ impl GlyphRenderer {
         paint: &Paint,
         transform: Transform,
         glyph_transform: Option<Transform>,
+        embolden: bool,
         glyphs: &[Glyph],
     ) {
         let font_data = font.data.as_ref();
@@ -115,6 +118,7 @@ impl GlyphRenderer {
                 glyph_id: glyph.id,
                 size_q4,
                 has_skew,
+                embolden,
                 subpixel_x,
                 subpixel_y,
             };
@@ -140,12 +144,17 @@ impl GlyphRenderer {
                     let dpi_scale = sx;
                     let logical_ppem = quantized_size / dpi_scale;
                     let (stdvw, stdhw) = get_stem_widths(font_ref, units_per_em);
+                    let strength = if embolden {
+                        DARKEN_STRENGTH + EMBOLDEN_STRENGTH
+                    } else {
+                        DARKEN_STRENGTH
+                    };
                     let darken_x = compute_stem_darkening(logical_ppem, units_per_em, stdvw)
                         * dpi_scale
-                        * DARKEN_STRENGTH;
+                        * strength;
                     let darken_y = compute_stem_darkening(logical_ppem, units_per_em, stdhw)
                         * dpi_scale
-                        * DARKEN_STRENGTH;
+                        * strength;
                     (darken_x, darken_y)
                 });
 

@@ -282,6 +282,7 @@ impl LineElement {
                                 &ruby_paint,
                                 transform,
                                 None,
+                                false,
                                 &glyphs,
                             );
                         }
@@ -369,6 +370,8 @@ impl Render for LineElement {
                                 })
                                 .collect();
 
+                            let embolden = synthesis.embolden();
+
                             glyph_renderer.draw_glyphs(
                                 pixmap,
                                 &run.font(),
@@ -376,6 +379,7 @@ impl Render for LineElement {
                                 &text_paint,
                                 transform,
                                 skew_transform,
+                                embolden,
                                 &glyphs,
                             );
 

@@ -217,6 +217,7 @@ fn apply_style_to_builder(
                 range,
             )
         }
+        Style::Bold(_) => {}
         Style::Italic(_) => builder.push(StyleProperty::FontStyle(FontStyle::Italic), range),
         Style::Strikethrough(_) => builder.push(StyleProperty::Strikethrough(true), range),
         Style::Underline(_) => builder.push(StyleProperty::Underline(true), range),
@@ -502,6 +503,9 @@ impl Layout for ParagraphNode {
                                 })
                                 .unwrap_or(12.0);
 
+                            let has_embolden =
+                                segment.styles.iter().any(|s| matches!(s, Style::Bold(_)));
+
                             for style in &segment.styles {
                                 let (start, end) = map_range_with_preedit(
                                     (base_start, base_end),
@@ -511,12 +515,19 @@ impl Layout for ParagraphNode {
                                 let range = char_to_byte_offset_with_map(&char_to_byte, start)
                                     ..char_to_byte_offset_with_map(&char_to_byte, end);
 
-                                apply_style_to_builder(
-                                    &mut builder,
-                                    style,
-                                    range,
-                                    segment_font_size,
-                                );
+                                if has_embolden && matches!(style, Style::FontWeight(_)) {
+                                    builder.push(
+                                        StyleProperty::FontWeight(FontWeight::new(1000.0)),
+                                        range,
+                                    );
+                                } else {
+                                    apply_style_to_builder(
+                                        &mut builder,
+                                        style,
+                                        range,
+                                        segment_font_size,
+                                    );
+                                }
                             }
 
                             for annotation in &segment.annotations {

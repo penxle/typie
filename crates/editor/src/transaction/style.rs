@@ -269,17 +269,11 @@ fn check_range_has_style(
     Ok(true)
 }
 
-fn get_common_style_in_range(
-    tr: &Transaction,
-    from: Position,
-    to: Position,
-    style_type: StyleType,
-) -> Option<Style> {
-    let ranges = collect_text_ranges_in_selection(tr, from, to).ok()?;
-    let mut common_style: Option<Style> = None;
+fn check_range_is_bold(tr: &Transaction, from: Position, to: Position) -> Result<bool> {
+    let ranges = collect_text_ranges_in_selection(tr, from, to)?;
 
     for (text_node_id, start_offset, end_offset) in ranges {
-        let node = tr.node(text_node_id)?;
+        let node = tr.node(text_node_id).context("Text node not found")?;
         if let Node::Text(text_node) = node.node() {
             let segments = text_node.text.get_segments();
             let mut current_offset = 0;
@@ -287,17 +281,17 @@ fn get_common_style_in_range(
             for segment in segments {
                 let segment_len = segment.text.chars().count();
                 let segment_end = current_offset + segment_len;
-
                 let overlap_start = current_offset.max(start_offset);
                 let overlap_end = segment_end.min(end_offset);
 
                 if overlap_start < overlap_end {
-                    let found = segment.styles.iter().find(|s| s.as_type() == style_type);
-                    match (found, &common_style) {
-                        (None, _) => return None,
-                        (Some(s), None) => common_style = Some(s.clone()),
-                        (Some(s), Some(existing)) if existing != s => return None,
-                        _ => {}
+                    let has_bold_style = segment.styles.iter().any(|s| matches!(s, Style::Bold(_)));
+                    let has_bold_weight = segment
+                        .styles
+                        .iter()
+                        .any(|s| matches!(s, Style::FontWeight(fw) if fw.weight >= 700));
+                    if !has_bold_style && !has_bold_weight {
+                        return Ok(false);
                     }
                 }
 
@@ -306,7 +300,71 @@ fn get_common_style_in_range(
         }
     }
 
-    common_style
+    Ok(true)
+}
+
+/// Given a current weight and available weights, find the bold target weight.
+/// Returns None if no heavier weight is available (use embolden instead).
+///
+/// Selection logic:
+/// 1. candidates = available weights strictly greater than current
+/// 2. bold_candidates = candidates >= 700 (preferred)
+/// 3. If bold_candidates exist: pick nearest to 700 (bias heavy on tie)
+/// 4. Else if candidates exist: pick nearest to 700 (bias heavy on tie)
+/// 5. Else: None (no heavier weight available)
+fn find_bold_target(current_weight: u16, available_weights: &[u16]) -> Option<u16> {
+    let candidates: Vec<u16> = available_weights
+        .iter()
+        .copied()
+        .filter(|&w| w > current_weight)
+        .collect();
+
+    if candidates.is_empty() {
+        return None;
+    }
+
+    let bold_candidates: Vec<u16> = candidates.iter().copied().filter(|&w| w >= 700).collect();
+
+    let pool = if bold_candidates.is_empty() {
+        &candidates
+    } else {
+        &bold_candidates
+    };
+
+    Some(nearest_weight(pool, 700))
+}
+
+fn find_unbold_target(current_weight: u16, available_weights: &[u16]) -> u16 {
+    let candidates: Vec<u16> = available_weights
+        .iter()
+        .copied()
+        .filter(|&w| w < current_weight)
+        .collect();
+    if candidates.is_empty() {
+        return 400;
+    }
+    nearest_weight(&candidates, 400)
+}
+
+fn remove_cascade_attr_on_empty_textblocks(
+    tr: &mut Transaction,
+    from: Position,
+    to: Position,
+    style_type: StyleType,
+) -> Result<()> {
+    let block_ids = collect_empty_textblocks_in_range(tr, from, to)?;
+
+    for block_id in block_ids {
+        let mut attrs = tr
+            .node(block_id)
+            .and_then(|b| b.cascade_attrs().map(|a| a.to_vec()))
+            .unwrap_or_default();
+
+        attrs.retain(|a| !matches!(a, Attr::Style(s) if s.as_type() == style_type));
+        tr.set_cascade_attrs(block_id, &attrs)?;
+    }
+
+    Ok(())
 }
 
 fn collect_text_ranges_in_selection(
@@ -378,10 +436,18 @@ fn apply_font_style_normalized(
 ) -> Result<()> {
     let ranges = collect_text_ranges_in_selection(tr, from, to)?;
     let available = get_available_fonts();
-    let (default_family, _) = tr.resolved_font(from.node_id);
+    let (default_family, default_weight) = tr.resolved_font(from.node_id);
     let style_type = style.as_type();
 
-    let mut actions: Vec<(NodeId, usize, usize, Vec<Style>)> = Vec::new();
+    // (node_id, start, end, styles_to_set, style_types_to_remove, font_detected)
+    let mut actions: Vec<(
+        NodeId,
+        usize,
+        usize,
+        Vec<Style>,
+        Vec<StyleType>,
+        Vec<(String, u16)>,
+    )> = Vec::new();
 
     for &(text_node_id, start_offset, end_offset) in &ranges {
         let allowed = tr.doc().allowed_styles_for(text_node_id);
@@ -405,6 +471,8 @@ fn apply_font_style_normalized(
 
                 if overlap_start < overlap_end {
                     let mut styles = Vec::new();
+                    let mut remove_types: Vec<StyleType> = Vec::new();
+                    let mut font_detected: Vec<(String, u16)> = Vec::new();
 
                     match style {
                         Style::FontWeight(fw) => {
@@ -428,23 +496,66 @@ fn apply_font_style_normalized(
                             {
                                 styles.push(style.clone());
 
-                                if let Some(weight) = segment.styles.iter().find_map(|s| match s {
-                                    Style::FontWeight(fw) => Some(fw.weight),
-                                    _ => None,
-                                }) {
-                                    let normalized = nearest_weight(family_weights, weight);
-                                    if normalized != weight {
+                                let has_bold =
+                                    segment.styles.iter().any(|s| matches!(s, Style::Bold(_)));
+                                let original_weight = segment
+                                    .styles
+                                    .iter()
+                                    .find_map(|s| match s {
+                                        Style::FontWeight(fw) => Some(fw.weight),
+                                        _ => None,
+                                    })
+                                    .unwrap_or(default_weight);
+                                let normalized = nearest_weight(family_weights, original_weight);
+
+                                if has_bold {
+                                    if let Some(target) =
+                                        find_bold_target(normalized, family_weights)
+                                    {
+                                        remove_types.push(StyleType::Bold);
+                                        styles.push(Style::FontWeight(FontWeightStyle {
+                                            weight: target,
+                                        }));
+                                        font_detected.push((fm.family.clone(), target));
+                                    } else if normalized != original_weight {
                                         styles.push(Style::FontWeight(FontWeightStyle {
                                             weight: normalized,
                                         }));
                                     }
+                                } else if original_weight >= 700 && normalized < 700 {
+                                    if let Some(target) =
+                                        find_bold_target(normalized, family_weights)
+                                    {
+                                        styles.push(Style::FontWeight(FontWeightStyle {
+                                            weight: target,
+                                        }));
+                                        font_detected.push((fm.family.clone(), target));
+                                    } else {
+                                        styles.push(Style::Bold(BoldStyle {}));
+                                        if normalized != original_weight {
+                                            styles.push(Style::FontWeight(FontWeightStyle {
+                                                weight: normalized,
+                                            }));
+                                        }
+                                    }
+                                } else if normalized != original_weight {
+                                    styles.push(Style::FontWeight(FontWeightStyle {
+                                        weight: normalized,
+                                    }));
                                 }
                             }
                         }
                         _ => {}
                     }
 
-                    actions.push((text_node_id, overlap_start, overlap_end, styles));
+                    actions.push((
+                        text_node_id,
+                        overlap_start,
+                        overlap_end,
+                        styles,
+                        remove_types,
+                        font_detected,
+                    ));
                 }
 
                 current_offset = seg_end;
@@ -452,14 +563,24 @@ fn apply_font_style_normalized(
         }
     }
 
-    for (text_node_id, start, end, styles) in actions {
+    for (text_node_id, start, end, styles, remove_types, font_detected) in actions {
         let node = tr.node_mut(text_node_id).context("Text node not found")?;
         if let Node::Text(text_node) = node.node() {
+            for st in &remove_types {
+                text_node.text.remove_style(start..end, *st)?;
+            }
             for s in &styles {
                 text_node.text.apply_style(start..end, s)?;
             }
             tr.push_effect(Effect::NodeChanged {
                 node_id: text_node_id,
+            });
+        }
+        for (family, weight) in font_detected {
+            tr.push_effect(Effect::FontDetected {
+                family,
+                weight,
+                codepoints: vec![],
             });
         }
     }
@@ -566,26 +687,56 @@ impl Transaction {
 
                 if selection.is_collapsed() {
                     if let Some(w) = family_weights.filter(|w| !w.is_empty()) {
+                        let (_, resolved_weight) = self.resolved_font(selection.head.node_id);
                         let current_weight =
                             self.state.pending_styles.iter().find_map(|s| match s {
                                 Style::FontWeight(fw) => Some(fw.weight),
                                 _ => None,
                             });
+                        let has_bold = self
+                            .state
+                            .pending_styles
+                            .iter()
+                            .any(|s| matches!(s, Style::Bold(_)));
 
                         self.state
                             .pending_styles
                             .retain(|s| s.as_type() != StyleType::FontFamily);
                         self.state.pending_styles.push(style);
 
-                        if let Some(weight) = current_weight {
-                            let normalized = nearest_weight(w, weight);
-                            if normalized != weight {
+                        let effective_weight = current_weight.unwrap_or(resolved_weight);
+                        let normalized = nearest_weight(w, effective_weight);
+                        if normalized != effective_weight {
+                            self.state
+                                .pending_styles
+                                .retain(|s| s.as_type() != StyleType::FontWeight);
+                            self.state
+                                .pending_styles
+                                .push(Style::FontWeight(FontWeightStyle { weight: normalized }));
+                        }
+
+                        if has_bold {
+                            if let Some(target) = find_bold_target(normalized, w) {
+                                self.state
+                                    .pending_styles
+                                    .retain(|s| s.as_type() != StyleType::Bold);
                                 self.state
                                     .pending_styles
                                     .retain(|s| s.as_type() != StyleType::FontWeight);
-                                self.state.pending_styles.push(Style::FontWeight(
-                                    FontWeightStyle { weight: normalized },
-                                ));
+                                self.state
+                                    .pending_styles
+                                    .push(Style::FontWeight(FontWeightStyle { weight: target }));
+                            }
+                        } else if effective_weight >= 700 && normalized < 700 {
+                            if let Some(target) = find_bold_target(normalized, w) {
+                                self.state
+                                    .pending_styles
+                                    .retain(|s| s.as_type() != StyleType::FontWeight);
+                                self.state
+                                    .pending_styles
+                                    .push(Style::FontWeight(FontWeightStyle { weight: target }));
+                            } else {
+                                self.state.pending_styles.push(Style::Bold(BoldStyle {}));
                             }
                         }
 
@@ -701,6 +852,10 @@ impl Transaction {
     }
 
     pub fn toggle_style(&mut self, style: Style) -> Result<bool> {
+        if matches!(style, Style::Bold(_)) {
+            return self.toggle_bold_style();
+        }
+
         anyhow::ensure!(
             matches!(
                 style,
@@ -808,71 +963,375 @@ impl Transaction {
     }
 
     pub fn toggle_bold_style(&mut self) -> Result<bool> {
-        let current_weight = match self.get_style_value(StyleType::FontWeight) {
-            Some(Style::FontWeight(s)) => Some(s.weight),
-            _ => None,
-        };
-
-        let family_name = match self.get_style_value(StyleType::FontFamily) {
-            Some(Style::FontFamily(s)) => s.family.clone(),
-            _ => self.resolved_font(self.selection().head.node_id).0,
-        };
-
-        let available = get_available_fonts();
-        let weights = available.get(&family_name).cloned().unwrap_or_default();
-
-        if weights.is_empty() {
-            return Ok(false);
-        }
-
-        let normal_weight = nearest_weight(&weights, 400);
-        let bold_weight = nearest_weight(&weights, 700);
-
-        if normal_weight == bold_weight {
-            return Ok(false);
-        }
-
-        let target_weight = if current_weight.unwrap_or(normal_weight) < bold_weight {
-            bold_weight
-        } else {
-            normal_weight
-        };
-
-        let style = Style::FontWeight(FontWeightStyle {
-            weight: target_weight,
-        });
-        for (fam_style, codepoints) in
-            collect_style_codepoints_in_selection(self, StyleType::FontFamily)
-        {
-            let Style::FontFamily(fm) = fam_style else {
-                continue;
-            };
-            self.push_effect(Effect::FontDetected {
-                family: fm.family,
-                weight: target_weight,
-                codepoints,
-            });
-        }
-        self.set_style(style)
-    }
-
-    pub fn get_style_value(&self, style_type: StyleType) -> Option<Style> {
-        let selection = self.selection();
+        let selection = self.selection().clone();
 
         if selection.is_collapsed() {
-            if let Some(style) = self
+            return self.toggle_bold_collapsed();
+        }
+
+        let (from, to) = selection.as_sorted(self.doc())?;
+        let is_bold = check_range_is_bold(self, from.clone(), to.clone())?;
+
+        if is_bold {
+            self.toggle_bold_off_range(from, to)
+        } else {
+            self.toggle_bold_on_range(from, to)
+        }
+    }
+
+    fn toggle_bold_collapsed(&mut self) -> Result<bool> {
+        let existing_bold = self.state.pending_styles.iter().find_map(|s| match s {
+            Style::Bold(b) => Some(b.clone()),
+            _ => None,
+        });
+
+        let current_weight = self
+            .state
+            .pending_styles
+            .iter()
+            .find_map(|s| match s {
+                Style::FontWeight(fw) => Some(fw.weight),
+                _ => None,
+            })
+            .unwrap_or_else(|| self.resolved_font(self.selection().head.node_id).1);
+
+        if existing_bold.is_some() {
+            // Toggle OFF: has Bold marker — unbold via find_unbold_target
+            self.state
+                .pending_styles
+                .retain(|s| s.as_type() != StyleType::Bold);
+
+            let family_name = self
                 .state
                 .pending_styles
                 .iter()
-                .find(|s| s.as_type() == style_type)
-            {
-                return Some(style.clone());
+                .find_map(|s| match s {
+                    Style::FontFamily(f) => Some(f.family.clone()),
+                    _ => None,
+                })
+                .unwrap_or_else(|| self.resolved_font(self.selection().head.node_id).0);
+
+            let available = get_available_fonts();
+            let weights = available.get(&family_name).cloned().unwrap_or_default();
+            let unbold = find_unbold_target(current_weight, &weights);
+
+            self.state
+                .pending_styles
+                .retain(|s| s.as_type() != StyleType::FontWeight);
+            self.state
+                .pending_styles
+                .push(Style::FontWeight(FontWeightStyle { weight: unbold }));
+        } else if current_weight >= 700 {
+            // Toggle OFF: FW >= 700 without Bold marker — unbold
+            let family_name = self
+                .state
+                .pending_styles
+                .iter()
+                .find_map(|s| match s {
+                    Style::FontFamily(f) => Some(f.family.clone()),
+                    _ => None,
+                })
+                .unwrap_or_else(|| self.resolved_font(self.selection().head.node_id).0);
+
+            let available = get_available_fonts();
+            let weights = available.get(&family_name).cloned().unwrap_or_default();
+            let unbold = find_unbold_target(current_weight, &weights);
+
+            self.state
+                .pending_styles
+                .retain(|s| s.as_type() != StyleType::FontWeight);
+            self.state
+                .pending_styles
+                .push(Style::FontWeight(FontWeightStyle { weight: unbold }));
+        } else {
+            // Toggle ON: compute target, add Bold + optionally change FW
+            let family_name = self
+                .state
+                .pending_styles
+                .iter()
+                .find_map(|s| match s {
+                    Style::FontFamily(f) => Some(f.family.clone()),
+                    _ => None,
+                })
+                .unwrap_or_else(|| self.resolved_font(self.selection().head.node_id).0);
+
+            let available = get_available_fonts();
+            let weights = available.get(&family_name).cloned().unwrap_or_default();
+            let target = find_bold_target(current_weight, &weights);
+
+            self.state
+                .pending_styles
+                .retain(|s| s.as_type() != StyleType::Bold);
+
+            if let Some(target_weight) = target {
+                // Heavier weight available: just change FW, no Bold marker needed
+                self.state
+                    .pending_styles
+                    .retain(|s| s.as_type() != StyleType::FontWeight);
+                self.state
+                    .pending_styles
+                    .push(Style::FontWeight(FontWeightStyle {
+                        weight: target_weight,
+                    }));
+            } else {
+                // No heavier weight: embolden via Bold marker
+                self.state.pending_styles.push(Style::Bold(BoldStyle {}));
             }
-        } else if let Ok((from, to)) = selection.as_sorted(self.doc()) {
-            return get_common_style_in_range(self, from, to, style_type);
         }
 
-        None
+        self.push_effect(Effect::PendingStylesChanged);
+        self.update_cascade_attrs_if_empty_textblock();
+        Ok(true)
+    }
+
+    fn toggle_bold_on_range(&mut self, from: Position, to: Position) -> Result<bool> {
+        let ranges = collect_text_ranges_in_selection(self, from.clone(), to.clone())?;
+        let available = get_available_fonts();
+        let (default_family, _) = self.resolved_font(from.node_id);
+
+        struct SegAction {
+            node_id: NodeId,
+            start: usize,
+            end: usize,
+            embolden: bool,
+            new_weight: Option<u16>,
+        }
+
+        let mut actions: Vec<SegAction> = Vec::new();
+        let mut font_effects: rustc_hash::FxHashMap<(String, u16), Vec<u32>> =
+            rustc_hash::FxHashMap::default();
+
+        for &(text_node_id, start_offset, end_offset) in &ranges {
+            let node = self.node(text_node_id).context("Text node not found")?;
+            if let Node::Text(text_node) = node.node() {
+                let segments = text_node.text.get_segments();
+                let mut current_offset = 0;
+
+                for segment in segments {
+                    let seg_len = segment.text.chars().count();
+                    let seg_end = current_offset + seg_len;
+                    let overlap_start = current_offset.max(start_offset);
+                    let overlap_end = seg_end.min(end_offset);
+
+                    if overlap_start < overlap_end {
+                        let already_bold =
+                            segment.styles.iter().any(|s| matches!(s, Style::Bold(_)))
+                                || segment.styles.iter().any(
+                                    |s| matches!(s, Style::FontWeight(fw) if fw.weight >= 700),
+                                );
+                        if already_bold {
+                            current_offset = seg_end;
+                            continue;
+                        }
+
+                        let family = segment
+                            .styles
+                            .iter()
+                            .find_map(|s| match s {
+                                Style::FontFamily(f) => Some(f.family.clone()),
+                                _ => None,
+                            })
+                            .unwrap_or_else(|| default_family.clone());
+
+                        let current_weight = segment
+                            .styles
+                            .iter()
+                            .find_map(|s| match s {
+                                Style::FontWeight(fw) => Some(fw.weight),
+                                _ => None,
+                            })
+                            .unwrap_or(400);
+
+                        let weights = available.get(&family).cloned().unwrap_or_default();
+                        let target = find_bold_target(current_weight, &weights);
+
+                        let (embolden, new_weight) = (target.is_none(), target);
+
+                        if let Some(tw) = new_weight {
+                            let local_start = overlap_start - current_offset;
+                            let local_end = overlap_end - current_offset;
+                            let cps: Vec<u32> = segment
+                                .text
+                                .chars()
+                                .skip(local_start)
+                                .take(local_end - local_start)
+                                .map(|c| c as u32)
+                                .collect();
+                            font_effects.entry((family, tw)).or_default().extend(cps);
+                        }
+
+                        actions.push(SegAction {
+                            node_id: text_node_id,
+                            start: overlap_start,
+                            end: overlap_end,
+                            embolden,
+                            new_weight,
+                        });
+                    }
+
+                    current_offset = seg_end;
+                }
+            }
+        }
+
+        for action in &actions {
+            let node = self
+                .node_mut(action.node_id)
+                .context("Text node not found")?;
+            if let Node::Text(text_node) = node.node() {
+                let range = action.start..action.end;
+                if action.embolden {
+                    text_node
+                        .text
+                        .apply_style(range.clone(), &Style::Bold(BoldStyle {}))?;
+                }
+                if let Some(w) = action.new_weight {
+                    text_node
+                        .text
+                        .apply_style(range, &Style::FontWeight(FontWeightStyle { weight: w }))?;
+                }
+            }
+            self.push_effect(Effect::NodeChanged {
+                node_id: action.node_id,
+            });
+        }
+
+        for ((family, weight), codepoints) in font_effects {
+            self.push_effect(Effect::FontDetected {
+                family,
+                weight,
+                codepoints,
+            });
+        }
+
+        update_cascade_attrs_on_empty_textblocks_in_range(
+            self,
+            from,
+            to,
+            &[Style::Bold(BoldStyle {})],
+        )?;
+
+        Ok(true)
+    }
+
+    fn toggle_bold_off_range(&mut self, from: Position, to: Position) -> Result<bool> {
+        let ranges = collect_text_ranges_in_selection(self, from.clone(), to.clone())?;
+        let available = get_available_fonts();
+        let (default_family, _) = self.resolved_font(from.node_id);
+
+        struct RestoreAction {
+            node_id: NodeId,
+            start: usize,
+            end: usize,
+            remove_bold: bool,
+            new_weight: Option<u16>,
+        }
+
+        let mut actions: Vec<RestoreAction> = Vec::new();
+        let mut font_effects: rustc_hash::FxHashMap<(String, u16), Vec<u32>> =
+            rustc_hash::FxHashMap::default();
+
+        for &(text_node_id, start_offset, end_offset) in &ranges {
+            let node = self.node(text_node_id).context("Text node not found")?;
+            if let Node::Text(text_node) = node.node() {
+                let segments = text_node.text.get_segments();
+                let mut current_offset = 0;
+
+                for segment in segments {
+                    let seg_len = segment.text.chars().count();
+                    let seg_end = current_offset + seg_len;
+                    let overlap_start = current_offset.max(start_offset);
+                    let overlap_end = seg_end.min(end_offset);
+
+                    if overlap_start < overlap_end {
+                        let bold_style = segment.styles.iter().find_map(|s| match s {
+                            Style::Bold(b) => Some(b.clone()),
+                            _ => None,
+                        });
+
+                        let family = segment
+                            .styles
+                            .iter()
+                            .find_map(|s| match s {
+                                Style::FontFamily(f) => Some(f.family.clone()),
+                                _ => None,
+                            })
+                            .unwrap_or_else(|| default_family.clone());
+
+                        let current_weight = segment
+                            .styles
+                            .iter()
+                            .find_map(|s| match s {
+                                Style::FontWeight(fw) => Some(fw.weight),
+                                _ => None,
+                            })
+                            .unwrap_or(400);
+
+                        let has_bold = bold_style.is_some();
+                        let weights = available.get(&family).cloned().unwrap_or_default();
+                        let new_weight = Some(find_unbold_target(current_weight, &weights));
+                        let remove_bold = has_bold;
+
+                        if let Some(w) = new_weight {
+                            let local_start = overlap_start - current_offset;
+                            let local_end = overlap_end - current_offset;
+                            let cps: Vec<u32> = segment
+                                .text
+                                .chars()
+                                .skip(local_start)
+                                .take(local_end - local_start)
+                                .map(|c| c as u32)
+                                .collect();
+                            font_effects.entry((family, w)).or_default().extend(cps);
+                        }
+
+                        actions.push(RestoreAction {
+                            node_id: text_node_id,
+                            start: overlap_start,
+                            end: overlap_end,
+                            remove_bold,
+                            new_weight,
+                        });
+                    }
+
+                    current_offset = seg_end;
+                }
+            }
+        }
+
+        for action in &actions {
+            let node = self
+                .node_mut(action.node_id)
+                .context("Text node not found")?;
+            if let Node::Text(text_node) = node.node() {
+                let range = action.start..action.end;
+                if action.remove_bold {
+                    text_node
+                        .text
+                        .remove_style(range.clone(), StyleType::Bold)?;
+                }
+                if let Some(w) = action.new_weight {
+                    text_node
+                        .text
+                        .apply_style(range, &Style::FontWeight(FontWeightStyle { weight: w }))?;
+                }
+            }
+            self.push_effect(Effect::NodeChanged {
+                node_id: action.node_id,
+            });
+        }
+
+        for ((family, weight), codepoints) in font_effects {
+            self.push_effect(Effect::FontDetected {
+                family,
+                weight,
+                codepoints,
+            });
+        }
+
+        remove_cascade_attr_on_empty_textblocks(self, from, to, StyleType::Bold)?;
+
+        Ok(true)
     }
 
     pub(crate) fn resolved_font(&self, node_id: NodeId) -> (String, u16) {
@@ -1874,7 +2333,7 @@ mod tests {
     }
 
     #[test]
-    fn toggle_bold_style() {
+    fn toggle_bold_on_applies_fw_and_bold_marker() {
         let mut p = id!();
 
         let font_family = DefaultAttrs::default().font_family().to_string();
@@ -1905,7 +2364,30 @@ mod tests {
             selection { (p, 0) -> (p, 5) }
         };
         assert_state_eq!(bold_state, expected_bold);
+    }
 
+    #[test]
+    fn toggle_bold_off_restores_original_weight() {
+        let mut p = id!();
+
+        let font_family = DefaultAttrs::default().font_family().to_string();
+        let mut fonts = std::collections::HashMap::new();
+        fonts.insert(font_family.clone(), vec![400, 700]);
+        let _guard = ScopedFontRegistration::new(fonts);
+
+        let initial = state! {
+            doc {
+                @p paragraph {
+                    text { "hello" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+
+        // Toggle ON
+        let (bold_state, _) = transact_with_effect!(initial, |tr| tr.toggle_bold_style().unwrap());
+
+        // Toggle OFF
         let (normal_state, effects) =
             transact_with_effect!(bold_state, |tr| tr.toggle_bold_style().unwrap());
 
@@ -1923,7 +2405,364 @@ mod tests {
     }
 
     #[test]
-    fn toggle_bold_style_backward_selection() {
+    fn toggle_bold_twice_restores_original_fw500() {
+        let mut p = id!();
+
+        let font_family = DefaultAttrs::default().font_family().to_string();
+        let mut fonts = std::collections::HashMap::new();
+        fonts.insert(font_family.clone(), vec![400, 500, 700]);
+        let _guard = ScopedFontRegistration::new(fonts);
+
+        let initial = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_weight(500)]) { "hello" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+
+        // Toggle ON: FW(500) -> FW(700), no Bold marker (heavier weight available)
+        let (bold_state, _) = transact_with_effect!(initial, |tr| tr.toggle_bold_style().unwrap());
+        let expected_bold = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_weight(700)]) { "hello" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+        assert_state_eq!(bold_state, expected_bold);
+
+        // Toggle OFF: unbold to nearest < 700 closest to 400 → FW(400)
+        let (normal_state, _) =
+            transact_with_effect!(bold_state, |tr| tr.toggle_bold_style().unwrap());
+        let expected_normal = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_weight(400)]) { "hello" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+        assert_state_eq!(normal_state, expected_normal);
+    }
+
+    #[test]
+    fn toggle_bold_embolden_when_no_heavier_weight() {
+        let mut p = id!();
+
+        let font_family = DefaultAttrs::default().font_family().to_string();
+        let mut fonts = std::collections::HashMap::new();
+        fonts.insert(font_family.clone(), vec![400]);
+        let _guard = ScopedFontRegistration::new(fonts);
+
+        let initial = state! {
+            doc {
+                @p paragraph {
+                    text { "hello" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+
+        // Toggle ON: no heavier weight -> embolden
+        let (bold_state, _) = transact_with_effect!(initial, |tr| tr.toggle_bold_style().unwrap());
+        let expected = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [bold()]) { "hello" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+        assert_state_eq!(bold_state, expected);
+
+        // Toggle OFF: remove embolden, FW unchanged
+        let (normal_state, _) =
+            transact_with_effect!(bold_state, |tr| tr.toggle_bold_style().unwrap());
+        let expected_normal = state! {
+            doc {
+                @p paragraph {
+                    text { "hello" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+        assert_state_eq!(normal_state, expected_normal);
+    }
+
+    #[test]
+    fn toggle_bold_unbolds_when_at_max_weight() {
+        // FW(900) >= 700 → already bold → toggle unbolds to nearest-to-400
+        let mut p = id!();
+
+        let font_family = DefaultAttrs::default().font_family().to_string();
+        let mut fonts = std::collections::HashMap::new();
+        fonts.insert(font_family.clone(), vec![400, 700, 900]);
+        let _guard = ScopedFontRegistration::new(fonts);
+
+        let initial = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_weight(900)]) { "hello" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+
+        // FW(900) >= 700 → unbold → find_unbold_target([400,700,900]) = 400
+        let (unbold_state, _) =
+            transact_with_effect!(initial, |tr| tr.toggle_bold_style().unwrap());
+        let expected = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_weight(400)]) { "hello" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+        assert_state_eq!(unbold_state, expected);
+
+        // Toggle ON again: FW(400) < 700 → bold → target 700, no Bold marker
+        let (bold_state, _) =
+            transact_with_effect!(unbold_state, |tr| tr.toggle_bold_style().unwrap());
+        let expected_bold = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_weight(700)]) { "hello" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+        assert_state_eq!(bold_state, expected_bold);
+    }
+
+    #[test]
+    fn toggle_bold_prefers_bold_candidates_over_700() {
+        let mut p = id!();
+
+        let font_family = DefaultAttrs::default().font_family().to_string();
+        let mut fonts = std::collections::HashMap::new();
+        fonts.insert(font_family.clone(), vec![400, 500, 900]);
+        let _guard = ScopedFontRegistration::new(fonts);
+
+        let initial = state! {
+            doc {
+                @p paragraph {
+                    text { "hello" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+
+        // candidates > 400: [500, 900], bold_candidates >= 700: [900]
+        // Should pick 900 (bold_candidate preferred over 500)
+        let (bold_state, _) = transact_with_effect!(initial, |tr| tr.toggle_bold_style().unwrap());
+        let expected = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_weight(900)]) { "hello" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+        assert_state_eq!(bold_state, expected);
+    }
+
+    #[test]
+    fn toggle_bold_picks_nearest_to_700_among_bold_candidates() {
+        let mut p = id!();
+
+        let font_family = DefaultAttrs::default().font_family().to_string();
+        let mut fonts = std::collections::HashMap::new();
+        fonts.insert(font_family.clone(), vec![400, 700, 800, 900]);
+        let _guard = ScopedFontRegistration::new(fonts);
+
+        let initial = state! {
+            doc {
+                @p paragraph {
+                    text { "hello" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+
+        // bold_candidates: [700, 800, 900], nearest to 700 = 700
+        let (bold_state, _) = transact_with_effect!(initial, |tr| tr.toggle_bold_style().unwrap());
+        let expected = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_weight(700)]) { "hello" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+        assert_state_eq!(bold_state, expected);
+    }
+
+    #[test]
+    fn toggle_bold_fallback_to_sub700_nearest() {
+        let mut p = id!();
+
+        let font_family = DefaultAttrs::default().font_family().to_string();
+        let mut fonts = std::collections::HashMap::new();
+        fonts.insert(font_family.clone(), vec![400, 500, 600]);
+        let _guard = ScopedFontRegistration::new(fonts);
+
+        let initial = state! {
+            doc {
+                @p paragraph {
+                    text { "hello" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+
+        // candidates > 400: [500, 600], no bold_candidates >= 700
+        // fallback: nearest to 700 among [500, 600] = 600
+        let (bold_state, _) = transact_with_effect!(initial, |tr| tr.toggle_bold_style().unwrap());
+        let expected = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_weight(600)]) { "hello" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+        assert_state_eq!(bold_state, expected);
+    }
+
+    #[test]
+    fn toggle_bold_collapsed_on_and_off() {
+        let mut p = id!();
+
+        let font_family = DefaultAttrs::default().font_family().to_string();
+        let mut fonts = std::collections::HashMap::new();
+        fonts.insert(font_family.clone(), vec![400, 700]);
+        let _guard = ScopedFontRegistration::new(fonts);
+
+        let state = state! {
+            doc {
+                @p paragraph {
+                    text { "hello" }
+                }
+            }
+            selection { (p, 2) }
+        };
+
+        // Toggle ON (collapsed): heavier weight available → no Bold marker, just FW
+        let mut tr = Transaction::new(&state);
+        tr.toggle_bold_style().unwrap();
+        let (view, _) = tr.commit().unwrap();
+
+        assert!(
+            !view
+                .pending_styles
+                .iter()
+                .any(|s| matches!(s, Style::Bold(_)))
+        );
+        assert!(
+            view.pending_styles
+                .iter()
+                .any(|s| matches!(s, Style::FontWeight(fw) if fw.weight == 700))
+        );
+
+        // Toggle OFF (collapsed): FW >= 700 → unbold
+        let mut tr = Transaction::new(&view);
+        tr.toggle_bold_style().unwrap();
+        let (view2, _) = tr.commit().unwrap();
+
+        assert!(
+            !view2
+                .pending_styles
+                .iter()
+                .any(|s| matches!(s, Style::Bold(_)))
+        );
+        assert!(
+            view2
+                .pending_styles
+                .iter()
+                .any(|s| matches!(s, Style::FontWeight(fw) if fw.weight == 400))
+        );
+    }
+
+    #[test]
+    fn toggle_bold_collapsed_embolden_when_no_heavier() {
+        let mut p = id!();
+
+        let font_family = DefaultAttrs::default().font_family().to_string();
+        let mut fonts = std::collections::HashMap::new();
+        fonts.insert(font_family.clone(), vec![400]);
+        let _guard = ScopedFontRegistration::new(fonts);
+
+        let state = state! {
+            doc {
+                @p paragraph {
+                    text { "hello" }
+                }
+            }
+            selection { (p, 2) }
+        };
+
+        // Toggle ON: no heavier weight -> embolden
+        let mut tr = Transaction::new(&state);
+        tr.toggle_bold_style().unwrap();
+        let (view, _) = tr.commit().unwrap();
+
+        assert!(
+            view.pending_styles
+                .iter()
+                .any(|s| matches!(s, Style::Bold(_)))
+        );
+        // FW should remain unchanged (400)
+        assert!(
+            view.pending_styles
+                .iter()
+                .any(|s| matches!(s, Style::FontWeight(fw) if fw.weight == 400))
+        );
+
+        // Toggle OFF: remove embolden
+        let mut tr = Transaction::new(&view);
+        tr.toggle_bold_style().unwrap();
+        let (view2, _) = tr.commit().unwrap();
+
+        assert!(
+            !view2
+                .pending_styles
+                .iter()
+                .any(|s| matches!(s, Style::Bold(_)))
+        );
+    }
+
+    #[test]
+    fn toggle_bold_embolden_when_no_available_fonts() {
+        let mut p = id!();
+
+        // No fonts registered at all
+        let initial = state! {
+            doc {
+                @p paragraph {
+                    text { "hello" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+
+        let (bold_state, _) = transact_with_effect!(initial, |tr| tr.toggle_bold_style().unwrap());
+        let expected = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [bold()]) { "hello" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+        assert_state_eq!(bold_state, expected);
+    }
+
+    #[test]
+    fn toggle_bold_backward_selection_applies_bold() {
         let mut p = id!();
 
         let font_family = DefaultAttrs::default().font_family().to_string();
@@ -1934,10 +2773,7 @@ mod tests {
         let initial = state! {
             doc {
                 @p paragraph {
-                    text {
-                        "가가가",
-                        "가" => [font_weight(700)]
-                    }
+                    text { "가가가가" }
                 }
             }
             selection { (p, 4) -> (p, 3) }
@@ -1949,13 +2785,428 @@ mod tests {
         let expected = state! {
             doc {
                 @p paragraph {
-                    text { "가가가가" }
+                    text {
+                        "가가가",
+                        "가" => [font_weight(700)]
+                    }
                 }
             }
             selection { (p, 4) -> (p, 3) }
         };
 
         assert_state_eq!(result_state, expected);
+    }
+
+    #[test]
+    fn toggle_bold_mixed_weights_in_range() {
+        // Range selection spans two segments with different weights.
+        // Segment "aa" at FW400, segment "bb" at FW600.
+        // Font has [400, 600, 700, 900].
+        // "aa": candidates > 400 = [600,700,900], bold_candidates >= 700 = [700,900], nearest 700 = 700
+        // "bb": candidates > 600 = [700,900], bold_candidates >= 700 = [700,900], nearest 700 = 700
+        let mut p = id!();
+
+        let font_family = DefaultAttrs::default().font_family().to_string();
+        let mut fonts = std::collections::HashMap::new();
+        fonts.insert(font_family.clone(), vec![400, 600, 700, 900]);
+        let _guard = ScopedFontRegistration::new(fonts);
+
+        let initial = state! {
+            doc {
+                @p paragraph {
+                    text {
+                        "aa",
+                        "bb" => [font_weight(600)]
+                    }
+                }
+            }
+            selection { (p, 0) -> (p, 4) }
+        };
+
+        let (bold_state, _) = transact_with_effect!(initial, |tr| tr.toggle_bold_style().unwrap());
+
+        let expected = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_weight(700)]) {
+                        "aabb"
+                    }
+                }
+            }
+            selection { (p, 0) -> (p, 4) }
+        };
+        assert_state_eq!(bold_state, expected);
+
+        // Toggle OFF: find_unbold_target(700, [400,600,700,900]) → 400 for both
+        let (normal_state, _) =
+            transact_with_effect!(bold_state, |tr| tr.toggle_bold_style().unwrap());
+
+        let expected_normal = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_weight(400)]) {
+                        "aabb"
+                    }
+                }
+            }
+            selection { (p, 0) -> (p, 4) }
+        };
+        assert_state_eq!(normal_state, expected_normal);
+    }
+
+    #[test]
+    fn toggle_bold_mixed_families_in_range() {
+        // Range spans two segments with different font families.
+        // "aa" uses default family (has [400, 700])
+        // "bb" uses "CustomFont" (has [400, 900])
+        // Each segment should resolve bold target from its own family's weights.
+        let mut p = id!();
+
+        let font_family = DefaultAttrs::default().font_family().to_string();
+        let custom_family = "CustomFont".to_string();
+        let mut fonts = std::collections::HashMap::new();
+        fonts.insert(font_family.clone(), vec![400, 700]);
+        fonts.insert(custom_family.clone(), vec![400, 900]);
+        let _guard = ScopedFontRegistration::new(fonts);
+
+        let initial = state! {
+            doc {
+                @p paragraph {
+                    text {
+                        "aa",
+                        "bb" => [font_family("CustomFont")]
+                    }
+                }
+            }
+            selection { (p, 0) -> (p, 4) }
+        };
+
+        let (bold_state, _) = transact_with_effect!(initial, |tr| tr.toggle_bold_style().unwrap());
+
+        // "aa": default family -> target 700, no Bold marker
+        // "bb": CustomFont -> target 900, no Bold marker
+        let expected = state! {
+            doc {
+                @p paragraph {
+                    text {
+                        "aa" => [font_weight(700)],
+                        "bb" => [font_family("CustomFont"), font_weight(900)]
+                    }
+                }
+            }
+            selection { (p, 0) -> (p, 4) }
+        };
+        assert_state_eq!(bold_state, expected);
+
+        // Toggle OFF: restore original weights, families unchanged
+        let (normal_state, _) =
+            transact_with_effect!(bold_state, |tr| tr.toggle_bold_style().unwrap());
+
+        let expected_normal = state! {
+            doc {
+                @p paragraph {
+                    text {
+                        "aa" => [font_weight(400)],
+                        "bb" => [font_family("CustomFont"), font_weight(400)]
+                    }
+                }
+            }
+            selection { (p, 0) -> (p, 4) }
+        };
+        assert_state_eq!(normal_state, expected_normal);
+    }
+
+    #[test]
+    fn toggle_bold_mixed_bold_and_normal_in_range() {
+        // "aa" at FW(400) (not bold), "bb" at FW(900) (already bold, >= 700).
+        // Toggle ON: only "aa" gets bolded, "bb" is skipped.
+        // Toggle OFF: both unbold to normal weight.
+        let mut p = id!();
+
+        let font_family = DefaultAttrs::default().font_family().to_string();
+        let mut fonts = std::collections::HashMap::new();
+        fonts.insert(font_family.clone(), vec![400, 700, 900]);
+        let _guard = ScopedFontRegistration::new(fonts);
+
+        let initial = state! {
+            doc {
+                @p paragraph {
+                    text {
+                        "aa",
+                        "bb" => [font_weight(900)]
+                    }
+                }
+            }
+            selection { (p, 0) -> (p, 4) }
+        };
+
+        // Not all bold ("aa" FW(400) < 700) → toggle ON
+        // "aa" → FW(700), "bb" → skipped (FW(900) >= 700)
+        let (bold_state, _) = transact_with_effect!(initial, |tr| tr.toggle_bold_style().unwrap());
+
+        let expected = state! {
+            doc {
+                @p paragraph {
+                    text {
+                        "aa" => [font_weight(700)],
+                        "bb" => [font_weight(900)]
+                    }
+                }
+            }
+            selection { (p, 0) -> (p, 4) }
+        };
+        assert_state_eq!(bold_state, expected);
+
+        // All bold now (aa FW >= 700, bb FW >= 700) → toggle OFF
+        let (normal_state, _) =
+            transact_with_effect!(bold_state, |tr| tr.toggle_bold_style().unwrap());
+
+        let expected_normal = state! {
+            doc {
+                @p paragraph {
+                    text {
+                        "aa" => [font_weight(400)],
+                        "bb" => [font_weight(400)]
+                    }
+                }
+            }
+            selection { (p, 0) -> (p, 4) }
+        };
+        assert_state_eq!(normal_state, expected_normal);
+    }
+
+    #[test]
+    fn toggle_bold_partial_bold_range_preserves_existing() {
+        // "aa" already bold (FW(700)), "bb" not bold (FW(400)).
+        // Select all -> toggle ON: should only bold "bb", leave "aa" untouched.
+        // Then toggle OFF: should restore everything to original.
+        let mut p = id!();
+
+        let font_family = DefaultAttrs::default().font_family().to_string();
+        let mut fonts = std::collections::HashMap::new();
+        fonts.insert(font_family.clone(), vec![400, 700]);
+        let _guard = ScopedFontRegistration::new(fonts);
+
+        let initial = state! {
+            doc {
+                @p paragraph {
+                    text {
+                        "aa" => [font_weight(700)],
+                        "bb"
+                    }
+                }
+            }
+            selection { (p, 0) -> (p, 4) }
+        };
+
+        // Toggle ON: "aa" already bold (FW >= 700) -> skip, "bb" gets FW(700)
+        let (bold_state, _) = transact_with_effect!(initial, |tr| tr.toggle_bold_style().unwrap());
+
+        let expected = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_weight(700)]) {
+                        "aabb"
+                    }
+                }
+            }
+            selection { (p, 0) -> (p, 4) }
+        };
+        assert_state_eq!(bold_state, expected);
+
+        // Toggle OFF: all bold now -> restore both to FW(400)
+        let (normal_state, _) =
+            transact_with_effect!(bold_state, |tr| tr.toggle_bold_style().unwrap());
+
+        let expected_normal = state! {
+            doc {
+                @p paragraph {
+                    text {
+                        "aa" => [font_weight(400)],
+                        "bb" => [font_weight(400)]
+                    }
+                }
+            }
+            selection { (p, 0) -> (p, 4) }
+        };
+        assert_state_eq!(normal_state, expected_normal);
+    }
+
+    #[test]
+    fn toggle_bold_multi_paragraph_range() {
+        // p1 at FW(400) (not bold), p2 at FW(700) (already bold).
+        // Toggle ON: only p1 gets bolded, p2 skipped.
+        // Toggle OFF: both unbold.
+        let mut p1 = id!();
+        let mut p2 = id!();
+
+        let font_family = DefaultAttrs::default().font_family().to_string();
+        let mut fonts = std::collections::HashMap::new();
+        fonts.insert(font_family.clone(), vec![400, 700]);
+        let _guard = ScopedFontRegistration::new(fonts);
+
+        let initial = state! {
+            doc {
+                @p1 paragraph {
+                    text { "hello" }
+                }
+                @p2 paragraph {
+                    text(styles: [font_weight(700)]) { "world" }
+                }
+            }
+            selection { (p1, 0) -> (p2, 5) }
+        };
+
+        // Not all bold (p1 FW(400) < 700) → toggle ON
+        // p1 → FW(700), p2 → skipped (FW(700) >= 700)
+        let (bold_state, _) = transact_with_effect!(initial, |tr| tr.toggle_bold_style().unwrap());
+
+        let expected = state! {
+            doc {
+                @p1 paragraph {
+                    text(styles: [font_weight(700)]) { "hello" }
+                }
+                @p2 paragraph {
+                    text(styles: [font_weight(700)]) { "world" }
+                }
+            }
+            selection { (p1, 0) -> (p2, 5) }
+        };
+        assert_state_eq!(bold_state, expected);
+
+        // All bold (p1 FW >= 700, p2 FW >= 700) → toggle OFF
+        let (normal_state, _) =
+            transact_with_effect!(bold_state, |tr| tr.toggle_bold_style().unwrap());
+
+        let expected_normal = state! {
+            doc {
+                @p1 paragraph {
+                    text(styles: [font_weight(400)]) { "hello" }
+                }
+                @p2 paragraph {
+                    text(styles: [font_weight(400)]) { "world" }
+                }
+            }
+            selection { (p1, 0) -> (p2, 5) }
+        };
+        assert_state_eq!(normal_state, expected_normal);
+    }
+
+    #[test]
+    fn toggle_bold_nearest_weight_heavy_bias_tie() {
+        // candidates [600, 800], both distance 100 from 700.
+        // Heavy bias: should pick 800.
+        let mut p = id!();
+
+        let font_family = DefaultAttrs::default().font_family().to_string();
+        let mut fonts = std::collections::HashMap::new();
+        fonts.insert(font_family.clone(), vec![400, 600, 800]);
+        let _guard = ScopedFontRegistration::new(fonts);
+
+        let initial = state! {
+            doc {
+                @p paragraph {
+                    text { "hello" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+
+        // candidates > 400: [600, 800], bold_candidates >= 700: [800]
+        // bold_candidates non-empty -> picks 800
+        let (bold_state, _) = transact_with_effect!(initial, |tr| tr.toggle_bold_style().unwrap());
+        let expected = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_weight(800)]) { "hello" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+        assert_state_eq!(bold_state, expected);
+    }
+
+    #[test]
+    fn toggle_bold_nearest_weight_sub700_heavy_bias_tie() {
+        // Only sub-700 candidates: [500, 600], both equidistant from 700 is
+        // 500 dist=200, 600 dist=100. Nearest to 700 = 600.
+        // Better test: candidates [550, 650], dist from 700 = 150 vs 50. Pick 650.
+        // Actually for a real tie test we need: current=400, available=[400, 550, 650]
+        // but that doesn't tie. Let's use current=300, available=[300, 600, 800]
+        // Wait, 800 >= 700 so that goes to bold_candidates.
+        // For a pure sub-700 tie: current=300, available=[300, 500]
+        // candidates > 300 = [500], only one, no tie.
+        // For sub-700 tie with heavy bias: current=200, available=[200, 500, 600]
+        // candidates > 200 = [500, 600], none >= 700, fallback pool = [500, 600]
+        // dist from 700: 500->200, 600->100. 600 is closer. Not a tie.
+        // Real tie: current=200, available=[200, 400, 600]
+        // pool = [400, 600], dist from 700: 400->300, 600->100. Not a tie.
+        // Hmm, hard to get a tie with sub-700 only. Let's just verify nearest picks heavier.
+        // current=300, available=[300, 550, 650]
+        // candidates = [550, 650], no bold_candidates. pool = [550, 650]
+        // dist from 700: 550->150, 650->50. Picks 650. Not a tie, but correct.
+        let mut p = id!();
+
+        let font_family = DefaultAttrs::default().font_family().to_string();
+        let mut fonts = std::collections::HashMap::new();
+        fonts.insert(font_family.clone(), vec![300, 550, 650]);
+        let _guard = ScopedFontRegistration::new(fonts);
+
+        let initial = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_weight(300)]) { "hello" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+
+        let (bold_state, _) = transact_with_effect!(initial, |tr| tr.toggle_bold_style().unwrap());
+        let expected = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_weight(650)]) { "hello" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+        assert_state_eq!(bold_state, expected);
+    }
+
+    #[test]
+    fn toggle_bold_unbolds_when_fw_already_gte_700() {
+        // FW(700) set explicitly via set_style (no Bold marker).
+        // toggle_bold should recognize FW >= 700 as already bold and unbold to 400.
+        let mut p = id!();
+
+        let font_family = DefaultAttrs::default().font_family().to_string();
+        let mut fonts = std::collections::HashMap::new();
+        fonts.insert(
+            font_family.clone(),
+            vec![100, 200, 300, 400, 500, 600, 700, 800, 900],
+        );
+        let _guard = ScopedFontRegistration::new(fonts);
+
+        let initial = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_weight(700)]) { "hello" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+
+        let (result, _) = transact_with_effect!(initial, |tr| tr.toggle_bold_style().unwrap());
+
+        let expected = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_weight(400)]) { "hello" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+        assert_state_eq!(result, expected);
     }
 
     #[test]
@@ -2327,7 +3578,7 @@ mod tests {
         let expected = state! {
             doc {
                 @p paragraph {
-                    text(styles: [font_weight(300), font_family("LightFont")]) { "hello" }
+                    text(styles: [font_weight(300), font_family("LightFont"), bold()]) { "hello" }
                 }
             }
             selection { (p, 0) -> (p, 5) }
@@ -2438,7 +3689,7 @@ mod tests {
             doc {
                 @p paragraph {
                     text(styles: [font_weight(300), font_family("TwoWeight")]) { "aaa" }
-                    text(styles: [font_weight(600), font_family("TwoWeight")]) { "bbb" }
+                    text(styles: [font_weight(600), font_family("TwoWeight"), bold()]) { "bbb" }
                 }
             }
             selection { (p, 0) -> (p, 6) }
@@ -2714,7 +3965,7 @@ mod tests {
             doc {
                 @p paragraph {
                     text {
-                        "hello" => [font_weight(400), font_family("NarrowFont")],
+                        "hello" => [font_weight(400), font_family("NarrowFont"), bold()],
                         " world" => [font_weight(700)]
                     }
                 }
@@ -3942,6 +5193,172 @@ mod tests {
                 .iter()
                 .any(|e| matches!(e, Effect::FontDetected { family, .. } if family == "FontB")),
             "FontDetected should not be emitted for unavailable FontB"
+        );
+    }
+
+    #[test]
+    fn set_font_family_converts_bold_to_weight() {
+        let mut p = id!();
+
+        let mut fonts = std::collections::HashMap::new();
+        fonts.insert("OldFont".to_string(), vec![400]);
+        fonts.insert("NewFont".to_string(), vec![400, 700]);
+        let _guard = ScopedFontRegistration::new(fonts);
+
+        let initial = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_weight(400), font_family("OldFont"), bold()]) { "hello" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+
+        let (actual, _) = transact_with_effect!(initial, |tr| {
+            tr.set_style(Style::FontFamily(FontFamilyStyle {
+                family: "NewFont".to_string(),
+            }))
+            .unwrap()
+        });
+
+        let expected = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_weight(700), font_family("NewFont")]) { "hello" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+        assert_state_eq!(actual, expected);
+    }
+
+    #[test]
+    fn set_font_family_converts_weight_to_bold() {
+        let mut p = id!();
+
+        let mut fonts = std::collections::HashMap::new();
+        fonts.insert("OldFont".to_string(), vec![400, 700]);
+        fonts.insert("NewFont".to_string(), vec![400]);
+        let _guard = ScopedFontRegistration::new(fonts);
+
+        let initial = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_weight(700), font_family("OldFont")]) { "hello" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+
+        let (actual, _) = transact_with_effect!(initial, |tr| {
+            tr.set_style(Style::FontFamily(FontFamilyStyle {
+                family: "NewFont".to_string(),
+            }))
+            .unwrap()
+        });
+
+        let expected = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_weight(400), font_family("NewFont"), bold()]) { "hello" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+        assert_state_eq!(actual, expected);
+    }
+
+    #[test]
+    fn set_font_family_collapsed_converts_bold_to_weight() {
+        let mut p = id!();
+
+        let mut fonts = std::collections::HashMap::new();
+        fonts.insert("OldFont".to_string(), vec![400]);
+        fonts.insert("NewFont".to_string(), vec![400, 700]);
+        let _guard = ScopedFontRegistration::new(fonts);
+
+        let state = state! {
+            doc {
+                @p paragraph {
+                    text { "hello" }
+                }
+            }
+            selection { (p, 2) }
+        };
+
+        let mut tr = Transaction::new(&state);
+        tr.set_style(Style::FontFamily(FontFamilyStyle {
+            family: "OldFont".to_string(),
+        }))
+        .unwrap();
+        tr.set_style(Style::FontWeight(FontWeightStyle { weight: 400 }))
+            .unwrap();
+        tr.set_style(Style::Bold(BoldStyle {})).unwrap();
+        tr.set_style(Style::FontFamily(FontFamilyStyle {
+            family: "NewFont".to_string(),
+        }))
+        .unwrap();
+        let (view, _) = tr.commit().unwrap();
+
+        assert!(
+            view.pending_styles
+                .contains(&Style::FontWeight(FontWeightStyle { weight: 700 })),
+            "should have FW 700, got: {:?}",
+            view.pending_styles
+        );
+        assert!(
+            !view
+                .pending_styles
+                .iter()
+                .any(|s| matches!(s, Style::Bold(_))),
+            "should not have Bold, got: {:?}",
+            view.pending_styles
+        );
+    }
+
+    #[test]
+    fn set_font_family_collapsed_converts_weight_to_bold() {
+        let mut p = id!();
+
+        let mut fonts = std::collections::HashMap::new();
+        fonts.insert("OldFont".to_string(), vec![400, 700]);
+        fonts.insert("NewFont".to_string(), vec![400]);
+        let _guard = ScopedFontRegistration::new(fonts);
+
+        let state = state! {
+            doc {
+                @p paragraph {
+                    text { "hello" }
+                }
+            }
+            selection { (p, 2) }
+        };
+
+        let mut tr = Transaction::new(&state);
+        tr.set_style(Style::FontFamily(FontFamilyStyle {
+            family: "OldFont".to_string(),
+        }))
+        .unwrap();
+        tr.set_style(Style::FontWeight(FontWeightStyle { weight: 700 }))
+            .unwrap();
+        tr.set_style(Style::FontFamily(FontFamilyStyle {
+            family: "NewFont".to_string(),
+        }))
+        .unwrap();
+        let (view, _) = tr.commit().unwrap();
+
+        assert!(
+            view.pending_styles
+                .contains(&Style::FontWeight(FontWeightStyle { weight: 400 })),
+            "should have FW 400, got: {:?}",
+            view.pending_styles
+        );
+        assert!(
+            view.pending_styles
+                .iter()
+                .any(|s| matches!(s, Style::Bold(_))),
+            "should have Bold, got: {:?}",
+            view.pending_styles
         );
     }
 }

@@ -1,4 +1,5 @@
 mod background_color;
+mod bold;
 mod font_family;
 mod font_size;
 mod font_weight;
@@ -9,6 +10,7 @@ mod text_color;
 mod underline;
 
 pub use background_color::*;
+pub use bold::*;
 pub use font_family::*;
 pub use font_size::*;
 pub use font_weight::*;

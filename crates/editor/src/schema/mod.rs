@@ -77,6 +77,7 @@ impl Default for Schema {
                 content: content_expr!([((Text | HardBreak)*), (PageBreak?)]),
                 styles: Some(&[
                     StyleType::BackgroundColor,
+                    StyleType::Bold,
                     StyleType::FontFamily,
                     StyleType::FontSize,
                     StyleType::FontWeight,
@@ -270,6 +271,12 @@ impl Default for Schema {
         );
         schema.add_style(
             StyleType::FontWeight,
+            StyleSpec {
+                expand: Expand::After,
+            },
+        );
+        schema.add_style(
+            StyleType::Bold,
             StyleSpec {
                 expand: Expand::After,
             },
