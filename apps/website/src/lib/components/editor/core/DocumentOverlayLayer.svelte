@@ -59,7 +59,6 @@
       position: 'absolute',
       inset: '0',
       pointerEvents: 'none',
-      zIndex: '2',
     })}
   >
     {#key layoutRefreshVersion}
