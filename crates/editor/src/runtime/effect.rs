@@ -56,14 +56,14 @@ impl Effect {
             Effect::FullLayoutInvalidation => 6,
             Effect::LayoutChanged => 7,
             Effect::PreeditChanged { .. } => 8,
-            Effect::FontDetected { .. } => 9,
-            Effect::ExternalElementChanged => 10,
-            Effect::PointerStyleChanged { .. } => 11,
-            Effect::DropTargetChanged { .. } => 12,
-            Effect::StructureChanged => 13,
-            Effect::ExitedDocumentStart => 14,
-            Effect::TextReplacementApplied { .. } => 15,
-            Effect::HtmlPasted { .. } => 16,
+            Effect::HtmlPasted { .. } => 9,
+            Effect::FontDetected { .. } => 10,
+            Effect::ExternalElementChanged => 11,
+            Effect::PointerStyleChanged { .. } => 12,
+            Effect::DropTargetChanged { .. } => 13,
+            Effect::StructureChanged => 14,
+            Effect::ExitedDocumentStart => 15,
+            Effect::TextReplacementApplied { .. } => 16,
         }
     }
 }

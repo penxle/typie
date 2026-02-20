@@ -27,7 +27,8 @@ use crate::render::{DragImageResult, RenderInfo, RenderResult, Renderer};
 use crate::state::ancestor_helpers::lowest_common_ancestor_id;
 use crate::state::selection_helpers::{
     SelectionAttributes, build_selection_decorations, collect_block_attrs_at,
-    collect_selected_block_ids, compute_selection_attrs, compute_structure_selection,
+    collect_blocks_in_range, collect_selected_block_ids, compute_selection_attrs,
+    compute_structure_selection,
 };
 use crate::state::{
     Position, Preedit, Selection, find_child_at_offset, find_text_at_offset, position_in_selection,
@@ -1507,6 +1508,11 @@ impl Runtime {
                     text,
                     styles,
                 } => {
+                    if let Ok((from, to)) = selection.as_sorted(self.doc())
+                        && let Ok(node_ids) = collect_blocks_in_range(self.doc(), from, to)
+                    {
+                        font_affected_nodes.extend(node_ids);
+                    }
                     self.repaste_text = Some((selection, text, styles));
                     self.pending.repaste = true;
                 }
@@ -1746,6 +1752,50 @@ mod tests {
             decor.end_offset(),
             1,
             "empty paragraph should render minimal range"
+        );
+    }
+
+    #[test]
+    fn html_pasted_collects_font_affected_nodes_from_anchor_to_head_range() {
+        let mut p1 = id!();
+        let mut p2 = id!();
+        let mut runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p1 paragraph { text { "A" } }
+                @p2 paragraph { text { "B" } }
+            }
+            selection { (p1, 0) }
+        };
+
+        let selection = Selection::new(
+            Position::new(p1, 0, Affinity::Downstream),
+            Position::new(p2, 1, Affinity::Upstream),
+        );
+
+        runtime.process_effects(vec![
+            Effect::FontDetected {
+                family: "PasteFont".to_string(),
+                weight: 400,
+                codepoints: vec!['A' as u32],
+            },
+            Effect::HtmlPasted {
+                selection,
+                text: "A\nB".to_string(),
+                styles: Vec::new(),
+            },
+        ]);
+
+        let nodes = runtime
+            .missing_font_nodes
+            .get(&(String::from("PasteFont"), 400))
+            .expect("pasted range should be tracked for missing font");
+
+        assert!(nodes.contains(&p1));
+        assert!(nodes.contains(&p2));
+        assert!(
+            !nodes.contains(&NodeId::ROOT),
+            "pasted range should avoid root fallback"
         );
     }
 
