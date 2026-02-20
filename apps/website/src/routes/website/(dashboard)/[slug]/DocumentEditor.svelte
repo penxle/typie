@@ -25,6 +25,7 @@
   import { getEditorContext } from '$lib/editor/context.svelte';
   import { Editor } from '$lib/editor/editor.svelte';
   import { IndexeddbPersistence } from '$lib/editor/persistence';
+  import { wasm } from '$lib/wasm';
   import DocumentMenu from '../@context-menu/DocumentMenu.svelte';
   import FontUploadModal from '../FontUploadModal.svelte';
   import PlanUpgradeModal from '../PlanUpgradeModal.svelte';
@@ -234,6 +235,12 @@
 
   $effect(() => {
     if (fontFamilies.length > 0) {
+      const availableFonts = Object.fromEntries(
+        fontFamilies
+          .filter((f) => f.state === 'ACTIVE')
+          .map((f) => [f.familyName, f.fonts.filter((font) => font.state === 'ACTIVE').map((font) => font.weight)]),
+      );
+      wasm.setAvailableFonts(availableFonts);
       editor.fontFamilies = fontFamilies;
     }
   });
