@@ -60,7 +60,7 @@ impl Transaction {
 mod tests {
     use super::*;
     use crate::layout::{Element, LayoutNode};
-    use crate::model::{Node, NodeId};
+    use crate::model::{Node, NodeId, TableBorderStyle};
     use crate::runtime::Message;
     use crate::runtime::slate::DIRTY_RENDER_REQUIRED;
     use crate::types::Affinity;
@@ -1235,6 +1235,229 @@ mod tests {
         let _ = transact!(initial, |tr| {
             tr.paste_fragment(fragment, None).unwrap();
         });
+    }
+
+    #[test]
+    fn paste_open_fold_content_fragment_with_table() {
+        let mut target = id!();
+
+        let initial = state! {
+            doc {
+                fold {
+                    fold_title {}
+                    fold_content {
+                        @target paragraph {}
+                    }
+                }
+            }
+            selection { (target, 0) }
+        };
+
+        let mut source_para = id!();
+        let mut source_content = id!();
+
+        let source = state! {
+            doc {
+                fold {
+                    fold_title {}
+                    @source_content fold_content {
+                        @source_para paragraph {
+                            text { "outer" }
+                        }
+                        table(border_style: TableBorderStyle::Solid, proportion: 1.0,) {
+                            table_row {
+                                table_cell {
+                                    horizontal_rule {}
+                                    fold {
+                                        fold_title {}
+                                        fold_content {
+                                            paragraph {
+                                                text { "inner" }
+                                            }
+                                        }
+                                    }
+                                }
+                                table_cell {
+                                    paragraph {}
+                                }
+                            }
+                            table_row {
+                                table_cell {
+                                    paragraph {}
+                                }
+                                table_cell {
+                                    paragraph {}
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            selection { (source_para, 0) -> (source_content, 2, Affinity::Upstream) }
+        };
+
+        let fragment = source.selection.extract_fragment(&source.doc).unwrap();
+        assert_eq!(fragment.open_start(), 1);
+        assert_eq!(fragment.open_end(), 0);
+
+        let actual = transact!(initial, |tr| {
+            tr.paste_fragment(fragment, None).unwrap();
+        });
+
+        let root = actual.doc.node(NodeId::ROOT).expect("root");
+        let has_table = root
+            .descendants()
+            .any(|n| matches!(n.node(), Node::Table(_)));
+        let has_outer_text = root
+            .descendants()
+            .any(|n| matches!(n.node(), Node::Text(t) if t.text.as_str() == "outer"));
+
+        assert!(has_table, "pasted fragment should contain a table");
+        assert!(
+            has_outer_text,
+            "pasted fragment should contain outer paragraph text"
+        );
+    }
+
+    #[test]
+    fn paste_open_table_cell_fragment_into_fold_content() {
+        let mut target = id!();
+
+        let initial = state! {
+            doc {
+                fold {
+                    fold_title {}
+                    fold_content {
+                        @target paragraph {}
+                    }
+                }
+            }
+            selection { (target, 0) }
+        };
+
+        let mut source_para = id!();
+        let mut source_cell = id!();
+
+        let source = state! {
+            doc {
+                table(border_style: TableBorderStyle::Solid, proportion: 1.0,) {
+                    table_row {
+                        @source_cell table_cell {
+                            @source_para paragraph {
+                                text { "cell-start" }
+                            }
+                            fold {
+                                fold_title {}
+                                fold_content {
+                                    paragraph {
+                                        text { "inner-fold" }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            selection { (source_para, 0) -> (source_cell, 2, Affinity::Upstream) }
+        };
+
+        let fragment = source.selection.extract_fragment(&source.doc).unwrap();
+        assert_eq!(fragment.open_start(), 1);
+        assert_eq!(fragment.open_end(), 0);
+
+        let actual = transact!(initial, |tr| {
+            tr.paste_fragment(fragment, None).unwrap();
+        });
+
+        let root = actual.doc.node(NodeId::ROOT).expect("root");
+        let has_fold = root
+            .descendants()
+            .any(|n| matches!(n.node(), Node::Fold(_)));
+        let has_source_text = root
+            .descendants()
+            .any(|n| matches!(n.node(), Node::Text(t) if t.text.as_str() == "cell-start"));
+        let has_inner_fold_text = root
+            .descendants()
+            .any(|n| matches!(n.node(), Node::Text(t) if t.text.as_str() == "inner-fold"));
+
+        assert!(has_fold, "pasted table_cell content should keep fold block");
+        assert!(
+            has_source_text,
+            "pasted table_cell content should keep paragraph text"
+        );
+        assert!(
+            has_inner_fold_text,
+            "pasted table_cell content should keep fold content text"
+        );
+    }
+
+    #[test]
+    fn paste_open_list_item_fragment_into_callout() {
+        let mut target = id!();
+
+        let initial = state! {
+            doc {
+                callout {
+                    @target paragraph {}
+                }
+            }
+            selection { (target, 0) }
+        };
+
+        let mut source_para = id!();
+        let mut source_item = id!();
+
+        let source = state! {
+            doc {
+                bullet_list {
+                    @source_item list_item {
+                        @source_para paragraph {
+                            text { "item" }
+                        }
+                        bullet_list {
+                            list_item {
+                                paragraph {
+                                    text { "sub-item" }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            selection { (source_para, 0) -> (source_item, 2, Affinity::Upstream) }
+        };
+
+        let fragment = source.selection.extract_fragment(&source.doc).unwrap();
+        assert_eq!(fragment.open_start(), 1);
+        assert_eq!(fragment.open_end(), 0);
+
+        let actual = transact!(initial, |tr| {
+            tr.paste_fragment(fragment, None).unwrap();
+        });
+
+        let root = actual.doc.node(NodeId::ROOT).expect("root");
+        let has_bullet_list = root
+            .descendants()
+            .any(|n| matches!(n.node(), Node::BulletList(_)));
+        let has_item_text = root
+            .descendants()
+            .any(|n| matches!(n.node(), Node::Text(t) if t.text.as_str() == "item"));
+        let has_sub_item_text = root
+            .descendants()
+            .any(|n| matches!(n.node(), Node::Text(t) if t.text.as_str() == "sub-item"));
+
+        assert!(
+            has_bullet_list,
+            "pasted list_item content should keep nested bullet list"
+        );
+        assert!(
+            has_item_text,
+            "pasted list_item content should keep paragraph text"
+        );
+        assert!(
+            has_sub_item_text,
+            "pasted list_item content should keep nested list text"
+        );
     }
 
     #[test]

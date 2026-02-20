@@ -924,15 +924,6 @@ impl Fragment {
             .sum()
     }
 
-    pub fn has_leaf_block(&self, schema: &Schema) -> bool {
-        self.top_level_node_ids().iter().any(|id| {
-            self.node(*id).map_or(false, |n| {
-                let spec = schema.node_spec(n.data().as_type());
-                !spec.inline && spec.content.is_leaf()
-            })
-        })
-    }
-
     pub fn has_open_start(&self) -> bool {
         self.open_start > 0
     }

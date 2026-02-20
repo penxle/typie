@@ -1163,14 +1163,27 @@ impl Transaction {
         fragment: &Fragment,
     ) -> Result<Position> {
         let schema = self.doc().schema();
+        let has_open_start = fragment.has_open_start();
 
-        if fragment.has_open_start() && !fragment.has_leaf_block(schema) {
-            return Ok(position);
-        }
+        let fragment_top_types: Vec<_> = if has_open_start {
+            fragment
+                .content_node_ids(schema)
+                .into_iter()
+                .filter_map(|id| fragment.node(id))
+                .map(|n| n.data().as_type())
+                .collect()
+        } else {
+            fragment
+                .top_level_node_ids()
+                .into_iter()
+                .filter_map(|id| fragment.node(id))
+                .map(|n| n.data().as_type())
+                .collect()
+        };
 
-        let has_block_nodes = fragment
+        let has_block_nodes = fragment_top_types
             .iter()
-            .any(|(_, n)| !schema.node_spec(n.data().as_type()).inline);
+            .any(|t| !schema.node_spec(*t).inline);
 
         if !has_block_nodes {
             return Ok(position);
@@ -1180,12 +1193,6 @@ impl Transaction {
             .doc()
             .node(position.node_id)
             .context("Node not found")?;
-
-        let fragment_top_types: Vec<_> = fragment
-            .iter()
-            .filter(|(_, n)| n.parent().is_none())
-            .map(|(_, n)| n.data().as_type())
-            .collect();
         let fragment_is_open = fragment.open_start() > 0 || fragment.open_end() > 0;
 
         match target.node() {
@@ -1194,11 +1201,7 @@ impl Transaction {
                 let index = target.index().context("Text has no index")?;
                 self.split_paragraph()?;
                 let pos = Position::new(parent_id, index + 1, Affinity::Downstream);
-                self.ascend_to_compatible_parent(
-                    pos,
-                    &fragment_top_types,
-                    fragment.open_start() > 0,
-                )
+                self.ascend_to_compatible_parent(pos, &fragment_top_types, has_open_start)
             }
             Node::Paragraph(_) => {
                 let parent_id = target
@@ -1208,23 +1211,14 @@ impl Transaction {
                 let index = target.index().context("Paragraph has no index")?;
                 let is_empty = target.first_child().is_none();
 
-                if fragment_is_open && position.offset == 0 {
-                    let pos = Position::new(parent_id, index, Affinity::Downstream);
-                    return self.ascend_to_compatible_parent_no_split(pos, &fragment_top_types);
-                }
-
-                if is_empty && position.offset == 0 {
+                if position.offset == 0 && (fragment_is_open || is_empty) {
                     let pos = Position::new(parent_id, index, Affinity::Downstream);
                     return self.ascend_to_compatible_parent_no_split(pos, &fragment_top_types);
                 }
 
                 self.split_paragraph()?;
                 let pos = Position::new(parent_id, index + 1, Affinity::Downstream);
-                self.ascend_to_compatible_parent(
-                    pos,
-                    &fragment_top_types,
-                    fragment.open_start() > 0,
-                )
+                self.ascend_to_compatible_parent(pos, &fragment_top_types, has_open_start)
             }
             _ => Ok(position),
         }
