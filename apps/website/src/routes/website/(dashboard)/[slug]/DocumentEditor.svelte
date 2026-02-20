@@ -55,6 +55,7 @@
       fragment DocumentEditor_query on Query {
         me @required {
           id
+          ...EditorContext_user
           ...DocumentPanel_user
           ...DashboardLayout_PlanUpgradeModal_user
 
@@ -205,6 +206,13 @@
     }
   `);
 
+  graphql(`
+    fragment EditorContext_user on User {
+      id
+      ...RemarkPopover_user
+    }
+  `);
+
   const app = getAppContext();
   const splitView = getSplitViewContext();
   const viewContext = getViewContext();
@@ -215,6 +223,7 @@
   const ctx = getEditorContext();
   const editor = new Editor();
   ctx.editor = editor;
+  ctx.user = $query.me;
 
   const document = $derived(entity?.node.__typename === 'Document' ? entity.node : null);
   const documentId = $derived(document?.id ?? null);

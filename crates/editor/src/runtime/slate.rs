@@ -212,6 +212,13 @@ define_slate! {
 
         pub remarks_offset: u32,
         pub remarks_count: u32,
+
+        pub current_block_node_id: [u8; 16],
+        pub current_block_page_idx: i32,
+        pub current_block_x: f32,
+        pub current_block_y: f32,
+        pub current_block_width: f32,
+        pub current_block_height: f32,
     }
 }
 

@@ -15,6 +15,7 @@ export const portal: Action<HTMLElement, Parameter> = (element, target: Paramete
       targetElement = target;
     }
 
+    element.dataset.portal = '';
     targetElement.append(element);
 
     return () => {

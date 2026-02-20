@@ -10,6 +10,7 @@
   import Input from './Input.svelte';
   import LineHighlight from './LineHighlight.svelte';
   import Page from './Page.svelte';
+  import RemarkOverlayLayer from './RemarkOverlayLayer.svelte';
   import RepasteAsText from './RepasteAsText.svelte';
 
   type Props = {
@@ -182,6 +183,9 @@
     <Page page={i} bind:containerEl={containerEls[i]} />
   {/each}
   <DocumentOverlayLayer />
+  {#if !editor.readOnly}
+    <RemarkOverlayLayer />
+  {/if}
 </div>
 
 {#if !editor.readOnly}

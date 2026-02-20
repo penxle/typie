@@ -18,6 +18,7 @@ import {
   DIRTY_PAGES,
   DIRTY_PLACEHOLDER,
   DIRTY_POINTER,
+  DIRTY_REMARKS,
   DIRTY_RENDER_REQUIRED,
   DIRTY_REPASTE,
   DIRTY_SELECTION,
@@ -30,7 +31,7 @@ import { calculateImageDisplaySize, calculateRelativePosition, findNearestPageCo
 import type { DocExportMode, Editor as WasmEditor, Modifier, PointerButton } from '@typie/editor';
 import type { ScrollViewport } from '@typie/ui/utils';
 import type { FontFamily } from './fonts';
-import type { TableOverlay, TrackedItem } from './slate';
+import type { RemarkOverlay, TableOverlay, TrackedItem } from './slate';
 import type { ThemeColors } from './theme';
 import type {
   AiFeedback,
@@ -203,6 +204,9 @@ export class Editor {
   searchMatches = $state<{ id: string; active: boolean }[]>([]);
 
   tableOverlays = $state<TableOverlay[]>([]);
+
+  remarkOverlays = $state<RemarkOverlay[]>([]);
+  currentBlock = $state<{ nodeId: string; pageIdx: number; bounds: Rect } | null>(null);
 
   repasteAsTextEnabled = $state(false);
 
@@ -431,6 +435,7 @@ export class Editor {
       this.characterCountsVersion++;
       this.#onSelectionChanged?.(sel.anchor, sel.head);
       this.#updateActiveTrackedItems();
+      this.currentBlock = slate.readCurrentBlock();
     }
 
     if (slate.isDirty(DIRTY_ATTRS)) {
@@ -493,6 +498,10 @@ export class Editor {
     if (slate.isDirty(DIRTY_REPASTE)) {
       const repaste = slate.readRepaste();
       this.repasteAsTextEnabled = repaste.enabled;
+    }
+
+    if (slate.isDirty(DIRTY_REMARKS)) {
+      this.remarkOverlays = slate.readRemarks();
     }
   }
 
