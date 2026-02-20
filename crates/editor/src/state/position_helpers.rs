@@ -266,12 +266,12 @@ pub fn move_from_block_position(doc: &Doc, position: Position, go_forward: bool)
             return leaf_block_start(&children[position.offset]);
         }
 
-        if let Some(last) = children.last() {
-            return leaf_block_end(last);
-        }
-
         if let Some(next_pos) = find_next_cursor_position_forward(doc, node.node_id()) {
             return next_pos;
+        }
+
+        if let Some(last) = children.last() {
+            return leaf_block_end(last);
         }
 
         return leaf_block_end(&doc.node(NodeId::ROOT).unwrap());
@@ -281,12 +281,12 @@ pub fn move_from_block_position(doc: &Doc, position: Position, go_forward: bool)
             return leaf_block_end(&children[child_idx]);
         }
 
-        if let Some(first) = children.first() {
-            return leaf_block_start(first);
-        }
-
         if let Some(prev_pos) = find_prev_cursor_position_backward(doc, node.node_id()) {
             return prev_pos;
+        }
+
+        if let Some(first) = children.first() {
+            return leaf_block_start(first);
         }
 
         return leaf_block_start(&doc.node(NodeId::ROOT).unwrap());
