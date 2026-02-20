@@ -30,6 +30,7 @@ const _vkF32 = 1;
 const _vkU32 = 2;
 const _vkString = 3;
 const _vkComposite = 4;
+const _vkI32 = 5;
 
 const _alignLeft = 0;
 const _alignCenter = 1;
@@ -54,8 +55,14 @@ const _unitTagMap = {
   _tagStrikethrough: 'strikethrough',
   _tagUnderline: 'underline',
 };
-const _f32TagMap = {_tagFontSize: 'font_size', _tagLetterSpacing: 'letter_spacing', _tagLineHeight: 'line_height'};
-const _u32TagMap = {_tagFontWeight: 'font_weight', _tagTextAlign: 'text_align'};
+const _f32TagMap = <int, String>{};
+const _u32TagMap = {
+  _tagFontSize: 'font_size',
+  _tagFontWeight: 'font_weight',
+  _tagTextAlign: 'text_align',
+  _tagLineHeight: 'line_height',
+};
+const _i32TagMap = {_tagLetterSpacing: 'letter_spacing'};
 const _stringTagMap = {
   _tagBackgroundColor: 'background_color',
   _tagTextColor: 'text_color',
@@ -225,6 +232,17 @@ class SlateReader {
           } else {
             result.add({'type': type, 'values': values});
           }
+        }
+      } else if (valueKind == _vkI32) {
+        final values = <dynamic>[];
+        for (var j = 0; j < valueCount; j++) {
+          final v = _slabBytes.getInt32(pos, Endian.little);
+          pos += 4;
+          values.add(v == -2147483648 ? null : v);
+        }
+        final type = _i32TagMap[typeTag];
+        if (type != null) {
+          result.add({'type': type, 'values': values});
         }
       } else if (valueKind == _vkString) {
         final values = <String?>[];

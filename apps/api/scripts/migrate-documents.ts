@@ -341,7 +341,7 @@ function migrateStyleValues(nodes: Record<string, Record<string, unknown>>): boo
       for (const style of seg.styles) {
         if (style.type === 'font_size') {
           const s = style as { type: 'font_size'; size: number };
-          if (s.size < 500) {
+          if (s.size < 500 && s.size > 0) {
             s.size = Math.round(s.size * 100);
             changed = true;
           }
@@ -364,7 +364,7 @@ function migrateNodeAttrs(nodes: Record<string, Record<string, unknown>>): boole
   for (const node of Object.values(nodes)) {
     if (node.type === 'paragraph' || node.type === 'fold_title') {
       const lh = node.line_height;
-      if (typeof lh === 'number' && lh < 10) {
+      if (typeof lh === 'number' && lh < 10 && lh !== 0) {
         node.line_height = Math.round(lh * 100);
         changed = true;
       }
@@ -375,11 +375,11 @@ function migrateNodeAttrs(nodes: Record<string, Record<string, unknown>>): boole
 
 function migrateSettings(settings: Record<string, unknown>): boolean {
   let changed = false;
-  if (typeof settings.block_gap === 'number' && settings.block_gap < 10) {
+  if (typeof settings.block_gap === 'number' && settings.block_gap < 10 && settings.block_gap !== 0) {
     settings.block_gap = Math.round(settings.block_gap * 100);
     changed = true;
   }
-  if (typeof settings.paragraph_indent === 'number' && settings.paragraph_indent < 10) {
+  if (typeof settings.paragraph_indent === 'number' && settings.paragraph_indent < 10 && settings.paragraph_indent !== 0) {
     settings.paragraph_indent = Math.round(settings.paragraph_indent * 100);
     changed = true;
   }
@@ -504,8 +504,13 @@ await (async () => {
       const doc = new LoroDoc();
       doc.import(row.snapshot);
 
-      // Fix table nodes missing proportion field (added in a later migration)
       const allNodesMap = doc.getMap('nodes');
+      if (allNodesMap.size === 0) {
+        skipped++;
+        return;
+      }
+
+      // Fix table nodes missing proportion field (added in a later migration)
       for (const nodeId of allNodesMap.keys()) {
         const nodeMap = allNodesMap.get(nodeId) as LoroMap;
         if ((nodeMap.get('type') as string) === 'table' && nodeMap.get('proportion') == null) {
@@ -519,7 +524,7 @@ await (async () => {
         const fixedSnapshot = new Uint8Array(doc.export({ mode: 'snapshot' }));
         const currentJson = (await wasm.snapshotToJson(fixedSnapshot)) as Record<string, unknown>;
         const nodes = currentJson.nodes as Record<string, Record<string, unknown>>;
-        let needsFix = false;
+        const reasons: string[] = [];
 
         const rootNode = nodes['00000000000000000000000000000000'];
         if (rootNode && !rootNode.cascade_attrs) {
@@ -532,12 +537,12 @@ await (async () => {
             'style:letter_spacing': 0,
             'paragraph:line_height': 160,
           };
-          needsFix = true;
+          reasons.push('missing cascade_attrs on root node');
         }
 
         if ('styles' in currentJson) {
           delete currentJson.styles;
-          needsFix = true;
+          reasons.push('legacy styles key in document JSON');
         }
 
         for (const node of Object.values(nodes)) {
@@ -547,7 +552,9 @@ await (async () => {
             for (const seg of node.text as NewTextSegment[]) {
               if (seg.styles && seg.styles.length > 0) {
                 seg.styles = [];
-                needsFix = true;
+                if (!reasons.includes('fold_title text has styles')) {
+                  reasons.push('fold_title text has styles');
+                }
               }
             }
             continue;
@@ -557,42 +564,54 @@ await (async () => {
             const filled = fillDefaultStyles(original);
             const validated = await validateFontStyles(filled, userId);
             if (filled.length !== original.length || validated !== filled) {
+              if (filled.length !== original.length && !reasons.includes('missing default styles')) {
+                reasons.push(`missing default styles (had ${original.length}, filled to ${filled.length})`);
+              }
+              if (validated !== filled && !reasons.includes('font validation changed styles')) {
+                reasons.push('font validation changed styles');
+              }
               seg.styles = validated;
-              needsFix = true;
             }
           }
         }
 
         if (migrateStyleValues(nodes)) {
-          needsFix = true;
+          reasons.push('style values need scaling (font_size < 500 or letter_spacing < 5)');
         }
 
         if (migrateNodeAttrs(nodes)) {
-          needsFix = true;
+          reasons.push('node attrs need scaling (line_height < 10)');
         }
 
         if ('settings' in currentJson && migrateSettings(currentJson.settings as Record<string, unknown>)) {
-          needsFix = true;
+          reasons.push('settings need scaling (block_gap or paragraph_indent < 10)');
         }
 
         if (fixTextNewlines(nodes)) {
-          needsFix = true;
+          reasons.push('text segments contain newlines');
         }
 
         const tableMigrationResult = migrateTableColWidths(nodes);
         if (tableMigrationResult.changed) {
-          needsFix = true;
+          reasons.push(`table col_width px→ratio (${tableMigrationResult.migratedTableCount} tables)`);
         }
         migratedTables += tableMigrationResult.migratedTableCount;
         skippedMixedTables += tableMigrationResult.skippedMixedTableCount;
 
-        if (!needsFix && !force) {
+        if (reasons.length === 0 && !force) {
           skipped++;
           return;
         }
 
+        if (force && reasons.length === 0) {
+          reasons.push('force mode');
+        }
+
+        console.log(`[${documentId}] already migrated, re-migrating: ${reasons.join('; ')}`);
+
         newDocJson = currentJson;
       } else {
+        console.log(`[${documentId}] not yet migrated, performing full migration`);
         const settings = doc.getMap('settings').toJSON() as Record<string, unknown>;
         const nodesMap = doc.getMap('nodes');
 
