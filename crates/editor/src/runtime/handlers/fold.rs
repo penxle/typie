@@ -69,13 +69,6 @@ impl Runtime {
         effects
     }
 
-    pub(crate) fn handle_toggle_fold_expansion(&mut self, node_id: String) -> Vec<Effect> {
-        let Some(id) = NodeId::from_string(&node_id) else {
-            return vec![];
-        };
-        self.toggle_view_state(id)
-    }
-
     pub(crate) fn handle_insert_fold(&mut self) -> Vec<Effect> {
         let mut created_fold_id = None;
         let mut effects = self.transact(|tr| {
@@ -98,7 +91,7 @@ impl Runtime {
 
 #[cfg(test)]
 mod tests {
-    use crate::runtime::Message;
+    use crate::test_utils::click_fold_toggle;
 
     #[test]
     fn close_fold_moves_selection_from_content_to_fold_title_end() {
@@ -123,12 +116,8 @@ mod tests {
             selection { (p, 5) }
         };
 
-        rt.update(Message::ToggleFoldExpansion {
-            node_id: fold.to_string(),
-        });
-        rt.update(Message::ToggleFoldExpansion {
-            node_id: fold.to_string(),
-        });
+        click_fold_toggle(&mut rt, fold);
+        click_fold_toggle(&mut rt, fold);
 
         let selection = rt.selection();
         assert!(selection.is_collapsed());
@@ -162,12 +151,8 @@ mod tests {
             selection { (p1, 7) }
         };
 
-        rt.update(Message::ToggleFoldExpansion {
-            node_id: fold.to_string(),
-        });
-        rt.update(Message::ToggleFoldExpansion {
-            node_id: fold.to_string(),
-        });
+        click_fold_toggle(&mut rt, fold);
+        click_fold_toggle(&mut rt, fold);
 
         let selection = rt.selection();
         assert!(selection.is_collapsed());
@@ -203,12 +188,8 @@ mod tests {
             selection { (p1, 3) -> (p2, 2) }
         };
 
-        rt.update(Message::ToggleFoldExpansion {
-            node_id: fold.to_string(),
-        });
-        rt.update(Message::ToggleFoldExpansion {
-            node_id: fold.to_string(),
-        });
+        click_fold_toggle(&mut rt, fold);
+        click_fold_toggle(&mut rt, fold);
 
         let selection = rt.selection();
         assert!(!selection.is_collapsed());
