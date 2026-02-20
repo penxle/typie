@@ -386,6 +386,36 @@ function migrateSettings(settings: Record<string, unknown>): boolean {
   return changed;
 }
 
+function migrateCascadeAttrs(nodes: Record<string, Record<string, unknown>>): boolean {
+  let changed = false;
+  for (const node of Object.values(nodes)) {
+    if (!node.cascade_attrs || typeof node.cascade_attrs !== 'object') continue;
+    const ca = node.cascade_attrs as Record<string, unknown>;
+
+    if (typeof ca['style:font_size'] === 'number' && (ca['style:font_size'] as number) < 500 && (ca['style:font_size'] as number) > 0) {
+      ca['style:font_size'] = Math.round((ca['style:font_size'] as number) * 100);
+      changed = true;
+    }
+    if (
+      typeof ca['paragraph:line_height'] === 'number' &&
+      (ca['paragraph:line_height'] as number) < 10 &&
+      (ca['paragraph:line_height'] as number) > 0
+    ) {
+      ca['paragraph:line_height'] = Math.round((ca['paragraph:line_height'] as number) * 100);
+      changed = true;
+    }
+    if (
+      typeof ca['style:letter_spacing'] === 'number' &&
+      Math.abs(ca['style:letter_spacing'] as number) < 5 &&
+      ca['style:letter_spacing'] !== 0
+    ) {
+      ca['style:letter_spacing'] = Math.round((ca['style:letter_spacing'] as number) * 100);
+      changed = true;
+    }
+  }
+  return changed;
+}
+
 function fixTextNewlines(nodes: Record<string, Record<string, unknown>>): boolean {
   let fixed = false;
   const replacements = new Map<string, string[]>();
@@ -540,6 +570,10 @@ await (async () => {
           reasons.push('missing cascade_attrs on root node');
         }
 
+        if (migrateCascadeAttrs(nodes)) {
+          reasons.push('cascade_attrs values need scaling');
+        }
+
         if ('styles' in currentJson) {
           delete currentJson.styles;
           reasons.push('legacy styles key in document JSON');
@@ -659,6 +693,7 @@ await (async () => {
         fixTextNewlines(transformedNodes as Record<string, Record<string, unknown>>);
         migrateStyleValues(transformedNodes as Record<string, Record<string, unknown>>);
         migrateNodeAttrs(transformedNodes as Record<string, Record<string, unknown>>);
+        migrateCascadeAttrs(transformedNodes as Record<string, Record<string, unknown>>);
         migrateSettings(settings);
         const tableMigrationResult = migrateTableColWidths(transformedNodes as Record<string, Record<string, unknown>>);
         migratedTables += tableMigrationResult.migratedTableCount;
