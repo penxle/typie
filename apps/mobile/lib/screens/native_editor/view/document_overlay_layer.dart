@@ -12,12 +12,14 @@ class DocumentOverlayViewport {
     required this.pageOffsets,
     required this.verticalScrollOffset,
     required this.horizontalScrollOffset,
+    required this.viewportWidth,
   });
 
   final ContentGeometry geometry;
   final List<double> pageOffsets;
   final double verticalScrollOffset;
   final double horizontalScrollOffset;
+  final double viewportWidth;
 
   bool hasPage(int pageIdx) {
     return pageIdx >= 0 && pageIdx < geometry.pages.length;
@@ -26,7 +28,7 @@ class DocumentOverlayViewport {
   Rect pageRect(int pageIdx) {
     final clamped = pageIdx.clamp(0, geometry.pages.length - 1);
     final page = geometry.pages[clamped];
-    final left = geometry.horizontalPadding - horizontalScrollOffset;
+    final left = geometry.contentStartX(viewportWidth: viewportWidth, horizontalScrollOffset: horizontalScrollOffset);
     final top = geometry.titleAreaHeight + pageOffsets[clamped] - verticalScrollOffset;
     return Rect.fromLTWH(left, top, page.width, page.height);
   }
@@ -58,12 +60,18 @@ class DocumentOverlayLayer extends HookWidget {
     final horizontalScrollOffset = scope.horizontalScrollController.hasSingleClient
         ? scope.horizontalScrollController.offset
         : 0.0;
+    final viewportWidth =
+        scope.horizontalScrollController.hasSingleClient &&
+            scope.horizontalScrollController.position.hasContentDimensions
+        ? scope.horizontalScrollController.position.viewportDimension
+        : MediaQuery.sizeOf(context).width;
 
     final viewport = DocumentOverlayViewport(
       geometry: geometry,
       pageOffsets: pageOffsets,
       verticalScrollOffset: verticalScrollOffset,
       horizontalScrollOffset: horizontalScrollOffset,
+      viewportWidth: viewportWidth,
     );
 
     return Positioned.fill(

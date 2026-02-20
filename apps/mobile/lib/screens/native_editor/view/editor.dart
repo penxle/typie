@@ -400,13 +400,18 @@ class EditorView extends HookWidget {
         final horizontalScrollOffset = horizontalScrollController.hasSingleClient
             ? horizontalScrollController.offset
             : 0.0;
+        final viewportWidth =
+            horizontalScrollController.hasSingleClient && horizontalScrollController.position.hasContentDimensions
+            ? horizontalScrollController.position.viewportDimension
+            : MediaQuery.sizeOf(context).width;
         final geo = ContentGeometry(
           layout: currentLayout!,
           pages: controller.state.pages,
           titleAreaHeight: titleAreaHeight.value,
         );
         final screenY = geo.titleAreaHeight + geo.cursorTopInPages(cursor) - verticalScrollOffset;
-        final screenX = geo.horizontalPadding + cursor.x - horizontalScrollOffset;
+        final screenX =
+            geo.contentStartX(viewportWidth: viewportWidth, horizontalScrollOffset: horizontalScrollOffset) + cursor.x;
         inputController.updateCursor(screenX, screenY, cursor.height, cursor.precedingCharWidths);
       }
 
@@ -683,9 +688,15 @@ class _DocumentPlaceholder extends StatelessWidget {
             final horizontalScroll = horizontalScrollController.hasSingleClient
                 ? horizontalScrollController.offset
                 : 0.0;
+            final viewportWidth =
+                horizontalScrollController.hasSingleClient && horizontalScrollController.position.hasContentDimensions
+                ? horizontalScrollController.position.viewportDimension
+                : MediaQuery.sizeOf(context).width;
 
             final top = placeholder.y! + titleAreaHeight.value - verticalScroll;
-            final left = placeholder.x! + geo.horizontalPadding - horizontalScroll;
+            final left =
+                placeholder.x! +
+                geo.contentStartX(viewportWidth: viewportWidth, horizontalScrollOffset: horizontalScroll);
 
             return Positioned(top: top, left: left, width: placeholder.width, child: child!);
           },
