@@ -958,6 +958,7 @@ impl Runtime {
             }
 
             self.pending.table_overlays = true;
+            self.pending.remarks = true;
         }
 
         if self.pending.cursor {
