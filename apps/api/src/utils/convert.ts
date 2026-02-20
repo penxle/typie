@@ -13,6 +13,7 @@ const ROOT_ID = '00000000000000000000000000000000';
 
 type LoroStyle =
   | { type: 'font_weight'; weight: number }
+  | { type: 'bold' }
   | { type: 'italic' }
   | { type: 'strikethrough' }
   | { type: 'underline' }
@@ -139,11 +140,39 @@ function resolveTableColRatios(rawWidths: (number | undefined)[], contentWidth: 
   return normalizeRatios(widths);
 }
 
+function findClosestWeight(target: number, weights: number[]): number {
+  let closest = weights[0];
+  let minDist = Math.abs(target - closest);
+  for (const w of weights) {
+    const dist = Math.abs(target - w);
+    if (dist < minDist || (dist === minDist && w > closest)) {
+      closest = w;
+      minDist = dist;
+    }
+  }
+  return closest;
+}
+
+async function getAvailableWeights(familyName: string, familyId: string | null): Promise<number[]> {
+  const defaultFamily = DEFAULT_FONT_FAMILIES.find((f) => f.familyName === familyName);
+  if (defaultFamily) {
+    return defaultFamily.fonts.map((f) => f.weight);
+  }
+
+  if (!familyId) return [];
+
+  const fonts = await db.select({ weight: Fonts.weight }).from(Fonts).where(eq(Fonts.familyId, familyId));
+  return fonts.map((f) => f.weight);
+}
+
 async function convertPmMarks(pmMarks: JSONContent['marks']): Promise<{ styles: LoroStyle[]; annotations: LoroAnnotation[] }> {
   const styles: LoroStyle[] = [];
   const annotations: LoroAnnotation[] = [];
 
   if (!pmMarks) return { styles, annotations };
+
+  let resolvedFamilyName: string | null = null;
+  let resolvedFamilyId: string | null = null;
 
   for (const pmMark of pmMarks) {
     switch (pmMark.type) {
@@ -185,15 +214,18 @@ async function convertPmMarks(pmMarks: JSONContent['marks']): Promise<{ styles: 
         if (pmMark.attrs?.fontFamily) {
           const fontFamily = pmMark.attrs.fontFamily as string;
           if (defaultFamilyNames.has(fontFamily)) {
+            resolvedFamilyName = fontFamily;
             styles.push({ type: 'font_family', family: fontFamily });
           } else if (fontFamily.startsWith('FONT0')) {
             const result = await db
-              .select({ familyName: FontFamilies.familyName })
+              .select({ familyName: FontFamilies.familyName, familyId: Fonts.familyId })
               .from(Fonts)
               .innerJoin(FontFamilies, eq(Fonts.familyId, FontFamilies.id))
               .where(eq(Fonts.id, fontFamily))
               .then((r) => r[0]);
             if (result) {
+              resolvedFamilyName = result.familyName;
+              resolvedFamilyId = result.familyId;
               styles.push({ type: 'font_family', family: result.familyName });
             }
           } else if (fontFamily.startsWith('FNTF0')) {
@@ -203,6 +235,8 @@ async function convertPmMarks(pmMarks: JSONContent['marks']): Promise<{ styles: 
               .where(eq(FontFamilies.id, fontFamily))
               .then((r) => r[0]);
             if (result) {
+              resolvedFamilyName = result.familyName;
+              resolvedFamilyId = fontFamily;
               styles.push({ type: 'font_family', family: result.familyName });
             }
           }
@@ -214,6 +248,40 @@ async function convertPmMarks(pmMarks: JSONContent['marks']): Promise<{ styles: 
           styles.push({ type: 'font_weight', weight: Number(pmMark.attrs.fontWeight) });
         }
         break;
+      }
+    }
+  }
+
+  if (resolvedFamilyName) {
+    const availableWeights = await getAvailableWeights(resolvedFamilyName, resolvedFamilyId);
+
+    if (availableWeights.length > 0) {
+      const weightStyleIndex = styles.findIndex((s) => s.type === 'font_weight');
+      const currentWeight =
+        weightStyleIndex === -1 ? defaultValues.fontWeight : (styles[weightStyleIndex] as { type: 'font_weight'; weight: number }).weight;
+
+      if (!availableWeights.includes(currentWeight)) {
+        let newWeight: number;
+        let addBold = false;
+
+        if (currentWeight >= 700 && availableWeights.length === 1) {
+          newWeight = availableWeights[0];
+          addBold = true;
+        } else if (currentWeight >= 700) {
+          newWeight = findClosestWeight(700, availableWeights);
+        } else {
+          newWeight = findClosestWeight(currentWeight, availableWeights);
+        }
+
+        if (weightStyleIndex === -1) {
+          styles.push({ type: 'font_weight', weight: newWeight });
+        } else {
+          styles[weightStyleIndex] = { type: 'font_weight', weight: newWeight };
+        }
+
+        if (addBold) {
+          styles.push({ type: 'bold' });
+        }
       }
     }
   }

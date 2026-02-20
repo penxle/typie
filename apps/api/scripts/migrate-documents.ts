@@ -1,8 +1,9 @@
 #!/usr/bin/env tsx
 
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { LoroDoc, LoroMap, LoroText } from 'loro-crdt';
-import { db, DocumentContents, pg } from '@/db';
+import { DEFAULT_FONT_FAMILIES } from '@/const';
+import { db, DocumentContents, Documents, Entities, FontFamilies, Fonts, pg } from '@/db';
 import { DocumentSyncType } from '@/enums';
 import { pubsub } from '@/pubsub';
 import { wasm } from '@/utils/wasm';
@@ -18,6 +19,7 @@ type Delta = {
 
 type NewStyle =
   | { type: 'font_weight'; weight: number }
+  | { type: 'bold' }
   | { type: 'italic' }
   | { type: 'strikethrough' }
   | { type: 'underline' }
@@ -157,6 +159,87 @@ const DEFAULT_TABLE_CELL_WIDTH_PX = 80;
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
+}
+
+function findClosestWeight(target: number, weights: number[]): number {
+  let closest = weights[0];
+  let minDist = Math.abs(target - closest);
+  for (const w of weights) {
+    const dist = Math.abs(target - w);
+    if (dist < minDist || (dist === minDist && w > closest)) {
+      closest = w;
+      minDist = dist;
+    }
+  }
+  return closest;
+}
+
+const weightCache = new Map<string, number[]>();
+
+async function getAvailableWeights(familyName: string, userId: string): Promise<number[]> {
+  const cacheKey = `${userId}:${familyName}`;
+  const cached = weightCache.get(cacheKey);
+  if (cached) return cached;
+
+  const defaultFamily = DEFAULT_FONT_FAMILIES.find((f) => f.familyName === familyName);
+  if (defaultFamily) {
+    const weights = defaultFamily.fonts.map((f) => f.weight);
+    weightCache.set(cacheKey, weights);
+    return weights;
+  }
+
+  const fonts = await db
+    .select({ weight: Fonts.weight })
+    .from(Fonts)
+    .innerJoin(FontFamilies, eq(Fonts.familyId, FontFamilies.id))
+    .where(and(eq(FontFamilies.familyName, familyName), eq(FontFamilies.userId, userId)));
+  const weights = [...new Set(fonts.map((f) => f.weight))];
+  weightCache.set(cacheKey, weights);
+  return weights;
+}
+
+async function validateFontStyles(styles: NewStyle[], userId: string): Promise<NewStyle[]> {
+  const familyStyleIndex = styles.findIndex((s) => s.type === 'font_family');
+  if (familyStyleIndex === -1) return styles;
+
+  const familyStyle = styles[familyStyleIndex] as { type: 'font_family'; family: string };
+  const availableWeights = await getAvailableWeights(familyStyle.family, userId);
+
+  if (availableWeights.length === 0) {
+    const result = [...styles];
+    result[familyStyleIndex] = { type: 'font_family', family: 'Pretendard' };
+    return result;
+  }
+
+  const weightStyleIndex = styles.findIndex((s) => s.type === 'font_weight');
+  const currentWeight = weightStyleIndex === -1 ? 400 : (styles[weightStyleIndex] as { type: 'font_weight'; weight: number }).weight;
+
+  if (availableWeights.includes(currentWeight)) return styles;
+
+  const result = [...styles];
+  let newWeight: number;
+  let addBold = false;
+
+  if (currentWeight >= 700 && availableWeights.length === 1) {
+    newWeight = availableWeights[0];
+    addBold = true;
+  } else if (currentWeight >= 700) {
+    newWeight = findClosestWeight(700, availableWeights);
+  } else {
+    newWeight = findClosestWeight(currentWeight, availableWeights);
+  }
+
+  if (weightStyleIndex === -1) {
+    result.push({ type: 'font_weight', weight: newWeight });
+  } else {
+    result[weightStyleIndex] = { type: 'font_weight', weight: newWeight };
+  }
+
+  if (addBold) {
+    result.push({ type: 'bold' });
+  }
+
+  return result;
 }
 
 type ColWidthMigrationResult = {
@@ -341,8 +424,11 @@ await (async () => {
     .select({
       id: DocumentContents.id,
       documentId: DocumentContents.documentId,
+      userId: Entities.userId,
     })
-    .from(DocumentContents);
+    .from(DocumentContents)
+    .innerJoin(Documents, eq(DocumentContents.documentId, Documents.id))
+    .innerJoin(Entities, eq(Documents.entityId, Entities.id));
 
   console.log(`Found ${ids.length} documents to process`);
 
@@ -352,7 +438,7 @@ await (async () => {
   let migratedTables = 0;
   let skippedMixedTables = 0;
 
-  async function migrateDocument({ id, documentId }: { id: string; documentId: string }) {
+  async function migrateDocument({ id, documentId, userId }: { id: string; documentId: string; userId: string }) {
     try {
       const [row] = await db.select({ snapshot: DocumentContents.snapshot }).from(DocumentContents).where(eq(DocumentContents.id, id));
 
@@ -413,9 +499,11 @@ await (async () => {
             continue;
           }
           for (const seg of node.text as NewTextSegment[]) {
-            const filled = fillDefaultStyles(seg.styles ?? []);
-            if (filled.length !== (seg.styles ?? []).length) {
-              seg.styles = filled;
+            const original = seg.styles ?? [];
+            const filled = fillDefaultStyles(original);
+            const validated = await validateFontStyles(filled, userId);
+            if (filled.length !== original.length || validated !== filled) {
+              seg.styles = validated;
               needsFix = true;
             }
           }
@@ -463,6 +551,12 @@ await (async () => {
             } else {
               const plainText = typeof nodeJson.text === 'string' ? nodeJson.text : '';
               newSegments = plainText ? [{ text: plainText, styles: allowsStyles ? [...DEFAULT_STYLES] : [] }] : [];
+            }
+
+            for (const seg of newSegments) {
+              if (seg.styles && seg.styles.length > 0) {
+                seg.styles = await validateFontStyles(seg.styles, userId);
+              }
             }
 
             transformedNodes[nodeId] = {
