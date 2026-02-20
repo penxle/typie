@@ -28,7 +28,7 @@ To do this, follow these steps precisely:
    - The **diff checksum** stored as a commit status on the reviewed commit (context: `claude/diff-checksum`, value in `description` field). Query it:
 
      ```bash
-     gh api repos/{owner}/{repo}/commits/{REVIEWED_COMMIT_SHA}/statuses --jq '.[] | select(.context == "claude/diff-checksum") | .description'
+     GH_TOKEN=$ACTIONS_GITHUB_TOKEN gh api repos/{owner}/{repo}/commits/{REVIEWED_COMMIT_SHA}/statuses --jq '.[] | select(.context == "claude/diff-checksum") | .description'
      ```
 
    Compare the reviewed commit SHA to the current HEAD SHA. If they differ, the HEAD has changed — but this does NOT necessarily mean the code has changed. Rebases, base branch updates (e.g., GitHub UI "Update branch" button, Graphite bot), or local rebase + force push can change the HEAD SHA without altering the PR's actual changes.
@@ -135,11 +135,13 @@ To do this, follow these steps precisely:
    ```bash
    CHECKSUM=$(gh pr diff <PR_NUMBER> | sha256sum | awk '{print $1}')
    HEAD_SHA=$(gh pr view <PR_NUMBER> --json headRefOid -q .headRefOid)
-   gh api repos/{owner}/{repo}/statuses/$HEAD_SHA \
+   GH_TOKEN=$ACTIONS_GITHUB_TOKEN gh api repos/{owner}/{repo}/statuses/$HEAD_SHA \
      -f state=success \
      -f context=claude/diff-checksum \
      -f "description=$CHECKSUM"
    ```
+
+   Note: `ACTIONS_GITHUB_TOKEN` is the GitHub Actions `GITHUB_TOKEN` (passed via workflow env), which has `statuses: write` permission. The default `GH_TOKEN` (Claude's OAuth token) does not have this permission.
 
    **To APPROVE:**
 
@@ -153,8 +155,8 @@ To do this, follow these steps precisely:
    ```bash
    gh api repos/{owner}/{repo}/pulls/{pull_number}/reviews \
      --method POST \
-     -f 'event=REQUEST_CHANGES' \
      --input <(echo '{
+       "event": "REQUEST_CHANGES",
        "comments": [
          {
            "path": "relative/path/to/file.ts",
