@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -29,17 +31,18 @@ class NativeEditorTextOptionsToolbar extends HookWidget {
     final controller = useScrollController();
     final key = useMemoized(GlobalKey.new);
     final keys = useMemoized(() => List.generate(items.length, (_) => GlobalKey()), [items]);
+    final lastMaxScrollExtent = useRef<double>(0);
 
-    useAsyncEffect(() async {
+    void scrollToActiveItem() {
       final index = items.indexWhere((e) => e[valueKey] == activeValue);
       if (index == -1) {
-        return null;
+        return;
       }
 
       final listBox = key.currentContext?.findRenderObject() as RenderBox?;
       final itemBox = keys[index].currentContext?.findRenderObject() as RenderBox?;
       if (listBox == null || itemBox == null) {
-        return null;
+        return;
       }
 
       var currentOffset = 0.0;
@@ -67,8 +70,11 @@ class NativeEditorTextOptionsToolbar extends HookWidget {
         controller.position.maxScrollExtent,
       );
 
-      await controller.animateTo(targetOffset, duration: const Duration(milliseconds: 150), curve: Curves.easeOut);
+      unawaited(controller.animateTo(targetOffset, duration: const Duration(milliseconds: 150), curve: Curves.easeOut));
+    }
 
+    useAsyncEffect(() async {
+      scrollToActiveItem();
       return null;
     }, [activeValue]);
 
@@ -83,21 +89,31 @@ class NativeEditorTextOptionsToolbar extends HookWidget {
         ),
         const Gap(12),
         Expanded(
-          child: SingleChildScrollView(
-            key: key,
-            controller: controller,
-            scrollDirection: Axis.horizontal,
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: const Pad(right: 16),
-            child: Row(
-              spacing: 4,
-              children: items.asMap().entries.map((entry) {
-                final index = entry.key;
-                final item = entry.value;
-                final isActive = item[valueKey] == activeValue;
+          child: NotificationListener<ScrollMetricsNotification>(
+            onNotification: (notification) {
+              final maxExtent = notification.metrics.maxScrollExtent;
+              if (lastMaxScrollExtent.value != maxExtent) {
+                lastMaxScrollExtent.value = maxExtent;
+                scrollToActiveItem();
+              }
+              return false;
+            },
+            child: SingleChildScrollView(
+              key: key,
+              controller: controller,
+              scrollDirection: Axis.horizontal,
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const Pad(right: 16),
+              child: Row(
+                spacing: 4,
+                children: items.asMap().entries.map((entry) {
+                  final index = entry.key;
+                  final item = entry.value;
+                  final isActive = item[valueKey] == activeValue;
 
-                return KeyedSubtree(key: keys[index], child: builder(context, item, isActive));
-              }).toList(),
+                  return KeyedSubtree(key: keys[index], child: builder(context, item, isActive));
+                }).toList(),
+              ),
             ),
           ),
         ),
