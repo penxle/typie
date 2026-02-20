@@ -16,6 +16,7 @@
 
 <Modal
   style={css.raw({ padding: '24px', maxWidth: '440px' })}
+  focusTrapOptions={{ initialFocus: '[data-dialog-primary]' }}
   onclose={() => {
     if (dialog.type === 'confirm') {
       dialog.cancelHandler?.();
@@ -55,6 +56,7 @@
       {/if}
 
       <Button
+        data-dialog-primary
         onclick={() => {
           dialog.actionHandler?.();
           dismiss();
