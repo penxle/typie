@@ -10,6 +10,7 @@ class LineHighlight extends StatelessWidget {
   final bool enabled;
 
   static const double _padding = 4;
+  static const double _horizontalOverflow = 100000;
 
   @override
   Widget build(BuildContext context) {
@@ -19,8 +20,8 @@ class LineHighlight extends StatelessWidget {
     }
 
     return Positioned(
-      left: 0,
-      right: 0,
+      left: -_horizontalOverflow,
+      width: _horizontalOverflow * 2,
       top: cursor.y - _padding,
       height: cursor.height + _padding * 2,
       child: Container(color: context.colors.surfaceMuted),

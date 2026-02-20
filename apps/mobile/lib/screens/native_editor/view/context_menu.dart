@@ -21,7 +21,7 @@ class SelectionContextMenu extends StatelessWidget {
     return ListenableBuilder(
       listenable: Listenable.merge([scope.verticalScrollController, scope.horizontalScrollController]),
       builder: (context, _) {
-        final anchor = _computeMenuAnchor(scope);
+        final anchor = _computeMenuAnchor(scope, viewportWidth: MediaQuery.sizeOf(context).width);
         if (anchor == null) {
           return const SizedBox.shrink();
         }
@@ -47,7 +47,10 @@ class SelectionContextMenu extends StatelessWidget {
     );
   }
 
-  ({double centerX, double above, double below})? _computeMenuAnchor(ContentScope scope) {
+  ({double centerX, double above, double below})? _computeMenuAnchor(
+    ContentScope scope, {
+    required double viewportWidth,
+  }) {
     final geo = scope.geometry;
     final offsets = geo.computeCumulativePageOffsets();
     final vController = scope.verticalScrollController;
@@ -59,6 +62,7 @@ class SelectionContextMenu extends StatelessWidget {
 
     final scrollOffset = vController.offset;
     final hScrollOffset = hController.hasSingleClient ? hController.offset : 0.0;
+    final contentStartX = geo.contentStartX(viewportWidth: viewportWidth, horizontalScrollOffset: hScrollOffset);
 
     final state = scope.controller.state;
     final fromHandle = state.selection?.fromBounds;
@@ -72,11 +76,11 @@ class SelectionContextMenu extends StatelessWidget {
     if (fromHandle != null && toHandle != null) {
       final fromPageTop = geo.titleAreaHeight + offsets[fromHandle.pageIdx];
       final fromScreenY = fromPageTop + fromHandle.y - scrollOffset;
-      final fromScreenX = geo.horizontalPadding + fromHandle.x - hScrollOffset;
+      final fromScreenX = contentStartX + fromHandle.x;
 
       final toPageTop = geo.titleAreaHeight + offsets[toHandle.pageIdx];
       final toScreenY = toPageTop + toHandle.y + toHandle.height - scrollOffset;
-      final toScreenX = geo.horizontalPadding + toHandle.x - hScrollOffset;
+      final toScreenX = contentStartX + toHandle.x;
 
       topY = fromScreenY;
       bottomY = toScreenY;
@@ -84,7 +88,7 @@ class SelectionContextMenu extends StatelessWidget {
     } else if (cursor != null) {
       final cursorPageTop = geo.titleAreaHeight + offsets[cursor.pageIdx];
       final cursorScreenY = cursorPageTop + cursor.y - scrollOffset;
-      final cursorScreenX = geo.horizontalPadding + cursor.x - hScrollOffset;
+      final cursorScreenX = contentStartX + cursor.x;
 
       topY = cursorScreenY;
       bottomY = cursorScreenY + cursor.height;

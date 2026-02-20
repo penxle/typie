@@ -74,6 +74,7 @@ class PageList extends HookWidget {
     final showContextMenu = useState(false);
     final wasContextMenuOpen = useRef(false);
     final clipboard = useMemoized(EditorClipboard.new);
+    final viewportWidth = useValueNotifier<double>(0);
 
     final longPressPosition = scope.longPressPosition;
     final handleDragPosition = scope.handleDragPosition;
@@ -87,10 +88,12 @@ class PageList extends HookWidget {
         controller: scope.controller,
         getPageAtPosition: getPageAtPosition,
         getPointerX: (localX) {
-          final offset = horizontalScrollController.hasSingleClient ? horizontalScrollController.offset : 0.0;
-          return localX + offset - scope.geometry.horizontalPadding;
+          final geo = scope.geometry;
+          final hScrollOffset = horizontalScrollController.hasSingleClient ? horizontalScrollController.offset : 0.0;
+          final viewport = viewportWidth.value;
+          return localX - geo.contentStartX(viewportWidth: viewport, horizontalScrollOffset: hScrollOffset);
         },
-        getHorizontalPadding: () => scope.geometry.horizontalPadding,
+        getViewportWidth: () => viewportWidth.value,
       ),
     );
 
@@ -153,6 +156,9 @@ class PageList extends HookWidget {
       builder: (context, constraints) {
         final viewWidth = constraints.maxWidth;
         final viewHeight = constraints.maxHeight;
+        if (viewportWidth.value != viewWidth) {
+          viewportWidth.value = viewWidth;
+        }
 
         Offset? viewportPositionFromGlobal(Offset globalPosition) {
           final renderBox = context.findRenderObject() as RenderBox?;
@@ -250,7 +256,7 @@ class PageList extends HookWidget {
 
         final geo = scope.geometry;
         final offsets = geo.computeCumulativePageOffsets();
-        final contentWidth = (pages.firstOrNull?.width ?? 0) + geo.horizontalPadding * 2;
+        final contentWidth = geo.contentWidth;
         final needsHorizontalScroll = contentWidth > viewWidth;
         final horizontalPhysics = isSelecting || !needsHorizontalScroll
             ? const NeverScrollableScrollPhysics()

@@ -16,9 +16,21 @@ class ContentGeometry {
 
   bool get isPaginated => layout is PaginatedLayout;
   double get horizontalPadding => isPaginated ? pagePadding : 0.0;
+  double get contentWidth => (pages.firstOrNull?.width ?? 0) + horizontalPadding * 2;
   double get defaultBottomPadding => isPaginated ? pagePadding : 200.0;
   double get trailingBottomMargin =>
       layout is PaginatedLayout ? (layout as PaginatedLayout).pageMarginBottom : continuousPageMargin;
+
+  double contentLeftInset(double viewportWidth) {
+    if (viewportWidth <= 0) {
+      return 0;
+    }
+    return ((viewportWidth - contentWidth) / 2).clamp(0.0, double.infinity);
+  }
+
+  double contentStartX({required double viewportWidth, required double horizontalScrollOffset}) {
+    return contentLeftInset(viewportWidth) + horizontalPadding - horizontalScrollOffset;
+  }
 
   double gapAfterPage(int index) => isPaginated && index < pages.length - 1 ? pageGap : 0.0;
 
