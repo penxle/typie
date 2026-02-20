@@ -376,8 +376,9 @@ export const ProcessBmoMentionJob = defineJob('bmo:process-mention', async (even
     const queryOptions: Options = {
       mcpServers: { bmo: bmoServer },
       allowedTools: ['mcp__bmo__*'],
-      model: 'claude-sonnet-4-5-20250929',
-      maxThinkingTokens: 20_000,
+      model: 'claude-sonnet-4-6',
+      thinking: { type: 'adaptive' },
+      effort: 'high',
       includePartialMessages: true,
       permissionMode: 'dontAsk',
       betas: ['context-1m-2025-08-07'],
