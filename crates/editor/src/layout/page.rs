@@ -402,82 +402,47 @@ impl Page {
         exclude_scope: Option<NodeId>,
     ) -> Option<&ElementEntry> {
         const EPSILON: f32 = 0.5;
-
-        let candidate_scopes: Vec<_> = self
+        let same_row = self
             .scopes
             .iter()
-            .filter(|s| {
-                let s_right = s.pos.x + s.size.width;
-                let excluded = exclude_scope.is_some_and(|id| s.scope_id == id);
-                !excluded && s_right <= x + EPSILON
+            .filter(|scope| {
+                let excluded = exclude_scope.is_some_and(|id| id == scope.scope_id);
+                let scope_right = scope.pos.x + scope.size.width;
+                let in_row =
+                    y >= scope.pos.y - EPSILON && y <= scope.pos.y + scope.size.height + EPSILON;
+                !excluded && in_row && scope_right <= x + EPSILON
             })
-            .collect();
+            .max_by(|a, b| {
+                let a_right = a.pos.x + a.size.width;
+                let b_right = b.pos.x + b.size.width;
+                a_right.total_cmp(&b_right)
+            });
 
-        let candidate_scope_ids: std::collections::HashSet<_> =
-            candidate_scopes.iter().map(|s| s.scope_id).collect();
-
-        let scopeless_elements: Vec<_> = self
-            .elements
-            .iter()
-            .filter(|e| {
-                let e_right = e.pos.x + e.size.width;
-                let in_candidate_scope = candidate_scope_ids.contains(&e.scope_id);
-                let excluded = exclude_scope.is_some_and(|id| e.scope_id == id);
-                !excluded && !in_candidate_scope && e_right <= x + EPSILON
-            })
-            .collect();
-
-        let score_scope = |s: &ScopeEntry| {
-            let s_right = s.pos.x + s.size.width;
-            let dx = (x - s_right).max(0.0);
-            let y_top = s.pos.y;
-            let y_bottom = s.pos.y + s.size.height;
-            let dy = if y < y_top {
-                y_top - y
-            } else if y > y_bottom {
-                y - y_bottom
-            } else {
-                0.0
-            };
-            dx * 10000.0 + dy
-        };
-
-        let score_element = |e: &ElementEntry| {
-            let e_right = e.pos.x + e.size.width;
-            let dx = (x - e_right).max(0.0);
-            let y_top = e.pos.y;
-            let y_bottom = e.pos.y + e.size.height;
-            let dy = if y < y_top {
-                y_top - y
-            } else if y > y_bottom {
-                y - y_bottom
-            } else {
-                0.0
-            };
-            dx * 10000.0 + dy
-        };
-
-        let best_scope = candidate_scopes
-            .iter()
-            .min_by(|a, b| score_scope(a).partial_cmp(&score_scope(b)).unwrap());
-        let best_scopeless = scopeless_elements
-            .iter()
-            .min_by(|a, b| score_element(a).partial_cmp(&score_element(b)).unwrap());
-
-        match (best_scope, best_scopeless) {
-            (Some(scope), Some(element)) => {
-                let scope_score = score_scope(scope);
-                let element_score = score_element(element);
-                if scope_score <= element_score {
-                    self.last_in_scope(scope.scope_id)
-                } else {
-                    Some(*element)
-                }
-            }
-            (Some(scope), None) => self.last_in_scope(scope.scope_id),
-            (None, Some(element)) => Some(*element),
-            (None, None) => None,
+        if let Some(scope) = same_row {
+            return self.last_in_scope(scope.scope_id);
         }
+
+        let above = self
+            .scopes
+            .iter()
+            .filter(|scope| {
+                let excluded = exclude_scope.is_some_and(|id| id == scope.scope_id);
+                let scope_bottom = scope.pos.y + scope.size.height;
+                !excluded && scope_bottom < y - EPSILON
+            })
+            .min_by(|a, b| {
+                let a_bottom = a.pos.y + a.size.height;
+                let b_bottom = b.pos.y + b.size.height;
+                let a_dy = (y - a_bottom).max(0.0);
+                let b_dy = (y - b_bottom).max(0.0);
+                a_dy.total_cmp(&b_dy).then_with(|| {
+                    let a_right = a.pos.x + a.size.width;
+                    let b_right = b.pos.x + b.size.width;
+                    b_right.total_cmp(&a_right)
+                })
+            });
+
+        above.and_then(|scope| self.last_in_scope(scope.scope_id))
     }
 
     pub fn find_target_right(
@@ -487,78 +452,36 @@ impl Page {
         exclude_scope: Option<NodeId>,
     ) -> Option<&ElementEntry> {
         const EPSILON: f32 = 0.5;
-
-        let candidate_scopes: Vec<_> = self
+        let same_row = self
             .scopes
             .iter()
-            .filter(|s| {
-                let excluded = exclude_scope.is_some_and(|id| s.scope_id == id);
-                !excluded && s.pos.x >= x - EPSILON
+            .filter(|scope| {
+                let excluded = exclude_scope.is_some_and(|id| id == scope.scope_id);
+                let in_row =
+                    y >= scope.pos.y - EPSILON && y <= scope.pos.y + scope.size.height + EPSILON;
+                !excluded && in_row && scope.pos.x >= x - EPSILON
             })
-            .collect();
+            .min_by(|a, b| a.pos.x.total_cmp(&b.pos.x));
 
-        let candidate_scope_ids: std::collections::HashSet<_> =
-            candidate_scopes.iter().map(|s| s.scope_id).collect();
-
-        let scopeless_elements: Vec<_> = self
-            .elements
-            .iter()
-            .filter(|e| {
-                let in_candidate_scope = candidate_scope_ids.contains(&e.scope_id);
-                let excluded = exclude_scope.is_some_and(|id| e.scope_id == id);
-                !excluded && !in_candidate_scope && e.pos.x >= x - EPSILON
-            })
-            .collect();
-
-        let score_scope = |s: &ScopeEntry| {
-            let dx = (s.pos.x - x).max(0.0);
-            let y_top = s.pos.y;
-            let y_bottom = s.pos.y + s.size.height;
-            let dy = if y < y_top {
-                y_top - y
-            } else if y > y_bottom {
-                y - y_bottom
-            } else {
-                0.0
-            };
-            dx * 10000.0 + dy
-        };
-
-        let score_element = |e: &ElementEntry| {
-            let dx = (e.pos.x - x).max(0.0);
-            let y_top = e.pos.y;
-            let y_bottom = e.pos.y + e.size.height;
-            let dy = if y < y_top {
-                y_top - y
-            } else if y > y_bottom {
-                y - y_bottom
-            } else {
-                0.0
-            };
-            dx * 10000.0 + dy
-        };
-
-        let best_scope = candidate_scopes
-            .iter()
-            .min_by(|a, b| score_scope(a).partial_cmp(&score_scope(b)).unwrap());
-        let best_scopeless = scopeless_elements
-            .iter()
-            .min_by(|a, b| score_element(a).partial_cmp(&score_element(b)).unwrap());
-
-        match (best_scope, best_scopeless) {
-            (Some(scope), Some(element)) => {
-                let scope_score = score_scope(scope);
-                let element_score = score_element(element);
-                if scope_score <= element_score {
-                    self.first_in_scope(scope.scope_id)
-                } else {
-                    Some(*element)
-                }
-            }
-            (Some(scope), None) => self.first_in_scope(scope.scope_id),
-            (None, Some(element)) => Some(*element),
-            (None, None) => None,
+        if let Some(scope) = same_row {
+            return self.first_in_scope(scope.scope_id);
         }
+
+        let below = self
+            .scopes
+            .iter()
+            .filter(|scope| {
+                let excluded = exclude_scope.is_some_and(|id| id == scope.scope_id);
+                !excluded && scope.pos.y > y + EPSILON
+            })
+            .min_by(|a, b| {
+                let a_dy = (a.pos.y - y).max(0.0);
+                let b_dy = (b.pos.y - y).max(0.0);
+                a_dy.total_cmp(&b_dy)
+                    .then_with(|| a.pos.x.total_cmp(&b.pos.x))
+            });
+
+        below.and_then(|scope| self.first_in_scope(scope.scope_id))
     }
 
     fn find_above_impl(
