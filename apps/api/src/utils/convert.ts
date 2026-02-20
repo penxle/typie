@@ -6,6 +6,7 @@ import { createDbId, db, FontFamilies, Fonts, TableCode } from '@/db';
 import { PostLayoutMode } from '@/enums';
 import { schema } from '@/pm';
 import type { JSONContent } from '@tiptap/core';
+import type { Dayjs } from 'dayjs';
 import type { PageLayout } from '@/db/schemas/json';
 
 const ROOT_ID = '00000000000000000000000000000000';
@@ -238,14 +239,27 @@ async function mergeInlineContent(content: JSONContent[] | undefined, extraStyle
   return segments;
 }
 
+function extractTextContent(node: JSONContent): string {
+  if (node.type === 'text') return node.text ?? '';
+  return (node.content ?? []).map(extractTextContent).join('');
+}
+
 async function convertNode(
   pmNode: JSONContent,
   parentId: string,
   nodes: Record<string, LoroNode>,
   archivedNodes: ArchivedNodeEntry[],
   contentWidth: number,
+  nodeIdMap: Map<string, { loroId: string; excerpt: string }>,
 ): Promise<string | null> {
   const nodeId = generateNodeId();
+
+  const pmNodeId = pmNode.attrs?.nodeId as string | undefined;
+  if (pmNodeId) {
+    const text = extractTextContent(pmNode);
+    const excerpt = text ? (text.length > 20 ? text.slice(0, 20) + '...' : text) : '(내용 없음)';
+    nodeIdMap.set(pmNodeId, { loroId: nodeId, excerpt });
+  }
 
   switch (pmNode.type) {
     case 'paragraph': {
@@ -310,7 +324,7 @@ async function convertNode(
       const children: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = await convertNode(child, nodeId, nodes, archivedNodes, contentWidth);
+          const childId = await convertNode(child, nodeId, nodes, archivedNodes, contentWidth, nodeIdMap);
           if (childId) children.push(childId);
         }
       }
@@ -330,7 +344,7 @@ async function convertNode(
       const children: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = await convertNode(child, nodeId, nodes, archivedNodes, contentWidth);
+          const childId = await convertNode(child, nodeId, nodes, archivedNodes, contentWidth, nodeIdMap);
           if (childId) children.push(childId);
         }
       }
@@ -348,7 +362,7 @@ async function convertNode(
       const children: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = await convertNode(child, nodeId, nodes, archivedNodes, contentWidth);
+          const childId = await convertNode(child, nodeId, nodes, archivedNodes, contentWidth, nodeIdMap);
           if (childId) children.push(childId);
         }
       }
@@ -365,7 +379,7 @@ async function convertNode(
       const children: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = await convertNode(child, nodeId, nodes, archivedNodes, contentWidth);
+          const childId = await convertNode(child, nodeId, nodes, archivedNodes, contentWidth, nodeIdMap);
           if (childId) children.push(childId);
         }
       }
@@ -382,7 +396,7 @@ async function convertNode(
       const children: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = await convertNode(child, nodeId, nodes, archivedNodes, contentWidth);
+          const childId = await convertNode(child, nodeId, nodes, archivedNodes, contentWidth, nodeIdMap);
           if (childId) children.push(childId);
         }
       }
@@ -430,7 +444,7 @@ async function convertNode(
       const children: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = await convertNode(child, nodeId, nodes, archivedNodes, contentWidth);
+          const childId = await convertNode(child, nodeId, nodes, archivedNodes, contentWidth, nodeIdMap);
           if (childId) children.push(childId);
         }
       }
@@ -509,7 +523,7 @@ async function convertNode(
       const children: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = await convertNode(child, nodeId, nodes, archivedNodes, contentWidth);
+          const childId = await convertNode(child, nodeId, nodes, archivedNodes, contentWidth, nodeIdMap);
           if (childId) children.push(childId);
         }
       }
@@ -526,7 +540,7 @@ async function convertNode(
       const children: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = await convertNode(child, nodeId, nodes, archivedNodes, contentWidth);
+          const childId = await convertNode(child, nodeId, nodes, archivedNodes, contentWidth, nodeIdMap);
           if (childId) children.push(childId);
         }
       }
@@ -599,7 +613,7 @@ async function convertNode(
       const contentChildren: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = await convertNode(child, foldContentId, nodes, archivedNodes, contentWidth);
+          const childId = await convertNode(child, foldContentId, nodes, archivedNodes, contentWidth, nodeIdMap);
           if (childId) contentChildren.push(childId);
         }
       }
@@ -676,6 +690,8 @@ export async function convertPostToDocumentJson(
     maxWidth: number;
     layoutMode: PostLayoutMode;
     pageLayout: PageLayout | null;
+    anchors?: { nodeId: string; name: string | null; createdAt: Dayjs }[];
+    userId?: string;
   },
 ): Promise<{ json: DocumentJson; archivedNodes: ArchivedNodeEntry[] }> {
   const bodyNode = body.content?.[0];
@@ -708,12 +724,13 @@ export async function convertPostToDocumentJson(
 
   const nodes: Record<string, LoroNode> = {};
   const archivedNodes: ArchivedNodeEntry[] = [];
+  const nodeIdMap = new Map<string, { loroId: string; excerpt: string }>();
 
   const rootChildren: string[] = [];
   const blocks = bodyNode?.content ?? [];
 
   for (const block of blocks) {
-    const childId = await convertNode(block, ROOT_ID, nodes, archivedNodes, contentWidth);
+    const childId = await convertNode(block, ROOT_ID, nodes, archivedNodes, contentWidth, nodeIdMap);
     if (childId) rootChildren.push(childId);
   }
 
@@ -742,6 +759,23 @@ export async function convertPostToDocumentJson(
       'paragraph:line_height': defaultValues.lineHeight,
     },
   };
+
+  if (options.anchors && options.anchors.length > 0 && options.userId) {
+    const anchorMap = new Map(options.anchors.map((a) => [a.nodeId, a]));
+    for (const [pmId, { loroId, excerpt }] of nodeIdMap) {
+      const anchor = anchorMap.get(pmId);
+      if (anchor && nodes[loroId]) {
+        const remarkId = generateNodeId();
+        nodes[loroId].remarks = {
+          [remarkId]: {
+            user_id: options.userId,
+            text: anchor.name || excerpt,
+            created_at: anchor.createdAt.valueOf(),
+          },
+        };
+      }
+    }
+  }
 
   const json: DocumentJson = {
     settings: {

@@ -14,6 +14,7 @@ import {
   firstOrThrow,
   Folders,
   Notes,
+  PostAnchors,
   PostContents,
   Posts,
   TableCode,
@@ -183,6 +184,7 @@ builder.mutationFields((t) => ({
       const entity = await db
         .select({
           id: Entities.id,
+          userId: Entities.userId,
           siteId: Entities.siteId,
           parentId: Entities.parentId,
           order: Entities.order,
@@ -216,10 +218,21 @@ builder.mutationFields((t) => ({
       await assertPlanRule({ userId: ctx.session.userId, rule: 'maxTotalCharacterCount' });
       await assertPlanRule({ userId: ctx.session.userId, rule: 'maxTotalBlobSize' });
 
+      const anchors = await db
+        .select({
+          nodeId: PostAnchors.nodeId,
+          name: PostAnchors.name,
+          createdAt: PostAnchors.createdAt,
+        })
+        .from(PostAnchors)
+        .where(eq(PostAnchors.postId, post.id));
+
       const { json, archivedNodes } = await convertPostToDocumentJson(postContents.body, {
         maxWidth: post.maxWidth,
         layoutMode: postContents.layoutMode,
         pageLayout: postContents.pageLayout,
+        anchors,
+        userId: entity.userId,
       });
 
       const snapshot = await wasm.jsonToSnapshot(json);
