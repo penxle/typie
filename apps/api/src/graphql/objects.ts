@@ -49,6 +49,7 @@ export const IDocument = createInterfaceRef('IDocument', T.Documents);
 export const IFolder = createInterfaceRef('IFolder', T.Folders);
 export const IPost = createInterfaceRef('IPost', T.Posts);
 export const ISite = createInterfaceRef('ISite', T.Sites);
+export const IUser = createInterfaceRef('IUser', T.Users);
 
 export const CreditCode = createObjectRef('CreditCode', T.CreditCodes);
 export const Document = createObjectRef('Document', T.Documents);
@@ -85,6 +86,7 @@ export const EntityView = createObjectRef('EntityView', T.Entities);
 export const FolderView = createObjectRef('FolderView', T.Folders);
 export const PostView = createObjectRef('PostView', T.Posts);
 export const SiteView = createObjectRef('SiteView', T.Sites);
+export const UserView = createObjectRef('UserView', T.Users);
 
 type BlobShape = { id: string; size: number; path: string };
 export const Blob = builder.interfaceRef<BlobShape>('Blob');

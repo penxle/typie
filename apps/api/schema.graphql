@@ -594,6 +594,12 @@ interface ISite {
   url: String!
 }
 
+interface IUser {
+  avatar: Image!
+  id: ID!
+  name: String!
+}
+
 type Image implements Blob {
   height: Int!
   id: ID!
@@ -1034,6 +1040,7 @@ type Query {
   site(siteId: ID!): Site!
   siteView(origin: String!): SiteView!
   stats: JSON!
+  userView(id: ID!): UserView!
   welcome: Welcome!
   widgets: [Widget!]!
 }
@@ -1415,7 +1422,7 @@ input UpdateWidgetInput {
   widgetId: ID!
 }
 
-type User {
+type User implements IUser {
   avatar: Image!
   billingKey: UserBillingKey
   canStartTrial: Boolean!
@@ -1492,6 +1499,12 @@ type UserTrial {
 type UserUsage {
   totalBlobSize: Int!
   totalCharacterCount: Int!
+}
+
+type UserView implements IUser {
+  avatar: Image!
+  id: ID!
+  name: String!
 }
 
 input VerifyPersonalIdentityInput {
