@@ -106,7 +106,12 @@ impl Transaction {
     }
 
     pub fn remove_annotation(&mut self, ann_type: AnnotationType) -> Result<bool> {
-        let ranges = self.find_annotation_ranges(ann_type);
+        let selection = self.selection().clone();
+        let ranges = if selection.is_collapsed() {
+            self.find_annotation_ranges_at_position(selection.anchor, ann_type)
+        } else {
+            self.find_annotation_ranges(ann_type)
+        };
         if ranges.is_empty() {
             return Ok(false);
         }
@@ -124,6 +129,62 @@ impl Transaction {
         }
 
         Ok(true)
+    }
+
+    fn find_annotation_ranges_at_position(
+        &self,
+        position: Position,
+        ann_type: AnnotationType,
+    ) -> Vec<(NodeId, usize, usize)> {
+        let block_id = position.node_id;
+        let block_offset = position.offset;
+
+        let mut all_ranges = Vec::new();
+        self.find_annotation_in_block(block_id, ann_type, &mut all_ranges);
+
+        if all_ranges.is_empty() {
+            return Vec::new();
+        }
+
+        let Some(block) = self.node(block_id) else {
+            return Vec::new();
+        };
+
+        // Map block offset to (text_node_id, local_offset)
+        let mut current_block_offset = 0;
+        let mut cursor_text_node: Option<(NodeId, usize)> = None;
+
+        for child in block.children() {
+            match child.node() {
+                Node::Text(text_node) => {
+                    let text_len = text_node.text.char_len();
+                    let child_end = current_block_offset + text_len;
+
+                    if block_offset >= current_block_offset && block_offset <= child_end {
+                        let local_offset = block_offset - current_block_offset;
+                        cursor_text_node = Some((child.node_id(), local_offset));
+                        break;
+                    }
+
+                    current_block_offset = child_end;
+                }
+                Node::HardBreak(_) => {
+                    current_block_offset += 1;
+                }
+                _ => {}
+            }
+        }
+
+        let Some((cursor_node_id, local_offset)) = cursor_text_node else {
+            return Vec::new();
+        };
+
+        all_ranges
+            .into_iter()
+            .filter(|(node_id, start, end)| {
+                *node_id == cursor_node_id && *start <= local_offset && local_offset < *end
+            })
+            .collect()
     }
 
     fn find_annotation_ranges(&self, ann_type: AnnotationType) -> Vec<(NodeId, usize, usize)> {
