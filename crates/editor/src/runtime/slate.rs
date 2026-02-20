@@ -28,6 +28,7 @@ pub const DIRTY_RENDER_REQUIRED: u64 = 1 << 16;
 pub const DIRTY_FONT_REQUIRED: u64 = 1 << 17;
 pub const DIRTY_EXITED_DOCUMENT_START: u64 = 1 << 19;
 pub const DIRTY_REPASTE: u64 = 1 << 20;
+pub const DIRTY_REMARKS: u64 = 1 << 21;
 
 pub const ATTR_TAG_BACKGROUND_COLOR: u32 = 0;
 pub const ATTR_TAG_TEXT_COLOR: u32 = 1;
@@ -207,6 +208,9 @@ define_slate! {
         pub default_attrs_count: u32,
 
         pub repaste_enabled: u32,
+
+        pub remarks_offset: u32,
+        pub remarks_count: u32,
     }
 }
 
@@ -797,6 +801,25 @@ impl Slab {
         slate.table_overlays_offset = start;
         slate.table_overlays_count = overlays.len() as u32;
         slate.dirty |= DIRTY_TABLE_OVERLAYS;
+    }
+
+    pub fn write_remarks(&mut self, slate: &mut Slate, overlays: &[super::RemarkOverlay]) {
+        let start = self.alloc(0, 4);
+        for o in overlays {
+            self.write_bytes(o.node_id.as_uuid().as_bytes());
+            self.write_bytes(o.remark_id.as_uuid().as_bytes());
+            self.write_str(&o.user_id);
+            self.write_str(&o.text);
+            self.write_u32_slice(&[
+                (o.created_at as u64 >> 32) as u32,
+                (o.created_at as u64 & 0xFFFFFFFF) as u32,
+            ]);
+            self.write_u32_slice(&[o.page_idx as u32]);
+            self.write_f32_slice(&[o.bounds.x, o.bounds.y, o.bounds.width, o.bounds.height]);
+        }
+        slate.remarks_offset = start;
+        slate.remarks_count = overlays.len() as u32;
+        slate.dirty |= DIRTY_REMARKS;
     }
 
     pub fn write_default_attrs(&mut self, slate: &mut Slate, attrs: &DefaultAttrs) {

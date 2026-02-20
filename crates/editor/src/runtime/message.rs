@@ -583,4 +583,16 @@ define_messages! {
     }
     => when When::True
     => handle(rt) { rt.handle_extend_selection_to(anchor_page_idx, anchor_x, anchor_y, head_page_idx, head_x, head_y) },
+
+    AddRemark { node_id: String, user_id: String, text: String, created_at: i64 }
+    => when When::key(ContextKey::CanEdit)
+    => handle(rt) { rt.handle_add_remark(node_id, user_id, text, created_at) },
+
+    UpdateRemark { node_id: String, remark_id: String, text: String }
+    => when When::key(ContextKey::CanEdit)
+    => handle(rt) { rt.handle_update_remark(node_id, remark_id, text) },
+
+    RemoveRemark { node_id: String, remark_id: String }
+    => when When::key(ContextKey::CanEdit)
+    => handle(rt) { rt.handle_remove_remark(node_id, remark_id) },
 }

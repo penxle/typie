@@ -10,6 +10,7 @@ mod list;
 mod node;
 mod paragraph;
 mod preedit;
+mod remark;
 mod root;
 mod selection;
 mod style;

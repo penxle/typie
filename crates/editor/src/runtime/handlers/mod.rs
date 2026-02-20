@@ -17,5 +17,6 @@ mod interaction;
 mod layout;
 mod navigation;
 mod pointer;
+mod remark;
 mod table;
 mod text_replacement;
