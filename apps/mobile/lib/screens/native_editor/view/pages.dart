@@ -601,6 +601,7 @@ class PageList extends HookWidget {
             ..lastTapPosition = localPosition;
 
           final pointerX = gesture.getPointerX(localPosition.dx);
+          final tappedInteractive = scope.editor.isInteractiveHit(pageIdx, pointerX, localY);
 
           if (clickCount == 1) {
             final isSelectionHit = scope.editor.isSelectionHit(pageIdx, pointerX, localY);
@@ -658,10 +659,13 @@ class PageList extends HookWidget {
                   newState.cursor!.isSamePosition(prevCursor);
 
               if (isSameCursor) {
-                final isInteractive = scope.editor.isInteractiveHit(pageIdx, pointerX, localY);
-                if (!isInteractive && !wasContextMenuOpen.value) {
+                if (!tappedInteractive && !wasContextMenuOpen.value) {
                   showContextMenu.value = true;
                 }
+                return;
+              }
+
+              if (tappedInteractive) {
                 return;
               }
 

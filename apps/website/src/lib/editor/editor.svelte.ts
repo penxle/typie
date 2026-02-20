@@ -167,8 +167,9 @@ export class Editor {
     visible: false,
   });
 
-  pendingScrollMode = $state<'auto' | 'typewriter' | null>(null);
+  pendingScrollConsumer = $state<'cursor' | 'typewriter' | null>(null);
   #pendingTypewriterRequest = false;
+  #typewriterAvailable = false;
 
   inputElement = $state<HTMLInputElement | null>(null);
 
@@ -420,13 +421,13 @@ export class Editor {
         this.cursor.bounds = c.bounds;
         this.cursor.visible = c.visible;
         if (this.#pendingTypewriterRequest) {
-          this.pendingScrollMode = 'typewriter';
+          this.pendingScrollConsumer = this.#typewriterAvailable ? 'typewriter' : 'cursor';
         }
       } else {
         this.cursor.pageIdx = -1;
         this.cursor.bounds = null;
         this.cursor.visible = false;
-        this.pendingScrollMode = null;
+        this.pendingScrollConsumer = null;
       }
     }
 
@@ -1398,10 +1399,29 @@ export class Editor {
     if (mode === 'typewriter') {
       this.#pendingTypewriterRequest = true;
     } else {
-      this.pendingScrollMode = mode;
+      this.pendingScrollConsumer = 'cursor';
       this.#pendingTypewriterRequest = false;
     }
     return this;
+  }
+
+  setTypewriterAvailability(enabled: boolean, hasPosition: boolean): void {
+    const nextAvailable = enabled && hasPosition;
+    if (this.#typewriterAvailable === nextAvailable) {
+      return;
+    }
+
+    this.#typewriterAvailable = nextAvailable;
+
+    if (!nextAvailable && this.pendingScrollConsumer === 'typewriter') {
+      this.pendingScrollConsumer = 'cursor';
+    }
+  }
+
+  consumePendingScroll(consumer: 'cursor' | 'typewriter'): void {
+    if (this.pendingScrollConsumer === consumer) {
+      this.pendingScrollConsumer = null;
+    }
   }
 
   focus(): Editor {
