@@ -365,7 +365,7 @@
           gap: '8px',
           paddingY: '8px',
           paddingLeft: '10px',
-          paddingRight: '8px',
+          paddingRight: '10px',
           maxHeight: '300px',
           overflowY: 'auto',
         })}
