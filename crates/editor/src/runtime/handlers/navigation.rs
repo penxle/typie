@@ -966,6 +966,40 @@ mod tests {
     }
 
     #[test]
+    fn test_arrow_left_from_table_cell_leading_hr_selection_exits_cell() {
+        let mut prev_para = id!();
+        let mut target_cell = id!();
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                table {
+                    table_row {
+                        table_cell {
+                            @prev_para paragraph { text { "A" } }
+                        }
+                        @target_cell table_cell {
+                            horizontal_rule {}
+                            paragraph { text { "B" } }
+                        }
+                    }
+                }
+            }
+            selection { (target_cell, 0) -> (target_cell, 1, Affinity::Upstream) }
+        };
+
+        rt.layout();
+        rt.update(Message::Navigate {
+            direction: Direction::Left,
+            extend: false,
+        });
+
+        let selection = &rt.state().selection;
+        assert_eq!(selection.anchor, selection.head);
+        assert_eq!(selection.head.node_id, prev_para);
+        assert_eq!(selection.head.offset, 1);
+    }
+
+    #[test]
     fn test_arrow_right_from_block_position_at_root_start() {
         let mut p1 = id!();
         let mut p2 = id!();
