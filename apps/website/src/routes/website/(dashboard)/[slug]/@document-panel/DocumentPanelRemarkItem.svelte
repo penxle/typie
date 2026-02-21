@@ -1,6 +1,6 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
-  import dayjs from 'dayjs';
+  import { TimeAgo } from '@typie/ui/components';
   import { graphql } from '$graphql';
   import { Img } from '$lib/components';
   import type { RemarkOverlay } from '$lib/editor/slate';
@@ -87,9 +87,7 @@
         >
           {$userQuery.userView.name}
         </span>
-        <span class={css({ fontSize: '11px', color: 'text.faint', flexShrink: '0' })}>
-          {dayjs(remark.createdAt).fromNow()}
-        </span>
+        <TimeAgo style={{ fontSize: '11px', color: 'text.faint', flexShrink: '0' }} timestamp={remark.createdAt} />
       {:else}
         <div
           class={css({
