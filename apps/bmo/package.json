@@ -1,0 +1,21 @@
+{
+  "name": "@typie/bmo",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.45",
+    "@aws-sdk/client-dynamodb": "^3.992.0",
+    "@aws-sdk/client-lambda": "^3.992.0",
+    "@aws-sdk/client-ssm": "^3.992.0",
+    "@aws-sdk/lib-dynamodb": "^3.992.0",
+    "@slack/web-api": "^7.14.1",
+    "dedent": "^1.7.1",
+    "remark": "^15.0.1",
+    "remark-gfm": "^4.0.1",
+    "ts-pattern": "^5.9.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}
