@@ -1,4 +1,3 @@
-use crate::render::glyph::scaler::{ColorImage, MaskImage};
 #[cfg(target_arch = "aarch64")]
 use std::arch::aarch64::*;
 use tiny_skia::PixmapMut;
@@ -42,7 +41,9 @@ unsafe fn as_pixels(data: &[u8]) -> &[u32] {
 
 pub(crate) fn blit_mask_d32_a8(
     dst: &mut PixmapMut,
-    mask: &MaskImage,
+    mask_data: &[u8],
+    mask_width: u32,
+    mask_height: u32,
     dst_x: i32,
     dst_y: i32,
     color_r: u8,
@@ -55,28 +56,50 @@ pub(crate) fn blit_mask_d32_a8(
     }
 
     if color_a == 255 {
-        blit_mask_opaque(dst, mask, dst_x, dst_y, color_r, color_g, color_b);
+        blit_mask_opaque(
+            dst,
+            mask_data,
+            mask_width,
+            mask_height,
+            dst_x,
+            dst_y,
+            color_r,
+            color_g,
+            color_b,
+        );
     } else {
-        blit_mask_general(dst, mask, dst_x, dst_y, color_r, color_g, color_b, color_a);
+        blit_mask_general(
+            dst,
+            mask_data,
+            mask_width,
+            mask_height,
+            dst_x,
+            dst_y,
+            color_r,
+            color_g,
+            color_b,
+            color_a,
+        );
     }
 }
 
 fn blit_mask_opaque(
     dst: &mut PixmapMut,
-    mask: &MaskImage,
+    mask_data: &[u8],
+    mask_width: u32,
+    mask_height: u32,
     dst_x: i32,
     dst_y: i32,
     color_r: u8,
     color_g: u8,
     color_b: u8,
 ) {
-    let (sx, sy, dx, dy, w, h) = compute_clip(dst, mask, dst_x, dst_y);
+    let (sx, sy, dx, dy, w, h) = compute_clip(dst, mask_width, mask_height, dst_x, dst_y);
     if w <= 0 || h <= 0 {
         return;
     }
 
-    let mask_data = &mask.data;
-    let mask_stride = mask.width as usize;
+    let mask_stride = mask_width as usize;
     let dst_width = dst.width() as usize;
     let dst_pixels = unsafe { as_pixels_mut(dst.data_mut()) };
     let src = pack_rgba(color_r, color_g, color_b, 255);
@@ -103,7 +126,9 @@ fn blit_mask_opaque(
 
 fn blit_mask_general(
     dst: &mut PixmapMut,
-    mask: &MaskImage,
+    mask_data: &[u8],
+    mask_width: u32,
+    mask_height: u32,
     dst_x: i32,
     dst_y: i32,
     color_r: u8,
@@ -111,13 +136,12 @@ fn blit_mask_general(
     color_b: u8,
     color_a: u8,
 ) {
-    let (sx, sy, dx, dy, w, h) = compute_clip(dst, mask, dst_x, dst_y);
+    let (sx, sy, dx, dy, w, h) = compute_clip(dst, mask_width, mask_height, dst_x, dst_y);
     if w <= 0 || h <= 0 {
         return;
     }
 
-    let mask_data = &mask.data;
-    let mask_stride = mask.width as usize;
+    let mask_stride = mask_width as usize;
     let dst_width = dst.width() as usize;
     let dst_pixels = unsafe { as_pixels_mut(dst.data_mut()) };
     let w = w as usize;
@@ -320,25 +344,32 @@ unsafe fn row_blend_general_scalar(
     }
 }
 
-pub(crate) fn blit_color(dst: &mut PixmapMut, color: &ColorImage, dst_x: i32, dst_y: i32) {
+pub(crate) fn blit_color(
+    dst: &mut PixmapMut,
+    src_data: &[u8],
+    src_width: u32,
+    src_height: u32,
+    dst_x: i32,
+    dst_y: i32,
+) {
     let dst_width = dst.width() as i32;
     let dst_height = dst.height() as i32;
-    let src_width = color.pixmap.width() as i32;
-    let src_height = color.pixmap.height() as i32;
+    let src_w = src_width as i32;
+    let src_h = src_height as i32;
 
     let src_x_start = if dst_x < 0 { -dst_x } else { 0 };
     let src_y_start = if dst_y < 0 { -dst_y } else { 0 };
     let dst_x_start = dst_x.max(0);
     let dst_y_start = dst_y.max(0);
 
-    let copy_width = (src_width - src_x_start).min(dst_width - dst_x_start);
-    let copy_height = (src_height - src_y_start).min(dst_height - dst_y_start);
+    let copy_width = (src_w - src_x_start).min(dst_width - dst_x_start);
+    let copy_height = (src_h - src_y_start).min(dst_height - dst_y_start);
 
     if copy_width <= 0 || copy_height <= 0 {
         return;
     }
 
-    let src_pixels = unsafe { as_pixels(color.pixmap.data()) };
+    let src_pixels = unsafe { as_pixels(src_data) };
     let dst_pixels = unsafe { as_pixels_mut(dst.data_mut()) };
     let src_stride = src_width as usize;
     let dst_stride = dst_width as usize;
@@ -386,14 +417,15 @@ pub(crate) fn blit_color(dst: &mut PixmapMut, color: &ColorImage, dst_x: i32, ds
 
 fn compute_clip(
     dst: &PixmapMut,
-    mask: &MaskImage,
+    mask_width: u32,
+    mask_height: u32,
     dst_x: i32,
     dst_y: i32,
 ) -> (i32, i32, i32, i32, i32, i32) {
     let dst_width = dst.width() as i32;
     let dst_height = dst.height() as i32;
-    let mask_width = mask.width as i32;
-    let mask_height = mask.height as i32;
+    let mask_width = mask_width as i32;
+    let mask_height = mask_height as i32;
 
     let src_x_start = if dst_x < 0 { -dst_x } else { 0 };
     let src_y_start = if dst_y < 0 { -dst_y } else { 0 };
