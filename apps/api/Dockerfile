@@ -34,11 +34,6 @@ FROM builder AS prod-deps
 COPY out/json/ .
 RUN bun install --no-save --omit=dev
 
-FROM builder AS sharp
-
-COPY vendor/sharp-debian.tar.xz ./vendor/
-RUN mkdir -p apps/api && tar -xf vendor/sharp-debian.tar.xz -C apps/api/ && rm -rf vendor
-
 FROM debian:12-slim AS runtime
 WORKDIR /app
 
@@ -52,6 +47,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     ghostscript \
     tini \
+    xz-utils \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /root/.bun /root/.bun
@@ -64,7 +60,9 @@ COPY --from=prod-deps /app/ .
 RUN cd apps/api && npx playwright install-deps && npx playwright install chromium
 
 COPY --from=build /app/ .
-COPY --from=sharp /app/apps/api/ ./apps/api/
+COPY vendor/sharp-debian.tar.xz ./vendor/
+
+RUN tar -xf vendor/sharp-debian.tar.xz -C apps/api/ && rm -rf vendor
 
 ENTRYPOINT ["tini", "--"]
 CMD ["bun", "run", "--cwd", "apps/api", "start"]
