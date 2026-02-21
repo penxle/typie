@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:typie/context/theme.dart';
 import 'package:typie/hooks/async_effect.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/screens/native_editor/toolbar/buttons/base.dart';
@@ -128,7 +129,7 @@ class NativeEditorTextOptionsToolbar extends HookWidget {
               builder: (context, color, _) {
                 return Container(
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.72),
+                    color: context.colors.surfaceDefault.withValues(alpha: 0.72),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   padding: const EdgeInsets.all(8),
