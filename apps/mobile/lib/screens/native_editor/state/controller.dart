@@ -117,6 +117,8 @@ class EditorController extends ChangeNotifier {
   final ValueNotifier<RemarkOverlayInfo?> remarkHighlightTarget = ValueNotifier(null);
 
   void scrollToRemark(RemarkOverlayInfo remark) {
+    remarkScrollTarget.value = null;
+    remarkHighlightTarget.value = null;
     remarkScrollTarget.value = remark;
     remarkHighlightTarget.value = remark;
   }
