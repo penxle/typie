@@ -23,13 +23,15 @@ impl NodeHtmlCodec for OrderedListNode {
 
 impl Layout for OrderedListNode {
     fn layout(&self, ctx: &LayoutContext, constraints: BoxConstraints) -> LayoutNode {
+        const ITEM_GAP: f32 = 4.0;
+
         let children: Vec<_> = ctx.node.children().collect();
         let mut child_nodes = Vec::new();
         let mut y_offset = 0.0;
         let mut max_width = 0.0f32;
 
-        for child in children {
-            let child_layout = ctx.layout(&child, constraints);
+        for (idx, child) in children.iter().enumerate() {
+            let child_layout = ctx.layout(child, constraints);
             let child_height = child_layout.size.height;
             let child_width = child_layout.size.width;
 
@@ -39,6 +41,9 @@ impl Layout for OrderedListNode {
             });
 
             y_offset += child_height;
+            if idx < children.len() - 1 {
+                y_offset += ITEM_GAP;
+            }
             max_width = max_width.max(child_width);
         }
 
