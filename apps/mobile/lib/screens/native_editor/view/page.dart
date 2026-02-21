@@ -394,6 +394,12 @@ class _RemarkHighlightOverlayState extends State<_RemarkHighlightOverlay> with S
         }
       });
     widget.controller.remarkHighlightTarget.addListener(_onHighlight);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      _onHighlight();
+    });
   }
 
   @override
