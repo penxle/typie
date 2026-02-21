@@ -19,7 +19,7 @@ permissions:
 jobs:
   build:
     name: Build
-    runs-on: linux-arm64-16vcpu
+    runs-on: linux-arm64-4vcpu
 
     outputs:
       version: ${{ steps.meta.outputs.version }}
@@ -34,9 +34,11 @@ jobs:
       - name: Run turbo prune
         run: bunx turbo prune @typie/${{ inputs.app }} --docker
 
-      - name: Copy Cargo files
-        run: |
-          cp Cargo.toml Cargo.lock out/full/
+      - name: Download WASM artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: editor-wasm
+          path: out/full/
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
