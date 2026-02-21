@@ -233,12 +233,12 @@
       position: 'fixed',
       zIndex: '20',
       borderRadius: '4px',
-      backgroundColor: 'black/65',
+      backgroundColor: 'surface.dark/65',
       paddingX: '8px',
       paddingY: '4px',
       fontSize: '11px',
       whiteSpace: 'nowrap',
-      color: 'white',
+      color: 'text.bright',
       fontVariantNumeric: 'tabular-nums',
       transition: 'opacity',
       transitionDuration: '300ms',
@@ -282,10 +282,10 @@
         width: '8px',
         cursor: 'pointer',
         borderRadius: 'full',
-        backgroundColor: isUserScrollVisible ? 'black/50' : 'black/22',
+        backgroundColor: isUserScrollVisible ? 'control.scrollbar.hover' : 'control.scrollbar.default',
         transition: 'colors',
-        _hover: { backgroundColor: isUserScrollVisible ? 'black/70' : 'black/35' },
-        _active: { backgroundColor: isUserScrollVisible ? 'black/80' : 'black/45' },
+        _hover: { backgroundColor: 'control.scrollbar.hover' },
+        _active: { backgroundColor: 'control.scrollbar.hover' },
       })}
       aria-valuemax={maxScrollV}
       aria-valuemin={0}
@@ -331,10 +331,10 @@
         height: '8px',
         cursor: 'pointer',
         borderRadius: 'full',
-        backgroundColor: isUserScrollVisible ? 'black/50' : 'black/22',
+        backgroundColor: isUserScrollVisible ? 'control.scrollbar.hover' : 'control.scrollbar.default',
         transition: 'colors',
-        _hover: { backgroundColor: isUserScrollVisible ? 'black/70' : 'black/35' },
-        _active: { backgroundColor: isUserScrollVisible ? 'black/80' : 'black/45' },
+        _hover: { backgroundColor: 'control.scrollbar.hover' },
+        _active: { backgroundColor: 'control.scrollbar.hover' },
       })}
       aria-valuemax={maxScrollH}
       aria-valuemin={0}
