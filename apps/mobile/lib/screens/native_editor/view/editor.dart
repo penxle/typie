@@ -489,6 +489,34 @@ class EditorView extends HookWidget {
       return null;
     }, [state.state.aiFeedback.scrollTarget, state.state.aiFeedback.scrollTargetPageIdx]);
 
+    useEffect(() {
+      void onRemarkScroll() {
+        final target = controller.remarkScrollTarget.value;
+        if (target != null) {
+          final layout = controller.state.layout;
+          if (layout != null) {
+            scrollToOverlayTarget(
+              verticalScrollController: verticalScrollController,
+              horizontalScrollController: horizontalScrollController,
+              geometry: ContentGeometry(
+                titleAreaHeight: titleAreaHeight.value,
+                layout: layout,
+                pages: controller.state.pages,
+              ),
+              pageIdx: target.pageIdx,
+              targetX: target.boundsX,
+              targetY: target.boundsY,
+              targetWidth: target.boundsWidth,
+            );
+          }
+          controller.remarkScrollTarget.value = null;
+        }
+      }
+
+      controller.remarkScrollTarget.addListener(onRemarkScroll);
+      return () => controller.remarkScrollTarget.removeListener(onRemarkScroll);
+    }, []);
+
     if (currentLayout == null) {
       return const SizedBox.shrink();
     }

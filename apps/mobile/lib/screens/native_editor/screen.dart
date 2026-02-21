@@ -26,6 +26,7 @@ import 'package:typie/screens/native_editor/note.dart';
 import 'package:typie/screens/native_editor/sheet/ai_feedback.dart';
 import 'package:typie/screens/native_editor/sheet/find_replace.dart';
 import 'package:typie/screens/native_editor/sheet/menu.dart';
+import 'package:typie/screens/native_editor/sheet/remark.dart';
 import 'package:typie/screens/native_editor/sheet/spellcheck.dart';
 import 'package:typie/screens/native_editor/state/controller.dart';
 import 'package:typie/screens/native_editor/state/fonts.dart';
@@ -184,6 +185,18 @@ class _Content extends HookWidget {
                                 intercept: true,
                                 overlayOpacity: 0.05,
                                 child: FindReplaceSheet(controller: controller),
+                              );
+                            },
+                            onOpenRemark: () async {
+                              final controller = editorContext.controller;
+                              if (controller == null) {
+                                return;
+                              }
+                              await context.showBottomSheet(
+                                intercept: true,
+                                overlayOpacity: 0.05,
+                                resizeToAvoidBottomInset: true,
+                                child: RemarkBottomSheet(controller: controller, client: client, userId: data.me!.id),
                               );
                             },
                             onOpenSpellcheck: () async {

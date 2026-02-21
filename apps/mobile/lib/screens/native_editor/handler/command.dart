@@ -83,6 +83,10 @@ class CommandHandler {
       if (dirty & (1 << 20) != 0) {
         _handleRepaste(controller, reader);
       }
+
+      if (dirty & (1 << 21) != 0) {
+        _handleRemarksChanged(controller, reader);
+      }
     } finally {
       controller.endBatchUpdate();
     }
@@ -225,6 +229,10 @@ class CommandHandler {
       'offset': headOffset,
       'affinity': headAffinity == 1 ? 'downstream' : 'upstream',
     };
+
+    final currentBlockNodeId = reader.readCurrentBlockNodeId();
+    final isZero = currentBlockNodeId.replaceAll('0', '').isEmpty;
+    controller.updateState((state) => state.copyWith(currentBlockNodeId: isZero ? null : currentBlockNodeId));
 
     controller.onSelectionChanged?.call(anchor, head);
   }
@@ -473,5 +481,26 @@ class CommandHandler {
   static void _handleRepaste(EditorController controller, SlateReader reader) {
     final repaste = reader.readRepaste();
     controller.updateState((state) => state.copyWith(repasteAsTextEnabled: repaste.enabled));
+  }
+
+  static void _handleRemarksChanged(EditorController controller, SlateReader reader) {
+    final rawRemarks = reader.readRemarks();
+    final remarks = rawRemarks
+        .map(
+          (r) => RemarkOverlayInfo(
+            pageIdx: r.pageIdx,
+            nodeId: r.nodeId,
+            remarkId: r.remarkId,
+            userId: r.userId,
+            text: r.text,
+            createdAt: r.createdAt,
+            boundsX: r.boundsX,
+            boundsY: r.boundsY,
+            boundsWidth: r.boundsWidth,
+            boundsHeight: r.boundsHeight,
+          ),
+        )
+        .toList();
+    controller.updateState((state) => state.copyWith(remarks: remarks));
   }
 }

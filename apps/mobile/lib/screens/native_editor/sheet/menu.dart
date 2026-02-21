@@ -30,6 +30,7 @@ class MenuSheet extends StatelessWidget {
     required this.editorController,
     required this.onOpenFindReplace,
     required this.onOpenSpellcheck,
+    required this.onOpenRemark,
     required this.onOpenAiFeedback,
     required this.onOpenRelatedNotes,
     super.key,
@@ -42,6 +43,7 @@ class MenuSheet extends StatelessWidget {
   final EditorController? editorController;
   final VoidCallback onOpenFindReplace;
   final VoidCallback onOpenSpellcheck;
+  final VoidCallback onOpenRemark;
   final VoidCallback onOpenAiFeedback;
   final VoidCallback onOpenRelatedNotes;
 
@@ -52,7 +54,24 @@ class MenuSheet extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           BottomMenuItem(icon: LucideLightIcons.search, label: '찾기', onTap: onOpenFindReplace),
-          BottomMenuItem(icon: LucideLightIcons.bookmark, label: '북마크', onTap: () {}),
+          BottomMenuItem(
+            icon: LucideLightIcons.message_square_text,
+            label: '코멘트',
+            trailing: (editorController?.state.remarks.length ?? 0) > 0
+                ? Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(color: context.colors.borderStrong),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    padding: const Pad(horizontal: 8, vertical: 4),
+                    child: Text(
+                      '${editorController?.state.remarks.length ?? 0}',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: context.colors.textDefault),
+                    ),
+                  )
+                : null,
+            onTap: onOpenRemark,
+          ),
           BottomMenuItem(icon: LucideLightIcons.spell_check, label: '맞춤법 검사', onTap: onOpenSpellcheck),
           BottomMenuItem(icon: LucideLightIcons.lightbulb, label: 'AI 피드백', onTap: onOpenAiFeedback),
           const Gap(16),

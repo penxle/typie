@@ -197,6 +197,22 @@ abstract class AiFeedbackState with _$AiFeedbackState {
 }
 
 @freezed
+abstract class RemarkOverlayInfo with _$RemarkOverlayInfo {
+  const factory RemarkOverlayInfo({
+    required int pageIdx,
+    required String nodeId,
+    required String remarkId,
+    required String userId,
+    required String text,
+    required int createdAt,
+    required double boundsX,
+    required double boundsY,
+    required double boundsWidth,
+    required double boundsHeight,
+  }) = _RemarkOverlayInfo;
+}
+
+@freezed
 abstract class PlaceholderInfo with _$PlaceholderInfo {
   const factory PlaceholderInfo({@Default(false) bool visible, double? x, double? y, double? width, double? height}) =
       _PlaceholderInfo;
@@ -246,6 +262,8 @@ abstract class EditorState with _$EditorState {
     @Default(PlaceholderInfo()) PlaceholderInfo placeholder,
     DropIndicatorInfo? dropIndicator,
     @Default(false) bool repasteAsTextEnabled,
+    @Default([]) List<RemarkOverlayInfo> remarks,
+    String? currentBlockNodeId,
   }) = _EditorState;
 
   const EditorState._();
