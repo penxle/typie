@@ -17,6 +17,10 @@ class NativeEditorPrimaryToolbar extends HookWidget {
     final keyboardType = useValueListenable(scope.keyboardType);
     final secondaryToolbarMode = useValueListenable(scope.secondaryToolbarMode);
     final bottomToolbarMode = useValueListenable(scope.bottomToolbarMode);
+    const trailingActionSize = 36.0;
+    final isToolbarCollapsed =
+        bottomToolbarMode == BottomToolbarMode.hidden && secondaryToolbarMode == SecondaryToolbarMode.hidden;
+    final shouldShowTrailingAction = keyboardType != KeyboardType.hardware || !isToolbarCollapsed;
 
     return Container(
       height: 48,
@@ -110,33 +114,34 @@ class NativeEditorPrimaryToolbar extends HookWidget {
               scope.controller.scrollIntoView();
             },
           ),
-          AnimatedIndexedSwitcher(
-            index: bottomToolbarMode == BottomToolbarMode.hidden && secondaryToolbarMode == SecondaryToolbarMode.hidden
-                ? 0
-                : 1,
-            children: [
-              IconToolbarButton(
-                icon: LucideLightIcons.keyboard_off,
-                onTap: () {
-                  if (keyboardType == KeyboardType.software) {
-                    scope.clearFocus();
-                  }
-                },
-              ),
-              IconToolbarButton(
-                icon: LucideLightIcons.circle_x,
-                onTap: () {
-                  switch (keyboardType) {
-                    case KeyboardType.software:
-                      scope.requestFocus();
-                    case KeyboardType.hardware:
-                      scope.bottomToolbarMode.value = BottomToolbarMode.hidden;
-                  }
-                  scope.secondaryToolbarMode.value = SecondaryToolbarMode.hidden;
-                },
-              ),
-            ],
-          ),
+          if (shouldShowTrailingAction)
+            AnimatedIndexedSwitcher(
+              index: isToolbarCollapsed ? 0 : 1,
+              children: [
+                IconToolbarButton(
+                  icon: LucideLightIcons.keyboard_off,
+                  onTap: () {
+                    if (keyboardType == KeyboardType.software) {
+                      scope.clearFocus();
+                    }
+                  },
+                ),
+                IconToolbarButton(
+                  icon: LucideLightIcons.circle_x,
+                  onTap: () {
+                    switch (keyboardType) {
+                      case KeyboardType.software:
+                        scope.requestFocus();
+                      case KeyboardType.hardware:
+                        scope.bottomToolbarMode.value = BottomToolbarMode.hidden;
+                    }
+                    scope.secondaryToolbarMode.value = SecondaryToolbarMode.hidden;
+                  },
+                ),
+              ],
+            )
+          else
+            const SizedBox.square(dimension: trailingActionSize),
         ],
       ),
     );
