@@ -1,0 +1,58 @@
+name: Build (wasm)
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build
+    runs-on: linux-arm64-4vcpu
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Cache WASM artifact
+        id: wasm-cache
+        uses: actions/cache@v4
+        with:
+          path: crates/editor/pkg/
+          key: wasm-${{ hashFiles('crates/**', 'Cargo.lock') }}
+
+      - name: Setup Bun
+        if: steps.wasm-cache.outputs.cache-hit != 'true'
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        if: steps.wasm-cache.outputs.cache-hit != 'true'
+        run: bun install --frozen-lockfile
+
+      - name: Setup Rust
+        if: steps.wasm-cache.outputs.cache-hit != 'true'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache Rust
+        if: steps.wasm-cache.outputs.cache-hit != 'true'
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-all-crates: 'true'
+
+      - name: Install wasm-pack
+        if: steps.wasm-cache.outputs.cache-hit != 'true'
+        run: cargo install wasm-pack
+
+      - name: Build WASM
+        if: steps.wasm-cache.outputs.cache-hit != 'true'
+        working-directory: crates/editor
+        run: RUSTFLAGS="-C target-feature=+simd128" wasm-pack build --target=bundler --no-pack
+
+      - name: Upload WASM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: editor-wasm
+          path: crates/editor/pkg/
