@@ -37,7 +37,7 @@ RUN bun install --no-save --omit=dev
 FROM builder AS sharp
 
 COPY vendor/sharp-debian.tar.xz ./vendor/
-RUN tar -xf vendor/sharp-debian.tar.xz -C apps/api/ && rm -rf vendor
+RUN mkdir -p apps/api && tar -xf vendor/sharp-debian.tar.xz -C apps/api/ && rm -rf vendor
 
 FROM debian:12-slim AS runtime
 WORKDIR /app
@@ -64,7 +64,7 @@ COPY --from=prod-deps /app/ .
 RUN cd apps/api && npx playwright install-deps && npx playwright install chromium
 
 COPY --from=build /app/ .
-COPY --from=sharp /app/apps/api/lib/ ./apps/api/lib/
+COPY --from=sharp /app/apps/api/ ./apps/api/
 
 ENTRYPOINT ["tini", "--"]
 CMD ["bun", "run", "--cwd", "apps/api", "start"]
