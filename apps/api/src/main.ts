@@ -13,6 +13,10 @@ import { rest } from '@/rest';
 const log = logger.getChild('main');
 
 app.use('*', async (c, next) => {
+  if (c.req.path.startsWith('/bmo/')) {
+    return next();
+  }
+
   const context = await deriveContext(c);
   c.set('context', context);
 
@@ -41,7 +45,7 @@ const server = Bun.serve({
   hostname: '0.0.0.0',
   port: env.LISTEN_PORT ?? 3000,
   websocket,
-  idleTimeout: 600,
+  idleTimeout: 60,
 });
 
 log.info('Listening {*}', { hostname: server.hostname, port: server.port });
