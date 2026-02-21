@@ -746,6 +746,16 @@ impl Transaction {
         let from_subtree_root_id = subtree_info.from_subtree_root_id;
         let to_subtree_root_id = subtree_info.to_subtree_root_id;
         let siblings_between_roots = subtree_info.siblings_between_roots;
+        let from_ancestor_siblings = self.collect_ancestor_siblings(
+            from.node_id,
+            from_subtree_root_id,
+            SiblingDirection::Following,
+        )?;
+        let to_ancestor_siblings = self.collect_ancestor_siblings(
+            to.node_id,
+            to_subtree_root_id,
+            SiblingDirection::Preceding,
+        )?;
 
         if let Some((start, end)) = siblings_between_roots {
             self.delete_flat_range(start, end)?;
@@ -773,13 +783,13 @@ impl Transaction {
             )?;
         }
 
-        self.delete_ancestor_siblings(
-            from.node_id,
-            from_subtree_root_id,
-            SiblingDirection::Following,
-        )?;
+        for id in from_ancestor_siblings {
+            self.delete_node_recursive(id)?;
+        }
 
-        self.delete_ancestor_siblings(to.node_id, to_subtree_root_id, SiblingDirection::Preceding)?;
+        for id in to_ancestor_siblings {
+            self.delete_node_recursive(id)?;
+        }
 
         if let Some(node) = self.doc().node(from.node_id) {
             self.clean_up_empty_ancestors(node.node_id())?;
@@ -1856,57 +1866,6 @@ impl Transaction {
         self.recompute_pending_styles();
     }
 
-    fn delete_ancestor_siblings(
-        &mut self,
-        start_node_id: NodeId,
-        ancestor_root_id: NodeId,
-        direction: SiblingDirection,
-    ) -> Result<()> {
-        let mut current_id = start_node_id;
-        let root_depth = self
-            .doc()
-            .node(ancestor_root_id)
-            .map(|n| n.depth())
-            .unwrap_or(0);
-        let start_depth = self
-            .doc()
-            .node(start_node_id)
-            .map(|n| n.depth())
-            .unwrap_or(0);
-
-        if start_depth > root_depth {
-            while current_id != ancestor_root_id {
-                let current_node = self
-                    .doc()
-                    .node(current_id)
-                    .context("Current node not found")?;
-                let parent = current_node.parent().context("Parent not found")?;
-                let parent_id = parent.node_id();
-
-                let mut siblings_to_delete = Vec::new();
-                let mut sibling = match direction {
-                    SiblingDirection::Following => current_node.next_sibling().map(|n| n.node_id()),
-                    SiblingDirection::Preceding => current_node.prev_sibling().map(|n| n.node_id()),
-                };
-
-                while let Some(id) = sibling {
-                    siblings_to_delete.push(id);
-                    sibling = self.doc().node(id).and_then(|n| match direction {
-                        SiblingDirection::Following => n.next_sibling().map(|s| s.node_id()),
-                        SiblingDirection::Preceding => n.prev_sibling().map(|s| s.node_id()),
-                    });
-                }
-
-                for id in siblings_to_delete {
-                    self.delete_node_recursive(id)?;
-                }
-
-                current_id = parent_id;
-            }
-        }
-        Ok(())
-    }
-
     // 블록을 타겟 부모 위치로 구조적 제약(structural/isolating)을 준수하며 lift하고 빈 조상을 정리
     pub(crate) fn try_lift_block(
         &mut self,
@@ -2378,6 +2337,57 @@ impl Transaction {
         }
 
         Ok(siblings)
+    }
+
+    fn collect_ancestor_siblings(
+        &self,
+        start_node_id: NodeId,
+        ancestor_root_id: NodeId,
+        direction: SiblingDirection,
+    ) -> Result<Vec<NodeId>> {
+        let mut current_id = start_node_id;
+        let mut siblings_to_delete = Vec::new();
+
+        let root_depth = self
+            .doc()
+            .node(ancestor_root_id)
+            .map(|n| n.depth())
+            .unwrap_or(0);
+        let start_depth = self
+            .doc()
+            .node(start_node_id)
+            .map(|n| n.depth())
+            .unwrap_or(0);
+
+        if start_depth <= root_depth {
+            return Ok(siblings_to_delete);
+        }
+
+        while current_id != ancestor_root_id {
+            let current_node = self
+                .doc()
+                .node(current_id)
+                .context("Current node not found")?;
+            let parent = current_node.parent().context("Parent not found")?;
+            let parent_id = parent.node_id();
+
+            let mut sibling = match direction {
+                SiblingDirection::Following => current_node.next_sibling().map(|n| n.node_id()),
+                SiblingDirection::Preceding => current_node.prev_sibling().map(|n| n.node_id()),
+            };
+
+            while let Some(id) = sibling {
+                siblings_to_delete.push(id);
+                sibling = self.doc().node(id).and_then(|n| match direction {
+                    SiblingDirection::Following => n.next_sibling().map(|s| s.node_id()),
+                    SiblingDirection::Preceding => n.prev_sibling().map(|s| s.node_id()),
+                });
+            }
+
+            current_id = parent_id;
+        }
+
+        Ok(siblings_to_delete)
     }
 }
 

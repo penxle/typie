@@ -390,6 +390,52 @@ mod tests {
     }
 
     #[test]
+    fn test_delete_selection_from_fold_paragraph_into_table_start() {
+        let mut n1 = id!();
+        let mut n2 = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                fold {
+                    fold_title {}
+                    fold_content {
+                        @n1 paragraph {}
+                        table {
+                            table_row {
+                                table_cell {
+                                    @n2 paragraph {}
+                                }
+                            }
+                        }
+                    }
+                }
+                paragraph {}
+            }
+            selection { (n1, 0) -> (n2, 0) }
+        };
+
+        rt.layout();
+        rt.update(Message::DeleteBackward);
+        rt.tick();
+
+        let expected = state! {
+            doc {
+                fold {
+                    fold_title {}
+                    fold_content {
+                        @n1 paragraph {}
+                    }
+                }
+                paragraph {}
+            }
+            selection { (n1, 0) }
+        };
+
+        assert_state_eq!(*rt.state(), expected);
+    }
+
+    #[test]
     fn test_delete_selection_callout_with_two_lines() {
         let mut n1 = id!();
         let mut n2 = id!();
