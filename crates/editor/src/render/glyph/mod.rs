@@ -28,7 +28,7 @@ const DARKEN_PARAMS: [(f32, f32); 4] = [
 
 const DEFAULT_STEM_WIDTH_PER_1000: f32 = 75.0;
 const DARKEN_STRENGTH: f32 = 0.25;
-const EMBOLDEN_STRENGTH: f32 = 1.25;
+const EMBOLDEN_STRENGTH: f32 = 2.5;
 
 #[derive(Clone, Copy)]
 pub struct Glyph {
