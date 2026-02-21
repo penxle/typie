@@ -1230,10 +1230,10 @@ packages:
     dependency: "direct main"
     description:
       name: luthor
-      sha256: "6ef33c41219aec095d18021a0d3a7d5a22526735232a26afbfd5384988e83581"
+      sha256: "0909bfcb3bba9fda658ef7beba66ddb57cba512bea97ee2e461169de006c8de0"
       url: "https://pub.dev"
     source: hosted
-    version: "0.16.0"
+    version: "0.17.0"
   matcher:
     dependency: transitive
     description:
