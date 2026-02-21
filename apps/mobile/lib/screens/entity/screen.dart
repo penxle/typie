@@ -33,7 +33,6 @@ import 'package:typie/modals/share.dart';
 import 'package:typie/routers/app.gr.dart';
 import 'package:typie/screens/entity/__generated__/create_document_mutation.req.gql.dart';
 import 'package:typie/screens/entity/__generated__/create_folder_mutation.req.gql.dart';
-import 'package:typie/screens/entity/__generated__/create_post_mutation.req.gql.dart';
 import 'package:typie/screens/entity/__generated__/delete_document_mutation.req.gql.dart';
 import 'package:typie/screens/entity/__generated__/delete_folder_mutation.req.gql.dart';
 import 'package:typie/screens/entity/__generated__/delete_post_mutation.req.gql.dart';
@@ -53,7 +52,6 @@ import 'package:typie/screens/entity/multi_entities_menu.dart';
 import 'package:typie/screens/entity/selected_entities_bar.dart';
 import 'package:typie/services/blob.dart';
 import 'package:typie/services/preference.dart';
-import 'package:typie/widgets/editor_select_bottom_sheet.dart';
 import 'package:typie/widgets/forms/form.dart';
 import 'package:typie/widgets/forms/text_field.dart';
 import 'package:typie/widgets/heading.dart';
@@ -371,62 +369,20 @@ class _EntityList extends HookWidget {
                           ],
                           BottomMenuItem(
                             icon: LucideLightIcons.square_pen,
-                            label: '여기에 포스트 만들기',
+                            label: '여기에 문서 만들기',
                             onTap: () async {
-                              if (pref.experimentalV2EditorEnabled) {
-                                await context.showBottomSheet(
-                                  child: EditorSelectBottomSheet(
-                                    onSelect: (version) async {
-                                      if (version == EditorVersion.v1) {
-                                        final resp = await client.request(
-                                          GEntityScreen_CreatePost_MutationReq(
-                                            (b) => b
-                                              ..vars.input.siteId = pref.siteId
-                                              ..vars.input.parentEntityId = Value.present(entity?.id),
-                                          ),
-                                        );
+                              final resp = await client.request(
+                                GEntityScreen_CreateDocument_MutationReq(
+                                  (b) => b
+                                    ..vars.input.siteId = pref.siteId
+                                    ..vars.input.parentEntityId = Value.present(entity?.id),
+                                ),
+                              );
 
-                                        unawaited(mixpanel.track('create_post', properties: {'via': 'entity_menu'}));
+                              unawaited(mixpanel.track('create_document', properties: {'via': 'entity_menu'}));
 
-                                        if (context.mounted) {
-                                          await context.router.push(EditorRoute(slug: resp.createPost.entity.slug));
-                                        }
-                                      } else {
-                                        final resp = await client.request(
-                                          GEntityScreen_CreateDocument_MutationReq(
-                                            (b) => b
-                                              ..vars.input.siteId = pref.siteId
-                                              ..vars.input.parentEntityId = Value.present(entity?.id),
-                                          ),
-                                        );
-
-                                        unawaited(
-                                          mixpanel.track('create_document', properties: {'via': 'entity_menu'}),
-                                        );
-
-                                        if (context.mounted) {
-                                          await context.router.push(
-                                            NativeEditorRoute(slug: resp.createDocument.entity.slug),
-                                          );
-                                        }
-                                      }
-                                    },
-                                  ),
-                                );
-                              } else {
-                                final resp = await client.request(
-                                  GEntityScreen_CreatePost_MutationReq(
-                                    (b) => b
-                                      ..vars.input.siteId = pref.siteId
-                                      ..vars.input.parentEntityId = Value.present(entity?.id),
-                                  ),
-                                );
-
-                                unawaited(mixpanel.track('create_post', properties: {'via': 'entity_menu'}));
-
-                                if (context.mounted) {
-                                  await context.router.push(EditorRoute(slug: resp.createPost.entity.slug));
-                                }
+                              if (context.mounted) {
+                                await context.router.push(NativeEditorRoute(slug: resp.createDocument.entity.slug));
                               }
                             },
                           ),
@@ -739,74 +695,24 @@ class _EntityList extends HookWidget {
                                   const BottomMenuSeparator(),
                                   BottomMenuItem(
                                     icon: LucideLightIcons.square_pen,
-                                    label: '하위 포스트 만들기',
+                                    label: '하위 문서 만들기',
                                     onTap: () async {
-                                      if (pref.experimentalV2EditorEnabled) {
-                                        await context.showBottomSheet(
-                                          child: EditorSelectBottomSheet(
-                                            onSelect: (version) async {
-                                              if (version == EditorVersion.v1) {
-                                                final resp = await client.request(
-                                                  GEntityScreen_CreatePost_MutationReq(
-                                                    (b) => b
-                                                      ..vars.input.siteId = pref.siteId
-                                                      ..vars.input.parentEntityId = Value.present(entities[index].id),
-                                                  ),
-                                                );
+                                      final resp = await client.request(
+                                        GEntityScreen_CreateDocument_MutationReq(
+                                          (b) => b
+                                            ..vars.input.siteId = pref.siteId
+                                            ..vars.input.parentEntityId = Value.present(entities[index].id),
+                                        ),
+                                      );
 
-                                                unawaited(
-                                                  mixpanel.track(
-                                                    'create_post',
-                                                    properties: {'via': 'entity_folder_menu'},
-                                                  ),
-                                                );
+                                      unawaited(
+                                        mixpanel.track('create_document', properties: {'via': 'entity_folder_menu'}),
+                                      );
 
-                                                if (context.mounted) {
-                                                  await context.router.push(
-                                                    EditorRoute(slug: resp.createPost.entity.slug),
-                                                  );
-                                                }
-                                              } else {
-                                                final resp = await client.request(
-                                                  GEntityScreen_CreateDocument_MutationReq(
-                                                    (b) => b
-                                                      ..vars.input.siteId = pref.siteId
-                                                      ..vars.input.parentEntityId = Value.present(entities[index].id),
-                                                  ),
-                                                );
-
-                                                unawaited(
-                                                  mixpanel.track(
-                                                    'create_document',
-                                                    properties: {'via': 'entity_folder_menu'},
-                                                  ),
-                                                );
-
-                                                if (context.mounted) {
-                                                  await context.router.push(
-                                                    NativeEditorRoute(slug: resp.createDocument.entity.slug),
-                                                  );
-                                                }
-                                              }
-                                            },
-                                          ),
+                                      if (context.mounted) {
+                                        await context.router.push(
+                                          NativeEditorRoute(slug: resp.createDocument.entity.slug),
                                         );
-                                      } else {
-                                        final resp = await client.request(
-                                          GEntityScreen_CreatePost_MutationReq(
-                                            (b) => b
-                                              ..vars.input.siteId = pref.siteId
-                                              ..vars.input.parentEntityId = Value.present(entities[index].id),
-                                          ),
-                                        );
-
-                                        unawaited(
-                                          mixpanel.track('create_post', properties: {'via': 'entity_folder_menu'}),
-                                        );
-
-                                        if (context.mounted) {
-                                          await context.router.push(EditorRoute(slug: resp.createPost.entity.slug));
-                                        }
                                       }
                                     },
                                   ),
@@ -1340,7 +1246,6 @@ class _Document extends StatelessWidget {
                   ? LucideLightIcons.layout_template
                   : LucideLightIcons.file_text,
               size: 18,
-              color: context.colors.accentBrand,
             ),
             Expanded(
               child: Text(
@@ -1389,12 +1294,6 @@ class _BottomMenuHeader extends StatelessWidget {
                   ) ??
                   LucideLightIcons.folder_open,
               size: 20,
-              color: entity?.node.when(
-                folder: (_) => null,
-                post: (_) => null,
-                document: (_) => context.colors.accentBrand,
-                orElse: () => null,
-              ),
             ),
             Expanded(
               child: Text(

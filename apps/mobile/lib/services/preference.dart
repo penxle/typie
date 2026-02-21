@@ -59,8 +59,4 @@ class Pref {
 
   bool get widgetAutoFadeEnabled => _box.get('widget_auto_fade_enabled', defaultValue: true) as bool;
   set widgetAutoFadeEnabled(bool value) => _box.put('widget_auto_fade_enabled', value);
-
-  bool get experimentalV2EditorEnabled =>
-      devMode && (_box.get('experimental_v2_editor_enabled', defaultValue: false) as bool);
-  set experimentalV2EditorEnabled(bool value) => _box.put('experimental_v2_editor_enabled', value);
 }
