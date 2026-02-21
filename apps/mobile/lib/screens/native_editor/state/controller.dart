@@ -113,6 +113,14 @@ class EditorController extends ChangeNotifier {
     pendingScrollMode = mode;
   }
 
+  final ValueNotifier<RemarkOverlayInfo?> remarkScrollTarget = ValueNotifier(null);
+  final ValueNotifier<RemarkOverlayInfo?> remarkHighlightTarget = ValueNotifier(null);
+
+  void scrollToRemark(RemarkOverlayInfo remark) {
+    remarkScrollTarget.value = remark;
+    remarkHighlightTarget.value = remark;
+  }
+
   void setFocused(bool focused) {
     if (_state.isFocused != focused) {
       _state = _state.copyWith(isFocused: focused);
@@ -167,6 +175,8 @@ class EditorController extends ChangeNotifier {
     characterCounts.dispose();
     characterCountsVersion.dispose();
     tableOverlays.dispose();
+    remarkScrollTarget.dispose();
+    remarkHighlightTarget.dispose();
     super.dispose();
   }
 }

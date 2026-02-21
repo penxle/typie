@@ -1,0 +1,10 @@
+query NativeEditor_RemarkUser_Query($userId: ID!) {
+  userView(id: $userId) {
+    id
+    name
+    avatar {
+      id
+      url
+    }
+  }
+}

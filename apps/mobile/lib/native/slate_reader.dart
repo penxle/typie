@@ -580,6 +580,73 @@ class SlateReader {
     return (enabled: enabled != 0);
   }
 
+  List<_RemarkOverlayRaw> readRemarks() {
+    final count = getU32('remarks_count');
+    if (count == 0) {
+      return const [];
+    }
+
+    var pos = getU32('remarks_offset');
+    final result = <_RemarkOverlayRaw>[];
+
+    for (var i = 0; i < count; i++) {
+      final nodeIdByteLen = _slabU32(pos);
+      pos += 4;
+      final nodeIdBytes = _slabData.sublist(pos, pos + nodeIdByteLen);
+      final nodeId = _bytesToHex(nodeIdBytes);
+      final alignPad = (4 - ((pos + nodeIdByteLen) % 4)) % 4;
+      pos += nodeIdByteLen + alignPad;
+
+      final remarkIdByteLen = _slabU32(pos);
+      pos += 4;
+      final remarkIdBytes = _slabData.sublist(pos, pos + remarkIdByteLen);
+      final remarkId = _bytesToHex(remarkIdBytes);
+      final remarkAlignPad = (4 - ((pos + remarkIdByteLen) % 4)) % 4;
+      pos += remarkIdByteLen + remarkAlignPad;
+
+      final userId = readStr(pos);
+      pos += _strByteLen(pos);
+
+      final text = readStr(pos);
+      pos += _strByteLen(pos);
+
+      final hi = _slabU32(pos);
+      final lo = _slabU32(pos + 4);
+      final createdAt = hi * 0x100000000 + lo;
+      pos += 8;
+
+      final pageIdx = _slabU32(pos);
+      pos += 4;
+
+      final boundsX = _slabF32(pos);
+      final boundsY = _slabF32(pos + 4);
+      final boundsWidth = _slabF32(pos + 8);
+      final boundsHeight = _slabF32(pos + 12);
+      pos += 16;
+
+      result.add(
+        _RemarkOverlayRaw(
+          pageIdx: pageIdx,
+          nodeId: nodeId,
+          remarkId: remarkId,
+          userId: userId,
+          text: text,
+          createdAt: createdAt,
+          boundsX: boundsX,
+          boundsY: boundsY,
+          boundsWidth: boundsWidth,
+          boundsHeight: boundsHeight,
+        ),
+      );
+    }
+
+    return result;
+  }
+
+  String readCurrentBlockNodeId() {
+    return readNodeId(_offset('current_block_node_id'));
+  }
+
   List<_LinkOverlayRaw> readLinkOverlays() {
     final count = getU32('link_overlays_count');
     if (count == 0) {
@@ -761,4 +828,30 @@ class _TableOverlayRaw {
   final List<double> colPositions;
   final List<double> rowHeights;
   final List<double> rowPositions;
+}
+
+class _RemarkOverlayRaw {
+  const _RemarkOverlayRaw({
+    required this.pageIdx,
+    required this.nodeId,
+    required this.remarkId,
+    required this.userId,
+    required this.text,
+    required this.createdAt,
+    required this.boundsX,
+    required this.boundsY,
+    required this.boundsWidth,
+    required this.boundsHeight,
+  });
+
+  final int pageIdx;
+  final String nodeId;
+  final String remarkId;
+  final String userId;
+  final String text;
+  final int createdAt;
+  final double boundsX;
+  final double boundsY;
+  final double boundsWidth;
+  final double boundsHeight;
 }

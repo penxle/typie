@@ -6,6 +6,7 @@ import 'package:typie/context/theme.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/native/editor_texture_renderer.dart';
 import 'package:typie/screens/native_editor/external/overlay.dart';
+import 'package:typie/screens/native_editor/state/controller.dart';
 import 'package:typie/screens/native_editor/state/state.dart';
 import 'package:typie/screens/native_editor/view/cursor.dart';
 import 'package:typie/screens/native_editor/view/geometry.dart';
@@ -134,6 +135,7 @@ class PageItem extends HookWidget {
             _SearchHighlightOverlay(pageIndex: pageIndex, overlays: editorState.search.overlays),
             _SpellcheckOverlay(pageIndex: pageIndex, overlays: editorState.spellcheck.overlays),
             _AiFeedbackOverlay(pageIndex: pageIndex, overlays: editorState.aiFeedback.overlays),
+            _RemarkHighlightOverlay(pageIndex: pageIndex, controller: scope.controller),
             Cursor(cursorInfo: displayCursor.value, isFocused: isFocused),
             ElementOverlay(pageIndex: pageIndex),
             if (isPaginated && margins != null)
@@ -363,6 +365,91 @@ class _AiFeedbackOverlay extends StatelessWidget {
                 ),
               ),
         ],
+      ),
+    );
+  }
+}
+
+class _RemarkHighlightOverlay extends StatefulWidget {
+  const _RemarkHighlightOverlay({required this.pageIndex, required this.controller});
+
+  final int pageIndex;
+  final EditorController controller;
+
+  @override
+  State<_RemarkHighlightOverlay> createState() => _RemarkHighlightOverlayState();
+}
+
+class _RemarkHighlightOverlayState extends State<_RemarkHighlightOverlay> with SingleTickerProviderStateMixin {
+  late final AnimationController _animation;
+  RemarkOverlayInfo? _target;
+
+  @override
+  void initState() {
+    super.initState();
+    _animation = AnimationController(vsync: this, duration: const Duration(milliseconds: 1500))
+      ..addStatusListener((status) {
+        if (status == AnimationStatus.completed) {
+          setState(() => _target = null);
+        }
+      });
+    widget.controller.remarkHighlightTarget.addListener(_onHighlight);
+  }
+
+  @override
+  void dispose() {
+    widget.controller.remarkHighlightTarget.removeListener(_onHighlight);
+    _animation.dispose();
+    super.dispose();
+  }
+
+  void _onHighlight() {
+    final target = widget.controller.remarkHighlightTarget.value;
+    if (target != null && target.pageIdx == widget.pageIndex) {
+      setState(() => _target = target);
+      unawaited(_animation.forward(from: 0));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final target = _target;
+    if (target == null) {
+      return const SizedBox.shrink();
+    }
+
+    return IgnorePointer(
+      child: AnimatedBuilder(
+        animation: _animation,
+        builder: (context, _) {
+          final t = _animation.value;
+          // fast fade-in (0~0.15), hold (0.15~0.4), fade-out (0.4~1.0)
+          final double opacity;
+          if (t < 0.15) {
+            opacity = t / 0.15;
+          } else if (t < 0.4) {
+            opacity = 1.0;
+          } else {
+            opacity = 1.0 - (t - 0.4) / 0.6;
+          }
+
+          return Stack(
+            children: [
+              Positioned(
+                left: target.boundsX - 4,
+                top: target.boundsY - 4,
+                width: target.boundsWidth + 8,
+                height: target.boundsHeight + 8,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: context.colors.accentBrand.withValues(alpha: 0.12 * opacity),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
