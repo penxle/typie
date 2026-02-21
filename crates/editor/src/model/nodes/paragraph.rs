@@ -524,19 +524,21 @@ impl Layout for ParagraphNode {
                                 let range = char_to_byte_offset_with_map(&char_to_byte, start)
                                     ..char_to_byte_offset_with_map(&char_to_byte, end);
 
-                                if has_embolden && matches!(style, Style::FontWeight(_)) {
+                                if has_embolden && let Style::FontWeight(weight_style) = style {
+                                    let target_weight = weight_style.weight.max(700) as f32;
                                     builder.push(
-                                        StyleProperty::FontWeight(FontWeight::new(1000.0)),
+                                        StyleProperty::FontWeight(FontWeight::new(target_weight)),
                                         range,
                                     );
-                                } else {
-                                    apply_style_to_builder(
-                                        &mut builder,
-                                        style,
-                                        range,
-                                        segment_font_size,
-                                    );
+                                    continue;
                                 }
+
+                                apply_style_to_builder(
+                                    &mut builder,
+                                    style,
+                                    range,
+                                    segment_font_size,
+                                );
                             }
 
                             for annotation in &segment.annotations {
