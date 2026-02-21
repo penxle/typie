@@ -12,6 +12,11 @@ machine:
       - 1.1.1.1
       - 1.0.0.1
 
+  kubelet:
+    extraConfig:
+      imageGCHighThresholdPercent: 60
+      imageGCLowThresholdPercent: 50
+
   features:
     hostDNS:
       forwardKubeDNSToHost: false
