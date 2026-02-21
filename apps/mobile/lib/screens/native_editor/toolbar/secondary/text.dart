@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
@@ -28,6 +27,8 @@ class NativeEditorTextToolbar extends HookWidget {
     final scope = NativeEditorToolbarScope.of(context);
     final attrs = useValueListenable(scope.attrs);
     final selection = useValueListenable(scope.selection);
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final horizontalInset = screenWidth > 600 ? (screenWidth - 600) / 2 : 0.0;
     final collapsed = selection?.collapsed ?? true;
 
     final textColorAttr = findAttr(attrs, 'text_color');
@@ -91,7 +92,7 @@ class NativeEditorTextToolbar extends HookWidget {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: const Pad(horizontal: 16),
+      padding: EdgeInsets.symmetric(horizontal: horizontalInset + 16),
       child: Row(
         spacing: 4,
         children: [

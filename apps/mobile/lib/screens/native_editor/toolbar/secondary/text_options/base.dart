@@ -1,13 +1,11 @@
 import 'dart:async';
 
-import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
-import 'package:gap/gap.dart';
 import 'package:typie/hooks/async_effect.dart';
 import 'package:typie/icons/lucide_light.dart';
-import 'package:typie/screens/native_editor/toolbar/buttons/icon.dart';
+import 'package:typie/screens/native_editor/toolbar/buttons/base.dart';
 import 'package:typie/screens/native_editor/toolbar/scope.dart';
 
 class NativeEditorTextOptionsToolbar extends HookWidget {
@@ -27,6 +25,12 @@ class NativeEditorTextOptionsToolbar extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final scope = NativeEditorToolbarScope.of(context);
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final horizontalInset = screenWidth > 600 ? (screenWidth - 600) / 2 : 0.0;
+    const backButtonHorizontalOffset = 4.0;
+    const backButtonSize = 36.0;
+    const backButtonGap = 12.0;
+    final contentLeftPadding = horizontalInset + backButtonHorizontalOffset + backButtonSize + backButtonGap;
 
     final controller = useScrollController();
     final key = useMemoized(GlobalKey.new);
@@ -78,17 +82,10 @@ class NativeEditorTextOptionsToolbar extends HookWidget {
       return null;
     }, [activeValue]);
 
-    return Row(
+    return Stack(
+      clipBehavior: Clip.none,
       children: [
-        const Gap(4),
-        IconToolbarButton(
-          icon: LucideLightIcons.chevron_left,
-          onTap: () {
-            scope.secondaryToolbarMode.value = SecondaryToolbarMode.text;
-          },
-        ),
-        const Gap(12),
-        Expanded(
+        Positioned.fill(
           child: NotificationListener<ScrollMetricsNotification>(
             onNotification: (notification) {
               final maxExtent = notification.metrics.maxScrollExtent;
@@ -103,7 +100,8 @@ class NativeEditorTextOptionsToolbar extends HookWidget {
               controller: controller,
               scrollDirection: Axis.horizontal,
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: const Pad(right: 16),
+              clipBehavior: Clip.none,
+              padding: EdgeInsets.only(left: contentLeftPadding, right: horizontalInset + 16),
               child: Row(
                 spacing: 4,
                 children: items.asMap().entries.map((entry) {
@@ -114,6 +112,29 @@ class NativeEditorTextOptionsToolbar extends HookWidget {
                   return KeyedSubtree(key: keys[index], child: builder(context, item, isActive));
                 }).toList(),
               ),
+            ),
+          ),
+        ),
+        Positioned(
+          left: horizontalInset + backButtonHorizontalOffset,
+          top: 0,
+          bottom: 0,
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: ToolbarButton(
+              onTap: () {
+                scope.secondaryToolbarMode.value = SecondaryToolbarMode.text;
+              },
+              builder: (context, color, _) {
+                return Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.72),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  padding: const EdgeInsets.all(8),
+                  child: Icon(LucideLightIcons.chevron_left, size: 20, color: color),
+                );
+              },
             ),
           ),
         ),
