@@ -24,26 +24,14 @@ RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-FROM base AS build-deps
-
-ENV PATH="/root/.bun/bin:/root/.cargo/bin:$PATH"
-ENV CARGO_HOME=/root/.cargo
-ENV RUSTUP_HOME=/root/.rustup
-
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
-RUN rustup target add wasm32-unknown-unknown
-RUN cargo install wasm-pack icu4x-datagen
-
 COPY out/json/ .
 RUN bun install --no-save
 
-FROM build-deps AS build
+FROM base AS build
 
 COPY out/full/ .
-RUN cd crates/editor && bun run wasm:release && bun run assets
 RUN bunx turbo build --filter=@typie/api
 RUN find . -type d -name "node_modules" -prune -exec rm -rf {} +
-RUN rm -rf target
 
 FROM base AS runtime-deps
 

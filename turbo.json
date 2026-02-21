@@ -19,10 +19,10 @@
       "cache": false
     },
     "lint:svelte": {
-      "dependsOn": ["^codegen", "codegen", "^wasm:build"]
+      "dependsOn": ["^codegen", "codegen"]
     },
     "lint:typecheck": {
-      "dependsOn": ["codegen", "^wasm:build"]
+      "dependsOn": ["codegen"]
     },
     "test": {
       "dependsOn": ["codegen"],

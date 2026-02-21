@@ -6,6 +6,10 @@ on:
   pull_request:
   merge_group:
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
   packages: read
@@ -18,7 +22,7 @@ env:
 jobs:
   lint:
     name: Lint
-    runs-on: linux-x64-16vcpu
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:

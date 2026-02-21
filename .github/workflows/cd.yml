@@ -5,19 +5,54 @@ on:
     branches:
       - main
 
+concurrency:
+  group: cd-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
   packages: write
 
 jobs:
+  build-wasm:
+    name: Build (wasm)
+    runs-on: linux-arm64-4vcpu
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install wasm-pack
+        run: cargo install wasm-pack
+
+      - name: Build WASM
+        working-directory: crates/editor
+        run: RUSTFLAGS="-C target-feature=+simd128" wasm-pack build --target=bundler --no-pack
+
+      - name: Upload WASM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: editor-wasm
+          path: crates/editor/pkg/
+
   build-api:
     name: Build (api)
+    needs: [build-wasm]
     uses: ./.github/workflows/build.yml
     with:
       app: api
 
   build-website:
     name: Build (website)
+    needs: [build-wasm]
     uses: ./.github/workflows/build.yml
     with:
       app: website
