@@ -687,32 +687,37 @@ class PageList extends HookWidget {
 
         final gestureDetector = GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onDoubleTapDown: (details) {
-            if (!dispatchDoubleTapSelection(details.localPosition)) {
-              return;
-            }
-            startDoubleTapDrag(details.localPosition);
-          },
           onTapDown: (details) {
-            gesture.tapDispatched = false;
             wasContextMenuOpen.value = showContextMenu.value;
             if (showContextMenu.value) {
               showContextMenu.value = false;
             }
 
             gesture.tapTimer?.cancel();
-            gesture.tapTimer = Timer(const Duration(milliseconds: 150), () {
+            gesture.tapTimer = null;
+
+            if (isConsecutiveTap(localPosition: details.localPosition, now: DateTime.now())) {
               gesture.tapDispatched = true;
-
-              final pointerX = gesture.getPointerX(details.localPosition.dx);
-              final (pageIdx, localY) = getPageAtPosition(details.localPosition.dy);
-
-              final canDrag = scope.editor.isSelectionHit(pageIdx, pointerX, localY);
-
-              if (!canDrag) {
-                dispatchTap(details.localPosition);
+              if (dispatchDoubleTapSelection(details.localPosition)) {
+                startDoubleTapDrag(details.localPosition);
               }
-            });
+              return;
+            }
+
+            gesture
+              ..tapDispatched = false
+              ..tapTimer = Timer(const Duration(milliseconds: 150), () {
+                gesture.tapDispatched = true;
+
+                final pointerX = gesture.getPointerX(details.localPosition.dx);
+                final (pageIdx, localY) = getPageAtPosition(details.localPosition.dy);
+
+                final canDrag = scope.editor.isSelectionHit(pageIdx, pointerX, localY);
+
+                if (!canDrag) {
+                  dispatchTap(details.localPosition);
+                }
+              });
           },
           onTapUp: (details) {
             if (isDoubleTapDragging.value) {
