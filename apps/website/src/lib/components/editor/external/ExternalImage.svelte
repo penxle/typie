@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { hide } from '@floating-ui/dom';
+  import { flip, hide } from '@floating-ui/dom';
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { createFloatingActions } from '@typie/ui/actions';
@@ -53,7 +53,7 @@
   const { anchor, floating } = createFloatingActions({
     placement: 'bottom',
     offset: 4,
-    middleware: [hide()],
+    middleware: [flip(), hide()],
   });
 
   $effect(() => {
@@ -260,7 +260,6 @@
     style:width={hasImage ? `${liveWidth}px` : '100%'}
     style:height={hasImage ? `${liveHeight}px` : undefined}
     class={cx('group', css({ position: 'relative', margin: '[0 auto]' }))}
-    use:anchor
   >
     {#if hasImage}
       <Img

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { hide } from '@floating-ui/dom';
+  import { flip, hide } from '@floating-ui/dom';
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { createFloatingActions } from '@typie/ui/actions';
@@ -50,7 +50,7 @@
   const { anchor, floating } = createFloatingActions({
     placement: 'bottom',
     offset: 4,
-    middleware: [hide()],
+    middleware: [flip(), hide()],
   });
 
   $effect(() => {
@@ -116,7 +116,7 @@
 </script>
 
 <ExternalElementWrapper {el} minHeight={hasEmbed ? undefined : '48px'}>
-  <div class={cx('group', css({ position: 'relative', width: 'full' }))} use:anchor>
+  <div class={cx('group', css({ position: 'relative', width: 'full' }))}>
     {#if asset}
       {#if asset.html}
         <div class={css({ display: 'contents' }, isEditable && { pointerEvents: 'none' })}>

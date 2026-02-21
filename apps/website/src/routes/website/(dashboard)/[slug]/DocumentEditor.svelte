@@ -900,6 +900,7 @@
               flexDirection: 'column',
               flexGrow: '1',
               overflowX: 'auto',
+              overflowY: 'hidden',
               zIndex: app.preference.current.zenModeEnabled && !currentViewZenModeEnabled ? 'underEditor' : 'editor',
               backgroundColor: 'surface.default',
             })}
