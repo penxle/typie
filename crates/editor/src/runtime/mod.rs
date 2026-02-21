@@ -344,44 +344,134 @@ impl Runtime {
     }
 
     fn handle_external_doc_change(&mut self, old_state_frontiers: Option<Frontiers>) {
-        // TODO: 최적화?
+        fn push_font_detected_effects(
+            effects: &mut Vec<Effect>,
+            fonts: Vec<(String, u16, FxHashSet<u32>)>,
+        ) {
+            effects.extend(fonts.into_iter().map(|(family, weight, codepoints)| {
+                Effect::FontDetected {
+                    family,
+                    weight,
+                    codepoints: codepoints.into_iter().collect(),
+                }
+            }));
+        }
+
+        fn push_full_fallback_effects(effects: &mut Vec<Effect>) {
+            effects.push(Effect::FullLayoutInvalidation);
+            effects.push(Effect::SettingsChanged);
+        }
+
         self.state.doc.clear_children_cache();
-        let mut invalidation = LayoutInvalidationBatch::new();
-        invalidation.push(LayoutInvalidationOp::Full);
-        self.layout_engine
-            .apply_invalidation(self.state.doc.as_ref(), &invalidation);
+        let mut effects = vec![Effect::DocChanged];
 
-        self.selection_cache = None;
-        self.cached_plain_text = None;
-        self.text_replacement_undo = None;
-        self.pending.layout = true;
-        self.pending.render = true;
-        self.pending.selection = true;
-        self.pending.active_styles = true;
-        self.pending.cursor = true;
-        self.pending.external_elements = true;
-        self.pending.settings = true;
-        self.pending.enabled_actions = true;
-        self.pending.default_attrs = true;
-        self.pending.placeholder = true;
-        self.pending.tracked_items = true;
-
-        let fonts = if let Some(old_state_frontiers) = old_state_frontiers.as_ref() {
-            let new_state_frontiers = self.state.doc.loro_doc().state_frontiers();
-            self.collect_doc_fonts_from_changed_text_diff(old_state_frontiers, &new_state_frontiers)
-                .unwrap_or_else(|| self.collect_doc_fonts())
-        } else {
-            self.collect_doc_fonts()
+        let Some(old_state_frontiers) = old_state_frontiers.as_ref() else {
+            push_full_fallback_effects(&mut effects);
+            let fonts = self.collect_doc_fonts_from_nodes([NodeId::ROOT]);
+            push_font_detected_effects(&mut effects, fonts);
+            self.process_effects(effects);
+            return;
         };
-        let font_effects = fonts
-            .into_iter()
-            .map(|(family, weight, codepoints)| Effect::FontDetected {
-                family,
-                weight,
-                codepoints: codepoints.into_iter().collect(),
-            })
-            .collect();
-        self.process_effects(font_effects);
+
+        let new_state_frontiers = self.state.doc.loro_doc().state_frontiers();
+        let Some((changed_nodes, settings_changed)) =
+            self.analyze_external_doc_diff(old_state_frontiers, &new_state_frontiers)
+        else {
+            push_full_fallback_effects(&mut effects);
+            let fonts = self.collect_doc_fonts_from_nodes([NodeId::ROOT]);
+            push_font_detected_effects(&mut effects, fonts);
+            self.process_effects(effects);
+            return;
+        };
+
+        if settings_changed {
+            effects.push(Effect::SettingsChanged);
+        }
+
+        effects.extend(
+            changed_nodes
+                .iter()
+                .copied()
+                .map(|node_id| Effect::NodeChanged { node_id }),
+        );
+
+        let fonts = if changed_nodes.is_empty() {
+            if !settings_changed {
+                push_full_fallback_effects(&mut effects);
+                self.collect_doc_fonts_from_nodes([NodeId::ROOT])
+            } else {
+                Vec::new()
+            }
+        } else {
+            self.collect_doc_fonts_from_nodes(changed_nodes)
+        };
+
+        push_font_detected_effects(&mut effects, fonts);
+
+        self.process_effects(effects);
+    }
+
+    fn analyze_external_doc_diff(
+        &self,
+        old_state_frontiers: &Frontiers,
+        new_state_frontiers: &Frontiers,
+    ) -> Option<(FxHashSet<NodeId>, bool)> {
+        const NODES_KEY: &str = "nodes";
+        const SETTINGS_KEY: &str = "settings";
+        const CASCADE_ATTRS_KEY: &str = "cascade_attrs";
+
+        let diff = self
+            .state
+            .doc
+            .loro_doc()
+            .diff(old_state_frontiers, new_state_frontiers)
+            .ok()?;
+
+        let mut changed_nodes = FxHashSet::default();
+        let mut settings_changed = false;
+
+        for (container_id, container_diff) in diff.iter() {
+            if matches!(container_diff, loro::event::Diff::Unknown) {
+                return None;
+            }
+
+            let path = self
+                .state
+                .doc
+                .loro_doc()
+                .get_path_to_container(container_id)?;
+
+            let mut key_iter = path.iter().filter_map(|(_, index)| match index {
+                loro::Index::Key(key) => Some(key.to_string()),
+                _ => None,
+            });
+
+            let root_key = key_iter.next()?;
+            match root_key.as_str() {
+                SETTINGS_KEY => {
+                    settings_changed = true;
+                }
+                NODES_KEY => {
+                    if let Some(node_key) = key_iter.next() {
+                        let node_id = NodeId::from_string(&node_key)?;
+                        if node_id == NodeId::ROOT && key_iter.any(|key| key == CASCADE_ATTRS_KEY) {
+                            settings_changed = true;
+                        }
+                        changed_nodes.insert(node_id);
+                    } else {
+                        let loro::event::Diff::Map(map_diff) = container_diff else {
+                            return None;
+                        };
+                        for node_key in map_diff.updated.keys() {
+                            changed_nodes.insert(NodeId::from_string(node_key.as_ref())?);
+                        }
+                    }
+                }
+                _ => return None,
+            }
+        }
+
+        Some((changed_nodes, settings_changed))
     }
 
     pub fn replace_text_in_block(
@@ -1697,8 +1787,15 @@ impl Runtime {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::runtime::slate::{
+        DIRTY_DEFAULT_ATTRS, DIRTY_DOC_CHANGED, DIRTY_FONT_REQUIRED, DIRTY_SETTINGS,
+    };
     use crate::state::position_helpers::calculate_offset_before_child;
     use std::rc::Rc;
+
+    fn has_dirty_flag(runtime: &Runtime, flag: u64) -> bool {
+        runtime.slate.dirty & flag != 0
+    }
 
     #[test]
     fn test_tracked_items_shift_after_replace_text_in_block() {
@@ -1849,7 +1946,7 @@ mod tests {
     }
 
     #[test]
-    fn import_updates_detects_fonts_for_external_doc_change() {
+    fn import_updates_text_change_marks_font_dirty_without_settings_refresh() {
         let mut p1 = id!();
         let mut p2 = id!();
         let base_state = state! {
@@ -1882,47 +1979,248 @@ mod tests {
             ),
         );
 
+        source.tick();
+        target.tick();
+
         let version = source
             .export(DocExportMode::Version)
             .expect("source should export version");
         source
             .replace_text_in_block(p1, 0, 1, "A")
             .expect("source should replace text");
-        source.layout();
+        source.flush();
         let updates = source
             .export(DocExportMode::UpdatesFrom { version })
             .expect("source should export incremental updates");
 
-        target.pending.fonts.clear();
         target.loaded_font_codepoints.clear();
         target.missing_font_nodes.clear();
 
         target
             .import_updates(&updates)
             .expect("target should import updates");
+        target.tick();
 
         assert_eq!(target.doc().to_plain_text(), "A\ny");
+        assert!(
+            has_dirty_flag(&target, DIRTY_DOC_CHANGED),
+            "text-only external diff should mark doc changed"
+        );
+        assert!(
+            has_dirty_flag(&target, DIRTY_FONT_REQUIRED),
+            "text-only external diff should request fonts"
+        );
+        assert!(
+            !has_dirty_flag(&target, DIRTY_SETTINGS),
+            "text-only external diff should not refresh settings payload"
+        );
+        assert!(
+            !has_dirty_flag(&target, DIRTY_DEFAULT_ATTRS),
+            "text-only external diff should not refresh default attrs payload"
+        );
 
         let has_detected_a = target
-            .pending
-            .fonts
+            .loaded_font_codepoints
             .values()
             .any(|codepoints| codepoints.contains(&('A' as u32)));
         assert!(
             has_detected_a,
-            "external doc change should detect codepoints from imported text, got: {:?}",
-            target.pending.fonts
+            "external doc change should detect codepoints from imported text"
         );
 
         let has_detected_unchanged_y = target
-            .pending
-            .fonts
+            .loaded_font_codepoints
             .values()
             .any(|codepoints| codepoints.contains(&('y' as u32)));
         assert!(
             !has_detected_unchanged_y,
-            "external doc change should avoid requesting unchanged text node fonts, got: {:?}",
-            target.pending.fonts
+            "external doc change should avoid requesting unchanged text node fonts"
+        );
+
+        let tracks_root = target
+            .missing_font_nodes
+            .values()
+            .any(|nodes| nodes.contains(&NodeId::ROOT));
+        assert!(
+            !tracks_root,
+            "external doc change font tracking should avoid root fallback when diff is text-only"
+        );
+
+        let has_non_root_tracking = target
+            .missing_font_nodes
+            .values()
+            .any(|nodes| !nodes.is_empty());
+        assert!(
+            has_non_root_tracking,
+            "external doc change font tracking should keep non-root nodes from diff"
+        );
+    }
+
+    #[test]
+    fn import_updates_settings_change_marks_settings_without_font_request() {
+        let mut p1 = id!();
+        let base_state = state! {
+            doc {
+                @p1 paragraph { text { "x" } }
+            }
+            selection { (p1, 0) }
+        };
+        let snapshot = base_state
+            .doc
+            .export(DocExportMode::Snapshot)
+            .expect("base should export snapshot");
+
+        let mut source = Runtime::new(
+            800.0,
+            1.0,
+            State::new(
+                Rc::new(Doc::from_snapshot(snapshot.clone())),
+                Selection::collapsed(Position::new(p1, 0, Affinity::Downstream)),
+            ),
+        );
+
+        let mut target = Runtime::new(
+            800.0,
+            1.0,
+            State::new(
+                Rc::new(Doc::from_snapshot(snapshot)),
+                Selection::collapsed(Position::new(p1, 0, Affinity::Downstream)),
+            ),
+        );
+
+        source.tick();
+        target.tick();
+
+        let version = source
+            .export(DocExportMode::Version)
+            .expect("source should export version");
+        source
+            .doc()
+            .update_settings(|s| s.layout_mode = LayoutMode::Continuous { max_width: 480.0 })
+            .expect("source should update settings");
+        let updates = source
+            .export(DocExportMode::UpdatesFrom { version })
+            .expect("source should export incremental updates");
+
+        target.loaded_font_codepoints.clear();
+        target.missing_font_nodes.clear();
+
+        target
+            .import_updates(&updates)
+            .expect("target should import updates");
+        target.tick();
+
+        assert!(
+            has_dirty_flag(&target, DIRTY_DOC_CHANGED),
+            "settings-only external diff should mark doc changed"
+        );
+        assert!(
+            has_dirty_flag(&target, DIRTY_SETTINGS),
+            "settings-only external diff should refresh settings payload"
+        );
+        assert!(
+            has_dirty_flag(&target, DIRTY_DEFAULT_ATTRS),
+            "settings effect should also refresh default attrs payload"
+        );
+        assert!(
+            !has_dirty_flag(&target, DIRTY_FONT_REQUIRED),
+            "settings-only external diff should not request fonts"
+        );
+        assert_eq!(
+            target.doc().settings().layout_mode,
+            LayoutMode::Continuous { max_width: 480.0 }
+        );
+        assert!(
+            target.missing_font_nodes.is_empty(),
+            "settings-only external diff should not track font nodes"
+        );
+    }
+
+    #[test]
+    fn import_updates_unknown_root_path_falls_back_to_safe_full_scan() {
+        let mut p1 = id!();
+        let mut p2 = id!();
+        let base_state = state! {
+            doc {
+                @p1 paragraph { text { "x" } }
+                @p2 paragraph { text { "y" } }
+            }
+            selection { (p1, 0) }
+        };
+        let snapshot = base_state
+            .doc
+            .export(DocExportMode::Snapshot)
+            .expect("base should export snapshot");
+
+        let mut source = Runtime::new(
+            800.0,
+            1.0,
+            State::new(
+                Rc::new(Doc::from_snapshot(snapshot.clone())),
+                Selection::collapsed(Position::new(p1, 0, Affinity::Downstream)),
+            ),
+        );
+
+        let mut target = Runtime::new(
+            800.0,
+            1.0,
+            State::new(
+                Rc::new(Doc::from_snapshot(snapshot)),
+                Selection::collapsed(Position::new(p1, 0, Affinity::Downstream)),
+            ),
+        );
+
+        source.tick();
+        target.tick();
+
+        let version = source
+            .export(DocExportMode::Version)
+            .expect("source should export version");
+
+        let meta = source.doc().loro_doc().get_map("meta");
+        meta.insert("v", 1).expect("source should update meta map");
+        source.doc().loro_doc().commit();
+
+        let updates = source
+            .export(DocExportMode::UpdatesFrom { version })
+            .expect("source should export incremental updates");
+
+        target.loaded_font_codepoints.clear();
+        target.missing_font_nodes.clear();
+
+        target
+            .import_updates(&updates)
+            .expect("target should import updates");
+        target.tick();
+
+        assert!(
+            has_dirty_flag(&target, DIRTY_DOC_CHANGED),
+            "unknown external diff path should still mark doc changed"
+        );
+        assert!(
+            has_dirty_flag(&target, DIRTY_SETTINGS),
+            "unknown external diff path should fall back to settings update"
+        );
+        assert!(
+            has_dirty_flag(&target, DIRTY_DEFAULT_ATTRS),
+            "unknown external diff path should refresh default attrs as fallback"
+        );
+        assert!(
+            has_dirty_flag(&target, DIRTY_FONT_REQUIRED),
+            "unknown external diff path should request fonts via full fallback"
+        );
+
+        let has_x = target
+            .loaded_font_codepoints
+            .values()
+            .any(|codepoints| codepoints.contains(&('x' as u32)));
+        let has_y = target
+            .loaded_font_codepoints
+            .values()
+            .any(|codepoints| codepoints.contains(&('y' as u32)));
+        assert!(
+            has_x && has_y,
+            "fallback font scan should include whole doc"
         );
 
         let tracks_root = target
@@ -1931,7 +2229,106 @@ mod tests {
             .any(|nodes| nodes.contains(&NodeId::ROOT));
         assert!(
             tracks_root,
-            "external doc change font tracking should fall back to root invalidation"
+            "fallback font tracking should use root invalidation"
+        );
+    }
+
+    #[test]
+    fn import_updates_mixed_text_and_settings_change_marks_both_paths() {
+        let mut p1 = id!();
+        let base_state = state! {
+            doc {
+                @p1 paragraph { text { "x" } }
+            }
+            selection { (p1, 0) }
+        };
+        let snapshot = base_state
+            .doc
+            .export(DocExportMode::Snapshot)
+            .expect("base should export snapshot");
+
+        let mut source = Runtime::new(
+            800.0,
+            1.0,
+            State::new(
+                Rc::new(Doc::from_snapshot(snapshot.clone())),
+                Selection::collapsed(Position::new(p1, 0, Affinity::Downstream)),
+            ),
+        );
+
+        let mut target = Runtime::new(
+            800.0,
+            1.0,
+            State::new(
+                Rc::new(Doc::from_snapshot(snapshot)),
+                Selection::collapsed(Position::new(p1, 0, Affinity::Downstream)),
+            ),
+        );
+
+        source.tick();
+        target.tick();
+
+        let version = source
+            .export(DocExportMode::Version)
+            .expect("source should export version");
+        source
+            .replace_text_in_block(p1, 0, 1, "A")
+            .expect("source should replace text");
+        source
+            .doc()
+            .update_settings(|s| s.layout_mode = LayoutMode::Continuous { max_width: 480.0 })
+            .expect("source should update settings");
+        source.flush();
+
+        let updates = source
+            .export(DocExportMode::UpdatesFrom { version })
+            .expect("source should export incremental updates");
+
+        target.loaded_font_codepoints.clear();
+        target.missing_font_nodes.clear();
+
+        target
+            .import_updates(&updates)
+            .expect("target should import updates");
+        target.tick();
+
+        assert_eq!(target.doc().to_plain_text(), "A");
+        assert_eq!(
+            target.doc().settings().layout_mode,
+            LayoutMode::Continuous { max_width: 480.0 }
+        );
+        assert!(
+            has_dirty_flag(&target, DIRTY_DOC_CHANGED),
+            "mixed external diff should mark doc changed"
+        );
+        assert!(
+            has_dirty_flag(&target, DIRTY_SETTINGS),
+            "mixed external diff should refresh settings payload"
+        );
+        assert!(
+            has_dirty_flag(&target, DIRTY_DEFAULT_ATTRS),
+            "mixed external diff should refresh default attrs payload"
+        );
+        assert!(
+            has_dirty_flag(&target, DIRTY_FONT_REQUIRED),
+            "mixed external diff should request fonts for changed text"
+        );
+
+        let tracks_root = target
+            .missing_font_nodes
+            .values()
+            .any(|nodes| nodes.contains(&NodeId::ROOT));
+        assert!(
+            !tracks_root,
+            "mixed diff with explicit changed nodes should avoid root fallback"
+        );
+        let has_non_root_tracking = target
+            .missing_font_nodes
+            .values()
+            .any(|nodes| !nodes.is_empty());
+        assert!(
+            has_non_root_tracking,
+            "mixed diff should keep non-root font invalidation targets"
         );
     }
 
