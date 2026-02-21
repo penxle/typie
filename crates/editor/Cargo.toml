@@ -22,53 +22,49 @@ native = ["dep:jni"]
 bench = []
 
 [target.'cfg(target_os = "android")'.dependencies]
-jni = { version = "0.21", optional = true }
+jni = { version = "0.22", optional = true }
 
 [dependencies]
-macros = { path = "./macros" }
-tiny-skia = "0.11"
-skrifa = "0.40"
-write-fonts = "0.45"
-parley = { version = "0.7.0", default-features = false, features = ["std"] }
-fontique = { version = "0.7.0", default-features = false, features = [
+anyhow = "1.0"
+bytecount = "0.6"
+console_error_panic_hook = { version = "0.1", optional = true }
+csscolorparser = "0.8"
+fancy-regex = "0.17"
+fontique = { version = "0.7", default-features = false, features = [
   "icu_properties",
 ] }
+icu_properties = { version = "2.1", default-features = false, features = [
+  "serde",
+] }
+icu_provider = { version = "2.1", features = ["serde"] }
+icu_provider_blob = "2.1"
+icu_segmenter = { version = "2.1", default-features = false, features = [
+  "serde",
+] }
+indexmap = { version = "2", features = ["serde"] }
+js-sys = { version = "0.3", optional = true }
+loro = "^1"
+macros = { path = "./macros" }
+parley = { version = "0.7", default-features = false, features = ["std"] }
+pretty_assertions = "1.4"
+rstar = "0.12"
+rustc-hash = "2"
+ruzstd = "0.8"
+scraper = "0.25"
 serde = { version = "1.0", features = ["derive"] }
+serde-wasm-bindgen = { version = "0.6", optional = true }
 serde_bytes = "0.11"
 serde_json = "1.0"
-uuid = { version = "1.11", features = ["v4", "serde"] }
-bytemuck = { version = "1.14", features = ["derive"] }
-icu_segmenter = { version = "2.1.1", default-features = false, features = [
-  "serde",
-] }
-bytecount = "0.6.9"
-anyhow = "1.0.100"
-thiserror = "2.0.17"
-bitflags = "2.10.0"
-pretty_assertions = "1.4.1"
-rstar = "0.12.2"
-rustc-hash = "2"
-indexmap = { version = "2", features = ["serde"] }
-loro = "^1"
-icu_properties = { version = "2.1.1", default-features = false, features = [
-  "serde",
-] }
-icu_provider = { version = "2.1.1", features = ["serde"] }
-icu_provider_blob = "2.1.1"
-scraper = "0.25"
-fancy-regex = "0.17"
-ruzstd = "0.8"
-csscolorparser = "0.8"
-zeno = "0.3"
-yazi = "0.2"
-
-web-sys = { version = "0.3", features = ["console"], optional = true }
-serde-wasm-bindgen = { version = "0.6", optional = true }
-wasm-bindgen = { version = "0.2", optional = true }
+skrifa = "0.40"
+tiny-skia = "0.12"
 tsify = { version = "0.5", features = ["js"], optional = true }
+uuid = { version = "1.21", features = ["v4", "serde"] }
+wasm-bindgen = { version = "0.2", optional = true }
 wasm-bindgen-futures = { version = "0.4", optional = true }
-console_error_panic_hook = { version = "0.1", optional = true }
-js-sys = { version = "0.3", optional = true }
+web-sys = { version = "0.3", features = ["console"], optional = true }
+write-fonts = "0.45"
+yazi = "0.2"
+zeno = "0.3"
 
 [dev-dependencies]
 criterion = "0.8"

@@ -11,6 +11,8 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = ["config-toml"] }
 
 [dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 tauri = { version = "2", features = ["config-toml"] }
 tauri-plugin-deep-link = "2"
 tauri-plugin-dialog = "2"
@@ -20,5 +22,3 @@ tauri-plugin-process = "2"
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 tauri-plugin-store = "2"
 tauri-plugin-updater = "2"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
