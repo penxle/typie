@@ -34,6 +34,11 @@ FROM builder AS prod-deps
 COPY out/json/ .
 RUN bun install --no-save --omit=dev
 
+FROM builder AS sharp
+
+COPY vendor/sharp-debian.tar.xz ./vendor/
+RUN tar -xf vendor/sharp-debian.tar.xz -C apps/api/ && rm -rf vendor
+
 FROM debian:12-slim AS runtime
 WORKDIR /app
 
@@ -58,12 +63,8 @@ RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash \
 COPY --from=prod-deps /app/ .
 RUN cd apps/api && npx playwright install-deps && npx playwright install chromium
 
-RUN npm install -g @anthropic-ai/claude-code
-
 COPY --from=build /app/ .
-COPY vendor/sharp-debian.tar.xz ./vendor/
-
-RUN tar -xf vendor/sharp-debian.tar.xz -C apps/api/ && rm -rf vendor
+COPY --from=sharp /app/apps/api/lib/ ./apps/api/lib/
 
 ENTRYPOINT ["tini", "--"]
 CMD ["bun", "run", "--cwd", "apps/api", "start"]
