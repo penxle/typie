@@ -35,25 +35,21 @@ class KeyboardPlugin: NSObject, FlutterStreamHandler {
       object: nil
     )
     
-    #if targetEnvironment(simulator)
-      events(["type": "hardware", "hardware": false])
-    #else
-      NotificationCenter.default.addObserver(
-        self,
-        selector: #selector(hardwareKeyboardDidConnect),
-        name: .GCKeyboardDidConnect,
-        object: nil
-      )
-    
-      NotificationCenter.default.addObserver(
-        self,
-        selector: #selector(hardwareKeyboardDidDisconnect),
-        name: .GCKeyboardDidDisconnect,
-        object: nil
-      )
-    
-      events(["type": "hardware", "hardware": GCKeyboard.coalesced != nil])
-    #endif
+    NotificationCenter.default.addObserver(
+      self,
+      selector: #selector(hardwareKeyboardDidConnect),
+      name: .GCKeyboardDidConnect,
+      object: nil
+    )
+
+    NotificationCenter.default.addObserver(
+      self,
+      selector: #selector(hardwareKeyboardDidDisconnect),
+      name: .GCKeyboardDidDisconnect,
+      object: nil
+    )
+
+    sendHardwareState()
 
     return nil
   }
@@ -69,20 +65,56 @@ class KeyboardPlugin: NSObject, FlutterStreamHandler {
   @objc private func keyboardWillShow(_ notification: Notification) {
     if let keyboardFrame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect {
       let keyboardHeight = keyboardFrame.height
-      events!(["type": "height", "height": Double(keyboardHeight)])
+      sendEvent(["type": "height", "height": Double(keyboardHeight)])
+      sendHardwareState()
     }
   }
   
   @objc private func keyboardWillHide(_ notification: Notification) {
-    events!(["type": "height", "height": 0.0])
+    sendEvent(["type": "height", "height": 0.0])
+    sendHardwareState()
   }
   
   @objc private func hardwareKeyboardDidConnect(_ notification: Notification) {
-    events!(["type": "hardware", "hardware": true])
+    sendHardwareState()
   }
 
   @objc private func hardwareKeyboardDidDisconnect(_ notification: Notification) {
-    events!(["type": "hardware", "hardware": false])
+    sendHardwareState()
+  }
+
+  private func sendHardwareState() {
+    let isHardwareKeyboard = resolveHardwareKeyboardState()
+    sendEvent(["type": "hardware", "hardware": isHardwareKeyboard])
+  }
+
+  private func resolveHardwareKeyboardState() -> Bool {
+    if let isInHardwareKeyboardMode = detectHardwareKeyboardModeFromUIKeyboardImpl() {
+      return isInHardwareKeyboardMode
+    }
+
+    return GCKeyboard.coalesced != nil
+  }
+
+  private func detectHardwareKeyboardModeFromUIKeyboardImpl() -> Bool? {
+    guard let cls = NSClassFromString("UIKeyboardImpl") as? NSObject.Type,
+          let instance = cls.perform(NSSelectorFromString("activeInstance"))?.takeUnretainedValue() as? NSObject else {
+      return nil
+    }
+
+    let selector = NSSelectorFromString("isInHardwareKeyboardMode")
+    guard instance.responds(to: selector) else {
+      return nil
+    }
+
+    typealias BoolMethod = @convention(c) (AnyObject, Selector) -> Bool
+    let methodImplementation = instance.method(for: selector)
+    let function = unsafeBitCast(methodImplementation, to: BoolMethod.self)
+    return function(instance, selector)
+  }
+
+  private func sendEvent(_ event: [String: Any]) {
+    events?(event)
   }
 }
   

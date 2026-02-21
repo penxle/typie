@@ -23,20 +23,29 @@ class NativeEditorBottomToolbar extends HookWidget {
     final mediaQuery = MediaQuery.of(context);
     final expandedHeightFallback = mediaQuery.viewPadding.bottom + mediaQuery.size.height * 0.2;
     final softwareExpandedHeight = keyboardHeight > 0 ? keyboardHeight : expandedHeightFallback;
+    final hardwareVisibleHeight = switch (bottomToolbarMode) {
+      BottomToolbarMode.hidden => keyboardHeight,
+      _ => keyboardHeight > expandedHeightFallback ? keyboardHeight : expandedHeightFallback,
+    };
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
       curve: Curves.ease,
-      height: switch (keyboardType) {
-        KeyboardType.software => switch (bottomToolbarMode) {
-          BottomToolbarMode.hidden => isKeyboardVisible ? keyboardHeight : mediaQuery.viewPadding.bottom,
-          _ => isKeyboardVisible ? keyboardHeight : softwareExpandedHeight,
-        },
-        KeyboardType.hardware => switch (bottomToolbarMode) {
-          BottomToolbarMode.hidden => mediaQuery.viewPadding.bottom,
-          _ => mediaQuery.viewPadding.bottom + mediaQuery.size.height * 0.2,
-        },
-      },
+      height: isKeyboardVisible
+          ? switch (keyboardType) {
+              KeyboardType.software => keyboardHeight,
+              KeyboardType.hardware => hardwareVisibleHeight,
+            }
+          : switch (keyboardType) {
+              KeyboardType.software => switch (bottomToolbarMode) {
+                BottomToolbarMode.hidden => mediaQuery.viewPadding.bottom,
+                _ => softwareExpandedHeight,
+              },
+              KeyboardType.hardware => switch (bottomToolbarMode) {
+                BottomToolbarMode.hidden => mediaQuery.viewPadding.bottom,
+                _ => mediaQuery.viewPadding.bottom + mediaQuery.size.height * 0.2,
+              },
+            },
       decoration: BoxDecoration(
         color: context.colors.surfaceDefault,
         border: Border(top: BorderSide(color: context.colors.borderSubtle)),
