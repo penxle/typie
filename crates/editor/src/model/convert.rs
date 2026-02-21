@@ -182,8 +182,10 @@ pub fn snapshot_to_json(snapshot: &[u8]) -> Result<DocumentJson> {
             .and_then(|c| c.into_map().ok())
             .context("node map not found")?;
 
-        let node =
-            Node::decode(&node_map).with_context(|| format!("failed to decode node {}", id_str))?;
+        let node = Node::decode(&node_map).with_context(|| {
+            let deep_value = node_map.get_deep_value();
+            format!("failed to decode node {}: {:?}", id_str, deep_value)
+        })?;
 
         let parent = node_map
             .get("parent")

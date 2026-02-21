@@ -145,15 +145,15 @@ impl Application {
     #[wasm_bindgen(js_name = snapshotToJson)]
     pub fn snapshot_to_json(&self, snapshot: Vec<u8>) -> Result<JsValue, JsValue> {
         let doc_json =
-            snapshot_to_json(&snapshot).map_err(|e| JsValue::from_str(&e.to_string()))?;
+            snapshot_to_json(&snapshot).map_err(|e| JsValue::from_str(&format!("{:?}", e)))?;
         Ok(to_js_value(&doc_json))
     }
 
     #[wasm_bindgen(js_name = jsonToSnapshot)]
     pub fn json_to_snapshot(&self, json: JsValue) -> Result<Vec<u8>, JsValue> {
-        let doc_json: DocumentJson =
-            serde_wasm_bindgen::from_value(json).map_err(|e| JsValue::from_str(&e.to_string()))?;
-        json_to_snapshot(&doc_json).map_err(|e| JsValue::from_str(&e.to_string()))
+        let doc_json: DocumentJson = serde_wasm_bindgen::from_value(json)
+            .map_err(|e| JsValue::from_str(&format!("{:?}", e)))?;
+        json_to_snapshot(&doc_json).map_err(|e| JsValue::from_str(&format!("{:?}", e)))
     }
 }
 
