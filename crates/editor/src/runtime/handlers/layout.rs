@@ -14,7 +14,7 @@ impl Runtime {
             Effect::LayoutChanged,
         ];
 
-        let fonts = self.collect_doc_fonts();
+        let fonts = self.collect_doc_fonts_from_nodes([crate::model::NodeId::ROOT]);
 
         for (family, weight, font_codepoints) in fonts {
             effects.push(Effect::FontDetected {

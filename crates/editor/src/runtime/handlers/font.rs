@@ -1,14 +1,19 @@
 use crate::model::{Annotation, Node, NodeId, Style};
 use crate::runtime::{Effect, Runtime};
-use loro::Frontiers;
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 impl Runtime {
-    pub(crate) fn collect_doc_fonts(&self) -> Vec<(String, u16, FxHashSet<u32>)> {
-        let mut fonts: rustc_hash::FxHashMap<(String, u16), FxHashSet<u32>> =
-            rustc_hash::FxHashMap::default();
-
-        self.collect_from_node(NodeId::ROOT, &mut fonts);
+    pub(crate) fn collect_doc_fonts_from_nodes<I>(
+        &self,
+        node_ids: I,
+    ) -> Vec<(String, u16, FxHashSet<u32>)>
+    where
+        I: IntoIterator<Item = NodeId>,
+    {
+        let mut fonts: FxHashMap<(String, u16), FxHashSet<u32>> = FxHashMap::default();
+        for node_id in node_ids {
+            self.collect_from_node(node_id, &mut fonts);
+        }
 
         fonts
             .into_iter()
@@ -16,89 +21,10 @@ impl Runtime {
             .collect()
     }
 
-    pub(crate) fn collect_doc_fonts_from_changed_text_diff(
-        &self,
-        old_state_frontiers: &Frontiers,
-        new_state_frontiers: &Frontiers,
-    ) -> Option<Vec<(String, u16, FxHashSet<u32>)>> {
-        let diff = self
-            .state
-            .doc
-            .loro_doc()
-            .diff(old_state_frontiers, new_state_frontiers)
-            .ok()?;
-
-        let mut changed_text_nodes = FxHashSet::default();
-        for (container_id, container_diff) in diff.iter() {
-            if !matches!(container_diff, loro::event::Diff::Text(_)) {
-                return None;
-            }
-
-            let path = self
-                .state
-                .doc
-                .loro_doc()
-                .get_path_to_container(container_id)?;
-            let node_id = Self::extract_text_node_id_from_container_path(&path)?;
-            changed_text_nodes.insert(node_id);
-        }
-
-        let mut fonts: rustc_hash::FxHashMap<(String, u16), FxHashSet<u32>> =
-            rustc_hash::FxHashMap::default();
-        for node_id in changed_text_nodes {
-            self.collect_from_node(node_id, &mut fonts);
-        }
-
-        Some(
-            fonts
-                .into_iter()
-                .map(|((family, weight), cps)| (family, weight, cps))
-                .collect(),
-        )
-    }
-
-    fn extract_text_node_id_from_container_path(
-        path: &[(loro::ContainerID, loro::Index)],
-    ) -> Option<NodeId> {
-        const NODES_KEY: &str = "nodes";
-        const TEXT_KEY: &str = "text";
-
-        let mut inside_nodes_map = false;
-        let mut node_id: Option<NodeId> = None;
-
-        for (_, index) in path {
-            let key = match index {
-                loro::Index::Key(key) => key.to_string(),
-                _ => continue,
-            };
-
-            if key == NODES_KEY {
-                inside_nodes_map = true;
-                node_id = None;
-                continue;
-            }
-
-            if inside_nodes_map && node_id.is_none() {
-                if let Some(parsed) = NodeId::from_string(&key) {
-                    node_id = Some(parsed);
-                    continue;
-                }
-                inside_nodes_map = false;
-                continue;
-            }
-
-            if key == TEXT_KEY {
-                return node_id;
-            }
-        }
-
-        None
-    }
-
     fn collect_from_node(
         &self,
         node_id: NodeId,
-        fonts: &mut rustc_hash::FxHashMap<(String, u16), FxHashSet<u32>>,
+        fonts: &mut FxHashMap<(String, u16), FxHashSet<u32>>,
     ) {
         let Some(node_ref) = self.doc().node(node_id) else {
             return;
