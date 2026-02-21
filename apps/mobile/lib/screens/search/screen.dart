@@ -5,7 +5,6 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
 import 'package:typie/constants/router_tab_index.dart';
 import 'package:typie/context/theme.dart';
-import 'package:typie/context/toast.dart';
 import 'package:typie/extensions/jiffy.dart';
 import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
 import 'package:typie/graphql/widget.dart';
@@ -161,8 +160,8 @@ class SearchScreen extends HookWidget {
                         ),
                       ),
                       searchHitDocument: (document) => Tappable(
-                        onTap: () {
-                          context.toast(ToastType.notification, '웹에서 조회 및 편집을 할 수 있어요');
+                        onTap: () async {
+                          await context.router.push(NativeEditorRoute(slug: document.document.entity.slug));
                         },
                         child: Container(
                           decoration: BoxDecoration(
@@ -225,10 +224,7 @@ class _RecentlyViewedItem extends StatelessWidget {
       onTap: () async {
         await entity.node.when(
           post: (_) => context.router.push(EditorRoute(slug: entity.slug)),
-          document: (_) {
-            context.toast(ToastType.notification, '웹에서 조회 및 편집을 할 수 있어요');
-            return Future<void>.value();
-          },
+          document: (_) => context.router.push(NativeEditorRoute(slug: entity.slug)),
           orElse: Future<void>.value,
         );
         refreshNotifier?.refresh();

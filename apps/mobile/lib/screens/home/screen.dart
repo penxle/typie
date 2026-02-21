@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gql_tristate_value/gql_tristate_value.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
-import 'package:typie/context/bottom_sheet.dart';
 import 'package:typie/context/theme.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/hooks/service.dart';
@@ -14,10 +13,8 @@ import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/icons/typie.dart';
 import 'package:typie/routers/app.gr.dart';
 import 'package:typie/screens/home/__generated__/create_document.req.gql.dart';
-import 'package:typie/screens/home/__generated__/create_post.req.gql.dart';
 import 'package:typie/screens/home/__generated__/site_update_stream.req.gql.dart';
 import 'package:typie/services/preference.dart';
-import 'package:typie/widgets/editor_select_bottom_sheet.dart';
 import 'package:typie/widgets/responsive_container.dart';
 import 'package:typie/widgets/tappable.dart';
 
@@ -90,58 +87,18 @@ class HomeScreen extends HookWidget {
                           parentEntityId = args.entityId;
                         }
 
-                        if (pref.experimentalV2EditorEnabled) {
-                          await context.showBottomSheet(
-                            child: EditorSelectBottomSheet(
-                              onSelect: (version) async {
-                                if (version == EditorVersion.v1) {
-                                  final result = await client.request(
-                                    GHomeScreen_CreatePost_MutationReq(
-                                      (b) => b
-                                        ..vars.input.siteId = pref.siteId
-                                        ..vars.input.parentEntityId = Value.present(parentEntityId),
-                                    ),
-                                  );
+                        final result = await client.request(
+                          GHomeScreen_CreateDocument_MutationReq(
+                            (b) => b
+                              ..vars.input.siteId = pref.siteId
+                              ..vars.input.parentEntityId = Value.present(parentEntityId),
+                          ),
+                        );
 
-                                  unawaited(mixpanel.track('create_post', properties: {'via': 'home'}));
+                        unawaited(mixpanel.track('create_document', properties: {'via': 'home'}));
 
-                                  if (context.mounted) {
-                                    await context.router.push(EditorRoute(slug: result.createPost.entity.slug));
-                                  }
-                                } else {
-                                  final result = await client.request(
-                                    GHomeScreen_CreateDocument_MutationReq(
-                                      (b) => b
-                                        ..vars.input.siteId = pref.siteId
-                                        ..vars.input.parentEntityId = Value.present(parentEntityId),
-                                    ),
-                                  );
-
-                                  unawaited(mixpanel.track('create_document', properties: {'via': 'home'}));
-
-                                  if (context.mounted) {
-                                    await context.router.push(
-                                      NativeEditorRoute(slug: result.createDocument.entity.slug),
-                                    );
-                                  }
-                                }
-                              },
-                            ),
-                          );
-                        } else {
-                          final result = await client.request(
-                            GHomeScreen_CreatePost_MutationReq(
-                              (b) => b
-                                ..vars.input.siteId = pref.siteId
-                                ..vars.input.parentEntityId = Value.present(parentEntityId),
-                            ),
-                          );
-
-                          unawaited(mixpanel.track('create_post', properties: {'via': 'home'}));
-
-                          if (context.mounted) {
-                            await context.router.push(EditorRoute(slug: result.createPost.entity.slug));
-                          }
+                        if (context.mounted) {
+                          await context.router.push(NativeEditorRoute(slug: result.createDocument.entity.slug));
                         }
                       },
                       child: Icon(LucideLightIcons.square_plus, size: 24, color: context.colors.textSubtle),

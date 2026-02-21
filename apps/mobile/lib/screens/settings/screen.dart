@@ -288,22 +288,6 @@ class SettingsScreen extends HookWidget {
                           },
                         ),
                       ),
-                      const _Divider(),
-                      _Item(
-                        label: 'v2 에디터 활성화',
-                        trailing: HookForm(
-                          submitMode: HookFormSubmitMode.onChange,
-                          onSubmit: (form) async {
-                            pref.experimentalV2EditorEnabled = form.data['experimentalV2EditorEnabled'] as bool;
-                          },
-                          builder: (context, form) {
-                            return HookFormSwitch(
-                              name: 'experimentalV2EditorEnabled',
-                              initialValue: pref.experimentalV2EditorEnabled,
-                            );
-                          },
-                        ),
-                      ),
                     ],
                   ),
                 _Section(
