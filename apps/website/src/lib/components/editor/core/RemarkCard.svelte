@@ -1,9 +1,8 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { autosize, tooltip } from '@typie/ui/actions';
-  import { Icon, Menu, MenuItem } from '@typie/ui/components';
+  import { Icon, Menu, MenuItem, TimeAgo } from '@typie/ui/components';
   import { Dialog } from '@typie/ui/notification';
-  import dayjs from 'dayjs';
   import ArrowUpIcon from '~icons/lucide/arrow-up';
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import PencilIcon from '~icons/lucide/pencil';
@@ -151,9 +150,7 @@
         >
           {$userQuery.userView.name}
         </span>
-        <span class={css({ fontSize: '11px', color: 'text.faint', flexShrink: '0' })}>
-          {dayjs(createdAt).fromNow()}
-        </span>
+        <TimeAgo style={{ fontSize: '11px', color: 'text.faint', flexShrink: '0' }} timestamp={createdAt} />
 
         {#if !readOnly}
           <div
