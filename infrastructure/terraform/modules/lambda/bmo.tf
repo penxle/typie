@@ -1,5 +1,3 @@
-# ─── IAM ───
-
 resource "aws_iam_role" "bmo_lambda" {
   name = "bmo@lambda"
 
@@ -65,8 +63,6 @@ resource "aws_iam_role_policy" "bmo_ssm" {
   })
 }
 
-# ─── ECR ───
-
 resource "aws_ecr_repository" "bmo_worker" {
   name                 = "bmo-worker"
   image_tag_mutability = "MUTABLE"
@@ -94,8 +90,6 @@ resource "aws_ecr_lifecycle_policy" "bmo_worker" {
     }]
   })
 }
-
-# ─── Lambda: webhook ───
 
 resource "aws_lambda_function" "bmo_webhook" {
   function_name = "bmo-webhook"
@@ -135,14 +129,12 @@ resource "aws_lambda_permission" "bmo_webhook_public_invoke" {
   principal     = "*"
 }
 
-# ─── Lambda: worker ───
-
 resource "aws_lambda_function" "bmo_worker" {
   function_name = "bmo-worker"
   role          = aws_iam_role.bmo_lambda.arn
 
   architectures = ["arm64"]
-  memory_size   = 1024
+  memory_size   = 10240
   timeout       = 900
 
   package_type = "Image"
@@ -152,8 +144,6 @@ resource "aws_lambda_function" "bmo_worker" {
     variables = {}
   }
 }
-
-# ─── DynamoDB ───
 
 resource "aws_dynamodb_table" "bmo_sessions" {
   name         = "bmo-sessions"
