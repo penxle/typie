@@ -111,9 +111,30 @@ const mmToPx = (mm: number) => Math.round((mm * 96) / 25.4);
 export const makeLoroDoc = (template?: TemplatePreset) => {
   const doc = new LoroDoc();
 
+  const blockGap =
+    template?.blockGap != null && template.blockGap < 10 && template.blockGap !== 0
+      ? Math.round(template.blockGap * 100)
+      : (template?.blockGap ?? defaultValues.blockGap);
+  const paragraphIndent =
+    template?.paragraphIndent != null && template.paragraphIndent < 10 && template.paragraphIndent !== 0
+      ? Math.round(template.paragraphIndent * 100)
+      : (template?.paragraphIndent ?? defaultValues.paragraphIndent);
+  const fontSize =
+    template?.fontSize != null && template.fontSize < 500 && template.fontSize > 0
+      ? Math.round(template.fontSize * 100)
+      : (template?.fontSize ?? defaultValues.fontSize);
+  const letterSpacing =
+    template?.letterSpacing != null && Math.abs(template.letterSpacing) < 5 && template.letterSpacing !== 0
+      ? Math.round(template.letterSpacing * 100)
+      : (template?.letterSpacing ?? defaultValues.letterSpacing);
+  const lineHeight =
+    template?.lineHeight != null && template.lineHeight < 10 && template.lineHeight !== 0
+      ? Math.round(template.lineHeight * 100)
+      : (template?.lineHeight ?? defaultValues.lineHeight);
+
   const settings = doc.getMap('settings');
-  settings.set('block_gap', template?.blockGap ?? defaultValues.blockGap);
-  settings.set('paragraph_indent', template?.paragraphIndent ?? defaultValues.paragraphIndent);
+  settings.set('block_gap', blockGap);
+  settings.set('paragraph_indent', paragraphIndent);
 
   const layoutMode = settings.setContainer('layout_mode', new LoroMap());
   if (template?.layoutMode === PostLayoutMode.PAGE && template.pageLayout) {
@@ -140,17 +161,17 @@ export const makeLoroDoc = (template?: TemplatePreset) => {
 
   const cascadeAttrs = rootNode.setContainer('cascade_attrs', new LoroMap());
   cascadeAttrs.set('style:font_family', template?.fontFamily ?? defaultValues.fontFamily);
-  cascadeAttrs.set('style:font_size', template?.fontSize ?? defaultValues.fontSize);
+  cascadeAttrs.set('style:font_size', fontSize);
   cascadeAttrs.set('style:font_weight', template?.fontWeight ?? defaultValues.fontWeight);
   cascadeAttrs.set('style:text_color', template?.textColor ?? defaultValues.textColor);
   cascadeAttrs.set('style:background_color', template?.backgroundColor ?? defaultValues.backgroundColor);
-  cascadeAttrs.set('style:letter_spacing', template?.letterSpacing ?? defaultValues.letterSpacing);
-  cascadeAttrs.set('paragraph:line_height', template?.lineHeight ?? defaultValues.lineHeight);
+  cascadeAttrs.set('style:letter_spacing', letterSpacing);
+  cascadeAttrs.set('paragraph:line_height', lineHeight);
 
   const paragraphNode = nodes.setContainer(paragraphId, new LoroMap());
   paragraphNode.set('type', 'paragraph');
   paragraphNode.set('align', defaultValues.textAlign);
-  paragraphNode.set('line_height', template?.lineHeight ?? defaultValues.lineHeight);
+  paragraphNode.set('line_height', lineHeight);
   paragraphNode.set('parent', ROOT_ID);
   paragraphNode.setContainer('children', new LoroList());
 
