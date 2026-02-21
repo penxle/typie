@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { flip, hide } from '@floating-ui/dom';
   import { css } from '@typie/styled-system/css';
   import { autosize, createFloatingActions, tooltip } from '@typie/ui/actions';
   import { Icon, Menu, MenuItem } from '@typie/ui/components';
@@ -74,6 +75,7 @@
   const { anchor, floating } = createFloatingActions({
     placement: 'bottom-start',
     offset: 4,
+    middleware: [flip(), hide()],
     onClickOutside: (event: Event) => {
       if (event.target instanceof HTMLElement && event.target.closest('[data-remark-panel-item]')) return;
       close();
@@ -179,6 +181,10 @@
           listEl.scrollTo({ top: Math.max(0, scrollTarget), behavior: 'smooth' });
 
           const shake = () => {
+            for (const animation of el.getAnimations()) {
+              animation.cancel();
+            }
+
             el.animate(
               [
                 { transform: 'translateX(0)' },
@@ -188,7 +194,7 @@
                 { transform: 'translateX(2px)' },
                 { transform: 'translateX(0)' },
               ],
-              { duration: 400, iterations: 1, easing: 'ease-in-out' },
+              { duration: 520, iterations: 1, easing: 'linear' },
             );
           };
 
@@ -367,6 +373,7 @@
           paddingLeft: '10px',
           paddingRight: '10px',
           maxHeight: '300px',
+          overflowX: 'hidden',
           overflowY: 'auto',
         })}
       >
