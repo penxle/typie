@@ -1,4 +1,4 @@
-FROM debian:12-slim AS base
+FROM debian:12-slim AS builder
 WORKDIR /app
 
 ENV PATH="/root/.bun/bin:$PATH"
@@ -8,11 +8,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     ca-certificates \
     curl \
-    ghostscript \
     git \
     python3 \
     tar \
-    tini \
     unzip \
     xz-utils \
     && rm -rf /var/lib/apt/lists/*
@@ -22,24 +20,35 @@ RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
+FROM builder AS build
+
 COPY out/json/ .
 COPY out/full/packages/sark/bin/sark.js ./packages/sark/bin/sark.js
 RUN bun install --no-save
 
-FROM base AS build
-
 COPY out/full/ .
 RUN bunx turbo build --filter=@typie/website
-
 RUN find . -type d -name "node_modules" -prune -exec rm -rf {} +
 
-FROM base AS runtime-deps
+FROM builder AS prod-deps
 
 COPY out/json/ .
 RUN bun install --no-save --omit=dev
 
-FROM runtime-deps AS runtime
+FROM debian:12-slim AS runtime
+WORKDIR /app
 
+ENV PATH="/root/.bun/bin:$PATH"
+ENV NODE_ENV=production
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    tini \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /root/.bun /root/.bun
+
+COPY --from=prod-deps /app/ .
 COPY --from=build /app/ .
 
 ENTRYPOINT ["tini", "--"]
