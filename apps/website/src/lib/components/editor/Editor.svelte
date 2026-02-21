@@ -151,7 +151,7 @@
 
   const pageGap = $derived(layoutMode.type === 'paginated' ? PAGE_GAP : 0);
   const continuousPageMargin = $derived(layoutMode.type === 'paginated' ? 0 : CONTINUOUS_PAGE_MARGIN);
-  const viewPadding = $derived(layoutMode.type === 'paginated' ? PAGINATED_VIEW_PADDING : CONTINUOUS_VIEW_PADDING);
+  const viewPadding = $derived(layoutMode.type === 'paginated' ? PAGINATED_VIEW_PADDING : readOnly ? 0 : CONTINUOUS_VIEW_PADDING);
   const width = $derived(
     layoutMode.type === 'continuous'
       ? Math.max(CONTINUOUS_MIN_WIDTH - continuousPageMargin * 2, containerClientWidth - viewPadding * 2)

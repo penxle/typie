@@ -107,7 +107,7 @@
   };
 
   const isPaginated = $derived(editor.layout.layoutMode.type === 'paginated');
-  const viewPadding = $derived(isPaginated ? PAGINATED_VIEW_PADDING : CONTINUOUS_VIEW_PADDING);
+  const viewPadding = $derived(isPaginated ? PAGINATED_VIEW_PADDING : editor.readOnly ? 0 : CONTINUOUS_VIEW_PADDING);
 </script>
 
 <svelte:window
