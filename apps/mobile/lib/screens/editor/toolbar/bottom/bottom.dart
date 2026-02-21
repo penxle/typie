@@ -15,21 +15,32 @@ class BottomToolbar extends HookWidget {
   Widget build(BuildContext context) {
     final scope = EditorStateScope.of(context);
     final keyboardHeight = useValueListenable(scope.keyboardHeight);
+    final isKeyboardVisible = useValueListenable(scope.isKeyboardVisible);
     final keyboardType = useValueListenable(scope.keyboardType);
     final bottomToolbarMode = useValueListenable(scope.bottomToolbarMode);
 
     final mediaQuery = MediaQuery.of(context);
+    final expandedHeightFallback = mediaQuery.viewPadding.bottom + mediaQuery.size.height * 0.2;
+    final hardwareVisibleHeight = switch (bottomToolbarMode) {
+      BottomToolbarMode.hidden => keyboardHeight,
+      _ => keyboardHeight > expandedHeightFallback ? keyboardHeight : expandedHeightFallback,
+    };
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
       curve: Curves.ease,
-      height: switch (keyboardType) {
-        KeyboardType.software => keyboardHeight,
-        KeyboardType.hardware => switch (bottomToolbarMode) {
-          BottomToolbarMode.hidden => mediaQuery.viewPadding.bottom,
-          _ => mediaQuery.viewPadding.bottom + mediaQuery.size.height * 0.2,
-        },
-      },
+      height: isKeyboardVisible
+          ? switch (keyboardType) {
+              KeyboardType.software => keyboardHeight,
+              KeyboardType.hardware => hardwareVisibleHeight,
+            }
+          : switch (keyboardType) {
+              KeyboardType.software => keyboardHeight,
+              KeyboardType.hardware => switch (bottomToolbarMode) {
+                BottomToolbarMode.hidden => mediaQuery.viewPadding.bottom,
+                _ => expandedHeightFallback,
+              },
+            },
       decoration: BoxDecoration(
         color: context.colors.surfaceDefault,
         border: Border(top: BorderSide(color: context.colors.borderSubtle)),
