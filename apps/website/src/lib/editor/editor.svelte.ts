@@ -736,6 +736,8 @@ export class Editor {
 
     if (e.target.closest('[data-pointer-capture]')) return;
 
+    if (this.readOnly && e.pointerType === 'touch') return;
+
     const resolved = this.#resolvePointerCoordinate(e, e.target);
     if (!resolved) {
       this.isDraggable = false;
@@ -770,6 +772,8 @@ export class Editor {
   }
 
   handlePointerMove(e: PointerEvent): void {
+    if (this.readOnly && e.pointerType === 'touch') return;
+
     const targetEl = document.elementFromPoint(e.clientX, e.clientY);
     if (!(targetEl instanceof HTMLElement)) return;
 
@@ -817,6 +821,8 @@ export class Editor {
 
   handlePointerUp(e: PointerEvent): void {
     this.isDraggable = false;
+
+    if (this.readOnly && e.pointerType === 'touch') return;
 
     if (!(e.target instanceof HTMLElement)) return;
 
