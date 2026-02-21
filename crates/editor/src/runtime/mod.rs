@@ -42,7 +42,7 @@ pub use dnd::*;
 pub use effect::*;
 use layout_engine::LayoutEngine;
 use layout_invalidation::{LayoutInvalidationBatch, LayoutInvalidationOp};
-use loro::UndoManager;
+use loro::{Frontiers, UndoManager};
 pub use message::*;
 pub use pointer::*;
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -247,24 +247,26 @@ impl Runtime {
 
     pub fn import_updates(&mut self, updates: &[u8]) -> Result<()> {
         let old_frontiers = self.state.doc.frontiers();
+        let old_state_frontiers = self.state.doc.loro_doc().state_frontiers();
         self.state.doc.import_updates(updates)?;
         let new_frontiers = self.state.doc.frontiers();
 
         if old_frontiers != new_frontiers {
             self.state.frontiers = new_frontiers;
-            self.handle_external_doc_change();
+            self.handle_external_doc_change(Some(old_state_frontiers));
         }
         Ok(())
     }
 
     pub fn import_updates_batch(&mut self, updates_batch: &[Vec<u8>]) -> Result<()> {
         let old_frontiers = self.state.doc.frontiers();
+        let old_state_frontiers = self.state.doc.loro_doc().state_frontiers();
         self.state.doc.import_updates_batch(updates_batch)?;
         let new_frontiers = self.state.doc.frontiers();
 
         if old_frontiers != new_frontiers {
             self.state.frontiers = new_frontiers;
-            self.handle_external_doc_change();
+            self.handle_external_doc_change(Some(old_state_frontiers));
         }
         Ok(())
     }
@@ -279,15 +281,17 @@ impl Runtime {
         if !self.state.doc.loro_doc().oplog_vv().includes_vv(&vv) {
             anyhow::bail!("Cannot checkout to unknown version");
         }
+        let old_state_frontiers = self.state.doc.loro_doc().state_frontiers();
         let frontiers = self.state.doc.loro_doc().vv_to_frontiers(&vv);
         self.state.doc.checkout(&frontiers)?;
-        self.handle_external_doc_change();
+        self.handle_external_doc_change(Some(old_state_frontiers));
         Ok(())
     }
 
     pub fn checkout_to_latest(&mut self) -> Result<()> {
+        let old_state_frontiers = self.state.doc.loro_doc().state_frontiers();
         self.state.doc.checkout_to_latest()?;
-        self.handle_external_doc_change();
+        self.handle_external_doc_change(Some(old_state_frontiers));
         Ok(())
     }
 
@@ -300,9 +304,10 @@ impl Runtime {
         if !self.state.doc.loro_doc().oplog_vv().includes_vv(&vv) {
             anyhow::bail!("Cannot revert to unknown version");
         }
+        let old_state_frontiers = self.state.doc.loro_doc().state_frontiers();
         let frontiers = self.state.doc.loro_doc().vv_to_frontiers(&vv);
         self.state.doc.revert_to(&frontiers)?;
-        self.handle_external_doc_change();
+        self.handle_external_doc_change(Some(old_state_frontiers));
         Ok(())
     }
 
@@ -338,7 +343,7 @@ impl Runtime {
         Ok(())
     }
 
-    fn handle_external_doc_change(&mut self) {
+    fn handle_external_doc_change(&mut self, old_state_frontiers: Option<Frontiers>) {
         // TODO: 최적화?
         self.state.doc.clear_children_cache();
         let mut invalidation = LayoutInvalidationBatch::new();
@@ -360,6 +365,23 @@ impl Runtime {
         self.pending.default_attrs = true;
         self.pending.placeholder = true;
         self.pending.tracked_items = true;
+
+        let fonts = if let Some(old_state_frontiers) = old_state_frontiers.as_ref() {
+            let new_state_frontiers = self.state.doc.loro_doc().state_frontiers();
+            self.collect_doc_fonts_from_changed_text_diff(old_state_frontiers, &new_state_frontiers)
+                .unwrap_or_else(|| self.collect_doc_fonts())
+        } else {
+            self.collect_doc_fonts()
+        };
+        let font_effects = fonts
+            .into_iter()
+            .map(|(family, weight, codepoints)| Effect::FontDetected {
+                family,
+                weight,
+                codepoints: codepoints.into_iter().collect(),
+            })
+            .collect();
+        self.process_effects(font_effects);
     }
 
     pub fn replace_text_in_block(
@@ -418,7 +440,7 @@ impl Runtime {
         }
 
         self.state.pending_loro_commit = true;
-        self.handle_external_doc_change();
+        self.handle_external_doc_change(None);
 
         Ok(())
     }
@@ -487,7 +509,7 @@ impl Runtime {
         }
 
         self.state.pending_loro_commit = true;
-        self.handle_external_doc_change();
+        self.handle_external_doc_change(None);
 
         Ok(())
     }
@@ -1823,6 +1845,93 @@ mod tests {
         assert!(
             !nodes.contains(&NodeId::ROOT),
             "pasted range should avoid root fallback"
+        );
+    }
+
+    #[test]
+    fn import_updates_detects_fonts_for_external_doc_change() {
+        let mut p1 = id!();
+        let mut p2 = id!();
+        let base_state = state! {
+            doc {
+                @p1 paragraph { text { "x" } }
+                @p2 paragraph { text { "y" } }
+            }
+            selection { (p1, 0) }
+        };
+        let snapshot = base_state
+            .doc
+            .export(DocExportMode::Snapshot)
+            .expect("base should export snapshot");
+
+        let mut source = Runtime::new(
+            800.0,
+            1.0,
+            State::new(
+                Rc::new(Doc::from_snapshot(snapshot.clone())),
+                Selection::collapsed(Position::new(p1, 0, Affinity::Downstream)),
+            ),
+        );
+
+        let mut target = Runtime::new(
+            800.0,
+            1.0,
+            State::new(
+                Rc::new(Doc::from_snapshot(snapshot)),
+                Selection::collapsed(Position::new(p1, 0, Affinity::Downstream)),
+            ),
+        );
+
+        let version = source
+            .export(DocExportMode::Version)
+            .expect("source should export version");
+        source
+            .replace_text_in_block(p1, 0, 1, "A")
+            .expect("source should replace text");
+        source.layout();
+        let updates = source
+            .export(DocExportMode::UpdatesFrom { version })
+            .expect("source should export incremental updates");
+
+        target.pending.fonts.clear();
+        target.loaded_font_codepoints.clear();
+        target.missing_font_nodes.clear();
+
+        target
+            .import_updates(&updates)
+            .expect("target should import updates");
+
+        assert_eq!(target.doc().to_plain_text(), "A\ny");
+
+        let has_detected_a = target
+            .pending
+            .fonts
+            .values()
+            .any(|codepoints| codepoints.contains(&('A' as u32)));
+        assert!(
+            has_detected_a,
+            "external doc change should detect codepoints from imported text, got: {:?}",
+            target.pending.fonts
+        );
+
+        let has_detected_unchanged_y = target
+            .pending
+            .fonts
+            .values()
+            .any(|codepoints| codepoints.contains(&('y' as u32)));
+        assert!(
+            !has_detected_unchanged_y,
+            "external doc change should avoid requesting unchanged text node fonts, got: {:?}",
+            target.pending.fonts
+        );
+
+        let tracks_root = target
+            .missing_font_nodes
+            .values()
+            .any(|nodes| nodes.contains(&NodeId::ROOT));
+        assert!(
+            tracks_root,
+            "external doc change font tracking should fall back to root invalidation"
         );
     }
 
