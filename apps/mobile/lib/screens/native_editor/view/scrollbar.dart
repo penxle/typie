@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:typie/context/theme.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/screens/native_editor/state/state.dart';
 import 'package:typie/screens/native_editor/toolbar/scope.dart';
@@ -316,16 +317,16 @@ class EditorScrollbar extends HookWidget {
                   height: _indicatorHeight,
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.65),
+                    color: context.colors.surfaceInverse.withValues(alpha: 0.65),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Center(
                     child: Text(
                       getDisplayText(),
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: context.colors.textInverse,
                         fontSize: 11,
-                        fontFeatures: [FontFeature.tabularFigures()],
+                        fontFeatures: const [FontFeature.tabularFigures()],
                       ),
                     ),
                   ),
@@ -434,8 +435,8 @@ class _VerticalScrollbarThumb extends StatelessWidget {
             height: thumbHeight,
             decoration: BoxDecoration(
               color: isDragging
-                  ? Colors.black.withValues(alpha: isUserScrollVisible ? 0.8 : 0.45)
-                  : Colors.black.withValues(alpha: isUserScrollVisible ? 0.5 : 0.22),
+                  ? context.colors.surfaceInverse.withValues(alpha: isUserScrollVisible ? 0.8 : 0.45)
+                  : context.colors.surfaceInverse.withValues(alpha: isUserScrollVisible ? 0.5 : 0.22),
               borderRadius: BorderRadius.circular(4),
             ),
           ),
@@ -471,8 +472,8 @@ class _HorizontalScrollbarThumb extends StatelessWidget {
             height: _thumbWidth,
             decoration: BoxDecoration(
               color: isDragging
-                  ? Colors.black.withValues(alpha: isUserScrollVisible ? 0.8 : 0.45)
-                  : Colors.black.withValues(alpha: isUserScrollVisible ? 0.5 : 0.22),
+                  ? context.colors.surfaceInverse.withValues(alpha: isUserScrollVisible ? 0.8 : 0.45)
+                  : context.colors.surfaceInverse.withValues(alpha: isUserScrollVisible ? 0.5 : 0.22),
               borderRadius: BorderRadius.circular(4),
             ),
           ),
