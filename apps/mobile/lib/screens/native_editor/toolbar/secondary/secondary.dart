@@ -95,6 +95,7 @@ class NativeEditorSecondaryToolbar extends HookWidget {
                 builder: (context, child) {
                   return Stack(
                     alignment: Alignment.centerLeft,
+                    clipBehavior: Clip.none,
                     children: [
                       Positioned.fill(
                         left: textPositionLeftTween.evaluate(switchCurve),

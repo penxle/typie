@@ -8,6 +8,7 @@ import 'package:typie/screens/native_editor/toolbar/bottom/table.dart';
 import 'package:typie/screens/native_editor/toolbar/scope.dart';
 import 'package:typie/services/keyboard.dart';
 import 'package:typie/widgets/animated_indexed_switcher.dart';
+import 'package:typie/widgets/responsive_container.dart';
 
 class NativeEditorBottomToolbar extends HookWidget {
   const NativeEditorBottomToolbar({super.key});
@@ -50,21 +51,23 @@ class NativeEditorBottomToolbar extends HookWidget {
         color: context.colors.surfaceDefault,
         border: Border(top: BorderSide(color: context.colors.borderSubtle)),
       ),
-      child: AnimatedIndexedSwitcher(
-        index: switch (bottomToolbarMode) {
-          BottomToolbarMode.hidden => 0,
-          BottomToolbarMode.insert => 1,
-          BottomToolbarMode.horizontalRule => 2,
-          BottomToolbarMode.blockquote => 3,
-          BottomToolbarMode.tableSize => 4,
-        },
-        children: const [
-          SizedBox.expand(),
-          NativeEditorInsertBottomToolbar(),
-          NativeEditorHorizontalRuleBottomToolbar(),
-          NativeEditorBlockquoteBottomToolbar(),
-          NativeEditorTableSizeBottomToolbar(),
-        ],
+      child: ResponsiveContainer(
+        child: AnimatedIndexedSwitcher(
+          index: switch (bottomToolbarMode) {
+            BottomToolbarMode.hidden => 0,
+            BottomToolbarMode.insert => 1,
+            BottomToolbarMode.horizontalRule => 2,
+            BottomToolbarMode.blockquote => 3,
+            BottomToolbarMode.tableSize => 4,
+          },
+          children: const [
+            SizedBox.expand(),
+            NativeEditorInsertBottomToolbar(),
+            NativeEditorHorizontalRuleBottomToolbar(),
+            NativeEditorBlockquoteBottomToolbar(),
+            NativeEditorTableSizeBottomToolbar(),
+          ],
+        ),
       ),
     );
   }
