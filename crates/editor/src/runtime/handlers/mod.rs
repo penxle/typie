@@ -8,6 +8,7 @@ mod embed;
 mod escape;
 mod file;
 mod fold;
+mod font;
 mod formatting;
 mod history;
 mod image;
