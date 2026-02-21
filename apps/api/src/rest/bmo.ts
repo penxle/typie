@@ -26,15 +26,27 @@ bmo.post('/query', async (c) => {
     return c.json({ error: 'Missing query' }, 400);
   }
 
-  try {
-    const result = await sql.begin('READ ONLY', async (sql) => {
-      const rows = await sql.unsafe(query);
-      return { success: true as const, count: rows.length, rows: [...rows] };
-    });
-    return c.json(result);
-  } catch (err) {
-    return c.json({ success: false, error: err instanceof Error ? err.message : String(err) });
-  }
+  const stream = new ReadableStream({
+    async start(controller) {
+      const encoder = new TextEncoder();
+      const heartbeat = setInterval(() => controller.enqueue(encoder.encode(' ')), 1000);
+
+      try {
+        const result = await sql.begin('READ ONLY', async (sql) => {
+          const rows = await sql.unsafe(query);
+          return { success: true as const, count: rows.length, rows: [...rows] };
+        });
+        controller.enqueue(encoder.encode(JSON.stringify(result)));
+      } catch (err) {
+        controller.enqueue(encoder.encode(JSON.stringify({ success: false, error: err instanceof Error ? err.message : String(err) })));
+      } finally {
+        clearInterval(heartbeat);
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, { headers: { 'content-type': 'application/json' } });
 });
 
 let schema: unknown | null = null;
