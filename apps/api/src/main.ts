@@ -58,8 +58,12 @@ const server = Bun.serve({
   fetch: app.fetch,
   hostname: '0.0.0.0',
   port: env.LISTEN_PORT ?? 3000,
-  websocket,
   idleTimeout: 60,
+  websocket: {
+    ...websocket,
+    idleTimeout: 60,
+    perMessageDeflate: true,
+  },
 });
 
 log.info('Listening {*}', { hostname: server.hostname, port: server.port });
