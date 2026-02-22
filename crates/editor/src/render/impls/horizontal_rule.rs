@@ -68,7 +68,7 @@ impl Render for HorizontalRuleElement {
                     let color = if ctx.is_focused {
                         ctx.theme.color_with_alpha("selection", 77)
                     } else {
-                        ctx.theme.color_with_alpha("ui.surface.dark", 32)
+                        ctx.theme.color_with_alpha("selection", 48)
                     };
                     let mut paint = Paint::default();
                     paint.set_color(color);
