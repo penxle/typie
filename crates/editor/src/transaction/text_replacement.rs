@@ -1,20 +1,103 @@
 use crate::global::with_text_replacement_rules;
-use crate::runtime::text_replacement::{
-    CompiledPattern, ReplacementUndoState, expand_substitute, offset_len_for_text,
-};
-use crate::runtime::{Effect, Runtime};
+use crate::model::{Node, NodeId};
+use crate::runtime::Effect;
+use crate::runtime::text_replacement::{CompiledPattern, ReplacementUndoState};
+use crate::transaction::Transaction;
+use anyhow::Result;
 
-impl Runtime {
-    pub(crate) fn try_text_replacement(&mut self, input_byte_len: usize) -> Option<Vec<Effect>> {
+fn expand_substitute(caps: &fancy_regex::Captures<'_>, template: &str) -> String {
+    let mut result = String::new();
+    let mut chars = template.chars().peekable();
+
+    while let Some(c) = chars.next() {
+        if c != '$' {
+            result.push(c);
+            continue;
+        }
+
+        match chars.peek() {
+            Some(&'$') => {
+                chars.next();
+                result.push('$');
+            }
+            Some(&'{') => {
+                chars.next();
+                let mut name = String::new();
+                for c in chars.by_ref() {
+                    if c == '}' {
+                        break;
+                    }
+                    name.push(c);
+                }
+                if let Some(m) = caps
+                    .name(&name)
+                    .or_else(|| name.parse::<usize>().ok().and_then(|n| caps.get(n)))
+                {
+                    result.push_str(m.as_str());
+                }
+            }
+            Some(&c) if c.is_ascii_digit() => {
+                let mut num_str = String::new();
+                while let Some(&c) = chars.peek() {
+                    if c.is_ascii_digit() {
+                        num_str.push(c);
+                        chars.next();
+                    } else {
+                        break;
+                    }
+                }
+                if let Some(m) = num_str.parse::<usize>().ok().and_then(|n| caps.get(n)) {
+                    result.push_str(m.as_str());
+                }
+            }
+            Some(&c) if c.is_ascii_alphabetic() || c == '_' => {
+                let mut name = String::new();
+                while let Some(&c) = chars.peek() {
+                    if c.is_ascii_alphanumeric() || c == '_' {
+                        name.push(c);
+                        chars.next();
+                    } else {
+                        break;
+                    }
+                }
+                if let Some(m) = caps
+                    .name(&name)
+                    .or_else(|| name.parse::<usize>().ok().and_then(|n| caps.get(n)))
+                {
+                    result.push_str(m.as_str());
+                }
+            }
+            _ => {
+                result.push('$');
+            }
+        }
+    }
+
+    result
+}
+
+fn offset_len_for_text(text: &str) -> usize {
+    let mut len = 0;
+    for part in text.split('\n') {
+        if len > 0 {
+            len += 1;
+        }
+        len += part.chars().count();
+    }
+    len
+}
+
+impl Transaction {
+    pub fn try_text_replacement(&mut self, input_byte_len: usize) -> Result<bool> {
         if self.state.preedit.is_some() {
-            return None;
+            return Ok(false);
         }
 
-        if !self.state.selection.is_collapsed() {
-            return None;
+        if !self.selection().is_collapsed() {
+            return Ok(false);
         }
 
-        let mut effects = Vec::new();
+        let mut replaced = false;
         let mut search_start_byte = 0usize;
 
         loop {
@@ -93,6 +176,7 @@ impl Runtime {
             let Some((matched_start_byte, matched_text, substitute, suffix)) = matched else {
                 break;
             };
+
             let next_search_start_byte = matched_start_byte.saturating_add(substitute.len());
 
             let original_offset_len = offset_len_for_text(&matched_text);
@@ -100,13 +184,9 @@ impl Runtime {
             let suffix_offset_len = offset_len_for_text(&suffix);
 
             let delete_count = original_offset_len + suffix_offset_len;
-
-            effects.extend(self.transact(|tr| {
-                for _ in 0..delete_count {
-                    tr.delete_text_backward()?;
-                }
-                Ok(true)
-            }));
+            for _ in 0..delete_count {
+                self.delete_text_backward()?;
+            }
 
             let full_insert = if suffix.is_empty() {
                 substitute.clone()
@@ -115,19 +195,14 @@ impl Runtime {
             };
 
             let parts: Vec<&str> = full_insert.split('\n').collect();
-            let insert_effects = self.transact(|tr| {
-                for (i, part) in parts.iter().enumerate() {
-                    if i > 0 {
-                        tr.insert_hard_break()?;
-                    }
-                    if !part.is_empty() {
-                        tr.insert_text(part)?;
-                    }
+            for (i, part) in parts.iter().enumerate() {
+                if i > 0 {
+                    self.insert_hard_break()?;
                 }
-                Ok(true)
-            });
-
-            effects.extend(insert_effects);
+                if !part.is_empty() {
+                    self.insert_text(part)?;
+                }
+            }
 
             let new_offset =
                 cursor_offset - original_offset_len - suffix_offset_len + replaced_offset_len;
@@ -140,25 +215,96 @@ impl Runtime {
                 original_offset_len,
                 replaced_offset_len,
             };
+            self.push_effect(Effect::TextReplacementApplied { undo_state });
 
-            effects.push(Effect::TextReplacementApplied { undo_state });
+            replaced = true;
             search_start_byte = next_search_start_byte;
         }
 
-        if effects.is_empty() {
-            None
-        } else {
-            Some(effects)
+        Ok(replaced)
+    }
+
+    pub fn try_undo_text_replacement(&mut self, undo: &ReplacementUndoState) -> Result<bool> {
+        let selection = self.selection();
+        if !selection.is_collapsed() {
+            return Ok(false);
         }
+
+        if selection.head.node_id != undo.node_id || selection.head.offset != undo.offset {
+            return Ok(false);
+        }
+
+        for _ in 0..undo.replaced_offset_len {
+            self.delete_text_backward()?;
+        }
+
+        let parts: Vec<&str> = undo.original_text.split('\n').collect();
+        for (i, part) in parts.iter().enumerate() {
+            if i > 0 {
+                self.insert_hard_break()?;
+            }
+            if !part.is_empty() {
+                self.insert_text(part)?;
+            }
+        }
+
+        Ok(true)
+    }
+
+    fn get_text_before_cursor(&self) -> Option<(NodeId, String, usize)> {
+        let selection = self.selection();
+        if !selection.is_collapsed() {
+            return None;
+        }
+
+        let head = selection.head;
+        let block = self.doc().node(head.node_id)?;
+
+        if !block.is_block() {
+            return None;
+        }
+
+        let mut text = String::new();
+        let mut current_offset = 0;
+
+        for child in block.children() {
+            if current_offset >= head.offset {
+                break;
+            }
+
+            match child.node() {
+                Node::Text(text_node) => {
+                    let char_len = text_node.text.char_len();
+                    let remaining = head.offset - current_offset;
+                    if remaining >= char_len {
+                        text.push_str(&text_node.text.to_string());
+                        current_offset += char_len;
+                    } else {
+                        let full = text_node.text.to_string();
+                        let partial: String = full.chars().take(remaining).collect();
+                        text.push_str(&partial);
+                        current_offset += remaining;
+                    }
+                }
+                Node::HardBreak(_) => {
+                    text.push('\n');
+                    current_offset += 1;
+                }
+                _ => {
+                    current_offset += 1;
+                }
+            }
+        }
+
+        Some((head.node_id, text, head.offset))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::global::{clear_text_replacement_rules, set_text_replacement_rules};
-    use crate::runtime::Message;
-    use crate::runtime::message::Direction;
     use crate::runtime::text_replacement::RawTextReplacementRule;
+    use crate::runtime::{Direction, Message};
     use crate::types::Affinity;
 
     fn set_rules(rules: Vec<RawTextReplacementRule>) {

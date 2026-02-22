@@ -5,11 +5,13 @@ use crate::state::Selection;
 
 impl Runtime {
     pub(crate) fn handle_delete_backward(&mut self) -> Vec<Effect> {
-        if let Some(undo_effects) = self.try_undo_text_replacement() {
-            return undo_effects;
-        }
-
+        let undo = self.text_replacement_undo.clone();
         self.transact(|tr| {
+            if let Some(undo) = undo.as_ref()
+                && tr.try_undo_text_replacement(undo)?
+            {
+                return Ok(true);
+            }
             if tr.delete_selection()? {
                 return Ok(true);
             }

@@ -16,6 +16,7 @@ mod selection;
 mod style;
 mod table;
 mod text;
+mod text_replacement;
 
 pub use selection::{paragraph_range_at, sentence_range_at, word_range_at};
 pub(crate) use style::{compute_styles_at_char_position, compute_styles_at_cursor};

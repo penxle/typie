@@ -11,7 +11,7 @@ pub mod search;
 pub mod slate;
 mod state;
 mod table;
-pub mod text_replacement;
+pub(crate) mod text_replacement;
 pub mod tracked_items;
 mod view_state;
 
@@ -24,6 +24,7 @@ use crate::layout::cursor::{Cursor, NavigationContext};
 use crate::layout::query::{find_drag_image_bounds, find_node_bounds, is_selectable_block_hit};
 use crate::model::*;
 use crate::render::{DragImageResult, RenderInfo, RenderResult, Renderer};
+use crate::runtime::text_replacement::ReplacementUndoState;
 use crate::state::ancestor_helpers::lowest_common_ancestor_id;
 use crate::state::selection_helpers::{
     SelectionAttributes, build_selection_decorations, collect_block_attrs_at,
@@ -48,7 +49,6 @@ pub use pointer::*;
 use rustc_hash::{FxHashMap, FxHashSet};
 use slate::{Slab, Slate};
 pub use state::*;
-pub use text_replacement::RawTextReplacementRule;
 pub use tracked_items::{RawTrackedItem, TrackedItem};
 pub use view_state::*;
 
@@ -120,7 +120,7 @@ pub struct Runtime {
     tracked_items: Vec<TrackedItem>,
     is_focused: bool,
     last_table_overlays: Vec<TableOverlay>,
-    text_replacement_undo: Option<text_replacement::ReplacementUndoState>,
+    text_replacement_undo: Option<ReplacementUndoState>,
 
     repaste_text: Option<(Selection, String, Vec<Style>)>,
 }
