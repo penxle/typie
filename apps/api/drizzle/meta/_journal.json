@@ -414,6 +414,13 @@
       "when": 1771313670415,
       "tag": "0058_perpetual_johnny_storm",
       "breakpoints": false
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1771732777513,
+      "tag": "0059_rapid_maginty",
+      "breakpoints": false
     }
   ]
 }

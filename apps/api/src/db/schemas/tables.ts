@@ -432,6 +432,7 @@ export const Posts = pgTable(
     allowReaction: boolean('allow_reaction').notNull().default(true),
     protectContent: boolean('protect_content').notNull().default(true),
     type: E._PostType('type').notNull().default('NORMAL'),
+    documentId: text('document_id').references(() => Documents.id, { onUpdate: 'cascade', onDelete: 'set null' }),
     createdAt: datetime('created_at')
       .notNull()
       .default(sql`now()`),
