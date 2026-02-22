@@ -2,7 +2,7 @@ import { PutObjectCommand } from '@aws-sdk/client-s3';
 import * as Sentry from '@sentry/bun';
 import argon2 from 'argon2';
 import dayjs from 'dayjs';
-import { and, desc, eq, gt, gte, inArray, isNotNull, lt, sql, sum } from 'drizzle-orm';
+import { and, desc, eq, getTableColumns, gt, gte, inArray, isNotNull, isNull, lt, ne, or, sql, sum } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import qs from 'query-string';
 import * as uuid from 'uuid';
@@ -47,6 +47,7 @@ import {
   CouponState,
   CreditCodeState,
   EntityState,
+  EntityType,
   FontFamilyState,
   PaymentInvoiceState,
   PlanAvailability,
@@ -154,9 +155,17 @@ User.implement({
       type: [Entity],
       resolve: async (self) => {
         return await db
-          .select()
+          .select(getTableColumns(Entities))
           .from(Entities)
-          .where(and(eq(Entities.userId, self.id), eq(Entities.state, EntityState.ACTIVE), isNotNull(Entities.viewedAt)))
+          .leftJoin(Posts, eq(Posts.entityId, Entities.id))
+          .where(
+            and(
+              eq(Entities.userId, self.id),
+              eq(Entities.state, EntityState.ACTIVE),
+              isNotNull(Entities.viewedAt),
+              or(ne(Entities.type, EntityType.POST), isNull(Posts.documentId)),
+            ),
+          )
           .orderBy(desc(Entities.viewedAt))
           .limit(10);
       },

@@ -1,5 +1,5 @@
 import dayjs from 'dayjs';
-import { and, asc, desc, eq, gt, inArray, isNull, lt, ne, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, getTableColumns, gt, inArray, isNull, lt, ne, or, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import escape from 'escape-string-regexp';
 import { match } from 'ts-pattern';
@@ -294,8 +294,9 @@ EntityView.implement({
         }
 
         return await db
-          .select()
+          .select(getTableColumns(Entities))
           .from(Entities)
+          .leftJoin(Posts, eq(Posts.entityId, Entities.id))
           .where(
             and(
               eq(Entities.siteId, self.siteId),
@@ -304,6 +305,7 @@ EntityView.implement({
               inArray(Entities.type, [EntityType.POST, EntityType.DOCUMENT]),
               inArray(Entities.visibility, visibilities),
               lt(Entities.order, self.order),
+              or(ne(Entities.type, EntityType.POST), isNull(Posts.documentId)),
             ),
           )
           .orderBy(desc(Entities.order))
@@ -333,8 +335,9 @@ EntityView.implement({
         }
 
         return await db
-          .select()
+          .select(getTableColumns(Entities))
           .from(Entities)
+          .leftJoin(Posts, eq(Posts.entityId, Entities.id))
           .where(
             and(
               eq(Entities.siteId, self.siteId),
@@ -343,6 +346,7 @@ EntityView.implement({
               inArray(Entities.type, [EntityType.POST, EntityType.DOCUMENT]),
               inArray(Entities.visibility, visibilities),
               gt(Entities.order, self.order),
+              or(ne(Entities.type, EntityType.POST), isNull(Posts.documentId)),
             ),
           )
           .orderBy(asc(Entities.order))

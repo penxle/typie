@@ -28,6 +28,11 @@
 
           ... on Post {
             id
+
+            document {
+              id
+            }
+
             ...DashboardLayout_EntityTree_Post_post
           }
 
@@ -45,7 +50,7 @@
 
 {#if $entity.node.__typename === 'Folder'}
   <Folder $entities={children} $folder={$entity.node} />
-{:else if $entity.node.__typename === 'Post'}
+{:else if $entity.node.__typename === 'Post' && !$entity.node.document}
   <Post $post={$entity.node} />
 {:else if $entity.node.__typename === 'Document'}
   <Document $document={$entity.node} />

@@ -47,6 +47,10 @@
                 id
                 ...Img_image
               }
+
+              document {
+                id
+              }
             }
 
             ... on DocumentView {
@@ -68,7 +72,9 @@
 
   const folders = $derived($query.siteView.entities.filter((entity) => entity.node.__typename === 'FolderView'));
   const posts = $derived(
-    $query.siteView.entities.filter((entity) => entity.node.__typename === 'PostView' || entity.node.__typename === 'DocumentView'),
+    $query.siteView.entities.filter(
+      (entity) => entity.node.__typename === 'DocumentView' || (entity.node.__typename === 'PostView' && !entity.node.document),
+    ),
   );
 </script>
 
