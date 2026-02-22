@@ -73,7 +73,12 @@ impl Transaction {
             _ => Vec::new(),
         };
 
-        let ranges = self.find_annotation_ranges(ann_type);
+        let selection = self.selection().clone();
+        let ranges = if selection.is_collapsed() {
+            self.find_annotation_ranges_at_position(selection.anchor, ann_type)
+        } else {
+            self.find_annotation_ranges(ann_type)
+        };
         if ranges.is_empty() {
             return Ok(false);
         }

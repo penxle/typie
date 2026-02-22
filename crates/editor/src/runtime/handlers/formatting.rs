@@ -581,6 +581,76 @@ mod tests {
     }
 
     #[test]
+    fn test_update_annotation_collapsed_updates_only_cursor_annotation() {
+        let mut p1 = id!();
+        let mut p2 = id!();
+
+        let mut runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p1 paragraph {
+                    text { "hello " , "world" @[link("http://a.com")] }
+                }
+                @p2 paragraph {
+                    text { "foo " , "bar" @[link("http://b.com")] }
+                }
+            }
+            selection { (p1, 7) }
+        };
+
+        // Cursor is inside "world" link (offset 7 = 'o' of "world")
+        runtime.update(Message::UpdateAnnotation {
+            annotation: Annotation::Link(LinkAnnotation {
+                href: "http://updated.com".to_string(),
+            }),
+        });
+
+        // p1's link annotation should be updated
+        let p1_node = runtime.state().doc.node(p1).unwrap();
+        let mut found_updated = false;
+        for child in p1_node.children() {
+            if let Node::Text(text_node) = child.node() {
+                for seg in text_node.text.get_segments() {
+                    for ann in &seg.annotations {
+                        if let Annotation::Link(link) = ann {
+                            assert_eq!(link.href, "http://updated.com");
+                            found_updated = true;
+                        }
+                    }
+                }
+            }
+        }
+        assert!(
+            found_updated,
+            "p1's link should be updated to http://updated.com"
+        );
+
+        // p2's link annotation should remain unchanged
+        let p2_node = runtime.state().doc.node(p2).unwrap();
+        let mut found_original = false;
+        for child in p2_node.children() {
+            if let Node::Text(text_node) = child.node() {
+                for seg in text_node.text.get_segments() {
+                    for ann in &seg.annotations {
+                        if let Annotation::Link(link) = ann {
+                            assert_eq!(
+                                link.href, "http://b.com",
+                                "p2's link should remain http://b.com, but got {}",
+                                link.href
+                            );
+                            found_original = true;
+                        }
+                    }
+                }
+            }
+        }
+        assert!(
+            found_original,
+            "p2 should still have its original link annotation"
+        );
+    }
+
+    #[test]
     fn test_remove_annotation_collapsed_removes_only_cursor_annotation() {
         let mut p1 = id!();
         let mut p2 = id!();
