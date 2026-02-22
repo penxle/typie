@@ -29,9 +29,7 @@ export const POST: RequestHandler = async ({ request, cookies, getClientAddress 
       ...(deviceId ? { 'X-Device-Id': deviceId } : {}),
       ...(bootstrapBypass ? { 'X-Bootstrap-Bypass': bootstrapBypass } : {}),
     },
-    body: request.body,
-    // @ts-expect-error Node type issues
-    duplex: 'half',
+    body: await request.arrayBuffer(),
   });
 
   if (response.status === 401) {

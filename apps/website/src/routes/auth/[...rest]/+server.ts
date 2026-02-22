@@ -9,7 +9,7 @@ const handler: RequestHandler = async ({ url, request, params }) => {
   const response = await fetch(`${env.PRIVATE_API_URL}/auth/${params.rest}${url.search}`, {
     method: request.method,
     headers: requestHeaders,
-    body: request.method === 'POST' ? request.body : undefined,
+    body: request.method === 'POST' ? await request.arrayBuffer() : undefined,
     redirect: 'manual',
   });
 
