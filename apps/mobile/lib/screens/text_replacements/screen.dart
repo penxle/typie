@@ -145,10 +145,7 @@ class TextReplacementsScreen extends HookWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  '입력 중 특정 텍스트를 자동으로 변환해요. v2 에디터에서만 적용돼요.',
-                  style: TextStyle(fontSize: 13, color: context.colors.textFaint),
-                ),
+                Text('입력 중 특정 텍스트를 자동으로 변환해요.', style: TextStyle(fontSize: 13, color: context.colors.textFaint)),
                 const Gap(20),
                 _Section(
                   title: '기본 대치',
