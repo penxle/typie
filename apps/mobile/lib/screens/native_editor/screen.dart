@@ -184,6 +184,7 @@ class _Content extends HookWidget {
                               await context.showBottomSheet(
                                 intercept: true,
                                 overlayOpacity: 0.05,
+                                dismissKeyboardOnTap: false,
                                 child: FindReplaceSheet(controller: controller),
                               );
                             },

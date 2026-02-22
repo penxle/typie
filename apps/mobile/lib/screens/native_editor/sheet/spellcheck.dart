@@ -171,7 +171,22 @@ class SpellcheckSheet extends HookWidget {
                             errors.value = errors.value.where((e) => e['id'] != errorId).toList();
                             editor.removeTrackedItems(0, [errorId]);
                           },
-                          onTap: controller.scrollIntoView,
+                          onTap: () {
+                            final errorId = error['id'] as String;
+                            final overlay = controller.state.spellcheck.overlays
+                                .where((o) => o.id == errorId)
+                                .firstOrNull;
+                            if (overlay != null && overlay.bounds.isNotEmpty) {
+                              controller.updateState(
+                                (state) => state.copyWith(
+                                  spellcheck: state.spellcheck.copyWith(
+                                    scrollTarget: overlay.bounds.first,
+                                    scrollTargetPageIdx: overlay.pageIdx,
+                                  ),
+                                ),
+                              );
+                            }
+                          },
                         ),
                       )
                       .toList(),

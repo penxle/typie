@@ -19,6 +19,7 @@ extension BottomSheetExtension on BuildContext {
     bool intercept = false,
     double overlayOpacity = 0.5,
     bool resizeToAvoidBottomInset = false,
+    bool dismissKeyboardOnTap = true,
     void Function(double)? onHeightCalculated,
   }) {
     return router.root.pushWidget(
@@ -68,7 +69,11 @@ extension BottomSheetExtension on BuildContext {
                     alignment: Alignment.bottomCenter,
                     child: SlideTransition(
                       position: tweenedSlide,
-                      child: _BottomSheet(onHeightCalculated: onHeightCalculated, child: child),
+                      child: _BottomSheet(
+                        onHeightCalculated: onHeightCalculated,
+                        dismissKeyboardOnTap: dismissKeyboardOnTap,
+                        child: child,
+                      ),
                     ),
                   ),
                 ),
@@ -82,10 +87,11 @@ extension BottomSheetExtension on BuildContext {
 }
 
 class _BottomSheet extends HookWidget {
-  const _BottomSheet({required this.child, this.onHeightCalculated});
+  const _BottomSheet({required this.child, this.onHeightCalculated, this.dismissKeyboardOnTap = true});
 
   final Widget child;
   final void Function(double)? onHeightCalculated;
+  final bool dismissKeyboardOnTap;
 
   @override
   Widget build(BuildContext context) {
@@ -133,7 +139,8 @@ class _BottomSheet extends HookWidget {
         builder: (context, child) {
           return Transform.translate(offset: Offset(0, controller.value), child: child);
         },
-        child: KeyboardDismiss(
+        child: _maybeDismissKeyboard(
+          dismissKeyboardOnTap: dismissKeyboardOnTap,
           child: Material(
             color: AppColors.transparent,
             child: Container(
@@ -157,6 +164,10 @@ class _BottomSheet extends HookWidget {
       ),
     );
   }
+}
+
+Widget _maybeDismissKeyboard({required bool dismissKeyboardOnTap, required Widget child}) {
+  return dismissKeyboardOnTap ? KeyboardDismiss(child: child) : child;
 }
 
 class AppBottomSheet extends StatelessWidget {
