@@ -54,7 +54,7 @@
           <InfoIcon class={css({ color: 'amber.600', width: '20px', height: '20px' })} />
           <div class={css({ fontSize: '14px', color: 'text.default' })}>
             <span class={css({ fontWeight: 'medium' })}>서비스 점검 안내:</span>
-            <span class={css({ marginLeft: '8px' })}>2025년 9월 30일 오전 5시부터 오전 9시까지 서버 점검이 예정되어 있어요.</span>
+            <span class={css({ marginLeft: '8px' })}>2026년 2월 23일 오전 2시부터 오전 7시까지 서버 점검이 예정되어 있어요.</span>
           </div>
         </div>
 
