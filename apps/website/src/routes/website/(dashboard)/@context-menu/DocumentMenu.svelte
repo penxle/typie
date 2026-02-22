@@ -13,7 +13,7 @@
   import Columns2Icon from '~icons/lucide/columns-2';
   import CopyIcon from '~icons/lucide/copy';
   import DotIcon from '~icons/lucide/dot';
-  import DownloadIcon from '~icons/lucide/download';
+  // import DownloadIcon from '~icons/lucide/download';
   import GlobeIcon from '~icons/lucide/globe';
   import InfoIcon from '~icons/lucide/info';
   import LayoutTemplateIcon from '~icons/lucide/layout-template';
@@ -218,13 +218,13 @@
 
 {@render children?.()}
 
-{#if app.preference.current.experimental_pdfExportEnabled}
+<!-- {#if app.preference.current.experimental_pdfExportEnabled}
   <HorizontalDivider color="secondary" />
 {/if}
 
 {#if app.preference.current.experimental_pdfExportEnabled}
   <MenuItem icon={DownloadIcon} noCloseOnClick onclick={() => (pdfExportModalOpen = true)}>PDF로 내보내기</MenuItem>
-{/if}
+{/if} -->
 
 <DocumentPdfExportModal
   documentId={document.id}
