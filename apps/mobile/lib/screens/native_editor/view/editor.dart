@@ -620,6 +620,7 @@ class EditorView extends HookWidget {
                           child: IgnorePointer(
                             child: InputView(
                               key: inputKey,
+                              brightness: context.theme.brightness,
                               onInsertText: inputController.onInsertText,
                               onDeleteBackward: inputController.onDeleteBackward,
                               onSetMarkedText: inputController.onSetMarkedText,

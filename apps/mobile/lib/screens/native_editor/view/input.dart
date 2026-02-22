@@ -7,6 +7,7 @@ import 'package:flutter/widgets.dart';
 
 class InputView extends StatefulWidget {
   const InputView({
+    required this.brightness,
     required this.onInsertText,
     required this.onDeleteBackward,
     required this.onSetMarkedText,
@@ -24,6 +25,7 @@ class InputView extends StatefulWidget {
     super.key,
   });
 
+  final Brightness brightness;
   final void Function(String text) onInsertText;
   final VoidCallback onDeleteBackward;
   final void Function(String text) onSetMarkedText;
@@ -46,6 +48,19 @@ class InputView extends StatefulWidget {
 class InputViewState extends State<InputView> {
   MethodChannel? _channel;
   Offset _cursorAnchor = Offset.zero;
+
+  void _syncKeyboardAppearance() {
+    if (!Platform.isIOS) {
+      return;
+    }
+
+    final appearance = switch (widget.brightness) {
+      Brightness.dark => 'dark',
+      Brightness.light => 'light',
+    };
+
+    unawaited(_channel?.invokeMethod('setKeyboardAppearance', <String, dynamic>{'appearance': appearance}));
+  }
 
   void activateInput() {
     unawaited(_channel?.invokeMethod('activate', <String, dynamic>{}));
@@ -113,7 +128,16 @@ class InputViewState extends State<InputView> {
             throw MissingPluginException('Method ${call.method} not implemented');
         }
       });
+    _syncKeyboardAppearance();
     widget.onReady?.call();
+  }
+
+  @override
+  void didUpdateWidget(covariant InputView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.brightness != widget.brightness) {
+      _syncKeyboardAppearance();
+    }
   }
 
   @override

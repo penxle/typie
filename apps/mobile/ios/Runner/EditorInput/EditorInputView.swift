@@ -86,6 +86,10 @@ class EditorInputView: NSObject, FlutterPlatformView {
           self.inputView.updateCursor(x: x, y: y, height: height, precedingCharWidths: precedingCharWidths)
         }
         result(nil)
+      case "setKeyboardAppearance":
+        let args = call.arguments as? [String: Any]
+        self.inputView.setKeyboardAppearance(args?["appearance"] as? String)
+        result(nil)
       default:
         result(FlutterMethodNotImplemented)
       }
@@ -127,7 +131,6 @@ class EditorTextInputView: UIView, UITextInput {
   private var _floatingCursorStart: CGPoint?
 
 
-
   override init(frame: CGRect) {
     super.init(frame: frame)
     backgroundColor = .clear
@@ -146,6 +149,21 @@ class EditorTextInputView: UIView, UITextInput {
 
   required init?(coder: NSCoder) {
     fatalError("init(coder:) has not been implemented")
+  }
+
+  func setKeyboardAppearance(_ appearance: String?) {
+    switch appearance {
+    case "light":
+      keyboardAppearance = .light
+    case "dark":
+      keyboardAppearance = .dark
+    default:
+      keyboardAppearance = .default
+    }
+
+    if isFirstResponder {
+      reloadInputViews()
+    }
   }
 
   func activate() {
@@ -365,6 +383,7 @@ class EditorTextInputView: UIView, UITextInput {
   var smartQuotesType: UITextSmartQuotesType = .no
   var smartDashesType: UITextSmartDashesType = .no
   var smartInsertDeleteType: UITextSmartInsertDeleteType = .no
+  var keyboardAppearance: UIKeyboardAppearance = .default
 
 
   // MARK: - Key Commands (shortcuts only)
