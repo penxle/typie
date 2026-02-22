@@ -192,7 +192,8 @@ async function convertPmMarks(pmMarks: JSONContent['marks']): Promise<{ styles: 
       }
       case 'link': {
         if (pmMark.attrs?.href) {
-          annotations.push({ type: 'link', href: pmMark.attrs.href as string });
+          const href = typeof pmMark.attrs.href === 'string' ? pmMark.attrs.href : `https://${pmMark.attrs.href}`;
+          annotations.push({ type: 'link', href });
         }
         break;
       }
@@ -475,6 +476,8 @@ async function convertNode(
   archivedNodes: ArchivedNodeEntry[],
   contentWidth: number,
   nodeIdMap: Map<string, { loroId: string; excerpt: string }>,
+  insideTable: boolean,
+  hoistedNodes: string[],
 ): Promise<string | null> {
   const nodeId = generateNodeId();
 
@@ -549,7 +552,7 @@ async function convertNode(
       const children: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = await convertNode(child, nodeId, nodes, archivedNodes, contentWidth, nodeIdMap);
+          const childId = await convertNode(child, nodeId, nodes, archivedNodes, contentWidth, nodeIdMap, insideTable, hoistedNodes);
           if (childId) children.push(childId);
         }
       }
@@ -569,7 +572,7 @@ async function convertNode(
       const children: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = await convertNode(child, nodeId, nodes, archivedNodes, contentWidth, nodeIdMap);
+          const childId = await convertNode(child, nodeId, nodes, archivedNodes, contentWidth, nodeIdMap, insideTable, hoistedNodes);
           if (childId) children.push(childId);
         }
       }
@@ -587,7 +590,7 @@ async function convertNode(
       const children: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = await convertNode(child, nodeId, nodes, archivedNodes, contentWidth, nodeIdMap);
+          const childId = await convertNode(child, nodeId, nodes, archivedNodes, contentWidth, nodeIdMap, insideTable, hoistedNodes);
           if (childId) children.push(childId);
         }
       }
@@ -604,7 +607,7 @@ async function convertNode(
       const children: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = await convertNode(child, nodeId, nodes, archivedNodes, contentWidth, nodeIdMap);
+          const childId = await convertNode(child, nodeId, nodes, archivedNodes, contentWidth, nodeIdMap, insideTable, hoistedNodes);
           if (childId) children.push(childId);
         }
       }
@@ -619,16 +622,19 @@ async function convertNode(
 
     case 'list_item': {
       const paragraphIds: string[] = [];
-      const otherIds: string[] = [];
+      const listIds: string[] = [];
 
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = await convertNode(child, nodeId, nodes, archivedNodes, contentWidth, nodeIdMap);
+          const childId = await convertNode(child, nodeId, nodes, archivedNodes, contentWidth, nodeIdMap, insideTable, hoistedNodes);
           if (childId) {
-            if (nodes[childId].type === 'paragraph') {
+            const childType = nodes[childId].type;
+            if (childType === 'paragraph') {
               paragraphIds.push(childId);
+            } else if (childType === 'bullet_list' || childType === 'ordered_list') {
+              listIds.push(childId);
             } else {
-              otherIds.push(childId);
+              hoistedNodes.push(childId);
             }
           }
         }
@@ -661,7 +667,7 @@ async function convertNode(
         }
       }
 
-      const children = paragraphIds.length > 0 ? [paragraphIds[0], ...otherIds] : otherIds;
+      const children = paragraphIds.length > 0 ? [paragraphIds[0], ...listIds] : listIds;
 
       nodes[nodeId] = {
         type: 'list_item',
@@ -703,10 +709,22 @@ async function convertNode(
     }
 
     case 'table': {
+      if (insideTable) {
+        const archivedId = createDbId(TableCode.DOCUMENT_ARCHIVED_NODES);
+        archivedNodes.push({ id: archivedId, content: jsonContentToHtml(pmNode) });
+        nodes[nodeId] = {
+          type: 'archived',
+          id: archivedId,
+          children: [],
+          parent: parentId,
+        };
+        return nodeId;
+      }
+
       const children: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = await convertNode(child, nodeId, nodes, archivedNodes, contentWidth, nodeIdMap);
+          const childId = await convertNode(child, nodeId, nodes, archivedNodes, contentWidth, nodeIdMap, true, hoistedNodes);
           if (childId) children.push(childId);
         }
       }
@@ -785,7 +803,7 @@ async function convertNode(
       const children: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = await convertNode(child, nodeId, nodes, archivedNodes, contentWidth, nodeIdMap);
+          const childId = await convertNode(child, nodeId, nodes, archivedNodes, contentWidth, nodeIdMap, insideTable, hoistedNodes);
           if (childId) children.push(childId);
         }
       }
@@ -802,22 +820,21 @@ async function convertNode(
       const children: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          if (child.type === 'table') {
-            const archivedId = createDbId(TableCode.DOCUMENT_ARCHIVED_NODES);
-            archivedNodes.push({ id: archivedId, content: jsonContentToHtml(child) });
-            const nestedId = generateNodeId();
-            nodes[nestedId] = {
-              type: 'archived',
-              id: archivedId,
-              children: [],
-              parent: nodeId,
-            };
-            children.push(nestedId);
-          } else {
-            const childId = await convertNode(child, nodeId, nodes, archivedNodes, contentWidth, nodeIdMap);
-            if (childId) children.push(childId);
-          }
+          const childId = await convertNode(child, nodeId, nodes, archivedNodes, contentWidth, nodeIdMap, insideTable, hoistedNodes);
+          if (childId) children.push(childId);
         }
+      }
+
+      if (children.length === 0) {
+        const fallbackParagraphId = generateNodeId();
+        nodes[fallbackParagraphId] = {
+          type: 'paragraph',
+          align: 'left',
+          line_height: 160,
+          children: [],
+          parent: nodeId,
+        };
+        children.push(fallbackParagraphId);
       }
 
       const loroNode: LoroNode = {
@@ -883,7 +900,7 @@ async function convertNode(
       const contentChildren: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = await convertNode(child, foldContentId, nodes, archivedNodes, contentWidth, nodeIdMap);
+          const childId = await convertNode(child, foldContentId, nodes, archivedNodes, contentWidth, nodeIdMap, insideTable, hoistedNodes);
           if (childId) contentChildren.push(childId);
         }
       }
@@ -990,25 +1007,53 @@ export async function convertPostToDocumentJson(
   const nodeIdMap = new Map<string, { loroId: string; excerpt: string }>();
 
   const rootChildren: string[] = [];
+  const hoistedNodes: string[] = [];
   const blocks = bodyNode?.content ?? [];
 
   for (const block of blocks) {
     if (block.type === 'page_break') {
       const lastParagraphId = [...rootChildren].toReversed().find((id) => nodes[id]?.type === 'paragraph');
       if (lastParagraphId) {
-        const pageBreakId = generateNodeId();
-        nodes[pageBreakId] = {
-          type: 'page_break',
-          children: [],
-          parent: lastParagraphId,
-        };
-        nodes[lastParagraphId].children.push(pageBreakId);
+        const lastParagraph = nodes[lastParagraphId];
+        const alreadyHasPageBreak = lastParagraph.children.some((childId) => nodes[childId]?.type === 'page_break');
+
+        if (alreadyHasPageBreak) {
+          const newParagraphId = generateNodeId();
+          const pageBreakId = generateNodeId();
+          nodes[pageBreakId] = {
+            type: 'page_break',
+            children: [],
+            parent: newParagraphId,
+          };
+          nodes[newParagraphId] = {
+            type: 'paragraph',
+            align: 'left',
+            line_height: 160,
+            children: [pageBreakId],
+            parent: ROOT_ID,
+          };
+          rootChildren.push(newParagraphId);
+        } else {
+          const pageBreakId = generateNodeId();
+          nodes[pageBreakId] = {
+            type: 'page_break',
+            children: [],
+            parent: lastParagraphId,
+          };
+          lastParagraph.children.push(pageBreakId);
+        }
       }
       continue;
     }
 
-    const childId = await convertNode(block, ROOT_ID, nodes, archivedNodes, contentWidth, nodeIdMap);
+    const childId = await convertNode(block, ROOT_ID, nodes, archivedNodes, contentWidth, nodeIdMap, false, hoistedNodes);
     if (childId) rootChildren.push(childId);
+
+    for (const hoistedId of hoistedNodes) {
+      nodes[hoistedId].parent = ROOT_ID;
+      rootChildren.push(hoistedId);
+    }
+    hoistedNodes.length = 0;
   }
 
   const lastRootChildId = rootChildren.at(-1);
