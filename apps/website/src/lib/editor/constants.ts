@@ -1,6 +1,12 @@
 export const CROP_MARKER_SIZE = 32;
 
 export const IS_MAC = navigator.platform.toUpperCase().includes('MAC');
+export const IS_IOS_SAFARI =
+  typeof navigator !== 'undefined' &&
+  /AppleWebKit/i.test(navigator.userAgent) &&
+  !/(CriOS|FxiOS|EdgiOS)/i.test(navigator.userAgent) &&
+  (/iPad|iPhone|iPod/i.test(navigator.userAgent) ||
+    (navigator.userAgent.includes('Macintosh') && typeof document !== 'undefined' && 'ontouchend' in document));
 
 export const CONTINUOUS_MIN_WIDTH = 300;
 export const CONTINUOUS_VIEW_PADDING = 20;
