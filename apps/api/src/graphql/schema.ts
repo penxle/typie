@@ -20,6 +20,7 @@ import './resolvers/unfurl';
 import './resolvers/user';
 import './resolvers/widget';
 import './resolvers/export';
+import './resolvers/feedback';
 
 import { dev } from '@/env';
 import { builder } from './builder';

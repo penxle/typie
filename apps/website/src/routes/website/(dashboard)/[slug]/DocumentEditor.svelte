@@ -37,6 +37,7 @@
   import { getEditorRegistry } from './@split-view/editor-registry.svelte';
   import DocumentFindReplace from './DocumentFindReplace.svelte';
   import DocumentTemplateModal from './DocumentTemplateModal.svelte';
+  import FeedbackPopover from './FeedbackPopover.svelte';
   import SpellcheckPopover from './SpellcheckPopover.svelte';
   import type { DocumentEditor_query } from '$graphql';
   import type { Affinity, Position } from '$lib/editor/types';
@@ -722,6 +723,8 @@
               <span>업그레이드</span>
             </button>
           {/if}
+
+          <FeedbackPopover />
 
           <div class={center({ size: '24px' })}>
             <div
