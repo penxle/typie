@@ -1798,7 +1798,7 @@ mod tests {
             doc {
                 paragraph { text { "existing" } }
                 @n paragraph {
-                    text(styles: [font_weight(700)]) { "bold" }
+                    text(styles: [bold()]) { "bold" }
                 }
             }
             selection { (n, 0) -> (n, 4) }

@@ -631,7 +631,7 @@ mod tests {
         let expected = state! {
             doc {
                 @p paragraph {
-                    text(styles: [font_weight(700)]) { "bold" }
+                    text(styles: [bold()]) { "bold" }
                 }
             }
             selection { (p, 0) -> (p, 4) }
