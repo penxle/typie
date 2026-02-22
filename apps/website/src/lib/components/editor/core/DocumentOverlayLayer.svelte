@@ -1,13 +1,11 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
-  import { tick } from 'svelte';
   import { SvelteMap } from 'svelte/reactivity';
+  import { PAGE_GAP } from '$lib/editor/constants';
   import { getEditorContext } from '$lib/editor/context.svelte';
   import TableOverlay from './TableOverlay.svelte';
 
   const { editor } = getEditorContext();
-
-  let layoutRefreshVersion = $state(0);
 
   const tableOverlaysByPage = $derived.by(() => {
     const grouped = new SvelteMap<number, typeof editor.tableOverlays>();
@@ -19,38 +17,10 @@
         grouped.set(overlay.pageIdx, [overlay]);
       }
     }
-    return [...grouped.entries()];
+    return grouped;
   });
 
-  $effect(() => {
-    void editor.layout.layoutMode;
-
-    let disposed = false;
-
-    void (async () => {
-      await tick();
-      if (disposed) return;
-      layoutRefreshVersion += 1;
-    })();
-
-    return () => {
-      disposed = true;
-    };
-  });
-
-  function pageOffset(pageIdx: number): { left: number; top: number } | null {
-    const pageEl = editor.pageContainerEls[pageIdx];
-    const containerEl = editor.extensionArea.containerEl;
-    if (!pageEl || !containerEl) {
-      return null;
-    }
-    const pageRect = pageEl.getBoundingClientRect();
-    const containerRect = containerEl.getBoundingClientRect();
-    return {
-      left: pageRect.left - containerRect.left,
-      top: pageRect.top - containerRect.top,
-    };
-  }
+  const pageGap = $derived(editor.layout.layoutMode.type === 'paginated' ? PAGE_GAP : 0);
 </script>
 
 {#if !editor.readOnly}
@@ -61,28 +31,33 @@
       pointerEvents: 'none',
     })}
   >
-    {#key layoutRefreshVersion}
-      {#each tableOverlaysByPage as [pageIdx, overlays] (`table-page-${pageIdx}`)}
-        {@const page = editor.layout.pages[pageIdx]}
-        {@const offset = pageOffset(pageIdx)}
-        {#if page && offset}
-          <div
-            style:left={`${offset.left}px`}
-            style:top={`${offset.top}px`}
-            style:width={`${page.width}px`}
-            style:height={`${page.height}px`}
-            class={css({
-              position: 'absolute',
-              pointerEvents: 'none',
-            })}
-            data-page-index={pageIdx}
-          >
-            {#each overlays as overlay (`${overlay.tableId}-${overlay.startRowIndex}`)}
-              <TableOverlay {editor} {overlay} />
-            {/each}
-          </div>
-        {/if}
+    <div
+      style:gap={`${pageGap}px`}
+      class={css({
+        position: 'relative',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        width: 'full',
+        height: 'full',
+      })}
+    >
+      {#each editor.layout.pages as page, pageIdx (`page-${pageIdx}`)}
+        {@const overlays = tableOverlaysByPage.get(pageIdx) ?? []}
+        <div
+          style:width={`${page.width}px`}
+          style:height={`${page.height}px`}
+          class={css({
+            position: 'relative',
+            pointerEvents: 'none',
+          })}
+          data-page-index={pageIdx}
+        >
+          {#each overlays as overlay (`${overlay.tableId}-${overlay.startRowIndex}`)}
+            <TableOverlay {editor} {overlay} />
+          {/each}
+        </div>
       {/each}
-    {/key}
+    </div>
   </div>
 {/if}
