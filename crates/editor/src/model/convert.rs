@@ -489,4 +489,64 @@ mod tests {
         assert_eq!(remarks[0].text, "a comment");
         assert_eq!(remarks[0].created_at, 1700000000000);
     }
+
+    #[test]
+    fn test_validate_doc_with_trailing_paragraph() {
+        let doc = Doc::new();
+        let root = doc.node(NodeId::ROOT).unwrap();
+        root.as_mut()
+            .insert_child(0, Node::Paragraph(ParagraphNode::default()))
+            .unwrap();
+
+        doc.validate_exhaustive().unwrap();
+    }
+
+    #[test]
+    fn test_validate_doc_with_content() {
+        let doc = Doc::new();
+        let root = doc.node(NodeId::ROOT).unwrap();
+        let para_id = root
+            .as_mut()
+            .insert_child(0, Node::Paragraph(ParagraphNode::default()))
+            .unwrap();
+
+        let para = doc.node(para_id).unwrap();
+        para.as_mut()
+            .insert_child(
+                0,
+                Node::Text(TextNode {
+                    text: Text::from("hello world"),
+                }),
+            )
+            .unwrap();
+
+        doc.validate_exhaustive().unwrap();
+    }
+
+    #[test]
+    fn test_validate_roundtripped_doc() {
+        let doc = Doc::new();
+        let root = doc.node(NodeId::ROOT).unwrap();
+        let para_id = root
+            .as_mut()
+            .insert_child(0, Node::Paragraph(ParagraphNode::default()))
+            .unwrap();
+
+        let para = doc.node(para_id).unwrap();
+        para.as_mut()
+            .insert_child(
+                0,
+                Node::Text(TextNode {
+                    text: Text::from("test"),
+                }),
+            )
+            .unwrap();
+
+        let snapshot = doc.export(DocExportMode::Snapshot).unwrap();
+        let json = snapshot_to_json(&snapshot).unwrap();
+        let new_snapshot = json_to_snapshot(&json).unwrap();
+        let new_doc = Doc::from_snapshot(new_snapshot);
+
+        new_doc.validate_exhaustive().unwrap();
+    }
 }

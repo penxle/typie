@@ -296,6 +296,104 @@ impl Doc {
             .unwrap_or_default()
     }
 
+    /// Exhaustive document validation. Traverses every reachable node and checks
+    /// content schema, styles, annotations, parent-child consistency, and
+    /// grandparent constraints. Intended for scripts/WASM tooling only — too
+    /// expensive for hot paths.
+    pub fn validate_exhaustive(&self) -> Result<()> {
+        // 1. Root node must exist
+        let root = self
+            .node(NodeId::ROOT)
+            .context("Root node does not exist")?;
+        anyhow::ensure!(
+            root.node_type() == NodeType::Root,
+            "Root node has wrong type: {:?}",
+            root.node_type()
+        );
+
+        // 2. Collect all reachable nodes via DFS from root
+        let mut visited = FxHashSet::default();
+        let mut stack = vec![NodeId::ROOT];
+        let mut parent_map: Vec<(NodeId, Option<NodeId>)> = Vec::new();
+
+        while let Some(id) = stack.pop() {
+            if !visited.insert(id) {
+                anyhow::bail!("Cycle detected: node {} visited twice", id);
+            }
+
+            let node_ref = self
+                .node(id)
+                .with_context(|| format!("Node {} is referenced but does not exist", id))?;
+
+            let expected_parent = if id == NodeId::ROOT {
+                None
+            } else {
+                Some(node_ref.parent_id())
+            };
+            parent_map.push((id, expected_parent.flatten()));
+
+            let children_ids = self.get_children_ids(id);
+            // Push in reverse so we visit in order
+            for &child_id in children_ids.iter().rev() {
+                stack.push(child_id);
+            }
+        }
+
+        // 3. Validate parent-child consistency
+        for &(id, expected_parent) in &parent_map {
+            if id == NodeId::ROOT {
+                continue;
+            }
+
+            let parent_id =
+                expected_parent.with_context(|| format!("Non-root node {} has no parent", id))?;
+
+            anyhow::ensure!(
+                visited.contains(&parent_id),
+                "Node {} has parent {} which is not reachable",
+                id,
+                parent_id
+            );
+
+            let parent_children = self.get_children_ids(parent_id);
+            anyhow::ensure!(
+                parent_children.contains(&id),
+                "Node {} claims parent {} but is not in parent's children list",
+                id,
+                parent_id
+            );
+        }
+
+        // 4. Validate each node: content schema, styles, annotations, grandparent constraint
+        for &id in &visited {
+            self.validate_node(id)
+                .with_context(|| format!("Validation failed at node {}", id))?;
+
+            // grandparent_must_be check
+            let node_ref = self.node(id).unwrap();
+            let spec = self.inner.schema.node_spec(node_ref.node_type());
+            if let Some(required_grandparent) = spec.grandparent_must_be {
+                let parent_id = node_ref.parent_id();
+                let grandparent_type = parent_id
+                    .and_then(|pid| self.node(pid))
+                    .and_then(|p| p.parent_id())
+                    .and_then(|gid| self.node(gid))
+                    .map(|g| g.node_type());
+
+                anyhow::ensure!(
+                    grandparent_type == Some(required_grandparent),
+                    "Node {} ({:?}) requires grandparent {:?}, but got {:?}",
+                    id,
+                    node_ref.node_type(),
+                    required_grandparent,
+                    grandparent_type
+                );
+            }
+        }
+
+        Ok(())
+    }
+
     pub fn validate_node(&self, node_id: NodeId) -> Result<()> {
         let node_ref = self.node(node_id).context("Node not found")?;
         let node_type = node_ref.node_type();

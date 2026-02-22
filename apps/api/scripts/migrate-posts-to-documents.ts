@@ -1,5 +1,7 @@
 #!/usr/bin/env tsx
 
+import { mkdir, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import dayjs from 'dayjs';
 import { and, asc, desc, eq, gt, isNull, sql } from 'drizzle-orm';
 import { LoroDoc } from 'loro-crdt';
@@ -30,6 +32,7 @@ process.env.SCRIPT = 'true';
 
 const DRY_RUN = process.argv.includes('--dry-run');
 const CONCURRENCY = 100;
+const ERROR_DUMP_DIR = path.join(import.meta.dirname, '../migration-errors');
 
 await (async () => {
   console.log(`Starting post → document migration...${DRY_RUN ? ' (DRY RUN)' : ''} (concurrency: ${CONCURRENCY})`);
@@ -172,6 +175,16 @@ await (async () => {
         anchors,
         userId: entity.userId,
       });
+
+      try {
+        await wasm.validateDocumentJson(json);
+      } catch (validationErr) {
+        await mkdir(ERROR_DUMP_DIR, { recursive: true });
+        await writeFile(path.join(ERROR_DUMP_DIR, `${postId}.json`), JSON.stringify({ input: postContents.body, output: json }, null, 2));
+        throw new Error(`Document validation failed for post ${postId} (dumped to ${ERROR_DUMP_DIR}/${postId}.json)`, {
+          cause: validationErr,
+        });
+      }
 
       const snapshot = await wasm.jsonToSnapshot(json);
       const doc = new LoroDoc();

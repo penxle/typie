@@ -235,6 +235,8 @@ builder.mutationFields((t) => ({
         userId: entity.userId,
       });
 
+      await wasm.validateDocumentJson(json);
+
       const snapshot = await wasm.jsonToSnapshot(json);
       const doc = new LoroDoc();
       doc.import(snapshot);
