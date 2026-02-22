@@ -18,6 +18,19 @@
 
         node {
           __typename
+
+          ... on PostView {
+            id
+
+            document {
+              id
+
+              entity {
+                id
+                slug
+              }
+            }
+          }
         }
 
         ...UsersiteWildcardSlugPage_DocumentView_entityView

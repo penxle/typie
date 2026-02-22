@@ -14,7 +14,7 @@
   import Editor from '../Editor.svelte';
   import CloseSplitView from './CloseSplitView.svelte';
   import { getSplitViewContext, setupViewContext } from './context.svelte';
-  import { VIEW_MIN_SIZE } from './utils';
+  import { replaceSplitView, VIEW_MIN_SIZE } from './utils';
   import ViewDropZone from './ViewDropZone.svelte';
   import type { SplitViews_View_query } from '$graphql';
   import type { SplitViewItem } from './context.svelte';
@@ -41,6 +41,19 @@
 
           node {
             __typename
+
+            ... on Post {
+              id
+
+              document {
+                id
+
+                entity {
+                  id
+                  slug
+                }
+              }
+            }
           }
         }
 
@@ -54,6 +67,20 @@
 
   const focused = $derived(viewItem.id === splitView.state.current.focusedViewId);
   const entity = $derived.by(() => $query.entities.find((entity) => entity.slug === viewItem.slug));
+
+  $effect(() => {
+    if (entity?.node.__typename === 'Post' && entity.node.document) {
+      const documentSlug = entity.node.document.entity.slug;
+
+      if (splitView.state.current.view) {
+        splitView.state.current.view = replaceSplitView(splitView.state.current.view, viewItem.id, documentSlug);
+      }
+
+      if (focused) {
+        goto(`/${documentSlug}`, { replaceState: true });
+      }
+    }
+  });
 
   const sizePercentage = $derived.by(() => {
     const v = splitView.state.current.currentPercentages?.[viewItem.id];
