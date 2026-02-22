@@ -61,6 +61,10 @@ import 'package:url_launcher/url_launcher.dart';
 
 const maxDepth = 3;
 
+List<GEntityScreen_Entity_entity> _filterEntities(List<GEntityScreen_Entity_entity> entities) {
+  return entities.where((e) => e.node.maybeWhen(post: (post) => post.document == null, orElse: () => true)).toList();
+}
+
 @RoutePage()
 class EntityRouter extends AutoRouter {
   const EntityRouter({super.key});
@@ -93,7 +97,7 @@ class _WithSiteId extends HookWidget {
       operation: GEntityScreen_WithSiteId_QueryReq((b) => b..vars.siteId = pref.siteId),
       refreshNotifier: refreshNotifier,
       builder: (context, client, data) {
-        return _EntityList(null, data.site.entities.toList(), site: data.site);
+        return _EntityList(null, _filterEntities(data.site.entities.toList()), site: data.site);
       },
     );
   }
@@ -115,7 +119,7 @@ class _WithEntityId extends HookWidget {
       operation: GEntityScreen_WithEntityId_QueryReq((b) => b..vars.entityId = entityId),
       refreshNotifier: refreshNotifier,
       builder: (context, client, data) {
-        return _EntityList(data.entity, data.entity.children.toList());
+        return _EntityList(data.entity, _filterEntities(data.entity.children.toList()));
       },
     );
   }

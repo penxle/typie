@@ -25,6 +25,10 @@ fragment EntityScreen_Entity_entity on Entity {
       updatedAt
       characterCount
 
+      document {
+        id
+      }
+
       characterCountChange {
         additions
         deletions

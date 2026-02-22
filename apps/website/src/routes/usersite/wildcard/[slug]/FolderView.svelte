@@ -75,6 +75,10 @@
                 id
                 ...Img_image
               }
+
+              document {
+                id
+              }
             }
 
             ... on DocumentView {
@@ -107,7 +111,9 @@
 
   const folders = $derived($entityView.children.filter((child) => child.node.__typename === 'FolderView'));
   const posts = $derived(
-    $entityView.children.filter((child) => child.node.__typename === 'PostView' || child.node.__typename === 'DocumentView'),
+    $entityView.children.filter(
+      (child) => child.node.__typename === 'DocumentView' || (child.node.__typename === 'PostView' && !child.node.document),
+    ),
   );
 </script>
 
