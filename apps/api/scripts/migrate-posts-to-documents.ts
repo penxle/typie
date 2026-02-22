@@ -29,10 +29,27 @@ import { wasm } from '@/utils/wasm';
 process.env.SCRIPT = 'true';
 
 const DRY_RUN = process.argv.includes('--dry-run');
-const CONCURRENCY = 10;
+const CONCURRENCY = 100;
 
 await (async () => {
   console.log(`Starting post → document migration...${DRY_RUN ? ' (DRY RUN)' : ''} (concurrency: ${CONCURRENCY})`);
+
+  const stateCounts = await db
+    .select({
+      state: Entities.state,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(Posts)
+    .innerJoin(Entities, eq(Entities.id, Posts.entityId))
+    .where(isNull(Posts.documentId))
+    .groupBy(Entities.state);
+
+  const countByState = Object.fromEntries(stateCounts.map((r) => [r.state, r.count]));
+  const total = stateCounts.reduce((sum, r) => sum + r.count, 0);
+
+  console.log(
+    `Found ${total} posts to migrate (ACTIVE: ${countByState.ACTIVE ?? 0}, DELETED: ${countByState.DELETED ?? 0}, PURGED: ${countByState.PURGED ?? 0})`,
+  );
 
   const posts = await db
     .select({
@@ -40,9 +57,9 @@ await (async () => {
       entityId: Posts.entityId,
     })
     .from(Posts)
-    .where(isNull(Posts.documentId));
-
-  console.log(`Found ${posts.length} posts to migrate`);
+    .innerJoin(Entities, eq(Entities.id, Posts.entityId))
+    .where(isNull(Posts.documentId))
+    .orderBy(sql`CASE ${Entities.state} WHEN 'ACTIVE' THEN 0 WHEN 'DELETED' THEN 1 WHEN 'PURGED' THEN 2 END`);
 
   let migrated = 0;
   let skipped = 0;
