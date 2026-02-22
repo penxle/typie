@@ -1,7 +1,6 @@
 import { z } from 'zod';
 
 const schema = z.object({
-  ANTHROPIC_API_KEY: z.string(),
   BMO_API_KEY: z.string(),
   APPLE_APP_APPLE_ID: z.coerce.number(),
   APPLE_APP_BUNDLE_ID: z.string(),
@@ -13,7 +12,6 @@ const schema = z.object({
   APPLE_TEAM_ID: z.string(),
   AUTH_URL: z.string(),
   DATABASE_URL: z.string(),
-  GITHUB_TOKEN: z.string(),
   GOOGLE_OAUTH_CLIENT_ID: z.string(),
   GOOGLE_OAUTH_CLIENT_SECRET: z.string(),
   GOOGLE_PLAY_PACKAGE_NAME: z.string(),
@@ -34,8 +32,6 @@ const schema = z.object({
   PORTONE_CHANNEL_KEY: z.string(),
   REDIS_URL: z.string(),
   SENTRY_DSN: z.string().optional(),
-  SLACK_BOT_TOKEN: z.string(),
-  SLACK_SIGNING_SECRET: z.string(),
   SLACK_WEBHOOK_URL: z.string(),
   SPELLCHECK_API_KEY: z.string(),
   SPELLCHECK_URL: z.string(),
