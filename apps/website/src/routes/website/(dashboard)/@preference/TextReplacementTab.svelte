@@ -380,9 +380,7 @@
 <div class={flex({ direction: 'column', gap: '40px', maxWidth: '640px' })}>
   <div>
     <h1 class={css({ fontSize: '20px', fontWeight: 'semibold', color: 'text.default', marginBottom: '4px' })}>텍스트 대치</h1>
-    <p class={css({ fontSize: '13px', color: 'text.subtle', lineHeight: '[1.6]' })}>
-      입력 중 특정 텍스트를 자동으로 변환해요. v2 에디터에서만 적용돼요.
-    </p>
+    <p class={css({ fontSize: '13px', color: 'text.subtle', lineHeight: '[1.6]' })}>입력 중 특정 텍스트를 자동으로 변환해요.</p>
   </div>
 
   <div>
