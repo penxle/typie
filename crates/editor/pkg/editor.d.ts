@@ -250,6 +250,7 @@ export class Application {
     setFallbackFonts(names: any): void;
     setTextReplacementRules(rules: any): void;
     snapshotToJson(snapshot: Uint8Array): any;
+    validateDocumentJson(json: any): void;
     validateRegex(pattern: string): boolean;
 }
 

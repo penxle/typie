@@ -156,6 +156,17 @@ impl Application {
             .map_err(|e| JsValue::from_str(&format!("{:?}", e)))?;
         json_to_snapshot(&doc_json).map_err(|e| JsValue::from_str(&format!("{:?}", e)))
     }
+
+    #[wasm_bindgen(js_name = validateDocumentJson)]
+    pub fn validate_document_json(&self, json: JsValue) -> Result<(), JsValue> {
+        let doc_json: DocumentJson = serde_wasm_bindgen::from_value(json)
+            .map_err(|e| JsValue::from_str(&format!("{:?}", e)))?;
+        let snapshot =
+            json_to_snapshot(&doc_json).map_err(|e| JsValue::from_str(&format!("{:?}", e)))?;
+        let doc = Doc::from_snapshot(snapshot);
+        doc.validate_exhaustive()
+            .map_err(|e| JsValue::from_str(&format!("{:?}", e)))
+    }
 }
 
 #[wasm_bindgen]
