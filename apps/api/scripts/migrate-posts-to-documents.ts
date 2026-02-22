@@ -28,10 +28,11 @@ import { wasm } from '@/utils/wasm';
 
 process.env.SCRIPT = 'true';
 
+const DRY_RUN = process.argv.includes('--dry-run');
 const CONCURRENCY = 10;
 
 await (async () => {
-  console.log(`Starting post → document migration... (concurrency: ${CONCURRENCY})`);
+  console.log(`Starting post → document migration...${DRY_RUN ? ' (DRY RUN)' : ''} (concurrency: ${CONCURRENCY})`);
 
   const posts = await db
     .select({
@@ -160,6 +161,11 @@ await (async () => {
       doc.import(snapshot);
       const version = doc.version().encode();
       const { json: contentJson, text, characterCount, blobSize } = await extractLoroDocContents(doc);
+
+      if (DRY_RUN) {
+        migrated++;
+        return;
+      }
 
       const nextEntity = await db
         .select({ order: Entities.order })
@@ -333,7 +339,11 @@ await (async () => {
   }
   await Promise.all(pool);
 
-  console.log(`Migration complete. Migrated: ${migrated}, Skipped: ${skipped}, Errors: ${errors}`);
+  const elapsed = Date.now() - startTime;
+  const elapsedSec = (elapsed / 1000).toFixed(1);
+  console.log(
+    `Migration${DRY_RUN ? ' dry run' : ''} complete. Migrated: ${migrated}, Skipped: ${skipped}, Errors: ${errors} (${elapsedSec}s)`,
+  );
 
   await pg.end();
   process.exit(0);
