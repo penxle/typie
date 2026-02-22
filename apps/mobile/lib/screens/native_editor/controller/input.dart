@@ -48,7 +48,11 @@ class InputController {
       _isActive = true;
       onFocusChanged(true);
     }
-    inputKey.currentState?.activateInput();
+    if (_inputReady) {
+      inputKey.currentState?.activateInput();
+    } else {
+      _pendingFocus = true;
+    }
   }
 
   void requestFocus() {
