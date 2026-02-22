@@ -23,15 +23,15 @@ class KeyboardPlugin: NSObject, FlutterStreamHandler {
     
     NotificationCenter.default.addObserver(
       self,
-      selector: #selector(keyboardWillShow),
-      name: UIResponder.keyboardWillShowNotification,
-      object: nil
-    )
-    
-    NotificationCenter.default.addObserver(
-      self,
       selector: #selector(keyboardWillHide),
       name: UIResponder.keyboardWillHideNotification,
+      object: nil
+    )
+
+    NotificationCenter.default.addObserver(
+      self,
+      selector: #selector(keyboardWillChangeFrame),
+      name: UIResponder.keyboardWillChangeFrameNotification,
       object: nil
     )
     
@@ -62,17 +62,21 @@ class KeyboardPlugin: NSObject, FlutterStreamHandler {
     return nil
   }
   
-  @objc private func keyboardWillShow(_ notification: Notification) {
-    if let keyboardFrame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect {
-      let keyboardHeight = keyboardFrame.height
-      sendEvent(["type": "height", "height": Double(keyboardHeight)])
-      sendHardwareState()
+  @objc private func keyboardWillChangeFrame(_ notification: Notification) {
+    guard let keyboardFrame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else {
+      return
     }
+
+    let height = keyboardVisibleHeight(from: keyboardFrame)
+    guard height > 0 else {
+      return
+    }
+
+    sendKeyboardHeight(height)
   }
   
   @objc private func keyboardWillHide(_ notification: Notification) {
-    sendEvent(["type": "height", "height": 0.0])
-    sendHardwareState()
+    sendKeyboardHeight(0)
   }
   
   @objc private func hardwareKeyboardDidConnect(_ notification: Notification) {
@@ -111,6 +115,29 @@ class KeyboardPlugin: NSObject, FlutterStreamHandler {
     let methodImplementation = instance.method(for: selector)
     let function = unsafeBitCast(methodImplementation, to: BoolMethod.self)
     return function(instance, selector)
+  }
+
+  private func sendKeyboardHeight(_ height: Double) {
+    sendEvent(["type": "height", "height": height])
+    sendHardwareState()
+  }
+
+  private func keyboardVisibleHeight(from keyboardFrame: CGRect) -> Double {
+    if let keyWindow = currentKeyWindow() {
+      let frameInWindow = keyWindow.convert(keyboardFrame, from: nil)
+      let overlap = keyWindow.bounds.intersection(frameInWindow)
+      return Double(max(0, overlap.height))
+    }
+
+    let overlap = UIScreen.main.bounds.intersection(keyboardFrame)
+    return Double(max(0, overlap.height))
+  }
+
+  private func currentKeyWindow() -> UIWindow? {
+    return UIApplication.shared.connectedScenes
+      .compactMap { $0 as? UIWindowScene }
+      .flatMap { $0.windows }
+      .first { $0.isKeyWindow }
   }
 
   private func sendEvent(_ event: [String: Any]) {
