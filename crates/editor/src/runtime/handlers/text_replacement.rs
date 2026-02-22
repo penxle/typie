@@ -14,100 +14,142 @@ impl Runtime {
             return None;
         }
 
-        let (block_id, text_before, cursor_offset) = self.get_text_before_cursor()?;
+        let mut effects = Vec::new();
+        let mut search_start_byte = 0usize;
 
-        if text_before.is_empty() {
-            return None;
-        }
+        loop {
+            let Some((block_id, text_before, cursor_offset)) = self.get_text_before_cursor() else {
+                break;
+            };
 
-        let input_start_byte = text_before.len().saturating_sub(input_byte_len);
+            if text_before.is_empty() {
+                break;
+            }
 
-        let matched = with_text_replacement_rules(|rules| {
-            for rule in rules {
-                match &rule.pattern {
-                    CompiledPattern::Plain(pattern) => {
-                        for (pos, _) in text_before.match_indices(pattern.as_str()) {
-                            let match_end = pos + pattern.len();
-                            if match_end > input_start_byte {
-                                let suffix = text_before[match_end..].to_string();
-                                return Some((pattern.clone(), rule.substitute.clone(), suffix));
+            if search_start_byte >= text_before.len() {
+                break;
+            }
+
+            while search_start_byte < text_before.len()
+                && !text_before.is_char_boundary(search_start_byte)
+            {
+                search_start_byte += 1;
+            }
+
+            let input_start_byte = text_before.len().saturating_sub(input_byte_len);
+
+            let matched = with_text_replacement_rules(|rules| {
+                for rule in rules {
+                    match &rule.pattern {
+                        CompiledPattern::Plain(pattern) => {
+                            for (pos, _) in text_before.match_indices(pattern.as_str()) {
+                                if pos < search_start_byte {
+                                    continue;
+                                }
+                                let match_end = pos + pattern.len();
+                                if match_end > input_start_byte {
+                                    let suffix = text_before[match_end..].to_string();
+                                    return Some((
+                                        pos,
+                                        pattern.clone(),
+                                        rule.substitute.clone(),
+                                        suffix,
+                                    ));
+                                }
                             }
                         }
-                    }
-                    CompiledPattern::Regex(regex) => {
-                        for try_end in (input_start_byte + 1)..=text_before.len() {
-                            if !text_before.is_char_boundary(try_end) {
-                                continue;
-                            }
-                            let truncated = &text_before[..try_end];
-                            if let Ok(Some(caps)) = regex.captures(truncated) {
-                                if let Some(m) = caps.get(0) {
-                                    if m.end() == truncated.len() {
-                                        let matched_str = m.as_str().to_string();
-                                        let expanded = expand_substitute(&caps, &rule.substitute);
-                                        let suffix = text_before[try_end..].to_string();
-                                        return Some((matched_str, expanded, suffix));
+                        CompiledPattern::Regex(regex) => {
+                            let try_start = (input_start_byte + 1).max(search_start_byte + 1);
+                            for try_end in try_start..=text_before.len() {
+                                if !text_before.is_char_boundary(try_end) {
+                                    continue;
+                                }
+                                let truncated = &text_before[..try_end];
+                                if let Ok(Some(caps)) = regex.captures(truncated) {
+                                    if let Some(m) = caps.get(0) {
+                                        if m.end() == truncated.len()
+                                            && m.start() >= search_start_byte
+                                        {
+                                            let matched_str = m.as_str().to_string();
+                                            let expanded =
+                                                expand_substitute(&caps, &rule.substitute);
+                                            let suffix = text_before[try_end..].to_string();
+                                            return Some((
+                                                m.start(),
+                                                matched_str,
+                                                expanded,
+                                                suffix,
+                                            ));
+                                        }
                                     }
                                 }
                             }
                         }
                     }
                 }
-            }
+                None
+            });
+
+            let Some((matched_start_byte, matched_text, substitute, suffix)) = matched else {
+                break;
+            };
+            let next_search_start_byte = matched_start_byte.saturating_add(substitute.len());
+
+            let original_offset_len = offset_len_for_text(&matched_text);
+            let replaced_offset_len = offset_len_for_text(&substitute);
+            let suffix_offset_len = offset_len_for_text(&suffix);
+
+            let delete_count = original_offset_len + suffix_offset_len;
+
+            effects.extend(self.transact(|tr| {
+                for _ in 0..delete_count {
+                    tr.delete_text_backward()?;
+                }
+                Ok(true)
+            }));
+
+            let full_insert = if suffix.is_empty() {
+                substitute.clone()
+            } else {
+                format!("{}{}", substitute, suffix)
+            };
+
+            let parts: Vec<&str> = full_insert.split('\n').collect();
+            let insert_effects = self.transact(|tr| {
+                for (i, part) in parts.iter().enumerate() {
+                    if i > 0 {
+                        tr.insert_hard_break()?;
+                    }
+                    if !part.is_empty() {
+                        tr.insert_text(part)?;
+                    }
+                }
+                Ok(true)
+            });
+
+            effects.extend(insert_effects);
+
+            let new_offset =
+                cursor_offset - original_offset_len - suffix_offset_len + replaced_offset_len;
+
+            let undo_state = ReplacementUndoState {
+                node_id: block_id,
+                offset: new_offset,
+                original_text: matched_text,
+                replaced_text: substitute,
+                original_offset_len,
+                replaced_offset_len,
+            };
+
+            effects.push(Effect::TextReplacementApplied { undo_state });
+            search_start_byte = next_search_start_byte;
+        }
+
+        if effects.is_empty() {
             None
-        });
-
-        let (matched_text, substitute, suffix) = matched?;
-
-        let original_offset_len = offset_len_for_text(&matched_text);
-        let replaced_offset_len = offset_len_for_text(&substitute);
-        let suffix_offset_len = offset_len_for_text(&suffix);
-
-        let delete_count = original_offset_len + suffix_offset_len;
-
-        let mut effects = self.transact(|tr| {
-            for _ in 0..delete_count {
-                tr.delete_text_backward()?;
-            }
-            Ok(true)
-        });
-
-        let full_insert = if suffix.is_empty() {
-            substitute.clone()
         } else {
-            format!("{}{}", substitute, suffix)
-        };
-
-        let parts: Vec<&str> = full_insert.split('\n').collect();
-        let insert_effects = self.transact(|tr| {
-            for (i, part) in parts.iter().enumerate() {
-                if i > 0 {
-                    tr.insert_hard_break()?;
-                }
-                if !part.is_empty() {
-                    tr.insert_text(part)?;
-                }
-            }
-            Ok(true)
-        });
-
-        effects.extend(insert_effects);
-
-        let new_offset =
-            cursor_offset - original_offset_len - suffix_offset_len + replaced_offset_len;
-
-        let undo_state = ReplacementUndoState {
-            node_id: block_id,
-            offset: new_offset,
-            original_text: matched_text,
-            replaced_text: substitute,
-            original_offset_len,
-            replaced_offset_len,
-        };
-
-        effects.push(Effect::TextReplacementApplied { undo_state });
-
-        Some(effects)
+            Some(effects)
+        }
     }
 }
 
@@ -749,6 +791,120 @@ mod tests {
                 }
             }
             selection { (p, 6, Affinity::Upstream) }
+        };
+
+        assert_state_eq!(actual, expected);
+        clear_rules();
+    }
+
+    #[test]
+    fn batched_input_repeated_plain_replacement() {
+        set_rules(vec![RawTextReplacementRule {
+            id: "1".into(),
+            match_pattern: "...".into(),
+            substitute: "\u{2026}".into(),
+            regex: false,
+        }]);
+
+        let mut p = id!();
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {
+                    text { "" }
+                }
+            }
+            selection { (p, 0) }
+        };
+
+        rt.update(Message::Input {
+            text: "......".to_string(),
+        });
+
+        let actual = rt.state();
+        let expected = state! {
+            doc {
+                @p paragraph {
+                    text { "\u{2026}\u{2026}" }
+                }
+            }
+            selection { (p, 2, Affinity::Upstream) }
+        };
+
+        assert_state_eq!(actual, expected);
+        clear_rules();
+    }
+
+    #[test]
+    fn batched_input_seven_dots_replacement() {
+        set_rules(vec![RawTextReplacementRule {
+            id: "1".into(),
+            match_pattern: "...".into(),
+            substitute: "\u{2026}".into(),
+            regex: false,
+        }]);
+
+        let mut p = id!();
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {
+                    text { "" }
+                }
+            }
+            selection { (p, 0) }
+        };
+
+        rt.update(Message::Input {
+            text: ".......".to_string(),
+        });
+
+        let actual = rt.state();
+        let expected = state! {
+            doc {
+                @p paragraph {
+                    text { "\u{2026}\u{2026}." }
+                }
+            }
+            selection { (p, 3, Affinity::Upstream) }
+        };
+
+        assert_state_eq!(actual, expected);
+        clear_rules();
+    }
+
+    #[test]
+    fn growing_rule_applies_once_per_pass() {
+        set_rules(vec![RawTextReplacementRule {
+            id: "1".into(),
+            match_pattern: "a".into(),
+            substitute: "aa".into(),
+            regex: false,
+        }]);
+
+        let mut p = id!();
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {
+                    text { "" }
+                }
+            }
+            selection { (p, 0) }
+        };
+
+        rt.update(Message::Input {
+            text: "a".to_string(),
+        });
+
+        let actual = rt.state();
+        let expected = state! {
+            doc {
+                @p paragraph {
+                    text { "aa" }
+                }
+            }
+            selection { (p, 2, Affinity::Upstream) }
         };
 
         assert_state_eq!(actual, expected);
