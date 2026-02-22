@@ -17,7 +17,7 @@ export type Bootstrap = {
   maintenance: MaintenanceConfig;
 };
 
-export async function assertBootstrap(fetch: typeof globalThis.fetch, clientIp: string, bypassKeyHash?: string) {
+export async function assertBootstrap(fetch: typeof globalThis.fetch, clientIp: string, bootstrapBypassKeyHash?: string) {
   const resp = await fetch('/api/bootstrap');
   if (!resp.ok) {
     return;
@@ -31,7 +31,7 @@ export async function assertBootstrap(fetch: typeof globalThis.fetch, clientIp: 
   ) {
     if (env.PRIVATE_BOOTSTRAP_BYPASS_KEY) {
       const expectedHash = createHash('sha256').update(env.PRIVATE_BOOTSTRAP_BYPASS_KEY).digest('hex');
-      if (bypassKeyHash === expectedHash) {
+      if (bootstrapBypassKeyHash === expectedHash) {
         return;
       }
     }

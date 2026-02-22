@@ -1,10 +1,12 @@
 import { useOpenTelemetry } from '@envelop/opentelemetry';
 import { trace } from '@opentelemetry/api';
+import { getClientAddress } from '@typie/lib';
 import { GraphQLError } from 'graphql';
 import { CloseCode, makeServer } from 'graphql-ws';
 import { createYoga, useExecutionCancellation } from 'graphql-yoga';
 import { Hono } from 'hono';
 import { upgradeWebSocket } from 'hono/bun';
+import { checkBootstrap } from '@/bootstrap';
 import { redis } from '@/cache';
 import { useError } from './plugins/error';
 import { useLogger } from './plugins/logger';
@@ -35,7 +37,9 @@ const app = createYoga<{ c: ServerContext }, UserContext>({
   ],
 });
 
-const server = makeServer<{ session: string }, { c: ServerContext }>({
+type Extra = { c: ServerContext; bootstrapBypassKeyHash?: string };
+
+const server = makeServer<{ session: string }, Extra>({
   /* eslint-disable @typescript-eslint/no-explicit-any */
   execute: (args: any) => args.rootValue.execute(args),
   subscribe: (args: any) => args.rootValue.subscribe(args),
@@ -50,7 +54,7 @@ const server = makeServer<{ session: string }, { c: ServerContext }>({
       return false;
     }
 
-    const { userId } = JSON.parse(session);
+    const { userId, bootstrapBypassKeyHash } = JSON.parse(session);
     if (!userId) {
       return false;
     }
@@ -59,6 +63,8 @@ const server = makeServer<{ session: string }, { c: ServerContext }>({
       id: ctx.connectionParams.session,
       userId,
     };
+
+    ctx.extra.bootstrapBypassKeyHash = bootstrapBypassKeyHash;
   },
   onSubscribe: async (ctx, _, payload) => {
     try {
@@ -98,9 +104,12 @@ graphql.get(
   '/',
   upgradeWebSocket((c) => {
     const protocol = c.req.header('sec-websocket-protocol') ?? '';
+    const ip = getClientAddress(c);
+    const extra: Extra = { c };
 
     let handleMessage: ((data: string) => Promise<void>) | undefined;
     let handleClose: ((code?: number, reason?: string) => Promise<void>) | undefined;
+    let bootstrapInterval: Timer | undefined;
 
     return {
       onOpen: (_, ws) => {
@@ -113,10 +122,18 @@ graphql.get(
               handleMessage = cb;
             },
           },
-          { c },
+          extra,
         );
+
+        bootstrapInterval = setInterval(async () => {
+          const { maintenance } = await checkBootstrap(ip, extra.bootstrapBypassKeyHash);
+          if (maintenance) {
+            ws.close(1001, 'Service under maintenance');
+          }
+        }, 60_000);
       },
       onClose: async (event) => {
+        clearInterval(bootstrapInterval);
         await handleClose?.(event.code, event.reason);
       },
       onMessage: async (event, ws) => {
