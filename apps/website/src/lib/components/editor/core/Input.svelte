@@ -16,7 +16,6 @@
   let inputEl = $state<HTMLInputElement>();
 
   let lastInputValue = '';
-  let ignoreEventText = '';
   let pendingImeDelete = false;
   let lastHandledBackspaceAt = 0;
 
@@ -29,11 +28,6 @@
       // 강제로 일본어 조합을 끝냄
       inputEl.blur();
       inputEl.focus({ preventScroll: true });
-
-      // 한글 조합 강제로 끝낸 직후 중복으로 들어오는 입력을 방지하되 그 이후의 입력(일본어 변환 포함)은 정상적으로 처리
-      setTimeout(() => {
-        ignoreEventText = '';
-      });
     }
   };
 
@@ -68,12 +62,6 @@
     if (inputEvent.isComposing) return;
 
     const value = inputEl?.value || '';
-
-    if (ignoreEventText && value === ignoreEventText) {
-      ignoreEventText = '';
-      resetInputState();
-      return;
-    }
 
     if (!inputEl) return;
 
@@ -198,10 +186,6 @@
 
     const text = e.data || '';
 
-    if (ignoreEventText && text === ignoreEventText) {
-      return;
-    }
-
     editor.dispatch({ type: 'compositionUpdate', text }).scrollIntoView({ mode: 'typewriter' });
   };
 
@@ -209,12 +193,6 @@
     if (editor.readOnly) return;
 
     const text = e.data || '';
-    if (ignoreEventText && text === ignoreEventText) {
-      ignoreEventText = '';
-      editor.dispatch({ type: 'compositionEnd' }).scrollIntoView({ mode: 'typewriter' });
-      resetInputState();
-      return;
-    }
 
     editor.dispatch({ type: 'commitPreedit' });
 
