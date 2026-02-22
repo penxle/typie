@@ -858,6 +858,46 @@ mod tests {
     }
 
     #[test]
+    fn paste_text_preserves_embolden_style_through_html_roundtrip() {
+        let mut p = id!();
+
+        let initial = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [bold()]) { "World" }
+                }
+            }
+            selection { (p, 0) -> (p, 5) }
+        };
+
+        let fragment = initial.selection.extract_fragment(&initial.doc).unwrap();
+        let html = fragment.to_html();
+        let restored_fragment = Fragment::from_html(&html).unwrap();
+
+        let paste_target = state! {
+            doc {
+                @p paragraph {}
+            }
+            selection { (p, 0) }
+        };
+
+        let actual = transact!(paste_target, |tr| {
+            tr.paste_fragment(restored_fragment, None).unwrap();
+        });
+
+        let expected = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [bold()]) { "World" }
+                }
+            }
+            selection { (p, 5) }
+        };
+
+        assert_state_eq!(actual, expected);
+    }
+
+    #[test]
     fn paste_blockquote_with_paragraph() {
         let mut bq_p = id!();
         let mut p2 = id!();
@@ -1699,7 +1739,7 @@ mod tests {
 
     #[test]
     fn paste_html_bold_preserves_bold_and_fills_rest() {
-        // <b>bold</b> 붙여넣기 → FontWeight(700) 유지 + 나머지 5종 기본값 보충
+        // <b>bold</b> 붙여넣기 → Bold 유지 + 나머지 기본값 보충
         let mut p = id!();
 
         let target = state! {
@@ -1718,7 +1758,7 @@ mod tests {
         let expected = state! {
             doc {
                 @p paragraph {
-                    text(styles: [font_weight(700)]) { "bold" }
+                    text(styles: [bold()]) { "bold" }
                 }
             }
             selection { (p, 4) }
@@ -1729,7 +1769,7 @@ mod tests {
 
     #[test]
     fn paste_html_mixed_bold_and_plain_fills_both_correctly() {
-        // <b>bold</b> plain → bold 세그먼트는 700 유지, plain 세그먼트는 400 보충
+        // <b>bold</b> plain → bold 세그먼트는 Bold 유지, plain 세그먼트는 기본값 보충
         let mut p = id!();
 
         let target = state! {
@@ -1749,7 +1789,7 @@ mod tests {
             doc {
                 @p paragraph {
                     text {
-                        "bold" => [font_weight(700)],
+                        "bold" => [bold()],
                         " plain"
                     }
                 }

@@ -31,27 +31,15 @@ impl StyleHtmlCodec for FontWeightStyle {
     }
 
     fn parse_rules() -> Vec<StyleParseRule> {
-        vec![
-            StyleParseRule::from_tag("b", |_| {
-                Some(Style::FontWeight(FontWeightStyle { weight: 700 }))
-            }),
-            StyleParseRule::from_tag("strong", |_| {
-                Some(Style::FontWeight(FontWeightStyle { weight: 700 }))
-            }),
-            StyleParseRule::from_style("font-weight", |elem| {
-                elem.value().attr("style").and_then(|s| {
-                    let m = parse_styles(s);
-                    m.get("font-weight").and_then(|fw| {
-                        if let Ok(w) = fw.parse::<u16>() {
-                            Some(Style::FontWeight(FontWeightStyle { weight: w }))
-                        } else if fw == "bold" {
-                            Some(Style::FontWeight(FontWeightStyle { weight: 700 }))
-                        } else {
-                            None
-                        }
-                    })
+        vec![StyleParseRule::from_style("font-weight", |elem| {
+            elem.value().attr("style").and_then(|s| {
+                let m = parse_styles(s);
+                m.get("font-weight").and_then(|fw| {
+                    fw.parse::<u16>()
+                        .ok()
+                        .map(|weight| Style::FontWeight(FontWeightStyle { weight }))
                 })
-            }),
-        ]
+            })
+        })]
     }
 }

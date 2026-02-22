@@ -294,6 +294,7 @@ pub fn collect_node_parse_rules() -> Vec<NodeParseRule> {
 
 pub fn collect_style_parse_rules() -> Vec<StyleParseRule> {
     let mut rules = Vec::new();
+    rules.extend(BoldStyle::parse_rules());
     rules.extend(ItalicStyle::parse_rules());
     rules.extend(UnderlineStyle::parse_rules());
     rules.extend(StrikethroughStyle::parse_rules());
