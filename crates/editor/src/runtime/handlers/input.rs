@@ -42,6 +42,9 @@ impl Runtime {
         }
 
         effects.extend(self.transact(|tr| tr.insert_text(text)));
+        if let Some(replacement_effects) = self.try_text_replacement(text.len()) {
+            effects.extend(replacement_effects);
+        }
         effects
     }
 }
