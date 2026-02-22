@@ -35,9 +35,9 @@
   >
     <div
       class={css({
-        backgroundColor: 'amber.50',
+        backgroundColor: { base: 'amber.50', _dark: 'amber.950/50' },
         borderWidth: '1px',
-        borderColor: 'amber.200',
+        borderColor: { base: 'amber.200', _dark: 'amber.900' },
         borderRadius: '8px',
       })}
     >
@@ -51,7 +51,7 @@
         })}
       >
         <div class={flex({ alignItems: 'center', gap: '12px' })}>
-          <InfoIcon class={css({ color: 'amber.600', width: '20px', height: '20px' })} />
+          <InfoIcon class={css({ color: { base: 'amber.400', _dark: 'amber.700' }, width: '20px', height: '20px' })} />
           <div class={css({ fontSize: '14px', color: 'text.default' })}>
             <span class={css({ fontWeight: 'medium' })}>서비스 점검 안내:</span>
             <span class={css({ marginLeft: '8px' })}>2026년 2월 23일 오전 2시부터 오전 7시까지 서버 점검이 예정되어 있어요.</span>
@@ -68,8 +68,8 @@
             borderRadius: '4px',
             transition: 'common',
             _hover: {
-              backgroundColor: 'amber.100',
-              color: 'amber.700',
+              backgroundColor: { base: 'amber.100', _dark: 'amber.950' },
+              color: { base: 'amber.700', _dark: 'amber.400' },
             },
           })}
           aria-label="24시간동안 숨기기"
