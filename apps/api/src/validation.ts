@@ -61,6 +61,7 @@ export const bootstrapSchema = z.object({
     message: z.string(),
     until: z.iso.datetime().nullable(),
     platforms: z.array(z.enum(['ios', 'android', 'web'])),
+    allowedIps: z.array(z.union([z.ipv4(), z.ipv6()])).default([]),
   }),
   minVersion: z.object({
     ios: z.object({
