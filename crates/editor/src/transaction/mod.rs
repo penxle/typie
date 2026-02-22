@@ -303,18 +303,37 @@ impl Transaction {
             return Ok(());
         }
 
-        let mut queue = vec![NodeId::ROOT];
+        let mut queue: Vec<(NodeId, Vec<NodeType>)> = vec![(NodeId::ROOT, Vec::new())];
         let mut modified = false;
 
         let schema = self.doc().schema().clone();
 
-        while let Some(node_id) = queue.pop() {
+        while let Some((node_id, inherited_forbidden)) = queue.pop() {
             modified |= self.repair_node_children(node_id, &schema)?;
+
+            let node_type = self.doc().get_node_type(node_id);
+            let own_forbidden: Vec<NodeType> = node_type
+                .and_then(|nt| schema.node_spec(nt).forbidden_descendants)
+                .map(|f| f.to_vec())
+                .unwrap_or_default();
+
+            let mut child_forbidden = inherited_forbidden.clone();
+            for ft in &own_forbidden {
+                if !child_forbidden.contains(ft) {
+                    child_forbidden.push(*ft);
+                }
+            }
 
             let children = self.doc().get_children_ids(node_id);
             for &child_id in children.iter() {
-                if let Some(node_type) = self.doc().get_node_type(child_id) {
-                    let spec = schema.node_spec(node_type);
+                if let Some(child_type) = self.doc().get_node_type(child_id) {
+                    if child_forbidden.contains(&child_type) {
+                        self.delete_node_recursive(child_id)?;
+                        modified = true;
+                        continue;
+                    }
+
+                    let spec = schema.node_spec(child_type);
 
                     if let Some(required_grandparent) = spec.grandparent_must_be {
                         let parent_id = self.doc().get_parent_id(child_id);
@@ -330,7 +349,7 @@ impl Transaction {
                     }
 
                     if !spec.content.is_leaf() {
-                        queue.push(child_id);
+                        queue.push((child_id, child_forbidden.clone()));
                     }
                 }
             }
@@ -669,5 +688,225 @@ mod tests {
         };
 
         assert_state_eq!(actual, expected);
+    }
+
+    #[test]
+    fn normalize_removes_forbidden_descendant_table_nested_in_table() {
+        let mut p1 = id!();
+
+        let initial = state! {
+            doc {
+                table {
+                    table_row {
+                        table_cell {
+                            fold {
+                                fold_title { text { "title" } }
+                                fold_content {
+                                    @p1 paragraph { text { "before" } }
+                                    table {
+                                        table_row {
+                                            table_cell {
+                                                paragraph { text { "nested" } }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            selection { (p1, 0) }
+        };
+
+        let actual = transact!(initial, |tr| {
+            tr.push_effect(Effect::StructureChanged);
+        });
+
+        // 내부 Table이 삭제되고, FoldContent의 content가 repair됨
+        let doc = &actual.doc;
+        let root = doc.node(NodeId::ROOT).unwrap();
+        let table = root.first_child().unwrap();
+        assert_eq!(table.node_type(), NodeType::Table);
+        let row = table.first_child().unwrap();
+        let cell = row.first_child().unwrap();
+        let fold = cell.first_child().unwrap();
+        assert_eq!(fold.node_type(), NodeType::Fold);
+        let fold_content = fold.children().nth(1).unwrap();
+        assert_eq!(fold_content.node_type(), NodeType::FoldContent);
+
+        // FoldContent 안에 Table이 없어야 함
+        for child in fold_content.children() {
+            assert_ne!(
+                child.node_type(),
+                NodeType::Table,
+                "Nested table should have been removed by normalization"
+            );
+        }
+    }
+
+    #[test]
+    fn normalize_preserves_non_forbidden_table() {
+        let mut p1 = id!();
+
+        let initial = state! {
+            doc {
+                fold {
+                    fold_title { text { "title" } }
+                    fold_content {
+                        @p1 paragraph { text { "before" } }
+                        table {
+                            table_row {
+                                table_cell {
+                                    paragraph { text { "in table" } }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            selection { (p1, 0) }
+        };
+
+        let actual = transact!(initial, |tr| {
+            tr.push_effect(Effect::StructureChanged);
+        });
+
+        // Table은 Table 안에 있는 게 아니므로 보존되어야 함
+        let doc = &actual.doc;
+        let root = doc.node(NodeId::ROOT).unwrap();
+        let fold = root.first_child().unwrap();
+        let fold_content = fold.children().nth(1).unwrap();
+
+        let has_table = fold_content
+            .children()
+            .any(|c| c.node_type() == NodeType::Table);
+        assert!(has_table, "Non-nested table should be preserved");
+    }
+
+    #[test]
+    fn normalize_removes_deeply_nested_forbidden_table() {
+        let mut p1 = id!();
+
+        // Table > TableRow > TableCell > Fold > FoldContent > Fold > FoldContent > Table
+        let initial = state! {
+            doc {
+                table {
+                    table_row {
+                        table_cell {
+                            fold {
+                                fold_title { text { "outer" } }
+                                fold_content {
+                                    fold {
+                                        fold_title { text { "inner" } }
+                                        fold_content {
+                                            @p1 paragraph { text { "deep" } }
+                                            table {
+                                                table_row {
+                                                    table_cell {
+                                                        paragraph { text { "nested" } }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            selection { (p1, 0) }
+        };
+
+        let actual = transact!(initial, |tr| {
+            tr.push_effect(Effect::StructureChanged);
+        });
+
+        // 깊이 중첩된 Table도 삭제되어야 함
+        let doc = &actual.doc;
+        let root = doc.node(NodeId::ROOT).unwrap();
+        let table = root.first_child().unwrap();
+        let row = table.first_child().unwrap();
+        let cell = row.first_child().unwrap();
+        let outer_fold = cell.first_child().unwrap();
+        let outer_fc = outer_fold.children().nth(1).unwrap();
+        let inner_fold = outer_fc.first_child().unwrap();
+        let inner_fc = inner_fold.children().nth(1).unwrap();
+
+        for child in inner_fc.children() {
+            assert_ne!(
+                child.node_type(),
+                NodeType::Table,
+                "Deeply nested table should have been removed"
+            );
+        }
+    }
+
+    #[test]
+    fn insert_table_inside_table_is_rejected() {
+        let mut p1 = id!();
+
+        let initial = state! {
+            doc {
+                table {
+                    table_row {
+                        table_cell {
+                            @p1 paragraph { text { "cell" } }
+                        }
+                    }
+                }
+            }
+            selection { (p1, 0) }
+        };
+
+        let actual = transact!(initial, |tr| {
+            let result = tr.insert_node(Node::Table(TableNode::default())).unwrap();
+            assert!(!result, "Inserting table inside table should be rejected");
+        });
+
+        // Table이 하나만 있어야 함
+        let doc = &actual.doc;
+        let root = doc.node(NodeId::ROOT).unwrap();
+        let table_count = root
+            .children()
+            .filter(|c| c.node_type() == NodeType::Table)
+            .count();
+        assert_eq!(table_count, 1);
+    }
+
+    #[test]
+    fn validate_exhaustive_rejects_forbidden_descendant() {
+        let initial = state! {
+            doc {
+                table {
+                    table_row {
+                        table_cell {
+                            fold {
+                                fold_title { text { "title" } }
+                                fold_content {
+                                    table {
+                                        table_row {
+                                            table_cell {
+                                                paragraph { text { "nested" } }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            selection { (NodeId::ROOT, 0) }
+        };
+
+        // state!로 만든 문서는 normalization 없이 직접 구성되므로
+        // validate_exhaustive가 forbidden descendant를 잡아야 함
+        let result = initial.doc.validate_exhaustive();
+        assert!(
+            result.is_err(),
+            "validate_exhaustive should reject nested table"
+        );
     }
 }

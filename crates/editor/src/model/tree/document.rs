@@ -313,10 +313,10 @@ impl Doc {
 
         // 2. Collect all reachable nodes via DFS from root
         let mut visited = FxHashSet::default();
-        let mut stack = vec![NodeId::ROOT];
+        let mut stack: Vec<(NodeId, Vec<NodeType>)> = vec![(NodeId::ROOT, Vec::new())];
         let mut parent_map: Vec<(NodeId, Option<NodeId>)> = Vec::new();
 
-        while let Some(id) = stack.pop() {
+        while let Some((id, inherited_forbidden)) = stack.pop() {
             if !visited.insert(id) {
                 anyhow::bail!("Cycle detected: node {} visited twice", id);
             }
@@ -325,6 +325,16 @@ impl Doc {
                 .node(id)
                 .with_context(|| format!("Node {} is referenced but does not exist", id))?;
 
+            let node_type = node_ref.node_type();
+
+            // Check forbidden_descendants violation
+            anyhow::ensure!(
+                !inherited_forbidden.contains(&node_type),
+                "Node {} ({:?}) is a forbidden descendant of an ancestor",
+                id,
+                node_type
+            );
+
             let expected_parent = if id == NodeId::ROOT {
                 None
             } else {
@@ -332,10 +342,21 @@ impl Doc {
             };
             parent_map.push((id, expected_parent.flatten()));
 
+            // Build forbidden list for children
+            let spec = self.inner.schema.node_spec(node_type);
+            let mut child_forbidden = inherited_forbidden;
+            if let Some(forbidden) = spec.forbidden_descendants {
+                for &ft in forbidden {
+                    if !child_forbidden.contains(&ft) {
+                        child_forbidden.push(ft);
+                    }
+                }
+            }
+
             let children_ids = self.get_children_ids(id);
             // Push in reverse so we visit in order
             for &child_id in children_ids.iter().rev() {
-                stack.push(child_id);
+                stack.push((child_id, child_forbidden.clone()));
             }
         }
 
@@ -476,6 +497,23 @@ impl Doc {
         }
 
         allowed
+    }
+
+    /// node_id 위치에서 target_type이 조상의 forbidden_descendants에 의해 금지되는지 확인
+    pub fn is_type_forbidden_at(&self, node_id: NodeId, target_type: NodeType) -> bool {
+        let mut current = Some(node_id);
+        while let Some(id) = current {
+            if let Some(node_type) = self.get_node_type(id) {
+                let spec = self.inner.schema.node_spec(node_type);
+                if let Some(forbidden) = spec.forbidden_descendants {
+                    if forbidden.contains(&target_type) {
+                        return true;
+                    }
+                }
+            }
+            current = self.get_parent_id(id);
+        }
+        false
     }
 
     pub fn is_ancestor(&self, ancestor: NodeId, node: NodeId) -> bool {
