@@ -19,7 +19,8 @@ import {
   PostContents,
   Posts,
 } from '@/db';
-import { EntityType, NoteState } from '@/enums';
+import { EntityState, EntityType, NoteState } from '@/enums';
+import { meilisearch } from '@/search';
 import { extractLoroDocContents, generateFractionalOrder, generatePermalink, generateSlug } from '@/utils';
 import { compressZstd } from '@/utils/compression';
 import { convertPostToDocumentJson } from '@/utils/convert';
@@ -184,7 +185,7 @@ await (async () => {
         .where(and(eq(Notes.entityId, entity.id), eq(Notes.state, NoteState.ACTIVE)))
         .orderBy(asc(Notes.order));
 
-      await db.transaction(async (tx) => {
+      const newDocument = await db.transaction(async (tx) => {
         // Lock per-user notes ordering inside the transaction to prevent race conditions
         // when concurrent workers process posts owned by the same user
         let lastOrder: string | null = null;
@@ -292,7 +293,21 @@ await (async () => {
         }
 
         await tx.update(Posts).set({ documentId: newDocument.id }).where(eq(Posts.id, postId));
+
+        return newDocument;
       });
+
+      if (entity.state === EntityState.ACTIVE) {
+        await meilisearch.index('documents').addDocuments([
+          {
+            id: newDocument.id,
+            siteId: entity.siteId,
+            title: newDocument.title,
+            subtitle: newDocument.subtitle,
+            text,
+          },
+        ]);
+      }
 
       migrated++;
     } catch (err) {
