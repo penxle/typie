@@ -1,16 +1,42 @@
 import '@typie/lib/dayjs';
 import '@/mq';
 
-import { logger } from '@typie/lib';
+import { getClientAddress, logger } from '@typie/lib';
 import { websocket } from 'hono/bun';
 import { HTTPException } from 'hono/http-exception';
 import { app } from '@/app';
+import { getBootstrap } from '@/bootstrap';
 import { deriveContext } from '@/context';
 import { env } from '@/env';
 import { graphql } from '@/graphql';
 import { rest } from '@/rest';
 
 const log = logger.getChild('main');
+
+app.use('*', async (c, next) => {
+  if (c.req.path.startsWith('/healthz') || c.req.path.startsWith('/bmo/')) {
+    return next();
+  }
+
+  const bootstrap = await getBootstrap();
+  if (
+    bootstrap?.maintenance.enabled &&
+    bootstrap.maintenance.platforms.includes('api') &&
+    !bootstrap.maintenance.allowedIps.includes(getClientAddress(c))
+  ) {
+    return c.json(
+      {
+        code: 'maintenance',
+        title: bootstrap.maintenance.title,
+        message: bootstrap.maintenance.message,
+        until: bootstrap.maintenance.until,
+      },
+      503,
+    );
+  }
+
+  return next();
+});
 
 app.use('*', async (c, next) => {
   if (c.req.path.startsWith('/bmo/')) {

@@ -1,11 +1,9 @@
-import { GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import { and, count, desc, eq, getTableColumns, ilike, or, sql } from 'drizzle-orm';
+import { fetchBootstrap, putBootstrap } from '@/bootstrap';
 import { redis } from '@/cache';
 import { db, Entities, first, firstOrThrow, pg, Posts, TableCode, UserPaymentCredits, Users, UserSessions, validateDbId } from '@/db';
 import { EntityState, PostType, UserRole, UserState } from '@/enums';
-import { stack } from '@/env';
 import { TypieError } from '@/errors';
-import { s3 } from '@/external/aws';
 import { enqueueJob } from '@/mq';
 import { assertAdminPermission } from '@/utils/permission';
 import { bootstrapSchema } from '@/validation';
@@ -188,19 +186,7 @@ builder.queryFields((t) => ({
     resolve: async (_, __, ctx) => {
       await assertAdminPermission({ sessionId: ctx.session.id });
 
-      const response = await s3.send(
-        new GetObjectCommand({
-          Bucket: 'typie-config',
-          Key: `bootstrap/${stack}.json`,
-        }),
-      );
-
-      const body = await response.Body?.transformToString();
-      if (!body) {
-        throw new TypieError({ code: 'bootstrap_not_found' });
-      }
-
-      return bootstrapSchema.parse(JSON.parse(body));
+      return fetchBootstrap();
     },
   }),
 }));
@@ -288,23 +274,7 @@ builder.mutationFields((t) => ({
 
       const parsed = bootstrapSchema.omit({ version: true, updatedAt: true }).parse(input.bootstrap);
 
-      const newData = {
-        version: 1,
-        updatedAt: new Date().toISOString(),
-        ...parsed,
-      };
-
-      await s3.send(
-        new PutObjectCommand({
-          Bucket: 'typie-config',
-          Key: `bootstrap/${stack}.json`,
-          Body: JSON.stringify(newData, null, 2),
-          ContentType: 'application/json',
-          CacheControl: 'no-cache, no-store',
-        }),
-      );
-
-      return newData;
+      return putBootstrap(parsed);
     },
   }),
 }));
