@@ -584,7 +584,16 @@ impl Layout for ParagraphNode {
                         })
                         .unwrap_or(1200);
 
+                    let has_embolden = ps.styles.iter().any(|s| matches!(s, Style::Bold(_)));
                     for style in &ps.styles {
+                        if has_embolden && let Style::FontWeight(weight_style) = style {
+                            let target_weight = weight_style.weight.max(700) as f32;
+                            builder.push(
+                                StyleProperty::FontWeight(FontWeight::new(target_weight)),
+                                range.clone(),
+                            );
+                            continue;
+                        }
                         apply_style_to_builder(
                             &mut builder,
                             style,
@@ -609,7 +618,16 @@ impl Layout for ParagraphNode {
                             }
                         })
                         .unwrap_or(1200);
+                    let has_embolden = ps.styles.iter().any(|s| matches!(s, Style::Bold(_)));
                     for style in &ps.styles {
+                        if has_embolden && let Style::FontWeight(weight_style) = style {
+                            let target_weight = weight_style.weight.max(700) as f32;
+                            builder.push(
+                                StyleProperty::FontWeight(FontWeight::new(target_weight)),
+                                range.clone(),
+                            );
+                            continue;
+                        }
                         apply_style_to_builder(&mut builder, style, range.clone(), font_size);
                     }
                 }
