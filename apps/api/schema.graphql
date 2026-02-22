@@ -761,6 +761,7 @@ type Mutation {
   sendEmailUpdateEmail(input: SendEmailUpdateEmailInput!): Boolean!
   sendPasswordResetEmail(input: SendPasswordResetEmailInput!): Boolean!
   sendSignUpEmail(input: SendSignUpEmailInput!): Boolean!
+  submitFeedback(input: SubmitFeedbackInput!): Boolean!
   subscribeOrChangePlanWithInAppPurchase(input: SubscribeOrChangePlanWithInAppPurchaseInput!): Subscription_!
   subscribePlanWithBillingKey(input: SubscribePlanWithBillingKeyInput!): Subscription_!
   subscribePlanWithTrial: Subscription_!
@@ -1198,6 +1199,13 @@ type SpellingError {
   explanation: String!
   from: Int!
   to: Int!
+}
+
+input SubmitFeedbackInput {
+  content: String!
+  mood: String
+  topic: String
+  url: String
 }
 
 input SubscribeOrChangePlanWithInAppPurchaseInput {
