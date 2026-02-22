@@ -754,4 +754,43 @@ mod tests {
         assert_state_eq!(actual, expected);
         clear_rules();
     }
+
+    #[test]
+    fn replace_backward_triggers_replacement() {
+        set_rules(vec![RawTextReplacementRule {
+            id: "1".into(),
+            match_pattern: "...".into(),
+            substitute: "\u{2026}".into(),
+            regex: false,
+        }]);
+
+        let mut p = id!();
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {
+                    text { ".." }
+                }
+            }
+            selection { (p, 2) }
+        };
+
+        rt.update(Message::ReplaceBackward {
+            length: 2,
+            text: "...".to_string(),
+        });
+
+        let actual = rt.state();
+        let expected = state! {
+            doc {
+                @p paragraph {
+                    text { "\u{2026}" }
+                }
+            }
+            selection { (p, 1, Affinity::Upstream) }
+        };
+
+        assert_state_eq!(actual, expected);
+        clear_rules();
+    }
 }
