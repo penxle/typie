@@ -1374,7 +1374,7 @@ builder.mutationFields((t) => ({
     },
   }),
 
-  reportDocument: t.withAuth({ session: true }).fieldWithInput({
+  reportDocument: t.fieldWithInput({
     type: 'Boolean',
     input: {
       documentId: t.input.id({ validate: validateDbId(TableCode.DOCUMENTS) }),
@@ -1392,11 +1392,13 @@ builder.mutationFields((t) => ({
         .where(eq(Documents.id, input.documentId))
         .then(firstOrThrow);
 
-      const user = await db
-        .select({ id: Users.id, name: Users.name, email: Users.email })
-        .from(Users)
-        .where(eq(Users.id, ctx.session.userId))
-        .then(firstOrThrow);
+      const user = ctx.session
+        ? await db
+            .select({ id: Users.id, name: Users.name, email: Users.email })
+            .from(Users)
+            .where(eq(Users.id, ctx.session.userId))
+            .then(firstOrThrow)
+        : null;
 
       await slack.sendMessage({
         channel: '#cs',
@@ -1404,8 +1406,8 @@ builder.mutationFields((t) => ({
         iconEmoji: ':rotating_light:',
         message: dedent`
           *${document.title}* (${document.id}) 문서 신고
-          > *신고자:* ${user.name} (${user.id}, ${user.email})
-          > *이유:* ${input.reason}
+          *신고자:* ${user ? `${user.name} (${user.id}, ${user.email})` : `로그인하지 않은 사용자 (${ctx.ip})`}
+          *이유:* ${input.reason ?? '(비어있음)'}
           ${env.USERSITE_URL.replace('*.', '')}/${document.permalink}
         `,
       });
