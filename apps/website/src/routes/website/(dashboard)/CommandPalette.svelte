@@ -108,6 +108,7 @@
             document {
               id
               title
+              type
 
               entity {
                 id
@@ -558,11 +559,14 @@
               </div>
             {/if}
           {:else if hit.__typename === 'SearchHitDocument'}
-            <!-- TODO: document template 다르게 보여줘야 함 -->
             <div
               class={center({ flexShrink: '0', borderRadius: '6px', size: '24px', color: 'text.faint', backgroundColor: 'surface.muted' })}
             >
-              <Icon icon={FileIcon} size={16} />
+              {#if hit.document.type === DocumentType.TEMPLATE}
+                <Icon icon={LayoutTemplateIcon} size={16} />
+              {:else}
+                <Icon icon={FileIcon} size={16} />
+              {/if}
             </div>
 
             <div class={css({ fontSize: '14px', fontWeight: 'medium', truncate: true })}>
