@@ -177,16 +177,6 @@
     return overlay.rowHeights[rowIndex];
   }
 
-  function closeColumnMenu(close: () => void) {
-    close();
-    menuOpenColIndex = null;
-  }
-
-  function closeRowMenu(close: () => void) {
-    close();
-    menuOpenRowIndex = null;
-  }
-
   function handleTablePointerMove(e: PointerEvent) {
     const layer = e.currentTarget as HTMLElement;
     const rect = layer.getBoundingClientRect();
@@ -338,7 +328,7 @@
           {#if activeColIndex > 0}
             <MenuItem
               onclick={() => {
-                closeColumnMenu(close);
+                close();
                 editor
                   .dispatch({
                     type: 'moveTableColumn',
@@ -357,7 +347,7 @@
           {#if activeColIndex < overlay.colWidthsAsPx.length - 1}
             <MenuItem
               onclick={() => {
-                closeColumnMenu(close);
+                close();
                 editor
                   .dispatch({
                     type: 'moveTableColumn',
@@ -375,7 +365,7 @@
           {/if}
           <MenuItem
             onclick={() => {
-              closeColumnMenu(close);
+              close();
               editor.dispatch({ type: 'addTableColumn', tableId: overlay.tableId, col: activeColIndex, before: true }).scrollIntoView();
               editor.focus();
             }}
@@ -385,7 +375,7 @@
           </MenuItem>
           <MenuItem
             onclick={() => {
-              closeColumnMenu(close);
+              close();
               editor.dispatch({ type: 'addTableColumn', tableId: overlay.tableId, col: activeColIndex, before: false }).scrollIntoView();
               editor.focus();
             }}
@@ -395,7 +385,7 @@
           </MenuItem>
           <MenuItem
             onclick={() => {
-              closeColumnMenu(close);
+              close();
               if (overlay.colWidthsAsPx.length <= 1) {
                 editor.dispatch({ type: 'deleteNode', nodeId: overlay.tableId }).scrollIntoView();
               } else {
@@ -470,7 +460,7 @@
           {#if globalRowIndex > 0}
             <MenuItem
               onclick={() => {
-                closeRowMenu(close);
+                close();
                 editor
                   .dispatch({ type: 'moveTableRow', tableId: overlay.tableId, fromRow: globalRowIndex, toRow: globalRowIndex - 1 })
                   .scrollIntoView();
@@ -484,7 +474,7 @@
           {#if globalRowIndex < (overlay.totalRows ?? overlay.rowHeights.length) - 1}
             <MenuItem
               onclick={() => {
-                closeRowMenu(close);
+                close();
                 editor
                   .dispatch({ type: 'moveTableRow', tableId: overlay.tableId, fromRow: globalRowIndex, toRow: globalRowIndex + 1 })
                   .scrollIntoView();
@@ -497,7 +487,7 @@
           {/if}
           <MenuItem
             onclick={() => {
-              closeRowMenu(close);
+              close();
               editor.dispatch({ type: 'addTableRow', tableId: overlay.tableId, row: globalRowIndex, before: true }).scrollIntoView();
               editor.focus();
             }}
@@ -507,7 +497,7 @@
           </MenuItem>
           <MenuItem
             onclick={() => {
-              closeRowMenu(close);
+              close();
               editor.dispatch({ type: 'addTableRow', tableId: overlay.tableId, row: globalRowIndex, before: false }).scrollIntoView();
               editor.focus();
             }}
@@ -517,7 +507,7 @@
           </MenuItem>
           <MenuItem
             onclick={() => {
-              closeRowMenu(close);
+              close();
               if ((overlay.totalRows ?? overlay.rowHeights.length) <= 1) {
                 editor.dispatch({ type: 'deleteNode', nodeId: overlay.tableId }).scrollIntoView();
               } else {
