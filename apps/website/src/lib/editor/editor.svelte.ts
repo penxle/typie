@@ -1221,6 +1221,7 @@ export class Editor {
   setReadOnly(readOnly: boolean): void {
     this.readOnly = readOnly;
     this.#wasmEditor?.setReadOnly(readOnly);
+    this.#wakeUp();
   }
 
   setRenderDebug(enabled: boolean): void {
@@ -1351,43 +1352,69 @@ export class Editor {
   findNext(): void {
     let found = false;
     for (const match of this.searchMatches) {
+      const wasActive = match.active;
       match.active = found;
 
       if (found) {
         this.scrollTrackedItemIntoView(match.id);
+        found = false;
       }
 
-      if (match.active) {
+      if (wasActive) {
         found = true;
       }
+    }
+
+    if (found && this.searchMatches.length > 0) {
+      this.searchMatches[0].active = true;
+      this.scrollTrackedItemIntoView(this.searchMatches[0].id);
     }
   }
 
   findPrevious(): void {
     let found = false;
     for (const match of this.searchMatches.toReversed()) {
+      const wasActive = match.active;
       match.active = found;
 
       if (found) {
         this.scrollTrackedItemIntoView(match.id);
+        found = false;
       }
 
-      if (match.active) {
+      if (wasActive) {
         found = true;
+      }
+    }
+
+    if (found && this.searchMatches.length > 0) {
+      const last = this.searchMatches.at(-1);
+      if (last) {
+        last.active = true;
+        this.scrollTrackedItemIntoView(last.id);
       }
     }
   }
 
   replace(replacement: string): void {
-    const match = this.searchMatches.find((v) => v.active);
-    if (!match || !this.#wasmEditor) return;
+    const matchIndex = this.searchMatches.findIndex((v) => v.active);
+    if (matchIndex === -1 || !this.#wasmEditor) return;
 
+    const match = this.searchMatches[matchIndex];
     const item = this.trackedItems.find((v) => v.group === 2 && v.id === match.id);
     if (!item) return;
 
     this.#wasmEditor.replaceTextInBlock(item.nodeId, item.startOffset, item.endOffset, replacement);
     this.#wasmEditor.removeTrackedItems(2, [item.id]);
     this.#wakeUp();
+
+    this.settled().then(() => {
+      if (this.searchMatches.length > 0 && !this.searchMatches.some((v) => v.active)) {
+        const nextIndex = matchIndex < this.searchMatches.length ? matchIndex : 0;
+        this.searchMatches[nextIndex].active = true;
+        this.scrollTrackedItemIntoView(this.searchMatches[nextIndex].id);
+      }
+    });
   }
 
   replaceAll(replacement: string): void {

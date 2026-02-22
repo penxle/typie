@@ -155,6 +155,7 @@
         })}
         aria-pressed={app.preference.current.searchMatchWholeWord}
         onclick={() => (app.preference.current.searchMatchWholeWord = !app.preference.current.searchMatchWholeWord)}
+        tabindex={-1}
         type="button"
         use:tooltip={{ message: '어절 단위로 찾기' }}
       >
