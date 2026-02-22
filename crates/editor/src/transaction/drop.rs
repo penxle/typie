@@ -581,6 +581,75 @@ mod tests {
     }
 
     #[test]
+    fn drop_external_inherits_inline_decorations_from_empty_paragraph_cascade() {
+        let mut p = id!();
+
+        let initial = state! {
+            doc {
+                @p paragraph {}
+            }
+            selection { (p, 0) }
+        };
+
+        let with_cascade = transact!(initial, |tr| {
+            tr.toggle_style(crate::model::Style::Italic(crate::model::ItalicStyle {}))
+                .unwrap();
+            tr.toggle_style(crate::model::Style::Strikethrough(
+                crate::model::StrikethroughStyle {},
+            ))
+            .unwrap();
+            tr.toggle_style(crate::model::Style::Underline(
+                crate::model::UnderlineStyle {},
+            ))
+            .unwrap();
+        });
+
+        let fragment = Fragment::from_text("hello", &[]);
+
+        let actual = transact!(with_cascade, |tr| {
+            tr.drop_external(Position::new(p, 0, Affinity::Downstream), fragment)
+                .unwrap();
+        });
+
+        let paragraph = actual.doc.node(p).expect("paragraph should exist");
+        let text_node = paragraph
+            .first_child()
+            .expect("dropped text should create a text node");
+
+        let Node::Text(text) = text_node.node() else {
+            panic!("first child should be text");
+        };
+
+        let segments = text.text.get_segments();
+        let seg = segments
+            .first()
+            .expect("dropped text node should have at least one segment");
+
+        assert_eq!(seg.text, "hello");
+        assert!(
+            seg.styles
+                .iter()
+                .any(|s| matches!(s, crate::model::Style::Italic(_))),
+            "dropped text should inherit italic from cascade, got: {:?}",
+            seg.styles
+        );
+        assert!(
+            seg.styles
+                .iter()
+                .any(|s| matches!(s, crate::model::Style::Strikethrough(_))),
+            "dropped text should inherit strikethrough from cascade, got: {:?}",
+            seg.styles
+        );
+        assert!(
+            seg.styles
+                .iter()
+                .any(|s| matches!(s, crate::model::Style::Underline(_))),
+            "dropped text should inherit underline from cascade, got: {:?}",
+            seg.styles
+        );
+    }
+
+    #[test]
     fn drop_external_html_plain_text_fills_cascade_styles() {
         let mut p = id!();
 
