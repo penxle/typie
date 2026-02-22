@@ -1,5 +1,5 @@
 import dayjs from 'dayjs';
-import { and, asc, desc, eq, getTableColumns, gt, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, getTableColumns, gt, isNull, sql } from 'drizzle-orm';
 import { LoroDoc } from 'loro-crdt';
 import * as Y from 'yjs';
 import {
@@ -251,20 +251,21 @@ builder.mutationFields((t) => ({
         .where(and(eq(Notes.entityId, entity.id), eq(Notes.state, NoteState.ACTIVE)))
         .orderBy(asc(Notes.order));
 
-      let lastOrder: string | null = null;
-      if (notes.length > 0) {
-        const lastUserNote = await db
-          .select({ order: Notes.order })
-          .from(Notes)
-          .where(and(eq(Notes.userId, ctx.session.userId), eq(Notes.state, NoteState.ACTIVE)))
-          .orderBy(desc(Notes.order))
-          .limit(1)
-          .then(first);
-
-        lastOrder = lastUserNote?.order ?? null;
-      }
-
       const document = await db.transaction(async (tx) => {
+        let lastOrder: string | null = null;
+        if (notes.length > 0) {
+          await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${ctx.session.userId}))`);
+
+          const lastUserNote = await tx
+            .select({ order: Notes.order })
+            .from(Notes)
+            .where(and(eq(Notes.userId, ctx.session.userId), eq(Notes.state, NoteState.ACTIVE)))
+            .orderBy(desc(Notes.order))
+            .limit(1)
+            .then(first);
+
+          lastOrder = lastUserNote?.order ?? null;
+        }
         if (archivedNodes.length > 0) {
           await tx.insert(DocumentArchivedNodes).values(
             archivedNodes.map((node) => ({
