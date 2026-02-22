@@ -508,6 +508,8 @@ class SlateReader {
 
       final align = readStr(pos);
       pos += _strByteLen(pos);
+      final proportion = _slabF32(pos);
+      pos += 4;
 
       final startRowIndex = _slabU32(pos);
       final totalRows = _slabU32(pos + 4);
@@ -556,6 +558,7 @@ class SlateReader {
           height: height,
           borderStyle: borderStyle,
           align: align,
+          proportion: proportion,
           startRowIndex: startRowIndex,
           totalRows: totalRows,
           isFocused: isFocused,
@@ -794,6 +797,7 @@ class _TableOverlayRaw {
     required this.height,
     required this.borderStyle,
     required this.align,
+    required this.proportion,
     required this.startRowIndex,
     required this.totalRows,
     required this.isFocused,
@@ -816,6 +820,7 @@ class _TableOverlayRaw {
   final double height;
   final String borderStyle;
   final String align;
+  final double proportion;
   final int startRowIndex;
   final int totalRows;
   final bool isFocused;

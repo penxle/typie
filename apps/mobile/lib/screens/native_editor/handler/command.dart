@@ -432,6 +432,7 @@ class CommandHandler {
             bounds: TableOverlayBounds(x: o.x, y: o.y, width: o.width, height: o.height),
             borderStyle: o.borderStyle,
             align: o.align,
+            proportion: o.proportion,
             startRowIndex: o.startRowIndex,
             totalRows: o.totalRows,
             isFocused: o.isFocused,

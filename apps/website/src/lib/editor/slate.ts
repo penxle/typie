@@ -17,6 +17,7 @@ export type TableOverlay = {
   bounds: Rect;
   borderStyle: string;
   align: string;
+  proportion: number;
   contentWidth: number;
   minProportionWidth: number;
   maxProportionWidth: number;
@@ -742,6 +743,8 @@ function readTableOverlays(view: DataView, offset: number, count: number): Table
 
     const { value: align, end: afterAlign } = readStr(view, pos);
     pos = afterAlign;
+    const proportion = view.getFloat32(pos, true);
+    pos += 4;
 
     const startRowIndex = view.getUint32(pos, true);
     const totalRows = view.getUint32(pos + 4, true);
@@ -786,6 +789,7 @@ function readTableOverlays(view: DataView, offset: number, count: number): Table
       bounds,
       borderStyle,
       align,
+      proportion,
       contentWidth,
       minProportionWidth,
       maxProportionWidth,

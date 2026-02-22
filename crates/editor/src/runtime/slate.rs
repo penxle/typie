@@ -807,6 +807,7 @@ impl Slab {
             self.write_f32_slice(&[o.bounds.x, o.bounds.y, o.bounds.width, o.bounds.height]);
             self.write_str(&o.border_style);
             self.write_str(&o.align);
+            self.write_f32_slice(&[o.proportion]);
             self.write_u32_slice(&[
                 o.start_row_index as u32,
                 o.total_rows as u32,
