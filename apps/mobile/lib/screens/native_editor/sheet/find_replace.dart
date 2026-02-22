@@ -64,7 +64,7 @@ class FindReplaceSheet extends HookWidget {
       void ensureKeyboardVisible() {
         if (findFocusNode.hasFocus || replaceFocusNode.hasFocus) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            SystemChannels.textInput.invokeMethod<void>('TextInput.show');
+            unawaited(SystemChannels.textInput.invokeMethod<void>('TextInput.show'));
           });
         }
       }
