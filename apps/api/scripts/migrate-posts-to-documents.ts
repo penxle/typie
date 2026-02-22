@@ -3,7 +3,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import dayjs from 'dayjs';
-import { and, asc, desc, eq, gt, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
 import { LoroDoc } from 'loro-crdt';
 import {
   db,
@@ -31,11 +31,18 @@ import { wasm } from '@/utils/wasm';
 process.env.SCRIPT = 'true';
 
 const DRY_RUN = process.argv.includes('--dry-run');
+const USER_IDS =
+  process.argv
+    .find((arg) => arg.startsWith('--user-ids='))
+    ?.split('=')[1]
+    ?.split(',') ?? [];
 const CONCURRENCY = 100;
 const ERROR_DUMP_DIR = path.join(import.meta.dirname, '../migration-errors');
 
 await (async () => {
-  console.log(`Starting post → document migration...${DRY_RUN ? ' (DRY RUN)' : ''} (concurrency: ${CONCURRENCY})`);
+  console.log(
+    `Starting post → document migration...${DRY_RUN ? ' (DRY RUN)' : ''}${USER_IDS.length > 0 ? ` (user-ids: ${USER_IDS.join(', ')})` : ''} (concurrency: ${CONCURRENCY})`,
+  );
 
   const stateCounts = await db
     .select({
@@ -44,7 +51,7 @@ await (async () => {
     })
     .from(Posts)
     .innerJoin(Entities, eq(Entities.id, Posts.entityId))
-    .where(isNull(Posts.documentId))
+    .where(and(isNull(Posts.documentId), USER_IDS.length > 0 ? inArray(Entities.userId, USER_IDS) : undefined))
     .groupBy(Entities.state);
 
   const countByState = Object.fromEntries(stateCounts.map((r) => [r.state, r.count]));
@@ -61,7 +68,7 @@ await (async () => {
     })
     .from(Posts)
     .innerJoin(Entities, eq(Entities.id, Posts.entityId))
-    .where(isNull(Posts.documentId))
+    .where(and(isNull(Posts.documentId), USER_IDS.length > 0 ? inArray(Entities.userId, USER_IDS) : undefined))
     .orderBy(sql`CASE ${Entities.state} WHEN 'ACTIVE' THEN 0 WHEN 'DELETED' THEN 1 WHEN 'PURGED' THEN 2 END`);
 
   let migrated = 0;
