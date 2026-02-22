@@ -180,10 +180,12 @@ await (async () => {
         await wasm.validateDocumentJson(json);
       } catch (validationErr) {
         await mkdir(ERROR_DUMP_DIR, { recursive: true });
-        await writeFile(path.join(ERROR_DUMP_DIR, `${postId}.json`), JSON.stringify({ input: postContents.body, output: json }, null, 2));
-        throw new Error(`Document validation failed for post ${postId} (dumped to ${ERROR_DUMP_DIR}/${postId}.json)`, {
-          cause: validationErr,
-        });
+        const reason = validationErr instanceof Error ? validationErr.message : String(validationErr);
+        await writeFile(
+          path.join(ERROR_DUMP_DIR, `${postId}.json`),
+          JSON.stringify({ error: reason, input: postContents.body, output: json }, null, 2),
+        );
+        throw new Error(`Document validation failed for post ${postId}: ${reason}\n(dumped to ${ERROR_DUMP_DIR}/${postId}.json)`);
       }
 
       const snapshot = await wasm.jsonToSnapshot(json);
