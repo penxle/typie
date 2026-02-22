@@ -13,6 +13,7 @@
       message: string;
       until: string | null;
       platforms: ('ios' | 'android' | 'web')[];
+      allowedIps: string[];
     };
     minVersion: {
       ios: { version: string; storeUrl: string };
@@ -57,11 +58,27 @@
       void updatedAt;
       await updateBootstrapMutation({ bootstrap: rest });
       message = { type: 'success', text: 'BOOTSTRAP CONFIG UPDATED SUCCESSFULLY' };
-    } catch {
-      message = { type: 'error', text: 'FAILED TO UPDATE BOOTSTRAP CONFIG' };
+    } catch (err) {
+      message = { type: 'error', text: err instanceof Error ? err.message : 'FAILED TO UPDATE BOOTSTRAP CONFIG' };
     } finally {
       saving = false;
     }
+  }
+
+  let newIp = $state('');
+
+  function addIp() {
+    if (!data || !newIp.trim()) return;
+    const ip = newIp.trim();
+    if (!data.maintenance.allowedIps.includes(ip)) {
+      data.maintenance.allowedIps = [...data.maintenance.allowedIps, ip];
+    }
+    newIp = '';
+  }
+
+  function removeIp(ip: string) {
+    if (!data) return;
+    data.maintenance.allowedIps = data.maintenance.allowedIps.filter((i) => i !== ip);
   }
 
   function togglePlatform(platform: 'ios' | 'android' | 'web') {
@@ -254,6 +271,80 @@
                     </button>
                   {/each}
                 </div>
+              </div>
+
+              <div class={flex({ flexDirection: 'column', gap: '8px' })}>
+                <span class={labelStyle}>ALLOWED IPS</span>
+                <div class={flex({ gap: '8px' })}>
+                  <input
+                    class={inputStyle}
+                    onkeydown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        addIp();
+                      }
+                    }}
+                    placeholder="0.0.0.0"
+                    type="text"
+                    bind:value={newIp}
+                  />
+                  <button
+                    class={css({
+                      paddingX: '16px',
+                      paddingY: '8px',
+                      borderWidth: '2px',
+                      borderColor: 'amber.500',
+                      backgroundColor: 'amber.500',
+                      color: 'gray.900',
+                      fontSize: '13px',
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap',
+                      _hover: {
+                        backgroundColor: 'amber.400',
+                        borderColor: 'amber.400',
+                      },
+                    })}
+                    onclick={addIp}
+                    type="button"
+                  >
+                    ADD
+                  </button>
+                </div>
+
+                {#if data.maintenance.allowedIps.length === 0}
+                  <div class={css({ fontSize: '12px', color: 'amber.700' })}>NO ALLOWED IPS</div>
+                {:else}
+                  <div class={flex({ flexDirection: 'column', gap: '4px' })}>
+                    {#each data.maintenance.allowedIps as ip (ip)}
+                      <div
+                        class={flex({
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          paddingX: '12px',
+                          paddingY: '8px',
+                          borderWidth: '1px',
+                          borderColor: 'amber.700',
+                        })}
+                      >
+                        <span class={css({ fontSize: '13px', color: 'amber.500' })}>{ip}</span>
+                        <button
+                          class={css({
+                            backgroundColor: 'transparent',
+                            border: 'none',
+                            color: 'red.500',
+                            fontSize: '12px',
+                            cursor: 'pointer',
+                            _hover: { color: 'red.400' },
+                          })}
+                          onclick={() => removeIp(ip)}
+                          type="button"
+                        >
+                          REMOVE
+                        </button>
+                      </div>
+                    {/each}
+                  </div>
+                {/if}
               </div>
             </div>
           </div>
