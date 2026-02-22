@@ -1,4 +1,5 @@
 import dayjs from 'dayjs';
+import dedent from 'dedent';
 import { and, asc, count, desc, eq, gt, gte, inArray, isNull, lt, sum } from 'drizzle-orm';
 import { filter, pipe, Repeater } from 'graphql-yoga';
 import { LoroDoc, VersionVector } from 'loro-crdt';
@@ -1401,10 +1402,12 @@ builder.mutationFields((t) => ({
         channel: '#cs',
         username: '타이피 신고 알림',
         iconEmoji: ':rotating_light:',
-        message: `${document.title} (${document.id}) 문서 신고
-        신고자: ${user.name}(${user.id}, ${user.email})
-        이유: ${input.reason}
-        ${env.USERSITE_URL.replace('*.', '')}/${document.permalink}`,
+        message: dedent`
+          *${document.title}* (${document.id}) 문서 신고
+          > *신고자:* ${user.name} (${user.id}, ${user.email})
+          > *이유:* ${input.reason}
+          ${env.USERSITE_URL.replace('*.', '')}/${document.permalink}
+        `,
       });
 
       return true;
