@@ -81,19 +81,51 @@
         보관된 블록
       </h2>
 
-      <pre
+      <div
         class={css({
-          fontSize: '13px',
-          fontFamily: 'mono',
-          color: 'text.subtle',
-          whiteSpace: 'pre-wrap',
-          wordBreak: 'break-all',
           maxHeight: '400px',
           overflowY: 'auto',
           padding: '12px',
           borderRadius: '6px',
           backgroundColor: 'surface.subtle',
-        })}>{asset.content}</pre>
+          '& pre': {
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-all',
+            padding: '12px',
+            borderRadius: '6px',
+            backgroundColor: 'surface.muted',
+            fontSize: '13px',
+            fontFamily: 'mono',
+            color: 'text.subtle',
+          },
+          '& pre code': {
+            fontFamily: '[inherit]',
+            fontSize: '[inherit]',
+          },
+          '& p': {
+            marginY: '0',
+          },
+          '& table': {
+            width: 'full',
+            borderCollapse: 'collapse',
+          },
+          '& td': {
+            border: '1px solid',
+            borderColor: 'border.default',
+            padding: '8px',
+          },
+          '& img': {
+            maxWidth: 'full',
+          },
+          '& a': {
+            color: 'accent.brand.default',
+            textDecoration: 'underline',
+          },
+        })}
+      >
+        <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+        {@html asset.content}
+      </div>
 
       <div class={flex({ justifyContent: 'flex-end', marginTop: '16px' })}>
         <Button

@@ -1,10 +1,8 @@
 import { faker } from '@faker-js/faker';
-import { Node } from '@tiptap/pm/model';
 import { eq } from 'drizzle-orm';
 import { DEFAULT_FONT_FAMILIES, defaultValues } from '@/const';
 import { createDbId, db, FontFamilies, Fonts, TableCode } from '@/db';
 import { PostLayoutMode } from '@/enums';
-import { schema } from '@/pm';
 import type { JSONContent } from '@tiptap/core';
 import type { Dayjs } from 'dayjs';
 import type { PageLayout } from '@/db/schemas/json';
@@ -312,6 +310,164 @@ function extractTextContent(node: JSONContent): string {
   return (node.content ?? []).map(extractTextContent).join('');
 }
 
+function escapeHtml(text: string): string {
+  return text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
+}
+
+function wrapWithMarks(html: string, marks?: JSONContent['marks']): string {
+  if (!marks || marks.length === 0) return html;
+
+  let result = html;
+  for (const mark of marks) {
+    switch (mark.type) {
+      case 'bold': {
+        result = `<strong>${result}</strong>`;
+        break;
+      }
+      case 'italic': {
+        result = `<em>${result}</em>`;
+        break;
+      }
+      case 'strike': {
+        result = `<del>${result}</del>`;
+        break;
+      }
+      case 'underline': {
+        result = `<u>${result}</u>`;
+        break;
+      }
+      case 'link': {
+        result = `<a href="${escapeHtml(mark.attrs?.href ?? '')}">${result}</a>`;
+        break;
+      }
+      case 'ruby': {
+        result = `<ruby>${result}<rp>(</rp><rt>${escapeHtml(mark.attrs?.text ?? '')}</rt><rp>)</rp></ruby>`;
+        break;
+      }
+      case 'text_style': {
+        const styles: string[] = [];
+        if (mark.attrs?.textColor) styles.push(`color:${mark.attrs.textColor}`);
+        if (mark.attrs?.textBackgroundColor) styles.push(`background-color:${mark.attrs.textBackgroundColor}`);
+        if (mark.attrs?.fontFamily) styles.push(`font-family:${mark.attrs.fontFamily}`);
+        if (mark.attrs?.fontSize) styles.push(`font-size:${mark.attrs.fontSize}px`);
+        if (mark.attrs?.fontWeight) styles.push(`font-weight:${mark.attrs.fontWeight}`);
+        if (styles.length > 0) result = `<span style="${styles.join(';')}">${result}</span>`;
+        break;
+      }
+    }
+  }
+  return result;
+}
+
+function nodeAttrs(node: JSONContent): string {
+  let attrs = ` data-node-type="${escapeHtml(node.type ?? '')}"`;
+  if (node.attrs?.nodeId) attrs += ` data-node-id="${escapeHtml(String(node.attrs.nodeId))}"`;
+  return attrs;
+}
+
+function jsonContentToHtml(node: JSONContent): string {
+  const children = (node.content ?? []).map(jsonContentToHtml).join('');
+  const da = nodeAttrs(node);
+
+  switch (node.type) {
+    case 'text': {
+      return wrapWithMarks(escapeHtml(node.text ?? ''), node.marks);
+    }
+    case 'paragraph': {
+      const pStyles: string[] = [];
+      if (node.attrs?.textAlign && node.attrs.textAlign !== 'left') pStyles.push(`text-align:${node.attrs.textAlign}`);
+      if (node.attrs?.lineHeight && node.attrs.lineHeight !== 1.6) pStyles.push(`line-height:${node.attrs.lineHeight}`);
+      if (node.attrs?.letterSpacing && node.attrs.letterSpacing !== 0) pStyles.push(`letter-spacing:${node.attrs.letterSpacing}em`);
+      const pStyleAttr = pStyles.length > 0 ? ` style="${pStyles.join(';')}"` : '';
+      return `<p${da}${pStyleAttr}>${children}</p>`;
+    }
+    case 'hard_break': {
+      return `<br${da}>`;
+    }
+    case 'bullet_list': {
+      return `<ul${da}>${children}</ul>`;
+    }
+    case 'ordered_list': {
+      const olStart = node.attrs?.start;
+      const olStartAttr = olStart && olStart !== 1 ? ` start="${olStart}"` : '';
+      return `<ol${da}${olStartAttr}>${children}</ol>`;
+    }
+    case 'list_item': {
+      return `<li${da}>${children}</li>`;
+    }
+    case 'blockquote': {
+      return `<blockquote${da} data-type="${escapeHtml(String(node.attrs?.type ?? 'left-line'))}">${children}</blockquote>`;
+    }
+    case 'callout': {
+      return `<div${da} data-type="${escapeHtml(String(node.attrs?.type ?? 'info'))}">${children}</div>`;
+    }
+    case 'code_block': {
+      return `<pre${da}><code data-lang="${escapeHtml(String(node.attrs?.language ?? 'text'))}">${children}</code></pre>`;
+    }
+    case 'html_block': {
+      return `<pre${da}>${children}</pre>`;
+    }
+    case 'image': {
+      const imgAttrs: string[] = [];
+      if (node.attrs?.id) imgAttrs.push(`data-id="${escapeHtml(String(node.attrs.id))}"`);
+      if (node.attrs?.url) imgAttrs.push(`src="${escapeHtml(String(node.attrs.url))}"`);
+      if (node.attrs?.ratio) imgAttrs.push(`data-ratio="${escapeHtml(String(node.attrs.ratio))}"`);
+      if (node.attrs?.proportion) imgAttrs.push(`data-proportion="${escapeHtml(String(node.attrs.proportion))}"`);
+      if (node.attrs?.placeholder) imgAttrs.push(`data-placeholder="${escapeHtml(String(node.attrs.placeholder))}"`);
+      if (node.attrs?.size) imgAttrs.push(`data-size="${escapeHtml(String(node.attrs.size))}"`);
+      return `<img${da} ${imgAttrs.join(' ')}>`;
+    }
+    case 'file': {
+      const fileUrl = escapeHtml(String(node.attrs?.url ?? ''));
+      const fileName = escapeHtml(String(node.attrs?.name ?? ''));
+      const fileAttrs: string[] = [];
+      if (node.attrs?.id) fileAttrs.push(`data-id="${escapeHtml(String(node.attrs.id))}"`);
+      if (node.attrs?.size) fileAttrs.push(`data-size="${escapeHtml(String(node.attrs.size))}"`);
+      return `<a${da} href="${fileUrl}" ${fileAttrs.join(' ')}>${fileName}</a>`;
+    }
+    case 'embed': {
+      const embedUrl = escapeHtml(String(node.attrs?.url ?? ''));
+      const embedTitle = escapeHtml(String(node.attrs?.title ?? node.attrs?.url ?? ''));
+      const embedAttrs: string[] = [];
+      if (node.attrs?.id) embedAttrs.push(`data-id="${escapeHtml(String(node.attrs.id))}"`);
+      if (node.attrs?.description) embedAttrs.push(`data-description="${escapeHtml(String(node.attrs.description))}"`);
+      if (node.attrs?.thumbnailUrl) embedAttrs.push(`data-thumbnail-url="${escapeHtml(String(node.attrs.thumbnailUrl))}"`);
+      if (node.attrs?.html) embedAttrs.push(`data-html="${escapeHtml(String(node.attrs.html))}"`);
+      if (node.attrs?.proportion) embedAttrs.push(`data-proportion="${escapeHtml(String(node.attrs.proportion))}"`);
+      return `<a${da} href="${embedUrl}" ${embedAttrs.join(' ')}>${embedTitle}</a>`;
+    }
+    case 'table': {
+      const tableAttrs: string[] = [];
+      if (node.attrs?.borderStyle && node.attrs.borderStyle !== 'solid') {
+        tableAttrs.push(`data-border-style="${escapeHtml(String(node.attrs.borderStyle))}"`);
+      }
+      const tableAttrStr = tableAttrs.length > 0 ? ` ${tableAttrs.join(' ')}` : '';
+      return `<table${da}${tableAttrStr}>${children}</table>`;
+    }
+    case 'table_row': {
+      return `<tr${da}>${children}</tr>`;
+    }
+    case 'table_cell': {
+      const tdAttrs: string[] = [];
+      if (node.attrs?.colspan && node.attrs.colspan !== 1) tdAttrs.push(`colspan="${node.attrs.colspan}"`);
+      if (node.attrs?.rowspan && node.attrs.rowspan !== 1) tdAttrs.push(`rowspan="${node.attrs.rowspan}"`);
+      if (node.attrs?.colwidth) tdAttrs.push(`data-colwidth="${escapeHtml(String(node.attrs.colwidth))}"`);
+      const tdAttrStr = tdAttrs.length > 0 ? ` ${tdAttrs.join(' ')}` : '';
+      return `<td${da}${tdAttrStr}>${children}</td>`;
+    }
+    case 'horizontal_rule': {
+      return `<hr${da} data-type="${escapeHtml(String(node.attrs?.type ?? 'light-line'))}">`;
+    }
+    case 'fold': {
+      const foldOpen = node.attrs?.open === false ? '' : ' open';
+      return `<details${da}${foldOpen}><summary>${escapeHtml(String(node.attrs?.title ?? ''))}</summary>${children}</details>`;
+    }
+    default: {
+      return children;
+    }
+  }
+}
+
 async function convertNode(
   pmNode: JSONContent,
   parentId: string,
@@ -462,13 +618,50 @@ async function convertNode(
     }
 
     case 'list_item': {
-      const children: string[] = [];
+      const paragraphIds: string[] = [];
+      const otherIds: string[] = [];
+
       if (pmNode.content) {
         for (const child of pmNode.content) {
           const childId = await convertNode(child, nodeId, nodes, archivedNodes, contentWidth, nodeIdMap);
-          if (childId) children.push(childId);
+          if (childId) {
+            if (nodes[childId].type === 'paragraph') {
+              paragraphIds.push(childId);
+            } else {
+              otherIds.push(childId);
+            }
+          }
         }
       }
+
+      if (paragraphIds.length > 1) {
+        const firstId = paragraphIds[0];
+        const firstNode = nodes[firstId];
+        for (let i = 1; i < paragraphIds.length; i++) {
+          const extraId = paragraphIds[i];
+          const extraNode = nodes[extraId];
+
+          if (extraNode.children.length > 0) {
+            const hardBreakId = generateNodeId();
+            nodes[hardBreakId] = {
+              type: 'hard_break',
+              children: [],
+              parent: firstId,
+            };
+            firstNode.children.push(hardBreakId);
+
+            for (const inlineId of extraNode.children) {
+              nodes[inlineId].parent = firstId;
+              firstNode.children.push(inlineId);
+            }
+          }
+
+          // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+          delete nodes[extraId];
+        }
+      }
+
+      const children = paragraphIds.length > 0 ? [paragraphIds[0], ...otherIds] : otherIds;
 
       nodes[nodeId] = {
         type: 'list_item',
@@ -609,8 +802,21 @@ async function convertNode(
       const children: string[] = [];
       if (pmNode.content) {
         for (const child of pmNode.content) {
-          const childId = await convertNode(child, nodeId, nodes, archivedNodes, contentWidth, nodeIdMap);
-          if (childId) children.push(childId);
+          if (child.type === 'table') {
+            const archivedId = createDbId(TableCode.DOCUMENT_ARCHIVED_NODES);
+            archivedNodes.push({ id: archivedId, content: jsonContentToHtml(child) });
+            const nestedId = generateNodeId();
+            nodes[nestedId] = {
+              type: 'archived',
+              id: archivedId,
+              children: [],
+              parent: nodeId,
+            };
+            children.push(nestedId);
+          } else {
+            const childId = await convertNode(child, nodeId, nodes, archivedNodes, contentWidth, nodeIdMap);
+            if (childId) children.push(childId);
+          }
         }
       }
 
@@ -648,12 +854,7 @@ async function convertNode(
     }
 
     case 'page_break': {
-      nodes[nodeId] = {
-        type: 'page_break',
-        children: [],
-        parent: parentId,
-      };
-      return nodeId;
+      return null;
     }
 
     case 'fold': {
@@ -702,10 +903,8 @@ async function convertNode(
     }
 
     case 'code_block': {
-      const textContent = (pmNode.content ?? []).map((c) => c.text ?? '').join('');
-
       const archivedId = createDbId(TableCode.DOCUMENT_ARCHIVED_NODES);
-      archivedNodes.push({ id: archivedId, content: textContent });
+      archivedNodes.push({ id: archivedId, content: jsonContentToHtml(pmNode) });
 
       nodes[nodeId] = {
         type: 'archived',
@@ -717,10 +916,8 @@ async function convertNode(
     }
 
     case 'html_block': {
-      const textContent = (pmNode.content ?? []).map((c) => c.text ?? '').join('');
-
       const archivedId = createDbId(TableCode.DOCUMENT_ARCHIVED_NODES);
-      archivedNodes.push({ id: archivedId, content: textContent });
+      archivedNodes.push({ id: archivedId, content: jsonContentToHtml(pmNode) });
 
       nodes[nodeId] = {
         type: 'archived',
@@ -732,11 +929,8 @@ async function convertNode(
     }
 
     case 'paywall': {
-      const pmNodeModel = Node.fromJSON(schema, pmNode);
-      const textContent = pmNodeModel.textContent;
-
       const archivedId = createDbId(TableCode.DOCUMENT_ARCHIVED_NODES);
-      archivedNodes.push({ id: archivedId, content: textContent });
+      archivedNodes.push({ id: archivedId, content: jsonContentToHtml(pmNode) });
 
       nodes[nodeId] = {
         type: 'archived',
@@ -799,20 +993,35 @@ export async function convertPostToDocumentJson(
   const blocks = bodyNode?.content ?? [];
 
   for (const block of blocks) {
+    if (block.type === 'page_break') {
+      const lastParagraphId = [...rootChildren].toReversed().find((id) => nodes[id]?.type === 'paragraph');
+      if (lastParagraphId) {
+        const pageBreakId = generateNodeId();
+        nodes[pageBreakId] = {
+          type: 'page_break',
+          children: [],
+          parent: lastParagraphId,
+        };
+        nodes[lastParagraphId].children.push(pageBreakId);
+      }
+      continue;
+    }
+
     const childId = await convertNode(block, ROOT_ID, nodes, archivedNodes, contentWidth, nodeIdMap);
     if (childId) rootChildren.push(childId);
   }
 
-  if (rootChildren.length === 0) {
-    const emptyParagraphId = generateNodeId();
-    nodes[emptyParagraphId] = {
+  const lastRootChildId = rootChildren.at(-1);
+  if (!lastRootChildId || nodes[lastRootChildId]?.type !== 'paragraph') {
+    const trailingParagraphId = generateNodeId();
+    nodes[trailingParagraphId] = {
       type: 'paragraph',
       align: 'left',
       line_height: 160,
       children: [],
       parent: ROOT_ID,
     };
-    rootChildren.push(emptyParagraphId);
+    rootChildren.push(trailingParagraphId);
   }
 
   nodes[ROOT_ID] = {
