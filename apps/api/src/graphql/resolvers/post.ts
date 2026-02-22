@@ -53,7 +53,20 @@ import { compressZstd, decompressZstd } from '@/utils/compression';
 import { assertSitePermission } from '@/utils/permission';
 import { assertPlanRule } from '@/utils/plan';
 import { builder } from '../builder';
-import { CharacterCountChange, Entity, EntityView, Image, IPost, isTypeOf, Post, PostReaction, PostSnapshot, PostView } from '../objects';
+import {
+  CharacterCountChange,
+  Document,
+  DocumentView,
+  Entity,
+  EntityView,
+  Image,
+  IPost,
+  isTypeOf,
+  Post,
+  PostReaction,
+  PostSnapshot,
+  PostView,
+} from '../objects';
 import type { Context } from '@/context';
 
 /**
@@ -168,6 +181,8 @@ Post.implement({
     view: t.expose('id', { type: PostView }),
 
     password: t.exposeString('password', { nullable: true }),
+
+    document: t.expose('documentId', { type: Document, nullable: true }),
 
     update: t.field({
       type: 'Binary',
@@ -349,6 +364,8 @@ PostView.implement({
   interfaces: [IPost],
   fields: (t) => ({
     hasPassword: t.boolean({ resolve: (self) => !!self.password }),
+
+    document: t.expose('documentId', { type: DocumentView, nullable: true }),
 
     excerpt: t.string({
       resolve: async (self, _, ctx) => {

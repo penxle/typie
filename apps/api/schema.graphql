@@ -884,6 +884,7 @@ type Post implements IPost {
   contentRating: PostContentRating!
   coverImage: Image
   createdAt: DateTime!
+  document: Document
   entity: Entity!
   excerpt: String!
   id: ID!
@@ -964,6 +965,7 @@ type PostView implements IPost {
   contentRating: PostContentRating!
   coverImage: Image
   createdAt: DateTime!
+  document: DocumentView
   entity: EntityView!
   excerpt: String!
   hasPassword: Boolean!
