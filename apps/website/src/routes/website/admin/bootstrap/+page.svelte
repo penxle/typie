@@ -12,7 +12,7 @@
       title: string;
       message: string;
       until: string | null;
-      platforms: ('ios' | 'android' | 'web')[];
+      platforms: ('ios' | 'android' | 'web' | 'api')[];
       allowedIps: string[];
     };
     minVersion: {
@@ -81,7 +81,7 @@
     data.maintenance.allowedIps = data.maintenance.allowedIps.filter((i) => i !== ip);
   }
 
-  function togglePlatform(platform: 'ios' | 'android' | 'web') {
+  function togglePlatform(platform: 'ios' | 'android' | 'web' | 'api') {
     if (!data) return;
     const platforms = data.maintenance.platforms;
     const index = platforms.indexOf(platform);
@@ -242,7 +242,7 @@
               <div class={flex({ flexDirection: 'column', gap: '8px' })}>
                 <span class={labelStyle}>PLATFORMS</span>
                 <div class={flex({ gap: '16px' })}>
-                  {#each ['ios', 'android', 'web'] as platform (platform)}
+                  {#each ['ios', 'android', 'web', 'api'] as platform (platform)}
                     <button
                       class={css({
                         display: 'flex',
@@ -253,7 +253,7 @@
                         border: 'none',
                         padding: '0',
                       })}
-                      onclick={() => togglePlatform(platform as 'ios' | 'android' | 'web')}
+                      onclick={() => togglePlatform(platform as 'ios' | 'android' | 'web' | 'api')}
                       type="button"
                     >
                       <div
@@ -262,7 +262,7 @@
                           height: '16px',
                           borderWidth: '2px',
                           borderColor: 'amber.500',
-                          backgroundColor: data.maintenance.platforms.includes(platform as 'ios' | 'android' | 'web')
+                          backgroundColor: data.maintenance.platforms.includes(platform as 'ios' | 'android' | 'web' | 'api')
                             ? 'amber.500'
                             : 'transparent',
                         })}
