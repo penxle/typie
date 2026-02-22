@@ -1441,8 +1441,10 @@ macro_rules! __fragment_create_node_with_id {
 
     ($nodes:ident, $id:expr, $parent:expr, text, [], [$first:literal => [$($first_styles:tt)*] $(, $($rest_segments:tt)*)?]) => {
         {
+            #[allow(unused_mut)]
             let mut text = $crate::model::Text::new();
             let mut pending_styles: Vec<(usize, usize, $crate::model::Style)> = Vec::new();
+            #[allow(unused_mut)]
             let mut pending_annotations: Vec<(usize, usize, $crate::model::Annotation)> = Vec::new();
             __parse_text_segments_with_pending!(text, pending_styles, pending_annotations, $first => [$($first_styles)*] $(, $($rest_segments)*)?);
 
