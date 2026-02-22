@@ -19,7 +19,7 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 
 #[cfg(target_os = "android")]
-use jni::JNIEnv;
+use jni::EnvUnowned;
 #[cfg(target_os = "android")]
 use jni::objects::{JByteBuffer, JClass};
 #[cfg(target_os = "android")]
@@ -1024,14 +1024,19 @@ pub extern "C" fn editor_get_clipboard_data(editor: *mut EditorHandle) -> *mut c
 #[cfg(target_os = "android")]
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_co_typie_editortexture_EditorTexture_nativeGetDirectBufferAddress(
-    env: JNIEnv,
+    mut env: EnvUnowned,
     _class: JClass,
     buffer: JByteBuffer,
 ) -> jlong {
-    if let Ok(ptr) = env.get_direct_buffer_address(&buffer) {
-        ptr as jlong
-    } else {
-        0
+    match env
+        .with_env(|env| -> jni::errors::Result<_> {
+            let ptr = env.get_direct_buffer_address(&buffer)?;
+            Ok(ptr as jlong)
+        })
+        .into_outcome()
+    {
+        jni::Outcome::Ok(v) => v,
+        _ => 0,
     }
 }
 
@@ -1356,7 +1361,7 @@ pub extern "C" fn editor_insert_template_fragment(
 #[cfg(target_os = "android")]
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_co_typie_editortexture_EditorTexture_nativeRenderPageTo(
-    _env: JNIEnv,
+    _env: EnvUnowned,
     _class: JClass,
     editor_ptr: jlong,
     page_index: jlong,
