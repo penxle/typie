@@ -117,6 +117,7 @@ class EditorTextInputView: UIView, UITextInput {
   private var _isDeactivating: Bool = false
   private var _shadowText: String = ""
   private var _precedingCharWidths: [Double] = []
+  private static weak var _activeInputView: EditorTextInputView?
 
   private var cursorX: Double = 0
   private var cursorY: Double = 0
@@ -131,6 +132,9 @@ class EditorTextInputView: UIView, UITextInput {
   }
 
   deinit {
+    if Self._activeInputView === self {
+      Self._activeInputView = nil
+    }
     _keyRepeatTimer?.invalidate()
   }
 
@@ -144,7 +148,29 @@ class EditorTextInputView: UIView, UITextInput {
 
   func activate() {
     DispatchQueue.main.async { [weak self] in
-      self?.becomeFirstResponder()
+      guard let self = self else { return }
+
+      if let active = Self._activeInputView, active !== self {
+        active._isDeactivating = true
+        _ = active.resignFirstResponder()
+        active._isDeactivating = false
+      }
+
+      if self.window?.isKeyWindow == false {
+        self.window?.makeKey()
+      }
+
+      if self.becomeFirstResponder() {
+        Self._activeInputView = self
+        return
+      }
+      
+      DispatchQueue.main.async { [weak self] in
+        guard let self = self else { return }
+        if self.becomeFirstResponder() {
+          Self._activeInputView = self
+        }
+      }
     }
   }
 
@@ -159,8 +185,13 @@ class EditorTextInputView: UIView, UITextInput {
   @discardableResult
   override func resignFirstResponder() -> Bool {
     let result = super.resignFirstResponder()
-    if result && !_isDeactivating {
-      onFocusLost?()
+    if result {
+      if Self._activeInputView === self {
+        Self._activeInputView = nil
+      }
+      if !_isDeactivating {
+        onFocusLost?()
+      }
     }
     return result
   }
