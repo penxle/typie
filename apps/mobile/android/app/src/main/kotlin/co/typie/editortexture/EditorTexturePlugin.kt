@@ -106,7 +106,6 @@ class EditorTexture(
   private var currentWidth = initialWidth
   private var currentHeight = initialHeight
   private val bufferLock = ReentrantLock()
-  private var acquiredImage: android.media.Image? = null
 
   init {
     createPipeline(initialWidth, initialHeight)
@@ -114,12 +113,10 @@ class EditorTexture(
 
   private fun createPipeline(width: Int, height: Int) {
     imageWriter?.close()
-    acquiredImage?.close()
-    acquiredImage = null
     imageReader?.close()
 
     val reader = ImageReader.newInstance(
-      width, height, PixelFormat.RGBA_8888, 2,
+      width, height, PixelFormat.RGBA_8888, 3,
       HardwareBuffer.USAGE_CPU_WRITE_OFTEN or HardwareBuffer.USAGE_GPU_SAMPLED_IMAGE
     )
     val writer = ImageWriter.newInstance(reader.surface, 2)
@@ -141,9 +138,6 @@ class EditorTexture(
       val writer = imageWriter ?: return false
       val reader = imageReader ?: return false
 
-      acquiredImage?.close()
-      acquiredImage = null
-
       val inputImage = try {
         writer.dequeueInputImage()
       } catch (_: IllegalStateException) {
@@ -164,7 +158,6 @@ class EditorTexture(
 
       val outputImage = reader.acquireLatestImage() ?: return false
       entry.pushImage(outputImage)
-      acquiredImage = outputImage
 
       return result == 0L
     } finally {
@@ -175,13 +168,11 @@ class EditorTexture(
   fun dispose() {
     bufferLock.lock()
     try {
+      entry.release()
       imageWriter?.close()
       imageWriter = null
-      acquiredImage?.close()
-      acquiredImage = null
       imageReader?.close()
       imageReader = null
-      entry.release()
     } finally {
       bufferLock.unlock()
     }
