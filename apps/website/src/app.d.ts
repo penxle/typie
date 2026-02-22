@@ -18,6 +18,11 @@ declare global {
       message: string;
       code?: string;
       eventId?: string;
+      maintenance?: {
+        title: string;
+        message: string;
+        until: string | null;
+      };
     }
 
     interface PageState {
