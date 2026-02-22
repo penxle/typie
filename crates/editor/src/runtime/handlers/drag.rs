@@ -105,6 +105,7 @@ impl Runtime {
         } else if let Some(text) = text {
             let fragment = html
                 .and_then(|h| Fragment::from_html(&h).ok())
+                .filter(|f| !f.is_empty())
                 .unwrap_or_else(|| Fragment::from_text(&text, &[]));
             self.transact(move |tr| tr.drop_external(drop_position, fragment))
         } else {
@@ -1802,6 +1803,38 @@ mod tests {
                 }
             }
             selection { (n, 0) -> (n, 4) }
+        };
+
+        assert_state_eq!(rt.state(), expected);
+    }
+
+    #[test]
+    fn external_drop_uses_plain_text_when_html_is_empty() {
+        let mut p = id!();
+        let mut n = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph { text { "existing" } }
+            }
+            selection { (p, 0) }
+        };
+        rt.layout();
+
+        drag_and_drop_external(
+            &mut rt,
+            Position::new(NodeId::ROOT, 1, Affinity::default()),
+            Some("fallback".to_string()),
+            Some("".to_string()),
+        );
+
+        let expected = state! {
+            doc {
+                paragraph { text { "existing" } }
+                @n paragraph { text { "fallback" } }
+            }
+            selection { (n, 0) -> (n, 8) }
         };
 
         assert_state_eq!(rt.state(), expected);
