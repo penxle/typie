@@ -10,7 +10,13 @@ impl Transaction {
         }
 
         let mut changed = false;
-        let lines: Vec<&str> = s.split('\n').collect();
+        let normalized = s
+            .replace("\r\n", "\n")
+            .replace('\r', "\n")
+            .replace('\u{2028}', "\n") // Line Separator
+            .replace('\u{2029}', "\n") // Paragraph Separator
+            .replace('\u{0085}', "\n"); // Next Line (NEL)
+        let lines: Vec<&str> = normalized.split('\n').collect();
 
         for (i, line) in lines.iter().enumerate() {
             if i > 0 {
@@ -132,6 +138,91 @@ mod tests {
 
         assert_state_eq!(actual, expected);
     }
+
+    #[test]
+    fn paste_text_normalizes_crlf_line_endings() {
+        let mut p = id!();
+
+        let initial = state! {
+            doc {
+                @p paragraph {}
+            }
+            selection { (p, 0) }
+        };
+
+        let actual = transact!(initial, |tr| tr.paste_text("A\r\nB".to_string()).unwrap());
+
+        let expected = state! {
+            doc {
+                paragraph {
+                    text { "A" }
+                }
+                @p paragraph {
+                    text { "B" }
+                }
+            }
+            selection { (p, 1, Affinity::Upstream) }
+        };
+
+        assert_state_eq!(actual, expected);
+    }
+
+    #[test]
+    fn paste_text_normalizes_cr_only_line_endings() {
+        let mut p = id!();
+
+        let initial = state! {
+            doc {
+                @p paragraph {}
+            }
+            selection { (p, 0) }
+        };
+
+        let actual = transact!(initial, |tr| tr.paste_text("A\rB".to_string()).unwrap());
+
+        let expected = state! {
+            doc {
+                paragraph {
+                    text { "A" }
+                }
+                @p paragraph {
+                    text { "B" }
+                }
+            }
+            selection { (p, 1, Affinity::Upstream) }
+        };
+
+        assert_state_eq!(actual, expected);
+    }
+
+    #[test]
+    fn paste_text_normalizes_unicode_line_separators() {
+        let mut p = id!();
+
+        let initial = state! {
+            doc {
+                @p paragraph {}
+            }
+            selection { (p, 0) }
+        };
+
+        let actual = transact!(initial, |tr| tr
+            .paste_text("A\u{2028}B\u{2029}C\u{0085}D".to_string())
+            .unwrap());
+
+        let expected = state! {
+            doc {
+                paragraph { text { "A" } }
+                paragraph { text { "B" } }
+                paragraph { text { "C" } }
+                @p paragraph { text { "D" } }
+            }
+            selection { (p, 1, Affinity::Upstream) }
+        };
+
+        assert_state_eq!(actual, expected);
+    }
+
     #[test]
     fn paste_text_middle_of_paragraph_splits_correctly() {
         let mut p = id!();
