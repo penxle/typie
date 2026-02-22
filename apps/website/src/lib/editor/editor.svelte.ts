@@ -736,7 +736,7 @@ export class Editor {
 
     if (e.target.closest('[data-pointer-capture]')) return;
 
-    if (this.readOnly && e.pointerType === 'touch') return;
+    const isReadOnlyTouch = this.readOnly && e.pointerType === 'touch';
 
     const resolved = this.#resolvePointerCoordinate(e, e.target);
     if (!resolved) {
@@ -752,13 +752,13 @@ export class Editor {
     this.isDraggable = !this.readOnly && this.isSelectionHit(pageIdx, relX, relY);
 
     if (e.button === 0) {
-      if (!this.isDraggable) {
+      if (!this.isDraggable && !isReadOnlyTouch) {
         e.target.setPointerCapture(e.pointerId);
       }
       this.pointer.isPressed = true;
     }
 
-    const count = e.button === 0 ? this.#getClickCount(e.clientX, e.clientY, e.timeStamp) : 1;
+    const count = e.button === 0 && !isReadOnlyTouch ? this.#getClickCount(e.clientX, e.clientY, e.timeStamp) : 1;
 
     this.dispatch({
       type: 'pointerDown',
@@ -821,8 +821,6 @@ export class Editor {
 
   handlePointerUp(e: PointerEvent): void {
     this.isDraggable = false;
-
-    if (this.readOnly && e.pointerType === 'touch') return;
 
     if (!(e.target instanceof HTMLElement)) return;
 
