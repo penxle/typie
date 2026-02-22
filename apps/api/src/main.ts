@@ -5,7 +5,7 @@ import { getClientAddress, logger } from '@typie/lib';
 import { websocket } from 'hono/bun';
 import { HTTPException } from 'hono/http-exception';
 import { app } from '@/app';
-import { assertBootstrap } from '@/bootstrap';
+import { checkBootstrap } from '@/bootstrap';
 import { deriveContext } from '@/context';
 import { env } from '@/env';
 import { graphql } from '@/graphql';
@@ -18,9 +18,10 @@ app.use('*', async (c, next) => {
     return next();
   }
 
-  const clientIp = getClientAddress(c);
-  const bypassKeyHash = c.req.header('X-Bootstrap-Bypass');
-  await assertBootstrap(clientIp, bypassKeyHash);
+  const { maintenance } = await checkBootstrap(getClientAddress(c), c.req.header('X-Bootstrap-Bypass'));
+  if (maintenance) {
+    return c.json({ code: 'maintenance' as const, ...maintenance }, 503);
+  }
 
   return next();
 });

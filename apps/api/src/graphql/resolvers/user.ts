@@ -938,7 +938,11 @@ builder.mutationFields((t) => ({
     resolve: async (_, __, ctx) => {
       const token = nanoid(64);
 
-      await redis.setex(`user:ws:${token}`, 60 * 10, JSON.stringify({ userId: ctx.session.userId }));
+      await redis.setex(
+        `user:ws:${token}`,
+        60 * 10,
+        JSON.stringify({ userId: ctx.session.userId, bootstrapBypassKeyHash: ctx.c.req.header('X-Bootstrap-Bypass') }),
+      );
 
       return token;
     },

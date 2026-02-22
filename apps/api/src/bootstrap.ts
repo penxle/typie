@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto';
 import { GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
-import { HTTPException } from 'hono/http-exception';
 import { env, stack } from '@/env';
 import { s3 } from '@/external/aws';
 import { bootstrapSchema } from '@/validation';
@@ -74,7 +73,15 @@ export async function getBootstrap(): Promise<Bootstrap | null> {
   return fetching;
 }
 
-export async function assertBootstrap(clientIp: string, bypassKeyHash?: string) {
+type BootstrapCheckResult = {
+  maintenance?: {
+    title: string;
+    message: string;
+    until: string | null;
+  };
+};
+
+export async function checkBootstrap(clientIp: string, bootstrapBypassKeyHash?: string): Promise<BootstrapCheckResult> {
   const bootstrap = await getBootstrap();
 
   if (
@@ -84,21 +91,19 @@ export async function assertBootstrap(clientIp: string, bypassKeyHash?: string) 
   ) {
     if (env.BOOTSTRAP_BYPASS_KEY) {
       const expectedHash = createHash('sha256').update(env.BOOTSTRAP_BYPASS_KEY).digest('hex');
-      if (bypassKeyHash === expectedHash) {
-        return;
+      if (bootstrapBypassKeyHash === expectedHash) {
+        return {};
       }
     }
 
-    throw new HTTPException(503, {
-      res: Response.json(
-        {
-          code: 'maintenance',
-          title: bootstrap.maintenance.title,
-          message: bootstrap.maintenance.message,
-          until: bootstrap.maintenance.until,
-        },
-        { status: 503 },
-      ),
-    });
+    return {
+      maintenance: {
+        title: bootstrap.maintenance.title,
+        message: bootstrap.maintenance.message,
+        until: bootstrap.maintenance.until,
+      },
+    };
   }
+
+  return {};
 }
