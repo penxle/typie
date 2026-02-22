@@ -163,7 +163,17 @@ class AiFeedbackSheet extends HookWidget {
     void onFeedbackTap(Map<String, dynamic> feedback) {
       final id = feedback['id'] as String;
       activeFeedbackId.value = id;
-      controller.scrollIntoView();
+      final overlay = controller.state.aiFeedback.overlays.where((o) => o.id == id).firstOrNull;
+      if (overlay != null && overlay.bounds.isNotEmpty) {
+        controller.updateState(
+          (state) => state.copyWith(
+            aiFeedback: state.aiFeedback.copyWith(
+              scrollTarget: overlay.bounds.first,
+              scrollTargetPageIdx: overlay.pageIdx,
+            ),
+          ),
+        );
+      }
     }
 
     void onDismissFeedback(Map<String, dynamic> feedback) {

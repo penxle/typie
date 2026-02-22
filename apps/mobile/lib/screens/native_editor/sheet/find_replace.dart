@@ -2,11 +2,15 @@ import 'dart:async';
 
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/context/bottom_sheet.dart';
 import 'package:typie/context/theme.dart';
+import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/screens/native_editor/state/controller.dart';
+import 'package:typie/screens/native_editor/state/state.dart';
+import 'package:typie/services/keyboard.dart';
 import 'package:typie/widgets/tappable.dart';
 
 class FindReplaceSheet extends HookWidget {
@@ -16,6 +20,8 @@ class FindReplaceSheet extends HookWidget {
 
   @override
   Widget build(BuildContext context) {
+    final keyboard = useService<Keyboard>();
+
     final findTextController = useTextEditingController();
     final replaceTextController = useTextEditingController();
 
@@ -31,11 +37,88 @@ class FindReplaceSheet extends HookWidget {
 
     final searchMatches = useRef<List<Map<String, dynamic>>>([]);
     final activeIndex = useState(0);
+    final matchCount = useState(0);
+
+    final keyboardHeight = useState<double>(0);
+    useEffect(() {
+      Timer? heightDebounce;
+      final sub = keyboard.onHeightChange.listen((value) {
+        if (value >= keyboardHeight.value) {
+          heightDebounce?.cancel();
+          keyboardHeight.value = value;
+        } else {
+          heightDebounce?.cancel();
+          heightDebounce = Timer(const Duration(milliseconds: 150), () {
+            keyboardHeight.value = value;
+          });
+        }
+      });
+
+      return () {
+        heightDebounce?.cancel();
+        unawaited(sub.cancel());
+      };
+    }, []);
+
+    useEffect(() {
+      void ensureKeyboardVisible() {
+        if (findFocusNode.hasFocus || replaceFocusNode.hasFocus) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            SystemChannels.textInput.invokeMethod<void>('TextInput.show');
+          });
+        }
+      }
+
+      findFocusNode.addListener(ensureKeyboardVisible);
+      replaceFocusNode.addListener(ensureKeyboardVisible);
+      return () {
+        findFocusNode.removeListener(ensureKeyboardVisible);
+        replaceFocusNode.removeListener(ensureKeyboardVisible);
+      };
+    }, []);
+
+    void updateSearchActiveIndex(int index) {
+      controller.updateState(
+        (state) => state.copyWith(
+          search: state.search.copyWith(
+            currentIndex: index,
+            overlays: [
+              for (var i = 0; i < state.search.overlays.length; i++)
+                state.search.overlays[i].copyWith(isCurrent: i == index),
+            ],
+          ),
+        ),
+      );
+    }
+
+    void scrollToSearchMatch(int index) {
+      final overlays = controller.state.search.overlays;
+      if (index >= 0 && index < overlays.length) {
+        final overlay = overlays[index];
+        if (overlay.bounds.isNotEmpty) {
+          final bound = overlay.bounds.first;
+          controller.updateState(
+            (state) => state.copyWith(
+              search: state.search.copyWith(
+                scrollTarget: SearchScrollTarget(
+                  pageIdx: overlay.pageIdx,
+                  x: bound.x,
+                  y: bound.y,
+                  width: bound.width,
+                  height: bound.height,
+                ),
+              ),
+            ),
+          );
+        }
+      }
+    }
 
     void performSearchAndUpdate(String query) {
       if (query.isEmpty) {
         searchMatches.value = [];
         activeIndex.value = 0;
+        matchCount.value = 0;
         controller.editor.setTrackedItems(2, []);
         return;
       }
@@ -52,6 +135,7 @@ class FindReplaceSheet extends HookWidget {
       }
 
       searchMatches.value = items;
+      matchCount.value = items.length;
       if (items.isNotEmpty) {
         if (activeIndex.value >= items.length) {
           activeIndex.value = 0;
@@ -73,12 +157,20 @@ class FindReplaceSheet extends HookWidget {
     useEffect(() {
       debounceTimer.value?.cancel();
       if (findText.isEmpty) {
-        performSearchAndUpdate('');
+        searchMatches.value = [];
+        controller.editor.setTrackedItems(2, []);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          matchCount.value = 0;
+          activeIndex.value = 0;
+        });
         return null;
       }
       debounceTimer.value = Timer(const Duration(milliseconds: 150), () {
         performSearchAndUpdate(findText);
-        controller.scrollIntoView();
+        updateSearchActiveIndex(activeIndex.value);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          scrollToSearchMatch(activeIndex.value);
+        });
       });
       return null;
     }, [findText]);
@@ -88,7 +180,8 @@ class FindReplaceSheet extends HookWidget {
         return;
       }
       activeIndex.value = (activeIndex.value + 1) % searchMatches.value.length;
-      controller.scrollIntoView();
+      updateSearchActiveIndex(activeIndex.value);
+      scrollToSearchMatch(activeIndex.value);
     }
 
     void findPrevious() {
@@ -96,7 +189,8 @@ class FindReplaceSheet extends HookWidget {
         return;
       }
       activeIndex.value = activeIndex.value <= 0 ? searchMatches.value.length - 1 : activeIndex.value - 1;
-      controller.scrollIntoView();
+      updateSearchActiveIndex(activeIndex.value);
+      scrollToSearchMatch(activeIndex.value);
     }
 
     void replace() {
@@ -111,7 +205,10 @@ class FindReplaceSheet extends HookWidget {
         replaceTextController.text,
       );
       performSearchAndUpdate(findText);
-      controller.scrollIntoView();
+      updateSearchActiveIndex(activeIndex.value);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        scrollToSearchMatch(activeIndex.value);
+      });
     }
 
     void replaceAll() {
@@ -125,16 +222,14 @@ class FindReplaceSheet extends HookWidget {
       performSearchAndUpdate(findText);
     }
 
-    final totalCount = searchMatches.value.length;
+    final totalCount = matchCount.value;
     final currentIndex = activeIndex.value;
-
-    final mediaQuery = MediaQuery.of(context);
 
     return AppBottomSheet(
       padding: const Pad(horizontal: 20, vertical: 16),
       includeBottomPadding: false,
       child: Padding(
-        padding: Pad(bottom: mediaQuery.padding.bottom + mediaQuery.viewInsets.bottom),
+        padding: Pad(bottom: keyboardHeight.value),
         child: Row(
           spacing: 12,
           children: [
@@ -170,10 +265,7 @@ class FindReplaceSheet extends HookWidget {
                               cursorColor: context.colors.textDefault,
                               autofocus: true,
                               textInputAction: TextInputAction.search,
-                              onSubmitted: (_) {
-                                findFocusNode.requestFocus();
-                                findNext();
-                              },
+                              onEditingComplete: findNext,
                             ),
                           ),
                           if (findText.isNotEmpty)
@@ -209,11 +301,8 @@ class FindReplaceSheet extends HookWidget {
                           ),
                           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
                           cursorColor: context.colors.textDefault,
-                          textInputAction: TextInputAction.go,
-                          onSubmitted: (_) {
-                            replaceFocusNode.requestFocus();
-                            replace();
-                          },
+                          textInputAction: TextInputAction.search,
+                          onEditingComplete: replace,
                         ),
                       ),
                     ),

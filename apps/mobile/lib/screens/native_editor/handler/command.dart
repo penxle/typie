@@ -401,7 +401,13 @@ class CommandHandler {
         final rects = item.bounds
             .map((b) => SearchHighlightRect(x: b.x, y: b.y, width: b.width, height: b.height))
             .toList();
-        searchOverlays.add(SearchOverlayInfo(pageIdx: item.pageIdx, isCurrent: false, bounds: rects));
+        searchOverlays.add(
+          SearchOverlayInfo(
+            pageIdx: item.pageIdx,
+            isCurrent: searchOverlays.length == controller.state.search.currentIndex,
+            bounds: rects,
+          ),
+        );
       }
     }
 
