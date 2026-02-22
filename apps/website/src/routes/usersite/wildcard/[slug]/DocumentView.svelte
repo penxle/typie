@@ -549,7 +549,7 @@
       {/if}
     {/if}
   {:else if document.documentBody.__typename === 'DocumentViewBodyUnavailable'}
-    <div class={css({ marginTop: '42px', fontSize: '16px', fontWeight: 'medium' })}>
+    <div class={flex({ align: 'center', justify: 'center', minHeight: '[100dvh]', fontSize: '16px', fontWeight: 'medium' })}>
       {#if document.documentBody.reason === 'REQUIRE_IDENTITY_VERIFICATION'}
         <PostViewBodyUnavailable description="본인 인증이 필요한 글이에요" icon={ShieldAlertIcon} title="연령제한글">
           {#if $user}
@@ -574,6 +574,7 @@
                 id="password"
                 style={css.raw({ width: 'full', height: '36px' })}
                 placeholder="비밀번호를 입력하세요"
+                type="password"
                 bind:value={form.fields.password}
               />
 
