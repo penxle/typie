@@ -98,6 +98,8 @@ class EditorInputView: NSObject, FlutterPlatformView {
 }
 
 class EditorTextInputView: UIView, UITextInput {
+  private static let cursorSentinelOffset: Int = 10000
+
   var onInsertText: ((String) -> Void)?
   var onDeleteBackward: (() -> Void)?
   var onSetMarkedText: ((String) -> Void)?
@@ -113,7 +115,7 @@ class EditorTextInputView: UIView, UITextInput {
   var onNavigate: ((String, Bool) -> Void)?
 
   private var _markedText: String?
-  private var _cursor: Int = 0
+  private var _cursor: Int = EditorTextInputView.cursorSentinelOffset
   private var _isDeactivating: Bool = false
   private var _shadowText: String = ""
   private var _precedingCharWidths: [Double] = []
@@ -211,6 +213,7 @@ class EditorTextInputView: UIView, UITextInput {
       onUnmarkText?()
     }
     _shadowText = ""
+    _cursor = Self.cursorSentinelOffset
     inputDelegate?.textWillChange(self)
     inputDelegate?.textDidChange(self)
   }
@@ -441,7 +444,7 @@ class EditorTextInputView: UIView, UITextInput {
         onPerformAction?("newline")
       }
       _shadowText = ""
-      _cursor = 0
+      _cursor = Self.cursorSentinelOffset
       return
     }
 
@@ -465,10 +468,10 @@ class EditorTextInputView: UIView, UITextInput {
     }
 
     _shadowText = ""
-    
+
     _cursor -= 1
-    if _cursor < 0 {
-      _cursor = 0
+    if _cursor < 1 {
+      _cursor = Self.cursorSentinelOffset
     }
 
     if !_shadowText.isEmpty {
@@ -514,7 +517,7 @@ class EditorTextInputView: UIView, UITextInput {
         let pos = markedText.count
         return EditorTextRange(start: pos, end: pos)
       }
-      let pos = _shadowText.count
+      let pos = _shadowText.isEmpty ? _cursor : _shadowText.count
       return EditorTextRange(start: pos, end: pos)
     }
     set {}
@@ -572,7 +575,7 @@ class EditorTextInputView: UIView, UITextInput {
     if let markedText = _markedText {
       return EditorTextPosition(offset: markedText.count)
     }
-    return EditorTextPosition(offset: _shadowText.count)
+    return EditorTextPosition(offset: _shadowText.isEmpty ? _cursor : _shadowText.count)
   }
 
   var inputDelegate: (any UITextInputDelegate)?
