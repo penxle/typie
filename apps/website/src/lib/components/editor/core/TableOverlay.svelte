@@ -253,7 +253,10 @@
   data-external-element
   data-table-overlay={overlay.tableId}
   onpointerenter={() => (isTableHovered = true)}
-  onpointerleave={() => (isTableHovered = false)}
+  onpointerleave={() => {
+    isTableHovered = false;
+    hoveredPointer = null;
+  }}
   role="presentation"
 >
   <div
