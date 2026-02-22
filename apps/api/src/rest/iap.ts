@@ -104,7 +104,12 @@ iap.post('/appstore', async (c) => {
       }
     })
     .otherwise(async () => {
-      await slack.sendMessage({ channel: 'iap', message: JSON.stringify({ source: 'rest/appstore', notification }, null, 2) });
+      await slack.sendMessage({
+        channel: 'iap',
+        username: '인앱결제 알림',
+        iconEmoji: ':credit_card:',
+        message: `\`\`\`\n${JSON.stringify({ source: 'rest/appstore', notification }, null, 2)}\n\`\`\``,
+      });
     });
 
   return c.json({}, 200);
@@ -202,13 +207,17 @@ iap.post('/googleplay', async (c) => {
       .otherwise(async () => {
         await slack.sendMessage({
           channel: 'iap',
-          message: JSON.stringify({ source: 'rest/googleplay', subscription }, null, 2),
+          username: '인앱결제 알림',
+          iconEmoji: ':credit_card:',
+          message: `\`\`\`\n${JSON.stringify({ source: 'rest/googleplay', subscription }, null, 2)}\n\`\`\``,
         });
       });
   } else {
     await slack.sendMessage({
       channel: 'iap',
-      message: JSON.stringify({ source: 'rest/googleplay', notification }, null, 2),
+      username: '인앱결제 알림',
+      iconEmoji: ':credit_card:',
+      message: `\`\`\`\n${JSON.stringify({ source: 'rest/googleplay', notification }, null, 2)}\n\`\`\``,
     });
   }
 
