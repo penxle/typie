@@ -20,15 +20,7 @@ app.use('*', async (c, next) => {
 
   const { maintenance } = await checkBootstrap(getClientAddress(c), c.req.header('X-Bootstrap-Bypass'));
   if (maintenance) {
-    return c.json({ code: 'maintenance' as const, ...maintenance }, 503);
-  }
-
-  return next();
-});
-
-app.use('*', async (c, next) => {
-  if (c.req.path.startsWith('/bmo/')) {
-    return next();
+    return c.json({ code: 'under_maintenance' as const, ...maintenance }, 503);
   }
 
   const context = await deriveContext(c);
