@@ -39,10 +39,23 @@ impl Transaction {
         }
 
         let styles = self.state.pending_styles.clone();
+        let fill_styles: Vec<_> = styles
+            .iter()
+            .filter(|s| {
+                !matches!(
+                    s,
+                    crate::model::Style::Bold(_)
+                        | crate::model::Style::Italic(_)
+                        | crate::model::Style::Strikethrough(_)
+                        | crate::model::Style::Underline(_)
+                )
+            })
+            .cloned()
+            .collect();
 
         let fragment = fragment
             .with_fresh_ids_for_doc(self.doc())
-            .fill_missing_styles(&styles);
+            .fill_missing_styles(&fill_styles);
         let result = self.insert_fragment(self.selection().head, fragment)?;
         if let Some(selection) = result.as_selection() {
             self.set_selection(selection);
@@ -1889,6 +1902,180 @@ mod tests {
         };
 
         assert_state_eq!(actual, expected);
+    }
+
+    #[test]
+    fn paste_open_fragment_does_not_apply_pending_bold_to_explicit_weight_400() {
+        let mut target = id!();
+
+        let initial = state! {
+            doc {
+                @target paragraph {}
+            }
+            selection { (target, 0) }
+        };
+
+        let fragment = fragment! {
+            open_start: 1,
+            open_end: 1,
+
+            paragraph {
+                text { "1" => [bg_color("none"), font_family("RIDIBatang"), font_size(1200), font_weight(400), letter_spacing(0), text_color("black")] }
+            }
+            paragraph {
+                text { "2" => [bg_color("none"), bold(), font_family("RIDIBatang"), font_size(1200), font_weight(400), letter_spacing(0), text_color("black")] }
+            }
+        };
+
+        let actual = transact!(initial, |tr| {
+            tr.state
+                .pending_styles
+                .push(crate::model::Style::Bold(crate::model::BoldStyle {}));
+            tr.paste_fragment(fragment, None).unwrap();
+        });
+
+        let root = actual.doc.node(NodeId::ROOT).expect("root");
+        let mut one_styles = None;
+        let mut two_styles = None;
+
+        for node in root.descendants() {
+            if let Node::Text(text_node) = node.node() {
+                for seg in text_node.text.get_segments() {
+                    if seg.text == "1" {
+                        one_styles = Some(seg.styles.clone());
+                    } else if seg.text == "2" {
+                        two_styles = Some(seg.styles.clone());
+                    }
+                }
+            }
+        }
+
+        let one_styles = one_styles.expect("segment '1' should exist");
+        let two_styles = two_styles.expect("segment '2' should exist");
+
+        assert!(
+            one_styles
+                .iter()
+                .any(|s| matches!(s, crate::model::Style::FontWeight(fw) if fw.weight == 400)),
+            "segment '1' should keep explicit FontWeight(400), got: {:?}",
+            one_styles
+        );
+        assert!(
+            !one_styles
+                .iter()
+                .any(|s| matches!(s, crate::model::Style::Bold(_))),
+            "segment '1' should not become bold from pending style, got: {:?}",
+            one_styles
+        );
+        assert!(
+            two_styles
+                .iter()
+                .any(|s| matches!(s, crate::model::Style::Bold(_))),
+            "segment '2' should preserve bold style, got: {:?}",
+            two_styles
+        );
+    }
+
+    #[test]
+    fn paste_open_fragment_does_not_apply_pending_inline_decorations() {
+        let mut target = id!();
+
+        let initial = state! {
+            doc {
+                @target paragraph {}
+            }
+            selection { (target, 0) }
+        };
+
+        let fragment = fragment! {
+            open_start: 1,
+            open_end: 1,
+
+            paragraph {
+                text { "plain" => [bg_color("none"), font_family("RIDIBatang"), font_size(1200), font_weight(400), letter_spacing(0), text_color("black")] }
+            }
+            paragraph {
+                text { "decorated" => [bg_color("none"), italic(), strikethrough(), underline(), font_family("RIDIBatang"), font_size(1200), font_weight(400), letter_spacing(0), text_color("black")] }
+            }
+        };
+
+        let actual = transact!(initial, |tr| {
+            tr.state
+                .pending_styles
+                .push(crate::model::Style::Italic(crate::model::ItalicStyle {}));
+            tr.state
+                .pending_styles
+                .push(crate::model::Style::Strikethrough(
+                    crate::model::StrikethroughStyle {},
+                ));
+            tr.state.pending_styles.push(crate::model::Style::Underline(
+                crate::model::UnderlineStyle {},
+            ));
+            tr.paste_fragment(fragment, None).unwrap();
+        });
+
+        let root = actual.doc.node(NodeId::ROOT).expect("root");
+        let mut plain_styles = None;
+        let mut decorated_styles = None;
+
+        for node in root.descendants() {
+            if let Node::Text(text_node) = node.node() {
+                for seg in text_node.text.get_segments() {
+                    if seg.text == "plain" {
+                        plain_styles = Some(seg.styles.clone());
+                    } else if seg.text == "decorated" {
+                        decorated_styles = Some(seg.styles.clone());
+                    }
+                }
+            }
+        }
+
+        let plain_styles = plain_styles.expect("segment 'plain' should exist");
+        let decorated_styles = decorated_styles.expect("segment 'decorated' should exist");
+
+        assert!(
+            !plain_styles
+                .iter()
+                .any(|s| matches!(s, crate::model::Style::Italic(_))),
+            "segment 'plain' should not become italic from pending style, got: {:?}",
+            plain_styles
+        );
+        assert!(
+            !plain_styles
+                .iter()
+                .any(|s| matches!(s, crate::model::Style::Strikethrough(_))),
+            "segment 'plain' should not become strikethrough from pending style, got: {:?}",
+            plain_styles
+        );
+        assert!(
+            !plain_styles
+                .iter()
+                .any(|s| matches!(s, crate::model::Style::Underline(_))),
+            "segment 'plain' should not become underline from pending style, got: {:?}",
+            plain_styles
+        );
+
+        assert!(
+            decorated_styles
+                .iter()
+                .any(|s| matches!(s, crate::model::Style::Italic(_))),
+            "segment 'decorated' should preserve italic style, got: {:?}",
+            decorated_styles
+        );
+        assert!(
+            decorated_styles
+                .iter()
+                .any(|s| matches!(s, crate::model::Style::Strikethrough(_))),
+            "segment 'decorated' should preserve strikethrough style, got: {:?}",
+            decorated_styles
+        );
+        assert!(
+            decorated_styles
+                .iter()
+                .any(|s| matches!(s, crate::model::Style::Underline(_))),
+            "segment 'decorated' should preserve underline style, got: {:?}",
+            decorated_styles
+        );
     }
 
     #[test]
