@@ -228,6 +228,7 @@ impl Default for Schema {
             NodeSpec {
                 content: content_expr!(TableRow+),
                 isolating: true,
+                forbidden_descendants: Some(&[NodeType::Table]),
                 ..Default::default()
             },
         );

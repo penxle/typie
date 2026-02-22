@@ -42,6 +42,13 @@ impl Transaction {
 
         let node_type = node.as_type();
 
+        if self
+            .doc()
+            .is_type_forbidden_at(insert_pos.node_id, node_type)
+        {
+            return Ok(false);
+        }
+
         let (parent_allows_node, parent_info) = {
             let parent_node = self
                 .node(insert_pos.node_id)
@@ -349,7 +356,25 @@ impl Transaction {
             let wrapper_allows_blocks =
                 block_types.iter().all(|t| wrapper_spec.content.matches(*t));
 
-            parent_allows_wrapper && wrapper_allows_blocks
+            if !parent_allows_wrapper || !wrapper_allows_blocks {
+                return false;
+            }
+
+            // blocks[0]의 parent가 parent_id이므로, parent_id 위치에서 wrapper_type이 금지되는지 확인
+            if let Some(&first_block) = blocks.first() {
+                if let Some(parent_node) = self.node(first_block) {
+                    if let Some(parent_ref) = parent_node.parent() {
+                        if self
+                            .doc()
+                            .is_type_forbidden_at(parent_ref.node_id(), wrapper_type)
+                        {
+                            return false;
+                        }
+                    }
+                }
+            }
+
+            true
         })?;
 
         if let Some(target) = target {
@@ -373,6 +398,13 @@ impl Transaction {
             Some(id) => id,
             None => return Ok(false),
         };
+
+        if self
+            .doc()
+            .is_type_forbidden_at(parent_id, wrapper.as_type())
+        {
+            return Ok(false);
+        }
 
         let wrapper_spec = self.doc().schema().node_spec(wrapper.as_type());
         let block_types: Vec<NodeType> = block_ids
@@ -1507,6 +1539,34 @@ mod tests {
         };
 
         let actual = transact!(initial.clone(), |tr| tr.lift_on_empty_paragraph().unwrap());
+
+        assert_state_eq!(actual, initial);
+    }
+
+    #[test]
+    fn wrap_in_table_inside_table_is_rejected() {
+        let mut p1 = id!();
+
+        let initial = state! {
+            doc {
+                table {
+                    table_row {
+                        table_cell {
+                            @p1 paragraph { text { "cell" } }
+                            paragraph { text { "cell2" } }
+                        }
+                    }
+                }
+            }
+            selection { (p1, 0) }
+        };
+
+        let actual = transact!(initial.clone(), |tr| {
+            let result = tr
+                .wrap_in_ancestor(Node::Table(TableNode::default()))
+                .unwrap();
+            assert!(!result, "Wrapping in table inside table should be rejected");
+        });
 
         assert_state_eq!(actual, initial);
     }
