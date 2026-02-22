@@ -30,6 +30,7 @@ dmarc
 dotenv
 dotum
 ebgp
+Edgi
 eulyoo
 ffigen
 ffprobe

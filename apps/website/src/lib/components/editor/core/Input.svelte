@@ -1,6 +1,6 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
-  import { IS_MAC } from '$lib/editor/constants';
+  import { IS_IOS_SAFARI, IS_MAC } from '$lib/editor/constants';
   import { getEditorContext } from '$lib/editor/context.svelte';
   import { handleKeyEvent } from '$lib/editor/keyboard';
 
@@ -17,11 +17,14 @@
 
   let lastInputValue = '';
   let ignoreEventText = '';
+  let pendingImeDelete = false;
+  let lastHandledBackspaceAt = 0;
 
   const resetInputState = () => {
     if (inputEl) {
       inputEl.value = '';
       lastInputValue = '';
+      pendingImeDelete = false;
 
       // 강제로 일본어 조합을 끝냄
       inputEl.blur();
@@ -47,6 +50,17 @@
     return inputEl;
   }
 
+  const handleBeforeInput = (e: InputEvent) => {
+    if (editor.readOnly || !IS_IOS_SAFARI) return;
+    if (e.inputType !== 'deleteContentBackward') return;
+
+    // iOS Safari 한글이 composition* 대신 deleteContentBackward + insertText 를 보냄
+    const fromBackspaceKey = Date.now() - lastHandledBackspaceAt < 120;
+    if (!fromBackspaceKey) {
+      pendingImeDelete = true;
+    }
+  };
+
   const handleInput = (e: Event) => {
     if (editor.readOnly) return;
 
@@ -64,9 +78,15 @@
     if (!inputEl) return;
 
     if (!value) {
+      if (pendingImeDelete && lastInputValue.length > 0) {
+        editor.dispatch({ type: 'replaceBackward', length: lastInputValue.length, text: '' }).scrollIntoView({ mode: 'typewriter' });
+      }
+      pendingImeDelete = false;
       lastInputValue = '';
       return;
     }
+
+    pendingImeDelete = false;
 
     if (value.startsWith(lastInputValue) && value.length > lastInputValue.length) {
       // Append
@@ -121,6 +141,11 @@
     }
 
     if (handleKeyEvent(editor, e)) {
+      if (IS_IOS_SAFARI && (e.key === 'Backspace' || e.key === 'Delete')) {
+        lastHandledBackspaceAt = Date.now();
+        pendingImeDelete = false;
+      }
+
       e.preventDefault();
       resetInputState();
     }
@@ -154,6 +179,11 @@
     const text = e.clipboardData?.getData('text/plain') ?? '';
 
     editor.paste({ html, text });
+  };
+
+  const handleBlur = (e: FocusEvent) => {
+    pendingImeDelete = false;
+    onBlur?.(e);
   };
 
   const handleCompositionStart = (e: CompositionEvent) => {
@@ -216,7 +246,8 @@
   autocapitalize="off"
   autocomplete="off"
   autocorrect="off"
-  onblur={onBlur}
+  onbeforeinput={handleBeforeInput}
+  onblur={handleBlur}
   oncompositionend={handleCompositionEnd}
   oncompositionstart={handleCompositionStart}
   oncompositionupdate={handleCompositionUpdate}
