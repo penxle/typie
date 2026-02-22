@@ -8,6 +8,7 @@ import 'package:typie/screens/native_editor/toolbar/scope.dart';
 
 const _inTableContext = 'in_table';
 const _selectedTableContext = 'selected_table';
+const _tableProportionEpsilon = 0.001;
 
 class NativeEditorTableFloatingToolbar extends HookWidget {
   const NativeEditorTableFloatingToolbar({required this.table, super.key});
@@ -38,17 +39,18 @@ class NativeEditorTableFloatingToolbar extends HookWidget {
                   scope.controller.scrollIntoView();
                 },
               ),
-              FloatingToolbarButton(
-                icon: _tableAlignIcon(table.align),
-                onTap: () {
-                  scope.dispatch({
-                    'type': 'setTableAlign',
-                    'tableId': table.tableId,
-                    'align': _nextTableAlign(table.align),
-                  });
-                  scope.controller.scrollIntoView();
-                },
-              ),
+              if (table.proportion < 1 - _tableProportionEpsilon)
+                FloatingToolbarButton(
+                  icon: _tableAlignIcon(table.align),
+                  onTap: () {
+                    scope.dispatch({
+                      'type': 'setTableAlign',
+                      'tableId': table.tableId,
+                      'align': _nextTableAlign(table.align),
+                    });
+                    scope.controller.scrollIntoView();
+                  },
+                ),
               _TableBorderStyleButton(
                 style: table.borderStyle,
                 onTap: () {

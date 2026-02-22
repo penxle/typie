@@ -21,6 +21,7 @@ struct ContinuousTableOverlaySegment {
     page_offset: f32,
     border_style: String,
     align: String,
+    proportion: f32,
     content_width: f32,
     min_proportion_width: f32,
     max_proportion_width: f32,
@@ -39,6 +40,7 @@ struct TableOverlayPayload {
     bounds: Rect,
     border_style: String,
     align: String,
+    proportion: f32,
     content_width: f32,
     min_proportion_width: f32,
     max_proportion_width: f32,
@@ -54,6 +56,7 @@ struct ContinuousTableOverlayAccum {
     table_id: String,
     border_style: String,
     align: String,
+    proportion: f32,
     content_width: f32,
     min_proportion_width: f32,
     max_proportion_width: f32,
@@ -78,6 +81,7 @@ impl ContinuousTableOverlayAccum {
             table_id: segment.table_id,
             border_style: segment.border_style,
             align: segment.align,
+            proportion: segment.proportion,
             content_width: segment.content_width,
             min_proportion_width: segment.min_proportion_width,
             max_proportion_width: segment.max_proportion_width,
@@ -158,6 +162,7 @@ impl ContinuousTableOverlayAccum {
             },
             border_style: self.border_style,
             align: self.align,
+            proportion: self.proportion,
             content_width: self.content_width,
             min_proportion_width: self.min_proportion_width,
             col_widths: self.col_widths,
@@ -275,6 +280,17 @@ fn table_col_ratios(doc: &Doc, table_id: NodeId, col_count: usize) -> Vec<f32> {
         .unwrap_or_else(|| vec![1.0 / col_count as f32; col_count])
 }
 
+fn table_proportion(doc: &Doc, table_id: NodeId) -> f32 {
+    doc.node(table_id)
+        .and_then(|node| match node.node() {
+            Node::Table(table_node) => Some(table_node.proportion),
+            _ => None,
+        })
+        .filter(|value| value.is_finite())
+        .map(|value| value.clamp(0.0, 1.0))
+        .unwrap_or(1.0)
+}
+
 fn table_min_proportion_width(col_count: usize, max_width: f32) -> f32 {
     if col_count == 0 {
         return 0.0;
@@ -317,6 +333,7 @@ fn collect_paginated_table_overlays(
                 let show_cell_selector = cell_selector_table_id == Some(table_border.node_id);
                 let col_widths =
                     table_col_ratios(doc.as_ref(), table_border.node_id, table_border.cols);
+                let proportion = table_proportion(doc.as_ref(), table_border.node_id);
                 let min_proportion_width =
                     table_min_proportion_width(table_border.cols, table_max_width);
                 let max_proportion_width =
@@ -325,6 +342,7 @@ fn collect_paginated_table_overlays(
                     page_idx,
                     abs_pos,
                     table_border,
+                    proportion,
                     is_focused,
                     show_cell_selector,
                     table_max_width,
@@ -369,6 +387,7 @@ fn collect_continuous_table_overlays(
                 let show_cell_selector = cell_selector_table_id == Some(table_border.node_id);
                 let col_widths =
                     table_col_ratios(doc.as_ref(), table_border.node_id, table_border.cols);
+                let proportion = table_proportion(doc.as_ref(), table_border.node_id);
                 let min_proportion_width =
                     table_min_proportion_width(table_border.cols, table_max_width);
                 let max_proportion_width =
@@ -378,6 +397,7 @@ fn collect_continuous_table_overlays(
                     page_offset,
                     abs_pos,
                     table_border,
+                    proportion,
                     is_focused,
                     show_cell_selector,
                     table_max_width,
@@ -419,6 +439,7 @@ fn to_paginated_overlay(
     page_idx: usize,
     abs_pos: Point,
     table_border: &TableBorderElement,
+    proportion: f32,
     is_focused: bool,
     show_cell_selector: bool,
     content_width: f32,
@@ -429,6 +450,7 @@ fn to_paginated_overlay(
     let payload = table_overlay_payload(
         abs_pos,
         table_border,
+        proportion,
         content_width,
         min_proportion_width,
         max_proportion_width,
@@ -443,6 +465,7 @@ fn to_paginated_overlay(
         bounds: payload.bounds,
         border_style: payload.border_style,
         align: payload.align,
+        proportion: payload.proportion,
         content_width: payload.content_width,
         min_proportion_width: payload.min_proportion_width,
         max_proportion_width: payload.max_proportion_width,
@@ -463,6 +486,7 @@ fn to_continuous_segment(
     page_offset: f32,
     abs_pos: Point,
     table_border: &TableBorderElement,
+    proportion: f32,
     is_focused: bool,
     show_cell_selector: bool,
     content_width: f32,
@@ -473,6 +497,7 @@ fn to_continuous_segment(
     let payload = table_overlay_payload(
         abs_pos,
         table_border,
+        proportion,
         content_width,
         min_proportion_width,
         max_proportion_width,
@@ -486,6 +511,7 @@ fn to_continuous_segment(
         page_offset,
         border_style: payload.border_style,
         align: payload.align,
+        proportion: payload.proportion,
         content_width: payload.content_width,
         min_proportion_width: payload.min_proportion_width,
         max_proportion_width: payload.max_proportion_width,
@@ -511,6 +537,7 @@ fn table_bounds(abs_pos: Point, table_border: &TableBorderElement) -> Rect {
 fn table_overlay_payload(
     abs_pos: Point,
     table_border: &TableBorderElement,
+    proportion: f32,
     content_width: f32,
     min_proportion_width: f32,
     max_proportion_width: f32,
@@ -521,6 +548,7 @@ fn table_overlay_payload(
         bounds: table_bounds(abs_pos, table_border),
         border_style: table_border_style_str(table_border.border_style).to_string(),
         align: table_align_str(table_border.align).to_string(),
+        proportion,
         content_width,
         min_proportion_width,
         max_proportion_width,
@@ -641,6 +669,7 @@ mod tests {
             page_offset,
             border_style: "solid".to_string(),
             align: "left".to_string(),
+            proportion: 1.0,
             content_width: 200.0,
             min_proportion_width: 100.0,
             max_proportion_width: 220.0,

@@ -209,6 +209,13 @@
   let buttonHovered = $state(false);
 
   const isButtonVisible = $derived(isTableHovered || overlay.isFocused || menuOpen || buttonHovered);
+  const isAlignButtonVisible = $derived.by(() => {
+    if (!Number.isFinite(overlay.proportion)) {
+      return true;
+    }
+
+    return overlay.proportion < 1 - 0.001;
+  });
   const activeColIndex = $derived.by(() => {
     const idx = menuOpenColIndex ?? hoveredColIndex;
     if (idx === null || idx < 0 || idx >= overlay.colWidthsAsPx.length) {
@@ -830,70 +837,72 @@
   onpointerleave={() => (buttonHovered = false)}
   role="presentation"
 >
-  <Menu offset={4} onopen={() => (menuOpen = true)} ontransitionend={() => (menuOpen = false)} placement="bottom">
-    {#snippet button({ open })}
-      <button
-        class={center({
-          display: 'flex',
-          fontSize: '14px',
-          fontWeight: 'medium',
-          color: open ? 'text.default' : 'text.faint',
-          backgroundColor: open ? 'interactive.hover' : 'transparent',
-          width: '24px',
-          height: '24px',
-          borderRadius: '4px',
-          cursor: 'pointer',
-          _hover: {
-            backgroundColor: 'interactive.hover',
-            color: 'text.default',
-          },
-        })}
-        aria-pressed={open}
-        type="button"
-      >
-        {#if overlay.align === 'center'}
-          <Icon icon={AlignCenterIcon} size={14} />
-        {:else if overlay.align === 'right'}
-          <Icon icon={AlignRightIcon} size={14} />
-        {:else}
-          <Icon icon={AlignLeftIcon} size={14} />
-        {/if}
-      </button>
-    {/snippet}
+  {#if isAlignButtonVisible}
+    <Menu offset={4} onopen={() => (menuOpen = true)} ontransitionend={() => (menuOpen = false)} placement="bottom">
+      {#snippet button({ open })}
+        <button
+          class={center({
+            display: 'flex',
+            fontSize: '14px',
+            fontWeight: 'medium',
+            color: open ? 'text.default' : 'text.faint',
+            backgroundColor: open ? 'interactive.hover' : 'transparent',
+            width: '24px',
+            height: '24px',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            _hover: {
+              backgroundColor: 'interactive.hover',
+              color: 'text.default',
+            },
+          })}
+          aria-pressed={open}
+          type="button"
+        >
+          {#if overlay.align === 'center'}
+            <Icon icon={AlignCenterIcon} size={14} />
+          {:else if overlay.align === 'right'}
+            <Icon icon={AlignRightIcon} size={14} />
+          {:else}
+            <Icon icon={AlignLeftIcon} size={14} />
+          {/if}
+        </button>
+      {/snippet}
 
-    {#snippet children({ close })}
-      <MenuItem
-        onclick={() => {
-          close();
-          editor.dispatch({ type: 'setTableAlign', tableId: overlay.tableId, align: 'left' });
-          editor.focus();
-        }}
-      >
-        <Icon icon={AlignLeftIcon} size={14} />
-        <span>왼쪽 정렬</span>
-      </MenuItem>
-      <MenuItem
-        onclick={() => {
-          close();
-          editor.dispatch({ type: 'setTableAlign', tableId: overlay.tableId, align: 'center' });
-          editor.focus();
-        }}
-      >
-        <Icon icon={AlignCenterIcon} size={14} />
-        <span>가운데 정렬</span>
-      </MenuItem>
-      <MenuItem
-        onclick={() => {
-          close();
-          editor.dispatch({ type: 'setTableAlign', tableId: overlay.tableId, align: 'right' });
-          editor.focus();
-        }}
-      >
-        <Icon icon={AlignRightIcon} size={14} />
-        <span>오른쪽 정렬</span>
-      </MenuItem>
-    {/snippet}
-  </Menu>
+      {#snippet children({ close })}
+        <MenuItem
+          onclick={() => {
+            close();
+            editor.dispatch({ type: 'setTableAlign', tableId: overlay.tableId, align: 'left' });
+            editor.focus();
+          }}
+        >
+          <Icon icon={AlignLeftIcon} size={14} />
+          <span>왼쪽 정렬</span>
+        </MenuItem>
+        <MenuItem
+          onclick={() => {
+            close();
+            editor.dispatch({ type: 'setTableAlign', tableId: overlay.tableId, align: 'center' });
+            editor.focus();
+          }}
+        >
+          <Icon icon={AlignCenterIcon} size={14} />
+          <span>가운데 정렬</span>
+        </MenuItem>
+        <MenuItem
+          onclick={() => {
+            close();
+            editor.dispatch({ type: 'setTableAlign', tableId: overlay.tableId, align: 'right' });
+            editor.focus();
+          }}
+        >
+          <Icon icon={AlignRightIcon} size={14} />
+          <span>오른쪽 정렬</span>
+        </MenuItem>
+      {/snippet}
+    </Menu>
+  {/if}
 
   <Menu offset={4} onopen={() => (menuOpen = true)} ontransitionend={() => (menuOpen = false)} placement="bottom">
     {#snippet button({ open })}

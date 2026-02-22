@@ -31,6 +31,7 @@ pub struct TableOverlay {
     pub bounds: Rect,
     pub border_style: String,
     pub align: String,
+    pub proportion: f32,
     pub content_width: f32,
     pub min_proportion_width: f32,
     pub max_proportion_width: f32,

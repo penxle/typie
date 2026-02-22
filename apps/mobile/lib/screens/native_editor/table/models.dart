@@ -14,6 +14,7 @@ class TableOverlayInfo {
     required this.bounds,
     required this.borderStyle,
     required this.align,
+    required this.proportion,
     required this.startRowIndex,
     required this.totalRows,
     required this.isFocused,
@@ -33,6 +34,7 @@ class TableOverlayInfo {
   final TableOverlayBounds bounds;
   final String borderStyle;
   final String align;
+  final double proportion;
   final int startRowIndex;
   final int totalRows;
   final bool isFocused;
