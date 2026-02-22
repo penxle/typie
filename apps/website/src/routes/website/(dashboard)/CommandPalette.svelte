@@ -121,9 +121,9 @@
     }
   `);
 
-  const createPost = graphql(`
-    mutation DashboardLayout_CommandPalette_CreatePost_Mutation($input: CreatePostInput!) {
-      createPost(input: $input) {
+  const createDocument = graphql(`
+    mutation DashboardLayout_CommandPalette_CreateDocument_Mutation($input: CreateDocumentInput!) {
+      createDocument(input: $input) {
         id
 
         entity {
@@ -138,15 +138,15 @@
 
   const commands: Command[] = $derived([
     {
-      name: '새 포스트 만들기',
-      aliases: ['새 포스트 생성', '새 글 쓰기', '새 글 생성'],
+      name: '새 문서 만들기',
+      aliases: ['새 문서 생성', '새 글 쓰기', '새 글 생성'],
       icon: SquarePenIcon,
       action: async () => {
-        const resp = await createPost({
+        const resp = await createDocument({
           siteId: $user.sites[0].id,
         });
 
-        mixpanel.track('create_post', { via: 'command_palette' });
+        mixpanel.track('create_document', { via: 'command_palette' });
 
         await goto(`/${resp.entity.slug}`);
       },

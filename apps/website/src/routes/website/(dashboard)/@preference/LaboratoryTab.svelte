@@ -81,30 +81,4 @@
       {/snippet}
     </SettingsRow>
   </SettingsCard>
-
-  <SettingsCard>
-    <SettingsRow>
-      {#snippet label()}
-        v2 에디터 사용
-      {/snippet}
-      {#snippet description()}
-        타이피 팀에서 새롭게 준비중인 에디터를 미리 체험해 볼 수 있어요.
-        <br />
-        아직 모든 기능 개발이 완료되지 않아, 실사용에는 적합하지 않아요.
-        <br />
-        새 문서를 만들 때 v2 에디터를 선택해 체험해보세요.
-      {/snippet}
-      {#snippet value()}
-        <Switch
-          onchange={() => {
-            mixpanel.track('toggle_experimental_feature', {
-              feature: 'v2_editor',
-              enabled: app.preference.current.experimental_v2EditorEnabled,
-            });
-          }}
-          bind:checked={app.preference.current.experimental_v2EditorEnabled}
-        />
-      {/snippet}
-    </SettingsRow>
-  </SettingsCard>
 </div>

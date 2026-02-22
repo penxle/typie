@@ -10,7 +10,6 @@
   import mixpanel from 'mixpanel-browser';
   import qs from 'query-string';
   import { onMount, untrack } from 'svelte';
-  import { goto } from '$app/navigation';
   import { updated } from '$app/state';
   import Logo from '$assets/logos/logo.svg?component';
   import { env } from '$env/dynamic/public';
@@ -27,7 +26,6 @@
   import StatsModal from './@stats/StatsModal.svelte';
   import TrashModal from './@trash/TrashModal.svelte';
   import CommandPalette from './CommandPalette.svelte';
-  import EditorSelectModal from './EditorSelectModal.svelte';
   import MaintenanceBanner from './MaintenanceBanner.svelte';
   import MarketingConsentModal from './MarketingConsentModal.svelte';
   import ReferralWelcomeModal from './ReferralWelcomeModal.svelte';
@@ -193,35 +191,7 @@
     }
   `);
 
-  const createPost = graphql(`
-    mutation DashboardLayout_CreatePost_Mutation($input: CreatePostInput!) {
-      createPost(input: $input) {
-        id
-
-        entity {
-          id
-          slug
-        }
-      }
-    }
-  `);
-
-  const createDocument = graphql(`
-    mutation DashboardLayout_CreateDocument_Mutation($input: CreateDocumentInput!) {
-      createDocument(input: $input) {
-        id
-
-        entity {
-          id
-          slug
-        }
-      }
-    }
-  `);
-
   const app = setupAppContext($query.me.id);
-
-  let editorSelectOpen = $derived(app.state.editorSelectContext !== null);
 
   setupSplitViewContext($query.me.id);
   setupDragDropContext();
@@ -460,41 +430,6 @@
 <MarketingConsentModal bind:open={marketingConsentModalOpen} />
 <TrialExpiredModal $user={$query.me} bind:open={trialExpiredModalOpen} />
 <UserSurveyModal bind:open={userSurveyModalOpen} />
-
-<EditorSelectModal
-  onOpenChange={(open) => {
-    if (!open) {
-      app.state.editorSelectContext = null;
-    }
-  }}
-  onselect={async (editor) => {
-    const context = app.state.editorSelectContext;
-    if (!context) return;
-
-    app.state.editorSelectContext = null;
-
-    if (editor === 'v1') {
-      const resp = await createPost({
-        siteId: context.siteId,
-        parentEntityId: context.parentEntityId,
-      });
-
-      mixpanel.track('create_post', { via: context.via });
-      context.onComplete?.();
-      await goto(`/${resp.entity.slug}`);
-    } else {
-      const resp = await createDocument({
-        siteId: context.siteId,
-        parentEntityId: context.parentEntityId,
-      });
-
-      mixpanel.track('create_document', { via: context.via });
-      context.onComplete?.();
-      await goto(`/${resp.entity.slug}`);
-    }
-  }}
-  open={editorSelectOpen}
-/>
 
 <div
   class={cx(

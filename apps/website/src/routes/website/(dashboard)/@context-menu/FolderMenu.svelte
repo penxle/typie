@@ -67,9 +67,9 @@
     }
   `);
 
-  const createPost = graphql(`
-    mutation FolderMenu_CreatePost_Mutation($input: CreatePostInput!) {
-      createPost(input: $input) {
+  const createDocument = graphql(`
+    mutation FolderMenu_CreateDocument_Mutation($input: CreateDocumentInput!) {
+      createDocument(input: $input) {
         id
 
         entity {
@@ -153,26 +153,17 @@
 <MenuItem
   icon={SquarePenIcon}
   onclick={async () => {
-    if (app.preference.current.experimental_v2EditorEnabled) {
-      app.state.editorSelectContext = {
-        siteId: entity.site.id,
-        parentEntityId: entity.id,
-        via,
-        onComplete: open,
-      };
-    } else {
-      const resp = await createPost({
-        siteId: entity.site.id,
-        parentEntityId: entity.id,
-      });
+    const resp = await createDocument({
+      siteId: entity.site.id,
+      parentEntityId: entity.id,
+    });
 
-      mixpanel.track('create_child_post', { via });
-      open();
-      await goto(`/${resp.entity.slug}`);
-    }
+    mixpanel.track('create_child_document', { via });
+    open();
+    await goto(`/${resp.entity.slug}`);
   }}
 >
-  하위 포스트 생성
+  하위 문서 생성
 </MenuItem>
 
 {#if entity.depth < maxDepth - 1}
