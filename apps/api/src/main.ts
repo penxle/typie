@@ -63,6 +63,8 @@ const server = Bun.serve({
     ...websocket,
     idleTimeout: 60,
     perMessageDeflate: true,
+    maxPayloadLength: 16 * 1024 * 1024, // 16 MB
+    backpressureLimit: 16 * 1024 * 1024, // 16 MB
   },
 });
 
