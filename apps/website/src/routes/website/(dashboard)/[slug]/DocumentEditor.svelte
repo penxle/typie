@@ -37,6 +37,7 @@
   import { getEditorRegistry } from './@split-view/editor-registry.svelte';
   import DocumentFindReplace from './DocumentFindReplace.svelte';
   import DocumentTemplateModal from './DocumentTemplateModal.svelte';
+  import EditorV2NoticeModal from './EditorV2NoticeModal.svelte';
   import FeedbackPopover from './FeedbackPopover.svelte';
   import SpellcheckPopover from './SpellcheckPopover.svelte';
   import type { DocumentEditor_query } from '$graphql';
@@ -1098,6 +1099,8 @@
     <br />
     모든 프리미엄 기능을 무제한으로 사용할 수 있어요.
   </PlanUpgradeModal>
+
+  <EditorV2NoticeModal {focused} />
 
   <FontUploadModal userId={$query.me.id} bind:open={fontUploadModalOpen} />
   <PlanUpgradeModal $user={$query.me} bind:open={fontPlanUpgradeModalOpen}>
