@@ -108,7 +108,7 @@
   <EntitySelectionIndicator entityId={$document.entity.id} visibility={$document.entity.visibility} />
 
   <Icon
-    style={css.raw({ color: 'accent.brand.default' })}
+    style={css.raw({ color: 'text.faint' })}
     icon={$document.documentType === DocumentType.TEMPLATE ? LayoutTemplateIcon : FileIcon}
     size={14}
   />

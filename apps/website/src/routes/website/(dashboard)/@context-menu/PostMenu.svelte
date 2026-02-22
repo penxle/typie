@@ -333,9 +333,7 @@
   <MenuItem icon={LayoutTemplateIcon} onclick={() => handleTypeChange(PostType.NORMAL)}>포스트로 전환</MenuItem>
 {/if}
 
-{#if app.preference.current.experimental_v2EditorEnabled}
-  <MenuItem icon={FileOutputIcon} onclick={handleConvertToDocument}>V2 에디터로 변환</MenuItem>
-{/if}
+<MenuItem icon={FileOutputIcon} onclick={handleConvertToDocument}>V2 에디터로 변환</MenuItem>
 
 {@render children?.()}
 

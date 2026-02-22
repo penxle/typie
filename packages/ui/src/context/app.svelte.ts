@@ -36,7 +36,6 @@ export type AppPreference = {
 
   experimental_pdfExportEnabled: boolean;
   experimental_docxExportEnabled: boolean;
-  experimental_v2EditorEnabled: boolean;
   lastPdfPageLayout: PageLayout | null;
 
   referralWelcomeModalShown: boolean;
@@ -66,13 +65,6 @@ type AppState = {
   newFolderId?: string;
 
   openMenuCount: number;
-
-  editorSelectContext: {
-    siteId: string;
-    parentEntityId?: string;
-    via: string;
-    onComplete?: () => void;
-  } | null;
 };
 
 type AppTimerState = {
@@ -111,8 +103,6 @@ export const setupAppContext = (userId: string) => {
     },
 
     openMenuCount: 0,
-
-    editorSelectContext: null,
   });
 
   const context: AppContext = {
@@ -151,8 +141,6 @@ export const setupAppContext = (userId: string) => {
       lastPdfPageLayout: null,
 
       experimental_docxExportEnabled: false,
-
-      experimental_v2EditorEnabled: false,
 
       referralWelcomeModalShown: false,
 

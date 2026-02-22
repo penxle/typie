@@ -101,9 +101,9 @@
     `),
   );
 
-  const createPost = graphql(`
-    mutation DashboardLayout_Sidebar_CreatePost_Mutation($input: CreatePostInput!) {
-      createPost(input: $input) {
+  const createDocument = graphql(`
+    mutation DashboardLayout_Sidebar_CreateDocument_Mutation($input: CreateDocumentInput!) {
+      createDocument(input: $input) {
         id
 
         entity {
@@ -357,22 +357,15 @@
             _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
           })}
           onclick={async () => {
-            if (app.preference.current.experimental_v2EditorEnabled) {
-              app.state.editorSelectContext = {
-                siteId: $site.id,
-                via: 'tree',
-              };
-            } else {
-              const resp = await createPost({
-                siteId: $site.id,
-              });
+            const resp = await createDocument({
+              siteId: $site.id,
+            });
 
-              mixpanel.track('create_post', { via: 'tree' });
-              await goto(`/${resp.entity.slug}`);
-            }
+            mixpanel.track('create_document', { via: 'tree' });
+            await goto(`/${resp.entity.slug}`);
           }}
           type="button"
-          use:tooltip={{ message: '새 포스트 생성' }}
+          use:tooltip={{ message: '새 문서 생성' }}
         >
           <Icon icon={SquarePenIcon} />
         </button>

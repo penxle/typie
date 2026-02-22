@@ -323,7 +323,7 @@
     <div>
       <h1 class={css({ fontSize: '20px', fontWeight: 'semibold', color: 'text.default' })}>프리셋</h1>
       <p class={css({ fontSize: '13px', color: 'text.subtle', lineHeight: '[1.6]', marginTop: '8px' })}>
-        새 포스트를 생성할 때 자동으로 적용될 기본 포맷을 설정해요.
+        새 문서를 생성할 때 자동으로 적용될 기본 포맷을 설정해요.
       </p>
     </div>
     <button
