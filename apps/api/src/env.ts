@@ -19,6 +19,7 @@ const schema = z.object({
   IFRAMELY_API_KEY: z.string(),
   KAKAO_CLIENT_ID: z.string(),
   KAKAO_CLIENT_SECRET: z.string(),
+  BOOTSTRAP_BYPASS_KEY: z.string().optional(),
   LISTEN_PORT: z.coerce.number().optional(),
   MEILISEARCH_API_KEY: z.string(),
   MEILISEARCH_URL: z.string(),

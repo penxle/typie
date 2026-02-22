@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/public';
-import type { Bootstrap } from '$lib/bootstrap';
+import type { Bootstrap } from '$lib/bootstrap.server';
 import type { RequestHandler } from './$types';
 
 const CACHE_TTL = 60_000;

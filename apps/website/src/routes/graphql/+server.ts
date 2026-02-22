@@ -18,6 +18,8 @@ export const POST: RequestHandler = async ({ request, cookies, getClientAddress 
     });
   }
 
+  const bootstrapBypass = cookies.get('typie-bb');
+
   const response = await fetch(`${env.PRIVATE_API_URL}/graphql`, {
     method: 'POST',
     headers: {
@@ -25,6 +27,7 @@ export const POST: RequestHandler = async ({ request, cookies, getClientAddress 
       'X-Client-IP': getClientAddress(),
       ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       ...(deviceId ? { 'X-Device-Id': deviceId } : {}),
+      ...(bootstrapBypass ? { 'X-Bootstrap-Bypass': bootstrapBypass } : {}),
     },
     body: request.body,
     // @ts-expect-error Node type issues
