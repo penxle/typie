@@ -12,7 +12,8 @@ use crate::model::{
 };
 use crate::render::DragImageResult;
 use crate::runtime::search::{SearchQuery, perform_search};
-use crate::runtime::{Message, RawTextReplacementRule, RawTrackedItem, Runtime, State, slate};
+use crate::runtime::text_replacement::RawTextReplacementRule;
+use crate::runtime::{Message, RawTrackedItem, Runtime, State, slate};
 use crate::state::{Position, Selection, leaf_block_end};
 use crate::types::Affinity;
 use icu_properties::props::GeneralCategory;

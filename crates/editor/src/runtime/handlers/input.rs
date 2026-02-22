@@ -16,12 +16,10 @@ impl Runtime {
         effects.extend(self.transact(|tr| {
             tr.delete_selection()?;
             tr.normalize()?;
-            tr.insert_text(text)
+            tr.insert_text(text)?;
+            tr.try_text_replacement(text.len())?;
+            Ok(true)
         }));
-
-        if let Some(replacement_effects) = self.try_text_replacement(text.len()) {
-            effects.extend(replacement_effects);
-        }
 
         effects
     }
@@ -41,10 +39,11 @@ impl Runtime {
             effects.push(Effect::PendingStylesChanged);
         }
 
-        effects.extend(self.transact(|tr| tr.insert_text(text)));
-        if let Some(replacement_effects) = self.try_text_replacement(text.len()) {
-            effects.extend(replacement_effects);
-        }
+        effects.extend(self.transact(|tr| {
+            tr.insert_text(text)?;
+            tr.try_text_replacement(text.len())?;
+            Ok(true)
+        }));
         effects
     }
 }
