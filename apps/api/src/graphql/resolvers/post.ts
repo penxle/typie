@@ -2,7 +2,6 @@ import { Node } from '@tiptap/pm/model';
 import dayjs from 'dayjs';
 import dedent from 'dedent';
 import { and, asc, count, desc, eq, gt, gte, inArray, isNull, lt, sum } from 'drizzle-orm';
-import { filter, pipe, Repeater } from 'graphql-yoga';
 import { nanoid } from 'nanoid';
 import { match } from 'ts-pattern';
 import * as Y from 'yjs';
@@ -1230,64 +1229,66 @@ builder.mutationFields((t) => ({
       type: t.input.field({ type: PostSyncType }),
       data: t.input.string(),
     },
-    resolve: async (_, { input }, ctx) => {
-      const post = await db
-        .select({ siteId: Entities.siteId, availability: Entities.availability })
-        .from(Posts)
-        .innerJoin(Entities, eq(Posts.entityId, Entities.id))
-        .where(eq(Posts.id, input.postId))
-        .then(firstOrThrow);
+    resolve: async () => {
+      throw new TypieError({ code: 'deprecated' });
 
-      if (post.availability === EntityAvailability.PRIVATE) {
-        await assertSitePermission({
-          userId: ctx.session.userId,
-          siteId: post.siteId,
-        });
-      }
+      // const post = await db
+      //   .select({ siteId: Entities.siteId, availability: Entities.availability })
+      //   .from(Posts)
+      //   .innerJoin(Entities, eq(Posts.entityId, Entities.id))
+      //   .where(eq(Posts.id, input.postId))
+      //   .then(firstOrThrow);
 
-      if (input.type === PostSyncType.UPDATE) {
-        pubsub.publish('post:sync', input.postId, {
-          target: `!${input.clientId}`,
-          type: PostSyncType.UPDATE,
-          data: input.data,
-        });
+      // if (post.availability === EntityAvailability.PRIVATE) {
+      //   await assertSitePermission({
+      //     userId: ctx.session.userId,
+      //     siteId: post.siteId,
+      //   });
+      // }
 
-        await redis.lpush(
-          `post:sync:updates:${input.postId}`,
-          JSON.stringify({
-            userId: ctx.session.userId,
-            data: input.data,
-          }),
-        );
+      // if (input.type === PostSyncType.UPDATE) {
+      //   pubsub.publish('post:sync', input.postId, {
+      //     target: `!${input.clientId}`,
+      //     type: PostSyncType.UPDATE,
+      //     data: input.data,
+      //   });
 
-        await enqueueJob('post:sync:collect', input.postId);
-      } else if (input.type === PostSyncType.VECTOR) {
-        const contents = await db
-          .select({ update: PostContents.update, vector: PostContents.vector })
-          .from(PostContents)
-          .where(eq(PostContents.postId, input.postId))
-          .then(firstOrThrow);
+      //   await redis.lpush(
+      //     `post:sync:updates:${input.postId}`,
+      //     JSON.stringify({
+      //       userId: ctx.session.userId,
+      //       data: input.data,
+      //     }),
+      //   );
 
-        const update = Y.diffUpdateV2(contents.update, Uint8Array.fromBase64(input.data));
+      //   await enqueueJob('post:sync:collect', input.postId);
+      // } else if (input.type === PostSyncType.VECTOR) {
+      //   const contents = await db
+      //     .select({ update: PostContents.update, vector: PostContents.vector })
+      //     .from(PostContents)
+      //     .where(eq(PostContents.postId, input.postId))
+      //     .then(firstOrThrow);
 
-        pubsub.publish('post:sync', input.postId, {
-          target: input.clientId,
-          type: PostSyncType.UPDATE,
-          data: update.toBase64(),
-        });
+      //   const update = Y.diffUpdateV2(contents.update, Uint8Array.fromBase64(input.data));
 
-        pubsub.publish('post:sync', input.postId, {
-          target: input.clientId,
-          type: PostSyncType.VECTOR,
-          data: contents.vector.toBase64(),
-        });
-      } else if (input.type === PostSyncType.AWARENESS) {
-        pubsub.publish('post:sync', input.postId, {
-          target: `!${input.clientId}`,
-          type: PostSyncType.AWARENESS,
-          data: input.data,
-        });
-      }
+      //   pubsub.publish('post:sync', input.postId, {
+      //     target: input.clientId,
+      //     type: PostSyncType.UPDATE,
+      //     data: update.toBase64(),
+      //   });
+
+      //   pubsub.publish('post:sync', input.postId, {
+      //     target: input.clientId,
+      //     type: PostSyncType.VECTOR,
+      //     data: contents.vector.toBase64(),
+      //   });
+      // } else if (input.type === PostSyncType.AWARENESS) {
+      //   pubsub.publish('post:sync', input.postId, {
+      //     target: `!${input.clientId}`,
+      //     type: PostSyncType.AWARENESS,
+      //     data: input.data,
+      //   });
+      // }
 
       return true;
     },
@@ -1442,67 +1443,70 @@ builder.subscriptionFields((t) => ({
       clientId: t.arg.string(),
       postId: t.arg.id({ validate: validateDbId(TableCode.POSTS) }),
     },
-    subscribe: async (_, args, ctx) => {
-      const post = await db
-        .select({ siteId: Entities.siteId, availability: Entities.availability })
-        .from(Posts)
-        .innerJoin(Entities, eq(Posts.entityId, Entities.id))
-        .where(eq(Posts.id, args.postId))
-        .then(firstOrThrow);
+    subscribe: async () => {
+      throw new TypieError({ code: 'deprecated' });
 
-      if (post.availability === EntityAvailability.PRIVATE) {
-        await assertSitePermission({
-          userId: ctx.session.userId,
-          siteId: post.siteId,
-        });
-      }
+      // const post = await db
+      //   .select({ siteId: Entities.siteId, availability: Entities.availability })
+      //   .from(Posts)
+      //   .innerJoin(Entities, eq(Posts.entityId, Entities.id))
+      //   .where(eq(Posts.id, args.postId))
+      //   .then(firstOrThrow);
 
-      pubsub.publish('post:sync', args.postId, {
-        target: `!${args.clientId}`,
-        type: PostSyncType.PRESENCE,
-        data: '',
-      });
+      // if (post.availability === EntityAvailability.PRIVATE) {
+      //   await assertSitePermission({
+      //     userId: ctx.session.userId,
+      //     siteId: post.siteId,
+      //   });
+      // }
 
-      const repeater = Repeater.merge([
-        pubsub.subscribe('post:sync', args.postId),
-        new Repeater<{ target: string; type: PostSyncType; data: string }>(async (push, stop) => {
-          const heartbeat = async () => {
-            await redis.zadd('writers:active', Date.now(), ctx.session.userId);
-            push({
-              target: args.clientId,
-              type: PostSyncType.HEARTBEAT,
-              data: dayjs().toISOString(),
-            });
-          };
+      // pubsub.publish('post:sync', args.postId, {
+      //   target: `!${args.clientId}`,
+      //   type: PostSyncType.PRESENCE,
+      //   data: '',
+      // });
 
-          await heartbeat();
-          const interval = setInterval(heartbeat, 1000);
+      // const repeater = Repeater.merge([
+      //   pubsub.subscribe('post:sync', args.postId),
+      //   new Repeater<{ target: string; type: PostSyncType; data: string }>(async (push, stop) => {
+      //     const heartbeat = async () => {
+      //       await redis.zadd('writers:active', Date.now(), ctx.session.userId);
+      //       push({
+      //         target: args.clientId,
+      //         type: PostSyncType.HEARTBEAT,
+      //         data: dayjs().toISOString(),
+      //       });
+      //     };
 
-          await stop;
+      //     await heartbeat();
+      //     const interval = setInterval(heartbeat, 1000);
 
-          clearInterval(interval);
-        }),
-      ]);
+      //     await stop;
 
-      return pipe(
-        repeater,
-        filter(({ target }) => {
-          if (target === '*') {
-            return true;
-          } else if (target.startsWith('!')) {
-            return target.slice(1) !== args.clientId;
-          } else {
-            return target === args.clientId;
-          }
-        }),
-      );
+      //     clearInterval(interval);
+      //   }),
+      // ]);
+
+      // return pipe(
+      //   repeater,
+      //   filter(({ target }) => {
+      //     if (target === '*') {
+      //       return true;
+      //     } else if (target.startsWith('!')) {
+      //       return target.slice(1) !== args.clientId;
+      //     } else {
+      //       return target === args.clientId;
+      //     }
+      //   }),
+      // );
     },
-    resolve: async (payload, args) => {
-      return {
-        postId: args.postId,
-        type: payload.type,
-        data: payload.data,
-      };
+    resolve: async () => {
+      throw new TypieError({ code: 'deprecated' });
+      // return {
+      //   postId: args.postId,
+      //   type: payload.type,
+      //   data: payload.data,
+      // };
     },
   }),
 }));
