@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:typie/hooks/select_value_listenable.dart';
 import 'package:typie/screens/native_editor/toolbar/buttons/color.dart';
 import 'package:typie/screens/native_editor/toolbar/scope.dart';
 import 'package:typie/screens/native_editor/toolbar/secondary/text_options/base.dart';
@@ -11,9 +12,7 @@ class NativeEditorTextColorTextOptionsToolbar extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final scope = NativeEditorToolbarScope.of(context);
-    final attrs = useValueListenable(scope.attrs);
-
-    final textColorAttr = findAttr(attrs, 'text_color');
+    final textColorAttr = useSelectValueListenable(scope.attrs, (attrs) => findAttr(attrs, 'text_color'));
     final textColorValues = (textColorAttr?['values'] as List?)?.whereType<String>().toList() ?? [];
     final activeValue = textColorValues.length == 1
         ? textColorValues[0]

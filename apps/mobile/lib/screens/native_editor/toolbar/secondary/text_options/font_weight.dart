@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:typie/hooks/select_value_listenable.dart';
 import 'package:typie/screens/native_editor/toolbar/buttons/label.dart';
 import 'package:typie/screens/native_editor/toolbar/scope.dart';
 import 'package:typie/screens/native_editor/toolbar/secondary/text_options/base.dart';
@@ -11,12 +12,10 @@ class NativeEditorFontWeightTextOptionsToolbar extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final scope = NativeEditorToolbarScope.of(context);
-    final attrs = useValueListenable(scope.attrs);
-
-    final fontFamilyAttr = findAttr(attrs, 'font_family');
+    final fontFamilyAttr = useSelectValueListenable(scope.attrs, (attrs) => findAttr(attrs, 'font_family'));
     final fontFamilyValues = (fontFamilyAttr?['values'] as List?)?.whereType<String>().toList() ?? [];
 
-    final fontWeightAttr = findAttr(attrs, 'font_weight');
+    final fontWeightAttr = useSelectValueListenable(scope.attrs, (attrs) => findAttr(attrs, 'font_weight'));
     final fontWeightValues = (fontWeightAttr?['values'] as List?)?.whereType<int>().toList() ?? [];
     final activeValue = fontWeightValues.length == 1 ? fontWeightValues[0] : null;
 
