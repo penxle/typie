@@ -68,7 +68,7 @@ class FileWidget extends HookWidget {
         child: Stack(
           children: [
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Row(
                 children: [
                   Icon(LucideLightIcons.file, size: 20, color: context.colors.textSubtle),
@@ -85,10 +85,16 @@ class FileWidget extends HookWidget {
                             fontWeight: FontWeight.w500,
                             color: context.colors.textDefault,
                           ),
+                          maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                         if (displaySize != null)
-                          Text(displaySize, style: TextStyle(fontSize: 12, color: context.colors.textSubtle)),
+                          Text(
+                            displaySize,
+                            style: TextStyle(fontSize: 12, color: context.colors.textSubtle),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                       ],
                     ),
                   ),
