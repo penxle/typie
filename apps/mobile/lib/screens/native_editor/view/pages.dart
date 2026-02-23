@@ -96,8 +96,10 @@ class PageList extends HookWidget {
           return localX - geo.contentStartX(viewportWidth: viewport, horizontalScrollOffset: hScrollOffset);
         },
         getViewportWidth: () => viewportWidth.value,
+        isLongPressing: scope.isLongPressing,
       ),
     );
+    final gestureState = gesture.state;
 
     useEffect(() => gesture.dispose, const []);
 
@@ -119,29 +121,21 @@ class PageList extends HookWidget {
     final prevFromHandle = useRef<SelectionHandleInfo?>(null);
     final prevToHandle = useRef<SelectionHandleInfo?>(null);
     final wasSelecting = useRef(false);
-    final doubleTapDragStart = useRef<Offset?>(null);
-    final isDoubleTapDragging = useRef(false);
 
     useEffect(() {
       final isCollapsed = fromHandle == null || toHandle == null;
       final handleDragCanceledByTableSelection =
-          isTableCellSelectorSelection && !gesture.draggingCellHandle && gesture.draggingHandleType != null;
+          isTableCellSelectorSelection && !gesture.isCellHandleDragging && gesture.hasTextHandleDrag;
       final justFinishedSelecting = wasSelecting.value && !isSelecting;
       final selectionChanged = fromHandle != prevFromHandle.value || toHandle != prevToHandle.value;
 
       final shouldResetTextHandleDrag =
-          !gesture.draggingCellHandle && (isCollapsed || handleDragCanceledByTableSelection);
+          !gesture.isCellHandleDragging && (isCollapsed || handleDragCanceledByTableSelection);
 
       if (shouldResetTextHandleDrag) {
-        gesture
-          ..draggingHandleType = null
-          ..dragAnchorHandle = null
-          ..stopAutoScroll();
-        if (!isDoubleTapDragging.value) {
-          doubleTapDragStart.value = null;
-        }
+        gesture.stopSelectionHandlesAndAutoScroll();
         showContextMenu.value = false;
-      } else if (!isSelecting && !isDoubleTapDragging.value) {
+      } else if (!isSelecting && !gestureState.active) {
         if (justFinishedSelecting) {
           showContextMenu.value = true;
         } else if (selectionChanged) {
@@ -149,7 +143,7 @@ class PageList extends HookWidget {
         }
       }
 
-      if (isSelecting || isDoubleTapDragging.value) {
+      if (isSelecting || gestureState.active) {
         showContextMenu.value = false;
       }
 
@@ -173,31 +167,18 @@ class PageList extends HookWidget {
         }
 
         bool isConsecutiveTap({required Offset localPosition, required DateTime now}) {
-          const maxTapIntervalMs = 300;
-          const maxTapDistance = 20.0;
-          final prevTime = gesture.lastTapTime;
-          final prevPosition = gesture.lastTapPosition;
-          if (prevTime == null || prevPosition == null) {
-            return false;
-          }
-
-          final timeDiff = now.difference(prevTime).inMilliseconds;
-          final distance = (localPosition - prevPosition).distance;
-          return timeDiff < maxTapIntervalMs && distance < maxTapDistance;
+          return gesture.isConsecutiveTap(localPosition: localPosition, now: now);
         }
 
         void endTextHandleDrag() {
-          if (gesture.draggingCellHandle) {
+          if (gesture.isCellHandleDragging) {
             return;
           }
-          final hadHandleDrag = gesture.draggingHandleType != null || handleDragPosition.value != null;
+          final hadHandleDrag = gesture.hasTextHandleDrag || handleDragPosition.value != null;
           if (!hadHandleDrag) {
             return;
           }
-          gesture
-            ..draggingHandleType = null
-            ..dragAnchorHandle = null
-            ..stopAutoScroll();
+          gesture.stopSelectionHandlesAndAutoScroll();
           handleDragPosition.value = null;
           if (scope.controller.state.isSelecting) {
             scope.controller.setSelecting(false);
@@ -234,44 +215,51 @@ class PageList extends HookWidget {
               'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
             });
 
-          gesture
-            ..lastTapTime = DateTime.now()
-            ..lastTapPosition = localPosition;
+          gesture.clearTapHistory();
 
           scope.controller.scrollIntoView();
           return true;
         }
 
-        void startDoubleTapDrag(Offset localPosition) {
+        void prepareDoubleTapDrag(Offset localPosition) {
           gesture
-            ..tapTimer?.cancel()
-            ..tapTimer = null
-            ..tapDispatched = true
-            ..draggingHandleType = SelectionHandleType.to
-            ..dragAnchorHandle = null
+            ..cancelTapTimer()
+            ..setTapDispatched(true)
+            ..clearSelectionHandleState()
             ..stopAutoScroll();
 
           longPressPosition.value = null;
-          scope.isLongPressing.value = false;
           showContextMenu.value = false;
-          isDoubleTapDragging.value = true;
-          doubleTapDragStart.value = localPosition;
+          gestureState.prepare(localPosition);
+          handleDragPosition.value = null;
+        }
+
+        void startDoubleTapDrag(Offset localPosition) {
+          gesture
+            ..cancelTapTimer()
+            ..setTapDispatched(true)
+            ..setTextHandleDragType(SelectionHandleType.to)
+            ..setDragAnchorHandle(null)
+            ..stopAutoScroll();
+
+          longPressPosition.value = null;
+          showContextMenu.value = false;
+          gestureState.begin(localPosition);
           handleDragPosition.value = null;
           scope.controller.setSelecting(true);
         }
 
         void endDoubleTapDrag() {
-          isDoubleTapDragging.value = false;
-          doubleTapDragStart.value = null;
+          gestureState.stop();
           endTextHandleDrag();
         }
 
         void updateDoubleTapDragSelection(Offset localPosition) {
-          if (!isDoubleTapDragging.value) {
+          if (!gestureState.dragging) {
             return;
           }
 
-          final startPosition = doubleTapDragStart.value;
+          final startPosition = gestureState.start;
           if (startPosition != null && (localPosition - startPosition).distance < 4) {
             return;
           }
@@ -286,8 +274,8 @@ class PageList extends HookWidget {
               final delta = localPosition - startPosition;
               final towardSelectionEnd = delta.dy > 8 || (delta.dy.abs() <= 8 && delta.dx >= 0);
               gesture
-                ..draggingHandleType = towardSelectionEnd ? SelectionHandleType.to : SelectionHandleType.from
-                ..dragAnchorHandle = towardSelectionEnd ? from : to;
+                ..setTextHandleDragType(towardSelectionEnd ? SelectionHandleType.to : SelectionHandleType.from)
+                ..setDragAnchorHandle(towardSelectionEnd ? from : to);
             }
           }
 
@@ -324,23 +312,24 @@ class PageList extends HookWidget {
           if (renderBox == null) {
             return;
           }
-          gesture.pointerDownTouchPosition = renderBox.globalToLocal(details.globalPosition);
+          gesture.rememberPointerDown(renderBox.globalToLocal(details.globalPosition));
         }
 
         void onHandleDragStart(SelectionHandleType type, DragStartDetails details) {
-          gesture.draggingHandleType = type;
           scope.controller.setSelecting(true);
 
           final renderBox = context.findRenderObject() as RenderBox?;
           if (renderBox == null) {
             return;
           }
-          final touchPosition = gesture.pointerDownTouchPosition ?? renderBox.globalToLocal(details.globalPosition);
+          final touchPosition = gesture.pointerDownTouchPosition() ?? renderBox.globalToLocal(details.globalPosition);
           final handle = type == SelectionHandleType.from ? fromHandle : toHandle;
-          gesture
-            ..dragStartTouchPosition = touchPosition
-            ..dragStartHandleScreenPosition = gesture.getHandleStemCenter(handle, scope.geometry) ?? touchPosition
-            ..dragAnchorHandle = type == SelectionHandleType.from ? toHandle : fromHandle;
+          gesture.beginTextHandleDrag(
+            type: type,
+            touchPosition: touchPosition,
+            handleScreenPosition: gesture.getHandleStemCenter(handle, scope.geometry) ?? touchPosition,
+            anchorHandle: type == SelectionHandleType.from ? toHandle : fromHandle,
+          );
         }
 
         void onHandleDragUpdate(SelectionHandleType type, DragUpdateDetails details) {
@@ -349,15 +338,13 @@ class PageList extends HookWidget {
             return;
           }
           final touchPosition = renderBox.globalToLocal(details.globalPosition);
-          final startTouch = gesture.dragStartTouchPosition;
-          final startHandleScreen = gesture.dragStartHandleScreenPosition;
-          final anchorHandle = gesture.dragAnchorHandle;
-          if (startTouch == null || startHandleScreen == null || anchorHandle == null) {
+          final dragContext = gesture.selectionHandleDragContext();
+          if (dragContext == null) {
             return;
           }
 
-          final delta = touchPosition - startTouch;
-          final selectionScreenPosition = startHandleScreen + delta;
+          final delta = touchPosition - dragContext.startTouchPosition;
+          final selectionScreenPosition = dragContext.startHandleScreenPosition + delta;
 
           handleDragPosition.value = selectionScreenPosition;
 
@@ -366,9 +353,9 @@ class PageList extends HookWidget {
             final pointerX = gesture.getPointerX(selectionScreenPosition.dx);
             editor.dispatch({
               'type': 'extendSelectionTo',
-              'anchorPageIdx': anchorHandle.pageIdx,
-              'anchorX': anchorHandle.x,
-              'anchorY': anchorHandle.y + anchorHandle.height / 2,
+              'anchorPageIdx': dragContext.anchorHandle.pageIdx,
+              'anchorX': dragContext.anchorHandle.x,
+              'anchorY': dragContext.anchorHandle.y + dragContext.anchorHandle.height / 2,
               'headPageIdx': pageIdx,
               'headX': pointerX,
               'headY': localY,
@@ -394,6 +381,7 @@ class PageList extends HookWidget {
         final offsets = geo.computeCumulativePageOffsets();
         final contentWidth = geo.contentWidth;
         final needsHorizontalScroll = contentWidth > viewWidth;
+        final hasRangeSelection = !(state.state.selection?.collapsed ?? true);
         final horizontalPhysics = isSelecting || !needsHorizontalScroll
             ? const NeverScrollableScrollPhysics()
             : const _NonGestureBouncingScrollPhysics();
@@ -407,132 +395,158 @@ class PageList extends HookWidget {
           typewriterPosition: pref.typewriterPosition,
         );
 
+        void startLongPress(Offset globalPosition) {
+          if (gesture.isCellHandleDragging) {
+            return;
+          }
+          if (gestureState.active) {
+            return;
+          }
+          final viewportPosition = viewportPositionFromGlobal(globalPosition);
+          if (viewportPosition == null) {
+            return;
+          }
+          scope.inputController.commitComposing();
+
+          longPressPosition.value = viewportPosition;
+          if (!gestureState.startLongPress()) {
+            return;
+          }
+
+          final draggingHandle = state.state.draggingHandle;
+          final anchorHandle = draggingHandle == SelectionHandleType.from
+              ? state.state.selection?.toBounds
+              : state.state.selection?.fromBounds;
+
+          gesture.beginLongPressSession(
+            touchPosition: globalPosition,
+            handleScreenPosition: gesture.getHandleStemCenter(fromHandle ?? toHandle, scope.geometry),
+            anchorHandle: anchorHandle,
+          );
+        }
+
+        void updateLongPress(Offset viewportPosition) {
+          if (!gestureState.longPressing || gestureState.active) {
+            return;
+          }
+
+          final (pageIdx, localY) = getPageAtPosition(viewportPosition.dy);
+          longPressPosition.value = viewportPosition;
+
+          if (pageIdx >= 0) {
+            final pointerX = gesture.getPointerX(viewportPosition.dx);
+            editor
+              ..dispatch({
+                'type': 'pointerDown',
+                'pageIdx': pageIdx,
+                'x': pointerX,
+                'y': localY,
+                'clickCount': 1,
+                'button': 'primary',
+                'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
+              })
+              ..dispatch({
+                'type': 'pointerUp',
+                'pageIdx': pageIdx,
+                'x': pointerX,
+                'y': localY,
+                'button': 'primary',
+                'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
+              });
+            scope.controller.scrollIntoView();
+          }
+
+          gesture.handleAutoScroll(
+            y: viewportPosition.dy,
+            x: viewportPosition.dx,
+            viewWidth: viewWidth,
+            viewHeight: viewHeight,
+            handleDragPosition: handleDragPosition,
+            longPressPosition: longPressPosition,
+            dropPosition: dropPosition,
+          );
+        }
+
+        void endLongPress() {
+          if (!gestureState.longPressing || gestureState.active) {
+            return;
+          }
+          longPressPosition.value = null;
+          gesture.stopAutoScroll();
+          gestureState.endLongPress();
+        }
+
         final listView = ScrollConfiguration(
           behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false, dragDevices: isSelecting ? {} : null),
           child: SingleChildScrollView(
             controller: verticalScrollController,
             physics: isSelecting ? const NeverScrollableScrollPhysics() : const _NonGestureBouncingScrollPhysics(),
-            child: EditorDraggable(
-              gesture: gesture,
-              child: RawGestureDetector(
-                gestures: {
-                  ConditionalLongPressGestureRecognizer:
-                      GestureRecognizerFactoryWithHandlers<ConditionalLongPressGestureRecognizer>(
-                        () => ConditionalLongPressGestureRecognizer(
-                          condition: (globalPosition) {
-                            if (gesture.draggingCellHandle) {
-                              return false;
-                            }
-                            if (isDoubleTapDragging.value) {
-                              return true;
-                            }
-                            final viewportPosition = viewportPositionFromGlobal(globalPosition);
-                            if (viewportPosition == null) {
-                              return true;
-                            }
-                            final (pageIdx, localY) = getPageAtPosition(viewportPosition.dy);
-                            final pointerX = gesture.getPointerX(viewportPosition.dx);
-                            return scope.editor.isSelectionHit(pageIdx, pointerX, localY);
-                          },
-                          duration: const Duration(milliseconds: 500),
-                        ),
-                        (ConditionalLongPressGestureRecognizer instance) {
-                          instance
-                            ..onLongPressStart = (details) {
-                              if (gesture.draggingCellHandle) {
-                                return;
+            child: Builder(
+              builder: (_) {
+                final content = RawGestureDetector(
+                  gestures: {
+                    ConditionalLongPressGestureRecognizer:
+                        GestureRecognizerFactoryWithHandlers<ConditionalLongPressGestureRecognizer>(
+                          () => ConditionalLongPressGestureRecognizer(
+                            condition: (globalPosition) {
+                              if (gesture.isCellHandleDragging) {
+                                return false;
                               }
-                              if (isDoubleTapDragging.value) {
-                                return;
+                              if (gestureState.active) {
+                                return true;
                               }
-                              final viewportPosition = viewportPositionFromGlobal(details.globalPosition);
+                              final viewportPosition = viewportPositionFromGlobal(globalPosition);
                               if (viewportPosition == null) {
-                                return;
+                                return true;
                               }
-                              scope.inputController.commitComposing();
-
-                              longPressPosition.value = viewportPosition;
-                              scope.isLongPressing.value = true;
-
-                              final draggingHandle = state.state.draggingHandle;
-                              final anchorHandle = draggingHandle == SelectionHandleType.from
-                                  ? state.state.selection?.toBounds
-                                  : state.state.selection?.fromBounds;
-
-                              gesture
-                                ..dragStartTouchPosition = details.globalPosition
-                                ..dragStartHandleScreenPosition = gesture.getHandleStemCenter(
-                                  fromHandle ?? toHandle,
-                                  scope.geometry,
-                                )
-                                ..dragAnchorHandle = anchorHandle
-                                ..lastTapTime = null;
-                            }
-                            ..onLongPressMoveUpdate = (details) {
-                              if (isDoubleTapDragging.value) {
-                                return;
-                              }
-                              final viewportPosition = viewportPositionFromGlobal(details.globalPosition);
-                              if (viewportPosition == null) {
-                                return;
-                              }
-
                               final (pageIdx, localY) = getPageAtPosition(viewportPosition.dy);
-                              longPressPosition.value = viewportPosition;
-
-                              if (pageIdx >= 0) {
-                                final pointerX = gesture.getPointerX(viewportPosition.dx);
-                                editor
-                                  ..dispatch({
-                                    'type': 'pointerDown',
-                                    'pageIdx': pageIdx,
-                                    'x': pointerX,
-                                    'y': localY,
-                                    'clickCount': 1,
-                                    'button': 'primary',
-                                    'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
-                                  })
-                                  ..dispatch({
-                                    'type': 'pointerUp',
-                                    'pageIdx': pageIdx,
-                                    'x': pointerX,
-                                    'y': localY,
-                                    'button': 'primary',
-                                    'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
-                                  });
-                                scope.controller.scrollIntoView();
+                              final pointerX = gesture.getPointerX(viewportPosition.dx);
+                              return scope.editor.isSelectionHit(pageIdx, pointerX, localY);
+                            },
+                            duration: const Duration(milliseconds: 500),
+                          ),
+                          (ConditionalLongPressGestureRecognizer instance) {
+                            instance
+                              ..onLongPressStart = (details) {
+                                startLongPress(details.globalPosition);
                               }
-
-                              gesture.handleAutoScroll(
-                                y: viewportPosition.dy,
-                                x: viewportPosition.dx,
-                                viewWidth: viewWidth,
-                                viewHeight: viewHeight,
-                                handleDragPosition: handleDragPosition,
-                                longPressPosition: longPressPosition,
-                                dropPosition: dropPosition,
-                              );
-                            }
-                            ..onLongPressEnd = (details) {
-                              if (isDoubleTapDragging.value) {
-                                return;
-                              }
-                              longPressPosition.value = null;
-                              gesture.stopAutoScroll();
-                              scope.isLongPressing.value = false;
-                            };
-                        },
-                      ),
-                },
-                child: Column(
-                  children: [
-                    _MeasuredTitleFields(scope: scope),
-                    if (needsHorizontalScroll)
-                      SingleChildScrollView(
-                        controller: horizontalScrollController,
-                        scrollDirection: Axis.horizontal,
-                        physics: horizontalPhysics,
-                        child: Container(
+                              ..onLongPressEnd = (details) {
+                                endLongPress();
+                              };
+                          },
+                        ),
+                  },
+                  child: Column(
+                    children: [
+                      _MeasuredTitleFields(scope: scope),
+                      if (needsHorizontalScroll)
+                        SingleChildScrollView(
+                          controller: horizontalScrollController,
+                          scrollDirection: Axis.horizontal,
+                          physics: horizontalPhysics,
+                          child: Container(
+                            width: (geo.pages.firstOrNull?.width ?? 0) + geo.horizontalPadding * 2,
+                            padding: EdgeInsets.only(
+                              left: geo.horizontalPadding,
+                              right: geo.horizontalPadding,
+                              bottom: contentBottomPadding,
+                            ),
+                            child: Column(
+                              children: [
+                                for (var i = 0; i < pages.length; i++) ...[
+                                  _PageSlot(
+                                    key: ValueKey(i),
+                                    pageIndex: i,
+                                    pageTop: geo.titleAreaHeight + offsets[i],
+                                    pageBottom: geo.titleAreaHeight + offsets[i] + pages[i].height,
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        )
+                      else
+                        Container(
                           width: (geo.pages.firstOrNull?.width ?? 0) + geo.horizontalPadding * 2,
                           padding: EdgeInsets.only(
                             left: geo.horizontalPadding,
@@ -552,31 +566,12 @@ class PageList extends HookWidget {
                             ],
                           ),
                         ),
-                      )
-                    else
-                      Container(
-                        width: (geo.pages.firstOrNull?.width ?? 0) + geo.horizontalPadding * 2,
-                        padding: EdgeInsets.only(
-                          left: geo.horizontalPadding,
-                          right: geo.horizontalPadding,
-                          bottom: contentBottomPadding,
-                        ),
-                        child: Column(
-                          children: [
-                            for (var i = 0; i < pages.length; i++) ...[
-                              _PageSlot(
-                                key: ValueKey(i),
-                                pageIndex: i,
-                                pageTop: geo.titleAreaHeight + offsets[i],
-                                pageBottom: geo.titleAreaHeight + offsets[i] + pages[i].height,
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                  ],
-                ),
-              ),
+                    ],
+                  ),
+                );
+
+                return EditorDraggable(gesture: gesture, child: content);
+              },
             ),
           ),
         );
@@ -596,9 +591,7 @@ class PageList extends HookWidget {
           final now = DateTime.now();
           final clickCount = isConsecutiveTap(localPosition: localPosition, now: now) ? 2 : 1;
 
-          gesture
-            ..lastTapTime = now
-            ..lastTapPosition = localPosition;
+          gesture.recordTap(now: now, localPosition: localPosition);
 
           final pointerX = gesture.getPointerX(localPosition.dx);
           final tappedInteractive = scope.editor.isInteractiveHit(pageIdx, pointerX, localY);
@@ -693,123 +686,80 @@ class PageList extends HookWidget {
               showContextMenu.value = false;
             }
 
-            gesture.tapTimer?.cancel();
-            gesture.tapTimer = null;
+            gesture.cancelTapTimer();
 
             if (isConsecutiveTap(localPosition: details.localPosition, now: DateTime.now())) {
-              gesture.tapDispatched = true;
+              gesture.setTapDispatched(true);
               if (dispatchDoubleTapSelection(details.localPosition)) {
-                startDoubleTapDrag(details.localPosition);
+                prepareDoubleTapDrag(details.localPosition);
               }
               return;
             }
 
             gesture
-              ..tapDispatched = false
-              ..tapTimer = Timer(const Duration(milliseconds: 150), () {
-                gesture.tapDispatched = true;
-
+              ..setTapDispatched(false)
+              ..scheduleTapTimer(const Duration(milliseconds: 150), () {
                 final pointerX = gesture.getPointerX(details.localPosition.dx);
                 final (pageIdx, localY) = getPageAtPosition(details.localPosition.dy);
 
                 final canDrag = scope.editor.isSelectionHit(pageIdx, pointerX, localY);
 
-                if (!canDrag) {
-                  dispatchTap(details.localPosition);
+                if (canDrag) {
+                  gesture.setTapDispatched(true);
+                  return;
                 }
+
+                if (hasRangeSelection) {
+                  // Keep current selection until long-press gesture resolves.
+                  return;
+                }
+
+                gesture.setTapDispatched(true);
+                dispatchTap(details.localPosition);
               });
           },
           onTapUp: (details) {
-            if (isDoubleTapDragging.value) {
+            if (gestureState.dragging) {
               return;
             }
-            gesture.tapTimer?.cancel();
-            gesture.tapTimer = null;
+            gestureState.clearPending();
+            gesture.cancelTapTimer();
             if (!gesture.tapDispatched) {
               dispatchTap(details.localPosition);
             }
           },
           onTapCancel: () {
-            if (isDoubleTapDragging.value) {
+            if (gestureState.dragging) {
               return;
             }
-            gesture.tapTimer?.cancel();
-            gesture.tapTimer = null;
+            gestureState.clearPending();
+            gesture.cancelTapTimer();
           },
 
           onPanDown: (details) {
             if (isSelecting) {
               return;
             }
-            if (verticalScrollController.hasSingleClient) {
-              verticalScrollController.position.hold(() {});
-            }
-            if (horizontalScrollController.hasSingleClient) {
-              horizontalScrollController.position.hold(() {});
-            }
+            gesture.holdScrollPositions();
           },
           onPanStart: (details) {
-            if (isDoubleTapDragging.value) {
+            if (gestureState.active) {
               return;
             }
-            if (verticalScrollController.hasSingleClient) {
-              gesture.verticalDrag = verticalScrollController.position.drag(details, () {
-                gesture.verticalDrag = null;
-              });
-            }
-            if (needsHorizontalScroll && horizontalScrollController.hasSingleClient) {
-              gesture.horizontalDrag = horizontalScrollController.position.drag(details, () {
-                gesture.horizontalDrag = null;
-              });
-            }
+            gesture.startScrollDrag(details: details, allowHorizontal: needsHorizontalScroll);
           },
-          onPanUpdate: (details) {
-            gesture.verticalDrag?.update(
-              DragUpdateDetails(
-                globalPosition: details.globalPosition,
-                delta: Offset(0, details.delta.dy),
-                primaryDelta: details.delta.dy,
-                sourceTimeStamp: details.sourceTimeStamp,
-              ),
-            );
-            gesture.horizontalDrag?.update(
-              DragUpdateDetails(
-                globalPosition: details.globalPosition,
-                delta: Offset(details.delta.dx, 0),
-                primaryDelta: details.delta.dx,
-                sourceTimeStamp: details.sourceTimeStamp,
-              ),
-            );
-          },
+          onPanUpdate: gesture.updateScrollDrag,
           onPanEnd: (details) {
-            if (isDoubleTapDragging.value) {
+            if (gestureState.active) {
               return;
             }
-            gesture.verticalDrag?.end(
-              DragEndDetails(
-                velocity: Velocity(pixelsPerSecond: Offset(0, details.velocity.pixelsPerSecond.dy)),
-                primaryVelocity: details.velocity.pixelsPerSecond.dy,
-              ),
-            );
-            gesture.horizontalDrag?.end(
-              DragEndDetails(
-                velocity: Velocity(pixelsPerSecond: Offset(details.velocity.pixelsPerSecond.dx, 0)),
-                primaryVelocity: details.velocity.pixelsPerSecond.dx,
-              ),
-            );
-            gesture
-              ..verticalDrag = null
-              ..horizontalDrag = null;
+            gesture.endScrollDrag(details);
           },
           onPanCancel: () {
-            if (isDoubleTapDragging.value) {
+            if (gestureState.active) {
               return;
             }
-            gesture.verticalDrag?.cancel();
-            gesture.horizontalDrag?.cancel();
-            gesture
-              ..verticalDrag = null
-              ..horizontalDrag = null;
+            gesture.cancelScrollDrag();
           },
           child: listView,
         );
@@ -874,22 +824,39 @@ class PageList extends HookWidget {
           child: Listener(
             behavior: HitTestBehavior.translucent,
             onPointerMove: (event) {
-              if (isDoubleTapDragging.value) {
+              if (gestureState.pending) {
+                final startPosition = gestureState.start;
+                if (startPosition != null && (event.localPosition - startPosition).distance >= 4) {
+                  startDoubleTapDrag(startPosition);
+                  updateDoubleTapDragSelection(event.localPosition);
+                }
+                return;
+              }
+              if (gestureState.dragging) {
                 updateDoubleTapDragSelection(event.localPosition);
+                return;
+              }
+
+              if (gestureState.longPressing) {
+                updateLongPress(event.localPosition);
               }
             },
             onPointerUp: (_) {
-              if (isDoubleTapDragging.value) {
+              if (gestureState.dragging) {
                 endDoubleTapDrag();
                 return;
               }
+              gestureState.clearPending();
+              endLongPress();
               endTextHandleDrag();
             },
             onPointerCancel: (_) {
-              if (isDoubleTapDragging.value) {
+              if (gestureState.dragging) {
                 endDoubleTapDrag();
                 return;
               }
+              gestureState.clearPending();
+              endLongPress();
               endTextHandleDrag();
             },
             child: Stack(
@@ -942,8 +909,8 @@ class PageList extends HookWidget {
                 ),
                 if (showContextMenu.value &&
                     longPressPosition.value == null &&
-                    gesture.draggingHandleType == null &&
-                    !isDoubleTapDragging.value)
+                    !gesture.hasTextHandleDrag &&
+                    !gestureState.active)
                   SelectionContextMenu(clipboard: clipboard, onDismiss: () => showContextMenu.value = false),
               ],
             ),

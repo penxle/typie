@@ -8,6 +8,84 @@ import 'package:typie/screens/native_editor/state/state.dart';
 import 'package:typie/screens/native_editor/view/geometry.dart';
 import 'package:typie/screens/native_editor/view/scroll.dart';
 
+class GestureStateMachine {
+  GestureStateMachine({required this.isLongPressing});
+
+  final ValueNotifier<bool> isLongPressing;
+
+  Offset? start;
+  _GesturePhase _phase = _GesturePhase.idle;
+
+  bool get longPressing => _phase == _GesturePhase.longPress;
+  bool get pending => _phase == _GesturePhase.doubleTapPending;
+  bool get dragging => _phase == _GesturePhase.doubleTapDragging;
+  bool get active => pending || dragging;
+
+  bool startLongPress() {
+    if (active) {
+      return false;
+    }
+    _setPhase(_GesturePhase.longPress);
+    return true;
+  }
+
+  void endLongPress() {
+    if (!longPressing) {
+      return;
+    }
+    _setPhase(_GesturePhase.idle);
+  }
+
+  void prepare(Offset startPosition) {
+    start = startPosition;
+    _setPhase(_GesturePhase.doubleTapPending);
+  }
+
+  void begin(Offset startPosition) {
+    start = startPosition;
+    _setPhase(_GesturePhase.doubleTapDragging);
+  }
+
+  void clearPending() {
+    if (!pending) {
+      return;
+    }
+    _setPhase(_GesturePhase.idle);
+  }
+
+  void stop() {
+    if (!active) {
+      return;
+    }
+    _setPhase(_GesturePhase.idle);
+  }
+
+  void _setPhase(_GesturePhase next) {
+    _phase = next;
+    final nextLongPressing = _phase == _GesturePhase.longPress;
+    if (isLongPressing.value != nextLongPressing) {
+      isLongPressing.value = nextLongPressing;
+    }
+    if (!pending && !dragging) {
+      start = null;
+    }
+  }
+}
+
+enum _GesturePhase { idle, longPress, doubleTapPending, doubleTapDragging }
+
+class SelectionHandleDragContext {
+  const SelectionHandleDragContext({
+    required this.startTouchPosition,
+    required this.startHandleScreenPosition,
+    required this.anchorHandle,
+  });
+
+  final Offset startTouchPosition;
+  final Offset startHandleScreenPosition;
+  final SelectionHandleInfo anchorHandle;
+}
+
 class GestureController {
   GestureController({
     required this.verticalScrollController,
@@ -17,7 +95,8 @@ class GestureController {
     required this.getPageAtPosition,
     required this.getPointerX,
     required this.getViewportWidth,
-  });
+    required ValueNotifier<bool> isLongPressing,
+  }) : state = GestureStateMachine(isLongPressing: isLongPressing);
 
   final ScrollController verticalScrollController;
   final ScrollController horizontalScrollController;
@@ -26,6 +105,7 @@ class GestureController {
   final (int, double) Function(double y) getPageAtPosition;
   final double Function(double localX) getPointerX;
   final double Function() getViewportWidth;
+  final GestureStateMachine state;
 
   static const _edgeThreshold = 60.0;
   static const _minScrollSpeed = 4.0;
@@ -39,20 +119,207 @@ class GestureController {
   Size _autoScrollViewSize = Size.zero;
   (int, double, double)? _lastDispatchedPosition;
 
-  SelectionHandleType? draggingHandleType;
-  bool draggingCellHandle = false;
-  Offset? pointerDownTouchPosition;
-  Offset? dragStartTouchPosition;
-  Offset? dragStartHandleScreenPosition;
-  SelectionHandleInfo? dragAnchorHandle;
+  SelectionHandleType? _draggingHandleType;
+  bool _draggingCellHandle = false;
+  Offset? _pointerDownTouchPosition;
+  Offset? _dragStartTouchPosition;
+  Offset? _dragStartHandleScreenPosition;
+  SelectionHandleInfo? _dragAnchorHandle;
 
-  DateTime? lastTapTime;
-  Offset? lastTapPosition;
-  Timer? tapTimer;
-  bool tapDispatched = false;
+  DateTime? _lastTapTime;
+  Offset? _lastTapPosition;
+  Timer? _tapTimer;
+  bool _tapDispatched = false;
 
-  Drag? verticalDrag;
-  Drag? horizontalDrag;
+  Drag? _verticalDrag;
+  Drag? _horizontalDrag;
+
+  bool get isCellHandleDragging => _draggingCellHandle;
+  bool get hasTextHandleDrag => _draggingHandleType != null;
+  bool get hasAnyHandleDrag => _draggingCellHandle || hasTextHandleDrag;
+
+  bool get tapDispatched => _tapDispatched;
+  SelectionHandleType? get draggingHandleType => _draggingHandleType;
+  SelectionHandleInfo? get dragAnchorHandle => _dragAnchorHandle;
+
+  void startCellHandleDrag() {
+    _draggingCellHandle = true;
+  }
+
+  bool stopCellHandleDrag() {
+    final wasDragging = _draggingCellHandle;
+    _draggingCellHandle = false;
+    return wasDragging;
+  }
+
+  void clearSelectionHandleState() {
+    _draggingHandleType = null;
+    _dragAnchorHandle = null;
+    _dragStartTouchPosition = null;
+    _dragStartHandleScreenPosition = null;
+  }
+
+  void stopSelectionHandlesAndAutoScroll() {
+    clearSelectionHandleState();
+    stopAutoScroll();
+  }
+
+  void setTextHandleDragType(SelectionHandleType? type) {
+    _draggingHandleType = type;
+  }
+
+  void setDragAnchorHandle(SelectionHandleInfo? anchorHandle) {
+    _dragAnchorHandle = anchorHandle;
+  }
+
+  void rememberPointerDown(Offset touchPosition) {
+    _pointerDownTouchPosition = touchPosition;
+  }
+
+  void beginTextHandleDrag({
+    required SelectionHandleType type,
+    required Offset touchPosition,
+    required Offset handleScreenPosition,
+    required SelectionHandleInfo? anchorHandle,
+  }) {
+    _draggingHandleType = type;
+    _dragStartTouchPosition = touchPosition;
+    _dragStartHandleScreenPosition = handleScreenPosition;
+    _dragAnchorHandle = anchorHandle;
+  }
+
+  void beginLongPressSession({
+    required Offset touchPosition,
+    required Offset? handleScreenPosition,
+    required SelectionHandleInfo? anchorHandle,
+  }) {
+    _dragStartTouchPosition = touchPosition;
+    _dragStartHandleScreenPosition = handleScreenPosition;
+    _dragAnchorHandle = anchorHandle;
+    clearTapHistory();
+  }
+
+  SelectionHandleDragContext? selectionHandleDragContext() {
+    final startTouchPosition = _dragStartTouchPosition;
+    final startHandleScreenPosition = _dragStartHandleScreenPosition;
+    final anchorHandle = _dragAnchorHandle;
+    if (startTouchPosition == null || startHandleScreenPosition == null || anchorHandle == null) {
+      return null;
+    }
+    return SelectionHandleDragContext(
+      startTouchPosition: startTouchPosition,
+      startHandleScreenPosition: startHandleScreenPosition,
+      anchorHandle: anchorHandle,
+    );
+  }
+
+  Offset? pointerDownTouchPosition() => _pointerDownTouchPosition;
+
+  bool isConsecutiveTap({
+    required Offset localPosition,
+    required DateTime now,
+    int maxTapIntervalMs = 300,
+    double maxTapDistance = 20,
+  }) {
+    final prevTime = _lastTapTime;
+    final prevPosition = _lastTapPosition;
+    if (prevTime == null || prevPosition == null) {
+      return false;
+    }
+
+    final timeDiff = now.difference(prevTime).inMilliseconds;
+    final distance = (localPosition - prevPosition).distance;
+    return timeDiff < maxTapIntervalMs && distance < maxTapDistance;
+  }
+
+  void recordTap({required DateTime now, required Offset localPosition}) {
+    _lastTapTime = now;
+    _lastTapPosition = localPosition;
+  }
+
+  void clearTapHistory() {
+    _lastTapTime = null;
+    _lastTapPosition = null;
+  }
+
+  void cancelTapTimer() {
+    _tapTimer?.cancel();
+    _tapTimer = null;
+  }
+
+  void scheduleTapTimer(Duration duration, VoidCallback onTimeout) {
+    cancelTapTimer();
+    _tapTimer = Timer(duration, onTimeout);
+  }
+
+  void setTapDispatched(bool dispatched) {
+    _tapDispatched = dispatched;
+  }
+
+  void holdScrollPositions() {
+    if (verticalScrollController.hasSingleClient) {
+      verticalScrollController.position.hold(() {});
+    }
+    if (horizontalScrollController.hasSingleClient) {
+      horizontalScrollController.position.hold(() {});
+    }
+  }
+
+  void startScrollDrag({required DragStartDetails details, required bool allowHorizontal}) {
+    if (verticalScrollController.hasSingleClient) {
+      _verticalDrag = verticalScrollController.position.drag(details, () {
+        _verticalDrag = null;
+      });
+    }
+    if (allowHorizontal && horizontalScrollController.hasSingleClient) {
+      _horizontalDrag = horizontalScrollController.position.drag(details, () {
+        _horizontalDrag = null;
+      });
+    }
+  }
+
+  void updateScrollDrag(DragUpdateDetails details) {
+    _verticalDrag?.update(
+      DragUpdateDetails(
+        globalPosition: details.globalPosition,
+        delta: Offset(0, details.delta.dy),
+        primaryDelta: details.delta.dy,
+        sourceTimeStamp: details.sourceTimeStamp,
+      ),
+    );
+    _horizontalDrag?.update(
+      DragUpdateDetails(
+        globalPosition: details.globalPosition,
+        delta: Offset(details.delta.dx, 0),
+        primaryDelta: details.delta.dx,
+        sourceTimeStamp: details.sourceTimeStamp,
+      ),
+    );
+  }
+
+  void endScrollDrag(DragEndDetails details) {
+    _verticalDrag?.end(
+      DragEndDetails(
+        velocity: Velocity(pixelsPerSecond: Offset(0, details.velocity.pixelsPerSecond.dy)),
+        primaryVelocity: details.velocity.pixelsPerSecond.dy,
+      ),
+    );
+    _horizontalDrag?.end(
+      DragEndDetails(
+        velocity: Velocity(pixelsPerSecond: Offset(details.velocity.pixelsPerSecond.dx, 0)),
+        primaryVelocity: details.velocity.pixelsPerSecond.dx,
+      ),
+    );
+    _verticalDrag = null;
+    _horizontalDrag = null;
+  }
+
+  void cancelScrollDrag() {
+    _verticalDrag?.cancel();
+    _horizontalDrag?.cancel();
+    _verticalDrag = null;
+    _horizontalDrag = null;
+  }
 
   void stopAutoScroll() {
     _autoScrollTimer?.cancel();
@@ -142,8 +409,8 @@ class GestureController {
           return;
         }
 
-        final anchorHandle = dragAnchorHandle;
-        if (draggingHandleType != null && anchorHandle != null) {
+        final anchorHandle = _dragAnchorHandle;
+        if (_draggingHandleType != null && anchorHandle != null) {
           editor.dispatch({
             'type': 'extendSelectionTo',
             'anchorPageIdx': anchorHandle.pageIdx,
@@ -153,7 +420,7 @@ class GestureController {
             'headX': pointerX,
             'headY': localY,
           });
-        } else if (draggingHandleType == null) {
+        } else if (_draggingHandleType == null) {
           editor
             ..dispatch({
               'type': 'pointerDown',
@@ -243,10 +510,9 @@ class GestureController {
 
   void dispose() {
     stopAutoScroll();
-    tapTimer?.cancel();
-    tapTimer = null;
-    verticalDrag?.cancel();
-    horizontalDrag?.cancel();
+    state.stop();
+    cancelTapTimer();
+    cancelScrollDrag();
   }
 }
 

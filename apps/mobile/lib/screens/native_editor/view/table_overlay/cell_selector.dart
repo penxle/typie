@@ -163,7 +163,7 @@ class TableCellSelectorController {
     if (!context.mounted) {
       return;
     }
-    gesture.draggingCellHandle = true;
+    gesture.startCellHandleDrag();
     scope.longPressPosition.value = null;
   }
 
@@ -176,7 +176,7 @@ class TableCellSelectorController {
     }
     gesture
       ..stopAutoScroll()
-      ..draggingCellHandle = true;
+      ..startCellHandleDrag();
     final minVisibleRow = overlay.startRowIndex;
     final maxVisibleRow = overlay.startRowIndex + overlay.rowHeights.length - 1;
     if (maxVisibleRow < minVisibleRow) {
@@ -200,21 +200,23 @@ class TableCellSelectorController {
       cellHandleDragPosition.value = viewportPosition;
     }
 
-    gesture.draggingHandleType = SelectionHandleType.to;
+    gesture.setTextHandleDragType(SelectionHandleType.to);
     if (layout == null) {
-      gesture.dragAnchorHandle = null;
+      gesture.setDragAnchorHandle(null);
       return;
     }
     final anchorPoint = tableCellCenterPagePoint(overlay: overlay, layout: layout!, pages: pages, cell: anchor);
-    gesture.dragAnchorHandle = anchorPoint == null
-        ? null
-        : SelectionEndpointBounds(
-            pageIdx: anchorPoint.pageIdx,
-            x: anchorPoint.x,
-            y: anchorPoint.y,
-            width: 0,
-            height: 0,
-          );
+    gesture.setDragAnchorHandle(
+      anchorPoint == null
+          ? null
+          : SelectionEndpointBounds(
+              pageIdx: anchorPoint.pageIdx,
+              x: anchorPoint.x,
+              y: anchorPoint.y,
+              width: 0,
+              height: 0,
+            ),
+    );
   }
 
   void updateDrag(DragUpdateDetails details) {
@@ -246,11 +248,9 @@ class TableCellSelectorController {
   void endDragFromPanEnd(DragEndDetails _) => endDrag();
 
   void endDrag() {
-    final wasDraggingCellHandle = gesture.draggingCellHandle;
+    final wasDraggingCellHandle = gesture.stopCellHandleDrag();
     gesture
-      ..draggingCellHandle = false
-      ..draggingHandleType = null
-      ..dragAnchorHandle = null
+      ..clearSelectionHandleState()
       ..stopAutoScroll();
     if (!context.mounted) {
       if (wasDraggingCellHandle && scope.controller.state.isSelecting) {
