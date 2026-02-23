@@ -2,7 +2,9 @@ use crate::global::get_available_fonts;
 use crate::model::*;
 use crate::runtime::Effect;
 use crate::state::position_helpers::find_child_at_offset;
-use crate::state::{Position, block_content_len, calculate_block_offsets, collect_blocks_in_range};
+use crate::state::{
+    Position, block_content_len, collect_text_ranges_in_selection, collect_text_target_blocks,
+};
 use crate::transaction::Transaction;
 use anyhow::{Context, Result};
 
@@ -104,7 +106,7 @@ fn apply_style_to_range(
     to: Position,
     style: &Style,
 ) -> Result<()> {
-    let ranges = collect_text_ranges_in_selection(tr, from, to)?;
+    let ranges = collect_text_ranges_in_selection(tr.doc(), tr.selection(), from, to)?;
     let style_type = style.as_type();
 
     for (text_node_id, start_offset, end_offset) in ranges {
@@ -136,9 +138,10 @@ fn collect_empty_textblocks_in_range(
     from: Position,
     to: Position,
 ) -> Result<Vec<NodeId>> {
-    let mut block_ids = collect_blocks_in_range(tr.doc(), from, to)?;
+    let (mut block_ids, is_rectangular) =
+        collect_text_target_blocks(tr.doc(), tr.selection(), from, to)?;
 
-    if to.offset == 0 && from.node_id != to.node_id {
+    if !is_rectangular && to.offset == 0 && from.node_id != to.node_id {
         if let Some(block) = tr.node(to.node_id) {
             if block.spec().is_textblock(tr.doc().schema())
                 && block_content_len(&block) == 0
@@ -189,7 +192,7 @@ fn remove_style_from_range(
     to: Position,
     style_type: StyleType,
 ) -> Result<()> {
-    let ranges = collect_text_ranges_in_selection(tr, from, to)?;
+    let ranges = collect_text_ranges_in_selection(tr.doc(), tr.selection(), from, to)?;
 
     for (text_node_id, start_offset, end_offset) in ranges {
         let node = tr.node_mut(text_node_id).context("Text node not found")?;
@@ -238,7 +241,7 @@ fn check_range_has_style(
     to: Position,
     style: &Style,
 ) -> Result<bool> {
-    let ranges = collect_text_ranges_in_selection(tr, from, to)?;
+    let ranges = collect_text_ranges_in_selection(tr.doc(), tr.selection(), from, to)?;
 
     for (text_node_id, start_offset, end_offset) in ranges {
         let node = tr.node(text_node_id).context("Text node not found")?;
@@ -268,7 +271,7 @@ fn check_range_has_style(
 }
 
 fn check_range_is_bold(tr: &Transaction, from: Position, to: Position) -> Result<bool> {
-    let ranges = collect_text_ranges_in_selection(tr, from, to)?;
+    let ranges = collect_text_ranges_in_selection(tr.doc(), tr.selection(), from, to)?;
 
     for (text_node_id, start_offset, end_offset) in ranges {
         let node = tr.node(text_node_id).context("Text node not found")?;
@@ -365,74 +368,13 @@ fn remove_cascade_attr_on_empty_textblocks(
     Ok(())
 }
 
-fn collect_text_ranges_in_selection(
-    tr: &Transaction,
-    from: Position,
-    to: Position,
-) -> Result<Vec<(NodeId, usize, usize)>> {
-    let block_ids = collect_blocks_in_range(tr.doc(), from, to)?;
-    let mut ranges = Vec::new();
-
-    for block_id in block_ids {
-        let block = tr
-            .node(block_id)
-            .with_context(|| format!("Block {block_id} not found"))?;
-
-        if !block.spec().is_textblock(tr.doc().schema()) {
-            continue;
-        }
-
-        let block_len = block_content_len(&block);
-        let (start, end) = calculate_block_offsets(block_id, block_len, from, to);
-
-        collect_ranges_in_textblock(&block, start, end, &mut ranges)?;
-    }
-
-    Ok(ranges)
-}
-
-fn collect_ranges_in_textblock(
-    parent: &NodeRef,
-    start_offset: usize,
-    end_offset: usize,
-    result: &mut Vec<(NodeId, usize, usize)>,
-) -> Result<()> {
-    let mut current_offset = 0;
-
-    for child in parent.children() {
-        match child.node() {
-            Node::Text(text_node) => {
-                let text_len = text_node.text.char_len();
-                let child_end = current_offset + text_len;
-
-                let overlap_start = current_offset.max(start_offset);
-                let overlap_end = child_end.min(end_offset);
-
-                if overlap_start < overlap_end {
-                    let local_start = overlap_start - current_offset;
-                    let local_end = overlap_end - current_offset;
-                    result.push((child.node_id(), local_start, local_end));
-                }
-
-                current_offset = child_end;
-            }
-            Node::HardBreak(_) => {
-                current_offset += 1;
-            }
-            _ => {}
-        }
-    }
-
-    Ok(())
-}
-
 fn apply_font_style_normalized(
     tr: &mut Transaction,
     from: Position,
     to: Position,
     style: &Style,
 ) -> Result<()> {
-    let ranges = collect_text_ranges_in_selection(tr, from, to)?;
+    let ranges = collect_text_ranges_in_selection(tr.doc(), tr.selection(), from, to)?;
     let available = get_available_fonts();
     let (default_family, default_weight) = tr.resolved_font(from.node_id);
     let style_type = style.as_type();
@@ -611,7 +553,7 @@ fn collect_style_codepoints_in_selection(
         Err(_) => return vec![],
     };
 
-    let ranges = match collect_text_ranges_in_selection(tr, from, to) {
+    let ranges = match collect_text_ranges_in_selection(tr.doc(), tr.selection(), from, to) {
         Ok(r) => r,
         Err(_) => return vec![],
     };
@@ -911,7 +853,12 @@ impl Transaction {
             self.update_cascade_attrs_if_empty_textblock();
         } else {
             let (from, to) = selection.as_sorted(self.doc())?;
-            let text_ranges = collect_text_ranges_in_selection(self, from.clone(), to.clone())?;
+            let text_ranges = collect_text_ranges_in_selection(
+                self.doc(),
+                self.selection(),
+                from.clone(),
+                to.clone(),
+            )?;
 
             for (text_node_id, start_offset, end_offset) in text_ranges {
                 let allowed = self.doc().allowed_styles_for(text_node_id);
@@ -1083,7 +1030,12 @@ impl Transaction {
     }
 
     fn toggle_bold_on_range(&mut self, from: Position, to: Position) -> Result<bool> {
-        let ranges = collect_text_ranges_in_selection(self, from.clone(), to.clone())?;
+        let ranges = collect_text_ranges_in_selection(
+            self.doc(),
+            self.selection(),
+            from.clone(),
+            to.clone(),
+        )?;
         let available = get_available_fonts();
         let (default_family, _) = self.resolved_font(from.node_id);
 
@@ -1213,7 +1165,12 @@ impl Transaction {
     }
 
     fn toggle_bold_off_range(&mut self, from: Position, to: Position) -> Result<bool> {
-        let ranges = collect_text_ranges_in_selection(self, from.clone(), to.clone())?;
+        let ranges = collect_text_ranges_in_selection(
+            self.doc(),
+            self.selection(),
+            from.clone(),
+            to.clone(),
+        )?;
         let available = get_available_fonts();
         let (default_family, _) = self.resolved_font(from.node_id);
 
@@ -5363,5 +5320,97 @@ mod tests {
             "should have Bold, got: {:?}",
             view.pending_styles
         );
+    }
+
+    #[test]
+    fn set_style_rectangular_table_selection_applies_only_selected_cells() {
+        let mut p11 = id!();
+        let mut p12 = id!();
+        let mut p21 = id!();
+        let mut p22 = id!();
+
+        let initial = state! {
+            doc {
+                table {
+                    table_row {
+                        table_cell { @p11 paragraph { text { "a" } } }
+                        table_cell { @p12 paragraph { text { "b" } } }
+                    }
+                    table_row {
+                        table_cell { @p21 paragraph { text { "c" } } }
+                        table_cell { @p22 paragraph { text { "d" } } }
+                    }
+                }
+            }
+            selection { (p11, 0) -> (p21, 1) }
+        };
+
+        let actual = transact!(initial, |tr| {
+            tr.set_style(Style::Italic(ItalicStyle {})).unwrap();
+        });
+
+        let expected = state! {
+            doc {
+                table {
+                    table_row {
+                        table_cell { @p11 paragraph { text(styles: [italic()]) { "a" } } }
+                        table_cell { @p12 paragraph { text { "b" } } }
+                    }
+                    table_row {
+                        table_cell { @p21 paragraph { text(styles: [italic()]) { "c" } } }
+                        table_cell { @p22 paragraph { text { "d" } } }
+                    }
+                }
+            }
+            selection { (p11, 0) -> (p21, 1) }
+        };
+
+        assert_state_eq!(actual, expected);
+    }
+
+    #[test]
+    fn toggle_style_rectangular_table_selection_ignores_unselected_cells() {
+        let mut p11 = id!();
+        let mut p12 = id!();
+        let mut p21 = id!();
+        let mut p22 = id!();
+
+        let initial = state! {
+            doc {
+                table {
+                    table_row {
+                        table_cell { @p11 paragraph { text(styles: [italic()]) { "a" } } }
+                        table_cell { @p12 paragraph { text { "b" } } }
+                    }
+                    table_row {
+                        table_cell { @p21 paragraph { text(styles: [italic()]) { "c" } } }
+                        table_cell { @p22 paragraph { text { "d" } } }
+                    }
+                }
+            }
+            selection { (p11, 0) -> (p21, 1) }
+        };
+
+        let actual = transact!(initial, |tr| {
+            tr.toggle_style(Style::Italic(ItalicStyle {})).unwrap();
+        });
+
+        let expected = state! {
+            doc {
+                table {
+                    table_row {
+                        table_cell { @p11 paragraph { text { "a" } } }
+                        table_cell { @p12 paragraph { text { "b" } } }
+                    }
+                    table_row {
+                        table_cell { @p21 paragraph { text { "c" } } }
+                        table_cell { @p22 paragraph { text { "d" } } }
+                    }
+                }
+            }
+            selection { (p11, 0) -> (p21, 1) }
+        };
+
+        assert_state_eq!(actual, expected);
     }
 }

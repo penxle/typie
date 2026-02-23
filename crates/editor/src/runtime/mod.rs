@@ -28,8 +28,7 @@ use crate::runtime::text_replacement::ReplacementUndoState;
 use crate::state::ancestor_helpers::lowest_common_ancestor_id;
 use crate::state::selection_helpers::{
     SelectionAttributes, build_selection_decorations, collect_block_attrs_at,
-    collect_blocks_in_range, collect_selected_block_ids, compute_selection_attrs,
-    compute_structure_selection,
+    collect_selected_block_ids, compute_selection_attrs, compute_structure_selection,
 };
 use crate::state::{
     Position, Preedit, Selection, find_child_at_offset, find_text_at_offset, position_in_selection,
@@ -1647,11 +1646,12 @@ impl Runtime {
                     text,
                     styles,
                 } => {
-                    if let Ok((from, to)) = selection.as_sorted(self.doc())
-                        && let Ok(node_ids) = collect_blocks_in_range(self.doc(), from, to)
-                    {
-                        font_affected_nodes.extend(node_ids);
-                    }
+                    let structure_selection = compute_structure_selection(self.doc(), &selection);
+                    font_affected_nodes.extend(collect_selected_block_ids(
+                        self.doc(),
+                        &selection,
+                        &structure_selection,
+                    ));
                     self.repaste_text = Some((selection, text, styles));
                     self.pending.repaste = true;
                 }

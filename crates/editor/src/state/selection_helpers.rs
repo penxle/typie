@@ -56,7 +56,11 @@ fn extract_block_attrs(node: &NodeRef) -> Vec<BlockAttr> {
     result
 }
 
-pub fn collect_blocks_in_range(doc: &Doc, from: Position, to: Position) -> Result<Vec<NodeId>> {
+pub(crate) fn collect_blocks_in_range(
+    doc: &Doc,
+    from: Position,
+    to: Position,
+) -> Result<Vec<NodeId>> {
     let start_id = start_block_id(doc, from)?;
 
     if from == to {
@@ -746,6 +750,90 @@ pub fn collect_selected_block_ids(
         }
         StructureSelectionInfo::None => collect_blocks_in_range(doc, from, to).unwrap_or_default(),
     }
+}
+
+pub fn collect_text_target_blocks(
+    doc: &Doc,
+    selection: &Selection,
+    from: Position,
+    to: Position,
+) -> Result<(Vec<NodeId>, bool)> {
+    let structure_selection = compute_structure_selection(doc, selection);
+
+    if let StructureSelectionInfo::Rectangular { .. } = structure_selection {
+        return Ok((
+            collect_selected_block_ids(doc, selection, &structure_selection),
+            true,
+        ));
+    }
+
+    Ok((collect_blocks_in_range(doc, from, to)?, false))
+}
+
+pub fn collect_text_ranges_in_selection(
+    doc: &Doc,
+    selection: &Selection,
+    from: Position,
+    to: Position,
+) -> Result<Vec<(NodeId, usize, usize)>> {
+    let (block_ids, is_rectangular) = collect_text_target_blocks(doc, selection, from, to)?;
+    let mut ranges = Vec::new();
+
+    for block_id in block_ids {
+        let block = doc
+            .node(block_id)
+            .with_context(|| format!("Block {block_id} not found"))?;
+
+        if !block.spec().is_textblock(doc.schema()) {
+            continue;
+        }
+
+        let block_len = block_content_len(&block);
+        let (start, end) = if is_rectangular {
+            (0, block_len)
+        } else {
+            calculate_block_offsets(block_id, block_len, from, to)
+        };
+
+        collect_text_ranges_in_textblock(&block, start, end, &mut ranges)?;
+    }
+
+    Ok(ranges)
+}
+
+fn collect_text_ranges_in_textblock(
+    parent: &NodeRef,
+    start_offset: usize,
+    end_offset: usize,
+    result: &mut Vec<(NodeId, usize, usize)>,
+) -> Result<()> {
+    let mut current_offset = 0;
+
+    for child in parent.children() {
+        match child.node() {
+            Node::Text(text_node) => {
+                let text_len = text_node.text.char_len();
+                let child_end = current_offset + text_len;
+
+                let overlap_start = current_offset.max(start_offset);
+                let overlap_end = child_end.min(end_offset);
+
+                if overlap_start < overlap_end {
+                    let local_start = overlap_start - current_offset;
+                    let local_end = overlap_end - current_offset;
+                    result.push((child.node_id(), local_start, local_end));
+                }
+
+                current_offset = child_end;
+            }
+            Node::HardBreak(_) => {
+                current_offset += 1;
+            }
+            _ => {}
+        }
+    }
+
+    Ok(())
 }
 
 pub fn selected_single_block_id(doc: &Doc, selection: &Selection) -> Option<NodeId> {

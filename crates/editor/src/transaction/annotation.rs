@@ -1,6 +1,6 @@
 use crate::model::*;
 use crate::runtime::Effect;
-use crate::state::{Position, block_content_len, calculate_block_offsets, collect_blocks_in_range};
+use crate::state::{Position, collect_text_ranges_in_selection};
 use crate::transaction::Transaction;
 use crate::utils::collect_codepoints;
 use anyhow::{Context, Result};
@@ -30,7 +30,7 @@ impl Transaction {
         }
 
         let (from, to) = selection.as_sorted(self.doc())?;
-        let ranges = collect_text_ranges_in_selection(self, from, to)?;
+        let ranges = collect_text_ranges_in_selection(self.doc(), &selection, from, to)?;
         for (text_node_id, start_offset, end_offset) in ranges {
             let allowed = self.doc().allowed_annotations_for(text_node_id);
             anyhow::ensure!(
@@ -257,7 +257,7 @@ impl Transaction {
         to: Position,
         ann_type: AnnotationType,
     ) -> Result<bool> {
-        let ranges = collect_text_ranges_in_selection(self, from, to)?;
+        let ranges = collect_text_ranges_in_selection(self.doc(), self.selection(), from, to)?;
 
         for (text_node_id, start_offset, end_offset) in ranges {
             let Some(node) = self.node(text_node_id) else {
@@ -286,65 +286,4 @@ impl Transaction {
 
         Ok(false)
     }
-}
-
-fn collect_text_ranges_in_selection(
-    tr: &Transaction,
-    from: Position,
-    to: Position,
-) -> Result<Vec<(NodeId, usize, usize)>> {
-    let block_ids = collect_blocks_in_range(tr.doc(), from, to)?;
-    let mut ranges = Vec::new();
-
-    for block_id in block_ids {
-        let block = tr
-            .node(block_id)
-            .with_context(|| format!("Block {block_id} not found"))?;
-
-        if !block.spec().is_textblock(tr.doc().schema()) {
-            continue;
-        }
-
-        let block_len = block_content_len(&block);
-        let (start, end) = calculate_block_offsets(block_id, block_len, from, to);
-
-        collect_ranges_in_textblock(&block, start, end, &mut ranges)?;
-    }
-
-    Ok(ranges)
-}
-
-fn collect_ranges_in_textblock(
-    parent: &NodeRef,
-    start_offset: usize,
-    end_offset: usize,
-    result: &mut Vec<(NodeId, usize, usize)>,
-) -> Result<()> {
-    let mut current_offset = 0;
-
-    for child in parent.children() {
-        match child.node() {
-            Node::Text(text_node) => {
-                let text_len = text_node.text.char_len();
-                let child_end = current_offset + text_len;
-
-                let overlap_start = current_offset.max(start_offset);
-                let overlap_end = child_end.min(end_offset);
-
-                if overlap_start < overlap_end {
-                    let local_start = overlap_start - current_offset;
-                    let local_end = overlap_end - current_offset;
-                    result.push((child.node_id(), local_start, local_end));
-                }
-
-                current_offset = child_end;
-            }
-            Node::HardBreak(_) => {
-                current_offset += 1;
-            }
-            _ => {}
-        }
-    }
-
-    Ok(())
 }
