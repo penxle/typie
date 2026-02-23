@@ -82,6 +82,14 @@ pub fn encode_vector_page(page: &VectorPage) -> Vec<u8> {
         }
     }
 
+    write_u32(&mut out, page.text_ops.len() as u32);
+    for text_op in &page.text_ops {
+        write_f32(&mut out, text_op.x);
+        write_f32(&mut out, text_op.y);
+        write_f32(&mut out, text_op.size);
+        write_str(&mut out, &text_op.text);
+    }
+
     out
 }
 
@@ -95,6 +103,12 @@ fn write_u32(out: &mut Vec<u8>, value: u32) {
 
 fn write_f32(out: &mut Vec<u8>, value: f32) {
     out.extend_from_slice(&value.to_le_bytes());
+}
+
+fn write_str(out: &mut Vec<u8>, value: &str) {
+    let bytes = value.as_bytes();
+    write_u32(out, bytes.len() as u32);
+    out.extend_from_slice(bytes);
 }
 
 fn write_path_commands(out: &mut Vec<u8>, path: &[VectorPathCommand]) {

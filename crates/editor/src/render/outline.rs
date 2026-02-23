@@ -107,16 +107,27 @@ pub enum VectorOp {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct VectorTextOp {
+    pub text: String,
+    pub x: f32,
+    pub y: f32,
+    pub size: f32,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct VectorPage {
     pub width: f32,
     pub height: f32,
     pub ops: Vec<VectorOp>,
+    pub text_ops: Vec<VectorTextOp>,
 }
 
 pub trait ElementSink {
     fn fill_rect(&mut self, rect: Rect, paint: &Paint, transform: Transform);
     fn fill_path(&mut self, path: &Path, paint: &Paint, fill_rule: FillRule, transform: Transform);
     fn stroke_path(&mut self, path: &Path, paint: &Paint, stroke: &Stroke, transform: Transform);
+    fn draw_text_layer(&mut self, text: &str, font_size: f32, x: f32, y: f32, transform: Transform);
     fn draw_glyphs(
         &mut self,
         font: &FontData,
@@ -158,6 +169,16 @@ impl ElementSink for RasterSink<'_, '_> {
             .stroke_path(path, paint, stroke, transform, None);
     }
 
+    fn draw_text_layer(
+        &mut self,
+        _text: &str,
+        _font_size: f32,
+        _x: f32,
+        _y: f32,
+        _transform: Transform,
+    ) {
+    }
+
     fn draw_glyphs(
         &mut self,
         font: &FontData,
@@ -183,6 +204,7 @@ impl ElementSink for RasterSink<'_, '_> {
 
 pub struct VectorSink {
     ops: Vec<VectorOp>,
+    text_ops: Vec<VectorTextOp>,
     glyph_renderer: GlyphRenderer,
 }
 
@@ -190,12 +212,13 @@ impl VectorSink {
     pub fn new() -> Self {
         Self {
             ops: Vec::new(),
+            text_ops: Vec::new(),
             glyph_renderer: GlyphRenderer::new(),
         }
     }
 
-    pub fn into_ops(self) -> Vec<VectorOp> {
-        self.ops
+    pub fn into_parts(self) -> (Vec<VectorOp>, Vec<VectorTextOp>) {
+        (self.ops, self.text_ops)
     }
 }
 
@@ -242,6 +265,31 @@ impl ElementSink for VectorSink {
             width: stroke.width,
             line_cap: stroke.line_cap.into(),
             line_join: stroke.line_join.into(),
+        });
+    }
+
+    fn draw_text_layer(
+        &mut self,
+        text: &str,
+        font_size: f32,
+        x: f32,
+        y: f32,
+        transform: Transform,
+    ) {
+        if text.is_empty() || !font_size.is_finite() || font_size <= 0.0 {
+            return;
+        }
+
+        let point = map_point(transform, tiny_skia::Point::from_xy(x, y));
+        if !point.x.is_finite() || !point.y.is_finite() {
+            return;
+        }
+
+        self.text_ops.push(VectorTextOp {
+            text: text.to_string(),
+            x: point.x,
+            y: point.y,
+            size: font_size,
         });
     }
 

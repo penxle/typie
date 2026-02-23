@@ -1,4 +1,4 @@
-import type { VectorOp, VectorPage, VectorPathCommand } from './vector';
+import type { VectorOp, VectorPage, VectorPathCommand, VectorTextOp } from './vector';
 
 const BINARY_MAGIC = 0x31_56_45_54; // TVE1
 
@@ -78,6 +78,14 @@ const parsePath = (view: DataView, offsetRef: { value: number }, count: number):
   return path;
 };
 
+const readString = (view: DataView, offsetRef: { value: number }): string => {
+  const byteLen = view.getUint32(offsetRef.value, true);
+  offsetRef.value += 4;
+  const bytes = new Uint8Array(view.buffer, view.byteOffset + offsetRef.value, byteLen);
+  offsetRef.value += byteLen;
+  return new TextDecoder().decode(bytes);
+};
+
 export const parseVectorPageBinary = (bytes: Uint8Array): Omit<VectorPage, 'externalElements'> => {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const offset = { value: 0 };
@@ -150,5 +158,20 @@ export const parseVectorPageBinary = (bytes: Uint8Array): Omit<VectorPage, 'exte
     throw new Error(`Unknown vector op tag: ${opTag}`);
   }
 
-  return { width, height, ops };
+  const textOps: VectorTextOp[] = [];
+  if (offset.value + 4 <= view.byteLength) {
+    const textOpCount = view.getUint32(offset.value, true);
+    offset.value += 4;
+
+    for (let i = 0; i < textOpCount; i++) {
+      const x = view.getFloat32(offset.value, true);
+      const y = view.getFloat32(offset.value + 4, true);
+      const size = view.getFloat32(offset.value + 8, true);
+      offset.value += 12;
+      const text = readString(view, offset);
+      textOps.push({ text, x, y, size });
+    }
+  }
+
+  return { width, height, ops, textOps };
 };
