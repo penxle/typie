@@ -614,16 +614,18 @@
         anchor: { nodeId: string; offset: number; affinity: Affinity };
         head: { nodeId: string; offset: number; affinity: Affinity };
       };
-      editor.dispatch({
-        type: 'setSelection',
-        anchorNodeId: sel.anchor.nodeId,
-        anchorOffset: sel.anchor.offset,
-        anchorAffinity: sel.anchor.affinity,
-        headNodeId: sel.head.nodeId,
-        headOffset: sel.head.offset,
-        headAffinity: sel.head.affinity,
-      });
-      editor.focus();
+      editor
+        .dispatch({
+          type: 'setSelection',
+          anchorNodeId: sel.anchor.nodeId,
+          anchorOffset: sel.anchor.offset,
+          anchorAffinity: sel.anchor.affinity,
+          headNodeId: sel.head.nodeId,
+          headOffset: sel.head.offset,
+          headAffinity: sel.head.affinity,
+        })
+        .scrollIntoView({ mode: 'typewriter' })
+        .focus();
     }
     editorReady = true;
   }
