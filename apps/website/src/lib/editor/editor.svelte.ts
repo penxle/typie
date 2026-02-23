@@ -1,4 +1,5 @@
 import icuPostcardUrl from '@typie/editor/icu/data.postcard?url';
+import { Tip } from '@typie/ui/notification';
 import { nanoid } from 'nanoid';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { defaultValues } from '@/const';
@@ -25,6 +26,7 @@ import {
   DIRTY_SETTINGS,
   DIRTY_TABLE_OVERLAYS,
   DIRTY_TRACKED_ITEMS,
+  SELECTION_EXPAND_ALL,
   SlateReader,
 } from './slate';
 import { calculateImageDisplaySize, calculateRelativePosition, findNearestPageCoordinate, getPageElement, idleCallback } from './utils';
@@ -97,6 +99,7 @@ export class Editor {
   #onDocChanged?: () => void;
   #onExitedDocumentStart?: () => void;
   #onSelectionChanged?: (anchor: Position, head: Position) => void;
+  #pendingSelectAllShortcut = false;
   #readyResolve?: () => void;
   ready: Promise<void>;
 
@@ -336,6 +339,7 @@ export class Editor {
   #tick = (): void => {
     this.#rafId = null;
     if (!this.#running) return;
+    const hadPendingSelectAllShortcut = this.#pendingSelectAllShortcut;
 
     if (this.#wasmEditor && this.#slateReader && this.#awake) {
       this.#awake = false;
@@ -353,6 +357,10 @@ export class Editor {
           this.#wasmEditor?.flush();
         });
       }
+    }
+
+    if (hadPendingSelectAllShortcut) {
+      this.#pendingSelectAllShortcut = false;
     }
 
     if (this.#settledResolvers.length > 0) {
@@ -448,11 +456,16 @@ export class Editor {
 
     if (slate.isDirty(DIRTY_SELECTION)) {
       const sel = slate.readSelection();
+      const selectionExpandable = slate.readSelectionExpandable();
       this.selection = sel;
       this.characterCountsVersion++;
       this.#onSelectionChanged?.(sel.anchor, sel.head);
       this.#updateActiveTrackedItems();
       this.currentBlock = slate.readCurrentBlock();
+
+      if (this.#pendingSelectAllShortcut && (selectionExpandable & SELECTION_EXPAND_ALL) !== 0) {
+        Tip.show('editor.shortcut.select-all-document', '`Mod-A`를 한 번 더 누르면 문서 전체가 선택돼요.');
+      }
     }
 
     if (slate.isDirty(DIRTY_ATTRS)) {
@@ -986,6 +999,10 @@ export class Editor {
   handleSelectAll(): void {
     this.dispatch({ type: 'selectAll' });
     this.closeContextMenu();
+  }
+
+  markSelectAllShortcut(): void {
+    this.#pendingSelectAllShortcut = true;
   }
 
   handleDragStart(e: DragEvent): void {
