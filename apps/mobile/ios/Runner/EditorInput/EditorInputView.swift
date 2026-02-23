@@ -122,6 +122,7 @@ class EditorTextInputView: UIView, UITextInput {
   private var _cursor: Int = EditorTextInputView.cursorSentinelOffset
   private var _isDeactivating: Bool = false
   private var _shadowText: String = ""
+  private var _pendingSelectionRange: NSRange?
   private var _precedingCharWidths: [Double] = []
   private static weak var _activeInputView: EditorTextInputView?
 
@@ -129,6 +130,31 @@ class EditorTextInputView: UIView, UITextInput {
   private var cursorY: Double = 0
   private var cursorHeight: Double = 20
   private var _floatingCursorStart: CGPoint?
+
+  private var _isIOSAppOnMac: Bool {
+    if #available(iOS 14.0, *) {
+      return ProcessInfo.processInfo.isiOSAppOnMac
+    }
+    return false
+  }
+
+  private var _textLengthForSelection: Int {
+    return _isIOSAppOnMac ? _shadowText.count : (_markedText?.count ?? 0)
+  }
+
+  private func _clampOffset(_ offset: Int, max: Int) -> Int {
+    return Swift.max(0, Swift.min(offset, max))
+  }
+
+  private func _consumeSelectionRange(shadowLength: Int) -> (start: Int, end: Int) {
+    let range = _pendingSelectionRange
+    _pendingSelectionRange = nil
+    let collapsed = (shadowLength, shadowLength)
+    guard let range else { return collapsed }
+    let start = _clampOffset(range.location, max: shadowLength)
+    let end = _clampOffset(range.location + range.length, max: shadowLength)
+    return (Swift.min(start, end), Swift.max(start, end))
+  }
 
 
   override init(frame: CGRect) {
@@ -230,6 +256,7 @@ class EditorTextInputView: UIView, UITextInput {
       _markedText = nil
       onUnmarkText?()
     }
+    _pendingSelectionRange = nil
     _shadowText = ""
     _cursor = Self.cursorSentinelOffset
     inputDelegate?.textWillChange(self)
@@ -427,6 +454,7 @@ class EditorTextInputView: UIView, UITextInput {
         }
         onShortcut?(def.action)
 
+        _pendingSelectionRange = nil
         _shadowText = ""
         _cursor = 0
         inputDelegate?.textWillChange(self)
@@ -462,8 +490,34 @@ class EditorTextInputView: UIView, UITextInput {
       } else {
         onPerformAction?("newline")
       }
+      _pendingSelectionRange = nil
       _shadowText = ""
       _cursor = Self.cursorSentinelOffset
+      return
+    }
+
+    if _isIOSAppOnMac {
+      let shadowLength = _shadowText.count
+      let selection = _consumeSelectionRange(shadowLength: shadowLength)
+      let replaceLength = selection.end - selection.start
+      let replacesSuffix = replaceLength > 0 && selection.end == shadowLength
+
+      let startIndex = _shadowText.index(_shadowText.startIndex, offsetBy: selection.start)
+      let endIndex = _shadowText.index(_shadowText.startIndex, offsetBy: selection.end)
+      _shadowText.replaceSubrange(startIndex..<endIndex, with: text)
+      if _shadowText.count > 64 {
+        _shadowText = String(_shadowText.suffix(64))
+      }
+      _cursor = Self.cursorSentinelOffset + _shadowText.count
+
+      inputDelegate?.textWillChange(self)
+      inputDelegate?.textDidChange(self)
+
+      if replacesSuffix {
+        onReplaceBackward?(replaceLength, text)
+      } else {
+        onInsertText?(text)
+      }
       return
     }
 
@@ -483,6 +537,43 @@ class EditorTextInputView: UIView, UITextInput {
     if _markedText != nil {
       _markedText = nil
       onCancelMarkedText?()
+      return
+    }
+
+    if _isIOSAppOnMac {
+      let shadowLength = _shadowText.count
+      var selection = _consumeSelectionRange(shadowLength: shadowLength)
+      if selection.start == selection.end {
+        if selection.end == 0 {
+          _shadowText = ""
+          _pendingSelectionRange = nil
+          _cursor = Self.cursorSentinelOffset
+          onDeleteBackward?()
+          return
+        }
+        selection = (selection.end - 1, selection.end)
+      }
+
+      let deleteLength = selection.end - selection.start
+      let deletesSuffix = selection.end == shadowLength
+
+      let startIndex = _shadowText.index(_shadowText.startIndex, offsetBy: selection.start)
+      let endIndex = _shadowText.index(_shadowText.startIndex, offsetBy: selection.end)
+      _shadowText.removeSubrange(startIndex..<endIndex)
+      _cursor = Self.cursorSentinelOffset + _shadowText.count
+
+      inputDelegate?.textWillChange(self)
+      inputDelegate?.textDidChange(self)
+
+      if deletesSuffix {
+        if deleteLength == 1 {
+          onDeleteBackward?()
+        } else {
+          onReplaceBackward?(deleteLength, "")
+        }
+      } else {
+        onDeleteBackward?()
+      }
       return
     }
 
@@ -511,10 +602,12 @@ class EditorTextInputView: UIView, UITextInput {
 
   func setMarkedText(_ markedText: String?, selectedRange: NSRange) {
     if let text = markedText, !text.isEmpty {
+      _pendingSelectionRange = nil
       _markedText = text
       onSetMarkedText?(text)
     } else {
       if _markedText != nil {
+        _pendingSelectionRange = nil
         _markedText = nil
         onCancelMarkedText?()
       }
@@ -523,6 +616,7 @@ class EditorTextInputView: UIView, UITextInput {
 
   func unmarkText() {
     if _markedText != nil {
+      _pendingSelectionRange = nil
       _markedText = nil
       onUnmarkText?()
     }
@@ -532,6 +626,9 @@ class EditorTextInputView: UIView, UITextInput {
 
   var selectedTextRange: UITextRange? {
     get {
+      if _isIOSAppOnMac, let range = _pendingSelectionRange {
+        return EditorTextRange(start: range.location, end: range.location + range.length)
+      }
       if let markedText = _markedText {
         let pos = markedText.count
         return EditorTextRange(start: pos, end: pos)
@@ -539,7 +636,18 @@ class EditorTextInputView: UIView, UITextInput {
       let pos = _shadowText.isEmpty ? _cursor : _shadowText.count
       return EditorTextRange(start: pos, end: pos)
     }
-    set {}
+    set {
+      guard _isIOSAppOnMac, let editorRange = newValue as? EditorTextRange else { return }
+      let maxLen = _shadowText.count
+      let start = _clampOffset(editorRange.startOffset, max: maxLen)
+      let end = _clampOffset(editorRange.endOffset, max: maxLen)
+      let normalizedStart = Swift.min(start, end)
+      let normalizedEnd = Swift.max(start, end)
+      _pendingSelectionRange = NSRange(location: normalizedStart, length: normalizedEnd - normalizedStart)
+      _cursor = Self.cursorSentinelOffset + normalizedEnd
+      inputDelegate?.selectionWillChange(self)
+      inputDelegate?.selectionDidChange(self)
+    }
   }
 
   // MARK: - UITextInput (Text Geometry)
@@ -550,8 +658,8 @@ class EditorTextInputView: UIView, UITextInput {
     }
     
     let shadowLen = _shadowText.count
-    let rangeStart = editorRange.startOffset
-    let rangeEnd = editorRange.endOffset
+    let rangeStart = max(0, min(editorRange.startOffset, shadowLen))
+    let rangeEnd = max(rangeStart, min(editorRange.endOffset, shadowLen))
     
     if shadowLen == 0 || rangeStart >= shadowLen {
       return CGRect(x: cursorX, y: cursorY, width: 1, height: cursorHeight)
@@ -571,8 +679,12 @@ class EditorTextInputView: UIView, UITextInput {
     }
     
     var width: Double = 0
-    for i in rangeStart..<min(rangeEnd, availableWidths) {
-      width += _precedingCharWidths[i]
+    let widthStart = min(rangeStart, availableWidths)
+    let widthEnd = min(rangeEnd, availableWidths)
+    if widthEnd > widthStart {
+      for i in widthStart..<widthEnd {
+        width += _precedingCharWidths[i]
+      }
     }
     
     if width < 1 {
@@ -591,6 +703,9 @@ class EditorTextInputView: UIView, UITextInput {
 
   var beginningOfDocument: UITextPosition { EditorTextPosition(offset: 0) }
   var endOfDocument: UITextPosition { 
+    if _isIOSAppOnMac {
+      return EditorTextPosition(offset: _shadowText.count)
+    }
     if let markedText = _markedText {
       return EditorTextPosition(offset: markedText.count)
     }
@@ -656,7 +771,7 @@ class EditorTextInputView: UIView, UITextInput {
   func position(from position: UITextPosition, offset: Int) -> UITextPosition? {
     guard let pos = position as? EditorTextPosition else { return nil }
     let newOffset = pos.offset + offset
-    let maxLen = _markedText?.count ?? 0
+    let maxLen = _textLengthForSelection
     if newOffset < 0 || newOffset > maxLen { return nil }
     return EditorTextPosition(offset: newOffset)
   }
@@ -665,7 +780,7 @@ class EditorTextInputView: UIView, UITextInput {
     guard let pos = position as? EditorTextPosition else { return nil }
     let delta = (direction == .left || direction == .up) ? -offset : offset
     let newOffset = pos.offset + delta
-    let maxLen = _markedText?.count ?? 0
+    let maxLen = _textLengthForSelection
     if newOffset < 0 || newOffset > maxLen { return nil }
     return EditorTextPosition(offset: newOffset)
   }
@@ -687,11 +802,11 @@ class EditorTextInputView: UIView, UITextInput {
   func selectionRects(for range: UITextRange) -> [UITextSelectionRect] { [] }
 
   func closestPosition(to point: CGPoint) -> UITextPosition? {
-    return EditorTextPosition(offset: _markedText?.count ?? 0)
+    return EditorTextPosition(offset: _textLengthForSelection)
   }
 
   func closestPosition(to point: CGPoint, within range: UITextRange) -> UITextPosition? {
-    return EditorTextPosition(offset: _markedText?.count ?? 0)
+    return EditorTextPosition(offset: _textLengthForSelection)
   }
 
   func characterRange(at point: CGPoint) -> UITextRange? { nil }
@@ -713,7 +828,7 @@ class EditorTextInputView: UIView, UITextInput {
 
   func characterRange(byExtending position: UITextPosition, in direction: UITextLayoutDirection) -> UITextRange? {
     guard let pos = position as? EditorTextPosition else { return nil }
-    let maxLen = _markedText?.count ?? 0
+    let maxLen = _textLengthForSelection
     if direction == .left || direction == .up {
       return EditorTextRange(start: 0, end: pos.offset)
     } else {
