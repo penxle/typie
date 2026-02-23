@@ -19,56 +19,72 @@ class EditorDraggable extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scope = ContentScope.of(context);
+    ({Offset localPosition, int pageIdx, double localY, double pointerX})? resolveDragLocation(Offset globalPosition) {
+      final renderBox = context.findRenderObject() as RenderBox?;
+      if (renderBox == null) {
+        return null;
+      }
+
+      final localPosition = renderBox.globalToLocal(globalPosition);
+      final localDocumentY = localPosition.dy;
+      final pointerX = gesture.getPointerX(localPosition.dx);
+
+      final geo = scope.geometry;
+      final offsets = geo.computeCumulativePageOffsets();
+      var pageIdx = -1;
+      var localY = 0.0;
+
+      if (localDocumentY >= geo.titleAreaHeight) {
+        final adjustedY = localDocumentY - geo.titleAreaHeight;
+        var low = 0;
+        var high = offsets.length - 1;
+        while (low < high) {
+          final mid = (low + high) ~/ 2;
+          if (offsets[mid] <= adjustedY) {
+            low = mid + 1;
+          } else {
+            high = mid;
+          }
+        }
+        pageIdx = (low - 1).clamp(0, geo.pages.length - 1);
+        localY = adjustedY - offsets[pageIdx];
+      } else {
+        // Inside Title Area
+        pageIdx = -1;
+        localY = localDocumentY;
+      }
+
+      return (localPosition: localPosition, pageIdx: pageIdx, localY: localY, pointerX: pointerX);
+    }
+
+    bool isSelectionDraggable(Offset globalPosition) {
+      if (gesture.hasTextHandleDrag) {
+        return false;
+      }
+      final resolved = resolveDragLocation(globalPosition);
+      if (resolved == null) {
+        return false;
+      }
+      return scope.editor.isSelectionHit(resolved.pageIdx, resolved.pointerX, resolved.localY);
+    }
+
     return DragItemWidget(
       dragItemProvider: (request) {
-        if (gesture.draggingHandleType != null) {
+        final resolved = resolveDragLocation(request.location);
+        if (resolved == null) {
           return null;
         }
-
-        final renderBox = context.findRenderObject() as RenderBox?;
-        if (renderBox == null) {
-          return null;
-        }
-        final localPosition = renderBox.globalToLocal(request.location);
-        final localDocumentY = localPosition.dy;
-        final pointerX = gesture.getPointerX(localPosition.dx);
-
-        final geo = scope.geometry;
-        final offsets = geo.computeCumulativePageOffsets();
-        var pageIdx = -1;
-        var localY = 0.0;
-
-        if (localDocumentY >= geo.titleAreaHeight) {
-          final adjustedY = localDocumentY - geo.titleAreaHeight;
-          var low = 0;
-          var high = offsets.length - 1;
-          while (low < high) {
-            final mid = (low + high) ~/ 2;
-            if (offsets[mid] <= adjustedY) {
-              low = mid + 1;
-            } else {
-              high = mid;
-            }
-          }
-          pageIdx = (low - 1).clamp(0, geo.pages.length - 1);
-          localY = adjustedY - offsets[pageIdx];
-        } else {
-          // Inside Title Area
-          pageIdx = -1;
-          localY = localDocumentY;
-        }
-
-        final canDrag = scope.editor.isSelectionHit(pageIdx, pointerX, localY);
+        final canDrag = scope.editor.isSelectionHit(resolved.pageIdx, resolved.pointerX, resolved.localY);
 
         if (!canDrag) {
           return null;
         }
 
         scope.dndController.handleDragStart(
-          pageIdx,
+          resolved.pageIdx,
           request.location.dx,
-          localY,
-          Offset(localPosition.dx, localDocumentY),
+          resolved.localY,
+          Offset(resolved.localPosition.dx, resolved.localPosition.dy),
         );
         return scope.dndController.createDragItem();
       },
@@ -89,7 +105,7 @@ class EditorDraggable extends StatelessWidget {
           },
         );
       },
-      child: DraggableWidget(child: child),
+      child: DraggableWidget(isLocationDraggable: isSelectionDraggable, child: child),
     );
   }
 
