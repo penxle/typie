@@ -38,12 +38,14 @@ class MultiEntitiesMenu extends HookWidget {
 
     final folderIds = selectedEntities.where((e) => e.node.G__typename == 'Folder').map((e) => e.id).toList();
     final postIds = selectedEntities.where((e) => e.node.G__typename == 'Post').map((e) => e.id).toList();
+    final documentIds = selectedEntities.where((e) => e.node.G__typename == 'Document').map((e) => e.id).toList();
 
     return BottomMenu(
       header: MultiEntitiesMenuHeader(
         selectedCount: selectedItems.length,
         folderCount: folderIds.length,
         postCount: postIds.length,
+        documentCount: documentIds.length,
       ),
       items: [
         if (folderIds.isNotEmpty)
@@ -72,6 +74,20 @@ class MultiEntitiesMenu extends HookWidget {
                 ),
               );
               await context.showBottomSheet(intercept: true, child: ShareBottomSheet(entityIds: postIds));
+            },
+          ),
+        if (documentIds.isNotEmpty)
+          BottomMenuItem(
+            icon: LucideLightIcons.blend,
+            label: '문서 ${documentIds.length}개 공유 및 게시',
+            onTap: () async {
+              unawaited(
+                mixpanel.track(
+                  'open_document_share_modal',
+                  properties: {'via': 'multi_entities_menu', 'count': documentIds.length},
+                ),
+              );
+              await context.showBottomSheet(intercept: true, child: ShareBottomSheet(entityIds: documentIds));
             },
           ),
         BottomMenuItem(
@@ -134,11 +150,13 @@ class MultiEntitiesMenuHeader extends StatelessWidget {
     required this.selectedCount,
     required this.folderCount,
     required this.postCount,
+    required this.documentCount,
   });
 
   final int selectedCount;
   final int folderCount;
   final int postCount;
+  final int documentCount;
 
   @override
   Widget build(BuildContext context) {
@@ -152,7 +170,7 @@ class MultiEntitiesMenuHeader extends StatelessWidget {
             Text('$selectedCount개 선택됨', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
           ],
         ),
-        if (folderCount > 0 || postCount > 0)
+        if (folderCount > 0 || postCount > 0 || documentCount > 0)
           Padding(
             padding: const EdgeInsets.only(left: 36, top: 4),
             child: Row(
@@ -172,6 +190,14 @@ class MultiEntitiesMenuHeader extends StatelessWidget {
                     children: [
                       Icon(LucideLightIcons.file, size: 14, color: context.colors.textSubtle),
                       Text('$postCount개', style: TextStyle(fontSize: 14, color: context.colors.textSubtle)),
+                    ],
+                  ),
+                if (documentCount > 0)
+                  Row(
+                    spacing: 4,
+                    children: [
+                      Icon(LucideLightIcons.file, size: 14, color: context.colors.textSubtle),
+                      Text('$documentCount개', style: TextStyle(fontSize: 14, color: context.colors.textSubtle)),
                     ],
                   ),
               ],
