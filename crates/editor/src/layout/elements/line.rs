@@ -185,6 +185,13 @@ impl LineElement {
         }
     }
 
+    fn trailing_whitespace_start_offset(&self) -> usize {
+        let start_byte = char_to_byte_offset(&self.text, self.metric.start_offset);
+        let end_byte = char_to_byte_offset(&self.text, self.metric.end_offset);
+        let line_slice = &self.text[start_byte..end_byte];
+        self.metric.start_offset + line_slice.trim_end().chars().count()
+    }
+
     // x가 cluster가 속한 grapheme의 visual mid보다 왼쪽이면 시작, 오른쪽이면 끝을 반환
     fn snap_to_containing_grapheme(
         &self,
@@ -527,6 +534,21 @@ impl LineElement {
 
         let offset = self.position_to_offset(&position)?;
 
+        if self.is_soft_wrap_next() {
+            let trailing_start = self.trailing_whitespace_start_offset();
+            if trailing_start > self.metric.start_offset
+                && trailing_start < self.metric.end_offset
+                && offset > trailing_start
+            {
+                return Some(Rect::new(
+                    self.offset_to_x(trailing_start),
+                    top,
+                    0.0,
+                    height,
+                ));
+            }
+        }
+
         if self.metric.clusters.is_empty() {
             return Some(Rect::new(self.metric.left, top, 0.0, height));
         }
@@ -638,8 +660,20 @@ impl LineElement {
             return None;
         }
 
+        let clamped_end = if self.is_soft_wrap_next() {
+            let trailing_start = self.trailing_whitespace_start_offset();
+            if trailing_start > self.metric.start_offset && trailing_start < self.metric.end_offset
+            {
+                local_end.min(trailing_start)
+            } else {
+                local_end
+            }
+        } else {
+            local_end
+        };
+
         let start_x = self.offset_to_x(local_start);
-        let end_x = self.offset_to_x(local_end);
+        let end_x = self.offset_to_x(clamped_end);
         let width = end_x - start_x;
 
         if width <= 0.0 {
@@ -805,6 +839,18 @@ impl CursorNavigable for LineElement {
             .prev_grapheme_offset(offset)
             .unwrap_or(self.metric.start_offset);
 
+        if self.is_soft_wrap_next() && offset == self.metric.end_offset {
+            let trailing_start = self.trailing_whitespace_start_offset();
+            if trailing_start > self.metric.start_offset && trailing_start < self.metric.end_offset
+            {
+                return Some(CursorNavigation::Moved {
+                    selection: Selection::collapsed(
+                        self.offset_to_position(trailing_start, Affinity::Upstream)?,
+                    ),
+                });
+            }
+        }
+
         let mut affinity = self.affinity_for_offset(prev, Affinity::Downstream);
         if self.is_explicit_break() && prev + 1 >= self.metric.end_offset {
             affinity = Affinity::Upstream;
@@ -840,6 +886,20 @@ impl CursorNavigable for LineElement {
         let next = self
             .next_grapheme_offset(offset)
             .unwrap_or(self.metric.end_offset);
+
+        if self.is_soft_wrap_next() {
+            let trailing_start = self.trailing_whitespace_start_offset();
+            if trailing_start > self.metric.start_offset
+                && trailing_start < self.metric.end_offset
+                && next > trailing_start
+            {
+                return Some(CursorNavigation::Moved {
+                    selection: Selection::collapsed(
+                        self.offset_to_position(self.metric.end_offset, Affinity::Downstream)?,
+                    ),
+                });
+            }
+        }
 
         let mut affinity = self.affinity_for_offset(next, Affinity::Upstream);
         if self.is_explicit_break() && next >= self.metric.end_offset {
@@ -1103,6 +1163,18 @@ impl CursorNavigable for LineElement {
 
                 return Some(CursorNavigation::Moved {
                     selection: Selection::collapsed(self.offset_to_position(offset, affinity)?),
+                });
+            }
+        }
+
+        if self.is_soft_wrap_next() {
+            let trailing_start = self.trailing_whitespace_start_offset();
+            if trailing_start > self.metric.start_offset && trailing_start < self.metric.end_offset
+            {
+                return Some(CursorNavigation::Moved {
+                    selection: Selection::collapsed(
+                        self.offset_to_position(trailing_start, Affinity::Upstream)?,
+                    ),
                 });
             }
         }
