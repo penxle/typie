@@ -249,6 +249,21 @@ export class Editor {
     return file;
   }
 
+  insertImagesFromFiles(files: Iterable<File>): boolean {
+    let handled = false;
+
+    for (const file of files) {
+      if (!file.type.startsWith('image/')) continue;
+
+      const uploadId = nanoid();
+      this.queueUpload(uploadId, file);
+      this.dispatch({ type: 'insertImage', uploadId }).scrollIntoView({ mode: 'typewriter' });
+      handled = true;
+    }
+
+    return handled;
+  }
+
   async initialize(options: EditorOptions): Promise<void> {
     if (this.#wasmEditor) {
       return;
@@ -919,8 +934,16 @@ export class Editor {
       const items = await navigator.clipboard.read();
       let html: string | undefined = undefined;
       let text = '';
+      const imageFiles: File[] = [];
 
       for (const item of items) {
+        const imageMime = item.types.find((type) => type.startsWith('image/'));
+        if (imageMime) {
+          const imageBlob = await item.getType(imageMime);
+          imageFiles.push(new File([imageBlob], 'clipboard-image', { type: imageBlob.type }));
+          continue;
+        }
+
         if (item.types.includes('text/html')) {
           const blob = await item.getType('text/html');
           html = await blob.text();
@@ -931,13 +954,15 @@ export class Editor {
         }
       }
 
-      this.paste({ html, text });
+      if (!this.insertImagesFromFiles(imageFiles)) {
+        this.paste({ html, text });
+      }
     } catch {
       const text = await navigator.clipboard.readText();
       this.paste({ text });
+    } finally {
+      this.closeContextMenu();
     }
-
-    this.closeContextMenu();
   }
 
   paste({ html, text }: { html?: string; text: string }) {
