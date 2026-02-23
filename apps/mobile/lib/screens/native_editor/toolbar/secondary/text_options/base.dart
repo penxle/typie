@@ -35,7 +35,7 @@ class NativeEditorTextOptionsToolbar extends HookWidget {
 
     final controller = useScrollController();
     final key = useMemoized(GlobalKey.new);
-    final keys = useMemoized(() => List.generate(items.length, (_) => GlobalKey()), [items]);
+    final keys = useMemoized(() => List.generate(items.length, (_) => GlobalKey()), [items.length]);
     final lastMaxScrollExtent = useRef<double>(0);
 
     void scrollToActiveItem() {

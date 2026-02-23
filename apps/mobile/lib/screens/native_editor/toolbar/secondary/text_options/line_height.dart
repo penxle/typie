@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:typie/hooks/select_value_listenable.dart';
 import 'package:typie/screens/native_editor/toolbar/buttons/label.dart';
 import 'package:typie/screens/native_editor/toolbar/scope.dart';
 import 'package:typie/screens/native_editor/toolbar/secondary/text_options/base.dart';
@@ -11,9 +12,7 @@ class NativeEditorLineHeightTextOptionsToolbar extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final scope = NativeEditorToolbarScope.of(context);
-    final attrs = useValueListenable(scope.attrs);
-
-    final lineHeightAttr = findAttr(attrs, 'line_height');
+    final lineHeightAttr = useSelectValueListenable(scope.attrs, (attrs) => findAttr(attrs, 'line_height'));
     final lineHeightValues = (lineHeightAttr?['values'] as List?)?.whereType<num>().toList() ?? [];
     final activeValue = lineHeightValues.length == 1
         ? lineHeightValues[0]

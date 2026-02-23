@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:typie/hooks/select_value_listenable.dart';
 import 'package:typie/screens/native_editor/toolbar/buttons/background_color.dart';
 import 'package:typie/screens/native_editor/toolbar/scope.dart';
 import 'package:typie/screens/native_editor/toolbar/secondary/text_options/base.dart';
@@ -11,9 +12,7 @@ class NativeEditorTextBackgroundColorTextOptionsToolbar extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final scope = NativeEditorToolbarScope.of(context);
-    final attrs = useValueListenable(scope.attrs);
-
-    final bgColorAttr = findAttr(attrs, 'background_color');
+    final bgColorAttr = useSelectValueListenable(scope.attrs, (attrs) => findAttr(attrs, 'background_color'));
     final bgColorValues = (bgColorAttr?['values'] as List?)?.whereType<String>().toList() ?? [];
     final activeValue = bgColorValues.length == 1
         ? bgColorValues[0]

@@ -2,6 +2,7 @@ import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/context/theme.dart';
+import 'package:typie/hooks/select_value_listenable.dart';
 import 'package:typie/screens/native_editor/state/fonts.dart';
 import 'package:typie/screens/native_editor/toolbar/buttons/base.dart';
 import 'package:typie/screens/native_editor/toolbar/scope.dart';
@@ -14,9 +15,7 @@ class NativeEditorFontFamilyTextOptionsToolbar extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final scope = NativeEditorToolbarScope.of(context);
-    final attrs = useValueListenable(scope.attrs);
-
-    final fontFamilyAttr = findAttr(attrs, 'font_family');
+    final fontFamilyAttr = useSelectValueListenable(scope.attrs, (attrs) => findAttr(attrs, 'font_family'));
     final fontFamilyValues = (fontFamilyAttr?['values'] as List?)?.whereType<String>().toList() ?? [];
     final activeValue = fontFamilyValues.length == 1 ? fontFamilyValues[0] : null;
 
