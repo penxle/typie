@@ -36,6 +36,27 @@
     clipboardData?.setData('text/plain', data.text);
   };
 
+  const getClipboardImageFiles = (clipboardData: DataTransfer | null): File[] => {
+    if (!clipboardData) {
+      return [];
+    }
+
+    const imageFiles = [...clipboardData.files].filter((file) => file.type.startsWith('image/'));
+    if (imageFiles.length > 0) {
+      return imageFiles;
+    }
+
+    const files: File[] = [];
+    for (const item of clipboardData.items) {
+      if (!item.type.startsWith('image/')) continue;
+      const file = item.getAsFile();
+      if (file) {
+        files.push(file);
+      }
+    }
+    return files;
+  };
+
   export function focus() {
     inputEl?.focus({ preventScroll: true });
   }
@@ -162,6 +183,11 @@
     if (editor.readOnly) return;
 
     e.preventDefault();
+
+    const imageFiles = getClipboardImageFiles(e.clipboardData);
+    if (editor.insertImagesFromFiles(imageFiles)) {
+      return;
+    }
 
     const html = e.clipboardData?.getData('text/html') || undefined;
     const text = e.clipboardData?.getData('text/plain') ?? '';
