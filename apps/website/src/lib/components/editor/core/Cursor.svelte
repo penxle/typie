@@ -68,7 +68,7 @@
       containerEls[pageIdx].append(element);
 
       element.style.visibility = visible && editor.isFocused ? 'visible' : 'hidden';
-      element.style.left = `${bounds.x}px`;
+      element.style.left = `${Math.round(bounds.x)}px`;
       element.style.top = `${bounds.y}px`;
       element.style.height = `${bounds.height}px`;
 
