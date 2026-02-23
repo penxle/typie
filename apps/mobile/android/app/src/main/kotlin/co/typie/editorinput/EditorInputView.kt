@@ -72,6 +72,19 @@ class EditorInputNativeView(
   private var lastDeleteTime = 0L
   private var batchEditDepth = 0
   private var pendingRestartInput = false
+  private var restartOnIdle = false
+
+  private val restartRunnable = Runnable {
+    if (restartOnIdle && !isComposing && batchEditDepth == 0) {
+      inputMethodManager.restartInput(this)
+    }
+    restartOnIdle = false
+  }
+
+  private fun scheduleRestartOnIdle() {
+    restartOnIdle = true
+    postOnAnimation(restartRunnable)
+  }
 
   private val inputMethodManager: InputMethodManager
     get() = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
@@ -89,6 +102,7 @@ class EditorInputNativeView(
       isComposing = false
       composingText = ""
       channel.invokeMethod("unmarkText", emptyMap<String, Any>())
+      scheduleRestartOnIdle()
     }
   }
 
@@ -101,6 +115,8 @@ class EditorInputNativeView(
   }
 
   private fun scheduleRestartInput() {
+    restartOnIdle = false
+    removeCallbacks(restartRunnable)
     if (batchEditDepth > 0) {
       pendingRestartInput = true
     } else {
@@ -196,7 +212,11 @@ class EditorInputNativeView(
         batchEditDepth--
         if (batchEditDepth == 0 && pendingRestartInput) {
           pendingRestartInput = false
-          inputMethodManager.restartInput(this@EditorInputNativeView)
+          restartOnIdle = false
+          removeCallbacks(restartRunnable)
+          if (!isComposing) {
+            inputMethodManager.restartInput(this@EditorInputNativeView)
+          }
         }
         return true
       }
@@ -214,10 +234,10 @@ class EditorInputNativeView(
           insertTextOrNewline(str)
         }
 
-        this@EditorInputNativeView.post {
-          if (!isComposing && batchEditDepth == 0) {
-            inputMethodManager.restartInput(this@EditorInputNativeView)
-          }
+        if (batchEditDepth > 0) {
+          pendingRestartInput = true
+        } else {
+          scheduleRestartOnIdle()
         }
 
         return true
@@ -225,6 +245,8 @@ class EditorInputNativeView(
 
       override fun setComposingText(text: CharSequence?, newCursorPosition: Int): Boolean {
         val str = text?.toString().orEmpty()
+        restartOnIdle = false
+        removeCallbacks(restartRunnable)
 
         if (str.isEmpty()) {
           if (isComposing) {
