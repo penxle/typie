@@ -4392,3 +4392,213 @@ fn test_find_target_left_fallback_above_prefers_rightmost_scope_on_same_y() {
         "When above candidates are same y-distance, left fallback should pick the right-most scope"
     );
 }
+
+fn assert_hung_whitespace_layout<'a>(
+    lines: &'a [&'a LineElement],
+    text: &str,
+) -> (&'a LineElement, &'a LineElement, usize) {
+    assert!(lines.len() >= 2, "expected soft wrap (text={:?})", text);
+    let first = lines[0];
+    let ft = line_text_slice(first);
+    let trimmed = ft.trim_end();
+    assert!(
+        trimmed.len() < ft.len(),
+        "expected trailing whitespace on first line: {:?} (text={:?})",
+        ft,
+        text
+    );
+    let trailing_start = first.metric.start_offset + trimmed.chars().count();
+    (first, lines[1], trailing_start)
+}
+
+#[test]
+fn test_navigate_right_skips_hung_whitespace() {
+    let mut p = id!();
+    let rt = runtime! {
+        viewport { paginated { width: 60.0, height: 400.0, margin: 0.0 } }
+        doc { @p paragraph { text { "aaaa bbbb cccc" } } }
+        selection { (p, 0) }
+    };
+
+    let pages = rt.pages();
+    let lines = collect_lines_for_block(&pages, p);
+    let (first_line, _, trailing_start) = assert_hung_whitespace_layout(&lines, "aaaa bbbb cccc");
+
+    let before_trailing = Position::new(p, trailing_start - 1, Affinity::Downstream);
+    let (_, rect) = Cursor::bounds(&ctx(&rt.state()), &pages, before_trailing).unwrap();
+    let sel = Cursor::move_right(
+        &ctx(&rt.state()),
+        &pages,
+        before_trailing,
+        rect.y + rect.height,
+    )
+    .unwrap();
+
+    assert_eq!(sel.head.offset, trailing_start);
+    assert_eq!(sel.head.affinity, Affinity::Upstream);
+
+    let (_, rect2) = Cursor::bounds(&ctx(&rt.state()), &pages, sel.head).unwrap();
+    let sel2 =
+        Cursor::move_right(&ctx(&rt.state()), &pages, sel.head, rect2.y + rect2.height).unwrap();
+
+    assert_eq!(sel2.head.offset, first_line.metric.end_offset);
+    assert_eq!(sel2.head.affinity, Affinity::Downstream);
+}
+
+#[test]
+fn test_navigate_right_before_hung_whitespace_is_normal() {
+    let mut p = id!();
+    let rt = runtime! {
+        viewport { paginated { width: 60.0, height: 400.0, margin: 0.0 } }
+        doc { @p paragraph { text { "aaaa bbbb cccc" } } }
+        selection { (p, 0) }
+    };
+
+    let pages = rt.pages();
+    let lines = collect_lines_for_block(&pages, p);
+    let (_, _, trailing_start) = assert_hung_whitespace_layout(&lines, "aaaa bbbb cccc");
+
+    if trailing_start >= 2 {
+        let before = Position::new(p, trailing_start - 2, Affinity::Downstream);
+        let (_, rect) = Cursor::bounds(&ctx(&rt.state()), &pages, before).unwrap();
+        let sel =
+            Cursor::move_right(&ctx(&rt.state()), &pages, before, rect.y + rect.height).unwrap();
+
+        assert_eq!(sel.head.offset, trailing_start - 1);
+    }
+}
+
+#[test]
+fn test_navigate_left_skips_hung_whitespace() {
+    let mut p = id!();
+    let rt = runtime! {
+        viewport { paginated { width: 60.0, height: 400.0, margin: 0.0 } }
+        doc { @p paragraph { text { "aaaa bbbb cccc" } } }
+        selection { (p, 0) }
+    };
+
+    let pages = rt.pages();
+    let lines = collect_lines_for_block(&pages, p);
+    let (first_line, second_line, trailing_start) =
+        assert_hung_whitespace_layout(&lines, "aaaa bbbb cccc");
+
+    let line2_start = Position::new(p, second_line.metric.start_offset, Affinity::Downstream);
+    let (_, rect) = Cursor::bounds(&ctx(&rt.state()), &pages, line2_start).unwrap();
+    let sel = Cursor::move_left(&ctx(&rt.state()), &pages, line2_start, rect.y).unwrap();
+
+    assert_eq!(sel.head.offset, trailing_start);
+    assert_eq!(sel.head.affinity, Affinity::Upstream);
+
+    let (_, rect2) = Cursor::bounds(&ctx(&rt.state()), &pages, sel.head).unwrap();
+    let sel2 = Cursor::move_left(&ctx(&rt.state()), &pages, sel.head, rect2.y).unwrap();
+
+    assert_eq!(sel2.head.offset, trailing_start - 1);
+    assert!(
+        first_line.metric.start_offset <= sel2.head.offset
+            && sel2.head.offset <= first_line.metric.end_offset,
+        "cursor should be within line 1 range"
+    );
+}
+
+#[test]
+fn test_navigate_right_then_left_round_trip_with_hung_whitespace() {
+    let mut p = id!();
+    let rt = runtime! {
+        viewport { paginated { width: 60.0, height: 400.0, margin: 0.0 } }
+        doc { @p paragraph { text { "aaaa bbbb cccc" } } }
+        selection { (p, 0) }
+    };
+
+    let pages = rt.pages();
+    let lines = collect_lines_for_block(&pages, p);
+    let (first_line, _, trailing_start) = assert_hung_whitespace_layout(&lines, "aaaa bbbb cccc");
+
+    let at_trailing = Position::new(p, trailing_start, Affinity::Upstream);
+    let (_, rect) = Cursor::bounds(&ctx(&rt.state()), &pages, at_trailing).unwrap();
+    let after_right =
+        Cursor::move_right(&ctx(&rt.state()), &pages, at_trailing, rect.y + rect.height).unwrap();
+
+    assert_eq!(after_right.head.offset, first_line.metric.end_offset);
+    assert_eq!(after_right.head.affinity, Affinity::Downstream);
+
+    let (_, rect2) = Cursor::bounds(&ctx(&rt.state()), &pages, after_right.head).unwrap();
+    let after_left =
+        Cursor::move_left(&ctx(&rt.state()), &pages, after_right.head, rect2.y).unwrap();
+
+    assert_eq!(after_left.head.offset, trailing_start);
+    assert_eq!(after_left.head.affinity, Affinity::Upstream);
+}
+
+#[test]
+fn test_navigate_right_skips_multiple_hung_whitespaces() {
+    let mut p = id!();
+    let rt = runtime! {
+        viewport { paginated { width: 60.0, height: 400.0, margin: 0.0 } }
+        doc { @p paragraph { text { "aaaa  bbbb cccc" } } }
+        selection { (p, 0) }
+    };
+
+    let pages = rt.pages();
+    let lines = collect_lines_for_block(&pages, p);
+    let (first_line, _, trailing_start) = assert_hung_whitespace_layout(&lines, "aaaa  bbbb cccc");
+
+    let trailing_count = first_line.metric.end_offset - trailing_start;
+    assert!(
+        trailing_count >= 2,
+        "expected at least 2 trailing whitespaces, got {}",
+        trailing_count
+    );
+
+    let at_trailing = Position::new(p, trailing_start, Affinity::Upstream);
+    let (_, rect) = Cursor::bounds(&ctx(&rt.state()), &pages, at_trailing).unwrap();
+    let sel =
+        Cursor::move_right(&ctx(&rt.state()), &pages, at_trailing, rect.y + rect.height).unwrap();
+
+    assert_eq!(sel.head.offset, first_line.metric.end_offset);
+    assert_eq!(sel.head.affinity, Affinity::Downstream);
+}
+
+#[test]
+fn test_navigate_left_skips_multiple_hung_whitespaces() {
+    let mut p = id!();
+    let rt = runtime! {
+        viewport { paginated { width: 60.0, height: 400.0, margin: 0.0 } }
+        doc { @p paragraph { text { "aaaa  bbbb cccc" } } }
+        selection { (p, 0) }
+    };
+
+    let pages = rt.pages();
+    let lines = collect_lines_for_block(&pages, p);
+    let (first_line, second_line, trailing_start) =
+        assert_hung_whitespace_layout(&lines, "aaaa  bbbb cccc");
+
+    let trailing_count = first_line.metric.end_offset - trailing_start;
+    assert!(trailing_count >= 2);
+
+    let line2_start = Position::new(p, second_line.metric.start_offset, Affinity::Downstream);
+    let (_, rect) = Cursor::bounds(&ctx(&rt.state()), &pages, line2_start).unwrap();
+    let sel = Cursor::move_left(&ctx(&rt.state()), &pages, line2_start, rect.y).unwrap();
+
+    assert_eq!(sel.head.offset, trailing_start);
+    assert_eq!(sel.head.affinity, Affinity::Upstream);
+}
+
+#[test]
+fn test_navigate_to_end_stops_at_hung_whitespace() {
+    let mut p = id!();
+    let rt = runtime! {
+        viewport { paginated { width: 60.0, height: 400.0, margin: 0.0 } }
+        doc { @p paragraph { text { "aaaa bbbb cccc" } } }
+        selection { (p, 0) }
+    };
+
+    let pages = rt.pages();
+    let lines = collect_lines_for_block(&pages, p);
+    let (_, _, trailing_start) = assert_hung_whitespace_layout(&lines, "aaaa bbbb cccc");
+
+    let start = Position::new(p, 0, Affinity::Downstream);
+    let sel = Cursor::move_to_line_end(&ctx(&rt.state()), &pages, start).unwrap();
+
+    assert_eq!(sel.head.offset, trailing_start);
+    assert_eq!(sel.head.affinity, Affinity::Upstream);
+}
