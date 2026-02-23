@@ -88,7 +88,6 @@ class EditorInputNativeView(
       isComposing = false
       composingText = ""
       channel.invokeMethod("unmarkText", emptyMap<String, Any>())
-      scheduleRestartInput()
     }
   }
 
@@ -138,6 +137,7 @@ class EditorInputNativeView(
 
   fun resetInputContext() {
     commitComposingState()
+    scheduleRestartInput()
   }
 
   override fun onCheckIsTextEditor(): Boolean = true
@@ -176,7 +176,6 @@ class EditorInputNativeView(
 
       override fun commitText(text: CharSequence?, newCursorPosition: Int): Boolean {
         val str = text?.toString().orEmpty()
-        val wasComposing = isComposing
 
         if (isComposing) {
           isComposing = false
@@ -186,10 +185,6 @@ class EditorInputNativeView(
 
         if (str.isNotEmpty()) {
           insertTextOrNewline(str)
-        }
-
-        if (wasComposing) {
-          scheduleRestartInput()
         }
 
         return true
@@ -217,7 +212,6 @@ class EditorInputNativeView(
           isComposing = false
           composingText = ""
           channel.invokeMethod("unmarkText", emptyMap<String, Any>())
-          scheduleRestartInput()
         }
         return true
       }
@@ -289,6 +283,11 @@ class EditorInputNativeView(
           KeyEvent.KEYCODE_DPAD_DOWN -> {
             commitComposingState()
             channel.invokeMethod("shortcut", mapOf("action" to "navigateDown"))
+            true
+          }
+          KeyEvent.KEYCODE_SPACE -> {
+            commitComposingState()
+            channel.invokeMethod("insertText", mapOf("text" to " "))
             true
           }
           else -> super.sendKeyEvent(event)
