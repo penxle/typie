@@ -10,7 +10,7 @@ import type { FontFamily } from './fonts';
 import type { VectorExternalElement, VectorPage } from './vector';
 
 // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-const ICU_DATA_PATH = new URL('icu_data.postcard', import.meta.resolve!('@typie/editor')).pathname;
+const ICU_DATA_PATH = new URL(import.meta.resolve!('@typie/editor/icu/data.postcard')).pathname;
 let icuDataCache: Uint8Array | null = null;
 async function getIcuData(): Promise<Uint8Array> {
   if (!icuDataCache) icuDataCache = new Uint8Array(await readFile(ICU_DATA_PATH));
