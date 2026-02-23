@@ -2,6 +2,7 @@ package co.typie.editorinput
 
 import android.content.Context
 import android.text.InputType
+import android.view.KeyCharacterMap
 import android.view.KeyEvent
 import android.view.View
 import android.view.inputmethod.BaseInputConnection
@@ -111,6 +112,15 @@ class EditorInputNativeView(
     channel.invokeMethod("deleteBackward", emptyMap<String, Any>())
   }
 
+  private fun performNewline(isShiftPressed: Boolean) {
+    commitComposingState()
+    if (isShiftPressed) {
+      channel.invokeMethod("shortcut", mapOf("action" to "insertHardBreak"))
+    } else {
+      channel.invokeMethod("performAction", mapOf("action" to "newline"))
+    }
+  }
+
   private fun insertTextOrNewline(text: String) {
     if (text == "\n") {
       channel.invokeMethod("performAction", mapOf("action" to "newline"))
@@ -146,18 +156,35 @@ class EditorInputNativeView(
     val meta = event.metaState and (META_CTRL or META_SHIFT or META_ALT)
     val shortcut = SHORTCUTS.find { it.keyCode == keyCode && it.meta == meta }
 
-    return if (shortcut != null) {
+    if (shortcut != null) {
       commitComposingState()
       channel.invokeMethod("shortcut", mapOf("action" to shortcut.action))
-      true
-    } else {
-      super.onKeyDown(keyCode, event)
+      return true
     }
+
+    if (event.deviceId != KeyCharacterMap.VIRTUAL_KEYBOARD) {
+      when (keyCode) {
+        KeyEvent.KEYCODE_DEL -> {
+          if (isComposing) {
+            cancelComposingState()
+          } else {
+            performDelete()
+          }
+          return true
+        }
+        KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> {
+          performNewline(event.isShiftPressed)
+          return true
+        }
+      }
+    }
+
+    return super.onKeyDown(keyCode, event)
   }
 
   override fun onCreateInputConnection(outAttrs: EditorInfo): InputConnection {
     outAttrs.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
-    outAttrs.imeOptions = EditorInfo.IME_FLAG_NO_FULLSCREEN or EditorInfo.IME_ACTION_NONE
+    outAttrs.imeOptions = EditorInfo.IME_FLAG_NO_FULLSCREEN or EditorInfo.IME_FLAG_NO_ENTER_ACTION or EditorInfo.IME_ACTION_NONE
 
     return object : BaseInputConnection(this, false) {
       override fun beginBatchEdit(): Boolean {
@@ -228,6 +255,10 @@ class EditorInputNativeView(
           isComposing = false
           composingText = ""
           channel.invokeMethod("cancelMarkedText", emptyMap<String, Any>())
+        } else if (beforeLength > 0) {
+          repeat(beforeLength) {
+            performDelete()
+          }
         }
         return true
       }
@@ -264,12 +295,7 @@ class EditorInputNativeView(
             true
           }
           KeyEvent.KEYCODE_ENTER -> {
-            commitComposingState()
-            if (event.isShiftPressed) {
-              channel.invokeMethod("shortcut", mapOf("action" to "insertHardBreak"))
-            } else {
-              channel.invokeMethod("performAction", mapOf("action" to "newline"))
-            }
+            performNewline(event.isShiftPressed)
             true
           }
           KeyEvent.KEYCODE_DPAD_LEFT -> {
