@@ -62,10 +62,15 @@ impl Runtime {
         else {
             return vec![];
         };
+
+        if !end_selection.is_collapsed() {
+            return vec![];
+        }
+
         let end_position = end_selection.head;
 
         if end_position.node_id != self.state.selection.head.node_id {
-            return vec![];
+            return self.handle_delete_backward();
         }
 
         let selection = self.state.selection;
@@ -91,7 +96,16 @@ impl Runtime {
         else {
             return vec![];
         };
+
+        if !end_selection.is_collapsed() {
+            return vec![];
+        }
+
         let end_position = end_selection.head;
+
+        if end_position.node_id != self.state.selection.head.node_id {
+            return self.handle_delete_forward();
+        }
 
         let selection = self.state.selection;
         self.transact(move |tr| {
@@ -116,7 +130,16 @@ impl Runtime {
         else {
             return vec![];
         };
+
+        if !end_selection.is_collapsed() {
+            return vec![];
+        }
+
         let end_position = end_selection.head;
+
+        if end_position.node_id != self.state.selection.head.node_id {
+            return self.handle_delete_backward();
+        }
 
         let selection = self.state.selection;
         self.transact(move |tr| {
@@ -197,6 +220,90 @@ mod tests {
         assert_eq!(selection.anchor.offset, 0);
         assert_eq!(selection.head.node_id, p);
         assert_eq!(selection.head.offset, 0);
+    }
+
+    #[test]
+    fn test_delete_word_backward_removes_paragraph_break() {
+        let mut p1 = id!();
+        let mut p2 = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p1 paragraph { text { "hello" } }
+                @p2 paragraph { text { "world" } }
+            }
+            selection { (p2, 0) }
+        };
+
+        rt.layout();
+        rt.update(Message::DeleteWordBackward);
+        rt.tick();
+
+        let expected = state! {
+            doc {
+                @p1 paragraph { text { "helloworld" } }
+            }
+            selection { (p1, 5) }
+        };
+
+        assert_state_eq!(*rt.state(), expected);
+    }
+
+    #[test]
+    fn test_delete_word_forward_removes_paragraph_break() {
+        let mut p1 = id!();
+        let mut p2 = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p1 paragraph { text { "hello" } }
+                @p2 paragraph { text { "world" } }
+            }
+            selection { (p1, 5) }
+        };
+
+        rt.layout();
+        rt.update(Message::DeleteWordForward);
+        rt.tick();
+
+        let expected = state! {
+            doc {
+                @p1 paragraph { text { "helloworld" } }
+            }
+            selection { (p1, 5) }
+        };
+
+        assert_state_eq!(*rt.state(), expected);
+    }
+
+    #[test]
+    fn test_delete_sentence_backward_removes_paragraph_break() {
+        let mut p1 = id!();
+        let mut p2 = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p1 paragraph { text { "hello" } }
+                @p2 paragraph { text { "world" } }
+            }
+            selection { (p2, 0) }
+        };
+
+        rt.layout();
+        rt.update(Message::DeleteSentenceBackward);
+        rt.tick();
+
+        let expected = state! {
+            doc {
+                @p1 paragraph { text { "helloworld" } }
+            }
+            selection { (p1, 5) }
+        };
+
+        assert_state_eq!(*rt.state(), expected);
     }
 
     #[test]
