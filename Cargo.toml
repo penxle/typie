@@ -21,3 +21,7 @@ opt-level = 3
 [profile.release-native]
 inherits = "release"
 panic = "unwind"
+
+[patch.crates-io]
+parley = { git = "https://github.com/devunt/parley.git", branch = "main" }
+fontique = { git = "https://github.com/devunt/parley.git", branch = "main" }

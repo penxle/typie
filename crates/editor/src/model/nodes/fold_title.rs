@@ -76,8 +76,8 @@ impl Layout for FoldTitleNode {
             let mut fcx = globals.parley_font_context.borrow_mut();
 
             let setup_defaults = |builder: &mut parley::RangedBuilder<'_, String>| {
-                builder.push_default(StyleProperty::FontStack(FontStack::Single(
-                    FontFamily::Named(ctx.default_attrs.font_family().into()),
+                builder.push_default(StyleProperty::FontFamily(FontFamily::Single(
+                    FontFamilyName::Named(ctx.default_attrs.font_family().into()),
                 )));
                 builder.push_default(StyleProperty::FontSize(14.0));
                 builder.push_default(StyleProperty::FontWeight(FontWeight::new(
@@ -89,7 +89,7 @@ impl Layout for FoldTitleNode {
                 builder.push_default(StyleProperty::LetterSpacing(0.0));
                 builder.push_default(StyleProperty::Brush("ui.text.faint".to_string()));
 
-                builder.push_default(StyleProperty::FontFeatures(FontSettings::Source(
+                builder.push_default(StyleProperty::FontFeatures(FontFeatures::Source(
                     Cow::Owned("\"ss05\" 1, \"cv12\" 1, \"ss18\" 1".to_string()),
                 )));
             };
@@ -97,7 +97,7 @@ impl Layout for FoldTitleNode {
             let mut builder = lcx.ranged_builder(&mut fcx, &text, 1.0, false);
 
             builder.push_default(StyleProperty::OverflowWrap(OverflowWrap::Anywhere));
-            builder.push_default(StyleProperty::WordBreak(WordBreakStrength::BreakAll));
+            builder.push_default(StyleProperty::WordBreak(WordBreak::BreakAll));
 
             setup_defaults(&mut builder);
 

@@ -197,7 +197,7 @@ fn apply_style_to_builder(
 ) {
     match style {
         Style::FontFamily(m) => builder.push(
-            StyleProperty::FontStack(FontStack::Single(FontFamily::Named(
+            StyleProperty::FontFamily(FontFamily::Single(FontFamilyName::Named(
                 m.family.clone().into(),
             ))),
             range,
@@ -455,38 +455,12 @@ impl Layout for ParagraphNode {
             builder.push_default(StyleProperty::LineHeight(LineHeight::FontSizeRelative(
                 line_height,
             )));
-            builder.push_default(StyleProperty::FontFeatures(FontSettings::Source(
+            builder.push_default(StyleProperty::FontFeatures(FontFeatures::Source(
                 Cow::Owned("\"ss05\" 1, \"cv12\" 1, \"ss18\" 1".to_string()),
             )));
 
-            let parent_is_root = ctx
-                .node
-                .parent()
-                .map(|parent| matches!(parent.node(), Node::Root(_)))
-                .unwrap_or(false);
-            let indent = if parent_is_root {
-                (ctx.settings.paragraph_indent as f32 / 100.0 * 16.0).max(0.0)
-            } else {
-                0.0
-            };
-
             builder.push_default(StyleProperty::OverflowWrap(OverflowWrap::Anywhere));
-            builder.push_default(match self.align {
-                TextAlign::Justify => StyleProperty::WordBreak(WordBreakStrength::KeepAll),
-                _ => StyleProperty::WordBreak(WordBreakStrength::BreakAll),
-            });
-
-            match self.align {
-                TextAlign::Left | TextAlign::Justify if indent > 0.0 => {
-                    builder.push_inline_box(parley::InlineBox {
-                        id: 0,
-                        index: 0,
-                        width: indent,
-                        height: 0.0,
-                    });
-                }
-                _ => {}
-            }
+            builder.push_default(StyleProperty::WordBreak(WordBreak::BreakAll));
 
             let mut offset = 0;
             for child in ctx.node.children() {
@@ -633,7 +607,23 @@ impl Layout for ParagraphNode {
                 }
             }
 
+            let parent_is_root = ctx
+                .node
+                .parent()
+                .map(|parent| matches!(parent.node(), Node::Root(_)))
+                .unwrap_or(false);
+            let indent = if parent_is_root {
+                (ctx.settings.paragraph_indent as f32 / 100.0 * 16.0).max(0.0)
+            } else {
+                0.0
+            };
+
             let mut layout = builder.build(&text);
+
+            if matches!(self.align, TextAlign::Left | TextAlign::Justify if indent > 0.0) {
+                layout.indent(indent, parley::IndentOptions::default());
+            }
+
             layout.break_all_lines(Some(constraints.max_width));
             layout.align(
                 Some(constraints.max_width),
@@ -653,7 +643,7 @@ impl Layout for ParagraphNode {
                 dummy_builder.push_default(StyleProperty::LineHeight(
                     LineHeight::FontSizeRelative(line_height),
                 ));
-                dummy_builder.push_default(StyleProperty::FontFeatures(FontSettings::Source(
+                dummy_builder.push_default(StyleProperty::FontFeatures(FontFeatures::Source(
                     Cow::Owned("\"ss05\" 1, \"cv12\" 1, \"ss18\" 1".to_string()),
                 )));
 

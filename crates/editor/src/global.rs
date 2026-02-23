@@ -164,6 +164,8 @@ pub fn add_font_chunk(family: &str, weight: u16, data: &[u8]) {
 }
 
 pub fn set_fallback_fonts(names: &[&str]) {
+    use fontique::ScriptExt;
+
     GLOBALS.with(|globals| {
         let globals = globals.borrow();
         let mut fcx = globals.parley_font_context.borrow_mut();
@@ -173,9 +175,11 @@ pub fn set_fallback_fonts(names: &[&str]) {
             .filter_map(|name| fcx.collection.family_by_name(name).map(|f| f.id()))
             .collect();
 
-        for script in icu_properties::props::Script::ALL_VALUES {
-            fcx.collection
-                .set_fallbacks(fontique::Script::from(*script), families.iter().copied());
+        for &(script, _) in fontique::Script::all_samples() {
+            fcx.collection.set_fallbacks(
+                fontique::FallbackKey::new(script, None),
+                families.iter().copied(),
+            );
         }
     });
 }

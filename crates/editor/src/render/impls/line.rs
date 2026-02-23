@@ -233,8 +233,8 @@ impl LineElement {
                 let mut ruby_builder =
                     lcx.ranged_builder(&mut fcx, &ruby_seg.ruby_text, 1.0, false);
 
-                ruby_builder.push_default(StyleProperty::FontStack(FontStack::Single(
-                    FontFamily::Named(ctx.doc.default_attrs().font_family().into()),
+                ruby_builder.push_default(StyleProperty::FontFamily(FontFamily::Single(
+                    FontFamilyName::Named(ctx.doc.default_attrs().font_family().into()),
                 )));
                 ruby_builder.push_default(StyleProperty::FontSize(RUBY_FONT_SIZE));
                 ruby_builder.push_default(StyleProperty::FontWeight(FontWeight::new(400.0)));
