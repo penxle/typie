@@ -187,6 +187,12 @@ class EditorInputNativeView(
           insertTextOrNewline(str)
         }
 
+        this@EditorInputNativeView.post {
+          if (!isComposing && batchEditDepth == 0) {
+            inputMethodManager.restartInput(this@EditorInputNativeView)
+          }
+        }
+
         return true
       }
 
@@ -212,6 +218,7 @@ class EditorInputNativeView(
           isComposing = false
           composingText = ""
           channel.invokeMethod("unmarkText", emptyMap<String, Any>())
+          scheduleRestartInput()
         }
         return true
       }
