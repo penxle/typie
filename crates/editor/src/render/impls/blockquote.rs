@@ -3,7 +3,8 @@ use crate::layout::elements::blockquote::{
     BlockquoteLineElement, BlockquoteMessageElement, BlockquoteQuoteElement,
 };
 use crate::model::BlockquoteVariant;
-use crate::render::{GlyphRenderer, Render, RenderContext, RenderPhase};
+use crate::render::outline::ElementSink;
+use crate::render::{GlyphRenderer, Outline, RasterSink, Render, RenderContext, RenderPhase};
 use macros::svg_icon_path;
 use tiny_skia::{Paint, PathBuilder, PixmapMut, Rect, Transform};
 
@@ -15,25 +16,34 @@ impl Render for BlockquoteLineElement {
     fn render(
         &self,
         pixmap: &mut PixmapMut,
-        _glyph_renderer: &mut GlyphRenderer,
+        glyph_renderer: &mut GlyphRenderer,
         transform: Transform,
         ctx: &RenderContext,
     ) {
-        match ctx.phase {
-            RenderPhase::Content => {
-                let Some(rect) = Rect::from_xywh(0.0, 0.0, self.size.width, self.size.height)
-                else {
-                    return;
-                };
+        let mut sink = RasterSink::new(pixmap, glyph_renderer);
+        self.paint_to(&mut sink, transform, ctx);
+    }
+}
 
-                let color = ctx.theme.color("ui.border.default");
-                let mut paint = Paint::default();
-                paint.set_color(color);
-                paint.anti_alias = true;
+impl Outline for BlockquoteLineElement {
+    fn outline(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
+        self.paint_to(sink, transform, ctx);
+    }
+}
 
-                pixmap.fill_rect(rect, &paint, transform, None);
-            }
-            _ => {}
+impl BlockquoteLineElement {
+    fn paint_to(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
+        if let RenderPhase::Content = ctx.phase {
+            let Some(rect) = Rect::from_xywh(0.0, 0.0, self.size.width, self.size.height) else {
+                return;
+            };
+
+            let color = ctx.theme.color("ui.border.default");
+            let mut paint = Paint::default();
+            paint.set_color(color);
+            paint.anti_alias = true;
+
+            sink.fill_rect(rect, &paint, transform);
         }
     }
 }
@@ -42,27 +52,37 @@ impl Render for BlockquoteQuoteElement {
     fn render(
         &self,
         pixmap: &mut PixmapMut,
-        _glyph_renderer: &mut GlyphRenderer,
+        glyph_renderer: &mut GlyphRenderer,
         transform: Transform,
         ctx: &RenderContext,
     ) {
-        match ctx.phase {
-            RenderPhase::Content => {
-                let color = ctx.theme.color("ui.text.muted");
-                let mut paint = Paint::default();
-                paint.set_color(color);
-                paint.anti_alias = true;
+        let mut sink = RasterSink::new(pixmap, glyph_renderer);
+        self.paint_to(&mut sink, transform, ctx);
+    }
+}
 
-                let cx = self.size.width / 2.0;
-                let cy = self.size.height / 2.0;
+impl Outline for BlockquoteQuoteElement {
+    fn outline(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
+        self.paint_to(sink, transform, ctx);
+    }
+}
 
-                let path = svg_icon_path!("typie/blockquote-quote", QUOTE_ICON_SIZE, cx, cy);
+impl BlockquoteQuoteElement {
+    fn paint_to(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
+        if let RenderPhase::Content = ctx.phase {
+            let color = ctx.theme.color("ui.text.muted");
+            let mut paint = Paint::default();
+            paint.set_color(color);
+            paint.anti_alias = true;
 
-                if let Some(path) = path {
-                    pixmap.fill_path(&path, &paint, tiny_skia::FillRule::Winding, transform, None);
-                }
+            let cx = self.size.width / 2.0;
+            let cy = self.size.height / 2.0;
+
+            let path = svg_icon_path!("typie/blockquote-quote", QUOTE_ICON_SIZE, cx, cy);
+
+            if let Some(path) = path {
+                sink.fill_path(&path, &paint, tiny_skia::FillRule::Winding, transform);
             }
-            _ => {}
         }
     }
 }
@@ -71,57 +91,59 @@ impl Render for BlockquoteMessageElement {
     fn render(
         &self,
         pixmap: &mut PixmapMut,
-        _glyph_renderer: &mut GlyphRenderer,
+        glyph_renderer: &mut GlyphRenderer,
         transform: Transform,
         ctx: &RenderContext,
     ) {
-        match ctx.phase {
-            RenderPhase::Background => {
-                let is_sent = matches!(self.variant, BlockquoteVariant::MessageSent);
-                let has_tail = !self.split_edges.bottom;
+        let mut sink = RasterSink::new(pixmap, glyph_renderer);
+        self.paint_to(&mut sink, transform, ctx);
+    }
+}
 
-                let bg_color = if is_sent {
-                    ctx.theme.color("ui.blockquote.message-sent")
+impl Outline for BlockquoteMessageElement {
+    fn outline(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
+        self.paint_to(sink, transform, ctx);
+    }
+}
+
+impl BlockquoteMessageElement {
+    fn paint_to(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
+        if let RenderPhase::Background = ctx.phase {
+            let is_sent = matches!(self.variant, BlockquoteVariant::MessageSent);
+            let has_tail = !self.split_edges.bottom;
+
+            let bg_color = if is_sent {
+                ctx.theme.color("ui.blockquote.message-sent")
+            } else {
+                ctx.theme.color("ui.blockquote.message-received")
+            };
+
+            let mut paint = Paint::default();
+            paint.set_color(bg_color);
+            paint.anti_alias = true;
+
+            let (tl, tr, mut br, mut bl) = corner_radii(MESSAGE_BORDER_RADIUS, &self.split_edges);
+
+            if has_tail {
+                if is_sent {
+                    br = 0.0;
                 } else {
-                    ctx.theme.color("ui.blockquote.message-received")
-                };
-
-                let mut paint = Paint::default();
-                paint.set_color(bg_color);
-                paint.anti_alias = true;
-
-                let (tl, tr, mut br, mut bl) =
-                    corner_radii(MESSAGE_BORDER_RADIUS, &self.split_edges);
-
-                if has_tail {
-                    if is_sent {
-                        br = 0.0;
-                    } else {
-                        bl = 0.0;
-                    }
-                }
-
-                if let Some(path) =
-                    build_rounded_rect(0.0, 0.0, self.size.width, self.size.height, tl, tr, br, bl)
-                {
-                    pixmap.fill_path(&path, &paint, tiny_skia::FillRule::Winding, transform, None);
-                }
-
-                if has_tail {
-                    if let Some(tail_path) =
-                        build_message_tail(self.size.width, self.size.height, is_sent)
-                    {
-                        pixmap.fill_path(
-                            &tail_path,
-                            &paint,
-                            tiny_skia::FillRule::Winding,
-                            transform,
-                            None,
-                        );
-                    }
+                    bl = 0.0;
                 }
             }
-            _ => {}
+
+            if let Some(path) =
+                build_rounded_rect(0.0, 0.0, self.size.width, self.size.height, tl, tr, br, bl)
+            {
+                sink.fill_path(&path, &paint, tiny_skia::FillRule::Winding, transform);
+            }
+
+            if has_tail
+                && let Some(tail_path) =
+                    build_message_tail(self.size.width, self.size.height, is_sent)
+            {
+                sink.fill_path(&tail_path, &paint, tiny_skia::FillRule::Winding, transform);
+            }
         }
     }
 }

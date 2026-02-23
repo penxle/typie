@@ -296,6 +296,7 @@ export class Editor {
     dispatch(val: any): void;
     enqueueMessage(val: any): void;
     export(mode: DocExportMode): Uint8Array;
+    exportPageVector(page_index: number): Uint8Array | undefined;
     flush(): void;
     getCharacterCountAtVersion(version: Uint8Array): number | undefined;
     getCharacterCounts(): CharacterCounts;
@@ -323,6 +324,7 @@ export class Editor {
     replaceTextInBlock(block_id: string, start_offset: number, end_offset: number, replacement: string): boolean;
     replaceTextInBlocks(items: any): boolean;
     revertTo(version: Uint8Array): void;
+    setAllFoldsExpanded(expanded: boolean): void;
     setLayoutDebug(enabled: boolean): void;
     setReadOnly(read_only: boolean): void;
     setRenderDebug(enabled: boolean): void;

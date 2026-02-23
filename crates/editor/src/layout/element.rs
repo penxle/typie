@@ -3,7 +3,7 @@ use crate::layout::cursor::CursorNavigable;
 use crate::layout::elements::{Wrapper, *};
 use crate::layout::interactive::Interactive;
 use crate::model::{NodeId, TABLE_BORDER_WIDTH};
-use crate::render::Render;
+use crate::render::{Outline, Render};
 use crate::types::{BoxConstraints, Point, PointerStyle, Size};
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
@@ -110,6 +110,25 @@ impl Element {
     }
 
     pub fn as_render(&self) -> Option<&dyn Render> {
+        match self {
+            Element::Line(e) => Some(e),
+            Element::External(_) => None,
+            Element::Blockquote(e) => Some(e),
+            Element::BlockquoteQuote(e) => Some(e),
+            Element::BlockquoteMessage(e) => Some(e),
+            Element::CalloutBackground(e) => Some(e),
+            Element::CalloutIcon(e) => Some(e),
+            Element::HorizontalRule(e) => Some(e),
+            Element::ListMarker(e) => Some(e),
+            Element::FoldTitle(e) => Some(e),
+            Element::FoldTitleBackground(e) => Some(e),
+            Element::FoldContent(e) => Some(e),
+            Element::TableBorder(e) => Some(e),
+            Element::TableCell(e) => Some(e),
+        }
+    }
+
+    pub fn as_outline(&self) -> Option<&dyn Outline> {
         match self {
             Element::Line(e) => Some(e),
             Element::External(_) => None,

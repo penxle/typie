@@ -1,5 +1,6 @@
 use crate::global::GLOBALS;
-use crate::render::{GlyphRenderer, Render, RenderContext, glyph::Glyph};
+use crate::render::outline::ElementSink;
+use crate::render::{GlyphRenderer, Outline, RasterSink, Render, RenderContext, glyph::Glyph};
 use parley::setting::{FontFeature, Tag};
 use parley::style::{FontFamily, FontFamilyName, FontFeatures, StyleProperty};
 use std::fmt;
@@ -58,19 +59,28 @@ impl Render for ListMarkerElement {
         transform: Transform,
         ctx: &RenderContext<'_>,
     ) {
-        match &self.marker_type {
-            ListMarkerType::Bullet => {
-                self.render_bullet(pixmap, transform, ctx);
-            }
-            ListMarkerType::Ordered(index) => {
-                self.render_ordered_marker(*index, pixmap, glyph_renderer, transform, ctx);
-            }
-        }
+        let mut sink = RasterSink::new(pixmap, glyph_renderer);
+        self.paint_to(&mut sink, transform, ctx);
+    }
+}
+
+impl Outline for ListMarkerElement {
+    fn outline(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
+        self.paint_to(sink, transform, ctx);
     }
 }
 
 impl ListMarkerElement {
-    fn render_bullet(&self, pixmap: &mut PixmapMut, transform: Transform, ctx: &RenderContext) {
+    fn paint_to(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
+        match &self.marker_type {
+            ListMarkerType::Bullet => self.render_bullet(sink, transform, ctx),
+            ListMarkerType::Ordered(index) => {
+                self.render_ordered_marker(*index, sink, transform, ctx);
+            }
+        }
+    }
+
+    fn render_bullet(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext) {
         let color = ctx.theme.color("ui.text.default");
         let paint = Paint {
             shader: tiny_skia::Shader::SolidColor(color),
@@ -82,14 +92,13 @@ impl ListMarkerElement {
         let y = self.line_mid - BULLET_SIZE / 2.0;
         let rect = tiny_skia::Rect::from_xywh(x, y, BULLET_SIZE, BULLET_SIZE).unwrap();
 
-        pixmap.fill_rect(rect, &paint, transform, None);
+        sink.fill_rect(rect, &paint, transform);
     }
 
     fn render_ordered_marker(
         &self,
         index: usize,
-        pixmap: &mut PixmapMut,
-        glyph_renderer: &mut GlyphRenderer,
+        sink: &mut dyn ElementSink,
         transform: Transform,
         ctx: &RenderContext,
     ) {
@@ -150,8 +159,7 @@ impl ListMarkerElement {
                             })
                             .collect();
 
-                        glyph_renderer.draw_glyphs(
-                            pixmap,
+                        sink.draw_glyphs(
                             &run.font(),
                             run.font_size() * scale,
                             &paint,

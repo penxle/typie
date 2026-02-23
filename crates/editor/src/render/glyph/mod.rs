@@ -8,8 +8,8 @@ use scale::image::{Content, Image};
 use scale::{Render, ScaleContext, Source, StrikeWith};
 use skrifa::{FontRef, GlyphId};
 use std::hash::{Hash, Hasher};
-use tiny_skia::{Paint, PixmapMut, Transform};
-use zeno::Vector;
+use tiny_skia::{Paint, Path, PathBuilder, PixmapMut, Transform};
+use zeno::{Vector, Verb};
 
 const SUBPIXEL_POS_BITS: u32 = 2;
 const SUBPIXEL_POS_COUNT: u32 = 1 << SUBPIXEL_POS_BITS;
@@ -209,6 +209,151 @@ impl GlyphRenderer {
             }
         }
     }
+
+    pub fn for_each_glyph_outline<F>(
+        &mut self,
+        font: &FontData,
+        font_size: f32,
+        transform: Transform,
+        glyph_transform: Option<Transform>,
+        embolden: bool,
+        glyphs: &[Glyph],
+        mut f: F,
+    ) where
+        F: FnMut(&Path),
+    {
+        let font_data = font.data.as_ref();
+        let font_ref = match FontRef::new(font_data) {
+            Ok(font_ref) => font_ref,
+            Err(e) => {
+                error!(
+                    "[GlyphRenderer] FontRef::new failed for outline export: {:?}, font_data.len={}",
+                    e,
+                    font_data.len()
+                );
+                return;
+            }
+        };
+
+        let font_hash = calculate_font_hash(font_data);
+        let size_q4 = (font_size * 4.0).round() as u32;
+        let quantized_size = size_q4 as f32 / 4.0;
+        let embolden_amount = if embolden {
+            quantized_size * EMBOLDEN_RATIO
+        } else {
+            0.0
+        };
+
+        let skew_transform = glyph_transform.map(|t| zeno::Transform {
+            xx: t.sx,
+            yx: t.kx,
+            xy: t.ky,
+            yy: t.sy,
+            x: 0.0,
+            y: 0.0,
+        });
+
+        for glyph in glyphs {
+            if glyph.id == 0 {
+                continue;
+            }
+
+            let glyph_point = map_transform(transform, glyph.x, glyph.y);
+            let fract_x = glyph_point.x - glyph_point.x.floor();
+            let subpixel_x = quantize_subpixel(fract_x.abs());
+            let subpixel_offset_x = subpixel_x as f32 * (1.0 / SUBPIXEL_POS_COUNT as f32);
+
+            let mut scaler = self
+                .scale_context
+                .builder(font_ref.clone(), [font_hash, 0])
+                .size(quantized_size)
+                .hint(true)
+                .build();
+
+            let Some(outline) =
+                scaler.scale_outline(GlyphId::new(glyph.id), skew_transform, embolden_amount)
+            else {
+                continue;
+            };
+
+            for layer_idx in 0..outline.len() {
+                let Some(layer) = outline.get(layer_idx) else {
+                    continue;
+                };
+
+                let Some(path) = build_outline_layer_path(
+                    layer.points(),
+                    layer.verbs(),
+                    glyph_point.x + subpixel_offset_x,
+                    glyph_point.y,
+                ) else {
+                    continue;
+                };
+
+                f(&path);
+            }
+        }
+    }
+}
+
+fn map_transform(transform: Transform, x: f32, y: f32) -> tiny_skia::Point {
+    let mut point = tiny_skia::Point::from_xy(x, y);
+    transform.map_point(&mut point);
+    point
+}
+
+fn map_outline_point(point: zeno::Point, origin_x: f32, origin_y: f32) -> (f32, f32) {
+    (origin_x + point.x, origin_y - point.y)
+}
+
+fn build_outline_layer_path(
+    points: &[zeno::Point],
+    verbs: &[Verb],
+    origin_x: f32,
+    origin_y: f32,
+) -> Option<Path> {
+    let mut pb = PathBuilder::new();
+    let mut point_idx = 0usize;
+
+    for verb in verbs {
+        match verb {
+            Verb::MoveTo => {
+                let point = points.get(point_idx)?;
+                point_idx += 1;
+                let (x, y) = map_outline_point(*point, origin_x, origin_y);
+                pb.move_to(x, y);
+            }
+            Verb::LineTo => {
+                let point = points.get(point_idx)?;
+                point_idx += 1;
+                let (x, y) = map_outline_point(*point, origin_x, origin_y);
+                pb.line_to(x, y);
+            }
+            Verb::QuadTo => {
+                let ctrl = points.get(point_idx)?;
+                let point = points.get(point_idx + 1)?;
+                point_idx += 2;
+                let (cx, cy) = map_outline_point(*ctrl, origin_x, origin_y);
+                let (x, y) = map_outline_point(*point, origin_x, origin_y);
+                pb.quad_to(cx, cy, x, y);
+            }
+            Verb::CurveTo => {
+                let ctrl1 = points.get(point_idx)?;
+                let ctrl2 = points.get(point_idx + 1)?;
+                let point = points.get(point_idx + 2)?;
+                point_idx += 3;
+                let (c1x, c1y) = map_outline_point(*ctrl1, origin_x, origin_y);
+                let (c2x, c2y) = map_outline_point(*ctrl2, origin_x, origin_y);
+                let (x, y) = map_outline_point(*point, origin_x, origin_y);
+                pb.cubic_to(c1x, c1y, c2x, c2y, x, y);
+            }
+            Verb::Close => {
+                pb.close();
+            }
+        }
+    }
+
+    pb.finish()
 }
 
 fn quantize_subpixel(fract: f32) -> u8 {

@@ -244,6 +244,37 @@ impl Runtime {
         self.pending.render = true;
     }
 
+    pub fn set_all_folds_expanded(&mut self, expanded: bool) {
+        let fold_ids = self
+            .doc()
+            .node(NodeId::ROOT)
+            .map(|root| {
+                root.descendants()
+                    .filter_map(|node| match node.node() {
+                        Node::Fold(_) => Some(node.node_id()),
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+
+        if fold_ids.is_empty() {
+            return;
+        }
+
+        let mut effects = Vec::new();
+        for fold_id in fold_ids {
+            if self.layout_engine.fold_expanded(fold_id) == expanded {
+                continue;
+            }
+            effects.extend(self.toggle_view_state(fold_id));
+        }
+
+        if !effects.is_empty() {
+            self.process_effects(effects);
+        }
+    }
+
     pub fn import_updates(&mut self, updates: &[u8]) -> Result<()> {
         let old_frontiers = self.state.doc.frontiers();
         let old_state_frontiers = self.state.doc.loro_doc().state_frontiers();
@@ -845,6 +876,22 @@ impl Runtime {
             drop_indicator,
             doc,
         ))
+    }
+
+    pub fn export_page_vector(&mut self, page_index: usize) -> Option<Vec<u8>> {
+        let doc = self.state.doc.as_ref();
+        let layout_mode = doc.settings().layout_mode;
+        let pages = self.layout_engine.pages();
+        let page = pages.get(page_index)?;
+        let next_page = pages.get(page_index + 1);
+        let page_height = Self::page_height_for_rendering(layout_mode, page);
+        let page_width = self.layout_engine.width().ceil();
+
+        let vector_page =
+            self.renderer
+                .export_page_vector(page, next_page, doc, page_width, page_height);
+
+        Some(crate::render::encode_vector_page(&vector_page))
     }
 
     #[allow(dead_code)]

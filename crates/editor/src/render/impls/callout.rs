@@ -2,7 +2,8 @@ use crate::layout::elements::SplitEdges;
 use crate::layout::elements::{CalloutBackgroundElement, CalloutIconElement};
 use crate::model::CalloutVariant;
 use crate::model::{CALLOUT_BORDER_RADIUS, CALLOUT_BORDER_WIDTH};
-use crate::render::{GlyphRenderer, Render, RenderContext, RenderPhase};
+use crate::render::outline::ElementSink;
+use crate::render::{GlyphRenderer, Outline, RasterSink, Render, RenderContext, RenderPhase};
 use macros::svg_icon_path;
 use tiny_skia::{Paint, PathBuilder, PixmapMut, Stroke, Transform};
 
@@ -13,10 +14,23 @@ impl Render for CalloutBackgroundElement {
     fn render(
         &self,
         pixmap: &mut PixmapMut,
-        _glyph_renderer: &mut GlyphRenderer,
+        glyph_renderer: &mut GlyphRenderer,
         transform: Transform,
         ctx: &RenderContext,
     ) {
+        let mut sink = RasterSink::new(pixmap, glyph_renderer);
+        self.paint_to(&mut sink, transform, ctx);
+    }
+}
+
+impl Outline for CalloutBackgroundElement {
+    fn outline(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
+        self.paint_to(sink, transform, ctx);
+    }
+}
+
+impl CalloutBackgroundElement {
+    fn paint_to(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
         let color_key = format!("ui.callout.{}", self.variant);
 
         match ctx.phase {
@@ -39,13 +53,7 @@ impl Render for CalloutBackgroundElement {
                     br,
                     bl,
                 ) {
-                    pixmap.fill_path(
-                        &path,
-                        &bg_paint,
-                        tiny_skia::FillRule::Winding,
-                        transform,
-                        None,
-                    );
+                    sink.fill_path(&path, &bg_paint, tiny_skia::FillRule::Winding, transform);
                 }
             }
             RenderPhase::Content => {
@@ -75,7 +83,7 @@ impl Render for CalloutBackgroundElement {
                     bl_inner,
                     &self.split_edges,
                 ) {
-                    pixmap.stroke_path(&path, &border_paint, &stroke, transform, None);
+                    sink.stroke_path(&path, &border_paint, &stroke, transform);
                 }
             }
             _ => {}
@@ -87,47 +95,53 @@ impl Render for CalloutIconElement {
     fn render(
         &self,
         pixmap: &mut PixmapMut,
-        _glyph_renderer: &mut GlyphRenderer,
+        glyph_renderer: &mut GlyphRenderer,
         transform: Transform,
         ctx: &RenderContext,
     ) {
-        match ctx.phase {
-            RenderPhase::Content => {
-                let color_key = format!("ui.callout.{}", self.variant);
-                let icon_color = ctx.theme.color(&color_key);
+        let mut sink = RasterSink::new(pixmap, glyph_renderer);
+        self.paint_to(&mut sink, transform, ctx);
+    }
+}
 
-                let mut icon_paint = Paint::default();
-                icon_paint.set_color(icon_color);
-                icon_paint.anti_alias = true;
+impl Outline for CalloutIconElement {
+    fn outline(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
+        self.paint_to(sink, transform, ctx);
+    }
+}
 
-                let icon_stroke = Stroke {
-                    width: ICON_STROKE_WIDTH,
-                    line_cap: tiny_skia::LineCap::Round,
-                    line_join: tiny_skia::LineJoin::Round,
-                    ..Stroke::default()
-                };
+impl CalloutIconElement {
+    fn paint_to(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
+        if let RenderPhase::Content = ctx.phase {
+            let color_key = format!("ui.callout.{}", self.variant);
+            let icon_color = ctx.theme.color(&color_key);
 
-                let cx = self.size.width / 2.0;
-                let cy = self.size.height / 2.0;
+            let mut icon_paint = Paint::default();
+            icon_paint.set_color(icon_color);
+            icon_paint.anti_alias = true;
 
-                let path = match self.variant {
-                    CalloutVariant::Info => svg_icon_path!("lucide/info", ICON_SIZE, cx, cy),
-                    CalloutVariant::Success => {
-                        svg_icon_path!("lucide/circle-check", ICON_SIZE, cx, cy)
-                    }
-                    CalloutVariant::Warning => {
-                        svg_icon_path!("lucide/circle-alert", ICON_SIZE, cx, cy)
-                    }
-                    CalloutVariant::Danger => {
-                        svg_icon_path!("lucide/triangle-alert", ICON_SIZE, cx, cy)
-                    }
-                };
+            let icon_stroke = Stroke {
+                width: ICON_STROKE_WIDTH,
+                line_cap: tiny_skia::LineCap::Round,
+                line_join: tiny_skia::LineJoin::Round,
+                ..Stroke::default()
+            };
 
-                if let Some(path) = path {
-                    pixmap.stroke_path(&path, &icon_paint, &icon_stroke, transform, None);
+            let cx = self.size.width / 2.0;
+            let cy = self.size.height / 2.0;
+
+            let path = match self.variant {
+                CalloutVariant::Info => svg_icon_path!("lucide/info", ICON_SIZE, cx, cy),
+                CalloutVariant::Success => svg_icon_path!("lucide/circle-check", ICON_SIZE, cx, cy),
+                CalloutVariant::Warning => svg_icon_path!("lucide/circle-alert", ICON_SIZE, cx, cy),
+                CalloutVariant::Danger => {
+                    svg_icon_path!("lucide/triangle-alert", ICON_SIZE, cx, cy)
                 }
+            };
+
+            if let Some(path) = path {
+                sink.stroke_path(&path, &icon_paint, &icon_stroke, transform);
             }
-            _ => {}
         }
     }
 }

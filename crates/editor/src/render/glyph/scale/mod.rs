@@ -206,6 +206,33 @@ impl<'a> Scaler<'a> {
             .unwrap_or_default()
     }
 
+    /// Scales a glyph outline and returns it as vector geometry.
+    pub fn scale_outline(
+        &mut self,
+        glyph_id: GlyphId,
+        transform: Option<Transform>,
+        embolden: f32,
+    ) -> Option<Outline> {
+        if !self.has_outlines() {
+            return None;
+        }
+
+        self.state.outline.clear();
+        if !self.scale_outline_impl(glyph_id, None, None) {
+            return None;
+        }
+
+        if embolden != 0.0 {
+            self.state.outline.embolden(embolden, embolden);
+        }
+
+        if let Some(transform) = transform {
+            self.state.outline.transform(&transform);
+        }
+
+        Some(self.state.outline.clone())
+    }
+
     /// Returns true if scalable color glyph outlines are available.
     pub fn has_color_outlines(&self) -> bool {
         self.color.colr != 0 && self.color.cpal != 0

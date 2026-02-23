@@ -3,9 +3,13 @@ mod debug_overlay;
 mod geometry;
 pub mod glyph;
 mod impls;
+pub mod outline;
 mod paint_diagnostics;
+mod vector_codec;
 
 pub use glyph::GlyphRenderer;
+pub use outline::{ElementSink, RasterSink, VectorPage, VectorSink};
+pub use vector_codec::encode_vector_page;
 
 use crate::diagnostics::FrameDiagnostics;
 use crate::layout::query::{DragImageBounds, DragImagePageBounds};
@@ -52,6 +56,10 @@ pub trait Render {
         transform: Transform,
         ctx: &RenderContext<'_>,
     );
+}
+
+pub trait Outline {
+    fn outline(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>);
 }
 
 pub struct RenderResult {
@@ -261,6 +269,70 @@ impl Renderer {
         );
 
         true
+    }
+
+    pub fn export_page_vector(
+        &mut self,
+        page: &Page,
+        next_page: Option<&Page>,
+        doc: &Doc,
+        page_width: f32,
+        page_height: f32,
+    ) -> VectorPage {
+        let mut sink = VectorSink::new();
+
+        for phase in [RenderPhase::Background, RenderPhase::Content] {
+            let ctx = RenderContext {
+                scale_factor: 1.0,
+                selections: &[],
+                theme: &self.theme,
+                doc,
+                default_text_color: None,
+                is_focused: self.is_focused,
+                phase,
+                render_origin: Point::zero(),
+            };
+
+            Self::outline_node(
+                &mut sink,
+                &page.root,
+                Point::zero(),
+                Transform::identity(),
+                &ctx,
+                &RenderHints::default(),
+                None,
+            );
+        }
+
+        if let Some(next_page) = next_page
+            && let Some(cull_clip) = next_page_overflow_cull_clip(page_width, page_height)
+        {
+            let ctx = RenderContext {
+                scale_factor: 1.0,
+                selections: &[],
+                theme: &self.theme,
+                doc,
+                default_text_color: None,
+                is_focused: self.is_focused,
+                phase: RenderPhase::Content,
+                render_origin: Point::zero(),
+            };
+            Self::outline_node_for_next_page_overflow(
+                &mut sink,
+                &next_page.root,
+                Point::new(0.0, page_height),
+                Transform::identity(),
+                &ctx,
+                &RenderHints::default(),
+                cull_clip,
+            );
+        }
+
+        VectorPage {
+            width: page_width,
+            height: page_height,
+            ops: sink.into_ops(),
+        }
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -673,6 +745,55 @@ impl Renderer {
         }
     }
 
+    fn outline_node(
+        sink: &mut dyn ElementSink,
+        positioned: &PositionedNode,
+        offset: Point,
+        transform: Transform,
+        ctx: &RenderContext<'_>,
+        inherited_hints: &RenderHints,
+        clip: Option<CacheRect>,
+    ) {
+        let scale = transform.sy;
+        let pos = Point::new(
+            offset.x + positioned.position.x,
+            ((offset.y + positioned.position.y) * scale).round() / scale,
+        );
+
+        if let Some(clip_rect) = clip {
+            if let Some(node_rect) = node_paint_bounds(positioned, pos)
+                && !node_rect.intersects(clip_rect)
+            {
+                return;
+            }
+        }
+
+        let merged_hints = positioned.node.render_hints.merge(inherited_hints);
+
+        let child_ctx_data = RenderContext {
+            default_text_color: merged_hints
+                .default_text_color
+                .as_ref()
+                .map(|color_key| ctx.theme.color(color_key))
+                .or(ctx.default_text_color),
+            ..*ctx
+        };
+        let render_ctx = &child_ctx_data;
+
+        if let Some(ref element) = positioned.node.element
+            && let Some(outline) = element.as_outline()
+        {
+            let element_transform = transform.pre_translate(pos.x, pos.y);
+            outline.outline(sink, element_transform, render_ctx);
+        }
+
+        if let Some(children) = &positioned.node.children {
+            for child in children {
+                Self::outline_node(sink, child, pos, transform, render_ctx, &merged_hints, clip);
+            }
+        }
+    }
+
     fn should_render_next_page_overflow(positioned: &PositionedNode) -> bool {
         matches!(
             positioned.node.element.as_ref(),
@@ -728,6 +849,63 @@ impl Renderer {
                 Self::render_node_for_next_page_overflow(
                     pixmap,
                     glyph_renderer,
+                    child,
+                    pos,
+                    transform,
+                    render_ctx,
+                    &merged_hints,
+                    cull_clip,
+                );
+            }
+        }
+    }
+
+    fn outline_node_for_next_page_overflow(
+        sink: &mut dyn ElementSink,
+        positioned: &PositionedNode,
+        offset: Point,
+        transform: Transform,
+        ctx: &RenderContext<'_>,
+        inherited_hints: &RenderHints,
+        cull_clip: CacheRect,
+    ) {
+        let scale = transform.sy;
+        let pos = Point::new(
+            offset.x + positioned.position.x,
+            ((offset.y + positioned.position.y) * scale).round() / scale,
+        );
+
+        let node_rect = node_paint_bounds(positioned, pos);
+        if let Some(node_rect) = node_rect
+            && !node_rect.intersects(cull_clip)
+        {
+            return;
+        }
+
+        let merged_hints = positioned.node.render_hints.merge(inherited_hints);
+
+        let child_ctx_data = RenderContext {
+            default_text_color: merged_hints
+                .default_text_color
+                .as_ref()
+                .map(|color_key| ctx.theme.color(color_key))
+                .or(ctx.default_text_color),
+            ..*ctx
+        };
+        let render_ctx = &child_ctx_data;
+
+        if Self::should_render_next_page_overflow(positioned)
+            && let Some(element) = positioned.node.element.as_ref()
+            && let Some(outline) = element.as_outline()
+        {
+            let element_transform = transform.pre_translate(pos.x, pos.y);
+            outline.outline(sink, element_transform, render_ctx);
+        }
+
+        if let Some(children) = &positioned.node.children {
+            for child in children {
+                Self::outline_node_for_next_page_overflow(
+                    sink,
                     child,
                     pos,
                     transform,

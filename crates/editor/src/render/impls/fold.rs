@@ -1,6 +1,7 @@
 use crate::layout::elements::{FoldContentElement, FoldTitleBackgroundElement, FoldTitleElement};
 use crate::model::{FOLD_BORDER_RADIUS, FOLD_BORDER_WIDTH};
-use crate::render::{GlyphRenderer, Render, RenderContext, RenderPhase};
+use crate::render::outline::ElementSink;
+use crate::render::{GlyphRenderer, Outline, RasterSink, Render, RenderContext, RenderPhase};
 use macros::svg_icon_path;
 use tiny_skia::{Paint, Path, PathBuilder, PixmapMut, Stroke, Transform};
 
@@ -11,38 +12,48 @@ impl Render for FoldTitleElement {
     fn render(
         &self,
         pixmap: &mut PixmapMut,
-        _glyph_renderer: &mut GlyphRenderer,
+        glyph_renderer: &mut GlyphRenderer,
         transform: Transform,
         ctx: &RenderContext,
     ) {
-        match ctx.phase {
-            RenderPhase::Content => {
-                let color = ctx.theme.color("ui.text.faint");
-                let mut paint = Paint::default();
-                paint.set_color(color);
-                paint.anti_alias = true;
+        let mut sink = RasterSink::new(pixmap, glyph_renderer);
+        self.paint_to(&mut sink, transform, ctx);
+    }
+}
 
-                let stroke = Stroke {
-                    width: CHEVRON_STROKE_WIDTH,
-                    line_cap: tiny_skia::LineCap::Round,
-                    line_join: tiny_skia::LineJoin::Round,
-                    ..Stroke::default()
-                };
+impl Outline for FoldTitleElement {
+    fn outline(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
+        self.paint_to(sink, transform, ctx);
+    }
+}
 
-                let cx = self.size.width / 2.0;
-                let cy = self.size.height / 2.0;
+impl FoldTitleElement {
+    fn paint_to(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
+        if let RenderPhase::Content = ctx.phase {
+            let color = ctx.theme.color("ui.text.faint");
+            let mut paint = Paint::default();
+            paint.set_color(color);
+            paint.anti_alias = true;
 
-                let path = if self.expanded {
-                    svg_icon_path!("lucide/chevron-up", CHEVRON_SIZE, cx, cy)
-                } else {
-                    svg_icon_path!("lucide/chevron-down", CHEVRON_SIZE, cx, cy)
-                };
+            let stroke = Stroke {
+                width: CHEVRON_STROKE_WIDTH,
+                line_cap: tiny_skia::LineCap::Round,
+                line_join: tiny_skia::LineJoin::Round,
+                ..Stroke::default()
+            };
 
-                if let Some(path) = path {
-                    pixmap.stroke_path(&path, &paint, &stroke, transform, None);
-                }
+            let cx = self.size.width / 2.0;
+            let cy = self.size.height / 2.0;
+
+            let path = if self.expanded {
+                svg_icon_path!("lucide/chevron-up", CHEVRON_SIZE, cx, cy)
+            } else {
+                svg_icon_path!("lucide/chevron-down", CHEVRON_SIZE, cx, cy)
+            };
+
+            if let Some(path) = path {
+                sink.stroke_path(&path, &paint, &stroke, transform);
             }
-            _ => {}
         }
     }
 }
@@ -51,10 +62,23 @@ impl Render for FoldTitleBackgroundElement {
     fn render(
         &self,
         pixmap: &mut PixmapMut,
-        _glyph_renderer: &mut GlyphRenderer,
+        glyph_renderer: &mut GlyphRenderer,
         transform: Transform,
         ctx: &RenderContext,
     ) {
+        let mut sink = RasterSink::new(pixmap, glyph_renderer);
+        self.paint_to(&mut sink, transform, ctx);
+    }
+}
+
+impl Outline for FoldTitleBackgroundElement {
+    fn outline(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
+        self.paint_to(sink, transform, ctx);
+    }
+}
+
+impl FoldTitleBackgroundElement {
+    fn paint_to(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
         let inner_radius = (FOLD_BORDER_RADIUS - FOLD_BORDER_WIDTH).max(0.0);
         let (top_left_radius, top_right_radius, bottom_right_radius, bottom_left_radius) =
             if self.expanded {
@@ -80,7 +104,7 @@ impl Render for FoldTitleBackgroundElement {
                     let mut paint = Paint::default();
                     paint.set_color(ctx.theme.color("ui.surface.muted"));
                     paint.anti_alias = true;
-                    pixmap.fill_path(&path, &paint, tiny_skia::FillRule::Winding, transform, None);
+                    sink.fill_path(path, &paint, tiny_skia::FillRule::Winding, transform);
                 }
 
                 let mut border_paint = Paint::default();
@@ -102,7 +126,7 @@ impl Render for FoldTitleBackgroundElement {
                         bottom_right_radius,
                         bottom_left_radius,
                     ) {
-                        pixmap.stroke_path(&path, &border_paint, &stroke, transform, None);
+                        sink.stroke_path(path, &border_paint, &stroke, transform);
                     }
                 } else {
                     let mut pb = PathBuilder::new();
@@ -126,7 +150,7 @@ impl Render for FoldTitleBackgroundElement {
                     );
                     pb.line_to(self.size.width - FOLD_BORDER_WIDTH / 2.0, self.size.height);
                     if let Some(path) = pb.finish() {
-                        pixmap.stroke_path(&path, &border_paint, &stroke, transform, None);
+                        sink.stroke_path(&path, &border_paint, &stroke, transform);
                     }
                 }
             }
@@ -148,13 +172,7 @@ impl Render for FoldTitleBackgroundElement {
                         };
                         let mut sel_paint = Paint::default();
                         sel_paint.set_color(color);
-                        pixmap.fill_path(
-                            &path,
-                            &sel_paint,
-                            tiny_skia::FillRule::Winding,
-                            transform,
-                            None,
-                        );
+                        sink.fill_path(path, &sel_paint, tiny_skia::FillRule::Winding, transform);
                     }
                 }
             }
@@ -167,10 +185,23 @@ impl Render for FoldContentElement {
     fn render(
         &self,
         pixmap: &mut PixmapMut,
-        _glyph_renderer: &mut GlyphRenderer,
+        glyph_renderer: &mut GlyphRenderer,
         transform: Transform,
         ctx: &RenderContext,
     ) {
+        let mut sink = RasterSink::new(pixmap, glyph_renderer);
+        self.paint_to(&mut sink, transform, ctx);
+    }
+}
+
+impl Outline for FoldContentElement {
+    fn outline(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
+        self.paint_to(sink, transform, ctx);
+    }
+}
+
+impl FoldContentElement {
+    fn paint_to(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
         let mb = FOLD_BORDER_WIDTH / 2.0;
 
         match ctx.phase {
@@ -214,7 +245,7 @@ impl Render for FoldContentElement {
                 }
 
                 if let Some(path) = pb.finish() {
-                    pixmap.stroke_path(&path, &paint, &stroke, transform, None);
+                    sink.stroke_path(&path, &paint, &stroke, transform);
                 }
             }
             RenderPhase::Selection => {
@@ -268,13 +299,7 @@ impl Render for FoldContentElement {
                     }
 
                     if let Some(path) = pb.finish() {
-                        pixmap.fill_path(
-                            &path,
-                            &sel_paint,
-                            tiny_skia::FillRule::Winding,
-                            transform,
-                            None,
-                        );
+                        sink.fill_path(&path, &sel_paint, tiny_skia::FillRule::Winding, transform);
                     }
                 }
             }

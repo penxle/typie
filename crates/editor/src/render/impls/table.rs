@@ -1,6 +1,7 @@
 use crate::layout::elements::{SplitEdges, TableBorderElement, TableCellElement};
 use crate::model::{LayoutMode, TABLE_BORDER_WIDTH, TableBorderStyle};
-use crate::render::{GlyphRenderer, Render, RenderContext, RenderPhase};
+use crate::render::outline::ElementSink;
+use crate::render::{GlyphRenderer, Outline, RasterSink, Render, RenderContext, RenderPhase};
 use tiny_skia::{Paint, PathBuilder, PixmapMut, Rect, Stroke, StrokeDash, Transform};
 
 #[derive(Debug, Clone, Copy)]
@@ -225,10 +226,23 @@ impl Render for TableBorderElement {
     fn render(
         &self,
         pixmap: &mut PixmapMut,
-        _glyph_renderer: &mut GlyphRenderer,
+        glyph_renderer: &mut GlyphRenderer,
         transform: Transform,
         ctx: &RenderContext,
     ) {
+        let mut sink = RasterSink::new(pixmap, glyph_renderer);
+        self.paint_to(&mut sink, transform, ctx);
+    }
+}
+
+impl Outline for TableBorderElement {
+    fn outline(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
+        self.paint_to(sink, transform, ctx);
+    }
+}
+
+impl TableBorderElement {
+    fn paint_to(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
         match ctx.phase {
             RenderPhase::Background => {
                 let mut paint = Paint::default();
@@ -236,7 +250,7 @@ impl Render for TableBorderElement {
                 if let Some(rect) =
                     Rect::from_xywh(self.x_offset, 0.0, self.size.width, self.size.height)
                 {
-                    pixmap.fill_rect(rect, &paint, transform, None);
+                    sink.fill_rect(rect, &paint, transform);
                 }
             }
             RenderPhase::Content => {
@@ -276,7 +290,7 @@ impl Render for TableBorderElement {
                 );
 
                 if let Some(path) = pb.finish() {
-                    pixmap.stroke_path(&path, &paint, &stroke, transform, None);
+                    sink.stroke_path(&path, &paint, &stroke, transform);
                 }
             }
             _ => {}
@@ -288,10 +302,23 @@ impl Render for TableCellElement {
     fn render(
         &self,
         pixmap: &mut PixmapMut,
-        _glyph_renderer: &mut GlyphRenderer,
+        glyph_renderer: &mut GlyphRenderer,
         transform: Transform,
         ctx: &RenderContext,
     ) {
+        let mut sink = RasterSink::new(pixmap, glyph_renderer);
+        self.paint_to(&mut sink, transform, ctx);
+    }
+}
+
+impl Outline for TableCellElement {
+    fn outline(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
+        self.paint_to(sink, transform, ctx);
+    }
+}
+
+impl TableCellElement {
+    fn paint_to(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
         let is_selected = ctx
             .selections
             .iter()
@@ -310,7 +337,7 @@ impl Render for TableCellElement {
 
                     if let Some(rect) = Rect::from_xywh(0.0, 0.0, self.size.width, self.size.height)
                     {
-                        pixmap.fill_rect(rect, &paint, transform, None);
+                        sink.fill_rect(rect, &paint, transform);
                     }
                 }
             }
