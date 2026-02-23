@@ -396,7 +396,7 @@ class SharePostsContent extends HookWidget {
                                   width: 64,
                                   height: 36,
                                   decoration: BoxDecoration(
-                                    border: Border.all(color: context.colors.borderDefault),
+                                    border: Border.all(color: context.colors.borderStrong),
                                     borderRadius: BorderRadius.circular(6),
                                   ),
                                   alignment: Alignment.center,
@@ -804,7 +804,7 @@ class ShareDocumentsContent extends HookWidget {
                                   width: 64,
                                   height: 36,
                                   decoration: BoxDecoration(
-                                    border: Border.all(color: context.colors.borderDefault),
+                                    border: Border.all(color: context.colors.borderStrong),
                                     borderRadius: BorderRadius.circular(6),
                                   ),
                                   alignment: Alignment.center,
@@ -1117,7 +1117,7 @@ class ShareFoldersContent extends HookWidget {
                                   width: 64,
                                   height: 36,
                                   decoration: BoxDecoration(
-                                    border: Border.all(color: context.colors.borderDefault),
+                                    border: Border.all(color: context.colors.borderStrong),
                                     borderRadius: BorderRadius.circular(6),
                                   ),
                                   alignment: Alignment.center,
@@ -1262,7 +1262,11 @@ class _Option extends StatelessWidget {
           Icon(icon, size: 20, color: context.colors.textSubtle),
           const Gap(8),
           Expanded(
-            child: Text(label, style: TextStyle(fontSize: 16, color: context.colors.textSubtle)),
+            child: Text(
+              label,
+              style: TextStyle(fontSize: 16, height: 1, color: context.colors.textSubtle),
+              strutStyle: const StrutStyle(fontSize: 16, height: 1, leading: 0, forceStrutHeight: true),
+            ),
           ),
           trailing,
         ],
