@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:ferry/ferry.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 import 'package:gql_dio_link/gql_dio_link.dart';
 import 'package:hive_ce/hive.dart';
@@ -57,7 +57,7 @@ class Auth extends ValueNotifier<AuthState> {
     return auth;
   }
 
-  Future<void> _refreshTokens() async {
+  Future<void> _refreshTokens({bool retriedAfterUnauthorized = false}) async {
     try {
       final sessionToken = _box.get(_sessionTokenKey) as String?;
       var accessToken = _box.get(_accessTokenKey) as String?;
@@ -81,8 +81,22 @@ class Auth extends ValueNotifier<AuthState> {
       _mixpanel.getPeople().set(r'$avatar', '${me.avatar.url}?s=256&f=png');
 
       value = AuthState.authenticated(sessionToken: sessionToken, accessToken: accessToken, me: me);
-    } on LinkException {
+    } on LinkException catch (error) {
+      final isUnauthorized = error is DioLinkServerException && error.response.statusCode == 401;
+
       final sessionToken = _box.get(_sessionTokenKey) as String?;
+
+      if (isUnauthorized) {
+        if (!retriedAfterUnauthorized && sessionToken != null) {
+          await _box.delete(_accessTokenKey);
+          await _refreshTokens(retriedAfterUnauthorized: true);
+          return;
+        }
+
+        await clearTokens();
+        return;
+      }
+
       if (sessionToken != null) {
         value = const AuthState.offline();
       } else {
