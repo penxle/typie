@@ -168,36 +168,34 @@ class EditorScrollbar extends HookWidget {
     final safeTop = safePadding.top;
     final toolbarVisible = isEditorFocused;
     final safeBottom = (!isKeyboardVisible && !toolbarVisible) ? safePadding.bottom : 0.0;
-    final trackHeight =
+    final rawTrackHeight =
         actualViewHeight - _trackPadding * 2 - safeTop - safeBottom - (hasHorizontalScroll ? _trackWidth : 0);
+    final trackHeight = math.max<double>(0, rawTrackHeight);
     final thumbRatio = viewportDimension > 0 ? viewportDimension / (viewportDimension + maxScrollExtent) : 1.0;
-    final thumbHeight = math.max(_minThumbSize, thumbRatio * trackHeight);
+    final thumbHeight = math.min(trackHeight, math.max(_minThumbSize, thumbRatio * trackHeight));
+    final thumbTravelV = math.max<double>(0, trackHeight - thumbHeight);
     final scrollRatioV = maxScrollExtent > 0 ? (scrollOffset / maxScrollExtent).clamp(0.0, 1.0) : 0.0;
-    final thumbTop = (_trackPadding + scrollRatioV * (trackHeight - thumbHeight)).clamp(
-      _trackPadding,
-      _trackPadding + trackHeight - thumbHeight,
-    );
+    final thumbTop = _trackPadding + scrollRatioV * thumbTravelV;
 
     final safeLeft = safePadding.left;
     final safeRight = safePadding.right;
-    final trackWidthH =
+    final rawTrackWidthH =
         actualViewWidth -
         _trackPadding * 2 -
         safeLeft -
         safeRight -
         safeBottom * 2 -
         (hasVerticalScroll ? _trackWidth : 0);
+    final trackWidthH = math.max<double>(0, rawTrackWidthH);
     final horizontalThumbRatio = horizontalViewportDimension > 0
         ? horizontalViewportDimension / (horizontalViewportDimension + horizontalMaxScrollExtent)
         : 1.0;
-    final thumbWidthH = math.max(_minThumbSize, horizontalThumbRatio * trackWidthH);
+    final thumbWidthH = math.min(trackWidthH, math.max(_minThumbSize, horizontalThumbRatio * trackWidthH));
+    final thumbTravelH = math.max<double>(0, trackWidthH - thumbWidthH);
     final scrollRatioH = horizontalMaxScrollExtent > 0
         ? (horizontalScrollOffset / horizontalMaxScrollExtent).clamp(0.0, 1.0)
         : 0.0;
-    final thumbLeft = (_trackPadding + scrollRatioH * (trackWidthH - thumbWidthH)).clamp(
-      _trackPadding,
-      _trackPadding + trackWidthH - thumbWidthH,
-    );
+    final thumbLeft = _trackPadding + scrollRatioH * thumbTravelH;
 
     int calculateMostVisiblePage() {
       final offset = scrollOffset.clamp(0.0, maxScrollExtent);
@@ -290,7 +288,7 @@ class EditorScrollbar extends HookWidget {
                   final currentMaxExtent = verticalScrollController.position.maxScrollExtent;
                   final deltaY = details.globalPosition.dy - dragStartY.value;
                   final newThumbTop = dragStartThumbTop.value + deltaY;
-                  final ratio = ((newThumbTop - _trackPadding) / (trackHeight - thumbHeight)).clamp(0.0, 1.0);
+                  final ratio = thumbTravelV > 0 ? ((newThumbTop - _trackPadding) / thumbTravelV).clamp(0.0, 1.0) : 0.0;
                   verticalScrollController.jumpTo(ratio * currentMaxExtent);
                   rebuildTrigger.value++;
                 },
@@ -389,7 +387,9 @@ class EditorScrollbar extends HookWidget {
                   final currentMaxExtent = horizontalScrollController.position.maxScrollExtent;
                   final deltaX = details.globalPosition.dx - dragStartX.value;
                   final newThumbLeft = dragStartThumbLeft.value + deltaX;
-                  final ratio = ((newThumbLeft - _trackPadding) / (trackWidthH - thumbWidthH)).clamp(0.0, 1.0);
+                  final ratio = thumbTravelH > 0
+                      ? ((newThumbLeft - _trackPadding) / thumbTravelH).clamp(0.0, 1.0)
+                      : 0.0;
                   horizontalScrollController.jumpTo(ratio * currentMaxExtent);
                   rebuildTrigger.value++;
                 },
