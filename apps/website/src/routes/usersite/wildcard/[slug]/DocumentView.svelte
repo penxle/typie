@@ -376,8 +376,98 @@
 
   {#if document.documentBody.__typename === 'DocumentViewBodyAvailable'}
     {#if bodySnapshot}
-      {#if document.protectContent}
-        <ContentProtect>
+      {#key document.id}
+        {#if document.protectContent}
+          <ContentProtect>
+            <EditorComponent {editor} {fontFamilies} readOnly snapshot={bodySnapshot} useWindowScroll>
+              {#snippet header()}
+                <div class={css({ paddingTop: { base: '48px', md: '80px' } })}>
+                  <nav class={flex({ alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginBottom: '20px' })}>
+                    <a class={flex({ alignItems: 'center', gap: '6px' })} href={$entityView.site.url}>
+                      {#if $entityView.site.logo}
+                        <Img
+                          style={css.raw({ size: '18px', borderRadius: '4px', objectFit: 'cover' })}
+                          $image={$entityView.site.logo}
+                          alt={`${$entityView.site.name} 로고`}
+                          size={24}
+                        />
+                      {/if}
+                      <span class={css({ fontSize: '13px', color: 'text.faint', _hover: { color: 'text.muted' } })}>
+                        {$entityView.site.name}
+                      </span>
+                    </a>
+
+                    {#each $entityView.ancestors as ancestor (ancestor.id)}
+                      {#if ancestor.node.__typename === 'FolderView'}
+                        <span class={css({ fontSize: '13px', color: 'text.faint' })}>/</span>
+                        <a
+                          class={css({ fontSize: '13px', color: 'text.faint', _hover: { color: 'text.muted' } })}
+                          href={`/${ancestor.slug}`}
+                        >
+                          {ancestor.node.name}
+                        </a>
+                      {/if}
+                    {/each}
+                  </nav>
+
+                  <div class={css({ fontSize: { base: '24px', lg: '28px' }, fontWeight: 'bold' })}>
+                    {document.title}
+                  </div>
+
+                  {#if document.subtitle}
+                    <div class={css({ marginTop: '8px', fontSize: { base: '14px', lg: '16px' }, fontWeight: 'medium' })}>
+                      {document.subtitle}
+                    </div>
+                  {/if}
+
+                  <div class={flex({ align: 'center', justify: 'space-between', marginTop: '24px', paddingBottom: '16px' })}>
+                    <div class={flex({ align: 'center', gap: '8px', fontSize: '13px', color: 'text.faint' })}>
+                      {#if document.allowReaction && document.reactions.length > 0}
+                        <div class={flex({ align: 'center', gap: '3px' })}>
+                          <Icon icon={SmileIcon} />
+                          <span>{comma(document.reactions.length)}</span>
+                        </div>
+                      {/if}
+                    </div>
+
+                    <div class={flex({ align: 'center', marginLeft: 'auto', gap: '12px', color: 'text.muted' })}>
+                      <ShareLinkPopover href={$entityView.url} />
+
+                      <DocumentActionMenu {$entityView} />
+                    </div>
+                  </div>
+
+                  <HorizontalDivider style={css.raw({ marginBottom: '24px' })} />
+                </div>
+              {/snippet}
+
+              {#snippet footer()}
+                <div
+                  class={flex({
+                    align: 'flex-start',
+                    justify: 'space-between',
+                    gap: '8px',
+                    marginTop: '20px',
+                    paddingBottom: '10px',
+                    width: 'full',
+                  })}
+                >
+                  <DocumentEmojiReaction $documentView={document} />
+
+                  <div class={flex({ align: 'center', gap: '12px', marginLeft: 'auto', color: 'text.muted' })}>
+                    <ShareLinkPopover href={$entityView.url} />
+
+                    <DocumentActionMenu {$entityView} />
+                  </div>
+                </div>
+
+                <div class={css({ paddingBottom: { base: '60px', lg: '80px' } })}>
+                  <ContentNavigation {$entityView} />
+                </div>
+              {/snippet}
+            </EditorComponent>
+          </ContentProtect>
+        {:else}
           <EditorComponent {editor} {fontFamilies} readOnly snapshot={bodySnapshot} useWindowScroll>
             {#snippet header()}
               <div class={css({ paddingTop: { base: '48px', md: '80px' } })}>
@@ -426,7 +516,7 @@
                     {/if}
                   </div>
 
-                  <div class={flex({ align: 'center', marginLeft: 'auto', gap: '12px', color: 'text.muted' })}>
+                  <div class={flex({ align: 'center', gap: '12px', marginLeft: 'auto', color: 'text.muted' })}>
                     <ShareLinkPopover href={$entityView.url} />
 
                     <DocumentActionMenu {$entityView} />
@@ -450,10 +540,8 @@
               >
                 <DocumentEmojiReaction $documentView={document} />
 
-                <div class={flex({ align: 'center', gap: '12px', marginLeft: 'auto', color: 'text.muted' })}>
+                <div class={flex({ align: 'center', marginLeft: 'auto' })}>
                   <ShareLinkPopover href={$entityView.url} />
-
-                  <DocumentActionMenu {$entityView} />
                 </div>
               </div>
 
@@ -462,91 +550,8 @@
               </div>
             {/snippet}
           </EditorComponent>
-        </ContentProtect>
-      {:else}
-        <EditorComponent {editor} {fontFamilies} readOnly snapshot={bodySnapshot} useWindowScroll>
-          {#snippet header()}
-            <div class={css({ paddingTop: { base: '48px', md: '80px' } })}>
-              <nav class={flex({ alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginBottom: '20px' })}>
-                <a class={flex({ alignItems: 'center', gap: '6px' })} href={$entityView.site.url}>
-                  {#if $entityView.site.logo}
-                    <Img
-                      style={css.raw({ size: '18px', borderRadius: '4px', objectFit: 'cover' })}
-                      $image={$entityView.site.logo}
-                      alt={`${$entityView.site.name} 로고`}
-                      size={24}
-                    />
-                  {/if}
-                  <span class={css({ fontSize: '13px', color: 'text.faint', _hover: { color: 'text.muted' } })}>
-                    {$entityView.site.name}
-                  </span>
-                </a>
-
-                {#each $entityView.ancestors as ancestor (ancestor.id)}
-                  {#if ancestor.node.__typename === 'FolderView'}
-                    <span class={css({ fontSize: '13px', color: 'text.faint' })}>/</span>
-                    <a class={css({ fontSize: '13px', color: 'text.faint', _hover: { color: 'text.muted' } })} href={`/${ancestor.slug}`}>
-                      {ancestor.node.name}
-                    </a>
-                  {/if}
-                {/each}
-              </nav>
-
-              <div class={css({ fontSize: { base: '24px', lg: '28px' }, fontWeight: 'bold' })}>
-                {document.title}
-              </div>
-
-              {#if document.subtitle}
-                <div class={css({ marginTop: '8px', fontSize: { base: '14px', lg: '16px' }, fontWeight: 'medium' })}>
-                  {document.subtitle}
-                </div>
-              {/if}
-
-              <div class={flex({ align: 'center', justify: 'space-between', marginTop: '24px', paddingBottom: '16px' })}>
-                <div class={flex({ align: 'center', gap: '8px', fontSize: '13px', color: 'text.faint' })}>
-                  {#if document.allowReaction && document.reactions.length > 0}
-                    <div class={flex({ align: 'center', gap: '3px' })}>
-                      <Icon icon={SmileIcon} />
-                      <span>{comma(document.reactions.length)}</span>
-                    </div>
-                  {/if}
-                </div>
-
-                <div class={flex({ align: 'center', gap: '12px', marginLeft: 'auto', color: 'text.muted' })}>
-                  <ShareLinkPopover href={$entityView.url} />
-
-                  <DocumentActionMenu {$entityView} />
-                </div>
-              </div>
-
-              <HorizontalDivider style={css.raw({ marginBottom: '24px' })} />
-            </div>
-          {/snippet}
-
-          {#snippet footer()}
-            <div
-              class={flex({
-                align: 'flex-start',
-                justify: 'space-between',
-                gap: '8px',
-                marginTop: '20px',
-                paddingBottom: '10px',
-                width: 'full',
-              })}
-            >
-              <DocumentEmojiReaction $documentView={document} />
-
-              <div class={flex({ align: 'center', marginLeft: 'auto' })}>
-                <ShareLinkPopover href={$entityView.url} />
-              </div>
-            </div>
-
-            <div class={css({ paddingBottom: { base: '60px', lg: '80px' } })}>
-              <ContentNavigation {$entityView} />
-            </div>
-          {/snippet}
-        </EditorComponent>
-      {/if}
+        {/if}
+      {/key}
     {/if}
   {:else if document.documentBody.__typename === 'DocumentViewBodyUnavailable'}
     <div class={flex({ align: 'center', justify: 'center', minHeight: '[100dvh]', fontSize: '16px', fontWeight: 'medium' })}>
