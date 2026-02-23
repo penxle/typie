@@ -1,6 +1,7 @@
 use crate::layout::elements::HorizontalRuleElement;
 use crate::model::HorizontalRuleVariant;
-use crate::render::{GlyphRenderer, Render, RenderContext, RenderPhase};
+use crate::render::outline::ElementSink;
+use crate::render::{GlyphRenderer, Outline, RasterSink, Render, RenderContext, RenderPhase};
 use crate::state::position_helpers::calculate_offset_before_child;
 use tiny_skia::{Paint, PathBuilder, PixmapMut, Rect, Stroke, Transform};
 
@@ -13,10 +14,23 @@ impl Render for HorizontalRuleElement {
     fn render(
         &self,
         pixmap: &mut PixmapMut,
-        _glyph_renderer: &mut GlyphRenderer,
+        glyph_renderer: &mut GlyphRenderer,
         transform: Transform,
         ctx: &RenderContext,
     ) {
+        let mut sink = RasterSink::new(pixmap, glyph_renderer);
+        self.paint_to(&mut sink, transform, ctx);
+    }
+}
+
+impl Outline for HorizontalRuleElement {
+    fn outline(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
+        self.paint_to(sink, transform, ctx);
+    }
+}
+
+impl HorizontalRuleElement {
+    fn paint_to(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
         let is_selected = if let Some(selection) = ctx
             .selections
             .iter()
@@ -40,27 +54,25 @@ impl Render for HorizontalRuleElement {
                 paint.anti_alias = true;
 
                 match self.variant {
-                    HorizontalRuleVariant::Line => self.render_line(pixmap, transform, &paint),
+                    HorizontalRuleVariant::Line => self.render_line(sink, transform, &paint),
                     HorizontalRuleVariant::DashedLine => {
-                        self.render_dashed_line(pixmap, transform, &paint)
+                        self.render_dashed_line(sink, transform, &paint)
                     }
                     HorizontalRuleVariant::CircleLine => {
-                        self.render_circle_line(pixmap, transform, &paint)
+                        self.render_circle_line(sink, transform, &paint)
                     }
                     HorizontalRuleVariant::DiamondLine => {
-                        self.render_diamond_line(pixmap, transform, &paint)
+                        self.render_diamond_line(sink, transform, &paint)
                     }
-                    HorizontalRuleVariant::Circle => self.render_circle(pixmap, transform, &paint),
-                    HorizontalRuleVariant::Diamond => {
-                        self.render_diamond(pixmap, transform, &paint)
-                    }
+                    HorizontalRuleVariant::Circle => self.render_circle(sink, transform, &paint),
+                    HorizontalRuleVariant::Diamond => self.render_diamond(sink, transform, &paint),
                     HorizontalRuleVariant::ThreeCircles => {
-                        self.render_three_circles(pixmap, transform, &paint)
+                        self.render_three_circles(sink, transform, &paint)
                     }
                     HorizontalRuleVariant::ThreeDiamonds => {
-                        self.render_three_diamonds(pixmap, transform, &paint)
+                        self.render_three_diamonds(sink, transform, &paint)
                     }
-                    HorizontalRuleVariant::Zigzag => self.render_zigzag(pixmap, transform, &paint),
+                    HorizontalRuleVariant::Zigzag => self.render_zigzag(sink, transform, &paint),
                 }
             }
             RenderPhase::Selection => {
@@ -75,16 +87,14 @@ impl Render for HorizontalRuleElement {
 
                     if let Some(rect) = Rect::from_xywh(0.0, 0.0, self.size.width, self.size.height)
                     {
-                        pixmap.fill_rect(rect, &paint, transform, None);
+                        sink.fill_rect(rect, &paint, transform);
                     }
                 }
             }
             RenderPhase::Content => {}
         }
     }
-}
 
-impl HorizontalRuleElement {
     fn center(&self) -> (f32, f32) {
         (self.size.width / 2.0, self.size.height / 2.0)
     }
@@ -107,19 +117,19 @@ impl HorizontalRuleElement {
 
     fn fill_path(
         &self,
-        pixmap: &mut PixmapMut,
+        sink: &mut dyn ElementSink,
         transform: Transform,
         paint: &Paint,
         path: Option<tiny_skia::Path>,
     ) {
         if let Some(path) = path {
-            pixmap.fill_path(&path, paint, tiny_skia::FillRule::Winding, transform, None);
+            sink.fill_path(&path, paint, tiny_skia::FillRule::Winding, transform);
         }
     }
 
     fn stroke_path(
         &self,
-        pixmap: &mut PixmapMut,
+        sink: &mut dyn ElementSink,
         transform: Transform,
         paint: &Paint,
         path: Option<tiny_skia::Path>,
@@ -129,13 +139,13 @@ impl HorizontalRuleElement {
                 width: 1.0,
                 ..Default::default()
             };
-            pixmap.stroke_path(&path, paint, &stroke, transform, None);
+            sink.stroke_path(&path, paint, &stroke, transform);
         }
     }
 
     fn fill_rect(
         &self,
-        pixmap: &mut PixmapMut,
+        sink: &mut dyn ElementSink,
         transform: Transform,
         paint: &Paint,
         x: f32,
@@ -144,24 +154,16 @@ impl HorizontalRuleElement {
         h: f32,
     ) {
         if let Some(rect) = Rect::from_xywh(x, y, w, h) {
-            pixmap.fill_rect(rect, paint, transform, None);
+            sink.fill_rect(rect, paint, transform);
         }
     }
 
-    fn render_line(&self, pixmap: &mut PixmapMut, transform: Transform, paint: &Paint) {
+    fn render_line(&self, sink: &mut dyn ElementSink, transform: Transform, paint: &Paint) {
         let y = (self.size.height - LINE_HEIGHT) / 2.0;
-        self.fill_rect(
-            pixmap,
-            transform,
-            paint,
-            0.0,
-            y,
-            self.size.width,
-            LINE_HEIGHT,
-        );
+        self.fill_rect(sink, transform, paint, 0.0, y, self.size.width, LINE_HEIGHT);
     }
 
-    fn render_dashed_line(&self, pixmap: &mut PixmapMut, transform: Transform, paint: &Paint) {
+    fn render_dashed_line(&self, sink: &mut dyn ElementSink, transform: Transform, paint: &Paint) {
         let y = self.size.height / 2.0 - LINE_HEIGHT / 2.0;
         let segment_width: f32 = 16.0;
         let dash_width: f32 = segment_width * 0.5;
@@ -169,12 +171,12 @@ impl HorizontalRuleElement {
 
         while x < self.size.width {
             let w = dash_width.min(self.size.width - x);
-            self.fill_rect(pixmap, transform, paint, x, y, w, LINE_HEIGHT);
+            self.fill_rect(sink, transform, paint, x, y, w, LINE_HEIGHT);
             x += segment_width;
         }
     }
 
-    fn render_circle_line(&self, pixmap: &mut PixmapMut, transform: Transform, paint: &Paint) {
+    fn render_circle_line(&self, sink: &mut dyn ElementSink, transform: Transform, paint: &Paint) {
         let (cx, cy) = self.center();
         let shape_half = (SHAPE_SIZE_LARGE / 2.0) + 10.0;
         let line_y = cy - LINE_HEIGHT / 2.0;
@@ -182,7 +184,7 @@ impl HorizontalRuleElement {
         let line_width = container_half - shape_half;
 
         self.fill_rect(
-            pixmap,
+            sink,
             transform,
             paint,
             cx - container_half,
@@ -191,7 +193,7 @@ impl HorizontalRuleElement {
             LINE_HEIGHT,
         );
         self.fill_rect(
-            pixmap,
+            sink,
             transform,
             paint,
             cx + shape_half,
@@ -200,14 +202,14 @@ impl HorizontalRuleElement {
             LINE_HEIGHT,
         );
         self.fill_path(
-            pixmap,
+            sink,
             transform,
             paint,
             Self::circle_path(cx, cy, SHAPE_SIZE_LARGE / 2.0),
         );
     }
 
-    fn render_diamond_line(&self, pixmap: &mut PixmapMut, transform: Transform, paint: &Paint) {
+    fn render_diamond_line(&self, sink: &mut dyn ElementSink, transform: Transform, paint: &Paint) {
         let (cx, cy) = self.center();
         let shape_half = (SHAPE_SIZE_LARGE / 2.0) + 10.0;
         let line_y = cy - LINE_HEIGHT / 2.0;
@@ -215,7 +217,7 @@ impl HorizontalRuleElement {
         let line_width = container_half - shape_half;
 
         self.fill_rect(
-            pixmap,
+            sink,
             transform,
             paint,
             cx - container_half,
@@ -224,7 +226,7 @@ impl HorizontalRuleElement {
             LINE_HEIGHT,
         );
         self.fill_rect(
-            pixmap,
+            sink,
             transform,
             paint,
             cx + shape_half,
@@ -233,40 +235,45 @@ impl HorizontalRuleElement {
             LINE_HEIGHT,
         );
         self.stroke_path(
-            pixmap,
+            sink,
             transform,
             paint,
             Self::diamond_path(cx, cy, SHAPE_SIZE_LARGE / 2.0),
         );
     }
 
-    fn render_circle(&self, pixmap: &mut PixmapMut, transform: Transform, paint: &Paint) {
+    fn render_circle(&self, sink: &mut dyn ElementSink, transform: Transform, paint: &Paint) {
         let (cx, cy) = self.center();
         self.fill_path(
-            pixmap,
+            sink,
             transform,
             paint,
             Self::circle_path(cx, cy, SHAPE_SIZE_LARGE / 2.0),
         );
     }
 
-    fn render_diamond(&self, pixmap: &mut PixmapMut, transform: Transform, paint: &Paint) {
+    fn render_diamond(&self, sink: &mut dyn ElementSink, transform: Transform, paint: &Paint) {
         let (cx, cy) = self.center();
         self.stroke_path(
-            pixmap,
+            sink,
             transform,
             paint,
             Self::diamond_path(cx, cy, SHAPE_SIZE_LARGE / 2.0),
         );
     }
 
-    fn render_three_circles(&self, pixmap: &mut PixmapMut, transform: Transform, paint: &Paint) {
+    fn render_three_circles(
+        &self,
+        sink: &mut dyn ElementSink,
+        transform: Transform,
+        paint: &Paint,
+    ) {
         let (cx, cy) = self.center();
         let r = SHAPE_SIZE_SMALL / 2.0;
         let gap = SHAPE_GAP + SHAPE_SIZE_SMALL;
         for offset in [-gap, 0.0, gap] {
             self.fill_path(
-                pixmap,
+                sink,
                 transform,
                 paint,
                 Self::circle_path(cx + offset, cy, r),
@@ -274,13 +281,18 @@ impl HorizontalRuleElement {
         }
     }
 
-    fn render_three_diamonds(&self, pixmap: &mut PixmapMut, transform: Transform, paint: &Paint) {
+    fn render_three_diamonds(
+        &self,
+        sink: &mut dyn ElementSink,
+        transform: Transform,
+        paint: &Paint,
+    ) {
         let (cx, cy) = self.center();
         let r = SHAPE_SIZE_SMALL / 2.0;
         let gap = SHAPE_GAP + SHAPE_SIZE_SMALL;
         for offset in [-gap, 0.0, gap] {
             self.stroke_path(
-                pixmap,
+                sink,
                 transform,
                 paint,
                 Self::diamond_path(cx + offset, cy, r),
@@ -288,7 +300,7 @@ impl HorizontalRuleElement {
         }
     }
 
-    fn render_zigzag(&self, pixmap: &mut PixmapMut, transform: Transform, paint: &Paint) {
+    fn render_zigzag(&self, sink: &mut dyn ElementSink, transform: Transform, paint: &Paint) {
         let (cx, cy) = self.center();
         const POINTS: usize = 8;
         const SEGMENT_WIDTH: f32 = 8.0;
@@ -319,7 +331,7 @@ impl HorizontalRuleElement {
                 line_join: tiny_skia::LineJoin::Round,
                 ..Default::default()
             };
-            pixmap.stroke_path(&path, paint, &stroke, transform, None);
+            sink.stroke_path(&path, paint, &stroke, transform);
         }
     }
 }

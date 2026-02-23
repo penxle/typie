@@ -305,6 +305,11 @@ impl Editor {
         })
     }
 
+    #[wasm_bindgen(js_name = exportPageVector)]
+    pub fn export_page_vector(&mut self, page_index: usize) -> Option<Vec<u8>> {
+        self.runtime.export_page_vector(page_index)
+    }
+
     #[wasm_bindgen(js_name = export)]
     pub fn export(&self, mode: DocExportMode) -> Vec<u8> {
         self.runtime.doc().export(mode).unwrap()
@@ -520,6 +525,11 @@ impl Editor {
     #[wasm_bindgen(js_name = setLayoutDebug)]
     pub fn set_layout_debug(&mut self, enabled: bool) {
         self.runtime.set_layout_debug(enabled);
+    }
+
+    #[wasm_bindgen(js_name = setAllFoldsExpanded)]
+    pub fn set_all_folds_expanded(&mut self, expanded: bool) {
+        self.runtime.set_all_folds_expanded(expanded);
     }
 
     #[wasm_bindgen(js_name = isReadOnly)]

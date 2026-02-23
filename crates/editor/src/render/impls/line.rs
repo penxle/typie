@@ -1,7 +1,8 @@
 use crate::global::GLOBALS;
 use crate::layout::elements::LineElement;
 use crate::render::glyph::Glyph;
-use crate::render::{GlyphRenderer, Render, RenderContext, RenderPhase};
+use crate::render::outline::ElementSink;
+use crate::render::{GlyphRenderer, Outline, RasterSink, Render, RenderContext, RenderPhase};
 use crate::types::Point;
 use macros::svg_icon_path;
 use tiny_skia::{Color, Paint, PixmapMut, Rect, Stroke, Transform};
@@ -56,7 +57,7 @@ impl LineElement {
 
     fn render_line_selection(
         &self,
-        pixmap: &mut PixmapMut,
+        sink: &mut dyn ElementSink,
         transform: Transform,
         point: Point,
         ctx: &RenderContext,
@@ -69,14 +70,14 @@ impl LineElement {
         let paint = create_solid_paint(color);
         for rect in self.compute_selection_rects(point, ctx.selections) {
             if let Some(rect) = Rect::from_xywh(rect.x, rect.y, rect.width, rect.height) {
-                pixmap.fill_rect(rect, &paint, transform, None);
+                sink.fill_rect(rect, &paint, transform);
             }
         }
     }
 
     fn render_page_break(
         &self,
-        pixmap: &mut PixmapMut,
+        sink: &mut dyn ElementSink,
         transform: Transform,
         point: Point,
         ctx: &RenderContext,
@@ -104,7 +105,7 @@ impl LineElement {
                 rect.width() - 20.0,
                 1.5,
             ) {
-                pixmap.fill_rect(line_rect, &accent_paint, transform, None);
+                sink.fill_rect(line_rect, &accent_paint, transform);
             }
 
             let icon_size = 16.0;
@@ -119,14 +120,14 @@ impl LineElement {
             let icon_y = rect.top() + rect.height() / 2.0;
 
             if let Some(path) = svg_icon_path!("lucide/file", icon_size, icon_x, icon_y) {
-                pixmap.stroke_path(&path, &accent_paint, &stroke, transform, None);
+                sink.stroke_path(&path, &accent_paint, &stroke, transform);
             }
         }
     }
 
     fn render_preedit(
         &self,
-        pixmap: &mut PixmapMut,
+        sink: &mut dyn ElementSink,
         transform: Transform,
         point: Point,
         ctx: &RenderContext,
@@ -137,12 +138,12 @@ impl LineElement {
 
         let color = ctx.theme.color("ui.text.muted");
         let paint = create_solid_paint(color);
-        pixmap.fill_rect(rect, &paint, transform, None);
+        sink.fill_rect(rect, &paint, transform);
     }
 
     fn render_background_segments(
         &self,
-        pixmap: &mut PixmapMut,
+        sink: &mut dyn ElementSink,
         transform: Transform,
         line_metrics: &parley::layout::LineMetrics,
         ctx: &RenderContext<'_>,
@@ -178,15 +179,14 @@ impl LineElement {
             if let Some(rect) = Rect::from_xywh(min_x, self.metric.top, max_x - min_x, line_height)
             {
                 let paint = create_solid_paint(color);
-                pixmap.fill_rect(rect, &paint, transform, None);
+                sink.fill_rect(rect, &paint, transform);
             }
         }
     }
 
     fn render_ruby_annotations(
         &self,
-        pixmap: &mut PixmapMut,
-        glyph_renderer: &mut GlyphRenderer,
+        sink: &mut dyn ElementSink,
         transform: Transform,
         line_metrics: &parley::layout::LineMetrics,
         ctx: &RenderContext<'_>,
@@ -275,8 +275,7 @@ impl LineElement {
                                 })
                                 .collect();
 
-                            glyph_renderer.draw_glyphs(
-                                pixmap,
+                            sink.draw_glyphs(
                                 &run.font(),
                                 RUBY_FONT_SIZE * scale,
                                 &ruby_paint,
@@ -301,6 +300,19 @@ impl Render for LineElement {
         transform: Transform,
         ctx: &RenderContext<'_>,
     ) {
+        let mut sink = RasterSink::new(pixmap, glyph_renderer);
+        self.paint_to(&mut sink, transform, ctx);
+    }
+}
+
+impl Outline for LineElement {
+    fn outline(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
+        self.paint_to(sink, transform, ctx);
+    }
+}
+
+impl LineElement {
+    fn paint_to(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
         let Some(line) = self.layout.get(self.line_idx) else {
             return;
         };
@@ -310,11 +322,11 @@ impl Render for LineElement {
 
         match ctx.phase {
             RenderPhase::Background => {
-                self.render_background_segments(pixmap, transform, &line_metrics, ctx);
+                self.render_background_segments(sink, transform, &line_metrics, ctx);
             }
             RenderPhase::Selection => {
-                self.render_line_selection(pixmap, transform, point, ctx);
-                self.render_page_break(pixmap, transform, point, ctx);
+                self.render_line_selection(sink, transform, point, ctx);
+                self.render_page_break(sink, transform, point, ctx);
             }
             RenderPhase::Content => {
                 let scale = ctx.scale_factor as f32;
@@ -372,8 +384,7 @@ impl Render for LineElement {
 
                             let embolden = synthesis.embolden();
 
-                            glyph_renderer.draw_glyphs(
-                                pixmap,
+                            sink.draw_glyphs(
                                 &run.font(),
                                 run.font_size() * scale,
                                 &text_paint,
@@ -394,7 +405,7 @@ impl Render for LineElement {
                                 if let Some(rect) =
                                     Rect::from_xywh(run_x, run_y + offset, run_width, size)
                                 {
-                                    pixmap.fill_rect(rect, &text_paint, transform, None);
+                                    sink.fill_rect(rect, &text_paint, transform);
                                 }
                             }
 
@@ -407,15 +418,15 @@ impl Render for LineElement {
                                 if let Some(rect) =
                                     Rect::from_xywh(run_x, run_y + offset, run_width, size)
                                 {
-                                    pixmap.fill_rect(rect, &text_paint, transform, None);
+                                    sink.fill_rect(rect, &text_paint, transform);
                                 }
                             }
                         }
                     }
                 }
 
-                self.render_preedit(pixmap, transform, point, ctx);
-                self.render_ruby_annotations(pixmap, glyph_renderer, transform, &line_metrics, ctx);
+                self.render_preedit(sink, transform, point, ctx);
+                self.render_ruby_annotations(sink, transform, &line_metrics, ctx);
             }
         }
     }
