@@ -2,7 +2,9 @@ use crate::layout::cursor::{Cursor, NavigationContext};
 use crate::layout::{Element, Page, PositionedNode};
 use crate::model::{Doc, NodeId, SelectionDecor};
 use crate::state::position_helpers::find_child_at_offset;
-use crate::state::selection_helpers::{build_selection_decorations, collect_blocks_in_range};
+use crate::state::selection_helpers::{
+    build_selection_decorations, collect_selected_block_ids, compute_structure_selection,
+};
 use crate::state::{Selection, compare_positions, position_in_selection};
 use crate::types::{Point, Rect};
 use std::cmp::Ordering;
@@ -228,19 +230,17 @@ pub fn find_drag_image_bounds(
 }
 
 fn collect_selected_non_text_blocks(doc: &Doc, selection: &Selection) -> Vec<NodeId> {
-    if let Ok((from, to)) = selection.as_sorted(doc) {
-        if let Ok(blocks) = collect_blocks_in_range(doc, from, to) {
-            return blocks
-                .into_iter()
-                .filter(|&id| {
-                    doc.node(id)
-                        .map(|n| !n.spec().is_textblock(doc.schema()))
-                        .unwrap_or(false)
-                })
-                .collect();
-        }
-    }
-    Vec::new()
+    let structure_selection = compute_structure_selection(doc, selection);
+    let blocks = collect_selected_block_ids(doc, selection, &structure_selection);
+
+    blocks
+        .into_iter()
+        .filter(|&id| {
+            doc.node(id)
+                .map(|n| !n.spec().is_textblock(doc.schema()))
+                .unwrap_or(false)
+        })
+        .collect()
 }
 
 fn collect_page_selection_bounds(

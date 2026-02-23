@@ -579,7 +579,7 @@ impl Transaction {
         let selection = self.selection().clone();
         let (from, to) = selection.as_sorted(self.doc())?;
 
-        let blocks = collect_blocks_in_range(self.doc(), from, to)?;
+        let (blocks, _) = collect_text_target_blocks(self.doc(), &selection, from, to)?;
 
         for block_id in blocks {
             let block = self.node_mut(block_id).context("Block not found")?;
@@ -600,7 +600,7 @@ impl Transaction {
         let selection = self.selection().clone();
         let (from, to) = selection.as_sorted(self.doc())?;
 
-        let blocks = collect_blocks_in_range(self.doc(), from, to)?;
+        let (blocks, _) = collect_text_target_blocks(self.doc(), &selection, from, to)?;
 
         for block_id in blocks {
             let block = self.node_mut(block_id).context("Block not found")?;
@@ -619,16 +619,34 @@ impl Transaction {
 
     pub fn reset_fully_selected_paragraphs(&mut self) -> Result<bool> {
         let selection = self.selection().clone();
-        let mut paragraph_ids = collect_nodes_in_selection(self.doc(), &selection, |node| {
-            matches!(node, Node::Paragraph(_))
-        })?;
+        let structure_selection = compute_structure_selection(self.doc(), &selection);
+        let is_rectangular = matches!(
+            structure_selection,
+            StructureSelectionInfo::Rectangular { .. }
+        );
 
-        let (_, to) = selection.as_sorted(self.doc())?;
-        if let Some(node) = self.node(to.node_id) {
-            if matches!(node.node(), Node::Paragraph(_)) && !paragraph_ids.contains(&to.node_id) {
-                paragraph_ids.push(to.node_id);
+        let paragraph_ids = if is_rectangular {
+            collect_selected_block_ids(self.doc(), &selection, &structure_selection)
+                .into_iter()
+                .filter(|&id| {
+                    self.node(id)
+                        .map(|node| matches!(node.node(), Node::Paragraph(_)))
+                        .unwrap_or(false)
+                })
+                .collect()
+        } else {
+            let mut ids = collect_nodes_in_selection(self.doc(), &selection, |node| {
+                matches!(node, Node::Paragraph(_))
+            })?;
+
+            let (_, to) = selection.as_sorted(self.doc())?;
+            if let Some(node) = self.node(to.node_id) {
+                if matches!(node.node(), Node::Paragraph(_)) && !ids.contains(&to.node_id) {
+                    ids.push(to.node_id);
+                }
             }
-        }
+            ids
+        };
 
         let root_attrs = self.resolve_attr_cascade(NodeId::ROOT);
         let default_styles = Attr::extract_styles(&root_attrs);
@@ -636,7 +654,7 @@ impl Transaction {
 
         let mut changed = false;
         for para_id in paragraph_ids {
-            if is_node_fully_selected(self.doc(), &selection, para_id)? {
+            if is_rectangular || is_node_fully_selected(self.doc(), &selection, para_id)? {
                 let default_line_height = default_para_attr
                     .as_ref()
                     .map(|p| p.line_height)
@@ -1614,6 +1632,94 @@ mod tests {
                 }
             }
             selection { (p, 0) }
+        };
+
+        assert_state_eq!(actual, expected);
+    }
+
+    #[test]
+    fn set_text_align_rectangular_selection_applies_only_selected_cells() {
+        let mut p11 = id!();
+        let mut p12 = id!();
+        let mut p21 = id!();
+        let mut p22 = id!();
+
+        let initial = state! {
+            doc {
+                table {
+                    table_row {
+                        table_cell { @p11 paragraph { text { "a" } } }
+                        table_cell { @p12 paragraph { text { "b" } } }
+                    }
+                    table_row {
+                        table_cell { @p21 paragraph { text { "c" } } }
+                        table_cell { @p22 paragraph { text { "d" } } }
+                    }
+                }
+            }
+            selection { (p11, 0) -> (p21, 1) }
+        };
+
+        let actual = transact!(initial, |tr| tr.set_text_align(TextAlign::Center).unwrap());
+
+        let expected = state! {
+            doc {
+                table {
+                    table_row {
+                        table_cell { @p11 paragraph(align: TextAlign::Center,) { text { "a" } } }
+                        table_cell { @p12 paragraph { text { "b" } } }
+                    }
+                    table_row {
+                        table_cell { @p21 paragraph(align: TextAlign::Center,) { text { "c" } } }
+                        table_cell { @p22 paragraph { text { "d" } } }
+                    }
+                }
+            }
+            selection { (p11, 0) -> (p21, 1) }
+        };
+
+        assert_state_eq!(actual, expected);
+    }
+
+    #[test]
+    fn reset_fully_selected_paragraphs_rectangular_selection_applies_only_selected_cells() {
+        let mut p11 = id!();
+        let mut p12 = id!();
+        let mut p21 = id!();
+        let mut p22 = id!();
+
+        let initial = state! {
+            doc {
+                table {
+                    table_row {
+                        table_cell { @p11 paragraph(align: TextAlign::Center, line_height: 100,) { text { "a" } } }
+                        table_cell { @p12 paragraph(align: TextAlign::Center, line_height: 100,) { text { "b" } } }
+                    }
+                    table_row {
+                        table_cell { @p21 paragraph(align: TextAlign::Center, line_height: 100,) { text { "c" } } }
+                        table_cell { @p22 paragraph(align: TextAlign::Center, line_height: 100,) { text { "d" } } }
+                    }
+                }
+            }
+            selection { (p11, 0) -> (p21, 1) }
+        };
+
+        let actual = transact!(initial, |tr| tr.reset_fully_selected_paragraphs().unwrap());
+
+        let expected = state! {
+            doc {
+                table {
+                    table_row {
+                        table_cell { @p11 paragraph(align: TextAlign::Left, line_height: 160,) { text { "a" } } }
+                        table_cell { @p12 paragraph(align: TextAlign::Center, line_height: 100,) { text { "b" } } }
+                    }
+                    table_row {
+                        table_cell { @p21 paragraph(align: TextAlign::Left, line_height: 160,) { text { "c" } } }
+                        table_cell { @p22 paragraph(align: TextAlign::Center, line_height: 100,) { text { "d" } } }
+                    }
+                }
+            }
+            selection { (p11, 0) -> (p21, 1) }
         };
 
         assert_state_eq!(actual, expected);

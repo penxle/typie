@@ -651,6 +651,69 @@ mod tests {
     }
 
     #[test]
+    fn test_add_annotation_rectangular_selection_applies_only_selected_cells() {
+        let mut p11 = id!();
+        let mut p12 = id!();
+        let mut p21 = id!();
+        let mut p22 = id!();
+
+        let mut runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                table {
+                    table_row {
+                        table_cell { @p11 paragraph { text { "a" } } }
+                        table_cell { @p12 paragraph { text { "b" } } }
+                    }
+                    table_row {
+                        table_cell { @p21 paragraph { text { "c" } } }
+                        table_cell { @p22 paragraph { text { "d" } } }
+                    }
+                }
+            }
+            selection { (p11, 0) -> (p21, 1) }
+        };
+
+        runtime.update(Message::AddAnnotation {
+            annotation: Annotation::Link(LinkAnnotation {
+                href: "https://example.com".to_string(),
+            }),
+        });
+
+        let has_link = |runtime: &Runtime, para_id: NodeId| -> bool {
+            let para = runtime.state().doc.node(para_id).unwrap();
+            para.children().any(|child| {
+                if let Node::Text(text_node) = child.node() {
+                    text_node.text.get_segments().iter().any(|seg| {
+                        seg.annotations
+                            .iter()
+                            .any(|ann| matches!(ann, Annotation::Link(_)))
+                    })
+                } else {
+                    false
+                }
+            })
+        };
+
+        assert!(
+            has_link(&runtime, p11),
+            "selected cell p11 should have link"
+        );
+        assert!(
+            has_link(&runtime, p21),
+            "selected cell p21 should have link"
+        );
+        assert!(
+            !has_link(&runtime, p12),
+            "unselected cell p12 should not have link"
+        );
+        assert!(
+            !has_link(&runtime, p22),
+            "unselected cell p22 should not have link"
+        );
+    }
+
+    #[test]
     fn test_remove_annotation_collapsed_removes_only_cursor_annotation() {
         let mut p1 = id!();
         let mut p2 = id!();

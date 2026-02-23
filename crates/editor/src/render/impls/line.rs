@@ -428,7 +428,8 @@ mod tests {
     use crate::layout::{Element, Layout, LayoutCache, LayoutContext, LayoutNode};
     use crate::model::{Decorations, NodeId, SelectionDecor};
     use crate::runtime::{State, ViewStates};
-    use crate::state::{build_selection_decorations, collect_blocks_in_range};
+    use crate::state::build_selection_decorations;
+    use crate::state::selection_helpers::collect_blocks_in_range;
     use crate::types::{Affinity, BoxConstraints, Rect, Size};
     use std::cell::RefCell;
 

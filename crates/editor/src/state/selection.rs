@@ -1,6 +1,9 @@
 use crate::model::{Doc, Fragment, Node, NodeId};
 use crate::state::position::Position;
 use crate::state::position_helpers::{compare_positions, is_block_position};
+use crate::state::selection_helpers::{
+    StructureSelectionInfo, collect_blocks_in_range, compute_structure_selection,
+};
 use crate::state::{BlockTraverser, eq_positions_ignoring_affinity};
 use anyhow::{Context, Result};
 use std::cmp::Ordering;
@@ -123,6 +126,16 @@ impl Selection {
             return String::new();
         }
 
+        if matches!(
+            compute_structure_selection(doc, self),
+            StructureSelectionInfo::Rectangular { .. }
+        ) {
+            return self
+                .extract_fragment(doc)
+                .map(|fragment| fragment.to_plain_text())
+                .unwrap_or_default();
+        }
+
         let Ok((from, to)) = self.as_sorted(doc) else {
             return String::new();
         };
@@ -136,7 +149,7 @@ impl Selection {
                 return extract_block_text_range(doc, from.node_id, from.offset, to.offset);
             }
 
-            let Ok(blocks) = crate::state::collect_blocks_in_range(doc, from, to) else {
+            let Ok(blocks) = collect_blocks_in_range(doc, from, to) else {
                 return String::new();
             };
             let mut result = String::new();
