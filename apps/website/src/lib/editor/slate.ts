@@ -67,6 +67,7 @@ export const POINTER_STATE_PRESSED = 1;
 export const POINTER_STATE_DRAGGING_CONTENT = 2;
 export const POINTER_STATE_DRAGGING_EXTERNAL = 3;
 export const POINTER_STATE_DRAGGING_SELECTION = 4;
+export const SELECTION_EXPAND_ALL = 8;
 
 const POINTER_STYLES = ['default', 'text', 'pointer'] as const;
 
@@ -270,6 +271,10 @@ export class SlateReader {
       anchorBounds,
       headBounds,
     };
+  }
+
+  readSelectionExpandable(): number {
+    return this.#u32('selection_expandable');
   }
 
   readAttrs(): Attribute[] {
