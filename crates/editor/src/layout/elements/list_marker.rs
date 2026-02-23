@@ -1,7 +1,7 @@
 use crate::global::GLOBALS;
 use crate::render::{GlyphRenderer, Render, RenderContext, glyph::Glyph};
-use parley::style::{FontFamily, FontStack, StyleProperty};
-use parley::swash;
+use parley::setting::{FontFeature, Tag};
+use parley::style::{FontFamily, FontFamilyName, FontFeatures, StyleProperty};
 use std::fmt;
 use tiny_skia::{Paint, PixmapMut, Transform};
 
@@ -109,15 +109,15 @@ impl ListMarkerElement {
             let mut builder = lcx.ranged_builder(&mut fcx, &text, 1.0, false);
 
             builder.push_default(StyleProperty::FontSize(MARKER_FONT_SIZE));
-            builder.push_default(StyleProperty::FontStack(FontStack::Single(
-                FontFamily::Named(ctx.doc.default_attrs().font_family().into()),
+            builder.push_default(StyleProperty::FontFamily(FontFamily::Single(
+                FontFamilyName::Named(ctx.doc.default_attrs().font_family().into()),
             )));
-            builder.push_default(StyleProperty::FontFeatures(
-                parley::style::FontSettings::List(std::borrow::Cow::Borrowed(&[swash::Setting {
-                    tag: swash::tag_from_bytes(b"tnum"),
+            builder.push_default(StyleProperty::FontFeatures(FontFeatures::List(
+                std::borrow::Cow::Borrowed(&[FontFeature {
+                    tag: Tag::new(b"tnum"),
                     value: 1,
-                }])),
-            ));
+                }]),
+            )));
 
             let mut layout = builder.build(&text);
             layout.break_all_lines(None);
