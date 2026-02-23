@@ -1,6 +1,5 @@
 {
   "lockfileVersion": 1,
-  "configVersion": 1,
   "workspaces": {
     "": {
       "name": "@typie/monorepo",
@@ -42,6 +41,7 @@
         "@opentelemetry/sdk-trace-node": "^2.5.1",
         "@opentelemetry/semantic-conventions": "^1.39.0",
         "@paralleldrive/cuid2": "^3.3.0",
+        "@pdf-lib/fontkit": "^1.1.1",
         "@portone/server-sdk": "^0.19.0",
         "@pothos/core": "^4.12.0",
         "@pothos/plugin-dataloader": "^4.4.3",
@@ -1327,6 +1327,8 @@
     "@pandacss/types": ["@pandacss/types@1.8.2", "", {}, "sha512-4678uTBYiqesy07w4IPIC137dxnrjAAswFLDCvhtEsEP2zOL3VYmDrOdHP5hnwF75R1b4tubG4/vQqGujf0dCg=="],
 
     "@paralleldrive/cuid2": ["@paralleldrive/cuid2@3.3.0", "", { "dependencies": { "@noble/hashes": "^2.0.1", "bignumber.js": "^9.3.1", "error-causes": "^3.0.2" }, "bin": { "cuid2": "bin/cuid2.js" } }, "sha512-OqiFvSOF0dBSesELYY2CAMa4YINvlLpvKOz/rv6NeZEqiyttlHgv98Juwv4Ch+GrEV7IZ8jfI2VcEoYUjXXCjw=="],
+
+    "@pdf-lib/fontkit": ["@pdf-lib/fontkit@1.1.1", "", { "dependencies": { "pako": "^1.0.6" } }, "sha512-KjMd7grNapIWS/Dm0gvfHEilSyAmeLvrEGVcqLGi0VYebuqqzTbgF29efCx7tvx+IEbG3zQciRSWl3GkUSvjZg=="],
 
     "@pdf-lib/standard-fonts": ["@pdf-lib/standard-fonts@1.0.0", "", { "dependencies": { "pako": "^1.0.6" } }, "sha512-hU30BK9IUN/su0Mn9VdlVKsWBS6GyhVfqjwl1FjZN4TxP6cCw0jP2w7V3Hf5uX7M0AZJ16vey9yE0ny7Sa59ZA=="],
 

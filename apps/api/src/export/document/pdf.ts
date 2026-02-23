@@ -1,12 +1,13 @@
 import { GetObjectCommand } from '@aws-sdk/client-s3';
+import fontkit from '@pdf-lib/fontkit';
 import { LineCapStyle, LineJoinStyle, PDFDocument, popGraphicsState, pushGraphicsState, rgb, setLineJoin } from 'pdf-lib';
 import sharp from 'sharp';
 import * as aws from '@/external/aws';
 import { decompressZstd } from '@/utils/compression';
 import { outlineTextToSvg } from '@/utils/font';
-import type { PDFImage, PDFPage } from 'pdf-lib';
+import type { PDFFont, PDFImage, PDFPage } from 'pdf-lib';
 import type { ResolvedExternalImage } from './external';
-import type { VectorExternalElement, VectorOp, VectorPage, VectorPathCommand } from './vector';
+import type { VectorExternalElement, VectorOp, VectorPage, VectorPathCommand, VectorTextOp } from './vector';
 
 const CSS_PX_TO_PDF_PT = 72 / 96;
 const PLACEHOLDER_BACKGROUND = rgb(0.965, 0.965, 0.969);
@@ -19,6 +20,8 @@ const PLACEHOLDER_LABEL_PADDING_RATIO = 0.14;
 const PLACEHOLDER_LABEL_HEIGHT_RATIO = 0.35;
 const PLACEHOLDER_FONT_BUCKET = 'typie-cdn';
 const PLACEHOLDER_FONT_KEY = 'editor/fonts/Pretendard-Regular/original.bin';
+const HIDDEN_TEXT_FONT_BUCKET = 'typie-cdn';
+const HIDDEN_TEXT_FONT_KEY = 'fonts/editor/Noto-Phantom.ttf';
 const EPSILON = 1e-3;
 
 type PdfRect = { x: number; y: number; width: number; height: number };
@@ -34,6 +37,7 @@ type OutlinedPlaceholderLabel = {
 };
 
 let placeholderFontDataPromise: Promise<Uint8Array | null> | null = null;
+let hiddenTextFontDataPromise: Promise<Uint8Array | null> | null = null;
 const outlinedPlaceholderLabelPromises = new Map<string, Promise<OutlinedPlaceholderLabel | null>>();
 
 const toRgb = (color: [number, number, number, number]) => rgb(color[0] / 255, color[1] / 255, color[2] / 255);
@@ -126,6 +130,25 @@ const drawVectorOp = (page: import('pdf-lib').PDFPage, op: VectorOp, pdfHeight: 
   }
 };
 
+const drawInvisibleTextOp = (page: PDFPage, op: VectorTextOp, pdfHeight: number, font: PDFFont): void => {
+  if (!op.text) return;
+  const size = op.size * CSS_PX_TO_PDF_PT;
+  if (!Number.isFinite(size) || size <= 0) return;
+
+  try {
+    page.drawText(op.text, {
+      x: toPdf(op.x),
+      y: pdfHeight - toPdf(op.y),
+      size,
+      font,
+      color: rgb(0, 0, 0),
+      opacity: 0,
+    });
+  } catch {
+    // Ignore encoding failures for hidden text layer.
+  }
+};
+
 const toPdfRect = (bounds: { x: number; y: number; width: number; height: number }, pdfHeight: number): PdfRect => ({
   x: toPdf(bounds.x),
   y: pdfHeight - toPdf(bounds.y + bounds.height),
@@ -184,6 +207,32 @@ const getPlaceholderFontData = (): Promise<Uint8Array | null> => {
   }
 
   return placeholderFontDataPromise;
+};
+
+const getHiddenTextFontData = (): Promise<Uint8Array | null> => {
+  if (!hiddenTextFontDataPromise) {
+    hiddenTextFontDataPromise = (async () => {
+      try {
+        const object = await aws.s3.send(
+          new GetObjectCommand({
+            Bucket: HIDDEN_TEXT_FONT_BUCKET,
+            Key: HIDDEN_TEXT_FONT_KEY,
+          }),
+        );
+
+        if (!object.Body) {
+          return null;
+        }
+
+        return new Uint8Array(await object.Body.transformToByteArray());
+      } catch (err) {
+        console.warn('[pdf] failed to load hidden text font', err);
+        return null;
+      }
+    })();
+  }
+
+  return hiddenTextFontDataPromise;
 };
 
 const getOutlinedPlaceholderLabel = (message: string): Promise<OutlinedPlaceholderLabel | null> => {
@@ -461,6 +510,16 @@ export async function createPdfFromVectorPages(
 ): Promise<Uint8Array> {
   const pdfDoc = await PDFDocument.create();
   const embeddedImageCache = new Map<string, PDFImage | null>();
+  let hiddenTextFont: PDFFont | null = null;
+  const hiddenTextFontData = await getHiddenTextFontData();
+  if (hiddenTextFontData) {
+    try {
+      pdfDoc.registerFontkit(fontkit);
+      hiddenTextFont = await pdfDoc.embedFont(hiddenTextFontData, { subset: true });
+    } catch (err) {
+      console.warn('[pdf] failed to embed hidden text font', err);
+    }
+  }
 
   pdfDoc.setTitle(title);
   pdfDoc.setAuthor(author);
@@ -478,6 +537,12 @@ export async function createPdfFromVectorPages(
 
     for (const external of pageData.externalElements) {
       await drawExternalElement(page, pdfDoc, external, imageAssets, embeddedImageCache, pdfHeight);
+    }
+
+    if (hiddenTextFont) {
+      for (const textOp of pageData.textOps) {
+        drawInvisibleTextOp(page, textOp, pdfHeight, hiddenTextFont);
+      }
     }
   }
 

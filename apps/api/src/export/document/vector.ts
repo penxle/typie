@@ -19,6 +19,13 @@ export type VectorOp =
       lineJoin: 'miter' | 'round' | 'bevel';
     };
 
+export type VectorTextOp = {
+  text: string;
+  x: number;
+  y: number;
+  size: number;
+};
+
 export type VectorExternalData =
   | { type: 'image'; id?: string; proportion: number; uploadId?: string }
   | { type: 'file'; id?: string; uploadId?: string }
@@ -40,6 +47,7 @@ export type VectorPage = {
   width: number;
   height: number;
   ops: VectorOp[];
+  textOps: VectorTextOp[];
   externalElements: VectorExternalElement[];
 };
 
@@ -151,6 +159,7 @@ export function exportDocumentVectorPages(
       width: page.width,
       height: page.height,
       ops: page.ops,
+      textOps: page.textOps,
       externalElements: externalByPage.get(i) ?? [],
     });
   }

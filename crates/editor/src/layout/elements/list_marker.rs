@@ -149,6 +149,37 @@ impl ListMarkerElement {
                         }
 
                         let align_offset = self.marker_width - run_x - run_width;
+                        let text_range = run.text_range();
+
+                        if text_range.start < text_range.end
+                            && let Some(marker_text) = text.get(text_range)
+                            && !marker_text.is_empty()
+                        {
+                            let chars: Vec<char> = marker_text.chars().collect();
+                            if chars.len() == glyph_data.len() {
+                                for (ch, (_, glyph_x, glyph_y)) in
+                                    chars.into_iter().zip(glyph_data.iter())
+                                {
+                                    let mut buf = [0u8; 4];
+                                    let s = ch.encode_utf8(&mut buf);
+                                    sink.draw_text_layer(
+                                        s,
+                                        run.font_size() * scale,
+                                        run_x + align_offset + *glyph_x,
+                                        self.baseline + *glyph_y,
+                                        transform,
+                                    );
+                                }
+                            } else {
+                                sink.draw_text_layer(
+                                    marker_text,
+                                    run.font_size() * scale,
+                                    run_x + align_offset,
+                                    self.baseline,
+                                    transform,
+                                );
+                            }
+                        }
 
                         let glyphs: Vec<_> = glyph_data
                             .into_iter()

@@ -328,10 +328,12 @@ impl Renderer {
             );
         }
 
+        let (ops, text_ops) = sink.into_parts();
         VectorPage {
             width: page_width,
             height: page_height,
-            ops: sink.into_ops(),
+            ops,
+            text_ops,
         }
     }
 

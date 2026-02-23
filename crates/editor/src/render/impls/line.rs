@@ -14,6 +14,74 @@ fn create_solid_paint(color: Color) -> Paint<'static> {
     paint
 }
 
+fn draw_text_layer_for_glyph_run(
+    sink: &mut dyn ElementSink,
+    source_text: &str,
+    run: &parley::layout::Run<'_, String>,
+    font_size: f32,
+    run_x: f32,
+    run_y: f32,
+    transform: Transform,
+) {
+    let text_range = run.text_range();
+    if text_range.start >= text_range.end {
+        return;
+    }
+
+    let Some(text) = source_text.get(text_range) else {
+        return;
+    };
+
+    if text.is_empty() {
+        return;
+    }
+
+    let chars: Vec<char> = text.chars().collect();
+    if chars.is_empty() {
+        return;
+    }
+
+    let mut emitted = false;
+    let mut cluster_x = run_x;
+    for cluster in run.visual_clusters() {
+        let cluster_advance = cluster.advance();
+        let cluster_range = cluster.text_range();
+        if cluster_range.start < cluster_range.end
+            && let Some(cluster_text) = source_text.get(cluster_range)
+            && !cluster_text.is_empty()
+        {
+            let cluster_chars: Vec<char> = cluster_text.chars().collect();
+            if !cluster_chars.is_empty() {
+                let step = cluster_advance / cluster_chars.len() as f32;
+                for (idx, ch) in cluster_chars.into_iter().enumerate() {
+                    let x = cluster_x + step * idx as f32;
+                    let mut buf = [0u8; 4];
+                    let s = ch.encode_utf8(&mut buf);
+                    sink.draw_text_layer(s, font_size, x, run_y, transform);
+                    emitted = true;
+                }
+            }
+        }
+
+        cluster_x += cluster_advance;
+    }
+
+    if emitted {
+        return;
+    }
+
+    for ch in chars {
+        if ch.is_control() {
+            continue;
+        }
+        {
+            let mut buf = [0u8; 4];
+            let s = ch.encode_utf8(&mut buf);
+            sink.draw_text_layer(s, font_size, run_x, run_y, transform);
+        }
+    }
+}
+
 impl LineElement {
     fn preedit_underline_rect(&self, point: Point) -> Option<Rect> {
         let preedit = self.preedit.as_ref()?;
@@ -255,11 +323,26 @@ impl LineElement {
 
                     let color = ctx.theme.color("text.black");
                     let ruby_paint = create_solid_paint(color);
+                    let mut last_text_run_idx = None;
 
                     for item in ruby_line.items() {
                         if let parley::PositionedLayoutItem::GlyphRun(glyph_run) = item {
                             let run = glyph_run.run();
                             let run_x = glyph_run.offset();
+                            let run_index = run.index();
+
+                            if last_text_run_idx != Some(run_index) {
+                                draw_text_layer_for_glyph_run(
+                                    sink,
+                                    &ruby_seg.ruby_text,
+                                    run,
+                                    run.font_size() * scale,
+                                    ruby_x_offset + run_x,
+                                    ruby_y_offset,
+                                    transform,
+                                );
+                                last_text_run_idx = Some(run_index);
+                            }
 
                             let mut x_advance = 0.0;
                             let glyphs: Vec<_> = glyph_run
@@ -331,6 +414,7 @@ impl LineElement {
             RenderPhase::Content => {
                 let scale = ctx.scale_factor as f32;
                 let run_y = self.metric.top + line_metrics.ascent;
+                let mut last_text_run_idx = None;
 
                 for item in line.items() {
                     match item {
@@ -351,6 +435,20 @@ impl LineElement {
                             let text_paint = create_solid_paint(color);
 
                             let run_x = glyph_run.offset();
+                            let run_index = run.index();
+
+                            if last_text_run_idx != Some(run_index) {
+                                draw_text_layer_for_glyph_run(
+                                    sink,
+                                    &self.text,
+                                    run,
+                                    run.font_size() * scale,
+                                    run_x,
+                                    run_y,
+                                    transform,
+                                );
+                                last_text_run_idx = Some(run_index);
+                            }
 
                             let synthesis = run.synthesis();
                             let skew_transform = if synthesis.skew() != Some(0.0) {
