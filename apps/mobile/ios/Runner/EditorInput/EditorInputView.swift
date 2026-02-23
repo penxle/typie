@@ -1,6 +1,61 @@
 import Flutter
 import UIKit
 
+private final class EditorBridgeTextView: UITextView {
+  var onBeginFloatingCursor: ((CGPoint) -> Void)?
+  var onUpdateFloatingCursor: ((CGPoint) -> Void)?
+  var onEndFloatingCursor: (() -> Void)?
+  var onShortcutAction: ((String) -> Void)?
+
+  override var undoManager: UndoManager? {
+    nil
+  }
+
+  override func beginFloatingCursor(at point: CGPoint) {
+    onBeginFloatingCursor?(point)
+  }
+
+  override func updateFloatingCursor(at point: CGPoint) {
+    onUpdateFloatingCursor?(point)
+  }
+
+  override func endFloatingCursor() {
+    onEndFloatingCursor?()
+  }
+
+  override func copy(_ sender: Any?) {
+    onShortcutAction?("copy")
+  }
+
+  override func cut(_ sender: Any?) {
+    onShortcutAction?("cut")
+  }
+
+  override func paste(_ sender: Any?) {
+    onShortcutAction?("paste")
+  }
+
+  override func selectAll(_ sender: Any?) {
+    onShortcutAction?("selectAll")
+  }
+
+  @objc func undo(_ sender: Any?) {
+    onShortcutAction?("undo")
+  }
+
+  @objc func redo(_ sender: Any?) {
+    onShortcutAction?("redo")
+  }
+
+  @objc private func _handleUndoShortcut(_ sender: Any?) {
+    onShortcutAction?("undo")
+  }
+
+  @objc private func _handleRedoShortcut(_ sender: Any?) {
+    onShortcutAction?("redo")
+  }
+}
+
 class EditorInputView: NSObject, FlutterPlatformView {
   private let inputView: EditorTextInputView
   private let channel: FlutterMethodChannel
@@ -101,8 +156,9 @@ class EditorInputView: NSObject, FlutterPlatformView {
   }
 }
 
-class EditorTextInputView: UIView, UITextInput {
+class EditorTextInputView: UIView, UITextInput, UITextViewDelegate {
   private static let cursorSentinelOffset: Int = 10000
+  private static let maxShadowTextLength: Int = 256
 
   var onInsertText: ((String) -> Void)?
   var onDeleteBackward: (() -> Void)?
@@ -123,6 +179,8 @@ class EditorTextInputView: UIView, UITextInput {
   private var _isDeactivating: Bool = false
   private var _shadowText: String = ""
   private var _pendingSelectionRange: NSRange?
+  private var _inputTextView: EditorBridgeTextView?
+  private var _isSyncingInputTextViewState: Bool = false
   private var _precedingCharWidths: [Double] = []
   private static weak var _activeInputView: EditorTextInputView?
 
@@ -131,15 +189,8 @@ class EditorTextInputView: UIView, UITextInput {
   private var cursorHeight: Double = 20
   private var _floatingCursorStart: CGPoint?
 
-  private var _isIOSAppOnMac: Bool {
-    if #available(iOS 14.0, *) {
-      return ProcessInfo.processInfo.isiOSAppOnMac
-    }
-    return false
-  }
-
   private var _textLengthForSelection: Int {
-    return _isIOSAppOnMac ? _shadowText.count : (_markedText?.count ?? 0)
+    return Swift.max(_shadowText.count, _markedText?.count ?? 0)
   }
 
   private func _clampOffset(_ offset: Int, max: Int) -> Int {
@@ -156,10 +207,119 @@ class EditorTextInputView: UIView, UITextInput {
     return (Swift.min(start, end), Swift.max(start, end))
   }
 
+  private func _setupInputTextViewIfNeeded() {
+    guard _inputTextView == nil else { return }
+
+    let textView = EditorBridgeTextView(frame: bounds)
+    textView.delegate = self
+    textView.backgroundColor = .clear
+    textView.textColor = .clear
+    textView.tintColor = .clear
+    textView.isEditable = true
+    textView.isSelectable = true
+    textView.isScrollEnabled = false
+    textView.autocorrectionType = .no
+    textView.autocapitalizationType = .none
+    textView.spellCheckingType = .no
+    textView.smartQuotesType = .no
+    textView.smartDashesType = .no
+    textView.smartInsertDeleteType = .no
+    textView.keyboardAppearance = keyboardAppearance
+    textView.textContainerInset = .zero
+    textView.textContainer.lineFragmentPadding = 0
+    textView.inputAssistantItem.leadingBarButtonGroups = []
+    textView.inputAssistantItem.trailingBarButtonGroups = []
+    textView.alpha = 0.01
+    textView.onBeginFloatingCursor = { [weak self] point in
+      self?.beginFloatingCursor(at: point)
+    }
+    textView.onUpdateFloatingCursor = { [weak self] point in
+      self?.updateFloatingCursor(at: point)
+    }
+    textView.onEndFloatingCursor = { [weak self] in
+      self?.endFloatingCursor()
+    }
+    textView.onShortcutAction = { [weak self] action in
+      self?._handleShortcutAction(action)
+    }
+
+    addSubview(textView)
+    _inputTextView = textView
+    _syncInputTextViewState()
+  }
+
+  private func _syncInputTextViewState(selectedOffset: Int? = nil) {
+    guard let textView = _inputTextView else { return }
+    _isSyncingInputTextViewState = true
+    textView.text = _shadowText
+    let selectionLocation = _clampOffset(selectedOffset ?? _shadowText.count, max: _shadowText.count)
+    textView.selectedRange = NSRange(location: selectionLocation, length: 0)
+    _isSyncingInputTextViewState = false
+  }
+
+  private func _clearMarkedText(notify: (() -> Void)? = nil) {
+    guard _markedText != nil else { return }
+    _markedText = nil
+    notify?()
+  }
+
+  private func _resetShadowState(syncInputTextView: Bool) {
+    _pendingSelectionRange = nil
+    _shadowText = ""
+    _cursor = Self.cursorSentinelOffset
+    if syncInputTextView {
+      _syncInputTextViewState(selectedOffset: 0)
+    }
+  }
+
+  private func _truncateShadowTextIfNeeded(syncInputTextView: Bool) {
+    let maxLen = Self.maxShadowTextLength
+    let shadowLen = _shadowText.count
+    guard shadowLen > maxLen else { return }
+
+    let droppedCount = shadowLen - maxLen
+    _shadowText = String(_shadowText.suffix(maxLen))
+
+    if let range = _pendingSelectionRange {
+      let rawStart = range.location - droppedCount
+      let rawEnd = (range.location + range.length) - droppedCount
+      let clampedStart = _clampOffset(rawStart, max: _shadowText.count)
+      let clampedEnd = _clampOffset(rawEnd, max: _shadowText.count)
+      let normalizedStart = Swift.min(clampedStart, clampedEnd)
+      let normalizedEnd = Swift.max(clampedStart, clampedEnd)
+      _pendingSelectionRange = NSRange(location: normalizedStart, length: normalizedEnd - normalizedStart)
+      _cursor = Self.cursorSentinelOffset + normalizedEnd
+    } else {
+      _cursor = Self.cursorSentinelOffset + _shadowText.count
+    }
+
+    if syncInputTextView {
+      let selectedOffset = _pendingSelectionRange.map { $0.location + $0.length } ?? _shadowText.count
+      _syncInputTextViewState(selectedOffset: selectedOffset)
+    }
+  }
+
+  private func _resignInputResponder() {
+    if let bridge = _inputTextView, bridge.isFirstResponder {
+      _ = bridge.resignFirstResponder()
+    } else {
+      _ = resignFirstResponder()
+    }
+  }
+
+  @discardableResult
+  private func _becomeInputResponder() -> Bool {
+    _setupInputTextViewIfNeeded()
+    _syncInputTextViewState()
+    guard let inputTextView = _inputTextView else { return false }
+    return inputTextView.becomeFirstResponder()
+  }
+
 
   override init(frame: CGRect) {
     super.init(frame: frame)
     backgroundColor = .clear
+    _setupInputTextViewIfNeeded()
   }
 
   deinit {
@@ -171,6 +331,13 @@ class EditorTextInputView: UIView, UITextInput {
 
   override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
     return nil
+  }
+
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    if let textView = _inputTextView {
+      textView.frame = bounds.isEmpty ? CGRect(x: 0, y: 0, width: 1, height: 1) : bounds
+    }
   }
 
   required init?(coder: NSCoder) {
@@ -187,8 +354,11 @@ class EditorTextInputView: UIView, UITextInput {
       keyboardAppearance = .default
     }
 
-    if isFirstResponder {
+    _inputTextView?.keyboardAppearance = keyboardAppearance
+
+    if isFirstResponder || (_inputTextView?.isFirstResponder ?? false) {
       reloadInputViews()
+      _inputTextView?.reloadInputViews()
     }
   }
 
@@ -196,24 +366,24 @@ class EditorTextInputView: UIView, UITextInput {
     DispatchQueue.main.async { [weak self] in
       guard let self = self else { return }
 
-      if let active = Self._activeInputView, active !== self {
+      if let active = Self._activeInputView,
+         active !== self,
+         let activeWindow = active.window,
+         let selfWindow = self.window,
+         activeWindow === selfWindow {
         active._isDeactivating = true
-        _ = active.resignFirstResponder()
+        active._resignInputResponder()
         active._isDeactivating = false
       }
 
-      if self.window?.isKeyWindow == false {
-        self.window?.makeKey()
-      }
-
-      if self.becomeFirstResponder() {
+      if self._becomeInputResponder() {
         Self._activeInputView = self
         return
       }
       
       DispatchQueue.main.async { [weak self] in
         guard let self = self else { return }
-        if self.becomeFirstResponder() {
+        if self._becomeInputResponder() {
           Self._activeInputView = self
         }
       }
@@ -223,13 +393,17 @@ class EditorTextInputView: UIView, UITextInput {
   func deactivate() {
     DispatchQueue.main.async { [weak self] in
       self?._isDeactivating = true
-      self?.resignFirstResponder()
+      self?._resignInputResponder()
       self?._isDeactivating = false
     }
   }
 
   @discardableResult
   override func resignFirstResponder() -> Bool {
+    if let bridge = _inputTextView, bridge.isFirstResponder {
+      return bridge.resignFirstResponder()
+    }
+
     let result = super.resignFirstResponder()
     if result {
       if Self._activeInputView === self {
@@ -252,13 +426,8 @@ class EditorTextInputView: UIView, UITextInput {
   }
 
   func resetInputContext() {
-    if _markedText != nil {
-      _markedText = nil
-      onUnmarkText?()
-    }
-    _pendingSelectionRange = nil
-    _shadowText = ""
-    _cursor = Self.cursorSentinelOffset
+    _clearMarkedText(notify: onUnmarkText)
+    _resetShadowState(syncInputTextView: true)
     inputDelegate?.textWillChange(self)
     inputDelegate?.textDidChange(self)
   }
@@ -270,10 +439,7 @@ class EditorTextInputView: UIView, UITextInput {
   // MARK: - Floating Cursor (keyboard trackpad mode)
 
   func beginFloatingCursor(at point: CGPoint) {
-    if _markedText != nil {
-      _markedText = nil
-      onUnmarkText?()
-    }
+    _clearMarkedText(notify: onUnmarkText)
     _floatingCursorStart = point
     onFloatingCursorBegin?()
   }
@@ -324,10 +490,7 @@ class EditorTextInputView: UIView, UITextInput {
     var handled = false
     for press in presses {
       if let (direction, extend) = getArrowKeyDirection(press) {
-        if _markedText != nil {
-          _markedText = nil
-          onUnmarkText?()
-        }
+        _clearMarkedText(notify: onUnmarkText)
         startKeyRepeat(direction: direction, extend: extend)
         handled = true
         break
@@ -448,23 +611,21 @@ class EditorTextInputView: UIView, UITextInput {
     let mods = cmd.modifierFlags
     for def in Self.shortcutDefs {
       if def.input == input && def.mods == mods {
-        if _markedText != nil {
-          _markedText = nil
-          onUnmarkText?()
-        }
-        onShortcut?(def.action)
-
-        _pendingSelectionRange = nil
-        _shadowText = ""
-        _cursor = 0
-        inputDelegate?.textWillChange(self)
-        inputDelegate?.selectionWillChange(self)
-        inputDelegate?.textDidChange(self)
-        inputDelegate?.selectionDidChange(self)
-        
+        _handleShortcutAction(def.action)
         return
       }
     }
+  }
+
+  private func _handleShortcutAction(_ action: String) {
+    _clearMarkedText(notify: onUnmarkText)
+    onShortcut?(action)
+
+    _resetShadowState(syncInputTextView: true)
+    inputDelegate?.textWillChange(self)
+    inputDelegate?.selectionWillChange(self)
+    inputDelegate?.textDidChange(self)
+    inputDelegate?.selectionDidChange(self)
   }
 
   // MARK: - UIKeyInput
@@ -479,10 +640,111 @@ class EditorTextInputView: UIView, UITextInput {
     return instance.perform(NSSelectorFromString("isShifted")) != nil
   }
 
-  func insertText(_ text: String) {
-    if _markedText != nil {
-      _markedText = nil
+  private func _dispatchTextDelta(from oldText: String, to newText: String) {
+    if oldText == newText {
+      return
     }
+
+    let oldChars = Array(oldText)
+    let newChars = Array(newText)
+
+    var prefix = 0
+    while prefix < oldChars.count, prefix < newChars.count, oldChars[prefix] == newChars[prefix] {
+      prefix += 1
+    }
+
+    let deleteLength = oldChars.count - prefix
+    let insertedText = String(newChars[prefix..<newChars.count])
+
+    if deleteLength == 0 {
+      if !insertedText.isEmpty {
+        onInsertText?(insertedText)
+      }
+      return
+    }
+
+    if insertedText.isEmpty {
+      if deleteLength == 1 {
+        onDeleteBackward?()
+      } else {
+        onReplaceBackward?(deleteLength, "")
+      }
+      return
+    }
+
+    onReplaceBackward?(deleteLength, insertedText)
+  }
+
+  private func _syncSelectionStateFromTextView(_ textView: UITextView, textLength: Int) {
+    let start = _clampOffset(textView.selectedRange.location, max: textLength)
+    let length = _clampOffset(textView.selectedRange.length, max: textLength - start)
+    _pendingSelectionRange = NSRange(location: start, length: length)
+    _cursor = Self.cursorSentinelOffset + start + length
+  }
+
+  func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {
+    guard !_isSyncingInputTextViewState else { return true }
+
+    if text.isEmpty, range.length == 0, range.location == 0, textView.markedTextRange == nil {
+      onDeleteBackward?()
+      _pendingSelectionRange = NSRange(location: 0, length: 0)
+      _cursor = Self.cursorSentinelOffset
+      return false
+    }
+
+    if text == "\n", textView.markedTextRange == nil {
+      if isSoftKeyboardShiftActive {
+        onShortcut?("insertHardBreak")
+      } else {
+        onPerformAction?("newline")
+      }
+      _resetShadowState(syncInputTextView: true)
+      return false
+    }
+
+    return true
+  }
+
+  func textViewDidChange(_ textView: UITextView) {
+    guard !_isSyncingInputTextViewState else { return }
+
+    let currentText = textView.text ?? ""
+    _syncSelectionStateFromTextView(textView, textLength: currentText.count)
+
+    if let markedRange = textView.markedTextRange,
+       let markedText = textView.text(in: markedRange),
+       !markedText.isEmpty {
+      if _markedText != markedText {
+        _markedText = markedText
+        onSetMarkedText?(markedText)
+      }
+      return
+    }
+
+    _clearMarkedText(notify: onCancelMarkedText)
+
+    let previousText = _shadowText
+    _shadowText = currentText
+    _dispatchTextDelta(from: previousText, to: currentText)
+    _truncateShadowTextIfNeeded(syncInputTextView: true)
+  }
+
+  func textViewDidChangeSelection(_ textView: UITextView) {
+    guard !_isSyncingInputTextViewState else { return }
+    _syncSelectionStateFromTextView(textView, textLength: (textView.text ?? "").count)
+  }
+
+  func textViewDidEndEditing(_ textView: UITextView) {
+    if Self._activeInputView === self {
+      Self._activeInputView = nil
+    }
+    if !_isDeactivating {
+      onFocusLost?()
+    }
+  }
+
+  func insertText(_ text: String) {
+    _clearMarkedText()
 
     if text == "\n" {
       if isSoftKeyboardShiftActive {
@@ -490,105 +752,68 @@ class EditorTextInputView: UIView, UITextInput {
       } else {
         onPerformAction?("newline")
       }
-      _pendingSelectionRange = nil
-      _shadowText = ""
-      _cursor = Self.cursorSentinelOffset
+      _resetShadowState(syncInputTextView: false)
       return
     }
 
-    if _isIOSAppOnMac {
-      let shadowLength = _shadowText.count
-      let selection = _consumeSelectionRange(shadowLength: shadowLength)
-      let replaceLength = selection.end - selection.start
-      let replacesSuffix = replaceLength > 0 && selection.end == shadowLength
+    let shadowLength = _shadowText.count
+    let selection = _consumeSelectionRange(shadowLength: shadowLength)
+    let replaceLength = selection.end - selection.start
+    let replacesSuffix = replaceLength > 0 && selection.end == shadowLength
 
-      let startIndex = _shadowText.index(_shadowText.startIndex, offsetBy: selection.start)
-      let endIndex = _shadowText.index(_shadowText.startIndex, offsetBy: selection.end)
-      _shadowText.replaceSubrange(startIndex..<endIndex, with: text)
-      if _shadowText.count > 64 {
-        _shadowText = String(_shadowText.suffix(64))
-      }
-      _cursor = Self.cursorSentinelOffset + _shadowText.count
+    let startIndex = _shadowText.index(_shadowText.startIndex, offsetBy: selection.start)
+    let endIndex = _shadowText.index(_shadowText.startIndex, offsetBy: selection.end)
+    _shadowText.replaceSubrange(startIndex..<endIndex, with: text)
+    _truncateShadowTextIfNeeded(syncInputTextView: false)
+    _cursor = Self.cursorSentinelOffset + _shadowText.count
 
-      inputDelegate?.textWillChange(self)
-      inputDelegate?.textDidChange(self)
-
-      if replacesSuffix {
-        onReplaceBackward?(replaceLength, text)
-      } else {
-        onInsertText?(text)
-      }
-      return
-    }
-
-    _shadowText.append(text)
-    if _shadowText.count > 64 {
-      _shadowText = String(_shadowText.suffix(64))
-    }
-    _cursor += text.count
-    
     inputDelegate?.textWillChange(self)
     inputDelegate?.textDidChange(self)
-    
-    onInsertText?(text)
+
+    if replacesSuffix {
+      onReplaceBackward?(replaceLength, text)
+    } else {
+      onInsertText?(text)
+    }
   }
 
   func deleteBackward() {
     if _markedText != nil {
-      _markedText = nil
-      onCancelMarkedText?()
+      _clearMarkedText(notify: onCancelMarkedText)
       return
     }
 
-    if _isIOSAppOnMac {
-      let shadowLength = _shadowText.count
-      var selection = _consumeSelectionRange(shadowLength: shadowLength)
-      if selection.start == selection.end {
-        if selection.end == 0 {
-          _shadowText = ""
-          _pendingSelectionRange = nil
-          _cursor = Self.cursorSentinelOffset
-          onDeleteBackward?()
-          return
-        }
-        selection = (selection.end - 1, selection.end)
-      }
-
-      let deleteLength = selection.end - selection.start
-      let deletesSuffix = selection.end == shadowLength
-
-      let startIndex = _shadowText.index(_shadowText.startIndex, offsetBy: selection.start)
-      let endIndex = _shadowText.index(_shadowText.startIndex, offsetBy: selection.end)
-      _shadowText.removeSubrange(startIndex..<endIndex)
-      _cursor = Self.cursorSentinelOffset + _shadowText.count
-
-      inputDelegate?.textWillChange(self)
-      inputDelegate?.textDidChange(self)
-
-      if deletesSuffix {
-        if deleteLength == 1 {
-          onDeleteBackward?()
-        } else {
-          onReplaceBackward?(deleteLength, "")
-        }
-      } else {
+    let shadowLength = _shadowText.count
+    var selection = _consumeSelectionRange(shadowLength: shadowLength)
+    if selection.start == selection.end {
+      if selection.end == 0 {
+        _resetShadowState(syncInputTextView: false)
         onDeleteBackward?()
+        return
       }
-      return
+      selection = (selection.end - 1, selection.end)
     }
 
-    _shadowText = ""
+    let deleteLength = selection.end - selection.start
+    let deletesSuffix = selection.end == shadowLength
 
-    _cursor -= 1
-    if _cursor < 1 {
-      _cursor = Self.cursorSentinelOffset
+    let startIndex = _shadowText.index(_shadowText.startIndex, offsetBy: selection.start)
+    let endIndex = _shadowText.index(_shadowText.startIndex, offsetBy: selection.end)
+    _shadowText.removeSubrange(startIndex..<endIndex)
+    _cursor = Self.cursorSentinelOffset + _shadowText.count
+
+    inputDelegate?.textWillChange(self)
+    inputDelegate?.textDidChange(self)
+
+    if deletesSuffix {
+      if deleteLength == 1 {
+        onDeleteBackward?()
+      } else {
+        onReplaceBackward?(deleteLength, "")
+      }
+    } else {
+      onDeleteBackward?()
     }
-
-    if !_shadowText.isEmpty {
-      _shadowText.removeLast()
-    }
-
-    onDeleteBackward?()
   }
 
   // MARK: - UITextInput (Marked Text)
@@ -606,27 +831,21 @@ class EditorTextInputView: UIView, UITextInput {
       _markedText = text
       onSetMarkedText?(text)
     } else {
-      if _markedText != nil {
-        _pendingSelectionRange = nil
-        _markedText = nil
-        onCancelMarkedText?()
-      }
+      _pendingSelectionRange = nil
+      _clearMarkedText(notify: onCancelMarkedText)
     }
   }
 
   func unmarkText() {
-    if _markedText != nil {
-      _pendingSelectionRange = nil
-      _markedText = nil
-      onUnmarkText?()
-    }
+    _pendingSelectionRange = nil
+    _clearMarkedText(notify: onUnmarkText)
   }
 
   // MARK: - UITextInput (Selection)
 
   var selectedTextRange: UITextRange? {
     get {
-      if _isIOSAppOnMac, let range = _pendingSelectionRange {
+      if let range = _pendingSelectionRange {
         return EditorTextRange(start: range.location, end: range.location + range.length)
       }
       if let markedText = _markedText {
@@ -637,7 +856,7 @@ class EditorTextInputView: UIView, UITextInput {
       return EditorTextRange(start: pos, end: pos)
     }
     set {
-      guard _isIOSAppOnMac, let editorRange = newValue as? EditorTextRange else { return }
+      guard let editorRange = newValue as? EditorTextRange else { return }
       let maxLen = _shadowText.count
       let start = _clampOffset(editorRange.startOffset, max: maxLen)
       let end = _clampOffset(editorRange.endOffset, max: maxLen)
@@ -703,9 +922,6 @@ class EditorTextInputView: UIView, UITextInput {
 
   var beginningOfDocument: UITextPosition { EditorTextPosition(offset: 0) }
   var endOfDocument: UITextPosition { 
-    if _isIOSAppOnMac {
-      return EditorTextPosition(offset: _shadowText.count)
-    }
     if let markedText = _markedText {
       return EditorTextPosition(offset: markedText.count)
     }
