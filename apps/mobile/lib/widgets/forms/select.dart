@@ -64,13 +64,21 @@ class HookFormSelect<T> extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             spacing: 8,
                             children: [
-                              if (item.icon != null)
-                                Padding(padding: const Pad(top: 2), child: Icon(item.icon, size: 18)),
+                              if (item.icon != null) Icon(item.icon, size: 18),
                               Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 spacing: 2,
                                 children: [
-                                  Text(item.label, style: const TextStyle(fontSize: 16)),
+                                  Text(
+                                    item.label,
+                                    style: const TextStyle(fontSize: 16, height: 1),
+                                    strutStyle: const StrutStyle(
+                                      fontSize: 16,
+                                      height: 1,
+                                      leading: 0,
+                                      forceStrutHeight: true,
+                                    ),
+                                  ),
                                   if (item.description != null)
                                     Text(
                                       item.description!,
@@ -91,7 +99,11 @@ class HookFormSelect<T> extends StatelessWidget {
           child: Row(
             children: [
               if (item?.icon != null) ...[Icon(item!.icon, size: 18), const Gap(4)],
-              Text(item?.label ?? '(알 수 없음)', style: const TextStyle(fontSize: 16)),
+              Text(
+                item?.label ?? '(알 수 없음)',
+                style: const TextStyle(fontSize: 16, height: 1),
+                strutStyle: const StrutStyle(fontSize: 16, height: 1, leading: 0, forceStrutHeight: true),
+              ),
               const Gap(8),
               const Icon(LucideLightIcons.chevron_down, size: 16),
             ],
