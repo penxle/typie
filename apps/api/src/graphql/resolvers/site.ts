@@ -172,7 +172,7 @@ Site.implement({
 
         return {
           totalCharacterCount: (postRow.totalCharacterCount || 0) + (documentRow.totalCharacterCount || 0),
-          totalBlobSize: (postRow.totalBlobSize || 0) + (documentRow.totalBlobSize || 0),
+          totalBlobSize: String((postRow.totalBlobSize || 0) + (documentRow.totalBlobSize || 0)),
         };
       },
     }),

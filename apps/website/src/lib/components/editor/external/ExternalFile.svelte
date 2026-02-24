@@ -39,8 +39,8 @@
   const isUploading = $derived(!!inflight && !asset);
   const displayName = $derived(asset?.name ?? inflight?.name ?? '파일');
   const displaySize = $derived.by(() => {
-    const size = asset?.size ?? inflight?.size;
-    return size && size > 0 ? formatFileSize(size) : undefined;
+    const size = Number(asset?.size ?? inflight?.size);
+    return size > 0 ? formatFileSize(size) : undefined;
   });
 
   const { anchor, floating } = createFloatingActions({

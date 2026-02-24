@@ -72,7 +72,7 @@
       return -1;
     }
 
-    return Math.min(1, $site.usage.totalBlobSize / planRule.maxTotalBlobSize);
+    return Math.min(1, Number($site.usage.totalBlobSize) / planRule.maxTotalBlobSize);
   });
 
   $effect(() => {
@@ -139,7 +139,7 @@
         <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>파일 업로드</div>
 
         <div class={css({ fontSize: '12px', color: 'text.faint' })}>
-          {formatBytes($site.usage.totalBlobSize)} / {formatBytes(planRule.maxTotalBlobSize)}
+          {formatBytes(Number($site.usage.totalBlobSize))} / {formatBytes(planRule.maxTotalBlobSize)}
         </div>
       </div>
 

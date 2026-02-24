@@ -70,7 +70,7 @@
       return -1;
     }
 
-    return Math.min(1, $query.site.usage.totalBlobSize / planRule.maxTotalBlobSize);
+    return Math.min(1, Number($query.site.usage.totalBlobSize) / planRule.maxTotalBlobSize);
   });
 
   const key = new PluginKey('limit');
