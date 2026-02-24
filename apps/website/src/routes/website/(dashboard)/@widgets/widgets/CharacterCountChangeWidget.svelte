@@ -20,29 +20,13 @@
   let { widgetId, data = {} }: Props = $props();
 
   const widgetContext = getWidgetContext();
-  const { $post: _post, $document: _document } = $derived(widgetContext.env);
+  const { $document: _document } = $derived(widgetContext.env);
   let isCollapsed = $state((data.isCollapsed as boolean) ?? false);
 
   const toggleCollapse = () => {
     isCollapsed = !isCollapsed;
     widgetContext.updateWidget?.(widgetId, { ...data, isCollapsed });
   };
-
-  const post = fragment(
-    // eslint-disable-next-line svelte/no-unused-svelte-ignore
-    // svelte-ignore state_referenced_locally
-    _post,
-    graphql(`
-      fragment Editor_Widget_CharacterCountChangeWidget_post on Post {
-        id
-
-        characterCountChange {
-          additions
-          deletions
-        }
-      }
-    `),
-  );
 
   const document = fragment(
     // eslint-disable-next-line svelte/no-unused-svelte-ignore
@@ -60,7 +44,7 @@
     `),
   );
 
-  const characterCountChange = $derived($post?.characterCountChange ?? $document?.characterCountChange);
+  const characterCountChange = $derived($document?.characterCountChange);
   const difference = $derived(characterCountChange ? characterCountChange.additions - characterCountChange.deletions : 0);
   const additions = $derived(characterCountChange ? characterCountChange.additions : 0);
   const deletions = $derived(characterCountChange ? characterCountChange.deletions : 0);

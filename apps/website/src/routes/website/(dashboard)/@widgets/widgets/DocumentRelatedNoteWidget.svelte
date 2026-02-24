@@ -28,14 +28,14 @@
   let { widgetId, data = {} }: Props = $props();
 
   const widgetContext = getWidgetContext();
-  const { palette, $post: _post } = $derived(widgetContext.env);
+  const { palette, $document: _document } = $derived(widgetContext.env);
 
-  const post = fragment(
+  const relatedDocument = fragment(
     // eslint-disable-next-line svelte/no-unused-svelte-ignore
     // svelte-ignore state_referenced_locally
-    _post,
+    _document,
     graphql(`
-      fragment Editor_Widget_PostRelatedNoteWidget_post on Post {
+      fragment Editor_Widget_DocumentRelatedNoteWidget_document on Document {
         id
 
         entity {
@@ -57,7 +57,7 @@
   );
 
   const createNote = graphql(`
-    mutation Editor_Widget_PostRelatedNoteWidget_CreateNote_Mutation($input: CreateNoteInput!) {
+    mutation Editor_Widget_DocumentRelatedNoteWidget_CreateNote_Mutation($input: CreateNoteInput!) {
       createNote(input: $input) {
         id
         content
@@ -71,7 +71,7 @@
   `);
 
   const updateNote = graphql(`
-    mutation Editor_Widget_PostRelatedNoteWidget_UpdateNote_Mutation($input: UpdateNoteInput!) {
+    mutation Editor_Widget_DocumentRelatedNoteWidget_UpdateNote_Mutation($input: UpdateNoteInput!) {
       updateNote(input: $input) {
         id
         content
@@ -81,7 +81,7 @@
   `);
 
   const deleteNote = graphql(`
-    mutation Editor_Widget_PostRelatedNoteWidget_DeleteNote_Mutation($input: DeleteNoteInput!) {
+    mutation Editor_Widget_DocumentRelatedNoteWidget_DeleteNote_Mutation($input: DeleteNoteInput!) {
       deleteNote(input: $input) {
         id
       }
@@ -89,7 +89,7 @@
   `);
 
   const moveNote = graphql(`
-    mutation Editor_Widget_PostRelatedNoteWidget_MoveNote_Mutation($input: MoveNoteInput!) {
+    mutation Editor_Widget_DocumentRelatedNoteWidget_MoveNote_Mutation($input: MoveNoteInput!) {
       moveNote(input: $input) {
         id
         order
@@ -117,8 +117,8 @@
   };
 
   const sortedNotes = $derived.by(() => {
-    if (!$post) return [];
-    const notes = $post.entity.notes;
+    if (!$relatedDocument) return [];
+    const notes = $relatedDocument.entity.notes;
     if (localNoteOrder.length === 0) {
       return notes.toSorted((a, b) => a.order.localeCompare(b.order));
     }
@@ -156,13 +156,13 @@
   }, 500);
 
   const handleAddNote = async (via: string) => {
-    if (!$post?.entity.id) return;
+    if (!$relatedDocument?.entity.id) return;
 
     const randomColor = getRandomNoteColor();
     const result = await createNote({
       content: '',
       color: randomColor,
-      entityId: $post.entity.id,
+      entityId: $relatedDocument.entity.id,
     });
 
     if (result?.id) {
@@ -170,16 +170,16 @@
       mixpanel.track('create_related_note', {
         via,
       });
-      cache.invalidate({ __typename: 'Entity', id: $post.entity.id, field: 'notes' });
+      cache.invalidate({ __typename: 'Entity', id: $relatedDocument.entity.id, field: 'notes' });
     }
   };
 
   const handleDeleteNote = async (noteId: string) => {
-    if (!$post?.entity.id) return;
+    if (!$relatedDocument?.entity.id) return;
 
     await deleteNote({ noteId });
     mixpanel.track('delete_related_note');
-    cache.invalidate({ __typename: 'Entity', id: $post.entity.id, field: 'notes' });
+    cache.invalidate({ __typename: 'Entity', id: $relatedDocument.entity.id, field: 'notes' });
   };
 
   const handleDragStart = (noteId: string) => {
@@ -204,7 +204,7 @@
   };
 
   const handleDragEnd = async () => {
-    if (!dragging || !$post?.entity.id) return;
+    if (!dragging || !$relatedDocument?.entity.id) return;
 
     const currentIndex = localNoteOrder.indexOf(dragging.noteId);
 
@@ -219,9 +219,9 @@
           upperOrder: upperNote?.order,
         });
         mixpanel.track('move_related_note');
-        cache.invalidate({ __typename: 'Entity', id: $post.entity.id, field: 'notes' });
+        cache.invalidate({ __typename: 'Entity', id: $relatedDocument.entity.id, field: 'notes' });
       } catch {
-        localNoteOrder = $post.entity.notes.map((note) => note.id);
+        localNoteOrder = $relatedDocument.entity.notes.map((note) => note.id);
         Toast.error('노트 순서 변경에 실패했습니다. 잠시 후 다시 시도해주세요.');
       }
     }
@@ -231,7 +231,7 @@
 
   let prevNoteIds = $state<string[]>([]);
   $effect(() => {
-    const noteIds = $post?.entity.notes.map((n) => n.id) ?? [];
+    const noteIds = $relatedDocument?.entity.notes.map((n) => n.id) ?? [];
     const noteIdsStr = noteIds.join(',');
     const prevNoteIdsStr = prevNoteIds.join(',');
 
@@ -261,7 +261,7 @@
   });
 </script>
 
-<Widget collapsed={isCollapsed} icon={StickyNoteIcon} noPadding title="이 포스트 관련 노트">
+<Widget collapsed={isCollapsed} icon={StickyNoteIcon} noPadding title="이 문서 관련 노트">
   {#snippet headerActions()}
     {#if !palette && !isCollapsed}
       <button
