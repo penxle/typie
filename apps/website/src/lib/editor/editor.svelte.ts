@@ -30,6 +30,7 @@ import {
   SlateReader,
 } from './slate';
 import { calculateImageDisplaySize, calculateRelativePosition, findNearestPageCoordinate, getPageElement, idleCallback } from './utils';
+import { WebGLRenderer } from './webgl';
 import type { DocExportMode, Editor as WasmEditor, Modifier, PointerButton } from '@typie/editor';
 import type { ScrollViewport } from '@typie/ui/utils';
 import type { FontFamily } from './fonts';
@@ -101,6 +102,7 @@ export class Editor {
   #onSelectionChanged?: (anchor: Position, head: Position) => void;
   #pendingSelectAllShortcut = false;
   #readyResolve?: () => void;
+  #renderer: WebGLRenderer | null = null;
   ready: Promise<void>;
 
   constructor() {
@@ -627,8 +629,31 @@ export class Editor {
     }
   }
 
+  get renderer(): WebGLRenderer | null {
+    if (!this.#renderer) {
+      try {
+        this.#renderer = new WebGLRenderer();
+      } catch (err) {
+        console.error('WebGL init failed:', err);
+      }
+    }
+    return this.#renderer;
+  }
+
   renderPage(pageIdx: number) {
     return this.#wasmEditor?.renderPage(pageIdx);
+  }
+
+  renderPageToCanvas(pageIdx: number, target: CanvasRenderingContext2D): boolean {
+    const renderer = this.renderer;
+    if (!renderer) return false;
+    const info = this.renderPage(pageIdx);
+    if (!info) return false;
+    const offscreen = renderer.render(info.ptr, info.len, info.width, info.height);
+    target.canvas.width = info.width;
+    target.canvas.height = info.height;
+    target.drawImage(offscreen, 0, 0);
+    return true;
   }
 
   export(mode: DocExportMode): Uint8Array | undefined {
@@ -1505,6 +1530,8 @@ export class Editor {
 
   destroy(): void {
     this.#stop();
+    this.#renderer?.dispose();
+    this.#renderer = null;
     this.#wasmEditor = null;
     this.#slateReader = null;
   }

@@ -28,7 +28,8 @@ export class WebGLRenderer {
   private texture: WebGLTexture;
   private vao: WebGLVertexArrayObject;
 
-  constructor(canvas: HTMLCanvasElement) {
+  constructor() {
+    const canvas = new OffscreenCanvas(1, 1);
     const gl = canvas.getContext('webgl2', { alpha: true, premultipliedAlpha: true, antialias: false });
     if (!gl) throw new Error('WebGL2 not supported');
 
@@ -117,14 +118,15 @@ export class WebGLRenderer {
     return vao;
   }
 
-  render(ptr: number, len: number, width: number, height: number): void {
+  render(ptr: number, len: number, width: number, height: number): OffscreenCanvas {
     const { gl, program, texture, vao } = this;
 
     const memory = wasm.getMemory() as WebAssembly.Memory;
     const data = new Uint8Array(memory.buffer, ptr, len);
 
-    gl.canvas.width = width;
-    gl.canvas.height = height;
+    const canvas = gl.canvas as OffscreenCanvas;
+    canvas.width = width;
+    canvas.height = height;
     gl.viewport(0, 0, width, height);
 
     gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -138,6 +140,8 @@ export class WebGLRenderer {
     gl.useProgram(program);
     gl.bindVertexArray(vao);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+    return canvas;
   }
 
   dispose(): void {
