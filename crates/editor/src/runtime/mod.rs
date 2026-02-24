@@ -1082,23 +1082,34 @@ impl Runtime {
             self.layout();
 
             let layout_mode = self.doc().settings().layout_mode;
+            let scale_factor = self.layout_engine.scale_factor();
+
+            // Snap logical size to a value whose physical pixel count (round(logical * scale))
+            // exactly equals CSS size * DPR, preventing sub-pixel stretching on fractional DPR
+            // displays when the canvas is rendered with image-rendering: pixelated.
+            let snap = |logical: f32| -> f32 {
+                let physical = (logical as f64 * scale_factor).round();
+                (physical / scale_factor) as f32
+            };
+
             let page_width = match layout_mode {
-                LayoutMode::Paginated { page_width, .. } => page_width.ceil(),
-                LayoutMode::Continuous { max_width } => self
-                    .layout_engine
-                    .width()
-                    .min(max_width + 2.0 * CONTINUOUS_PAGE_MARGIN)
-                    .ceil(),
+                LayoutMode::Paginated { page_width, .. } => snap(page_width.ceil()),
+                LayoutMode::Continuous { max_width } => snap(
+                    self.layout_engine
+                        .width()
+                        .min(max_width + 2.0 * CONTINUOUS_PAGE_MARGIN)
+                        .ceil(),
+                ),
             };
 
             let page_heights: Vec<f32> = match layout_mode {
                 LayoutMode::Paginated { page_height, .. } => {
-                    vec![page_height.ceil(); self.pages().len()]
+                    vec![snap(page_height.ceil()); self.pages().len()]
                 }
                 LayoutMode::Continuous { .. } => self
                     .pages()
                     .iter()
-                    .map(|p| p.root.node.size.height.ceil())
+                    .map(|p| snap(p.root.node.size.height.ceil()))
                     .collect(),
             };
 
