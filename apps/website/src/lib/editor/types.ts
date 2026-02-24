@@ -40,6 +40,7 @@ export type SelectionEndpointBounds = {
 
 export type Selection = {
   collapsed: boolean;
+  cmp: number;
   anchor: Position;
   head: Position;
   anchorBounds: SelectionEndpointBounds | null;

@@ -6,9 +6,12 @@ use crate::state::selection_helpers::{
 };
 use crate::state::{BlockTraverser, eq_positions_ignoring_affinity};
 use anyhow::{Context, Result};
+use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[serde(rename_all = "camelCase")]
 pub struct Selection {
     pub anchor: Position,
     pub head: Position,

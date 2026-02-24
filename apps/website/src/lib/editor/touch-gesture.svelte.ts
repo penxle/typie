@@ -11,7 +11,7 @@ import {
 } from './constants';
 import type { Placement } from '@floating-ui/dom';
 import type { Editor } from './editor.svelte';
-import type { Selection, SelectionEndpointBounds } from './types';
+import type { Position, Selection, SelectionEndpointBounds } from './types';
 
 export type SelectionHandleKind = 'from' | 'to';
 
@@ -65,24 +65,12 @@ const isTouchLikePointer = (e: PointerEvent) => {
   return e.pointerType === 'touch';
 };
 
-const compareEndpoints = (a: SelectionEndpointBounds, b: SelectionEndpointBounds) => {
-  if (a.pageIdx !== b.pageIdx) return a.pageIdx - b.pageIdx;
-
-  const yDiff = a.bounds.y - b.bounds.y;
-  if (Math.abs(yDiff) > 0.5) return yDiff;
-
-  const xDiff = a.bounds.x - b.bounds.x;
-  if (Math.abs(xDiff) > 0.5) return xDiff;
-
-  return 0;
-};
-
 export const getOrderedSelectionHandles = (selection: Selection | null): OrderedSelectionHandles | null => {
   if (!selection || selection.collapsed || !selection.anchorBounds || !selection.headBounds) {
     return null;
   }
 
-  if (compareEndpoints(selection.anchorBounds, selection.headBounds) <= 0) {
+  if (selection.cmp >= 0) {
     return {
       from: selection.anchorBounds,
       to: selection.headBounds,
@@ -177,6 +165,7 @@ export class TouchGestureController {
   #lastTap: TapRecord | null = null;
   #press: PressRecord | null = null;
   #dragAnchor: SelectionEndpointBounds | null = null;
+  #doubleTapInitialRange: { anchor: Position; head: Position } | null = null;
   #doubleTapStart: { x: number; y: number } | null = null;
   #lastClientPoint: { x: number; y: number } | null = null;
   #longPressTimer: ReturnType<typeof setTimeout> | null = null;
@@ -209,6 +198,23 @@ export class TouchGestureController {
 
   isReadOnlyTouchDragCandidate(): boolean {
     return this.#dragCandidate;
+  }
+
+  get isDoubleTapSelectionDragActive(): boolean {
+    return this.#phase === 'doubleTapPending' || this.#phase === 'doubleTapDragging';
+  }
+
+  get panLockActive(): boolean {
+    if (!this.#editor.readOnly) {
+      return false;
+    }
+
+    return (
+      this.#phase === 'doubleTapPending' ||
+      this.#phase === 'doubleTapDragging' ||
+      this.#phase === 'handleDragging' ||
+      this.#phase === 'dndArmed'
+    );
   }
 
   #nextContextMenuRequestId(): number {
@@ -259,6 +265,7 @@ export class TouchGestureController {
     this.#movedPastTapThreshold = false;
     this.#readOnlyDragStarted = false;
     this.#dragAnchor = null;
+    this.#doubleTapInitialRange = null;
     this.#doubleTapStart = null;
     this.#setDragArmed(false);
     this.#setDragCandidate(false);
@@ -417,6 +424,7 @@ export class TouchGestureController {
     this.#activePointerId = e.pointerId;
     this.#setPhase('handleDragging');
     this.#dragAnchor = type === 'from' ? handles.to : handles.from;
+    this.#doubleTapInitialRange = null;
     this.#suppressTapOnPointerUp = true;
     this.#movedPastTapThreshold = true;
     this.#lastClientPoint = { x: e.clientX, y: e.clientY };
@@ -502,10 +510,10 @@ export class TouchGestureController {
       }
 
       this.#dispatchPointerClick(resolved, 2);
-      this.#setPhase('idle');
+      this.#setPhase('doubleTapPending');
+      this.#doubleTapStart = { x: point.x, y: point.y };
       this.#suppressTapOnPointerUp = true;
       this.#vibrate('selection');
-      this.#openTouchContextMenuFromSelectionDeferred();
     }, TOUCH_LONG_PRESS_MS);
   }
 
@@ -557,29 +565,35 @@ export class TouchGestureController {
     });
   }
 
-  #ensureDragAnchorForDoubleTap(): SelectionEndpointBounds | null {
-    if (this.#dragAnchor) {
-      return this.#dragAnchor;
+  #resolveDoubleTapDragSelectionContext(): {
+    anchor: SelectionEndpointBounds;
+    doubleTapInitialRange: { anchor: Position; head: Position };
+  } | null {
+    if (!this.#doubleTapInitialRange) {
+      const selection = this.#editor.selection;
+      if (!selection || selection.collapsed) {
+        return null;
+      }
+
+      this.#doubleTapInitialRange = { anchor: selection.anchor, head: selection.head };
     }
 
-    const start = this.#doubleTapStart;
-    const current = this.#lastClientPoint;
-    if (!start || !current) {
+    if (!this.#dragAnchor) {
+      const handles = getOrderedSelectionHandles(this.#editor.selection);
+      if (!handles) {
+        return null;
+      }
+      this.#dragAnchor = handles.from;
+    }
+
+    if (!this.#dragAnchor || !this.#doubleTapInitialRange) {
       return null;
     }
 
-    const handles = getOrderedSelectionHandles(this.#editor.selection);
-    if (!handles) {
-      return null;
-    }
-
-    const deltaX = current.x - start.x;
-    const deltaY = current.y - start.y;
-    const towardSelectionEnd = deltaY > 8 || (Math.abs(deltaY) <= 8 && deltaX >= 0);
-
-    this.#dragAnchor = towardSelectionEnd ? handles.from : handles.to;
-
-    return this.#dragAnchor;
+    return {
+      anchor: this.#dragAnchor,
+      doubleTapInitialRange: this.#doubleTapInitialRange,
+    };
   }
 
   #dispatchDragSelectionAtCurrentPoint(): void {
@@ -593,8 +607,18 @@ export class TouchGestureController {
       return;
     }
 
-    const anchor = this.#phase === 'doubleTapDragging' ? this.#ensureDragAnchorForDoubleTap() : this.#dragAnchor;
-    if (!anchor) {
+    let anchor = this.#dragAnchor;
+    let doubleTapInitialRange: { anchor: Position; head: Position } | undefined;
+
+    if (this.#phase === 'doubleTapDragging') {
+      const context = this.#resolveDoubleTapDragSelectionContext();
+      if (!context) {
+        return;
+      }
+
+      anchor = context.anchor;
+      doubleTapInitialRange = context.doubleTapInitialRange;
+    } else if (!anchor) {
       return;
     }
 
@@ -606,6 +630,7 @@ export class TouchGestureController {
       headPageIdx: resolved.pageIdx,
       headX: resolved.x,
       headY: resolved.y,
+      doubleTapInitialRange,
     });
   }
 
@@ -654,6 +679,7 @@ export class TouchGestureController {
     this.#activePointerId = null;
     this.#press = null;
     this.#dragAnchor = null;
+    this.#doubleTapInitialRange = null;
     this.#doubleTapStart = null;
     this.#lastClientPoint = null;
     this.#suppressTapOnPointerUp = false;

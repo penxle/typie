@@ -4,6 +4,7 @@
   import { CONTINUOUS_VIEW_PADDING, IS_MAC, PAGE_GAP, PAGINATED_VIEW_PADDING } from '$lib/editor/constants';
   import { getEditorContext } from '$lib/editor/context.svelte';
   import { setupTypewriter } from '$lib/editor/typewriter.svelte';
+  import { touchPanLock } from './actions/touch-pan-lock.svelte';
   import ContextMenu from './ContextMenu.svelte';
   import Cursor from './Cursor.svelte';
   import DocumentOverlayLayer from './DocumentOverlayLayer.svelte';
@@ -192,6 +193,7 @@
   }}
   role="textbox"
   tabindex="0"
+  use:touchPanLock={editor.touchGesture.panLockActive}
 >
   {#each editor.layout.pages, i}
     <Page page={i} bind:containerEl={containerEls[i]} />

@@ -266,6 +266,7 @@ export class SlateReader {
 
     return {
       collapsed,
+      cmp,
       anchor,
       head,
       anchorBounds,

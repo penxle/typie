@@ -239,7 +239,6 @@ class PageList extends HookWidget {
             ..cancelTapTimer()
             ..setTapDispatched(true)
             ..setTextHandleDragType(SelectionHandleType.to)
-            ..setDragAnchorHandle(null)
             ..stopAutoScroll();
 
           longPressPosition.value = null;
@@ -254,6 +253,42 @@ class PageList extends HookWidget {
           endTextHandleDrag();
         }
 
+        ({SelectionHandleInfo anchor, Map<String, dynamic> initialRange})? resolveDoubleTapDragSelectionContext(
+          Offset? startPosition,
+        ) {
+          final dragAnchorHandle = gesture.dragAnchorHandle;
+          final doubleTapInitialRange = gesture.doubleTapInitialRange;
+          if (dragAnchorHandle != null && doubleTapInitialRange != null) {
+            return (anchor: dragAnchorHandle, initialRange: doubleTapInitialRange);
+          }
+
+          final selection = scope.controller.state.selection;
+          if (selection == null || selection.collapsed) {
+            return null;
+          }
+
+          if (startPosition != null) {
+            final (startPageIdx, startY) = getPageAtPosition(startPosition.dy);
+            if (startPageIdx < 0) {
+              return null;
+            }
+            final startX = gesture.getPointerX(startPosition.dx);
+            if (!editor.isSelectionHit(startPageIdx, startX, startY)) {
+              return null;
+            }
+          }
+
+          final anchor = selection.fromBounds;
+          if (anchor == null) {
+            return null;
+          }
+          final initialRange = selection.range;
+          gesture
+            ..setDragAnchorHandle(anchor)
+            ..setDoubleTapInitialRange(initialRange);
+          return (anchor: anchor, initialRange: initialRange);
+        }
+
         void updateDoubleTapDragSelection(Offset localPosition) {
           if (!gestureState.dragging) {
             return;
@@ -265,36 +300,20 @@ class PageList extends HookWidget {
           }
 
           handleDragPosition.value = localPosition;
-
-          if (gesture.dragAnchorHandle == null) {
-            final selection = scope.controller.state.selection;
-            final from = selection?.fromBounds;
-            final to = selection?.toBounds;
-            if (startPosition != null && from != null && to != null) {
-              final delta = localPosition - startPosition;
-              final towardSelectionEnd = delta.dy > 8 || (delta.dy.abs() <= 8 && delta.dx >= 0);
-              gesture
-                ..setTextHandleDragType(towardSelectionEnd ? SelectionHandleType.to : SelectionHandleType.from)
-                ..setDragAnchorHandle(towardSelectionEnd ? from : to);
-            }
-          }
-
-          final anchorHandle = gesture.dragAnchorHandle;
           final (pageIdx, localY) = getPageAtPosition(localPosition.dy);
-          if (anchorHandle != null && pageIdx >= 0) {
-            final pointerX = gesture.getPointerX(localPosition.dx);
+          final pointerX = gesture.getPointerX(localPosition.dx);
+          final context = resolveDoubleTapDragSelectionContext(startPosition);
+          if (context != null && pageIdx >= 0) {
             editor.dispatch({
               'type': 'extendSelectionTo',
-              'anchorPageIdx': anchorHandle.pageIdx,
-              'anchorX': anchorHandle.x,
-              'anchorY': anchorHandle.y + anchorHandle.height / 2,
+              'anchorPageIdx': context.anchor.pageIdx,
+              'anchorX': context.anchor.x,
+              'anchorY': context.anchor.y + context.anchor.height / 2,
               'headPageIdx': pageIdx,
               'headX': pointerX,
               'headY': localY,
+              'doubleTapInitialRange': context.initialRange,
             });
-          }
-
-          if (anchorHandle != null) {
             gesture.handleAutoScroll(
               y: localPosition.dy,
               x: localPosition.dx,
@@ -493,7 +512,7 @@ class PageList extends HookWidget {
                                 return false;
                               }
                               if (gestureState.active) {
-                                return true;
+                                return false;
                               }
                               final viewportPosition = viewportPositionFromGlobal(globalPosition);
                               if (viewportPosition == null) {
@@ -729,7 +748,7 @@ class PageList extends HookWidget {
             }
           },
           onTapCancel: () {
-            if (gestureState.dragging) {
+            if (gestureState.active) {
               return;
             }
             gestureState.clearPending();
