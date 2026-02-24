@@ -505,29 +505,30 @@ impl Fragment {
 
     pub fn to_plain_text(&self) -> String {
         let mut result = String::new();
-        let mut last_was_block = false;
+        let mut seen_effective_block = false;
+        let leading_ancestor_blocks_to_skip = self.open_start.saturating_sub(1);
+        let mut skipped_leading_ancestor_blocks = 0usize;
 
         for (_, node) in &self.nodes {
             match node.data() {
                 Node::Text(text_node) => {
                     result.push_str(&text_node.text.as_str());
-                    last_was_block = false;
                 }
                 Node::HardBreak(_) => {
                     result.push('\n');
-                    last_was_block = false;
                 }
-                Node::Paragraph(_)
-                | Node::Blockquote(_)
-                | Node::BulletList(_)
-                | Node::OrderedList(_)
-                | Node::ListItem(_) => {
-                    if !result.is_empty() && !last_was_block {
+                Node::Root(_) => {}
+                _ => {
+                    if skipped_leading_ancestor_blocks < leading_ancestor_blocks_to_skip {
+                        skipped_leading_ancestor_blocks += 1;
+                        continue;
+                    }
+
+                    if seen_effective_block {
                         result.push('\n');
                     }
-                    last_was_block = true;
+                    seen_effective_block = true;
                 }
-                _ => {}
             }
         }
 
@@ -1239,6 +1240,23 @@ impl Fragment {
 mod tests {
     use super::*;
     use std::rc::Rc;
+
+    fn assert_selection_fragment_plain_text_equivalent(
+        state: &crate::runtime::State,
+        case_name: &str,
+    ) {
+        let selection_text = state.selection.to_plain_text(&state.doc);
+        let fragment_text = state
+            .selection
+            .extract_fragment(&state.doc)
+            .unwrap()
+            .to_plain_text();
+
+        assert_eq!(
+            fragment_text, selection_text,
+            "[{case_name}] fragment/plain mismatch: fragment=`{fragment_text}`, selection=`{selection_text}`"
+        );
+    }
 
     #[test]
     fn test_empty_fragment_from_collapsed_selection() {
@@ -2381,6 +2399,118 @@ mod tests {
                 result.node(*id).is_some(),
                 "Non-conflicting ID {id:?} should be preserved"
             );
+        }
+    }
+
+    #[test]
+    fn selection_plain_text_and_fragment_plain_text_should_match() {
+        let mut p1 = id!();
+        let mut p3 = id!();
+
+        let state = state! {
+            doc {
+                @p1 paragraph { text { "A" } }
+                paragraph {}
+                @p3 paragraph { text { "B" } }
+            }
+            selection { (p1, 0) -> (p3, 1) }
+        };
+
+        assert_selection_fragment_plain_text_equivalent(&state, "empty paragraph boundary");
+    }
+
+    #[test]
+    fn selection_fragment_plain_text_equivalence_complex_cases() {
+        {
+            let mut p1 = id!();
+            let mut p4 = id!();
+
+            let state = state! {
+                doc {
+                    @p1 paragraph {
+                        text { "AA" }
+                        hard_break {}
+                        text { "BB" }
+                    }
+                    paragraph {}
+                    blockquote {
+                        paragraph { text { "CC" } }
+                        paragraph {}
+                        paragraph { text { "DD" } }
+                    }
+                    @p4 paragraph { text { "EE" } }
+                }
+                selection { (p1, 1) -> (p4, 1) }
+            };
+
+            assert_selection_fragment_plain_text_equivalent(
+                &state,
+                "nested blockquote + hard break + empty paragraphs",
+            );
+        }
+
+        {
+            let mut p1 = id!();
+            let mut p3 = id!();
+
+            let state = state! {
+                doc {
+                    bullet_list {
+                        list_item { @p1 paragraph { text { "one" } } }
+                        list_item { paragraph {} }
+                        list_item { paragraph { text { "three" } } }
+                    }
+                    @p3 paragraph { text { "tail" } }
+                }
+                selection { (p3, 3) -> (p1, 1) }
+            };
+
+            assert_selection_fragment_plain_text_equivalent(
+                &state,
+                "reverse-direction selection across list and paragraph",
+            );
+        }
+
+        {
+            let mut p1 = id!();
+            let mut p2 = id!();
+
+            let state = state! {
+                doc {
+                    @p1 paragraph { text { "Top" } }
+                    horizontal_rule {}
+                    @p2 paragraph { text { "Bottom" } }
+                }
+                selection { (p1, 2) -> (p2, 3) }
+            };
+
+            assert_selection_fragment_plain_text_equivalent(
+                &state,
+                "selection across horizontal rule",
+            );
+        }
+
+        {
+            let mut p1 = id!();
+            let mut p2 = id!();
+
+            let state = state! {
+                doc {
+                    table {
+                        table_row {
+                            table_cell { @p1 paragraph { text { "0-0" } } }
+                            table_cell { paragraph { text { "0-1" } } }
+                        }
+                        table_row {
+                            table_cell { paragraph { text { "1-0" } } }
+                            table_cell { @p2 paragraph { text { "1-1" } } }
+                        }
+                    }
+                }
+                selection { (p1, 0) -> (p2, 3) }
+            };
+
+            assert_selection_fragment_plain_text_equivalent(&state, "rectangular table selection");
         }
     }
 }
