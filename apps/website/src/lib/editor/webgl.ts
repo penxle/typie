@@ -27,8 +27,12 @@ export class WebGLRenderer {
   private program: WebGLProgram;
   private texture: WebGLTexture;
   private vao: WebGLVertexArrayObject;
+  private lost = false;
+  private onRestored?: () => void;
 
-  constructor() {
+  constructor(onRestored?: () => void) {
+    this.onRestored = onRestored;
+
     const canvas = new OffscreenCanvas(1, 1);
     const gl = canvas.getContext('webgl2', { alpha: true, premultipliedAlpha: true, antialias: false });
     if (!gl) throw new Error('WebGL2 not supported');
@@ -37,6 +41,18 @@ export class WebGLRenderer {
     this.program = this.createProgram();
     this.texture = this.createTexture();
     this.vao = this.createQuad();
+
+    canvas.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault();
+      this.lost = true;
+    });
+    canvas.addEventListener('webglcontextrestored', () => {
+      this.program = this.createProgram();
+      this.texture = this.createTexture();
+      this.vao = this.createQuad();
+      this.lost = false;
+      this.onRestored?.();
+    });
   }
 
   private createShader(type: number, source: string): WebGLShader {
@@ -118,7 +134,8 @@ export class WebGLRenderer {
     return vao;
   }
 
-  render(ptr: number, len: number, width: number, height: number): OffscreenCanvas {
+  render(ptr: number, len: number, width: number, height: number): OffscreenCanvas | null {
+    if (this.lost) return null;
     const { gl, program, texture, vao } = this;
 
     const memory = wasm.getMemory() as WebAssembly.Memory;

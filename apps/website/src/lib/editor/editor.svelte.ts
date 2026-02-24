@@ -632,7 +632,7 @@ export class Editor {
   get renderer(): WebGLRenderer | null {
     if (!this.#renderer) {
       try {
-        this.#renderer = new WebGLRenderer();
+        this.#renderer = new WebGLRenderer(() => this.renderVersion++);
       } catch (err) {
         console.error('WebGL init failed:', err);
       }
@@ -650,6 +650,7 @@ export class Editor {
     const info = this.renderPage(pageIdx);
     if (!info) return false;
     const offscreen = renderer.render(info.ptr, info.len, info.width, info.height);
+    if (!offscreen) return false;
     target.canvas.width = info.width;
     target.canvas.height = info.height;
     target.drawImage(offscreen, 0, 0);
