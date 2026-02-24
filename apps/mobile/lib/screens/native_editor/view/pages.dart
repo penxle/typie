@@ -253,9 +253,7 @@ class PageList extends HookWidget {
           endTextHandleDrag();
         }
 
-        ({SelectionHandleInfo anchor, Map<String, dynamic> initialRange})? resolveDoubleTapDragSelectionContext(
-          Offset? startPosition,
-        ) {
+        ({SelectionHandleInfo anchor, Map<String, dynamic> initialRange})? resolveDoubleTapDragSelectionContext() {
           final dragAnchorHandle = gesture.dragAnchorHandle;
           final doubleTapInitialRange = gesture.doubleTapInitialRange;
           if (dragAnchorHandle != null && doubleTapInitialRange != null) {
@@ -265,17 +263,6 @@ class PageList extends HookWidget {
           final selection = scope.controller.state.selection;
           if (selection == null || selection.collapsed) {
             return null;
-          }
-
-          if (startPosition != null) {
-            final (startPageIdx, startY) = getPageAtPosition(startPosition.dy);
-            if (startPageIdx < 0) {
-              return null;
-            }
-            final startX = gesture.getPointerX(startPosition.dx);
-            if (!editor.isSelectionHit(startPageIdx, startX, startY)) {
-              return null;
-            }
           }
 
           final anchor = selection.fromBounds;
@@ -302,7 +289,7 @@ class PageList extends HookWidget {
           handleDragPosition.value = localPosition;
           final (pageIdx, localY) = getPageAtPosition(localPosition.dy);
           final pointerX = gesture.getPointerX(localPosition.dx);
-          final context = resolveDoubleTapDragSelectionContext(startPosition);
+          final context = resolveDoubleTapDragSelectionContext();
           if (context != null && pageIdx >= 0) {
             editor.dispatch({
               'type': 'extendSelectionTo',
