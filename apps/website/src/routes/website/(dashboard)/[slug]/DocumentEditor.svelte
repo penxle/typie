@@ -57,6 +57,7 @@
       fragment DocumentEditor_query on Query {
         me @required {
           id
+          role
           ...EditorContext_user
           ...DocumentPanel_user
           ...DashboardLayout_PlanUpgradeModal_user
@@ -64,6 +65,12 @@
           sites {
             id
             ...DocumentTemplateModal_site
+          }
+        }
+
+        impersonation {
+          admin {
+            role
           }
         }
 
@@ -305,7 +312,7 @@
   let showFindReplace = $state(false);
   let renderDebugEnabled = $state(false);
   let layoutDebugEnabled = $state(false);
-  const showRenderDebugToggle = dev;
+  const showRenderDebugToggle = $derived(dev || $query.me.role === 'ADMIN' || $query.impersonation?.admin.role === 'ADMIN');
 
   const selectionsStore = new LocalStore<Record<string, { selection?: unknown; type?: string; element?: string; timestamp: number }>>(
     'typie:selections',
