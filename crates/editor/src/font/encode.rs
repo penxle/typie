@@ -133,6 +133,50 @@ pub fn encode_font(ttf_data: &[u8], chunk_codepoints: &[Vec<u32>]) -> Result<Enc
         }
     }
 
+    // Compute global glyph bounds from per_glyph data.
+    // Some fonts ship with head bounding box set to (0,0,0,0); patch it if so.
+    // Only for glyf fonts — CBDT entries have a different binary layout.
+    let glyph_bounds = if has_glyf {
+        let mut x_min = i16::MAX;
+        let mut y_min = i16::MAX;
+        let mut x_max = i16::MIN;
+        let mut y_max = i16::MIN;
+        let mut has_any = false;
+        for (_, data) in per_glyph.values() {
+            if data.len() >= 10 {
+                x_min = x_min.min(i16::from_be_bytes([data[2], data[3]]));
+                y_min = y_min.min(i16::from_be_bytes([data[4], data[5]]));
+                x_max = x_max.max(i16::from_be_bytes([data[6], data[7]]));
+                y_max = y_max.max(i16::from_be_bytes([data[8], data[9]]));
+                has_any = true;
+            }
+        }
+        has_any.then_some((x_min, y_min, x_max, y_max))
+    } else {
+        None
+    };
+
+    let head_tag = Tag::new(b"head");
+    let needs_head_patch = if let Ok(head) = font.head() {
+        head.x_min() == 0 && head.y_min() == 0 && head.x_max() == 0 && head.y_max() == 0
+    } else {
+        false
+    };
+
+    if needs_head_patch {
+        if let (Some((gx_min, gy_min, gx_max, gy_max)), Some(head_data)) =
+            (glyph_bounds, font.table_data(head_tag))
+        {
+            let mut patched_head = head_data.as_ref().to_vec();
+            // head offsets: xMin=36, yMin=38, xMax=40, yMax=42
+            patched_head[36..38].copy_from_slice(&gx_min.to_be_bytes());
+            patched_head[38..40].copy_from_slice(&gy_min.to_be_bytes());
+            patched_head[40..42].copy_from_slice(&gx_max.to_be_bytes());
+            patched_head[42..44].copy_from_slice(&gy_max.to_be_bytes());
+            table_overrides.push((head_tag, patched_head));
+        }
+    }
+
     let mut builder = FontBuilder::new();
     for (tag, data) in &table_overrides {
         builder.add_raw(*tag, data.as_slice());
