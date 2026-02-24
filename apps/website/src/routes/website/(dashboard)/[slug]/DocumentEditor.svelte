@@ -1046,7 +1046,9 @@
                       use:autosize
                     ></textarea>
 
-                    <HorizontalDivider style={css.raw({ marginTop: '10px' })} />
+                    {#if editor.layout.layoutMode.type !== 'paginated'}
+                      <HorizontalDivider style={css.raw({ marginTop: '10px' })} />
+                    {/if}
                   </div>
                 </div>
               {/snippet}
