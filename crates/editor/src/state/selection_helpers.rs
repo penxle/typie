@@ -759,11 +759,18 @@ pub fn collect_text_target_blocks(
     to: Position,
 ) -> Result<(Vec<NodeId>, bool)> {
     let structure_selection = compute_structure_selection(doc, selection);
+    let is_rectangular = matches!(
+        structure_selection,
+        StructureSelectionInfo::Rectangular { .. }
+    );
 
-    if let StructureSelectionInfo::Rectangular { .. } = structure_selection {
+    if matches!(
+        structure_selection,
+        StructureSelectionInfo::Rectangular { .. } | StructureSelectionInfo::Structural(_)
+    ) {
         return Ok((
             collect_selected_block_ids(doc, selection, &structure_selection),
-            true,
+            is_rectangular,
         ));
     }
 
@@ -776,6 +783,7 @@ pub fn collect_text_ranges_in_selection(
     from: Position,
     to: Position,
 ) -> Result<Vec<(NodeId, usize, usize)>> {
+    let structure_selection = compute_structure_selection(doc, selection);
     let (block_ids, is_rectangular) = collect_text_target_blocks(doc, selection, from, to)?;
     let mut ranges = Vec::new();
 
@@ -789,7 +797,15 @@ pub fn collect_text_ranges_in_selection(
         }
 
         let block_len = block_content_len(&block);
-        let (start, end) = if is_rectangular {
+        let in_structural_selection = matches!(
+            &structure_selection,
+            StructureSelectionInfo::Structural(root_ids)
+                if root_ids
+                    .iter()
+                    .any(|&root_id| root_id == block_id || doc.is_ancestor(root_id, block_id))
+        );
+
+        let (start, end) = if is_rectangular || in_structural_selection {
             (0, block_len)
         } else {
             calculate_block_offsets(block_id, block_len, from, to)

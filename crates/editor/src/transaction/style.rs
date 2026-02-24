@@ -5413,4 +5413,53 @@ mod tests {
 
         assert_state_eq!(actual, expected);
     }
+
+    #[test]
+    fn set_style_structural_selection_applies_to_entire_structural_node() {
+        let mut p11 = id!();
+        let mut p12 = id!();
+        let mut p21 = id!();
+        let mut p22 = id!();
+        let mut p_after = id!();
+
+        let initial = state! {
+            doc {
+                table {
+                    table_row {
+                        table_cell { @p11 paragraph { text { "a" } } }
+                        table_cell { @p12 paragraph { text { "b" } } }
+                    }
+                    table_row {
+                        table_cell { @p21 paragraph { text { "c" } } }
+                        table_cell { @p22 paragraph { text { "d" } } }
+                    }
+                }
+                @p_after paragraph { text { "after" } }
+            }
+            selection { (p12, 1) -> (p_after, 0) }
+        };
+
+        let actual = transact!(initial, |tr| {
+            tr.set_style(Style::Italic(ItalicStyle {})).unwrap();
+        });
+
+        let expected = state! {
+            doc {
+                table {
+                    table_row {
+                        table_cell { @p11 paragraph { text(styles: [italic()]) { "a" } } }
+                        table_cell { @p12 paragraph { text(styles: [italic()]) { "b" } } }
+                    }
+                    table_row {
+                        table_cell { @p21 paragraph { text(styles: [italic()]) { "c" } } }
+                        table_cell { @p22 paragraph { text(styles: [italic()]) { "d" } } }
+                    }
+                }
+                @p_after paragraph { text { "after" } }
+            }
+            selection { (p12, 1) -> (p_after, 0) }
+        };
+
+        assert_state_eq!(actual, expected);
+    }
 }
