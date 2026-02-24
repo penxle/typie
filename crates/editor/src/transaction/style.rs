@@ -111,12 +111,9 @@ fn apply_style_to_range(
 
     for (text_node_id, start_offset, end_offset) in ranges {
         let allowed = tr.doc().allowed_styles_for(text_node_id);
-        anyhow::ensure!(
-            allowed.contains(&style_type),
-            "Style '{:?}' not allowed at node {}",
-            style_type,
-            text_node_id,
-        );
+        if !allowed.contains(&style_type) {
+            continue;
+        }
 
         let node = tr.node_mut(text_node_id).context("Text node not found")?;
         if let Node::Text(text_node) = node.node() {
@@ -170,12 +167,23 @@ fn update_cascade_attrs_on_empty_textblocks_in_range(
     let block_ids = collect_empty_textblocks_in_range(tr, from, to)?;
 
     for block_id in block_ids {
+        let allowed = tr.doc().allowed_styles_for_content(block_id);
+        let applicable_styles: Vec<Style> = styles
+            .iter()
+            .filter(|style| allowed.contains(&style.as_type()))
+            .cloned()
+            .collect();
+
+        if applicable_styles.is_empty() {
+            continue;
+        }
+
         let mut attrs = tr
             .node(block_id)
             .and_then(|b| b.cascade_attrs().map(|a| a.to_vec()))
             .unwrap_or_default();
 
-        for style in styles {
+        for style in &applicable_styles {
             attrs.retain(|a| !matches!(a, Attr::Style(s) if s.as_type() == style.as_type()));
             attrs.push(Attr::Style(style.clone()));
         }
@@ -391,12 +399,9 @@ fn apply_font_style_normalized(
 
     for &(text_node_id, start_offset, end_offset) in &ranges {
         let allowed = tr.doc().allowed_styles_for(text_node_id);
-        anyhow::ensure!(
-            allowed.contains(&style_type),
-            "Style '{:?}' not allowed at node {}",
-            style_type,
-            text_node_id,
-        );
+        if !allowed.contains(&style_type) {
+            continue;
+        }
 
         let node = tr.node(text_node_id).context("Text node not found")?;
         if let Node::Text(text_node) = node.node() {
@@ -5458,6 +5463,93 @@ mod tests {
                 @p_after paragraph { text { "after" } }
             }
             selection { (p12, 1) -> (p_after, 0) }
+        };
+
+        assert_state_eq!(actual, expected);
+    }
+
+    #[test]
+    fn set_font_size_across_nested_fold_selection_applies_to_fold_content_paragraphs() {
+        let mut n1 = id!();
+        let mut n2 = id!();
+
+        let initial = state! {
+            doc {
+                @n1 paragraph {}
+                fold {
+                    fold_title {
+                        text { "asdasdasd" }
+                    }
+                    fold_content {
+                        paragraph {
+                            text { "1" => [font_size(1200)] }
+                        }
+                        fold {
+                            fold_title {}
+                            fold_content {
+                                paragraph {
+                                    text { "2" => [font_size(1200)] }
+                                }
+                                fold {
+                                    fold_title {}
+                                    fold_content {
+                                        paragraph {
+                                            text { "3" => [font_size(1200)] }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        paragraph {
+                            text { "4" => [font_size(1200)] }
+                        }
+                    }
+                }
+                @n2 paragraph {}
+            }
+            selection { (n1, 0) -> (n2, 0) }
+        };
+
+        let actual = transact!(initial, |tr| {
+            tr.set_style(Style::FontSize(FontSizeStyle { size: 1500 }))
+                .unwrap();
+        });
+
+        let expected = state! {
+            doc {
+                @n1 paragraph {}
+                fold {
+                    fold_title {
+                        text { "asdasdasd" }
+                    }
+                    fold_content {
+                        paragraph {
+                            text { "1" => [font_size(1500)] }
+                        }
+                        fold {
+                            fold_title {}
+                            fold_content {
+                                paragraph {
+                                    text { "2" => [font_size(1500)] }
+                                }
+                                fold {
+                                    fold_title {}
+                                    fold_content {
+                                        paragraph {
+                                            text { "3" => [font_size(1500)] }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        paragraph {
+                            text { "4" => [font_size(1500)] }
+                        }
+                    }
+                }
+                @n2 paragraph {}
+            }
+            selection { (n1, 0) -> (n2, 0) }
         };
 
         assert_state_eq!(actual, expected);
