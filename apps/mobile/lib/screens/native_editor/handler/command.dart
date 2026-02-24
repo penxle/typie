@@ -197,28 +197,12 @@ class CommandHandler {
             height: reader.getF32('selection_head_height'),
           );
 
-    final expandable = reader.getU32('selection_expandable');
-
-    controller.updateState(
-      (state) => state.copyWith(
-        selection: EditorSelection(
-          collapsed: collapsed,
-          cmp: cmp,
-          anchorBounds: anchorBounds,
-          headBounds: headBounds,
-          expandable: expandable,
-        ),
-      ),
-    );
-    _updateFloatingSelection(controller, reader);
-
     final anchorNodeId = reader.readNodeIdField('selection_anchor_node_id');
     final headNodeId = reader.readNodeIdField('selection_head_node_id');
     final anchorOffset = reader.getU32('selection_anchor_offset');
     final headOffset = reader.getU32('selection_head_offset');
     final anchorAffinity = reader.getU32('selection_anchor_affinity');
     final headAffinity = reader.getU32('selection_head_affinity');
-
     final anchor = <String, dynamic>{
       'nodeId': anchorNodeId,
       'offset': anchorOffset,
@@ -229,6 +213,22 @@ class CommandHandler {
       'offset': headOffset,
       'affinity': headAffinity == 1 ? 'downstream' : 'upstream',
     };
+
+    final expandable = reader.getU32('selection_expandable');
+
+    controller.updateState(
+      (state) => state.copyWith(
+        selection: EditorSelection(
+          collapsed: collapsed,
+          cmp: cmp,
+          anchorBounds: anchorBounds,
+          headBounds: headBounds,
+          range: {'anchor': anchor, 'head': head},
+          expandable: expandable,
+        ),
+      ),
+    );
+    _updateFloatingSelection(controller, reader);
 
     final currentBlockNodeId = reader.readCurrentBlockNodeId();
     final isZero = currentBlockNodeId.replaceAll('0', '').isEmpty;

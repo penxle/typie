@@ -4,6 +4,7 @@ use crate::runtime::pointer::{PointerMode, PressContext};
 use crate::runtime::{Effect, Runtime};
 use crate::state::position_helpers::compare_positions;
 use crate::state::{Position, Selection};
+use std::cmp::Ordering;
 
 impl Runtime {
     pub(crate) fn set_pointer_mode(&mut self, mode: PointerMode) {
@@ -372,25 +373,33 @@ impl Runtime {
         head_page_idx: usize,
         head_x: f32,
         head_y: f32,
+        double_tap_initial_range: Option<Selection>,
     ) -> Vec<Effect> {
-        let Some(anchor_page) = self.pages().get(anchor_page_idx) else {
-            return vec![];
-        };
         let Some(head_page) = self.pages().get(head_page_idx) else {
             return vec![];
         };
 
         let ctx = NavigationContext::new(&self.state.doc);
 
-        let Some(anchor_hit) = Cursor::hit_test_drag(&ctx, anchor_page, anchor_x, anchor_y) else {
-            return vec![];
-        };
         let Some(head_hit) = Cursor::hit_test_drag(&ctx, head_page, head_x, head_y) else {
             return vec![];
         };
 
         let selection = self.state.selection;
-        let new_selection = anchor_hit.extend_to(&self.state.doc, head_hit);
+        let new_selection = if let Some((initial_from, initial_to)) =
+            double_tap_initial_range.and_then(|range| range.as_sorted(&self.state.doc).ok())
+        {
+            self.extend_selection_with_double_tap_range(initial_from, initial_to, head_hit)
+        } else {
+            let Some(anchor_page) = self.pages().get(anchor_page_idx) else {
+                return vec![];
+            };
+            let Some(anchor_hit) = Cursor::hit_test_drag(&ctx, anchor_page, anchor_x, anchor_y)
+            else {
+                return vec![];
+            };
+            anchor_hit.extend_to(&self.state.doc, head_hit)
+        };
 
         if new_selection.is_collapsed() {
             return vec![];
@@ -405,5 +414,32 @@ impl Runtime {
         } else {
             vec![]
         }
+    }
+
+    fn extend_selection_with_double_tap_range(
+        &self,
+        initial_from: Position,
+        initial_to: Position,
+        head_hit: Selection,
+    ) -> Selection {
+        let (head_from, head_to) = head_hit
+            .as_sorted(&self.state.doc)
+            .unwrap_or((head_hit.anchor, head_hit.head));
+
+        if matches!(
+            compare_positions(&self.state.doc, head_to, initial_from),
+            Ok(Ordering::Less)
+        ) {
+            return Selection::collapsed(initial_to).extend_to(&self.state.doc, head_hit);
+        }
+
+        if matches!(
+            compare_positions(&self.state.doc, head_from, initial_to),
+            Ok(Ordering::Greater)
+        ) {
+            return Selection::collapsed(initial_from).extend_to(&self.state.doc, head_hit);
+        }
+
+        Selection::new(initial_from, initial_to)
     }
 }

@@ -53,6 +53,7 @@ abstract class EditorSelection with _$EditorSelection {
     @Default(0) int cmp,
     SelectionEndpointBounds? anchorBounds,
     SelectionEndpointBounds? headBounds,
+    required Map<String, dynamic> range,
     @Default(0) int expandable,
   }) = _EditorSelection;
 

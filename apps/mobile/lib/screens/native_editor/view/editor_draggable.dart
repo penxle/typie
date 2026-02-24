@@ -58,6 +58,9 @@ class EditorDraggable extends StatelessWidget {
     }
 
     bool isSelectionDraggable(Offset globalPosition) {
+      if (gesture.state.active) {
+        return false;
+      }
       if (gesture.hasTextHandleDrag) {
         return false;
       }
@@ -70,6 +73,9 @@ class EditorDraggable extends StatelessWidget {
 
     return DragItemWidget(
       dragItemProvider: (request) {
+        if (gesture.state.active) {
+          return null;
+        }
         final resolved = resolveDragLocation(request.location);
         if (resolved == null) {
           return null;

@@ -125,6 +125,7 @@ class GestureController {
   Offset? _dragStartTouchPosition;
   Offset? _dragStartHandleScreenPosition;
   SelectionHandleInfo? _dragAnchorHandle;
+  Map<String, dynamic>? _doubleTapInitialRange;
 
   DateTime? _lastTapTime;
   Offset? _lastTapPosition;
@@ -141,6 +142,7 @@ class GestureController {
   bool get tapDispatched => _tapDispatched;
   SelectionHandleType? get draggingHandleType => _draggingHandleType;
   SelectionHandleInfo? get dragAnchorHandle => _dragAnchorHandle;
+  Map<String, dynamic>? get doubleTapInitialRange => _doubleTapInitialRange;
 
   void startCellHandleDrag() {
     _draggingCellHandle = true;
@@ -157,6 +159,7 @@ class GestureController {
     _dragAnchorHandle = null;
     _dragStartTouchPosition = null;
     _dragStartHandleScreenPosition = null;
+    _doubleTapInitialRange = null;
   }
 
   void stopSelectionHandlesAndAutoScroll() {
@@ -170,6 +173,10 @@ class GestureController {
 
   void setDragAnchorHandle(SelectionHandleInfo? anchorHandle) {
     _dragAnchorHandle = anchorHandle;
+  }
+
+  void setDoubleTapInitialRange(Map<String, dynamic>? range) {
+    _doubleTapInitialRange = range;
   }
 
   void rememberPointerDown(Offset touchPosition) {
@@ -419,6 +426,7 @@ class GestureController {
             'headPageIdx': pageIdx,
             'headX': pointerX,
             'headY': localY,
+            if (_doubleTapInitialRange != null) 'doubleTapInitialRange': _doubleTapInitialRange,
           });
         } else if (_draggingHandleType == null) {
           editor

@@ -4,6 +4,7 @@ use crate::model::{
 };
 use crate::runtime::effect::Effect;
 use crate::runtime::{Context, ContextKey, Runtime, When};
+use crate::state::Selection;
 use crate::types::{Affinity, Theme};
 use serde::{Deserialize, Serialize};
 
@@ -579,9 +580,10 @@ define_messages! {
         head_page_idx: usize,
         head_x: f32,
         head_y: f32,
+        double_tap_initial_range: Option<Selection>,
     }
     => when When::True
-    => handle(rt) { rt.handle_extend_selection_to(anchor_page_idx, anchor_x, anchor_y, head_page_idx, head_x, head_y) },
+    => handle(rt) { rt.handle_extend_selection_to(anchor_page_idx, anchor_x, anchor_y, head_page_idx, head_x, head_y, double_tap_initial_range) },
 
     AddRemark { node_id: String, user_id: String, text: String, created_at: i64 }
     => when When::key(ContextKey::CanEdit)

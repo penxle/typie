@@ -1104,6 +1104,11 @@ export class Editor {
       return;
     }
 
+    if (this.touchGesture.isDoubleTapSelectionDragActive) {
+      e.preventDefault();
+      return;
+    }
+
     const resolved = this.#resolvePointerCoordinate(e, e.target);
     if (!resolved) {
       if (this.readOnly) {
