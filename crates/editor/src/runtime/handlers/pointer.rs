@@ -70,7 +70,7 @@ impl Runtime {
             return self.handle_shift_click(hit_selection);
         }
 
-        if let Some(effects) = self.handle_multi_click(click_count, position) {
+        if let Some(effects) = self.handle_multi_click(click_count, position, hit_selection) {
             return effects;
         }
 
@@ -92,12 +92,25 @@ impl Runtime {
         })
     }
 
-    fn handle_multi_click(&mut self, click_count: u32, position: Position) -> Option<Vec<Effect>> {
+    fn handle_multi_click(
+        &mut self,
+        click_count: u32,
+        position: Position,
+        hit_selection: Selection,
+    ) -> Option<Vec<Effect>> {
         if click_count <= 1 {
             return None;
         }
 
         self.set_pointer_mode(PointerMode::Idle);
+
+        if click_count == 2 && self.is_read_only() && self.is_block_selectable_hit(&hit_selection) {
+            return Some(self.transact(move |tr| {
+                tr.set_selection(hit_selection);
+                tr.set_preferred_x(None);
+                Ok(true)
+            }));
+        }
 
         let effects = match click_count {
             2 => self.transact(move |tr| {
@@ -433,14 +446,14 @@ impl Runtime {
             .unwrap_or((head_hit.anchor, head_hit.head));
 
         if matches!(
-            compare_positions(&self.state.doc, head_to, initial_from),
+            compare_positions(&self.state.doc, head_from, initial_from),
             Ok(Ordering::Less)
         ) {
             return Selection::collapsed(initial_to).extend_to(&self.state.doc, head_hit);
         }
 
         if matches!(
-            compare_positions(&self.state.doc, head_from, initial_to),
+            compare_positions(&self.state.doc, head_to, initial_to),
             Ok(Ordering::Greater)
         ) {
             return Selection::collapsed(initial_from).extend_to(&self.state.doc, head_hit);

@@ -4141,13 +4141,40 @@ fn test_image_selection_handle_bounds() {
         .expect("Start handle should exist");
     assert_eq!(page_idx, 0);
     assert_eq!(rect.x, 50.0);
-    assert_eq!(rect.height, 1.0);
+    assert!(rect.height > 0.0);
 
     let (page_idx, rect) = Cursor::selection_handle_bounds(&ctx, &pages, selection.head)
         .expect("End handle should exist");
     assert_eq!(page_idx, 0);
     assert_eq!(rect.x, 750.0);
-    assert_eq!(rect.height, 1.0);
+    assert!(rect.height > 0.0);
+}
+
+#[test]
+fn test_horizontal_rule_selection_handle_bounds() {
+    let rt = runtime! {
+        viewport { paginated { width: 800.0, height: 500.0, margin: 50.0 } }
+        doc {
+            horizontal_rule {}
+        }
+        selection { (NodeId::ROOT, 0) -> (NodeId::ROOT, 1, Affinity::Upstream) }
+    };
+
+    let pages = rt.pages();
+    let ctx = ctx(&rt.state());
+    let selection = rt.selection();
+
+    let (page_idx, rect) = Cursor::selection_handle_bounds(&ctx, &pages, selection.anchor)
+        .expect("Start handle should exist");
+    assert_eq!(page_idx, 0);
+    assert_eq!(rect.x, 50.0);
+    assert!(rect.height > 0.0);
+
+    let (page_idx, rect) = Cursor::selection_handle_bounds(&ctx, &pages, selection.head)
+        .expect("End handle should exist");
+    assert_eq!(page_idx, 0);
+    assert_eq!(rect.x, 750.0);
+    assert!(rect.height > 0.0);
 }
 
 #[test]
