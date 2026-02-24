@@ -1,0 +1,3 @@
+ALTER TABLE "files" ALTER COLUMN "size" SET DATA TYPE bigint;
+ALTER TABLE "fonts" ALTER COLUMN "size" SET DATA TYPE bigint;
+ALTER TABLE "images" ALTER COLUMN "size" SET DATA TYPE bigint;

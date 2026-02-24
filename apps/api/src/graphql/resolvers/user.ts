@@ -408,7 +408,7 @@ User.implement({
       type: t.builder.simpleObject('UserUsage', {
         fields: (t) => ({
           totalCharacterCount: t.int(),
-          totalBlobSize: t.int(),
+          totalBlobSize: t.field({ type: 'BigInt' }),
         }),
       }),
       resolve: async (self) => {

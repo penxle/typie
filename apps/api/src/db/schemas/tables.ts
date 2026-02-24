@@ -189,7 +189,7 @@ export const Files = pgTable('files', {
   userId: text('user_id').references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
   name: text('name').notNull(),
   format: text('format').notNull(),
-  size: integer('size').notNull(),
+  size: bigint('size', { mode: 'number' }).notNull(),
   path: text('path').notNull(),
   createdAt: datetime('created_at')
     .notNull()
@@ -246,7 +246,7 @@ export const Fonts = pgTable(
     postScriptName: text('post_script_name'),
     subfamilyDisplayName: text('subfamily_display_name'),
     weight: integer('weight').notNull(),
-    size: integer('size').notNull(),
+    size: bigint('size', { mode: 'number' }).notNull(),
     path: text('path').notNull(),
     state: E._FontState('state').notNull().default('ACTIVE'),
     createdAt: datetime('created_at')
@@ -323,7 +323,7 @@ export const Images = pgTable('images', {
   userId: text('user_id').references((): AnyPgColumn => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
   name: text('name').notNull(),
   format: text('format').notNull(),
-  size: integer('size').notNull(),
+  size: bigint('size', { mode: 'number' }).notNull(),
   width: integer('width').notNull(),
   height: integer('height').notNull(),
   placeholder: text('placeholder').notNull(),
