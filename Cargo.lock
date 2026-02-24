@@ -745,7 +745,7 @@ dependencies = [
 [[package]]
 name = "fontique"
 version = "0.7.0"
-source = "git+https://github.com/devunt/parley.git?branch=main#83c59c5c62c1977db06a1ce9eac3bcf3cd1216a0"
+source = "git+https://github.com/devunt/parley.git?branch=main#66b619340ae34e71f864cfc799f3e70b387ddb2b"
 dependencies = [
  "hashbrown 0.16.1",
  "linebender_resource_handle",
@@ -1726,7 +1726,7 @@ dependencies = [
 [[package]]
 name = "parley"
 version = "0.7.0"
-source = "git+https://github.com/devunt/parley.git?branch=main#83c59c5c62c1977db06a1ce9eac3bcf3cd1216a0"
+source = "git+https://github.com/devunt/parley.git?branch=main#66b619340ae34e71f864cfc799f3e70b387ddb2b"
 dependencies = [
  "fontique",
  "harfrust",
@@ -1743,7 +1743,7 @@ dependencies = [
 [[package]]
 name = "parley_data"
 version = "0.0.0"
-source = "git+https://github.com/devunt/parley.git?branch=main#83c59c5c62c1977db06a1ce9eac3bcf3cd1216a0"
+source = "git+https://github.com/devunt/parley.git?branch=main#66b619340ae34e71f864cfc799f3e70b387ddb2b"
 dependencies = [
  "icu_collections",
  "icu_properties",
@@ -2495,7 +2495,7 @@ dependencies = [
 [[package]]
 name = "text_primitives"
 version = "0.1.0"
-source = "git+https://github.com/devunt/parley.git?branch=main#83c59c5c62c1977db06a1ce9eac3bcf3cd1216a0"
+source = "git+https://github.com/devunt/parley.git?branch=main#66b619340ae34e71f864cfc799f3e70b387ddb2b"
 
 [[package]]
 name = "thiserror"

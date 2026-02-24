@@ -175,9 +175,17 @@ pub fn set_fallback_fonts(names: &[&str]) {
             .filter_map(|name| fcx.collection.family_by_name(name).map(|f| f.id()))
             .collect();
 
-        for &(script, _) in fontique::Script::all_samples() {
+        for script in fontique::Script::all_samples()
+            .iter()
+            .map(|(script, _)| script)
+            .chain(&[
+                fontique::Script::COMMON,
+                fontique::Script::INHERITED,
+                fontique::Script::UNKNOWN,
+            ])
+        {
             fcx.collection.set_fallbacks(
-                fontique::FallbackKey::new(script, None),
+                fontique::FallbackKey::new(*script, None),
                 families.iter().copied(),
             );
         }
