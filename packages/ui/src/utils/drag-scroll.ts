@@ -12,6 +12,100 @@ export type DragScrollOptions = {
   onScrollThrottleMs?: number;
 };
 
+const isWindowTarget = (target: EventTarget): target is Window => {
+  return typeof window !== 'undefined' && target === window;
+};
+
+const isElementTarget = (target: EventTarget): target is HTMLElement => {
+  return target instanceof HTMLElement;
+};
+
+const isInsetSet = (value: string) => value !== '' && value !== 'auto';
+
+const isTopAnchored = (style: CSSStyleDeclaration) => {
+  return isInsetSet(style.top) || isInsetSet(style.insetBlockStart);
+};
+
+const getViewportContainer = (target: EventTarget): HTMLElement | null => {
+  if (isElementTarget(target)) {
+    return target;
+  }
+
+  if (isWindowTarget(target)) {
+    return document.body;
+  }
+
+  return null;
+};
+
+const collectStickyCandidates = (target: EventTarget): HTMLElement[] => {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return [];
+  }
+
+  const container = getViewportContainer(target);
+  if (!container) {
+    return [];
+  }
+
+  const candidates: HTMLElement[] = [];
+  const rootStyle = window.getComputedStyle(container);
+  if ((rootStyle.position === 'sticky' || rootStyle.position === 'fixed') && isTopAnchored(rootStyle)) {
+    candidates.push(container);
+  }
+
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_ELEMENT);
+  let current = walker.nextNode();
+  while (current) {
+    if (current instanceof HTMLElement) {
+      const style = window.getComputedStyle(current);
+      if ((style.position === 'sticky' || style.position === 'fixed') && isTopAnchored(style)) {
+        candidates.push(current);
+      }
+    }
+    current = walker.nextNode();
+  }
+
+  return candidates;
+};
+
+const getStickyTopBoundary = (
+  rect: { top: number; bottom: number; left: number; right: number },
+  stickyCandidates: HTMLElement[],
+  topAnchorThresholdPx: number,
+): number => {
+  if (stickyCandidates.length === 0) {
+    return rect.top;
+  }
+
+  let stickyTop = rect.top;
+
+  for (const element of stickyCandidates) {
+    const elementRect = element.getBoundingClientRect();
+    const intersectsHorizontally = elementRect.right > rect.left && elementRect.left < rect.right;
+    const intersectsTopZone = elementRect.bottom > rect.top && elementRect.top <= rect.top + topAnchorThresholdPx;
+
+    if (!intersectsHorizontally || !intersectsTopZone) {
+      continue;
+    }
+
+    stickyTop = Math.max(stickyTop, elementRect.bottom);
+  }
+
+  return Math.min(stickyTop, rect.bottom);
+};
+
+const getAdjustedRect = (
+  rect: { top: number; bottom: number; left: number; right: number },
+  stickyCandidates: HTMLElement[],
+  topAnchorThresholdPx: number,
+): { top: number; bottom: number; left: number; right: number } => {
+  return {
+    ...rect,
+    top: getStickyTopBoundary(rect, stickyCandidates, topAnchorThresholdPx),
+  };
+};
+
 // NOTE: 드래그 중 끝에서 자동 스크롤
 export function handleDragScroll(
   viewport: ScrollViewport | null,
@@ -31,6 +125,8 @@ export function handleDragScroll(
   } = options;
 
   const useHorizontalScroll = axis === 'both';
+  const stickyCandidates = collectStickyCandidates(viewport.target);
+  const topAnchorThresholdPx = Math.max(scrollZoneSize * 2, 96);
 
   let lastPointerX = 0;
   let lastPointerY = 0;
@@ -54,7 +150,7 @@ export function handleDragScroll(
     lastPointerX = clientX;
     lastPointerY = clientY;
 
-    const rect = viewport.getRect();
+    const rect = getAdjustedRect(viewport.getRect(), stickyCandidates, topAnchorThresholdPx);
 
     if (!useHorizontalScroll && (lastPointerX < rect.left || lastPointerX > rect.right)) {
       return;
@@ -74,7 +170,7 @@ export function handleDragScroll(
   };
 
   const scroll = () => {
-    const rect = viewport.getRect();
+    const rect = getAdjustedRect(viewport.getRect(), stickyCandidates, topAnchorThresholdPx);
 
     if (!useHorizontalScroll && (lastPointerX < rect.left || lastPointerX > rect.right)) {
       animationId = null;
