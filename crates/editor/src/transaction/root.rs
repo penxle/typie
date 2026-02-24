@@ -19,7 +19,14 @@ impl Transaction {
     }
 
     pub fn set_default_attrs(&mut self, attrs: DefaultAttrs) -> Result<bool> {
+        let family = attrs.font_family().to_string();
+        let weight = attrs.font_weight();
         let _ = self.doc().update_default_attrs(attrs);
+        self.push_effect(Effect::FontDetected {
+            family,
+            weight,
+            codepoints: vec!['\u{200B}' as u32],
+        });
         self.push_effect(Effect::SettingsChanged);
         self.push_effect(Effect::DocChanged);
         Ok(true)

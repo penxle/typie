@@ -1,4 +1,4 @@
-use crate::model::{Annotation, Node, NodeId, Style};
+use crate::model::{Annotation, Attr, Node, NodeId, Style};
 use crate::runtime::{Effect, Runtime};
 use rustc_hash::{FxHashMap, FxHashSet};
 
@@ -29,6 +29,25 @@ impl Runtime {
         let Some(node_ref) = self.doc().node(node_id) else {
             return;
         };
+
+        if let Some(cascade_attrs) = node_ref.cascade_attrs() {
+            let mut family = None;
+            let mut weight = None;
+            for attr in &cascade_attrs {
+                match attr {
+                    Attr::Style(Style::FontFamily(f)) => family = Some(f.family.clone()),
+                    Attr::Style(Style::FontWeight(w)) => weight = Some(w.weight),
+                    _ => {}
+                }
+            }
+            if let Some(family) = family {
+                let weight = weight.unwrap_or_else(|| self.doc().default_attrs().font_weight());
+                fonts
+                    .entry((family, weight))
+                    .or_default()
+                    .insert('\u{200B}' as u32);
+            }
+        }
 
         if let Node::Text(text_node) = node_ref.node() {
             let defaults = self.doc().default_attrs();
@@ -91,6 +110,18 @@ impl Runtime {
         }
     }
 
+    #[cfg(test)]
+    fn collect_doc_fonts_as_map<I>(&self, node_ids: I) -> FxHashMap<(String, u16), FxHashSet<u32>>
+    where
+        I: IntoIterator<Item = NodeId>,
+    {
+        let mut fonts: FxHashMap<(String, u16), FxHashSet<u32>> = FxHashMap::default();
+        for node_id in node_ids {
+            self.collect_from_node(node_id, &mut fonts);
+        }
+        fonts
+    }
+
     pub(crate) fn handle_fonts_loaded(&mut self, family: String, weight: u16) -> Vec<Effect> {
         if let Some(nodes) = self.missing_font_nodes.remove(&(family.clone(), weight)) {
             if nodes.contains(&NodeId::ROOT) {
@@ -105,5 +136,144 @@ impl Runtime {
             }
         }
         Vec::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::model::*;
+
+    const ZWSP: u32 = '\u{200B}' as u32;
+
+    #[test]
+    fn collect_fonts_includes_root_cascade_attrs_font() {
+        let state = state! {
+            doc {
+                paragraph { text { "a" } }
+            }
+        };
+        let rt = crate::runtime::Runtime::new(800.0, 1.0, state);
+        let fonts = rt.collect_doc_fonts_as_map([NodeId::ROOT]);
+
+        let default_family = rt.doc().default_attrs().font_family().to_string();
+        let default_weight = rt.doc().default_attrs().font_weight();
+        let key = (default_family, default_weight);
+
+        assert!(
+            fonts.contains_key(&key),
+            "ROOT cascade_attrs font must be collected, got keys: {:?}",
+            fonts.keys().collect::<Vec<_>>()
+        );
+        assert!(
+            fonts[&key].contains(&ZWSP),
+            "cascade_attrs font codepoints must include ZWSP"
+        );
+    }
+
+    #[test]
+    fn collect_fonts_includes_paragraph_cascade_attrs_font() {
+        let mut p = id!();
+        let state = state! {
+            doc { @p paragraph {} }
+            selection { (p, 0) }
+        };
+        let state = transact!(state, |tr| {
+            tr.set_cascade_attrs(
+                p,
+                &Attr::from_styles(&[Style::FontFamily(FontFamilyStyle {
+                    family: "CustomFont".to_string(),
+                })]),
+            )
+            .unwrap();
+        });
+        let rt = crate::runtime::Runtime::new(800.0, 1.0, state);
+        let fonts = rt.collect_doc_fonts_as_map([NodeId::ROOT]);
+
+        assert!(
+            fonts.keys().any(|(f, _)| f == "CustomFont"),
+            "paragraph cascade_attrs font must be collected"
+        );
+    }
+
+    #[test]
+    fn collect_fonts_from_empty_paragraph_with_cascade_attrs() {
+        let mut p = id!();
+        let state = state! {
+            doc { @p paragraph {} }
+            selection { (p, 0) }
+        };
+        let state = transact!(state, |tr| {
+            tr.set_cascade_attrs(
+                p,
+                &Attr::from_styles(&[Style::FontFamily(FontFamilyStyle {
+                    family: "EmptyParaFont".to_string(),
+                })]),
+            )
+            .unwrap();
+        });
+        let rt = crate::runtime::Runtime::new(800.0, 1.0, state);
+
+        // Collect from the paragraph node directly (no text children)
+        let fonts = rt.collect_doc_fonts_as_map([p]);
+
+        assert!(
+            fonts.keys().any(|(f, _)| f == "EmptyParaFont"),
+            "empty paragraph's cascade_attrs font must be collected"
+        );
+    }
+
+    #[test]
+    fn collect_fonts_cascade_uses_default_weight_when_only_family_specified() {
+        let mut p = id!();
+        let state = state! {
+            doc { @p paragraph {} }
+            selection { (p, 0) }
+        };
+        let state = transact!(state, |tr| {
+            tr.set_cascade_attrs(
+                p,
+                &Attr::from_styles(&[Style::FontFamily(FontFamilyStyle {
+                    family: "WeightTest".to_string(),
+                })]),
+            )
+            .unwrap();
+        });
+        let rt = crate::runtime::Runtime::new(800.0, 1.0, state);
+        let default_weight = rt.doc().default_attrs().font_weight();
+        let fonts = rt.collect_doc_fonts_as_map([p]);
+
+        assert!(
+            fonts.contains_key(&("WeightTest".to_string(), default_weight)),
+            "cascade font without explicit weight must use default weight ({})",
+            default_weight
+        );
+    }
+
+    #[test]
+    fn collect_fonts_cascade_respects_explicit_weight() {
+        let mut p = id!();
+        let state = state! {
+            doc { @p paragraph {} }
+            selection { (p, 0) }
+        };
+        let state = transact!(state, |tr| {
+            tr.set_cascade_attrs(
+                p,
+                &Attr::from_styles(&[
+                    Style::FontFamily(FontFamilyStyle {
+                        family: "BoldFont".to_string(),
+                    }),
+                    Style::FontWeight(FontWeightStyle { weight: 700 }),
+                ]),
+            )
+            .unwrap();
+        });
+        let rt = crate::runtime::Runtime::new(800.0, 1.0, state);
+        let fonts = rt.collect_doc_fonts_as_map([p]);
+
+        assert!(
+            fonts.contains_key(&("BoldFont".to_string(), 700)),
+            "cascade font with explicit weight=700 must be collected with that weight"
+        );
     }
 }

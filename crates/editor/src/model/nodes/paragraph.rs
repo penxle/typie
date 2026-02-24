@@ -442,6 +442,10 @@ impl Layout for ParagraphNode {
         let char_to_byte = build_char_to_byte_offsets(&text);
 
         let line_height = self.line_height as f32 / 100.0;
+
+        // Resolve cascade font defaults (style_overrides → cascade_attrs chain → root default_attrs)
+        let (cascade_family, cascade_weight, cascade_font_size) = ctx.resolve_cascade_font();
+
         let layout = GLOBALS.with(|globals| {
             use parley::style::*;
 
@@ -452,6 +456,17 @@ impl Layout for ParagraphNode {
 
             let mut builder = lcx.ranged_builder(&mut fcx, &text, 1.0, false);
 
+            builder.push_default(StyleProperty::FontFamily(FontFamily::Single(
+                FontFamilyName::Named(cascade_family.clone().into()),
+            )));
+            builder.push_default(StyleProperty::FontWeight(FontWeight::new(
+                cascade_weight as f32,
+            )));
+            builder.push_default(StyleProperty::FontSize(convert_length(
+                cascade_font_size as f32 / 100.0,
+                LengthUnit::Pt,
+                LengthUnit::Px,
+            )));
             builder.push_default(StyleProperty::LineHeight(LineHeight::FontSizeRelative(
                 line_height,
             )));
@@ -640,6 +655,17 @@ impl Layout for ParagraphNode {
                 let ps_styles = pending_styles.map(|ps| &ps.styles[..]);
 
                 let mut dummy_builder = lcx.ranged_builder(&mut fcx, "\u{200B}", 1.0, false);
+                dummy_builder.push_default(StyleProperty::FontFamily(FontFamily::Single(
+                    FontFamilyName::Named(cascade_family.clone().into()),
+                )));
+                dummy_builder.push_default(StyleProperty::FontWeight(FontWeight::new(
+                    cascade_weight as f32,
+                )));
+                dummy_builder.push_default(StyleProperty::FontSize(convert_length(
+                    cascade_font_size as f32 / 100.0,
+                    LengthUnit::Pt,
+                    LengthUnit::Px,
+                )));
                 dummy_builder.push_default(StyleProperty::LineHeight(
                     LineHeight::FontSizeRelative(line_height),
                 ));

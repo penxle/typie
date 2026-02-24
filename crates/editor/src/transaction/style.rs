@@ -605,7 +605,7 @@ fn collect_style_codepoints_in_selection(
 }
 
 impl Transaction {
-    fn update_cascade_attrs_if_empty_textblock(&self) {
+    fn update_cascade_attrs_if_empty_textblock(&mut self) {
         let head = self.selection().head;
         if !self.cursor_has_text_segment(head.node_id, head.offset) {
             let _ = self
@@ -3969,7 +3969,7 @@ mod tests {
             doc { @p paragraph {} }
             selection { (p, 0) }
         };
-        let tr = Transaction::new(&state);
+        let mut tr = Transaction::new(&state);
         tr.set_cascade_attrs(
             p,
             &Attr::from_styles(&[Style::FontWeight(FontWeightStyle { weight: 700 })]),
@@ -3993,7 +3993,7 @@ mod tests {
             doc { @p paragraph {} }
             selection { (p, 0) }
         };
-        let tr = Transaction::new(&state);
+        let mut tr = Transaction::new(&state);
         tr.set_cascade_attrs(
             p,
             &Attr::from_styles(&[Style::FontWeight(FontWeightStyle { weight: 700 })]),
@@ -4037,7 +4037,7 @@ mod tests {
             doc { @p paragraph {} }
             selection { (p, 0) }
         };
-        let tr = Transaction::new(&state);
+        let mut tr = Transaction::new(&state);
 
         tr.set_cascade_attrs(
             p,
@@ -4072,7 +4072,7 @@ mod tests {
             doc { @p paragraph {} }
             selection { (p, 0) }
         };
-        let tr = Transaction::new(&state);
+        let mut tr = Transaction::new(&state);
         tr.set_cascade_attrs(
             p,
             &Attr::from_styles(&[Style::FontWeight(FontWeightStyle { weight: 700 })]),
@@ -4101,7 +4101,7 @@ mod tests {
             }
             selection { (p, 3) }
         };
-        let tr = Transaction::new(&state);
+        let mut tr = Transaction::new(&state);
         tr.set_cascade_attrs(p, &Attr::from_styles(&[Style::Bold(BoldStyle {})]))
             .unwrap();
 
@@ -4148,7 +4148,7 @@ mod tests {
             selection { (p, 0) }
         };
 
-        let tr = Transaction::new(&state);
+        let mut tr = Transaction::new(&state);
         let paragraph = tr.node(p).unwrap();
         let text_node_id = paragraph.first_child().unwrap().node_id();
 
@@ -5553,5 +5553,117 @@ mod tests {
         };
 
         assert_state_eq!(actual, expected);
+    }
+
+    #[test]
+    fn set_cascade_attrs_emits_font_detected_with_family() {
+        let mut p = id!();
+        let state = state! {
+            doc { @p paragraph {} }
+            selection { (p, 0) }
+        };
+        let (_, effects) = transact_with_effect!(state, |tr| {
+            tr.set_cascade_attrs(
+                p,
+                &Attr::from_styles(&[Style::FontFamily(FontFamilyStyle {
+                    family: "NewFont".to_string(),
+                })]),
+            )
+            .unwrap();
+        });
+
+        let font_detected = effects.iter().find(|e| {
+            matches!(e, crate::runtime::Effect::FontDetected { family, .. } if family == "NewFont")
+        });
+        assert!(
+            font_detected.is_some(),
+            "set_cascade_attrs with FontFamily must emit FontDetected"
+        );
+    }
+
+    #[test]
+    fn set_cascade_attrs_font_detected_includes_zwsp_codepoint() {
+        let mut p = id!();
+        let state = state! {
+            doc { @p paragraph {} }
+            selection { (p, 0) }
+        };
+        let (_, effects) = transact_with_effect!(state, |tr| {
+            tr.set_cascade_attrs(
+                p,
+                &Attr::from_styles(&[Style::FontFamily(FontFamilyStyle {
+                    family: "TestFont".to_string(),
+                })]),
+            )
+            .unwrap();
+        });
+
+        let codepoints = effects.iter().find_map(|e| match e {
+            crate::runtime::Effect::FontDetected {
+                family, codepoints, ..
+            } if family == "TestFont" => Some(codepoints),
+            _ => None,
+        });
+        assert!(
+            codepoints.is_some_and(|cps| cps.contains(&('\u{200B}' as u32))),
+            "FontDetected codepoints must include ZWSP"
+        );
+    }
+
+    #[test]
+    fn set_cascade_attrs_without_family_does_not_emit_font_detected() {
+        let mut p = id!();
+        let state = state! {
+            doc { @p paragraph {} }
+            selection { (p, 0) }
+        };
+        let (_, effects) = transact_with_effect!(state, |tr| {
+            tr.set_cascade_attrs(
+                p,
+                &Attr::from_styles(&[Style::FontWeight(FontWeightStyle { weight: 700 })]),
+            )
+            .unwrap();
+        });
+
+        let has_font_detected = effects
+            .iter()
+            .any(|e| matches!(e, crate::runtime::Effect::FontDetected { .. }));
+        assert!(
+            !has_font_detected,
+            "set_cascade_attrs without FontFamily must not emit FontDetected"
+        );
+    }
+
+    #[test]
+    fn set_default_attrs_emits_font_detected() {
+        let mut p = id!();
+        let state = state! {
+            doc { @p paragraph {} }
+            selection { (p, 0) }
+        };
+
+        let new_defaults = DefaultAttrs::from_attrs(&Attr::from_styles(&[
+            Style::FontFamily(FontFamilyStyle {
+                family: "NewDefault".to_string(),
+            }),
+            Style::FontWeight(FontWeightStyle { weight: 500 }),
+            Style::FontSize(FontSizeStyle { size: 1400 }),
+        ]));
+
+        let (_, effects) = transact_with_effect!(state, |tr| {
+            tr.set_default_attrs(new_defaults).unwrap();
+        });
+
+        let font_detected = effects.iter().find(|e| {
+            matches!(
+                e,
+                crate::runtime::Effect::FontDetected { family, weight, .. }
+                if family == "NewDefault" && *weight == 500
+            )
+        });
+        assert!(
+            font_detected.is_some(),
+            "set_default_attrs must emit FontDetected with new font family and weight"
+        );
     }
 }
