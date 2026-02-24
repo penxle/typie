@@ -310,14 +310,34 @@
   let fontUploadModalOpen = $state(false);
   let fontPlanUpgradeModalOpen = $state(false);
   let showFindReplace = $state(false);
-  let renderDebugEnabled = $state(false);
-  let layoutDebugEnabled = $state(false);
+  const debugStore = new LocalStore<{
+    renderDebugEnabled: boolean;
+    layoutDebugEnabled: boolean;
+  }>('typie:editor:debug', {
+    renderDebugEnabled: false,
+    layoutDebugEnabled: false,
+  });
+  let renderDebugEnabled = $state(debugStore.current.renderDebugEnabled);
+  let layoutDebugEnabled = $state(debugStore.current.layoutDebugEnabled);
   const showRenderDebugToggle = $derived(dev || $query.me.role === 'ADMIN' || $query.impersonation?.admin.role === 'ADMIN');
 
   const selectionsStore = new LocalStore<Record<string, { selection?: unknown; type?: string; element?: string; timestamp: number }>>(
     'typie:selections',
     {},
   );
+
+  $effect(() => {
+    if (!showRenderDebugToggle) {
+      return;
+    }
+
+    editor.setRenderDebug(renderDebugEnabled);
+    editor.setLayoutDebug(layoutDebugEnabled);
+    debugStore.current = {
+      renderDebugEnabled,
+      layoutDebugEnabled,
+    };
+  });
 
   let titleEl = $state<HTMLTextAreaElement>();
   let subtitleEl = $state<HTMLTextAreaElement>();
@@ -779,7 +799,6 @@
               aria-pressed={layoutDebugEnabled}
               onclick={() => {
                 layoutDebugEnabled = !layoutDebugEnabled;
-                editor.setLayoutDebug(layoutDebugEnabled);
               }}
               type="button"
               use:tooltip={{
@@ -812,7 +831,6 @@
               aria-pressed={renderDebugEnabled}
               onclick={() => {
                 renderDebugEnabled = !renderDebugEnabled;
-                editor.setRenderDebug(renderDebugEnabled);
               }}
               type="button"
               use:tooltip={{
