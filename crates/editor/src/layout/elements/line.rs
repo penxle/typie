@@ -1,13 +1,15 @@
 use crate::layout::cursor::{CursorNavigable, CursorNavigation, NavigationContext};
 use crate::model::{NodeId, PreeditDecor, SelectionDecor};
 use crate::state::{Position, Selection};
-use crate::types::{Affinity, Point, Rect, Size};
+use crate::types::{Affinity, PaintOverflow, Point, Rect, Size};
 use crate::utils::{
     build_char_to_byte_offsets, byte_to_char_offset_with_map, char_to_byte_offset,
     compute_grapheme_boundaries, compute_sentence_boundaries, compute_word_boundaries,
     resolve_explicit_break_line_end,
 };
 use rustc_hash::FxHashSet;
+use skrifa::FontRef;
+use skrifa::instance::{LocationRef, Size as SkriFaSize};
 use std::fmt;
 use std::rc::Rc;
 
@@ -149,6 +151,21 @@ impl LineElement {
             ruby_segments,
             background_segments,
             has_page_break,
+        }
+    }
+
+    const RUBY_TOP_OVERHANG: f32 = 16.0;
+
+    pub fn paint_overflow(&self) -> PaintOverflow {
+        let ruby_top = if self.ruby_segments.is_empty() {
+            0.0
+        } else {
+            Self::RUBY_TOP_OVERHANG
+        };
+        PaintOverflow {
+            top: ruby_top + self.metric.ascent_overflow,
+            bottom: self.metric.descent_overflow,
+            ..PaintOverflow::default()
         }
     }
 
@@ -1254,6 +1271,10 @@ pub struct LineMetric {
     pub clusters: Vec<ClusterMetric>,
     pub break_reason: parley::layout::BreakReason,
     pub grapheme_offsets: Vec<usize>,
+    /// How far glyph outlines may extend beyond the typographic ascent/descent.
+    /// Computed from the font's bounding box vs typographic metrics.
+    pub ascent_overflow: f32,
+    pub descent_overflow: f32,
 }
 
 pub fn build_metrics(
@@ -1291,6 +1312,8 @@ pub fn build_metrics(
         let mut advance_x = 0.0;
         let mut inline_prefix = 0.0;
         let mut seen_glyph = false;
+        let mut max_ascent_overflow = 0.0f32;
+        let mut max_descent_overflow = 0.0f32;
 
         let mut indices = FxHashSet::default();
 
@@ -1301,6 +1324,22 @@ pub fn build_metrics(
 
                     if !indices.insert(run.index()) {
                         continue;
+                    }
+
+                    let font = run.font();
+                    if let Ok(font_ref) = FontRef::from_index(font.data.as_ref(), font.index) {
+                        let sm = skrifa::metrics::Metrics::new(
+                            &font_ref,
+                            SkriFaSize::new(run.font_size()),
+                            LocationRef::default(),
+                        );
+                        if let Some(bounds) = sm.bounds {
+                            max_ascent_overflow =
+                                max_ascent_overflow.max((bounds.y_max - sm.ascent).max(0.0));
+                            // sm.descent is negative; bounds.y_min is negative
+                            max_descent_overflow =
+                                max_descent_overflow.max((-bounds.y_min + sm.descent).max(0.0));
+                        }
                     }
 
                     for cluster in run.clusters() {
@@ -1370,6 +1409,8 @@ pub fn build_metrics(
             clusters,
             break_reason: line.break_reason(),
             grapheme_offsets,
+            ascent_overflow: max_ascent_overflow,
+            descent_overflow: max_descent_overflow,
         });
     }
 

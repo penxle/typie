@@ -4,7 +4,7 @@ use crate::layout::elements::{Wrapper, *};
 use crate::layout::interactive::Interactive;
 use crate::model::{NodeId, TABLE_BORDER_WIDTH};
 use crate::render::{Outline, Render};
-use crate::types::{BoxConstraints, Point, PointerStyle, Size};
+use crate::types::{BoxConstraints, PaintOverflow, Point, PointerStyle, Size};
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 
@@ -87,6 +87,13 @@ impl Element {
             Element::FoldContent(e) => e.size,
             Element::TableBorder(e) => e.size,
             Element::TableCell(e) => e.size,
+        }
+    }
+
+    pub fn paint_overflow(&self) -> PaintOverflow {
+        match self {
+            Element::Line(e) => e.paint_overflow(),
+            _ => PaintOverflow::default(),
         }
     }
 

@@ -546,6 +546,8 @@ mod tests {
                 clusters: vec![],
                 break_reason: parley::layout::BreakReason::None,
                 grapheme_offsets: vec![],
+                ascent_overflow: 0.0,
+                descent_overflow: 0.0,
             },
             None,
             false,

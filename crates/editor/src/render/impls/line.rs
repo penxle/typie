@@ -603,6 +603,8 @@ mod tests {
                 }],
                 break_reason: parley::layout::BreakReason::None,
                 grapheme_offsets: vec![0, 2],
+                ascent_overflow: 0.0,
+                descent_overflow: 0.0,
             },
             Some(crate::model::PreeditDecor {
                 node_id: block_id,
@@ -923,6 +925,8 @@ mod tests {
             clusters: vec![],
             break_reason: parley::layout::BreakReason::None,
             grapheme_offsets: vec![],
+            ascent_overflow: 0.0,
+            descent_overflow: 0.0,
         };
 
         let line = LineElement::build(
