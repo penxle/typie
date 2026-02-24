@@ -2,6 +2,7 @@ package co.typie.editorinput
 
 import android.content.Context
 import android.text.InputType
+import android.text.Selection
 import android.view.KeyCharacterMap
 import android.view.KeyEvent
 import android.view.View
@@ -72,19 +73,8 @@ class EditorInputNativeView(
   private var lastDeleteTime = 0L
   private var batchEditDepth = 0
   private var pendingRestartInput = false
-  private var restartOnIdle = false
-
-  private val restartRunnable = Runnable {
-    if (restartOnIdle && !isComposing && batchEditDepth == 0) {
-      inputMethodManager.restartInput(this)
-    }
-    restartOnIdle = false
-  }
-
-  private fun scheduleRestartOnIdle() {
-    restartOnIdle = true
-    postOnAnimation(restartRunnable)
-  }
+  private var composingRegionLength = 0
+  private var lastCommitWasAutocorrect = false
 
   private val inputMethodManager: InputMethodManager
     get() = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
@@ -102,8 +92,8 @@ class EditorInputNativeView(
       isComposing = false
       composingText = ""
       channel.invokeMethod("unmarkText", emptyMap<String, Any>())
-      scheduleRestartOnIdle()
     }
+    composingRegionLength = 0
   }
 
   private fun cancelComposingState() {
@@ -112,11 +102,17 @@ class EditorInputNativeView(
       composingText = ""
       channel.invokeMethod("cancelMarkedText", emptyMap<String, Any>())
     }
+    composingRegionLength = 0
+  }
+
+  private fun consumeComposingRegion(): Boolean {
+    if (composingRegionLength <= 0) return false
+    repeat(composingRegionLength) { performDelete() }
+    composingRegionLength = 0
+    return true
   }
 
   private fun scheduleRestartInput() {
-    restartOnIdle = false
-    removeCallbacks(restartRunnable)
     if (batchEditDepth > 0) {
       pendingRestartInput = true
     } else {
@@ -181,11 +177,7 @@ class EditorInputNativeView(
     if (event.deviceId != KeyCharacterMap.VIRTUAL_KEYBOARD) {
       when (keyCode) {
         KeyEvent.KEYCODE_DEL -> {
-          if (isComposing) {
-            cancelComposingState()
-          } else {
-            performDelete()
-          }
+          if (isComposing) cancelComposingState() else performDelete()
           return true
         }
         KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> {
@@ -202,86 +194,123 @@ class EditorInputNativeView(
     outAttrs.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
     outAttrs.imeOptions = EditorInfo.IME_FLAG_NO_FULLSCREEN or EditorInfo.IME_FLAG_NO_ENTER_ACTION or EditorInfo.IME_ACTION_NONE
 
-    return object : BaseInputConnection(this, false) {
+    return object : BaseInputConnection(this, true) {
+
+      private fun notifyCursorUpdate() {
+        val editable = getEditable() ?: return
+        inputMethodManager.updateSelection(
+          this@EditorInputNativeView,
+          Selection.getSelectionStart(editable),
+          Selection.getSelectionEnd(editable),
+          BaseInputConnection.getComposingSpanStart(editable),
+          BaseInputConnection.getComposingSpanEnd(editable)
+        )
+      }
+
+      private fun handleNewline() {
+        commitComposingState()
+        super.finishComposingText()
+        channel.invokeMethod("performAction", mapOf("action" to "newline"))
+        super.commitText("\n", 1)
+        notifyCursorUpdate()
+      }
+
       override fun beginBatchEdit(): Boolean {
         batchEditDepth++
-        return true
+        return super.beginBatchEdit()
       }
 
       override fun endBatchEdit(): Boolean {
         batchEditDepth--
         if (batchEditDepth == 0 && pendingRestartInput) {
           pendingRestartInput = false
-          restartOnIdle = false
-          removeCallbacks(restartRunnable)
           if (!isComposing) {
             inputMethodManager.restartInput(this@EditorInputNativeView)
           }
         }
-        return true
+        return super.endBatchEdit()
       }
 
       override fun commitText(text: CharSequence?, newCursorPosition: Int): Boolean {
         val str = text?.toString().orEmpty()
 
+        if (consumeComposingRegion()) {
+          if (str.isNotEmpty()) insertTextOrNewline(str)
+          super.commitText(text, newCursorPosition)
+          notifyCursorUpdate()
+          return true
+        }
+
+        val skipCacheInvalidation: Boolean
         if (isComposing) {
+          skipCacheInvalidation = (str != composingText)
+          lastCommitWasAutocorrect = skipCacheInvalidation
           isComposing = false
           composingText = ""
           channel.invokeMethod("cancelMarkedText", emptyMap<String, Any>())
-        }
-
-        if (str.isNotEmpty()) {
-          insertTextOrNewline(str)
-        }
-
-        if (batchEditDepth > 0) {
-          pendingRestartInput = true
         } else {
-          scheduleRestartOnIdle()
+          skipCacheInvalidation = lastCommitWasAutocorrect
+          lastCommitWasAutocorrect = false
         }
 
+        if (str.isNotEmpty()) insertTextOrNewline(str)
+        super.commitText(text, newCursorPosition)
+
+        if (!skipCacheInvalidation) {
+          inputMethodManager.updateSelection(
+            this@EditorInputNativeView, 0, 0, -1, -1)
+        }
+        notifyCursorUpdate()
         return true
       }
 
       override fun setComposingText(text: CharSequence?, newCursorPosition: Int): Boolean {
         val str = text?.toString().orEmpty()
-        restartOnIdle = false
-        removeCallbacks(restartRunnable)
+
+        if (consumeComposingRegion()) {
+          if (str.isNotEmpty()) {
+            isComposing = true
+            composingText = str
+            channel.invokeMethod("setMarkedText", mapOf("text" to str))
+          }
+          super.setComposingText(text, newCursorPosition)
+          notifyCursorUpdate()
+          return true
+        }
 
         if (str.isEmpty()) {
-          if (isComposing) {
-            isComposing = false
-            composingText = ""
-            channel.invokeMethod("cancelMarkedText", emptyMap<String, Any>())
-          }
+          cancelComposingState()
         } else {
           isComposing = true
           composingText = str
           channel.invokeMethod("setMarkedText", mapOf("text" to str))
         }
+
+        super.setComposingText(text, newCursorPosition)
+        notifyCursorUpdate()
         return true
       }
 
       override fun finishComposingText(): Boolean {
+        composingRegionLength = 0
         if (isComposing) {
-          isComposing = false
-          composingText = ""
-          channel.invokeMethod("unmarkText", emptyMap<String, Any>())
+          commitComposingState()
           scheduleRestartInput()
         }
+        super.finishComposingText()
+        notifyCursorUpdate()
         return true
       }
 
       override fun deleteSurroundingText(beforeLength: Int, afterLength: Int): Boolean {
         if (isComposing) {
-          isComposing = false
-          composingText = ""
-          channel.invokeMethod("cancelMarkedText", emptyMap<String, Any>())
+          cancelComposingState()
+          repeat(beforeLength) { performDelete() }
         } else if (beforeLength > 0) {
-          repeat(beforeLength) {
-            performDelete()
-          }
+          repeat(beforeLength) { performDelete() }
         }
+        super.deleteSurroundingText(beforeLength, afterLength)
+        notifyCursorUpdate()
         return true
       }
 
@@ -289,60 +318,50 @@ class EditorInputNativeView(
         return deleteSurroundingText(beforeLength, afterLength)
       }
 
-      override fun getTextBeforeCursor(maxChars: Int, flags: Int): CharSequence = " "
-
-      override fun getTextAfterCursor(maxChars: Int, flags: Int): CharSequence = " "
-
-      override fun getSelectedText(flags: Int): CharSequence? = null
+      override fun setComposingRegion(start: Int, end: Int): Boolean {
+        composingRegionLength = kotlin.math.abs(end - start)
+        super.setComposingRegion(start, end)
+        return true
+      }
 
       override fun sendKeyEvent(event: KeyEvent): Boolean {
-        if (event.action != KeyEvent.ACTION_DOWN) {
-          return super.sendKeyEvent(event)
+        if (event.action != KeyEvent.ACTION_DOWN) return true
+
+        DPAD_ACTIONS[event.keyCode]?.let { action ->
+          commitComposingState()
+          super.finishComposingText()
+          channel.invokeMethod("shortcut", mapOf("action" to action))
+          notifyCursorUpdate()
+          return true
         }
 
         return when (event.keyCode) {
           KeyEvent.KEYCODE_DEL -> {
             if (isComposing) {
               cancelComposingState()
+              super.commitText("", 1)
             } else {
               if (event.repeatCount > 0) {
                 val now = System.currentTimeMillis()
-                if (now - lastDeleteTime < 300) {
-                  return true
-                }
+                if (now - lastDeleteTime < 300) return true
                 lastDeleteTime = now
               }
               performDelete()
+              super.deleteSurroundingText(1, 0)
             }
+            notifyCursorUpdate()
             true
           }
           KeyEvent.KEYCODE_ENTER -> {
-            performNewline(event.isShiftPressed)
-            true
-          }
-          KeyEvent.KEYCODE_DPAD_LEFT -> {
-            commitComposingState()
-            channel.invokeMethod("shortcut", mapOf("action" to "navigateLeft"))
-            true
-          }
-          KeyEvent.KEYCODE_DPAD_RIGHT -> {
-            commitComposingState()
-            channel.invokeMethod("shortcut", mapOf("action" to "navigateRight"))
-            true
-          }
-          KeyEvent.KEYCODE_DPAD_UP -> {
-            commitComposingState()
-            channel.invokeMethod("shortcut", mapOf("action" to "navigateUp"))
-            true
-          }
-          KeyEvent.KEYCODE_DPAD_DOWN -> {
-            commitComposingState()
-            channel.invokeMethod("shortcut", mapOf("action" to "navigateDown"))
+            handleNewline()
             true
           }
           KeyEvent.KEYCODE_SPACE -> {
             commitComposingState()
+            super.finishComposingText()
             channel.invokeMethod("insertText", mapOf("text" to " "))
+            super.commitText(" ", 1)
+            notifyCursorUpdate()
             true
           }
           else -> super.sendKeyEvent(event)
@@ -350,8 +369,7 @@ class EditorInputNativeView(
       }
 
       override fun performEditorAction(actionCode: Int): Boolean {
-        commitComposingState()
-        channel.invokeMethod("performAction", mapOf("action" to "newline"))
+        handleNewline()
         return true
       }
     }
@@ -364,6 +382,13 @@ class EditorInputNativeView(
     private const val META_SHIFT = KeyEvent.META_SHIFT_ON
     private const val META_ALT = KeyEvent.META_ALT_ON
     private const val META_CTRL_SHIFT = META_CTRL or META_SHIFT
+
+    private val DPAD_ACTIONS = mapOf(
+      KeyEvent.KEYCODE_DPAD_LEFT to "navigateLeft",
+      KeyEvent.KEYCODE_DPAD_RIGHT to "navigateRight",
+      KeyEvent.KEYCODE_DPAD_UP to "navigateUp",
+      KeyEvent.KEYCODE_DPAD_DOWN to "navigateDown",
+    )
 
     private val SHORTCUTS = listOf(
       Shortcut(KeyEvent.KEYCODE_A, META_CTRL, "selectAll"),
