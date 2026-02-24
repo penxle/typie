@@ -219,6 +219,10 @@ impl Transaction {
         };
 
         if child.spec().selectable {
+            if self.state.read_only {
+                return;
+            }
+
             let anchor = Position::new(pos.node_id, pos.offset, Affinity::Downstream);
             let head = Position::new(pos.node_id, pos.offset + 1, Affinity::Downstream);
             self.state.selection = Selection::new(anchor, head);
@@ -707,6 +711,29 @@ mod tests {
         };
 
         assert_state_eq!(actual, expected);
+    }
+
+    #[test]
+    fn normalize_selection_keeps_collapsed_selectable_position_in_read_only_mode() {
+        let doc = doc! {
+            image()
+            paragraph { text { "hello" } }
+        };
+
+        let mut initial = State::new(
+            doc,
+            Selection::collapsed(Position::new(NodeId::ROOT, 0, Affinity::Downstream)),
+        );
+        initial.read_only = true;
+
+        let actual = transact!(initial, |tr| {
+            tr.push_effect(Effect::StructureChanged);
+        });
+
+        assert_eq!(
+            actual.selection,
+            Selection::collapsed(Position::new(NodeId::ROOT, 0, Affinity::Downstream))
+        );
     }
 
     #[test]

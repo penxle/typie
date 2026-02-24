@@ -191,6 +191,7 @@ impl Runtime {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::layout::elements::ExternalElementData;
     use crate::model::NodeId;
     use crate::runtime::message::PointerButton;
     use crate::runtime::{DropIndicator, Message};
@@ -629,6 +630,76 @@ mod tests {
             selection { (NodeId::ROOT, 1) -> (NodeId::ROOT, 2, Affinity::Upstream) }
         };
         assert_state_eq!(rt.state(), expected);
+    }
+
+    #[test]
+    fn test_click_selectable_node_collapses_to_anchor_in_read_only_mode() {
+        let mut p1 = id!();
+        let mut img = id!();
+        let mut p2 = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p1 paragraph { text { "Before" } }
+                @img image (id: Some("test-image-id".to_string()),) {}
+                @p2 paragraph { text { "After" } }
+            }
+            selection { (p1, 0) }
+        };
+        rt.layout();
+        rt.set_read_only(true);
+
+        let (img_x, img_y) = {
+            let ctx = NavigationContext::new(&rt.state.doc);
+            let bounds = crate::layout::query::find_node_bounds(ctx.doc, rt.pages(), img)
+                .expect("Image bounds should exist");
+            (
+                bounds.x + bounds.width / 2.0,
+                bounds.y + bounds.height / 2.0,
+            )
+        };
+
+        rt.update(Message::PointerDown {
+            page_idx: 0,
+            x: img_x,
+            y: img_y,
+            click_count: 1,
+            button: PointerButton::Primary,
+            modifier: Modifier::default(),
+        });
+
+        rt.update(Message::PointerUp {
+            page_idx: 0,
+            x: img_x,
+            y: img_y,
+            button: PointerButton::Primary,
+            modifier: Modifier::default(),
+        });
+
+        assert_eq!(
+            rt.state().selection,
+            Selection::collapsed(Position::new(NodeId::ROOT, 1, Affinity::Downstream))
+        );
+
+        let external_elements = rt.build_external_elements();
+        let image_element = external_elements
+            .iter()
+            .find(|el| {
+                matches!(
+                    &el.data,
+                    ExternalElementData::Image {
+                        id: Some(id),
+                        ..
+                    } if id == "test-image-id"
+                )
+            })
+            .expect("image external element should exist");
+
+        assert!(
+            !image_element.is_selected,
+            "read-only collapsed selection should not mark selectable node as selected"
+        );
     }
 
     #[test]

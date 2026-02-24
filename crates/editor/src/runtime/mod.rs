@@ -654,6 +654,11 @@ impl Runtime {
 
     fn selection_snapshot(&mut self) -> Option<SelectionSnapshot> {
         let selection = &self.state.selection;
+        if selection.is_collapsed() {
+            self.selection_cache = None;
+            return None;
+        }
+
         let Ok((from, to)) = selection.as_sorted(self.doc()) else {
             self.selection_cache = None;
             return None;

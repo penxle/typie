@@ -125,11 +125,12 @@ impl Runtime {
         hit_selection: Selection,
     ) -> Vec<Effect> {
         let context = self.determine_press_context(position, &hit_selection);
-
-        let is_in_selection = match context {
-            PressContext::InSelection => true,
-            PressContext::OnSelectable(_) => self.is_position_in_selection(position),
-            _ => false,
+        let should_update_selection_on_down = match context {
+            PressContext::InSelection => false,
+            PressContext::OnSelectable(_) => {
+                !self.is_read_only() && !self.is_position_in_selection(position)
+            }
+            _ => true,
         };
 
         self.set_pointer_mode(PointerMode::Pressed {
@@ -140,14 +141,14 @@ impl Runtime {
             context,
         });
 
-        if is_in_selection {
-            vec![]
-        } else {
+        if should_update_selection_on_down {
             self.transact(move |tr| {
                 tr.set_selection(hit_selection);
                 tr.set_preferred_x(None);
                 Ok(true)
             })
+        } else {
+            vec![]
         }
     }
 
@@ -345,7 +346,12 @@ impl Runtime {
                     }));
                 }
                 PressContext::OnSelectable(selection) => {
-                    let selection = *selection;
+                    let selection = if self.is_read_only() {
+                        Selection::collapsed(selection.anchor)
+                    } else {
+                        *selection
+                    };
+
                     effects.extend(self.transact(move |tr| {
                         tr.set_selection(selection);
                         tr.set_preferred_x(None);

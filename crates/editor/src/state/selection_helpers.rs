@@ -717,6 +717,10 @@ pub fn collect_selected_block_ids(
     selection: &Selection,
     cell_selection: &StructureSelectionInfo,
 ) -> Vec<NodeId> {
+    if selection.is_collapsed() {
+        return Vec::new();
+    }
+
     let Ok((from, to)) = selection.as_sorted(doc) else {
         return Vec::new();
     };
@@ -1198,6 +1202,20 @@ mod tests {
             }
             _ => panic!("Expected FullTables selection, got {:?}", cell_selection),
         }
+    }
+
+    #[test]
+    fn test_collect_selected_block_ids_returns_empty_for_collapsed_selection() {
+        let doc = doc! {
+            image()
+            paragraph { text { "hello" } }
+        };
+
+        let selection = Selection::collapsed(Position::new(NodeId::ROOT, 0, Affinity::Downstream));
+        let structure_selection = compute_structure_selection(&doc, &selection);
+        let block_ids = collect_selected_block_ids(&doc, &selection, &structure_selection);
+
+        assert!(block_ids.is_empty());
     }
 
     #[test]
