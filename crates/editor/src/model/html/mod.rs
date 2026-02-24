@@ -24,6 +24,7 @@ impl Fragment {
         let ctx = HtmlContext::new(self);
         let mut b = HtmlBuilder::new();
 
+        b.open("meta").attr("charset", "utf-8").void();
         b.open("meta")
             .attr("name", "typ-frag")
             .data("open-start", self.open_start())
