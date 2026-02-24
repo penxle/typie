@@ -2,7 +2,6 @@
   import { css } from '@typie/styled-system/css';
   import { CROP_MARKER_SIZE } from '$lib/editor/constants';
   import { getEditorContext } from '$lib/editor/context.svelte';
-  import { WebGLRenderer } from '$lib/editor/webgl';
   import ExternalArchived from '../external/ExternalArchived.svelte';
   import ExternalEmbed from '../external/ExternalEmbed.svelte';
   import ExternalFile from '../external/ExternalFile.svelte';
@@ -27,21 +26,17 @@
   const externalElements = $derived(editor.externalElements.filter((el) => el.pageIdx === page));
   const isPaginated = $derived(layoutMode.type === 'paginated');
 
-  let renderer = $state<WebGLRenderer | null>(null);
+  let ctx2d = $state<CanvasRenderingContext2D | null>(null);
   let visible = $state(false);
 
   function render() {
-    if (!renderer) return;
-
-    const info = editor.renderPage(page);
-    if (!info) return;
-
-    renderer.render(info.ptr, info.len, info.width, info.height);
+    if (!ctx2d) return;
+    editor.renderPageToCanvas(page, ctx2d);
   }
 
   $effect(() => {
     void editor.renderVersion;
-    if (!visible || !renderer) return;
+    if (!visible || !ctx2d) return;
     render();
   });
 
@@ -119,15 +114,9 @@
         style="image-rendering: pixelated;"
         class={css({ height: 'full', width: 'full' })}
         {@attach (canvas) => {
-          try {
-            renderer = new WebGLRenderer(canvas);
-          } catch (err) {
-            console.error('WebGL init failed:', err);
-          }
-
+          ctx2d = canvas.getContext('2d');
           return () => {
-            renderer?.dispose();
-            renderer = null;
+            ctx2d = null;
           };
         }}
       ></canvas>
