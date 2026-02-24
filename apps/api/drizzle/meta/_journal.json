@@ -421,6 +421,13 @@
       "when": 1771732777513,
       "tag": "0059_rapid_maginty",
       "breakpoints": false
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1771901074820,
+      "tag": "0060_blob-size-bigint",
+      "breakpoints": false
     }
   ]
 }

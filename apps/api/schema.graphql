@@ -39,11 +39,13 @@ input AuthorizeSingleSignOnInput {
   referralCode: String
 }
 
+scalar BigInt
+
 scalar Binary
 
 interface Blob {
   id: ID!
-  size: Int!
+  size: BigInt!
 }
 
 type CharacterCountChange {
@@ -468,7 +470,7 @@ type ExportPostAsPdfResult {
 type File implements Blob {
   id: ID!
   name: String!
-  size: Int!
+  size: BigInt!
   url: String!
 }
 
@@ -498,7 +500,7 @@ type Font implements Blob {
   fullName: String
   id: ID!
   name: String! @deprecated(reason: "Replaced by `fullName`")
-  size: Int!
+  size: BigInt!
   subfamilyDisplayName: String
   url: String!
   weight: Int!
@@ -605,7 +607,7 @@ type Image implements Blob {
   id: ID!
   placeholder: String!
   ratio: Float!
-  size: Int!
+  size: BigInt!
   url: String!
   width: Int!
 }
@@ -1171,7 +1173,7 @@ enum SiteState {
 union SiteUpdateStreamPayload = Entity | Site
 
 type SiteUsage {
-  totalBlobSize: Int!
+  totalBlobSize: BigInt!
   totalCharacterCount: Int!
 }
 
@@ -1507,7 +1509,7 @@ type UserTrial {
 }
 
 type UserUsage {
-  totalBlobSize: Int!
+  totalBlobSize: BigInt!
   totalCharacterCount: Int!
 }
 

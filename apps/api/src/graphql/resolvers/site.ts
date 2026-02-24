@@ -143,7 +143,7 @@ Site.implement({
       type: t.builder.simpleObject('SiteUsage', {
         fields: (t) => ({
           totalCharacterCount: t.int(),
-          totalBlobSize: t.int(),
+          totalBlobSize: t.field({ type: 'BigInt' }),
         }),
       }),
       resolve: async (self) => {

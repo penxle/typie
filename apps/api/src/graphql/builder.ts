@@ -21,6 +21,7 @@ export const builder = new SchemaBuilder<{
   DefaultInputFieldRequiredness: true;
   DefaultFieldNullability: false;
   Scalars: {
+    BigInt: { Input: number; Output: number };
     Binary: { Input: Uint8Array; Output: Uint8Array };
     DateTime: { Input: dayjs.Dayjs; Output: dayjs.Dayjs };
     ID: { Input: string; Output: string };
@@ -64,6 +65,17 @@ builder.mutationType();
 builder.subscriptionType();
 
 builder.addScalarType('JSON', GraphQLJSON);
+
+builder.scalarType('BigInt', {
+  serialize: (value) => value,
+  parseValue: (value) => {
+    if (typeof value === 'number') {
+      return value;
+    }
+
+    throw new Error('Invalid BigInt value');
+  },
+});
 
 builder.scalarType('Binary', {
   serialize: (value) => value.toBase64(),

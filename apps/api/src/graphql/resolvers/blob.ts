@@ -94,7 +94,7 @@ function convertToMp4(inputPath: string, outputPath: string): Promise<void> {
 Blob.implement({
   fields: (t) => ({
     id: t.exposeID('id'),
-    size: t.exposeInt('size'),
+    size: t.expose('size', { type: 'BigInt' }),
   }),
 });
 
