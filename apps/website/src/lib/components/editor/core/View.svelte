@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { CONTINUOUS_VIEW_PADDING, IS_MAC, PAGE_GAP, PAGINATED_VIEW_PADDING } from '$lib/editor/constants';
   import { getEditorContext } from '$lib/editor/context.svelte';
@@ -12,6 +13,7 @@
   import Page from './Page.svelte';
   import RemarkOverlayLayer from './RemarkOverlayLayer.svelte';
   import RepasteAsText from './RepasteAsText.svelte';
+  import SelectionHandles from './SelectionHandles.svelte';
 
   type Props = {
     defaultPaddingBottom?: number;
@@ -73,6 +75,10 @@
     editor.handlePointerUp(e);
   };
 
+  const handlePointerCancel = (e: PointerEvent) => {
+    editor.handlePointerCancel(e);
+  };
+
   const handleContextMenu = (e: MouseEvent) => {
     if (!extensionAreaEl?.contains(e.target as Node)) {
       return;
@@ -112,6 +118,7 @@
 
 <svelte:window
   oncontextmenu={handleContextMenu}
+  onpointercancel={handlePointerCancel}
   onpointerdown={handlePointerDown}
   onpointermove={handlePointerMove}
   onpointerup={handlePointerUp}
@@ -122,12 +129,19 @@
   style:padding-left="{viewPadding}px"
   style:padding-right="{viewPadding}px"
   style:gap={isPaginated ? `${PAGE_GAP}px` : '0'}
-  class={flex({
-    position: 'relative',
-    direction: 'column',
-    align: 'center',
-    grow: '1',
-  })}
+  class={css(
+    flex.raw({
+      position: 'relative',
+      direction: 'column',
+      align: 'center',
+      grow: '1',
+    }),
+    editor.readOnly && {
+      userSelect: 'none',
+      WebkitUserSelect: 'none',
+      WebkitTouchCallout: 'none',
+    },
+  )}
   aria-label="Editor"
   aria-multiline="true"
   draggable={editor.isDraggable}
@@ -183,6 +197,9 @@
     <Page page={i} bind:containerEl={containerEls[i]} />
   {/each}
   <DocumentOverlayLayer />
+  {#if editor.readOnly}
+    <SelectionHandles />
+  {/if}
   {#if !editor.readOnly}
     <RemarkOverlayLayer />
   {/if}

@@ -26,6 +26,9 @@
   const externalElements = $derived(editor.externalElements.filter((el) => el.pageIdx === page));
   const isPaginated = $derived(layoutMode.type === 'paginated');
 
+  // NOTE: iOS에서 캔버스 롱프레스 시 텍스트 인식해서 선택되는 동작을 막음
+  const disableCanvasPointer = $derived(editor.readOnly); // TODO: 항상 disable 해도 안전한지 확인하기
+
   let ctx2d = $state<CanvasRenderingContext2D | null>(null);
   let visible = $state(false);
 
@@ -112,6 +115,7 @@
     {#if visible}
       <canvas
         style="image-rendering: pixelated;"
+        style:pointer-events={disableCanvasPointer ? 'none' : 'auto'}
         class={css({ height: 'full', width: 'full' })}
         {@attach (canvas) => {
           ctx2d = canvas.getContext('2d');

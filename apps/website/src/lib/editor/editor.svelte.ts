@@ -29,8 +29,10 @@ import {
   SELECTION_EXPAND_ALL,
   SlateReader,
 } from './slate';
+import { TouchGestureController } from './touch-gesture.svelte';
 import { calculateImageDisplaySize, calculateRelativePosition, findNearestPageCoordinate, getPageElement, idleCallback } from './utils';
 import { WebGLRenderer } from './webgl';
+import type { Placement } from '@floating-ui/dom';
 import type { DocExportMode, Editor as WasmEditor, Modifier, PointerButton } from '@typie/editor';
 import type { ScrollViewport } from '@typie/ui/utils';
 import type { FontFamily } from './fonts';
@@ -189,6 +191,8 @@ export class Editor {
     x: 0,
     y: 0,
     isOpen: false,
+    source: 'mouse' as 'mouse' | 'touch',
+    placement: 'bottom-start' as Placement,
   });
 
   isFocused = $state(false);
@@ -229,6 +233,7 @@ export class Editor {
   scrollViewport = $state<ScrollViewport | null>(null);
 
   pageContainerEls = $state<HTMLDivElement[]>([]);
+  touchGesture = new TouchGestureController(this);
 
   #lastClickTime = 0;
   #lastClickPos: { x: number; y: number } | null = null;
@@ -785,12 +790,48 @@ export class Editor {
     };
   }
 
+  resolvePointerCoordinateFromClient(clientX: number, clientY: number): { pageIdx: number; x: number; y: number } | null {
+    const pointEl = document.elementFromPoint(clientX, clientY);
+    const targetEl = pointEl instanceof HTMLElement ? pointEl : this.extensionArea.containerEl;
+    if (!targetEl) return null;
+
+    const syntheticEvent = { clientX, clientY, target: targetEl } as unknown as MouseEvent;
+    const resolved = this.#resolvePointerCoordinate(syntheticEvent, targetEl);
+    if (!resolved) return null;
+
+    return {
+      pageIdx: resolved.pageIdx,
+      x: resolved.x,
+      y: resolved.y,
+    };
+  }
+
+  openContextMenu(options: { x: number; y: number; source: 'mouse' | 'touch'; placement: Placement }): void {
+    this.contextMenu.x = options.x;
+    this.contextMenu.y = options.y;
+    this.contextMenu.source = options.source;
+    this.contextMenu.placement = options.placement;
+    this.contextMenu.isOpen = true;
+  }
+
+  runAfterSettled(task: () => void): void {
+    this.#wakeUp();
+    void this.settled().then(task);
+  }
+
   handlePointerDown(e: PointerEvent): void {
     if (!(e.target instanceof HTMLElement)) return;
 
     if (e.target.closest('[data-pointer-capture]')) return;
 
-    const isReadOnlyTouch = this.readOnly && e.pointerType === 'touch';
+    const isReadOnlyTouch = this.readOnly && this.#isTouchLikePointer(e);
+
+    if (isReadOnlyTouch) {
+      const resolved = this.resolvePointerCoordinateFromClient(e.clientX, e.clientY);
+      this.isDraggable = resolved ? this.isSelectionHit(resolved.pageIdx, resolved.x, resolved.y) : false;
+      this.touchGesture.handlePointerDown(e, resolved);
+      return;
+    }
 
     const resolved = this.#resolvePointerCoordinate(e, e.target);
     if (!resolved) {
@@ -803,16 +844,16 @@ export class Editor {
     const rect = pageElement.getBoundingClientRect();
     const relX = e.clientX - rect.left;
     const relY = e.clientY - rect.top;
-    this.isDraggable = !this.readOnly && this.isSelectionHit(pageIdx, relX, relY);
+    this.isDraggable = this.isSelectionHit(pageIdx, relX, relY);
 
     if (e.button === 0) {
-      if (!this.isDraggable && !isReadOnlyTouch) {
+      if (!this.isDraggable) {
         e.target.setPointerCapture(e.pointerId);
       }
       this.pointer.isPressed = true;
     }
 
-    const count = e.button === 0 && !isReadOnlyTouch ? this.#getClickCount(e.clientX, e.clientY, e.timeStamp) : 1;
+    const count = e.button === 0 ? this.#getClickCount(e.clientX, e.clientY, e.timeStamp) : 1;
 
     this.dispatch({
       type: 'pointerDown',
@@ -826,7 +867,10 @@ export class Editor {
   }
 
   handlePointerMove(e: PointerEvent): void {
-    if (this.readOnly && e.pointerType === 'touch') return;
+    if (this.readOnly && this.#isTouchLikePointer(e)) {
+      this.touchGesture.handlePointerMove(e);
+      return;
+    }
 
     const targetEl = document.elementFromPoint(e.clientX, e.clientY);
     if (!(targetEl instanceof HTMLElement)) return;
@@ -876,6 +920,14 @@ export class Editor {
   handlePointerUp(e: PointerEvent): void {
     this.isDraggable = false;
 
+    const isReadOnlyTouch = this.readOnly && this.#isTouchLikePointer(e);
+    if (isReadOnlyTouch) {
+      const resolved = this.resolvePointerCoordinateFromClient(e.clientX, e.clientY);
+      this.touchGesture.handlePointerUp(e, resolved);
+      this.pointer.isPressed = false;
+      return;
+    }
+
     if (!(e.target instanceof HTMLElement)) return;
 
     if (e.target.hasPointerCapture(e.pointerId)) {
@@ -910,7 +962,21 @@ export class Editor {
     this.pointer.isPressed = false;
   }
 
+  handlePointerCancel(e: PointerEvent): void {
+    if (this.readOnly && this.#isTouchLikePointer(e)) {
+      this.touchGesture.handlePointerCancel(e);
+    }
+
+    this.pointer.isPressed = false;
+    this.isDraggable = false;
+  }
+
   handleContextMenu(e: MouseEvent): void {
+    if (this.readOnly && this.touchGesture.shouldSuppressNativeContextMenu()) {
+      e.preventDefault();
+      return;
+    }
+
     if (!(e.target instanceof HTMLElement)) return;
 
     const resolved = this.#resolvePointerCoordinate(e, e.target);
@@ -930,12 +996,11 @@ export class Editor {
       modifier: this.#toModifier(e),
     });
 
-    this.contextMenu.x = e.clientX;
-    this.contextMenu.y = e.clientY;
-    this.contextMenu.isOpen = true;
+    this.openContextMenu({ x: e.clientX, y: e.clientY, source: 'mouse', placement: 'bottom-start' });
   }
 
   closeContextMenu(): void {
+    this.touchGesture.cancelContextMenuRequest();
     this.contextMenu.isOpen = false;
   }
 
@@ -1032,25 +1097,41 @@ export class Editor {
   }
 
   handleDragStart(e: DragEvent): void {
-    if (!(e.target instanceof HTMLElement)) return;
+    if (!(e.target instanceof HTMLElement)) {
+      if (this.readOnly) {
+        e.preventDefault();
+      }
+      return;
+    }
 
     const resolved = this.#resolvePointerCoordinate(e, e.target);
-    if (!resolved) return;
+    if (!resolved) {
+      if (this.readOnly) {
+        e.preventDefault();
+      }
+      return;
+    }
 
     const { pageIdx, x, y, pageElement } = resolved;
 
     const rect = pageElement.getBoundingClientRect();
 
-    if (this.readOnly || !this.isSelectionHit(pageIdx, x, y)) {
+    const canStartReadOnlyTouchDrag =
+      this.readOnly && this.touchGesture.isReadOnlyTouchDragCandidate() && this.touchGesture.isReadOnlyTouchDragArmed();
+    if ((!canStartReadOnlyTouchDrag && this.readOnly) || !this.isSelectionHit(pageIdx, x, y)) {
       e.preventDefault();
       return;
+    }
+
+    if (canStartReadOnlyTouchDrag) {
+      this.touchGesture.handleNativeDragStart();
     }
 
     const data = this.getClipboardData();
     if (e.dataTransfer && data) {
       e.dataTransfer.setData('text/html', data.html);
       e.dataTransfer.setData('text/plain', data.text);
-      e.dataTransfer.effectAllowed = 'copyMove';
+      e.dataTransfer.effectAllowed = canStartReadOnlyTouchDrag ? 'copy' : 'copyMove';
 
       const visiblePages = [...this.pageVisibility.keys()];
       const dragImage = this.#renderDragImage(visiblePages, pageIdx);
@@ -1277,6 +1358,7 @@ export class Editor {
 
   handleDragEnd(e: DragEvent): void {
     void e;
+    this.touchGesture.handleNativeDragEnd();
     this.dispatch({ type: 'dragEnd' });
   }
 
@@ -1286,6 +1368,10 @@ export class Editor {
 
   setReadOnly(readOnly: boolean): void {
     this.readOnly = readOnly;
+    if (!readOnly) {
+      this.touchGesture.resetReadOnlyTouchState();
+      this.isDraggable = false;
+    }
     this.#wasmEditor?.setReadOnly(readOnly);
     this.#wakeUp();
   }
@@ -1531,6 +1617,7 @@ export class Editor {
 
   destroy(): void {
     this.#stop();
+    this.touchGesture.destroy();
     this.#renderer?.dispose();
     this.#renderer = null;
     this.#wasmEditor = null;
@@ -1561,5 +1648,9 @@ export class Editor {
       alt: e.altKey,
       meta: e.metaKey,
     };
+  }
+
+  #isTouchLikePointer(e: PointerEvent): boolean {
+    return e.pointerType === 'touch';
   }
 }
