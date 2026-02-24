@@ -221,7 +221,7 @@
         {/each}
       {/each}
 
-      {#if isPaginated}
+      {#if isPaginated && !editor.isReadOnly()}
         <svg
           class={css({
             pointerEvents: 'none',
