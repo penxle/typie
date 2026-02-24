@@ -412,7 +412,8 @@ User.implement({
         }),
       }),
       resolve: async (self) => {
-        return await getUserUsage({ userId: self.id });
+        const usage = await getUserUsage({ userId: self.id });
+        return { ...usage, totalBlobSize: String(usage.totalBlobSize) };
       },
     }),
 

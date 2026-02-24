@@ -93,7 +93,7 @@
       return -1;
     }
 
-    return Math.min(1, $site.usage.totalBlobSize / planRule.maxTotalBlobSize);
+    return Math.min(1, Number($site.usage.totalBlobSize) / planRule.maxTotalBlobSize);
   });
 
   let open = $state(false);

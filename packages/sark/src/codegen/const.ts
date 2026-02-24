@@ -17,7 +17,7 @@ export const scalarTSTypes = {
   },
   BigInt: {
     Input: 'number',
-    Output: 'number',
+    Output: 'string',
   },
   Boolean: {
     Input: 'boolean',

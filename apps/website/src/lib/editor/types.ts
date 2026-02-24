@@ -92,7 +92,7 @@ export type FileAsset = {
   id: string;
   url: string;
   name: string;
-  size: number;
+  size: string;
 };
 
 export type EmbedAsset = {
