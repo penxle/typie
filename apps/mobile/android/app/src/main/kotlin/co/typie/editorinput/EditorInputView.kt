@@ -72,7 +72,7 @@ class EditorInputNativeView(
   private var cursorHeight = 20.0
   private var lastDeleteTime = 0L
   private var batchEditDepth = 0
-  private var pendingRestartInput = false
+  private var pendingCacheInvalidation = false
   private var composingRegionLength = 0
   private var lastCommitWasAutocorrect = false
 
@@ -110,14 +110,6 @@ class EditorInputNativeView(
     repeat(composingRegionLength) { performDelete() }
     composingRegionLength = 0
     return true
-  }
-
-  private fun scheduleRestartInput() {
-    if (batchEditDepth > 0) {
-      pendingRestartInput = true
-    } else {
-      inputMethodManager.restartInput(this)
-    }
   }
 
   private fun performDelete() {
@@ -159,7 +151,7 @@ class EditorInputNativeView(
 
   fun resetInputContext() {
     commitComposingState()
-    scheduleRestartInput()
+    inputMethodManager.restartInput(this)
   }
 
   override fun onCheckIsTextEditor(): Boolean = true
@@ -222,11 +214,10 @@ class EditorInputNativeView(
 
       override fun endBatchEdit(): Boolean {
         batchEditDepth--
-        if (batchEditDepth == 0 && pendingRestartInput) {
-          pendingRestartInput = false
-          if (!isComposing) {
-            inputMethodManager.restartInput(this@EditorInputNativeView)
-          }
+        if (batchEditDepth == 0 && pendingCacheInvalidation) {
+          pendingCacheInvalidation = false
+          inputMethodManager.updateSelection(
+            this@EditorInputNativeView, 0, 0, -1, -1)
         }
         return super.endBatchEdit()
       }
@@ -257,14 +248,19 @@ class EditorInputNativeView(
         super.commitText(text, newCursorPosition)
 
         if (!skipCacheInvalidation) {
-          inputMethodManager.updateSelection(
-            this@EditorInputNativeView, 0, 0, -1, -1)
+          if (batchEditDepth > 0) {
+            pendingCacheInvalidation = true
+          } else {
+            inputMethodManager.updateSelection(
+              this@EditorInputNativeView, 0, 0, -1, -1)
+          }
         }
         notifyCursorUpdate()
         return true
       }
 
       override fun setComposingText(text: CharSequence?, newCursorPosition: Int): Boolean {
+        pendingCacheInvalidation = false
         val str = text?.toString().orEmpty()
 
         if (consumeComposingRegion()) {
@@ -295,7 +291,6 @@ class EditorInputNativeView(
         composingRegionLength = 0
         if (isComposing) {
           commitComposingState()
-          scheduleRestartInput()
         }
         super.finishComposingText()
         notifyCursorUpdate()
