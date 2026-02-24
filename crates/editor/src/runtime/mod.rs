@@ -863,7 +863,8 @@ impl Runtime {
         let layout_mode = doc.settings().layout_mode;
         let pages = self.layout_engine.pages();
         let page = pages.get(page_index)?;
-        let next_page = pages.get(page_index + 1);
+        let prev_page = page_index.checked_sub(1).and_then(|idx| pages.get(idx));
+        let next_page = page_index.checked_add(1).and_then(|idx| pages.get(idx));
         let page_height = Self::page_height_for_rendering(layout_mode, page);
         let page_width = self.layout_engine.width().ceil();
         let scale_factor = self.layout_engine.scale_factor();
@@ -876,6 +877,7 @@ impl Runtime {
         Some(renderer.render(
             page,
             page_index,
+            prev_page,
             next_page,
             &selections,
             drop_indicator,
@@ -888,13 +890,19 @@ impl Runtime {
         let layout_mode = doc.settings().layout_mode;
         let pages = self.layout_engine.pages();
         let page = pages.get(page_index)?;
-        let next_page = pages.get(page_index + 1);
+        let prev_page = page_index.checked_sub(1).and_then(|idx| pages.get(idx));
+        let next_page = page_index.checked_add(1).and_then(|idx| pages.get(idx));
         let page_height = Self::page_height_for_rendering(layout_mode, page);
         let page_width = self.layout_engine.width().ceil();
 
-        let vector_page =
-            self.renderer
-                .export_page_vector(page, next_page, doc, page_width, page_height);
+        let vector_page = self.renderer.export_page_vector(
+            page,
+            prev_page,
+            next_page,
+            doc,
+            page_width,
+            page_height,
+        );
 
         Some(crate::render::encode_vector_page(&vector_page))
     }
@@ -938,7 +946,8 @@ impl Runtime {
         let Some(page) = pages.get(page_index) else {
             return false;
         };
-        let next_page = pages.get(page_index + 1);
+        let prev_page = page_index.checked_sub(1).and_then(|idx| pages.get(idx));
+        let next_page = page_index.checked_add(1).and_then(|idx| pages.get(idx));
         let page_height = Self::page_height_for_rendering(layout_mode, page);
         let page_width = self.layout_engine.width().ceil();
         let scale_factor = self.layout_engine.scale_factor();
@@ -950,6 +959,7 @@ impl Runtime {
         renderer.render_to(
             page,
             page_index,
+            prev_page,
             next_page,
             &selections,
             drop_indicator,

@@ -31,6 +31,12 @@ const FULL_REPAINT_RECT_THRESHOLD: usize = 32;
 const PAGE_EDGE_OVERFLOW_BAND: f32 = 16.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OverflowDirection {
+    Upward,
+    Downward,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RenderPhase {
     Background,
     Content,
@@ -181,6 +187,7 @@ impl Renderer {
         &mut self,
         page: &Page,
         page_idx: usize,
+        prev_page: Option<&Page>,
         next_page: Option<&Page>,
         selections: &[SelectionDecor],
         drop_indicator: Option<&DropIndicator>,
@@ -206,6 +213,7 @@ impl Renderer {
             self.layout_debug_enabled,
             page,
             page_idx,
+            prev_page,
             next_page,
             selections,
             drop_indicator,
@@ -227,6 +235,7 @@ impl Renderer {
         &mut self,
         page: &Page,
         page_idx: usize,
+        prev_page: Option<&Page>,
         next_page: Option<&Page>,
         selections: &[SelectionDecor],
         drop_indicator: Option<&DropIndicator>,
@@ -261,6 +270,7 @@ impl Renderer {
             self.layout_debug_enabled,
             page,
             page_idx,
+            prev_page,
             next_page,
             selections,
             drop_indicator,
@@ -274,6 +284,7 @@ impl Renderer {
     pub fn export_page_vector(
         &mut self,
         page: &Page,
+        prev_page: Option<&Page>,
         next_page: Option<&Page>,
         doc: &Doc,
         page_width: f32,
@@ -304,6 +315,31 @@ impl Renderer {
             );
         }
 
+        if let Some(prev_page) = prev_page
+            && let Some(cull_clip) = prev_page_overflow_cull_clip(page_width)
+        {
+            let ctx = RenderContext {
+                scale_factor: 1.0,
+                selections: &[],
+                theme: &self.theme,
+                doc,
+                default_text_color: None,
+                is_focused: self.is_focused,
+                phase: RenderPhase::Content,
+                render_origin: Point::zero(),
+            };
+            Self::outline_node_for_page_boundary_overflow(
+                &mut sink,
+                &prev_page.root,
+                Point::new(0.0, -page_height),
+                Transform::identity(),
+                &ctx,
+                &RenderHints::default(),
+                cull_clip,
+                OverflowDirection::Downward,
+            );
+        }
+
         if let Some(next_page) = next_page
             && let Some(cull_clip) = next_page_overflow_cull_clip(page_width, page_height)
         {
@@ -317,7 +353,7 @@ impl Renderer {
                 phase: RenderPhase::Content,
                 render_origin: Point::zero(),
             };
-            Self::outline_node_for_next_page_overflow(
+            Self::outline_node_for_page_boundary_overflow(
                 &mut sink,
                 &next_page.root,
                 Point::new(0.0, page_height),
@@ -325,6 +361,7 @@ impl Renderer {
                 &ctx,
                 &RenderHints::default(),
                 cull_clip,
+                OverflowDirection::Upward,
             );
         }
 
@@ -348,15 +385,27 @@ impl Renderer {
         layout_debug_enabled: bool,
         page: &Page,
         page_idx: usize,
+        prev_page: Option<&Page>,
         next_page: Option<&Page>,
         selections: &[SelectionDecor],
         drop_indicator: Option<&DropIndicator>,
         doc: &Doc,
         debug_frame: &mut Option<PaintDebugFrame>,
     ) {
-        if let Some(next_page) = next_page {
-            if debug_frame.is_some() {
-                let mut overflow_rects = Vec::new();
+        if debug_frame.is_some() {
+            let mut overflow_rects = Vec::new();
+            if let Some(prev_page) = prev_page {
+                Self::render_prev_page_overflow(
+                    pixmap,
+                    glyph_renderer,
+                    scale_factor,
+                    theme,
+                    prev_page,
+                    doc,
+                    Some(&mut overflow_rects),
+                );
+            }
+            if let Some(next_page) = next_page {
                 Self::render_next_page_overflow(
                     pixmap,
                     glyph_renderer,
@@ -366,10 +415,23 @@ impl Renderer {
                     doc,
                     Some(&mut overflow_rects),
                 );
-                if let Some(frame) = debug_frame.as_mut() {
-                    frame.overflow_rects = overflow_rects;
-                }
-            } else {
+            }
+            if let Some(frame) = debug_frame.as_mut() {
+                frame.overflow_rects = overflow_rects;
+            }
+        } else {
+            if let Some(prev_page) = prev_page {
+                Self::render_prev_page_overflow(
+                    pixmap,
+                    glyph_renderer,
+                    scale_factor,
+                    theme,
+                    prev_page,
+                    doc,
+                    None,
+                );
+            }
+            if let Some(next_page) = next_page {
                 Self::render_next_page_overflow(
                     pixmap,
                     glyph_renderer,
@@ -796,14 +858,21 @@ impl Renderer {
         }
     }
 
-    fn should_render_next_page_overflow(positioned: &PositionedNode) -> bool {
-        matches!(
-            positioned.node.element.as_ref(),
-            Some(Element::Line(line)) if !line.ruby_segments.is_empty()
-        )
+    fn should_render_page_boundary_overflow(
+        positioned: &PositionedNode,
+        direction: OverflowDirection,
+    ) -> bool {
+        positioned
+            .node
+            .element
+            .as_ref()
+            .is_some_and(|element| match direction {
+                OverflowDirection::Upward => element.paint_overflow().top > 0.0,
+                OverflowDirection::Downward => element.paint_overflow().bottom > 0.0,
+            })
     }
 
-    fn render_node_for_next_page_overflow(
+    fn render_node_for_page_boundary_overflow(
         pixmap: &mut PixmapMut,
         glyph_renderer: &mut GlyphRenderer,
         positioned: &PositionedNode,
@@ -812,6 +881,7 @@ impl Renderer {
         ctx: &RenderContext<'_>,
         inherited_hints: &RenderHints,
         cull_clip: CacheRect,
+        direction: OverflowDirection,
     ) {
         let scale = transform.sy;
         let pos = Point::new(
@@ -838,7 +908,7 @@ impl Renderer {
         };
         let render_ctx = &child_ctx_data;
 
-        if Self::should_render_next_page_overflow(positioned)
+        if Self::should_render_page_boundary_overflow(positioned, direction)
             && let Some(element) = positioned.node.element.as_ref()
             && let Some(render) = element.as_render()
         {
@@ -848,7 +918,7 @@ impl Renderer {
 
         if let Some(children) = &positioned.node.children {
             for child in children {
-                Self::render_node_for_next_page_overflow(
+                Self::render_node_for_page_boundary_overflow(
                     pixmap,
                     glyph_renderer,
                     child,
@@ -857,12 +927,13 @@ impl Renderer {
                     render_ctx,
                     &merged_hints,
                     cull_clip,
+                    direction,
                 );
             }
         }
     }
 
-    fn outline_node_for_next_page_overflow(
+    fn outline_node_for_page_boundary_overflow(
         sink: &mut dyn ElementSink,
         positioned: &PositionedNode,
         offset: Point,
@@ -870,6 +941,7 @@ impl Renderer {
         ctx: &RenderContext<'_>,
         inherited_hints: &RenderHints,
         cull_clip: CacheRect,
+        direction: OverflowDirection,
     ) {
         let scale = transform.sy;
         let pos = Point::new(
@@ -896,7 +968,7 @@ impl Renderer {
         };
         let render_ctx = &child_ctx_data;
 
-        if Self::should_render_next_page_overflow(positioned)
+        if Self::should_render_page_boundary_overflow(positioned, direction)
             && let Some(element) = positioned.node.element.as_ref()
             && let Some(outline) = element.as_outline()
         {
@@ -906,7 +978,7 @@ impl Renderer {
 
         if let Some(children) = &positioned.node.children {
             for child in children {
-                Self::outline_node_for_next_page_overflow(
+                Self::outline_node_for_page_boundary_overflow(
                     sink,
                     child,
                     pos,
@@ -914,6 +986,7 @@ impl Renderer {
                     render_ctx,
                     &merged_hints,
                     cull_clip,
+                    direction,
                 );
             }
         }
@@ -934,6 +1007,64 @@ impl Renderer {
         let Some(cull_clip) = next_page_overflow_cull_clip(page_width, page_height) else {
             return;
         };
+        Self::render_page_boundary_overflow_with_clip(
+            pixmap,
+            glyph_renderer,
+            scale_factor,
+            theme,
+            next_page,
+            doc,
+            Point::new(0.0, page_height),
+            cull_clip,
+            OverflowDirection::Upward,
+            debug_rects,
+        );
+    }
+
+    fn render_prev_page_overflow(
+        pixmap: &mut PixmapMut,
+        glyph_renderer: &mut GlyphRenderer,
+        scale_factor: f64,
+        theme: &Theme,
+        prev_page: &Page,
+        doc: &Doc,
+        debug_rects: Option<&mut Vec<CacheRect>>,
+    ) {
+        let scale = scale_factor as f32;
+        let page_width = pixmap.width() as f32 / scale;
+        let Some(cull_clip) = prev_page_overflow_cull_clip(page_width) else {
+            return;
+        };
+        let page_height = pixmap.height() as f32 / scale;
+        Self::render_page_boundary_overflow_with_clip(
+            pixmap,
+            glyph_renderer,
+            scale_factor,
+            theme,
+            prev_page,
+            doc,
+            Point::new(0.0, -page_height),
+            cull_clip,
+            OverflowDirection::Downward,
+            debug_rects,
+        );
+    }
+
+    fn render_page_boundary_overflow_with_clip(
+        pixmap: &mut PixmapMut,
+        glyph_renderer: &mut GlyphRenderer,
+        scale_factor: f64,
+        theme: &Theme,
+        page: &Page,
+        doc: &Doc,
+        page_offset: Point,
+        cull_clip: CacheRect,
+        direction: OverflowDirection,
+        debug_rects: Option<&mut Vec<CacheRect>>,
+    ) {
+        let scale = scale_factor as f32;
+        let page_width = pixmap.width() as f32 / scale;
+        let page_height = pixmap.height() as f32 / scale;
         let Some(pixel_rect) =
             PixelRect::from_layout_rect(cull_clip, scale, pixmap.width(), pixmap.height())
         else {
@@ -956,15 +1087,16 @@ impl Renderer {
 
         let transform = Transform::from_scale(scale, scale)
             .pre_translate(-hard_clip_layout_rect.x, -hard_clip_layout_rect.y);
-        Self::render_node_for_next_page_overflow(
+        Self::render_node_for_page_boundary_overflow(
             &mut tile_pixmap.as_mut(),
             glyph_renderer,
-            &next_page.root,
-            Point::new(0.0, page_height),
+            &page.root,
+            page_offset,
             transform,
             &ctx,
             &RenderHints::default(),
             cull_clip,
+            direction,
         );
         let paint = PixmapPaint::default();
         pixmap.draw_pixmap(
@@ -977,28 +1109,33 @@ impl Renderer {
         );
 
         if let Some(debug_rects) = debug_rects {
-            debug_rects.extend(Self::collect_next_page_overflow_debug_rects(
-                next_page,
+            debug_rects.extend(Self::collect_page_boundary_overflow_debug_rects(
+                page,
+                page_offset,
                 page_width,
                 page_height,
                 cull_clip,
+                direction,
             ));
         }
     }
 
-    fn collect_next_page_overflow_debug_rects(
-        next_page: &Page,
+    fn collect_page_boundary_overflow_debug_rects(
+        page: &Page,
+        page_offset: Point,
         page_width: f32,
         page_height: f32,
         cull_clip: CacheRect,
+        direction: OverflowDirection,
     ) -> Vec<CacheRect> {
         let mut rects = Vec::new();
         Self::collect_overflow_debug_rects_recursive(
-            &next_page.root,
-            Point::new(0.0, page_height),
+            &page.root,
+            page_offset,
             cull_clip,
             page_width,
             page_height,
+            direction,
             &mut rects,
         );
         normalize_dirty_rects(rects, page_width, page_height)
@@ -1010,6 +1147,7 @@ impl Renderer {
         cull_clip: CacheRect,
         page_width: f32,
         page_height: f32,
+        direction: OverflowDirection,
         out: &mut Vec<CacheRect>,
     ) {
         let pos = Point::new(
@@ -1022,7 +1160,7 @@ impl Renderer {
                 return;
             }
 
-            if Self::should_render_next_page_overflow(positioned) {
+            if Self::should_render_page_boundary_overflow(positioned, direction) {
                 let left = node_rect.x.max(cull_clip.x);
                 let top = node_rect.y.max(cull_clip.y);
                 let right = node_rect.right().min(cull_clip.right());
@@ -1045,6 +1183,7 @@ impl Renderer {
                     cull_clip,
                     page_width,
                     page_height,
+                    direction,
                     out,
                 );
             }
@@ -1361,11 +1500,18 @@ fn should_promote_full_repaint(rects: &[CacheRect], canvas_width: f32, canvas_he
 }
 
 fn next_page_overflow_cull_clip(page_width: f32, page_height: f32) -> Option<CacheRect> {
-    // 다음 페이지 루트(y == page_height)가 clip 교차 검사에서 탈락하지 않도록
-    // 경계 아래쪽까지 band를 확장하고, 실제 픽셀 클리핑은 pixmap에 맡긴다.
     CacheRect::from_xywh(
         0.0,
-        (page_height - PAGE_EDGE_OVERFLOW_BAND).max(0.0),
+        page_height - PAGE_EDGE_OVERFLOW_BAND,
+        page_width,
+        PAGE_EDGE_OVERFLOW_BAND * 2.0,
+    )
+}
+
+fn prev_page_overflow_cull_clip(page_width: f32) -> Option<CacheRect> {
+    CacheRect::from_xywh(
+        0.0,
+        -PAGE_EDGE_OVERFLOW_BAND,
         page_width,
         PAGE_EDGE_OVERFLOW_BAND * 2.0,
     )
@@ -1459,6 +1605,38 @@ mod tests {
     fn rgba_at(buf: &[u8], width: usize, x: usize, y: usize) -> [u8; 4] {
         let idx = (y * width + x) * 4;
         [buf[idx], buf[idx + 1], buf[idx + 2], buf[idx + 3]]
+    }
+
+    fn collect_next_page_overflow_debug_rects(
+        next_page: &Page,
+        page_width: f32,
+        page_height: f32,
+        cull_clip: CacheRect,
+    ) -> Vec<CacheRect> {
+        Renderer::collect_page_boundary_overflow_debug_rects(
+            next_page,
+            Point::new(0.0, page_height),
+            page_width,
+            page_height,
+            cull_clip,
+            OverflowDirection::Upward,
+        )
+    }
+
+    fn collect_prev_page_overflow_debug_rects(
+        prev_page: &Page,
+        page_width: f32,
+        page_height: f32,
+        cull_clip: CacheRect,
+    ) -> Vec<CacheRect> {
+        Renderer::collect_page_boundary_overflow_debug_rects(
+            prev_page,
+            Point::new(0.0, -page_height),
+            page_width,
+            page_height,
+            cull_clip,
+            OverflowDirection::Downward,
+        )
     }
 
     #[test]
@@ -2102,18 +2280,10 @@ mod tests {
         let clip =
             next_page_overflow_cull_clip(page_width, page_height).expect("next page overflow clip");
 
-        let with_rects = Renderer::collect_next_page_overflow_debug_rects(
-            &with_ruby,
-            page_width,
-            page_height,
-            clip,
-        );
-        let without_rects = Renderer::collect_next_page_overflow_debug_rects(
-            &without_ruby,
-            page_width,
-            page_height,
-            clip,
-        );
+        let with_rects =
+            collect_next_page_overflow_debug_rects(&with_ruby, page_width, page_height, clip);
+        let without_rects =
+            collect_next_page_overflow_debug_rects(&without_ruby, page_width, page_height, clip);
 
         assert!(
             !with_rects.is_empty(),
@@ -2132,6 +2302,173 @@ mod tests {
     }
 
     #[test]
+    fn overflow_debug_rects_include_visible_non_ruby_top_overflow() {
+        let block_id = NodeId::new();
+        let shared_layout = Rc::new(parley::Layout::default());
+        let page_width = 300.0;
+        let page_height = 200.0;
+
+        let make_next_page = |ascent_overflow: f32| {
+            root_with_children(
+                Some(vec![PositionedNode {
+                    position: Point::new(20.0, 0.0),
+                    node: Rc::new(LayoutNode {
+                        size: Size::new(180.0, 20.0),
+                        element: Some(Element::Line(LineElement::build(
+                            block_id,
+                            Size::new(180.0, 20.0),
+                            0,
+                            Rc::clone(&shared_layout),
+                            LineMetric {
+                                top: 0.0,
+                                left: 0.0,
+                                height: 20.0,
+                                leading: 0.0,
+                                baseline: 14.0,
+                                ascent: 14.0,
+                                content_width: 120.0,
+                                start_offset: 0,
+                                end_offset: 2,
+                                clusters: vec![],
+                                break_reason: parley::layout::BreakReason::None,
+                                grapheme_offsets: vec![0, 2],
+                                ascent_overflow,
+                                descent_overflow: 0.0,
+                            },
+                            None,
+                            false,
+                            Rc::from("ab"),
+                            vec![],
+                            vec![],
+                            false,
+                        ))),
+                        children: None,
+                        page_break_policy: PageBreakPolicy::default(),
+                        render_hints: RenderHints::default(),
+                        scope_id: None,
+                    }),
+                }]),
+                Size::new(page_width, page_height),
+            )
+        };
+
+        let with_top_overflow = make_next_page(6.0);
+        let without_top_overflow = make_next_page(0.0);
+        let clip =
+            next_page_overflow_cull_clip(page_width, page_height).expect("next page overflow clip");
+
+        let with_rects = collect_next_page_overflow_debug_rects(
+            &with_top_overflow,
+            page_width,
+            page_height,
+            clip,
+        );
+        let without_rects = collect_next_page_overflow_debug_rects(
+            &without_top_overflow,
+            page_width,
+            page_height,
+            clip,
+        );
+
+        assert!(
+            !with_rects.is_empty(),
+            "루비가 없어도 top paint_overflow가 있으면 next-page overflow rect가 수집돼야 함"
+        );
+        assert!(
+            with_rects.iter().any(|rect| rect.y < page_height),
+            "수집된 rect는 현재 페이지 가시 영역으로 클램프되어야 함"
+        );
+        assert!(
+            without_rects.is_empty(),
+            "top paint_overflow가 없으면 next-page overflow rect가 없어야 함"
+        );
+    }
+
+    #[test]
+    fn prev_page_overflow_debug_rects_include_visible_bottom_overflow() {
+        let block_id = NodeId::new();
+        let shared_layout = Rc::new(parley::Layout::default());
+        let page_width = 300.0;
+        let page_height = 200.0;
+
+        let make_prev_page = |descent_overflow: f32| {
+            root_with_children(
+                Some(vec![PositionedNode {
+                    position: Point::new(20.0, page_height - 20.0),
+                    node: Rc::new(LayoutNode {
+                        size: Size::new(180.0, 20.0),
+                        element: Some(Element::Line(LineElement::build(
+                            block_id,
+                            Size::new(180.0, 20.0),
+                            0,
+                            Rc::clone(&shared_layout),
+                            LineMetric {
+                                top: 0.0,
+                                left: 0.0,
+                                height: 20.0,
+                                leading: 0.0,
+                                baseline: 14.0,
+                                ascent: 14.0,
+                                content_width: 120.0,
+                                start_offset: 0,
+                                end_offset: 2,
+                                clusters: vec![],
+                                break_reason: parley::layout::BreakReason::None,
+                                grapheme_offsets: vec![0, 2],
+                                ascent_overflow: 0.0,
+                                descent_overflow,
+                            },
+                            None,
+                            false,
+                            Rc::from("ab"),
+                            vec![],
+                            vec![],
+                            false,
+                        ))),
+                        children: None,
+                        page_break_policy: PageBreakPolicy::default(),
+                        render_hints: RenderHints::default(),
+                        scope_id: None,
+                    }),
+                }]),
+                Size::new(page_width, page_height),
+            )
+        };
+
+        let with_bottom_overflow = make_prev_page(8.0);
+        let without_bottom_overflow = make_prev_page(0.0);
+        let clip = prev_page_overflow_cull_clip(page_width).expect("prev page overflow clip");
+
+        let with_rects = collect_prev_page_overflow_debug_rects(
+            &with_bottom_overflow,
+            page_width,
+            page_height,
+            clip,
+        );
+        let without_rects = collect_prev_page_overflow_debug_rects(
+            &without_bottom_overflow,
+            page_width,
+            page_height,
+            clip,
+        );
+
+        assert!(
+            !with_rects.is_empty(),
+            "bottom paint_overflow가 있으면 이전 페이지 overflow rect가 수집돼야 함"
+        );
+        assert!(
+            with_rects
+                .iter()
+                .any(|rect| rect.y <= PAGE_EDGE_OVERFLOW_BAND && rect.bottom() > 0.0),
+            "수집된 rect는 현재 페이지 상단 가시 영역에 위치해야 함"
+        );
+        assert!(
+            without_rects.is_empty(),
+            "bottom paint_overflow가 없으면 이전 페이지 overflow rect가 없어야 함"
+        );
+    }
+
+    #[test]
     fn partial_render_does_not_overdraw_outside_dirty_rect() {
         let callout_id = NodeId::new();
         let page1 = callout_page_with_icon(callout_id);
@@ -2145,14 +2482,14 @@ mod tests {
         let height = renderer.height() as usize;
         let mut buffer = vec![0u8; width * height * 4];
 
-        assert!(renderer.render_to(&page1, 0, None, &[], None, &doc, &mut buffer));
+        assert!(renderer.render_to(&page1, 0, None, None, &[], None, &doc, &mut buffer));
         let first = rgba_at(&buffer, width, 120, 70);
         assert!(
             first[3] > 0,
             "샘플 픽셀이 투명하면 callout 배경이 실제로 그려졌는지 검증할 수 없음"
         );
 
-        assert!(renderer.render_to(&page2, 0, None, &[], None, &doc, &mut buffer));
+        assert!(renderer.render_to(&page2, 0, None, None, &[], None, &doc, &mut buffer));
         let second = rgba_at(&buffer, width, 120, 70);
 
         assert_eq!(
