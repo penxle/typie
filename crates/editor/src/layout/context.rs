@@ -1,6 +1,6 @@
 use crate::diagnostics::LayoutPassRecorder;
 use crate::layout::{Layout, LayoutCache, LayoutNode};
-use crate::model::{Decorations, DefaultAttrs, DocumentSettings, NodeRef};
+use crate::model::{Attr, Decorations, DefaultAttrs, DocumentSettings, NodeRef, Style};
 use crate::runtime::ViewStates;
 use crate::types::BoxConstraints;
 use std::cell::RefCell;
@@ -59,6 +59,52 @@ impl<'a> LayoutContext<'a> {
             cache,
             trace,
         }
+    }
+
+    /// Resolve font defaults from style_overrides → cascade_attrs chain → root default_attrs.
+    pub fn resolve_cascade_font(&self) -> (String, u16, u32) {
+        let mut family: Option<String> = None;
+        let mut weight: Option<u16> = None;
+        let mut font_size: Option<u32> = None;
+
+        // cascade_attrs: node → parent → ... → root (first occurrence wins)
+        for ancestor in self.node.ancestors() {
+            if let Some(cascade) = ancestor.cascade_attrs() {
+                for attr in &cascade {
+                    match attr {
+                        Attr::Style(Style::FontFamily(f)) if family.is_none() => {
+                            family = Some(f.family.clone());
+                        }
+                        Attr::Style(Style::FontWeight(w)) if weight.is_none() => {
+                            weight = Some(w.weight);
+                        }
+                        Attr::Style(Style::FontSize(s)) if font_size.is_none() => {
+                            font_size = Some(s.size);
+                        }
+                        _ => {}
+                    }
+                }
+                if family.is_some() && weight.is_some() && font_size.is_some() {
+                    break;
+                }
+            }
+        }
+
+        let mut family = family.unwrap_or_else(|| self.default_attrs.font_family().to_string());
+        let mut weight = weight.unwrap_or_else(|| self.default_attrs.font_weight());
+        let mut font_size = font_size.unwrap_or(1200);
+
+        // style_overrides: highest priority (node-type-specific hardcoded overrides)
+        for style in self.node.node().style_overrides() {
+            match &style {
+                Style::FontFamily(f) => family = f.family.clone(),
+                Style::FontWeight(w) => weight = w.weight,
+                Style::FontSize(s) => font_size = s.size,
+                _ => {}
+            }
+        }
+
+        (family, weight, font_size)
     }
 
     pub fn with_node(&self, node: &'a NodeRef<'a>) -> Self {
@@ -282,6 +328,117 @@ mod tests {
             t_elem.align,
             TableAlign::Right,
             "Align should be updated to Right"
+        );
+    }
+
+    #[test]
+    fn resolve_cascade_font_returns_root_defaults_when_no_cascade() {
+        let mut p = id!();
+        let state = state! {
+            doc { @p paragraph {} }
+            selection { (p, 0) }
+        };
+
+        let doc = &state.doc;
+        let node = doc.node(p).unwrap();
+        let settings = doc.settings();
+        let default_attrs = doc.default_attrs();
+        let decorations = Decorations::default();
+        let cache = RefCell::new(LayoutCache::new());
+        let view_states = crate::runtime::ViewStates::default();
+        let ctx = LayoutContext::new(
+            &node,
+            &settings,
+            &default_attrs,
+            &decorations,
+            1.0,
+            &view_states,
+            &cache,
+        );
+
+        let (family, weight, _) = ctx.resolve_cascade_font();
+        assert_eq!(family, default_attrs.font_family());
+        assert_eq!(weight, default_attrs.font_weight());
+    }
+
+    #[test]
+    fn resolve_cascade_font_paragraph_overrides_root() {
+        let mut p = id!();
+        let state = state! {
+            doc { @p paragraph {} }
+            selection { (p, 0) }
+        };
+        let state = transact!(state, |tr| {
+            tr.set_cascade_attrs(
+                p,
+                &crate::model::Attr::from_styles(&[crate::model::Style::FontFamily(
+                    crate::model::FontFamilyStyle {
+                        family: "ParagraphFont".to_string(),
+                    },
+                )]),
+            )
+            .unwrap();
+        });
+
+        let doc = &state.doc;
+        let node = doc.node(p).unwrap();
+        let settings = doc.settings();
+        let default_attrs = doc.default_attrs();
+        let decorations = Decorations::default();
+        let cache = RefCell::new(LayoutCache::new());
+        let view_states = crate::runtime::ViewStates::default();
+        let ctx = LayoutContext::new(
+            &node,
+            &settings,
+            &default_attrs,
+            &decorations,
+            1.0,
+            &view_states,
+            &cache,
+        );
+
+        let (family, _, _) = ctx.resolve_cascade_font();
+        assert_eq!(
+            family, "ParagraphFont",
+            "paragraph cascade_attrs must override root default"
+        );
+    }
+
+    #[test]
+    fn resolve_cascade_font_includes_style_overrides() {
+        // FoldTitle has style_overrides() -> FontWeight(500)
+        let mut f = id!();
+        let state = state! {
+            doc {
+                fold {
+                    @f fold_title {}
+                }
+            }
+            selection { (f, 0) }
+        };
+
+        let doc = &state.doc;
+        let node = doc.node(f).unwrap();
+        let settings = doc.settings();
+        let default_attrs = doc.default_attrs();
+        let decorations = Decorations::default();
+        let cache = RefCell::new(LayoutCache::new());
+        let view_states = crate::runtime::ViewStates::default();
+        let ctx = LayoutContext::new(
+            &node,
+            &settings,
+            &default_attrs,
+            &decorations,
+            1.0,
+            &view_states,
+            &cache,
+        );
+
+        let (_, weight, _) = ctx.resolve_cascade_font();
+        // FOLD_TITLE_FONT_WEIGHT = 500
+        assert_eq!(
+            weight, 500,
+            "style_overrides FontWeight must be reflected in resolve_cascade_font"
         );
     }
 }

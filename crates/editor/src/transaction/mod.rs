@@ -108,9 +108,28 @@ impl Transaction {
         Attr::extract_styles(&self.resolve_attr_cascade(node_id))
     }
 
-    pub(crate) fn set_cascade_attrs(&self, node_id: NodeId, attrs: &[Attr]) -> Result<()> {
+    pub(crate) fn set_cascade_attrs(&mut self, node_id: NodeId, attrs: &[Attr]) -> Result<()> {
         let node = self.node_mut(node_id).context("Node not found")?;
         node.as_mut().set_cascade_attrs(attrs)?;
+
+        let mut family = None;
+        let mut weight = None;
+        for attr in attrs {
+            match attr {
+                Attr::Style(Style::FontFamily(f)) => family = Some(f.family.clone()),
+                Attr::Style(Style::FontWeight(w)) => weight = Some(w.weight),
+                _ => {}
+            }
+        }
+        if let Some(family) = family {
+            let weight = weight.unwrap_or_else(|| self.doc().default_attrs().font_weight());
+            self.push_effect(Effect::FontDetected {
+                family,
+                weight,
+                codepoints: vec!['\u{200B}' as u32],
+            });
+        }
+
         Ok(())
     }
 

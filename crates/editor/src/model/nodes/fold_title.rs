@@ -69,6 +69,8 @@ impl Layout for FoldTitleNode {
         let line_height = default_line_height();
         let content_width = (constraints.max_width - CONTENT_OFFSET).max(0.0);
 
+        let (cascade_family, _, _) = ctx.resolve_cascade_font();
+
         let layout = GLOBALS.with(|globals| {
             let globals = globals.borrow();
 
@@ -77,7 +79,7 @@ impl Layout for FoldTitleNode {
 
             let setup_defaults = |builder: &mut parley::RangedBuilder<'_, String>| {
                 builder.push_default(StyleProperty::FontFamily(FontFamily::Single(
-                    FontFamilyName::Named(ctx.default_attrs.font_family().into()),
+                    FontFamilyName::Named(cascade_family.clone().into()),
                 )));
                 builder.push_default(StyleProperty::FontSize(14.0));
                 builder.push_default(StyleProperty::FontWeight(FontWeight::new(
