@@ -2,7 +2,10 @@ use crate::global::{add_font_base, add_font_chunk, set_available_fonts, set_fall
 use crate::global::{clear_text_replacement_rules, set_text_replacement_rules};
 use crate::icu_data::{get_general_category_map, load_icu_data};
 use crate::layout::query::is_selection_hit;
-use crate::model::{Doc, DocExportMode, LayoutMode, Node, NodeId, ParagraphNode, TextMapping};
+use crate::model::{
+    CONTINUOUS_PAGE_MARGIN, Doc, DocExportMode, LayoutMode, Node, NodeId, ParagraphNode,
+    TextMapping,
+};
 use crate::runtime::search::{SearchQuery, perform_search};
 use crate::runtime::slate::{Slate, get_slate_offsets};
 use crate::runtime::text_replacement::RawTextReplacementRule;
@@ -447,7 +450,7 @@ impl EditorInner {
     fn get_width(doc: &Doc) -> f32 {
         match doc.settings().layout_mode {
             LayoutMode::Paginated { page_width, .. } => page_width,
-            LayoutMode::Continuous { max_width, .. } => max_width,
+            LayoutMode::Continuous { max_width, .. } => max_width + 2.0 * CONTINUOUS_PAGE_MARGIN,
         }
     }
 }

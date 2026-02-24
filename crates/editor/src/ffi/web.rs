@@ -7,8 +7,8 @@ use crate::global::{
 use crate::icu_data::{get_general_category_map, load_icu_data};
 use crate::layout::query::is_selection_hit;
 use crate::model::{
-    Doc, DocExportMode, DocumentJson, LayoutMode, Node, NodeId, ParagraphNode, TextMapping,
-    json_to_snapshot, snapshot_to_json,
+    CONTINUOUS_PAGE_MARGIN, Doc, DocExportMode, DocumentJson, LayoutMode, Node, NodeId,
+    ParagraphNode, TextMapping, json_to_snapshot, snapshot_to_json,
 };
 use crate::render::DragImageResult;
 use crate::runtime::search::{SearchQuery, perform_search};
@@ -248,7 +248,7 @@ impl Editor {
 
         let width = match layout_mode {
             LayoutMode::Paginated { page_width, .. } => page_width,
-            LayoutMode::Continuous { max_width, .. } => max_width,
+            LayoutMode::Continuous { max_width, .. } => max_width + 2.0 * CONTINUOUS_PAGE_MARGIN,
         };
 
         let root = doc.node(NodeId::ROOT).unwrap();
@@ -279,7 +279,7 @@ impl Editor {
 
         let width = match layout_mode {
             LayoutMode::Paginated { page_width, .. } => page_width,
-            LayoutMode::Continuous { max_width, .. } => max_width,
+            LayoutMode::Continuous { max_width, .. } => max_width + 2.0 * CONTINUOUS_PAGE_MARGIN,
         };
 
         let state = State::new(doc, Selection::collapsed(selection_pos));
