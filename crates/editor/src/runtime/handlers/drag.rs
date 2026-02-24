@@ -703,6 +703,161 @@ mod tests {
     }
 
     #[test]
+    fn test_double_click_selectable_node_selects_it_in_read_only_mode() {
+        let mut p1 = id!();
+        let mut img = id!();
+        let mut p2 = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p1 paragraph { text { "Before" } }
+                @img image (id: Some("test-image-id".to_string()),) {}
+                @p2 paragraph { text { "After" } }
+            }
+            selection { (p1, 0) }
+        };
+        rt.layout();
+        rt.set_read_only(true);
+
+        let (img_x, img_y) = {
+            let ctx = NavigationContext::new(&rt.state.doc);
+            let bounds = crate::layout::query::find_node_bounds(ctx.doc, rt.pages(), img)
+                .expect("Image bounds should exist");
+            (
+                bounds.x + bounds.width / 2.0,
+                bounds.y + bounds.height / 2.0,
+            )
+        };
+
+        rt.update(Message::PointerDown {
+            page_idx: 0,
+            x: img_x,
+            y: img_y,
+            click_count: 2,
+            button: PointerButton::Primary,
+            modifier: Modifier::default(),
+        });
+
+        rt.update(Message::PointerUp {
+            page_idx: 0,
+            x: img_x,
+            y: img_y,
+            button: PointerButton::Primary,
+            modifier: Modifier::default(),
+        });
+
+        let expected = state! {
+            doc {
+                @p1 paragraph { text { "Before" } }
+                @img image (id: Some("test-image-id".to_string()),) {}
+                @p2 paragraph { text { "After" } }
+            }
+            selection { (NodeId::ROOT, 1) -> (NodeId::ROOT, 2, Affinity::Upstream) }
+        };
+        assert_state_eq!(rt.state(), expected);
+
+        let external_elements = rt.build_external_elements();
+        let image_element = external_elements
+            .iter()
+            .find(|el| {
+                matches!(
+                    &el.data,
+                    ExternalElementData::Image {
+                        id: Some(id),
+                        ..
+                    } if id == "test-image-id"
+                )
+            })
+            .expect("image external element should exist");
+
+        assert!(image_element.is_selected);
+    }
+
+    #[test]
+    fn test_double_tap_range_extends_to_adjacent_selectable_on_left() {
+        let mut left_img = id!();
+        let mut right_img = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @left_img image (id: Some("left-image-id".to_string()),) {}
+                @right_img image (id: Some("right-image-id".to_string()),) {}
+                paragraph { text { "After" } }
+            }
+            selection { (NodeId::ROOT, 1) -> (NodeId::ROOT, 2, Affinity::Upstream) }
+        };
+        rt.layout();
+        rt.set_read_only(true);
+        let initial_selection = *rt.selection();
+
+        let (left_img_x, left_img_y, right_img_x, right_img_y) = {
+            let ctx = NavigationContext::new(&rt.state.doc);
+            let left_img_bounds =
+                crate::layout::query::find_node_bounds(ctx.doc, rt.pages(), left_img)
+                    .expect("Left image bounds should exist");
+            let right_img_bounds =
+                crate::layout::query::find_node_bounds(ctx.doc, rt.pages(), right_img)
+                    .expect("Right image bounds should exist");
+            (
+                left_img_bounds.x + left_img_bounds.width / 2.0,
+                left_img_bounds.y + left_img_bounds.height / 2.0,
+                right_img_bounds.x + right_img_bounds.width / 2.0,
+                right_img_bounds.y + right_img_bounds.height / 2.0,
+            )
+        };
+
+        rt.update(Message::ExtendSelectionTo {
+            anchor_page_idx: 0,
+            anchor_x: right_img_x,
+            anchor_y: right_img_y,
+            head_page_idx: 0,
+            head_x: left_img_x,
+            head_y: left_img_y,
+            double_tap_initial_range: Some(initial_selection),
+        });
+
+        let (from, to) = rt
+            .selection()
+            .as_sorted(&rt.state.doc)
+            .expect("selection should be comparable");
+        assert_eq!(from.node_id, NodeId::ROOT);
+        assert_eq!(from.offset, 0);
+        assert_eq!(to.node_id, NodeId::ROOT);
+        assert_eq!(to.offset, 2);
+
+        let external_elements = rt.build_external_elements();
+        let image_element = external_elements
+            .iter()
+            .find(|el| {
+                matches!(
+                    &el.data,
+                    ExternalElementData::Image {
+                        id: Some(id),
+                        ..
+                    } if id == "left-image-id"
+                )
+            })
+            .expect("left image external element should exist");
+        let right_image_element = external_elements
+            .iter()
+            .find(|el| {
+                matches!(
+                    &el.data,
+                    ExternalElementData::Image {
+                        id: Some(id),
+                        ..
+                    } if id == "right-image-id"
+                )
+            })
+            .expect("right image external element should exist");
+
+        assert!(image_element.is_selected);
+        assert!(right_image_element.is_selected);
+    }
+
+    #[test]
     fn test_dnd_image_to_inline_position_splits_paragraph() {
         let mut p1 = id!();
         let mut img = id!();

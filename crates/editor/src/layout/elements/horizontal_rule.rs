@@ -61,6 +61,14 @@ impl CursorNavigable for HorizontalRuleElement {
         None
     }
 
+    fn selection_handle_bounds(
+        &self,
+        ctx: &NavigationContext,
+        position: &Position,
+    ) -> Option<Rect> {
+        self.cursor_bounds(ctx, position)
+    }
+
     fn navigate_left(
         &self,
         _ctx: &NavigationContext,
