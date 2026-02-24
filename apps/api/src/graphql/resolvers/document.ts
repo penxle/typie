@@ -145,7 +145,31 @@ IDocument.implement({
         doc.import(content.snapshot);
         const { imageIds, fileIds, embedIds } = extractAssetIdsFromLoroDoc(doc);
 
-        return [...imageIds, ...fileIds, ...embedIds];
+        const [existingImageIds, existingFileIds, existingEmbedIds] = await Promise.all([
+          imageIds.length > 0
+            ? db
+                .select({ id: Images.id })
+                .from(Images)
+                .where(inArray(Images.id, imageIds))
+                .then((r) => r.map((x) => x.id))
+            : [],
+          fileIds.length > 0
+            ? db
+                .select({ id: Files.id })
+                .from(Files)
+                .where(inArray(Files.id, fileIds))
+                .then((r) => r.map((x) => x.id))
+            : [],
+          embedIds.length > 0
+            ? db
+                .select({ id: Embeds.id })
+                .from(Embeds)
+                .where(inArray(Embeds.id, embedIds))
+                .then((r) => r.map((x) => x.id))
+            : [],
+        ]);
+
+        return [...existingImageIds, ...existingFileIds, ...existingEmbedIds];
       },
     }),
 
@@ -188,7 +212,38 @@ Document.implement({
         doc.import(content.snapshot);
         const { imageIds, fileIds, embedIds, archivedIds } = extractAssetIdsFromLoroDoc(doc);
 
-        return [...imageIds, ...fileIds, ...embedIds, ...archivedIds];
+        const [existingImageIds, existingFileIds, existingEmbedIds, existingArchivedIds] = await Promise.all([
+          imageIds.length > 0
+            ? db
+                .select({ id: Images.id })
+                .from(Images)
+                .where(inArray(Images.id, imageIds))
+                .then((r) => r.map((x) => x.id))
+            : [],
+          fileIds.length > 0
+            ? db
+                .select({ id: Files.id })
+                .from(Files)
+                .where(inArray(Files.id, fileIds))
+                .then((r) => r.map((x) => x.id))
+            : [],
+          embedIds.length > 0
+            ? db
+                .select({ id: Embeds.id })
+                .from(Embeds)
+                .where(inArray(Embeds.id, embedIds))
+                .then((r) => r.map((x) => x.id))
+            : [],
+          archivedIds.length > 0
+            ? db
+                .select({ id: DocumentArchivedNodes.id })
+                .from(DocumentArchivedNodes)
+                .where(inArray(DocumentArchivedNodes.id, archivedIds))
+                .then((r) => r.map((x) => x.id))
+            : [],
+        ]);
+
+        return [...existingImageIds, ...existingFileIds, ...existingEmbedIds, ...existingArchivedIds];
       },
     }),
 
