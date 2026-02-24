@@ -1,13 +1,18 @@
 import type { ScrollViewport } from './scroll-viewport';
 
+export type DragScrollAxis = 'vertical' | 'both';
+
 export type DragScrollOptions = {
   scrollZoneSize?: number;
+  minScrollSpeed?: number;
   maxScrollSpeed?: number;
+  axis?: DragScrollAxis;
+  initialPointer?: { clientX: number; clientY: number };
   onScroll?: (clientX: number, clientY: number) => void;
   onScrollThrottleMs?: number;
 };
 
-// NOTE: 드래그 중 위, 아래 끝에서 자동 스크롤
+// NOTE: 드래그 중 끝에서 자동 스크롤
 export function handleDragScroll(
   viewport: ScrollViewport | null,
   isDragging: boolean,
@@ -15,12 +20,35 @@ export function handleDragScroll(
 ): (() => void) | undefined {
   if (!isDragging || !viewport) return;
 
-  const { scrollZoneSize = 50, maxScrollSpeed = 15, onScroll, onScrollThrottleMs = 50 } = options;
+  const {
+    scrollZoneSize = 50,
+    minScrollSpeed = 1,
+    maxScrollSpeed = 15,
+    axis = 'vertical',
+    initialPointer,
+    onScroll,
+    onScrollThrottleMs = 50,
+  } = options;
+
+  const useHorizontalScroll = axis === 'both';
 
   let lastPointerX = 0;
   let lastPointerY = 0;
   let animationId: number | null = null;
   let lastOnScrollTime = 0;
+
+  const isNearEdge = (rect: { top: number; bottom: number; left: number; right: number }) => {
+    const isNearVertical = lastPointerY < rect.top + scrollZoneSize || lastPointerY > rect.bottom - scrollZoneSize;
+    if (useHorizontalScroll) {
+      const isNearHorizontal = lastPointerX < rect.left + scrollZoneSize || lastPointerX > rect.right - scrollZoneSize;
+      return isNearVertical || isNearHorizontal;
+    }
+    return isNearVertical;
+  };
+
+  const getScrollSpeed = (distance: number) => {
+    return Math.min(maxScrollSpeed, Math.max(minScrollSpeed, distance / 3));
+  };
 
   const updatePointer = (clientX: number, clientY: number) => {
     lastPointerX = clientX;
@@ -28,11 +56,11 @@ export function handleDragScroll(
 
     const rect = viewport.getRect();
 
-    if (lastPointerX < rect.left || lastPointerX > rect.right) {
+    if (!useHorizontalScroll && (lastPointerX < rect.left || lastPointerX > rect.right)) {
       return;
     }
 
-    if ((lastPointerY < rect.top + scrollZoneSize || lastPointerY > rect.bottom - scrollZoneSize) && animationId === null) {
+    if (isNearEdge(rect) && animationId === null) {
       animationId = requestAnimationFrame(scroll);
     }
   };
@@ -48,7 +76,7 @@ export function handleDragScroll(
   const scroll = () => {
     const rect = viewport.getRect();
 
-    if (lastPointerX < rect.left || lastPointerX > rect.right) {
+    if (!useHorizontalScroll && (lastPointerX < rect.left || lastPointerX > rect.right)) {
       animationId = null;
       return;
     }
@@ -56,33 +84,49 @@ export function handleDragScroll(
     const now = performance.now();
     const shouldCallOnScroll = now - lastOnScrollTime >= onScrollThrottleMs;
 
+    let deltaX = 0;
+    let deltaY = 0;
+
     if (lastPointerY < rect.top + scrollZoneSize) {
       const distance = rect.top + scrollZoneSize - lastPointerY;
-      const scrollSpeed = Math.min(maxScrollSpeed, Math.max(1, distance / 3));
-      const prevScrollTop = viewport.getScrollTop();
-      viewport.scrollBy(0, -scrollSpeed);
-      if (shouldCallOnScroll && viewport.getScrollTop() !== prevScrollTop) {
-        lastOnScrollTime = now;
-        onScroll?.(lastPointerX, lastPointerY);
-      }
-      animationId = requestAnimationFrame(scroll);
+      deltaY = -getScrollSpeed(distance);
     } else if (lastPointerY > rect.bottom - scrollZoneSize) {
       const distance = lastPointerY - (rect.bottom - scrollZoneSize);
-      const scrollSpeed = Math.min(maxScrollSpeed, Math.max(1, distance / 3));
-      const prevScrollTop = viewport.getScrollTop();
-      viewport.scrollBy(0, scrollSpeed);
-      if (shouldCallOnScroll && viewport.getScrollTop() !== prevScrollTop) {
-        lastOnScrollTime = now;
-        onScroll?.(lastPointerX, lastPointerY);
-      }
-      animationId = requestAnimationFrame(scroll);
-    } else {
-      animationId = null;
+      deltaY = getScrollSpeed(distance);
     }
+
+    if (useHorizontalScroll) {
+      if (lastPointerX < rect.left + scrollZoneSize) {
+        const distance = rect.left + scrollZoneSize - lastPointerX;
+        deltaX = -getScrollSpeed(distance);
+      } else if (lastPointerX > rect.right - scrollZoneSize) {
+        const distance = lastPointerX - (rect.right - scrollZoneSize);
+        deltaX = getScrollSpeed(distance);
+      }
+    }
+
+    if (deltaX === 0 && deltaY === 0) {
+      animationId = null;
+      return;
+    }
+
+    const prevScrollTop = viewport.getScrollTop();
+    const prevScrollLeft = viewport.getScrollLeft();
+    viewport.scrollBy(deltaX, deltaY);
+
+    if (shouldCallOnScroll && (viewport.getScrollTop() !== prevScrollTop || viewport.getScrollLeft() !== prevScrollLeft)) {
+      lastOnScrollTime = now;
+      onScroll?.(lastPointerX, lastPointerY);
+    }
+
+    animationId = requestAnimationFrame(scroll);
   };
 
   viewport.target.addEventListener('dragover', handleDragOver as EventListener);
   viewport.target.addEventListener('pointermove', handlePointerMove as EventListener);
+  if (initialPointer) {
+    updatePointer(initialPointer.clientX, initialPointer.clientY);
+  }
 
   return () => {
     viewport.target.removeEventListener('dragover', handleDragOver as EventListener);

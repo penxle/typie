@@ -27,6 +27,7 @@
   import DocumentActionMenu from './DocumentActionMenu.svelte';
   import DocumentEmojiReaction from './DocumentEmojiReaction.svelte';
   import PostViewBodyUnavailable from './PostViewBodyUnavailable.svelte';
+  import ReadOnlyTouchSelectionSuppress from './ReadOnlyTouchSelectionSuppress.svelte';
   import ShareLinkPopover from './ShareLinkPopover.svelte';
   import type { Optional, UsersiteWildcardSlugPage_DocumentView_entityView, UsersiteWildcardSlugPage_DocumentView_user } from '$graphql';
 
@@ -376,6 +377,7 @@
 
   {#if document.documentBody.__typename === 'DocumentViewBodyAvailable'}
     {#if bodySnapshot}
+      <ReadOnlyTouchSelectionSuppress enabled={editor.touchGesture.gestureActive} />
       {#key document.id}
         {#if document.protectContent}
           <ContentProtect>
