@@ -1121,9 +1121,16 @@ export class Editor {
 
     const rect = pageElement.getBoundingClientRect();
 
+    if (!this.isSelectionHit(pageIdx, x, y)) {
+      e.preventDefault();
+      return;
+    }
+
+    const isReadOnlyTouchDrag = this.readOnly && this.touchGesture.gestureActive;
     const canStartReadOnlyTouchDrag =
       this.readOnly && this.touchGesture.isReadOnlyTouchDragCandidate() && this.touchGesture.isReadOnlyTouchDragArmed();
-    if ((!canStartReadOnlyTouchDrag && this.readOnly) || !this.isSelectionHit(pageIdx, x, y)) {
+
+    if (isReadOnlyTouchDrag && !canStartReadOnlyTouchDrag) {
       e.preventDefault();
       return;
     }
