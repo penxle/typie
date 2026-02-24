@@ -162,9 +162,17 @@ impl LineElement {
         } else {
             Self::RUBY_TOP_OVERHANG
         };
+
+        // When metric.top is negative (negative leading), content extends above the element.
+        let content_top_overflow = (-self.metric.top).max(0.0);
+        // When content area bottom exceeds element height, content extends below.
+        let element_height = self.metric.height + self.metric.leading;
+        let content_bottom_overflow =
+            (self.metric.top + self.metric.height - element_height).max(0.0);
+
         PaintOverflow {
-            top: ruby_top + self.metric.ascent_overflow,
-            bottom: self.metric.descent_overflow,
+            top: ruby_top + content_top_overflow + self.metric.ascent_overflow,
+            bottom: content_bottom_overflow + self.metric.descent_overflow,
             ..PaintOverflow::default()
         }
     }
