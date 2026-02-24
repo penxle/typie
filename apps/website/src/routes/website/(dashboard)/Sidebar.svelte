@@ -126,13 +126,22 @@
 
   type Resizer = {
     deltaX: number;
-    eligible: boolean;
     event: PointerEvent;
     element: HTMLElement;
   };
 
   let resizer = $state<Resizer | null>(null);
   let newWidth = $derived(clamp((app.preference.current.sidebarWidth ?? 240) + (resizer?.deltaX ?? 0), 240, 480));
+
+  const finishResizer = (commit: boolean) => {
+    if (!resizer) return;
+
+    if (commit && resizer.deltaX !== 0) {
+      app.preference.current.sidebarWidth = newWidth;
+    }
+
+    resizer = null;
+  };
 
   let hideTimeout = $state<NodeJS.Timeout | null>(null);
   let hovered = $state(false);
@@ -778,34 +787,34 @@
         opacity: '50',
       },
     })}
+    onlostpointercapture={(e) => {
+      if (!resizer || resizer.event.pointerId !== e.pointerId) return;
+      finishResizer(true);
+    }}
+    onpointercancelcapture={(e) => {
+      if (!resizer || resizer.event.pointerId !== e.pointerId) return;
+      finishResizer(false);
+    }}
     onpointerdowncapture={(e) => {
+      if (e.button !== 0) return;
+
+      const element = e.currentTarget;
+      element.setPointerCapture(e.pointerId);
+
       resizer = {
-        element: e.currentTarget,
+        element,
         event: e,
         deltaX: 0,
-        eligible: false,
       };
     }}
     onpointermovecapture={(e) => {
-      if (!resizer) return;
-
-      if (!resizer.eligible) {
-        resizer.eligible = true;
-        resizer.element.setPointerCapture(e.pointerId);
-      }
+      if (!resizer || resizer.event.pointerId !== e.pointerId) return;
 
       resizer.deltaX = Math.round(e.clientX - resizer.event.clientX);
     }}
-    onpointerupcapture={() => {
-      if (!resizer) return;
-
-      if (resizer.eligible && resizer.element.hasPointerCapture(resizer.event.pointerId)) {
-        resizer.element.releasePointerCapture(resizer.event.pointerId);
-      }
-
-      app.preference.current.sidebarWidth = newWidth;
-
-      resizer = null;
+    onpointerupcapture={(e) => {
+      if (!resizer || resizer.event.pointerId !== e.pointerId) return;
+      finishResizer(true);
     }}
   ></div>
 </div>
