@@ -51,17 +51,11 @@
         node {
           __typename
 
-          ... on Post {
-            id
-
-            ...Editor_Widget_CharacterCountChangeWidget_post
-            ...Editor_Widget_PostRelatedNoteWidget_post
-          }
-
           ... on Document {
             id
 
             ...Editor_Widget_CharacterCountChangeWidget_document
+            ...Editor_Widget_DocumentRelatedNoteWidget_document
           }
         }
       }
@@ -117,7 +111,6 @@
   const focusedViewSlug = $derived(focusedView?.type === 'item' ? focusedView.slug : null);
   const editor = $derived(focusedViewId && focusedViewSlug ? editorRegistry.getTipTap(focusedViewId, focusedViewSlug) : undefined);
   const nativeEditor = $derived(focusedViewId && focusedViewSlug ? editorRegistry.getNative(focusedViewId, focusedViewSlug) : undefined);
-  const _post = $derived(focusedViewSlug && $postQuery?.entity?.node?.__typename === 'Post' ? $postQuery.entity.node : undefined);
   const _document = $derived(focusedViewSlug && $postQuery?.entity?.node?.__typename === 'Document' ? $postQuery.entity.node : undefined);
 
   $effect(() => {
@@ -534,7 +527,6 @@
     widgetContext.env.editMode = editMode;
     widgetContext.env.editor = editor;
     widgetContext.env.nativeEditor = nativeEditor;
-    widgetContext.env.$post = _post;
     widgetContext.env.$document = _document;
   });
 
@@ -998,7 +990,6 @@
 
 <WidgetPalette
   $document={_document}
-  $post={_post}
   addedWidgets={[
     ...widgetsInGroup.filter((w) => w.type === 'real').map((w) => w.name as WidgetType),
     ...freePositionWidgets.map((w) => w.name as WidgetType),

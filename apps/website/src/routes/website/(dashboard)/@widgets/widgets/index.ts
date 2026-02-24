@@ -1,15 +1,15 @@
 import CharacterCountChangeWidget from './CharacterCountChangeWidget.svelte';
 import CharacterCountWidget from './CharacterCountWidget.svelte';
+import DocumentRelatedNoteWidget from './DocumentRelatedNoteWidget.svelte';
 import OnboardingWidget from './OnboardingWidget.svelte';
-import PostRelatedNoteWidget from './PostRelatedNoteWidget.svelte';
 import TimerWidget from './TimerWidget.svelte';
 import type { Component } from 'svelte';
 import type { WidgetType } from '../widget-context.svelte';
 
 export { default as CharacterCountChangeWidget } from './CharacterCountChangeWidget.svelte';
 export { default as CharacterCountWidget } from './CharacterCountWidget.svelte';
+export { default as DocumentRelatedNoteWidget } from './DocumentRelatedNoteWidget.svelte';
 export { default as OnboardingWidget } from './OnboardingWidget.svelte';
-export { default as PostRelatedNoteWidget } from './PostRelatedNoteWidget.svelte';
 export { default as TimerWidget } from './TimerWidget.svelte';
 
 export type WidgetComponentProps = {
@@ -22,7 +22,7 @@ export type WidgetComponent = Component<WidgetComponentProps>;
 export const WIDGET_COMPONENTS: Record<WidgetType, Component<WidgetComponentProps>> = {
   characterCount: CharacterCountWidget,
   characterCountChange: CharacterCountChangeWidget,
-  postRelatedNote: PostRelatedNoteWidget,
+  postRelatedNote: DocumentRelatedNoteWidget,
   onboarding: OnboardingWidget,
   timer: TimerWidget,
 };
