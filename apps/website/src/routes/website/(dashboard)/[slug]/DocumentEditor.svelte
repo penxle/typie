@@ -657,6 +657,15 @@
     editorReady = true;
   }
 
+  function focusTitleFromHeader() {
+    if (editor.scrollContainerEl) {
+      editor.scrollContainerEl.scrollTop = 0;
+    }
+
+    titleEl?.focus();
+    titleEl?.select();
+  }
+
   function handleGlobalKeydown(e: KeyboardEvent) {
     if ((IS_MAC ? e.metaKey : e.ctrlKey) && e.code === 'KeyF' && focused) {
       e.preventDefault();
@@ -714,9 +723,7 @@
               _hover: { color: 'text.default' },
               transition: 'common',
             })}
-            onclick={() => {
-              titleEl?.select();
-            }}
+            onclick={focusTitleFromHeader}
             type="button"
           >
             {title || '(제목 없음)'}
