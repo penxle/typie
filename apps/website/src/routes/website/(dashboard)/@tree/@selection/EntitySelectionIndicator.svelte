@@ -3,6 +3,7 @@
   import { Checkbox } from '@typie/ui/components';
   import { EntityVisibility } from '@/enums';
   import { getTreeContext } from '../state.svelte';
+  import { resetShiftMultiSelectTip, showShiftMultiSelectTipIfNeeded } from './shift-multi-select-tip';
   import type { TreeEntity } from './types';
 
   type Props = {
@@ -117,11 +118,15 @@
         e.preventDefault();
       }
       selectEntityRange();
+      resetShiftMultiSelectTip(treeState);
     } else {
       if (selected) {
         deselect(entityId);
+        resetShiftMultiSelectTip(treeState);
       } else {
+        const selectedCountBefore = treeState.selectedEntityIds.size;
         select(entityId);
+        showShiftMultiSelectTipIfNeeded(treeState, entityId, selectedCountBefore, treeState.selectedEntityIds.size);
       }
     }
   };
