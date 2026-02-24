@@ -149,7 +149,12 @@ class FileWidget extends HookWidget {
       );
 
       final fileResult = result.persistBlobAsFile;
-      final asset = FileAsset(id: fileResult.id, url: fileResult.url, name: fileResult.name, size: fileResult.size);
+      final asset = FileAsset(
+        id: fileResult.id,
+        url: fileResult.url,
+        name: fileResult.name,
+        size: int.parse(fileResult.size.value),
+      );
       uploadManager.completeFileUpload(uploadId: uploadId, nodeId: element.nodeId, asset: asset);
 
       scope.dispatch({'type': 'setFileId', 'nodeId': element.nodeId, 'fileId': fileResult.id});

@@ -111,7 +111,7 @@ class FileFloatingToolbar extends HookWidget {
                           'id': result.persistBlobAsFile.id,
                           'url': result.persistBlobAsFile.url,
                           'name': result.persistBlobAsFile.name,
-                          'size': result.persistBlobAsFile.size,
+                          'size': int.parse(result.persistBlobAsFile.size.value),
                         },
                       },
                     });

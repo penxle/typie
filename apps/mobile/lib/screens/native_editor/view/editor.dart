@@ -115,7 +115,10 @@ class EditorView extends HookWidget {
                 placeholder: img.placeholder,
               ),
             ),
-            file: (f) => uploadManager.addFileAsset(f.id, FileAsset(id: f.id, url: f.url, name: f.name, size: f.size)),
+            file: (f) => uploadManager.addFileAsset(
+              f.id,
+              FileAsset(id: f.id, url: f.url, name: f.name, size: int.parse(f.size.value)),
+            ),
             embed: (e) => uploadManager.addEmbedAsset(
               e.id,
               EmbedAsset(

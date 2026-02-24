@@ -118,7 +118,7 @@ class ImageFloatingToolbar extends HookWidget {
                           'url': result.persistBlobAsImage.url,
                           'ratio': result.persistBlobAsImage.ratio,
                           'placeholder': result.persistBlobAsImage.placeholder,
-                          'size': result.persistBlobAsImage.size,
+                          'size': int.parse(result.persistBlobAsImage.size.value),
                         },
                       },
                     });
