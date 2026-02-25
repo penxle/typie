@@ -10,6 +10,7 @@ import { checkBootstrap } from '@/bootstrap';
 import { redis } from '@/cache';
 import { useError } from './plugins/error';
 import { useLogger } from './plugins/logger';
+import { useRateLimit } from './plugins/rate-limit';
 import { schema } from './schema';
 import type { Env, ServerContext, UserContext } from '@/context';
 
@@ -27,6 +28,9 @@ const app = createYoga<{ c: ServerContext }, UserContext>({
     useExecutionCancellation(),
     useLogger(),
     useError(),
+    useRateLimit({
+      default: { max: 300, refillRate: 5 },
+    }),
     useOpenTelemetry(
       {
         document: false,

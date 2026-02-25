@@ -40,6 +40,8 @@ fnts
 fstype
 genai
 healthz
+hmget
+hset
 icns
 iconify
 iframely
