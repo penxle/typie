@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/scheduler.dart';
+import 'package:typie/native/editor_native.dart';
 import 'package:typie/native/slate_reader.dart';
 import 'package:typie/screens/native_editor/handler/command.dart';
 import 'package:typie/screens/native_editor/state/controller.dart';
@@ -13,7 +14,30 @@ class EditorTicker {
 
   Ticker? _ticker;
   bool _flushPending = false;
+  bool _inputFastPathQueued = false;
   List<Completer<void>> _settledCompleters = [];
+
+  static bool _isInputFastPathMessage(Map<String, dynamic> message) {
+    final type = message['type'];
+    if (type is! String) {
+      return false;
+    }
+
+    switch (type) {
+      case 'input':
+      case 'replaceBackward':
+      case 'deleteBackward':
+      case 'deleteWordBackward':
+      case 'deleteSentenceBackward':
+      case 'compositionStart':
+      case 'compositionUpdate':
+      case 'compositionEnd':
+      case 'commitPreedit':
+        return true;
+      default:
+        return false;
+    }
+  }
 
   Future<void> settled() {
     final completer = Completer<void>();
@@ -23,7 +47,9 @@ class EditorTicker {
 
   void start() {
     _ticker ??= tickerProvider.createTicker(_onTick);
-    getController().editor.onWakeUp = _ensureActive;
+    final controller = getController();
+    controller.editor.onWakeUp = _ensureActive;
+    controller.onDispatched = onDispatchedMessage;
     _ensureActive();
   }
 
@@ -47,6 +73,37 @@ class EditorTicker {
       return;
     }
 
+    _runTickCycle(controller, editor);
+  }
+
+  void onDispatchedMessage(Map<String, dynamic> message) {
+    if (!_isInputFastPathMessage(message)) {
+      return;
+    }
+    _wakeUpInputFastPath();
+  }
+
+  void _wakeUpInputFastPath() {
+    if (_inputFastPathQueued) {
+      return;
+    }
+    _inputFastPathQueued = true;
+
+    scheduleMicrotask(() {
+      _inputFastPathQueued = false;
+      final controller = getController();
+      final editor = controller.editor;
+      if (editor.isDisposed || !editor.awake) {
+        return;
+      }
+      _runTickCycle(controller, editor);
+      if (editor.awake) {
+        _ensureActive();
+      }
+    });
+  }
+
+  void _runTickCycle(EditorController controller, NativeEditor editor) {
     editor
       ..tick()
       ..resetAwake();
@@ -82,6 +139,7 @@ class EditorTicker {
   }
 
   void dispose() {
+    getController().onDispatched = null;
     stop();
     _ticker?.dispose();
   }
