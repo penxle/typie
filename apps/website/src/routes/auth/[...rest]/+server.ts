@@ -6,6 +6,8 @@ const handler: RequestHandler = async ({ url, request, params }) => {
   requestHeaders.delete('Host');
   requestHeaders.delete('Accept-Encoding');
 
+  requestHeaders.set('Connection', 'close');
+
   const response = await fetch(`${env.PRIVATE_API_URL}/auth/${params.rest}${url.search}`, {
     method: request.method,
     headers: requestHeaders,
