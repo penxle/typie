@@ -1,7 +1,38 @@
 use crate::model::Fragment;
 use crate::runtime::Effect;
+use crate::state::{Position, Selection};
 use crate::transaction::Transaction;
+use crate::types::Affinity;
 use anyhow::Result;
+use std::borrow::Cow;
+
+fn normalize_line_endings(input: &str) -> Cow<'_, str> {
+    let needs_normalization = input.as_bytes().contains(&b'\r')
+        || input.contains('\u{2028}') // Line Separator
+        || input.contains('\u{2029}') // Paragraph Separator
+        || input.contains('\u{0085}'); // Next Line (NEL)
+
+    if !needs_normalization {
+        return Cow::Borrowed(input);
+    }
+
+    let mut normalized = String::with_capacity(input.len());
+    let mut chars = input.chars().peekable();
+    while let Some(ch) = chars.next() {
+        match ch {
+            '\r' => {
+                if matches!(chars.peek(), Some('\n')) {
+                    chars.next();
+                }
+                normalized.push('\n');
+            }
+            '\u{2028}' | '\u{2029}' | '\u{0085}' => normalized.push('\n'),
+            _ => normalized.push(ch),
+        }
+    }
+
+    Cow::Owned(normalized)
+}
 
 impl Transaction {
     pub fn paste_text(&mut self, s: String) -> Result<bool> {
@@ -9,28 +40,25 @@ impl Transaction {
             return Ok(false);
         }
 
-        let mut changed = false;
-        let normalized = s
-            .replace("\r\n", "\n")
-            .replace('\r', "\n")
-            .replace('\u{2028}', "\n") // Line Separator
-            .replace('\u{2029}', "\n") // Paragraph Separator
-            .replace('\u{0085}', "\n"); // Next Line (NEL)
-        let lines: Vec<&str> = normalized.split('\n').collect();
-
-        for (i, line) in lines.iter().enumerate() {
-            if i > 0 {
-                self.split_paragraph()?;
-                changed = true;
-            }
-            if !line.is_empty() {
-                if self.insert_text(line)? {
-                    changed = true;
-                }
-            }
+        if !self.selection().is_collapsed() {
+            return Ok(false);
         }
 
-        Ok(changed)
+        let normalized = normalize_line_endings(&s);
+        let selection = self.selection().head;
+        let fragment = Fragment::from_text(normalized.as_ref(), &self.state.pending_styles);
+        let result = self.insert_fragment(selection, fragment)?;
+        if let Some(selection) = result.as_selection() {
+            let selection = if selection.is_collapsed() {
+                let head = selection.head;
+                Selection::collapsed(Position::new(head.node_id, head.offset, Affinity::Upstream))
+            } else {
+                selection
+            };
+            self.set_selection(selection);
+        }
+
+        Ok(result.inserted())
     }
 
     pub fn paste_fragment(&mut self, fragment: Fragment, text: Option<String>) -> Result<bool> {
