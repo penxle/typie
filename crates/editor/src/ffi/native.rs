@@ -635,6 +635,7 @@ pub extern "C" fn editor_render_page_to(
     page_index: usize,
     dst: *mut u8,
     dst_stride: usize,
+    dst_width: usize,
     dst_height: usize,
     format: i32,
 ) -> i32 {
@@ -654,7 +655,7 @@ pub extern "C" fn editor_render_page_to(
             let height = info.height as usize;
             let tight_stride = width * 4;
 
-            if dst_height < height || dst_stride < tight_stride {
+            if dst_width != width || dst_height != height || dst_stride < tight_stride {
                 return Ok(1);
             }
 
@@ -1370,6 +1371,7 @@ pub extern "system" fn Java_co_typie_editortexture_EditorTexture_nativeRenderPag
     page_index: jlong,
     dst_ptr: jlong,
     dst_stride: jlong,
+    dst_width: jlong,
     dst_height: jlong,
     format: jlong,
 ) -> jlong {
@@ -1377,8 +1379,11 @@ pub extern "system" fn Java_co_typie_editortexture_EditorTexture_nativeRenderPag
     let page_index = page_index as usize;
     let dst = dst_ptr as *mut u8;
     let dst_stride = dst_stride as usize;
+    let dst_width = dst_width as usize;
     let dst_height = dst_height as usize;
     let format = format as i32;
 
-    editor_render_page_to(editor, page_index, dst, dst_stride, dst_height, format) as jlong
+    editor_render_page_to(
+        editor, page_index, dst, dst_stride, dst_width, dst_height, format,
+    ) as jlong
 }

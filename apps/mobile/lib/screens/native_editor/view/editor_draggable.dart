@@ -8,54 +8,20 @@ import 'package:typie/screens/native_editor/external/models.dart';
 import 'package:typie/screens/native_editor/toolbar/scope.dart';
 import 'package:typie/screens/native_editor/view/gesture.dart';
 import 'package:typie/screens/native_editor/view/scope.dart';
-import 'package:typie/screens/native_editor/view/scroll.dart';
+
+typedef DragLocationResolver =
+    ({Offset localPosition, int pageIdx, double localY, double pointerX})? Function(Offset globalPosition);
 
 class EditorDraggable extends StatelessWidget {
-  const EditorDraggable({super.key, required this.child, required this.gesture});
+  const EditorDraggable({super.key, required this.child, required this.gesture, required this.resolveDragLocation});
 
   final Widget child;
   final GestureController gesture;
+  final DragLocationResolver resolveDragLocation;
 
   @override
   Widget build(BuildContext context) {
     final scope = ContentScope.of(context);
-    ({Offset localPosition, int pageIdx, double localY, double pointerX})? resolveDragLocation(Offset globalPosition) {
-      final renderBox = context.findRenderObject() as RenderBox?;
-      if (renderBox == null) {
-        return null;
-      }
-
-      final localPosition = renderBox.globalToLocal(globalPosition);
-      final localDocumentY = localPosition.dy;
-      final pointerX = gesture.getPointerX(localPosition.dx);
-
-      final geo = scope.geometry;
-      final offsets = geo.computeCumulativePageOffsets();
-      var pageIdx = -1;
-      var localY = 0.0;
-
-      if (localDocumentY >= geo.titleAreaHeight) {
-        final adjustedY = localDocumentY - geo.titleAreaHeight;
-        var low = 0;
-        var high = offsets.length - 1;
-        while (low < high) {
-          final mid = (low + high) ~/ 2;
-          if (offsets[mid] <= adjustedY) {
-            low = mid + 1;
-          } else {
-            high = mid;
-          }
-        }
-        pageIdx = (low - 1).clamp(0, geo.pages.length - 1);
-        localY = adjustedY - offsets[pageIdx];
-      } else {
-        // Inside Title Area
-        pageIdx = -1;
-        localY = localDocumentY;
-      }
-
-      return (localPosition: localPosition, pageIdx: pageIdx, localY: localY, pointerX: pointerX);
-    }
 
     bool isSelectionDraggable(Offset globalPosition) {
       if (gesture.state.active) {
@@ -88,26 +54,26 @@ class EditorDraggable extends StatelessWidget {
 
         scope.dndController.handleDragStart(
           resolved.pageIdx,
-          request.location.dx,
+          resolved.pointerX,
           resolved.localY,
           Offset(resolved.localPosition.dx, resolved.localPosition.dy),
         );
         return scope.dndController.createDragItem();
       },
       allowedOperations: () => [DropOperation.copy, DropOperation.move],
-      liftBuilder: (context, child) {
+      liftBuilder: (context, _) {
         return ValueListenableBuilder(
           valueListenable: scope.dndController.dragUiImage,
           builder: (context, imageRecord, _) {
-            return _buildDragPreview(context, scope, imageRecord, child);
+            return _buildDragPreview(context, scope, imageRecord);
           },
         );
       },
-      dragBuilder: (context, child) {
+      dragBuilder: (context, _) {
         return ValueListenableBuilder(
           valueListenable: scope.dndController.dragUiImage,
           builder: (context, imageRecord, _) {
-            return _buildDragPreview(context, scope, imageRecord, child);
+            return _buildDragPreview(context, scope, imageRecord);
           },
         );
       },
@@ -118,58 +84,64 @@ class EditorDraggable extends StatelessWidget {
   Widget _buildDragPreview(
     BuildContext context,
     ContentScope scope,
-    ({ui.Image image, double scale, double offsetX, double offsetY, int pageIdx, ui.Offset initialPoint})? imageRecord,
-    Widget child,
+    ({
+      ui.Image image,
+      double scale,
+      double offsetX,
+      double offsetY,
+      int pageIdx,
+      double startX,
+      double startY,
+      ui.Offset initialPoint,
+    })?
+    imageRecord,
   ) {
     if (imageRecord == null) {
-      return child;
+      return const SizedBox(width: 1, height: 1);
     }
 
     final geo = scope.geometry;
-    final offsets = geo.computeCumulativePageOffsets();
-    final renderBox = context.findRenderObject() as RenderBox?;
-    final viewportWidth = (renderBox?.hasSize ?? false) ? renderBox!.size.width : MediaQuery.sizeOf(context).width;
-    final horizontalScrollOffset = scope.horizontalScrollController.hasSingleClient
-        ? scope.horizontalScrollController.offset
-        : 0.0;
-    final contentStartX = geo.contentStartX(
-      viewportWidth: viewportWidth,
-      horizontalScrollOffset: horizontalScrollOffset,
-    );
-
     final unionRect = Rect.fromLTWH(
       imageRecord.offsetX,
       imageRecord.offsetY,
       imageRecord.image.width / imageRecord.scale,
       imageRecord.image.height / imageRecord.scale,
     );
+    final displayRect = Rect.fromLTWH(
+      geo.toDisplayX(unionRect.left),
+      geo.toDisplayY(unionRect.top),
+      geo.toDisplayX(unionRect.width),
+      geo.toDisplayY(unionRect.height),
+    );
+    final zoom = geo.effectiveZoom > 0 ? geo.effectiveZoom : 1.0;
 
     return SnapshotSettings(
       translation: (rect, point) {
-        final pageY = offsets[imageRecord.pageIdx];
-        final targetX = contentStartX + unionRect.left;
-        final targetY = geo.titleAreaHeight + pageY + unionRect.top;
+        final pointerOffsetX = geo.toDisplayX(imageRecord.startX - unionRect.left);
+        final pointerOffsetY = geo.toDisplayY(imageRecord.startY - unionRect.top);
+        final targetX = imageRecord.initialPoint.dx - pointerOffsetX;
+        final targetY = imageRecord.initialPoint.dy - pointerOffsetY;
 
         return Offset(targetX, targetY);
       },
       constraintsTransform: (constraints) => constraints.copyWith(
-        minWidth: unionRect.width,
-        maxWidth: unionRect.width,
-        minHeight: unionRect.height,
-        maxHeight: unionRect.height,
+        minWidth: displayRect.width,
+        maxWidth: displayRect.width,
+        minHeight: displayRect.height,
+        maxHeight: displayRect.height,
       ),
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Positioned(
-            left: 0,
-            top: 0,
-            width: unionRect.width,
-            height: unionRect.height,
-            child: RawImage(image: imageRecord.image, scale: imageRecord.scale),
-          ),
-          ..._buildExternalElements(context, scope, imageRecord, unionRect),
-        ],
+      child: SizedBox(
+        width: displayRect.width,
+        height: displayRect.height,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Positioned.fill(
+              child: RawImage(image: imageRecord.image, scale: imageRecord.scale / zoom),
+            ),
+            ..._buildExternalElements(context, scope, imageRecord, unionRect, zoom),
+          ],
+        ),
       ),
     );
   }
@@ -177,8 +149,19 @@ class EditorDraggable extends StatelessWidget {
   List<Widget> _buildExternalElements(
     BuildContext context,
     ContentScope scope,
-    ({ui.Image image, double scale, double offsetX, double offsetY, int pageIdx, ui.Offset initialPoint}) imageRecord,
+    ({
+      ui.Image image,
+      double scale,
+      double offsetX,
+      double offsetY,
+      int pageIdx,
+      double startX,
+      double startY,
+      ui.Offset initialPoint,
+    })
+    imageRecord,
     Rect unionRect,
+    double zoom,
   ) {
     final elements = scope.controller.state.externalElements;
     final uploadManager = NativeEditorToolbarScope.of(context).uploadManager;
@@ -208,13 +191,13 @@ class EditorDraggable extends StatelessWidget {
           final displayWidth = element.bounds.width * imageData.proportion;
           final xOffset = (element.bounds.width - displayWidth) / 2;
 
-          final globalX = element.bounds.x + xOffset;
-          final globalY = element.bounds.y;
+          final globalX = (element.bounds.x + xOffset) * zoom;
+          final globalY = element.bounds.y * zoom;
 
-          final destX = globalX - unionRect.left;
-          final destY = globalY - unionRect.top;
-          final destW = displayWidth;
-          final destH = element.bounds.height;
+          final destX = globalX - unionRect.left * zoom;
+          final destY = globalY - unionRect.top * zoom;
+          final destW = displayWidth * zoom;
+          final destH = element.bounds.height * zoom;
 
           return Positioned(
             left: destX,

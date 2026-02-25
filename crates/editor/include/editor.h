@@ -65,7 +65,15 @@ int32_t editor_get_render_info(EditorHandle* editor, size_t page_index, RenderIn
 
 #define PIXEL_FORMAT_RGBA 0
 #define PIXEL_FORMAT_BGRA 1
-int32_t editor_render_page_to(EditorHandle* editor, size_t page_index, uint8_t* dst, size_t dst_stride, size_t dst_height, int32_t format);
+int32_t editor_render_page_to(
+    EditorHandle* editor,
+    size_t page_index,
+    uint8_t* dst,
+    size_t dst_stride,
+    size_t dst_width,
+    size_t dst_height,
+    int32_t format
+);
 int32_t editor_is_selection_hit(EditorHandle* editor, size_t page_idx, float x, float y);
 int32_t editor_is_interactive_hit(EditorHandle* editor, size_t page_idx, float x, float y);
 int32_t editor_get_character_counts(EditorHandle* editor, CharacterCounts* out_counts);

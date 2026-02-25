@@ -4,7 +4,7 @@ import UIKit
 class EditorTexturePlugin: NSObject, FlutterPlugin {
   private let textureRegistry: FlutterTextureRegistry
   private var textures: [Int64: EditorTexture] = [:]
-  private static let maxTextures = 5
+  private static let maxTextures = 10
 
   init(registrar: FlutterPluginRegistrar) {
     self.textureRegistry = registrar.textures()
@@ -66,23 +66,31 @@ class EditorTexturePlugin: NSObject, FlutterPlugin {
       return
     }
 
+    var results: [Bool] = []
+
     for item in items {
       guard let textureId = item["textureId"] as? Int64,
             let editorPtr = item["editorPtr"] as? Int64,
             let pageIndex = item["pageIndex"] as? Int,
             let width = item["width"] as? Int,
             let height = item["height"] as? Int else {
+        results.append(false)
         continue
       }
 
-      guard let texture = textures[textureId] else { continue }
+      guard let texture = textures[textureId] else {
+        results.append(false)
+        continue
+      }
 
-      if texture.render(editorPtr: editorPtr, pageIndex: pageIndex, width: width, height: height) {
+      let didRender = texture.render(editorPtr: editorPtr, pageIndex: pageIndex, width: width, height: height)
+      if didRender {
         textureRegistry.textureFrameAvailable(textureId)
       }
+      results.append(didRender)
     }
 
-    result(true)
+    result(results)
   }
 
   private func handleDispose(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
@@ -176,6 +184,7 @@ class EditorTexture: NSObject, FlutterTexture {
       pageIndex,
       ptr.assumingMemoryBound(to: UInt8.self),
       stride,
+      width,
       height,
       PIXEL_FORMAT_BGRA
     )

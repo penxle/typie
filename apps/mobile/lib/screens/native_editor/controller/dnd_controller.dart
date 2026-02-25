@@ -18,62 +18,95 @@ class DndController {
 
   Completer<void>? _imageCompleter;
   final ValueNotifier<
-    ({ui.Image image, double scale, double offsetX, double offsetY, int pageIdx, ui.Offset initialPoint})?
+    ({
+      ui.Image image,
+      double scale,
+      double offsetX,
+      double offsetY,
+      int pageIdx,
+      double startX,
+      double startY,
+      ui.Offset initialPoint,
+    })?
   >
   dragUiImage = ValueNotifier(null);
 
-  Future<void> prepareDragImage(int pageIdx, ui.Offset initialPoint) async {
+  Future<void> prepareDragImage(int pageIdx, double startX, double startY, ui.Offset initialPoint) async {
     dragUiImage.value = null;
     _imageCompleter = Completer<void>();
 
     final result = await _tryRenderDragImage(pageIdx);
     if (result != null) {
-      ui.decodeImageFromPixels(result.pixels, result.width, result.height, ui.PixelFormat.rgba8888, (image) {
+      final decoded = await _decodeImageSafe(result.pixels, result.width, result.height);
+      if (decoded != null) {
         dragUiImage.value = (
-          image: image,
+          image: decoded,
           scale: result.scaleFactor,
           offsetX: result.offsetX,
           offsetY: result.offsetY,
           pageIdx: pageIdx,
+          startX: startX,
+          startY: startY,
           initialPoint: initialPoint,
         );
-        _imageCompleter?.complete();
-      });
-      return;
+        if (!(_imageCompleter?.isCompleted ?? true)) {
+          _imageCompleter?.complete();
+        }
+        return;
+      }
     }
 
     final elements = controller.state.externalElements;
-    double? minX, minY, maxX, maxY;
+    double? minX, minY;
 
     for (final element in elements) {
       if (element.pageIdx == pageIdx && element.isSelected) {
         minX = minX == null ? element.bounds.x : math.min(minX, element.bounds.x);
         minY = minY == null ? element.bounds.y : math.min(minY, element.bounds.y);
-        maxX = maxX == null
-            ? (element.bounds.x + element.bounds.width)
-            : math.max(maxX, element.bounds.x + element.bounds.width);
-        maxY = maxY == null
-            ? (element.bounds.y + element.bounds.height)
-            : math.max(maxY, element.bounds.y + element.bounds.height);
       }
     }
 
-    if (minX != null && minY != null && maxX != null && maxY != null) {
-      final completer = Completer<ui.Image>();
-      ui.decodeImageFromPixels(Uint8List.fromList([0, 0, 0, 0]), 1, 1, ui.PixelFormat.rgba8888, completer.complete);
-      final transparentImage = await completer.future;
-
-      dragUiImage.value = (
-        image: transparentImage,
-        scale: 1.0,
-        offsetX: minX,
-        offsetY: minY,
-        pageIdx: pageIdx,
-        initialPoint: initialPoint,
-      );
+    final transparentImage = await _decodeImageSafe(Uint8List.fromList([0, 0, 0, 0]), 1, 1);
+    if (transparentImage == null) {
+      if (!(_imageCompleter?.isCompleted ?? true)) {
+        _imageCompleter?.complete();
+      }
+      return;
     }
 
-    _imageCompleter?.complete();
+    dragUiImage.value = (
+      image: transparentImage,
+      scale: 1.0,
+      offsetX: minX ?? 0,
+      offsetY: minY ?? 0,
+      pageIdx: pageIdx,
+      startX: startX,
+      startY: startY,
+      initialPoint: initialPoint,
+    );
+
+    if (!(_imageCompleter?.isCompleted ?? true)) {
+      _imageCompleter?.complete();
+    }
+  }
+
+  Future<ui.Image?> _decodeImageSafe(Uint8List pixels, int width, int height) async {
+    if (width <= 0 || height <= 0) {
+      return null;
+    }
+
+    final expected = width * height * 4;
+    if (pixels.lengthInBytes != expected) {
+      return null;
+    }
+
+    final completer = Completer<ui.Image>();
+    try {
+      ui.decodeImageFromPixels(pixels, width, height, ui.PixelFormat.rgba8888, completer.complete);
+      return await completer.future;
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<NativeDragImageResult?> _tryRenderDragImage(int pageIdx) async {
@@ -85,8 +118,9 @@ class DndController {
   }
 
   Future<DragItem?> createDragItem() async {
-    if (_imageCompleter != null && !_imageCompleter!.isCompleted) {
-      await _imageCompleter!.future;
+    final pendingImage = _imageCompleter;
+    if (pendingImage != null && !pendingImage.isCompleted) {
+      await pendingImage.future;
     }
 
     final clipboardData = editor.getClipboardData();
@@ -116,7 +150,7 @@ class DndController {
 
   void handleDragStart(int pageIdx, double x, double y, ui.Offset initialPoint) {
     _isDragging = true;
-    unawaited(prepareDragImage(pageIdx, initialPoint));
+    unawaited(prepareDragImage(pageIdx, x, y, initialPoint));
     editor.dispatch({'type': 'dragStart', 'pageIdx': pageIdx, 'x': x, 'y': y});
     controller.scrollIntoView();
   }
@@ -211,6 +245,10 @@ class DndController {
 
   void handleDragEnd() {
     _isDragging = false;
+    dragUiImage.value = null;
+    if (!(_imageCompleter?.isCompleted ?? true)) {
+      _imageCompleter?.complete();
+    }
     _handleDragEnd();
   }
 

@@ -6,7 +6,7 @@ import 'package:typie/context/theme.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/screens/native_editor/controller/clipboard.dart';
 import 'package:typie/screens/native_editor/view/scope.dart';
-import 'package:typie/screens/native_editor/view/scroll.dart';
+import 'package:typie/screens/native_editor/view/zoom.dart';
 
 class SelectionContextMenu extends StatelessWidget {
   const SelectionContextMenu({required this.clipboard, required this.onDismiss, super.key});
@@ -19,7 +19,11 @@ class SelectionContextMenu extends StatelessWidget {
     final scope = ContentScope.of(context);
 
     return ListenableBuilder(
-      listenable: Listenable.merge([scope.verticalScrollController, scope.horizontalScrollController]),
+      listenable: Listenable.merge([
+        scope.verticalScrollController,
+        scope.horizontalScrollController,
+        scope.displayZoom,
+      ]),
       builder: (context, _) {
         final anchor = _computeMenuAnchor(scope, viewportWidth: MediaQuery.sizeOf(context).width);
         if (anchor == null) {
@@ -55,14 +59,22 @@ class SelectionContextMenu extends StatelessWidget {
     final offsets = geo.computeCumulativePageOffsets();
     final vController = scope.verticalScrollController;
     final hController = scope.horizontalScrollController;
-
-    if (!vController.hasSingleClient) {
+    final verticalPosition = resolveScrollPosition(vController);
+    if (verticalPosition == null || !verticalPosition.hasContentDimensions) {
       return null;
     }
 
-    final scrollOffset = vController.offset;
-    final hScrollOffset = hController.hasSingleClient ? hController.offset : 0.0;
-    final contentStartX = geo.contentStartX(viewportWidth: viewportWidth, horizontalScrollOffset: hScrollOffset);
+    final horizontalMetrics = resolveHorizontalScrollMetrics(
+      controller: hController,
+      contentWidth: geo.contentWidth,
+      fallbackViewportDimension: viewportWidth,
+    );
+    final scrollOffset = verticalPosition.pixels;
+    final hScrollOffset = horizontalMetrics.scrollOffset;
+    final contentStartX = geo.contentStartX(
+      viewportWidth: horizontalMetrics.viewportDimension,
+      horizontalScrollOffset: hScrollOffset,
+    );
 
     final state = scope.controller.state;
     final fromHandle = state.selection?.fromBounds;
@@ -75,23 +87,23 @@ class SelectionContextMenu extends StatelessWidget {
 
     if (fromHandle != null && toHandle != null) {
       final fromPageTop = geo.titleAreaHeight + offsets[fromHandle.pageIdx];
-      final fromScreenY = fromPageTop + fromHandle.y - scrollOffset;
-      final fromScreenX = contentStartX + fromHandle.x;
+      final fromScreenY = fromPageTop + geo.toDisplayY(fromHandle.y) - scrollOffset;
+      final fromScreenX = contentStartX + geo.toDisplayX(fromHandle.x);
 
       final toPageTop = geo.titleAreaHeight + offsets[toHandle.pageIdx];
-      final toScreenY = toPageTop + toHandle.y + toHandle.height - scrollOffset;
-      final toScreenX = contentStartX + toHandle.x;
+      final toScreenY = toPageTop + geo.toDisplayY(toHandle.y + toHandle.height) - scrollOffset;
+      final toScreenX = contentStartX + geo.toDisplayX(toHandle.x);
 
       topY = fromScreenY;
       bottomY = toScreenY;
       centerX = (fromScreenX + toScreenX) / 2;
     } else if (cursor != null) {
       final cursorPageTop = geo.titleAreaHeight + offsets[cursor.pageIdx];
-      final cursorScreenY = cursorPageTop + cursor.y - scrollOffset;
-      final cursorScreenX = contentStartX + cursor.x;
+      final cursorScreenY = cursorPageTop + geo.toDisplayY(cursor.y) - scrollOffset;
+      final cursorScreenX = contentStartX + geo.toDisplayX(cursor.x);
 
       topY = cursorScreenY;
-      bottomY = cursorScreenY + cursor.height;
+      bottomY = cursorScreenY + geo.toDisplayY(cursor.height);
       centerX = cursorScreenX;
     } else {
       return null;

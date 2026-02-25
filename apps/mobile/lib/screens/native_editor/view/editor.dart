@@ -34,6 +34,8 @@ import 'package:typie/screens/native_editor/view/repaste_as_text.dart';
 import 'package:typie/screens/native_editor/view/scope.dart';
 import 'package:typie/screens/native_editor/view/scroll.dart';
 import 'package:typie/screens/native_editor/view/scrollbar.dart';
+import 'package:typie/screens/native_editor/view/zoom.dart';
+import 'package:typie/screens/native_editor/view/zoom_overlay.dart';
 import 'package:typie/services/keyboard.dart';
 import 'package:typie/services/preference.dart';
 
@@ -92,11 +94,58 @@ class EditorView extends HookWidget {
     final longPressPosition = useValueNotifier<Offset?>(null);
     final handleDragPosition = useValueNotifier<Offset?>(null);
     final pendingScroll = useValueNotifier<VoidCallback?>(null);
+    final zoomViewportWidth = useValueNotifier<double>(0);
+    final displayZoom = useValueNotifier<double>(1);
+    final renderZoom = useValueNotifier<double>(1);
+    final renderZoomTimer = useRef<Timer?>(null);
+    final currentZoomViewportWidth = useValueListenable(zoomViewportWidth);
+    final currentDisplayZoom = useValueListenable(displayZoom);
+    final currentRenderZoom = useValueListenable(renderZoom);
 
     final lastSize = useRef<(double, double, double)>((0, 0, 0));
 
     final titleNotifier = useValueNotifier(title)..value = title;
     final subtitleNotifier = useValueNotifier(subtitle)..value = subtitle;
+
+    useEffect(() {
+      return () => renderZoomTimer.value?.cancel();
+    }, []);
+
+    void setZoom(double zoom, {bool commitRender = false}) {
+      final layout = controller.state.layout;
+      final next = switch (layout) {
+        PaginatedLayout(:final pageWidth) => clampPaginatedZoom(
+          zoom: zoom,
+          pageWidth: pageWidth,
+          viewportWidth: zoomViewportWidth.value > 0 ? zoomViewportWidth.value : pageWidth,
+        ),
+        _ => 1.0,
+      };
+      final nextRender = renderZoomForDisplay(next);
+
+      if (zoomDiffers(displayZoom.value, next)) {
+        displayZoom.value = next;
+      }
+
+      renderZoomTimer.value?.cancel();
+
+      if (commitRender) {
+        if (zoomDiffers(renderZoom.value, nextRender)) {
+          renderZoom.value = nextRender;
+        }
+        return;
+      }
+
+      renderZoomTimer.value = Timer(renderZoomDebounce, () {
+        final latestLayout = controller.state.layout;
+        final latestIsPaginated = latestLayout is PaginatedLayout;
+        final latestDisplay = latestIsPaginated ? displayZoom.value : 1.0;
+        final latestRender = renderZoomForDisplay(latestDisplay);
+        if (zoomDiffers(renderZoom.value, latestRender)) {
+          renderZoom.value = latestRender;
+        }
+      });
+    }
 
     useEffect(() => uploadManager.dispose, []);
 
@@ -197,14 +246,16 @@ class EditorView extends HookWidget {
           if (layout == null) {
             return;
           }
+          final zoom = displayZoom.value;
 
           final geo = ContentGeometry(
             layout: layout,
             pages: controller.state.pages,
             titleAreaHeight: titleAreaHeight.value,
+            zoom: zoom,
           );
 
-          final newContentX = origin.x + dx;
+          final newContentX = origin.x + geo.toLogicalX(dx);
           final originAbsoluteY = geo.cursorTopInPages(origin);
           final newAbsoluteY = (originAbsoluteY + dy).clamp(0.0, geo.pagesContentHeight);
 
@@ -221,7 +272,7 @@ class EditorView extends HookWidget {
           }
 
           final pageIdx = (low - 1).clamp(0, controller.state.pages.length - 1);
-          final localY = newAbsoluteY - offsets[pageIdx];
+          final localY = geo.toLogicalY(newAbsoluteY - offsets[pageIdx]);
 
           final pointerEvent = <String, dynamic>{
             'pageIdx': pageIdx,
@@ -252,16 +303,16 @@ class EditorView extends HookWidget {
 
     useEffect(() {
       void scrollToTop() {
-        if (verticalScrollController.hasSingleClient) {
-          suppressScrollbarTimer.value?.cancel();
-          suppressScrollbarShow.value = true;
-          unawaited(
-            verticalScrollController.animateTo(0, duration: const Duration(milliseconds: 100), curve: Curves.easeOut),
-          );
-          suppressScrollbarTimer.value = Timer(const Duration(milliseconds: 150), () {
-            suppressScrollbarShow.value = false;
-          });
+        final verticalPosition = resolveScrollPosition(verticalScrollController);
+        if (verticalPosition == null || !verticalPosition.hasContentDimensions) {
+          return;
         }
+        suppressScrollbarTimer.value?.cancel();
+        suppressScrollbarShow.value = true;
+        unawaited(verticalPosition.animateTo(0, duration: const Duration(milliseconds: 100), curve: Curves.easeOut));
+        suppressScrollbarTimer.value = Timer(const Duration(milliseconds: 150), () {
+          suppressScrollbarShow.value = false;
+        });
       }
 
       void onTitleFocusChange() {
@@ -320,6 +371,7 @@ class EditorView extends HookWidget {
           layout: controller.state.layout!,
           pages: controller.state.pages,
           selection: controller.state.selection,
+          zoom: currentDisplayZoom,
         ),
         cursor: c,
         typewriterEnabled: typewriter,
@@ -338,7 +390,8 @@ class EditorView extends HookWidget {
 
         if (!wasVisible && height > 0) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (!verticalScrollController.hasSingleClient) {
+            final verticalPosition = resolveScrollPosition(verticalScrollController);
+            if (verticalPosition == null || !verticalPosition.hasContentDimensions) {
               return;
             }
             final cursor = controller.state.cursor;
@@ -380,8 +433,34 @@ class EditorView extends HookWidget {
 
     final state = useListenable(controller);
     final currentLayout = state.state.layout;
+    final isPaginatedLayout = currentLayout is PaginatedLayout;
     final cursor = state.state.cursor;
     final isDropping = useValueListenable(dndController.isDropping);
+    final didApplyPaginatedInitialZoom = useRef(false);
+
+    useEffect(() {
+      if (!isPaginatedLayout) {
+        didApplyPaginatedInitialZoom.value = false;
+        setZoom(1, commitRender: true);
+        return null;
+      }
+
+      if (didApplyPaginatedInitialZoom.value) {
+        return null;
+      }
+      if (currentZoomViewportWidth <= 0) {
+        return null;
+      }
+
+      final initialZoom = computeInitialPaginatedZoom(
+        pageWidth: currentLayout.pageWidth,
+        viewportWidth: currentZoomViewportWidth,
+      );
+      setZoom(initialZoom, commitRender: true);
+      didApplyPaginatedInitialZoom.value = true;
+
+      return null;
+    }, [isPaginatedLayout, currentLayout, currentZoomViewportWidth]);
 
     useEffect(() {
       selection.value = state.state.selection;
@@ -399,23 +478,25 @@ class EditorView extends HookWidget {
       }
 
       if (cursor.visible) {
-        final verticalScrollOffset = verticalScrollController.hasSingleClient ? verticalScrollController.offset : 0.0;
-        final horizontalScrollOffset = horizontalScrollController.hasSingleClient
-            ? horizontalScrollController.offset
-            : 0.0;
-        final viewportWidth =
-            horizontalScrollController.hasSingleClient && horizontalScrollController.position.hasContentDimensions
-            ? horizontalScrollController.position.viewportDimension
-            : MediaQuery.sizeOf(context).width;
+        final verticalScrollOffset = resolveScrollOffset(verticalScrollController);
         final geo = ContentGeometry(
           layout: currentLayout!,
           pages: controller.state.pages,
           titleAreaHeight: titleAreaHeight.value,
+          zoom: isPaginatedLayout ? currentDisplayZoom : 1.0,
         );
+        final horizontalMetrics = resolveHorizontalScrollMetrics(
+          controller: horizontalScrollController,
+          contentWidth: geo.contentWidth,
+          fallbackViewportDimension: MediaQuery.sizeOf(context).width,
+        );
+        final viewportWidth = horizontalMetrics.viewportDimension;
+        final horizontalScrollOffset = horizontalMetrics.scrollOffset;
         final screenY = geo.titleAreaHeight + geo.cursorTopInPages(cursor) - verticalScrollOffset;
         final screenX =
-            geo.contentStartX(viewportWidth: viewportWidth, horizontalScrollOffset: horizontalScrollOffset) + cursor.x;
-        inputController.updateCursor(screenX, screenY, cursor.height, cursor.precedingCharWidths);
+            geo.contentStartX(viewportWidth: viewportWidth, horizontalScrollOffset: horizontalScrollOffset) +
+            geo.toDisplayX(cursor.x);
+        inputController.updateCursor(screenX, screenY, geo.toDisplayY(cursor.height), cursor.precedingCharWidths);
       }
 
       final shouldScroll =
@@ -445,7 +526,7 @@ class EditorView extends HookWidget {
         }
       }
       return null;
-    }, [cursor, state.state.renderVersion]);
+    }, [cursor, state.state.renderVersion, currentDisplayZoom]);
 
     void scrollToOverlay({required int pageIdx, required double x, required double y, required double width}) {
       if (currentLayout == null) {
@@ -458,6 +539,7 @@ class EditorView extends HookWidget {
           titleAreaHeight: titleAreaHeight.value,
           layout: currentLayout,
           pages: controller.state.pages,
+          zoom: isPaginatedLayout ? currentDisplayZoom : 1.0,
         ),
         pageIdx: pageIdx,
         targetX: x,
@@ -505,6 +587,7 @@ class EditorView extends HookWidget {
                 titleAreaHeight: titleAreaHeight.value,
                 layout: layout,
                 pages: controller.state.pages,
+                zoom: currentDisplayZoom,
               ),
               pageIdx: target.pageIdx,
               targetX: target.boundsX,
@@ -563,11 +646,23 @@ class EditorView extends HookWidget {
           titleFocusNode: titleFocusNode,
           subtitleFocusNode: subtitleFocusNode,
           pendingScroll: pendingScroll,
+          displayZoom: displayZoom,
+          renderZoom: renderZoom,
+          setZoom: setZoom,
           child: LayoutBuilder(
             builder: (context, constraints) {
               final width = constraints.maxWidth.floorToDouble();
               final height = constraints.maxHeight;
-              final scaleFactor = MediaQuery.devicePixelRatioOf(context);
+              if (zoomViewportWidth.value != constraints.maxWidth) {
+                final nextViewportWidth = constraints.maxWidth;
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (zoomViewportWidth.value != nextViewportWidth) {
+                    zoomViewportWidth.value = nextViewportWidth;
+                  }
+                });
+              }
+              final zoomForRender = isPaginatedLayout ? currentRenderZoom : 1.0;
+              final scaleFactor = MediaQuery.devicePixelRatioOf(context) * zoomForRender;
               final currentSize = (width, height, scaleFactor);
               if (lastSize.value != currentSize) {
                 lastSize.value = currentSize;
@@ -584,6 +679,7 @@ class EditorView extends HookWidget {
                     child: Stack(
                       fit: StackFit.expand,
                       children: [
+                        if (isPaginatedLayout) Positioned.fill(child: ColoredBox(color: context.colors.surfaceSubtle)),
                         NotificationListener<ScrollMetricsNotification>(
                           onNotification: (_) {
                             scrollMetricsRevision.value++;
@@ -599,6 +695,7 @@ class EditorView extends HookWidget {
                           scrollMetricsRevision: scrollMetricsRevision,
                           documentTemplates: documentTemplates,
                           client: client,
+                          displayZoom: displayZoom,
                         ),
                         ValueListenableBuilder<Offset?>(
                           valueListenable: longPressPosition,
@@ -647,6 +744,7 @@ class EditorView extends HookWidget {
                           ),
                         ),
                         if (pref.characterCountFloatingEnabled) const NativeCharacterCountFloating(),
+                        const NativeEditorZoomOverlay(),
                         const Positioned(bottom: 20, right: 20, child: NativeEditorFloatingToolbar()),
                         if (state.state.repasteAsTextEnabled)
                           Positioned(left: 0, right: 0, bottom: 0, child: RepasteAsTextWidget(controller: controller)),
@@ -678,6 +776,7 @@ class _DocumentPlaceholder extends StatelessWidget {
     required this.scrollMetricsRevision,
     required this.documentTemplates,
     required this.client,
+    required this.displayZoom,
   });
 
   final EditorController controller;
@@ -687,11 +786,12 @@ class _DocumentPlaceholder extends StatelessWidget {
   final ValueNotifier<int> scrollMetricsRevision;
   final List<GNativeEditorScreen_QueryData_entity_site_documentTemplates> documentTemplates;
   final GraphQLClient client;
+  final ValueNotifier<double> displayZoom;
 
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: Listenable.merge([controller, titleAreaHeight]),
+      listenable: Listenable.merge([controller, titleAreaHeight, displayZoom]),
       builder: (context, _) {
         final placeholder = controller.state.placeholder;
         if (!placeholder.visible ||
@@ -711,26 +811,36 @@ class _DocumentPlaceholder extends StatelessWidget {
           layout: layout,
           pages: controller.state.pages,
           titleAreaHeight: titleAreaHeight.value,
+          zoom: displayZoom.value,
         );
 
         return AnimatedBuilder(
           animation: Listenable.merge([verticalScrollController, horizontalScrollController, scrollMetricsRevision]),
           builder: (context, child) {
-            final verticalScroll = verticalScrollController.hasSingleClient ? verticalScrollController.offset : 0.0;
-            final horizontalScroll = horizontalScrollController.hasSingleClient
-                ? horizontalScrollController.offset
-                : 0.0;
-            final viewportWidth =
-                horizontalScrollController.hasSingleClient && horizontalScrollController.position.hasContentDimensions
-                ? horizontalScrollController.position.viewportDimension
-                : MediaQuery.sizeOf(context).width;
+            final verticalScroll = resolveScrollOffset(verticalScrollController);
+            final horizontalMetrics = resolveHorizontalScrollMetrics(
+              controller: horizontalScrollController,
+              contentWidth: geo.contentWidth,
+              fallbackViewportDimension: MediaQuery.sizeOf(context).width,
+            );
+            final viewportWidth = horizontalMetrics.viewportDimension;
+            final horizontalScroll = horizontalMetrics.scrollOffset;
+            final placeholderX = placeholder.x!;
+            final placeholderY = placeholder.y!;
+            final placeholderWidth = placeholder.width!;
 
-            final top = placeholder.y! + titleAreaHeight.value - verticalScroll;
+            final top = geo.toDisplayY(placeholderY) + titleAreaHeight.value - verticalScroll;
             final left =
-                placeholder.x! +
+                geo.toDisplayX(placeholderX) +
                 geo.contentStartX(viewportWidth: viewportWidth, horizontalScrollOffset: horizontalScroll);
+            final zoom = geo.effectiveZoom;
 
-            return Positioned(top: top, left: left, width: placeholder.width, child: child!);
+            return Positioned(
+              top: top,
+              left: left,
+              width: placeholderWidth,
+              child: Transform.scale(alignment: Alignment.topLeft, scale: zoom, child: child),
+            );
           },
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

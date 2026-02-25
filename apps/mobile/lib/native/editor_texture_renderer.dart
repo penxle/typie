@@ -6,18 +6,22 @@ import 'package:typie/native/editor_native.dart';
 class _BatchRenderItem {
   _BatchRenderItem({
     required this.textureId,
+    required this.editor,
     required this.editorPtr,
     required this.pageIndex,
     required this.width,
     required this.height,
+    required this.requestToken,
     required this.completer,
   });
 
   final int textureId;
+  final NativeEditor editor;
   final int editorPtr;
   final int pageIndex;
   final int width;
   final int height;
+  final int requestToken;
   final Completer<bool> completer;
 }
 
@@ -26,7 +30,10 @@ class EditorTextureRenderer {
 
   static const _channel = MethodChannel('co.typie.editor_texture');
   static final _pendingRenders = <_BatchRenderItem>[];
+  static final _latestRequestTokenByTexture = <int, int>{};
+  static int _nextRequestToken = 1;
   static bool _flushScheduled = false;
+  static bool _isFlushing = false;
 
   final NativeEditor editor;
   int? _textureId;
@@ -37,9 +44,16 @@ class EditorTextureRenderer {
   int get width => _currentWidth;
   int get height => _currentHeight;
 
+  bool _isRenderableSize(int width, int height) {
+    return width > 0 && height > 0;
+  }
+
   Future<void> create(int pageIndex) async {
     final info = editor.getRenderInfo(pageIndex);
     if (info == null) {
+      return;
+    }
+    if (!_isRenderableSize(info.width, info.height)) {
       return;
     }
 
@@ -58,59 +72,137 @@ class EditorTextureRenderer {
     if (info == null) {
       return false;
     }
+    if (!_isRenderableSize(info.width, info.height)) {
+      return false;
+    }
 
     _currentWidth = info.width;
     _currentHeight = info.height;
 
     final completer = Completer<bool>();
+    final requestToken = _nextRequestToken++;
+    _latestRequestTokenByTexture[_textureId!] = requestToken;
     _pendingRenders.add(
       _BatchRenderItem(
         textureId: _textureId!,
+        editor: editor,
         editorPtr: editor.handle.address,
         pageIndex: pageIndex,
         width: info.width,
         height: info.height,
+        requestToken: requestToken,
         completer: completer,
       ),
     );
 
     if (!_flushScheduled) {
       _flushScheduled = true;
-      scheduleMicrotask(_flushBatch);
+      scheduleMicrotask(_flushBatchLoop);
     }
 
     return completer.future;
   }
 
-  static Future<void> _flushBatch() async {
-    _flushScheduled = false;
+  static Future<void> _flushBatchLoop() async {
+    if (_isFlushing) {
+      return;
+    }
+    _isFlushing = true;
+    try {
+      while (_pendingRenders.isNotEmpty) {
+        final batch = List.of(_pendingRenders);
+        _pendingRenders.clear();
+        await _flushBatch(batch);
+      }
+    } finally {
+      _isFlushing = false;
+      _flushScheduled = false;
+      if (_pendingRenders.isNotEmpty) {
+        _flushScheduled = true;
+        scheduleMicrotask(_flushBatchLoop);
+      }
+    }
+  }
 
-    final batch = List.of(_pendingRenders);
-    _pendingRenders.clear();
-
+  static Future<void> _flushBatch(List<_BatchRenderItem> batch) async {
     if (batch.isEmpty) {
       return;
     }
 
-    try {
-      await _channel.invokeMethod<void>('render', {
-        'items': batch
-            .map(
-              (r) => <String, dynamic>{
-                'textureId': r.textureId,
-                'editorPtr': r.editorPtr,
-                'pageIndex': r.pageIndex,
-                'width': r.width,
-                'height': r.height,
-              },
-            )
-            .toList(),
+    final latestByTexture = <int, _BatchRenderItem>{};
+    for (final item in batch) {
+      final previous = latestByTexture[item.textureId];
+      if (previous == null) {
+        latestByTexture[item.textureId] = item;
+        continue;
+      }
+      if (item.requestToken >= previous.requestToken) {
+        previous.completer.complete(false);
+        latestByTexture[item.textureId] = item;
+      } else {
+        item.completer.complete(false);
+      }
+    }
+
+    final submitted = <_BatchRenderItem>[];
+    final payloadItems = <Map<String, dynamic>>[];
+
+    for (final item in latestByTexture.values) {
+      final latestToken = _latestRequestTokenByTexture[item.textureId];
+      if (latestToken != item.requestToken) {
+        item.completer.complete(false);
+        continue;
+      }
+
+      final latestInfo = item.editor.getRenderInfo(item.pageIndex);
+      final stableSize =
+          latestInfo != null &&
+          latestInfo.width > 0 &&
+          latestInfo.height > 0 &&
+          latestInfo.width == item.width &&
+          latestInfo.height == item.height;
+
+      if (!stableSize) {
+        item.completer.complete(false);
+        continue;
+      }
+
+      submitted.add(item);
+      payloadItems.add(<String, dynamic>{
+        'textureId': item.textureId,
+        'editorPtr': item.editorPtr,
+        'pageIndex': item.pageIndex,
+        'width': item.width,
+        'height': item.height,
       });
-      for (final item in batch) {
-        item.completer.complete(true);
+    }
+
+    if (submitted.isEmpty) {
+      return;
+    }
+
+    try {
+      final response = await _channel.invokeMethod<dynamic>('render', {'items': payloadItems});
+
+      if (response is List && response.length == submitted.length) {
+        for (var i = 0; i < submitted.length; i++) {
+          submitted[i].completer.complete(response[i] == true);
+        }
+        return;
+      }
+
+      if (response == true) {
+        for (final item in submitted) {
+          item.completer.complete(true);
+        }
+        return;
+      }
+
+      for (final item in submitted) {
+        item.completer.complete(false);
       }
     } catch (_) {
-      for (final item in batch) {
+      for (final item in submitted) {
         item.completer.complete(false);
       }
     }
@@ -123,6 +215,7 @@ class EditorTextureRenderer {
     }
 
     _textureId = null;
+    _latestRequestTokenByTexture.remove(id);
     await _channel.invokeMethod<void>('dispose', {'textureId': id});
   }
 }
