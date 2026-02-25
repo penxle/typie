@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createSubscription } from '@mearie/svelte';
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { token } from '@typie/styled-system/tokens';
@@ -9,13 +10,14 @@
   import stringify from 'fast-json-stable-stringify';
   import mixpanel from 'mixpanel-browser';
   import qs from 'query-string';
-  import { onMount, untrack } from 'svelte';
+  import { onMount } from 'svelte';
   import { updated } from '$app/state';
   import Logo from '$assets/logos/logo.svg?component';
   import { env } from '$env/dynamic/public';
-  import { graphql } from '$graphql';
   import { AdminImpersonateBanner } from '$lib/components/admin';
+  import { hydrateQuery } from '$lib/graphql';
   import { wasm } from '$lib/wasm';
+  import { graphql } from '$mearie';
   import { setupSplitViewContext } from './[slug]/@split-view/context.svelte';
   import { setupDragDropContext } from './[slug]/@split-view/drag-context.svelte';
   import { setupEditorRegistry } from './[slug]/@split-view/editor-registry.svelte';
@@ -33,164 +35,89 @@
   import TrialExpiredModal from './TrialExpiredModal.svelte';
   import UserSurveyModal from './UserSurveyModal.svelte';
 
-  let { children } = $props();
+  let { data, children } = $props();
 
-  const query = graphql(`
-    query DashboardLayout_Query {
-      me @required {
-        id
-        name
-        email
-        preferences
+  const query = $derived(hydrateQuery(() => data.query));
 
-        avatar {
-          id
-          url
-        }
+  let siteId = $derived(query.data.me.sites[0].id);
+  let userId = $derived(query.data.me.id);
 
-        sites {
-          id
-          name
-
-          fonts {
+  createSubscription(
+    graphql(`
+      subscription DashboardLayout_SiteUpdateStream($siteId: ID!) {
+        siteUpdateStream(siteId: $siteId) {
+          ... on Site {
             id
-            weight
-            url
 
-            family {
-              id
-            }
+            ...DashboardLayout_EntityTree_site
+            ...DashboardLayout_TrashModal_site
           }
 
-          ...DashboardLayout_Sidebar_site
-          ...DashboardLayout_SiteSettingsModal_site
-          ...DashboardLayout_TrashModal_site
-        }
-
-        referral {
-          id
-        }
-
-        surveys
-        marketingConsentAskedAt
-
-        usage {
-          totalCharacterCount
-        }
-
-        documentFontFamilies {
-          id
-          familyName
-          displayName
-          source
-          state
-
-          fonts {
-            id
-            weight
-            state
-            subfamilyDisplayName
-          }
-        }
-
-        textReplacements {
-          __typename
-          ... on TextReplacement {
-            id
-            match
-            substitute
-            regex
-          }
-          ... on TextReplacementPreference {
+          ... on Entity {
             id
             state
-            textReplacement {
+
+            children {
               id
-              match
-              substitute
-              regex
-            }
-          }
-        }
-
-        ...DashboardLayout_CommandPalette_user
-        ...DashboardLayout_PreferenceModal_user
-        ...DashboardLayout_Sidebar_user
-        ...DashboardLayout_SiteSettingsModal_user
-        ...DashboardLayout_TrialExpiredModal_user
-      }
-
-      ...AdminImpersonateBanner_query
-      ...DashboardLayout_Shortcuts_query
-      ...DashboardLayout_Notes_query
-    }
-  `);
-
-  const siteUpdateStream = graphql(`
-    subscription DashboardLayout_SiteUpdateStream($siteId: ID!) {
-      siteUpdateStream(siteId: $siteId) {
-        ... on Site {
-          id
-
-          ...DashboardLayout_EntityTree_site
-          ...DashboardLayout_TrashModal_site
-        }
-
-        ... on Entity {
-          id
-          state
-
-          node {
-            __typename
-
-            ... on Folder {
-              id
-              name
+              ...DashboardLayout_EntityTree_Entity_entity
             }
 
-            ... on Post {
-              id
-              title
+            node {
+              __typename
 
-              characterCountChange {
-                additions
-                deletions
+              ... on Folder {
+                id
+                name
               }
-            }
 
-            ... on Document {
-              id
-              title
-              nullableTitle
-              subtitle
+              ... on Post {
+                id
+                title
 
-              characterCountChange {
-                additions
-                deletions
+                characterCountChange {
+                  additions
+                  deletions
+                }
+              }
+
+              ... on Document {
+                id
+                title
+                nullableTitle
+                subtitle
+
+                characterCountChange {
+                  additions
+                  deletions
+                }
               }
             }
           }
         }
       }
-    }
-  `);
+    `),
+    () => ({ siteId }),
+  );
 
-  const userUsageUpdateStream = graphql(`
-    subscription DashboardLayout_UserUsageUpdateStream($userId: ID!) {
-      userUsageUpdateStream(userId: $userId) {
-        id
+  createSubscription(
+    graphql(`
+      subscription DashboardLayout_UserUsageUpdateStream($userId: ID!) {
+        userUsageUpdateStream(userId: $userId) {
+          id
 
-        usage {
-          totalCharacterCount
-          totalBlobSize
+          usage {
+            totalCharacterCount
+            totalBlobSize
+          }
         }
       }
-    }
-  `);
+    `),
+    () => ({ userId }),
+  );
 
-  const app = setupAppContext($query.me.id);
+  const app = setupAppContext(query.data.me.id);
 
-  setupSplitViewContext($query.me.id);
+  setupSplitViewContext(query.data.me.id);
   setupDragDropContext();
   setupEditorRegistry();
 
@@ -200,7 +127,7 @@
   let trialExpiredModalOpen = $state(false);
 
   const fontFaces = $derived(
-    $query.me.sites[0].fonts
+    query.data.me.sites[0].fonts
       .flatMap((font) => [
         `@font-face { font-family: ${font.id}; src: url(${font.url}) format('woff2'); font-weight: ${font.weight}; font-display: block; }`,
         `@font-face { font-family: ${font.family.id}; src: url(${font.url}) format('woff2'); font-weight: ${font.weight}; font-display: block; }`,
@@ -208,21 +135,9 @@
       .join('\n'),
   );
 
-  $effect(() => {
-    return untrack(() => {
-      const unsubscribe = siteUpdateStream.subscribe({ siteId: $query.me.sites[0].id });
-      const unsubscribe2 = userUsageUpdateStream.subscribe({ userId: $query.me.id });
-
-      return () => {
-        unsubscribe();
-        unsubscribe2();
-      };
-    });
-  });
-
   const textReplacementRulesJson = $derived.by(() =>
     stringify(
-      $query.me.textReplacements
+      query.data.me.textReplacements
         .map((item) => {
           if (item.__typename === 'TextReplacementPreference') {
             if (item.state !== 'ACTIVE') return null;
@@ -253,13 +168,13 @@
   });
 
   $effect(() => {
-    if ($query.me) {
-      mixpanel.identify($query.me.id);
+    if (query.data.me) {
+      mixpanel.identify(query.data.me.id);
 
       mixpanel.people.set({
-        $email: $query.me.email,
-        $name: $query.me.name,
-        $avatar: qs.stringifyUrl({ url: $query.me.avatar.url, query: { s: 256, f: 'png' } }),
+        $email: query.data.me.email,
+        $name: query.data.me.name,
+        $avatar: qs.stringifyUrl({ url: query.data.me.avatar.url, query: { s: 256, f: 'png' } }),
       });
     }
   });
@@ -276,28 +191,28 @@
   });
 
   onMount(() => {
-    if ($query.me.referral && !app.preference.current.referralWelcomeModalShown) {
+    if (query.data.me.referral && !app.preference.current.referralWelcomeModalShown) {
       referralWelcomeModalOpen = true;
       app.preference.current.referralWelcomeModalShown = true;
-    } else if ($query.me.surveys.includes('trial_expired_modal')) {
+    } else if (query.data.me.surveys.includes('trial_expired_modal')) {
       trialExpiredModalOpen = true;
-    } else if ($query.me.marketingConsentAskedAt === null && $query.me.usage.totalCharacterCount >= 100) {
+    } else if (query.data.me.marketingConsentAskedAt === null && query.data.me.usage.totalCharacterCount >= 100) {
       marketingConsentModalOpen = true;
     }
 
     const skipUntil = localStorage.getItem('surveySkipUntil');
-    const shouldShowSurvey = $query.me.surveys.includes('202509_ir') && (!skipUntil || new Date(skipUntil) < new Date());
+    const shouldShowSurvey = query.data.me.surveys.includes('202509_ir') && (!skipUntil || new Date(skipUntil) < new Date());
 
     if (shouldShowSurvey && !marketingConsentModalOpen && !trialExpiredModalOpen) {
       userSurveyModalOpen = true;
     }
 
-    if ($query.me.preferences.initialPage) {
-      app.preference.current.initialPage = $query.me.preferences.initialPage;
+    if (query.data.me.preferences.initialPage) {
+      app.preference.current.initialPage = query.data.me.preferences.initialPage;
     }
 
-    if ($query.me.preferences.toolbarStyle) {
-      app.preference.current.toolbarStyle = $query.me.preferences.toolbarStyle;
+    if (query.data.me.preferences.toolbarStyle) {
+      app.preference.current.toolbarStyle = query.data.me.preferences.toolbarStyle;
     }
   });
 </script>
@@ -354,7 +269,7 @@
 
       <div class={css({ borderRadius: '8px', paddingY: '8px', textAlign: 'center', backgroundColor: 'surface.subtle' })}>
         <p class={css({ fontSize: '13px', color: 'text.faint' })}>현재 로그인 정보</p>
-        <p class={css({ marginTop: '2px', fontSize: '14px' })}>{$query.me.email}</p>
+        <p class={css({ marginTop: '2px', fontSize: '14px' })}>{query.data.me.email}</p>
       </div>
 
       <HorizontalDivider color="secondary" />
@@ -386,7 +301,7 @@
   </div>
 {:else}
   <div class={flex({ flexDirection: 'column', height: '[100dvh]' })}>
-    <AdminImpersonateBanner {$query} />
+    <AdminImpersonateBanner query$key={query.data} />
 
     <div
       class={flex({
@@ -396,7 +311,7 @@
         overflow: 'hidden',
       })}
     >
-      <Sidebar $site={$query.me.sites[0]} $user={$query.me} />
+      <Sidebar site$key={query.data.me.sites[0]} user$key={query.data.me} />
 
       <div
         class={cx(
@@ -413,18 +328,18 @@
   </div>
 {/if}
 
-<CommandPalette $user={$query.me} />
-<Notes {$query} />
-<PreferenceModal $user={$query.me} />
-<SiteSettingsModal $site={$query.me.sites[0]} $user={$query.me} />
+<CommandPalette user$key={query.data.me} />
+<Notes query$key={query.data} />
+<PreferenceModal user$key={query.data.me} />
+<SiteSettingsModal site$key={query.data.me.sites[0]} user$key={query.data.me} />
 <ShareModal />
 <StatsModal />
-<TrashModal $site={$query.me.sites[0]} />
-<Shortcuts {$query} />
+<TrashModal site$key={query.data.me.sites[0]} />
+<Shortcuts query$key={query.data} />
 
 <ReferralWelcomeModal bind:open={referralWelcomeModalOpen} />
 <MarketingConsentModal bind:open={marketingConsentModalOpen} />
-<TrialExpiredModal $user={$query.me} bind:open={trialExpiredModalOpen} />
+<TrialExpiredModal user$key={query.data.me} bind:open={trialExpiredModalOpen} />
 <UserSurveyModal bind:open={userSurveyModalOpen} />
 
 <div

@@ -82,7 +82,7 @@ const getEmptyDragImage = () => {
 export type EditorOptions = {
   theme: ThemeColors;
   snapshot?: Uint8Array;
-  fontFamilies: FontFamily[];
+  fontFamilies: readonly FontFamily[];
   readOnly?: boolean;
   onDocChanged?: () => void;
   onExitedDocumentStart?: () => void;
@@ -113,7 +113,7 @@ export class Editor {
     });
   }
 
-  fontFamilies = $state<FontFamily[]>([]);
+  fontFamilies = $state<readonly FontFamily[]>([]);
 
   renderVersion = $state(0);
 

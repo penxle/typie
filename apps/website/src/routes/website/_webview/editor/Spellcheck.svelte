@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createMutation } from '@mearie/svelte';
   import { getChangedRanges, posToDOMRect } from '@tiptap/core';
   import { Plugin, PluginKey } from '@tiptap/pm/state';
   import { Decoration, DecorationSet } from '@tiptap/pm/view';
@@ -7,7 +8,7 @@
   import { nanoid } from 'nanoid';
   import { onMount, untrack } from 'svelte';
   import { absolutePositionToRelativePosition, relativePositionToAbsolutePosition, ySyncPluginKey } from 'y-prosemirror';
-  import { graphql } from '$graphql';
+  import { graphql } from '$mearie';
   import type { Editor } from '@tiptap/core';
   import type { Transaction } from '@tiptap/pm/state';
   import type { Ref } from '@typie/ui/utils';
@@ -32,17 +33,19 @@
   let mounted = $state(false);
   let errors = $state<SpellcheckError[]>([]);
 
-  const checkSpelling = graphql(`
-    mutation WebViewEditor_CheckSpelling_Mutation($input: CheckSpellingInput!) {
-      checkSpelling(input: $input) {
-        from
-        to
-        context
-        corrections
-        explanation
+  const [checkSpelling] = createMutation(
+    graphql(`
+      mutation WebViewEditor_CheckSpelling_Mutation($input: CheckSpellingInput!) {
+        checkSpelling(input: $input) {
+          from
+          to
+          context
+          corrections
+          explanation
+        }
       }
-    }
-  `);
+    `),
+  );
 
   const handleTransaction = ({ editor, transaction }: { editor: Editor; transaction: Transaction }) => {
     const { binding } = ySyncPluginKey.getState(editor.view.state);
@@ -161,14 +164,15 @@
       if (!editor?.current) return;
 
       const body = editor.current.getJSON();
-      const resp = await checkSpelling({ body });
+      const resp = await checkSpelling({ input: { body } });
 
-      mixpanel.track('spellcheck', { errors: resp.length });
+      mixpanel.track('spellcheck', { errors: resp.checkSpelling.length });
 
       const { binding } = ySyncPluginKey.getState(editor.current.view.state);
-      errors = resp.map((error) => ({
+      errors = resp.checkSpelling.map((error) => ({
         id: nanoid(),
         ...error,
+        corrections: [...error.corrections],
         relativeFrom: absolutePositionToRelativePosition(error.from, binding.type, binding.mapping),
         relativeTo: absolutePositionToRelativePosition(error.to, binding.type, binding.mapping),
       }));
@@ -184,7 +188,7 @@
           return {
             id: error.id,
             context: error.context,
-            corrections: error.corrections,
+            corrections: [...error.corrections],
             explanation,
           };
         }),

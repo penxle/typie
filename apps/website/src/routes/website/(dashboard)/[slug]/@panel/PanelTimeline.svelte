@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createFragment, createQuery } from '@mearie/svelte';
   import { getText } from '@tiptap/core';
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex, wrap } from '@typie/styled-system/patterns';
@@ -23,26 +24,25 @@
   import IconClockFading from '~icons/lucide/clock-fading';
   import MinusIcon from '~icons/lucide/minus';
   import PlusIcon from '~icons/lucide/plus';
-  import { fragment, graphql } from '$graphql';
+  import { graphql } from '$mearie';
   import { getViewContext } from '../@split-view/context.svelte';
   import type { Editor } from '@tiptap/core';
   import type { PageLayout, Ref } from '@typie/ui/utils';
   import type { Action } from 'svelte/action';
   import type { PointerEventHandler } from 'svelte/elements';
-  import type { Editor_Panel_PanelTimeline_post } from '$graphql';
+  import type { Editor_Panel_PanelTimeline_post$key } from '$mearie';
 
   type Props = {
-    $post: Editor_Panel_PanelTimeline_post;
+    post$key: Editor_Panel_PanelTimeline_post$key;
     editor?: Ref<Editor>;
     viewEditor?: Ref<Editor>;
     doc: Y.Doc;
     viewDoc?: Y.Doc;
   };
 
-  let { $post: _post, editor, viewEditor, doc, viewDoc = $bindable() }: Props = $props();
+  let { post$key, editor, viewEditor, doc, viewDoc = $bindable() }: Props = $props();
 
-  const post = fragment(
-    _post,
+  const post = createFragment(
     graphql(`
       fragment Editor_Panel_PanelTimeline_post on Post {
         id
@@ -53,27 +53,34 @@
         }
       }
     `),
+    () => post$key,
   );
 
-  const query = graphql(`
-    query Editor_PanelTimeline_Query($slug: String!, $first: Int!, $before: DateTime) @client {
-      post(slug: $slug) {
-        id
-        update
+  let queryVars = $state<{ slug: string; first: number; before?: string | null } | null>(null);
 
-        snapshotMetas {
+  const query = createQuery(
+    graphql(`
+      query Editor_PanelTimeline_Query($slug: String!, $first: Int!, $before: DateTime) {
+        post(slug: $slug) {
           id
-          createdAt
-        }
+          update
 
-        snapshots(first: $first, before: $before) {
-          id
-          snapshot
-          createdAt
+          snapshotMetas {
+            id
+            createdAt
+          }
+
+          snapshots(first: $first, before: $before) {
+            id
+            snapshot
+            createdAt
+          }
         }
       }
-    }
-  `);
+    `),
+    () => queryVars ?? { slug: '', first: 20 },
+    () => ({ skip: !queryVars }),
+  );
 
   const app = getAppContext();
   const view = getViewContext();
@@ -87,7 +94,7 @@
   let snapshotCharCounts = $state<Record<string, number>>({});
   let internalViewDoc = $state<Y.Doc>();
 
-  const snapshotMetas = $derived($query?.post.snapshotMetas ?? []);
+  const snapshotMetas = $derived(query.data?.post.snapshotMetas ?? []);
 
   let snapshotCache = new SvelteMap<string, string>();
 
@@ -194,13 +201,33 @@
   let isLoadingMore = $state(false);
   let loadingPromise: Promise<void> | null = null;
   let hasMoreSnapshots = $derived(snapshotMetas.some((meta) => !snapshotCache.has(meta.id)));
+  // TODO: query.load() returned a promise with result data. In Mearie's createQuery, queries are reactive.
+  // These functions use a workaround: set queryVars to trigger a fetch, then watch query.data reactively.
+
+  let pendingLoadResolve: ((data: typeof query.data) => void) | null = null;
+
+  const loadQuery = (vars: { slug: string; first: number; before?: string | null }): Promise<NonNullable<typeof query.data>> => {
+    return new Promise((resolve) => {
+      pendingLoadResolve = resolve as (data: typeof query.data) => void;
+      queryVars = { ...vars };
+      query.refetch();
+    });
+  };
+
+  $effect(() => {
+    if (queryVars && query.data && !query.loading && pendingLoadResolve) {
+      const resolve = pendingLoadResolve;
+      pendingLoadResolve = null;
+      resolve(query.data);
+    }
+  });
 
   const loadMoreSnapshots = async () => {
     if (loadingPromise) {
       await loadingPromise;
       return;
     }
-    if (!$query || loadedSnapshots.length === 0) return;
+    if (!query.data || loadedSnapshots.length === 0) return;
     if (!hasMoreSnapshots) return;
 
     isLoadingMore = true;
@@ -209,8 +236,8 @@
         const oldestDisplayed = loadedSnapshots[0];
         if (!oldestDisplayed) return;
 
-        const result = await query.load({
-          slug: $post.entity.slug,
+        const result = await loadQuery({
+          slug: post.data.entity.slug,
           first: 20,
           before: oldestDisplayed.createdAt,
         });
@@ -236,7 +263,7 @@
   const initialize = async () => {
     isLoading = true;
     try {
-      const result = await query.load({ slug: $post.entity.slug, first: 20, before: null });
+      const result = await loadQuery({ slug: post.data.entity.slug, first: 20, before: null });
 
       baseDoc = new Y.Doc({ gc: false });
       Y.applyUpdateV2(baseDoc, Uint8Array.fromBase64(result.post.update));
@@ -253,7 +280,7 @@
         selectedSnapshotId = metas.at(-1)!.id;
       }
 
-      processSnapshotsCharacterCounts(result.post.snapshots);
+      processSnapshotsCharacterCounts([...result.post.snapshots] as { id: string; snapshot: string }[]);
     } finally {
       tick().then(() => {
         isLoading = false;
@@ -290,7 +317,7 @@
 
   $effect(() => {
     const currentId = selectedSnapshotId;
-    if (!currentId || !$query) return;
+    if (!currentId || !query.data) return;
 
     if (currentId === prevSelectedId) return;
     prevSelectedId = currentId;
@@ -306,7 +333,7 @@
   });
 
   const updateViewDoc = throttle((snapshotId: string) => {
-    if (!baseDoc || !$query) return;
+    if (!baseDoc || !query.data) return;
 
     const snapshotBinary = snapshotCache.get(snapshotId);
     if (!snapshotBinary) return;
@@ -354,7 +381,7 @@
   }, 32);
 
   const handleSlide: PointerEventHandler<HTMLElement> = (e) => {
-    if (!e.currentTarget.parentElement || !$query) {
+    if (!e.currentTarget.parentElement || !query.data) {
       return;
     }
 
@@ -369,7 +396,7 @@
   };
 
   const restore = () => {
-    if (!$query || !baseDoc) {
+    if (!query.data || !baseDoc) {
       return;
     }
 
@@ -393,7 +420,7 @@
     Y.applyUpdateV2(doc, revertUpdate, 'snapshot');
 
     app.preference.current.panelExpandedByViewId[view.id] = false;
-    Toast.success(`${dayjs($query.post.snapshots[sliderIndex]?.createdAt).formatAsSmart()} 시점으로 복원되었습니다`);
+    Toast.success(`${dayjs(query.data.post.snapshots[sliderIndex]?.createdAt).formatAsSmart()} 시점으로 복원되었습니다`);
     mixpanel.track('timeline_restore');
   };
 
@@ -610,7 +637,7 @@
   </div>
 </div>
 
-{#if editorContainer && $query && !isLoading}
+{#if editorContainer && query.data && !isLoading}
   <div
     class={center({ position: 'absolute', left: '0', right: '0', bottom: '32px', pointerEvents: 'none' })}
     use:portal={editorContainer}

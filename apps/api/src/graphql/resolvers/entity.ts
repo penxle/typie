@@ -761,6 +761,14 @@ builder.mutationFields((t) => ({
 
         pubsub.publish('site:update', siteId, { scope: 'site' });
 
+        if (targetParentId) {
+          pubsub.publish('site:update', siteId, { scope: 'entity', entityId: targetParentId });
+        }
+
+        for (const entity of entities) {
+          pubsub.publish('site:update', siteId, { scope: 'entity', entityId: entity.id });
+        }
+
         return movedEntities;
       });
     },

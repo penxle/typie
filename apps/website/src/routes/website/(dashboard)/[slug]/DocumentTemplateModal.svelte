@@ -1,23 +1,23 @@
 <script lang="ts">
+  import { createFragment, createQuery } from '@mearie/svelte';
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { HorizontalDivider, Icon, Modal } from '@typie/ui/components';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
   import LayoutTemplateIcon from '~icons/lucide/layout-template';
-  import { fragment, graphql } from '$graphql';
-  import type { DocumentTemplateModal_site } from '$graphql';
+  import { graphql } from '$mearie';
   import type { Editor } from '$lib/editor/editor.svelte';
+  import type { DocumentTemplateModal_site$key } from '$mearie';
 
   type Props = {
-    $site: DocumentTemplateModal_site;
+    site$key: DocumentTemplateModal_site$key;
     editor: Editor;
     focused: boolean;
   };
 
-  let { $site: _site, editor, focused }: Props = $props();
+  let { site$key, editor, focused }: Props = $props();
 
-  const site = fragment(
-    _site,
+  const site = createFragment(
     graphql(`
       fragment DocumentTemplateModal_site on Site {
         id
@@ -33,16 +33,23 @@
         }
       }
     `),
+    () => site$key,
   );
 
-  const query = graphql(`
-    query DocumentTemplateModal_Query($slug: String!) @client {
-      document(slug: $slug) {
-        id
-        snapshot
+  let templateSlug = $state<string | null>(null);
+
+  const query = createQuery(
+    graphql(`
+      query DocumentTemplateModal_Query($slug: String!) {
+        document(slug: $slug) {
+          id
+          snapshot
+        }
       }
-    }
-  `);
+    `),
+    () => ({ slug: templateSlug ?? '' }),
+    () => ({ skip: !templateSlug }),
+  );
 
   let open = $state(false);
 
@@ -60,15 +67,19 @@
     };
   });
 
-  const loadTemplate = async (slug: string) => {
-    const resp = await query.load({ slug });
-
-    if (resp.document.snapshot) {
-      const snapshot = Uint8Array.fromBase64(resp.document.snapshot);
-      editor.insertTemplateFragment(snapshot);
+  $effect(() => {
+    if (templateSlug && query.data && !query.loading) {
+      if (query.data.document.snapshot) {
+        const snapshot = Uint8Array.fromBase64(query.data.document.snapshot);
+        editor.insertTemplateFragment(snapshot);
+      }
+      templateSlug = null;
+      open = false;
     }
+  });
 
-    open = false;
+  const loadTemplate = (slug: string) => {
+    templateSlug = slug;
   };
 </script>
 
@@ -83,7 +94,7 @@
   <HorizontalDivider />
 
   <div class={flex({ flexDirection: 'column', paddingX: '24px', paddingY: '16px' })}>
-    {#each $site.documentTemplates as template (template.id)}
+    {#each site.data.documentTemplates as template (template.id)}
       <button
         class={cx(
           'group',

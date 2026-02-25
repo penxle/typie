@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createFragment, createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { tooltip } from '@typie/ui/actions';
@@ -24,19 +25,18 @@
   import Trash2Icon from '~icons/lucide/trash-2';
   import UsersRoundIcon from '~icons/lucide/users-round';
   import { env } from '$env/dynamic/public';
-  import { fragment, graphql } from '$graphql';
   import { Img } from '$lib/components';
   import { uploadBlobAsImage } from '$lib/utils';
-  import type { DashboardLayout_Share_Document_document } from '$graphql';
+  import { graphql } from '$mearie';
+  import type { DashboardLayout_Share_Document_document$key } from '$mearie';
 
   type Props = {
-    $documents: DashboardLayout_Share_Document_document[];
+    documents$key: DashboardLayout_Share_Document_document$key[];
   };
 
-  let { $documents: _documents }: Props = $props();
+  let { documents$key }: Props = $props();
 
-  const documents = fragment(
-    _documents,
+  const documents = createFragment(
     graphql(`
       fragment DashboardLayout_Share_Document_document on Document {
         id
@@ -60,35 +60,38 @@
         }
       }
     `),
+    () => documents$key,
   );
 
   let activeTab = $state<'publish' | 'share'>('publish');
 
-  const isSingleDocument = $derived($documents.length === 1);
-  const documentIds = $derived($documents.map((d) => d.id));
+  const isSingleDocument = $derived(documents.data.length === 1);
+  const documentIds = $derived(documents.data.map((d) => d.id));
 
-  const updateDocumentsOption = graphql(`
-    mutation DashboardLayout_Share_Document_UpdateDocumentsOption_Mutation($input: UpdateDocumentsOptionInput!) {
-      updateDocumentsOption(input: $input) {
-        id
-        password
-        documentContentRating: contentRating
-        allowReaction
-        protectContent
-
-        thumbnail {
+  const [updateDocumentsOption] = createMutation(
+    graphql(`
+      mutation DashboardLayout_Share_Document_UpdateDocumentsOption_Mutation($input: UpdateDocumentsOptionInput!) {
+        updateDocumentsOption(input: $input) {
           id
-          ...Img_image
-        }
+          password
+          documentContentRating: contentRating
+          allowReaction
+          protectContent
 
-        entity {
-          id
-          visibility
-          availability
+          thumbnail {
+            id
+            ...Img_image
+          }
+
+          entity {
+            id
+            visibility
+            availability
+          }
         }
       }
-    }
-  `);
+    `),
+  );
 
   let copied = $state(false);
   let timer: NodeJS.Timeout | undefined;
@@ -98,12 +101,14 @@
   let thumbnailUploading = $state(false);
 
   const visibilityIndeterminate = $derived(
-    $documents.length > 1 && $documents.some((d) => d.entity.visibility !== $documents[0].entity.visibility),
+    documents.data.length > 1 && documents.data.some((d) => d.entity.visibility !== documents.data[0].entity.visibility),
   );
   const availabilityIndeterminate = $derived(
-    $documents.length > 1 && $documents.some((d) => d.entity.availability !== $documents[0].entity.availability),
+    documents.data.length > 1 && documents.data.some((d) => d.entity.availability !== documents.data[0].entity.availability),
   );
-  const thumbnailIndeterminate = $derived($documents.length > 1 && $documents.some((d) => d.thumbnail?.id !== $documents[0].thumbnail?.id));
+  const thumbnailIndeterminate = $derived(
+    documents.data.length > 1 && documents.data.some((d) => d.thumbnail?.id !== documents.data[0].thumbnail?.id),
+  );
 
   const form = createForm({
     schema: z.object({
@@ -117,7 +122,7 @@
     }),
     submitOn: 'change',
     onSubmit: async (data) => {
-      if ($documents.length === 0) return;
+      if (documents.data.length === 0) return;
 
       const dirtyFields = form.getDirtyFields();
       const updateData: {
@@ -138,23 +143,26 @@
       if ('hasPassword' in dirtyFields || 'password' in dirtyFields) updateData.password = data.hasPassword ? data.password : null;
 
       if (Object.keys(updateData).length > 1) {
-        await updateDocumentsOption(updateData);
+        await updateDocumentsOption({ input: updateData });
 
         mixpanel.track('update_document_option', {
           ...updateData,
           hasPassword: data.hasPassword,
-          count: $documents.length,
+          count: documents.data.length,
         });
       }
     },
     defaultValues: {
-      availability: $documents[0].entity.availability,
-      visibility: $documents[0].entity.visibility,
-      hasPassword: $documents[0].password !== null,
-      password: $documents.length > 1 && $documents.some((d) => d.password !== $documents[0].password) ? null : $documents[0].password,
-      documentContentRating: $documents[0].documentContentRating,
-      allowReaction: $documents[0].allowReaction,
-      protectContent: $documents[0].protectContent,
+      availability: documents.data[0].entity.availability,
+      visibility: documents.data[0].entity.visibility,
+      hasPassword: documents.data[0].password !== null,
+      password:
+        documents.data.length > 1 && documents.data.some((d) => d.password !== documents.data[0].password)
+          ? null
+          : documents.data[0].password,
+      documentContentRating: documents.data[0].documentContentRating,
+      allowReaction: documents.data[0].allowReaction,
+      protectContent: documents.data[0].protectContent,
     },
   });
 
@@ -187,11 +195,13 @@
   };
 
   const handleCopyLink = () => {
-    if ($documents.length === 0) return;
+    if (documents.data.length === 0) return;
 
-    const urls = $documents.map((d) => (activeTab === 'publish' ? d.entity.url : `${env.PUBLIC_WEBSITE_URL}/${d.entity.slug}`)).join('\n');
+    const urls = documents.data
+      .map((d) => (activeTab === 'publish' ? d.entity.url : `${env.PUBLIC_WEBSITE_URL}/${d.entity.slug}`))
+      .join('\n');
     navigator.clipboard.writeText(urls);
-    mixpanel.track('copy_document_share_url', { tab: activeTab, count: $documents.length });
+    mixpanel.track('copy_document_share_url', { tab: activeTab, count: documents.data.length });
 
     if (timer) {
       clearTimeout(timer);
@@ -213,8 +223,8 @@
       thumbnailUploading = true;
       try {
         const image = await uploadBlobAsImage(file);
-        await updateDocumentsOption({ documentIds, thumbnailId: image.id });
-        mixpanel.track('update_document_thumbnail', { count: $documents.length });
+        await updateDocumentsOption({ input: { documentIds, thumbnailId: image.id } });
+        mixpanel.track('update_document_thumbnail', { count: documents.data.length });
       } finally {
         thumbnailUploading = false;
       }
@@ -224,15 +234,15 @@
   };
 
   const handleThumbnailRemove = async () => {
-    await updateDocumentsOption({ documentIds, thumbnailId: null });
-    mixpanel.track('remove_document_thumbnail', { count: $documents.length });
+    await updateDocumentsOption({ input: { documentIds, thumbnailId: null } });
+    mixpanel.track('remove_document_thumbnail', { count: documents.data.length });
   };
 </script>
 
 <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '32px', paddingX: '16px', paddingY: '12px' })}>
   <div class={flex({ gap: '[0.5ch]', fontSize: '12px', fontWeight: 'medium' })}>
     <span class={css({ wordBreak: 'break-all', lineClamp: '1', fontWeight: 'semibold' })}>
-      {isSingleDocument ? $documents[0].title : `${$documents.length}개의 문서`}
+      {isSingleDocument ? documents.data[0].title : `${documents.data.length}개의 문서`}
     </span>
     <span class={css({ flexShrink: '0' })}>공유 및 게시하기</span>
   </div>
@@ -371,7 +381,7 @@
               value: EntityVisibility.PRIVATE,
             },
           ]}
-          values={$documents.map((d) => d.entity.visibility)}
+          values={documents.data.map((d) => d.entity.visibility)}
           bind:value={form.fields.visibility}
         />
       </div>
@@ -383,7 +393,7 @@
             <div class={css({ fontSize: '12px', color: 'text.subtle' })}>비밀번호 보호</div>
           </div>
 
-          <Switch values={$documents.map((d) => d.password !== null)} bind:checked={form.fields.hasPassword} />
+          <Switch values={documents.data.map((d) => d.password !== null)} bind:checked={form.fields.hasPassword} />
         </div>
 
         {#if form.fields.hasPassword}
@@ -469,7 +479,7 @@
             { label: '15세', value: DocumentContentRating.R15 },
             { label: '성인', value: DocumentContentRating.R19 },
           ]}
-          values={$documents.map((d) => d.documentContentRating)}
+          values={documents.data.map((d) => d.documentContentRating)}
           bind:value={form.fields.documentContentRating}
         />
       </div>
@@ -501,7 +511,7 @@
             >
               {thumbnailUploading ? '...' : '다름'}
             </button>
-          {:else if $documents[0].thumbnail}
+          {:else if documents.data[0].thumbnail}
             <div class={flex({ alignItems: 'center', gap: '4px' })}>
               <button
                 class={css({ position: 'relative', cursor: 'pointer' })}
@@ -516,8 +526,8 @@
                     borderRadius: '6px',
                     objectFit: 'cover',
                   })}
-                  $image={$documents[0].thumbnail}
                   alt="썸네일"
+                  image$key={documents.data[0].thumbnail}
                   size={128}
                 />
               </button>
@@ -575,7 +585,7 @@
             { icon: UsersRoundIcon, label: '누구나', value: true },
             { icon: BanIcon, label: '비허용', value: false },
           ]}
-          values={$documents.map((d) => d.allowReaction)}
+          values={documents.data.map((d) => d.allowReaction)}
           bind:value={form.fields.allowReaction}
         />
       </div>
@@ -593,7 +603,7 @@
           </div>
         </div>
 
-        <Switch values={$documents.map((d) => d.protectContent)} bind:checked={form.fields.protectContent} />
+        <Switch values={documents.data.map((d) => d.protectContent)} bind:checked={form.fields.protectContent} />
       </div>
     </div>
   </div>
@@ -623,7 +633,7 @@
               value: EntityAvailability.PRIVATE,
             },
           ]}
-          values={$documents.map((d) => d.entity.availability)}
+          values={documents.data.map((d) => d.entity.availability)}
           bind:value={form.fields.availability}
         />
       </div>

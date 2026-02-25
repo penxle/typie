@@ -1,14 +1,15 @@
 <script lang="ts">
+  import { createFragment } from '@mearie/svelte';
   import { Img } from '@typie/ui/components';
-  import { fragment, graphql } from '$graphql';
+  import { graphql } from '$mearie';
   import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { HTMLImgAttributes } from 'svelte/elements';
-  import type { Img_image } from '$graphql';
+  import type { Img_image$key } from '$mearie';
 
   type Size = 16 | 24 | 32 | 48 | 64 | 96 | 128 | 256 | 512 | 1024 | 'full';
 
   type Props = {
-    $image: Img_image;
+    image$key: Img_image$key;
     alt: string;
     style?: SystemStyleObject;
     size: Size;
@@ -17,10 +18,9 @@
     progressive?: boolean;
   } & Omit<HTMLImgAttributes, 'style' | 'src' | 'srcset' | 'sizes' | 'alt' | 'placeholder'>;
 
-  let { $image: _image, progressive, ...rest }: Props = $props();
+  let { image$key, progressive, ...rest }: Props = $props();
 
-  const image = fragment(
-    _image,
+  const image = createFragment(
     graphql(`
       fragment Img_image on Image {
         id
@@ -29,7 +29,8 @@
         placeholder
       }
     `),
+    () => image$key,
   );
 </script>
 
-<Img placeholder={progressive ? $image.placeholder : undefined} ratio={$image.ratio} url={$image.url} {...rest} />
+<Img placeholder={progressive ? image.data.placeholder : undefined} ratio={image.data.ratio} url={image.data.url} {...rest} />

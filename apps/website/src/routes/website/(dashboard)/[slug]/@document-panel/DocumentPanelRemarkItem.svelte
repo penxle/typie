@@ -1,8 +1,9 @@
 <script lang="ts">
+  import { createQuery } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { TimeAgo } from '@typie/ui/components';
-  import { graphql } from '$graphql';
   import { Img } from '$lib/components';
+  import { graphql } from '$mearie';
   import type { RemarkOverlay } from '$lib/editor/slate';
 
   type Props = {
@@ -12,22 +13,21 @@
 
   let { remark, onclick }: Props = $props();
 
-  const userQuery = graphql(`
-    query DocumentPanelRemarkItem_Query($userId: ID!) @client {
-      userView(id: $userId) {
-        id
-        name
-        avatar {
+  const userQuery = createQuery(
+    graphql(`
+      query DocumentPanelRemarkItem_Query($userId: ID!) {
+        userView(id: $userId) {
           id
-          ...Img_image
+          name
+          avatar {
+            id
+            ...Img_image
+          }
         }
       }
-    }
-  `);
-
-  $effect(() => {
-    userQuery.load({ userId: remark.userId });
-  });
+    `),
+    () => ({ userId: remark.userId }),
+  );
 </script>
 
 <button
@@ -52,11 +52,11 @@
   {onclick}
   type="button"
 >
-  {#if $userQuery?.userView.avatar}
+  {#if userQuery.data?.userView.avatar}
     <Img
       style={css.raw({ width: '20px', height: '20px', borderRadius: 'full', flexShrink: '0', marginTop: '1px' })}
-      $image={$userQuery.userView.avatar}
-      alt={$userQuery.userView.name}
+      alt={userQuery.data.userView.name}
+      image$key={userQuery.data.userView.avatar}
       size={24}
     />
   {:else}
@@ -74,7 +74,7 @@
 
   <div class={css({ flexGrow: '1', minWidth: '0' })}>
     <div class={css({ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '2px' })}>
-      {#if $userQuery}
+      {#if userQuery.data}
         <span
           class={css({
             fontSize: '13px',
@@ -85,7 +85,7 @@
             minWidth: '0',
           })}
         >
-          {$userQuery.userView.name}
+          {userQuery.data.userView.name}
         </span>
         <TimeAgo style={{ fontSize: '11px', color: 'text.faint', flexShrink: '0' }} timestamp={remark.createdAt} />
       {:else}

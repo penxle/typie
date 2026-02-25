@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createMutation, createQuery } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { center } from '@typie/styled-system/patterns';
   import { nanoid } from 'nanoid';
@@ -7,53 +8,58 @@
   import { afterNavigate } from '$app/navigation';
   import { page } from '$app/state';
   import Logo from '$assets/logos/logo.svg?component';
-  import { graphql } from '$graphql';
   import { fb } from '$lib/analytics';
+  import { graphql } from '$mearie';
   import WidgetGroup from '../@widgets/WidgetGroup.svelte';
   import { getSplitViewContext } from './@split-view/context.svelte';
   import SplitViews from './@split-view/SplitViews.svelte';
   import { collectSlug, findViewIdBySlug, replaceSplitView } from './@split-view/utils';
 
-  const query = graphql(`
-    query DashboardSlugPage_Query($slugs: [String!]!) @client {
-      me @required {
-        id
-      }
-
-      entities(slugs: $slugs) {
-        id
-        slug
-        state
-
-        user {
+  const query = createQuery(
+    graphql(`
+      query DashboardSlugPage_Query($slugs: [String!]!) {
+        me @required {
           id
         }
 
-        node {
-          __typename
-        }
-      }
-
-      ...SplitViews_View_query
-      ...WidgetGroup_query
-    }
-  `);
-
-  const viewEntity = graphql(`
-    mutation DashboardSlugPage_ViewEntity_Mutation($input: ViewEntityInput!) {
-      viewEntity(input: $input) {
-        id
-
-        user {
+        entities(slugs: $slugs) {
           id
+          slug
+          state
 
-          recentlyViewedEntities {
+          user {
             id
+          }
+
+          node {
+            __typename
+          }
+        }
+
+        ...SplitViews_View_query
+        ...WidgetGroup_query
+      }
+    `),
+    () => ({ slugs }),
+  );
+
+  const [viewEntity] = createMutation(
+    graphql(`
+      mutation DashboardSlugPage_ViewEntity_Mutation($input: ViewEntityInput!) {
+        viewEntity(input: $input) {
+          id
+
+          user {
+            id
+
+            recentlyViewedEntities {
+              id
+            }
           }
         }
       }
-    }
-  `);
+    `),
+  );
 
   const splitView = getSplitViewContext();
 
@@ -76,7 +82,7 @@
     }
   });
 
-  const focusedEntity = $derived.by(() => $query && $query.entities.find((entity) => entity.slug === slug));
+  const focusedEntity = $derived.by(() => query.data && query.data.entities.find((entity) => entity.slug === slug));
 
   $effect(() => {
     if (!slug) return;
@@ -103,13 +109,13 @@
   $effect(() => {
     if (
       focusedEntity &&
-      $query &&
-      $query.me.id === focusedEntity.user.id &&
+      query.data &&
+      query.data.me.id === focusedEntity.user.id &&
       focusedEntity.state === EntityState.ACTIVE &&
       !hasTrackedView
     ) {
       hasTrackedView = true;
-      viewEntity({ entityId: focusedEntity.id });
+      viewEntity({ input: { entityId: focusedEntity.id } });
       fb.track('ViewContent');
     }
   });
@@ -118,20 +124,11 @@
     hasTrackedView = false;
   });
 
-  let loaded = $state(false);
-  const load = async () => {
-    await query.load({ slugs });
-    loaded = true;
-  };
-
-  $effect(() => {
-    void view;
-    load();
-  });
+  const loaded = $derived(!!query.data && !query.loading);
 </script>
 
-{#if loaded && $query && slug && view}
-  <SplitViews {$query} {slug} {view} />
+{#if loaded && query.data && slug && view}
+  <SplitViews query$key={query.data} {slug} {view} />
 {:else}
   <div
     class={center({
@@ -149,6 +146,6 @@
   </div>
 {/if}
 
-{#if loaded && $query}
-  <WidgetGroup {$query} />
+{#if loaded && query.data}
+  <WidgetGroup query$key={query.data} />
 {/if}

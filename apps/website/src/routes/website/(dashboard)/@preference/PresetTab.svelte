@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { cache } from '@typie/sark/internal';
+  import { createFragment, createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { createFloatingActions } from '@typie/ui/actions';
@@ -27,22 +27,23 @@
   import RulerDimensionLineIcon from '~icons/lucide/ruler-dimension-line';
   import LetterSpacingIcon from '~icons/typie/letter-spacing';
   import LineHeightIcon from '~icons/typie/line-height';
-  import { fragment, graphql } from '$graphql';
   import { FontSpecimen, SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
   import { getRepresentativeFont } from '$lib/editor/fonts';
   import { THEME_COLORS } from '$lib/editor/theme';
   import { createPaginatedLayout } from '$lib/editor/utils';
   import { values } from '$lib/editor/values';
+  import { cache } from '$lib/graphql';
+  import { graphql } from '$mearie';
   import ToolbarColorGrid from '../[slug]/@toolbar/ToolbarColorGrid.svelte';
-  import type { DashboardLayout_PreferenceModal_PresetTab_user } from '$graphql';
   import type { ThemeVariant } from '$lib/editor/theme';
   import type { PageLayout, PageLayoutPreset } from '$lib/editor/utils';
+  import type { DashboardLayout_PreferenceModal_PresetTab_user$key } from '$mearie';
 
   type Props = {
-    $user: DashboardLayout_PreferenceModal_PresetTab_user;
+    user$key: DashboardLayout_PreferenceModal_PresetTab_user$key;
   };
 
-  let { $user: _user }: Props = $props();
+  let { user$key }: Props = $props();
 
   const theme = getThemeContext();
   const themeVariant = $derived(
@@ -50,8 +51,7 @@
   );
   const tc = $derived(THEME_COLORS[themeVariant]);
 
-  const user = fragment(
-    _user,
+  const user = createFragment(
     graphql(`
       fragment DashboardLayout_PreferenceModal_PresetTab_user on User {
         id
@@ -74,15 +74,18 @@
         }
       }
     `),
+    () => user$key,
   );
 
-  const updatePreferences = graphql(`
-    mutation DashboardLayout_PreferenceModal_PresetTab_UpdatePreferences_Mutation($input: UpdatePreferencesInput!) {
-      updatePreferences(input: $input) {
-        id
+  const [updatePreferences] = createMutation(
+    graphql(`
+      mutation DashboardLayout_PreferenceModal_PresetTab_UpdatePreferences_Mutation($input: UpdatePreferencesInput!) {
+        updatePreferences(input: $input) {
+          id
+        }
       }
-    }
-  `);
+    `),
+  );
 
   type PresetPreference = {
     fontFamily?: string;
@@ -99,18 +102,18 @@
     blockGap?: number;
   };
 
-  const template = $derived<PresetPreference>(($user.preferences as Record<string, unknown>)?.template ?? {});
+  const template = $derived<PresetPreference>((user.data.preferences as Record<string, unknown>)?.template ?? {});
 
   const fontFamily = $derived(template.fontFamily ?? defaultValues.fontFamily);
   const fontSize = $derived(template.fontSize ?? defaultValues.fontSize);
   const fontWeight = $derived(template.fontWeight ?? defaultValues.fontWeight);
 
   const fontFamilyItems = $derived(
-    $user.documentFontFamilies.filter((f) => f.state === 'ACTIVE').map((f) => ({ value: f.familyName, label: f.displayName })),
+    user.data.documentFontFamilies.filter((f) => f.state === 'ACTIVE').map((f) => ({ value: f.familyName, label: f.displayName })),
   );
 
   const currentFontFamilyFonts = $derived.by(() => {
-    const family = $user.documentFontFamilies.find((f) => f.familyName === fontFamily);
+    const family = user.data.documentFontFamilies.find((f) => f.familyName === fontFamily);
     if (!family) return [];
     return [...new Map(family.fonts.filter((f) => f.state === 'ACTIVE').map((f) => [f.weight, f])).values()].toSorted(
       (a, b) => a.weight - b.weight,
@@ -126,12 +129,14 @@
     })),
   );
 
-  const representativeFontMap = $derived(new Map($user.documentFontFamilies.map((f) => [f.familyName, getRepresentativeFont(f.fonts)])));
+  const representativeFontMap = $derived(
+    new Map(user.data.documentFontFamilies.map((f) => [f.familyName, getRepresentativeFont(f.fonts)])),
+  );
 
   const weightFontIdMap = $derived(new Map(currentFontFamilyFonts.map((f) => [f.weight, f.id])));
 
   const getClosestWeight = (familyName: string, targetWeight: number) => {
-    const family = $user.documentFontFamilies.find((f) => f.familyName === familyName);
+    const family = user.data.documentFontFamilies.find((f) => f.familyName === familyName);
     if (!family) return targetWeight;
 
     const weights = [...new Set(family.fonts.filter((f) => f.state === 'ACTIVE').map((f) => f.weight))].toSorted((a, b) => a - b);
@@ -169,8 +174,8 @@
 
   const updateTemplate = async (updates: Partial<PresetPreference>) => {
     const newTemplate = { ...template, ...updates };
-    await updatePreferences({ value: { template: newTemplate } });
-    cache.invalidate({ __typename: 'User', id: $user.id, field: 'preferences' });
+    await updatePreferences({ input: { value: { template: newTemplate } } });
+    cache.invalidate({ __typename: 'User', id: user.data.id, field: 'preferences' });
 
     mixpanel.track('update_post_template', {
       updates: Object.keys(updates),
@@ -178,8 +183,8 @@
   };
 
   const resetTemplate = async () => {
-    await updatePreferences({ value: { template: {} } });
-    cache.invalidate({ __typename: 'User', id: $user.id, field: 'preferences' });
+    await updatePreferences({ input: { value: { template: {} } } });
+    cache.invalidate({ __typename: 'User', id: user.data.id, field: 'preferences' });
 
     mixpanel.track('reset_post_template');
   };

@@ -1,21 +1,21 @@
 <script lang="ts">
+  import { createFragment } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { SearchableDropdown } from '@typie/ui/components';
   import { defaultValues, values } from '@typie/ui/tiptap';
-  import { fragment, graphql } from '$graphql';
+  import { graphql } from '$mearie';
   import type { Editor } from '@tiptap/core';
   import type { Ref } from '@typie/ui/utils';
-  import type { Editor_BottomToolbar_FontWeight_user } from '$graphql';
+  import type { Editor_BottomToolbar_FontWeight_user$key } from '$mearie';
 
   type Props = {
-    $user: Editor_BottomToolbar_FontWeight_user;
+    user$key: Editor_BottomToolbar_FontWeight_user$key;
     editor?: Ref<Editor>;
   };
 
-  let { $user: _user, editor }: Props = $props();
+  let { user$key, editor }: Props = $props();
 
-  const user = fragment(
-    _user,
+  const user = createFragment(
     graphql(`
       fragment Editor_BottomToolbar_FontWeight_user on User {
         id
@@ -30,6 +30,7 @@
         }
       }
     `),
+    () => user$key,
   );
 
   const currentFontFamilyAndWeights = $derived.by(() => {
@@ -50,10 +51,10 @@
       };
     }
 
-    const userFonts = $user.fontFamilies.flatMap((f) => f.fonts);
+    const userFonts = user.data.fontFamilies.flatMap((f) => f.fonts);
     if (userFonts.length === 0) return defaultFontFamilyAndWeights;
 
-    const userFontFamily = $user.fontFamilies.find(
+    const userFontFamily = user.data.fontFamilies.find(
       ({ id, fonts }) => id === fontOrFontIdOrFontFamilyId || fonts.some(({ id }) => id === fontOrFontIdOrFontFamilyId),
     );
     if (!userFontFamily) return defaultFontFamilyAndWeights;

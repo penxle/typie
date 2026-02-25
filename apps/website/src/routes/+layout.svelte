@@ -1,13 +1,16 @@
 <script lang="ts">
   import '../app.css';
 
+  import { setClient } from '@mearie/svelte';
   import { setupThemeContext } from '@typie/ui/context';
   import { NotificationProvider } from '@typie/ui/notification';
   import { onMount } from 'svelte';
   import { invalidate } from '$app/navigation';
+  import { mearieClient } from '$lib/graphql';
 
   let { children } = $props();
 
+  setClient(mearieClient);
   setupThemeContext();
 
   onMount(() => {

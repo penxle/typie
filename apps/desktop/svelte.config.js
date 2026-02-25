@@ -11,7 +11,6 @@ export default {
     alias: {
       '@/*': '../api/src/*',
       '$assets/*': './src/assets/*',
-      $graphql: './.sark',
     },
     files: {
       hooks: {
@@ -28,7 +27,6 @@ export default {
         ...config,
         compilerOptions: {
           ...config.compilerOptions,
-          rootDirs: [...config.compilerOptions.rootDirs, '../.sark/types'],
         },
       }),
     },

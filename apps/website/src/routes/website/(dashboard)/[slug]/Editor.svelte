@@ -1,5 +1,6 @@
 <script lang="ts">
   import { random } from '@ctrl/tinycolor';
+  import { createFragment, createMutation, createSubscription } from '@mearie/svelte';
   import stringHash from '@sindresorhus/string-hash';
   import { isiOS, isMacOS } from '@tiptap/core';
   import { Selection, Transaction } from '@tiptap/pm/state';
@@ -30,8 +31,8 @@
   import Maximize2Icon from '~icons/lucide/maximize-2';
   import XIcon from '~icons/lucide/x';
   import { browser } from '$app/environment';
-  import { fragment, graphql } from '$graphql';
   import { unfurlEmbed, uploadBlobAsFile, uploadBlobAsImage } from '$lib/utils';
+  import { graphql } from '$mearie';
   import PostMenu from '../@context-menu/PostMenu.svelte';
   import PlanUpgradeModal from '../PlanUpgradeModal.svelte';
   import Anchors from './@anchor/Anchors.svelte';
@@ -52,20 +53,19 @@
   import TemplateModal from './TemplateModal.svelte';
   import type { Editor } from '@tiptap/core';
   import type { PageLayout, Ref } from '@typie/ui/utils';
-  import type { Editor_query } from '$graphql';
+  import type { Editor_query$key } from '$mearie';
 
   const DISCONNECT_THRESHOLD = 3;
 
   type Props = {
-    $query: Editor_query;
+    query$key: Editor_query$key;
     slug: string;
     focused: boolean;
   };
 
-  let { $query: _query, slug, focused }: Props = $props();
+  let { query$key, slug, focused }: Props = $props();
 
-  const query = fragment(
-    _query,
+  const query = createFragment(
     graphql(`
       fragment Editor_query on Query {
         ...Editor_Limit_query
@@ -168,23 +168,75 @@
         }
       }
     `),
+    () => query$key,
   );
 
-  const syncPost = graphql(`
-    mutation Editor_SyncPost_Mutation($input: SyncPostInput!) {
-      syncPost(input: $input)
-    }
-  `);
-
-  const postSyncStream = graphql(`
-    subscription Editor_PostSyncStream_Subscription($clientId: String!, $postId: ID!) {
-      postSyncStream(clientId: $clientId, postId: $postId) {
-        postId
-        type
-        data
+  const [syncPost] = createMutation(
+    graphql(`
+      mutation Editor_SyncPost_Mutation($input: SyncPostInput!) {
+        syncPost(input: $input)
       }
-    }
-  `);
+    `),
+  );
+
+  let postSyncReady = $state(false);
+
+  createSubscription(
+    graphql(`
+      subscription Editor_PostSyncStream_Subscription($clientId: String!, $postId: ID!) {
+        postSyncStream(clientId: $clientId, postId: $postId) {
+          postId
+          type
+          data
+        }
+      }
+    `),
+    () => ({ clientId, postId: postId ?? '' }),
+    () => ({
+      skip: !postSyncReady || !postId,
+      onData: async (data) => {
+        const payload = data.postSyncStream;
+        if (payload.type === PostSyncType.HEARTBEAT) {
+          lastHeartbeatAt = dayjs(payload.data);
+          connectionStatus = 'connected';
+        } else if (payload.type === PostSyncType.UPDATE) {
+          Y.applyUpdateV2(doc, Uint8Array.fromBase64(payload.data), 'remote');
+        } else if (payload.type === PostSyncType.VECTOR) {
+          if (!postId) return;
+          const update = Y.encodeStateAsUpdateV2(doc, Uint8Array.fromBase64(payload.data));
+
+          await syncPost(
+            {
+              input: {
+                clientId,
+                postId,
+                type: PostSyncType.UPDATE,
+                data: update.toBase64(),
+              },
+            },
+            { metadata: { subscription: { transport: true } } },
+          );
+        } else if (payload.type === PostSyncType.AWARENESS) {
+          YAwareness.applyAwarenessUpdate(awareness, Uint8Array.fromBase64(payload.data), 'remote');
+        } else if (payload.type === PostSyncType.PRESENCE) {
+          if (!postId) return;
+          const update = YAwareness.encodeAwarenessUpdate(awareness, [doc.clientID]);
+
+          await syncPost(
+            {
+              input: {
+                clientId,
+                postId,
+                type: PostSyncType.AWARENESS,
+                data: update.toBase64(),
+              },
+            },
+            { metadata: { subscription: { transport: true } } },
+          );
+        }
+      },
+    }),
+  );
 
   const editorContext = setupEditorContext();
 
@@ -196,7 +248,7 @@
   const dragViewProps = $derived({ dragDropContext, viewId: splitViewId });
   const clientId = nanoid();
   // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-  let entity = $state<(typeof $query.entities)[number]>($query.entities.find((entity) => entity.slug === slug)!);
+  let entity = $state<(typeof query.data.entities)[number]>(query.data.entities.find((entity) => entity.slug === slug)!);
 
   const selectionsStore = new LocalStore<
     Record<
@@ -214,7 +266,7 @@
     void slug;
 
     untrack(() => {
-      const next = $query.entities.find((entity) => entity.slug === slug);
+      const next = query.data.entities.find((entity) => entity.slug === slug);
       if (next) {
         entity = next;
       }
@@ -323,12 +375,14 @@
 
     await syncPost(
       {
-        clientId,
-        postId,
-        type: PostSyncType.VECTOR,
-        data: vector.toBase64(),
+        input: {
+          clientId,
+          postId,
+          type: PostSyncType.VECTOR,
+          data: vector.toBase64(),
+        },
       },
-      { transport: 'ws' },
+      { metadata: { subscription: { transport: true } } },
     );
   };
 
@@ -338,10 +392,12 @@
     const update = Y.encodeStateAsUpdateV2(doc);
 
     await syncPost({
-      clientId,
-      postId,
-      type: PostSyncType.UPDATE,
-      data: update.toBase64(),
+      input: {
+        clientId,
+        postId,
+        type: PostSyncType.UPDATE,
+        data: update.toBase64(),
+      },
     });
   };
 
@@ -412,11 +468,11 @@
 
     clipboardData = undefined;
   };
-
   $effect(() => {
     if (!postId) return;
 
     return untrack(() => {
+      postSyncReady = false;
       const currentPostId = postId;
 
       const handleOnline = () => {
@@ -458,12 +514,14 @@
             if (postId === currentPostId) {
               await syncPost(
                 {
-                  clientId,
-                  postId,
-                  type: PostSyncType.UPDATE,
-                  data: pendingUpdate.toBase64(),
+                  input: {
+                    clientId,
+                    postId,
+                    type: PostSyncType.UPDATE,
+                    data: pendingUpdate.toBase64(),
+                  },
                 },
-                { transport: 'ws' },
+                { metadata: { subscription: { transport: true } } },
               );
 
               pendingUpdate = null;
@@ -476,12 +534,14 @@
               if (pendingUpdate && postId === currentPostId) {
                 await syncPost(
                   {
-                    clientId,
-                    postId,
-                    type: PostSyncType.UPDATE,
-                    data: pendingUpdate.toBase64(),
+                    input: {
+                      clientId,
+                      postId,
+                      type: PostSyncType.UPDATE,
+                      data: pendingUpdate.toBase64(),
+                    },
                   },
-                  { transport: 'ws' },
+                  { metadata: { subscription: { transport: true } } },
                 );
 
                 pendingUpdate = null;
@@ -521,12 +581,14 @@
 
               await syncPost(
                 {
-                  clientId,
-                  postId,
-                  type: PostSyncType.AWARENESS,
-                  data: update.toBase64(),
+                  input: {
+                    clientId,
+                    postId,
+                    type: PostSyncType.AWARENESS,
+                    data: update.toBase64(),
+                  },
                 },
-                { transport: 'ws' },
+                { metadata: { subscription: { transport: true } } },
               );
 
               pendingAwarenessStates = null;
@@ -545,12 +607,14 @@
 
                 await syncPost(
                   {
-                    clientId,
-                    postId,
-                    type: PostSyncType.AWARENESS,
-                    data: update.toBase64(),
+                    input: {
+                      clientId,
+                      postId,
+                      type: PostSyncType.AWARENESS,
+                      data: update.toBase64(),
+                    },
                   },
-                  { transport: 'ws' },
+                  { metadata: { subscription: { transport: true } } },
                 );
 
                 pendingAwarenessStates = null;
@@ -561,44 +625,7 @@
         }
       });
 
-      const unsubscribe = postSyncStream.subscribe({ clientId, postId: currentPostId }, async (payload) => {
-        if (postId !== currentPostId) {
-          return;
-        }
-
-        if (payload.type === PostSyncType.HEARTBEAT) {
-          lastHeartbeatAt = dayjs(payload.data);
-          connectionStatus = 'connected';
-        } else if (payload.type === PostSyncType.UPDATE) {
-          Y.applyUpdateV2(doc, Uint8Array.fromBase64(payload.data), 'remote');
-        } else if (payload.type === PostSyncType.VECTOR) {
-          const update = Y.encodeStateAsUpdateV2(doc, Uint8Array.fromBase64(payload.data));
-
-          await syncPost(
-            {
-              clientId,
-              postId: currentPostId,
-              type: PostSyncType.UPDATE,
-              data: update.toBase64(),
-            },
-            { transport: 'ws' },
-          );
-        } else if (payload.type === PostSyncType.AWARENESS) {
-          YAwareness.applyAwarenessUpdate(awareness, Uint8Array.fromBase64(payload.data), 'remote');
-        } else if (payload.type === PostSyncType.PRESENCE) {
-          const update = YAwareness.encodeAwarenessUpdate(awareness, [doc.clientID]);
-
-          await syncPost(
-            {
-              clientId,
-              postId: currentPostId,
-              type: PostSyncType.AWARENESS,
-              data: update.toBase64(),
-            },
-            { transport: 'ws' },
-          );
-        }
-      });
+      postSyncReady = true;
 
       const persistence = new IndexeddbPersistence(`typie:editor:${currentPostId}`, doc);
 
@@ -611,8 +638,8 @@
       }
 
       awareness.setLocalStateField('user', {
-        name: $query.me.name,
-        color: random({ luminosity: 'bright', seed: stringHash($query.me.id) }).toHexString(),
+        name: query.data.me.name,
+        color: random({ luminosity: 'bright', seed: stringHash(query.data.me.id) }).toHexString(),
       });
 
       editor?.current.once('create', ({ editor }) => {
@@ -741,7 +768,7 @@
         window.removeEventListener('offline', handleOffline);
 
         YAwareness.removeAwarenessStates(awareness, [doc.clientID], 'local');
-        unsubscribe();
+        postSyncReady = false;
 
         editor?.current.off('selectionUpdate', persistSelection);
         editor?.current.off('transaction', applyInitialMarks);
@@ -888,7 +915,7 @@
             ></div>
           </div>
 
-          {#if $query.me.id === entity.user.id}
+          {#if query.data.me.id === entity.user.id}
             <Menu>
               {#snippet button({ open })}
                 <button
@@ -952,11 +979,11 @@
 
       <HorizontalDivider color="secondary" />
 
-      <TopToolbar $site={entity.site} {editor} />
+      <TopToolbar {editor} site$key={entity.site} />
 
       <div class={flex({ position: 'relative', flexGrow: '1', overflowY: 'hidden' })}>
         <div class={flex({ position: 'relative', flexDirection: 'column', flexGrow: '1', overflowX: 'auto' })}>
-          <BottomToolbar $user={entity.user} {editor} {undoManager} />
+          <BottomToolbar {editor} {undoManager} user$key={entity.user} />
           <div
             style:position={currentViewZenModeEnabled ? 'fixed' : 'relative'}
             style:top={currentViewZenModeEnabled ? '0' : 'auto'}
@@ -1281,15 +1308,16 @@
                             uploadBlobAsFile: (file) => {
                               return uploadBlobAsFile(file);
                             },
-                            unfurlEmbed: (url) => {
-                              return unfurlEmbed({ url });
+                            unfurlEmbed: async (url) => {
+                              const result = await unfurlEmbed({ input: { url } });
+                              return result.unfurlEmbed;
                             },
                           }}
                           {undoManager}
                           bind:editor
                         />
                         {#if editor && mounted}
-                          <TemplateModal $site={entity.site} {doc} {editor} {focused} />
+                          <TemplateModal {doc} {editor} {focused} site$key={entity.site} />
                           {#if app.preference.current.lineHighlightEnabled}
                             <Highlight {editor} scale={editorScale} />
                           {/if}
@@ -1397,13 +1425,13 @@
           </div>
         {/if}
 
-        <Panel $post={entity.node} $user={$query.me} {doc} {editor} {viewEditor} bind:viewDoc />
+        <Panel {doc} {editor} post$key={entity.node} user$key={query.data.me} {viewEditor} bind:viewDoc />
       </div>
     </div>
   </div>
 {/if}
 
-<Limit {$query} $user={entity.user} {editor} />
+<Limit {editor} query$key={query.data} user$key={entity.user} />
 <PasteModal
   onconfirm={(mode) => {
     onPasteConfirm(mode);
@@ -1419,7 +1447,7 @@
     }
   }
 />
-<PlanUpgradeModal $user={$query.me} bind:open={planUpgradeModalOpen}>
+<PlanUpgradeModal user$key={query.data.me} bind:open={planUpgradeModalOpen}>
   FULL ACCESS로 업그레이드하면
   <br />
   모든 프리미엄 기능을 무제한으로 사용할 수 있어요.

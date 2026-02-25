@@ -1,9 +1,10 @@
 <script lang="ts">
+  import { createFragment } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { getAppContext } from '@typie/ui/context';
   import { clamp } from '@typie/ui/utils';
-  import { fragment, graphql } from '$graphql';
+  import { graphql } from '$mearie';
   import { getViewContext } from '../@split-view/context.svelte';
   import PanelAi from './PanelAi.svelte';
   import PanelAnchors from './PanelAnchors.svelte';
@@ -15,11 +16,11 @@
   import type { Editor } from '@tiptap/core';
   import type { Ref } from '@typie/ui/utils';
   import type * as Y from 'yjs';
-  import type { Editor_Panel_post, Editor_Panel_user } from '$graphql';
+  import type { Editor_Panel_post$key, Editor_Panel_user$key } from '$mearie';
 
   type Props = {
-    $post: Editor_Panel_post;
-    $user: Editor_Panel_user;
+    post$key: Editor_Panel_post$key;
+    user$key: Editor_Panel_user$key;
     editor?: Ref<Editor>;
     viewEditor?: Ref<Editor>;
     doc: Y.Doc;
@@ -29,10 +30,9 @@
   const minWidth = 240;
   const maxWidth = 400;
 
-  let { $post: _post, $user: _user, editor, viewEditor, doc, viewDoc = $bindable() }: Props = $props();
+  let { post$key, user$key, editor, viewEditor, doc, viewDoc = $bindable() }: Props = $props();
 
-  const user = fragment(
-    _user,
+  const user = createFragment(
     graphql(`
       fragment Editor_Panel_user on User {
         id
@@ -42,10 +42,10 @@
         ...Editor_Panel_PanelSpellcheck_user
       }
     `),
+    () => user$key,
   );
 
-  const post = fragment(
-    _post,
+  const post = createFragment(
     graphql(`
       fragment Editor_Panel_post on Post {
         id
@@ -60,6 +60,7 @@
         ...Editor_Panel_PanelTimeline_post
       }
     `),
+    () => post$key,
   );
 
   const app = getAppContext();
@@ -156,11 +157,11 @@
 
   {#if isExpanded}
     {#if app.preference.current.panelTabByViewId[splitViewId] === 'info'}
-      <PanelInfo {$post} {$user} {editor} />
+      <PanelInfo {editor} post$key={post.data} user$key={user.data} />
     {/if}
 
     {#if app.preference.current.panelTabByViewId[splitViewId] === 'note'}
-      <PanelNote $entity={$post.entity} />
+      <PanelNote entity$key={post.data.entity} />
     {/if}
 
     {#if app.preference.current.panelTabByViewId[splitViewId] === 'anchors'}
@@ -168,15 +169,15 @@
     {/if}
 
     {#if app.preference.current.panelTabByViewId[splitViewId] === 'spellcheck'}
-      <PanelSpellcheck {$user} {editor} />
+      <PanelSpellcheck {editor} user$key={user.data} />
     {/if}
 
     {#if app.preference.current.panelTabByViewId[splitViewId] === 'ai'}
-      <PanelAi {$user} {editor} />
+      <PanelAi {editor} user$key={user.data} />
     {/if}
 
     {#if app.preference.current.panelTabByViewId[splitViewId] === 'timeline'}
-      <PanelTimeline {$post} {doc} {editor} {viewEditor} bind:viewDoc />
+      <PanelTimeline {doc} {editor} post$key={post.data} {viewEditor} bind:viewDoc />
     {/if}
 
     {#if app.preference.current.panelTabByViewId[splitViewId] === 'settings'}

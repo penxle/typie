@@ -1,5 +1,5 @@
 import { getContext, setContext } from 'svelte';
-import type { EditorContext_user } from '$graphql';
+import type { EditorContext_user$key } from '$mearie';
 import type { Editor } from './editor.svelte';
 
 export class EditorContext {
@@ -10,7 +10,7 @@ export class EditorContext {
   serverVersion = $state<string | null>(null);
   serverGeneration = $state<number>(0);
 
-  user = $state<EditorContext_user | null>(null);
+  user = $state<EditorContext_user$key | null>(null);
 
   resetKey = $state(0);
 }

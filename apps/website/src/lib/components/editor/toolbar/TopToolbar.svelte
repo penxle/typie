@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createFragment } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { DropdownMenu, DropdownMenuItem, VerticalDivider } from '@typie/ui/components';
@@ -21,32 +22,32 @@
   import StickyNoteIcon from '~icons/lucide/sticky-note';
   import TableIcon from '~icons/lucide/table';
   import HorizontalRuleIcon from '~icons/typie/horizontal-rule';
-  import { fragment, graphql } from '$graphql';
   import { blockquoteVariants, horizontalRuleVariants } from '$lib/components/editor/values';
   import { getEditorContext } from '$lib/editor/context.svelte';
+  import { graphql } from '$mearie';
   import TableSizeSelector from './TableSizeSelector.svelte';
   import ToolbarButton from './ToolbarButton.svelte';
   import ToolbarDropdownButton from './ToolbarDropdownButton.svelte';
   import ToolbarIcon from './ToolbarIcon.svelte';
   import ToolbarPanelTabButton from './ToolbarPanelTabButton.svelte';
   import type { SystemStyleObject } from '@typie/styled-system/types';
-  import type { DocumentEditor_TopToolbar_user } from '$graphql';
+  import type { DocumentEditor_TopToolbar_user$key } from '$mearie';
 
   type Props = {
     style?: SystemStyleObject;
-    $user: DocumentEditor_TopToolbar_user;
+    user$key: DocumentEditor_TopToolbar_user$key;
   };
 
-  let { style, $user: _user }: Props = $props();
+  let { style, user$key }: Props = $props();
 
-  const user = fragment(
-    _user,
+  const user = createFragment(
     graphql(`
       fragment DocumentEditor_TopToolbar_user on User {
         id
         ...DocumentEditor_TopToolbar_PanelTabButton_user
       }
     `),
+    () => user$key,
   );
 
   const app = getAppContext();
@@ -245,12 +246,12 @@
   <VerticalDivider style={css.raw({ height: '[80%]', marginX: '12px' })} />
 
   <div class={flex({ alignItems: 'center', gap: '4px' })}>
-    <ToolbarPanelTabButton {$user} icon={InfoIcon} label="정보" tab="info" />
-    <ToolbarPanelTabButton {$user} icon={StickyNoteIcon} label="노트" tab="note" />
-    <ToolbarPanelTabButton {$user} icon={MessageSquareTextIcon} label="코멘트" tab="remarks" />
-    <ToolbarPanelTabButton {$user} icon={SpellCheckIcon} label="맞춤법" needSubscription tab="spellcheck" />
-    <ToolbarPanelTabButton {$user} icon={LightbulbIcon} label="AI 피드백" needSubscription tab="ai" />
-    <ToolbarPanelTabButton {$user} icon={ClockFadingIcon} label="타임라인" tab="timeline" />
-    <ToolbarPanelTabButton {$user} icon={SettingsIcon} label="본문 설정" tab="settings" />
+    <ToolbarPanelTabButton icon={InfoIcon} label="정보" tab="info" user$key={user.data} />
+    <ToolbarPanelTabButton icon={StickyNoteIcon} label="노트" tab="note" user$key={user.data} />
+    <ToolbarPanelTabButton icon={MessageSquareTextIcon} label="코멘트" tab="remarks" user$key={user.data} />
+    <ToolbarPanelTabButton icon={SpellCheckIcon} label="맞춤법" needSubscription tab="spellcheck" user$key={user.data} />
+    <ToolbarPanelTabButton icon={LightbulbIcon} label="AI 피드백" needSubscription tab="ai" user$key={user.data} />
+    <ToolbarPanelTabButton icon={ClockFadingIcon} label="타임라인" tab="timeline" user$key={user.data} />
+    <ToolbarPanelTabButton icon={SettingsIcon} label="본문 설정" tab="settings" user$key={user.data} />
   </div>
 </div>

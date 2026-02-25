@@ -10,6 +10,7 @@
   };
 
   let { focused }: Props = $props();
+
   let open = $state(false);
   let hasShown = false;
   const dismissStorageKey = 'editor-v2-notice-dismissed';

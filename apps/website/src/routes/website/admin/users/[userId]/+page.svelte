@@ -1,89 +1,40 @@
 <script lang="ts">
+  import { createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex, grid } from '@typie/styled-system/patterns';
   import { comma } from '@typie/ui/utils';
   import dayjs from 'dayjs';
   import ArrowLeftIcon from '~icons/lucide/arrow-left';
-  import { graphql } from '$graphql';
   import { AdminIcon, AdminModal } from '$lib/components/admin';
+  import { hydrateQuery } from '$lib/graphql';
+  import { graphql } from '$mearie';
+
+  let { data } = $props();
+
+  const query = $derived(hydrateQuery(() => data.query));
 
   let impersonateModalOpen = $state(false);
 
-  const query = graphql(`
-    query AdminUserDetail_Query($userId: String!) {
-      adminUser(userId: $userId) {
-        id
-        name
-        email
-        role
-        state
-        createdAt
-        avatar {
-          id
-          url
-        }
-        sites {
-          id
-          name
-          url
-        }
-        singleSignOns {
-          id
-          provider
-          email
-        }
-        subscription {
-          id
-          state
-          startsAt
-          expiresAt
-          plan {
-            id
-            name
-            availability
-          }
-        }
-        credit
-        personalIdentity {
-          id
-          name
-          birthDate
-          gender
-          phoneNumber
-        }
-        marketingConsent
-        recentPosts {
-          id
-          title
-          createdAt
-          updatedAt
-        }
-        postCount
-        totalCharacterCount
-        billingKey {
-          id
-          name
-        }
+  const [adminImpersonate] = createMutation(
+    graphql(`
+      mutation AdminUserDetail_AdminImpersonate_Mutation($input: AdminImpersonateInput!) {
+        adminImpersonate(input: $input)
       }
-    }
-  `);
-
-  const adminImpersonate = graphql(`
-    mutation AdminUserDetail_AdminImpersonate_Mutation($input: AdminImpersonateInput!) {
-      adminImpersonate(input: $input)
-    }
-  `);
+    `),
+  );
 
   const handleImpersonate = async () => {
-    await adminImpersonate({ userId: $query.adminUser.id });
+    await adminImpersonate({ input: { userId: query.data.adminUser.id } });
     location.href = '/initial';
   };
 
-  const adminGiveCredit = graphql(`
-    mutation AdminUserDetail_AdminGiveCredit_Mutation($input: AdminGiveCreditInput!) {
-      adminGiveCredit(input: $input)
-    }
-  `);
+  const [adminGiveCredit] = createMutation(
+    graphql(`
+      mutation AdminUserDetail_AdminGiveCredit_Mutation($input: AdminGiveCreditInput!) {
+        adminGiveCredit(input: $input)
+      }
+    `),
+  );
 </script>
 
 <div class={flex({ flexDirection: 'column', gap: '24px', color: 'amber.500' })}>
@@ -114,7 +65,7 @@
     <h2 class={css({ fontSize: '18px', color: 'amber.500' })}>USER DETAILS</h2>
   </div>
 
-  {#if $query.adminUser}
+  {#if query.data.adminUser}
     <div
       class={grid({
         gap: '24px',
@@ -144,17 +95,17 @@
                 flexShrink: '0',
               })}
             >
-              {#if $query.adminUser.avatar?.url}
-                <img alt={$query.adminUser.name} src={$query.adminUser.avatar.url} />
+              {#if query.data.adminUser.avatar?.url}
+                <img alt={query.data.adminUser.name} src={query.data.adminUser.avatar.url} />
               {/if}
             </div>
 
             <div class={flex({ flexDirection: 'column', gap: '8px' })}>
               <h4 class={css({ fontSize: '20px', fontWeight: 'bold', color: 'amber.500' })}>
-                {$query.adminUser.name}
+                {query.data.adminUser.name}
               </h4>
               <div class={css({ fontSize: '12px', color: 'amber.400' })}>
-                {$query.adminUser.email}
+                {query.data.adminUser.email}
               </div>
             </div>
           </div>
@@ -174,14 +125,14 @@
           <div class={grid({ gridTemplateColumns: 'repeat(2, 1fr)', gap: '24px', marginBottom: '32px' })}>
             <div>
               <div class={css({ fontSize: '24px', color: 'amber.500', marginBottom: '4px' })}>
-                {$query.adminUser.postCount}
+                {query.data.adminUser.postCount}
               </div>
               <div class={css({ fontSize: '11px', color: 'amber.400' })}>POSTS</div>
             </div>
 
             <div>
               <div class={css({ fontSize: '24px', color: 'amber.500', marginBottom: '4px' })}>
-                {comma($query.adminUser.totalCharacterCount)}
+                {comma(query.data.adminUser.totalCharacterCount)}
               </div>
               <div class={css({ fontSize: '11px', color: 'amber.400' })}>CHARACTERS</div>
             </div>
@@ -190,9 +141,9 @@
           <!-- RECENT POSTS -->
           <div>
             <h4 class={css({ fontSize: '14px', color: 'amber.500', marginBottom: '16px' })}>RECENT POSTS</h4>
-            {#if $query.adminUser.recentPosts.length > 0}
+            {#if query.data.adminUser.recentPosts.length > 0}
               <div class={flex({ flexDirection: 'column', gap: '12px' })}>
-                {#each $query.adminUser.recentPosts as post (post.id)}
+                {#each query.data.adminUser.recentPosts as post (post.id)}
                   <div
                     class={css({
                       borderWidth: '1px',
@@ -232,12 +183,12 @@
           })}
         >
           <h3 class={css({ fontSize: '16px', color: 'amber.500', marginBottom: '20px' })}>
-            SITES ({$query.adminUser.sites.length})
+            SITES ({query.data.adminUser.sites.length})
           </h3>
 
-          {#if $query.adminUser.sites.length > 0}
+          {#if query.data.adminUser.sites.length > 0}
             <div class={flex({ flexDirection: 'column', gap: '12px' })}>
-              {#each $query.adminUser.sites as site (site.id)}
+              {#each query.data.adminUser.sites as site (site.id)}
                 <div
                   class={css({
                     borderWidth: '1px',
@@ -289,14 +240,14 @@
             <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
               <span class={css({ fontSize: '11px', color: 'amber.400' })}>USER ID</span>
               <span class={css({ fontSize: '12px', color: 'amber.500' })}>
-                {$query.adminUser.id}
+                {query.data.adminUser.id}
               </span>
             </div>
 
             <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
               <span class={css({ fontSize: '11px', color: 'amber.400' })}>ROLE</span>
-              <span class={css({ fontSize: '12px', color: $query.adminUser.role === 'ADMIN' ? 'amber.500' : 'gray.400' })}>
-                [{$query.adminUser.role}]
+              <span class={css({ fontSize: '12px', color: query.data.adminUser.role === 'ADMIN' ? 'amber.500' : 'gray.400' })}>
+                [{query.data.adminUser.role}]
               </span>
             </div>
 
@@ -305,17 +256,17 @@
               <span
                 class={css({
                   fontSize: '12px',
-                  color: $query.adminUser.state === 'ACTIVE' ? 'green.400' : 'red.400',
+                  color: query.data.adminUser.state === 'ACTIVE' ? 'green.400' : 'red.400',
                 })}
               >
-                [{$query.adminUser.state}]
+                [{query.data.adminUser.state}]
               </span>
             </div>
 
             <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
               <span class={css({ fontSize: '11px', color: 'amber.400' })}>JOINED</span>
               <span class={css({ fontSize: '12px', color: 'amber.500' })}>
-                {dayjs($query.adminUser.createdAt).formatAsDateTime()}
+                {dayjs(query.data.adminUser.createdAt).formatAsDateTime()}
               </span>
             </div>
           </div>
@@ -335,9 +286,9 @@
           <div class={flex({ flexDirection: 'column', gap: '16px' })}>
             <div>
               <div class={css({ fontSize: '11px', color: 'amber.400', marginBottom: '8px' })}>LOGIN METHODS</div>
-              {#if $query.adminUser.singleSignOns.length > 0}
+              {#if query.data.adminUser.singleSignOns.length > 0}
                 <div class={flex({ flexDirection: 'column', gap: '8px' })}>
-                  {#each $query.adminUser.singleSignOns as sso (sso.id)}
+                  {#each query.data.adminUser.singleSignOns as sso (sso.id)}
                     <div class={css({ fontSize: '12px', color: 'amber.500' })}>
                       [{sso.provider}] {sso.email}
                     </div>
@@ -345,7 +296,7 @@
                 </div>
               {:else}
                 <div class={css({ fontSize: '12px', color: 'amber.500' })}>
-                  [EMAIL] {$query.adminUser.email}
+                  [EMAIL] {query.data.adminUser.email}
                 </div>
               {/if}
             </div>
@@ -363,12 +314,12 @@
         >
           <h3 class={css({ fontSize: '16px', color: 'amber.500', marginBottom: '20px' })}>IDENTITY</h3>
 
-          {#if $query.adminUser.personalIdentity}
+          {#if query.data.adminUser.personalIdentity}
             <div class={flex({ flexDirection: 'column', gap: '16px' })}>
               <div>
                 <div class={css({ fontSize: '11px', color: 'amber.400', marginBottom: '4px' })}>NAME</div>
                 <div class={css({ fontSize: '14px', color: 'amber.500', fontWeight: 'bold' })}>
-                  {$query.adminUser.personalIdentity.name}
+                  {query.data.adminUser.personalIdentity.name}
                 </div>
               </div>
 
@@ -376,22 +327,22 @@
                 <div>
                   <div class={css({ fontSize: '11px', color: 'amber.400', marginBottom: '4px' })}>BIRTH DATE</div>
                   <div class={css({ fontSize: '12px', color: 'amber.500' })}>
-                    {dayjs($query.adminUser.personalIdentity.birthDate).format('YYYY-MM-DD')}
+                    {dayjs(query.data.adminUser.personalIdentity.birthDate).format('YYYY-MM-DD')}
                   </div>
                 </div>
                 <div>
                   <div class={css({ fontSize: '11px', color: 'amber.400', marginBottom: '4px' })}>GENDER</div>
                   <div class={css({ fontSize: '12px', color: 'amber.500' })}>
-                    [{$query.adminUser.personalIdentity.gender}]
+                    [{query.data.adminUser.personalIdentity.gender}]
                   </div>
                 </div>
               </div>
 
-              {#if $query.adminUser.personalIdentity.phoneNumber}
+              {#if query.data.adminUser.personalIdentity.phoneNumber}
                 <div>
                   <div class={css({ fontSize: '11px', color: 'amber.400', marginBottom: '4px' })}>PHONE NUMBER</div>
                   <div class={css({ fontSize: '12px', color: 'amber.500' })}>
-                    {$query.adminUser.personalIdentity.phoneNumber}
+                    {query.data.adminUser.personalIdentity.phoneNumber}
                   </div>
                 </div>
               {/if}
@@ -412,12 +363,12 @@
         >
           <h3 class={css({ fontSize: '16px', color: 'amber.500', marginBottom: '20px' })}>SUBSCRIPTION</h3>
 
-          {#if $query.adminUser.subscription}
+          {#if query.data.adminUser.subscription}
             <div class={flex({ flexDirection: 'column', gap: '16px' })}>
               <div>
                 <div class={css({ fontSize: '11px', color: 'amber.400', marginBottom: '4px' })}>PLAN</div>
                 <div class={css({ fontSize: '14px', color: 'amber.500', fontWeight: 'bold' })}>
-                  {$query.adminUser.subscription.plan.name}
+                  {query.data.adminUser.subscription.plan.name}
                 </div>
               </div>
 
@@ -427,37 +378,37 @@
                   class={css({
                     fontSize: '12px',
                     color:
-                      $query.adminUser.subscription.state === 'ACTIVE'
+                      query.data.adminUser.subscription.state === 'ACTIVE'
                         ? 'green.400'
-                        : $query.adminUser.subscription.state === 'WILL_EXPIRE'
+                        : query.data.adminUser.subscription.state === 'WILL_EXPIRE'
                           ? 'amber.400'
-                          : $query.adminUser.subscription.state === 'IN_GRACE_PERIOD'
+                          : query.data.adminUser.subscription.state === 'IN_GRACE_PERIOD'
                             ? 'red.400'
                             : 'gray.400',
                   })}
                 >
-                  [{$query.adminUser.subscription.state}]
+                  [{query.data.adminUser.subscription.state}]
                 </span>
               </div>
 
               <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
                 <span class={css({ fontSize: '11px', color: 'amber.400' })}>STARTED</span>
                 <span class={css({ fontSize: '12px', color: 'amber.500' })}>
-                  {dayjs($query.adminUser.subscription.startsAt).formatAsDateTime()}
+                  {dayjs(query.data.adminUser.subscription.startsAt).formatAsDateTime()}
                 </span>
               </div>
 
               <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
                 <span class={css({ fontSize: '11px', color: 'amber.400' })}>EXPIRES</span>
                 <span class={css({ fontSize: '12px', color: 'amber.500' })}>
-                  {dayjs($query.adminUser.subscription.expiresAt).formatAsDateTime()}
+                  {dayjs(query.data.adminUser.subscription.expiresAt).formatAsDateTime()}
                 </span>
               </div>
 
               <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
                 <span class={css({ fontSize: '11px', color: 'amber.400' })}>PAYMENT METHOD</span>
                 <span class={css({ fontSize: '12px', color: 'amber.500' })}>
-                  [{$query.adminUser.subscription.plan.availability}]
+                  [{query.data.adminUser.subscription.plan.availability}]
                 </span>
               </div>
             </div>
@@ -480,9 +431,9 @@
           <div class={flex({ flexDirection: 'column', gap: '16px' })}>
             <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
               <span class={css({ fontSize: '11px', color: 'amber.400' })}>BILLING KEY</span>
-              {#if $query.adminUser.billingKey}
+              {#if query.data.adminUser.billingKey}
                 <span class={css({ fontSize: '12px', color: 'amber.500' })}>
-                  {$query.adminUser.billingKey.name}
+                  {query.data.adminUser.billingKey.name}
                 </span>
               {:else}
                 <span class={css({ fontSize: '12px', color: 'gray.400' })}>NONE</span>
@@ -491,8 +442,8 @@
 
             <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
               <span class={css({ fontSize: '11px', color: 'amber.400' })}>CREDIT BALANCE</span>
-              <span class={css({ fontSize: '12px', color: $query.adminUser.credit === 0 ? 'gray.400' : 'amber.500' })}>
-                ₩{comma($query.adminUser.credit)}
+              <span class={css({ fontSize: '12px', color: query.data.adminUser.credit === 0 ? 'gray.400' : 'amber.500' })}>
+                ₩{comma(query.data.adminUser.credit)}
               </span>
             </div>
           </div>
@@ -515,10 +466,10 @@
               <span
                 class={css({
                   fontSize: '12px',
-                  color: $query.adminUser.marketingConsent ? 'green.400' : 'gray.400',
+                  color: query.data.adminUser.marketingConsent ? 'green.400' : 'gray.400',
                 })}
               >
-                {$query.adminUser.marketingConsent ? 'CONSENTED' : 'NOT CONSENTED'}
+                {query.data.adminUser.marketingConsent ? 'CONSENTED' : 'NOT CONSENTED'}
               </span>
             </div>
           </div>
@@ -584,9 +535,9 @@
               const amount = Number.parseInt(prompt('Enter the amount of credit to give: ') || '');
 
               if (!Number.isNaN(amount)) {
-                await adminGiveCredit({ userId: $query.adminUser.id, amount });
-                query.load({ userId: $query.adminUser.id });
-                alert(`${amount} points given to user ${$query.adminUser.name}`);
+                await adminGiveCredit({ input: { userId: query.data.adminUser.id, amount } });
+                query.refetch();
+                alert(`${amount} points given to user ${query.data.adminUser.name}`);
               }
             }}
             type="button"
@@ -612,7 +563,7 @@
       <div class={css({ marginBottom: '16px' })}>
         <p class={css({ marginBottom: '8px' })}>ARE YOU SURE YOU WANT TO IMPERSONATE THIS USER?</p>
         <p class={css({ color: 'amber.400' })}>
-          USER: {$query.adminUser.name.toUpperCase()} ({$query.adminUser.email})
+          USER: {query.data.adminUser.name.toUpperCase()} ({query.data.adminUser.email})
         </p>
       </div>
     </AdminModal>

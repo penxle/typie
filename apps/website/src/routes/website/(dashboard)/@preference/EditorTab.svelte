@@ -1,27 +1,28 @@
 <script lang="ts">
+  import { createFragment } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Select, Slider, Switch } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import mixpanel from 'mixpanel-browser';
-  import { fragment, graphql } from '$graphql';
   import { SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
-  import type { DashboardLayout_PreferenceModal_EditorTab_user } from '$graphql';
+  import { graphql } from '$mearie';
+  import type { DashboardLayout_PreferenceModal_EditorTab_user$key } from '$mearie';
 
   type Props = {
-    $user: DashboardLayout_PreferenceModal_EditorTab_user;
+    user$key: DashboardLayout_PreferenceModal_EditorTab_user$key;
   };
 
-  let { $user: _user }: Props = $props();
+  let { user$key }: Props = $props();
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const user = fragment(
-    _user,
+  const user = createFragment(
     graphql(`
       fragment DashboardLayout_PreferenceModal_EditorTab_user on User {
         id
       }
     `),
+    () => user$key,
   );
 
   const app = getAppContext();

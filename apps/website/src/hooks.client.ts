@@ -1,9 +1,11 @@
 import '$lib/polyfills';
 import '@typie/lib/dayjs';
 
+import { isAggregatedError } from '@mearie/svelte';
 import * as Sentry from '@sentry/sveltekit';
 import { env } from '$env/dynamic/public';
 import { setupMixpanel } from '$lib/analytics';
+import type { HandleClientError } from '@sveltejs/kit';
 
 setupMixpanel();
 
@@ -12,4 +14,10 @@ Sentry.init({
   sendDefaultPii: true,
 });
 
-export const handleError = Sentry.handleErrorWithSentry();
+const errorHandler: HandleClientError = async ({ error }) => {
+  if (isAggregatedError(error)) {
+    console.error('AggregatedError:', error.errors);
+  }
+};
+
+export const handleError = Sentry.handleErrorWithSentry(errorHandler);

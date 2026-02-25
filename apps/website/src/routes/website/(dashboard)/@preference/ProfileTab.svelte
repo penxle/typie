@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createFragment, createMutation } from '@mearie/svelte';
   import * as PortOne from '@portone/browser-sdk/v2';
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
@@ -12,20 +13,20 @@
   import CheckCircle2Icon from '~icons/lucide/check-circle-2';
   import PencilIcon from '~icons/lucide/pencil';
   import UploadIcon from '~icons/lucide/upload';
-  import { fragment, graphql } from '$graphql';
   import { LoadableImg, SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
+  import { unwrapError } from '$lib/graphql';
   import { uploadBlobAsImage } from '$lib/utils';
+  import { graphql } from '$mearie';
   import UpdateEmailModal from './UpdateEmailModal.svelte';
-  import type { DashboardLayout_PreferenceModal_ProfileTab_user } from '$graphql';
+  import type { DashboardLayout_PreferenceModal_ProfileTab_user$key } from '$mearie';
 
   type Props = {
-    $user: DashboardLayout_PreferenceModal_ProfileTab_user;
+    user$key: DashboardLayout_PreferenceModal_ProfileTab_user$key;
   };
 
-  let { $user: _user }: Props = $props();
+  let { user$key }: Props = $props();
 
-  const user = fragment(
-    _user,
+  const user = createFragment(
     graphql(`
       fragment DashboardLayout_PreferenceModal_ProfileTab_user on User {
         id
@@ -44,42 +45,49 @@
         }
       }
     `),
+    () => user$key,
   );
 
-  const updateUser = graphql(`
-    mutation DashboardLayout_PreferenceModal_ProfileTab_UpdateUser_Mutation($input: UpdateUserInput!) {
-      updateUser(input: $input) {
-        id
-        name
-
-        avatar {
+  const [updateUser] = createMutation(
+    graphql(`
+      mutation DashboardLayout_PreferenceModal_ProfileTab_UpdateUser_Mutation($input: UpdateUserInput!) {
+        updateUser(input: $input) {
           id
+          name
+
+          avatar {
+            id
+          }
         }
       }
-    }
-  `);
+    `),
+  );
 
-  const updateMarketingConsent = graphql(`
-    mutation DashboardLayout_PreferenceModal_ProfileTab_UpdateMarketingConsent_Mutation($input: UpdateMarketingConsentInput!) {
-      updateMarketingConsent(input: $input) {
-        id
-        marketingConsent
-      }
-    }
-  `);
-
-  const verifyPersonalIdentity = graphql(`
-    mutation DashboardLayout_PreferenceModal_ProfileTab_VerifyPersonalIdentity_Mutation($input: VerifyPersonalIdentityInput!) {
-      verifyPersonalIdentity(input: $input) {
-        id
-
-        personalIdentity {
+  const [updateMarketingConsent] = createMutation(
+    graphql(`
+      mutation DashboardLayout_PreferenceModal_ProfileTab_UpdateMarketingConsent_Mutation($input: UpdateMarketingConsentInput!) {
+        updateMarketingConsent(input: $input) {
           id
-          expiresAt
+          marketingConsent
         }
       }
-    }
-  `);
+    `),
+  );
+
+  const [verifyPersonalIdentity] = createMutation(
+    graphql(`
+      mutation DashboardLayout_PreferenceModal_ProfileTab_VerifyPersonalIdentity_Mutation($input: VerifyPersonalIdentityInput!) {
+        verifyPersonalIdentity(input: $input) {
+          id
+
+          personalIdentity {
+            id
+            expiresAt
+          }
+        }
+      }
+    `),
+  );
 
   const form = createForm({
     schema: z.object({
@@ -87,13 +95,13 @@
       avatarId: z.string(),
     }),
     onSubmit: async (data) => {
-      await updateUser({ name: data.name, avatarId: data.avatarId });
+      await updateUser({ input: { name: data.name, avatarId: data.avatarId } });
       mixpanel.track('update_user');
       Toast.success('프로필이 업데이트됐어요.');
     },
     defaultValues: {
-      name: $user.name,
-      avatarId: $user.avatar.id,
+      name: user.data.name,
+      avatarId: user.data.avatar.id,
     },
   });
 
@@ -116,7 +124,7 @@
         return;
       }
 
-      await verifyPersonalIdentity({ identityVerificationId: resp.identityVerificationId });
+      await verifyPersonalIdentity({ input: { identityVerificationId: resp.identityVerificationId } });
 
       mixpanel.track('verify_personal_identity_success');
     } catch (err) {
@@ -125,8 +133,9 @@
         same_identity_exists: '이미 다른 계정에 인증된 정보예요.',
       };
 
-      if (err instanceof TypieError) {
-        const message = errorMessages[err.code] || err.code;
+      const error = unwrapError(err);
+      if (error instanceof TypieError) {
+        const message = errorMessages[error.code] || error.code;
         Toast.error(message);
       }
     }
@@ -155,7 +164,7 @@
               <LoadableImg
                 id={form.fields.avatarId}
                 style={css.raw({ size: '32px', borderRadius: 'full' })}
-                alt={`${$user.name}의 아바타`}
+                alt={`${user.data.name}의 아바타`}
                 size={64}
               />
               <div
@@ -205,7 +214,7 @@
           {/snippet}
           {#snippet value()}
             <div class={flex({ align: 'center', gap: '10px' })}>
-              <span>{$user.email}</span>
+              <span>{user.data.email}</span>
               <button
                 class={css({
                   display: 'flex',
@@ -268,7 +277,7 @@
           일부 서비스 이용 시 실명 확인이 요구될 수 있어요.
         {/snippet}
         {#snippet value()}
-          {#if $user.personalIdentity}
+          {#if user.data.personalIdentity}
             <div class={flex({ align: 'center', gap: '6px' })}>
               <Icon style={css.raw({ color: 'text.success' })} icon={CheckCircle2Icon} size={12} />
               <span class={css({ color: 'text.success' })}>인증 완료</span>
@@ -295,13 +304,13 @@
         {/snippet}
         {#snippet value()}
           <Switch
-            checked={$user.marketingConsent}
+            checked={user.data.marketingConsent}
             onchange={async () => {
-              await updateMarketingConsent({ marketingConsent: !$user.marketingConsent });
-              mixpanel.track('update_marketing_consent', { marketingConsent: !$user.marketingConsent });
+              await updateMarketingConsent({ input: { marketingConsent: !user.data.marketingConsent } });
+              mixpanel.track('update_marketing_consent', { marketingConsent: !user.data.marketingConsent });
               Dialog.alert({
                 title: '마케팅 수신 동의',
-                message: `${dayjs().formatAsDate()}에 ${$user.marketingConsent ? '거부' : '동의'}처리됐어요.`,
+                message: `${dayjs().formatAsDate()}에 ${user.data.marketingConsent ? '거부' : '동의'}처리됐어요.`,
               });
             }}
           />
@@ -324,7 +333,7 @@
         {/snippet}
         {#snippet value()}
           <div class={css({ fontSize: '12px', fontFamily: 'mono', color: 'text.subtle', letterSpacing: '[0]' })}>
-            {$user.id}
+            {user.data.id}
           </div>
         {/snippet}
       </SettingsRow>
@@ -332,4 +341,4 @@
   </div>
 </div>
 
-<UpdateEmailModal email={$user.email} bind:open={updateEmailOpen} />
+<UpdateEmailModal email={user.data.email} bind:open={updateEmailOpen} />

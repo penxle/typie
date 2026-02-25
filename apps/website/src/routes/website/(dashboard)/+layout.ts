@@ -2,10 +2,107 @@ import { redirect } from '@sveltejs/kit';
 import { serializeOAuthState } from '@typie/ui/utils';
 import qs from 'query-string';
 import { env } from '$env/dynamic/public';
-import type { DashboardLayout_Query_AfterLoad } from './$graphql';
+import { loadQuery } from '$lib/graphql';
+import { graphql } from '$mearie';
 
-export const _DashboardLayout_Query_AfterLoad: DashboardLayout_Query_AfterLoad = ({ query, event }) => {
-  if (!query.me) {
+export const ssr = false;
+
+export const load = async (event) => {
+  const query = await loadQuery(
+    event,
+    graphql(`
+      query DashboardLayout_Query {
+        me @required {
+          id
+          name
+          email
+          preferences
+
+          avatar {
+            id
+            url
+          }
+
+          sites {
+            id
+            name
+
+            fonts {
+              id
+              weight
+              url
+
+              family {
+                id
+              }
+            }
+
+            ...DashboardLayout_Sidebar_site
+            ...DashboardLayout_SiteSettingsModal_site
+            ...DashboardLayout_TrashModal_site
+          }
+
+          referral {
+            id
+          }
+
+          surveys
+          marketingConsentAskedAt
+
+          usage {
+            totalCharacterCount
+          }
+
+          documentFontFamilies {
+            id
+            familyName
+            displayName
+            source
+            state
+
+            fonts {
+              id
+              weight
+              state
+              subfamilyDisplayName
+            }
+          }
+
+          textReplacements {
+            __typename
+            ... on TextReplacement {
+              id
+              match
+              substitute
+              regex
+            }
+            ... on TextReplacementPreference {
+              id
+              state
+              textReplacement {
+                id
+                match
+                substitute
+                regex
+              }
+            }
+          }
+
+          ...DashboardLayout_CommandPalette_user
+          ...DashboardLayout_PreferenceModal_user
+          ...DashboardLayout_Sidebar_user
+          ...DashboardLayout_SiteSettingsModal_user
+          ...DashboardLayout_TrialExpiredModal_user
+        }
+
+        ...AdminImpersonateBanner_query
+        ...DashboardLayout_Shortcuts_query
+        ...DashboardLayout_Notes_query
+      }
+    `),
+  );
+
+  if (!query.data.me) {
     redirect(
       302,
       qs.stringifyUrl({
@@ -19,6 +116,6 @@ export const _DashboardLayout_Query_AfterLoad: DashboardLayout_Query_AfterLoad =
       }),
     );
   }
-};
 
-export const ssr = false;
+  return { query };
+};

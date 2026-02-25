@@ -5,74 +5,16 @@
   import dayjs from 'dayjs';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
   import FolderIcon from '~icons/lucide/folder';
-  import { graphql } from '$graphql';
   import { Img } from '$lib/components';
+  import { hydrateQuery } from '$lib/graphql';
 
-  const query = graphql(`
-    query UsersiteWildcardIndexPage_Query($origin: String!) {
-      siteView(origin: $origin) {
-        id
-        name
+  let { data } = $props();
 
-        logo {
-          id
-          ...Img_image
-        }
+  const query = $derived(hydrateQuery(() => data.query));
 
-        entities {
-          id
-          slug
-
-          node {
-            __typename
-
-            ... on FolderView {
-              id
-              name
-              folderCount
-              postCount
-              thumbnail {
-                id
-                ...Img_image
-              }
-            }
-
-            ... on PostView {
-              id
-              title
-              subtitle
-              excerpt
-              updatedAt
-              thumbnail {
-                id
-                ...Img_image
-              }
-
-              document {
-                id
-              }
-            }
-
-            ... on DocumentView {
-              id
-              title
-              subtitle
-              excerpt
-              updatedAt
-              thumbnail {
-                id
-                ...Img_image
-              }
-            }
-          }
-        }
-      }
-    }
-  `);
-
-  const folders = $derived($query.siteView.entities.filter((entity) => entity.node.__typename === 'FolderView'));
+  const folders = $derived(query.data.siteView.entities.filter((entity) => entity.node.__typename === 'FolderView'));
   const posts = $derived(
-    $query.siteView.entities.filter(
+    query.data.siteView.entities.filter(
       (entity) => entity.node.__typename === 'DocumentView' || (entity.node.__typename === 'PostView' && !entity.node.document),
     ),
   );
@@ -83,8 +25,8 @@
 </svelte:head>
 
 <Helmet
-  description={`${$query.siteView.name}에서 공유된 폴더 ${folders.length}개, 포스트 ${posts.length}개를 확인하세요.`}
-  title={$query.siteView.name}
+  description={`${query.data.siteView.name}에서 공유된 폴더 ${folders.length}개, 포스트 ${posts.length}개를 확인하세요.`}
+  title={query.data.siteView.name}
 />
 
 <div class={flex({ flexDirection: 'column', alignItems: 'center', width: 'full', minHeight: 'full' })}>
@@ -100,17 +42,17 @@
     })}
   >
     <header class={css({ marginBottom: { base: '56px', md: '72px' } })}>
-      {#if $query.siteView.logo}
+      {#if query.data.siteView.logo}
         <Img
           style={css.raw({ size: '44px', borderRadius: '10px', objectFit: 'cover', marginBottom: '20px' })}
-          $image={$query.siteView.logo}
-          alt={`${$query.siteView.name} 로고`}
+          alt={`${query.data.siteView.name} 로고`}
+          image$key={query.data.siteView.logo}
           size={48}
         />
       {/if}
 
       <h1 class={css({ fontSize: '22px', fontWeight: 'bold', letterSpacing: '-0.01em', lineHeight: '[1.3]' })}>
-        {$query.siteView.name}
+        {query.data.siteView.name}
       </h1>
 
       {#if folders.length > 0 || posts.length > 0}
@@ -155,8 +97,8 @@
                   >
                     <Img
                       style={css.raw({ width: 'full', height: 'full', objectFit: 'cover' })}
-                      $image={entity.node.thumbnail}
                       alt={entity.node.name}
+                      image$key={entity.node.thumbnail}
                       size={48}
                     />
                   </div>
@@ -287,8 +229,8 @@
                   >
                     <Img
                       style={css.raw({ width: 'full', height: 'full', objectFit: 'cover' })}
-                      $image={entity.node.thumbnail}
                       alt={entity.node.title}
+                      image$key={entity.node.thumbnail}
                       size={256}
                     />
                   </div>

@@ -16,7 +16,7 @@ infrastructure/machines/secrets.yaml
 infrastructure/machines/patches/secrets.yaml
 
 .svelte-kit/
-.sark/
+.mearie/
 styled-system/
 !packages/styled-system/
 

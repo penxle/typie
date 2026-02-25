@@ -1,18 +1,19 @@
 <script lang="ts">
+  import { createFragment } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Icon, Modal } from '@typie/ui/components';
   import OrbitIcon from '~icons/lucide/orbit';
   import { replaceState } from '$app/navigation';
   import { page } from '$app/state';
-  import { fragment, graphql } from '$graphql';
+  import { graphql } from '$mearie';
   import GeneralTab from './GeneralTab.svelte';
   import type { Component } from 'svelte';
-  import type { DashboardLayout_SiteSettingsModal_site, DashboardLayout_SiteSettingsModal_user } from '$graphql';
+  import type { DashboardLayout_SiteSettingsModal_site$key, DashboardLayout_SiteSettingsModal_user$key } from '$mearie';
 
   type Props = {
-    $site: DashboardLayout_SiteSettingsModal_site;
-    $user: DashboardLayout_SiteSettingsModal_user;
+    site$key: DashboardLayout_SiteSettingsModal_site$key;
+    user$key: DashboardLayout_SiteSettingsModal_user$key;
   };
 
   type Tab = {
@@ -23,10 +24,9 @@
     component: Component<any>;
   };
 
-  let { $site: _site, $user: _user }: Props = $props();
+  let { site$key, user$key }: Props = $props();
 
-  const site = fragment(
-    _site,
+  const site = createFragment(
     graphql(`
       fragment DashboardLayout_SiteSettingsModal_site on Site {
         id
@@ -34,10 +34,10 @@
         ...DashboardLayout_SiteSettingsModal_GeneralTab_site
       }
     `),
+    () => site$key,
   );
 
-  const user = fragment(
-    _user,
+  const user = createFragment(
     graphql(`
       fragment DashboardLayout_SiteSettingsModal_user on User {
         id
@@ -45,6 +45,7 @@
         ...DashboardLayout_SiteSettingsModal_GeneralTab_user
       }
     `),
+    () => user$key,
   );
 
   const tabs: Tab[] = [
@@ -137,7 +138,7 @@
         {@const Component = currentTab.component}
 
         <!-- @ts-expect-error Each tab component accepts a specific fragment type -->
-        <Component {$site} {$user} />
+        <Component site$key={site.data} user$key={user.data} />
       {/if}
     </div>
   </div>

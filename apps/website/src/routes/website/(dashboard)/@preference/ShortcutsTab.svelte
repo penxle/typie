@@ -1,24 +1,25 @@
 <script lang="ts">
+  import { createFragment } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
-  import { fragment, graphql } from '$graphql';
   import { SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
-  import type { DashboardLayout_PreferenceModal_ShortcutsTab_user } from '$graphql';
+  import { graphql } from '$mearie';
+  import type { DashboardLayout_PreferenceModal_ShortcutsTab_user$key } from '$mearie';
 
   type Props = {
-    $user: DashboardLayout_PreferenceModal_ShortcutsTab_user;
+    user$key: DashboardLayout_PreferenceModal_ShortcutsTab_user$key;
   };
 
-  let { $user: _user }: Props = $props();
+  let { user$key }: Props = $props();
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const user = fragment(
-    _user,
+  const user = createFragment(
     graphql(`
       fragment DashboardLayout_PreferenceModal_ShortcutsTab_user on User {
         id
       }
     `),
+    () => user$key,
   );
 
   type ShortcutCategory = {

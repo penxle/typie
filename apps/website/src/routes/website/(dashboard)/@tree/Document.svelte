@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createFragment } from '@mearie/svelte';
   import { css, cx } from '@typie/styled-system/css';
   import { center } from '@typie/styled-system/patterns';
   import { contextMenu } from '@typie/ui/actions';
@@ -8,21 +9,20 @@
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import FileIcon from '~icons/lucide/file';
   import LayoutTemplateIcon from '~icons/lucide/layout-template';
-  import { fragment, graphql } from '$graphql';
+  import { graphql } from '$mearie';
   import DocumentMenu from '../@context-menu/DocumentMenu.svelte';
   import EntitySelectionIndicator from './@selection/EntitySelectionIndicator.svelte';
   import MultiEntitiesMenu from './@selection/MultiEntitiesMenu.svelte';
   import { getTreeContext } from './state.svelte';
-  import type { DashboardLayout_EntityTree_Document_document } from '$graphql';
+  import type { DashboardLayout_EntityTree_Document_document$key } from '$mearie';
 
   type Props = {
-    $document: DashboardLayout_EntityTree_Document_document;
+    document$key: DashboardLayout_EntityTree_Document_document$key;
   };
 
-  let { $document: _document }: Props = $props();
+  let { document$key }: Props = $props();
 
-  const document = fragment(
-    _document,
+  const document = createFragment(
     graphql(`
       fragment DashboardLayout_EntityTree_Document_document on Document {
         id
@@ -43,12 +43,13 @@
         }
       }
     `),
+    () => document$key,
   );
 
   const app = getAppContext();
   const treeState = getTreeContext();
-  const active = $derived(app.state.current === $document.entity.id);
-  const selected = $derived(treeState.selectedEntityIds.has($document.entity.id));
+  const active = $derived(app.state.current === document.data.entity.id);
+  const selected = $derived(treeState.selectedEntityIds.has(document.data.entity.id));
 
   let element = $state<HTMLAnchorElement>();
 
@@ -76,7 +77,7 @@
         '&:has([aria-pressed="true"])': { backgroundColor: 'surface.muted' },
         '&[data-context-menu-open="true"]': { backgroundColor: 'surface.muted' },
       },
-      $document.entity.depth > 0 && {
+      document.data.entity.depth > 0 && {
         borderLeftWidth: '1px',
         borderLeftRadius: '0',
         marginLeft: '-1px',
@@ -95,21 +96,21 @@
     ),
   )}
   aria-selected="false"
-  data-id={$document.entity.id}
-  data-order={$document.entity.order}
-  data-path-depth={$document.entity.depth}
-  data-slug={$document.entity.slug}
+  data-id={document.data.entity.id}
+  data-order={document.data.entity.order}
+  data-path-depth={document.data.entity.depth}
+  data-slug={document.data.entity.slug}
   data-type="document"
   draggable="false"
-  href="/{$document.entity.slug}"
+  href="/{document.data.entity.slug}"
   role="treeitem"
   use:contextMenu={{ content: contextMenuContent }}
 >
-  <EntitySelectionIndicator entityId={$document.entity.id} visibility={$document.entity.visibility} />
+  <EntitySelectionIndicator entityId={document.data.entity.id} visibility={document.data.entity.visibility} />
 
   <Icon
     style={css.raw({ color: 'text.faint' })}
-    icon={$document.documentType === DocumentType.TEMPLATE ? LayoutTemplateIcon : FileIcon}
+    icon={document.data.documentType === DocumentType.TEMPLATE ? LayoutTemplateIcon : FileIcon}
     size={14}
   />
 
@@ -126,7 +127,7 @@
       active && { fontWeight: 'bold', color: 'text.default' },
     )}
   >
-    {$document.title}
+    {document.data.title}
   </span>
 
   <Menu placement="bottom-start">
@@ -153,9 +154,9 @@
 </a>
 
 {#snippet contextMenuContent()}
-  {#if treeState.selectedEntityIds.size > 1 && treeState.selectedEntityIds.has($document.entity.id)}
+  {#if treeState.selectedEntityIds.size > 1 && treeState.selectedEntityIds.has(document.data.entity.id)}
     <MultiEntitiesMenu />
   {:else}
-    <DocumentMenu document={$document} entity={$document.entity} via="tree" />
+    <DocumentMenu document={document.data} entity={document.data.entity} via="tree" />
   {/if}
 {/snippet}

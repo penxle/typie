@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createFragment } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Icon, Modal } from '@typie/ui/components';
@@ -19,7 +20,7 @@
   import UserIcon from '~icons/lucide/user';
   import { replaceState } from '$app/navigation';
   import { page } from '$app/state';
-  import { fragment, graphql } from '$graphql';
+  import { graphql } from '$mearie';
   import AiTab from './AiTab.svelte';
   import BillingTab from './BillingTab.svelte';
   import EditorTab from './EditorTab.svelte';
@@ -36,10 +37,10 @@
   import TextReplacementTab from './TextReplacementTab.svelte';
   import ThemeTab from './ThemeTab.svelte';
   import type { Component } from 'svelte';
-  import type { DashboardLayout_PreferenceModal_user } from '$graphql';
+  import type { DashboardLayout_PreferenceModal_user$key } from '$mearie';
 
   type Props = {
-    $user: DashboardLayout_PreferenceModal_user;
+    user$key: DashboardLayout_PreferenceModal_user$key;
   };
 
   type Tab = {
@@ -50,10 +51,9 @@
     component: Component<any>;
   };
 
-  let { $user: _user }: Props = $props();
+  let { user$key }: Props = $props();
 
-  const user = fragment(
-    _user,
+  const user = createFragment(
     graphql(`
       fragment DashboardLayout_PreferenceModal_user on User {
         id
@@ -78,6 +78,7 @@
         ...DashboardLayout_PreferenceModal_TextReplacementTab_user
       }
     `),
+    () => user$key,
   );
 
   type TabGroup = {
@@ -283,7 +284,7 @@
         {@const Component = currentTab.component}
 
         <!-- @ts-expect-error Each tab component accepts a specific fragment type derived from DashboardLayout_PreferenceModal_user -->
-        <Component {$user} />
+        <Component user$key={user.data} />
       {/if}
     </div>
   </div>

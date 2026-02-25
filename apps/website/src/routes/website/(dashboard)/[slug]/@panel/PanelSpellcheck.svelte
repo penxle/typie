@@ -1,5 +1,6 @@
 <script lang="ts">
   import { hide, inline, shift } from '@floating-ui/dom';
+  import { createFragment, createMutation } from '@mearie/svelte';
   import { getChangedRanges } from '@tiptap/core';
   import { Plugin, PluginKey, Transaction } from '@tiptap/pm/state';
   import { Decoration, DecorationSet } from '@tiptap/pm/view';
@@ -16,14 +17,14 @@
   import CircleCheckIcon from '~icons/lucide/circle-check';
   import CopyXIcon from '~icons/lucide/copy-x';
   import XIcon from '~icons/lucide/x';
-  import { fragment, graphql } from '$graphql';
+  import { graphql } from '$mearie';
   import { getViewContext } from '../@split-view/context.svelte';
   import type { Editor } from '@tiptap/core';
   import type { Ref } from '@typie/ui/utils';
-  import type { Editor_Panel_PanelSpellcheck_user } from '$graphql';
+  import type { Editor_Panel_PanelSpellcheck_user$key } from '$mearie';
 
   type Props = {
-    $user: Editor_Panel_PanelSpellcheck_user;
+    user$key: Editor_Panel_PanelSpellcheck_user$key;
     editor?: Ref<Editor>;
   };
 
@@ -38,10 +39,9 @@
     explanation: string;
   };
 
-  let { $user: _user, editor }: Props = $props();
+  let { user$key, editor }: Props = $props();
 
-  const user = fragment(
-    _user,
+  const user = createFragment(
     graphql(`
       fragment Editor_Panel_PanelSpellcheck_user on User {
         id
@@ -51,6 +51,7 @@
         }
       }
     `),
+    () => user$key,
   );
 
   const view = getViewContext();
@@ -66,17 +67,19 @@
 
   let scrollContainer: Element | undefined = $state();
 
-  const checkSpelling = graphql(`
-    mutation Editor_Panel_Spellcheck_CheckSpelling_Mutation($input: CheckSpellingInput!) {
-      checkSpelling(input: $input) {
-        from
-        to
-        context
-        corrections
-        explanation
+  const [checkSpelling] = createMutation(
+    graphql(`
+      mutation Editor_Panel_Spellcheck_CheckSpelling_Mutation($input: CheckSpellingInput!) {
+        checkSpelling(input: $input) {
+          from
+          to
+          context
+          corrections
+          explanation
+        }
       }
-    }
-  `);
+    `),
+  );
 
   const runSpellcheck = async () => {
     if (!editor?.current || inflight) {
@@ -89,12 +92,13 @@
 
     try {
       const body = editor.current.getJSON();
-      const resp = await checkSpelling({ body });
+      const resp = await checkSpelling({ input: { body } });
 
       const { binding } = ySyncPluginKey.getState(editor.current.view.state);
-      errors = resp.map((error) => ({
+      errors = resp.checkSpelling.map((error) => ({
         id: nanoid(),
         ...error,
+        corrections: [...error.corrections],
         relativeFrom: absolutePositionToRelativePosition(error.from, binding.type, binding.mapping),
         relativeTo: absolutePositionToRelativePosition(error.to, binding.type, binding.mapping),
       }));
@@ -239,7 +243,7 @@
   });
 
   $effect(() => {
-    if (mounted && !hasChecked && $user.subscription) {
+    if (mounted && !hasChecked && user.data.subscription) {
       // NOTE: tick 후 하지 않으면 빈 문서로 검사하는 문제가 있음
       tick().then(() => {
         runSpellcheck();
@@ -348,7 +352,7 @@
     <div class={flex({ justifyContent: 'center', alignItems: 'center', paddingY: '40px' })}>
       <RingSpinner style={css.raw({ size: '24px', color: 'text.faint' })} />
     </div>
-  {:else if (hasChecked && checkFailed) || !$user.subscription}
+  {:else if (hasChecked && checkFailed) || !user.data.subscription}
     <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '8px', paddingY: '40px' })}>
       <Icon style={css.raw({ color: 'text.faint' })} icon={CircleAlertIcon} size={32} />
       <div class={css({ fontSize: '16px', color: 'text.faint' })}>맞춤법 검사에 실패했습니다</div>

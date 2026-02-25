@@ -1,6 +1,8 @@
 /* eslint-disable @typescript-eslint/consistent-type-definitions */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
+import '../.mearie/graphql.d.ts';
+
 type WebView = {
   platform: 'android' | 'ios';
   emitEvent: (name: string, data?: unknown) => void;

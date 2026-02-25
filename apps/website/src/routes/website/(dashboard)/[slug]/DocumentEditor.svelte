@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createFragment, createMutation, createSubscription } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { autosize, tooltip } from '@typie/ui/actions';
@@ -9,7 +10,6 @@
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
   import { nanoid } from 'nanoid';
-  import { untrack } from 'svelte';
   import { match } from 'ts-pattern';
   import { DocumentSyncType } from '@/enums';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
@@ -19,13 +19,13 @@
   import Maximize2Icon from '~icons/lucide/maximize-2';
   import XIcon from '~icons/lucide/x';
   import { dev } from '$app/environment';
-  import { fragment, graphql } from '$graphql';
   import { BottomToolbar, Editor as EditorComponent, TopToolbar } from '$lib/components/editor';
   import { IS_MAC } from '$lib/editor/constants';
   import { getEditorContext } from '$lib/editor/context.svelte';
   import { Editor } from '$lib/editor/editor.svelte';
   import { IndexeddbPersistence } from '$lib/editor/persistence';
   import { wasm } from '$lib/wasm';
+  import { graphql } from '$mearie';
   import DocumentMenu from '../@context-menu/DocumentMenu.svelte';
   import FontUploadModal from '../FontUploadModal.svelte';
   import PlanUpgradeModal from '../PlanUpgradeModal.svelte';
@@ -40,19 +40,18 @@
   import EditorV2NoticeModal from './EditorV2NoticeModal.svelte';
   import FeedbackPopover from './FeedbackPopover.svelte';
   import SpellcheckPopover from './SpellcheckPopover.svelte';
-  import type { DocumentEditor_query } from '$graphql';
   import type { Affinity, Position } from '$lib/editor/types';
+  import type { DocumentEditor_query$key } from '$mearie';
 
   type Props = {
-    $query: DocumentEditor_query;
+    query$key: DocumentEditor_query$key;
     slug: string;
     focused: boolean;
   };
 
-  let { $query: _query, slug, focused }: Props = $props();
+  let { query$key, slug, focused }: Props = $props();
 
-  const query = fragment(
-    _query,
+  const query = createFragment(
     graphql(`
       fragment DocumentEditor_query on Query {
         me @required {
@@ -152,68 +151,76 @@
                 }
               }
 
+              fontFamilies {
+                id
+                familyName
+                displayName
+                state
+
+                fonts {
+                  id
+                  weight
+                  subfamilyDisplayName
+                  url
+                  state
+                }
+              }
+
               ...DocumentPanel_document
             }
           }
         }
       }
     `),
+    () => query$key,
   );
 
-  const entity = $derived($query.entities.find((e) => e.slug === slug));
+  const entity = $derived(query.data.entities.find((e) => e.slug === slug));
 
-  const syncDocument = graphql(`
-    mutation Document_SyncDocument_Mutation($input: SyncDocumentInput!) {
-      syncDocument(input: $input) {
-        type
-        data
-      }
-    }
-  `);
-
-  const documentSyncStream = graphql(`
-    subscription Document_DocumentSyncStream_Subscription($clientId: String!, $documentId: ID!) {
-      documentSyncStream(clientId: $clientId, documentId: $documentId) {
-        documentId
-        type
-        data
-      }
-    }
-  `);
-
-  const updateDocument = graphql(`
-    mutation Document_UpdateDocument_Mutation($input: UpdateDocumentInput!) {
-      updateDocument(input: $input) {
-        id
-        title
-        nullableTitle
-        subtitle
-      }
-    }
-  `);
-
-  const fontFamiliesQuery = graphql(`
-    query DocumentEditor_FontFamilies_Query($slug: String!) @client {
-      document(slug: $slug) {
-        id
-
-        fontFamilies {
-          id
-          familyName
-          displayName
-          state
-
-          fonts {
-            id
-            weight
-            subfamilyDisplayName
-            url
-            state
-          }
+  const [syncDocument] = createMutation(
+    graphql(`
+      mutation Document_SyncDocument_Mutation($input: SyncDocumentInput!) {
+        syncDocument(input: $input) {
+          type
+          data
         }
       }
-    }
-  `);
+    `),
+  );
+
+  let documentSyncReady = $state(false);
+
+  createSubscription(
+    graphql(`
+      subscription Document_DocumentSyncStream_Subscription($clientId: String!, $documentId: ID!) {
+        documentSyncStream(clientId: $clientId, documentId: $documentId) {
+          documentId
+          type
+          data
+        }
+      }
+    `),
+    () => ({ clientId, documentId: documentId ?? '' }),
+    () => ({
+      skip: !documentSyncReady || !documentId,
+      onData: async (data) => {
+        await handleSyncPayload(data.documentSyncStream);
+      },
+    }),
+  );
+
+  const [updateDocument] = createMutation(
+    graphql(`
+      mutation Document_UpdateDocument_Mutation($input: UpdateDocumentInput!) {
+        updateDocument(input: $input) {
+          id
+          title
+          nullableTitle
+          subtitle
+        }
+      }
+    `),
+  );
 
   graphql(`
     fragment EditorContext_user on User {
@@ -232,7 +239,7 @@
   const ctx = getEditorContext();
   const editor = new Editor();
   ctx.editor = editor;
-  ctx.user = $query.me;
+  ctx.user = query.data.me;
 
   const document = $derived(entity?.node.__typename === 'Document' ? entity.node : null);
   const documentId = $derived(document?.id ?? null);
@@ -241,16 +248,7 @@
   const serverVersion = $derived(ctx.serverVersion);
   const assets = $derived(document?.assets);
 
-  const fontFamilies = $derived($fontFamiliesQuery?.document.fontFamilies ?? []);
-
-  $effect(() => {
-    void slug;
-
-    untrack(() => {
-      fontFamiliesQuery.load({ slug });
-    });
-  });
-
+  const fontFamilies = $derived(document?.fontFamilies ?? []);
   $effect(() => {
     if (fontFamilies.length > 0) {
       const availableFonts = Object.fromEntries(
@@ -319,7 +317,7 @@
   });
   let renderDebugEnabled = $state(debugStore.current.renderDebugEnabled);
   let layoutDebugEnabled = $state(debugStore.current.layoutDebugEnabled);
-  const showRenderDebugToggle = $derived(dev || $query.me.role === 'ADMIN' || $query.impersonation?.admin.role === 'ADMIN');
+  const showRenderDebugToggle = $derived(dev || query.data.me.role === 'ADMIN' || query.data.impersonation?.admin.role === 'ADMIN');
 
   const selectionsStore = new LocalStore<Record<string, { selection?: unknown; type?: string; element?: string; timestamp: number }>>(
     'typie:selections',
@@ -372,8 +370,10 @@
 
     titleDirty = true;
     await updateDocument({
-      documentId,
-      title: localTitle || null,
+      input: {
+        documentId,
+        title: localTitle || null,
+      },
     });
   }
 
@@ -382,8 +382,10 @@
 
     subtitleDirty = true;
     await updateDocument({
-      documentId,
-      subtitle: localSubtitle || null,
+      input: {
+        documentId,
+        subtitle: localSubtitle || null,
+      },
     });
   }
 
@@ -442,18 +444,18 @@
 
   async function doSync(
     input: { clientId: string; documentId: string; type: DocumentSyncType; data: string },
-    options?: { transport?: 'fetch' | 'sse' | 'ws' },
+    options?: { metadata?: { subscription?: { transport?: boolean } } },
   ) {
-    const results = await syncDocument(input, options);
-    for (const payload of results) {
+    const results = await syncDocument({ input }, options);
+    for (const payload of results.syncDocument) {
       await handleSyncPayload(payload);
     }
   }
-
   $effect(() => {
     const currentDocumentId = documentId;
     if (!currentDocumentId) return;
 
+    documentSyncReady = false;
     persistence = new IndexeddbPersistence(currentDocumentId);
 
     const handleOnline = () => {
@@ -484,7 +486,6 @@
 
     let fullSyncInterval: ReturnType<typeof setInterval> | null = null;
     let forceSyncInterval: ReturnType<typeof setInterval> | null = null;
-    let unsubscribe: (() => void) | null = null;
 
     editor.ready.then(async () => {
       if (currentDocumentId !== documentId) return;
@@ -507,17 +508,11 @@
 
       await fullSync();
 
-      unsubscribe = documentSyncStream.subscribe({ clientId, documentId: currentDocumentId }, async (payload) => {
-        if (currentDocumentId !== documentId) {
-          return;
-        }
-
-        await handleSyncPayload(payload);
-      });
+      documentSyncReady = true;
     });
 
     return () => {
-      unsubscribe?.();
+      documentSyncReady = false;
       if (fullSyncInterval) clearInterval(fullSyncInterval);
       if (forceSyncInterval) clearInterval(forceSyncInterval);
       clearInterval(heartbeatInterval);
@@ -576,7 +571,7 @@
         type: DocumentSyncType.VECTOR,
         data: version.toBase64(),
       },
-      { transport: 'ws' },
+      { metadata: { subscription: { transport: true } } },
     );
   }
 
@@ -610,7 +605,7 @@
             type: DocumentSyncType.UPDATE,
             data: update.toBase64(),
           },
-          { transport: 'ws' },
+          { metadata: { subscription: { transport: true } } },
         );
       }
     }, 1000);
@@ -850,7 +845,7 @@
             </button>
           {/if}
 
-          {#if $query.me.id === entity.user.id}
+          {#if query.data.me.id === entity.user.id}
             <Menu>
               {#snippet button({ open })}
                 <button
@@ -911,7 +906,7 @@
 
       <HorizontalDivider color="secondary" />
 
-      <TopToolbar $user={entity.user} />
+      <TopToolbar user$key={entity.user} />
 
       <div class={flex({ position: 'relative', flexGrow: '1', overflowY: 'hidden' })}>
         <div class={flex({ position: 'relative', flexDirection: 'column', flexGrow: '1', overflowX: 'auto' })}>
@@ -1060,7 +1055,7 @@
           </div>
         </div>
 
-        <DocumentPanel $document={document} $user={$query.me} {editor} />
+        <DocumentPanel document$key={document} {editor} user$key={query.data.me} />
       </div>
 
       {#if currentViewZenModeEnabled}
@@ -1130,7 +1125,7 @@
     </div>
   </div>
 
-  <PlanUpgradeModal $user={$query.me} bind:open={planUpgradeModalOpen}>
+  <PlanUpgradeModal user$key={query.data.me} bind:open={planUpgradeModalOpen}>
     FULL ACCESS로 업그레이드하면
     <br />
     모든 프리미엄 기능을 무제한으로 사용할 수 있어요.
@@ -1138,12 +1133,12 @@
 
   <EditorV2NoticeModal {focused} />
 
-  <FontUploadModal userId={$query.me.id} bind:open={fontUploadModalOpen} />
-  <PlanUpgradeModal $user={$query.me} bind:open={fontPlanUpgradeModalOpen}>
+  <FontUploadModal userId={query.data.me.id} bind:open={fontUploadModalOpen} />
+  <PlanUpgradeModal user$key={query.data.me} bind:open={fontPlanUpgradeModalOpen}>
     폰트 업로드 기능은 FULL ACCESS 플랜에서 사용할 수 있어요.
   </PlanUpgradeModal>
 
-  {#if $query.me.sites[0]}
-    <DocumentTemplateModal $site={$query.me.sites[0]} {editor} {focused} />
+  {#if query.data.me.sites[0]}
+    <DocumentTemplateModal {editor} {focused} site$key={query.data.me.sites[0]} />
   {/if}
 {/if}

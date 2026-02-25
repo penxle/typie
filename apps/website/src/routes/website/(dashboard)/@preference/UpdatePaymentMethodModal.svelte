@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { cache } from '@typie/sark/internal';
+  import { createFragment, createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Button, Checkbox, Modal, TextInput } from '@typie/ui/components';
@@ -13,21 +13,21 @@
   import { PlanInterval } from '@/enums';
   import { TypieError } from '@/errors';
   import { cardSchema } from '@/validation';
-  import { fragment, graphql } from '$graphql';
   import { fb } from '$lib/analytics';
+  import { cache } from '$lib/graphql';
+  import { graphql } from '$mearie';
   import SubscriptionCelebrationModal from '../SubscriptionCelebrationModal.svelte';
-  import type { DashboardLayout_PreferenceModal_BillingTab_UpdatePaymentMethodModal_user } from '$graphql';
+  import type { DashboardLayout_PreferenceModal_BillingTab_UpdatePaymentMethodModal_user$key } from '$mearie';
 
   type Props = {
     open: boolean;
-    $user: DashboardLayout_PreferenceModal_BillingTab_UpdatePaymentMethodModal_user;
+    user$key: DashboardLayout_PreferenceModal_BillingTab_UpdatePaymentMethodModal_user$key;
     mode: 'register' | 'subscribe';
   };
 
-  let { open = $bindable(), $user: _user, mode }: Props = $props();
+  let { open = $bindable(), user$key, mode }: Props = $props();
 
-  const user = fragment(
-    _user,
+  const user = createFragment(
     graphql(`
       fragment DashboardLayout_PreferenceModal_BillingTab_UpdatePaymentMethodModal_user on User {
         id
@@ -48,43 +48,50 @@
         }
       }
     `),
+    () => user$key,
   );
 
-  const updateBillingKey = graphql(`
-    mutation DashboardLayout_PreferenceModal_BillingTab_UpdatePaymentMethodModal_UpdateBillingKey_Mutation($input: UpdateBillingKeyInput!) {
-      updateBillingKey(input: $input) {
-        id
-        name
-        createdAt
-      }
-    }
-  `);
-
-  const subscribePlanWithBillingKey = graphql(`
-    mutation DashboardLayout_PreferenceModal_BillingTab_UpdatePaymentMethodModal_SubscribePlanWithBillingKey_Mutation(
-      $input: SubscribePlanWithBillingKeyInput!
-    ) {
-      subscribePlanWithBillingKey(input: $input) {
-        id
-
-        user {
+  const [updateBillingKey] = createMutation(
+    graphql(`
+      mutation DashboardLayout_PreferenceModal_BillingTab_UpdatePaymentMethodModal_UpdateBillingKey_Mutation(
+        $input: UpdateBillingKeyInput!
+      ) {
+        updateBillingKey(input: $input) {
           id
-          ...DashboardLayout_PreferenceModal_BillingTab_user
-          ...DashboardLayout_PlanUsageWidget_user
-          ...DashboardLayout_UserMenu_user
-          ...Editor_BottomToolbar_FontFamily_user
-          ...Editor_BottomToolbar_FontWeight_user
-          ...Editor_Limit_user
+          name
+          createdAt
+        }
+      }
+    `),
+  );
 
-          sites {
+  const [subscribePlanWithBillingKey] = createMutation(
+    graphql(`
+      mutation DashboardLayout_PreferenceModal_BillingTab_UpdatePaymentMethodModal_SubscribePlanWithBillingKey_Mutation(
+        $input: SubscribePlanWithBillingKeyInput!
+      ) {
+        subscribePlanWithBillingKey(input: $input) {
+          id
+
+          user {
             id
+            ...DashboardLayout_PreferenceModal_BillingTab_user
+            ...DashboardLayout_PlanUsageWidget_user
+            ...DashboardLayout_UserMenu_user
+            ...Editor_BottomToolbar_FontFamily_user
+            ...Editor_BottomToolbar_FontWeight_user
+            ...Editor_Limit_user
 
-            ...Editor_TopToolbar_site
+            sites {
+              id
+
+              ...Editor_TopToolbar_site
+            }
           }
         }
       }
-    }
-  `);
+    `),
+  );
 
   let interval = $state<PlanInterval>(PlanInterval.MONTHLY);
   let submitError = $state<string | null>(null);
@@ -109,7 +116,7 @@
         throw new FormError('agreementsAccepted', '약관에 동의해주세요.');
       }
 
-      const needsCardRegistration = mode === 'register' || !$user.billingKey || isEditingCard;
+      const needsCardRegistration = mode === 'register' || !user.data.billingKey || isEditingCard;
 
       if (needsCardRegistration) {
         if (!data.cardNumber) {
@@ -126,27 +133,29 @@
         }
 
         await updateBillingKey({
-          birthOrBusinessRegistrationNumber: data.birthOrBusinessRegistrationNumber,
-          cardNumber: data.cardNumber,
-          expiryDate: data.expiryDate,
-          passwordTwoDigits: data.passwordTwoDigits,
+          input: {
+            birthOrBusinessRegistrationNumber: data.birthOrBusinessRegistrationNumber,
+            cardNumber: data.cardNumber,
+            expiryDate: data.expiryDate,
+            passwordTwoDigits: data.passwordTwoDigits,
+          },
         });
 
-        cache.invalidate({ __typename: 'User', id: $user.id, field: 'billingKey' });
+        cache.invalidate({ __typename: 'User', id: user.data.id, field: 'billingKey' });
         mixpanel.track('update_payment_billing_key');
         fb.track('AddPaymentInfo');
       }
 
       if (mode === 'register') {
-        Toast.success($user.billingKey ? '카드 정보가 변경되었어요.' : '카드가 등록되었어요.');
+        Toast.success(user.data.billingKey ? '카드 정보가 변경되었어요.' : '카드가 등록되었어요.');
         open = false;
       } else {
         if (interval === PlanInterval.MONTHLY) {
-          await subscribePlanWithBillingKey({ planId: PlanId.FULL_ACCESS_1MONTH_WITH_BILLING_KEY });
+          await subscribePlanWithBillingKey({ input: { planId: PlanId.FULL_ACCESS_1MONTH_WITH_BILLING_KEY } });
           mixpanel.track('enroll_plan', { planId: PlanId.FULL_ACCESS_1MONTH_WITH_BILLING_KEY });
           fb.track('Subscribe', { value: '4900.00', currency: 'KRW', predicted_ltv: '4900.00' });
         } else if (interval === PlanInterval.YEARLY) {
-          await subscribePlanWithBillingKey({ planId: PlanId.FULL_ACCESS_1YEAR_WITH_BILLING_KEY });
+          await subscribePlanWithBillingKey({ input: { planId: PlanId.FULL_ACCESS_1YEAR_WITH_BILLING_KEY } });
           mixpanel.track('enroll_plan', { planId: PlanId.FULL_ACCESS_1YEAR_WITH_BILLING_KEY });
           fb.track('Subscribe', { value: '49000.00', currency: 'KRW', predicted_ltv: '49000.00' });
         }
@@ -197,7 +206,7 @@
   });
 
   const planFee = $derived(interval === PlanInterval.MONTHLY ? 4900 : 49_000);
-  const creditDiscount = $derived(Math.min($user.credit, planFee));
+  const creditDiscount = $derived(Math.min(user.data.credit, planFee));
   const finalAmount = $derived(planFee - creditDiscount);
 
   const handleAllCheck = () => {
@@ -232,7 +241,7 @@
 
 <Modal style={css.raw({ padding: '24px', maxWidth: '480px' })} bind:open>
   <h2 class={css({ fontSize: '16px', fontWeight: 'semibold', color: 'text.default', marginBottom: '24px' })}>
-    {mode === 'register' ? ($user.billingKey ? '결제 카드 변경' : '결제 카드 등록') : '플랜 업그레이드'}
+    {mode === 'register' ? (user.data.billingKey ? '결제 카드 변경' : '결제 카드 등록') : '플랜 업그레이드'}
   </h2>
 
   <form class={flex({ direction: 'column', gap: '24px' })} onsubmit={form.handleSubmit}>
@@ -308,7 +317,7 @@
       </div>
     {/if}
 
-    {#if mode === 'subscribe' && $user.billingKey && !isEditingCard}
+    {#if mode === 'subscribe' && user.data.billingKey && !isEditingCard}
       <div class={flex({ direction: 'column', gap: '12px' })}>
         <div class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.default', marginBottom: '4px' })}>결제 카드</div>
         <div
@@ -322,7 +331,7 @@
             backgroundColor: 'surface.default',
           })}
         >
-          <span class={css({ fontSize: '14px', color: 'text.default' })}>{$user.billingKey.name}</span>
+          <span class={css({ fontSize: '14px', color: 'text.default' })}>{user.data.billingKey.name}</span>
           <Button onclick={() => (isEditingCard = true)} size="sm" variant="secondary">카드 변경</Button>
         </div>
       </div>
@@ -330,7 +339,7 @@
       <div class={flex({ direction: 'column', gap: '12px' })}>
         <div class={flex({ justify: 'space-between', alignItems: 'center', marginBottom: '4px' })}>
           <div class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.default' })}>카드 정보</div>
-          {#if isEditingCard && $user.billingKey}
+          {#if isEditingCard && user.data.billingKey}
             <button
               class={css({
                 fontSize: '13px',
@@ -512,7 +521,7 @@
 
     <Button style={css.raw({ width: 'full' })} loading={form.state.isLoading} type="submit">
       {#if mode === 'register'}
-        {$user.billingKey ? '변경하기' : '등록하기'}
+        {user.data.billingKey ? '변경하기' : '등록하기'}
       {:else if finalAmount === 0}
         무료로 시작하기
       {:else}

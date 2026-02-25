@@ -1,5 +1,6 @@
 <script lang="ts">
   import { random } from '@ctrl/tinycolor';
+  import { createMutation, createQuery, createSubscription } from '@mearie/svelte';
   import stringHash from '@sindresorhus/string-hash';
   import { getText } from '@tiptap/core';
   import { Mark } from '@tiptap/pm/model';
@@ -22,8 +23,9 @@
   import { PostLayoutMode, PostSyncType } from '@/enums';
   import { textSerializers } from '@/pm/serializer';
   import { browser } from '$app/environment';
-  import { graphql } from '$graphql';
+  import { hydrateQuery } from '$lib/graphql';
   import { unfurlEmbed, uploadBlobAsFile, uploadBlobAsImage } from '$lib/utils';
+  import { graphql } from '$mearie';
   import AiFeedback from './AiFeedback.svelte';
   import Anchors from './Anchors.svelte';
   import { handleCaretMovement } from './caret';
@@ -35,149 +37,155 @@
   import type { Editor } from '@tiptap/core';
   import type { PageLayout, PageLayoutPreset, Ref } from '@typie/ui/utils';
 
+  let { data } = $props();
+
+  const query = $derived(hydrateQuery(() => data.query));
+
   const WEBVIEW_DISCONNECT_THRESHOLD = 10;
+  let templateSlug = $state<string | null>(null);
 
-  const query = graphql(`
-    query WebViewEditorPage_Query($slug: String!, $siteId: ID!) {
-      ...WebViewEditor_Limit_query
-
-      me @required {
-        id
-        name
-
-        subscription {
+  const postQuery = createQuery(
+    graphql(`
+      query WebViewEditorPage_Post_Query($slug: String!) {
+        post(slug: $slug) {
           id
+          body
+          maxWidth
+          storedMarks
+          layoutMode
+          pageLayout
+        }
+      }
+    `),
+    () => ({ slug: templateSlug ?? (data.slug as string) }),
+  );
 
-          plan {
+  const [syncPost] = createMutation(
+    graphql(`
+      mutation WebViewEditor_SyncPost_Mutation($input: SyncPostInput!) {
+        syncPost(input: $input)
+      }
+    `),
+  );
+
+  const [viewEntity] = createMutation(
+    graphql(`
+      mutation WebViewEditor_ViewEntity_Mutation($input: ViewEntityInput!) {
+        viewEntity(input: $input) {
+          id
+        }
+      }
+    `),
+  );
+
+  let postSyncReady = $state(false);
+
+  createSubscription(
+    graphql(`
+      subscription WebViewEditor_PostSyncStream_Subscription($clientId: String!, $postId: ID!) {
+        postSyncStream(clientId: $clientId, postId: $postId) {
+          postId
+          type
+          data
+        }
+      }
+    `),
+    () => ({ clientId, postId: query.data.post.id }),
+    () => ({
+      skip: !postSyncReady,
+      onData: async (data) => {
+        const payload = data.postSyncStream;
+        if (payload.type === PostSyncType.HEARTBEAT) {
+          lastHeartbeatAt = dayjs(payload.data);
+          connectionStatus = 'connected';
+        } else if (payload.type === PostSyncType.UPDATE) {
+          Y.applyUpdateV2(doc, Uint8Array.fromBase64(payload.data), 'remote');
+        } else if (payload.type === PostSyncType.VECTOR) {
+          const update = Y.encodeStateAsUpdateV2(doc, Uint8Array.fromBase64(payload.data));
+
+          await syncPost(
+            {
+              input: {
+                clientId,
+                postId: query.data.post.id,
+                type: PostSyncType.UPDATE,
+                data: update.toBase64(),
+              },
+            },
+            { metadata: { subscription: { transport: true } } },
+          );
+        } else if (payload.type === PostSyncType.AWARENESS) {
+          YAwareness.applyAwarenessUpdate(awareness, Uint8Array.fromBase64(payload.data), 'remote');
+        } else if (payload.type === PostSyncType.PRESENCE) {
+          const update = YAwareness.encodeAwarenessUpdate(awareness, [doc.clientID]);
+
+          await syncPost(
+            {
+              input: {
+                clientId,
+                postId: query.data.post.id,
+                type: PostSyncType.AWARENESS,
+                data: update.toBase64(),
+              },
+            },
+            { metadata: { subscription: { transport: true } } },
+          );
+        }
+      },
+    }),
+  );
+
+  createSubscription(
+    graphql(`
+      subscription WebViewEditor_SiteUsageUpdateStream($siteId: ID!) {
+        siteUsageUpdateStream(siteId: $siteId) {
+          ... on Site {
             id
 
-            rule {
-              maxTotalCharacterCount
-              maxTotalBlobSize
+            usage {
+              totalCharacterCount
+              totalBlobSize
             }
           }
         }
       }
+    `),
+    () => ({ siteId: query.data.site.id }),
+  );
 
-      post(slug: $slug) {
-        id
-        update
-
-        entity {
+  const [createNote] = createMutation(
+    graphql(`
+      mutation WebViewEditor_CreateNote_Mutation($input: CreateNoteInput!) {
+        createNote(input: $input) {
           id
-
-          notes {
-            id
-            content
-            color
-          }
-
-          site {
-            id
-
-            fonts {
-              id
-              url
-              weight
-
-              family {
-                id
-              }
-            }
-          }
+          content
+          color
         }
       }
+    `),
+  );
 
-      site(siteId: $siteId) {
-        id
-
-        usage {
-          totalCharacterCount
-          totalBlobSize
-        }
-      }
-    }
-  `);
-
-  const postQuery = graphql(`
-    query WebViewEditorPage_Post_Query($slug: String!) @client {
-      post(slug: $slug) {
-        id
-        body
-        maxWidth
-        storedMarks
-        layoutMode
-        pageLayout
-      }
-    }
-  `);
-
-  const syncPost = graphql(`
-    mutation WebViewEditor_SyncPost_Mutation($input: SyncPostInput!) {
-      syncPost(input: $input)
-    }
-  `);
-
-  const viewEntity = graphql(`
-    mutation WebViewEditor_ViewEntity_Mutation($input: ViewEntityInput!) {
-      viewEntity(input: $input) {
-        id
-      }
-    }
-  `);
-
-  const postSyncStream = graphql(`
-    subscription WebViewEditor_PostSyncStream_Subscription($clientId: String!, $postId: ID!) {
-      postSyncStream(clientId: $clientId, postId: $postId) {
-        postId
-        type
-        data
-      }
-    }
-  `);
-
-  const siteUsageUpdateStream = graphql(`
-    subscription WebViewEditor_SiteUsageUpdateStream($siteId: ID!) {
-      siteUsageUpdateStream(siteId: $siteId) {
-        ... on Site {
+  const [updateNote] = createMutation(
+    graphql(`
+      mutation WebViewEditor_UpdateNote_Mutation($input: UpdateNoteInput!) {
+        updateNote(input: $input) {
           id
-
-          usage {
-            totalCharacterCount
-            totalBlobSize
-          }
+          content
+          color
         }
       }
-    }
-  `);
+    `),
+  );
 
-  const createNote = graphql(`
-    mutation WebViewEditor_CreateNote_Mutation($input: CreateNoteInput!) {
-      createNote(input: $input) {
-        id
-        content
-        color
+  const [deleteNote] = createMutation(
+    graphql(`
+      mutation WebViewEditor_DeleteNote_Mutation($input: DeleteNoteInput!) {
+        deleteNote(input: $input) {
+          id
+        }
       }
-    }
-  `);
-
-  const updateNote = graphql(`
-    mutation WebViewEditor_UpdateNote_Mutation($input: UpdateNoteInput!) {
-      updateNote(input: $input) {
-        id
-        content
-        color
-      }
-    }
-  `);
-
-  const deleteNote = graphql(`
-    mutation WebViewEditor_DeleteNote_Mutation($input: DeleteNoteInput!) {
-      deleteNote(input: $input) {
-        id
-      }
-    }
-  `);
+    `),
+  );
 
   setupEditorContext();
 
@@ -230,7 +238,7 @@
   const layoutMode = new YState<PostLayoutMode>(doc, 'layoutMode', PostLayoutMode.SCROLL);
 
   const fontFaces = $derived(
-    $query.post.entity.site.fonts
+    query.data.post.entity.site.fonts
       .flatMap((font) => [
         `@font-face { font-family: ${font.id}; src: url(${font.url}) format('woff2'); font-weight: ${font.weight}; font-display: block; }`,
         `@font-face { font-family: ${font.family.id}; src: url(${font.url}) format('woff2'); font-weight: ${font.weight}; font-display: block; }`,
@@ -262,12 +270,14 @@
         if (pendingUpdate) {
           await syncPost(
             {
-              clientId,
-              postId: $query.post.id,
-              type: PostSyncType.UPDATE,
-              data: pendingUpdate.toBase64(),
+              input: {
+                clientId,
+                postId: query.data.post.id,
+                type: PostSyncType.UPDATE,
+                data: pendingUpdate.toBase64(),
+              },
             },
-            { transport: 'ws' },
+            { metadata: { subscription: { transport: true } } },
           );
 
           pendingUpdate = null;
@@ -305,12 +315,14 @@
 
           await syncPost(
             {
-              clientId,
-              postId: $query.post.id,
-              type: PostSyncType.AWARENESS,
-              data: update.toBase64(),
+              input: {
+                clientId,
+                postId: query.data.post.id,
+                type: PostSyncType.AWARENESS,
+                data: update.toBase64(),
+              },
             },
-            { transport: 'ws' },
+            { metadata: { subscription: { transport: true } } },
           );
 
           pendingAwarenessStates = null;
@@ -324,12 +336,14 @@
 
     await syncPost(
       {
-        clientId,
-        postId: $query.post.id,
-        type: PostSyncType.VECTOR,
-        data: vector.toBase64(),
+        input: {
+          clientId,
+          postId: query.data.post.id,
+          type: PostSyncType.VECTOR,
+          data: vector.toBase64(),
+        },
       },
-      { transport: 'ws' },
+      { metadata: { subscription: { transport: true } } },
     );
   };
 
@@ -382,20 +396,26 @@
     noteUpdateTimeout = setTimeout(async () => {
       if (content && !currentNoteId) {
         const result = await createNote({
-          entityId: $query.post.entity.id,
-          content,
-          color: getRandomNoteColor(),
+          input: {
+            entityId: query.data.post.entity.id,
+            content,
+            color: getRandomNoteColor(),
+          },
         });
 
-        currentNoteId = result.id;
+        currentNoteId = result.createNote.id;
       } else if (content && currentNoteId) {
         await updateNote({
-          noteId: currentNoteId,
-          content,
+          input: {
+            noteId: currentNoteId,
+            content,
+          },
         });
       } else if (!content && currentNoteId) {
         await deleteNote({
-          noteId: currentNoteId,
+          input: {
+            noteId: currentNoteId,
+          },
         });
 
         currentNoteId = undefined;
@@ -437,9 +457,21 @@
       });
     }
   });
+  $effect(() => {
+    if (templateSlug && postQuery.data && !postQuery.loading) {
+      if (!editor) return;
+
+      maxWidth.current = postQuery.data.post.maxWidth;
+      layoutMode.current = postQuery.data.post.layoutMode;
+      pageLayout.current = postQuery.data.post.pageLayout;
+      editor.current.commands.loadTemplate(postQuery.data.post);
+
+      templateSlug = null;
+    }
+  });
 
   onMount(() => {
-    const existingNote = $query.post.entity.notes?.[0];
+    const existingNote = query.data.post.entity.notes?.[0];
     if (existingNote) {
       noteContent = existingNote.content;
       currentNoteId = existingNote.id;
@@ -447,7 +479,7 @@
 
     isNoteInitialized = true;
 
-    viewEntity({ entityId: $query.post.entity.id });
+    viewEntity({ input: { entityId: query.data.post.entity.id } });
 
     const heartbeatCheckInterval = setInterval(() => {
       const lastActiveTime = dayjs.max(lastHeartbeatAt, lastAppActiveAt);
@@ -476,55 +508,20 @@
       connectionStatus = 'disconnected';
     }
 
-    const unsubscribe = postSyncStream.subscribe({ clientId, postId: $query.post.id }, async (payload) => {
-      if (payload.type === PostSyncType.HEARTBEAT) {
-        lastHeartbeatAt = dayjs(payload.data);
-        connectionStatus = 'connected';
-      } else if (payload.type === PostSyncType.UPDATE) {
-        Y.applyUpdateV2(doc, Uint8Array.fromBase64(payload.data), 'remote');
-      } else if (payload.type === PostSyncType.VECTOR) {
-        const update = Y.encodeStateAsUpdateV2(doc, Uint8Array.fromBase64(payload.data));
+    postSyncReady = true;
 
-        await syncPost(
-          {
-            clientId,
-            postId: $query.post.id,
-            type: PostSyncType.UPDATE,
-            data: update.toBase64(),
-          },
-          { transport: 'ws' },
-        );
-      } else if (payload.type === PostSyncType.AWARENESS) {
-        YAwareness.applyAwarenessUpdate(awareness, Uint8Array.fromBase64(payload.data), 'remote');
-      } else if (payload.type === PostSyncType.PRESENCE) {
-        const update = YAwareness.encodeAwarenessUpdate(awareness, [doc.clientID]);
-
-        await syncPost(
-          {
-            clientId,
-            postId: $query.post.id,
-            type: PostSyncType.AWARENESS,
-            data: update.toBase64(),
-          },
-          { transport: 'ws' },
-        );
-      }
-    });
-
-    const unsubscribe2 = siteUsageUpdateStream.subscribe({ siteId: $query.site.id });
-
-    const persistence = new IndexeddbPersistence(`typie:editor:${$query.post.id}`, doc);
+    const persistence = new IndexeddbPersistence(`typie:editor:${query.data.post.id}`, doc);
     persistence.on('synced', () => forceSync());
 
-    Y.applyUpdateV2(doc, Uint8Array.fromBase64($query.post.update), 'remote');
+    Y.applyUpdateV2(doc, Uint8Array.fromBase64(query.data.post.update), 'remote');
 
     if (![PostLayoutMode.SCROLL, PostLayoutMode.PAGE].includes(layoutMode.current)) {
       layoutMode.current = PostLayoutMode.SCROLL;
     }
 
     awareness.setLocalStateField('user', {
-      name: $query.me.name,
-      color: random({ luminosity: 'bright', seed: stringHash($query.me.id) }).toHexString(),
+      name: query.data.me.name,
+      color: random({ luminosity: 'bright', seed: stringHash(query.data.me.id) }).toHexString(),
     });
 
     if (editor) {
@@ -976,15 +973,8 @@
       }
     });
 
-    window.__webview__?.addEventListener('loadTemplate', async (data) => {
-      const resp = await postQuery.load({ slug: data.slug as string });
-
-      if (!editor) return;
-
-      maxWidth.current = resp.post.maxWidth;
-      layoutMode.current = resp.post.layoutMode;
-      pageLayout.current = resp.post.pageLayout;
-      editor.current.commands.loadTemplate(resp.post);
+    window.__webview__?.addEventListener('loadTemplate', (data) => {
+      templateSlug = data.slug as string;
     });
 
     window.__webview__?.addEventListener('pasteConfirm', (data) => {
@@ -1020,8 +1010,7 @@
       window.removeEventListener('offline', handleOffline);
 
       YAwareness.removeAwarenessStates(awareness, [doc.clientID], 'local');
-      unsubscribe();
-      unsubscribe2();
+      postSyncReady = false;
 
       editor?.current.off('transaction', handler);
       doc.getMap('attrs').unobserve(setYJSState);
@@ -1240,8 +1229,9 @@
           uploadBlobAsFile: (file) => {
             return uploadBlobAsFile(file);
           },
-          unfurlEmbed: (url) => {
-            return unfurlEmbed({ url });
+          unfurlEmbed: async (url) => {
+            const result = await unfurlEmbed({ input: { url } });
+            return result.unfurlEmbed;
           },
         }}
         {undoManager}
@@ -1251,7 +1241,7 @@
         {#if settings.lineHighlightEnabled}
           <Highlight {editor} scale={editorScale} />
         {/if}
-        <Limit {$query} {editor} />
+        <Limit {editor} query$key={query.data} />
         <Spellcheck {editor} />
         <AiFeedback {editor} />
         <FindReplace {editor} />

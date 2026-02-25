@@ -2,7 +2,7 @@
 
 ## Project Structure
 
-Turborepo monorepo using Bun as package manager/runtime. `apps/` (api, website, desktop, mobile), `crates/` (editor), `packages/` (lib, ui, sark, styled-system, tsconfig, lintconfig).
+Turborepo monorepo using Bun as package manager/runtime. `apps/` (api, website, desktop, mobile), `crates/` (editor), `packages/` (lib, ui, styled-system, tsconfig, lintconfig).
 
 ## Code Style
 

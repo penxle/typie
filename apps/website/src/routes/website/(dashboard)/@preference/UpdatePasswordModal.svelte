@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Button, Modal, TextInput } from '@typie/ui/components';
@@ -6,7 +7,7 @@
   import mixpanel from 'mixpanel-browser';
   import { z } from 'zod';
   import { TypieError } from '@/errors';
-  import { graphql } from '$graphql';
+  import { graphql } from '$mearie';
 
   type Props = {
     open: boolean;
@@ -17,14 +18,16 @@
 
   const passwordSchema = z.string({ error: '비밀번호를 입력해주세요.' }).min(1, '비밀번호를 입력해주세요.');
 
-  const updatePassword = graphql(`
-    mutation UpdatePasswordModal_UpdatePassword_Mutation($input: UpdatePasswordInput!) {
-      updatePassword(input: $input) {
-        id
-        hasPassword
+  const [updatePassword] = createMutation(
+    graphql(`
+      mutation UpdatePasswordModal_UpdatePassword_Mutation($input: UpdatePasswordInput!) {
+        updatePassword(input: $input) {
+          id
+          hasPassword
+        }
       }
-    }
-  `);
+    `),
+  );
 
   const form = createForm({
     schema: z
@@ -39,8 +42,10 @@
       }),
     onSubmit: async (data) => {
       await updatePassword({
-        currentPassword: hasPassword ? data.currentPassword : undefined,
-        newPassword: data.newPassword,
+        input: {
+          currentPassword: hasPassword ? data.currentPassword : undefined,
+          newPassword: data.newPassword,
+        },
       });
 
       mixpanel.track('update_password', { hadPassword: hasPassword });

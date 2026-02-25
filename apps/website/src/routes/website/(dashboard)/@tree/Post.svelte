@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createFragment } from '@mearie/svelte';
   import { css, cx } from '@typie/styled-system/css';
   import { center } from '@typie/styled-system/patterns';
   import { contextMenu } from '@typie/ui/actions';
@@ -8,21 +9,20 @@
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import FileIcon from '~icons/lucide/file';
   import LayoutTemplateIcon from '~icons/lucide/layout-template';
-  import { fragment, graphql } from '$graphql';
+  import { graphql } from '$mearie';
   import PostMenu from '../@context-menu/PostMenu.svelte';
   import EntitySelectionIndicator from './@selection/EntitySelectionIndicator.svelte';
   import MultiEntitiesMenu from './@selection/MultiEntitiesMenu.svelte';
   import { getTreeContext } from './state.svelte';
-  import type { DashboardLayout_EntityTree_Post_post } from '$graphql';
+  import type { DashboardLayout_EntityTree_Post_post$key } from '$mearie';
 
   type Props = {
-    $post: DashboardLayout_EntityTree_Post_post;
+    post$key: DashboardLayout_EntityTree_Post_post$key;
   };
 
-  let { $post: _post }: Props = $props();
+  let { post$key }: Props = $props();
 
-  const post = fragment(
-    _post,
+  const post = createFragment(
     graphql(`
       fragment DashboardLayout_EntityTree_Post_post on Post {
         id
@@ -43,12 +43,13 @@
         }
       }
     `),
+    () => post$key,
   );
 
   const app = getAppContext();
   const treeState = getTreeContext();
-  const active = $derived(app.state.current === $post.entity.id);
-  const selected = $derived(treeState.selectedEntityIds.has($post.entity.id));
+  const active = $derived(app.state.current === post.data.entity.id);
+  const selected = $derived(treeState.selectedEntityIds.has(post.data.entity.id));
 
   let element = $state<HTMLAnchorElement>();
 
@@ -76,7 +77,7 @@
         '&:has([aria-pressed="true"])': { backgroundColor: 'surface.muted' },
         '&[data-context-menu-open="true"]': { backgroundColor: 'surface.muted' },
       },
-      $post.entity.depth > 0 && {
+      post.data.entity.depth > 0 && {
         borderLeftWidth: '1px',
         borderLeftRadius: '0',
         marginLeft: '-1px',
@@ -95,21 +96,21 @@
     ),
   )}
   aria-selected="false"
-  data-id={$post.entity.id}
-  data-order={$post.entity.order}
-  data-path-depth={$post.entity.depth}
-  data-slug={$post.entity.slug}
+  data-id={post.data.entity.id}
+  data-order={post.data.entity.order}
+  data-path-depth={post.data.entity.depth}
+  data-slug={post.data.entity.slug}
   data-type="post"
   draggable="false"
-  href="/{$post.entity.slug}"
+  href="/{post.data.entity.slug}"
   role="treeitem"
   use:contextMenu={{ content: contextMenuContent }}
 >
-  <EntitySelectionIndicator entityId={$post.entity.id} visibility={$post.entity.visibility} />
+  <EntitySelectionIndicator entityId={post.data.entity.id} visibility={post.data.entity.visibility} />
 
-  {#if $post.type === PostType.NORMAL}
+  {#if post.data.type === PostType.NORMAL}
     <Icon style={css.raw({ color: 'text.faint' })} icon={FileIcon} size={14} />
-  {:else if $post.type === PostType.TEMPLATE}
+  {:else if post.data.type === PostType.TEMPLATE}
     <Icon style={css.raw({ color: 'text.faint' })} icon={LayoutTemplateIcon} size={14} />
   {/if}
 
@@ -126,7 +127,7 @@
       active && { fontWeight: 'bold', color: 'text.default' },
     )}
   >
-    {$post.title}
+    {post.data.title}
   </span>
 
   <Menu placement="bottom-start">
@@ -153,9 +154,9 @@
 </a>
 
 {#snippet contextMenuContent()}
-  {#if treeState.selectedEntityIds.size > 1 && treeState.selectedEntityIds.has($post.entity.id)}
+  {#if treeState.selectedEntityIds.size > 1 && treeState.selectedEntityIds.has(post.data.entity.id)}
     <MultiEntitiesMenu />
   {:else}
-    <PostMenu entity={$post.entity} post={$post} via="tree" />
+    <PostMenu entity={post.data.entity} post={post.data} via="tree" />
   {/if}
 {/snippet}

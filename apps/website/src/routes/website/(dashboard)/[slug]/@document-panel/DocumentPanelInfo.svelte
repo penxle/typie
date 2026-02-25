@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createFragment } from '@mearie/svelte';
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { tooltip } from '@typie/ui/actions';
@@ -8,22 +9,21 @@
   import mixpanel from 'mixpanel-browser';
   import { EntityAvailability, EntityVisibility } from '@/enums';
   import ExternalLinkIcon from '~icons/lucide/external-link';
-  import { fragment, graphql } from '$graphql';
+  import { graphql } from '$mearie';
   import DocumentPanelCharacterCount from './DocumentPanelCharacterCount.svelte';
   import DocumentPanelCharacterCountChange from './DocumentPanelCharacterCountChange.svelte';
-  import type { DocumentPanel_Info_document, DocumentPanel_Info_user } from '$graphql';
   import type { Editor } from '$lib/editor/editor.svelte';
+  import type { DocumentPanel_Info_document$key, DocumentPanel_Info_user$key } from '$mearie';
 
   type Props = {
-    $document: DocumentPanel_Info_document;
-    $user: DocumentPanel_Info_user;
+    document$key: DocumentPanel_Info_document$key;
+    user$key: DocumentPanel_Info_user$key;
     editor: Editor;
   };
 
-  let { $document: _document, $user: _user, editor }: Props = $props();
+  let { document$key, user$key, editor }: Props = $props();
 
-  const document = fragment(
-    _document,
+  const document = createFragment(
     graphql(`
       fragment DocumentPanel_Info_document on Document {
         id
@@ -44,15 +44,16 @@
         ...DocumentPanel_Info_CharacterCountChange_document
       }
     `),
+    () => document$key,
   );
 
-  const user = fragment(
-    _user,
+  const user = createFragment(
     graphql(`
       fragment DocumentPanel_Info_user on User {
         id
       }
     `),
+    () => user$key,
   );
 
   const app = getAppContext();
@@ -89,10 +90,10 @@
         <div class={flex({ alignItems: 'center', gap: '4px' })}>
           <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>공유 및 게시</div>
 
-          {#if $user.id === $document.entity.user.id}
+          {#if user.data.id === document.data.entity.user.id}
             <a
               class={cx('group', center({ size: '20px' }))}
-              href={$document.entity.url}
+              href={document.data.entity.url}
               rel="noopener noreferrer"
               target="_blank"
               use:tooltip={{ message: '스페이스에서 열기' }}
@@ -102,7 +103,7 @@
           {/if}
         </div>
 
-        {#if $user.id === $document.entity.user.id}
+        {#if user.data.id === document.data.entity.user.id}
           <button
             class={css({
               fontSize: '13px',
@@ -112,7 +113,7 @@
               _hover: { color: 'text.subtle' },
             })}
             onclick={() => {
-              app.state.shareOpen = [$document.entity.id];
+              app.state.shareOpen = [document.data.entity.id];
               mixpanel.track('open_post_share_modal', { via: 'panel' });
             }}
             type="button"
@@ -123,7 +124,7 @@
       </div>
 
       <div class={flex({ alignItems: 'center', gap: '4px' })}>
-        {#if $document.entity.visibility === EntityVisibility.PUBLIC}
+        {#if document.data.entity.visibility === EntityVisibility.PUBLIC}
           <div
             class={css({
               borderRadius: '4px',
@@ -139,7 +140,7 @@
           >
             공개 조회
           </div>
-        {:else if $document.entity.visibility === EntityVisibility.UNLISTED}
+        {:else if document.data.entity.visibility === EntityVisibility.UNLISTED}
           <div
             class={css({
               borderRadius: '4px',
@@ -173,7 +174,7 @@
           </div>
         {/if}
 
-        {#if $document.entity.availability === EntityAvailability.UNLISTED}
+        {#if document.data.entity.availability === EntityAvailability.UNLISTED}
           <div
             class={css({
               borderRadius: '4px',
@@ -211,12 +212,12 @@
 
     <div class={flex({ flexDirection: 'column', gap: '6px' })}>
       <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>최초 생성 시각</div>
-      <div class={css({ fontSize: '13px', color: 'text.subtle' })}>{dayjs($document.createdAt).formatAsDateTime()}</div>
+      <div class={css({ fontSize: '13px', color: 'text.subtle' })}>{dayjs(document.data.createdAt).formatAsDateTime()}</div>
     </div>
 
     <div class={flex({ flexDirection: 'column', gap: '6px' })}>
       <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>마지막 수정 시각</div>
-      <div class={css({ fontSize: '13px', color: 'text.subtle' })}>{dayjs($document.updatedAt).formatAsDateTime()}</div>
+      <div class={css({ fontSize: '13px', color: 'text.subtle' })}>{dayjs(document.data.updatedAt).formatAsDateTime()}</div>
     </div>
 
     <div class={flex({ flexDirection: 'column', gap: '12px' })}>
@@ -224,7 +225,7 @@
 
       <div class={flex({ flexDirection: 'column' })}>
         <DocumentPanelCharacterCount {editor} />
-        <DocumentPanelCharacterCountChange {$document} />
+        <DocumentPanelCharacterCountChange document$key={document.data} />
       </div>
     </div>
   </div>

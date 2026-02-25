@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { tooltip } from '@typie/ui/actions';
@@ -14,26 +15,29 @@
   import { page } from '$app/state';
   import Logo from '$assets/logos/logo.svg?component';
   import { env } from '$env/dynamic/public';
-  import { graphql } from '$graphql';
   import { fb } from '$lib/analytics';
+  import { hydrateQuery } from '$lib/graphql';
+  import { graphql } from '$mearie';
 
-  const query = graphql(`
-    query SignUpPage_Query {
-      randomName
-    }
-  `);
+  let { data } = $props();
 
-  const sendSignUpEmail = graphql(`
-    mutation SignUpPage_SendSignUpEmail_Mutation($input: SendSignUpEmailInput!) {
-      sendSignUpEmail(input: $input)
-    }
-  `);
+  const query = $derived(hydrateQuery(() => data.query));
 
-  const generateRandomName = graphql(`
-    mutation SignUpPage_GenerateRandomName_Mutation {
-      generateRandomName
-    }
-  `);
+  const [sendSignUpEmail] = createMutation(
+    graphql(`
+      mutation SignUpPage_SendSignUpEmail_Mutation($input: SendSignUpEmailInput!) {
+        sendSignUpEmail(input: $input)
+      }
+    `),
+  );
+
+  const [generateRandomName] = createMutation(
+    graphql(`
+      mutation SignUpPage_GenerateRandomName_Mutation {
+        generateRandomName
+      }
+    `),
+  );
 
   const form = createForm({
     schema: z
@@ -53,15 +57,17 @@
       }),
     onSubmit: async (data) => {
       await sendSignUpEmail({
-        email: data.email,
-        name: data.name ?? name,
-        password: data.password,
-        state: serializeOAuthState({
-          redirect_uri: page.url.searchParams.get('redirect_uri') || `${env.PUBLIC_WEBSITE_URL}/authorize`,
-          state: page.url.searchParams.get('state') || serializeOAuthState({ redirect_uri: env.PUBLIC_WEBSITE_URL }),
-        }),
-        marketingAgreed: data.marketingAgreed ?? false,
-        referralCode: page.url.searchParams.get('r'),
+        input: {
+          email: data.email,
+          name: data.name ?? name,
+          password: data.password,
+          state: serializeOAuthState({
+            redirect_uri: page.url.searchParams.get('redirect_uri') || `${env.PUBLIC_WEBSITE_URL}/authorize`,
+            state: page.url.searchParams.get('state') || serializeOAuthState({ redirect_uri: env.PUBLIC_WEBSITE_URL }),
+          }),
+          marketingAgreed: data.marketingAgreed ?? false,
+          referralCode: page.url.searchParams.get('r'),
+        },
       });
 
       mixpanel.track('send_sign_up_email');
@@ -84,7 +90,7 @@
     void form;
   });
 
-  let name = $state($query.randomName);
+  let name = $state(query.data.randomName);
   let emailSent = $state(false);
 </script>
 
@@ -173,7 +179,8 @@
                   _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
                 })}
                 onclick={async () => {
-                  name = await generateRandomName();
+                  const result = await generateRandomName();
+                  name = result.generateRandomName;
                 }}
                 type="button"
                 use:tooltip={{ message: '주사위 굴리기', placement: 'top', offset: 8, keepOnClick: true }}

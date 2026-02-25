@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { Helmet, RingSpinner } from '@typie/ui/components';
@@ -8,18 +9,22 @@
   import { page } from '$app/state';
   import Logo from '$assets/logos/logo.svg?component';
   import { env } from '$env/dynamic/public';
-  import { graphql } from '$graphql';
+  import { graphql } from '$mearie';
 
-  const authorizeSignUpEmail = graphql(`
-    mutation EmailPage_AuthorizeSignUpEmail_Mutation($input: AuthorizeSignUpEmailInput!) {
-      authorizeSignUpEmail(input: $input)
-    }
-  `);
+  const [authorizeSignUpEmail] = createMutation(
+    graphql(`
+      mutation EmailPage_AuthorizeSignUpEmail_Mutation($input: AuthorizeSignUpEmailInput!) {
+        authorizeSignUpEmail(input: $input)
+      }
+    `),
+  );
 
   onMount(async () => {
     const resp = await authorizeSignUpEmail({
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      code: page.url.searchParams.get('code')!,
+      input: {
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        code: page.url.searchParams.get('code')!,
+      },
     });
 
     location.href = qs.stringifyUrl({
@@ -27,7 +32,7 @@
       query: {
         client_id: env.PUBLIC_OIDC_CLIENT_ID,
         response_type: 'code',
-        ...deserializeOAuthState(resp),
+        ...deserializeOAuthState(resp.authorizeSignUpEmail),
       },
     });
   });

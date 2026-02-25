@@ -1,23 +1,23 @@
 <script lang="ts">
+  import { createFragment } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Helmet, Icon } from '@typie/ui/components';
   import dayjs from 'dayjs';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
   import FolderIcon from '~icons/lucide/folder';
-  import { fragment, graphql } from '$graphql';
   import { Img } from '$lib/components';
+  import { graphql } from '$mearie';
   import ShareLinkPopover from './ShareLinkPopover.svelte';
-  import type { UsersiteWildcardSlugPage_FolderView_entityView } from '$graphql';
+  import type { UsersiteWildcardSlugPage_FolderView_entityView$key } from '$mearie';
 
   type Props = {
-    $entityView: UsersiteWildcardSlugPage_FolderView_entityView;
+    entityView$key: UsersiteWildcardSlugPage_FolderView_entityView$key;
   };
 
-  let { $entityView: _entityView }: Props = $props();
+  let { entityView$key }: Props = $props();
 
-  const entityView = fragment(
-    _entityView,
+  const entityView = createFragment(
     graphql(`
       fragment UsersiteWildcardSlugPage_FolderView_entityView on EntityView {
         id
@@ -107,11 +107,12 @@
         }
       }
     `),
+    () => entityView$key,
   );
 
-  const folders = $derived($entityView.children.filter((child) => child.node.__typename === 'FolderView'));
+  const folders = $derived(entityView.data.children.filter((child) => child.node.__typename === 'FolderView'));
   const posts = $derived(
-    $entityView.children.filter(
+    entityView.data.children.filter(
       (child) => child.node.__typename === 'DocumentView' || (child.node.__typename === 'PostView' && !child.node.document),
     ),
   );
@@ -121,10 +122,10 @@
   <meta name="robots" content="noindex, nofollow" />
 </svelte:head>
 
-{#if $entityView.node.__typename === 'FolderView'}
+{#if entityView.data.node.__typename === 'FolderView'}
   <Helmet
-    description={`${$entityView.node.name}에서 공유된 폴더 ${folders.length}개, 포스트 ${posts.length}개를 확인하세요.`}
-    title={$entityView.node.name}
+    description={`${entityView.data.node.name}에서 공유된 폴더 ${folders.length}개, 포스트 ${posts.length}개를 확인하세요.`}
+    title={entityView.data.node.name}
   />
 
   <div class={flex({ flexDirection: 'column', alignItems: 'center', width: 'full', minHeight: 'full' })}>
@@ -141,21 +142,21 @@
     >
       <header class={css({ marginBottom: { base: '56px', md: '72px' } })}>
         <nav class={flex({ alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginBottom: '20px' })}>
-          <a class={flex({ alignItems: 'center', gap: '6px' })} href={$entityView.site.url}>
-            {#if $entityView.site.logo}
+          <a class={flex({ alignItems: 'center', gap: '6px' })} href={entityView.data.site.url}>
+            {#if entityView.data.site.logo}
               <Img
                 style={css.raw({ size: '18px', borderRadius: '4px', objectFit: 'cover' })}
-                $image={$entityView.site.logo}
-                alt={`${$entityView.site.name} 로고`}
+                alt={`${entityView.data.site.name} 로고`}
+                image$key={entityView.data.site.logo}
                 size={24}
               />
             {/if}
             <span class={css({ fontSize: '13px', color: 'text.faint', _hover: { color: 'text.muted' } })}>
-              {$entityView.site.name}
+              {entityView.data.site.name}
             </span>
           </a>
 
-          {#each $entityView.ancestors as ancestor (ancestor.id)}
+          {#each entityView.data.ancestors as ancestor (ancestor.id)}
             {#if ancestor.node.__typename === 'FolderView'}
               <span class={css({ fontSize: '13px', color: 'text.faint' })}>/</span>
               <a class={css({ fontSize: '13px', color: 'text.faint', _hover: { color: 'text.muted' } })} href={`/${ancestor.slug}`}>
@@ -166,7 +167,7 @@
         </nav>
 
         <h1 class={css({ fontSize: '22px', fontWeight: 'bold', letterSpacing: '-0.01em', lineHeight: '[1.3]' })}>
-          {$entityView.node.name}
+          {entityView.data.node.name}
         </h1>
 
         <div class={flex({ alignItems: 'center', gap: '8px', marginTop: '8px' })}>
@@ -184,7 +185,7 @@
             </p>
           {/if}
 
-          <ShareLinkPopover href={$entityView.url} />
+          <ShareLinkPopover href={entityView.data.url} />
         </div>
       </header>
 
@@ -215,8 +216,8 @@
                     >
                       <Img
                         style={css.raw({ width: 'full', height: 'full', objectFit: 'cover' })}
-                        $image={entity.node.thumbnail}
                         alt={entity.node.name}
+                        image$key={entity.node.thumbnail}
                         size={48}
                       />
                     </div>
@@ -347,8 +348,8 @@
                     >
                       <Img
                         style={css.raw({ width: 'full', height: 'full', objectFit: 'cover' })}
-                        $image={entity.node.thumbnail}
                         alt={entity.node.title}
+                        image$key={entity.node.thumbnail}
                         size={256}
                       />
                     </div>

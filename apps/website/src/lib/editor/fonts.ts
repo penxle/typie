@@ -4,10 +4,10 @@ import notoPhantomEmojiUrl from '@typie/editor/font/Noto-Phantom-Emoji.bin?url';
 import type { Application } from '@typie/editor';
 
 export type Font = { id: string; weight: number; subfamilyDisplayName?: string | null; url: string; state: string };
-export type FontFamily = { id: string; familyName: string; displayName: string; state: string; fonts: Font[] };
+export type FontFamily = { id: string; familyName: string; displayName: string; state: string; fonts: readonly Font[] };
 type FontRef = { weight: number; url: string };
 
-export function getRepresentativeFont(fonts: Font[]): Font | null {
+export function getRepresentativeFont(fonts: readonly Font[]): Font | null {
   const active = fonts.filter((f) => f.state === 'ACTIVE');
   if (active.length === 0) return null;
   return active.reduce((prev, curr) => {

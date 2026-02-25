@@ -1,6 +1,7 @@
 import '$lib/polyfills';
 import '@typie/lib/dayjs';
 
+import { isAggregatedError } from '@mearie/svelte';
 import * as Sentry from '@sentry/sveltekit';
 import { sequence } from '@sveltejs/kit/hooks';
 import { logger, logging } from '@typie/lib/svelte';
@@ -53,7 +54,11 @@ const header: Handle = async ({ event, resolve }) => {
 };
 
 const errorHandler: HandleServerError = ({ error, status, message }) => {
-  log.error('Server error {*}', { status, message, error });
+  if (isAggregatedError(error)) {
+    log.error('Server error {*}', { status, message, errors: error.errors });
+  } else {
+    log.error('Server error {*}', { status, message, error });
+  }
 };
 
 export const handle = sequence(Sentry.sentryHandle(), logging, theme, header);

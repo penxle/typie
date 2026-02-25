@@ -1,22 +1,22 @@
 <script lang="ts">
+  import { createFragment, createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import AlertTriangleIcon from '~icons/lucide/alert-triangle';
   import ArrowRightIcon from '~icons/lucide/arrow-right';
-  import { fragment, graphql } from '$graphql';
   import { AdminIcon, AdminModal } from '$lib/components/admin';
-  import type { AdminImpersonateBanner_query } from '$graphql';
+  import { graphql } from '$mearie';
+  import type { AdminImpersonateBanner_query$key } from '$mearie';
 
   type Props = {
-    $query: AdminImpersonateBanner_query;
+    query$key: AdminImpersonateBanner_query$key;
   };
 
-  let { $query: _query }: Props = $props();
+  let { query$key }: Props = $props();
 
   let confirmModalOpen = $state(false);
 
-  const query = fragment(
-    _query,
+  const query = createFragment(
     graphql(`
       fragment AdminImpersonateBanner_query on Query {
         impersonation {
@@ -33,13 +33,16 @@
         }
       }
     `),
+    () => query$key,
   );
 
-  const adminStopImpersonation = graphql(`
-    mutation AdminImpersonateBanner_AdminStopImpersonation_Mutation {
-      adminStopImpersonation
-    }
-  `);
+  const [adminStopImpersonation] = createMutation(
+    graphql(`
+      mutation AdminImpersonateBanner_AdminStopImpersonation_Mutation {
+        adminStopImpersonation
+      }
+    `),
+  );
 
   const handleStop = async () => {
     await adminStopImpersonation();
@@ -47,7 +50,7 @@
   };
 </script>
 
-{#if $query.impersonation}
+{#if query.data.impersonation}
   <div
     class={css({
       backgroundColor: 'amber.500',
@@ -73,10 +76,10 @@
         <div class={flex({ alignItems: 'center', gap: '12px' })}>
           <div class={flex({ alignItems: 'center', gap: '6px' })}>
             <span class={css({ fontWeight: 'bold', color: 'gray.900' })}>
-              {$query.impersonation.admin.name}
+              {query.data.impersonation.admin.name}
             </span>
             <span class={css({ color: 'gray.700', fontSize: '11px' })}>
-              ({$query.impersonation.admin.email})
+              ({query.data.impersonation.admin.email})
             </span>
           </div>
 
@@ -84,10 +87,10 @@
 
           <div class={flex({ alignItems: 'center', gap: '6px' })}>
             <span class={css({ fontWeight: 'bold', color: 'gray.900' })}>
-              {$query.impersonation.user.name}
+              {query.data.impersonation.user.name}
             </span>
             <span class={css({ color: 'gray.700', fontSize: '11px' })}>
-              ({$query.impersonation.user.email})
+              ({query.data.impersonation.user.email})
             </span>
           </div>
         </div>
@@ -134,7 +137,7 @@
     <div class={css({ marginBottom: '16px' })}>
       <p class={css({ marginBottom: '8px' })}>ARE YOU SURE YOU WANT TO STOP IMPERSONATING?</p>
       <p class={css({ color: 'amber.400' })}>
-        CURRENT USER: {$query.impersonation?.user.name.toUpperCase()} ({$query.impersonation?.user.email})
+        CURRENT USER: {query.data.impersonation?.user.name.toUpperCase()} ({query.data.impersonation?.user.email})
       </p>
     </div>
   </AdminModal>

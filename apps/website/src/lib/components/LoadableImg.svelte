@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { graphql } from '$graphql';
+  import { createQuery } from '@mearie/svelte';
+  import { graphql } from '$mearie';
   import Img from './Img.svelte';
   import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { ComponentProps } from 'svelte';
@@ -17,24 +18,19 @@
 
   let { id, alt, style, size, quality, progressive = false }: Props = $props();
 
-  const query = graphql(`
-    query LoadableImg_Query($imageId: ID!) @client {
-      image(imageId: $imageId) {
-        id
-        ...Img_image
+  const query = createQuery(
+    graphql(`
+      query LoadableImg_Query($imageId: ID!) {
+        image(imageId: $imageId) {
+          id
+          ...Img_image
+        }
       }
-    }
-  `);
-
-  const load = async () => {
-    await query.load({ imageId: id });
-  };
-
-  $effect(() => {
-    load();
-  });
+    `),
+    () => ({ imageId: id }),
+  );
 </script>
 
-{#if $query}
-  <Img {style} $image={$query.image} {alt} {progressive} {quality} {size} />
+{#if query.data}
+  <Img {style} {alt} image$key={query.data.image} {progressive} {quality} {size} />
 {/if}

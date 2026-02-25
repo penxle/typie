@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createFragment, createMutation } from '@mearie/svelte';
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { tooltip } from '@typie/ui/actions';
@@ -10,19 +11,18 @@
   import FolderIcon from '~icons/lucide/folder';
   import Trash2Icon from '~icons/lucide/trash-2';
   import Undo2Icon from '~icons/lucide/undo-2';
-  import { fragment, graphql } from '$graphql';
+  import { graphql } from '$mearie';
   import TrashEntity from './TrashEntity.svelte';
-  import type { DashboardLayout_TrashTree_TrashFolder_entity, DashboardLayout_TrashTree_TrashFolder_folder, List } from '$graphql';
+  import type { DashboardLayout_TrashTree_TrashFolder_entity$key, DashboardLayout_TrashTree_TrashFolder_folder$key } from '$mearie';
 
   type Props = {
-    $folder: DashboardLayout_TrashTree_TrashFolder_folder;
-    $entities: List<DashboardLayout_TrashTree_TrashFolder_entity>;
+    folder$key: DashboardLayout_TrashTree_TrashFolder_folder$key;
+    entities$key: DashboardLayout_TrashTree_TrashFolder_entity$key[];
   };
 
-  let { $folder: _folder, $entities: _entities }: Props = $props();
+  let { folder$key, entities$key }: Props = $props();
 
-  const folder = fragment(
-    _folder,
+  const folder = createFragment(
     graphql(`
       fragment DashboardLayout_TrashTree_TrashFolder_folder on Folder {
         id
@@ -36,33 +36,38 @@
         }
       }
     `),
+    () => folder$key,
   );
 
-  const recoverEntity = graphql(`
-    mutation DashboardLayout_TrashTree_TrashFolder_RecoverEntity_Mutation($input: RecoverEntityInput!) {
-      recoverEntity(input: $input) {
-        id
+  const [recoverEntity] = createMutation(
+    graphql(`
+      mutation DashboardLayout_TrashTree_TrashFolder_RecoverEntity_Mutation($input: RecoverEntityInput!) {
+        recoverEntity(input: $input) {
+          id
 
-        state
+          state
 
-        site {
+          site {
+            id
+            ...DashboardLayout_TrashModal_site
+          }
+        }
+      }
+    `),
+  );
+
+  const [purgeEntities] = createMutation(
+    graphql(`
+      mutation DashboardLayout_TrashTree_TrashFolder_PurgeEntities_Mutation($input: PurgeEntitiesInput!) {
+        purgeEntities(input: $input) {
           id
           ...DashboardLayout_TrashModal_site
         }
       }
-    }
-  `);
+    `),
+  );
 
-  const purgeEntities = graphql(`
-    mutation DashboardLayout_TrashTree_TrashFolder_PurgeEntities_Mutation($input: PurgeEntitiesInput!) {
-      purgeEntities(input: $input) {
-        id
-        ...DashboardLayout_TrashModal_site
-      }
-    }
-  `);
-  const entities = fragment(
-    _entities,
+  const entities = createFragment(
     graphql(`
       fragment DashboardLayout_TrashTree_TrashFolder_entity on Entity {
         id
@@ -70,6 +75,7 @@
         ...DashboardLayout_TrashTree_TrashEntity_entity
       }
     `),
+    () => entities$key,
   );
 
   let detailsEl = $state<HTMLDetailsElement>();
@@ -78,9 +84,9 @@
 
 <details
   bind:this={detailsEl}
-  data-id={$folder.entity.id}
-  data-order={$folder.entity.order}
-  data-path-depth={$folder.entity.depth}
+  data-id={folder.data.entity.id}
+  data-order={folder.data.entity.order}
+  data-path-depth={folder.data.entity.depth}
   data-type="folder"
   bind:open
 >
@@ -102,7 +108,7 @@
       }),
     )}
     aria-selected="false"
-    data-anchor={$entities && $entities.length > 0}
+    data-anchor={entities.data && entities.data.length > 0}
     onkeyup={(e) => {
       if (e.code === 'Space') {
         e.preventDefault();
@@ -123,7 +129,7 @@
           lineClamp: '1',
         })}
       >
-        {$folder.name}
+        {folder.data.name}
       </span>
     </div>
 
@@ -138,7 +144,7 @@
         })}
         onclick={async () => {
           try {
-            await recoverEntity({ entityId: $folder.entity.id });
+            await recoverEntity({ input: { entityId: folder.data.entity.id } });
             mixpanel.track('recover_entity', { via: 'trash', type: 'folder' });
             Toast.success('폴더를 복원했어요');
           } catch {
@@ -166,7 +172,7 @@
             actionLabel: '영구 삭제',
             actionHandler: async () => {
               try {
-                await purgeEntities({ entityIds: [$folder.entity.id] });
+                await purgeEntities({ input: { entityIds: [folder.data.entity.id] } });
                 mixpanel.track('purge_entity', { via: 'trash', type: 'folder' });
               } catch {
                 Toast.error('폴더 영구 삭제에 실패했어요');
@@ -183,8 +189,8 @@
   </summary>
 
   <div class={flex({ flexDirection: 'column', borderLeftWidth: '1px', marginLeft: '24px' })} aria-hidden={!open} role="tree">
-    {#each $entities as entity (entity.id)}
-      <TrashEntity $entity={entity} />
+    {#each entities.data as entity (entity.id)}
+      <TrashEntity entity$key={entity} />
     {:else}
       <div class={css({ paddingX: '8px', paddingY: '6px', fontSize: '14px', fontWeight: 'medium', color: 'text.disabled' })}>
         폴더가 비어있어요

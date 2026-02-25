@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createFragment, createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { Button, Icon } from '@typie/ui/components';
@@ -7,19 +8,18 @@
   import NaverIcon from '~icons/simple-icons/naver';
   import GoogleIcon from '~icons/typie/google';
   import KakaoIcon from '~icons/typie/kakao';
-  import { fragment, graphql } from '$graphql';
   import { SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
+  import { graphql } from '$mearie';
   import UpdatePasswordModal from './UpdatePasswordModal.svelte';
-  import type { DashboardLayout_PreferenceModal_SecurityTab_user } from '$graphql';
+  import type { DashboardLayout_PreferenceModal_SecurityTab_user$key } from '$mearie';
 
   type Props = {
-    $user: DashboardLayout_PreferenceModal_SecurityTab_user;
+    user$key: DashboardLayout_PreferenceModal_SecurityTab_user$key;
   };
 
-  let { $user: _user }: Props = $props();
+  let { user$key }: Props = $props();
 
-  const user = fragment(
-    _user,
+  const user = createFragment(
     graphql(`
       fragment DashboardLayout_PreferenceModal_SecurityTab_user on User {
         id
@@ -32,13 +32,16 @@
         }
       }
     `),
+    () => user$key,
   );
 
-  const deleteUser = graphql(`
-    mutation DashboardLayout_PreferenceModal_SecurityTab_DeleteUser_Mutation {
-      deleteUser
-    }
-  `);
+  const [deleteUser] = createMutation(
+    graphql(`
+      mutation DashboardLayout_PreferenceModal_SecurityTab_DeleteUser_Mutation {
+        deleteUser
+      }
+    `),
+  );
 
   let updatePasswordOpen = $state(false);
 </script>
@@ -60,20 +63,20 @@
         {/snippet}
         {#snippet value()}
           <Button onclick={() => (updatePasswordOpen = true)} size="sm" variant="secondary">
-            {$user.hasPassword ? '변경' : '설정'}
+            {user.data.hasPassword ? '변경' : '설정'}
           </Button>
         {/snippet}
       </SettingsRow>
     </SettingsCard>
   </div>
 
-  {#if $user.singleSignOns.length > 0}
+  {#if user.data.singleSignOns.length > 0}
     <!-- Connected Accounts Section -->
     <div>
       <h2 class={css({ fontSize: '16px', fontWeight: 'semibold', color: 'text.default', marginBottom: '24px' })}>연결된 SNS 계정</h2>
 
       <SettingsCard>
-        {#each $user.singleSignOns as singleSignOn, index (singleSignOn.id)}
+        {#each user.data.singleSignOns as singleSignOn, index (singleSignOn.id)}
           {#if index > 0}
             <SettingsDivider />
           {/if}
@@ -159,4 +162,4 @@
   </div>
 </div>
 
-<UpdatePasswordModal hasPassword={$user.hasPassword} bind:open={updatePasswordOpen} />
+<UpdatePasswordModal hasPassword={user.data.hasPassword} bind:open={updatePasswordOpen} />

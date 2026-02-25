@@ -1,23 +1,23 @@
 <script lang="ts">
+  import { createFragment } from '@mearie/svelte';
   import { getAppContext } from '@typie/ui/context';
   import mixpanel from 'mixpanel-browser';
-  import { fragment, graphql } from '$graphql';
   import { IS_MAC } from '$lib/editor/constants';
+  import { graphql } from '$mearie';
   import { getSplitViewContext } from './[slug]/@split-view/context.svelte';
-  import type { DashboardLayout_Shortcuts_query } from '$graphql';
+  import type { DashboardLayout_Shortcuts_query$key } from '$mearie';
 
   type Props = {
-    $query: DashboardLayout_Shortcuts_query;
+    query$key: DashboardLayout_Shortcuts_query$key;
   };
 
-  let { $query: _query }: Props = $props();
+  let { query$key }: Props = $props();
 
   const app = getAppContext();
   const splitView = getSplitViewContext();
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const query = fragment(
-    _query,
+  const query = createFragment(
     graphql(`
       fragment DashboardLayout_Shortcuts_query on Query {
         me @required {
@@ -25,6 +25,7 @@
         }
       }
     `),
+    () => query$key,
   );
 
   const handleKeydown = async (event: KeyboardEvent) => {

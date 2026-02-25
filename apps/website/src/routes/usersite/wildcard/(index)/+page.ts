@@ -1,5 +1,74 @@
-import type { UsersiteWildcardIndexPage_Query_Variables } from './$graphql';
+import { loadQuery } from '$lib/graphql';
+import { graphql } from '$mearie';
 
-export const _UsersiteWildcardIndexPage_Query_Variables: UsersiteWildcardIndexPage_Query_Variables = ({ url }) => ({
-  origin: url.origin,
-});
+export const load = async (event) => {
+  return {
+    query: await loadQuery(
+      event,
+      graphql(`
+        query UsersiteWildcardIndexPage_Query($origin: String!) {
+          siteView(origin: $origin) {
+            id
+            name
+
+            logo {
+              id
+              ...Img_image
+            }
+
+            entities {
+              id
+              slug
+
+              node {
+                __typename
+
+                ... on FolderView {
+                  id
+                  name
+                  folderCount
+                  postCount
+                  thumbnail {
+                    id
+                    ...Img_image
+                  }
+                }
+
+                ... on PostView {
+                  id
+                  title
+                  subtitle
+                  excerpt
+                  updatedAt
+                  thumbnail {
+                    id
+                    ...Img_image
+                  }
+
+                  document {
+                    id
+                  }
+                }
+
+                ... on DocumentView {
+                  id
+                  title
+                  subtitle
+                  excerpt
+                  updatedAt
+                  thumbnail {
+                    id
+                    ...Img_image
+                  }
+                }
+              }
+            }
+          }
+        }
+      `),
+      {
+        origin: event.url.origin,
+      },
+    ),
+  };
+};

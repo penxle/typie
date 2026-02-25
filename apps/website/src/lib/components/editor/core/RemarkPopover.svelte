@@ -1,5 +1,6 @@
 <script lang="ts">
   import { flip, hide } from '@floating-ui/dom';
+  import { createFragment } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { autosize, createFloatingActions, tooltip } from '@typie/ui/actions';
   import { Icon, Menu, MenuItem } from '@typie/ui/components';
@@ -14,13 +15,13 @@
   import MessageSquareTextIcon from '~icons/lucide/message-square-text';
   import Trash2Icon from '~icons/lucide/trash-2';
   import XIcon from '~icons/lucide/x';
-  import { fragment, graphql } from '$graphql';
   import { Img } from '$lib/components';
   import { getEditorContext } from '$lib/editor/context.svelte';
+  import { graphql } from '$mearie';
   import RemarkCard from './RemarkCard.svelte';
-  import type { RemarkPopover_user } from '$graphql';
   import type { Editor } from '$lib/editor/editor.svelte';
   import type { RemarkOverlay } from '$lib/editor/slate';
+  import type { RemarkPopover_user$key } from '$mearie';
 
   const REMARK_WIDTH = 280;
 
@@ -36,8 +37,7 @@
 
   const ctx = getEditorContext();
 
-  const user = fragment(
-    ctx.user as RemarkPopover_user | null,
+  const user = createFragment(
     graphql(`
       fragment RemarkPopover_user on User {
         id
@@ -47,6 +47,7 @@
         }
       }
     `),
+    () => ctx.user as unknown as RemarkPopover_user$key | null,
   );
 
   let newRemarkText = $state('');
@@ -150,7 +151,7 @@
     const trimmed = newRemarkText.trim();
     if (!trimmed) return;
 
-    editor.dispatch({ type: 'addRemark', nodeId, userId: $user?.id ?? '', text: trimmed, createdAt: Date.now() });
+    editor.dispatch({ type: 'addRemark', nodeId, userId: user.data?.id ?? '', text: trimmed, createdAt: Date.now() });
     newRemarkText = '';
     editor
       .settled()
@@ -407,11 +408,11 @@
       <div
         class={css({ display: 'flex', gap: '8px', alignItems: 'flex-start', paddingY: '8px', paddingLeft: '10px', paddingRight: '8px' })}
       >
-        {#if $user?.avatar}
+        {#if user.data?.avatar}
           <Img
             style={css.raw({ width: '24px', height: '24px', borderRadius: 'full', flexShrink: '0', marginTop: '1px' })}
-            $image={$user.avatar}
-            alt={$user.name}
+            alt={user.data.name}
+            image$key={user.data.avatar}
             size={24}
           />
         {/if}

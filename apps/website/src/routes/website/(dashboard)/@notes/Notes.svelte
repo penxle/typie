@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createFragment, createMutation, createQuery } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { Button, Icon, Modal, Select } from '@typie/ui/components';
@@ -15,19 +16,19 @@
   import LayoutTemplateIcon from '~icons/lucide/layout-template';
   import { beforeNavigate } from '$app/navigation';
   import { page } from '$app/state';
-  import { cache, fragment, graphql } from '$graphql';
+  import { cache } from '$lib/graphql';
+  import { graphql } from '$mearie';
   import Masonry from './Masonry.svelte';
   import NoteComponent from './Note.svelte';
-  import type { DashboardLayout_Notes_query } from '$graphql';
+  import type { DashboardLayout_Notes_query$key } from '$mearie';
 
   type Props = {
-    $query: DashboardLayout_Notes_query;
+    query$key: DashboardLayout_Notes_query$key;
   };
 
-  let { $query: _query }: Props = $props();
+  let { query$key }: Props = $props();
 
-  const query = fragment(
-    _query,
+  const query = createFragment(
     graphql(`
       fragment DashboardLayout_Notes_query on Query {
         me @required {
@@ -81,41 +82,14 @@
         }
       }
     `),
+    () => query$key,
   );
 
-  const currentEntityQuery = graphql(`
-    query DashboardLayout_Notes_CurrentEntity_Query($slug: String!) @client {
-      entity(slug: $slug) {
-        id
-
-        node {
-          __typename
-
-          ... on Post {
-            id
-            title
-            type
-          }
-
-          ... on Document {
-            id
-            title
-          }
-        }
-      }
-    }
-  `);
-
-  const createNote = graphql(`
-    mutation DashboardLayout_Notes_CreateNote_Mutation($input: CreateNoteInput!) {
-      createNote(input: $input) {
-        id
-        content
-        createdAt
-        color
-        entity {
+  const currentEntityQuery = createQuery(
+    graphql(`
+      query DashboardLayout_Notes_CurrentEntity_Query($slug: String!) {
+        entity(slug: $slug) {
           id
-          slug
 
           node {
             __typename
@@ -125,52 +99,91 @@
               title
               type
             }
-          }
-        }
-      }
-    }
-  `);
 
-  const updateNote = graphql(`
-    mutation DashboardLayout_Notes_UpdateNote_Mutation($input: UpdateNoteInput!) {
-      updateNote(input: $input) {
-        id
-        content
-        updatedAt
-        entity {
-          id
-          slug
-
-          node {
-            __typename
-
-            ... on Post {
+            ... on Document {
               id
               title
-              type
             }
           }
         }
       }
-    }
-  `);
+    `),
+    () => ({ slug: page.params.slug ?? '' }),
+  );
 
-  const deleteNote = graphql(`
-    mutation DashboardLayout_Notes_DeleteNote_Mutation($input: DeleteNoteInput!) {
-      deleteNote(input: $input) {
-        id
-      }
-    }
-  `);
+  const [createNote] = createMutation(
+    graphql(`
+      mutation DashboardLayout_Notes_CreateNote_Mutation($input: CreateNoteInput!) {
+        createNote(input: $input) {
+          id
+          content
+          createdAt
+          color
+          entity {
+            id
+            slug
 
-  const moveNote = graphql(`
-    mutation DashboardLayout_Notes_MoveNote_Mutation($input: MoveNoteInput!) {
-      moveNote(input: $input) {
-        id
-        order
+            node {
+              __typename
+
+              ... on Post {
+                id
+                title
+                type
+              }
+            }
+          }
+        }
       }
-    }
-  `);
+    `),
+  );
+
+  const [updateNote] = createMutation(
+    graphql(`
+      mutation DashboardLayout_Notes_UpdateNote_Mutation($input: UpdateNoteInput!) {
+        updateNote(input: $input) {
+          id
+          content
+          updatedAt
+          entity {
+            id
+            slug
+
+            node {
+              __typename
+
+              ... on Post {
+                id
+                title
+                type
+              }
+            }
+          }
+        }
+      }
+    `),
+  );
+
+  const [deleteNote] = createMutation(
+    graphql(`
+      mutation DashboardLayout_Notes_DeleteNote_Mutation($input: DeleteNoteInput!) {
+        deleteNote(input: $input) {
+          id
+        }
+      }
+    `),
+  );
+
+  const [moveNote] = createMutation(
+    graphql(`
+      mutation DashboardLayout_Notes_MoveNote_Mutation($input: MoveNoteInput!) {
+        moveNote(input: $input) {
+          id
+          order
+        }
+      }
+    `),
+  );
 
   const app = getAppContext();
 
@@ -178,7 +191,7 @@
   let inputEl = $state<HTMLTextAreaElement>();
   let selectedEntityId = $state<string | null>(null);
   const selectedEntityTitle = $derived.by(() => {
-    const note = $query.notes.find((note) => note.entity?.id === selectedEntityId);
+    const note = query.data.notes.find((note) => note.entity?.id === selectedEntityId);
     if (!note) return null;
 
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
@@ -194,9 +207,9 @@
   let editInputEl = $state<HTMLTextAreaElement>();
   let editSelectedEntityId = $state<string | null>(null);
 
-  const currentEntity = $derived(page.params.slug && $currentEntityQuery ? $currentEntityQuery.entity : null);
+  const currentEntity = $derived(page.params.slug && currentEntityQuery.data ? currentEntityQuery.data.entity : null);
   const recentlyViewedEntities = $derived(
-    $query.me.recentlyViewedEntities
+    query.data.me.recentlyViewedEntities
       .slice(0, 10)
       .map((entity) =>
         match(entity.node)
@@ -224,8 +237,8 @@
   let localNoteOrder = $state<string[]>([]);
 
   const sortedNotes = $derived.by(() => {
-    if (localNoteOrder.length === 0) return $query.notes;
-    return [...$query.notes].toSorted((a, b) => {
+    if (localNoteOrder.length === 0) return query.data.notes;
+    return [...query.data.notes].toSorted((a, b) => {
       const indexA = localNoteOrder.indexOf(a.id);
       const indexB = localNoteOrder.indexOf(b.id);
       if (indexA === -1) return 1;
@@ -253,9 +266,11 @@
       try {
         const { noteId } = dragging;
         await moveNote({
-          noteId,
-          lowerOrder: lowerNote?.order,
-          upperOrder: upperNote?.order,
+          input: {
+            noteId,
+            lowerOrder: lowerNote?.order,
+            upperOrder: upperNote?.order,
+          },
         });
         mixpanel.track('move_note');
         cache.invalidate({ __typename: 'Query', field: 'notes' });
@@ -265,7 +280,7 @@
           cache.invalidate({ __typename: 'Entity', id: movedNote.entity.id, field: 'notes' });
         }
       } catch {
-        localNoteOrder = $query.notes.map((note) => note.id);
+        localNoteOrder = query.data.notes.map((note) => note.id);
         Toast.error('노트 순서 변경에 실패했습니다. 잠시 후 다시 시도해주세요.');
       }
     }
@@ -290,7 +305,7 @@
 
   let prevNoteIds = $state<string[]>([]);
   $effect(() => {
-    const noteIds = $query.notes.map((n) => n.id);
+    const noteIds = query.data.notes.map((n) => n.id);
     const noteIdsStr = noteIds.join(',');
     const prevNoteIdsStr = prevNoteIds.join(',');
 
@@ -323,9 +338,11 @@
     if (!inputValue.trim()) return;
 
     await createNote({
-      color: getRandomNoteColor(),
-      content: inputValue,
-      entityId: selectedEntityId,
+      input: {
+        color: getRandomNoteColor(),
+        content: inputValue,
+        entityId: selectedEntityId,
+      },
     });
     mixpanel.track('create_note', {
       relatedToEntity: !!selectedEntityId,
@@ -341,18 +358,18 @@
   };
 
   const handleDeleteNote = async (noteId: string) => {
-    await deleteNote({ noteId });
+    await deleteNote({ input: { noteId } });
     mixpanel.track('delete_note');
     cache.invalidate({ __typename: 'Query', field: 'notes' });
 
-    const note = $query.notes.find((n) => n.id === noteId);
+    const note = query.data.notes.find((n) => n.id === noteId);
     if (note?.entity?.id) {
       cache.invalidate({ __typename: 'Entity', id: note.entity.id, field: 'notes' });
     }
   };
 
   const editNote = (id: string) => {
-    const note = $query.notes.find((n) => n.id === id);
+    const note = query.data.notes.find((n) => n.id === id);
     if (note) {
       editingNoteId = note.id;
       editingValue = note.content;
@@ -363,9 +380,11 @@
   const handleSaveEdit = async () => {
     if (editingNoteId && editingValue.trim()) {
       await updateNote({
-        noteId: editingNoteId,
-        content: editingValue.trim(),
-        entityId: editSelectedEntityId,
+        input: {
+          noteId: editingNoteId,
+          content: editingValue.trim(),
+          entityId: editSelectedEntityId,
+        },
       });
       mixpanel.track('update_note');
 
@@ -416,13 +435,6 @@
       editInputEl.setSelectionRange(editingValue.length, editingValue.length);
     }
   });
-
-  $effect(() => {
-    if (page.params.slug) {
-      currentEntityQuery.load({ slug: page.params.slug });
-    }
-  });
-
   $effect.pre(() => {
     void localNoteOrder;
     animateFlip('[data-note-id]', 'noteId');

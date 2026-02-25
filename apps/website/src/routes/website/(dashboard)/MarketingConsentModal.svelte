@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Button, Icon, Modal } from '@typie/ui/components';
@@ -9,7 +10,7 @@
   import MailIcon from '~icons/lucide/mail';
   import SparklesIcon from '~icons/lucide/sparkles';
   import ZapIcon from '~icons/lucide/zap';
-  import { graphql } from '$graphql';
+  import { graphql } from '$mearie';
 
   type Props = {
     open: boolean;
@@ -17,18 +18,20 @@
 
   let { open = $bindable(false) }: Props = $props();
 
-  const updateMarketingConsent = graphql(`
-    mutation MarketingConsentModal_UpdateMarketingConsent_Mutation($input: UpdateMarketingConsentInput!) {
-      updateMarketingConsent(input: $input) {
-        id
-        marketingConsent
-        marketingConsentAskedAt
+  const [updateMarketingConsent] = createMutation(
+    graphql(`
+      mutation MarketingConsentModal_UpdateMarketingConsent_Mutation($input: UpdateMarketingConsentInput!) {
+        updateMarketingConsent(input: $input) {
+          id
+          marketingConsent
+          marketingConsentAskedAt
+        }
       }
-    }
-  `);
+    `),
+  );
 
   const handleConsent = async (consented: boolean) => {
-    await updateMarketingConsent({ marketingConsent: consented });
+    await updateMarketingConsent({ input: { marketingConsent: consented } });
     open = false;
     Toast.success(`${dayjs().formatAsDate()}에 마케팅 수신 ${consented ? '동의' : '거부'}처리됐어요.`);
   };

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { cache } from '@typie/sark/internal';
+  import { createFragment, createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Button, HorizontalDivider, Icon, Modal } from '@typie/ui/components';
@@ -12,39 +12,44 @@
   import StarIcon from '~icons/lucide/star';
   import TagIcon from '~icons/lucide/tag';
   import { pushState } from '$app/navigation';
-  import { fragment, graphql } from '$graphql';
-  import type { DashboardLayout_TrialExpiredModal_user } from '$graphql';
+  import { cache } from '$lib/graphql';
+  import { graphql } from '$mearie';
+  import type { DashboardLayout_TrialExpiredModal_user$key } from '$mearie';
 
   type Props = {
     open: boolean;
-    $user: DashboardLayout_TrialExpiredModal_user;
+    user$key: DashboardLayout_TrialExpiredModal_user$key;
   };
 
-  let { open = $bindable(false), $user: _user }: Props = $props();
+  let { open = $bindable(false), user$key }: Props = $props();
 
-  const user = fragment(
-    _user,
+  const user = createFragment(
     graphql(`
       fragment DashboardLayout_TrialExpiredModal_user on User {
         id
       }
     `),
+    () => user$key,
   );
 
-  const recordSurvey = graphql(`
-    mutation DashboardLayout_TrialExpiredModal_RecordSurvey_Mutation($input: RecordSurveyInput!) {
-      recordSurvey(input: $input) {
-        id
+  const [recordSurvey] = createMutation(
+    graphql(`
+      mutation DashboardLayout_TrialExpiredModal_RecordSurvey_Mutation($input: RecordSurveyInput!) {
+        recordSurvey(input: $input) {
+          id
+        }
       }
-    }
-  `);
+    `),
+  );
 
   async function markAsShown() {
     await recordSurvey({
-      name: 'trial_expired_modal_shown',
-      value: {},
+      input: {
+        name: 'trial_expired_modal_shown',
+        value: {},
+      },
     });
-    cache.invalidate({ __typename: 'User', id: $user.id, field: 'surveys' });
+    cache.invalidate({ __typename: 'User', id: user.data.id, field: 'surveys' });
   }
 
   async function handleClose() {

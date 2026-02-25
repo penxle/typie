@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { cache } from '@typie/sark/internal';
+  import { createFragment, createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Button, HorizontalDivider, Icon, Modal } from '@typie/ui/components';
@@ -13,22 +13,21 @@
   import StarIcon from '~icons/lucide/star';
   import TagIcon from '~icons/lucide/tag';
   import { pushState } from '$app/navigation';
-  import { fragment, graphql } from '$graphql';
+  import { graphql } from '$mearie';
   import SubscriptionCelebrationModal from './SubscriptionCelebrationModal.svelte';
   import type { Snippet } from 'svelte';
-  import type { DashboardLayout_PlanUpgradeModal_user } from '$graphql';
+  import type { DashboardLayout_PlanUpgradeModal_user$key } from '$mearie';
 
   type Props = {
     open: boolean;
-    $user: DashboardLayout_PlanUpgradeModal_user;
+    user$key: DashboardLayout_PlanUpgradeModal_user$key;
     title?: string;
     children?: Snippet;
   };
 
-  let { open = $bindable(false), $user: _user, title = '플랜 업그레이드가 필요해요', children }: Props = $props();
+  let { open = $bindable(false), user$key, title = '플랜 업그레이드가 필요해요', children }: Props = $props();
 
-  const user = fragment(
-    _user,
+  const user = createFragment(
     graphql(`
       fragment DashboardLayout_PlanUpgradeModal_user on User {
         id
@@ -40,25 +39,28 @@
         }
       }
     `),
+    () => user$key,
   );
 
-  const subscribePlanWithTrial = graphql(`
-    mutation DashboardLayout_PlanUpgradeModal_SubscribePlanWithTrial_Mutation {
-      subscribePlanWithTrial {
-        id
-        state
-        expiresAt
-
-        plan {
+  const [subscribePlanWithTrial] = createMutation(
+    graphql(`
+      mutation DashboardLayout_PlanUpgradeModal_SubscribePlanWithTrial_Mutation {
+        subscribePlanWithTrial {
           id
-          name
-          availability
+          state
+          expiresAt
+
+          plan {
+            id
+            name
+            availability
+          }
         }
       }
-    }
-  `);
+    `),
+  );
 
-  const canStartTrial = $derived($user.canStartTrial);
+  const canStartTrial = $derived(user.data.canStartTrial);
 
   let trialStartedModalOpen = $state(false);
 </script>
@@ -164,8 +166,8 @@
             actionLabel: '시작하기',
             actionHandler: async () => {
               await subscribePlanWithTrial();
-              cache.invalidate({ __typename: 'User', id: $user.id, field: 'subscription' });
-              cache.invalidate({ __typename: 'User', id: $user.id, field: 'canStartTrial' });
+              //               cache.invalidate({ __typename: 'User', id: user.data.id, field: 'subscription' });
+              //               cache.invalidate({ __typename: 'User', id: user.data.id, field: 'canStartTrial' });
               mixpanel.track('start_trial');
               open = false;
               trialStartedModalOpen = true;

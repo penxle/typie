@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createMutation, createQuery } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Button, Icon, Modal } from '@typie/ui/components';
@@ -8,28 +9,34 @@
   import dayjs from 'dayjs';
   import CopyIcon from '~icons/lucide/copy';
   import DownloadIcon from '~icons/lucide/download';
-  import { graphql } from '$graphql';
+  import { graphql } from '$mearie';
   import ActivityChart from './ActivityChart.svelte';
   import ActivityGrid from './ActivityGrid.svelte';
 
-  const query = graphql(`
-    query DashboardLayout_StatsModal_Query @client {
-      me @required {
-        id
-        name
-        postCount
-        totalCharacterCount
+  const app = getAppContext();
 
-        characterCountChanges {
-          date
-          additions
+  const query = createQuery(
+    graphql(`
+      query DashboardLayout_StatsModal_Query {
+        me @required {
+          id
+          name
+          postCount
+          totalCharacterCount
+
+          characterCountChanges {
+            date
+            additions
+          }
+
+          ...DashboardLayout_Stats_ActivityChart_user
+          ...DashboardLayout_Stats_ActivityGrid_user
         }
-
-        ...DashboardLayout_Stats_ActivityChart_user
-        ...DashboardLayout_Stats_ActivityGrid_user
       }
-    }
-  `);
+    `),
+    undefined,
+    () => ({ skip: !app.state.statsOpen }),
+  );
 
   type StreakData = {
     currentStreak: number;
@@ -98,8 +105,8 @@
   };
 
   const streakData = $derived.by(() => {
-    if (!$query) return null;
-    return calculateStreakData($query.me.characterCountChanges, $query.me.totalCharacterCount);
+    if (!query.data) return null;
+    return calculateStreakData([...query.data.me.characterCountChanges], query.data.me.totalCharacterCount);
   });
 
   type WeekdayData = {
@@ -135,35 +142,26 @@
   };
 
   const weekdayData = $derived.by(() => {
-    if (!$query) return null;
-    return calculateWeekdayPattern($query.me.characterCountChanges);
+    if (!query.data) return null;
+    return calculateWeekdayPattern([...query.data.me.characterCountChanges]);
   });
 
   const maxWeekdayAvg = $derived(weekdayData ? Math.max(...weekdayData.map((d) => d.avgAdditions)) : 0);
   const bestWeekdayIndex = $derived(weekdayData ? weekdayData.findIndex((d) => d.avgAdditions === maxWeekdayAvg) : -1);
 
-  const generateActivityImage = graphql(`
-    mutation DashboardLayout_StatsModal_GenerateActivityImage {
-      generateActivityImage
-    }
-  `);
+  const [generateActivityImage] = createMutation(
+    graphql(`
+      mutation DashboardLayout_StatsModal_GenerateActivityImage {
+        generateActivityImage
+      }
+    `),
+  );
 
-  const app = getAppContext();
-  let loaded = $state(false);
-
-  const load = async () => {
-    if (app.state.statsOpen) {
-      await query.load();
-      loaded = true;
-    }
-  };
-
-  $effect(() => {
-    load();
-  });
+  const loaded = $derived(app.state.statsOpen && !!query.data && !query.loading);
 
   const copyActivityImage = async () => {
-    const b64 = await generateActivityImage();
+    const resp = await generateActivityImage();
+    const b64 = resp.generateActivityImage;
     const blob = new Blob([Uint8Array.fromBase64(b64)], { type: 'image/png' });
     await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
 
@@ -171,8 +169,9 @@
   };
 
   const downloadActivityImage = async () => {
-    const b64 = await generateActivityImage();
-    downloadFromBase64(b64, `${$query?.me.name ?? '타이피'} - 나의 글쓰기 발자취.png`, 'image/png');
+    const resp = await generateActivityImage();
+    const b64 = resp.generateActivityImage;
+    downloadFromBase64(b64, `${query.data?.me.name ?? '타이피'} - 나의 글쓰기 발자취.png`, 'image/png');
 
     Toast.success('이미지가 다운로드되었어요.');
   };
@@ -196,11 +195,10 @@
   loading={!loaded || !query}
   onclose={() => {
     app.state.statsOpen = false;
-    loaded = false;
   }}
   open={app.state.statsOpen}
 >
-  {#if loaded && $query && streakData}
+  {#if loaded && query.data && streakData}
     <div class={css({ fontSize: '17px', fontWeight: 'semibold', color: 'text.default' })}>나의 글쓰기 통계</div>
 
     <div class={flex({ flexDirection: 'column', gap: '12px' })}>
@@ -208,14 +206,14 @@
         <div class={css(cardStyle, { flex: '1' })}>
           <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.faint', marginBottom: '8px' })}>총 글자</div>
           <div class={css({ fontSize: '28px', fontWeight: 'bold', color: 'text.default', fontVariantNumeric: 'tabular-nums' })}>
-            {comma($query.me.totalCharacterCount)}
+            {comma(query.data.me.totalCharacterCount)}
           </div>
         </div>
 
         <div class={css(cardStyle, { flex: '1' })}>
           <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.faint', marginBottom: '8px' })}>총 포스트</div>
           <div class={css({ fontSize: '28px', fontWeight: 'bold', color: 'text.default', fontVariantNumeric: 'tabular-nums' })}>
-            {$query.me.postCount}
+            {query.data.me.postCount}
           </div>
         </div>
 
@@ -294,11 +292,11 @@
             </Button>
           </div>
         </div>
-        <ActivityGrid $user={$query.me} />
+        <ActivityGrid user$key={query.data.me} />
       </div>
 
       <div class={css(cardStyle)}>
-        <ActivityChart $user={$query.me} />
+        <ActivityChart user$key={query.data.me} />
       </div>
     </div>
   {/if}

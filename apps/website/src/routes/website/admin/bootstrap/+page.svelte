@@ -1,8 +1,14 @@
 <script lang="ts">
+  import { createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import dayjs from 'dayjs';
-  import { graphql } from '$graphql';
+  import { hydrateQuery } from '$lib/graphql';
+  import { graphql } from '$mearie';
+
+  let { data } = $props();
+
+  const query = $derived(hydrateQuery(() => data.query));
 
   type Bootstrap = {
     version: number;
@@ -21,42 +27,38 @@
     };
   };
 
-  const query = graphql(`
-    query AdminBootstrap_Query {
-      getBootstrap
-    }
-  `);
+  const [updateBootstrapMutation] = createMutation(
+    graphql(`
+      mutation AdminBootstrap_UpdateBootstrap_Mutation($input: UpdateBootstrapInput!) {
+        updateBootstrap(input: $input)
+      }
+    `),
+  );
 
-  const updateBootstrapMutation = graphql(`
-    mutation AdminBootstrap_UpdateBootstrap_Mutation($input: UpdateBootstrapInput!) {
-      updateBootstrap(input: $input)
-    }
-  `);
-
-  let data = $state<Bootstrap | null>(null);
+  let bootstrapData = $state<Bootstrap | null>(null);
   let loading = $state(true);
   let saving = $state(false);
   let message = $state<{ type: 'success' | 'error'; text: string } | null>(null);
 
   $effect(() => {
-    if ($query) {
-      data = $query.getBootstrap as Bootstrap;
+    if (query.data) {
+      bootstrapData = query.data.getBootstrap as Bootstrap;
       loading = false;
     }
   });
 
   async function handleSubmit(e: SubmitEvent) {
     e.preventDefault();
-    if (!data) return;
+    if (!bootstrapData) return;
 
     saving = true;
     message = null;
 
     try {
-      const { version, updatedAt, ...rest } = data;
+      const { version, updatedAt, ...rest } = bootstrapData;
       void version;
       void updatedAt;
-      await updateBootstrapMutation({ bootstrap: rest });
+      await updateBootstrapMutation({ input: { bootstrap: rest } });
       message = { type: 'success', text: 'BOOTSTRAP CONFIG UPDATED SUCCESSFULLY' };
     } catch (err) {
       message = { type: 'error', text: err instanceof Error ? err.message : 'FAILED TO UPDATE BOOTSTRAP CONFIG' };
@@ -68,27 +70,27 @@
   let newIp = $state('');
 
   function addIp() {
-    if (!data || !newIp.trim()) return;
+    if (!bootstrapData || !newIp.trim()) return;
     const ip = newIp.trim();
-    if (!data.maintenance.allowedIps.includes(ip)) {
-      data.maintenance.allowedIps = [...data.maintenance.allowedIps, ip];
+    if (!bootstrapData.maintenance.allowedIps.includes(ip)) {
+      bootstrapData.maintenance.allowedIps = [...bootstrapData.maintenance.allowedIps, ip];
     }
     newIp = '';
   }
 
   function removeIp(ip: string) {
-    if (!data) return;
-    data.maintenance.allowedIps = data.maintenance.allowedIps.filter((i) => i !== ip);
+    if (!bootstrapData) return;
+    bootstrapData.maintenance.allowedIps = bootstrapData.maintenance.allowedIps.filter((i) => i !== ip);
   }
 
   function togglePlatform(platform: 'ios' | 'android' | 'web' | 'api') {
-    if (!data) return;
-    const platforms = data.maintenance.platforms;
+    if (!bootstrapData) return;
+    const platforms = bootstrapData.maintenance.platforms;
     const index = platforms.indexOf(platform);
     if (index === -1) {
-      data.maintenance.platforms = [...platforms, platform];
+      bootstrapData.maintenance.platforms = [...platforms, platform];
     } else {
-      data.maintenance.platforms = platforms.filter((p) => p !== platform);
+      bootstrapData.maintenance.platforms = platforms.filter((p) => p !== platform);
     }
   }
 
@@ -159,7 +161,7 @@
 
   {#if loading}
     <div class={css({ fontSize: '13px', color: 'amber.400' })}>LOADING...</div>
-  {:else if data}
+  {:else if bootstrapData}
     <form onsubmit={handleSubmit}>
       <div class={flex({ flexDirection: 'column', gap: '24px' })}>
         <div class={sectionStyle}>
@@ -175,31 +177,31 @@
                     height: '24px',
                     borderWidth: '2px',
                     borderColor: 'amber.500',
-                    backgroundColor: data.maintenance.enabled ? 'amber.500' : 'gray.800',
+                    backgroundColor: bootstrapData.maintenance.enabled ? 'amber.500' : 'gray.800',
                     position: 'relative',
                     cursor: 'pointer',
                   })}
                   aria-label="Toggle maintenance mode"
                   onclick={() => {
-                    if (data) data.maintenance.enabled = !data.maintenance.enabled;
+                    if (bootstrapData) bootstrapData.maintenance.enabled = !bootstrapData.maintenance.enabled;
                   }}
                   type="button"
                 >
                   <div
-                    style={`left: ${data.maintenance.enabled ? '26px' : '2px'}`}
+                    style={`left: ${bootstrapData.maintenance.enabled ? '26px' : '2px'}`}
                     class={css({
                       position: 'absolute',
                       top: '2px',
                       width: '16px',
                       height: '16px',
-                      backgroundColor: data.maintenance.enabled ? 'gray.900' : 'amber.500',
+                      backgroundColor: bootstrapData.maintenance.enabled ? 'gray.900' : 'amber.500',
                       transitionProperty: '[left]',
                       transitionDuration: '0.2s',
                     })}
                   ></div>
                 </button>
-                <span class={css({ fontSize: '11px', color: data.maintenance.enabled ? 'amber.500' : 'amber.700' })}>
-                  {data.maintenance.enabled ? 'ON' : 'OFF'}
+                <span class={css({ fontSize: '11px', color: bootstrapData.maintenance.enabled ? 'amber.500' : 'amber.700' })}>
+                  {bootstrapData.maintenance.enabled ? 'ON' : 'OFF'}
                 </span>
               </div>
 
@@ -210,7 +212,7 @@
                   class={inputStyle}
                   placeholder="서비스 점검 중"
                   type="text"
-                  bind:value={data.maintenance.title}
+                  bind:value={bootstrapData.maintenance.title}
                 />
               </div>
 
@@ -220,7 +222,7 @@
                   id="maintenance-message"
                   class={textareaStyle}
                   placeholder="점검 안내 메시지"
-                  bind:value={data.maintenance.message}
+                  bind:value={bootstrapData.maintenance.message}
                 ></textarea>
               </div>
 
@@ -230,12 +232,12 @@
                   id="maintenance-until"
                   class={inputStyle}
                   oninput={(e) => {
-                    if (!data) return;
+                    if (!bootstrapData) return;
                     const value = e.currentTarget.value;
-                    data.maintenance.until = value ? new Date(value).toISOString() : null;
+                    bootstrapData.maintenance.until = value ? new Date(value).toISOString() : null;
                   }}
                   type="datetime-local"
-                  value={data.maintenance.until ? dayjs(data.maintenance.until).format('YYYY-MM-DDTHH:mm') : ''}
+                  value={bootstrapData.maintenance.until ? dayjs(bootstrapData.maintenance.until).format('YYYY-MM-DDTHH:mm') : ''}
                 />
               </div>
 
@@ -262,7 +264,7 @@
                           height: '16px',
                           borderWidth: '2px',
                           borderColor: 'amber.500',
-                          backgroundColor: data.maintenance.platforms.includes(platform as 'ios' | 'android' | 'web' | 'api')
+                          backgroundColor: bootstrapData.maintenance.platforms.includes(platform as 'ios' | 'android' | 'web' | 'api')
                             ? 'amber.500'
                             : 'transparent',
                         })}
@@ -311,11 +313,11 @@
                   </button>
                 </div>
 
-                {#if data.maintenance.allowedIps.length === 0}
+                {#if bootstrapData.maintenance.allowedIps.length === 0}
                   <div class={css({ fontSize: '12px', color: 'amber.700' })}>NO ALLOWED IPS</div>
                 {:else}
                   <div class={flex({ flexDirection: 'column', gap: '4px' })}>
-                    {#each data.maintenance.allowedIps as ip (ip)}
+                    {#each bootstrapData.maintenance.allowedIps as ip (ip)}
                       <div
                         class={flex({
                           alignItems: 'center',
@@ -359,7 +361,13 @@
                 <div class={flex({ gap: '16px' })}>
                   <div class={flex({ flexDirection: 'column', gap: '8px', flex: '1' })}>
                     <label class={labelStyle} for="ios-version">VERSION</label>
-                    <input id="ios-version" class={inputStyle} placeholder="1.2.0" type="text" bind:value={data.minVersion.ios.version} />
+                    <input
+                      id="ios-version"
+                      class={inputStyle}
+                      placeholder="1.2.0"
+                      type="text"
+                      bind:value={bootstrapData.minVersion.ios.version}
+                    />
                   </div>
                   <div class={css(flex.raw({ flexDirection: 'column', gap: '8px' }), { flexGrow: '2' })}>
                     <label class={labelStyle} for="ios-store-url">STORE URL</label>
@@ -368,7 +376,7 @@
                       class={inputStyle}
                       placeholder="https://apps.apple.com/app/..."
                       type="url"
-                      bind:value={data.minVersion.ios.storeUrl}
+                      bind:value={bootstrapData.minVersion.ios.storeUrl}
                     />
                   </div>
                 </div>
@@ -384,7 +392,7 @@
                       class={inputStyle}
                       placeholder="1.2.0"
                       type="text"
-                      bind:value={data.minVersion.android.version}
+                      bind:value={bootstrapData.minVersion.android.version}
                     />
                   </div>
                   <div class={css(flex.raw({ flexDirection: 'column', gap: '8px' }), { flexGrow: '2' })}>
@@ -394,7 +402,7 @@
                       class={inputStyle}
                       placeholder="https://play.google.com/store/apps/..."
                       type="url"
-                      bind:value={data.minVersion.android.storeUrl}
+                      bind:value={bootstrapData.minVersion.android.storeUrl}
                     />
                   </div>
                 </div>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createFragment, createMutation } from '@mearie/svelte';
   import * as PortOne from '@portone/browser-sdk/v2';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
@@ -9,7 +10,6 @@
   import mixpanel from 'mixpanel-browser';
   import { nanoid } from 'nanoid';
   import qs from 'query-string';
-  import { untrack } from 'svelte';
   import { z } from 'zod';
   import { TypieError } from '@/errors';
   import LockIcon from '~icons/lucide/lock';
@@ -17,29 +17,29 @@
   import SmileIcon from '~icons/lucide/smile';
   import { page } from '$app/state';
   import { env } from '$env/dynamic/public';
-  import { fragment, graphql } from '$graphql';
   import { Img } from '$lib/components';
   import { Editor as EditorComponent } from '$lib/components/editor';
   import { setupEditorContext } from '$lib/editor/context.svelte';
   import { Editor } from '$lib/editor/editor.svelte';
+  import { unwrapError } from '$lib/graphql';
   import { wasm } from '$lib/wasm';
+  import { graphql } from '$mearie';
   import ContentNavigation from './ContentNavigation.svelte';
   import DocumentActionMenu from './DocumentActionMenu.svelte';
   import DocumentEmojiReaction from './DocumentEmojiReaction.svelte';
   import PostViewBodyUnavailable from './PostViewBodyUnavailable.svelte';
   import ReadOnlyTouchSelectionSuppress from './ReadOnlyTouchSelectionSuppress.svelte';
   import ShareLinkPopover from './ShareLinkPopover.svelte';
-  import type { Optional, UsersiteWildcardSlugPage_DocumentView_entityView, UsersiteWildcardSlugPage_DocumentView_user } from '$graphql';
+  import type { UsersiteWildcardSlugPage_DocumentView_entityView$key, UsersiteWildcardSlugPage_DocumentView_user$key } from '$mearie';
 
   type Props = {
-    $entityView: UsersiteWildcardSlugPage_DocumentView_entityView;
-    $user: Optional<UsersiteWildcardSlugPage_DocumentView_user>;
+    entityView$key: UsersiteWildcardSlugPage_DocumentView_entityView$key;
+    user$key: UsersiteWildcardSlugPage_DocumentView_user$key | null | undefined;
   };
 
-  let { $entityView: _entityView, $user: _user }: Props = $props();
+  let { entityView$key, user$key }: Props = $props();
 
-  const entityView = fragment(
-    _entityView,
+  const entityView = createFragment(
     graphql(`
       fragment UsersiteWildcardSlugPage_DocumentView_entityView on EntityView {
         id
@@ -90,6 +90,21 @@
               emoji
             }
 
+            fontFamilies {
+              id
+              familyName
+              displayName
+              state
+
+              fonts {
+                id
+                weight
+                subfamilyDisplayName
+                url
+                state
+              }
+            }
+
             assets {
               __typename
 
@@ -137,97 +152,73 @@
         ...UsersiteWildcardSlugPage_ContentNavigation_entityView
       }
     `),
+    () => entityView$key,
   );
 
-  const user = fragment(
-    _user,
+  const user = createFragment(
     graphql(`
       fragment UsersiteWildcardSlugPage_DocumentView_user on User {
         id
       }
     `),
+    () => user$key,
   );
 
-  const unlockDocumentView = graphql(`
-    mutation UsersiteWildcardSlugPage_UnlockDocumentView_Mutation($input: UnlockDocumentViewInput!) {
-      unlockDocumentView(input: $input) {
-        id
-
-        documentBody: body {
-          __typename
-
-          ... on DocumentViewBodyAvailable {
-            snapshot
-          }
-
-          ... on DocumentViewBodyUnavailable {
-            reason
-          }
-        }
-      }
-    }
-  `);
-
-  const verifyPersonalIdentity = graphql(`
-    mutation UsersiteWildcardSlugPage_DocumentView_VerifyPersonalIdentity_Mutation($input: VerifyPersonalIdentityInput!) {
-      verifyPersonalIdentity(input: $input) {
-        id
-
-        personalIdentity {
+  const [unlockDocumentView] = createMutation(
+    graphql(`
+      mutation UsersiteWildcardSlugPage_UnlockDocumentView_Mutation($input: UnlockDocumentViewInput!) {
+        unlockDocumentView(input: $input) {
           id
-          expiresAt
-        }
-      }
-    }
-  `);
 
-  const fontFamiliesQuery = graphql(`
-    query DocumentView_FontFamilies_Query($origin: String!, $slug: String!) @client {
-      entityView(origin: $origin, slug: $slug) {
-        id
+          documentBody: body {
+            __typename
 
-        node {
-          __typename
+            ... on DocumentViewBodyAvailable {
+              snapshot
+            }
 
-          ... on DocumentView {
-            id
-
-            fontFamilies {
-              id
-              familyName
-              displayName
-              state
-
-              fonts {
-                id
-                weight
-                subfamilyDisplayName
-                url
-                state
-              }
+            ... on DocumentViewBodyUnavailable {
+              reason
             }
           }
         }
       }
-    }
-  `);
+    `),
+  );
+
+  const [verifyPersonalIdentity] = createMutation(
+    graphql(`
+      mutation UsersiteWildcardSlugPage_DocumentView_VerifyPersonalIdentity_Mutation($input: VerifyPersonalIdentityInput!) {
+        verifyPersonalIdentity(input: $input) {
+          id
+
+          personalIdentity {
+            id
+            expiresAt
+          }
+        }
+      }
+    `),
+  );
 
   const form = createForm({
     schema: z.object({
       password: z.string(),
     }),
     onSubmit: async (data) => {
-      if ($entityView.node.__typename !== 'DocumentView') {
+      if (entityView.data.node.__typename !== 'DocumentView') {
         return;
       }
 
       await unlockDocumentView({
-        documentId: $entityView.node.id,
-        password: data.password,
+        input: {
+          documentId: entityView.data.node.id,
+          password: data.password,
+        },
       });
 
       mixpanel.track('unlock_document_view', {
-        documentId: $entityView.node.id,
+        documentId: entityView.data.node.id,
       });
     },
     onError: (error) => {
@@ -245,23 +236,12 @@
   const editor = new Editor();
   ctx.editor = editor;
 
-  const document = $derived($entityView.node.__typename === 'DocumentView' ? $entityView.node : null);
+  const document = $derived(entityView.data.node.__typename === 'DocumentView' ? entityView.data.node : null);
 
   $effect(() => {
     editor.protectContent = document?.protectContent ?? false;
   });
-
-  $effect(() => {
-    void $entityView.slug;
-
-    untrack(() => {
-      fontFamiliesQuery.load({ origin: page.url.origin, slug: $entityView.slug });
-    });
-  });
-
-  const fontFamilies = $derived(
-    $fontFamiliesQuery?.entityView.node.__typename === 'DocumentView' ? ($fontFamiliesQuery.entityView.node.fontFamilies ?? []) : [],
-  );
+  const fontFamilies = $derived(document?.fontFamilies ?? []);
 
   $effect(() => {
     if (fontFamilies.length > 0) {
@@ -345,7 +325,9 @@
       }
 
       await verifyPersonalIdentity({
-        identityVerificationId: resp.identityVerificationId,
+        input: {
+          identityVerificationId: resp.identityVerificationId,
+        },
       });
 
       mixpanel.track('verify_personal_identity_success');
@@ -356,8 +338,9 @@
         same_identity_exists: '이미 다른 계정에 인증된 정보입니다.',
       };
 
-      if (err instanceof TypieError) {
-        const message = errorMessages[err.code] || err.code;
+      const error = unwrapError(err);
+      if (error instanceof TypieError) {
+        const message = errorMessages[error.code] || error.code;
         Toast.error(message);
       }
     }
@@ -371,7 +354,7 @@
 {#if document && fontFamilies.length > 0}
   <Helmet
     description={document.excerpt}
-    image={{ size: 'large', src: `${env.PUBLIC_API_URL}/og/${$entityView.id}` }}
+    image={{ size: 'large', src: `${env.PUBLIC_API_URL}/og/${entityView.data.id}` }}
     title={document.title}
   />
 
@@ -385,21 +368,21 @@
               {#snippet header()}
                 <div class={css({ paddingTop: { base: '48px', md: '80px' } })}>
                   <nav class={flex({ alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginBottom: '20px' })}>
-                    <a class={flex({ alignItems: 'center', gap: '6px' })} href={$entityView.site.url}>
-                      {#if $entityView.site.logo}
+                    <a class={flex({ alignItems: 'center', gap: '6px' })} href={entityView.data.site.url}>
+                      {#if entityView.data.site.logo}
                         <Img
                           style={css.raw({ size: '18px', borderRadius: '4px', objectFit: 'cover' })}
-                          $image={$entityView.site.logo}
-                          alt={`${$entityView.site.name} 로고`}
+                          alt={`${entityView.data.site.name} 로고`}
+                          image$key={entityView.data.site.logo}
                           size={24}
                         />
                       {/if}
                       <span class={css({ fontSize: '13px', color: 'text.faint', _hover: { color: 'text.muted' } })}>
-                        {$entityView.site.name}
+                        {entityView.data.site.name}
                       </span>
                     </a>
 
-                    {#each $entityView.ancestors as ancestor (ancestor.id)}
+                    {#each entityView.data.ancestors as ancestor (ancestor.id)}
                       {#if ancestor.node.__typename === 'FolderView'}
                         <span class={css({ fontSize: '13px', color: 'text.faint' })}>/</span>
                         <a
@@ -433,9 +416,9 @@
                     </div>
 
                     <div class={flex({ align: 'center', marginLeft: 'auto', gap: '12px', color: 'text.muted' })}>
-                      <ShareLinkPopover href={$entityView.url} />
+                      <ShareLinkPopover href={entityView.data.url} />
 
-                      <DocumentActionMenu {$entityView} />
+                      <DocumentActionMenu entityView$key={entityView.data} />
                     </div>
                   </div>
 
@@ -456,17 +439,17 @@
                     width: 'full',
                   })}
                 >
-                  <DocumentEmojiReaction $documentView={document} />
+                  <DocumentEmojiReaction documentView$key={document} />
 
                   <div class={flex({ align: 'center', gap: '12px', marginLeft: 'auto', color: 'text.muted' })}>
-                    <ShareLinkPopover href={$entityView.url} />
+                    <ShareLinkPopover href={entityView.data.url} />
 
-                    <DocumentActionMenu {$entityView} />
+                    <DocumentActionMenu entityView$key={entityView.data} />
                   </div>
                 </div>
 
                 <div class={css({ paddingBottom: { base: '60px', lg: '80px' } })}>
-                  <ContentNavigation {$entityView} />
+                  <ContentNavigation entityView$key={entityView.data} />
                 </div>
               {/snippet}
             </EditorComponent>
@@ -476,21 +459,21 @@
             {#snippet header()}
               <div class={css({ paddingTop: { base: '48px', md: '80px' } })}>
                 <nav class={flex({ alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginBottom: '20px' })}>
-                  <a class={flex({ alignItems: 'center', gap: '6px' })} href={$entityView.site.url}>
-                    {#if $entityView.site.logo}
+                  <a class={flex({ alignItems: 'center', gap: '6px' })} href={entityView.data.site.url}>
+                    {#if entityView.data.site.logo}
                       <Img
                         style={css.raw({ size: '18px', borderRadius: '4px', objectFit: 'cover' })}
-                        $image={$entityView.site.logo}
-                        alt={`${$entityView.site.name} 로고`}
+                        alt={`${entityView.data.site.name} 로고`}
+                        image$key={entityView.data.site.logo}
                         size={24}
                       />
                     {/if}
                     <span class={css({ fontSize: '13px', color: 'text.faint', _hover: { color: 'text.muted' } })}>
-                      {$entityView.site.name}
+                      {entityView.data.site.name}
                     </span>
                   </a>
 
-                  {#each $entityView.ancestors as ancestor (ancestor.id)}
+                  {#each entityView.data.ancestors as ancestor (ancestor.id)}
                     {#if ancestor.node.__typename === 'FolderView'}
                       <span class={css({ fontSize: '13px', color: 'text.faint' })}>/</span>
                       <a class={css({ fontSize: '13px', color: 'text.faint', _hover: { color: 'text.muted' } })} href={`/${ancestor.slug}`}>
@@ -521,9 +504,9 @@
                   </div>
 
                   <div class={flex({ align: 'center', gap: '12px', marginLeft: 'auto', color: 'text.muted' })}>
-                    <ShareLinkPopover href={$entityView.url} />
+                    <ShareLinkPopover href={entityView.data.url} />
 
-                    <DocumentActionMenu {$entityView} />
+                    <DocumentActionMenu entityView$key={entityView.data} />
                   </div>
                 </div>
 
@@ -544,15 +527,15 @@
                   width: 'full',
                 })}
               >
-                <DocumentEmojiReaction $documentView={document} />
+                <DocumentEmojiReaction documentView$key={document} />
 
                 <div class={flex({ align: 'center', marginLeft: 'auto' })}>
-                  <ShareLinkPopover href={$entityView.url} />
+                  <ShareLinkPopover href={entityView.data.url} />
                 </div>
               </div>
 
               <div class={css({ paddingBottom: { base: '60px', lg: '80px' } })}>
-                <ContentNavigation {$entityView} />
+                <ContentNavigation entityView$key={entityView.data} />
               </div>
             {/snippet}
           </EditorComponent>
@@ -563,7 +546,7 @@
     <div class={flex({ align: 'center', justify: 'center', minHeight: '[100dvh]', fontSize: '16px', fontWeight: 'medium' })}>
       {#if document.documentBody.reason === 'REQUIRE_IDENTITY_VERIFICATION'}
         <PostViewBodyUnavailable description="본인 인증이 필요한 글이에요" icon={ShieldAlertIcon} title="연령제한글">
-          {#if $user}
+          {#if user.data}
             <Button style={css.raw({ width: 'full' })} onclick={handleVerification} variant="secondary">본인 인증</Button>
           {:else}
             <Button style={css.raw({ width: 'full' })} external href={authorizeUrl} type="link" variant="secondary">

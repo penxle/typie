@@ -1,26 +1,26 @@
 <script lang="ts">
+  import { createFragment, createSubscription } from '@mearie/svelte';
   import { findChildren, getText } from '@tiptap/core';
   import { Plugin, PluginKey } from '@tiptap/pm/state';
   import { untrack } from 'svelte';
   import { ySyncPluginKey } from 'y-prosemirror';
   import { textSerializers } from '@/pm/serializer';
-  import { fragment, graphql } from '$graphql';
+  import { graphql } from '$mearie';
   import PlanUpgradeModal from '../PlanUpgradeModal.svelte';
   import type { Editor } from '@tiptap/core';
   import type { Node } from '@tiptap/pm/model';
   import type { Ref } from '@typie/ui/utils';
-  import type { Editor_Limit_query, Editor_Limit_user } from '$graphql';
+  import type { Editor_Limit_query$key, Editor_Limit_user$key } from '$mearie';
 
   type Props = {
     editor?: Ref<Editor>;
-    $user: Editor_Limit_user;
-    $query: Editor_Limit_query;
+    user$key: Editor_Limit_user$key;
+    query$key: Editor_Limit_query$key;
   };
 
-  let { $query: _query, $user: _user, editor }: Props = $props();
+  let { query$key, user$key, editor }: Props = $props();
 
-  const query = fragment(
-    _query,
+  const query = createFragment(
     graphql(`
       fragment Editor_Limit_query on Query {
         defaultPlanRule {
@@ -29,10 +29,10 @@
         }
       }
     `),
+    () => query$key,
   );
 
-  const user = fragment(
-    _user,
+  const user = createFragment(
     graphql(`
       fragment Editor_Limit_user on User {
         id
@@ -58,29 +58,33 @@
         }
       }
     `),
+    () => user$key,
   );
 
-  const userUsageUpdateStream = graphql(`
-    subscription Editor_Limit_UserUsageUpdateStream($userId: ID!) {
-      userUsageUpdateStream(userId: $userId) {
-        id
+  createSubscription(
+    graphql(`
+      subscription Editor_Limit_UserUsageUpdateStream($userId: ID!) {
+        userUsageUpdateStream(userId: $userId) {
+          id
 
-        usage {
-          totalCharacterCount
-          totalBlobSize
+          usage {
+            totalCharacterCount
+            totalBlobSize
+          }
         }
       }
-    }
-  `);
+    `),
+    () => ({ userId: user.data.id }),
+  );
 
-  const planRule = $derived($user.subscription?.plan?.rule ?? $query.defaultPlanRule);
+  const planRule = $derived(user.data.subscription?.plan?.rule ?? query.data.defaultPlanRule);
 
   const totalCharacterCountProgress = $derived.by(() => {
     if (planRule.maxTotalCharacterCount === -1) {
       return -1;
     }
 
-    return Math.min(1, $user.usage.totalCharacterCount / planRule.maxTotalCharacterCount);
+    return Math.min(1, user.data.usage.totalCharacterCount / planRule.maxTotalCharacterCount);
   });
 
   const totalBlobSizeProgress = $derived.by(() => {
@@ -88,7 +92,7 @@
       return -1;
     }
 
-    return Math.min(1, Number($user.usage.totalBlobSize) / planRule.maxTotalBlobSize);
+    return Math.min(1, Number(user.data.usage.totalBlobSize) / planRule.maxTotalBlobSize);
   });
 
   let open = $state(false);
@@ -157,19 +161,9 @@
       };
     });
   });
-
-  $effect(() => {
-    return untrack(() => {
-      const unsubscribe = userUsageUpdateStream.subscribe({ userId: $user.id });
-
-      return () => {
-        unsubscribe();
-      };
-    });
-  });
 </script>
 
-<PlanUpgradeModal {$user} bind:open>
+<PlanUpgradeModal user$key={user.data} bind:open>
   현재 플랜의 최대 사용량을 초과했어요.
   <br />
   이어서 작성하려면 플랜을 업그레이드 해주세요.

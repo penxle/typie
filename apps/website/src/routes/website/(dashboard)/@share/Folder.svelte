@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createFragment, createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { tooltip } from '@typie/ui/actions';
@@ -15,19 +16,18 @@
   import LinkIcon from '~icons/lucide/link';
   import LockIcon from '~icons/lucide/lock';
   import Trash2Icon from '~icons/lucide/trash-2';
-  import { fragment, graphql } from '$graphql';
   import { Img } from '$lib/components';
   import { uploadBlobAsImage } from '$lib/utils';
-  import type { DashboardLayout_Share_Folder_folder } from '$graphql';
+  import { graphql } from '$mearie';
+  import type { DashboardLayout_Share_Folder_folder$key } from '$mearie';
 
   type Props = {
-    $folders: DashboardLayout_Share_Folder_folder[];
+    folders$key: DashboardLayout_Share_Folder_folder$key[];
   };
 
-  let { $folders: _folders }: Props = $props();
+  let { folders$key }: Props = $props();
 
-  const folders = fragment(
-    _folders,
+  const folders = createFragment(
     graphql(`
       fragment DashboardLayout_Share_Folder_folder on Folder {
         id
@@ -45,26 +45,24 @@
         }
       }
     `),
+    () => folders$key,
   );
 
-  const isSingleFolder = $derived($folders.length === 1);
-  const folderIds = $derived($folders.map((f) => f.id));
+  const isSingleFolder = $derived(folders.data.length === 1);
+  const folderIds = $derived(folders.data.map((f) => f.id));
 
-  const updateFoldersOption = graphql(`
-    mutation DashboardLayout_Share_Folder_UpdateFoldersOption_Mutation($input: UpdateFoldersOptionInput!) {
-      updateFoldersOption(input: $input) {
-        id
-
-        thumbnail {
+  const [updateFoldersOption] = createMutation(
+    graphql(`
+      mutation DashboardLayout_Share_Folder_UpdateFoldersOption_Mutation($input: UpdateFoldersOptionInput!) {
+        updateFoldersOption(input: $input) {
           id
-          ...Img_image
-        }
 
-        entity {
-          id
-          visibility
+          thumbnail {
+            id
+            ...Img_image
+          }
 
-          children {
+          entity {
             id
             visibility
 
@@ -75,13 +73,18 @@
               children {
                 id
                 visibility
+
+                children {
+                  id
+                  visibility
+                }
               }
             }
           }
         }
       }
-    }
-  `);
+    `),
+  );
 
   let copied = $state(false);
   let timer: NodeJS.Timeout | undefined;
@@ -96,7 +99,7 @@
     }),
     submitOn: 'change',
     onSubmit: async (data) => {
-      if ($folders.length === 0) return;
+      if (folders.data.length === 0) return;
 
       const dirtyFields = form.getDirtyFields();
       const updateData: {
@@ -109,12 +112,12 @@
       }
 
       if (Object.keys(updateData).length > 1) {
-        await updateFoldersOption(updateData);
+        await updateFoldersOption({ input: updateData });
         mixpanel.track('update_folder_option', { visibility: data.visibility, count: folderIds.length });
       }
     },
     defaultValues: {
-      visibility: $folders[0].entity.visibility,
+      visibility: folders.data[0].entity.visibility,
     },
   });
 
@@ -131,16 +134,18 @@
   });
 
   const visibilityIndeterminate = $derived(
-    $folders.length > 1 && $folders.some((f) => f.entity.visibility !== $folders[0].entity.visibility),
+    folders.data.length > 1 && folders.data.some((f) => f.entity.visibility !== folders.data[0].entity.visibility),
   );
-  const thumbnailIndeterminate = $derived($folders.length > 1 && $folders.some((f) => f.thumbnail?.id !== $folders[0].thumbnail?.id));
+  const thumbnailIndeterminate = $derived(
+    folders.data.length > 1 && folders.data.some((f) => f.thumbnail?.id !== folders.data[0].thumbnail?.id),
+  );
 
   const handleCopyLink = () => {
-    if ($folders.length === 0) return;
+    if (folders.data.length === 0) return;
 
-    const urls = $folders.map((f) => f.entity.url).join('\n');
+    const urls = folders.data.map((f) => f.entity.url).join('\n');
     navigator.clipboard.writeText(urls);
-    mixpanel.track('copy_folder_share_url', { count: $folders.length });
+    mixpanel.track('copy_folder_share_url', { count: folders.data.length });
 
     if (timer) {
       clearTimeout(timer);
@@ -162,8 +167,8 @@
       thumbnailUploading = true;
       try {
         const image = await uploadBlobAsImage(file);
-        await updateFoldersOption({ folderIds, thumbnailId: image.id });
-        mixpanel.track('update_folder_thumbnail', { count: $folders.length });
+        await updateFoldersOption({ input: { folderIds, thumbnailId: image.id } });
+        mixpanel.track('update_folder_thumbnail', { count: folders.data.length });
       } finally {
         thumbnailUploading = false;
       }
@@ -173,15 +178,15 @@
   };
 
   const handleThumbnailRemove = async () => {
-    await updateFoldersOption({ folderIds, thumbnailId: null });
-    mixpanel.track('remove_folder_thumbnail', { count: $folders.length });
+    await updateFoldersOption({ input: { folderIds, thumbnailId: null } });
+    mixpanel.track('remove_folder_thumbnail', { count: folders.data.length });
   };
 </script>
 
 <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '32px', paddingX: '16px', paddingY: '12px' })}>
   <div class={flex({ gap: '[0.5ch]', fontSize: '12px', fontWeight: 'medium' })}>
     <span class={css({ wordBreak: 'break-all', lineClamp: '1', fontWeight: 'semibold' })}>
-      {isSingleFolder ? $folders[0].name : `${$folders.length}개의 폴더`}
+      {isSingleFolder ? folders.data[0].name : `${folders.data.length}개의 폴더`}
     </span>
     <span class={css({ flexShrink: '0' })}>공유 및 게시하기</span>
   </div>
@@ -245,7 +250,7 @@
             value: EntityVisibility.PRIVATE,
           },
         ]}
-        values={$folders.map((f) => f.entity.visibility)}
+        values={folders.data.map((f) => f.entity.visibility)}
         bind:value={form.fields.visibility}
       />
     </div>
@@ -265,7 +270,7 @@
 
         recursiveState = 'inflight';
 
-        await updateFoldersOption({ folderIds, visibility: form.fields.visibility, recursive: true });
+        await updateFoldersOption({ input: { folderIds, visibility: form.fields.visibility, recursive: true } });
 
         recursiveState = 'success';
         mixpanel.track('update_folder_option', { visibility: form.fields.visibility, recursive: true });
@@ -316,7 +321,7 @@
           >
             {thumbnailUploading ? '...' : '다름'}
           </button>
-        {:else if $folders[0].thumbnail}
+        {:else if folders.data[0].thumbnail}
           <div class={flex({ alignItems: 'center', gap: '4px' })}>
             <button
               class={css({ position: 'relative', cursor: 'pointer' })}
@@ -331,8 +336,8 @@
                   borderRadius: '6px',
                   objectFit: 'cover',
                 })}
-                $image={$folders[0].thumbnail}
                 alt="썸네일"
+                image$key={folders.data[0].thumbnail}
                 size={128}
               />
             </button>

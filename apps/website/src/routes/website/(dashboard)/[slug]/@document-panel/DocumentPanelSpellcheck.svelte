@@ -1,5 +1,6 @@
 <script lang="ts">
   import { hide, inline, shift } from '@floating-ui/dom';
+  import { createFragment, createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { createFloatingActions, tooltip } from '@typie/ui/actions';
@@ -10,29 +11,28 @@
   import CircleCheckIcon from '~icons/lucide/circle-check';
   import CopyXIcon from '~icons/lucide/copy-x';
   import XIcon from '~icons/lucide/x';
-  import { fragment, graphql } from '$graphql';
-  import type { DocumentPanel_Spellcheck_document, DocumentPanel_Spellcheck_user } from '$graphql';
+  import { graphql } from '$mearie';
   import type { Editor } from '$lib/editor/editor.svelte';
+  import type { DocumentPanel_Spellcheck_document$key, DocumentPanel_Spellcheck_user$key } from '$mearie';
 
   type Props = {
-    $document: DocumentPanel_Spellcheck_document;
-    $user: DocumentPanel_Spellcheck_user;
+    document$key: DocumentPanel_Spellcheck_document$key;
+    user$key: DocumentPanel_Spellcheck_user$key;
     editor: Editor;
   };
 
-  let { $document: _document, $user: _user, editor }: Props = $props();
+  let { document$key, user$key, editor }: Props = $props();
 
-  const document = fragment(
-    _document,
+  const document = createFragment(
     graphql(`
       fragment DocumentPanel_Spellcheck_document on Document {
         id
       }
     `),
+    () => document$key,
   );
 
-  const user = fragment(
-    _user,
+  const user = createFragment(
     graphql(`
       fragment DocumentPanel_Spellcheck_user on User {
         id
@@ -41,6 +41,7 @@
         }
       }
     `),
+    () => user$key,
   );
 
   let inflight = $state(false);
@@ -54,19 +55,21 @@
   let floating: ReturnType<typeof createFloatingActions>['floating'] | undefined = $state();
   let scrollContainer: Element | undefined = $state();
 
-  const checkSpellingDocument = graphql(`
-    mutation Editor_Panel_DocumentPanelSpellcheck_CheckSpelling_Mutation($input: CheckSpellingDocumentInput!) {
-      checkSpellingDocument(input: $input) {
-        id
-        nodeId
-        startOffset
-        endOffset
-        context
-        corrections
-        explanation
+  const [checkSpellingDocument] = createMutation(
+    graphql(`
+      mutation Editor_Panel_DocumentPanelSpellcheck_CheckSpelling_Mutation($input: CheckSpellingDocumentInput!) {
+        checkSpellingDocument(input: $input) {
+          id
+          nodeId
+          startOffset
+          endOffset
+          context
+          corrections
+          explanation
+        }
       }
-    }
-  `);
+    `),
+  );
 
   const runSpellcheck = async () => {
     if (!editor || inflight) {
@@ -86,22 +89,24 @@
 
     try {
       const resp = await checkSpellingDocument({
-        documentId: $document.id,
-        text: spellcheckData.text,
-        mappings: spellcheckData.mappings,
+        input: {
+          documentId: document.data.id,
+          text: spellcheckData.text,
+          mappings: spellcheckData.mappings,
+        },
       });
 
-      editor.spellcheckErrors = resp.map((error) => ({
+      editor.spellcheckErrors = resp.checkSpellingDocument.map((error) => ({
         id: error.id,
         context: error.context,
-        corrections: error.corrections,
+        corrections: [...error.corrections],
         explanation: error.explanation,
         active: false,
       }));
 
       editor.setTrackedItems(
         0,
-        resp.map((e) => ({
+        resp.checkSpellingDocument.map((e) => ({
           id: e.id,
           nodeId: e.nodeId,
           startOffset: e.startOffset,
@@ -203,7 +208,7 @@
   });
 
   $effect(() => {
-    if (mounted && !hasChecked && $user.subscription) {
+    if (mounted && !hasChecked && user.data.subscription) {
       tick().then(() => {
         runSpellcheck();
       });

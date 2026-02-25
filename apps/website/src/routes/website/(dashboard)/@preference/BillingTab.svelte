@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { cache } from '@typie/sark/internal';
+  import { createFragment, createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Button } from '@typie/ui/components';
@@ -9,22 +9,21 @@
   import mixpanel from 'mixpanel-browser';
   import { PlanPair } from '@/const';
   import { PlanAvailability, PlanInterval, SubscriptionState } from '@/enums';
-  import { fragment, graphql } from '$graphql';
   import { SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
+  import { graphql } from '$mearie';
   import SubscriptionCelebrationModal from '../SubscriptionCelebrationModal.svelte';
   import RedeemCreditCodeModal from './RedeemCreditCodeModal.svelte';
   import SubscriptionCancellationSurveyModal from './SubscriptionCancellationSurveyModal.svelte';
   import UpdatePaymentMethodModal from './UpdatePaymentMethodModal.svelte';
-  import type { DashboardLayout_PreferenceModal_BillingTab_user } from '$graphql';
+  import type { DashboardLayout_PreferenceModal_BillingTab_user$key } from '$mearie';
 
   type Props = {
-    $user: DashboardLayout_PreferenceModal_BillingTab_user;
+    user$key: DashboardLayout_PreferenceModal_BillingTab_user$key;
   };
 
-  let { $user: _user }: Props = $props();
+  let { user$key }: Props = $props();
 
-  const user = fragment(
-    _user,
+  const user = createFragment(
     graphql(`
       fragment DashboardLayout_PreferenceModal_BillingTab_user on User {
         id
@@ -69,86 +68,101 @@
         }
       }
     `),
+    () => user$key,
   );
 
-  const isTrial = $derived($user.subscription?.plan.availability === PlanAvailability.TRIAL);
-  const canStartTrial = $derived($user.canStartTrial);
+  const isTrial = $derived(user.data.subscription?.plan.availability === PlanAvailability.TRIAL);
+  const canStartTrial = $derived(user.data.canStartTrial);
 
-  const scheduleSubscriptionCancellation = graphql(`
-    mutation DashboardLayout_PreferenceModal_BillingTab_ScheduleSubscriptionCancellation_Mutation {
-      scheduleSubscriptionCancellation {
-        id
-        state
-        expiresAt
-      }
-    }
-  `);
-
-  const cancelSubscriptionCancellation = graphql(`
-    mutation DashboardLayout_PreferenceModal_BillingTab_CancelSubscriptionCancellation_Mutation {
-      cancelSubscriptionCancellation {
-        id
-        state
-        expiresAt
-      }
-    }
-  `);
-
-  const schedulePlanChange = graphql(`
-    mutation DashboardLayout_PreferenceModal_BillingTab_SchedulePlanChange_Mutation($input: SchedulePlanChangeInput!) {
-      schedulePlanChange(input: $input) {
-        id
-        state
-        startsAt
-        expiresAt
-        plan {
+  const [scheduleSubscriptionCancellation] = createMutation(
+    graphql(`
+      mutation DashboardLayout_PreferenceModal_BillingTab_ScheduleSubscriptionCancellation_Mutation {
+        scheduleSubscriptionCancellation {
           id
-          name
-          fee
+          state
+          expiresAt
         }
       }
-    }
-  `);
+    `),
+  );
 
-  const cancelPlanChange = graphql(`
-    mutation DashboardLayout_PreferenceModal_BillingTab_CancelPlanChange_Mutation {
-      cancelPlanChange {
-        id
-        state
-        expiresAt
-      }
-    }
-  `);
-
-  const recordSurvey = graphql(`
-    mutation DashboardLayout_PreferenceModal_BillingTab_RecordSurvey_Mutation($input: RecordSurveyInput!) {
-      recordSurvey(input: $input) {
-        id
-      }
-    }
-  `);
-
-  const subscribePlanWithTrial = graphql(`
-    mutation DashboardLayout_PreferenceModal_BillingTab_SubscribePlanWithTrial_Mutation {
-      subscribePlanWithTrial {
-        id
-        state
-        expiresAt
-
-        plan {
+  const [cancelSubscriptionCancellation] = createMutation(
+    graphql(`
+      mutation DashboardLayout_PreferenceModal_BillingTab_CancelSubscriptionCancellation_Mutation {
+        cancelSubscriptionCancellation {
           id
-          name
-          availability
+          state
+          expiresAt
         }
       }
-    }
-  `);
+    `),
+  );
 
-  const deleteBillingKey = graphql(`
-    mutation DashboardLayout_PreferenceModal_BillingTab_DeleteBillingKey_Mutation {
-      deleteBillingKey
-    }
-  `);
+  const [schedulePlanChange] = createMutation(
+    graphql(`
+      mutation DashboardLayout_PreferenceModal_BillingTab_SchedulePlanChange_Mutation($input: SchedulePlanChangeInput!) {
+        schedulePlanChange(input: $input) {
+          id
+          state
+          startsAt
+          expiresAt
+          plan {
+            id
+            name
+            fee
+          }
+        }
+      }
+    `),
+  );
+
+  const [cancelPlanChange] = createMutation(
+    graphql(`
+      mutation DashboardLayout_PreferenceModal_BillingTab_CancelPlanChange_Mutation {
+        cancelPlanChange {
+          id
+          state
+          expiresAt
+        }
+      }
+    `),
+  );
+
+  const [recordSurvey] = createMutation(
+    graphql(`
+      mutation DashboardLayout_PreferenceModal_BillingTab_RecordSurvey_Mutation($input: RecordSurveyInput!) {
+        recordSurvey(input: $input) {
+          id
+        }
+      }
+    `),
+  );
+
+  const [subscribePlanWithTrial] = createMutation(
+    graphql(`
+      mutation DashboardLayout_PreferenceModal_BillingTab_SubscribePlanWithTrial_Mutation {
+        subscribePlanWithTrial {
+          id
+          state
+          expiresAt
+
+          plan {
+            id
+            name
+            availability
+          }
+        }
+      }
+    `),
+  );
+
+  const [deleteBillingKey] = createMutation(
+    graphql(`
+      mutation DashboardLayout_PreferenceModal_BillingTab_DeleteBillingKey_Mutation {
+        deleteBillingKey
+      }
+    `),
+  );
 
   let updatePaymentMethodOpen = $state(false);
   let updatePaymentMethodMode = $state<'register' | 'subscribe'>('register');
@@ -158,8 +172,10 @@
 
   async function handleCancellationSurveySubmit(surveyData: unknown) {
     await recordSurvey({
-      name: 'subscription_cancellation_202510',
-      value: surveyData,
+      input: {
+        name: 'subscription_cancellation_202510',
+        value: surveyData,
+      },
     });
 
     await scheduleSubscriptionCancellation();
@@ -179,7 +195,7 @@
   <div>
     <h2 class={css({ fontSize: '16px', fontWeight: 'semibold', color: 'text.default', marginBottom: '24px' })}>현재 플랜</h2>
 
-    {#if !$user.subscription}
+    {#if !user.data.subscription}
       <SettingsCard>
         <SettingsRow>
           {#snippet label()}
@@ -199,8 +215,8 @@
                       actionLabel: '시작하기',
                       actionHandler: async () => {
                         await subscribePlanWithTrial();
-                        cache.invalidate({ __typename: 'User', id: $user.id, field: 'subscription' });
-                        cache.invalidate({ __typename: 'User', id: $user.id, field: 'canStartTrial' });
+                        //                         cache.invalidate({ __typename: 'User', id: user.data.id, field: 'subscription' });
+                        //                         cache.invalidate({ __typename: 'User', id: user.data.id, field: 'canStartTrial' });
                         mixpanel.track('start_trial');
                         trialStartedModalOpen = true;
                       },
@@ -227,7 +243,7 @@
         </SettingsRow>
       </SettingsCard>
     {:else}
-      {@const subscription = $user.subscription}
+      {@const subscription = user.data.subscription}
       <SettingsCard>
         <SettingsRow>
           {#snippet label()}
@@ -253,7 +269,7 @@
           {/snippet}
         </SettingsRow>
 
-        {#if subscription.state === SubscriptionState.ACTIVE && !$user.nextSubscription && PlanPair[subscription.plan.id as keyof typeof PlanPair]}
+        {#if subscription.state === SubscriptionState.ACTIVE && !user.data.nextSubscription && PlanPair[subscription.plan.id as keyof typeof PlanPair]}
           <SettingsDivider />
 
           <SettingsRow>
@@ -276,9 +292,9 @@
                       : `다음 결제일(${dayjs(subscription.expiresAt).formatAsDate()})부터 월간 플랜(4,900원/월)이 적용돼요.`,
                     actionLabel: '전환하기',
                     actionHandler: async () => {
-                      await schedulePlanChange({ planId: targetPlanId });
-                      cache.invalidate({ __typename: 'User', id: $user.id, field: 'subscription' });
-                      cache.invalidate({ __typename: 'User', id: $user.id, field: 'nextSubscription' });
+                      await schedulePlanChange({ input: { planId: targetPlanId } });
+                      //                       cache.invalidate({ __typename: 'User', id: user.data.id, field: 'subscription' });
+                      //                       cache.invalidate({ __typename: 'User', id: user.data.id, field: 'nextSubscription' });
                       mixpanel.track('change_plan', {
                         from: isMonthly ? 'monthly' : 'yearly',
                         to: isMonthly ? 'yearly' : 'monthly',
@@ -296,7 +312,7 @@
           </SettingsRow>
         {/if}
 
-        {#if subscription.state === SubscriptionState.WILL_EXPIRE && !$user.nextSubscription}
+        {#if subscription.state === SubscriptionState.WILL_EXPIRE && !user.data.nextSubscription}
           <SettingsDivider />
 
           {#if isTrial}
@@ -353,8 +369,8 @@
         {/if}
       </SettingsCard>
 
-      {#if $user.nextSubscription}
-        {@const nextSubscription = $user.nextSubscription}
+      {#if user.data.nextSubscription}
+        {@const nextSubscription = user.data.nextSubscription}
         <div class={css({ marginTop: '16px' })}>
           <p class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.default', marginBottom: '12px' })}>다음 플랜 (예정)</p>
           <SettingsCard>
@@ -374,8 +390,8 @@
                       actionLabel: '전환 취소',
                       actionHandler: async () => {
                         await cancelPlanChange();
-                        cache.invalidate({ __typename: 'User', id: $user.id, field: 'subscription' });
-                        cache.invalidate({ __typename: 'User', id: $user.id, field: 'nextSubscription' });
+                        //                         cache.invalidate({ __typename: 'User', id: user.data.id, field: 'subscription' });
+                        //                         cache.invalidate({ __typename: 'User', id: user.data.id, field: 'nextSubscription' });
                         mixpanel.track('cancel_plan_change');
                         Toast.success('플랜 전환이 취소되었어요');
                       },
@@ -404,8 +420,8 @@
           결제 카드
         {/snippet}
         {#snippet description()}
-          {#if $user.billingKey}
-            {$user.billingKey.name}
+          {#if user.data.billingKey}
+            {user.data.billingKey.name}
           {:else}
             등록된 카드가 없어요.
           {/if}
@@ -420,9 +436,9 @@
               size="sm"
               variant="secondary"
             >
-              {$user.billingKey ? '변경' : '카드 등록'}
+              {user.data.billingKey ? '변경' : '카드 등록'}
             </Button>
-            {#if $user.billingKey && (!$user.subscription || isTrial)}
+            {#if user.data.billingKey && (!user.data.subscription || isTrial)}
               <Button
                 onclick={() => {
                   Dialog.confirm({
@@ -432,7 +448,7 @@
                     actionLabel: '삭제',
                     actionHandler: async () => {
                       await deleteBillingKey();
-                      cache.invalidate({ __typename: 'User', id: $user.id, field: 'billingKey' });
+                      //                       cache.invalidate({ __typename: 'User', id: user.data.id, field: 'billingKey' });
                       mixpanel.track('delete_billing_key');
                       Toast.success('카드가 삭제되었어요');
                     },
@@ -459,7 +475,7 @@
             구독료 결제 시 크레딧이 있으면 우선 차감돼요.
           {/snippet}
           {#snippet value()}
-            <span>{comma($user.credit)}원</span>
+            <span>{comma(user.data.credit)}원</span>
           {/snippet}
         </SettingsRow>
 
@@ -480,7 +496,7 @@
     </div>
   </div>
 
-  {#if $user.subscription?.state === SubscriptionState.ACTIVE || $user.subscription?.state === SubscriptionState.IN_GRACE_PERIOD}
+  {#if user.data.subscription?.state === SubscriptionState.ACTIVE || user.data.subscription?.state === SubscriptionState.IN_GRACE_PERIOD}
     <!-- Subscription Cancellation Section -->
     <div>
       <h2 class={css({ fontSize: '16px', fontWeight: 'semibold', color: 'text.default', marginBottom: '24px' })}>구독 해지</h2>
@@ -510,9 +526,9 @@
   {/if}
 </div>
 
-<UpdatePaymentMethodModal {$user} mode={updatePaymentMethodMode} bind:open={updatePaymentMethodOpen} />
+<UpdatePaymentMethodModal mode={updatePaymentMethodMode} user$key={user.data} bind:open={updatePaymentMethodOpen} />
 <RedeemCreditCodeModal bind:open={redeemCreditCodeOpen} />
-<SubscriptionCancellationSurveyModal {$user} onSubmit={handleCancellationSurveySubmit} bind:open={cancellationSurveyOpen} />
+<SubscriptionCancellationSurveyModal onSubmit={handleCancellationSurveySubmit} user$key={user.data} bind:open={cancellationSurveyOpen} />
 <SubscriptionCelebrationModal
   message="2주간 타이피의 모든 기능을 자유롭게 이용해보세요."
   title="무료 체험이 시작됐어요!"

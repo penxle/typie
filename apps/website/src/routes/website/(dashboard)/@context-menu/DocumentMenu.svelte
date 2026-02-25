@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { HorizontalDivider, Icon, MenuItem } from '@typie/ui/components';
@@ -20,7 +21,8 @@
   import Rows2Icon from '~icons/lucide/rows-2';
   import TrashIcon from '~icons/lucide/trash';
   import { goto } from '$app/navigation';
-  import { graphql } from '$graphql';
+  import { unwrapError } from '$lib/graphql';
+  import { graphql } from '$mearie';
   import { getSplitViewContext, getViewContext } from '../[slug]/@split-view/context.svelte';
   import DocumentPdfExportModal from './DocumentPdfExportModal.svelte';
   import type { Snippet } from 'svelte';
@@ -53,77 +55,84 @@
 
   let pdfExportModalOpen = $state(false);
 
-  const deleteDocument = graphql(`
-    mutation DocumentMenu_DeleteDocument_Mutation($input: DeleteDocumentInput!) {
-      deleteDocument(input: $input) {
-        id
-
-        entity {
+  const [deleteDocument] = createMutation(
+    graphql(`
+      mutation DocumentMenu_DeleteDocument_Mutation($input: DeleteDocumentInput!) {
+        deleteDocument(input: $input) {
           id
 
-          site {
-            id
-          }
-
-          user {
+          entity {
             id
 
-            recentlyViewedEntities {
+            site {
               id
+            }
+
+            user {
+              id
+
+              recentlyViewedEntities {
+                id
+              }
             }
           }
         }
       }
-    }
-  `);
+    `),
+  );
 
-  const duplicateDocument = graphql(`
-    mutation DocumentMenu_DuplicateDocument_Mutation($input: DuplicateDocumentInput!) {
-      duplicateDocument(input: $input) {
-        id
-
-        entity {
+  const [duplicateDocument] = createMutation(
+    graphql(`
+      mutation DocumentMenu_DuplicateDocument_Mutation($input: DuplicateDocumentInput!) {
+        duplicateDocument(input: $input) {
           id
-          slug
+
+          entity {
+            id
+            slug
+          }
         }
       }
-    }
-  `);
+    `),
+  );
 
-  const updateDocumentType = graphql(`
-    mutation DocumentMenu_UpdateDocumentType_Mutation($input: UpdateDocumentTypeInput!) {
-      updateDocumentType(input: $input) {
-        id
-        type
-
-        entity {
+  const [updateDocumentType] = createMutation(
+    graphql(`
+      mutation DocumentMenu_UpdateDocumentType_Mutation($input: UpdateDocumentTypeInput!) {
+        updateDocumentType(input: $input) {
           id
+          type
 
-          site {
+          entity {
             id
 
-            documentTemplates {
+            site {
               id
+
+              documentTemplates {
+                id
+              }
             }
           }
         }
       }
-    }
-  `);
+    `),
+  );
 
   const handleDuplicate = async () => {
     try {
-      const resp = await duplicateDocument({ documentId: document.id });
+      const resp = await duplicateDocument({ input: { documentId: document.id } });
       mixpanel.track('duplicate_document', { via });
-      await goto(`/${resp.entity.slug}`);
+      await goto(`/${resp.duplicateDocument.entity.slug}`);
     } catch (err) {
       const errorMessages: Record<string, string> = {
         character_count_limit_exceeded: '현재 플랜의 글자 수 제한을 초과했어요.',
         blob_size_limit_exceeded: '현재 플랜의 파일 크기 제한을 초과했어요.',
       };
 
-      if (err instanceof TypieError) {
-        const message = errorMessages[err.code] || err.code;
+      const error = unwrapError(err);
+      if (error instanceof TypieError) {
+        const message = errorMessages[error.code] || error.code;
         Toast.error(message);
       }
     }
@@ -137,7 +146,7 @@
       action: 'danger',
       actionLabel: '삭제',
       actionHandler: async () => {
-        await deleteDocument({ documentId: document.id });
+        await deleteDocument({ input: { documentId: document.id } });
         mixpanel.track('delete_document', { via });
       },
     });
@@ -153,7 +162,7 @@
         : '이 템플릿을 다시 일반 문서로 전환하시겠어요?',
       actionLabel: '전환',
       actionHandler: async () => {
-        await updateDocumentType({ documentId: document.id, type: newType });
+        await updateDocumentType({ input: { documentId: document.id, type: newType } });
       },
     });
   };

@@ -1,25 +1,26 @@
 <script lang="ts">
+  import { createFragment } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { comma } from '@typie/ui/utils';
-  import { fragment, graphql } from '$graphql';
   import { SettingsCard, SettingsRow } from '$lib/components';
-  import type { DashboardLayout_PreferenceModal_RevenueTab_user } from '$graphql';
+  import { graphql } from '$mearie';
+  import type { DashboardLayout_PreferenceModal_RevenueTab_user$key } from '$mearie';
 
   type Props = {
-    $user: DashboardLayout_PreferenceModal_RevenueTab_user;
+    user$key: DashboardLayout_PreferenceModal_RevenueTab_user$key;
   };
 
-  let { $user: _user }: Props = $props();
+  let { user$key }: Props = $props();
 
-  const user = fragment(
-    _user,
+  const user = createFragment(
     graphql(`
       fragment DashboardLayout_PreferenceModal_RevenueTab_user on User {
         id
         revenue
       }
     `),
+    () => user$key,
   );
 </script>
 
@@ -40,7 +41,7 @@
           유료 콘텐츠 판매로 얻은 수익이에요.
         {/snippet}
         {#snippet value()}
-          <span class={css({ fontSize: '16px', fontWeight: 'semibold' })}>{comma($user.revenue)}원</span>
+          <span class={css({ fontSize: '16px', fontWeight: 'semibold' })}>{comma(user.data.revenue)}원</span>
         {/snippet}
       </SettingsRow>
     </SettingsCard>

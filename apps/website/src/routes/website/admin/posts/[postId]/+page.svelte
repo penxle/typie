@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex, grid } from '@typie/styled-system/patterns';
   import { comma } from '@typie/ui/utils';
@@ -7,77 +8,24 @@
   import ChevronRightIcon from '~icons/lucide/chevron-right';
   import EditIcon from '~icons/lucide/edit';
   import EyeIcon from '~icons/lucide/eye';
-  import { graphql } from '$graphql';
   import { AdminIcon } from '$lib/components/admin';
+  import { hydrateQuery } from '$lib/graphql';
+  import { graphql } from '$mearie';
 
-  const query = graphql(`
-    query AdminPost_Query($postId: String!) {
-      adminPost(postId: $postId) {
-        id
-        title
-        subtitle
-        type
-        contentRating
-        allowReaction
-        protectContent
-        createdAt
-        updatedAt
-        excerpt
-        password
-        coverImage {
-          id
-          url
-        }
-        entity {
-          id
-          slug
-          url
-          visibility
-          state
-          ancestors {
-            id
-            node {
-              __typename
-              ... on Folder {
-                name
-              }
-              ... on Post {
-                title
-              }
-              ... on Document {
-                title
-              }
-            }
-          }
-          user {
-            id
-            name
-            email
-            avatar {
-              id
-              url
-            }
-            postCount
-            subscription {
-              id
-              state
-            }
-          }
-        }
-        reactionCount
-        characterCount
+  let { data } = $props();
+
+  const query = $derived(hydrateQuery(() => data.query));
+
+  const [adminEnqueuePostCompact] = createMutation(
+    graphql(`
+      mutation AdminPostDetail_AdminEnqueuePostCompact_Mutation($input: AdminEnqueuePostCompactInput!) {
+        adminEnqueuePostCompact(input: $input)
       }
-    }
-  `);
-
-  const adminEnqueuePostCompact = graphql(`
-    mutation AdminPostDetail_AdminEnqueuePostCompact_Mutation($input: AdminEnqueuePostCompactInput!) {
-      adminEnqueuePostCompact(input: $input)
-    }
-  `);
+    `),
+  );
 </script>
 
-{#if $query.adminPost}
+{#if query.data.adminPost}
   <div class={flex({ flexDirection: 'column', gap: '24px', color: 'amber.500' })}>
     <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
       <div class={flex({ alignItems: 'center', gap: '12px' })}>
@@ -125,7 +73,7 @@
               color: 'gray.900',
             },
           })}
-          href={$query.adminPost.entity.url}
+          href={query.data.adminPost.entity.url}
           rel="noopener noreferrer"
           target="_blank"
         >
@@ -150,7 +98,7 @@
               color: 'gray.900',
             },
           })}
-          href="/{$query.adminPost.entity.slug}"
+          href="/{query.data.adminPost.entity.slug}"
           rel="noopener noreferrer"
           target="_blank"
         >
@@ -180,7 +128,7 @@
         >
           <h3 class={css({ fontSize: '16px', color: 'amber.500', marginBottom: '20px' })}>CONTENT</h3>
 
-          {#if $query.adminPost.coverImage?.url}
+          {#if query.data.adminPost.coverImage?.url}
             <div class={css({ marginBottom: '20px' })}>
               <img
                 class={css({
@@ -189,8 +137,8 @@
                   objectFit: 'cover',
                   borderRadius: '8px',
                 })}
-                alt={$query.adminPost.title}
-                src={$query.adminPost.coverImage.url}
+                alt={query.data.adminPost.title}
+                src={query.data.adminPost.coverImage.url}
               />
             </div>
           {/if}
@@ -199,14 +147,14 @@
             <div>
               <div class={css({ fontSize: '11px', color: 'amber.400', marginBottom: '4px' })}>TITLE</div>
               <div class={css({ fontSize: '14px', color: 'amber.500' })}>
-                {$query.adminPost.title}
+                {query.data.adminPost.title}
               </div>
             </div>
 
             <div>
               <div class={css({ fontSize: '11px', color: 'amber.400', marginBottom: '4px' })}>SUBTITLE</div>
-              <div class={css({ fontSize: '12px', color: $query.adminPost.subtitle ? 'amber.500' : 'gray.400' })}>
-                {$query.adminPost.subtitle || '(NO SUBTITLE)'}
+              <div class={css({ fontSize: '12px', color: query.data.adminPost.subtitle ? 'amber.500' : 'gray.400' })}>
+                {query.data.adminPost.subtitle || '(NO SUBTITLE)'}
               </div>
             </div>
 
@@ -216,18 +164,18 @@
                 class={css({
                   fontSize: '12px',
                   fontFamily: 'mono',
-                  color: $query.adminPost.excerpt ? 'amber.500' : 'gray.400',
+                  color: query.data.adminPost.excerpt ? 'amber.500' : 'gray.400',
                   lineHeight: '[1.5]',
                 })}
               >
-                {$query.adminPost.excerpt || '(NO EXCERPT)'}
+                {query.data.adminPost.excerpt || '(NO EXCERPT)'}
               </div>
             </div>
 
             <div>
               <div class={css({ fontSize: '11px', color: 'amber.400', marginBottom: '4px' })}>CHARACTERS</div>
               <div class={css({ fontSize: '12px', color: 'amber.500' })}>
-                {comma($query.adminPost.characterCount)}
+                {comma(query.data.adminPost.characterCount)}
               </div>
             </div>
           </div>
@@ -251,14 +199,14 @@
             <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
               <span class={css({ fontSize: '11px', color: 'amber.400' })}>POST ID</span>
               <span class={css({ fontSize: '12px', color: 'amber.500' })}>
-                {$query.adminPost.id}
+                {query.data.adminPost.id}
               </span>
             </div>
 
             <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
               <span class={css({ fontSize: '11px', color: 'amber.400' })}>TYPE</span>
               <span class={css({ fontSize: '12px', color: 'amber.500' })}>
-                [{$query.adminPost.type}]
+                [{query.data.adminPost.type}]
               </span>
             </div>
 
@@ -267,24 +215,24 @@
               <span
                 class={css({
                   fontSize: '12px',
-                  color: $query.adminPost.entity.state === 'ACTIVE' ? 'green.400' : 'red.400',
+                  color: query.data.adminPost.entity.state === 'ACTIVE' ? 'green.400' : 'red.400',
                 })}
               >
-                [{$query.adminPost.entity.state}]
+                [{query.data.adminPost.entity.state}]
               </span>
             </div>
 
             <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
               <span class={css({ fontSize: '11px', color: 'amber.400' })}>CREATED</span>
               <span class={css({ fontSize: '12px', color: 'amber.500' })}>
-                {dayjs($query.adminPost.createdAt).formatAsDateTime()}
+                {dayjs(query.data.adminPost.createdAt).formatAsDateTime()}
               </span>
             </div>
 
             <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
               <span class={css({ fontSize: '11px', color: 'amber.400' })}>UPDATED</span>
               <span class={css({ fontSize: '12px', color: 'amber.500' })}>
-                {dayjs($query.adminPost.updatedAt).formatAsDateTime()}
+                {dayjs(query.data.adminPost.updatedAt).formatAsDateTime()}
               </span>
             </div>
           </div>
@@ -302,12 +250,12 @@
           <h3 class={css({ fontSize: '16px', color: 'amber.500', marginBottom: '20px' })}>PATH</h3>
 
           <div class={flex({ fontSize: '12px', color: 'amber.400', alignItems: 'center', gap: '4px' })}>
-            {#if $query.adminPost.entity.ancestors.length > 0}
-              {#each $query.adminPost.entity.ancestors as ancestor, i (ancestor.id)}
+            {#if query.data.adminPost.entity.ancestors.length > 0}
+              {#each query.data.adminPost.entity.ancestors as ancestor, i (ancestor.id)}
                 <span>
                   {ancestor.node.__typename === 'Folder' ? ancestor.node.name : ancestor.node.title}
                 </span>
-                {#if i < $query.adminPost.entity.ancestors.length - 1}
+                {#if i < query.data.adminPost.entity.ancestors.length - 1}
                   <AdminIcon icon={ChevronRightIcon} size={12} />
                 {/if}
               {/each}
@@ -318,7 +266,7 @@
         </div>
 
         <!-- USER -->
-        {#if $query.adminPost.entity?.user}
+        {#if query.data.adminPost.entity?.user}
           <div
             class={css({
               borderWidth: '2px',
@@ -338,8 +286,8 @@
                   flexShrink: '0',
                 })}
               >
-                {#if $query.adminPost.entity.user.avatar?.url}
-                  <img alt={$query.adminPost.entity.user.name} src={$query.adminPost.entity.user.avatar.url} />
+                {#if query.data.adminPost.entity.user.avatar?.url}
+                  <img alt={query.data.adminPost.entity.user.name} src={query.data.adminPost.entity.user.avatar.url} />
                 {/if}
               </div>
               <div class={flex({ flexDirection: 'column', gap: '2px' })}>
@@ -350,12 +298,12 @@
                     color: 'amber.500',
                     _hover: { textDecoration: 'underline' },
                   })}
-                  href="/admin/users/{$query.adminPost.entity.user.id}"
+                  href="/admin/users/{query.data.adminPost.entity.user.id}"
                 >
-                  {$query.adminPost.entity.user.name}
+                  {query.data.adminPost.entity.user.name}
                 </a>
                 <div class={css({ fontSize: '11px', color: 'amber.400' })}>
-                  {$query.adminPost.entity.user.email}
+                  {query.data.adminPost.entity.user.email}
                 </div>
               </div>
             </div>
@@ -380,21 +328,21 @@
                 class={css({
                   fontSize: '12px',
                   color:
-                    $query.adminPost.entity.visibility === 'UNLISTED'
+                    query.data.adminPost.entity.visibility === 'UNLISTED'
                       ? 'green.400'
-                      : $query.adminPost.entity.visibility === 'PUBLIC'
+                      : query.data.adminPost.entity.visibility === 'PUBLIC'
                         ? 'blue.400'
                         : 'gray.400',
                 })}
               >
-                [{$query.adminPost.entity.visibility}]
+                [{query.data.adminPost.entity.visibility}]
               </span>
             </div>
 
             <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
               <span class={css({ fontSize: '11px', color: 'amber.400' })}>PASSWORD</span>
-              <span class={css({ fontSize: '12px', color: $query.adminPost.password ? 'amber.500' : 'gray.400' })}>
-                {$query.adminPost.password || 'NONE'}
+              <span class={css({ fontSize: '12px', color: query.data.adminPost.password ? 'amber.500' : 'gray.400' })}>
+                {query.data.adminPost.password || 'NONE'}
               </span>
             </div>
 
@@ -404,28 +352,28 @@
                 class={css({
                   fontSize: '12px',
                   color:
-                    $query.adminPost.contentRating === 'ALL'
+                    query.data.adminPost.contentRating === 'ALL'
                       ? 'green.400'
-                      : $query.adminPost.contentRating === 'R15'
+                      : query.data.adminPost.contentRating === 'R15'
                         ? 'blue.400'
                         : 'red.400',
                 })}
               >
-                [{$query.adminPost.contentRating}]
+                [{query.data.adminPost.contentRating}]
               </span>
             </div>
 
             <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
               <span class={css({ fontSize: '11px', color: 'amber.400' })}>REACTIONS</span>
-              <span class={css({ fontSize: '12px', color: $query.adminPost.allowReaction ? 'green.400' : 'gray.400' })}>
-                {$query.adminPost.allowReaction ? 'ALLOWED' : 'DISABLED'}
+              <span class={css({ fontSize: '12px', color: query.data.adminPost.allowReaction ? 'green.400' : 'gray.400' })}>
+                {query.data.adminPost.allowReaction ? 'ALLOWED' : 'DISABLED'}
               </span>
             </div>
 
             <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
               <span class={css({ fontSize: '11px', color: 'amber.400' })}>CONTENT COPY</span>
-              <span class={css({ fontSize: '12px', color: $query.adminPost.protectContent ? 'amber.500' : 'gray.400' })}>
-                {$query.adminPost.protectContent ? 'PROTECTED' : 'ALLOWED'}
+              <span class={css({ fontSize: '12px', color: query.data.adminPost.protectContent ? 'amber.500' : 'gray.400' })}>
+                {query.data.adminPost.protectContent ? 'PROTECTED' : 'ALLOWED'}
               </span>
             </div>
           </div>
@@ -445,7 +393,7 @@
           <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
             <span class={css({ fontSize: '11px', color: 'amber.400' })}>REACTIONS</span>
             <span class={css({ fontSize: '12px', color: 'amber.500' })}>
-              {$query.adminPost.reactionCount}
+              {query.data.adminPost.reactionCount}
             </span>
           </div>
         </div>
@@ -480,7 +428,7 @@
               },
             })}
             onclick={() =>
-              adminEnqueuePostCompact({ postId: $query.adminPost.id }).then(
+              adminEnqueuePostCompact({ input: { postId: query.data.adminPost.id } }).then(
                 () => {
                   alert('Compact Enqueue OK');
                 },

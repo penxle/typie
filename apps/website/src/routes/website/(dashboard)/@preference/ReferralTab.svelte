@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createFragment, createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Button, Icon } from '@typie/ui/components';
@@ -8,18 +9,17 @@
   import CopyIcon from '~icons/lucide/copy';
   import GiftIcon from '~icons/lucide/gift';
   import UsersIcon from '~icons/lucide/users';
-  import { fragment, graphql } from '$graphql';
   import { SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
-  import type { DashboardLayout_PreferenceModal_ReferralTab_user } from '$graphql';
+  import { graphql } from '$mearie';
+  import type { DashboardLayout_PreferenceModal_ReferralTab_user$key } from '$mearie';
 
   type Props = {
-    $user: DashboardLayout_PreferenceModal_ReferralTab_user;
+    user$key: DashboardLayout_PreferenceModal_ReferralTab_user$key;
   };
 
-  let { $user: _user }: Props = $props();
+  let { user$key }: Props = $props();
 
-  const user = fragment(
-    _user,
+  const user = createFragment(
     graphql(`
       fragment DashboardLayout_PreferenceModal_ReferralTab_user on User {
         id
@@ -30,13 +30,16 @@
         }
       }
     `),
+    () => user$key,
   );
 
-  const issueReferralUrl = graphql(`
-    mutation DashboardLayout_PreferenceModal_ReferralTab_IssueReferralUrl_Mutation {
-      issueReferralUrl
-    }
-  `);
+  const [issueReferralUrl] = createMutation(
+    graphql(`
+      mutation DashboardLayout_PreferenceModal_ReferralTab_IssueReferralUrl_Mutation {
+        issueReferralUrl
+      }
+    `),
+  );
 
   const copyReferralUrl = async () => {
     const referralUrl = await issueReferralUrl();
@@ -93,7 +96,7 @@
           </div>
         {/snippet}
         {#snippet value()}
-          <span>{comma($user.referrals.length)}명</span>
+          <span>{comma(user.data.referrals.length)}명</span>
         {/snippet}
       </SettingsRow>
 
@@ -108,8 +111,8 @@
         {/snippet}
         {#snippet value()}
           <span>
-            {#if $user.referrals.some((referral) => referral.compensated)}
-              {comma($user.referrals.filter((referral) => referral.compensated).length * 4900)}원
+            {#if user.data.referrals.some((referral) => referral.compensated)}
+              {comma(user.data.referrals.filter((referral) => referral.compensated).length * 4900)}원
             {:else}
               없음
             {/if}

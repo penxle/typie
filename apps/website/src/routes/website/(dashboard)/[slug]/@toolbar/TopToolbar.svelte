@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createFragment } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { DropdownMenu, DropdownMenuItem, VerticalDivider } from '@typie/ui/components';
@@ -22,7 +23,7 @@
   import StickyNoteIcon from '~icons/lucide/sticky-note';
   import TableIcon from '~icons/lucide/table';
   import HorizontalRuleIcon from '~icons/typie/horizontal-rule';
-  import { fragment, graphql } from '$graphql';
+  import { graphql } from '$mearie';
   import ToolbarButton from './ToolbarButton.svelte';
   import ToolbarDropdownButton from './ToolbarDropdownButton.svelte';
   import ToolbarIcon from './ToolbarIcon.svelte';
@@ -30,18 +31,17 @@
   import type { Editor } from '@tiptap/core';
   import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { Ref } from '@typie/ui/utils';
-  import type { Editor_TopToolbar_site } from '$graphql';
+  import type { Editor_TopToolbar_site$key } from '$mearie';
 
   type Props = {
-    $site: Editor_TopToolbar_site;
+    site$key: Editor_TopToolbar_site$key;
     editor?: Ref<Editor>;
     style?: SystemStyleObject;
   };
 
-  let { $site: _site, editor, style }: Props = $props();
+  let { site$key, editor, style }: Props = $props();
 
-  const site = fragment(
-    _site,
+  const site = createFragment(
     graphql(`
       fragment Editor_TopToolbar_site on Site {
         id
@@ -56,6 +56,7 @@
         }
       }
     `),
+    () => site$key,
   );
 
   const app = getAppContext();
@@ -266,12 +267,12 @@
   <VerticalDivider style={css.raw({ height: '[80%]', marginX: '12px' })} />
 
   <div class={flex({ alignItems: 'center', gap: '4px' })}>
-    <ToolbarPanelTabButton $user={$site.user} icon={InfoIcon} label="정보" tab="info" />
-    <ToolbarPanelTabButton $user={$site.user} icon={StickyNoteIcon} label="노트" tab="note" />
-    <ToolbarPanelTabButton $user={$site.user} icon={BookmarkIcon} label="북마크" tab="anchors" />
-    <ToolbarPanelTabButton $user={$site.user} icon={SpellCheckIcon} label="맞춤법" needSubscription tab="spellcheck" />
-    <ToolbarPanelTabButton $user={$site.user} icon={LightbulbIcon} label="AI 피드백" needSubscription tab="ai" />
-    <ToolbarPanelTabButton $user={$site.user} icon={ClockFadingIcon} label="타임라인" tab="timeline" />
-    <ToolbarPanelTabButton $user={$site.user} icon={SettingsIcon} label="본문 설정" tab="settings" />
+    <ToolbarPanelTabButton icon={InfoIcon} label="정보" tab="info" user$key={site.data.user} />
+    <ToolbarPanelTabButton icon={StickyNoteIcon} label="노트" tab="note" user$key={site.data.user} />
+    <ToolbarPanelTabButton icon={BookmarkIcon} label="북마크" tab="anchors" user$key={site.data.user} />
+    <ToolbarPanelTabButton icon={SpellCheckIcon} label="맞춤법" needSubscription tab="spellcheck" user$key={site.data.user} />
+    <ToolbarPanelTabButton icon={LightbulbIcon} label="AI 피드백" needSubscription tab="ai" user$key={site.data.user} />
+    <ToolbarPanelTabButton icon={ClockFadingIcon} label="타임라인" tab="timeline" user$key={site.data.user} />
+    <ToolbarPanelTabButton icon={SettingsIcon} label="본문 설정" tab="settings" user$key={site.data.user} />
   </div>
 </div>

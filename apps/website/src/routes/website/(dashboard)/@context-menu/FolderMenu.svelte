@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createMutation, createQuery } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { HorizontalDivider, Icon, MenuItem, RingSpinner } from '@typie/ui/components';
@@ -19,7 +20,7 @@
   import TrashIcon from '~icons/lucide/trash';
   import TriangleAlertIcon from '~icons/lucide/triangle-alert';
   import { goto } from '$app/navigation';
-  import { graphql } from '$graphql';
+  import { graphql } from '$mearie';
   import { maxDepth } from '../@tree/utils';
 
   type Props = {
@@ -43,68 +44,83 @@
 
   let { folder, entity, via, onRename, open }: Props = $props();
 
-  const descendants = graphql(`
-    query FolderMenu_Descendants_Query($entityId: ID!) @client {
-      entity(entityId: $entityId) {
-        id
+  let descendantsEntityId = $state<string | null>(null);
 
-        descendants {
-          id
-          type
-        }
-      }
-    }
-  `);
-
-  const info = graphql(`
-    query FolderMenu_Info_Query($folderId: ID!) @client {
-      folder(id: $folderId) {
-        id
-        characterCount
-        folderCount
-        documentCount
-      }
-    }
-  `);
-
-  const createDocument = graphql(`
-    mutation FolderMenu_CreateDocument_Mutation($input: CreateDocumentInput!) {
-      createDocument(input: $input) {
-        id
-
-        entity {
-          id
-          slug
-        }
-      }
-    }
-  `);
-
-  const createFolder = graphql(`
-    mutation FolderMenu_CreateFolder_Mutation($input: CreateFolderInput!) {
-      createFolder(input: $input) {
-        id
-      }
-    }
-  `);
-
-  const deleteFolder = graphql(`
-    mutation FolderMenu_DeleteFolder_Mutation($input: DeleteFolderInput!) {
-      deleteFolder(input: $input) {
-        id
-
-        entity {
+  const descendants = createQuery(
+    graphql(`
+      query FolderMenu_Descendants_Query($entityId: ID!) {
+        entity(entityId: $entityId) {
           id
 
-          site {
+          descendants {
             id
-            ...DashboardLayout_EntityTree_site
-            ...DashboardLayout_TrashModal_site
+            type
           }
         }
       }
-    }
-  `);
+    `),
+    () => ({ entityId: descendantsEntityId ?? '' }),
+    () => ({ skip: !descendantsEntityId }),
+  );
+
+  const info = createQuery(
+    graphql(`
+      query FolderMenu_Info_Query($folderId: ID!) {
+        folder(id: $folderId) {
+          id
+          characterCount
+          folderCount
+          documentCount
+        }
+      }
+    `),
+    () => ({ folderId: folder.id }),
+  );
+
+  const [createDocument] = createMutation(
+    graphql(`
+      mutation FolderMenu_CreateDocument_Mutation($input: CreateDocumentInput!) {
+        createDocument(input: $input) {
+          id
+
+          entity {
+            id
+            slug
+          }
+        }
+      }
+    `),
+  );
+
+  const [createFolder] = createMutation(
+    graphql(`
+      mutation FolderMenu_CreateFolder_Mutation($input: CreateFolderInput!) {
+        createFolder(input: $input) {
+          id
+        }
+      }
+    `),
+  );
+
+  const [deleteFolder] = createMutation(
+    graphql(`
+      mutation FolderMenu_DeleteFolder_Mutation($input: DeleteFolderInput!) {
+        deleteFolder(input: $input) {
+          id
+
+          entity {
+            id
+
+            site {
+              id
+              ...DashboardLayout_EntityTree_site
+              ...DashboardLayout_TrashModal_site
+            }
+          }
+        }
+      }
+    `),
+  );
 
   const app = getAppContext();
 
@@ -112,10 +128,9 @@
   let loadingInfo = $state(false);
 
   $effect(() => {
-    loadingInfo = true;
-    info.load({ folderId: folder.id }).then(() => {
-      loadingInfo = false;
-    });
+    if (descendantsEntityId && descendants.data && !descendants.loading) {
+      loadingDescendants = false;
+    }
   });
 </script>
 
@@ -153,13 +168,15 @@
   icon={SquarePenIcon}
   onclick={async () => {
     const resp = await createDocument({
-      siteId: entity.site.id,
-      parentEntityId: entity.id,
+      input: {
+        siteId: entity.site.id,
+        parentEntityId: entity.id,
+      },
     });
 
     mixpanel.track('create_child_document', { via });
     open();
-    await goto(`/${resp.entity.slug}`);
+    await goto(`/${resp.createDocument.entity.slug}`);
   }}
 >
   하위 문서 생성
@@ -170,9 +187,11 @@
     icon={FolderPlusIcon}
     onclick={async () => {
       const resp = await createFolder({
-        siteId: entity.site.id,
-        parentEntityId: entity.id,
-        name: '새 폴더',
+        input: {
+          siteId: entity.site.id,
+          parentEntityId: entity.id,
+          name: '새 폴더',
+        },
       });
 
       mixpanel.track('create_child_folder', { via });
@@ -181,7 +200,7 @@
       // NOTE: Menu 컴포넌트의 focus-trap이 deactivate시 focus 되돌리기를 setTimeout으로 하므로,
       // focus-trap에 의해 곧바로 편집 상태가 풀리는 일이 없도록 setTimeout 적용함.
       setTimeout(() => {
-        app.state.newFolderId = resp.id;
+        app.state.newFolderId = resp.createFolder.id;
       });
     }}
   >
@@ -195,9 +214,8 @@
   icon={TrashIcon}
   onclick={async () => {
     loadingDescendants = true;
-    descendants.load({ entityId: entity.id }).then(() => {
-      loadingDescendants = false;
-    });
+    descendantsEntityId = entity.id;
+    descendants.refetch();
 
     Dialog.confirm({
       title: '폴더 삭제',
@@ -206,7 +224,7 @@
       action: 'danger',
       actionLabel: '삭제',
       actionHandler: async () => {
-        await deleteFolder({ folderId: folder.id });
+        await deleteFolder({ input: { folderId: folder.id } });
         mixpanel.track('delete_folder', { via });
       },
     });
@@ -234,28 +252,28 @@
       <RingSpinner style={css.raw({ size: '12px' })} />
       불러오는 중...
     </span>
-  {:else if $info}
+  {:else if info.data}
     <div class={flex({ alignItems: 'center', gap: '8px' })}>
-      {#if $info.folder.folderCount > 0}
+      {#if info.data.folder.folderCount > 0}
         <div class={center({ gap: '2px' })}>
           <Icon style={css.raw({ color: 'text.disabled' })} icon={FolderIcon} size={14} />
-          {$info.folder.folderCount}개
+          {info.data.folder.folderCount}개
         </div>
       {/if}
-      {#if $info.folder.documentCount > 0}
+      {#if info.data.folder.documentCount > 0}
         <div class={center({ gap: '2px' })}>
           <Icon style={css.raw({ color: 'text.disabled' })} icon={FileIcon} size={14} />
-          {$info.folder.documentCount}개
+          {info.data.folder.documentCount}개
         </div>
       {/if}
     </div>
 
-    <span>총 {comma($info.folder.characterCount)}자</span>
+    <span>총 {comma(info.data.folder.characterCount)}자</span>
   {/if}
 </div>
 
 {#snippet descendantsView()}
-  {#if loadingDescendants || !$descendants}
+  {#if loadingDescendants || !descendants.data}
     <div
       class={flex({
         alignItems: 'center',
@@ -270,8 +288,8 @@
       <span class={css({ fontSize: '13px', color: 'text.faint' })}>함께 삭제될 항목 계산중...</span>
     </div>
   {:else}
-    {@const folders = $descendants.entity.descendants.filter((d) => d.type === EntityType.FOLDER).length}
-    {@const documents = $descendants.entity.descendants.filter((d) => d.type === EntityType.DOCUMENT).length}
+    {@const folders = descendants.data.entity.descendants.filter((d) => d.type === EntityType.FOLDER).length}
+    {@const documents = descendants.data.entity.descendants.filter((d) => d.type === EntityType.DOCUMENT).length}
 
     {#if folders > 0 || documents > 0}
       {@const items = [folders > 0 && `${folders}개의 하위 폴더`, documents > 0 && `${documents}개의 하위 문서`].filter(Boolean)}

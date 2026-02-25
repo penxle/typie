@@ -94,8 +94,9 @@ export class Form<Schema extends z.ZodTypeAny, D extends Partial<z.infer<Schema>
         await this.#options.onSubmit(data);
         submitSucceeded = true;
       } catch (err) {
-        this.#options.onError?.(err);
-        throw err;
+        const unwrapped = err instanceof AggregateError && err.errors.length === 1 ? err.errors[0] : err;
+        this.#options.onError?.(unwrapped);
+        throw unwrapped;
       }
     } catch (err) {
       const errors = {} as FormFieldErrors<z.infer<Schema>>;

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { Button, Helmet, Icon, TextInput } from '@typie/ui/components';
@@ -18,20 +19,24 @@
   import { page } from '$app/state';
   import Logo from '$assets/logos/logo.svg?component';
   import { env } from '$env/dynamic/public';
-  import { graphql } from '$graphql';
   import { fb } from '$lib/analytics';
+  import { graphql } from '$mearie';
 
-  const loginWithEmail = graphql(`
-    mutation LoginPage_LoginWithEmail_Mutation($input: LoginWithEmailInput!) {
-      loginWithEmail(input: $input)
-    }
-  `);
+  const [loginWithEmail] = createMutation(
+    graphql(`
+      mutation LoginPage_LoginWithEmail_Mutation($input: LoginWithEmailInput!) {
+        loginWithEmail(input: $input)
+      }
+    `),
+  );
 
-  const generateSingleSignOnAuthorizationUrl = graphql(`
-    mutation LoginPage_GenerateSingleSignOnAuthorizationUrl_Mutation($input: GenerateSingleSignOnAuthorizationUrlInput!) {
-      generateSingleSignOnAuthorizationUrl(input: $input)
-    }
-  `);
+  const [generateSingleSignOnAuthorizationUrl] = createMutation(
+    graphql(`
+      mutation LoginPage_GenerateSingleSignOnAuthorizationUrl_Mutation($input: GenerateSingleSignOnAuthorizationUrlInput!) {
+        generateSingleSignOnAuthorizationUrl(input: $input)
+      }
+    `),
+  );
 
   const form = createForm({
     schema: z.object({
@@ -40,8 +45,10 @@
     }),
     onSubmit: async (data) => {
       await loginWithEmail({
-        email: data.email,
-        password: data.password,
+        input: {
+          email: data.email,
+          password: data.password,
+        },
       });
 
       mixpanel.track('login_with_email');
@@ -72,13 +79,15 @@
   });
 
   const singleSignOn = async (provider: SingleSignOnProvider) => {
-    const url = await generateSingleSignOnAuthorizationUrl({
-      provider,
-      state: serializeOAuthState({
-        redirect_uri: page.url.searchParams.get('redirect_uri') || `${env.PUBLIC_WEBSITE_URL}/authorize`,
-        state: page.url.searchParams.get('state') || serializeOAuthState({ redirect_uri: env.PUBLIC_WEBSITE_URL }),
-        referral_code: page.url.searchParams.get('r'),
-      }),
+    const { generateSingleSignOnAuthorizationUrl: url } = await generateSingleSignOnAuthorizationUrl({
+      input: {
+        provider,
+        state: serializeOAuthState({
+          redirect_uri: page.url.searchParams.get('redirect_uri') || `${env.PUBLIC_WEBSITE_URL}/authorize`,
+          state: page.url.searchParams.get('state') || serializeOAuthState({ redirect_uri: env.PUBLIC_WEBSITE_URL }),
+          referral_code: page.url.searchParams.get('r'),
+        }),
+      },
     });
 
     mixpanel.track('login_with_sso', { provider });

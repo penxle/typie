@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createFragment, createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { center, flex, grid } from '@typie/styled-system/patterns';
   import { createFloatingActions } from '@typie/ui/actions';
@@ -8,19 +9,18 @@
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import ChevronUpIcon from '~icons/lucide/chevron-up';
   import SmilePlusIcon from '~icons/lucide/smile-plus';
-  import { fragment, graphql } from '$graphql';
+  import { graphql } from '$mearie';
   import { emojis } from './emoji';
   import Emoji from './Emoji.svelte';
-  import type { UsersiteWildcardSlugPage_DocumentEmojiReaction_documentView } from '$graphql';
+  import type { UsersiteWildcardSlugPage_DocumentEmojiReaction_documentView$key } from '$mearie';
 
   type Props = {
-    $documentView: UsersiteWildcardSlugPage_DocumentEmojiReaction_documentView;
+    documentView$key: UsersiteWildcardSlugPage_DocumentEmojiReaction_documentView$key;
   };
 
-  let { $documentView: _documentView }: Props = $props();
+  let { documentView$key }: Props = $props();
 
-  const documentView = fragment(
-    _documentView,
+  const documentView = createFragment(
     graphql(`
       fragment UsersiteWildcardSlugPage_DocumentEmojiReaction_documentView on DocumentView {
         id
@@ -32,24 +32,27 @@
         }
       }
     `),
+    () => documentView$key,
   );
 
-  const createDocumentReaction = graphql(`
-    mutation UsersiteWildcardSlugPage_DocumentEmojiReaction_CreateDocumentReaction_Mutation($input: CreateDocumentReactionInput!) {
-      createDocumentReaction(input: $input) {
-        id
-
-        document {
+  const [createDocumentReaction] = createMutation(
+    graphql(`
+      mutation UsersiteWildcardSlugPage_DocumentEmojiReaction_CreateDocumentReaction_Mutation($input: CreateDocumentReactionInput!) {
+        createDocumentReaction(input: $input) {
           id
 
-          reactions {
+          document {
             id
-            emoji
+
+            reactions {
+              id
+              emoji
+            }
           }
         }
       }
-    }
-  `);
+    `),
+  );
 
   let open = $state(false);
   let showAll = $state(false);
@@ -64,7 +67,7 @@
   const MAX_REACTIONS = 100;
 </script>
 
-{#if $documentView.allowReaction}
+{#if documentView.data.allowReaction}
   <button
     class={css({ marginTop: '2px', borderRadius: '4px', padding: '3px', _hover: { backgroundColor: 'surface.muted' } })}
     onclick={() => {
@@ -97,7 +100,7 @@
           <button
             class={center({ borderRadius: '4px', padding: '5px', size: 'full', _supportHover: { backgroundColor: 'surface.muted' } })}
             onclick={async () => {
-              await createDocumentReaction({ documentId: $documentView.id, emoji });
+              await createDocumentReaction({ input: { documentId: documentView.data.id, emoji } });
               mixpanel.track('create_document_reaction', { emoji });
             }}
             type="button"
@@ -110,11 +113,11 @@
   {/if}
 
   <ul class={flex({ align: 'center', gap: '4px', wrap: 'wrap', marginTop: '4px' })}>
-    {#each showAll ? $documentView.reactions : $documentView.reactions.slice(0, MAX_REACTIONS) as reaction (reaction.id)}
+    {#each showAll ? documentView.data.reactions : documentView.data.reactions.slice(0, MAX_REACTIONS) as reaction (reaction.id)}
       <Emoji emoji={reaction.emoji} />
     {/each}
 
-    {#if $documentView.reactions.length > MAX_REACTIONS}
+    {#if documentView.data.reactions.length > MAX_REACTIONS}
       <li>
         <button
           class={flex({ align: 'center', gap: '2px', fontSize: '13px', color: 'text.muted' })}
@@ -127,7 +130,7 @@
           {:else}
             ...
             <Icon icon={ChevronDownIcon} size={12} />
-            {$documentView.reactions.length - MAX_REACTIONS}
+            {documentView.data.reactions.length - MAX_REACTIONS}
           {/if}
         </button>
       </li>

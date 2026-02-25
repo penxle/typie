@@ -1,18 +1,18 @@
 <script lang="ts">
-  import { fragment, graphql } from '$graphql';
+  import { createFragment } from '@mearie/svelte';
+  import { graphql } from '$mearie';
   import Document from './Document.svelte';
   import Folder from './Folder.svelte';
   import Post from './Post.svelte';
-  import type { DashboardLayout_EntityTree_Entity_entity, DashboardLayout_EntityTree_Folder_entity } from '$graphql';
+  import type { DashboardLayout_EntityTree_Entity_entity$key } from '$mearie';
 
   type Props = {
-    $entity: DashboardLayout_EntityTree_Entity_entity;
+    entity$key: DashboardLayout_EntityTree_Entity_entity$key;
   };
 
-  let { $entity: _entity }: Props = $props();
+  let { entity$key }: Props = $props();
 
-  const entity = fragment(
-    _entity,
+  const entity = createFragment(
     graphql(`
       fragment DashboardLayout_EntityTree_Entity_entity on Entity {
         id
@@ -43,15 +43,14 @@
         }
       }
     `),
+    () => entity$key,
   );
-
-  const children = $derived(($entity as unknown as { children: DashboardLayout_EntityTree_Folder_entity[] }).children ?? []);
 </script>
 
-{#if $entity.node.__typename === 'Folder'}
-  <Folder $entities={children} $folder={$entity.node} />
-{:else if $entity.node.__typename === 'Post' && !$entity.node.document}
-  <Post $post={$entity.node} />
-{:else if $entity.node.__typename === 'Document'}
-  <Document $document={$entity.node} />
+{#if entity.data.node.__typename === 'Folder'}
+  <Folder folder$key={entity.data.node} />
+{:else if entity.data.node.__typename === 'Post' && !entity.data.node.document}
+  <Post post$key={entity.data.node} />
+{:else if entity.data.node.__typename === 'Document'}
+  <Document document$key={entity.data.node} />
 {/if}

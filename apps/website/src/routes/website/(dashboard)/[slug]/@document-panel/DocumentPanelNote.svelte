@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { cache } from '@typie/sark/internal';
+  import { createFragment, createMutation } from '@mearie/svelte';
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { token } from '@typie/styled-system/tokens';
@@ -12,17 +12,17 @@
   import PlusIcon from '~icons/lucide/plus';
   import StickyNoteIcon from '~icons/lucide/sticky-note';
   import Trash2Icon from '~icons/lucide/trash-2';
-  import { fragment, graphql } from '$graphql';
-  import type { DocumentPanel_Note_entity } from '$graphql';
+  import { cache } from '$lib/graphql';
+  import { graphql } from '$mearie';
+  import type { DocumentPanel_Note_entity$key } from '$mearie';
 
   type Props = {
-    $entity: DocumentPanel_Note_entity;
+    entity$key: DocumentPanel_Note_entity$key;
   };
 
-  let { $entity: _entity }: Props = $props();
+  let { entity$key }: Props = $props();
 
-  const entity = fragment(
-    _entity,
+  const entity = createFragment(
     graphql(`
       fragment DocumentPanel_Note_entity on Entity {
         id
@@ -39,48 +39,57 @@
         }
       }
     `),
+    () => entity$key,
   );
 
-  const createNote = graphql(`
-    mutation DocumentPanelNote_CreateNote_Mutation($input: CreateNoteInput!) {
-      createNote(input: $input) {
-        id
-        content
-        color
-        order
-        entity {
+  const [createNote] = createMutation(
+    graphql(`
+      mutation DocumentPanelNote_CreateNote_Mutation($input: CreateNoteInput!) {
+        createNote(input: $input) {
+          id
+          content
+          color
+          order
+          entity {
+            id
+          }
+        }
+      }
+    `),
+  );
+
+  const [updateNote] = createMutation(
+    graphql(`
+      mutation DocumentPanelNote_UpdateNote_Mutation($input: UpdateNoteInput!) {
+        updateNote(input: $input) {
+          id
+          content
+          updatedAt
+        }
+      }
+    `),
+  );
+
+  const [deleteNote] = createMutation(
+    graphql(`
+      mutation DocumentPanelNote_DeleteNote_Mutation($input: DeleteNoteInput!) {
+        deleteNote(input: $input) {
           id
         }
       }
-    }
-  `);
+    `),
+  );
 
-  const updateNote = graphql(`
-    mutation DocumentPanelNote_UpdateNote_Mutation($input: UpdateNoteInput!) {
-      updateNote(input: $input) {
-        id
-        content
-        updatedAt
+  const [moveNote] = createMutation(
+    graphql(`
+      mutation DocumentPanelNote_MoveNote_Mutation($input: MoveNoteInput!) {
+        moveNote(input: $input) {
+          id
+          order
+        }
       }
-    }
-  `);
-
-  const deleteNote = graphql(`
-    mutation DocumentPanelNote_DeleteNote_Mutation($input: DeleteNoteInput!) {
-      deleteNote(input: $input) {
-        id
-      }
-    }
-  `);
-
-  const moveNote = graphql(`
-    mutation DocumentPanelNote_MoveNote_Mutation($input: MoveNoteInput!) {
-      moveNote(input: $input) {
-        id
-        order
-      }
-    }
-  `);
+    `),
+  );
 
   let dragging = $state<{
     noteId: string;
@@ -91,9 +100,9 @@
 
   const sortedNotes = $derived.by(() => {
     if (localNoteOrder.length === 0) {
-      return $entity.notes.toSorted((a, b) => a.order.localeCompare(b.order));
+      return entity.data.notes.toSorted((a, b) => a.order.localeCompare(b.order));
     }
-    return [...$entity.notes].toSorted((a, b) => {
+    return [...entity.data.notes].toSorted((a, b) => {
       const indexA = localNoteOrder.indexOf(a.id);
       const indexB = localNoteOrder.indexOf(b.id);
       if (indexA === -1) return 1;
@@ -121,32 +130,36 @@
 
   const saveNote = debounce(async (noteId: string, content: string) => {
     await updateNote({
-      noteId,
-      content,
+      input: {
+        noteId,
+        content,
+      },
     });
   }, 500);
 
   const handleAddNote = async (via: string) => {
     const randomColor = getRandomNoteColor();
     const result = await createNote({
-      content: '',
-      color: randomColor,
-      entityId: $entity.id,
+      input: {
+        content: '',
+        color: randomColor,
+        entityId: entity.data.id,
+      },
     });
 
-    if (result?.id) {
-      lastAddedNoteId = result.id;
+    if (result?.createNote?.id) {
+      lastAddedNoteId = result.createNote.id;
       mixpanel.track('create_related_note', {
         via,
       });
-      cache.invalidate({ __typename: 'Entity', id: $entity.id, field: 'notes' });
+      cache.invalidate({ __typename: 'Entity', id: entity.data.id, field: 'notes' });
     }
   };
 
   const handleDeleteNote = async (noteId: string) => {
-    await deleteNote({ noteId });
+    await deleteNote({ input: { noteId } });
     mixpanel.track('delete_related_note');
-    cache.invalidate({ __typename: 'Entity', id: $entity.id, field: 'notes' });
+    cache.invalidate({ __typename: 'Entity', id: entity.data.id, field: 'notes' });
   };
 
   const handleDragStart = (noteId: string) => {
@@ -181,14 +194,16 @@
 
       try {
         await moveNote({
-          noteId: dragging.noteId,
-          lowerOrder: lowerNote?.order,
-          upperOrder: upperNote?.order,
+          input: {
+            noteId: dragging.noteId,
+            lowerOrder: lowerNote?.order,
+            upperOrder: upperNote?.order,
+          },
         });
         mixpanel.track('move_related_note');
-        cache.invalidate({ __typename: 'Entity', id: $entity.id, field: 'notes' });
+        cache.invalidate({ __typename: 'Entity', id: entity.data.id, field: 'notes' });
       } catch {
-        localNoteOrder = $entity.notes.map((note) => note.id);
+        localNoteOrder = entity.data.notes.map((note) => note.id);
         Toast.error('노트 순서 변경에 실패했습니다. 잠시 후 다시 시도해주세요.');
       }
     }
@@ -198,7 +213,7 @@
 
   let prevNoteIds = $state<string[]>([]);
   $effect(() => {
-    const noteIds = $entity.notes.map((n) => n.id);
+    const noteIds = entity.data.notes.map((n) => n.id);
     const noteIdsStr = noteIds.join(',');
     const prevNoteIdsStr = prevNoteIds.join(',');
 

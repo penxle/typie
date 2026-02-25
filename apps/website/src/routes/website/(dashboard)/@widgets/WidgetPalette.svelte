@@ -9,15 +9,18 @@
   import { WIDGET_CATEGORIES, WIDGET_COMPONENTS, WIDGET_METADATA } from './widgets';
   import type { Editor } from '@tiptap/core';
   import type { Ref } from '@typie/ui/utils';
-  import type { Editor_Widget_CharacterCountChangeWidget_document, Editor_Widget_DocumentRelatedNoteWidget_document } from '$graphql';
   import type { Editor as NativeEditor } from '$lib/editor/editor.svelte';
+  import type {
+    Editor_Widget_CharacterCountChangeWidget_document$key,
+    Editor_Widget_DocumentRelatedNoteWidget_document$key,
+  } from '$mearie';
   import type { WidgetType } from './widget-context.svelte';
 
   type Props = {
     open: boolean;
     editor?: Ref<Editor>;
     nativeEditor?: NativeEditor;
-    $document?: Editor_Widget_CharacterCountChangeWidget_document & Editor_Widget_DocumentRelatedNoteWidget_document;
+    document$key?: Editor_Widget_CharacterCountChangeWidget_document$key & Editor_Widget_DocumentRelatedNoteWidget_document$key;
     addedWidgets?: WidgetType[];
     onDragStart: (e: PointerEvent, widgetType: WidgetType, target: HTMLElement) => void;
     onDragMove: (e: PointerEvent) => void;
@@ -29,7 +32,7 @@
     open = $bindable(false),
     editor,
     nativeEditor,
-    $document: _document,
+    document$key: _document,
     addedWidgets = [],
     onDragStart,
     onDragMove,
@@ -51,7 +54,7 @@
   $effect(() => {
     widgetContext.env.editor = editor;
     widgetContext.env.nativeEditor = nativeEditor;
-    widgetContext.env.$document = _document;
+    widgetContext.env.document$key = _document;
     widgetContext.env.editMode = false;
     widgetContext.env.palette = true;
   });
