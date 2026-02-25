@@ -62,7 +62,7 @@
         id
         characterCount
         folderCount
-        postCount
+        documentCount
       }
     }
   `);
@@ -100,7 +100,6 @@
             id
             ...DashboardLayout_EntityTree_site
             ...DashboardLayout_TrashModal_site
-            ...DashboardLayout_PlanUsageWidget_site
           }
         }
       }
@@ -243,10 +242,10 @@
           {$info.folder.folderCount}개
         </div>
       {/if}
-      {#if $info.folder.postCount > 0}
+      {#if $info.folder.documentCount > 0}
         <div class={center({ gap: '2px' })}>
           <Icon style={css.raw({ color: 'text.disabled' })} icon={FileIcon} size={14} />
-          {$info.folder.postCount}개
+          {$info.folder.documentCount}개
         </div>
       {/if}
     </div>
@@ -272,15 +271,10 @@
     </div>
   {:else}
     {@const folders = $descendants.entity.descendants.filter((d) => d.type === EntityType.FOLDER).length}
-    {@const posts = $descendants.entity.descendants.filter((d) => d.type === EntityType.POST).length}
     {@const documents = $descendants.entity.descendants.filter((d) => d.type === EntityType.DOCUMENT).length}
 
-    {#if folders > 0 || posts > 0 || documents > 0}
-      {@const items = [
-        folders > 0 && `${folders}개의 하위 폴더`,
-        posts > 0 && `${posts}개의 하위 포스트`,
-        documents > 0 && `${documents}개의 하위 문서`,
-      ].filter(Boolean)}
+    {#if folders > 0 || documents > 0}
+      {@const items = [folders > 0 && `${folders}개의 하위 폴더`, documents > 0 && `${documents}개의 하위 문서`].filter(Boolean)}
       <div
         class={flex({
           alignItems: 'center',

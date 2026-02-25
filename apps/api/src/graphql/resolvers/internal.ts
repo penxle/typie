@@ -359,7 +359,7 @@ builder.mutationFields((t) => ({
       });
 
       pubsub.publish('site:update', entity.siteId, { scope: 'site' });
-      pubsub.publish('site:usage:update', entity.siteId, null);
+      pubsub.publish('user:usage:update', ctx.session.userId, null);
 
       await enqueueJob('document:index', document.id);
 

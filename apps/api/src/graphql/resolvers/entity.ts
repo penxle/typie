@@ -828,7 +828,7 @@ builder.mutationFields((t) => ({
           );
 
         pubsub.publish('site:update', siteId, { scope: 'site' });
-        pubsub.publish('site:usage:update', siteId, null);
+        pubsub.publish('user:usage:update', ctx.session.userId, null);
 
         const postEntityIds: string[] = [];
 
@@ -939,7 +939,7 @@ builder.mutationFields((t) => ({
           );
 
         pubsub.publish('site:update', entity.siteId, { scope: 'site' });
-        pubsub.publish('site:usage:update', entity.siteId, null);
+        pubsub.publish('user:usage:update', ctx.session.userId, null);
 
         const postEntityIds = updatedEntities.filter(({ type }) => type === EntityType.POST).map(({ id }) => id);
         if (postEntityIds.length > 0) {

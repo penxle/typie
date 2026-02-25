@@ -283,15 +283,15 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
   }
 
   if (updated) {
-    const { siteId, entityId } = await db
-      .select({ siteId: Entities.siteId, entityId: Entities.id })
+    const { siteId, entityId, userId } = await db
+      .select({ siteId: Entities.siteId, entityId: Entities.id, userId: Entities.userId })
       .from(Posts)
       .innerJoin(Entities, eq(Posts.entityId, Entities.id))
       .where(eq(Posts.id, postId))
       .then(firstOrThrow);
 
     pubsub.publish('site:update', siteId, { scope: 'entity', entityId });
-    pubsub.publish('site:usage:update', siteId, null);
+    pubsub.publish('user:usage:update', userId, null);
 
     await enqueueJob('post:index', postId, {
       deduplication: {

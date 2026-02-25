@@ -1,6 +1,6 @@
 import dayjs from 'dayjs';
 import { and, desc, eq, getTableColumns, inArray, isNull, sql } from 'drizzle-orm';
-import { db, Entities, first, firstOrThrow, Folders, Notes, PostContents, Posts, TableCode, validateDbId } from '@/db';
+import { db, DocumentContents, Documents, Entities, first, firstOrThrow, Folders, Notes, Posts, TableCode, validateDbId } from '@/db';
 import { EntityState, EntityType, EntityVisibility, NoteState } from '@/enums';
 import { TypieError } from '@/errors';
 import { enqueueJob } from '@/mq';
@@ -65,11 +65,11 @@ Folder.implement({
               JOIN descendant_entities de ON e.parent_id = de.id
               WHERE e.state = ${EntityState.ACTIVE}
             )
-            SELECT COALESCE(SUM(pc.character_count), 0) AS total
+            SELECT COALESCE(SUM(dc.character_count), 0) AS total
             FROM descendant_entities de
-            JOIN ${Posts} p ON p.entity_id = de.id
-            JOIN ${PostContents} pc ON pc.post_id = p.id
-            JOIN ${Entities} e ON e.id = p.entity_id
+            JOIN ${Documents} d ON d.entity_id = de.id
+            JOIN ${DocumentContents} dc ON dc.document_id = d.id
+            JOIN ${Entities} e ON e.id = d.entity_id
             WHERE e.state = ${EntityState.ACTIVE}
           `,
         );
@@ -95,6 +95,30 @@ Folder.implement({
             SELECT COUNT(*) AS count
             FROM descendant_entities
             WHERE type = ${EntityType.FOLDER}
+          `,
+        );
+        return Number(rows[0]?.count || 0);
+      },
+    }),
+
+    documentCount: t.int({
+      resolve: async (self) => {
+        const rows = await db.execute<{ count: number }>(
+          sql`
+            WITH RECURSIVE descendant_entities AS (
+              SELECT id, type
+              FROM ${Entities}
+              WHERE parent_id = ${self.entityId}
+              AND state = ${EntityState.ACTIVE}
+              UNION ALL
+              SELECT e.id, e.type
+              FROM ${Entities} e
+              JOIN descendant_entities de ON e.parent_id = de.id
+              WHERE e.state = ${EntityState.ACTIVE}
+            )
+            SELECT COUNT(*) AS count
+            FROM descendant_entities
+            WHERE type = ${EntityType.DOCUMENT}
           `,
         );
         return Number(rows[0]?.count || 0);
@@ -151,6 +175,31 @@ FolderView.implement({
             SELECT COUNT(*) AS count
             FROM descendant_entities
             WHERE type = ${EntityType.FOLDER}
+            AND visibility IN (${EntityVisibility.UNLISTED}, ${EntityVisibility.PUBLIC})
+          `,
+        );
+        return Number(rows[0]?.count || 0);
+      },
+    }),
+
+    documentCount: t.int({
+      resolve: async (self) => {
+        const rows = await db.execute<{ count: number }>(
+          sql`
+            WITH RECURSIVE descendant_entities AS (
+              SELECT id, type, visibility
+              FROM ${Entities}
+              WHERE parent_id = ${self.entityId}
+              AND state = ${EntityState.ACTIVE}
+              UNION ALL
+              SELECT e.id, e.type, e.visibility
+              FROM ${Entities} e
+              JOIN descendant_entities de ON e.parent_id = de.id
+              WHERE e.state = ${EntityState.ACTIVE}
+            )
+            SELECT COUNT(*) AS count
+            FROM descendant_entities
+            WHERE type = ${EntityType.DOCUMENT}
             AND visibility IN (${EntityVisibility.UNLISTED}, ${EntityVisibility.PUBLIC})
           `,
         );
@@ -373,6 +422,7 @@ builder.mutationFields((t) => ({
       for (const entityId of entityIds) {
         pubsub.publish('site:update', folder.siteId, { scope: 'entity', entityId });
       }
+      pubsub.publish('user:usage:update', ctx.session.userId, null);
 
       const deletedPosts = await db
         .select({ id: Posts.id })
@@ -386,6 +436,20 @@ builder.mutationFields((t) => ({
 
       for (const post of deletedPosts) {
         await enqueueJob('post:index', post.id);
+      }
+
+      const deletedDocuments = await db
+        .select({ id: Documents.id })
+        .from(Documents)
+        .where(
+          inArray(
+            Documents.entityId,
+            descendants.filter(({ type }) => type === EntityType.DOCUMENT).map(({ id }) => id),
+          ),
+        );
+
+      for (const document of deletedDocuments) {
+        await enqueueJob('document:index', document.id);
       }
 
       return folder.id;

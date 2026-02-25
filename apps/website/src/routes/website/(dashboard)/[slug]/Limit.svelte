@@ -9,15 +9,15 @@
   import type { Editor } from '@tiptap/core';
   import type { Node } from '@tiptap/pm/model';
   import type { Ref } from '@typie/ui/utils';
-  import type { Editor_Limit_query, Editor_Limit_site } from '$graphql';
+  import type { Editor_Limit_query, Editor_Limit_user } from '$graphql';
 
   type Props = {
     editor?: Ref<Editor>;
-    $site: Editor_Limit_site;
+    $user: Editor_Limit_user;
     $query: Editor_Limit_query;
   };
 
-  let { $query: _query, $site: _site, editor }: Props = $props();
+  let { $query: _query, $user: _user, editor }: Props = $props();
 
   const query = fragment(
     _query,
@@ -31,31 +31,28 @@
     `),
   );
 
-  const site = fragment(
-    _site,
+  const user = fragment(
+    _user,
     graphql(`
-      fragment Editor_Limit_site on Site {
+      fragment Editor_Limit_user on User {
         id
+
+        ...DashboardLayout_PlanUpgradeModal_user
 
         usage {
           totalCharacterCount
           totalBlobSize
         }
 
-        user {
+        subscription {
           id
-          ...DashboardLayout_PlanUpgradeModal_user
 
-          subscription {
+          plan {
             id
 
-            plan {
-              id
-
-              rule {
-                maxTotalCharacterCount
-                maxTotalBlobSize
-              }
+            rule {
+              maxTotalCharacterCount
+              maxTotalBlobSize
             }
           }
         }
@@ -63,29 +60,27 @@
     `),
   );
 
-  const siteUsageUpdateStream = graphql(`
-    subscription Editor_Limit_SiteUsageUpdateStream($siteId: ID!) {
-      siteUsageUpdateStream(siteId: $siteId) {
-        ... on Site {
-          id
+  const userUsageUpdateStream = graphql(`
+    subscription Editor_Limit_UserUsageUpdateStream($userId: ID!) {
+      userUsageUpdateStream(userId: $userId) {
+        id
 
-          usage {
-            totalCharacterCount
-            totalBlobSize
-          }
+        usage {
+          totalCharacterCount
+          totalBlobSize
         }
       }
     }
   `);
 
-  const planRule = $derived($site.user.subscription?.plan?.rule ?? $query.defaultPlanRule);
+  const planRule = $derived($user.subscription?.plan?.rule ?? $query.defaultPlanRule);
 
   const totalCharacterCountProgress = $derived.by(() => {
     if (planRule.maxTotalCharacterCount === -1) {
       return -1;
     }
 
-    return Math.min(1, $site.usage.totalCharacterCount / planRule.maxTotalCharacterCount);
+    return Math.min(1, $user.usage.totalCharacterCount / planRule.maxTotalCharacterCount);
   });
 
   const totalBlobSizeProgress = $derived.by(() => {
@@ -93,7 +88,7 @@
       return -1;
     }
 
-    return Math.min(1, Number($site.usage.totalBlobSize) / planRule.maxTotalBlobSize);
+    return Math.min(1, Number($user.usage.totalBlobSize) / planRule.maxTotalBlobSize);
   });
 
   let open = $state(false);
@@ -165,7 +160,7 @@
 
   $effect(() => {
     return untrack(() => {
-      const unsubscribe = siteUsageUpdateStream.subscribe({ siteId: $site.id });
+      const unsubscribe = userUsageUpdateStream.subscribe({ userId: $user.id });
 
       return () => {
         unsubscribe();
@@ -174,7 +169,7 @@
   });
 </script>
 
-<PlanUpgradeModal $user={$site.user} bind:open>
+<PlanUpgradeModal {$user} bind:open>
   현재 플랜의 최대 사용량을 초과했어요.
   <br />
   이어서 작성하려면 플랜을 업그레이드 해주세요.

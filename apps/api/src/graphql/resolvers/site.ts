@@ -18,6 +18,7 @@ import {
   Posts,
   Sites,
   TableCode,
+  Users,
   validateDbId,
 } from '@/db';
 import { DocumentType, EntityState, EntityType, EntityVisibility, FontState, PostType, SiteState } from '@/enums';
@@ -389,6 +390,29 @@ builder.subscriptionFields((t) => ({
       clearLoaders(ctx);
 
       return await db.select().from(Sites).where(eq(Sites.id, args.siteId)).then(firstOrThrow);
+    },
+  }),
+
+  userUsageUpdateStream: t.withAuth({ session: true }).field({
+    type: User,
+    args: { userId: t.arg.id({ validate: validateDbId(TableCode.USERS) }) },
+    subscribe: async (_, args, ctx) => {
+      if (ctx.session.userId !== args.userId) {
+        throw new TypieError({ code: 'permission_denied' });
+      }
+
+      const repeater = pubsub.subscribe('user:usage:update', args.userId);
+
+      ctx.c.req.raw.signal.addEventListener('abort', () => {
+        repeater.return();
+      });
+
+      return repeater;
+    },
+    resolve: async (_, args, ctx) => {
+      clearLoaders(ctx);
+
+      return await db.select().from(Users).where(eq(Users.id, args.userId)).then(firstOrThrow);
     },
   }),
 }));

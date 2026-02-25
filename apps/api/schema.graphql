@@ -476,6 +476,7 @@ type File implements Blob {
 
 type Folder implements IFolder {
   characterCount: Int!
+  documentCount: Int!
   entity: Entity!
   folderCount: Int!
   id: ID!
@@ -487,6 +488,7 @@ type Folder implements IFolder {
 }
 
 type FolderView implements IFolder {
+  documentCount: Int!
   entity: EntityView!
   folderCount: Int!
   id: ID!
@@ -1226,6 +1228,7 @@ type Subscription {
   postSyncStream(clientId: String!, postId: ID!): PostSyncStreamPayload!
   siteUpdateStream(siteId: ID!): SiteUpdateStreamPayload!
   siteUsageUpdateStream(siteId: ID!): Site!
+  userUsageUpdateStream(userId: ID!): User!
 }
 
 enum SubscriptionState {
