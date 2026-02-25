@@ -138,9 +138,9 @@ class NativeEditorPrimaryToolbar extends HookWidget {
                             onTap: () {
                               switch (keyboardType) {
                                 case KeyboardType.software:
-                                  scope.clearFocus();
                                 case KeyboardType.hardware:
                                   scope.dismissKeyboard();
+                                  scope.clearFocus();
                               }
                             },
                           ),
