@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/context/theme.dart';
+import 'package:typie/screens/native_editor/state/state.dart';
 import 'package:typie/screens/native_editor/view/geometry.dart';
 import 'package:typie/screens/native_editor/view/scope.dart';
 
@@ -28,6 +29,7 @@ class TitleFields extends HookWidget {
     final onSubtitleChanged = scope.onSubtitleChanged;
     final titleFocusNode = scope.titleFocusNode;
     final subtitleFocusNode = scope.subtitleFocusNode;
+    final isPaginatedLayout = scope.controller.state.layout is PaginatedLayout;
 
     final titleController = useTextEditingController(text: title);
     final subtitleController = useTextEditingController(text: subtitle);
@@ -149,8 +151,10 @@ class TitleFields extends HookWidget {
               ),
             ),
             const SizedBox(height: ContentGeometry.pagePadding),
-            Container(width: 120, height: 1, color: context.colors.borderDefault),
-            const SizedBox(height: ContentGeometry.pagePadding),
+            if (!isPaginatedLayout) ...[
+              Container(width: 120, height: 1, color: context.colors.borderDefault),
+              const SizedBox(height: ContentGeometry.pagePadding),
+            ],
           ],
         ),
       ),
