@@ -9,12 +9,15 @@ import 'package:typie/screens/native_editor/external/overlay.dart';
 import 'package:typie/screens/native_editor/state/controller.dart';
 import 'package:typie/screens/native_editor/state/state.dart';
 import 'package:typie/screens/native_editor/view/cursor.dart';
-import 'package:typie/screens/native_editor/view/geometry.dart';
 import 'package:typie/screens/native_editor/view/line_highlight.dart';
 import 'package:typie/screens/native_editor/view/scope.dart';
+import 'package:typie/screens/native_editor/view/zoom.dart';
 import 'package:typie/services/preference.dart';
 
 const _cropMarkerSize = 32.0;
+const _renderRetryBaseDelayMs = 32;
+const _renderRetryMaxDelayMs = 512;
+const _renderRetryMaxAttempts = 6;
 
 class PageItem extends HookWidget {
   const PageItem({required this.pageIndex, super.key});
@@ -28,14 +31,20 @@ class PageItem extends HookWidget {
     final editorState = scope.controller.state;
 
     final layout = editorState.layout!;
-    final pages = editorState.pages;
     final cursor = editorState.cursor;
     final pageCursor = cursor?.pageIdx == pageIndex ? cursor : null;
     final isFocused = editorState.isFocused;
     final isPaginated = layout is PaginatedLayout;
     final margins = layout is PaginatedLayout ? layout : null;
-    final bottomGap = isPaginated && pageIndex < pages.length - 1 ? ContentGeometry.pageGap : 0.0;
-    final pageHeight = pages.elementAtOrNull(pageIndex)?.height;
+    final page = editorState.pages.elementAtOrNull(pageIndex);
+    final logicalPageWidth = margins?.pageWidth ?? page?.width ?? 0.0;
+    final logicalPageHeight = margins?.pageHeight ?? page?.height ?? 0.0;
+    final displayZoom = useValueListenable(scope.displayZoom);
+    final renderZoom = useValueListenable(scope.renderZoom);
+    final effectiveDisplayZoom = isPaginated ? displayZoom : 1.0;
+    final effectiveRenderZoom = isPaginated ? renderZoom : 1.0;
+    final bottomGap = scope.geometry.gapAfterPage(pageIndex);
+    final pageHeight = scope.geometry.pageHeightAt(pageIndex);
 
     final editor = scope.editor;
     final renderVersion = editorState.renderVersion;
@@ -45,40 +54,82 @@ class PageItem extends HookWidget {
     final textureId = useState<int?>(null);
     final textureSize = useState<Size?>(null);
     final isMounted = useRef(true);
-    final displayCursor = useState<CursorInfo?>(pageCursor);
-    final renderInProgress = useRef(false);
-    final pageCursorRef = useRef(pageCursor)..value = pageCursor;
+    final retryAttempts = useRef(0);
+    final retryTimer = useRef<Timer?>(null);
+    final isRenderTaskRunning = useRef(false);
 
-    final devicePixelRatio = MediaQuery.devicePixelRatioOf(context);
+    void resetRetryState() {
+      retryAttempts.value = 0;
+      retryTimer.value?.cancel();
+      retryTimer.value = null;
+    }
 
-    Future<void> render() async {
-      renderer.value ??= EditorTextureRenderer(editor: editor);
-      final r = renderer.value!;
-
-      if (r.textureId == null) {
-        await r.create(pageIndex);
-        if (!isMounted.value) {
-          return;
-        }
-      }
-      if (r.textureId == null) {
-        return;
-      }
-
-      await r.render(pageIndex);
+    void scheduleRetry(Future<void> Function() task) {
       if (!isMounted.value) {
         return;
       }
+      if (retryAttempts.value >= _renderRetryMaxAttempts) {
+        return;
+      }
 
-      textureId.value = r.textureId;
-      textureSize.value = Size(r.width / devicePixelRatio, r.height / devicePixelRatio);
-      renderInProgress.value = false;
-      displayCursor.value = pageCursorRef.value;
+      retryTimer.value?.cancel();
+      retryAttempts.value += 1;
 
-      final pending = scope.pendingScroll.value;
-      if (pending != null) {
-        scope.pendingScroll.value = null;
-        pending();
+      final exponent = retryAttempts.value - 1;
+      final delayMs = (_renderRetryBaseDelayMs * (1 << exponent)).clamp(
+        _renderRetryBaseDelayMs,
+        _renderRetryMaxDelayMs,
+      );
+
+      retryTimer.value = Timer(Duration(milliseconds: delayMs), () {
+        retryTimer.value = null;
+        if (!isMounted.value) {
+          return;
+        }
+        unawaited(task());
+      });
+    }
+
+    Future<void> render() async {
+      if (isRenderTaskRunning.value) {
+        return;
+      }
+      isRenderTaskRunning.value = true;
+
+      renderer.value ??= EditorTextureRenderer(editor: editor);
+      final r = renderer.value!;
+      try {
+        if (r.textureId == null) {
+          await r.create(pageIndex);
+          if (!isMounted.value) {
+            return;
+          }
+        }
+        if (r.textureId == null) {
+          scheduleRetry(render);
+          return;
+        }
+
+        final didRender = await r.render(pageIndex);
+        if (!isMounted.value) {
+          return;
+        }
+        if (!didRender) {
+          scheduleRetry(render);
+          return;
+        }
+
+        resetRetryState();
+        textureId.value = r.textureId;
+        textureSize.value = Size(logicalPageWidth, logicalPageHeight);
+
+        final pending = scope.pendingScroll.value;
+        if (pending != null) {
+          scope.pendingScroll.value = null;
+          pending();
+        }
+      } finally {
+        isRenderTaskRunning.value = false;
       }
     }
 
@@ -88,25 +139,20 @@ class PageItem extends HookWidget {
       });
       return () {
         timer.cancel();
+        retryTimer.value?.cancel();
+        retryTimer.value = null;
         isMounted.value = false;
         unawaited(renderer.value?.dispose());
       };
     }, const []);
 
     useEffect(() {
+      resetRetryState();
       if (renderer.value?.textureId != null) {
-        renderInProgress.value = true;
         unawaited(render());
       }
       return null;
-    }, [renderVersion]);
-
-    useEffect(() {
-      if (!renderInProgress.value) {
-        displayCursor.value = pageCursor;
-      }
-      return null;
-    }, [pageCursor]);
+    }, [renderVersion, effectiveRenderZoom]);
 
     final hasTexture = textureId.value != null && textureSize.value != null;
 
@@ -125,18 +171,24 @@ class PageItem extends HookWidget {
         : null;
 
     if (hasTexture) {
-      Widget content = SizedBox.fromSize(
-        size: textureSize.value,
+      final baseSize = textureSize.value!;
+      final backgroundOverlayLayer = SizedBox.fromSize(
+        size: baseSize,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [LineHighlight(cursorInfo: pageCursor, isFocused: isFocused, enabled: lineHighlightEnabled)],
+        ),
+      );
+      final foregroundOverlayLayer = SizedBox.fromSize(
+        size: baseSize,
         child: Stack(
           clipBehavior: Clip.none,
           children: [
-            LineHighlight(cursorInfo: displayCursor.value, isFocused: isFocused, enabled: lineHighlightEnabled),
-            SizedBox.expand(child: Texture(textureId: textureId.value!)),
             _SearchHighlightOverlay(pageIndex: pageIndex, overlays: editorState.search.overlays),
             _SpellcheckOverlay(pageIndex: pageIndex, overlays: editorState.spellcheck.overlays),
             _AiFeedbackOverlay(pageIndex: pageIndex, overlays: editorState.aiFeedback.overlays),
             _RemarkHighlightOverlay(pageIndex: pageIndex, controller: scope.controller),
-            Cursor(cursorInfo: displayCursor.value, isFocused: isFocused),
+            Cursor(cursorInfo: pageCursor, isFocused: isFocused),
             ElementOverlay(pageIndex: pageIndex),
             if (isPaginated && margins != null)
               Positioned.fill(
@@ -155,6 +207,58 @@ class PageItem extends HookWidget {
           ],
         ),
       );
+
+      Widget content;
+      if (isPaginated && !isUnitZoom(effectiveDisplayZoom)) {
+        final scaledSize = Size(baseSize.width * effectiveDisplayZoom, baseSize.height * effectiveDisplayZoom);
+        final scaledBackgroundOverlay = OverflowBox(
+          alignment: Alignment.topLeft,
+          minWidth: baseSize.width,
+          maxWidth: baseSize.width,
+          minHeight: baseSize.height,
+          maxHeight: baseSize.height,
+          child: Transform.scale(
+            alignment: Alignment.topLeft,
+            scale: effectiveDisplayZoom,
+            child: backgroundOverlayLayer,
+          ),
+        );
+        final scaledForegroundOverlay = OverflowBox(
+          alignment: Alignment.topLeft,
+          minWidth: baseSize.width,
+          maxWidth: baseSize.width,
+          minHeight: baseSize.height,
+          maxHeight: baseSize.height,
+          child: Transform.scale(
+            alignment: Alignment.topLeft,
+            scale: effectiveDisplayZoom,
+            child: foregroundOverlayLayer,
+          ),
+        );
+        content = SizedBox.fromSize(
+          size: scaledSize,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Positioned.fill(child: scaledBackgroundOverlay),
+              Positioned.fill(child: Texture(textureId: textureId.value!)),
+              Positioned.fill(child: scaledForegroundOverlay),
+            ],
+          ),
+        );
+      } else {
+        content = SizedBox.fromSize(
+          size: baseSize,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              backgroundOverlayLayer,
+              SizedBox.expand(child: Texture(textureId: textureId.value!)),
+              foregroundOverlayLayer,
+            ],
+          ),
+        );
+      }
 
       if (pageDecoration != null) {
         content = DecoratedBox(decoration: pageDecoration, child: content);

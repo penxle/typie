@@ -17,7 +17,7 @@ class EditorTexturePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
   private val textures = mutableMapOf<Long, EditorTexture>()
 
   companion object {
-    private const val MAX_TEXTURES = 5
+    private const val MAX_TEXTURES = 10
   }
 
   override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
@@ -71,18 +71,26 @@ class EditorTexturePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
       return
     }
 
-    for (item in items) {
-      val textureId = (item["textureId"] as Number).toLong()
-      val editorPtr = (item["editorPtr"] as Number).toLong()
-      val pageIndex = item["pageIndex"] as Int
-      val width = item["width"] as Int
-      val height = item["height"] as Int
+    val results = mutableListOf<Boolean>()
 
-      val texture = textures[textureId] ?: continue
-      texture.render(editorPtr, pageIndex, width, height)
+    for (item in items) {
+      val textureId = (item["textureId"] as? Number)?.toLong()
+      val editorPtr = (item["editorPtr"] as? Number)?.toLong()
+      val pageIndex = item["pageIndex"] as? Int
+      val width = item["width"] as? Int
+      val height = item["height"] as? Int
+
+      if (textureId == null || editorPtr == null || pageIndex == null || width == null || height == null) {
+        results.add(false)
+        continue
+      }
+
+      val texture = textures[textureId]
+      val didRender = texture?.render(editorPtr, pageIndex, width, height) ?: false
+      results.add(didRender)
     }
 
-    result.success(true)
+    result.success(results)
   }
 
   private fun handleDispose(call: MethodCall, result: MethodChannel.Result) {
@@ -162,7 +170,20 @@ class EditorTexture(
         return false
       }
 
-      val result = nativeRenderPageTo(editorPtr, pageIndex.toLong(), ptr, plane.rowStride.toLong(), currentHeight.toLong(), PIXEL_FORMAT_RGBA)
+      val result = nativeRenderPageTo(
+        editorPtr,
+        pageIndex.toLong(),
+        ptr,
+        plane.rowStride.toLong(),
+        currentWidth.toLong(),
+        currentHeight.toLong(),
+        PIXEL_FORMAT_RGBA
+      )
+
+      if (result != 0L) {
+        inputImage.close()
+        return false
+      }
 
       writer.queueInputImage(inputImage)
 
@@ -170,7 +191,7 @@ class EditorTexture(
       entry.pushImage(outputImage)
       prevImage = outputImage
 
-      return result == 0L
+      return true
     } finally {
       bufferLock.unlock()
     }
@@ -194,7 +215,15 @@ class EditorTexture(
   }
 
   private external fun nativeGetDirectBufferAddress(buffer: ByteBuffer): Long
-  private external fun nativeRenderPageTo(editorPtr: Long, pageIndex: Long, dstPtr: Long, dstStride: Long, dstHeight: Long, format: Long): Long
+  private external fun nativeRenderPageTo(
+    editorPtr: Long,
+    pageIndex: Long,
+    dstPtr: Long,
+    dstStride: Long,
+    dstWidth: Long,
+    dstHeight: Long,
+    format: Long
+  ): Long
 
   companion object {
     private const val PIXEL_FORMAT_RGBA = 0L

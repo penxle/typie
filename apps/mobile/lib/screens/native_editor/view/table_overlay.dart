@@ -64,20 +64,31 @@ class TableOverlay extends HookWidget {
           return const SizedBox.shrink();
         }
         final pageRect = viewport.pageRect(focusedOverlay.pageIdx);
-        final overlayWidth = math.max(pageRect.width, focusedOverlay.bounds.x + focusedOverlay.bounds.width + 24);
-        final overlayHeight = math.max(pageRect.height, focusedOverlay.bounds.y + focusedOverlay.bounds.height + 24);
+        final zoom = viewport.geometry.effectiveZoom;
+        final logicalPageWidth = zoom > 0 ? pageRect.width / zoom : pageRect.width;
+        final logicalPageHeight = zoom > 0 ? pageRect.height / zoom : pageRect.height;
+        final overlayWidth = math.max(logicalPageWidth, focusedOverlay.bounds.x + focusedOverlay.bounds.width + 24);
+        final overlayHeight = math.max(logicalPageHeight, focusedOverlay.bounds.y + focusedOverlay.bounds.height + 24);
         return Positioned(
           left: pageRect.left,
           top: pageRect.top,
-          width: overlayWidth,
-          height: overlayHeight,
-          child: _FocusedTableOverlay(
-            overlay: focusedOverlay,
-            gesture: gesture,
-            viewWidth: viewWidth,
-            viewHeight: viewHeight,
-            dropPosition: dropPosition,
-            globalToViewport: globalToViewport,
+          width: overlayWidth * zoom,
+          height: overlayHeight * zoom,
+          child: Transform.scale(
+            alignment: Alignment.topLeft,
+            scale: zoom,
+            child: SizedBox(
+              width: overlayWidth,
+              height: overlayHeight,
+              child: _FocusedTableOverlay(
+                overlay: focusedOverlay,
+                gesture: gesture,
+                viewWidth: viewWidth,
+                viewHeight: viewHeight,
+                dropPosition: dropPosition,
+                globalToViewport: globalToViewport,
+              ),
+            ),
           ),
         );
       },

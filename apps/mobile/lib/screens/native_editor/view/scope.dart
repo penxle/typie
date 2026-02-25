@@ -26,6 +26,9 @@ class ContentScope extends InheritedWidget {
     required this.subtitleFocusNode,
     required this.pendingScroll,
     required this.dndController,
+    required this.displayZoom,
+    required this.renderZoom,
+    required this.setZoom,
     super.key,
   });
 
@@ -47,6 +50,9 @@ class ContentScope extends InheritedWidget {
   final FocusNode titleFocusNode;
   final FocusNode subtitleFocusNode;
   final ValueNotifier<VoidCallback?> pendingScroll;
+  final ValueNotifier<double> displayZoom;
+  final ValueNotifier<double> renderZoom;
+  final void Function(double zoom, {bool commitRender}) setZoom;
 
   NativeEditor get editor => controller.editor;
 
@@ -56,6 +62,7 @@ class ContentScope extends InheritedWidget {
       pages: controller.state.pages,
       titleAreaHeight: titleAreaHeight.value,
       selection: controller.state.selection,
+      zoom: displayZoom.value,
     );
   }
 

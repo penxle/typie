@@ -4,13 +4,9 @@ import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 import 'package:typie/screens/native_editor/state/state.dart';
 import 'package:typie/screens/native_editor/view/geometry.dart';
+import 'package:typie/screens/native_editor/view/zoom.dart';
 
 const _scrollMargin = 60.0;
-
-extension SafeScrollAccess on ScrollController {
-  /// [position]/[offset] 접근 전에 사용. 여러 scroll view에 attach된 경우 false 반환.
-  bool get hasSingleClient => hasClients && positions.length == 1;
-}
 
 void scrollToCursor({
   required ScrollController verticalController,
@@ -37,15 +33,17 @@ void _scrollVertical({
   required bool typewriterEnabled,
   required double typewriterPosition,
 }) {
-  if (!controller.hasSingleClient) {
+  final position = resolveScrollPosition(controller);
+  if (position == null || !position.hasContentDimensions) {
     return;
   }
 
   final cursorGlobalY = geometry.cursorTopInContent(cursor);
-  final viewportHeight = controller.position.viewportDimension;
+  final viewportHeight = position.viewportDimension;
+  final cursorHeight = geometry.toDisplayY(cursor.height);
 
   if (typewriterEnabled) {
-    final availableRange = viewportHeight - cursor.height;
+    final availableRange = viewportHeight - cursorHeight;
     final targetScroll = cursorGlobalY - availableRange * typewriterPosition;
     final totalContentHeight = geometry.totalContentHeight(
       viewportHeight: viewportHeight,
@@ -56,38 +54,38 @@ void _scrollVertical({
     final maxScrollExtent = math.max<double>(0, totalContentHeight - viewportHeight);
 
     final clampedTarget = targetScroll.clamp(0.0, maxScrollExtent);
-    final distance = (controller.offset - clampedTarget).abs();
+    final distance = (position.pixels - clampedTarget).abs();
     if (distance <= 1) {
       return;
     }
 
-    controller.jumpTo(clampedTarget);
+    position.jumpTo(clampedTarget);
     return;
   }
 
   _jumpToKeepCursorInScrollMargin(
-    controller: controller,
+    position: position,
     cursorTop: cursorGlobalY,
-    cursorHeight: cursor.height,
+    cursorHeight: cursorHeight,
     viewportHeight: viewportHeight,
-    maxScrollExtent: controller.position.maxScrollExtent,
+    maxScrollExtent: position.maxScrollExtent,
   );
 }
 
 void _jumpToKeepCursorInScrollMargin({
-  required ScrollController controller,
+  required ScrollPosition position,
   required double cursorTop,
   required double cursorHeight,
   required double viewportHeight,
   required double maxScrollExtent,
 }) {
-  final scrollOffset = controller.offset;
+  final scrollOffset = position.pixels;
   final cursorBottom = cursorTop + cursorHeight;
 
   if (cursorBottom > scrollOffset + viewportHeight - _scrollMargin) {
-    controller.jumpTo((cursorBottom - viewportHeight + _scrollMargin).clamp(0.0, maxScrollExtent));
+    position.jumpTo((cursorBottom - viewportHeight + _scrollMargin).clamp(0.0, maxScrollExtent));
   } else if (cursorTop < scrollOffset + _scrollMargin) {
-    controller.jumpTo((cursorTop - _scrollMargin).clamp(0.0, maxScrollExtent));
+    position.jumpTo((cursorTop - _scrollMargin).clamp(0.0, maxScrollExtent));
   }
 }
 
@@ -97,29 +95,35 @@ void _scrollHorizontal({
   required CursorInfo cursor,
   bool animate = true,
 }) {
-  if (!controller.hasSingleClient || controller.position.maxScrollExtent <= 0) {
+  final horizontalMetrics = resolveHorizontalScrollMetrics(
+    controller: controller,
+    contentWidth: geometry.contentWidth,
+    fallbackViewportDimension: geometry.contentWidth,
+  );
+  final position = horizontalMetrics.activePosition;
+  if (!horizontalMetrics.canScrollHorizontally || position == null) {
     return;
   }
 
   const scrollMargin = _scrollMargin;
-  final cursorX = cursor.x + geometry.horizontalPadding;
-  final scrollOffset = controller.offset;
-  final viewportWidth = controller.position.viewportDimension;
-  final cursorRight = cursorX + 2;
+  final cursorX = geometry.toDisplayX(cursor.x) + geometry.horizontalPadding;
+  final scrollOffset = horizontalMetrics.scrollOffset;
+  final viewportWidth = horizontalMetrics.viewportDimension;
+  final cursorRight = cursorX + geometry.toDisplayX(2);
 
   if (cursorRight > scrollOffset + viewportWidth - scrollMargin) {
-    final target = (cursorRight - viewportWidth + scrollMargin).clamp(0.0, controller.position.maxScrollExtent);
+    final target = (cursorRight - viewportWidth + scrollMargin).clamp(0.0, position.maxScrollExtent);
     if (animate) {
-      unawaited(controller.animateTo(target, duration: const Duration(milliseconds: 100), curve: Curves.easeOut));
+      unawaited(position.animateTo(target, duration: const Duration(milliseconds: 100), curve: Curves.easeOut));
     } else {
-      controller.jumpTo(target);
+      position.jumpTo(target);
     }
   } else if (cursorX < scrollOffset + scrollMargin) {
-    final target = (cursorX - scrollMargin).clamp(0.0, controller.position.maxScrollExtent);
+    final target = (cursorX - scrollMargin).clamp(0.0, position.maxScrollExtent);
     if (animate) {
-      unawaited(controller.animateTo(target, duration: const Duration(milliseconds: 100), curve: Curves.easeOut));
+      unawaited(position.animateTo(target, duration: const Duration(milliseconds: 100), curve: Curves.easeOut));
     } else {
-      controller.jumpTo(target);
+      position.jumpTo(target);
     }
   }
 }
@@ -134,43 +138,48 @@ void scrollToOverlayTarget({
   required double targetWidth,
 }) {
   final offsets = geometry.computeCumulativePageOffsets();
-  final absoluteY = geometry.titleAreaHeight + offsets[pageIdx] + targetY;
+  final absoluteY = geometry.titleAreaHeight + offsets[pageIdx] + geometry.toDisplayY(targetY);
 
-  if (verticalScrollController.hasSingleClient) {
-    final viewportHeight = verticalScrollController.position.viewportDimension;
-    final targetOffset = (absoluteY - viewportHeight / 3).clamp(0.0, verticalScrollController.position.maxScrollExtent);
+  final verticalPosition = resolveScrollPosition(verticalScrollController);
+  if (verticalPosition != null && verticalPosition.hasContentDimensions) {
+    final viewportHeight = verticalPosition.viewportDimension;
+    final targetOffset = (absoluteY - viewportHeight / 3).clamp(0.0, verticalPosition.maxScrollExtent);
     unawaited(
-      verticalScrollController.animateTo(
-        targetOffset,
+      verticalPosition.animateTo(targetOffset, duration: const Duration(milliseconds: 200), curve: Curves.easeOut),
+    );
+  }
+
+  final horizontalMetrics = resolveHorizontalScrollMetrics(
+    controller: horizontalScrollController,
+    contentWidth: geometry.contentWidth,
+    fallbackViewportDimension: geometry.contentWidth,
+  );
+  final horizontalPosition = horizontalMetrics.activePosition;
+  if (!horizontalMetrics.canScrollHorizontally || horizontalPosition == null) {
+    return;
+  }
+
+  const scrollMargin = 60.0;
+  final matchX = geometry.toDisplayX(targetX) + geometry.horizontalPadding;
+  final matchRight = matchX + geometry.toDisplayX(targetWidth);
+  final scrollOffset = horizontalMetrics.scrollOffset;
+  final viewportWidth = horizontalMetrics.viewportDimension;
+
+  if (matchRight > scrollOffset + viewportWidth - scrollMargin) {
+    unawaited(
+      horizontalPosition.animateTo(
+        (matchRight - viewportWidth + scrollMargin).clamp(0.0, horizontalPosition.maxScrollExtent),
         duration: const Duration(milliseconds: 200),
         curve: Curves.easeOut,
       ),
     );
-  }
-
-  if (horizontalScrollController.hasSingleClient && horizontalScrollController.position.maxScrollExtent > 0) {
-    const scrollMargin = 60.0;
-    final matchX = targetX + geometry.horizontalPadding;
-    final matchRight = matchX + targetWidth;
-    final scrollOffset = horizontalScrollController.offset;
-    final viewportWidth = horizontalScrollController.position.viewportDimension;
-
-    if (matchRight > scrollOffset + viewportWidth - scrollMargin) {
-      unawaited(
-        horizontalScrollController.animateTo(
-          (matchRight - viewportWidth + scrollMargin).clamp(0.0, horizontalScrollController.position.maxScrollExtent),
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOut,
-        ),
-      );
-    } else if (matchX < scrollOffset + scrollMargin) {
-      unawaited(
-        horizontalScrollController.animateTo(
-          (matchX - scrollMargin).clamp(0.0, horizontalScrollController.position.maxScrollExtent),
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOut,
-        ),
-      );
-    }
+  } else if (matchX < scrollOffset + scrollMargin) {
+    unawaited(
+      horizontalPosition.animateTo(
+        (matchX - scrollMargin).clamp(0.0, horizontalPosition.maxScrollExtent),
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+      ),
+    );
   }
 }

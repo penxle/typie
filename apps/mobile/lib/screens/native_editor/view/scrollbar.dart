@@ -8,7 +8,7 @@ import 'package:typie/hooks/service.dart';
 import 'package:typie/screens/native_editor/state/state.dart';
 import 'package:typie/screens/native_editor/toolbar/scope.dart';
 import 'package:typie/screens/native_editor/view/scope.dart';
-import 'package:typie/screens/native_editor/view/scroll.dart';
+import 'package:typie/screens/native_editor/view/zoom.dart';
 import 'package:typie/services/preference.dart';
 
 const _hideDelay = Duration(milliseconds: 1000);
@@ -45,6 +45,7 @@ class EditorScrollbar extends HookWidget {
     final pages = state.state.pages;
     final cursor = state.state.cursor;
     useValueListenable(scope.titleAreaHeight);
+    useValueListenable(scope.displayZoom);
     final typewriterEnabled = pref.typewriterEnabled;
     final typewriterPosition = pref.typewriterPosition;
 
@@ -124,11 +125,16 @@ class EditorScrollbar extends HookWidget {
     final isUserScrollVisible = visibleScrollSource.value == _ScrollVisibilitySource.user;
 
     final geometry = scope.geometry;
-    final hasVerticalClients =
-        verticalScrollController.hasSingleClient && verticalScrollController.position.hasContentDimensions;
+    final verticalPosition = resolveScrollPosition(verticalScrollController);
+    final hasVerticalClients = verticalPosition != null && verticalPosition.hasContentDimensions;
+    final horizontalMetrics = resolveHorizontalScrollMetrics(
+      controller: horizontalScrollController,
+      contentWidth: geometry.contentWidth,
+      fallbackViewportDimension: viewWidth,
+    );
 
     double calculateTotalContentHeight() {
-      final viewportHeight = hasVerticalClients ? verticalScrollController.position.viewportDimension : viewHeight;
+      final viewportHeight = hasVerticalClients ? verticalPosition.viewportDimension : viewHeight;
       return geometry.totalContentHeight(
         viewportHeight: viewportHeight,
         cursor: cursor,
@@ -137,13 +143,10 @@ class EditorScrollbar extends HookWidget {
       );
     }
 
-    final hasHorizontalScroll =
-        horizontalScrollController.hasSingleClient &&
-        horizontalScrollController.position.hasContentDimensions &&
-        horizontalScrollController.position.maxScrollExtent > 0;
+    final hasHorizontalScroll = horizontalMetrics.expectsScrollableContent;
 
-    final actualViewHeight = hasVerticalClients ? verticalScrollController.position.viewportDimension : viewHeight;
-    final actualViewWidth = hasHorizontalScroll ? horizontalScrollController.position.viewportDimension : viewWidth;
+    final actualViewHeight = hasVerticalClients ? verticalPosition.viewportDimension : viewHeight;
+    final actualViewWidth = hasHorizontalScroll ? horizontalMetrics.viewportDimension : viewWidth;
 
     final totalContentHeight = calculateTotalContentHeight();
     final calculatedMaxScrollExtent = math.max<double>(0, totalContentHeight - actualViewHeight);
@@ -153,17 +156,17 @@ class EditorScrollbar extends HookWidget {
       return const SizedBox.shrink();
     }
 
-    final scrollOffset = hasVerticalClients
-        ? verticalScrollController.offset.clamp(0.0, calculatedMaxScrollExtent)
-        : 0.0;
+    final scrollOffset = hasVerticalClients ? verticalPosition.pixels.clamp(0.0, calculatedMaxScrollExtent) : 0.0;
     final maxScrollExtent = calculatedMaxScrollExtent;
     final viewportDimension = actualViewHeight;
 
-    final horizontalScrollOffset = hasHorizontalScroll ? horizontalScrollController.offset : 0.0;
-    final horizontalMaxScrollExtent = hasHorizontalScroll ? horizontalScrollController.position.maxScrollExtent : 0.0;
-    final horizontalViewportDimension = hasHorizontalScroll
-        ? horizontalScrollController.position.viewportDimension
-        : viewWidth;
+    final horizontalScrollOffset = hasHorizontalScroll ? horizontalMetrics.scrollOffset : 0.0;
+    final horizontalMaxScrollExtent = hasHorizontalScroll
+        ? (horizontalMetrics.hasScrollablePositionExtent
+              ? horizontalMetrics.maxScrollExtent
+              : horizontalMetrics.expectedMaxScrollExtent)
+        : 0.0;
+    final horizontalViewportDimension = hasHorizontalScroll ? horizontalMetrics.viewportDimension : viewWidth;
 
     final safeTop = safePadding.top;
     final toolbarVisible = isEditorFocused;
@@ -207,7 +210,7 @@ class EditorScrollbar extends HookWidget {
 
       for (var i = 0; i < pages.length; i++) {
         final pageTop = cumHeight;
-        final pageHeight = pages.elementAtOrNull(i)?.height ?? 0.0;
+        final pageHeight = geometry.pageHeightAt(i);
         final pageBottom = cumHeight + pageHeight;
         cumHeight = pageBottom + geometry.gapAfterPage(i);
 
@@ -282,14 +285,17 @@ class EditorScrollbar extends HookWidget {
                   showTemporarily(source: _ScrollVisibilitySource.user);
                 },
                 onPanUpdate: (details) {
-                  if (!isDraggingV.value || !verticalScrollController.hasSingleClient) {
+                  final dragVerticalPosition = resolveScrollPosition(verticalScrollController);
+                  if (!isDraggingV.value ||
+                      dragVerticalPosition == null ||
+                      !dragVerticalPosition.hasContentDimensions) {
                     return;
                   }
-                  final currentMaxExtent = verticalScrollController.position.maxScrollExtent;
+                  final currentMaxExtent = dragVerticalPosition.maxScrollExtent;
                   final deltaY = details.globalPosition.dy - dragStartY.value;
                   final newThumbTop = dragStartThumbTop.value + deltaY;
                   final ratio = thumbTravelV > 0 ? ((newThumbTop - _trackPadding) / thumbTravelV).clamp(0.0, 1.0) : 0.0;
-                  verticalScrollController.jumpTo(ratio * currentMaxExtent);
+                  dragVerticalPosition.jumpTo(ratio * currentMaxExtent);
                   rebuildTrigger.value++;
                 },
                 onPanEnd: (_) {
@@ -381,16 +387,24 @@ class EditorScrollbar extends HookWidget {
                   showTemporarily(source: _ScrollVisibilitySource.user);
                 },
                 onPanUpdate: (details) {
-                  if (!isDraggingH.value || !horizontalScrollController.hasSingleClient) {
+                  final dragHorizontalMetrics = resolveHorizontalScrollMetrics(
+                    controller: horizontalScrollController,
+                    contentWidth: geometry.contentWidth,
+                    fallbackViewportDimension: viewWidth,
+                  );
+                  final dragHorizontalPosition = dragHorizontalMetrics.activePosition;
+                  if (!isDraggingH.value ||
+                      dragHorizontalPosition == null ||
+                      !dragHorizontalMetrics.canScrollHorizontally) {
                     return;
                   }
-                  final currentMaxExtent = horizontalScrollController.position.maxScrollExtent;
+                  final currentMaxExtent = dragHorizontalPosition.maxScrollExtent;
                   final deltaX = details.globalPosition.dx - dragStartX.value;
                   final newThumbLeft = dragStartThumbLeft.value + deltaX;
                   final ratio = thumbTravelH > 0
                       ? ((newThumbLeft - _trackPadding) / thumbTravelH).clamp(0.0, 1.0)
                       : 0.0;
-                  horizontalScrollController.jumpTo(ratio * currentMaxExtent);
+                  dragHorizontalPosition.jumpTo(ratio * currentMaxExtent);
                   rebuildTrigger.value++;
                 },
                 onPanEnd: (_) {

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -13,10 +14,11 @@ import 'package:typie/screens/native_editor/view/geometry.dart';
 import 'package:typie/screens/native_editor/view/gesture.dart';
 import 'package:typie/screens/native_editor/view/page.dart';
 import 'package:typie/screens/native_editor/view/scope.dart';
-import 'package:typie/screens/native_editor/view/scroll.dart';
 import 'package:typie/screens/native_editor/view/selection.dart';
 import 'package:typie/screens/native_editor/view/table_overlay.dart';
 import 'package:typie/screens/native_editor/view/title.dart';
+import 'package:typie/screens/native_editor/view/zoom.dart';
+import 'package:typie/screens/native_editor/view/zoom_pinch.dart';
 import 'package:typie/services/preference.dart';
 
 class PageList extends HookWidget {
@@ -43,13 +45,17 @@ class PageList extends HookWidget {
     final handleMetricsRevision = useValueNotifier(0);
 
     useValueListenable(scope.titleAreaHeight);
+    final zoom = useValueListenable(scope.displayZoom);
 
     (int pageIdx, double localY) getPageAtPosition(double y) {
       final geo = scope.geometry;
       final offsets = geo.computeCumulativePageOffsets();
-      final scrollOffset = scope.verticalScrollController.hasSingleClient ? scope.verticalScrollController.offset : 0.0;
+      final scrollOffset = resolveScrollOffset(scope.verticalScrollController);
       final absoluteY = y + scrollOffset;
-      final extensionAreaTop = (geo.titleAreaHeight - ContentGeometry.pagePadding).clamp(0.0, double.infinity);
+      final extensionAreaTop = (geo.titleAreaHeight - geo.toDisplayY(ContentGeometry.pagePadding)).clamp(
+        0.0,
+        double.infinity,
+      );
 
       if (absoluteY < extensionAreaTop) {
         return (-1, absoluteY);
@@ -69,7 +75,7 @@ class PageList extends HookWidget {
       }
 
       final pageIdx = (low - 1).clamp(0, geo.pages.length - 1);
-      final localY = adjustedY - offsets[pageIdx];
+      final localY = geo.toLogicalY(adjustedY - offsets[pageIdx]);
       return (pageIdx, localY);
     }
 
@@ -77,6 +83,15 @@ class PageList extends HookWidget {
     final wasContextMenuOpen = useRef(false);
     final clipboard = useMemoized(EditorClipboard.new);
     final viewportWidth = useValueNotifier<double>(0);
+
+    HorizontalScrollMetrics resolveHorizontalMetrics() {
+      final geo = scope.geometry;
+      return resolveHorizontalScrollMetrics(
+        controller: horizontalScrollController,
+        contentWidth: geo.contentWidth,
+        fallbackViewportDimension: viewportWidth.value,
+      );
+    }
 
     final longPressPosition = scope.longPressPosition;
     final handleDragPosition = scope.handleDragPosition;
@@ -91,17 +106,28 @@ class PageList extends HookWidget {
         getPageAtPosition: getPageAtPosition,
         getPointerX: (localX) {
           final geo = scope.geometry;
-          final hScrollOffset = horizontalScrollController.hasSingleClient ? horizontalScrollController.offset : 0.0;
-          final viewport = viewportWidth.value;
-          return localX - geo.contentStartX(viewportWidth: viewport, horizontalScrollOffset: hScrollOffset);
+          final horizontalMetrics = resolveHorizontalMetrics();
+          final hScrollOffset = horizontalMetrics.scrollOffset;
+          return geo.toLogicalX(
+            localX -
+                geo.contentStartX(
+                  viewportWidth: horizontalMetrics.viewportDimension,
+                  horizontalScrollOffset: hScrollOffset,
+                ),
+          );
         },
-        getViewportWidth: () => viewportWidth.value,
+        getHorizontalMetrics: resolveHorizontalMetrics,
         isLongPressing: scope.isLongPressing,
       ),
     );
     final gestureState = gesture.state;
+    final pinch = useMemoized(PinchGestureController.new);
+    final resumedPanPointer = useRef<int?>(null);
+    final resumedPanLastLocalPosition = useRef<Offset?>(null);
+    final resumedPanActive = useRef(false);
 
     useEffect(() => gesture.dispose, const []);
+    useEffect(() => pinch.reset, [pinch]);
 
     useEffect(() {
       void onScroll() {
@@ -157,8 +183,14 @@ class PageList extends HookWidget {
       builder: (context, constraints) {
         final viewWidth = constraints.maxWidth;
         final viewHeight = constraints.maxHeight;
+        final geo = scope.geometry;
         if (viewportWidth.value != viewWidth) {
-          viewportWidth.value = viewWidth;
+          final nextViewportWidth = viewWidth;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (viewportWidth.value != nextViewportWidth) {
+              viewportWidth.value = nextViewportWidth;
+            }
+          });
         }
 
         Offset? viewportPositionFromGlobal(Offset globalPosition) {
@@ -170,7 +202,64 @@ class PageList extends HookWidget {
           return gesture.isConsecutiveTap(localPosition: localPosition, now: now);
         }
 
+        void beginPinchIfNeeded() {
+          final started = pinch.beginIfNeeded(
+            isPaginated: geo.isPaginated,
+            currentZoom: zoom,
+            resolveLogicalX: gesture.getPointerX,
+            resolvePageAtPosition: getPageAtPosition,
+          );
+          if (!started) {
+            return;
+          }
+
+          resumedPanPointer.value = null;
+          resumedPanLastLocalPosition.value = null;
+          resumedPanActive.value = false;
+
+          gesture
+            ..cancelTapTimer()
+            ..stopSelectionHandlesAndAutoScroll()
+            ..cancelScrollDrag();
+          gestureState.stop();
+          longPressPosition.value = null;
+          handleDragPosition.value = null;
+          showContextMenu.value = false;
+          if (scope.controller.state.isSelecting) {
+            scope.controller.setSelecting(false);
+          }
+        }
+
+        void updatePinchZoom() {
+          pinch.updateIfNeeded(
+            isPaginated: geo.isPaginated,
+            layout: scope.controller.state.layout,
+            viewportWidth: viewWidth,
+            currentZoom: zoom,
+            resolveLogicalX: gesture.getPointerX,
+            resolvePageAtPosition: getPageAtPosition,
+            setZoom: scope.setZoom,
+            geometryBuilder: (nextZoom) => ContentGeometry(
+              layout: scope.controller.state.layout!,
+              pages: scope.controller.state.pages,
+              titleAreaHeight: scope.titleAreaHeight.value,
+              selection: scope.controller.state.selection,
+              zoom: nextZoom,
+            ),
+            horizontalScrollController: horizontalScrollController,
+            verticalScrollController: verticalScrollController,
+            isMounted: () => context.mounted,
+          );
+        }
+
+        void endPinchIfNeeded() {
+          pinch.endIfNeeded(currentZoom: scope.displayZoom.value, setZoom: scope.setZoom);
+        }
+
         void endTextHandleDrag() {
+          if (pinch.isPinching) {
+            return;
+          }
           if (gesture.isCellHandleDragging) {
             return;
           }
@@ -186,6 +275,9 @@ class PageList extends HookWidget {
         }
 
         bool dispatchDoubleTapSelection(Offset localPosition) {
+          if (pinch.isPinching) {
+            return false;
+          }
           final (pageIdx, localY) = getPageAtPosition(localPosition.dy);
           if (pageIdx < 0) {
             return false;
@@ -222,6 +314,9 @@ class PageList extends HookWidget {
         }
 
         void prepareDoubleTapDrag(Offset localPosition) {
+          if (pinch.isPinching) {
+            return;
+          }
           gesture
             ..cancelTapTimer()
             ..setTapDispatched(true)
@@ -235,6 +330,9 @@ class PageList extends HookWidget {
         }
 
         void startDoubleTapDrag(Offset localPosition) {
+          if (pinch.isPinching) {
+            return;
+          }
           gesture
             ..cancelTapTimer()
             ..setTapDispatched(true)
@@ -277,6 +375,9 @@ class PageList extends HookWidget {
         }
 
         void updateDoubleTapDragSelection(Offset localPosition) {
+          if (pinch.isPinching) {
+            return;
+          }
           if (!gestureState.dragging) {
             return;
           }
@@ -322,6 +423,9 @@ class PageList extends HookWidget {
         }
 
         void onHandleDragStart(SelectionHandleType type, DragStartDetails details) {
+          if (pinch.isPinching) {
+            return;
+          }
           scope.controller.setSelecting(true);
 
           final renderBox = context.findRenderObject() as RenderBox?;
@@ -339,6 +443,9 @@ class PageList extends HookWidget {
         }
 
         void onHandleDragUpdate(SelectionHandleType type, DragUpdateDetails details) {
+          if (pinch.isPinching) {
+            return;
+          }
           final renderBox = context.findRenderObject() as RenderBox?;
           if (renderBox == null) {
             return;
@@ -383,25 +490,31 @@ class PageList extends HookWidget {
           endTextHandleDrag();
         }
 
-        final geo = scope.geometry;
         final offsets = geo.computeCumulativePageOffsets();
         final contentWidth = geo.contentWidth;
-        final needsHorizontalScroll = contentWidth > viewWidth;
+        final allowHorizontalPan = geo.isPaginated;
         final hasRangeSelection = !(state.state.selection?.collapsed ?? true);
-        final horizontalPhysics = isSelecting || !needsHorizontalScroll
+        final horizontalPhysics = isSelecting || !allowHorizontalPan
             ? const NeverScrollableScrollPhysics()
             : const _NonGestureBouncingScrollPhysics();
 
         final contentBottomPadding = geo.bottomPadding(
-          viewportHeight: verticalScrollController.hasSingleClient
-              ? verticalScrollController.position.viewportDimension
-              : viewHeight,
+          viewportHeight: resolveScrollPosition(verticalScrollController)?.viewportDimension ?? viewHeight,
           cursor: cursor,
           typewriterEnabled: pref.typewriterEnabled,
           typewriterPosition: pref.typewriterPosition,
         );
 
+        void clearResumedPanState() {
+          resumedPanPointer.value = null;
+          resumedPanLastLocalPosition.value = null;
+          resumedPanActive.value = false;
+        }
+
         void startLongPress(Offset globalPosition) {
+          if (pinch.isPinching) {
+            return;
+          }
           if (gesture.isCellHandleDragging) {
             return;
           }
@@ -432,6 +545,9 @@ class PageList extends HookWidget {
         }
 
         void updateLongPress(Offset viewportPosition) {
+          if (pinch.isPinching) {
+            return;
+          }
           if (!gestureState.longPressing || gestureState.active) {
             return;
           }
@@ -474,6 +590,9 @@ class PageList extends HookWidget {
         }
 
         void endLongPress() {
+          if (pinch.isPinching) {
+            return;
+          }
           if (!gestureState.longPressing || gestureState.active) {
             return;
           }
@@ -525,64 +644,62 @@ class PageList extends HookWidget {
                   child: Column(
                     children: [
                       _MeasuredTitleFields(scope: scope),
-                      if (needsHorizontalScroll)
-                        SingleChildScrollView(
-                          controller: horizontalScrollController,
-                          scrollDirection: Axis.horizontal,
-                          physics: horizontalPhysics,
-                          child: Container(
-                            width: (geo.pages.firstOrNull?.width ?? 0) + geo.horizontalPadding * 2,
-                            padding: EdgeInsets.only(
-                              left: geo.horizontalPadding,
-                              right: geo.horizontalPadding,
-                              bottom: contentBottomPadding,
-                            ),
-                            child: Column(
-                              children: [
-                                for (var i = 0; i < pages.length; i++) ...[
-                                  _PageSlot(
-                                    key: ValueKey(i),
-                                    pageIndex: i,
-                                    pageTop: geo.titleAreaHeight + offsets[i],
-                                    pageBottom: geo.titleAreaHeight + offsets[i] + pages[i].height,
-                                  ),
+                      _TrackedHorizontalScrollView(
+                        controller: horizontalScrollController,
+                        physics: horizontalPhysics,
+                        child: SizedBox(
+                          width: math.max(contentWidth, viewWidth),
+                          child: Align(
+                            alignment: Alignment.topCenter,
+                            child: Container(
+                              width: contentWidth,
+                              padding: EdgeInsets.only(
+                                left: geo.horizontalPadding,
+                                right: geo.horizontalPadding,
+                                bottom: contentBottomPadding,
+                              ),
+                              child: Column(
+                                children: [
+                                  for (var i = 0; i < pages.length; i++) ...[
+                                    _PageSlot(
+                                      key: ValueKey(i),
+                                      pageIndex: i,
+                                      pageTop: geo.titleAreaHeight + offsets[i],
+                                      pageBottom: geo.titleAreaHeight + offsets[i] + geo.pageHeightAt(i),
+                                    ),
+                                  ],
                                 ],
-                              ],
+                              ),
                             ),
-                          ),
-                        )
-                      else
-                        Container(
-                          width: (geo.pages.firstOrNull?.width ?? 0) + geo.horizontalPadding * 2,
-                          padding: EdgeInsets.only(
-                            left: geo.horizontalPadding,
-                            right: geo.horizontalPadding,
-                            bottom: contentBottomPadding,
-                          ),
-                          child: Column(
-                            children: [
-                              for (var i = 0; i < pages.length; i++) ...[
-                                _PageSlot(
-                                  key: ValueKey(i),
-                                  pageIndex: i,
-                                  pageTop: geo.titleAreaHeight + offsets[i],
-                                  pageBottom: geo.titleAreaHeight + offsets[i] + pages[i].height,
-                                ),
-                              ],
-                            ],
                           ),
                         ),
+                      ),
                     ],
                   ),
                 );
 
-                return EditorDraggable(gesture: gesture, child: content);
+                return EditorDraggable(
+                  gesture: gesture,
+                  resolveDragLocation: (globalPosition) {
+                    final viewportPosition = viewportPositionFromGlobal(globalPosition);
+                    if (viewportPosition == null) {
+                      return null;
+                    }
+                    final (pageIdx, localY) = getPageAtPosition(viewportPosition.dy);
+                    final pointerX = gesture.getPointerX(viewportPosition.dx);
+                    return (localPosition: viewportPosition, pageIdx: pageIdx, localY: localY, pointerX: pointerX);
+                  },
+                  child: content,
+                );
               },
             ),
           ),
         );
 
         void dispatchTap(Offset localPosition) {
+          if (pinch.isPinching) {
+            return;
+          }
           showContextMenu.value = false;
 
           final (pageIdx, localY) = getPageAtPosition(localPosition.dy);
@@ -674,8 +791,9 @@ class PageList extends HookWidget {
         }
 
         Widget buildSelectionHandle(SelectionHandleInfo handle, SelectionHandleType type) {
+          final scaledHandle = handle.copyWith(height: geo.toDisplayY(handle.height));
           return SelectionHandle(
-            handleInfo: handle,
+            handleInfo: scaledHandle,
             type: type,
             onDragDown: onHandleDragDown,
             onDragStart: onHandleDragStart,
@@ -687,6 +805,9 @@ class PageList extends HookWidget {
         final gestureDetector = GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTapDown: (details) {
+            if (pinch.isPinching) {
+              return;
+            }
             wasContextMenuOpen.value = showContextMenu.value;
             if (showContextMenu.value) {
               showContextMenu.value = false;
@@ -725,6 +846,9 @@ class PageList extends HookWidget {
               });
           },
           onTapUp: (details) {
+            if (pinch.isPinching) {
+              return;
+            }
             if (gestureState.dragging) {
               return;
             }
@@ -735,6 +859,9 @@ class PageList extends HookWidget {
             }
           },
           onTapCancel: () {
+            if (pinch.isPinching) {
+              return;
+            }
             if (gestureState.active) {
               return;
             }
@@ -743,25 +870,42 @@ class PageList extends HookWidget {
           },
 
           onPanDown: (details) {
+            if (pinch.isPinching) {
+              return;
+            }
             if (isSelecting) {
               return;
             }
             gesture.holdScrollPositions();
           },
           onPanStart: (details) {
+            if (pinch.isPinching) {
+              return;
+            }
             if (gestureState.active) {
               return;
             }
-            gesture.startScrollDrag(details: details, allowHorizontal: needsHorizontalScroll);
+            gesture.startScrollDrag(details: details, allowHorizontal: allowHorizontalPan);
           },
-          onPanUpdate: gesture.updateScrollDrag,
+          onPanUpdate: (details) {
+            if (pinch.isPinching) {
+              return;
+            }
+            gesture.updateScrollDrag(details);
+          },
           onPanEnd: (details) {
+            if (pinch.isPinching) {
+              return;
+            }
             if (gestureState.active) {
               return;
             }
             gesture.endScrollDrag(details);
           },
           onPanCancel: () {
+            if (pinch.isPinching) {
+              return;
+            }
             if (gestureState.active) {
               return;
             }
@@ -774,6 +918,9 @@ class PageList extends HookWidget {
           formats: Formats.standardFormats,
           hitTestBehavior: HitTestBehavior.translucent,
           onDropOver: (event) {
+            if (pinch.isPinching) {
+              return DropOperation.none;
+            }
             final item = event.session.items.firstOrNull;
             if (item == null) {
               return DropOperation.none;
@@ -804,6 +951,9 @@ class PageList extends HookWidget {
             return DropOperation.copy;
           },
           onDropEnter: (event) {
+            if (pinch.isPinching) {
+              return;
+            }
             scope.dndController.handleDragEnter();
           },
           onDropLeave: (event) {
@@ -812,6 +962,9 @@ class PageList extends HookWidget {
             scope.dndController.handleDragLeave();
           },
           onPerformDrop: (event) async {
+            if (pinch.isPinching) {
+              return;
+            }
             dropPosition.value = null;
             gesture.stopAutoScroll();
 
@@ -829,7 +982,62 @@ class PageList extends HookWidget {
           },
           child: Listener(
             behavior: HitTestBehavior.translucent,
+            onPointerDown: (event) {
+              clearResumedPanState();
+              pinch.addPointer(event.pointer, event.localPosition);
+              if (pinch.pointerCount >= 2) {
+                beginPinchIfNeeded();
+              }
+            },
             onPointerMove: (event) {
+              final previousPointerPosition = pinch.pointerPosition(event.pointer);
+              if (pinch.containsPointer(event.pointer)) {
+                pinch.updatePointer(event.pointer, event.localPosition);
+              }
+
+              if (pinch.isPinching) {
+                updatePinchZoom();
+                return;
+              }
+
+              if (resumedPanPointer.value == event.pointer) {
+                final previous = resumedPanLastLocalPosition.value;
+                resumedPanLastLocalPosition.value = event.localPosition;
+
+                if (previous == null) {
+                  return;
+                }
+
+                if (isSelecting || gestureState.active || gesture.hasAnyHandleDrag) {
+                  clearResumedPanState();
+                  return;
+                }
+
+                final delta = event.localPosition - previous;
+                if (!resumedPanActive.value) {
+                  if (delta.distance < 1) {
+                    return;
+                  }
+                  gesture.startScrollDrag(
+                    details: DragStartDetails(globalPosition: event.position, localPosition: previous),
+                    allowHorizontal: allowHorizontalPan,
+                  );
+                  resumedPanActive.value = true;
+                }
+
+                if (delta.distance > 0) {
+                  gesture.updateScrollDrag(
+                    DragUpdateDetails(
+                      globalPosition: event.position,
+                      localPosition: event.localPosition,
+                      delta: delta,
+                      sourceTimeStamp: event.timeStamp,
+                    ),
+                  );
+                }
+                return;
+              }
+
               if (gestureState.pending) {
                 final startPosition = gestureState.start;
                 if (startPosition != null && (event.localPosition - startPosition).distance >= 4) {
@@ -845,9 +1053,48 @@ class PageList extends HookWidget {
 
               if (gestureState.longPressing) {
                 updateLongPress(event.localPosition);
+                return;
+              }
+
+              final isSinglePointer = pinch.pointerCount == 1;
+              final canRawPan =
+                  isSinglePointer &&
+                  previousPointerPosition != null &&
+                  !isSelecting &&
+                  !gesture.hasAnyHandleDrag &&
+                  !gesture.hasScrollDrag;
+              if (canRawPan) {
+                final delta = event.localPosition - previousPointerPosition;
+                if (delta.distance >= 1) {
+                  gesture.applyRawPanDelta(delta: delta, allowHorizontal: allowHorizontalPan);
+                }
               }
             },
-            onPointerUp: (_) {
+            onPointerUp: (event) {
+              if (resumedPanPointer.value == event.pointer) {
+                if (resumedPanActive.value) {
+                  gesture.endScrollDrag(DragEndDetails());
+                }
+                clearResumedPanState();
+              }
+
+              final wasPinching = pinch.isPinching;
+              pinch.removePointer(event.pointer);
+              if (pinch.pointerCount < 2) {
+                endPinchIfNeeded();
+              }
+
+              if (wasPinching && pinch.pointerCount == 1) {
+                final remaining = pinch.singlePointerEntry!;
+                resumedPanPointer.value = remaining.key;
+                resumedPanLastLocalPosition.value = remaining.value;
+                resumedPanActive.value = false;
+              }
+
+              if (wasPinching) {
+                return;
+              }
+
               if (gestureState.dragging) {
                 endDoubleTapDrag();
                 return;
@@ -856,7 +1103,31 @@ class PageList extends HookWidget {
               endLongPress();
               endTextHandleDrag();
             },
-            onPointerCancel: (_) {
+            onPointerCancel: (event) {
+              if (resumedPanPointer.value == event.pointer) {
+                if (resumedPanActive.value) {
+                  gesture.cancelScrollDrag();
+                }
+                clearResumedPanState();
+              }
+
+              final wasPinching = pinch.isPinching;
+              pinch.removePointer(event.pointer);
+              if (pinch.pointerCount < 2) {
+                endPinchIfNeeded();
+              }
+
+              if (wasPinching && pinch.pointerCount == 1) {
+                final remaining = pinch.singlePointerEntry!;
+                resumedPanPointer.value = remaining.key;
+                resumedPanLastLocalPosition.value = remaining.value;
+                resumedPanActive.value = false;
+              }
+
+              if (wasPinching) {
+                return;
+              }
+
               if (gestureState.dragging) {
                 endDoubleTapDrag();
                 return;
@@ -927,6 +1198,65 @@ class PageList extends HookWidget {
   }
 }
 
+class _TrackedHorizontalScrollView extends HookWidget {
+  const _TrackedHorizontalScrollView({required this.controller, required this.physics, required this.child});
+
+  final ScrollController controller;
+  final ScrollPhysics physics;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final trackedPositionRef = useRef<ScrollPosition?>(null);
+
+    void registerPosition(ScrollPosition position) {
+      final previous = trackedPositionRef.value;
+      if (!identical(previous, position)) {
+        if (previous != null) {
+          clearPreferredHorizontalScrollPosition(controller, previous);
+        }
+        trackedPositionRef.value = position;
+      }
+      setPreferredHorizontalScrollPosition(controller, position);
+    }
+
+    useEffect(() {
+      return () {
+        final tracked = trackedPositionRef.value;
+        if (tracked != null) {
+          clearPreferredHorizontalScrollPosition(controller, tracked);
+        }
+        trackedPositionRef.value = null;
+      };
+    }, [controller]);
+
+    return NotificationListener<ScrollNotification>(
+      onNotification: (notification) {
+        final context = notification.context;
+        if (context != null) {
+          registerPosition(Scrollable.of(context).position);
+        }
+        return false;
+      },
+      child: SingleChildScrollView(
+        controller: controller,
+        scrollDirection: Axis.horizontal,
+        physics: physics,
+        child: HookBuilder(
+          builder: (context) {
+            final position = Scrollable.of(context).position;
+            useEffect(() {
+              registerPosition(position);
+              return null;
+            }, [position, controller]);
+            return child;
+          },
+        ),
+      ),
+    );
+  }
+}
+
 class _PageSlot extends HookWidget {
   const _PageSlot({required this.pageIndex, required this.pageTop, required this.pageBottom, super.key});
 
@@ -940,13 +1270,12 @@ class _PageSlot extends HookWidget {
     final verticalScrollController = scope.verticalScrollController;
 
     bool computeVisibility() {
-      if (!verticalScrollController.hasSingleClient) {
+      final verticalPosition = resolveScrollPosition(verticalScrollController);
+      if (verticalPosition == null || !verticalPosition.hasContentDimensions) {
         return true;
       }
-      final scrollOffset = verticalScrollController.offset;
-      final viewHeight = verticalScrollController.position.hasContentDimensions
-          ? verticalScrollController.position.viewportDimension
-          : 0.0;
+      final scrollOffset = verticalPosition.pixels;
+      final viewHeight = verticalPosition.viewportDimension;
       const cacheExtent = 200.0;
       final viewTop = scrollOffset - cacheExtent;
       final viewBottom = scrollOffset + viewHeight + cacheExtent;

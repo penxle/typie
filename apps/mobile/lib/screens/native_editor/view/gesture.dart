@@ -6,7 +6,7 @@ import 'package:typie/native/editor_native.dart';
 import 'package:typie/screens/native_editor/state/controller.dart';
 import 'package:typie/screens/native_editor/state/state.dart';
 import 'package:typie/screens/native_editor/view/geometry.dart';
-import 'package:typie/screens/native_editor/view/scroll.dart';
+import 'package:typie/screens/native_editor/view/zoom.dart';
 
 class GestureStateMachine {
   GestureStateMachine({required this.isLongPressing});
@@ -94,7 +94,7 @@ class GestureController {
     required this.controller,
     required this.getPageAtPosition,
     required this.getPointerX,
-    required this.getViewportWidth,
+    required this.getHorizontalMetrics,
     required ValueNotifier<bool> isLongPressing,
   }) : state = GestureStateMachine(isLongPressing: isLongPressing);
 
@@ -104,7 +104,7 @@ class GestureController {
   final EditorController controller;
   final (int, double) Function(double y) getPageAtPosition;
   final double Function(double localX) getPointerX;
-  final double Function() getViewportWidth;
+  final HorizontalScrollMetrics Function() getHorizontalMetrics;
   final GestureStateMachine state;
 
   static const _edgeThreshold = 60.0;
@@ -134,15 +134,27 @@ class GestureController {
 
   Drag? _verticalDrag;
   Drag? _horizontalDrag;
+  bool _horizontalPanEnabled = false;
 
   bool get isCellHandleDragging => _draggingCellHandle;
   bool get hasTextHandleDrag => _draggingHandleType != null;
   bool get hasAnyHandleDrag => _draggingCellHandle || hasTextHandleDrag;
+  bool get hasScrollDrag => _verticalDrag != null || _horizontalDrag != null;
 
   bool get tapDispatched => _tapDispatched;
   SelectionHandleType? get draggingHandleType => _draggingHandleType;
   SelectionHandleInfo? get dragAnchorHandle => _dragAnchorHandle;
   Map<String, dynamic>? get doubleTapInitialRange => _doubleTapInitialRange;
+
+  ScrollPosition? get _verticalPosition {
+    return resolveScrollPosition(verticalScrollController);
+  }
+
+  HorizontalScrollMetrics get _horizontalMetrics => getHorizontalMetrics();
+
+  ScrollPosition? get _horizontalPosition {
+    return _horizontalMetrics.activePosition;
+  }
 
   void startCellHandleDrag() {
     _draggingCellHandle = true;
@@ -264,28 +276,38 @@ class GestureController {
   }
 
   void holdScrollPositions() {
-    if (verticalScrollController.hasSingleClient) {
-      verticalScrollController.position.hold(() {});
-    }
-    if (horizontalScrollController.hasSingleClient) {
-      horizontalScrollController.position.hold(() {});
-    }
+    // no-op
   }
 
   void startScrollDrag({required DragStartDetails details, required bool allowHorizontal}) {
-    if (verticalScrollController.hasSingleClient) {
-      _verticalDrag = verticalScrollController.position.drag(details, () {
+    final horizontalMetrics = _horizontalMetrics;
+    final horizontalPosition = horizontalMetrics.activePosition;
+    final canStartHorizontal = allowHorizontal && horizontalMetrics.canScrollHorizontally && horizontalPosition != null;
+
+    _horizontalPanEnabled = canStartHorizontal;
+    final verticalPosition = _verticalPosition;
+    if (verticalPosition != null) {
+      _verticalDrag = verticalPosition.drag(details, () {
         _verticalDrag = null;
       });
     }
-    if (allowHorizontal && horizontalScrollController.hasSingleClient) {
-      _horizontalDrag = horizontalScrollController.position.drag(details, () {
+    if (canStartHorizontal) {
+      _horizontalDrag = horizontalPosition.drag(details, () {
         _horizontalDrag = null;
       });
     }
   }
 
   void updateScrollDrag(DragUpdateDetails details) {
+    final horizontalMetrics = _horizontalMetrics;
+    final horizontalPosition = horizontalMetrics.activePosition;
+    final canFallbackHorizontal =
+        _horizontalPanEnabled &&
+        horizontalMetrics.canScrollHorizontally &&
+        horizontalPosition != null &&
+        details.delta.dx != 0;
+    final horizontalBefore = canFallbackHorizontal ? horizontalPosition.pixels : null;
+
     _verticalDrag?.update(
       DragUpdateDetails(
         globalPosition: details.globalPosition,
@@ -302,6 +324,41 @@ class GestureController {
         sourceTimeStamp: details.sourceTimeStamp,
       ),
     );
+
+    if (canFallbackHorizontal) {
+      final horizontalAfterDrag = horizontalPosition.pixels;
+      final dragMoved = horizontalBefore != null && (horizontalAfterDrag - horizontalBefore).abs() > 0.01;
+      if (!dragMoved) {
+        final nextOffset = (horizontalAfterDrag - details.delta.dx).clamp(0.0, horizontalPosition.maxScrollExtent);
+        if ((nextOffset - horizontalAfterDrag).abs() > 0) {
+          horizontalPosition.jumpTo(nextOffset);
+        }
+      }
+    }
+  }
+
+  void applyRawPanDelta({required Offset delta, required bool allowHorizontal}) {
+    final verticalPosition = _verticalPosition;
+    if (verticalPosition != null &&
+        verticalPosition.hasContentDimensions &&
+        verticalPosition.maxScrollExtent > 0 &&
+        delta.dy != 0) {
+      final currentOffset = verticalPosition.pixels;
+      final nextOffset = (currentOffset - delta.dy).clamp(0.0, verticalPosition.maxScrollExtent);
+      if ((nextOffset - currentOffset).abs() > 0) {
+        verticalPosition.jumpTo(nextOffset);
+      }
+    }
+
+    final horizontalMetrics = _horizontalMetrics;
+    final horizontalPosition = horizontalMetrics.activePosition;
+    if (allowHorizontal && horizontalMetrics.canScrollHorizontally && horizontalPosition != null && delta.dx != 0) {
+      final currentOffset = horizontalPosition.pixels;
+      final nextOffset = (currentOffset - delta.dx).clamp(0.0, horizontalPosition.maxScrollExtent);
+      if ((nextOffset - currentOffset).abs() > 0) {
+        horizontalPosition.jumpTo(nextOffset);
+      }
+    }
   }
 
   void endScrollDrag(DragEndDetails details) {
@@ -319,6 +376,7 @@ class GestureController {
     );
     _verticalDrag = null;
     _horizontalDrag = null;
+    _horizontalPanEnabled = false;
   }
 
   void cancelScrollDrag() {
@@ -326,6 +384,7 @@ class GestureController {
     _horizontalDrag?.cancel();
     _verticalDrag = null;
     _horizontalDrag = null;
+    _horizontalPanEnabled = false;
   }
 
   void stopAutoScroll() {
@@ -349,44 +408,42 @@ class GestureController {
       var scrolledY = activePosition?.dy ?? 0;
       var scrolledX = activePosition?.dx ?? 0;
 
-      if (_verticalDirection != 0 && verticalScrollController.hasSingleClient) {
+      final verticalPosition = _verticalPosition;
+      if (_verticalDirection != 0 && verticalPosition != null && verticalPosition.hasContentDimensions) {
         final proximity = 1.0 - (_verticalEdgeDistance / _edgeThreshold).clamp(0.0, 1.0);
         final scrollSpeed = _minScrollSpeed + proximity * (_maxScrollSpeed - _minScrollSpeed);
 
-        final currentOffset = verticalScrollController.offset;
+        final currentOffset = verticalPosition.pixels;
         final newOffset = (currentOffset + _verticalDirection * scrollSpeed).clamp(
           0.0,
-          verticalScrollController.position.maxScrollExtent,
+          verticalPosition.maxScrollExtent,
         );
 
         if (newOffset != currentOffset) {
-          verticalScrollController.jumpTo(newOffset);
+          verticalPosition.jumpTo(newOffset);
           final viewHeight = _autoScrollViewSize.height;
           scrolledY = _verticalDirection > 0
-              ? viewHeight -
-                    _edgeThreshold +
-                    (newOffset >= verticalScrollController.position.maxScrollExtent ? _edgeThreshold : 0)
+              ? viewHeight - _edgeThreshold + (newOffset >= verticalPosition.maxScrollExtent ? _edgeThreshold : 0)
               : newOffset.clamp(0.0, _edgeThreshold);
         }
       }
 
-      if (_horizontalDirection != 0 && horizontalScrollController.hasSingleClient) {
+      final horizontalPosition = _horizontalPosition;
+      if (_horizontalDirection != 0 && horizontalPosition != null && horizontalPosition.hasContentDimensions) {
         final proximity = 1.0 - (_horizontalEdgeDistance / _edgeThreshold).clamp(0.0, 1.0);
         final scrollSpeed = _minScrollSpeed + proximity * (_maxScrollSpeed - _minScrollSpeed);
 
-        final currentOffset = horizontalScrollController.offset;
+        final currentOffset = horizontalPosition.pixels;
         final newOffset = (currentOffset + _horizontalDirection * scrollSpeed).clamp(
           0.0,
-          horizontalScrollController.position.maxScrollExtent,
+          horizontalPosition.maxScrollExtent,
         );
 
         if (newOffset != currentOffset) {
-          horizontalScrollController.jumpTo(newOffset);
+          horizontalPosition.jumpTo(newOffset);
           final viewWidth = _autoScrollViewSize.width;
           scrolledX = _horizontalDirection > 0
-              ? viewWidth -
-                    _edgeThreshold +
-                    (newOffset >= horizontalScrollController.position.maxScrollExtent ? _edgeThreshold : 0)
+              ? viewWidth - _edgeThreshold + (newOffset >= horizontalPosition.maxScrollExtent ? _edgeThreshold : 0)
               : newOffset.clamp(0.0, _edgeThreshold);
         }
       }
@@ -500,11 +557,14 @@ class GestureController {
       return null;
     }
     final offsets = geo.computeCumulativePageOffsets();
-    final scrollOffset = verticalScrollController.hasSingleClient ? verticalScrollController.offset : 0.0;
-    final hScrollOffset = horizontalScrollController.hasSingleClient ? horizontalScrollController.offset : 0.0;
+    final scrollOffset = _verticalPosition?.pixels ?? 0.0;
+    final horizontalMetrics = _horizontalMetrics;
+    final hScrollOffset = horizontalMetrics.scrollOffset;
     final pageTopOffset = geo.titleAreaHeight + offsets[handle.pageIdx];
-    final y = pageTopOffset + handle.y - scrollOffset;
-    final x = geo.contentStartX(viewportWidth: getViewportWidth(), horizontalScrollOffset: hScrollOffset) + handle.x;
+    final y = pageTopOffset + geo.toDisplayY(handle.y) - scrollOffset;
+    final x =
+        geo.contentStartX(viewportWidth: horizontalMetrics.viewportDimension, horizontalScrollOffset: hScrollOffset) +
+        geo.toDisplayX(handle.x);
     return Offset(x, y);
   }
 
@@ -513,7 +573,7 @@ class GestureController {
     if (pos == null || handle == null) {
       return null;
     }
-    return Offset(pos.dx, pos.dy + handle.height / 2);
+    return Offset(pos.dx, pos.dy + geo.toDisplayY(handle.height) / 2);
   }
 
   void dispose() {
