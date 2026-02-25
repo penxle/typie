@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createFragment, createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { Button, Icon, Menu, MenuItem, Modal } from '@typie/ui/components';
   import { createForm } from '@typie/ui/form';
@@ -9,19 +10,18 @@
   import MessageSquareWarningIcon from '~icons/lucide/message-square-warning';
   import PencilLineIcon from '~icons/lucide/pencil-line';
   import { env } from '$env/dynamic/public';
-  import { fragment, graphql } from '$graphql';
-  import type { UsersiteWildcardSlugPage_DocumentActionMenu_entityView } from '$graphql';
+  import { graphql } from '$mearie';
+  import type { UsersiteWildcardSlugPage_DocumentActionMenu_entityView$key } from '$mearie';
 
   type Props = {
-    $entityView: UsersiteWildcardSlugPage_DocumentActionMenu_entityView;
+    entityView$key: UsersiteWildcardSlugPage_DocumentActionMenu_entityView$key;
   };
 
-  let { $entityView: _entityView }: Props = $props();
+  let { entityView$key }: Props = $props();
 
   let reportDocumentOpen = $state(false);
 
-  const entityView = fragment(
-    _entityView,
+  const entityView = createFragment(
     graphql(`
       fragment UsersiteWildcardSlugPage_DocumentActionMenu_entityView on EntityView {
         id
@@ -37,24 +37,29 @@
         }
       }
     `),
+    () => entityView$key,
   );
 
-  const reportDocument = graphql(`
-    mutation UsersiteWildcardSlugPage_DocumentActionMenu_ReportDocument_Mutation($input: ReportDocumentInput!) {
-      reportDocument(input: $input)
-    }
-  `);
+  const [reportDocument] = createMutation(
+    graphql(`
+      mutation UsersiteWildcardSlugPage_DocumentActionMenu_ReportDocument_Mutation($input: ReportDocumentInput!) {
+        reportDocument(input: $input)
+      }
+    `),
+  );
 
   const form = createForm({
     schema: z.object({
       reason: z.string().optional(),
     }),
     onSubmit: async (data) => {
-      if ($entityView.node.__typename !== 'DocumentView') return;
+      if (entityView.data.node.__typename !== 'DocumentView') return;
 
       await reportDocument({
-        documentId: $entityView.node.id,
-        reason: data.reason,
+        input: {
+          documentId: entityView.data.node.id,
+          reason: data.reason,
+        },
       });
 
       mixpanel.track('report_document');
@@ -68,7 +73,7 @@
   });
 </script>
 
-{#if $entityView.node.__typename === 'DocumentView'}
+{#if entityView.data.node.__typename === 'DocumentView'}
   <Menu
     style={css.raw({
       borderRadius: '4px',
@@ -81,8 +86,8 @@
       <Icon icon={EllipsisVerticalIcon} size={18} />
     {/snippet}
 
-    {#if $entityView.node.documentAvailableActions.includes('EDIT')}
-      <MenuItem external href={`${env.PUBLIC_WEBSITE_URL}/${$entityView.slug}`} icon={PencilLineIcon} type="link">문서 수정</MenuItem>
+    {#if entityView.data.node.documentAvailableActions.includes('EDIT')}
+      <MenuItem external href={`${env.PUBLIC_WEBSITE_URL}/${entityView.data.slug}`} icon={PencilLineIcon} type="link">문서 수정</MenuItem>
     {:else}
       <MenuItem icon={MessageSquareWarningIcon} onclick={() => (reportDocumentOpen = true)}>문서 신고</MenuItem>
     {/if}

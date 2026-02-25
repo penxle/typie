@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createFragment } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { DropdownMenu, DropdownMenuItem, VerticalDivider } from '@typie/ui/components';
@@ -16,7 +17,7 @@
   import LetterSpacingIcon from '~icons/typie/letter-spacing';
   import LineHeightIcon from '~icons/typie/line-height';
   import RubyIcon from '~icons/typie/ruby';
-  import { fragment, graphql } from '$graphql';
+  import { graphql } from '$mearie';
   import { getViewContext } from '../@split-view/context.svelte';
   import ToolbarButton from './ToolbarButton.svelte';
   import ToolbarColorGrid from './ToolbarColorGrid.svelte';
@@ -31,19 +32,18 @@
   import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { Ref } from '@typie/ui/utils';
   import type * as Y from 'yjs';
-  import type { Editor_BottomToolbar_user } from '$graphql';
+  import type { Editor_BottomToolbar_user$key } from '$mearie';
 
   type Props = {
-    $user: Editor_BottomToolbar_user;
+    user$key: Editor_BottomToolbar_user$key;
     editor?: Ref<Editor>;
     undoManager: Y.UndoManager;
     style?: SystemStyleObject;
   };
 
-  let { $user: _user, editor, undoManager, style }: Props = $props();
+  let { user$key, editor, undoManager, style }: Props = $props();
 
-  const user = fragment(
-    _user,
+  const user = createFragment(
     graphql(`
       fragment Editor_BottomToolbar_user on User {
         id
@@ -56,6 +56,7 @@
         ...Editor_BottomToolbar_FontWeight_user
       }
     `),
+    () => user$key,
   );
 
   const app = getAppContext();
@@ -219,8 +220,8 @@
       {/snippet}
     </ToolbarDropdownButton>
 
-    <ToolbarFontFamily {$user} {editor} />
-    <ToolbarFontWeight {$user} {editor} />
+    <ToolbarFontFamily {editor} user$key={user.data} />
+    <ToolbarFontWeight {editor} user$key={user.data} />
     <ToolbarFontSize {editor} />
   </div>
 

@@ -1,6 +1,6 @@
 <script lang="ts">
+  import { createFragment, createMutation } from '@mearie/svelte';
   import * as PortOne from '@portone/browser-sdk/v2';
-  import { cache } from '@typie/sark/internal';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Button, Checkbox, ContentProtect, Helmet, HorizontalDivider, Icon, Modal, TextInput } from '@typie/ui/components';
@@ -20,24 +20,24 @@
   import SmileIcon from '~icons/lucide/smile';
   import { page } from '$app/state';
   import { env } from '$env/dynamic/public';
-  import { fragment, graphql } from '$graphql';
   import { Img } from '$lib/components';
+  import { unwrapError } from '$lib/graphql';
+  import { graphql } from '$mearie';
   import ContentNavigation from './ContentNavigation.svelte';
   import EmojiReaction from './EmojiReaction.svelte';
   import PostActionMenu from './PostActionMenu.svelte';
   import PostViewBodyUnavailable from './PostViewBodyUnavailable.svelte';
   import ShareLinkPopover from './ShareLinkPopover.svelte';
-  import type { Optional, UsersiteWildcardSlugPage_PostView_entityView, UsersiteWildcardSlugPage_PostView_user } from '$graphql';
+  import type { UsersiteWildcardSlugPage_PostView_entityView$key, UsersiteWildcardSlugPage_PostView_user$key } from '$mearie';
 
   type Props = {
-    $entityView: UsersiteWildcardSlugPage_PostView_entityView;
-    $user: Optional<UsersiteWildcardSlugPage_PostView_user>;
+    entityView$key: UsersiteWildcardSlugPage_PostView_entityView$key;
+    user$key: UsersiteWildcardSlugPage_PostView_user$key | null | undefined;
   };
 
-  let { $entityView: _entityView, $user: _user }: Props = $props();
+  let { entityView$key, user$key }: Props = $props();
 
-  const entityView = fragment(
-    _entityView,
+  const entityView = createFragment(
     graphql(`
       fragment UsersiteWildcardSlugPage_PostView_entityView on EntityView {
         id
@@ -121,10 +121,10 @@
         ...UsersiteWildcardSlugPage_ContentNavigation_entityView
       }
     `),
+    () => entityView$key,
   );
 
-  const user = fragment(
-    _user,
+  const user = createFragment(
     graphql(`
       fragment UsersiteWildcardSlugPage_PostView_user on User {
         id
@@ -134,72 +134,83 @@
         }
       }
     `),
+    () => user$key,
   );
 
-  const unlockPostView = graphql(`
-    mutation UsersiteWildcardSlugPage_UnlockPostView_Mutation($input: UnlockPostViewInput!) {
-      unlockPostView(input: $input) {
-        id
-
-        body {
-          __typename
-
-          ... on PostViewBodyAvailable {
-            content
-          }
-
-          ... on PostViewBodyUnavailable {
-            reason
-          }
-        }
-      }
-    }
-  `);
-
-  const verifyPersonalIdentity = graphql(`
-    mutation UsersiteWildcardSlugPage_VerifyPersonalIdentity_Mutation($input: VerifyPersonalIdentityInput!) {
-      verifyPersonalIdentity(input: $input) {
-        id
-
-        personalIdentity {
+  const [unlockPostView] = createMutation(
+    graphql(`
+      mutation UsersiteWildcardSlugPage_UnlockPostView_Mutation($input: UnlockPostViewInput!) {
+        unlockPostView(input: $input) {
           id
-          expiresAt
+
+          body {
+            __typename
+
+            ... on PostViewBodyAvailable {
+              content
+            }
+
+            ... on PostViewBodyUnavailable {
+              reason
+            }
+          }
         }
       }
-    }
-  `);
+    `),
+  );
 
-  const updateBillingKey = graphql(`
-    mutation UsersiteWildcardSlugPage_UpdateBillingKey_Mutation($input: UpdateBillingKeyInput!) {
-      updateBillingKey(input: $input) {
-        id
-        name
+  const [verifyPersonalIdentity] = createMutation(
+    graphql(`
+      mutation UsersiteWildcardSlugPage_VerifyPersonalIdentity_Mutation($input: VerifyPersonalIdentityInput!) {
+        verifyPersonalIdentity(input: $input) {
+          id
+
+          personalIdentity {
+            id
+            expiresAt
+          }
+        }
       }
-    }
-  `);
+    `),
+  );
 
-  const purchasePaywall = graphql(`
-    mutation UsersiteWildcardSlugPage_PurchasePaywall_Mutation($input: PurchasePaywallInput!) {
-      purchasePaywall(input: $input)
-    }
-  `);
+  const [updateBillingKey] = createMutation(
+    graphql(`
+      mutation UsersiteWildcardSlugPage_UpdateBillingKey_Mutation($input: UpdateBillingKeyInput!) {
+        updateBillingKey(input: $input) {
+          id
+          name
+        }
+      }
+    `),
+  );
+
+  const [purchasePaywall] = createMutation(
+    graphql(`
+      mutation UsersiteWildcardSlugPage_PurchasePaywall_Mutation($input: PurchasePaywallInput!) {
+        purchasePaywall(input: $input)
+      }
+    `),
+  );
 
   const form = createForm({
     schema: z.object({
       password: z.string(),
     }),
     onSubmit: async (data) => {
-      if ($entityView.node.__typename !== 'PostView') {
+      if (entityView.data.node.__typename !== 'PostView') {
         return;
       }
 
       await unlockPostView({
-        postId: $entityView.node.id,
-        password: data.password,
+        input: {
+          postId: entityView.data.node.id,
+          password: data.password,
+        },
       });
 
       mixpanel.track('unlock_post_view', {
-        postId: $entityView.node.id,
+        postId: entityView.data.node.id,
       });
     },
     onError: (error) => {
@@ -218,7 +229,7 @@
   let paywallModalOpen = $state(false);
   let showCardRegistration = $state(false);
   let cardSubmitError = $state<string | null>(null);
-  let hasBillingKey = $state($user?.billingKey !== null);
+  let hasBillingKey = $state(user.data?.billingKey !== null);
 
   const cardAgreements = [
     { name: '타이피 결제 이용약관', url: 'https://typie.co/legal/terms' },
@@ -251,10 +262,12 @@
       }
 
       await updateBillingKey({
-        cardNumber: data.cardNumber,
-        expiryDate: data.expiryDate,
-        birthOrBusinessRegistrationNumber: data.birthOrBusinessRegistrationNumber,
-        passwordTwoDigits: data.passwordTwoDigits,
+        input: {
+          cardNumber: data.cardNumber,
+          expiryDate: data.expiryDate,
+          birthOrBusinessRegistrationNumber: data.birthOrBusinessRegistrationNumber,
+          passwordTwoDigits: data.passwordTwoDigits,
+        },
       });
 
       mixpanel.track('paywall_register_card');
@@ -302,7 +315,7 @@
   };
 
   const handlePaywallPurchase = (nodeId: string, price: number) => {
-    if (!$user) {
+    if (!user.data) {
       window.location.href = authorizeUrl;
       return;
     }
@@ -320,7 +333,7 @@
   });
 
   const fontFaces = $derived(
-    $entityView.site.fonts
+    entityView.data.site.fonts
       .flatMap((font) => [
         `@font-face { font-family: ${font.id}; src: url(${font.url}) format('woff2'); font-weight: ${font.weight}; font-display: block; }`,
         `@font-face { font-family: ${font.family.id}; src: url(${font.url}) format('woff2'); font-weight: ${font.weight}; font-display: block; }`,
@@ -357,7 +370,9 @@
       }
 
       await verifyPersonalIdentity({
-        identityVerificationId: resp.identityVerificationId,
+        input: {
+          identityVerificationId: resp.identityVerificationId,
+        },
       });
 
       mixpanel.track('verify_personal_identity_success');
@@ -368,8 +383,9 @@
         same_identity_exists: '이미 다른 계정에 인증된 정보입니다.',
       };
 
-      if (err instanceof TypieError) {
-        const message = errorMessages[err.code] || err.code;
+      const error = unwrapError(err);
+      if (error instanceof TypieError) {
+        const message = errorMessages[error.code] || error.code;
         Toast.error(message);
       }
     }
@@ -383,16 +399,16 @@
   {@html '<style type="text/css"' + `>${fontFaces}</` + 'style>'}
 </svelte:head>
 
-{#if $entityView.node.__typename === 'PostView'}
+{#if entityView.data.node.__typename === 'PostView'}
   <Helmet
-    description={$entityView.node.excerpt}
-    image={{ size: 'large', src: `${env.PUBLIC_API_URL}/og/${$entityView.id}` }}
-    title={$entityView.node.title}
+    description={entityView.data.node.excerpt}
+    image={{ size: 'large', src: `${env.PUBLIC_API_URL}/og/${entityView.data.id}` }}
+    title={entityView.data.node.title}
   />
 
   <div class={flex({ flexDirection: 'column', alignItems: 'center', width: 'full' })}>
     <div
-      style:--prosemirror-max-width={`${$entityView.node.maxWidth}px`}
+      style:--prosemirror-max-width={`${entityView.data.node.maxWidth}px`}
       class={flex({
         flexDirection: 'column',
         alignItems: 'center',
@@ -404,12 +420,12 @@
         backgroundColor: 'surface.default',
       })}
     >
-      {#if $entityView.node.coverImage}
+      {#if entityView.data.node.coverImage}
         <div class={css({ width: 'full', marginBottom: '40px' })}>
           <Img
             style={css.raw({ width: 'full' })}
-            $image={$entityView.node.coverImage}
             alt="커버 이미지"
+            image$key={entityView.data.node.coverImage}
             progressive
             ratio={5 / 2}
             size="full"
@@ -419,28 +435,28 @@
 
       <div
         class={css({
-          paddingTop: $entityView.node.coverImage ? '0' : { base: '48px', md: '80px' },
+          paddingTop: entityView.data.node.coverImage ? '0' : { base: '48px', md: '80px' },
           width: 'full',
           maxWidth: 'var(--prosemirror-max-width)',
         })}
       >
         <div class={flex({ flexDirection: 'column', width: 'full', maxWidth: 'var(--prosemirror-max-width)' })}>
           <nav class={flex({ alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginBottom: '20px' })}>
-            <a class={flex({ alignItems: 'center', gap: '6px' })} href={$entityView.site.url}>
-              {#if $entityView.site.logo}
+            <a class={flex({ alignItems: 'center', gap: '6px' })} href={entityView.data.site.url}>
+              {#if entityView.data.site.logo}
                 <Img
                   style={css.raw({ size: '18px', borderRadius: '4px', objectFit: 'cover' })}
-                  $image={$entityView.site.logo}
-                  alt={`${$entityView.site.name} 로고`}
+                  alt={`${entityView.data.site.name} 로고`}
+                  image$key={entityView.data.site.logo}
                   size={24}
                 />
               {/if}
               <span class={css({ fontSize: '13px', color: 'text.faint', _hover: { color: 'text.muted' } })}>
-                {$entityView.site.name}
+                {entityView.data.site.name}
               </span>
             </a>
 
-            {#each $entityView.ancestors as ancestor (ancestor.id)}
+            {#each entityView.data.ancestors as ancestor (ancestor.id)}
               {#if ancestor.node.__typename === 'FolderView'}
                 <span class={css({ fontSize: '13px', color: 'text.faint' })}>/</span>
                 <a class={css({ fontSize: '13px', color: 'text.faint', _hover: { color: 'text.muted' } })} href={`/${ancestor.slug}`}>
@@ -451,42 +467,42 @@
           </nav>
 
           <h1 class={css({ fontSize: '22px', fontWeight: 'bold', letterSpacing: '-0.01em', lineHeight: '[1.4]' })}>
-            {$entityView.node.title}
+            {entityView.data.node.title}
           </h1>
 
-          {#if $entityView.node.subtitle}
+          {#if entityView.data.node.subtitle}
             <p class={css({ marginTop: '8px', fontSize: '15px', color: 'text.muted' })}>
-              {$entityView.node.subtitle}
+              {entityView.data.node.subtitle}
             </p>
           {/if}
 
           <div class={flex({ align: 'center', justify: 'space-between', marginTop: '24px', paddingBottom: '16px' })}>
             <div class={flex({ align: 'center', gap: '8px', fontSize: '13px', color: 'text.faint' })}>
-              {#if $entityView.node.allowReaction && $entityView.node.reactions.length > 0}
+              {#if entityView.data.node.allowReaction && entityView.data.node.reactions.length > 0}
                 <div class={flex({ align: 'center', gap: '3px' })}>
                   <Icon icon={SmileIcon} />
-                  <span>{comma($entityView.node.reactions.length)}</span>
+                  <span>{comma(entityView.data.node.reactions.length)}</span>
                 </div>
               {/if}
             </div>
 
             <div class={flex({ align: 'center', marginLeft: 'auto', gap: '12px', color: 'text.muted' })}>
-              <ShareLinkPopover href={$entityView.url} />
+              <ShareLinkPopover href={entityView.data.url} />
 
-              <PostActionMenu {$entityView} />
+              <PostActionMenu entityView$key={entityView.data} />
             </div>
           </div>
 
           <HorizontalDivider style={css.raw({ marginBottom: '24px' })} />
         </div>
 
-        {#if $entityView.node.body.__typename === 'PostViewBodyAvailable'}
-          {#if $entityView.node.protectContent}
+        {#if entityView.data.node.body.__typename === 'PostViewBodyAvailable'}
+          {#if entityView.data.node.protectContent}
             <ContentProtect>
-              <TiptapRenderer style={css.raw({ width: 'full' })} content={$entityView.node.body.content} />
+              <TiptapRenderer style={css.raw({ width: 'full' })} content={entityView.data.node.body.content} />
             </ContentProtect>
           {:else}
-            <TiptapRenderer style={css.raw({ width: 'full' })} content={$entityView.node.body.content} />
+            <TiptapRenderer style={css.raw({ width: 'full' })} content={entityView.data.node.body.content} />
           {/if}
 
           <div
@@ -500,19 +516,19 @@
               maxWidth: 'var(--prosemirror-max-width)',
             })}
           >
-            <EmojiReaction $postView={$entityView.node} />
+            <EmojiReaction postView$key={entityView.data.node} />
 
             <div class={flex({ align: 'center', gap: '12px', marginLeft: 'auto', color: 'text.muted' })}>
-              <ShareLinkPopover href={$entityView.url} />
+              <ShareLinkPopover href={entityView.data.url} />
 
-              <PostActionMenu {$entityView} />
+              <PostActionMenu entityView$key={entityView.data} />
             </div>
           </div>
-        {:else if $entityView.node.body.__typename === 'PostViewBodyUnavailable'}
+        {:else if entityView.data.node.body.__typename === 'PostViewBodyUnavailable'}
           <div class={css({ marginTop: '42px', fontSize: '16px', fontWeight: 'medium' })}>
-            {#if $entityView.node.body.reason === 'REQUIRE_IDENTITY_VERIFICATION'}
+            {#if entityView.data.node.body.reason === 'REQUIRE_IDENTITY_VERIFICATION'}
               <PostViewBodyUnavailable description="본인 인증이 필요한 글이에요" icon={ShieldAlertIcon} title="연령제한글">
-                {#if $user}
+                {#if user.data}
                   <Button style={css.raw({ width: 'full' })} onclick={handleVerification} variant="secondary">본인 인증</Button>
                 {:else}
                   <Button style={css.raw({ width: 'full' })} external href={authorizeUrl} type="link" variant="secondary">
@@ -520,13 +536,13 @@
                   </Button>
                 {/if}
               </PostViewBodyUnavailable>
-            {:else if $entityView.node.body.reason === 'REQUIRE_MINIMUM_AGE'}
+            {:else if entityView.data.node.body.reason === 'REQUIRE_MINIMUM_AGE'}
               <PostViewBodyUnavailable
                 description="이 글은 연령 기준에 따라 현재 계정으로는 열람이 제한되어 있어요"
                 icon={ShieldAlertIcon}
                 title="연령제한글"
               />
-            {:else if $entityView.node.body.reason === 'REQUIRE_PASSWORD'}
+            {:else if entityView.data.node.body.reason === 'REQUIRE_PASSWORD'}
               <form onsubmit={form.handleSubmit}>
                 <PostViewBodyUnavailable description="해당 내용은 비밀번호 입력이 필요해요" icon={LockIcon} title="비밀글">
                   <div class={flex({ direction: 'column', gap: '4px' })}>
@@ -546,12 +562,12 @@
                 </PostViewBodyUnavailable>
               </form>
             {:else}
-              {$entityView.node.body.reason}
+              {entityView.data.node.body.reason}
             {/if}
           </div>
         {/if}
 
-        <ContentNavigation {$entityView} />
+        <ContentNavigation entityView$key={entityView.data} />
       </div>
     </div>
   </div>
@@ -700,27 +716,30 @@
         <Button
           style={css.raw({ width: 'full' })}
           onclick={async () => {
-            if ($entityView.node.__typename !== 'PostView' || !paywallNodeId) {
+            if (entityView.data.node.__typename !== 'PostView' || !paywallNodeId) {
               return;
             }
 
             try {
               await purchasePaywall({
-                postId: $entityView.node.id,
-                nodeId: paywallNodeId,
+                input: {
+                  postId: entityView.data.node.id,
+                  nodeId: paywallNodeId,
+                },
               });
 
               mixpanel.track('purchase_paywall', {
-                postId: $entityView.node.id,
+                postId: entityView.data.node.id,
                 nodeId: paywallNodeId,
                 price: paywallPrice,
               });
 
-              cache.invalidate({ __typename: 'PostView', id: $entityView.node.id, field: 'body' });
+              //               cache.invalidate({ __typename: 'PostView', id: entityView.data.node.id, field: 'body' });
               paywallModalOpen = false;
             } catch (err) {
-              if (err instanceof TypieError) {
-                Toast.error(err.message);
+              const error = unwrapError(err);
+              if (error instanceof TypieError) {
+                Toast.error(error.message);
               }
             }
           }}

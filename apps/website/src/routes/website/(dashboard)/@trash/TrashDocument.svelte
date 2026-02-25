@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createFragment, createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { center } from '@typie/styled-system/patterns';
   import { tooltip } from '@typie/ui/actions';
@@ -8,17 +9,16 @@
   import FileIcon from '~icons/lucide/file';
   import Trash2Icon from '~icons/lucide/trash-2';
   import Undo2Icon from '~icons/lucide/undo-2';
-  import { fragment, graphql } from '$graphql';
-  import type { DashboardLayout_TrashTree_TrashDocument_document } from '$graphql';
+  import { graphql } from '$mearie';
+  import type { DashboardLayout_TrashTree_TrashDocument_document$key } from '$mearie';
 
   type Props = {
-    $document: DashboardLayout_TrashTree_TrashDocument_document;
+    document$key: DashboardLayout_TrashTree_TrashDocument_document$key;
   };
 
-  let { $document: _document }: Props = $props();
+  let { document$key }: Props = $props();
 
-  const document = fragment(
-    _document,
+  const document = createFragment(
     graphql(`
       fragment DashboardLayout_TrashTree_TrashDocument_document on Document {
         id
@@ -30,31 +30,36 @@
         }
       }
     `),
+    () => document$key,
   );
 
-  const recoverEntity = graphql(`
-    mutation DashboardLayout_TrashTree_TrashDocument_RecoverEntity_Mutation($input: RecoverEntityInput!) {
-      recoverEntity(input: $input) {
-        id
+  const [recoverEntity] = createMutation(
+    graphql(`
+      mutation DashboardLayout_TrashTree_TrashDocument_RecoverEntity_Mutation($input: RecoverEntityInput!) {
+        recoverEntity(input: $input) {
+          id
 
-        state
+          state
 
-        site {
+          site {
+            id
+            ...DashboardLayout_TrashModal_site
+          }
+        }
+      }
+    `),
+  );
+
+  const [purgeEntities] = createMutation(
+    graphql(`
+      mutation DashboardLayout_TrashTree_TrashDocument_PurgeEntities_Mutation($input: PurgeEntitiesInput!) {
+        purgeEntities(input: $input) {
           id
           ...DashboardLayout_TrashModal_site
         }
       }
-    }
-  `);
-
-  const purgeEntities = graphql(`
-    mutation DashboardLayout_TrashTree_TrashDocument_PurgeEntities_Mutation($input: PurgeEntitiesInput!) {
-      purgeEntities(input: $input) {
-        id
-        ...DashboardLayout_TrashModal_site
-      }
-    }
-  `);
+    `),
+  );
 </script>
 
 <div
@@ -86,7 +91,7 @@
         lineClamp: '1',
       })}
     >
-      {$document.title}
+      {document.data.title}
     </span>
   </div>
 
@@ -101,7 +106,7 @@
       })}
       onclick={async () => {
         try {
-          await recoverEntity({ entityId: $document.entity.id });
+          await recoverEntity({ input: { entityId: document.data.entity.id } });
           mixpanel.track('recover_entity', { via: 'trash', type: 'document' });
         } catch {
           Toast.error('문서 복원에 실패했어요');
@@ -129,7 +134,7 @@
           actionLabel: '영구 삭제',
           actionHandler: async () => {
             try {
-              await purgeEntities({ entityIds: [$document.entity.id] });
+              await purgeEntities({ input: { entityIds: [document.data.entity.id] } });
               mixpanel.track('purge_entity', { via: 'trash', type: 'document' });
               Toast.success('문서를 영구 삭제했어요');
             } catch {

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { HorizontalDivider, Icon, MenuItem } from '@typie/ui/components';
@@ -21,8 +22,9 @@
   import Rows2Icon from '~icons/lucide/rows-2';
   import TrashIcon from '~icons/lucide/trash';
   import { goto } from '$app/navigation';
-  import { graphql } from '$graphql';
+  import { unwrapError } from '$lib/graphql';
   import { getPostYjsAttrs } from '$lib/utils/yjs-post';
+  import { graphql } from '$mearie';
   import { getSplitViewContext, getViewContext } from '../[slug]/@split-view/context.svelte';
   import PdfExportModal from './PdfExportModal.svelte';
   import type { PageLayout } from '@typie/ui/utils';
@@ -61,112 +63,125 @@
   let exportModalPageEnabled = $state<boolean>(false);
   let loadingDocxExport = $state(false);
 
-  const duplicatePost = graphql(`
-    mutation PostMenu_DuplicatePost_Mutation($input: DuplicatePostInput!) {
-      duplicatePost(input: $input) {
-        id
-
-        entity {
+  const [duplicatePost] = createMutation(
+    graphql(`
+      mutation PostMenu_DuplicatePost_Mutation($input: DuplicatePostInput!) {
+        duplicatePost(input: $input) {
           id
-          slug
+
+          entity {
+            id
+            slug
+          }
         }
       }
-    }
-  `);
+    `),
+  );
 
-  const deletePost = graphql(`
-    mutation PostMenu_DeletePost_Mutation($input: DeletePostInput!) {
-      deletePost(input: $input) {
-        id
-
-        entity {
+  const [deletePost] = createMutation(
+    graphql(`
+      mutation PostMenu_DeletePost_Mutation($input: DeletePostInput!) {
+        deletePost(input: $input) {
           id
 
-          site {
+          entity {
             id
+
+            site {
+              id
+            }
+
+            user {
+              id
+
+              recentlyViewedEntities {
+                id
+              }
+            }
           }
+        }
+      }
+    `),
+  );
 
-          user {
+  const [updatePostType] = createMutation(
+    graphql(`
+      mutation PostMenu_UpdatePostType_Mutation($input: UpdatePostTypeInput!) {
+        updatePostType(input: $input) {
+          id
+          type
+
+          entity {
             id
 
-            recentlyViewedEntities {
+            site {
+              id
+
+              templates {
+                id
+              }
+            }
+          }
+        }
+      }
+    `),
+  );
+
+  const [convertPostToDocument] = createMutation(
+    graphql(`
+      mutation PostMenu_ConvertPostToDocument_Mutation($input: ConvertPostToDocumentInput!) {
+        convertPostToDocument(input: $input) {
+          id
+
+          entity {
+            id
+            slug
+
+            site {
               id
             }
           }
         }
       }
-    }
-  `);
+    `),
+  );
 
-  const updatePostType = graphql(`
-    mutation PostMenu_UpdatePostType_Mutation($input: UpdatePostTypeInput!) {
-      updatePostType(input: $input) {
-        id
-        type
-
-        entity {
-          id
-
-          site {
-            id
-
-            templates {
-              id
-            }
-          }
+  const [exportPostAsPdf] = createMutation(
+    graphql(`
+      mutation PostMenu_ExportPostAsPdf_Mutation($input: ExportPostAsPdfInput!) {
+        exportPostAsPdf(input: $input) {
+          data
+          filename
         }
       }
-    }
-  `);
+    `),
+  );
 
-  const convertPostToDocument = graphql(`
-    mutation PostMenu_ConvertPostToDocument_Mutation($input: ConvertPostToDocumentInput!) {
-      convertPostToDocument(input: $input) {
-        id
-
-        entity {
-          id
-          slug
-
-          site {
-            id
-          }
+  const [exportPostAsDocx] = createMutation(
+    graphql(`
+      mutation PostMenu_ExportPostAsDocx_Mutation($input: ExportPostAsDocxInput!) {
+        exportPostAsDocx(input: $input) {
+          data
+          filename
         }
       }
-    }
-  `);
-
-  const exportPostAsPdf = graphql(`
-    mutation PostMenu_ExportPostAsPdf_Mutation($input: ExportPostAsPdfInput!) {
-      exportPostAsPdf(input: $input) {
-        data
-        filename
-      }
-    }
-  `);
-
-  const exportPostAsDocx = graphql(`
-    mutation PostMenu_ExportPostAsDocx_Mutation($input: ExportPostAsDocxInput!) {
-      exportPostAsDocx(input: $input) {
-        data
-        filename
-      }
-    }
-  `);
+    `),
+  );
 
   const handleDuplicate = async () => {
     try {
-      const resp = await duplicatePost({ postId: post.id });
+      const resp = await duplicatePost({ input: { postId: post.id } });
       mixpanel.track('duplicate_post', { via });
-      await goto(`/${resp.entity.slug}`);
+      await goto(`/${resp.duplicatePost.entity.slug}`);
     } catch (err) {
       const errorMessages: Record<string, string> = {
         character_count_limit_exceeded: '현재 플랜의 글자 수 제한을 초과했어요.',
         blob_size_limit_exceeded: '현재 플랜의 파일 크기 제한을 초과했어요.',
       };
 
-      if (err instanceof TypieError) {
-        const message = errorMessages[err.code] || err.code;
+      const error = unwrapError(err);
+      if (error instanceof TypieError) {
+        const message = errorMessages[error.code] || error.code;
         Toast.error(message);
       }
     }
@@ -180,7 +195,7 @@
       action: 'danger',
       actionLabel: '삭제',
       actionHandler: async () => {
-        await deletePost({ postId: post.id });
+        await deletePost({ input: { postId: post.id } });
         mixpanel.track('delete_post', { via });
       },
     });
@@ -196,7 +211,7 @@
         : '이 템플릿을 다시 일반 포스트로 전환하시겠어요?',
       actionLabel: '전환',
       actionHandler: async () => {
-        await updatePostType({ postId: post.id, type: newType });
+        await updatePostType({ input: { postId: post.id, type: newType } });
       },
     });
   };
@@ -209,12 +224,13 @@
       actionLabel: '변환',
       actionHandler: async () => {
         try {
-          const resp = await convertPostToDocument({ postId: post.id });
+          const resp = await convertPostToDocument({ input: { postId: post.id } });
           mixpanel.track('convert_post_to_document', { via });
-          await goto(`/${resp.entity.slug}`);
+          await goto(`/${resp.convertPostToDocument.entity.slug}`);
         } catch (err) {
-          if (err instanceof TypieError) {
-            Toast.error(err.message);
+          const error = unwrapError(err);
+          if (error instanceof TypieError) {
+            Toast.error(error.message);
           }
         }
       },
@@ -242,12 +258,14 @@
   const handlePdfExportConfirm = async (layoutMode: ExportLayoutMode, pageLayout: PageLayout) => {
     try {
       const resp = await exportPostAsPdf({
-        entityId: entity.id,
-        layoutMode,
-        ...pageLayout,
+        input: {
+          entityId: entity.id,
+          layoutMode,
+          ...pageLayout,
+        },
       });
 
-      downloadFromBase64(resp.data, resp.filename, 'application/pdf');
+      downloadFromBase64(resp.exportPostAsPdf.data, resp.exportPostAsPdf.filename, 'application/pdf');
 
       Toast.success('PDF 내보내기가 완료되었어요');
       mixpanel.track('export_post', { via, format: 'PDF', layoutMode });
@@ -260,11 +278,17 @@
     loadingDocxExport = true;
     try {
       const resp = await exportPostAsDocx({
-        entityId: entity.id,
+        input: {
+          entityId: entity.id,
+        },
       });
 
       // cspell:ignore wordprocessingml
-      downloadFromBase64(resp.data, resp.filename, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+      downloadFromBase64(
+        resp.exportPostAsDocx.data,
+        resp.exportPostAsDocx.filename,
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      );
 
       Toast.success('DOCX 내보내기가 완료되었어요');
       mixpanel.track('export_post', { via, format: 'DOCX' });

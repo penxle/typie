@@ -1,26 +1,25 @@
 <script lang="ts">
-  import { cache } from '@typie/sark/internal';
+  import { createFragment, createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Button, Icon } from '@typie/ui/components';
   import { Dialog } from '@typie/ui/notification';
   import PlusIcon from '~icons/lucide/plus';
-  import { fragment, graphql } from '$graphql';
   import { FontSpecimen, SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
   import { getRepresentativeFont } from '$lib/editor/fonts';
   import { values } from '$lib/editor/values';
+  import { graphql } from '$mearie';
   import FontUploadModal from '../FontUploadModal.svelte';
   import PlanUpgradeModal from '../PlanUpgradeModal.svelte';
-  import type { DashboardLayout_PreferenceModal_FontTab_user } from '$graphql';
+  import type { DashboardLayout_PreferenceModal_FontTab_user$key } from '$mearie';
 
   type Props = {
-    $user: DashboardLayout_PreferenceModal_FontTab_user;
+    user$key: DashboardLayout_PreferenceModal_FontTab_user$key;
   };
 
-  let { $user: _user }: Props = $props();
+  let { user$key }: Props = $props();
 
-  const user = fragment(
-    _user,
+  const user = createFragment(
     graphql(`
       fragment DashboardLayout_PreferenceModal_FontTab_user on User {
         id
@@ -47,10 +46,11 @@
         }
       }
     `),
+    () => user$key,
   );
 
   const userFontFamilies = $derived(
-    $user.documentFontFamilies
+    user.data.documentFontFamilies
       .filter((f) => f.source === 'USER' && f.state === 'ACTIVE')
       .map((family) => ({
         ...family,
@@ -69,21 +69,25 @@
   let uploadModalOpen = $state(false);
   let planUpgradeOpen = $state(false);
 
-  const archiveFontFamily = graphql(`
-    mutation DashboardLayout_PreferenceModal_FontTab_ArchiveFontFamily_Mutation($input: ArchiveFontFamilyInput!) {
-      archiveFontFamily(input: $input) {
-        id
+  const [archiveFontFamily] = createMutation(
+    graphql(`
+      mutation DashboardLayout_PreferenceModal_FontTab_ArchiveFontFamily_Mutation($input: ArchiveFontFamilyInput!) {
+        archiveFontFamily(input: $input) {
+          id
+        }
       }
-    }
-  `);
+    `),
+  );
 
-  const archiveFont = graphql(`
-    mutation DashboardLayout_PreferenceModal_FontTab_ArchiveFont_Mutation($input: ArchiveFontInput!) {
-      archiveFont(input: $input) {
-        id
+  const [archiveFont] = createMutation(
+    graphql(`
+      mutation DashboardLayout_PreferenceModal_FontTab_ArchiveFont_Mutation($input: ArchiveFontInput!) {
+        archiveFont(input: $input) {
+          id
+        }
       }
-    }
-  `);
+    `),
+  );
 
   const getWeightLabel = (font: { weight: number; subfamilyDisplayName?: string | null }) => {
     return (
@@ -110,7 +114,7 @@
         _hover: { backgroundColor: 'surface.muted' },
       })}
       onclick={() => {
-        if ($user.subscription) {
+        if (user.data.subscription) {
           uploadModalOpen = true;
         } else {
           planUpgradeOpen = true;
@@ -152,10 +156,10 @@
                 action: 'danger',
                 actionLabel: '삭제',
                 actionHandler: async () => {
-                  await archiveFontFamily({ fontFamilyId: family.id });
-                  cache.invalidate({ __typename: 'User', id: $user.id, field: 'fontFamilies' });
-                  cache.invalidate({ __typename: 'User', id: $user.id, field: 'documentFontFamilies' });
-                  cache.invalidate({ __typename: 'Document', field: 'fontFamilies' });
+                  await archiveFontFamily({ input: { fontFamilyId: family.id } });
+                  //                   cache.invalidate({ __typename: 'User', id: user.data.id, field: 'fontFamilies' });
+                  //                   cache.invalidate({ __typename: 'User', id: user.data.id, field: 'documentFontFamilies' });
+                  //                   cache.invalidate({ __typename: 'Document', field: 'fontFamilies' });
                 },
               });
             }}
@@ -183,10 +187,10 @@
                       action: 'danger',
                       actionLabel: '삭제',
                       actionHandler: async () => {
-                        await archiveFont({ fontId: font.id });
-                        cache.invalidate({ __typename: 'User', id: $user.id, field: 'documentFontFamilies' });
-                        cache.invalidate({ __typename: 'User', id: $user.id, field: 'fontFamilies' });
-                        cache.invalidate({ __typename: 'Document', field: 'fontFamilies' });
+                        await archiveFont({ input: { fontId: font.id } });
+                        //                         cache.invalidate({ __typename: 'User', id: user.data.id, field: 'documentFontFamilies' });
+                        //                         cache.invalidate({ __typename: 'User', id: user.data.id, field: 'fontFamilies' });
+                        //                         cache.invalidate({ __typename: 'Document', field: 'fontFamilies' });
                       },
                     });
                   }}
@@ -212,5 +216,7 @@
   {/if}
 </div>
 
-<FontUploadModal userId={$user.id} bind:open={uploadModalOpen} />
-<PlanUpgradeModal {$user} bind:open={planUpgradeOpen}>폰트 업로드 기능은 FULL ACCESS 플랜에서 사용할 수 있어요.</PlanUpgradeModal>
+<FontUploadModal userId={user.data.id} bind:open={uploadModalOpen} />
+<PlanUpgradeModal user$key={user.data} bind:open={planUpgradeOpen}>
+  폰트 업로드 기능은 FULL ACCESS 플랜에서 사용할 수 있어요.
+</PlanUpgradeModal>

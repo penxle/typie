@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createFragment, createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { tooltip } from '@typie/ui/actions';
@@ -24,19 +25,18 @@
   import Trash2Icon from '~icons/lucide/trash-2';
   import UsersRoundIcon from '~icons/lucide/users-round';
   import { env } from '$env/dynamic/public';
-  import { fragment, graphql } from '$graphql';
   import { Img } from '$lib/components';
   import { uploadBlobAsImage } from '$lib/utils';
-  import type { DashboardLayout_Share_Post_post } from '$graphql';
+  import { graphql } from '$mearie';
+  import type { DashboardLayout_Share_Post_post$key } from '$mearie';
 
   type Props = {
-    $posts: DashboardLayout_Share_Post_post[];
+    posts$key: DashboardLayout_Share_Post_post$key[];
   };
 
-  let { $posts: _posts }: Props = $props();
+  let { posts$key }: Props = $props();
 
-  const posts = fragment(
-    _posts,
+  const posts = createFragment(
     graphql(`
       fragment DashboardLayout_Share_Post_post on Post {
         id
@@ -60,35 +60,38 @@
         }
       }
     `),
+    () => posts$key,
   );
 
   let activeTab = $state<'publish' | 'share'>('publish');
 
-  const isSinglePost = $derived($posts.length === 1);
-  const postIds = $derived($posts.map((p) => p.id));
+  const isSinglePost = $derived(posts.data.length === 1);
+  const postIds = $derived(posts.data.map((p) => p.id));
 
-  const updatePostsOption = graphql(`
-    mutation DashboardLayout_Share_Post_UpdatePostsOption_Mutation($input: UpdatePostsOptionInput!) {
-      updatePostsOption(input: $input) {
-        id
-        password
-        contentRating
-        allowReaction
-        protectContent
-
-        thumbnail {
+  const [updatePostsOption] = createMutation(
+    graphql(`
+      mutation DashboardLayout_Share_Post_UpdatePostsOption_Mutation($input: UpdatePostsOptionInput!) {
+        updatePostsOption(input: $input) {
           id
-          ...Img_image
-        }
+          password
+          contentRating
+          allowReaction
+          protectContent
 
-        entity {
-          id
-          visibility
-          availability
+          thumbnail {
+            id
+            ...Img_image
+          }
+
+          entity {
+            id
+            visibility
+            availability
+          }
         }
       }
-    }
-  `);
+    `),
+  );
 
   let copied = $state(false);
   let timer: NodeJS.Timeout | undefined;
@@ -97,11 +100,13 @@
   let isRolling = $state(false);
   let thumbnailUploading = $state(false);
 
-  const visibilityIndeterminate = $derived($posts.length > 1 && $posts.some((p) => p.entity.visibility !== $posts[0].entity.visibility));
-  const availabilityIndeterminate = $derived(
-    $posts.length > 1 && $posts.some((p) => p.entity.availability !== $posts[0].entity.availability),
+  const visibilityIndeterminate = $derived(
+    posts.data.length > 1 && posts.data.some((p) => p.entity.visibility !== posts.data[0].entity.visibility),
   );
-  const thumbnailIndeterminate = $derived($posts.length > 1 && $posts.some((p) => p.thumbnail?.id !== $posts[0].thumbnail?.id));
+  const availabilityIndeterminate = $derived(
+    posts.data.length > 1 && posts.data.some((p) => p.entity.availability !== posts.data[0].entity.availability),
+  );
+  const thumbnailIndeterminate = $derived(posts.data.length > 1 && posts.data.some((p) => p.thumbnail?.id !== posts.data[0].thumbnail?.id));
 
   const form = createForm({
     schema: z.object({
@@ -115,7 +120,7 @@
     }),
     submitOn: 'change',
     onSubmit: async (data) => {
-      if ($posts.length === 0) return;
+      if (posts.data.length === 0) return;
 
       const dirtyFields = form.getDirtyFields();
       const updateData: {
@@ -136,23 +141,23 @@
       if ('hasPassword' in dirtyFields || 'password' in dirtyFields) updateData.password = data.hasPassword ? data.password : null;
 
       if (Object.keys(updateData).length > 1) {
-        await updatePostsOption(updateData);
+        await updatePostsOption({ input: updateData });
 
         mixpanel.track('update_post_option', {
           ...updateData,
           hasPassword: data.hasPassword,
-          count: $posts.length,
+          count: posts.data.length,
         });
       }
     },
     defaultValues: {
-      availability: $posts[0].entity.availability,
-      visibility: $posts[0].entity.visibility,
-      hasPassword: $posts[0].password !== null,
-      password: $posts.length > 1 && $posts.some((p) => p.password !== $posts[0].password) ? null : $posts[0].password,
-      contentRating: $posts[0].contentRating,
-      allowReaction: $posts[0].allowReaction,
-      protectContent: $posts[0].protectContent,
+      availability: posts.data[0].entity.availability,
+      visibility: posts.data[0].entity.visibility,
+      hasPassword: posts.data[0].password !== null,
+      password: posts.data.length > 1 && posts.data.some((p) => p.password !== posts.data[0].password) ? null : posts.data[0].password,
+      contentRating: posts.data[0].contentRating,
+      allowReaction: posts.data[0].allowReaction,
+      protectContent: posts.data[0].protectContent,
     },
   });
 
@@ -185,11 +190,11 @@
   };
 
   const handleCopyLink = () => {
-    if ($posts.length === 0) return;
+    if (posts.data.length === 0) return;
 
-    const urls = $posts.map((p) => (activeTab === 'publish' ? p.entity.url : `${env.PUBLIC_WEBSITE_URL}/${p.entity.slug}`)).join('\n');
+    const urls = posts.data.map((p) => (activeTab === 'publish' ? p.entity.url : `${env.PUBLIC_WEBSITE_URL}/${p.entity.slug}`)).join('\n');
     navigator.clipboard.writeText(urls);
-    mixpanel.track('copy_post_share_url', { tab: activeTab, count: $posts.length });
+    mixpanel.track('copy_post_share_url', { tab: activeTab, count: posts.data.length });
 
     if (timer) {
       clearTimeout(timer);
@@ -211,8 +216,8 @@
       thumbnailUploading = true;
       try {
         const image = await uploadBlobAsImage(file);
-        await updatePostsOption({ postIds, thumbnailId: image.id });
-        mixpanel.track('update_post_thumbnail', { count: $posts.length });
+        await updatePostsOption({ input: { postIds, thumbnailId: image.id } });
+        mixpanel.track('update_post_thumbnail', { count: posts.data.length });
       } finally {
         thumbnailUploading = false;
       }
@@ -222,15 +227,15 @@
   };
 
   const handleThumbnailRemove = async () => {
-    await updatePostsOption({ postIds, thumbnailId: null });
-    mixpanel.track('remove_post_thumbnail', { count: $posts.length });
+    await updatePostsOption({ input: { postIds, thumbnailId: null } });
+    mixpanel.track('remove_post_thumbnail', { count: posts.data.length });
   };
 </script>
 
 <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '32px', paddingX: '16px', paddingY: '12px' })}>
   <div class={flex({ gap: '[0.5ch]', fontSize: '12px', fontWeight: 'medium' })}>
     <span class={css({ wordBreak: 'break-all', lineClamp: '1', fontWeight: 'semibold' })}>
-      {isSinglePost ? $posts[0].title : `${$posts.length}개의 포스트`}
+      {isSinglePost ? posts.data[0].title : `${posts.data.length}개의 포스트`}
     </span>
     <span class={css({ flexShrink: '0' })}>공유 및 게시하기</span>
   </div>
@@ -369,7 +374,7 @@
               value: EntityVisibility.PRIVATE,
             },
           ]}
-          values={$posts.map((p) => p.entity.visibility)}
+          values={posts.data.map((p) => p.entity.visibility)}
           bind:value={form.fields.visibility}
         />
       </div>
@@ -381,7 +386,7 @@
             <div class={css({ fontSize: '12px', color: 'text.subtle' })}>비밀번호 보호</div>
           </div>
 
-          <Switch values={$posts.map((p) => p.password !== null)} bind:checked={form.fields.hasPassword} />
+          <Switch values={posts.data.map((p) => p.password !== null)} bind:checked={form.fields.hasPassword} />
         </div>
 
         {#if form.fields.hasPassword}
@@ -467,7 +472,7 @@
             { label: '15세', value: PostContentRating.R15 },
             { label: '성인', value: PostContentRating.R19 },
           ]}
-          values={$posts.map((p) => p.contentRating)}
+          values={posts.data.map((p) => p.contentRating)}
           bind:value={form.fields.contentRating}
         />
       </div>
@@ -499,7 +504,7 @@
             >
               {thumbnailUploading ? '...' : '다름'}
             </button>
-          {:else if $posts[0].thumbnail}
+          {:else if posts.data[0].thumbnail}
             <div class={flex({ alignItems: 'center', gap: '4px' })}>
               <button
                 class={css({ position: 'relative', cursor: 'pointer' })}
@@ -514,8 +519,8 @@
                     borderRadius: '6px',
                     objectFit: 'cover',
                   })}
-                  $image={$posts[0].thumbnail}
                   alt="썸네일"
+                  image$key={posts.data[0].thumbnail}
                   size={128}
                 />
               </button>
@@ -573,7 +578,7 @@
             { icon: UsersRoundIcon, label: '누구나', value: true },
             { icon: BanIcon, label: '비허용', value: false },
           ]}
-          values={$posts.map((p) => p.allowReaction)}
+          values={posts.data.map((p) => p.allowReaction)}
           bind:value={form.fields.allowReaction}
         />
       </div>
@@ -591,7 +596,7 @@
           </div>
         </div>
 
-        <Switch values={$posts.map((p) => p.protectContent)} bind:checked={form.fields.protectContent} />
+        <Switch values={posts.data.map((p) => p.protectContent)} bind:checked={form.fields.protectContent} />
       </div>
     </div>
   </div>
@@ -621,7 +626,7 @@
               value: EntityAvailability.PRIVATE,
             },
           ]}
-          values={$posts.map((p) => p.entity.availability)}
+          values={posts.data.map((p) => p.entity.availability)}
           bind:value={form.fields.availability}
         />
       </div>

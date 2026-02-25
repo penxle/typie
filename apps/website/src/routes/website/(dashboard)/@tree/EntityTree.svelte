@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createFragment, createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { portal } from '@typie/ui/actions';
@@ -13,14 +14,14 @@
   import { fade } from 'svelte/transition';
   import FileIcon from '~icons/lucide/file';
   import FolderIcon from '~icons/lucide/folder';
-  import { fragment, graphql } from '$graphql';
+  import { graphql } from '$mearie';
   import { getDragDropContext } from '../[slug]/@split-view/drag-context.svelte';
   import SelectedEntitiesBar from './@selection/SelectedEntitiesBar.svelte';
   import Entity from './Entity.svelte';
   import { setupTreeContext } from './state.svelte';
   import { getNextElement, getPreviousElement, maxDepth } from './utils';
   import type { MouseEventHandler, PointerEventHandler } from 'svelte/elements';
-  import type { DashboardLayout_EntityTree_site } from '$graphql';
+  import type { DashboardLayout_EntityTree_site$key } from '$mearie';
 
   type EntityNode = {
     id: string;
@@ -28,17 +29,16 @@
       __typename: 'Document' | 'Folder' | 'Post';
     };
     children?: EntityNode[];
-    ' $$_DashboardLayout_EntityTree_Entity_entity'?: unknown;
+    ' $_DashboardLayout_EntityTree_Entity_entity'?: unknown;
   };
 
   type Props = {
-    $site: DashboardLayout_EntityTree_site;
+    site$key: DashboardLayout_EntityTree_site$key;
   };
 
-  let { $site: _site }: Props = $props();
+  let { site$key }: Props = $props();
 
-  const site = fragment(
-    _site,
+  const site = createFragment(
     graphql(`
       fragment DashboardLayout_EntityTree_site on Site {
         id
@@ -76,54 +76,59 @@
         }
       }
     `),
+    () => site$key,
   );
 
-  const moveEntities = graphql(`
-    mutation DashboardLayout_EntityTree_MoveEntities_Mutation($input: MoveEntitiesInput!) {
-      moveEntities(input: $input) {
-        id
-
-        ancestors {
+  const [moveEntities] = createMutation(
+    graphql(`
+      mutation DashboardLayout_EntityTree_MoveEntities_Mutation($input: MoveEntitiesInput!) {
+        moveEntities(input: $input) {
           id
 
-          node {
-            __typename
-
-            ... on Folder {
-              id
-              name
-            }
-          }
-        }
-
-        parent {
-          id
-
-          children {
+          ancestors {
             id
-            slug
 
             node {
               __typename
+
+              ... on Folder {
+                id
+                name
+              }
             }
+          }
+
+          parent {
+            id
+
+            # children {
+            #   id
+            #   slug
+
+            #   node {
+            #     __typename
+            #   }
+            # }
           }
         }
       }
-    }
-  `);
+    `),
+  );
 
-  const deleteEntities = graphql(`
-    mutation DashboardLayout_EntityTree_DeleteEntities_Mutation($input: DeleteEntitiesInput!) {
-      deleteEntities(input: $input) {
-        id
-        site {
+  const [deleteEntities] = createMutation(
+    graphql(`
+      mutation DashboardLayout_EntityTree_DeleteEntities_Mutation($input: DeleteEntitiesInput!) {
+        deleteEntities(input: $input) {
           id
-          ...DashboardLayout_EntityTree_site
-          ...DashboardLayout_TrashModal_site
+          site {
+            id
+            ...DashboardLayout_EntityTree_site
+            ...DashboardLayout_TrashModal_site
+          }
         }
       }
-    }
-  `);
+    `),
+  );
 
   type Indicator = {
     top: number;
@@ -185,7 +190,7 @@
   });
 
   $effect(() => {
-    if ($site) {
+    if (site.data) {
       const entityMap = new SvelteMap<string, (typeof treeState.entities)[number]>();
       const collect = (children: EntityNode[], parentId?: string): typeof treeState.entities => {
         const entities = children.map((entity) => ({
@@ -202,7 +207,7 @@
         return entities;
       };
 
-      treeState.entities = collect($site.entities);
+      treeState.entities = collect(site.data.entities as unknown as EntityNode[]);
       treeState.entityMap = entityMap;
     }
   });
@@ -572,7 +577,7 @@
       if (target === 'trash') {
         try {
           endDragging();
-          await deleteEntities({ entityIds: selectedIds });
+          await deleteEntities({ input: { entityIds: selectedIds } });
 
           mixpanel.track('delete_entities', { totalCount: selectedIds.length, via: 'drag_and_drop' });
 
@@ -589,10 +594,12 @@
 
         endDragging();
         await moveEntities({
-          entityIds: selectedIds,
-          parentEntityId: parentId ?? null,
-          lowerOrder,
-          upperOrder,
+          input: {
+            entityIds: selectedIds,
+            parentEntityId: parentId ?? null,
+            lowerOrder,
+            upperOrder,
+          },
         });
         mixpanel.track('move_entities', { totalCount: selectedIds.length, parentEntityId: parentId ?? null, lowerOrder, upperOrder });
         return;
@@ -662,7 +669,7 @@
       });
     };
 
-    collect($site.entities as EntityNode[]);
+    collect(site.data.entities as unknown as EntityNode[]);
 
     return count;
   });
@@ -700,8 +707,8 @@
   onpointerupcapture={handlePointerUp}
   role="tree"
 >
-  {#each $site.entities as entity (entity.id)}
-    <Entity $entity={entity} />
+  {#each site.data.entities as entity (entity.id)}
+    <Entity entity$key={entity} />
   {:else}
     <div class={center({ flexGrow: '1' })}>
       <p class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.disabled' })}>아직 포스트가 없어요</p>

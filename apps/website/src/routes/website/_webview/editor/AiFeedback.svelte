@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createSubscription } from '@mearie/svelte';
   import { getChangedRanges } from '@tiptap/core';
   import { Plugin, PluginKey } from '@tiptap/pm/state';
   import { Decoration, DecorationSet } from '@tiptap/pm/view';
@@ -6,7 +7,7 @@
   import { nanoid } from 'nanoid';
   import { onMount, untrack } from 'svelte';
   import { absolutePositionToRelativePosition, relativePositionToAbsolutePosition, ySyncPluginKey } from 'y-prosemirror';
-  import { graphql } from '$graphql';
+  import { graphql } from '$mearie';
   import type { Editor } from '@tiptap/core';
   import type { Transaction } from '@tiptap/pm/state';
   import type { Ref } from '@typie/ui/utils';
@@ -31,27 +32,78 @@
   let mounted = $state(false);
   let feedbacks = $state<AiFeedback[]>([]);
   let activeFeedbackId = $state<string | null>(null);
-  let currentUnsubscribe: (() => void) | null = null;
+  let analysisVars = $state<{ body: unknown; binding: unknown } | null>(null);
 
-  const literaryAnalysisStream = graphql(`
-    subscription WebViewEditor_LiteraryAnalysisStream_Subscription($body: JSON!) {
-      literaryAnalysisStream(body: $body) {
-        type
-        feedback {
-          from
-          to
-          startText
-          endText
-          feedback
-        }
-        progress {
-          current
-          total
-          phase
+  createSubscription(
+    graphql(`
+      subscription WebViewEditor_LiteraryAnalysisStream_Subscription($body: JSON!) {
+        literaryAnalysisStream(body: $body) {
+          type
+          feedback {
+            from
+            to
+            startText
+            endText
+            feedback
+          }
+          progress {
+            current
+            total
+            phase
+          }
         }
       }
-    }
-  `);
+    `),
+    () => ({ body: analysisVars?.body }),
+    () => ({
+      skip: !analysisVars,
+      onData: (data) => {
+        const payload = data.literaryAnalysisStream;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const binding = analysisVars?.binding as any;
+        if (payload.type === 'feedback' && payload.feedback) {
+          const item = payload.feedback;
+          const newFeedback: AiFeedback = {
+            id: nanoid(),
+            from: item.from,
+            to: item.to,
+            startText: item.startText,
+            endText: item.endText,
+            feedback: item.feedback,
+            relativeFrom: absolutePositionToRelativePosition(item.from, binding.type, binding.mapping),
+            relativeTo: absolutePositionToRelativePosition(item.to, binding.type, binding.mapping),
+          };
+          feedbacks = [...feedbacks, newFeedback].toSorted((a, b) => a.from - b.from);
+
+          window.__webview__?.emitEvent('aiFeedbackUpdate', {
+            type: 'feedback',
+            feedback: {
+              id: newFeedback.id,
+              from: newFeedback.from,
+              to: newFeedback.to,
+              startText: newFeedback.startText,
+              endText: newFeedback.endText,
+              feedback: newFeedback.feedback,
+            },
+          });
+        } else if (payload.type === 'progress' && payload.progress) {
+          window.__webview__?.emitEvent('aiFeedbackUpdate', {
+            type: 'progress',
+            progress: payload.progress,
+          });
+        } else if (payload.type === 'complete') {
+          window.__webview__?.emitEvent('aiFeedbackUpdate', {
+            type: 'complete',
+            feedbackCount: feedbacks.length,
+          });
+        } else if (payload.type === 'error') {
+          window.__webview__?.emitEvent('aiFeedbackUpdate', {
+            type: 'error',
+          });
+        }
+      },
+    }),
+  );
 
   const handleTransaction = ({ editor, transaction }: { editor: Editor; transaction: Transaction }) => {
     const { binding } = ySyncPluginKey.getState(editor.view.state);
@@ -147,15 +199,9 @@
       mounted = true;
     }
   });
-
   onMount(() => {
     window.__webview__?.setProcedure('runAiFeedback', async () => {
       if (!editor?.current) return { success: false };
-
-      if (currentUnsubscribe) {
-        currentUnsubscribe();
-        currentUnsubscribe = null;
-      }
 
       feedbacks = [];
       activeFeedbackId = null;
@@ -163,57 +209,13 @@
       const body = editor.current.getJSON();
       const { binding } = ySyncPluginKey.getState(editor.current.view.state);
 
-      currentUnsubscribe = literaryAnalysisStream.subscribe({ body }, (payload) => {
-        if (payload.type === 'feedback' && payload.feedback) {
-          const item = payload.feedback;
-          const newFeedback: AiFeedback = {
-            id: nanoid(),
-            from: item.from,
-            to: item.to,
-            startText: item.startText,
-            endText: item.endText,
-            feedback: item.feedback,
-            relativeFrom: absolutePositionToRelativePosition(item.from, binding.type, binding.mapping),
-            relativeTo: absolutePositionToRelativePosition(item.to, binding.type, binding.mapping),
-          };
-          feedbacks = [...feedbacks, newFeedback].toSorted((a, b) => a.from - b.from);
-
-          window.__webview__?.emitEvent('aiFeedbackUpdate', {
-            type: 'feedback',
-            feedback: {
-              id: newFeedback.id,
-              from: newFeedback.from,
-              to: newFeedback.to,
-              startText: newFeedback.startText,
-              endText: newFeedback.endText,
-              feedback: newFeedback.feedback,
-            },
-          });
-        } else if (payload.type === 'progress' && payload.progress) {
-          window.__webview__?.emitEvent('aiFeedbackUpdate', {
-            type: 'progress',
-            progress: payload.progress,
-          });
-        } else if (payload.type === 'complete') {
-          window.__webview__?.emitEvent('aiFeedbackUpdate', {
-            type: 'complete',
-            feedbackCount: feedbacks.length,
-          });
-        } else if (payload.type === 'error') {
-          window.__webview__?.emitEvent('aiFeedbackUpdate', {
-            type: 'error',
-          });
-        }
-      });
+      analysisVars = { body, binding };
 
       return { success: true };
     });
 
     window.__webview__?.setProcedure('stopAiFeedback', () => {
-      if (currentUnsubscribe) {
-        currentUnsubscribe();
-        currentUnsubscribe = null;
-      }
+      analysisVars = null;
     });
 
     window.__webview__?.setProcedure('setAiFeedbackHighlight', ({ id }: { id: string | null }) => {
@@ -247,10 +249,7 @@
     });
 
     return () => {
-      if (currentUnsubscribe) {
-        currentUnsubscribe();
-        currentUnsubscribe = null;
-      }
+      analysisVars = null;
     };
   });
 </script>

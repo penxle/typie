@@ -6,16 +6,16 @@
   import SplitViews from './SplitViews.svelte';
   import { getMinSizeForView, VIEW_MIN_SIZE } from './utils';
   import View from './View.svelte';
-  import type { SplitViews_View_query } from '$graphql';
+  import type { SplitViews_View_query$key } from '$mearie';
   import type { SplitView } from './context.svelte';
 
   type Props = {
-    $query: SplitViews_View_query;
+    query$key: SplitViews_View_query$key;
     slug: string;
     view: SplitView;
   };
 
-  let { $query: _query, slug, view }: Props = $props();
+  let { query$key, slug, view }: Props = $props();
 
   const context = getSplitViewContext();
   let containerRef: HTMLDivElement | undefined = $state();
@@ -40,7 +40,7 @@
 </script>
 
 {#if view.type === 'item'}
-  <View $query={_query} viewItem={view} />
+  <View {query$key} viewItem={view} />
 {:else if view.type === 'container'}
   <div
     bind:this={containerRef}
@@ -59,7 +59,7 @@
     })}
   >
     {#each view.children as child, index (child.type === 'item' ? `item-${child.id}-${child.slug ?? ''}` : `container-${child.id}`)}
-      <SplitViews $query={_query} {slug} view={child} />
+      <SplitViews {query$key} {slug} view={child} />
       {#if index !== view.children.length - 1}
         <Resizer {containerRef} direction={view.direction} {index} {view} />
       {/if}

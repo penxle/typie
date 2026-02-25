@@ -1,18 +1,18 @@
 <script lang="ts">
+  import { createFragment } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
-  import { fragment, graphql } from '$graphql';
+  import { graphql } from '$mearie';
   import TrashEntity from './TrashEntity.svelte';
-  import type { DashboardLayout_TrashTree_site } from '$graphql';
+  import type { DashboardLayout_TrashTree_site$key } from '$mearie';
 
   type Props = {
-    $site: DashboardLayout_TrashTree_site;
+    site$key: DashboardLayout_TrashTree_site$key;
   };
 
-  let { $site: _site }: Props = $props();
+  let { site$key }: Props = $props();
 
-  const site = fragment(
-    _site,
+  const site = createFragment(
     graphql(`
       fragment DashboardLayout_TrashTree_site on Site {
         id
@@ -50,6 +50,7 @@
         }
       }
     `),
+    () => site$key,
   );
 </script>
 
@@ -62,7 +63,7 @@
   })}
   role="tree"
 >
-  {#if $site.deletedEntities.length > 0}
+  {#if site.data.deletedEntities.length > 0}
     <div
       class={flex({
         flexDirection: 'column',
@@ -73,8 +74,8 @@
         overflowY: 'auto',
       })}
     >
-      {#each $site.deletedEntities as entity (entity.id)}
-        <TrashEntity $entity={entity} />
+      {#each site.data.deletedEntities as entity (entity.id)}
+        <TrashEntity entity$key={entity} />
       {/each}
     </div>
   {:else}

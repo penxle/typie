@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createFragment } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Button, Icon, Modal } from '@typie/ui/components';
@@ -8,19 +9,18 @@
   import CheckIcon from '~icons/lucide/check';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
   import XIcon from '~icons/lucide/x';
-  import { fragment, graphql } from '$graphql';
-  import type { DashboardLayout_PreferenceModal_BillingTab_SubscriptionCancellationSurveyModal_user } from '$graphql';
+  import { graphql } from '$mearie';
+  import type { DashboardLayout_PreferenceModal_BillingTab_SubscriptionCancellationSurveyModal_user$key } from '$mearie';
 
   type Props = {
     open: boolean;
-    $user: DashboardLayout_PreferenceModal_BillingTab_SubscriptionCancellationSurveyModal_user;
+    user$key: DashboardLayout_PreferenceModal_BillingTab_SubscriptionCancellationSurveyModal_user$key;
     onSubmit: (data: unknown) => void;
   };
 
-  let { open = $bindable(false), $user: _user, onSubmit }: Props = $props();
+  let { open = $bindable(false), user$key, onSubmit }: Props = $props();
 
-  const user = fragment(
-    _user,
+  const user = createFragment(
     graphql(`
       fragment DashboardLayout_PreferenceModal_BillingTab_SubscriptionCancellationSurveyModal_user on User {
         id
@@ -31,6 +31,7 @@
         }
       }
     `),
+    () => user$key,
   );
 
   let currentStep = $state(0);
@@ -168,12 +169,12 @@
           </div>
         </div>
 
-        {#if $user.subscription?.state === SubscriptionState.ACTIVE}
+        {#if user.data.subscription?.state === SubscriptionState.ACTIVE}
           <p class={css({ fontSize: '14px', color: 'text.faint', lineHeight: '[1.6]' })}>
-            지금 해지하더라도 {dayjs($user.subscription.expiresAt).formatAsDate()}까지는 계속해서 타이피 FULL ACCESS 혜택을 이용할 수
+            지금 해지하더라도 {dayjs(user.data.subscription.expiresAt).formatAsDate()}까지는 계속해서 타이피 FULL ACCESS 혜택을 이용할 수
             있어요.
           </p>
-        {:else if $user.subscription?.state === SubscriptionState.IN_GRACE_PERIOD}
+        {:else if user.data.subscription?.state === SubscriptionState.IN_GRACE_PERIOD}
           <p class={css({ fontSize: '14px', color: 'text.faint', lineHeight: '[1.6]' })}>해지 즉시 유료 서비스가 중단됩니다.</p>
         {/if}
       </div>

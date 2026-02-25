@@ -1,8 +1,9 @@
 <script lang="ts" module>
   import ky from 'ky';
-  import { graphql } from '$graphql';
+  import { mearieClient } from '$lib/graphql';
+  import { graphql } from '$mearie';
 
-  const issueBlobUploadUrl = graphql(`
+  const issueBlobUploadUrlMutation = graphql(`
     mutation BlobUtils_IssueBlobUploadUrl($input: IssueBlobUploadUrlInput!) {
       issueBlobUploadUrl(input: $input) {
         path
@@ -12,7 +13,7 @@
     }
   `);
 
-  const persistBlobAsFile = graphql(`
+  const persistBlobAsFileMutation = graphql(`
     mutation BlobUtils_PersistBlobAsFile($input: PersistBlobAsFileInput!) {
       persistBlobAsFile(input: $input) {
         id
@@ -23,7 +24,7 @@
     }
   `);
 
-  const persistBlobAsImage = graphql(`
+  const persistBlobAsImageMutation = graphql(`
     mutation BlobUtils_PersistBlobAsImage($input: PersistBlobAsImageInput!) {
       persistBlobAsImage(input: $input) {
         id
@@ -38,7 +39,9 @@
   `);
 
   export const uploadBlob = async (file: File) => {
-    const { path, url, fields } = await issueBlobUploadUrl({ filename: file.name });
+    const {
+      issueBlobUploadUrl: { path, url, fields },
+    } = await mearieClient.mutation(issueBlobUploadUrlMutation, { input: { filename: file.name } });
 
     const formData = new FormData();
     for (const [key, value] of Object.entries<string>(fields)) {
@@ -58,11 +61,13 @@
 
   export const uploadBlobAsFile = async (file: File) => {
     const path = await uploadBlob(file);
-    return await persistBlobAsFile({ path });
+    const result = await mearieClient.mutation(persistBlobAsFileMutation, { input: { path } });
+    return result.persistBlobAsFile;
   };
 
   export const uploadBlobAsImage = async (file: File, modification?: unknown) => {
     const path = await uploadBlob(file);
-    return await persistBlobAsImage({ path, modification });
+    const result = await mearieClient.mutation(persistBlobAsImageMutation, { input: { path, modification } });
+    return result.persistBlobAsImage;
   };
 </script>

@@ -1,21 +1,21 @@
 <script lang="ts">
+  import { createFragment } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Icon } from '@typie/ui/components';
   import ChevronLeftIcon from '~icons/lucide/chevron-left';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
-  import { fragment, graphql } from '$graphql';
   import { Img } from '$lib/components';
-  import type { UsersiteWildcardSlugPage_ContentNavigation_entityView } from '$graphql';
+  import { graphql } from '$mearie';
+  import type { UsersiteWildcardSlugPage_ContentNavigation_entityView$key } from '$mearie';
 
   type Props = {
-    $entityView: UsersiteWildcardSlugPage_ContentNavigation_entityView;
+    entityView$key: UsersiteWildcardSlugPage_ContentNavigation_entityView$key;
   };
 
-  let { $entityView: _entityView }: Props = $props();
+  let { entityView$key }: Props = $props();
 
-  const entityView = fragment(
-    _entityView,
+  const entityView = createFragment(
     graphql(`
       fragment UsersiteWildcardSlugPage_ContentNavigation_entityView on EntityView {
         id
@@ -75,13 +75,18 @@
         }
       }
     `),
+    () => entityView$key,
   );
 
   const prevNode = $derived(
-    $entityView.prev?.node.__typename === 'PostView' || $entityView.prev?.node.__typename === 'DocumentView' ? $entityView.prev.node : null,
+    entityView.data.prev?.node.__typename === 'PostView' || entityView.data.prev?.node.__typename === 'DocumentView'
+      ? entityView.data.prev.node
+      : null,
   );
   const nextNode = $derived(
-    $entityView.next?.node.__typename === 'PostView' || $entityView.next?.node.__typename === 'DocumentView' ? $entityView.next.node : null,
+    entityView.data.next?.node.__typename === 'PostView' || entityView.data.next?.node.__typename === 'DocumentView'
+      ? entityView.data.next.node
+      : null,
   );
 </script>
 
@@ -97,7 +102,7 @@
       maxWidth: 'var(--prosemirror-max-width)',
     })}
   >
-    {#if prevNode && $entityView.prev}
+    {#if prevNode && entityView.data.prev}
       <a
         class={flex({
           flex: '1',
@@ -109,7 +114,7 @@
           transition: 'background',
           _hover: { backgroundColor: 'surface.muted' },
         })}
-        href={`/${$entityView.prev.slug}`}
+        href={`/${entityView.data.prev.slug}`}
       >
         {#if prevNode.thumbnail}
           <div
@@ -123,8 +128,8 @@
           >
             <Img
               style={css.raw({ width: 'full', height: 'full', objectFit: 'cover' })}
-              $image={prevNode.thumbnail}
               alt={prevNode.title}
+              image$key={prevNode.thumbnail}
               size={48}
             />
           </div>
@@ -144,7 +149,7 @@
       <div class={css({ flex: '1' })}></div>
     {/if}
 
-    {#if nextNode && $entityView.next}
+    {#if nextNode && entityView.data.next}
       <a
         class={flex({
           flex: '1',
@@ -157,7 +162,7 @@
           transition: 'background',
           _hover: { backgroundColor: 'surface.muted' },
         })}
-        href={`/${$entityView.next.slug}`}
+        href={`/${entityView.data.next.slug}`}
       >
         {#if nextNode.thumbnail}
           <div
@@ -171,8 +176,8 @@
           >
             <Img
               style={css.raw({ width: 'full', height: 'full', objectFit: 'cover' })}
-              $image={nextNode.thumbnail}
               alt={nextNode.title}
+              image$key={nextNode.thumbnail}
               size={48}
             />
           </div>

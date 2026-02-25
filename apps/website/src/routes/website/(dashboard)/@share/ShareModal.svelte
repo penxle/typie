@@ -1,58 +1,51 @@
 <script lang="ts">
+  import { createQuery } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { Modal } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
-  import { graphql } from '$graphql';
+  import { graphql } from '$mearie';
   import Document from './Document.svelte';
   import Folder from './Folder.svelte';
   import Post from './Post.svelte';
 
-  const entitiesQuery = graphql(`
-    query DashboardLayout_ShareModal_Query($entityIds: [ID!]!) @client {
-      entities(entityIds: $entityIds) {
-        id
-        type
+  const app = getAppContext();
 
-        node {
-          __typename
+  const entitiesQuery = createQuery(
+    graphql(`
+      query DashboardLayout_ShareModal_Query($entityIds: [ID!]!) {
+        entities(entityIds: $entityIds) {
+          id
+          type
 
-          ... on Folder {
-            id
+          node {
+            __typename
 
-            ...DashboardLayout_Share_Folder_folder
-          }
+            ... on Folder {
+              id
 
-          ... on Post {
-            id
+              ...DashboardLayout_Share_Folder_folder
+            }
 
-            ...DashboardLayout_Share_Post_post
-          }
+            ... on Post {
+              id
 
-          ... on Document {
-            id
+              ...DashboardLayout_Share_Post_post
+            }
 
-            ...DashboardLayout_Share_Document_document
+            ... on Document {
+              id
+
+              ...DashboardLayout_Share_Document_document
+            }
           }
         }
       }
-    }
-  `);
+    `),
+    () => ({ entityIds: app.state.shareOpen }),
+    () => ({ skip: app.state.shareOpen.length === 0 }),
+  );
 
-  const app = getAppContext();
-  let loaded = $state(false);
-
-  const load = async () => {
-    loaded = false;
-
-    if (app.state.shareOpen.length > 0) {
-      await entitiesQuery.load({ entityIds: app.state.shareOpen });
-      loaded = true;
-    }
-  };
-
-  $effect(() => {
-    load();
-  });
+  const loaded = $derived(app.state.shareOpen.length > 0 && !!entitiesQuery.data && !entitiesQuery.loading);
 </script>
 
 <Modal
@@ -62,22 +55,21 @@
   loading={!loaded}
   onclose={() => {
     app.state.shareOpen = [];
-    loaded = false;
   }}
   open={app.state.shareOpen.length > 0}
 >
-  {#if loaded && $entitiesQuery}
-    {@const entities = $entitiesQuery.entities}
+  {#if loaded && entitiesQuery.data}
+    {@const entities = entitiesQuery.data.entities}
     {@const allFolders = entities.every((e) => e.type === 'FOLDER')}
     {@const allPosts = entities.every((e) => e.type === 'POST')}
     {@const allDocuments = entities.every((e) => e.type === 'DOCUMENT')}
 
     {#if allFolders}
-      <Folder $folders={$entitiesQuery.entities.map((e) => e.node).filter((e) => e.__typename === 'Folder')} />
+      <Folder folders$key={entitiesQuery.data.entities.map((e) => e.node).filter((e) => e.__typename === 'Folder')} />
     {:else if allPosts}
-      <Post $posts={$entitiesQuery.entities.map((e) => e.node).filter((e) => e.__typename === 'Post')} />
+      <Post posts$key={entitiesQuery.data.entities.map((e) => e.node).filter((e) => e.__typename === 'Post')} />
     {:else if allDocuments}
-      <Document $documents={$entitiesQuery.entities.map((e) => e.node).filter((e) => e.__typename === 'Document')} />
+      <Document documents$key={entitiesQuery.data.entities.map((e) => e.node).filter((e) => e.__typename === 'Document')} />
     {/if}
   {/if}
 </Modal>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createFragment, createSubscription } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { tooltip } from '@typie/ui/actions';
@@ -11,30 +12,29 @@
   import LightbulbIcon from '~icons/lucide/lightbulb';
   import XIcon from '~icons/lucide/x';
   import { pushState } from '$app/navigation';
-  import { fragment, graphql } from '$graphql';
-  import type { DocumentPanel_Ai_document, DocumentPanel_Ai_user } from '$graphql';
+  import { graphql } from '$mearie';
   import type { Editor } from '$lib/editor/editor.svelte';
+  import type { DocumentPanel_Ai_document$key, DocumentPanel_Ai_user$key } from '$mearie';
 
   type Props = {
-    $document: DocumentPanel_Ai_document;
-    $user: DocumentPanel_Ai_user;
+    document$key: DocumentPanel_Ai_document$key;
+    user$key: DocumentPanel_Ai_user$key;
     editor: Editor;
   };
 
-  let { $document: _document, $user: _user, editor }: Props = $props();
+  let { document$key, user$key, editor }: Props = $props();
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const document = fragment(
-    _document,
+  const document = createFragment(
     graphql(`
       fragment DocumentPanel_Ai_document on Document {
         id
       }
     `),
+    () => document$key,
   );
 
-  const user = fragment(
-    _user,
+  const user = createFragment(
     graphql(`
       fragment DocumentPanel_Ai_user on User {
         id
@@ -45,9 +45,10 @@
         }
       }
     `),
+    () => user$key,
   );
 
-  const aiOptIn = $derived(($user.preferences.aiOptIn as boolean | undefined) ?? false);
+  const aiOptIn = $derived((user.data.preferences.aiOptIn as boolean | undefined) ?? false);
 
   let inflight = $state(false);
   let mounted = $state(false);
@@ -58,68 +59,38 @@
 
   const activeFeedback = $derived(editor.aiFeedbacks.find((v) => v.active));
 
-  const literaryAnalysisDocumentStream = graphql(`
-    subscription DocumentPanel_Ai_LiteraryAnalysisDocumentStream($text: String!, $mappings: [DocumentTextMappingInput!]!) {
-      literaryAnalysisDocumentStream(text: $text, mappings: $mappings) {
-        type
-        feedback {
-          nodeId
-          startOffset
-          endOffset
-          startText
-          endText
-          feedback
-        }
-        progress {
-          current
-          total
-          phase
-        }
-      }
-    }
-  `);
-
-  let currentUnsubscribe: (() => void) | null = null;
+  let analysisVars = $state<{
+    text: string;
+    mappings: { nodeId: string; textStart: number; textEnd: number; blockOffset: number }[];
+  } | null>(null);
   let trackedEntries: { id: string; nodeId: string; startOffset: number; endOffset: number }[] = [];
 
-  const scrollToBottom = async () => {
-    if (!listContainer) return;
-
-    const isAtBottom = listContainer.scrollHeight - listContainer.scrollTop - listContainer.clientHeight < 100;
-    await tick();
-    if (isAtBottom) {
-      listContainer.scrollTop = listContainer.scrollHeight;
-    }
-  };
-
-  const runAnalysis = async () => {
-    if (!editor || inflight) {
-      return;
-    }
-
-    await editor.ready;
-
-    const spellcheckData = editor.getTextWithMappings();
-    if (!spellcheckData?.text?.trim()) {
-      return;
-    }
-
-    if (currentUnsubscribe) {
-      currentUnsubscribe();
-      currentUnsubscribe = null;
-    }
-
-    inflight = true;
-    hasChecked = true;
-    checkFailed = false;
-    editor.aiFeedbacks = [];
-    editor.setTrackedItems(1, []);
-    trackedEntries = [];
-    progress = null;
-
-    currentUnsubscribe = literaryAnalysisDocumentStream.subscribe(
-      { text: spellcheckData.text, mappings: spellcheckData.mappings },
-      (payload) => {
+  createSubscription(
+    graphql(`
+      subscription DocumentPanel_Ai_LiteraryAnalysisDocumentStream($text: String!, $mappings: [DocumentTextMappingInput!]!) {
+        literaryAnalysisDocumentStream(text: $text, mappings: $mappings) {
+          type
+          feedback {
+            nodeId
+            startOffset
+            endOffset
+            startText
+            endText
+            feedback
+          }
+          progress {
+            current
+            total
+            phase
+          }
+        }
+      }
+    `),
+    () => ({ text: analysisVars?.text ?? '', mappings: analysisVars?.mappings ?? [] }),
+    () => ({
+      skip: !analysisVars,
+      onData: (data) => {
+        const payload = data.literaryAnalysisDocumentStream;
         if (payload.type === 'feedback' && payload.feedback) {
           const item = payload.feedback;
           const newId = nanoid();
@@ -154,7 +125,40 @@
           checkFailed = true;
         }
       },
-    );
+    }),
+  );
+
+  const scrollToBottom = async () => {
+    if (!listContainer) return;
+
+    const isAtBottom = listContainer.scrollHeight - listContainer.scrollTop - listContainer.clientHeight < 100;
+    await tick();
+    if (isAtBottom) {
+      listContainer.scrollTop = listContainer.scrollHeight;
+    }
+  };
+
+  const runAnalysis = async () => {
+    if (!editor || inflight) {
+      return;
+    }
+
+    await editor.ready;
+
+    const spellcheckData = editor.getTextWithMappings();
+    if (!spellcheckData?.text?.trim()) {
+      return;
+    }
+
+    inflight = true;
+    hasChecked = true;
+    checkFailed = false;
+    editor.aiFeedbacks = [];
+    editor.setTrackedItems(1, []);
+    trackedEntries = [];
+    progress = null;
+
+    analysisVars = { text: spellcheckData.text, mappings: spellcheckData.mappings };
   };
 
   const setActiveFeedback = (feedbackId: string) => {
@@ -215,10 +219,7 @@
 
   onMount(() => {
     return () => {
-      if (currentUnsubscribe) {
-        currentUnsubscribe();
-        currentUnsubscribe = null;
-      }
+      analysisVars = null;
     };
   });
 </script>
@@ -344,7 +345,7 @@
 
       <Button onclick={runAnalysis} size="sm" variant="secondary">분석 시작</Button>
     </div>
-  {:else if (hasChecked && checkFailed) || !$user.subscription}
+  {:else if (hasChecked && checkFailed) || !user.data.subscription}
     <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '8px', paddingY: '40px' })}>
       <Icon style={css.raw({ color: 'text.faint' })} icon={CircleAlertIcon} size={32} />
       <div class={css({ fontSize: '16px', color: 'text.faint' })}>분석에 실패했습니다</div>

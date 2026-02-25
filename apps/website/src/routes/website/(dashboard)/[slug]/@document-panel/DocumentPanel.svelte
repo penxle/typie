@@ -1,11 +1,12 @@
 <script lang="ts">
+  import { createFragment } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Icon } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { clamp } from '@typie/ui/utils';
   import ConstructionIcon from '~icons/lucide/construction';
-  import { fragment, graphql } from '$graphql';
+  import { graphql } from '$mearie';
   import { getViewContext } from '../@split-view/context.svelte';
   import DocumentPanelAi from './DocumentPanelAi.svelte';
   import DocumentPanelInfo from './DocumentPanelInfo.svelte';
@@ -14,22 +15,21 @@
   import DocumentPanelSettings from './DocumentPanelSettings.svelte';
   import DocumentPanelSpellcheck from './DocumentPanelSpellcheck.svelte';
   import DocumentPanelTimeline from './DocumentPanelTimeline.svelte';
-  import type { DocumentPanel_document, DocumentPanel_user } from '$graphql';
   import type { Editor } from '$lib/editor/editor.svelte';
+  import type { DocumentPanel_document$key, DocumentPanel_user$key } from '$mearie';
 
   type Props = {
     editor: Editor;
-    $document: DocumentPanel_document;
-    $user: DocumentPanel_user;
+    document$key: DocumentPanel_document$key;
+    user$key: DocumentPanel_user$key;
   };
 
   const minWidth = 240;
   const maxWidth = 400;
 
-  let { editor, $document: _document, $user: _user }: Props = $props();
+  let { editor, document$key, user$key }: Props = $props();
 
-  const document = fragment(
-    _document,
+  const document = createFragment(
     graphql(`
       fragment DocumentPanel_document on Document {
         id
@@ -45,10 +45,10 @@
         ...DocumentPanelTimeline_document
       }
     `),
+    () => document$key,
   );
 
-  const user = fragment(
-    _user,
+  const user = createFragment(
     graphql(`
       fragment DocumentPanel_user on User {
         id
@@ -57,6 +57,7 @@
         ...DocumentPanel_Spellcheck_user
       }
     `),
+    () => user$key,
   );
 
   const app = getAppContext();
@@ -155,15 +156,15 @@
     {#if app.preference.current.panelTabByViewId[splitViewId] === 'settings'}
       <DocumentPanelSettings {editor} />
     {:else if app.preference.current.panelTabByViewId[splitViewId] === 'info'}
-      <DocumentPanelInfo {$document} {$user} {editor} />
+      <DocumentPanelInfo document$key={document.data} {editor} user$key={user.data} />
     {:else if app.preference.current.panelTabByViewId[splitViewId] === 'note'}
-      <DocumentPanelNote $entity={$document.entity} />
+      <DocumentPanelNote entity$key={document.data.entity} />
     {:else if app.preference.current.panelTabByViewId[splitViewId] === 'timeline'}
-      <DocumentPanelTimeline {$document} {editor} />
+      <DocumentPanelTimeline document$key={document.data} {editor} />
     {:else if app.preference.current.panelTabByViewId[splitViewId] === 'spellcheck'}
-      <DocumentPanelSpellcheck {$document} {$user} {editor} />
+      <DocumentPanelSpellcheck document$key={document.data} {editor} user$key={user.data} />
     {:else if app.preference.current.panelTabByViewId[splitViewId] === 'ai'}
-      <DocumentPanelAi {$document} {$user} {editor} />
+      <DocumentPanelAi document$key={document.data} {editor} user$key={user.data} />
     {:else if app.preference.current.panelTabByViewId[splitViewId] === 'remarks'}
       <DocumentPanelRemark {editor} />
     {:else}

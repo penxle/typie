@@ -1,8 +1,22 @@
 import { redirect } from '@sveltejs/kit';
-import type { IndexPage_Query_AfterLoad } from './$graphql';
+import { loadQuery } from '$lib/graphql';
+import { graphql } from '$mearie';
 
-export const _IndexPage_Query_AfterLoad: IndexPage_Query_AfterLoad = async ({ query }) => {
-  if (query.me) {
+export const load = async (event) => {
+  const query = await loadQuery(
+    event,
+    graphql(`
+      query IndexPage_Query {
+        me {
+          id
+        }
+      }
+    `),
+  );
+
+  if (query.data.me) {
     redirect(302, '/initial');
   }
+
+  return { query };
 };

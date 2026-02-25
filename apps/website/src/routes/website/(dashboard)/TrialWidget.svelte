@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createFragment } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Button, Icon } from '@typie/ui/components';
@@ -8,20 +9,19 @@
   import HourglassIcon from '~icons/lucide/hourglass';
   import ZapIcon from '~icons/lucide/zap';
   import { pushState } from '$app/navigation';
-  import { fragment, graphql } from '$graphql';
+  import { graphql } from '$mearie';
   import PlanUpgradeModal from './PlanUpgradeModal.svelte';
-  import type { DashboardLayout_TrialWidget_user } from '$graphql';
+  import type { DashboardLayout_TrialWidget_user$key } from '$mearie';
 
   type Props = {
-    $user: DashboardLayout_TrialWidget_user;
+    user$key: DashboardLayout_TrialWidget_user$key;
   };
 
-  let { $user: _user }: Props = $props();
+  let { user$key }: Props = $props();
 
   let planUpgradeModalOpen = $state(false);
 
-  const user = fragment(
-    _user,
+  const user = createFragment(
     graphql(`
       fragment DashboardLayout_TrialWidget_user on User {
         id
@@ -39,20 +39,21 @@
         }
       }
     `),
+    () => user$key,
   );
 
-  const isTrial = $derived($user.subscription?.plan.availability === PlanAvailability.TRIAL);
-  const canStartTrial = $derived($user.canStartTrial);
+  const isTrial = $derived(user.data.subscription?.plan.availability === PlanAvailability.TRIAL);
+  const canStartTrial = $derived(user.data.canStartTrial);
 
   const trialDaysRemaining = $derived.by(() => {
-    if (!isTrial || !$user.subscription?.expiresAt) {
+    if (!isTrial || !user.data.subscription?.expiresAt) {
       return 0;
     }
-    return Math.max(0, dayjs($user.subscription.expiresAt).diff(dayjs(), 'day'));
+    return Math.max(0, dayjs(user.data.subscription.expiresAt).diff(dayjs(), 'day'));
   });
 </script>
 
-{#if canStartTrial && !$user.subscription}
+{#if canStartTrial && !user.data.subscription}
   <div class={css({ borderTopWidth: '1px', borderColor: 'border.default', paddingX: '12px', paddingY: '8px' })}>
     <Button
       style={css.raw({ width: 'full' })}
@@ -103,7 +104,7 @@
   </button>
 {/if}
 
-<PlanUpgradeModal {$user} title="2주 무료 체험을 시작해보세요" bind:open={planUpgradeModalOpen}>
+<PlanUpgradeModal title="2주 무료 체험을 시작해보세요" user$key={user.data} bind:open={planUpgradeModalOpen}>
   결제 수단 등록 없이 타이피의 모든 기능을
   <br />
   무료로 이용할 수 있어요.

@@ -1,18 +1,18 @@
 <script lang="ts">
-  import { fragment, graphql } from '$graphql';
+  import { createFragment } from '@mearie/svelte';
+  import { graphql } from '$mearie';
   import TrashDocument from './TrashDocument.svelte';
   import TrashFolder from './TrashFolder.svelte';
   import TrashPost from './TrashPost.svelte';
-  import type { DashboardLayout_TrashTree_TrashEntity_entity, DashboardLayout_TrashTree_TrashFolder_entity } from '$graphql';
+  import type { DashboardLayout_TrashTree_TrashEntity_entity$key, DashboardLayout_TrashTree_TrashFolder_entity$key } from '$mearie';
 
   type Props = {
-    $entity: DashboardLayout_TrashTree_TrashEntity_entity;
+    entity$key: DashboardLayout_TrashTree_TrashEntity_entity$key;
   };
 
-  let { $entity: _entity }: Props = $props();
+  let { entity$key }: Props = $props();
 
-  const entity = fragment(
-    _entity,
+  const entity = createFragment(
     graphql(`
       fragment DashboardLayout_TrashTree_TrashEntity_entity on Entity {
         id
@@ -37,17 +37,18 @@
         }
       }
     `),
+    () => entity$key,
   );
 
   const children = $derived(
-    ($entity as unknown as { deletedChildren: DashboardLayout_TrashTree_TrashFolder_entity[] }).deletedChildren ?? [],
+    (entity.data as unknown as { deletedChildren: DashboardLayout_TrashTree_TrashFolder_entity$key[] }).deletedChildren ?? [],
   );
 </script>
 
-{#if $entity.node.__typename === 'Folder'}
-  <TrashFolder $entities={children} $folder={$entity.node} />
-{:else if $entity.node.__typename === 'Post'}
-  <TrashPost $post={$entity.node} />
-{:else if $entity.node.__typename === 'Document'}
-  <TrashDocument $document={$entity.node} />
+{#if entity.data.node.__typename === 'Folder'}
+  <TrashFolder entities$key={children} folder$key={entity.data.node} />
+{:else if entity.data.node.__typename === 'Post'}
+  <TrashPost post$key={entity.data.node} />
+{:else if entity.data.node.__typename === 'Document'}
+  <TrashDocument document$key={entity.data.node} />
 {/if}

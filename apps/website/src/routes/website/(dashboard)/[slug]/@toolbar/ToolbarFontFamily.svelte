@@ -1,29 +1,29 @@
 <script lang="ts">
+  import { createFragment } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Icon, SearchableDropdown } from '@typie/ui/components';
   import { defaultValues, values } from '@typie/ui/tiptap';
   import mixpanel from 'mixpanel-browser';
   import PlusIcon from '~icons/lucide/plus';
-  import { fragment, graphql } from '$graphql';
+  import { graphql } from '$mearie';
   import FontUploadModal from '../../FontUploadModal.svelte';
   import PlanUpgradeModal from '../../PlanUpgradeModal.svelte';
   import type { Editor } from '@tiptap/core';
   import type { Ref } from '@typie/ui/utils';
-  import type { Editor_BottomToolbar_FontFamily_user } from '$graphql';
+  import type { Editor_BottomToolbar_FontFamily_user$key } from '$mearie';
 
   type Props = {
-    $user: Editor_BottomToolbar_FontFamily_user;
+    user$key: Editor_BottomToolbar_FontFamily_user$key;
     editor?: Ref<Editor>;
   };
 
-  let { $user: _user, editor }: Props = $props();
+  let { user$key, editor }: Props = $props();
 
   let uploadModalOpen = $state(false);
   let planUpgradeOpen = $state(false);
 
-  const user = fragment(
-    _user,
+  const user = createFragment(
     graphql(`
       fragment Editor_BottomToolbar_FontFamily_user on User {
         id
@@ -44,13 +44,14 @@
         }
       }
     `),
+    () => user$key,
   );
 
   const currentFontFamilyValue = $derived.by(() => {
     const value = editor?.current.getAttributes('text_style').fontFamily;
 
     // NOTE: 레거시 지원; value가 font id(FONT0)인 경우, font family id(FNTF0)로 변환
-    for (const fontFamily of $user.fontFamilies) {
+    for (const fontFamily of user.data.fontFamilies) {
       if (fontFamily.fonts.some((font) => font.id === value)) {
         return fontFamily.id;
       }
@@ -61,7 +62,7 @@
 
   const allFontFamilies = $derived.by(() => {
     const systemFonts = values.fontFamily.map((f) => ({ value: f.value, label: f.label }));
-    const userFonts = $user.subscription ? $user.fontFamilies.map((f) => ({ value: f.id, label: f.displayName })) : [];
+    const userFonts = user.data.subscription ? user.data.fontFamilies.map((f) => ({ value: f.id, label: f.displayName })) : [];
     return [...systemFonts, ...userFonts];
   });
 
@@ -72,7 +73,7 @@
     if (systemFontFamily) {
       weights = systemFontFamily.weights.toSorted((a, b) => a - b);
     } else {
-      const userFontFamily = $user.fontFamilies.find((f) => f.id === fontFamilyOrId);
+      const userFontFamily = user.data.fontFamilies.find((f) => f.id === fontFamilyOrId);
       if (!userFontFamily) return null;
 
       weights = userFontFamily.fonts.map((f) => f.weight).toSorted((a, b) => a - b);
@@ -116,7 +117,7 @@
   extraItems={[
     {
       onclick: () => {
-        if ($user.subscription) {
+        if (user.data.subscription) {
           uploadModalOpen = true;
         } else {
           planUpgradeOpen = true;
@@ -150,5 +151,7 @@
   {/snippet}
 </SearchableDropdown>
 
-<FontUploadModal userId={$user.id} bind:open={uploadModalOpen} />
-<PlanUpgradeModal {$user} bind:open={planUpgradeOpen}>폰트 업로드 기능은 FULL ACCESS 플랜에서 사용할 수 있어요.</PlanUpgradeModal>
+<FontUploadModal userId={user.data.id} bind:open={uploadModalOpen} />
+<PlanUpgradeModal user$key={user.data} bind:open={planUpgradeOpen}>
+  폰트 업로드 기능은 FULL ACCESS 플랜에서 사용할 수 있어요.
+</PlanUpgradeModal>

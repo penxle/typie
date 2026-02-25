@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Button, Modal, TextInput } from '@typie/ui/components';
@@ -7,7 +8,7 @@
   import { z } from 'zod';
   import { TypieError } from '@/errors';
   import { redeemCodeSchema } from '@/validation';
-  import { graphql } from '$graphql';
+  import { graphql } from '$mearie';
 
   type Props = {
     open: boolean;
@@ -15,21 +16,23 @@
 
   let { open = $bindable() }: Props = $props();
 
-  const redeemCreditCode = graphql(`
-    mutation DashboardLayout_PreferenceModal_BillingTab_RedeemCreditCodeModal_RedeemCreditCode_Mutation($input: RedeemCreditCodeInput!) {
-      redeemCreditCode(input: $input) {
-        id
-        credit
+  const [redeemCreditCode] = createMutation(
+    graphql(`
+      mutation DashboardLayout_PreferenceModal_BillingTab_RedeemCreditCodeModal_RedeemCreditCode_Mutation($input: RedeemCreditCodeInput!) {
+        redeemCreditCode(input: $input) {
+          id
+          credit
+        }
       }
-    }
-  `);
+    `),
+  );
 
   const form = createForm({
     schema: z.object({
       code: redeemCodeSchema,
     }),
     onSubmit: async (data) => {
-      await redeemCreditCode({ code: data.code });
+      await redeemCreditCode({ input: { code: data.code } });
       mixpanel.track('redeem_credit_code', { via: 'redeem-credit-code-modal' });
 
       open = false;

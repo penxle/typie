@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { Button, Helmet, Icon, TextInput } from '@typie/ui/components';
@@ -10,13 +11,15 @@
   import GoogleIcon from '~icons/typie/google';
   import { page } from '$app/state';
   import Logo from '$assets/logos/logo.svg?component';
-  import { graphql } from '$graphql';
+  import { graphql } from '$mearie';
 
-  const sendPasswordResetEmail = graphql(`
-    mutation ForgotPasswordPage_SendPasswordResetEmail_Mutation($input: SendPasswordResetEmailInput!) {
-      sendPasswordResetEmail(input: $input)
-    }
-  `);
+  const [sendPasswordResetEmail] = createMutation(
+    graphql(`
+      mutation ForgotPasswordPage_SendPasswordResetEmail_Mutation($input: SendPasswordResetEmailInput!) {
+        sendPasswordResetEmail(input: $input)
+      }
+    `),
+  );
 
   const form = createForm({
     schema: z.object({
@@ -24,7 +27,9 @@
     }),
     onSubmit: async (data) => {
       await sendPasswordResetEmail({
-        email: data.email,
+        input: {
+          email: data.email,
+        },
       });
 
       mixpanel.track('send_password_reset_email');

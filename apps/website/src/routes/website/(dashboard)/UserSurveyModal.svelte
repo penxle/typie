@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Button, Icon, Modal } from '@typie/ui/components';
@@ -6,7 +7,7 @@
   import ChevronLeftIcon from '~icons/lucide/chevron-left';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
   import XIcon from '~icons/lucide/x';
-  import { graphql } from '$graphql';
+  import { graphql } from '$mearie';
   import type { SurveyData, SurveyStep } from './survey.types';
 
   type Props = {
@@ -15,13 +16,15 @@
 
   let { open = $bindable(false) }: Props = $props();
 
-  const recordSurvey = graphql(`
-    mutation UserSurveyModal_RecordSurvey_Mutation($input: RecordSurveyInput!) {
-      recordSurvey(input: $input) {
-        id
+  const [recordSurvey] = createMutation(
+    graphql(`
+      mutation UserSurveyModal_RecordSurvey_Mutation($input: RecordSurveyInput!) {
+        recordSurvey(input: $input) {
+          id
+        }
       }
-    }
-  `);
+    `),
+  );
 
   let currentStep = $state(0);
   const totalSteps = 5;
@@ -213,7 +216,7 @@
   }
 
   function handleSubmit() {
-    recordSurvey({ name: '202509_ir', value: surveyData });
+    recordSurvey({ input: { name: '202509_ir', value: surveyData } });
     open = false;
     currentStep = 0;
   }

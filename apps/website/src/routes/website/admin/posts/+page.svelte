@@ -6,74 +6,22 @@
   import dayjs from 'dayjs';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
   import SearchIcon from '~icons/lucide/search';
-  import { graphql } from '$graphql';
   import { AdminIcon, AdminPagination, AdminTable } from '$lib/components/admin';
+  import { hydrateQuery } from '$lib/graphql';
+
+  let { data } = $props();
+
+  const query = $derived(hydrateQuery(() => data.query));
 
   const searchQuery = new QueryString('search', '', { debounce: 300 });
   const pageNumber = new QueryStringNumber('page', 1);
-
-  const query = graphql(`
-    query AdminPosts_Query($search: String, $offset: Int!, $limit: Int!) {
-      adminPosts(search: $search, offset: $offset, limit: $limit) {
-        totalCount
-
-        posts {
-          id
-          title
-          subtitle
-          type
-          createdAt
-          updatedAt
-          contentRating
-          excerpt
-          reactionCount
-          characterCount
-          entity {
-            id
-            slug
-            visibility
-            state
-            ancestors {
-              id
-              node {
-                __typename
-                ... on Folder {
-                  name
-                }
-                ... on Post {
-                  title
-                }
-                ... on Document {
-                  title
-                }
-              }
-            }
-            user {
-              id
-              name
-              email
-              avatar {
-                id
-                url
-              }
-            }
-          }
-
-          coverImage {
-            id
-            url
-          }
-        }
-      }
-    }
-  `);
 </script>
 
 <div class={flex({ flexDirection: 'column', gap: '24px', color: 'amber.500' })}>
   <div>
     <h2 class={css({ fontSize: '18px', color: 'amber.500' })}>POST MANAGEMENT</h2>
     <p class={css({ marginTop: '8px', fontSize: '13px', color: 'amber.400' })}>
-      TOTAL POSTS: {$query.adminPosts.totalCount}
+      TOTAL POSTS: {query.data.adminPosts.totalCount}
     </p>
   </div>
 
@@ -141,7 +89,7 @@
         { key: '$state', label: 'STATE', width: '10%' },
         { key: '$updatedAt', label: 'UPDATED', width: '10%' },
       ]}
-      data={$query.adminPosts.posts}
+      data={[...query.data.adminPosts.posts]}
       dataKey="id"
     >
       {#snippet $post(post)}
@@ -264,6 +212,6 @@
       {/snippet}
     </AdminTable>
 
-    <AdminPagination totalCount={$query.adminPosts.totalCount} bind:pageNumber={pageNumber.current} />
+    <AdminPagination totalCount={query.data.adminPosts.totalCount} bind:pageNumber={pageNumber.current} />
   </div>
 </div>

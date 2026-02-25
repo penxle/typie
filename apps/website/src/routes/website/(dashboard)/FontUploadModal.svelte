@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { cache } from '@typie/sark/internal';
+  import { createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { tooltip } from '@typie/ui/actions';
@@ -11,9 +11,10 @@
   import InfoIcon from '~icons/lucide/info';
   import TypeIcon from '~icons/lucide/type';
   import UploadIcon from '~icons/lucide/upload';
-  import { graphql } from '$graphql';
   import { values } from '$lib/editor/values';
+  import { cache, unwrapError } from '$lib/graphql';
   import { uploadBlob } from '$lib/utils';
+  import { graphql } from '$mearie';
 
   type Props = {
     open: boolean;
@@ -22,20 +23,22 @@
 
   let { open = $bindable(), userId }: Props = $props();
 
-  const persistBlobAsFont = graphql(`
-    mutation FontUploadModal_PersistBlobAsFont_Mutation($input: PersistBlobAsFontInput!) {
-      persistBlobAsFont(input: $input) {
-        id
-        subfamilyDisplayName
-        weight
-
-        family {
+  const [persistBlobAsFont] = createMutation(
+    graphql(`
+      mutation FontUploadModal_PersistBlobAsFont_Mutation($input: PersistBlobAsFontInput!) {
+        persistBlobAsFont(input: $input) {
           id
-          displayName
+          subfamilyDisplayName
+          weight
+
+          family {
+            id
+            displayName
+          }
         }
       }
-    }
-  `);
+    `),
+  );
 
   let inflight = $state(false);
   let isDragging = $state(false);
@@ -68,23 +71,24 @@
       uploadProgress.current++;
       try {
         const path = await uploadBlob(file);
-        const resp = await persistBlobAsFont({ path });
+        const resp = await persistBlobAsFont({ input: { path } });
         cache.invalidate({ __typename: 'User', id: userId, field: 'fontFamilies' });
         cache.invalidate({ __typename: 'User', id: userId, field: 'documentFontFamilies' });
         cache.invalidate({ __typename: 'Document', field: 'fontFamilies' });
 
         results.push({
-          name: resp.family.displayName,
-          familyId: resp.family.id,
-          familyDisplayName: resp.family.displayName,
-          weight: resp.weight,
-          subfamilyDisplayName: resp.subfamilyDisplayName,
+          name: resp.persistBlobAsFont.family.displayName,
+          familyId: resp.persistBlobAsFont.family.id,
+          familyDisplayName: resp.persistBlobAsFont.family.displayName,
+          weight: resp.persistBlobAsFont.weight,
+          subfamilyDisplayName: resp.persistBlobAsFont.subfamilyDisplayName,
           success: true,
         });
       } catch (err) {
         let errorMessage = '폰트 업로드에 실패했어요.';
-        if (err instanceof TypieError) {
-          errorMessage = errorMap[err.code as never] ?? errorMessage;
+        const error = unwrapError(err);
+        if (error instanceof TypieError) {
+          errorMessage = errorMap[error.code as never] ?? errorMessage;
         }
         results.push({
           name: file.name,

@@ -28,7 +28,6 @@
     "@tiptap/core": "^3.20.0",
     "@tiptap/pm": "^3.20.0",
     "@typie/lib": "workspace:*",
-    "@typie/sark": "workspace:*",
     "@typie/styled-system": "workspace:*",
     "@typie/tsconfig": "workspace:*",
     "@typie/ui": "workspace:*",

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createQuery } from '@mearie/svelte';
   import NumberFlow from '@number-flow/svelte';
   import { css, cx } from '@typie/styled-system/css';
   import { Icon } from '@typie/ui/components';
@@ -9,21 +10,21 @@
   import GooglePlayIcon from '~icons/simple-icons/googleplay';
   import { browser } from '$app/environment';
   import { page } from '$app/state';
-  import { graphql } from '$graphql';
+  import { graphql } from '$mearie';
   import heroImage from './images/hero.webp';
   import { inview } from './inview';
 
-  const activeWritersQuery = graphql(`
-    query Hero_ActiveWriters_Query @client {
-      activeWritersCount
-    }
-  `);
+  const activeWritersQuery = createQuery(
+    graphql(`
+      query Hero_ActiveWriters_Query {
+        activeWritersCount
+      }
+    `),
+  );
 
   onMount(() => {
-    activeWritersQuery.load();
-
     const interval = setInterval(() => {
-      activeWritersQuery.load();
+      activeWritersQuery.refetch();
     }, 30_000);
 
     return () => clearInterval(interval);
@@ -352,11 +353,11 @@
           {#if browser}
             <NumberFlow
               class={css({ color: 'dark.gray.200', fontWeight: 'semibold' })}
-              value={$activeWritersQuery?.activeWritersCount ?? 0}
+              value={activeWritersQuery.data?.activeWritersCount ?? 0}
             />
           {:else}
             <strong class={css({ color: 'dark.gray.200', fontWeight: 'semibold' })}>
-              {($activeWritersQuery?.activeWritersCount ?? 0).toLocaleString()}
+              {(activeWritersQuery.data?.activeWritersCount ?? 0).toLocaleString()}
             </strong>
           {/if}
           명이 지금 글 쓰는 중

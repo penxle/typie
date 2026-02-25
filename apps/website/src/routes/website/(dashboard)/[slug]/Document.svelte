@@ -1,20 +1,20 @@
 <script lang="ts">
+  import { createFragment } from '@mearie/svelte';
   import { settled } from 'svelte';
-  import { fragment, graphql } from '$graphql';
   import { setupEditorContext } from '$lib/editor/context.svelte';
+  import { graphql } from '$mearie';
   import DocumentEditor from './DocumentEditor.svelte';
-  import type { Document_query } from '$graphql';
+  import type { Document_query$key } from '$mearie';
 
   type Props = {
-    $query: Document_query;
+    query$key: Document_query$key;
     slug: string;
     focused: boolean;
   };
 
-  let { $query: _query, slug, focused }: Props = $props();
+  let { query$key, slug, focused }: Props = $props();
 
-  const query = fragment(
-    _query,
+  const query = createFragment(
     graphql(`
       fragment Document_query on Query {
         ...DocumentEditor_query
@@ -79,11 +79,12 @@
         }
       }
     `),
+    () => query$key,
   );
 
   const ctx = setupEditorContext();
 
-  const entity = $derived($query.entities.find((e) => e.slug === slug));
+  const entity = $derived(query.data.entities.find((e) => e.slug === slug));
 
   $effect.pre(() => {
     ctx.documentId = entity?.node.__typename === 'Document' ? entity.node.id : null;
@@ -109,6 +110,6 @@
 
 {#if entity?.node.__typename === 'Document'}
   {#if mounted}
-    <DocumentEditor {$query} {focused} {slug} />
+    <DocumentEditor {focused} query$key={query.data} {slug} />
   {/if}
 {/if}

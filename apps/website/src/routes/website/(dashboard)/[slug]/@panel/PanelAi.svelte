@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createFragment, createSubscription } from '@mearie/svelte';
   import { getChangedRanges } from '@tiptap/core';
   import { Plugin, PluginKey, Transaction } from '@tiptap/pm/state';
   import { Decoration, DecorationSet } from '@tiptap/pm/view';
@@ -16,14 +17,14 @@
   import LightbulbIcon from '~icons/lucide/lightbulb';
   import XIcon from '~icons/lucide/x';
   import { pushState } from '$app/navigation';
-  import { fragment, graphql } from '$graphql';
+  import { graphql } from '$mearie';
   import { getViewContext } from '../@split-view/context.svelte';
   import type { Editor } from '@tiptap/core';
   import type { Ref } from '@typie/ui/utils';
-  import type { Editor_Panel_PanelAi_user } from '$graphql';
+  import type { Editor_Panel_PanelAi_user$key } from '$mearie';
 
   type Props = {
-    $user: Editor_Panel_PanelAi_user;
+    user$key: Editor_Panel_PanelAi_user$key;
     editor?: Ref<Editor>;
   };
 
@@ -38,10 +39,9 @@
     feedback: string;
   };
 
-  let { $user: _user, editor }: Props = $props();
+  let { user$key, editor }: Props = $props();
 
-  const user = fragment(
-    _user,
+  const user = createFragment(
     graphql(`
       fragment Editor_Panel_PanelAi_user on User {
         id
@@ -52,10 +52,11 @@
         }
       }
     `),
+    () => user$key,
   );
 
   const view = getViewContext();
-  const aiOptIn = $derived(($user.preferences.aiOptIn as boolean | undefined) ?? false);
+  const aiOptIn = $derived((user.data.preferences.aiOptIn as boolean | undefined) ?? false);
 
   let inflight = $state(false);
   let mounted = $state(false);
@@ -66,27 +67,63 @@
   let listContainer = $state<HTMLElement>();
   let progress = $state<{ current: number; total: number; phase: string } | null>(null);
 
-  const literaryAnalysisStream = graphql(`
-    subscription Editor_Panel_Ai_LiteraryAnalysisStream($body: JSON!) {
-      literaryAnalysisStream(body: $body) {
-        type
-        feedback {
-          from
-          to
-          startText
-          endText
-          feedback
-        }
-        progress {
-          current
-          total
-          phase
+  let analysisVars = $state<{ body: unknown; binding: unknown } | null>(null);
+
+  createSubscription(
+    graphql(`
+      subscription Editor_Panel_Ai_LiteraryAnalysisStream($body: JSON!) {
+        literaryAnalysisStream(body: $body) {
+          type
+          feedback {
+            from
+            to
+            startText
+            endText
+            feedback
+          }
+          progress {
+            current
+            total
+            phase
+          }
         }
       }
-    }
-  `);
-
-  let currentUnsubscribe: (() => void) | null = null;
+    `),
+    () => ({ body: analysisVars?.body ?? {} }),
+    () => ({
+      skip: !analysisVars,
+      onData: (data) => {
+        const payload = data.literaryAnalysisStream;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const binding = analysisVars?.binding as any;
+        if (payload.type === 'feedback' && payload.feedback) {
+          const item = payload.feedback;
+          const newFeedback = {
+            id: nanoid(),
+            from: item.from,
+            to: item.to,
+            startText: item.startText,
+            endText: item.endText,
+            feedback: item.feedback,
+            relativeFrom: absolutePositionToRelativePosition(item.from, binding.type, binding.mapping),
+            relativeTo: absolutePositionToRelativePosition(item.to, binding.type, binding.mapping),
+          };
+          feedbacks = [...feedbacks, newFeedback].toSorted((a, b) => a.from - b.from);
+          scrollToBottom();
+        } else if (payload.type === 'progress' && payload.progress) {
+          progress = payload.progress;
+        } else if (payload.type === 'complete') {
+          inflight = false;
+          progress = null;
+          mixpanel.track('ai-feedback', { feedbacks: feedbacks.length, via: 'panel' });
+        } else if (payload.type === 'error') {
+          inflight = false;
+          progress = null;
+          checkFailed = true;
+        }
+      },
+    }),
+  );
 
   const scrollToBottom = async () => {
     if (!listContainer) return;
@@ -103,11 +140,6 @@
       return;
     }
 
-    if (currentUnsubscribe) {
-      currentUnsubscribe();
-      currentUnsubscribe = null;
-    }
-
     inflight = true;
     hasChecked = true;
     checkFailed = false;
@@ -117,33 +149,7 @@
     const body = editor.current.getJSON();
     const { binding } = ySyncPluginKey.getState(editor.current.view.state);
 
-    currentUnsubscribe = literaryAnalysisStream.subscribe({ body }, (payload) => {
-      if (payload.type === 'feedback' && payload.feedback) {
-        const item = payload.feedback;
-        const newFeedback = {
-          id: nanoid(),
-          from: item.from,
-          to: item.to,
-          startText: item.startText,
-          endText: item.endText,
-          feedback: item.feedback,
-          relativeFrom: absolutePositionToRelativePosition(item.from, binding.type, binding.mapping),
-          relativeTo: absolutePositionToRelativePosition(item.to, binding.type, binding.mapping),
-        };
-        feedbacks = [...feedbacks, newFeedback].toSorted((a, b) => a.from - b.from);
-        scrollToBottom();
-      } else if (payload.type === 'progress' && payload.progress) {
-        progress = payload.progress;
-      } else if (payload.type === 'complete') {
-        inflight = false;
-        progress = null;
-        mixpanel.track('ai-feedback', { feedbacks: feedbacks.length, via: 'panel' });
-      } else if (payload.type === 'error') {
-        inflight = false;
-        progress = null;
-        checkFailed = true;
-      }
-    });
+    analysisVars = { body, binding };
   };
 
   const scrollToFeedback = (feedback: AiFeedback) => {
@@ -254,10 +260,7 @@
   onMount(() => {
     return () => {
       activeFeedback = undefined;
-      if (currentUnsubscribe) {
-        currentUnsubscribe();
-        currentUnsubscribe = null;
-      }
+      analysisVars = null;
     };
   });
 </script>
@@ -383,7 +386,7 @@
 
       <Button onclick={runAnalysis} size="sm" variant="secondary">분석 시작</Button>
     </div>
-  {:else if (hasChecked && checkFailed) || !$user.subscription}
+  {:else if (hasChecked && checkFailed) || !user.data.subscription}
     <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '8px', paddingY: '40px' })}>
       <Icon style={css.raw({ color: 'text.faint' })} icon={CircleAlertIcon} size={32} />
       <div class={css({ fontSize: '16px', color: 'text.faint' })}>분석에 실패했습니다</div>

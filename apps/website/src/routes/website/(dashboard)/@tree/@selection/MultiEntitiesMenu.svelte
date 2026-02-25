@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { HorizontalDivider, Icon, MenuItem } from '@typie/ui/components';
@@ -11,25 +12,27 @@
   import InfoIcon from '~icons/lucide/info';
   import TrashIcon from '~icons/lucide/trash';
   import TriangleAlertIcon from '~icons/lucide/triangle-alert';
-  import { graphql } from '$graphql';
+  import { graphql } from '$mearie';
   import { getTreeContext } from '../state.svelte';
   import type { TreeEntity } from './types';
 
   const app = getAppContext();
   const tree = getTreeContext();
 
-  const deleteEntities = graphql(`
-    mutation DashboardLayout_EntityTree_MultiEntitiesMenu_DeleteEntities_Mutation($input: DeleteEntitiesInput!) {
-      deleteEntities(input: $input) {
-        id
-        site {
+  const [deleteEntities] = createMutation(
+    graphql(`
+      mutation DashboardLayout_EntityTree_MultiEntitiesMenu_DeleteEntities_Mutation($input: DeleteEntitiesInput!) {
+        deleteEntities(input: $input) {
           id
-          ...DashboardLayout_EntityTree_site
-          ...DashboardLayout_TrashModal_site
+          site {
+            id
+            ...DashboardLayout_EntityTree_site
+            ...DashboardLayout_TrashModal_site
+          }
         }
       }
-    }
-  `);
+    `),
+  );
 
   const { folderIds, postIds, documentIds } = $derived.by(() => {
     const folderIds: string[] = [];
@@ -136,7 +139,7 @@
         try {
           const entityIds = [...tree.selectedEntityIds];
 
-          await deleteEntities({ entityIds });
+          await deleteEntities({ input: { entityIds } });
 
           mixpanel.track('delete_entities', {
             totalCount: entityIds.length,

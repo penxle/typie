@@ -1,34 +1,32 @@
 <script lang="ts">
+  import { createQuery } from '@mearie/svelte';
   import { css, cx } from '@typie/styled-system/css';
   import { grid } from '@typie/styled-system/patterns';
   import { Helmet, Icon } from '@typie/ui/components';
-  import { onMount } from 'svelte';
   import ArrowRightIcon from '~icons/lucide/arrow-right';
   import { page } from '$app/state';
-  import { graphql } from '$graphql';
+  import { graphql } from '$mearie';
   import { inview } from '../(index)/inview';
   import StatCard from './StatCard.svelte';
   import StatCardSkeleton from './StatCardSkeleton.svelte';
 
-  const query = graphql(`
-    query OpenStartupPage_Query @client {
-      stats
-    }
-  `);
-
-  onMount(() => {
-    query.load();
-  });
+  const query = createQuery(
+    graphql(`
+      query OpenStartupPage_Query {
+        stats
+      }
+    `),
+  );
 
   function formatNumber(num: number): string {
     if (num >= 100_000_000) {
       const value = (num / 100_000_000).toFixed(1);
       const formatted = value.endsWith('.0') ? value.slice(0, -2) + '억' : value + '억';
-      return formatted.replaceAll(/(\d)(?=(\d{3})+(?!\d))/g, '$1,');
+      return formatted.replaceAll(/(\d)(?=(\d{3})+(?!\d))/g, '<script lang="ts">,');
     } else if (num >= 10_000) {
       const value = (num / 10_000).toFixed(1);
       const formatted = value.endsWith('.0') ? value.slice(0, -2) + '만' : value + '만';
-      return formatted.replaceAll(/(\d)(?=(\d{3})+(?!\d))/g, '$1,');
+      return formatted.replaceAll(/(\d)(?=(\d{3})+(?!\d))/g, '<script lang="ts">,');
     }
     return num.toLocaleString();
   }
@@ -185,53 +183,53 @@
         )}
         {@attach inview}
       >
-        {#if $query}
+        {#if query.data}
           <StatCard
-            data={$query.stats.usersTotal.data}
+            data={query.data.stats.usersTotal.data}
             description="가입한 전체 사용자 수"
             title="전체 사용자"
             type="accumulative"
-            value={formatWithUnit($query.stats.usersTotal.current, '명')}
+            value={formatWithUnit(query.data.stats.usersTotal.current, '명')}
           />
 
           <StatCard
-            data={$query.stats.usersNew.data}
+            data={query.data.stats.usersNew.data}
             description="오늘 새로 합류한 사용자"
             title="신규 가입"
             type="daily"
-            value={formatWithUnit($query.stats.usersNew.current, '명')}
+            value={formatWithUnit(query.data.stats.usersNew.current, '명')}
           />
 
           <StatCard
-            data={$query.stats.charactersDaily.data}
+            data={query.data.stats.charactersDaily.data}
             description="오늘 하루 동안 쓰인 글자"
             title="오늘의 글자 수"
             type="daily"
-            value={formatWithUnit($query.stats.charactersDaily.current, '자')}
+            value={formatWithUnit(query.data.stats.charactersDaily.current, '자')}
           />
 
           <StatCard
-            data={$query.stats.usersActive.data}
+            data={query.data.stats.usersActive.data}
             description="오늘 글을 쓴 사용자"
             title="일일 활성 사용자"
             type="daily"
-            value={formatWithUnit($query.stats.usersActive.current, '명')}
+            value={formatWithUnit(query.data.stats.usersActive.current, '명')}
           />
 
           <StatCard
-            data={$query.stats.subscriptionsRevenue.data}
+            data={query.data.stats.subscriptionsRevenue.data}
             description="이번 달 구독 매출"
             title="월 매출 (MRR)"
             type="accumulative"
-            value={formatWithUnit($query.stats.subscriptionsRevenue.current, '원')}
+            value={formatWithUnit(query.data.stats.subscriptionsRevenue.current, '원')}
           />
 
           <StatCard
-            data={$query.stats.subscriptionsActive.data}
+            data={query.data.stats.subscriptionsActive.data}
             description="유료 플랜 사용 중"
             title="유료 구독자"
             type="accumulative"
-            value={formatWithUnit($query.stats.subscriptionsActive.current, '명')}
+            value={formatWithUnit(query.data.stats.subscriptionsActive.current, '명')}
           />
         {:else}
           {#each Array.from({ length: 6 }, (_, i) => i) as i (i)}
@@ -312,7 +310,7 @@
         )}
         {@attach inview}
       >
-        {#if $query}
+        {#if query.data}
           <div
             class={css({
               paddingY: { sm: '32px', lg: '48px' },
@@ -346,7 +344,7 @@
                 marginBottom: '12px',
               })}
             >
-              {formatWithUnit($query.stats.systemServiceDays.current, '일')}
+              {formatWithUnit(query.data.stats.systemServiceDays.current, '일')}
             </p>
             <p class={css({ fontSize: '14px', color: 'dark.gray.500' })}>첫 번째 사용자가 가입한 날부터</p>
           </div>
@@ -382,7 +380,7 @@
                 marginBottom: '12px',
               })}
             >
-              {formatWithUnit($query.stats.postsTotal.current, '개')}
+              {formatWithUnit(query.data.stats.postsTotal.current, '개')}
             </p>
             <p class={css({ fontSize: '14px', color: 'dark.gray.500' })}>타이피에서 작성된 글</p>
           </div>
@@ -420,7 +418,7 @@
                 marginBottom: '12px',
               })}
             >
-              {formatWithUnit($query.stats.usersTotal.current, '명')}
+              {formatWithUnit(query.data.stats.usersTotal.current, '명')}
             </p>
             <p class={css({ fontSize: '14px', color: 'dark.gray.500' })}>타이피와 함께하는 사용자</p>
           </div>
@@ -454,7 +452,7 @@
                 marginBottom: '12px',
               })}
             >
-              {formatWithUnit($query.stats.charactersInput.current, '자')}
+              {formatWithUnit(query.data.stats.charactersInput.current, '자')}
             </p>
             <p class={css({ fontSize: '14px', color: 'dark.gray.500' })}>타이피에서 입력된 모든 글자</p>
           </div>

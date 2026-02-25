@@ -3,53 +3,18 @@
   import { NotifyIdle, setupEditorContext, TiptapRenderer } from '@typie/ui/tiptap';
   import { onMount } from 'svelte';
   import { page } from '$app/state';
-  import { graphql } from '$graphql';
+  import { hydrateQuery } from '$lib/graphql';
   import type { Editor } from '@tiptap/core';
   import type { Ref } from '@typie/ui/utils';
 
-  const query = graphql(`
-    query ExportPdfSlugPage_query($slug: String!) {
-      entity(slug: $slug) {
-        id
+  let { data } = $props();
 
-        user {
-          id
-          name
-        }
-
-        site {
-          id
-
-          fonts {
-            id
-            weight
-            url
-
-            family {
-              id
-            }
-          }
-        }
-
-        node {
-          __typename
-
-          ... on Post {
-            id
-            title
-            subtitle
-            body
-            createdAt
-          }
-        }
-      }
-    }
-  `);
+  const query = $derived(hydrateQuery(() => data.query));
 
   let editor = $state<Ref<Editor>>();
   setupEditorContext({ pdf: true });
 
-  const post = $derived($query.entity.node.__typename === 'Post' ? $query.entity.node : null);
+  const post = $derived(query.data.entity.node.__typename === 'Post' ? query.data.entity.node : null);
 
   const urlParams = $derived(page.url.searchParams);
 
@@ -63,7 +28,7 @@
   });
 
   const fontFaces = $derived(
-    $query.entity.site.fonts
+    query.data.entity.site.fonts
       .flatMap((font) => [
         `@font-face { font-family: ${font.id}; src: url(${font.url}) format('woff2'); font-weight: ${font.weight}; font-display: block; }`,
         `@font-face { font-family: ${font.family.id}; src: url(${font.url}) format('woff2'); font-weight: ${font.weight}; font-display: block; }`,

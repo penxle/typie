@@ -1,50 +1,20 @@
 <script lang="ts">
-  import { graphql } from '$graphql';
+  import { hydrateQuery } from '$lib/graphql';
   import DocumentView from './DocumentView.svelte';
   import FolderView from './FolderView.svelte';
   import PostView from './PostView.svelte';
 
-  const query = graphql(`
-    query UsersiteWildcardSlugPage_Query($origin: String!, $slug: String!) {
-      me {
-        id
+  let { data } = $props();
 
-        ...UsersiteWildcardSlugPage_PostView_user
-        ...UsersiteWildcardSlugPage_DocumentView_user
-      }
-
-      entityView(origin: $origin, slug: $slug) {
-        id
-
-        node {
-          __typename
-
-          ... on PostView {
-            id
-
-            document {
-              id
-
-              entity {
-                id
-                slug
-              }
-            }
-          }
-        }
-
-        ...UsersiteWildcardSlugPage_DocumentView_entityView
-        ...UsersiteWildcardSlugPage_FolderView_entityView
-        ...UsersiteWildcardSlugPage_PostView_entityView
-      }
-    }
-  `);
+  const query = $derived(hydrateQuery(() => data.query));
 </script>
 
-{#if $query.entityView.node.__typename === 'PostView'}
-  <PostView $entityView={$query.entityView} $user={$query.me} />
-{:else if $query.entityView.node.__typename === 'DocumentView'}
-  <DocumentView $entityView={$query.entityView} $user={$query.me} />
-{:else}
-  <FolderView $entityView={$query.entityView} />
-{/if}
+{#key query.data.entityView.id}
+  {#if query.data.entityView.node.__typename === 'PostView'}
+    <PostView entityView$key={query.data.entityView} user$key={query.data.me} />
+  {:else if query.data.entityView.node.__typename === 'DocumentView'}
+    <DocumentView entityView$key={query.data.entityView} user$key={query.data.me} />
+  {:else}
+    <FolderView entityView$key={query.data.entityView} />
+  {/if}
+{/key}

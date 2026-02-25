@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createFragment, createMutation, createQuery } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { Icon, Modal } from '@typie/ui/components';
@@ -23,12 +24,12 @@
   import SquarePenIcon from '~icons/lucide/square-pen';
   import XIcon from '~icons/lucide/x';
   import { beforeNavigate, goto, pushState } from '$app/navigation';
-  import { fragment, graphql } from '$graphql';
+  import { graphql } from '$mearie';
   import type { Component } from 'svelte';
-  import type { DashboardLayout_CommandPalette_user } from '$graphql';
+  import type { DashboardLayout_CommandPalette_user$key } from '$mearie';
 
   type Props = {
-    $user: DashboardLayout_CommandPalette_user;
+    user$key: DashboardLayout_CommandPalette_user$key;
   };
 
   type Command = {
@@ -38,10 +39,9 @@
     action: () => void | Promise<void>;
   };
 
-  let { $user: _user }: Props = $props();
+  let { user$key }: Props = $props();
 
-  const user = fragment(
-    _user,
+  const user = createFragment(
     graphql(`
       fragment DashboardLayout_CommandPalette_user on User {
         id
@@ -73,66 +73,75 @@
         }
       }
     `),
+    () => user$key,
   );
 
-  const searchQuery = graphql(`
-    query DashboardLayout_CommandPalette_Search_Query($siteId: ID!, $query: String!) @client {
-      search(siteId: $siteId, query: $query) {
-        totalHits
+  let debouncedQuery = $state('');
 
-        hits {
-          __typename
+  const searchQuery = createQuery(
+    graphql(`
+      query DashboardLayout_CommandPalette_Search_Query($siteId: ID!, $query: String!) {
+        search(siteId: $siteId, query: $query) {
+          totalHits
 
-          ... on SearchHitPost {
-            title
-            subtitle
-            text
+          hits {
+            __typename
 
-            post {
-              id
+            ... on SearchHitPost {
               title
-              type
+              subtitle
+              text
 
-              entity {
+              post {
                 id
-                slug
+                title
+                type
+
+                entity {
+                  id
+                  slug
+                }
               }
             }
-          }
 
-          ... on SearchHitDocument {
-            title
-            subtitle
-            text
-
-            document {
-              id
+            ... on SearchHitDocument {
               title
-              type
+              subtitle
+              text
 
-              entity {
+              document {
                 id
-                slug
+                title
+                type
+
+                entity {
+                  id
+                  slug
+                }
               }
             }
           }
         }
       }
-    }
-  `);
+    `),
+    () => ({ siteId: user.data.sites[0].id, query: debouncedQuery }),
+    () => ({ skip: debouncedQuery.length === 0 }),
+  );
 
-  const createDocument = graphql(`
-    mutation DashboardLayout_CommandPalette_CreateDocument_Mutation($input: CreateDocumentInput!) {
-      createDocument(input: $input) {
-        id
-
-        entity {
+  const [createDocument] = createMutation(
+    graphql(`
+      mutation DashboardLayout_CommandPalette_CreateDocument_Mutation($input: CreateDocumentInput!) {
+        createDocument(input: $input) {
           id
-          slug
+
+          entity {
+            id
+            slug
+          }
         }
       }
-    }
-  `);
+    `),
+  );
 
   const app = getAppContext();
 
@@ -143,12 +152,14 @@
       icon: SquarePenIcon,
       action: async () => {
         const resp = await createDocument({
-          siteId: $user.sites[0].id,
+          input: {
+            siteId: user.data.sites[0].id,
+          },
         });
 
         mixpanel.track('create_document', { via: 'command_palette' });
 
-        await goto(`/${resp.entity.slug}`);
+        await goto(`/${resp.createDocument.entity.slug}`);
       },
     },
     {
@@ -215,16 +226,15 @@
     const randomIndex = Math.floor(Math.random() * currentGreetings.length);
     greeting = currentGreetings[randomIndex];
   };
-
   const debouncedSearch = R.funnel(
-    async (query: string) => {
-      await searchQuery.load({ siteId: $user.sites[0].id, query });
+    (q: string) => {
+      debouncedQuery = q;
       if (selectedResultIndex !== -1) {
         selectedResultIndex = null;
       }
     },
     {
-      reducer: (_, query: string) => query,
+      reducer: (_: unknown, q: string) => q,
       minQuietPeriodMs: 16,
       triggerAt: 'end',
     },
@@ -248,7 +258,7 @@
 
   const recentlyViewedHits = $derived(
     query.length === 0
-      ? $user.recentlyViewedEntities
+      ? user.data.recentlyViewedEntities
           .slice(0, 5)
           .map((entity) =>
             match(entity.node)
@@ -272,7 +282,7 @@
   );
 
   const searchHits = $derived(
-    [...(query.length > 0 ? ($searchQuery?.search.hits ?? []) : recentlyViewedHits), ...commandHits].map((hit, idx) => ({
+    [...(query.length > 0 ? (searchQuery.data?.search.hits ?? []) : recentlyViewedHits), ...commandHits].map((hit, idx) => ({
       ...hit,
       idx,
       action: match(hit)
@@ -359,6 +369,7 @@
     app.state.commandPaletteOpen = false;
 
     query = '';
+    debouncedQuery = '';
     selectedResultIndex = null;
   };
 
@@ -411,7 +422,7 @@
           e.stopPropagation();
         }
       }}
-      placeholder={`${$user.name}님, ${greeting}`}
+      placeholder={`${user.data.name}님, ${greeting}`}
       tabindex="0"
       type="text"
       bind:value={query}

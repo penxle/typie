@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createFragment } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { center } from '@typie/styled-system/patterns';
   import { tooltip } from '@typie/ui/actions';
@@ -7,18 +8,17 @@
   import qs from 'query-string';
   import { pushState } from '$app/navigation';
   import { env } from '$env/dynamic/public';
-  import { fragment, graphql } from '$graphql';
   import { Img } from '$lib/components';
-  import type { DashboardLayout_UserMenu_user } from '$graphql';
+  import { graphql } from '$mearie';
+  import type { DashboardLayout_UserMenu_user$key } from '$mearie';
 
   type Props = {
-    $user: DashboardLayout_UserMenu_user;
+    user$key: DashboardLayout_UserMenu_user$key;
   };
 
-  let { $user: _user }: Props = $props();
+  let { user$key }: Props = $props();
 
-  const user = fragment(
-    _user,
+  const user = createFragment(
     graphql(`
       fragment DashboardLayout_UserMenu_user on User {
         id
@@ -35,6 +35,7 @@
         }
       }
     `),
+    () => user$key,
   );
 
   let open = $state(false);
@@ -53,7 +54,7 @@
   type="button"
   use:tooltip={{ message: '프로필', placement: 'right', offset: 12 }}
 >
-  <Img style={css.raw({ size: 'full' })} $image={$user.avatar} alt={`${$user.name}의 아바타`} size={32} />
+  <Img style={css.raw({ size: 'full' })} alt={`${user.data.name}의 아바타`} image$key={user.data.avatar} size={32} />
 </button>
 
 <Modal style={css.raw({ alignItems: 'center', borderWidth: '0', maxWidth: '300px' })} bind:open>
@@ -79,15 +80,15 @@
         translateY: '1/2',
         size: '80px',
       })}
-      $image={$user.avatar}
-      alt={`${$user.name}의 아바타`}
+      alt={`${user.data.name}의 아바타`}
+      image$key={user.data.avatar}
       size={128}
     />
   </div>
 
-  <div class={css({ fontSize: '15px', fontWeight: 'semibold', lineClamp: '1' })}>{$user.name}</div>
+  <div class={css({ fontSize: '15px', fontWeight: 'semibold', lineClamp: '1' })}>{user.data.name}</div>
 
-  <div class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.faint', letterSpacing: '[0]' })}>{$user.email}</div>
+  <div class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.faint', letterSpacing: '[0]' })}>{user.data.email}</div>
 
   <div class={css({ marginTop: '16px', width: 'full', height: '1px', backgroundColor: 'interactive.hover' })}></div>
 
@@ -115,7 +116,7 @@
 
   <div class={css({ width: 'full', height: '1px', backgroundColor: 'interactive.hover' })}></div>
 
-  {#if $user.subscription}
+  {#if user.data.subscription}
     <a
       class={css({
         paddingX: '16px',

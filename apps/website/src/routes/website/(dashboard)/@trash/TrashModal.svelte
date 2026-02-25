@@ -1,22 +1,22 @@
 <script lang="ts">
+  import { createFragment, createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Button, Modal } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { Dialog, Toast } from '@typie/ui/notification';
   import mixpanel from 'mixpanel-browser';
-  import { fragment, graphql } from '$graphql';
+  import { graphql } from '$mearie';
   import TrashTree from './TrashTree.svelte';
-  import type { DashboardLayout_TrashModal_site } from '$graphql';
+  import type { DashboardLayout_TrashModal_site$key } from '$mearie';
 
   type Props = {
-    $site: DashboardLayout_TrashModal_site;
+    site$key: DashboardLayout_TrashModal_site$key;
   };
 
-  let { $site: _site }: Props = $props();
+  let { site$key }: Props = $props();
 
-  const site = fragment(
-    _site,
+  const site = createFragment(
     graphql(`
       fragment DashboardLayout_TrashModal_site on Site {
         id
@@ -26,22 +26,25 @@
         ...DashboardLayout_TrashTree_site
       }
     `),
+    () => site$key,
   );
 
-  const purgeEntities = graphql(`
-    mutation DashboardLayout_TrashModal_PurgeEntities($input: PurgeEntitiesInput!) {
-      purgeEntities(input: $input) {
-        id
+  const [purgeEntities] = createMutation(
+    graphql(`
+      mutation DashboardLayout_TrashModal_PurgeEntities($input: PurgeEntitiesInput!) {
+        purgeEntities(input: $input) {
+          id
 
-        ...DashboardLayout_TrashModal_site
+          ...DashboardLayout_TrashModal_site
+        }
       }
-    }
-  `);
+    `),
+  );
 
   const app = getAppContext();
 
   const handleEmptyTrash = async () => {
-    const entityIds = $site.deletedEntities.map((entity) => entity.id);
+    const entityIds = site.data.deletedEntities.map((entity) => entity.id);
     if (entityIds.length === 0) {
       Toast.success('휴지통이 비어있어요');
       return;
@@ -54,7 +57,7 @@
       actionLabel: '모두 삭제',
       actionHandler: async () => {
         try {
-          await purgeEntities({ entityIds });
+          await purgeEntities({ input: { entityIds } });
           mixpanel.track('empty_trash', { via: 'trash', count: entityIds.length });
           Toast.success('휴지통을 비웠어요');
         } catch {
@@ -88,6 +91,6 @@
       overflowY: 'auto',
     })}
   >
-    <TrashTree {$site} />
+    <TrashTree site$key={site.data} />
   </div>
 </Modal>

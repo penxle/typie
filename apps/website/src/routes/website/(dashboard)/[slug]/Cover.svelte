@@ -1,12 +1,13 @@
 <script lang="ts">
+  import { createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { Button, Icon, RingSpinner } from '@typie/ui/components';
   import mixpanel from 'mixpanel-browser';
   import IconTrash2 from '~icons/lucide/trash-2';
-  import { graphql } from '$graphql';
   import { Img } from '$lib/components';
   import { uploadBlob } from '$lib/utils';
+  import { graphql } from '$mearie';
   import { YState } from './state.svelte';
   import type * as Y from 'yjs';
 
@@ -16,16 +17,18 @@
 
   let { doc }: Props = $props();
 
-  const persistBlobAsImage = graphql(`
-    mutation EditorCover_PersistBlobAsImage_Mutation($input: PersistBlobAsImageInput!) {
-      persistBlobAsImage(input: $input) {
-        id
-        url
-        ratio
-        placeholder
+  const [persistBlobAsImage] = createMutation(
+    graphql(`
+      mutation EditorCover_PersistBlobAsImage_Mutation($input: PersistBlobAsImageInput!) {
+        persistBlobAsImage(input: $input) {
+          id
+          url
+          ratio
+          placeholder
+        }
       }
-    }
-  `);
+    `),
+  );
 
   let hover = $state(false);
   let inflight = $state(false);
@@ -46,7 +49,7 @@
       inflight = true;
       try {
         const path = await uploadBlob(file);
-        const attrs = await persistBlobAsImage({ path });
+        const attrs = await persistBlobAsImage({ input: { path } });
 
         coverImage.current = JSON.stringify(attrs);
 
@@ -70,8 +73,8 @@
     {#key coverImage.current}
       <Img
         style={css.raw({ width: 'full', objectFit: 'cover' })}
-        $image={JSON.parse(coverImage.current)}
         alt="커버 이미지"
+        image$key={JSON.parse(coverImage.current)}
         progressive
         ratio={5 / 1}
         size="full"

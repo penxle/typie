@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createFragment } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Icon, Menu, MenuItem } from '@typie/ui/components';
@@ -11,18 +12,17 @@
   import UsersIcon from '~icons/lucide/users';
   import { pushState } from '$app/navigation';
   import { env } from '$env/dynamic/public';
-  import { fragment, graphql } from '$graphql';
   import { Img } from '$lib/components';
-  import type { DashboardLayout_Profile_user } from '$graphql';
+  import { graphql } from '$mearie';
+  import type { DashboardLayout_Profile_user$key } from '$mearie';
 
   type Props = {
-    $user: DashboardLayout_Profile_user;
+    user$key: DashboardLayout_Profile_user$key;
   };
 
-  let { $user: _user }: Props = $props();
+  let { user$key }: Props = $props();
 
-  const user = fragment(
-    _user,
+  const user = createFragment(
     graphql(`
       fragment DashboardLayout_Profile_user on User {
         id
@@ -39,6 +39,7 @@
         }
       }
     `),
+    () => user$key,
   );
 
   let open = $state(false);
@@ -66,13 +67,13 @@
           size: '20px',
           borderRadius: 'full',
         })}
-        $image={$user.avatar}
-        alt={$user.name}
+        alt={user.data.name}
+        image$key={user.data.avatar}
         size={24}
       />
 
       <span class={css({ fontSize: '16px', fontWeight: 'semibold', color: 'text.default', truncate: true })}>
-        {$user.name}
+        {user.data.name}
       </span>
 
       <Icon style={css.raw({ color: 'text.faint' })} icon={ChevronDownIcon} size={16} />
@@ -90,7 +91,7 @@
     설정
   </MenuItem>
 
-  {#if $user.subscription}
+  {#if user.data.subscription}
     <MenuItem external href="https://typie.link/community" icon={UsersIcon} type="link">타이피 커뮤니티</MenuItem>
   {/if}
 

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createQuery } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { autosize, tooltip } from '@typie/ui/actions';
   import { Icon, Menu, MenuItem, TimeAgo } from '@typie/ui/components';
@@ -8,8 +9,8 @@
   import PencilIcon from '~icons/lucide/pencil';
   import Trash2Icon from '~icons/lucide/trash-2';
   import XIcon from '~icons/lucide/x';
-  import { graphql } from '$graphql';
   import { Img } from '$lib/components';
+  import { graphql } from '$mearie';
   import type { Editor } from '$lib/editor/editor.svelte';
 
   type Props = {
@@ -25,22 +26,21 @@
 
   let { editor, nodeId, remarkId, userId, text, createdAt, readOnly = false, onDirtyChange }: Props = $props();
 
-  const userQuery = graphql(`
-    query RemarkCard_Query($userId: ID!) @client {
-      userView(id: $userId) {
-        id
-        name
-        avatar {
+  const userQuery = createQuery(
+    graphql(`
+      query RemarkCard_Query($userId: ID!) {
+        userView(id: $userId) {
           id
-          ...Img_image
+          name
+          avatar {
+            id
+            ...Img_image
+          }
         }
       }
-    }
-  `);
-
-  $effect(() => {
-    userQuery.load({ userId });
-  });
+    `),
+    () => ({ userId }),
+  );
 
   let menuOpen = $state(false);
   let editing = $state(false);
@@ -114,14 +114,14 @@
     gap: '8px',
   })}`}
 >
-  {#if $userQuery?.userView.avatar}
+  {#if userQuery.data?.userView.avatar}
     <Img
       style={css.raw({ width: '24px', height: '24px', borderRadius: 'full', flexShrink: '0', marginTop: '1px' })}
-      $image={$userQuery.userView.avatar}
-      alt={$userQuery.userView.name}
+      alt={userQuery.data.userView.name}
+      image$key={userQuery.data.userView.avatar}
       size={24}
     />
-  {:else if !$userQuery}
+  {:else if !userQuery.data}
     <div
       class={css({
         width: '24px',
@@ -137,7 +137,7 @@
 
   <div class={css({ flexGrow: '1', minWidth: '0' })}>
     <div class={css({ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '2px', minHeight: '20px' })}>
-      {#if $userQuery}
+      {#if userQuery.data}
         <span
           class={css({
             fontSize: '13px',
@@ -148,7 +148,7 @@
             minWidth: '0',
           })}
         >
-          {$userQuery.userView.name}
+          {userQuery.data.userView.name}
         </span>
         <TimeAgo style={{ fontSize: '11px', color: 'text.faint', flexShrink: '0' }} timestamp={createdAt} />
 

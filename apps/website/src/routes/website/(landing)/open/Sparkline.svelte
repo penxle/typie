@@ -9,6 +9,7 @@
   };
 
   let { data, width = 100, height = 30 }: SparklineProps = $props();
+
   let chartContainer: HTMLDivElement;
 
   $effect(() => {

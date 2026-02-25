@@ -13,7 +13,6 @@ export default {
     alias: {
       '@/*': '../api/src/*',
       '$assets/*': './src/assets/*',
-      $graphql: './.sark',
     },
     paths: { relative: false },
     csrf: { trustedOrigins: ['*'] },
@@ -23,7 +22,6 @@ export default {
         ...config,
         compilerOptions: {
           ...config.compilerOptions,
-          rootDirs: [...config.compilerOptions.rootDirs, '../.sark/types'],
         },
         include: [...config.include, '../scripts/**/*.ts'],
       }),

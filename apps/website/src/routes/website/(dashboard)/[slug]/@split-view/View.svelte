@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createFragment } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { Helmet, Icon } from '@typie/ui/components';
@@ -9,25 +10,24 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import Logo from '$assets/logos/logo.svg?component';
-  import { fragment, graphql } from '$graphql';
+  import { graphql } from '$mearie';
   import Document from '../Document.svelte';
   import Editor from '../Editor.svelte';
   import CloseSplitView from './CloseSplitView.svelte';
   import { getSplitViewContext, setupViewContext } from './context.svelte';
   import { replaceSplitView, VIEW_MIN_SIZE } from './utils';
   import ViewDropZone from './ViewDropZone.svelte';
-  import type { SplitViews_View_query } from '$graphql';
+  import type { SplitViews_View_query$key } from '$mearie';
   import type { SplitViewItem } from './context.svelte';
 
   type Props = {
     viewItem: SplitViewItem;
-    $query: SplitViews_View_query;
+    query$key: SplitViews_View_query$key;
   };
 
-  let { viewItem, $query: _query }: Props = $props();
+  let { viewItem, query$key }: Props = $props();
 
-  const query = fragment(
-    _query,
+  const query = createFragment(
     graphql(`
       fragment SplitViews_View_query on Query {
         me @required {
@@ -61,12 +61,13 @@
         ...Editor_query
       }
     `),
+    () => query$key,
   );
 
   const splitView = getSplitViewContext();
 
   const focused = $derived(viewItem.id === splitView.state.current.focusedViewId);
-  const entity = $derived.by(() => $query.entities.find((entity) => entity.slug === viewItem.slug));
+  const entity = $derived.by(() => query.data.entities.find((entity) => entity.slug === viewItem.slug));
 
   $effect(() => {
     if (entity?.node.__typename === 'Post' && entity.node.document) {
@@ -131,9 +132,9 @@
     {#key entity.id}
       {#if entity?.state === EntityState.ACTIVE}
         {#if entity?.node.__typename === 'Post'}
-          <Editor {$query} {focused} slug={entity.slug} />
+          <Editor {focused} query$key={query.data} slug={entity.slug} />
         {:else if entity?.node.__typename === 'Document'}
-          <Document {$query} {focused} slug={entity.slug} />
+          <Document {focused} query$key={query.data} slug={entity.slug} />
         {/if}
       {:else}
         {@const name = entity?.node.__typename === 'Post' ? '포스트' : '문서'}

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { cache } from '@typie/sark/internal';
+  import { createFragment, createMutation, createQuery } from '@mearie/svelte';
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { tooltip } from '@typie/ui/actions';
@@ -13,24 +13,24 @@
   import MinusIcon from '~icons/lucide/minus';
   import ShapesIcon from '~icons/lucide/shapes';
   import XIcon from '~icons/lucide/x';
-  import { fragment, graphql } from '$graphql';
+  import { cache } from '$lib/graphql';
+  import { graphql } from '$mearie';
   import { getSplitViewContext } from '../[slug]/@split-view/context.svelte';
   import { getEditorRegistry } from '../[slug]/@split-view/editor-registry.svelte';
   import { findViewById } from '../[slug]/@split-view/utils';
   import { setupWidgetContext } from './widget-context.svelte';
   import WidgetPalette from './WidgetPalette.svelte';
   import { WIDGET_COMPONENTS } from './widgets';
-  import type { WidgetGroup_query } from '$graphql';
+  import type { WidgetGroup_query$key } from '$mearie';
   import type { WidgetPosition, WidgetType } from './widget-context.svelte';
 
   type Props = {
-    $query: WidgetGroup_query;
+    query$key: WidgetGroup_query$key;
   };
 
-  let { $query: _query }: Props = $props();
+  let { query$key }: Props = $props();
 
-  const query = fragment(
-    _query,
+  const query = createFragment(
     graphql(`
       fragment WidgetGroup_query on Query {
         widgets {
@@ -41,63 +41,8 @@
         }
       }
     `),
+    () => query$key,
   );
-
-  const postQuery = graphql(`
-    query WidgetGroup_Query($slug: String!) @client {
-      entity(slug: $slug) {
-        id
-
-        node {
-          __typename
-
-          ... on Document {
-            id
-
-            ...Editor_Widget_CharacterCountChangeWidget_document
-            ...Editor_Widget_DocumentRelatedNoteWidget_document
-          }
-        }
-      }
-    }
-  `);
-
-  const createWidgetMutation = graphql(`
-    mutation WidgetGroup_createWidget_Mutation($input: CreateWidgetInput!) {
-      createWidget(input: $input) {
-        id
-        name
-        data
-        order
-      }
-    }
-  `);
-
-  const deleteWidgetMutation = graphql(`
-    mutation WidgetGroup_deleteWidget_Mutation($input: DeleteWidgetInput!) {
-      deleteWidget(input: $input) {
-        id
-      }
-    }
-  `);
-
-  const moveWidgetMutation = graphql(`
-    mutation WidgetGroup_moveWidget_Mutation($input: MoveWidgetInput!) {
-      moveWidget(input: $input) {
-        id
-        order
-      }
-    }
-  `);
-
-  const updateWidgetMutation = graphql(`
-    mutation WidgetGroup_updateWidget_Mutation($input: UpdateWidgetInput!) {
-      updateWidget(input: $input) {
-        id
-        data
-      }
-    }
-  `);
 
   const editorRegistry = getEditorRegistry();
   const splitView = getSplitViewContext();
@@ -109,16 +54,80 @@
   );
 
   const focusedViewSlug = $derived(focusedView?.type === 'item' ? focusedView.slug : null);
+
+  const postQuery = createQuery(
+    graphql(`
+      query WidgetGroup_Query($slug: String!) {
+        entity(slug: $slug) {
+          id
+
+          node {
+            __typename
+
+            ... on Document {
+              id
+
+              ...Editor_Widget_CharacterCountChangeWidget_document
+              ...Editor_Widget_DocumentRelatedNoteWidget_document
+            }
+          }
+        }
+      }
+    `),
+    () => ({ slug: focusedViewSlug ?? '' }),
+    () => ({ skip: !focusedViewSlug }),
+  );
+
+  const [createWidgetMutation] = createMutation(
+    graphql(`
+      mutation WidgetGroup_createWidget_Mutation($input: CreateWidgetInput!) {
+        createWidget(input: $input) {
+          id
+          name
+          data
+          order
+        }
+      }
+    `),
+  );
+
+  const [deleteWidgetMutation] = createMutation(
+    graphql(`
+      mutation WidgetGroup_deleteWidget_Mutation($input: DeleteWidgetInput!) {
+        deleteWidget(input: $input) {
+          id
+        }
+      }
+    `),
+  );
+
+  const [moveWidgetMutation] = createMutation(
+    graphql(`
+      mutation WidgetGroup_moveWidget_Mutation($input: MoveWidgetInput!) {
+        moveWidget(input: $input) {
+          id
+          order
+        }
+      }
+    `),
+  );
+
+  const [updateWidgetMutation] = createMutation(
+    graphql(`
+      mutation WidgetGroup_updateWidget_Mutation($input: UpdateWidgetInput!) {
+        updateWidget(input: $input) {
+          id
+          data
+        }
+      }
+    `),
+  );
+
   const editor = $derived(focusedViewId && focusedViewSlug ? editorRegistry.getTipTap(focusedViewId, focusedViewSlug) : undefined);
   const nativeEditor = $derived(focusedViewId && focusedViewSlug ? editorRegistry.getNative(focusedViewId, focusedViewSlug) : undefined);
-  const _document = $derived(focusedViewSlug && $postQuery?.entity?.node?.__typename === 'Document' ? $postQuery.entity.node : undefined);
-
-  $effect(() => {
-    if (focusedViewSlug) {
-      postQuery.load({ slug: focusedViewSlug });
-    }
-  });
-
+  const _document = $derived(
+    focusedViewSlug && postQuery.data?.entity?.node?.__typename === 'Document' ? postQuery.data.entity.node : undefined,
+  );
   const app = getAppContext();
 
   let editMode = $state(false);
@@ -258,7 +267,7 @@
   const widgetContext = setupWidgetContext();
 
   widgetContext.createWidget = async (type: WidgetType, via: string, index?: number) => {
-    const widgets = $query.widgets;
+    const widgets = query.data.widgets;
     let lowerOrder: string | undefined;
     let upperOrder: string | undefined;
 
@@ -275,10 +284,12 @@
 
     try {
       await createWidgetMutation({
-        name: type,
-        data: {},
-        lowerOrder,
-        upperOrder,
+        input: {
+          name: type,
+          data: {},
+          lowerOrder,
+          upperOrder,
+        },
       });
 
       mixpanel.track('create_widget', {
@@ -292,9 +303,9 @@
 
   widgetContext.deleteWidget = async (id: string, via: string) => {
     optimisticDeletedWidgetIds = [...optimisticDeletedWidgetIds, id];
-    const widget = $query.widgets.find((w) => w.id === id);
+    const widget = query.data.widgets.find((w) => w.id === id);
     try {
-      await deleteWidgetMutation({ widgetId: id });
+      await deleteWidgetMutation({ input: { widgetId: id } });
 
       mixpanel.track('delete_widget', {
         widgetType: widget?.name,
@@ -310,14 +321,15 @@
 
   widgetContext.updateWidget = async (widgetId: string, data: Record<string, unknown>) => {
     try {
-      await updateWidgetMutation({ widgetId, data }, { optimistic: { id: widgetId, data } });
+      // await updateWidgetMutation({ input: { widgetId, data } }, { optimistic: { id: widgetId, data } });
+      await updateWidgetMutation({ input: { widgetId, data } });
     } finally {
       cache.invalidate({ __typename: 'Query', field: 'widgets' });
     }
   };
 
   widgetContext.moveWidgetInGroup = async (widgetId: string, targetIndex: number) => {
-    const widgets = $query.widgets;
+    const widgets = query.data.widgets;
     const widget = widgets.find((w) => w.id === widgetId);
     if (!widget) return;
 
@@ -341,30 +353,23 @@
       const upperOrder = rightId ? globalSorted.find((w) => w.id === rightId)?.order : undefined;
 
       await moveWidgetMutation({
-        widgetId,
-        lowerOrder,
-        upperOrder,
+        input: {
+          widgetId,
+          lowerOrder,
+          upperOrder,
+        },
       });
 
       if (wasAttaching) {
-        await updateWidgetMutation(
-          {
+        await updateWidgetMutation({
+          input: {
             widgetId,
             data: {
               ...widget.data,
               position: null,
             },
           },
-          {
-            optimistic: {
-              id: widgetId,
-              data: {
-                ...widget.data,
-                position: null,
-              },
-            },
-          },
-        );
+        });
       }
 
       if (wasAttaching) {
@@ -385,7 +390,7 @@
   };
 
   widgetContext.moveWidgetToFreePosition = async (widgetId: string, position: WidgetPosition) => {
-    const widgets = $query.widgets;
+    const widgets = query.data.widgets;
     const widget = widgets.find((w) => w.id === widgetId);
     if (!widget) return;
 
@@ -399,29 +404,22 @@
     const upperOrder = undefined;
 
     try {
-      await updateWidgetMutation(
-        {
+      await updateWidgetMutation({
+        input: {
           widgetId,
           data: {
             ...widget.data,
             position,
           },
         },
-        {
-          optimistic: {
-            id: widgetId,
-            data: {
-              ...widget.data,
-              position,
-            },
-          },
-        },
-      );
+      });
 
       await moveWidgetMutation({
-        widgetId,
-        lowerOrder,
-        upperOrder,
+        input: {
+          widgetId,
+          lowerOrder,
+          upperOrder,
+        },
       });
 
       if (wasDetaching) {
@@ -467,15 +465,15 @@
   let prevWidgetCount = 0;
 
   $effect.pre(() => {
-    const newCount = $query.widgets.length;
+    const newCount = query.data.widgets.length;
 
     if (newCount < prevWidgetCount) {
-      optimisticDeletedWidgetIds = optimisticDeletedWidgetIds.filter((id) => $query.widgets.find((w) => w.id === id));
+      optimisticDeletedWidgetIds = optimisticDeletedWidgetIds.filter((id) => query.data.widgets.find((w) => w.id === id));
     }
 
     prevWidgetCount = newCount;
 
-    const widgets = $query.widgets.filter(
+    const widgets = query.data.widgets.filter(
       (w) =>
         !(dragging?.source === 'group' && dragging.widgetId === w.id) && !optimisticDeletedWidgetIds.includes(w.id) && !w.data.position,
     );
@@ -518,7 +516,7 @@
 
     widgetsInGroup = result;
 
-    freePositionWidgets = $query.widgets
+    freePositionWidgets = query.data.widgets
       .filter((w) => w.data.position && !optimisticDeletedWidgetIds.includes(w.id))
       .map((w) => ({ type: 'real' as const, ...w }));
   });
@@ -527,7 +525,7 @@
     widgetContext.env.editMode = editMode;
     widgetContext.env.editor = editor;
     widgetContext.env.nativeEditor = nativeEditor;
-    widgetContext.env.$document = _document;
+    widgetContext.env.document$key = _document;
   });
 
   $effect(() => {
@@ -550,13 +548,13 @@
         const widgetId = widgetElement.dataset.widgetId;
         if (!widgetId) return;
 
-        const widget = $query.widgets.find((w) => w.id === widgetId);
+        const widget = query.data.widgets.find((w) => w.id === widgetId);
         if (!widget) return;
 
         const rect = widgetElement.getBoundingClientRect();
 
         dragging = {
-          dropIndex: $query.widgets.findIndex((w) => w.id === widgetId),
+          dropIndex: query.data.widgets.findIndex((w) => w.id === widgetId),
           isOutsideDropZone: false,
           cursorPosition: { x: e.clientX, y: e.clientY },
           source: 'group',
@@ -579,7 +577,7 @@
           try {
             if (currentDragging.isOutsideDropZone) {
               const { widgetId, widgetRect, offsetX, offsetY } = currentDragging;
-              const widget = $query.widgets.find((w) => w.id === widgetId);
+              const widget = query.data.widgets.find((w) => w.id === widgetId);
               if (widget) {
                 const newPosition = calculateWidgetPosition(e.clientX, e.clientY, widgetRect, offsetX, offsetY);
 
@@ -643,7 +641,7 @@
         const widgetId = widgetElement.dataset.widgetId;
         if (!widgetId) return;
 
-        const widget = $query.widgets.find((w) => w.id === widgetId);
+        const widget = query.data.widgets.find((w) => w.id === widgetId);
         if (!widget) return;
 
         const rect = widgetElement.getBoundingClientRect();
@@ -696,7 +694,7 @@
 
           try {
             const { widgetId, dropIndex } = currentDragging;
-            const widget = $query.widgets.find((w) => w.id === widgetId);
+            const widget = query.data.widgets.find((w) => w.id === widgetId);
 
             if (widget) {
               if (!currentDragging.isOutsideDropZone && dropIndex !== null) {
@@ -989,11 +987,11 @@
 </div>
 
 <WidgetPalette
-  $document={_document}
   addedWidgets={[
     ...widgetsInGroup.filter((w) => w.type === 'real').map((w) => w.name as WidgetType),
     ...freePositionWidgets.map((w) => w.name as WidgetType),
   ]}
+  document$key={_document}
   {editor}
   {nativeEditor}
   onDragCancel={() => {
@@ -1009,9 +1007,11 @@
           await widgetContext.createWidget?.(currentDragging.widgetType, 'drag', currentDragging.dropIndex ?? undefined);
         } else if (currentDragging.calculatedPosition) {
           await createWidgetMutation({
-            name: currentDragging.widgetType,
-            data: {
-              position: currentDragging.calculatedPosition,
+            input: {
+              name: currentDragging.widgetType,
+              data: {
+                position: currentDragging.calculatedPosition,
+              },
             },
           });
 
@@ -1157,7 +1157,7 @@
 </div>
 
 {#if dragging?.source === 'freePosition' && dragging.calculatedPosition && !dragging.dropped}
-  {@const widget = $query.widgets.find((w) => dragging?.source === 'freePosition' && w.id === dragging.widgetId)}
+  {@const widget = query.data.widgets.find((w) => dragging?.source === 'freePosition' && w.id === dragging.widgetId)}
   {#if widget}
     {@const WidgetComponent = WIDGET_COMPONENTS[widget.name as WidgetType]}
     <div

@@ -1,12 +1,13 @@
 <script lang="ts">
+  import { createFragment } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { createFloatingActions } from '@typie/ui/actions';
   import { comma } from '@typie/ui/utils';
   import dayjs from 'dayjs';
   import { fade } from 'svelte/transition';
-  import { fragment, graphql } from '$graphql';
-  import type { DashboardLayout_Stats_ActivityChart_user } from '$graphql';
+  import { graphql } from '$mearie';
+  import type { DashboardLayout_Stats_ActivityChart_user$key } from '$mearie';
 
   type DayData = {
     date: dayjs.Dayjs;
@@ -16,15 +17,14 @@
   };
 
   type Props = {
-    $user: DashboardLayout_Stats_ActivityChart_user;
+    user$key: DashboardLayout_Stats_ActivityChart_user$key;
   };
 
   const chartHeight = 100;
 
-  const { $user: _user }: Props = $props();
+  const { user$key }: Props = $props();
 
-  const user = fragment(
-    _user,
+  const user = createFragment(
     graphql(`
       fragment DashboardLayout_Stats_ActivityChart_user on User {
         id
@@ -36,6 +36,7 @@
         }
       }
     `),
+    () => user$key,
   );
 
   let hoverData = $state<DayData & { element: HTMLElement }>();
@@ -50,7 +51,7 @@
 
     const changesByDate: Record<string, { additions: number; deletions: number }> = {};
 
-    for (const change of $user.characterCountChanges) {
+    for (const change of user.data.characterCountChanges) {
       const date = dayjs(change.date).format('YYYY-MM-DD');
       changesByDate[date] = {
         additions: change.additions,

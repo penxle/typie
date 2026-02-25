@@ -18,17 +18,15 @@
   import WordmarkBlack from '$assets/logos/wordmark-black.svg?component';
   import WordmarkWhite from '$assets/logos/wordmark-white.svg?component';
   import { env } from '$env/dynamic/public';
-  import { graphql } from '$graphql';
   import { Img } from '$lib/components';
   import { AdminImpersonateBanner } from '$lib/components/admin';
+  import { hydrateQuery } from '$lib/graphql';
   import type { Theme } from '@typie/ui/context';
-  import type { Component, Snippet } from 'svelte';
+  import type { Component } from 'svelte';
 
-  type Props = {
-    children: Snippet;
-  };
+  let { data, children } = $props();
 
-  let { children }: Props = $props();
+  const query = $derived(hydrateQuery(() => data.query));
 
   const themes: Record<Theme, { icon: Component; label: string }> = {
     auto: { icon: MonitorIcon, label: '시스템 설정' },
@@ -40,28 +38,8 @@
   const theme = getThemeContext();
 
   let themeMenuOpen = $state(false);
-
-  const query = graphql(`
-    query UsersiteWildcard_Layout_Query {
-      me {
-        id
-        name
-        email
-
-        avatar {
-          id
-          url
-
-          ...Img_image
-        }
-      }
-
-      ...AdminImpersonateBanner_query
-    }
-  `);
-
   onMount(() => {
-    if (!$query.me && !document.cookie.includes('typie-af')) {
+    if (!query.data.me && !document.cookie.includes('typie-af')) {
       location.href = qs.stringifyUrl({
         url: `${env.PUBLIC_AUTH_URL}/authorize`,
         query: {
@@ -76,13 +54,13 @@
   });
 
   $effect(() => {
-    if ($query.me) {
-      mixpanel.identify($query.me.id);
+    if (query.data.me) {
+      mixpanel.identify(query.data.me.id);
 
       mixpanel.people.set({
-        $email: $query.me.email,
-        $name: $query.me.name,
-        $avatar: qs.stringifyUrl({ url: $query.me.avatar.url, query: { s: 256, f: 'png' } }),
+        $email: query.data.me.email,
+        $name: query.data.me.name,
+        $avatar: qs.stringifyUrl({ url: query.data.me.avatar.url, query: { s: 256, f: 'png' } }),
       });
     }
   });
@@ -110,7 +88,7 @@
       backgroundColor: 'surface.default',
     })}
   >
-    <AdminImpersonateBanner {$query} />
+    <AdminImpersonateBanner query$key={query.data} />
 
     <div
       class={flex({
@@ -173,14 +151,14 @@
           {/each}
         </Menu>
 
-        {#if $query.me}
+        {#if query.data.me}
           <Menu>
             {#snippet button()}
-              {#if $query.me?.avatar}
+              {#if query.data.me?.avatar}
                 <Img
                   style={css.raw({ size: '32px', borderWidth: '1px', borderColor: 'border.subtle', borderRadius: 'full' })}
-                  $image={$query.me.avatar}
-                  alt={`${$query.me.name}의 아바타`}
+                  alt={`${query.data.me.name}의 아바타`}
+                  image$key={query.data.me.avatar}
                   size={32}
                 />
               {:else}

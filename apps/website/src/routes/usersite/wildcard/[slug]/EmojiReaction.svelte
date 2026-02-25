@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createFragment, createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { center, flex, grid } from '@typie/styled-system/patterns';
   import { createFloatingActions } from '@typie/ui/actions';
@@ -8,19 +9,18 @@
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import ChevronUpIcon from '~icons/lucide/chevron-up';
   import SmilePlusIcon from '~icons/lucide/smile-plus';
-  import { fragment, graphql } from '$graphql';
+  import { graphql } from '$mearie';
   import { emojis } from './emoji';
   import Emoji from './Emoji.svelte';
-  import type { UsersiteWildcardSlugPage_EmojiReaction_postView } from '$graphql';
+  import type { UsersiteWildcardSlugPage_EmojiReaction_postView$key } from '$mearie';
 
   type Props = {
-    $postView: UsersiteWildcardSlugPage_EmojiReaction_postView;
+    postView$key: UsersiteWildcardSlugPage_EmojiReaction_postView$key;
   };
 
-  let { $postView: _postView }: Props = $props();
+  let { postView$key }: Props = $props();
 
-  const postView = fragment(
-    _postView,
+  const postView = createFragment(
     graphql(`
       fragment UsersiteWildcardSlugPage_EmojiReaction_postView on PostView {
         id
@@ -32,24 +32,27 @@
         }
       }
     `),
+    () => postView$key,
   );
 
-  const createPostReaction = graphql(`
-    mutation UsersiteWildcardSlugPage_EmojiReaction_CreatePostReaction_Mutation($input: CreatePostReactionInput!) {
-      createPostReaction(input: $input) {
-        id
-
-        post {
+  const [createPostReaction] = createMutation(
+    graphql(`
+      mutation UsersiteWildcardSlugPage_EmojiReaction_CreatePostReaction_Mutation($input: CreatePostReactionInput!) {
+        createPostReaction(input: $input) {
           id
 
-          reactions {
+          post {
             id
-            emoji
+
+            reactions {
+              id
+              emoji
+            }
           }
         }
       }
-    }
-  `);
+    `),
+  );
 
   let open = $state(false);
   let showAll = $state(false);
@@ -64,7 +67,7 @@
   const MAX_REACTIONS = 100;
 </script>
 
-{#if $postView.allowReaction}
+{#if postView.data.allowReaction}
   <button
     class={css({ marginTop: '2px', borderRadius: '4px', padding: '3px', _hover: { backgroundColor: 'surface.muted' } })}
     onclick={() => {
@@ -97,7 +100,7 @@
           <button
             class={center({ borderRadius: '4px', padding: '5px', size: 'full', _supportHover: { backgroundColor: 'surface.muted' } })}
             onclick={async () => {
-              await createPostReaction({ postId: $postView.id, emoji });
+              await createPostReaction({ input: { postId: postView.data.id, emoji } });
               mixpanel.track('create_post_reaction', { emoji });
             }}
             type="button"
@@ -110,11 +113,11 @@
   {/if}
 
   <ul class={flex({ align: 'center', gap: '4px', wrap: 'wrap', marginTop: '4px' })}>
-    {#each showAll ? $postView.reactions : $postView.reactions.slice(0, MAX_REACTIONS) as reaction (reaction.id)}
+    {#each showAll ? postView.data.reactions : postView.data.reactions.slice(0, MAX_REACTIONS) as reaction (reaction.id)}
       <Emoji emoji={reaction.emoji} />
     {/each}
 
-    {#if $postView.reactions.length > MAX_REACTIONS}
+    {#if postView.data.reactions.length > MAX_REACTIONS}
       <li>
         <button
           class={flex({ align: 'center', gap: '2px', fontSize: '13px', color: 'text.muted' })}
@@ -127,7 +130,7 @@
           {:else}
             ...
             <Icon icon={ChevronDownIcon} size={12} />
-            {$postView.reactions.length - MAX_REACTIONS}
+            {postView.data.reactions.length - MAX_REACTIONS}
           {/if}
         </button>
       </li>

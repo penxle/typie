@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "codegen": "svelte-kit sync && panda codegen && sark codegen",
+    "codegen": "svelte-kit sync && panda codegen && mearie generate",
     "dev": "doppler run -- bun --bun run vite dev",
     "lint:svelte": "svelte-check --fail-on-warnings",
     "start": "bun run dist/index.js"
@@ -20,6 +20,8 @@
     "@iconify-json/lucide": "^1.2.91",
     "@iconify-json/simple-icons": "^1.2.71",
     "@iconify-json/twemoji": "^1.2.5",
+    "@mearie/core": "^0.2.2",
+    "@mearie/svelte": "^0.2.4",
     "@number-flow/svelte": "^0.3.11",
     "@observablehq/plot": "^0.6.17",
     "@pandacss/dev": "^1.8.2",
@@ -34,7 +36,6 @@
     "@typie/api": "workspace:*",
     "@typie/editor": "workspace:*",
     "@typie/lib": "workspace:*",
-    "@typie/sark": "workspace:*",
     "@typie/styled-system": "workspace:*",
     "@typie/tsconfig": "workspace:*",
     "@typie/ui": "workspace:*",
@@ -49,6 +50,7 @@
     "ky": "^1.14.3",
     "marked": "^17.0.3",
     "match-sorter": "^8.2.0",
+    "mearie": "^0.1.3",
     "mixpanel-browser": "^2.74.0",
     "nanoid": "^5.1.6",
     "query-string": "^9.3.1",

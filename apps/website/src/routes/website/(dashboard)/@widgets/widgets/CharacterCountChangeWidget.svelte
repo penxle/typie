@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createFragment } from '@mearie/svelte';
   import { css, cx } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Icon } from '@typie/ui/components';
@@ -8,7 +9,7 @@
   import GoalIcon from '~icons/lucide/goal';
   import TrendingDownIcon from '~icons/lucide/trending-down';
   import TrendingUpIcon from '~icons/lucide/trending-up';
-  import { fragment, graphql } from '$graphql';
+  import { graphql } from '$mearie';
   import Widget from '../Widget.svelte';
   import { getWidgetContext } from '../widget-context.svelte';
 
@@ -20,7 +21,7 @@
   let { widgetId, data = {} }: Props = $props();
 
   const widgetContext = getWidgetContext();
-  const { $document: _document } = $derived(widgetContext.env);
+  const { document$key } = $derived(widgetContext.env);
   let isCollapsed = $state((data.isCollapsed as boolean) ?? false);
 
   const toggleCollapse = () => {
@@ -28,10 +29,7 @@
     widgetContext.updateWidget?.(widgetId, { ...data, isCollapsed });
   };
 
-  const document = fragment(
-    // eslint-disable-next-line svelte/no-unused-svelte-ignore
-    // svelte-ignore state_referenced_locally
-    _document,
+  const document = createFragment(
     graphql(`
       fragment Editor_Widget_CharacterCountChangeWidget_document on Document {
         id
@@ -42,9 +40,10 @@
         }
       }
     `),
+    () => document$key,
   );
 
-  const characterCountChange = $derived($document?.characterCountChange);
+  const characterCountChange = $derived(document.data?.characterCountChange);
   const difference = $derived(characterCountChange ? characterCountChange.additions - characterCountChange.deletions : 0);
   const additions = $derived(characterCountChange ? characterCountChange.additions : 0);
   const deletions = $derived(characterCountChange ? characterCountChange.deletions : 0);

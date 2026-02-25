@@ -1,12 +1,13 @@
 <script lang="ts">
+  import { createFragment } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { center, flex, grid } from '@typie/styled-system/patterns';
   import { createFloatingActions } from '@typie/ui/actions';
   import { comma } from '@typie/ui/utils';
   import dayjs from 'dayjs';
   import { fade } from 'svelte/transition';
-  import { fragment, graphql } from '$graphql';
-  import type { DashboardLayout_Stats_ActivityGrid_user } from '$graphql';
+  import { graphql } from '$mearie';
+  import type { DashboardLayout_Stats_ActivityGrid_user$key } from '$mearie';
 
   type Level = 0 | 1 | 2 | 3 | 4 | 5;
 
@@ -17,13 +18,12 @@
   };
 
   type Props = {
-    $user: DashboardLayout_Stats_ActivityGrid_user;
+    user$key: DashboardLayout_Stats_ActivityGrid_user$key;
   };
 
-  const { $user: _user }: Props = $props();
+  const { user$key }: Props = $props();
 
-  const user = fragment(
-    _user,
+  const user = createFragment(
     graphql(`
       fragment DashboardLayout_Stats_ActivityGrid_user on User {
         id
@@ -34,6 +34,7 @@
         }
       }
     `),
+    () => user$key,
   );
 
   let hoverActivity = $state<Activity & { element: HTMLElement }>();
@@ -44,7 +45,7 @@
   const activities = $derived.by<Activity[]>(() => {
     const activities: Activity[] = [];
 
-    const numbers = $user.characterCountChanges.map(({ additions }) => additions).filter((n) => n > 0);
+    const numbers = user.data.characterCountChanges.map(({ additions }) => additions).filter((n) => n > 0);
 
     let p95 = 0;
     if (numbers.length > 0) {
@@ -53,7 +54,7 @@
       p95 = sorted[Math.min(index, sorted.length - 1)];
     }
 
-    const changes = Object.fromEntries($user.characterCountChanges.map((change) => [dayjs(change.date).unix(), change]));
+    const changes = Object.fromEntries(user.data.characterCountChanges.map((change) => [dayjs(change.date).unix(), change]));
 
     let currentDate = startDate;
     while (!currentDate.isAfter(endDate)) {

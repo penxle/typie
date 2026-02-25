@@ -1,43 +1,46 @@
 <script lang="ts">
+  import { createFragment, createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Switch } from '@typie/ui/components';
   import { Dialog } from '@typie/ui/notification';
   import mixpanel from 'mixpanel-browser';
-  import { fragment, graphql } from '$graphql';
   import { SettingsCard, SettingsRow } from '$lib/components';
-  import type { DashboardLayout_PreferenceModal_AiTab_user } from '$graphql';
+  import { graphql } from '$mearie';
+  import type { DashboardLayout_PreferenceModal_AiTab_user$key } from '$mearie';
 
   type Props = {
-    $user: DashboardLayout_PreferenceModal_AiTab_user;
+    user$key: DashboardLayout_PreferenceModal_AiTab_user$key;
   };
 
-  let { $user: _user }: Props = $props();
+  let { user$key }: Props = $props();
 
-  const user = fragment(
-    _user,
+  const user = createFragment(
     graphql(`
       fragment DashboardLayout_PreferenceModal_AiTab_user on User {
         id
         preferences
       }
     `),
+    () => user$key,
   );
 
-  const updatePreferences = graphql(`
-    mutation DashboardLayout_PreferenceModal_AiTab_UpdatePreferences_Mutation($input: UpdatePreferencesInput!) {
-      updatePreferences(input: $input) {
-        id
-        preferences
+  const [updatePreferences] = createMutation(
+    graphql(`
+      mutation DashboardLayout_PreferenceModal_AiTab_UpdatePreferences_Mutation($input: UpdatePreferencesInput!) {
+        updatePreferences(input: $input) {
+          id
+          preferences
+        }
       }
-    }
-  `);
+    `),
+  );
 
-  let aiOptIn = $derived($user.preferences.aiOptIn ?? false);
+  let aiOptIn = $derived(user.data.preferences.aiOptIn ?? false);
 
   const handleToggle = () => {
     if (aiOptIn) {
-      updatePreferences({ value: { aiOptIn: false } });
+      updatePreferences({ input: { value: { aiOptIn: false } } });
       mixpanel.track('ai_opt_in', { enabled: false });
     } else {
       Dialog.confirm({
@@ -47,7 +50,7 @@
         action: 'primary',
         actionLabel: '활성화',
         actionHandler: async () => {
-          await updatePreferences({ value: { aiOptIn: true } });
+          await updatePreferences({ input: { value: { aiOptIn: true } } });
           mixpanel.track('ai_opt_in', { enabled: true });
         },
       });

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { tooltip } from '@typie/ui/actions';
@@ -13,13 +14,15 @@
   import MessageSquareIcon from '~icons/lucide/message-square';
   import SmileIcon from '~icons/lucide/smile';
   import { page } from '$app/state';
-  import { graphql } from '$graphql';
+  import { graphql } from '$mearie';
 
-  const submitFeedback = graphql(`
-    mutation FeedbackPopover_SubmitFeedback_Mutation($input: SubmitFeedbackInput!) {
-      submitFeedback(input: $input)
-    }
-  `);
+  const [submitFeedback] = createMutation(
+    graphql(`
+      mutation FeedbackPopover_SubmitFeedback_Mutation($input: SubmitFeedbackInput!) {
+        submitFeedback(input: $input)
+      }
+    `),
+  );
 
   const moods = [
     { icon: AngryIcon, value: 'angry' },
@@ -52,7 +55,7 @@
     if (!canSubmit) return;
     submitting = true;
     try {
-      await submitFeedback({ topic, content: content.trim(), mood, url: page.url.href });
+      await submitFeedback({ input: { topic, content: content.trim(), mood, url: page.url.href } });
       Toast.success('피드백을 보냈어요. 감사해요!');
       topic = '';
       content = '';

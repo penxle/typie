@@ -1,5 +1,6 @@
 <script lang="ts">
   import { flip, hide } from '@floating-ui/dom';
+  import { createMutation } from '@mearie/svelte';
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { createFloatingActions } from '@typie/ui/actions';
@@ -9,8 +10,8 @@
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import FileUpIcon from '~icons/lucide/file-up';
   import Trash2Icon from '~icons/lucide/trash-2';
-  import { graphql } from '$graphql';
   import { getEditorContext } from '$lib/editor/context.svelte';
+  import { graphql } from '$mearie';
   import ExternalElementWrapper from './ExternalElementWrapper.svelte';
   import type { ExternalElement, ExternalElementData } from '$lib/editor/types';
 
@@ -34,18 +35,20 @@
   const asset = $derived(embedData.id ? editor.embedAssets.get(embedData.id) : undefined);
   const hasEmbed = $derived(!!asset || inflight);
 
-  const unfurlEmbed = graphql(`
-    mutation ExternalEmbed_UnfurlEmbed_Mutation($input: UnfurlEmbedInput!) {
-      unfurlEmbed(input: $input) {
-        id
-        url
-        title
-        description
-        thumbnailUrl
-        html
+  const [unfurlEmbed] = createMutation(
+    graphql(`
+      mutation ExternalEmbed_UnfurlEmbed_Mutation($input: UnfurlEmbedInput!) {
+        unfurlEmbed(input: $input) {
+          id
+          url
+          title
+          description
+          thumbnailUrl
+          html
+        }
       }
-    }
-  `);
+    `),
+  );
 
   const { anchor, floating } = createFloatingActions({
     placement: 'bottom',
@@ -71,21 +74,21 @@
     inflight = true;
     try {
       const url = /^[^:]+:\/\//.test(inflightUrl) ? inflightUrl : `https://${inflightUrl}`;
-      const result = await unfurlEmbed({ url });
+      const result = await unfurlEmbed({ input: { url } });
 
-      editor.embedAssets.set(result.id, {
-        id: result.id,
-        url: result.url,
-        title: result.title ?? null,
-        description: result.description ?? null,
-        thumbnailUrl: result.thumbnailUrl ?? null,
-        html: result.html ?? null,
+      editor.embedAssets.set(result.unfurlEmbed.id, {
+        id: result.unfurlEmbed.id,
+        url: result.unfurlEmbed.url,
+        title: result.unfurlEmbed.title ?? null,
+        description: result.unfurlEmbed.description ?? null,
+        thumbnailUrl: result.unfurlEmbed.thumbnailUrl ?? null,
+        html: result.unfurlEmbed.html ?? null,
       });
 
       editor.dispatch({
         type: 'setEmbedId',
         nodeId: el.nodeId,
-        embedId: result.id,
+        embedId: result.unfurlEmbed.id,
       });
 
       editor.focus();

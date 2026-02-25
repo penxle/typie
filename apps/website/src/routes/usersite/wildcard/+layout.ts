@@ -1,5 +1,31 @@
-import type { UsersiteWildcard_Layout_Query_Variables } from './$graphql';
+import { loadQuery } from '$lib/graphql';
+import { graphql } from '$mearie';
 
-export const _UsersiteWildcard_Layout_Query_Variables: UsersiteWildcard_Layout_Query_Variables = ({ url }) => ({
-  origin: url.origin,
-});
+export const load = async (event) => {
+  return {
+    query: await loadQuery(
+      event,
+      graphql(`
+        query UsersiteWildcard_Layout_Query {
+          me {
+            id
+            name
+            email
+
+            avatar {
+              id
+              url
+
+              ...Img_image
+            }
+          }
+
+          ...AdminImpersonateBanner_query
+        }
+      `),
+      {
+        origin: event.url.origin,
+      },
+    ),
+  };
+};

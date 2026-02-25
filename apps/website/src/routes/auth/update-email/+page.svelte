@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { Helmet, RingSpinner } from '@typie/ui/components';
@@ -8,18 +9,22 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import Logo from '$assets/logos/logo.svg?component';
-  import { graphql } from '$graphql';
+  import { graphql } from '$mearie';
 
-  const updateEmail = graphql(`
-    mutation UpdateEmailPage_UpdateEmail_Mutation($input: UpdateEmailInput!) {
-      updateEmail(input: $input)
-    }
-  `);
+  const [updateEmail] = createMutation(
+    graphql(`
+      mutation UpdateEmailPage_UpdateEmail_Mutation($input: UpdateEmailInput!) {
+        updateEmail(input: $input)
+      }
+    `),
+  );
 
   onMount(async () => {
     await updateEmail({
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      code: page.url.searchParams.get('code')!,
+      input: {
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        code: page.url.searchParams.get('code')!,
+      },
     });
 
     mixpanel.track('update_email');

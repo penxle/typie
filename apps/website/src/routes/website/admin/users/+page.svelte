@@ -5,65 +5,22 @@
   import { comma } from '@typie/ui/utils';
   import dayjs from 'dayjs';
   import SearchIcon from '~icons/lucide/search';
-  import { graphql } from '$graphql';
   import { AdminIcon, AdminPagination, AdminTable } from '$lib/components/admin';
+  import { hydrateQuery } from '$lib/graphql';
+
+  let { data } = $props();
+
+  const query = $derived(hydrateQuery(() => data.query));
 
   const searchQuery = new QueryString('search', '', { debounce: 300 });
   const pageNumber = new QueryStringNumber('page', 1);
-
-  const query = graphql(`
-    query AdminUsers_Query($search: String, $offset: Int!, $limit: Int!) {
-      adminUsers(search: $search, offset: $offset, limit: $limit) {
-        totalCount
-
-        users {
-          id
-          name
-          email
-          role
-          state
-          createdAt
-          avatar {
-            id
-            url
-          }
-          singleSignOns {
-            id
-            provider
-            email
-          }
-          subscription {
-            id
-            state
-            plan {
-              id
-              name
-            }
-          }
-          credit
-          sites {
-            id
-          }
-          postCount
-          totalCharacterCount
-          marketingConsent
-          personalIdentity {
-            id
-          }
-          billingKey {
-            id
-          }
-        }
-      }
-    }
-  `);
 </script>
 
 <div class={flex({ flexDirection: 'column', gap: '24px', color: 'amber.500' })}>
   <div>
     <h2 class={css({ fontSize: '18px', color: 'amber.500' })}>USER MANAGEMENT</h2>
     <p class={css({ marginTop: '8px', fontSize: '13px', color: 'amber.400' })}>
-      TOTAL USERS: {$query.adminUsers.totalCount}
+      TOTAL USERS: {query.data.adminUsers.totalCount}
     </p>
   </div>
 
@@ -130,7 +87,7 @@
         { key: '$state', label: 'STATE', width: '10%' },
         { key: '$createdAt', label: 'JOINED', width: '20%' },
       ]}
-      data={$query.adminUsers.users}
+      data={[...query.data.adminUsers.users]}
       dataKey="id"
     >
       {#snippet $user(user)}
@@ -215,6 +172,6 @@
       {/snippet}
     </AdminTable>
 
-    <AdminPagination totalCount={$query.adminUsers.totalCount} bind:pageNumber={pageNumber.current} />
+    <AdminPagination totalCount={query.data.adminUsers.totalCount} bind:pageNumber={pageNumber.current} />
   </div>
 </div>

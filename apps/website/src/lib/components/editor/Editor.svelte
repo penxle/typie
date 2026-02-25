@@ -30,7 +30,7 @@
     readOnly?: boolean;
     useWindowScroll?: boolean;
     editor?: Editor;
-    fontFamilies: FontFamily[];
+    fontFamilies: readonly FontFamily[];
     onDocChanged?: () => void;
     onSelectionChanged?: (anchor: Position, head: Position) => void;
     onExitedDocumentStart?: () => void;

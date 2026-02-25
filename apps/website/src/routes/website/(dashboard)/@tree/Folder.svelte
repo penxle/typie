@@ -1,30 +1,31 @@
 <script lang="ts">
+  import { createFragment, createMutation, createQuery } from '@mearie/svelte';
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { contextMenu } from '@typie/ui/actions';
-  import { Icon, Menu } from '@typie/ui/components';
+  import { Icon, Menu, RingSpinner } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import mixpanel from 'mixpanel-browser';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
   import EllipsisIcon from '~icons/lucide/ellipsis';
-  import { fragment, graphql } from '$graphql';
+  import { graphql } from '$mearie';
   import FolderMenu from '../@context-menu/FolderMenu.svelte';
   import EntitySelectionIndicator from './@selection/EntitySelectionIndicator.svelte';
   import MultiEntitiesMenu from './@selection/MultiEntitiesMenu.svelte';
   import Entity from './Entity.svelte';
   import { getTreeContext } from './state.svelte';
-  import type { DashboardLayout_EntityTree_Folder_entity, DashboardLayout_EntityTree_Folder_folder, List } from '$graphql';
+  import type { DashboardLayout_EntityTree_Folder_folder$key } from '$mearie';
 
   type Props = {
-    $folder: DashboardLayout_EntityTree_Folder_folder;
-    $entities: List<DashboardLayout_EntityTree_Folder_entity>;
+    folder$key: DashboardLayout_EntityTree_Folder_folder$key;
   };
 
-  let { $folder: _folder, $entities: _entities }: Props = $props();
+  let { folder$key }: Props = $props();
 
-  const folder = fragment(
-    _folder,
+  let open = $state(false);
+
+  const folder = createFragment(
     graphql(`
       fragment DashboardLayout_EntityTree_Folder_folder on Folder {
         id
@@ -43,37 +44,45 @@
         }
       }
     `),
+    () => folder$key,
   );
 
-  const entities = fragment(
-    _entities,
+  const children = createQuery(
     graphql(`
-      fragment DashboardLayout_EntityTree_Folder_entity on Entity {
-        id
+      query DashboardLayout_EntityTree_FolderChildren_Query($entityId: ID!) {
+        entity(entityId: $entityId) {
+          id
 
-        ...DashboardLayout_EntityTree_Entity_entity
+          children {
+            id
+            ...DashboardLayout_EntityTree_Entity_entity
+          }
+        }
+      }
+    `),
+    () => ({ entityId: folder.data.entity.id }),
+    () => ({ skip: !open }),
+  );
+
+  const [renameFolder] = createMutation(
+    graphql(`
+      mutation DashboardLayout_EntityTree_Folder_RenameFolder_Mutation($input: RenameFolderInput!) {
+        renameFolder(input: $input) {
+          id
+          name
+        }
       }
     `),
   );
 
-  const renameFolder = graphql(`
-    mutation DashboardLayout_EntityTree_Folder_RenameFolder_Mutation($input: RenameFolderInput!) {
-      renameFolder(input: $input) {
-        id
-        name
-      }
-    }
-  `);
-
   const app = getAppContext();
   const treeState = getTreeContext();
-  const active = $derived(app.state.ancestors.includes($folder.entity.id));
-  const selected = $derived(treeState.selectedEntityIds.has($folder.entity.id));
+  const active = $derived(app.state.ancestors.includes(folder.data.entity.id));
+  const selected = $derived(treeState.selectedEntityIds.has(folder.data.entity.id));
 
   let detailsEl = $state<HTMLDetailsElement>();
   let inputEl = $state<HTMLInputElement>();
 
-  let open = $state(false);
   let editing = $state(false);
 
   $effect(() => {
@@ -92,7 +101,7 @@
   });
 
   $effect(() => {
-    if (app.state.newFolderId === $folder.id) {
+    if (app.state.newFolderId === folder.data.id) {
       editing = true;
       app.state.newFolderId = undefined;
 
@@ -110,9 +119,9 @@
 
 <details
   bind:this={detailsEl}
-  data-id={$folder.entity.id}
-  data-order={$folder.entity.order}
-  data-path-depth={$folder.entity.depth}
+  data-id={folder.data.entity.id}
+  data-order={folder.data.entity.order}
+  data-path-depth={folder.data.entity.depth}
   data-type="folder"
   bind:open
 >
@@ -133,7 +142,7 @@
           '&:has([aria-pressed="true"])': { backgroundColor: 'surface.muted' },
           '&[data-context-menu-open="true"]': { backgroundColor: 'surface.muted' },
         },
-        $folder.entity.depth > 0 && {
+        folder.data.entity.depth > 0 && {
           borderLeftWidth: '1px',
           borderLeftRadius: '0',
           marginLeft: '-1px',
@@ -149,7 +158,7 @@
       ),
     )}
     aria-selected="false"
-    data-anchor={$entities.length > 0}
+    data-anchor={(children.data?.entity?.children?.length ?? 0) > 0}
     onkeyup={(e) => {
       if (e.code === 'Space') {
         e.preventDefault();
@@ -158,7 +167,7 @@
     role="treeitem"
     use:contextMenu={{ content: contextMenuContent }}
   >
-    <EntitySelectionIndicator entityId={$folder.entity.id} visibility={$folder.entity.visibility} />
+    <EntitySelectionIndicator entityId={folder.data.entity.id} visibility={folder.data.entity.visibility} />
 
     <Icon style={css.raw({ color: 'text.faint' })} icon={open ? ChevronDownIcon : ChevronRightIcon} size={14} />
 
@@ -171,8 +180,10 @@
           const formData = new FormData(e.currentTarget);
 
           await renameFolder({
-            folderId: $folder.id,
-            name: formData.get('name') as string,
+            input: {
+              folderId: folder.data.id,
+              name: formData.get('name') as string,
+            },
           });
 
           mixpanel.track('rename_folder');
@@ -190,7 +201,7 @@
             color: 'text.muted',
             minWidth: '0',
           })}
-          defaultValue={$folder.name}
+          defaultValue={folder.data.name}
           onblur={(e) => e.currentTarget.form?.requestSubmit()}
           onkeydown={(e) => {
             if (e.key === 'Escape') {
@@ -212,7 +223,7 @@
           lineClamp: '1',
         })}
       >
-        {$folder.name}
+        {folder.data.name}
       </span>
 
       <Menu placement="bottom-start">
@@ -239,12 +250,12 @@
     {/if}
   </summary>
   {#snippet contextMenuContent()}
-    {#if treeState.selectedEntityIds.size > 1 && treeState.selectedEntityIds.has($folder.entity.id)}
+    {#if treeState.selectedEntityIds.size > 1 && treeState.selectedEntityIds.has(folder.data.entity.id)}
       <MultiEntitiesMenu />
     {:else}
       <FolderMenu
-        entity={$folder.entity}
-        folder={$folder}
+        entity={folder.data.entity}
+        folder={folder.data}
         onRename={() => {
           editing = true;
         }}
@@ -257,12 +268,18 @@
   {/snippet}
 
   <div class={flex({ flexDirection: 'column', borderLeftWidth: '1px', marginLeft: '24px' })} aria-hidden={!open} role="tree">
-    {#each $entities as entity (entity.id)}
-      <Entity $entity={entity} />
-    {:else}
-      <div class={css({ paddingX: '8px', paddingY: '6px', fontSize: '14px', fontWeight: 'medium', color: 'text.disabled' })}>
-        폴더가 비어있어요
+    {#if children.loading}
+      <div class={css({ paddingX: '8px', paddingY: '6px', color: 'text.disabled' })}>
+        <RingSpinner style={css.raw({ size: '14px' })} />
       </div>
-    {/each}
+    {:else}
+      {#each children.data?.entity?.children ?? [] as entity (entity.id)}
+        <Entity entity$key={entity} />
+      {:else}
+        <div class={css({ paddingX: '8px', paddingY: '6px', fontSize: '14px', fontWeight: 'medium', color: 'text.disabled' })}>
+          폴더가 비어있어요
+        </div>
+      {/each}
+    {/if}
   </div>
 </details>

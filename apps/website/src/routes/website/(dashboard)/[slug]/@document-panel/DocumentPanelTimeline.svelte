@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createFragment, createQuery } from '@mearie/svelte';
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex, wrap } from '@typie/styled-system/patterns';
   import { createFloatingActions, infiniteScroll, portal, tooltip } from '@typie/ui/actions';
@@ -16,23 +17,22 @@
   import IconClockFading from '~icons/lucide/clock-fading';
   import MinusIcon from '~icons/lucide/minus';
   import PlusIcon from '~icons/lucide/plus';
-  import { fragment, graphql } from '$graphql';
   import { idleCallback } from '$lib/editor/utils';
+  import { graphql } from '$mearie';
   import { getViewContext } from '../@split-view/context.svelte';
   import type { Action } from 'svelte/action';
   import type { PointerEventHandler } from 'svelte/elements';
-  import type { DocumentPanelTimeline_document } from '$graphql';
   import type { Editor } from '$lib/editor/editor.svelte';
+  import type { DocumentPanelTimeline_document$key } from '$mearie';
 
   type Props = {
-    $document: DocumentPanelTimeline_document;
+    document$key: DocumentPanelTimeline_document$key;
     editor: Editor;
   };
 
-  let { $document: _document, editor }: Props = $props();
+  let { document$key, editor }: Props = $props();
 
-  const document = fragment(
-    _document,
+  const document = createFragment(
     graphql(`
       fragment DocumentPanelTimeline_document on Document {
         id
@@ -43,26 +43,33 @@
         }
       }
     `),
+    () => document$key,
   );
 
-  const query = graphql(`
-    query Editor_DocumentPanelTimeline_Query($slug: String!, $first: Int!, $before: DateTime) @client {
-      document(slug: $slug) {
-        id
+  let queryVars = $state<{ slug: string; first: number; before?: string | null } | null>(null);
 
-        versionMetas {
+  const query = createQuery(
+    graphql(`
+      query Editor_DocumentPanelTimeline_Query($slug: String!, $first: Int!, $before: DateTime) {
+        document(slug: $slug) {
           id
-          createdAt
-        }
 
-        versions(first: $first, before: $before) {
-          id
-          version
-          createdAt
+          versionMetas {
+            id
+            createdAt
+          }
+
+          versions(first: $first, before: $before) {
+            id
+            version
+            createdAt
+          }
         }
       }
-    }
-  `);
+    `),
+    () => queryVars ?? { slug: '', first: 20 },
+    () => ({ skip: !queryVars }),
+  );
 
   const app = getAppContext();
   const view = getViewContext();
@@ -74,7 +81,7 @@
   let versionCharCounts = $state<Record<string, number>>({});
   let wasDetached = $state(false);
 
-  const versionMetas = $derived($query?.document.versionMetas ?? []);
+  const versionMetas = $derived(query.data?.document.versionMetas ?? []);
   let versionCache = new SvelteMap<string, string>();
 
   const loadedVersions = $derived.by(() => {
@@ -142,13 +149,34 @@
   let isLoadingMore = $state(false);
   let loadingPromise: Promise<void> | null = null;
   let hasMoreVersions = $derived(versionMetas.some((meta) => !versionCache.has(meta.id)));
+  // TODO: query.load() returned a promise with result data. In Mearie's createQuery, queries are reactive.
+  // These functions use a workaround: set queryVars to trigger a fetch, then watch query.data reactively.
+  // For now, we set variables and use $effect to process results, which may need refinement.
+
+  let pendingLoadResolve: ((data: typeof query.data) => void) | null = null;
+
+  const loadQuery = (vars: { slug: string; first: number; before?: string | null }): Promise<NonNullable<typeof query.data>> => {
+    return new Promise((resolve) => {
+      pendingLoadResolve = resolve as (data: typeof query.data) => void;
+      queryVars = { ...vars };
+      query.refetch();
+    });
+  };
+
+  $effect(() => {
+    if (queryVars && query.data && !query.loading && pendingLoadResolve) {
+      const resolve = pendingLoadResolve;
+      pendingLoadResolve = null;
+      resolve(query.data);
+    }
+  });
 
   const loadMoreVersions = async () => {
     if (loadingPromise) {
       await loadingPromise;
       return;
     }
-    if (!$query || loadedVersions.length === 0) return;
+    if (!query.data || loadedVersions.length === 0) return;
     if (!hasMoreVersions) return;
 
     isLoadingMore = true;
@@ -157,8 +185,8 @@
         const oldestDisplayed = loadedVersions[0];
         if (!oldestDisplayed) return;
 
-        const result = await query.load({
-          slug: $document.entity.slug,
+        const result = await loadQuery({
+          slug: document.data.entity.slug,
           first: 20,
           before: oldestDisplayed.createdAt,
         });
@@ -184,7 +212,7 @@
   const initialize = async () => {
     isLoading = true;
     try {
-      const result = await query.load({ slug: $document.entity.slug, first: 20, before: null });
+      const result = await loadQuery({ slug: document.data.entity.slug, first: 20, before: null });
 
       const newCache = new SvelteMap<string, string>();
       for (const v of result.document.versions) {
@@ -198,7 +226,7 @@
         selectedVersionId = metas.at(-1)!.id;
       }
 
-      processVersionsCharacterCounts(result.document.versions);
+      processVersionsCharacterCounts([...result.document.versions] as { id: string; version: string }[]);
     } finally {
       tick().then(() => {
         isLoading = false;
@@ -229,7 +257,7 @@
 
   $effect(() => {
     const currentId = selectedVersionId;
-    if (!currentId || !$query) return;
+    if (!currentId || !query.data) return;
 
     if (currentId === prevSelectedId) return;
     prevSelectedId = currentId;

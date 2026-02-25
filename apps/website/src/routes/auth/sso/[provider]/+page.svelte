@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { Helmet, RingSpinner } from '@typie/ui/components';
@@ -10,13 +11,15 @@
   import { page } from '$app/state';
   import Logo from '$assets/logos/logo.svg?component';
   import { env } from '$env/dynamic/public';
-  import { graphql } from '$graphql';
+  import { graphql } from '$mearie';
 
-  const authorizeSingleSignOn = graphql(`
-    mutation SSOProviderPage_AuthorizeSingleSignOn_Mutation($input: AuthorizeSingleSignOnInput!) {
-      authorizeSingleSignOn(input: $input)
-    }
-  `);
+  const [authorizeSingleSignOn] = createMutation(
+    graphql(`
+      mutation SSOProviderPage_AuthorizeSingleSignOn_Mutation($input: AuthorizeSingleSignOnInput!) {
+        authorizeSingleSignOn(input: $input)
+      }
+    `),
+  );
 
   onMount(async () => {
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
@@ -24,13 +27,15 @@
 
     try {
       const resp = await authorizeSingleSignOn({
-        provider: match(page.params.provider)
-          .with('google', () => SingleSignOnProvider.GOOGLE)
-          .with('kakao', () => SingleSignOnProvider.KAKAO)
-          .with('naver', () => SingleSignOnProvider.NAVER)
-          .run(),
-        params: Object.fromEntries(page.url.searchParams),
-        referralCode: referral_code,
+        input: {
+          provider: match(page.params.provider)
+            .with('google', () => SingleSignOnProvider.GOOGLE)
+            .with('kakao', () => SingleSignOnProvider.KAKAO)
+            .with('naver', () => SingleSignOnProvider.NAVER)
+            .run(),
+          params: Object.fromEntries(page.url.searchParams),
+          referralCode: referral_code,
+        },
       });
 
       location.href = qs.stringifyUrl({
@@ -38,7 +43,7 @@
         query: {
           client_id: env.PUBLIC_OIDC_CLIENT_ID,
           response_type: 'code',
-          ...deserializeOAuthState(resp),
+          ...deserializeOAuthState(resp.authorizeSingleSignOn),
         },
       });
     } catch {

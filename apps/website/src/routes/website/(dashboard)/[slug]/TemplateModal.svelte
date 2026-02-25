@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createFragment, createQuery } from '@mearie/svelte';
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { HorizontalDivider, Icon, Modal } from '@typie/ui/components';
@@ -6,23 +7,22 @@
   import { PostLayoutMode } from '@/enums';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
   import LayoutTemplateIcon from '~icons/lucide/layout-template';
-  import { fragment, graphql } from '$graphql';
+  import { graphql } from '$mearie';
   import { YState } from './state.svelte';
   import type { Editor } from '@tiptap/core';
   import type { PageLayout, Ref } from '@typie/ui/utils';
-  import type { Editor_Placeholder_site } from '$graphql';
+  import type { Editor_Placeholder_site$key } from '$mearie';
 
   type Props = {
-    $site: Editor_Placeholder_site;
+    site$key: Editor_Placeholder_site$key;
     editor: Ref<Editor>;
     doc: Y.Doc;
     focused: boolean;
   };
 
-  let { $site: _site, editor, doc, focused }: Props = $props();
+  let { site$key, editor, doc, focused }: Props = $props();
 
-  const site = fragment(
-    _site,
+  const site = createFragment(
     graphql(`
       fragment Editor_Placeholder_site on Site {
         id
@@ -38,20 +38,27 @@
         }
       }
     `),
+    () => site$key,
   );
 
-  const query = graphql(`
-    query Editor_Placeholder_Query($slug: String!) @client {
-      post(slug: $slug) {
-        id
-        body
-        maxWidth
-        layoutMode
-        pageLayout
-        storedMarks
+  let templateSlug = $state<string | null>(null);
+
+  const query = createQuery(
+    graphql(`
+      query Editor_Placeholder_Query($slug: String!) {
+        post(slug: $slug) {
+          id
+          body
+          maxWidth
+          layoutMode
+          pageLayout
+          storedMarks
+        }
       }
-    }
-  `);
+    `),
+    () => ({ slug: templateSlug ?? '' }),
+    () => ({ skip: !templateSlug }),
+  );
 
   let open = $state(false);
 
@@ -73,16 +80,21 @@
     };
   });
 
-  const loadTemplate = async (slug: string) => {
-    const resp = await query.load({ slug });
+  $effect(() => {
+    if (templateSlug && query.data && !query.loading) {
+      maxWidth.current = query.data.post.maxWidth;
+      layoutMode.current = query.data.post.layoutMode;
+      pageLayout.current = query.data.post.pageLayout;
 
-    maxWidth.current = resp.post.maxWidth;
-    layoutMode.current = resp.post.layoutMode;
-    pageLayout.current = resp.post.pageLayout;
+      editor.current.commands.loadTemplate(query.data.post);
 
-    editor.current.commands.loadTemplate(resp.post);
+      templateSlug = null;
+      open = false;
+    }
+  });
 
-    open = false;
+  const loadTemplate = (slug: string) => {
+    templateSlug = slug;
   };
 </script>
 
@@ -97,7 +109,7 @@
   <HorizontalDivider />
 
   <div class={flex({ flexDirection: 'column', paddingX: '24px', paddingY: '16px' })}>
-    {#each $site.templates as template (template.id)}
+    {#each site.data.templates as template (template.id)}
       <button
         class={cx(
           'group',

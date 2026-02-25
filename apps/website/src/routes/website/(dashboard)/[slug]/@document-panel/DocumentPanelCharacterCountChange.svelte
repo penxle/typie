@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createFragment } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Icon } from '@typie/ui/components';
@@ -8,17 +9,16 @@
   import GoalIcon from '~icons/lucide/goal';
   import TrendingDownIcon from '~icons/lucide/trending-down';
   import TrendingUpIcon from '~icons/lucide/trending-up';
-  import { fragment, graphql } from '$graphql';
-  import type { DocumentPanel_Info_CharacterCountChange_document } from '$graphql';
+  import { graphql } from '$mearie';
+  import type { DocumentPanel_Info_CharacterCountChange_document$key } from '$mearie';
 
   type Props = {
-    $document: DocumentPanel_Info_CharacterCountChange_document;
+    document$key: DocumentPanel_Info_CharacterCountChange_document$key;
   };
 
-  let { $document: _document }: Props = $props();
+  let { document$key }: Props = $props();
 
-  const document = fragment(
-    _document,
+  const document = createFragment(
     graphql(`
       fragment DocumentPanel_Info_CharacterCountChange_document on Document {
         id
@@ -29,10 +29,11 @@
         }
       }
     `),
+    () => document$key,
   );
 
   let open = $state(false);
-  const difference = $derived($document.characterCountChange.additions - $document.characterCountChange.deletions);
+  const difference = $derived(document.data.characterCountChange.additions - document.data.characterCountChange.deletions);
 </script>
 
 <details class={flex({ flexDirection: 'column', marginBottom: open ? '12px' : '0' })} bind:open>
@@ -72,12 +73,12 @@
 
       <dl class={flex({ justifyContent: 'space-between', gap: '8px', fontSize: '13px' })}>
         <dt class={css({ color: 'text.faint' })}>입력한 글자</dt>
-        <dd class={css({ fontWeight: 'medium', color: 'text.subtle' })}>{comma($document.characterCountChange.additions)}자</dd>
+        <dd class={css({ fontWeight: 'medium', color: 'text.subtle' })}>{comma(document.data.characterCountChange.additions)}자</dd>
       </dl>
 
       <dl class={flex({ justifyContent: 'space-between', gap: '8px', fontSize: '13px' })}>
         <dt class={css({ color: 'text.faint' })}>지운 글자</dt>
-        <dd class={css({ fontWeight: 'medium', color: 'text.subtle' })}>{comma($document.characterCountChange.deletions)}자</dd>
+        <dd class={css({ fontWeight: 'medium', color: 'text.subtle' })}>{comma(document.data.characterCountChange.deletions)}자</dd>
       </dl>
     </div>
   {/if}

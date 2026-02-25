@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createMutation, createQuery } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex, grid } from '@typie/styled-system/patterns';
   import { Button, Checkbox, HorizontalDivider, Icon, Modal, Select, TextInput } from '@typie/ui/components';
@@ -13,9 +14,9 @@
   import PanelRightDashedIcon from '~icons/lucide/panel-right-dashed';
   import PanelTopDashedIcon from '~icons/lucide/panel-top-dashed';
   import RulerDimensionLineIcon from '~icons/lucide/ruler-dimension-line';
-  import { graphql } from '$graphql';
   import { createPaginatedLayout } from '$lib/editor/utils';
   import { values } from '$lib/editor/values';
+  import { graphql } from '$mearie';
   import type { LayoutMode } from '@typie/editor';
   import type { PageLayout, PageLayoutPreset } from '$lib/editor/utils';
 
@@ -38,23 +39,29 @@
   let useCurrentSettings = $state(false);
   let pageLayout = $state<PageLayout>(app.preference.current.lastPdfPageLayout ?? createPaginatedLayout('a4'));
 
-  const documentQuery = graphql(`
-    query DocumentPdfExportModal_Document_Query($slug: String!) @client {
-      document(slug: $slug) {
-        id
-        layoutMode
+  const documentQuery = createQuery(
+    graphql(`
+      query DocumentPdfExportModal_Document_Query($slug: String!) {
+        document(slug: $slug) {
+          id
+          layoutMode
+        }
       }
-    }
-  `);
+    `),
+    () => ({ slug }),
+    () => ({ skip: !open }),
+  );
 
-  const exportDocumentAsPdf = graphql(`
-    mutation DocumentPdfExportModal_ExportDocumentAsPdf_Mutation($input: ExportDocumentAsPdfInput!) {
-      exportDocumentAsPdf(input: $input) {
-        data
-        filename
+  const [exportDocumentAsPdf] = createMutation(
+    graphql(`
+      mutation DocumentPdfExportModal_ExportDocumentAsPdf_Mutation($input: ExportDocumentAsPdfInput!) {
+        exportDocumentAsPdf(input: $input) {
+          data
+          filename
+        }
       }
-    }
-  `);
+    `),
+  );
 
   const convertLayoutModeToPageLayout = (mode: LayoutMode): PageLayout | undefined => {
     if (mode.type !== 'paginated') return undefined;
@@ -68,21 +75,22 @@
     };
   };
 
-  const load = async () => {
-    loaded = false;
-    await documentQuery.load({ slug });
-    loaded = true;
-  };
-
   $effect(() => {
     if (open) {
-      load();
+      loaded = false;
+      documentQuery.refetch();
     }
   });
 
   $effect(() => {
-    if (loaded && $documentQuery) {
-      const layoutMode = $documentQuery.document.layoutMode as LayoutMode;
+    if (open && documentQuery.data && !documentQuery.loading) {
+      loaded = true;
+    }
+  });
+
+  $effect(() => {
+    if (loaded && documentQuery.data) {
+      const layoutMode = documentQuery.data.document.layoutMode as LayoutMode;
       const isPaginated = layoutMode.type === 'paginated';
       const converted = convertLayoutModeToPageLayout(layoutMode);
 
@@ -118,17 +126,19 @@
 
     isExporting = true;
     const result = await exportDocumentAsPdf({
-      documentId,
-      width: layout.width,
-      height: layout.height,
-      marginTop: layout.marginTop,
-      marginBottom: layout.marginBottom,
-      marginLeft: layout.marginLeft,
-      marginRight: layout.marginRight,
+      input: {
+        documentId,
+        width: layout.width,
+        height: layout.height,
+        marginTop: layout.marginTop,
+        marginBottom: layout.marginBottom,
+        marginLeft: layout.marginLeft,
+        marginRight: layout.marginRight,
+      },
     });
     isExporting = false;
 
-    downloadPdf(result.data, result.filename);
+    downloadPdf(result.exportDocumentAsPdf.data, result.exportDocumentAsPdf.filename);
     mixpanel.track('export_document_pdf', { via });
     onClose();
   };
@@ -142,8 +152,8 @@
   onclose={onClose}
   bind:open
 >
-  {#if loaded && $documentQuery}
-    {@const layoutMode = $documentQuery.document.layoutMode as LayoutMode}
+  {#if loaded && documentQuery.data}
+    {@const layoutMode = documentQuery.data.document.layoutMode as LayoutMode}
     {@const currentPageEnabled = layoutMode.type === 'paginated'}
     {@const currentPageLayout = convertLayoutModeToPageLayout(layoutMode)}
 

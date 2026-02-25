@@ -1,24 +1,24 @@
 <script lang="ts">
+  import { createFragment } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { getAppContext } from '@typie/ui/context';
   import { comma, formatBytes } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import { defaultPlanRules } from '@/const';
-  import { fragment, graphql } from '$graphql';
+  import { graphql } from '$mearie';
   import PlanUpgradeModal from './PlanUpgradeModal.svelte';
-  import type { DashboardLayout_PlanUsageWidget_user } from '$graphql';
+  import type { DashboardLayout_PlanUsageWidget_user$key } from '$mearie';
 
   type Props = {
-    $user: DashboardLayout_PlanUsageWidget_user;
+    user$key: DashboardLayout_PlanUsageWidget_user$key;
   };
 
-  let { $user: _user }: Props = $props();
+  let { user$key }: Props = $props();
 
   let planUpgradeModalOpen = $state(false);
 
-  const user = fragment(
-    _user,
+  const user = createFragment(
     graphql(`
       fragment DashboardLayout_PlanUsageWidget_user on User {
         id
@@ -43,18 +43,19 @@
         }
       }
     `),
+    () => user$key,
   );
 
   const app = getAppContext();
 
-  const planRule = $derived($user.subscription?.plan?.rule ?? defaultPlanRules);
+  const planRule = $derived(user.data.subscription?.plan?.rule ?? defaultPlanRules);
 
   const totalCharacterCountProgress = $derived.by(() => {
     if (planRule.maxTotalCharacterCount === -1) {
       return -1;
     }
 
-    return Math.min(1, $user.usage.totalCharacterCount / planRule.maxTotalCharacterCount);
+    return Math.min(1, user.data.usage.totalCharacterCount / planRule.maxTotalCharacterCount);
   });
 
   const totalBlobSizeProgress = $derived.by(() => {
@@ -62,7 +63,7 @@
       return -1;
     }
 
-    return Math.min(1, Number($user.usage.totalBlobSize) / planRule.maxTotalBlobSize);
+    return Math.min(1, Number(user.data.usage.totalBlobSize) / planRule.maxTotalBlobSize);
   });
 
   $effect(() => {
@@ -100,7 +101,7 @@
         <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>글자 수</div>
 
         <div class={css({ fontSize: '12px', color: 'text.faint' })}>
-          {comma($user.usage.totalCharacterCount)}자 / {comma(planRule.maxTotalCharacterCount)}자
+          {comma(user.data.usage.totalCharacterCount)}자 / {comma(planRule.maxTotalCharacterCount)}자
         </div>
       </div>
 
@@ -129,7 +130,7 @@
         <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>파일 업로드</div>
 
         <div class={css({ fontSize: '12px', color: 'text.faint' })}>
-          {formatBytes(Number($user.usage.totalBlobSize))} / {formatBytes(planRule.maxTotalBlobSize)}
+          {formatBytes(Number(user.data.usage.totalBlobSize))} / {formatBytes(planRule.maxTotalBlobSize)}
         </div>
       </div>
 
@@ -154,7 +155,7 @@
     </div>
   </button>
 
-  <PlanUpgradeModal {$user} bind:open={planUpgradeModalOpen}>
+  <PlanUpgradeModal user$key={user.data} bind:open={planUpgradeModalOpen}>
     FULL ACCESS로 업그레이드하면
     <br />
     무제한으로 글을 작성하고 파일을 업로드할 수 있어요.

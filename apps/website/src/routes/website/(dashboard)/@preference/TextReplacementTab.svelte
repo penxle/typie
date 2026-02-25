@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { cache } from '@typie/sark/internal';
+  import { createFragment, createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Button, Icon, Switch, TextInput, Tooltip } from '@typie/ui/components';
@@ -10,19 +10,19 @@
   import PencilIcon from '~icons/lucide/pencil';
   import PlusIcon from '~icons/lucide/plus';
   import TrashIcon from '~icons/lucide/trash';
-  import { fragment, graphql } from '$graphql';
   import { SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
+  import { cache } from '$lib/graphql';
   import { wasm } from '$lib/wasm';
-  import type { DashboardLayout_PreferenceModal_TextReplacementTab_user } from '$graphql';
+  import { graphql } from '$mearie';
+  import type { DashboardLayout_PreferenceModal_TextReplacementTab_user$key } from '$mearie';
 
   type Props = {
-    $user: DashboardLayout_PreferenceModal_TextReplacementTab_user;
+    user$key: DashboardLayout_PreferenceModal_TextReplacementTab_user$key;
   };
 
-  let { $user: _user }: Props = $props();
+  let { user$key }: Props = $props();
 
-  const user = fragment(
-    _user,
+  const user = createFragment(
     graphql(`
       fragment DashboardLayout_PreferenceModal_TextReplacementTab_user on User {
         id
@@ -53,59 +53,68 @@
         }
       }
     `),
+    () => user$key,
   );
 
-  const createTextReplacement = graphql(`
-    mutation DashboardLayout_PreferenceModal_TextReplacementTab_CreateTextReplacement_Mutation($input: CreateTextReplacementInput!) {
-      createTextReplacement(input: $input) {
-        ... on TextReplacement {
-          id
-        }
-        ... on TextReplacementPreference {
-          id
+  const [createTextReplacement] = createMutation(
+    graphql(`
+      mutation DashboardLayout_PreferenceModal_TextReplacementTab_CreateTextReplacement_Mutation($input: CreateTextReplacementInput!) {
+        createTextReplacement(input: $input) {
+          ... on TextReplacement {
+            id
+          }
+          ... on TextReplacementPreference {
+            id
+          }
         }
       }
-    }
-  `);
+    `),
+  );
 
-  const updateTextReplacement = graphql(`
-    mutation DashboardLayout_PreferenceModal_TextReplacementTab_UpdateTextReplacement_Mutation($input: UpdateTextReplacementInput!) {
-      updateTextReplacement(input: $input) {
-        ... on TextReplacement {
-          id
-        }
-        ... on TextReplacementPreference {
-          id
+  const [updateTextReplacement] = createMutation(
+    graphql(`
+      mutation DashboardLayout_PreferenceModal_TextReplacementTab_UpdateTextReplacement_Mutation($input: UpdateTextReplacementInput!) {
+        updateTextReplacement(input: $input) {
+          ... on TextReplacement {
+            id
+          }
+          ... on TextReplacementPreference {
+            id
+          }
         }
       }
-    }
-  `);
+    `),
+  );
 
-  const deleteTextReplacement = graphql(`
-    mutation DashboardLayout_PreferenceModal_TextReplacementTab_DeleteTextReplacement_Mutation($input: DeleteTextReplacementInput!) {
-      deleteTextReplacement(input: $input) {
-        ... on TextReplacement {
-          id
-        }
-        ... on TextReplacementPreference {
-          id
+  const [deleteTextReplacement] = createMutation(
+    graphql(`
+      mutation DashboardLayout_PreferenceModal_TextReplacementTab_DeleteTextReplacement_Mutation($input: DeleteTextReplacementInput!) {
+        deleteTextReplacement(input: $input) {
+          ... on TextReplacement {
+            id
+          }
+          ... on TextReplacementPreference {
+            id
+          }
         }
       }
-    }
-  `);
+    `),
+  );
 
-  const moveTextReplacement = graphql(`
-    mutation DashboardLayout_PreferenceModal_TextReplacementTab_MoveTextReplacement_Mutation($input: MoveTextReplacementInput!) {
-      moveTextReplacement(input: $input) {
-        ... on TextReplacement {
-          id
-        }
-        ... on TextReplacementPreference {
-          id
+  const [moveTextReplacement] = createMutation(
+    graphql(`
+      mutation DashboardLayout_PreferenceModal_TextReplacementTab_MoveTextReplacement_Mutation($input: MoveTextReplacementInput!) {
+        moveTextReplacement(input: $input) {
+          ... on TextReplacement {
+            id
+          }
+          ... on TextReplacementPreference {
+            id
+          }
         }
       }
-    }
-  `);
+    `),
+  );
 
   type NormalizedItem = {
     textReplacementId: string;
@@ -119,7 +128,7 @@
     note: string | null;
   };
 
-  const normalize = (item: (typeof $user.textReplacements)[number]): NormalizedItem => {
+  const normalize = (item: (typeof user.data.textReplacements)[number]): NormalizedItem => {
     if ('textReplacement' in item) {
       return {
         textReplacementId: item.textReplacement.id,
@@ -150,7 +159,7 @@
   const smartQuoteIds = new Set(['TXR0SQUOTEOPEN', 'TXR0SQUOTECLOSE', 'TXR0DQUOTEOPEN', 'TXR0DQUOTECLOSE']);
   // spell-checker:enable
 
-  const items = $derived($user.textReplacements.map(normalize));
+  const items = $derived(user.data.textReplacements.map(normalize));
   const allPresets = $derived(items.filter((item) => item.preset).toSorted((a, b) => (a.order ?? '').localeCompare(b.order ?? '')));
   const smartQuoteItems = $derived(allPresets.filter((item) => smartQuoteIds.has(item.textReplacementId)));
   const presets = $derived(allPresets.filter((item) => !smartQuoteIds.has(item.textReplacementId)));
@@ -177,18 +186,20 @@
   });
 
   const invalidateCache = () => {
-    cache.invalidate({ __typename: 'User', id: $user.id, field: 'textReplacements' });
+    cache.invalidate({ __typename: 'User', id: user.data.id, field: 'textReplacements' });
   };
 
   const toggleState = async (item: NormalizedItem) => {
     const newState = item.state === 'ACTIVE' ? 'DISABLED' : 'ACTIVE';
-    await updateTextReplacement({ textReplacementId: item.textReplacementId, state: newState });
+    await updateTextReplacement({ input: { textReplacementId: item.textReplacementId, state: newState } });
     invalidateCache();
   };
 
   const toggleSmartQuotes = async () => {
     const newState = smartQuoteAllActive ? 'DISABLED' : 'ACTIVE';
-    await Promise.all(smartQuoteItems.map((item) => updateTextReplacement({ textReplacementId: item.textReplacementId, state: newState })));
+    await Promise.all(
+      smartQuoteItems.map((item) => updateTextReplacement({ input: { textReplacementId: item.textReplacementId, state: newState } })),
+    );
     invalidateCache();
   };
 
@@ -258,19 +269,23 @@
     if (creatingNew) {
       const lastOrder = customItems.at(-1)?.order ?? undefined;
       await createTextReplacement({
-        match: formMatch,
-        substitute: formSubstitute,
-        regex: formRegex,
-        note: formNote,
-        lowerOrder: lastOrder,
+        input: {
+          match: formMatch,
+          substitute: formSubstitute,
+          regex: formRegex,
+          note: formNote,
+          lowerOrder: lastOrder,
+        },
       });
     } else if (editingId) {
       await updateTextReplacement({
-        textReplacementId: editingId,
-        match: formMatch,
-        substitute: formSubstitute,
-        regex: formRegex,
-        note: formNote,
+        input: {
+          textReplacementId: editingId,
+          match: formMatch,
+          substitute: formSubstitute,
+          regex: formRegex,
+          note: formNote,
+        },
       });
     }
 
@@ -285,7 +300,7 @@
       action: 'danger',
       actionLabel: '삭제',
       actionHandler: async () => {
-        await deleteTextReplacement({ textReplacementId: item.textReplacementId });
+        await deleteTextReplacement({ input: { textReplacementId: item.textReplacementId } });
         invalidateCache();
       },
     });
@@ -356,7 +371,7 @@
         draggingItemId = null;
         dropIndex = null;
 
-        await moveTextReplacement({ textReplacementId: currentItemId, lowerOrder, upperOrder });
+        await moveTextReplacement({ input: { textReplacementId: currentItemId, lowerOrder, upperOrder } });
         invalidateCache();
       },
       onDragCancel: () => {

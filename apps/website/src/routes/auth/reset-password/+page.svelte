@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Button, Helmet, TextInput } from '@typie/ui/components';
@@ -10,13 +11,15 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import Logo from '$assets/logos/logo.svg?component';
-  import { graphql } from '$graphql';
+  import { graphql } from '$mearie';
 
-  const resetPassword = graphql(`
-    mutation ResetPasswordPage_ResetPassword_Mutation($input: ResetPasswordInput!) {
-      resetPassword(input: $input)
-    }
-  `);
+  const [resetPassword] = createMutation(
+    graphql(`
+      mutation ResetPasswordPage_ResetPassword_Mutation($input: ResetPasswordInput!) {
+        resetPassword(input: $input)
+      }
+    `),
+  );
 
   const form = createForm({
     schema: z
@@ -30,8 +33,10 @@
       }),
     onSubmit: async (data) => {
       await resetPassword({
-        code: page.url.searchParams.get('code') ?? '',
-        password: data.password,
+        input: {
+          code: page.url.searchParams.get('code') ?? '',
+          password: data.password,
+        },
       });
 
       mixpanel.track('reset_password');

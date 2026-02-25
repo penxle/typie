@@ -1,37 +1,40 @@
 <script lang="ts">
+  import { createFragment, createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Select } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import mixpanel from 'mixpanel-browser';
-  import { fragment, graphql } from '$graphql';
   import { SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
-  import type { DashboardLayout_PreferenceModal_InterfaceTab_user } from '$graphql';
+  import { graphql } from '$mearie';
+  import type { DashboardLayout_PreferenceModal_InterfaceTab_user$key } from '$mearie';
 
   type Props = {
-    $user: DashboardLayout_PreferenceModal_InterfaceTab_user;
+    user$key: DashboardLayout_PreferenceModal_InterfaceTab_user$key;
   };
 
-  let { $user: _user }: Props = $props();
+  let { user$key }: Props = $props();
 
-  const user = fragment(
-    _user,
+  const user = createFragment(
     graphql(`
       fragment DashboardLayout_PreferenceModal_InterfaceTab_user on User {
         id
         preferences
       }
     `),
+    () => user$key,
   );
 
-  const updatePreferences = graphql(`
-    mutation DashboardLayout_PreferenceModal_InterfaceTab_UpdatePreferences_Mutation($input: UpdatePreferencesInput!) {
-      updatePreferences(input: $input) {
-        id
-        preferences
+  const [updatePreferences] = createMutation(
+    graphql(`
+      mutation DashboardLayout_PreferenceModal_InterfaceTab_UpdatePreferences_Mutation($input: UpdatePreferencesInput!) {
+        updatePreferences(input: $input) {
+          id
+          preferences
+        }
       }
-    }
-  `);
+    `),
+  );
 
   const app = getAppContext();
 </script>
@@ -63,9 +66,9 @@
                 page: value,
               });
 
-              await updatePreferences({ value: { initialPage: value } });
+              await updatePreferences({ input: { value: { initialPage: value } } });
             }}
-            value={$user.preferences.initialPage ?? 'last'}
+            value={user.data.preferences.initialPage ?? 'last'}
           />
         {/snippet}
       </SettingsRow>
@@ -91,9 +94,9 @@
               });
 
               app.preference.current.toolbarStyle = value;
-              await updatePreferences({ value: { toolbarStyle: value } });
+              await updatePreferences({ input: { value: { toolbarStyle: value } } });
             }}
-            value={$user.preferences.toolbarStyle ?? 'compact'}
+            value={user.data.preferences.toolbarStyle ?? 'compact'}
           />
         {/snippet}
       </SettingsRow>
@@ -119,9 +122,9 @@
               });
 
               app.preference.current.sidebarTrigger = value;
-              await updatePreferences({ value: { sidebarTrigger: value } });
+              await updatePreferences({ input: { value: { sidebarTrigger: value } } });
             }}
-            value={$user.preferences.sidebarTrigger ?? 'hover'}
+            value={user.data.preferences.sidebarTrigger ?? 'hover'}
           />
         {/snippet}
       </SettingsRow>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createFragment, createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex, grid } from '@typie/styled-system/patterns';
   import { Button, Icon } from '@typie/ui/components';
@@ -6,18 +7,17 @@
   import { Dialog } from '@typie/ui/notification';
   import mixpanel from 'mixpanel-browser';
   import { replaceState } from '$app/navigation';
-  import { cache, fragment, graphql } from '$graphql';
+  import { graphql } from '$mearie';
   import SubscriptionCelebrationModal from '../SubscriptionCelebrationModal.svelte';
-  import type { DashboardLayout_PreferenceModal_PlanTab_user } from '$graphql';
+  import type { DashboardLayout_PreferenceModal_PlanTab_user$key } from '$mearie';
 
   type Props = {
-    $user: DashboardLayout_PreferenceModal_PlanTab_user;
+    user$key: DashboardLayout_PreferenceModal_PlanTab_user$key;
   };
 
-  let { $user: _user }: Props = $props();
+  let { user$key }: Props = $props();
 
-  const user = fragment(
-    _user,
+  const user = createFragment(
     graphql(`
       fragment DashboardLayout_PreferenceModal_PlanTab_user on User {
         id
@@ -37,32 +37,35 @@
         }
       }
     `),
+    () => user$key,
   );
 
-  const subscribePlanWithTrial = graphql(`
-    mutation DashboardLayout_PreferenceModal_PlanTab_SubscribePlanWithTrial_Mutation {
-      subscribePlanWithTrial {
-        id
-        state
-        expiresAt
-
-        plan {
+  const [subscribePlanWithTrial] = createMutation(
+    graphql(`
+      mutation DashboardLayout_PreferenceModal_PlanTab_SubscribePlanWithTrial_Mutation {
+        subscribePlanWithTrial {
           id
-          name
-          availability
+          state
+          expiresAt
+
+          plan {
+            id
+            name
+            availability
+          }
         }
       }
-    }
-  `);
-
-  const hasActiveSubscription = $derived(
-    $user.subscription?.state === 'ACTIVE' ||
-      $user.subscription?.state === 'IN_GRACE_PERIOD' ||
-      $user.subscription?.state === 'WILL_EXPIRE',
+    `),
   );
 
-  const isOnTrial = $derived($user.subscription?.plan.availability === 'TRIAL');
-  const canStartTrial = $derived($user.canStartTrial);
+  const hasActiveSubscription = $derived(
+    user.data.subscription?.state === 'ACTIVE' ||
+      user.data.subscription?.state === 'IN_GRACE_PERIOD' ||
+      user.data.subscription?.state === 'WILL_EXPIRE',
+  );
+
+  const isOnTrial = $derived(user.data.subscription?.plan.availability === 'TRIAL');
+  const canStartTrial = $derived(user.data.canStartTrial);
 
   let trialStartedModalOpen = $state(false);
 </script>
@@ -221,8 +224,8 @@
                   actionLabel: '시작하기',
                   actionHandler: async () => {
                     await subscribePlanWithTrial();
-                    cache.invalidate({ __typename: 'User', id: $user.id, field: 'subscription' });
-                    cache.invalidate({ __typename: 'User', id: $user.id, field: 'canStartTrial' });
+                    //                     cache.invalidate({ __typename: 'User', id: user.data.id, field: 'subscription' });
+                    //                     cache.invalidate({ __typename: 'User', id: user.data.id, field: 'canStartTrial' });
                     mixpanel.track('start_trial');
                     trialStartedModalOpen = true;
                   },

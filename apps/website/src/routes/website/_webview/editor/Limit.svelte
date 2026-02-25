@@ -1,24 +1,24 @@
 <script lang="ts">
+  import { createFragment } from '@mearie/svelte';
   import { findChildren, getText } from '@tiptap/core';
   import { Plugin, PluginKey } from '@tiptap/pm/state';
   import { untrack } from 'svelte';
   import { ySyncPluginKey } from 'y-prosemirror';
   import { textSerializers } from '@/pm/serializer';
-  import { fragment, graphql } from '$graphql';
+  import { graphql } from '$mearie';
   import type { Editor } from '@tiptap/core';
   import type { Node } from '@tiptap/pm/model';
   import type { Ref } from '@typie/ui/utils';
-  import type { WebViewEditor_Limit_query } from '$graphql';
+  import type { WebViewEditor_Limit_query$key } from '$mearie';
 
   type Props = {
-    $query: WebViewEditor_Limit_query;
+    query$key: WebViewEditor_Limit_query$key;
     editor?: Ref<Editor>;
   };
 
-  let { $query: _query, editor }: Props = $props();
+  let { query$key, editor }: Props = $props();
 
-  const query = fragment(
-    _query,
+  const query = createFragment(
     graphql(`
       fragment WebViewEditor_Limit_query on Query {
         defaultPlanRule {
@@ -53,16 +53,17 @@
         }
       }
     `),
+    () => query$key,
   );
 
-  const planRule = $derived($query.me.subscription?.plan?.rule ?? $query.defaultPlanRule);
+  const planRule = $derived(query.data.me.subscription?.plan?.rule ?? query.data.defaultPlanRule);
 
   const totalCharacterCountProgress = $derived.by(() => {
     if (planRule.maxTotalCharacterCount === -1) {
       return -1;
     }
 
-    return Math.min(1, $query.site.usage.totalCharacterCount / planRule.maxTotalCharacterCount);
+    return Math.min(1, query.data.site.usage.totalCharacterCount / planRule.maxTotalCharacterCount);
   });
 
   const totalBlobSizeProgress = $derived.by(() => {
@@ -70,7 +71,7 @@
       return -1;
     }
 
-    return Math.min(1, Number($query.site.usage.totalBlobSize) / planRule.maxTotalBlobSize);
+    return Math.min(1, Number(query.data.site.usage.totalBlobSize) / planRule.maxTotalBlobSize);
   });
 
   const key = new PluginKey('limit');

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { token } from '@typie/styled-system/tokens';
@@ -10,24 +11,33 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import Logo from '$assets/logos/logo.svg?component';
-  import { graphql } from '$graphql';
+  import { unwrapError } from '$lib/graphql';
+  import { graphql } from '$mearie';
 
-  const verifyPersonalIdentity = graphql(`
-    mutation UsersiteWildcardIdentityPage_VerifyPersonalIdentity_Mutation($input: VerifyPersonalIdentityInput!) {
-      verifyPersonalIdentity(input: $input) {
-        id
+  const [verifyPersonalIdentity] = createMutation(
+    graphql(`
+      mutation UsersiteWildcardIdentityPage_VerifyPersonalIdentity_Mutation($input: VerifyPersonalIdentityInput!) {
+        verifyPersonalIdentity(input: $input) {
+          id
+        }
       }
-    }
-  `);
+    `),
+  );
 
   onMount(async () => {
     const redirectUri = sessionStorage.getItem('redirect_uri');
     sessionStorage.removeItem('redirect_uri');
 
     try {
+      const identityVerificationId = page.url.searchParams.get('identityVerificationId');
+      if (!identityVerificationId) {
+        throw new Error('identityVerificationId is missing');
+      }
+
       await verifyPersonalIdentity({
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        identityVerificationId: page.url.searchParams.get('identityVerificationId')!,
+        input: {
+          identityVerificationId,
+        },
       });
 
       mixpanel.track('verify_personal_identity_success');
@@ -38,8 +48,9 @@
         same_identity_exists: '이미 다른 계정에 인증된 정보입니다.',
       };
 
-      if (err instanceof TypieError) {
-        const message = errorMessages[err.code] || err.code;
+      const error = unwrapError(err);
+      if (error instanceof TypieError) {
+        const message = errorMessages[error.code] || error.code;
         Toast.error(message);
       }
     } finally {

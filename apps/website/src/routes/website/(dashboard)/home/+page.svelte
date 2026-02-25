@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { Button, Helmet, Icon } from '@typie/ui/components';
@@ -14,66 +15,28 @@
   import LayoutTemplateIcon from '~icons/lucide/layout-template';
   import { goto } from '$app/navigation';
   import Logo from '$assets/logos/logo.svg?component';
-  import { graphql } from '$graphql';
+  import { hydrateQuery } from '$lib/graphql';
+  import { graphql } from '$mearie';
   import ActivityGrid from '../@stats/ActivityGrid.svelte';
 
-  const query = graphql(`
-    query HomePage_Query {
-      me @required {
-        id
-        name
+  let { data } = $props();
 
-        ...DashboardLayout_Stats_ActivityGrid_user
+  const query = $derived(hydrateQuery(() => data.query));
 
-        sites {
+  const [createDocument] = createMutation(
+    graphql(`
+      mutation HomePage_CreateDocument_Mutation($input: CreateDocumentInput!) {
+        createDocument(input: $input) {
           id
 
-          firstEntity(type: POST) {
+          entity {
             id
             slug
           }
         }
-
-        recentlyViewedEntities {
-          id
-          slug
-          type
-
-          node {
-            __typename
-
-            ... on Post {
-              id
-              title
-              subtitle
-              type
-              excerpt
-            }
-
-            ... on Document {
-              id
-              title
-              documentType: type
-              excerpt
-            }
-          }
-        }
       }
-    }
-  `);
-
-  const createDocument = graphql(`
-    mutation HomePage_CreateDocument_Mutation($input: CreateDocumentInput!) {
-      createDocument(input: $input) {
-        id
-
-        entity {
-          id
-          slug
-        }
-      }
-    }
-  `);
+    `),
+  );
 
   const app = getAppContext();
 
@@ -149,17 +112,17 @@
           })}
           transition:typewriter={{ speed: 50 }}
         >
-          {$query.me.name}님, {getGreeting()}
+          {query.data.me.name}님, {getGreeting()}
         </h1>
       {/if}
     </div>
 
-    {#if $query.me.sites[0].firstEntity}
-      {#if $query.me.recentlyViewedEntities.length > 0}
+    {#if query.data.me.sites[0].firstEntity}
+      {#if query.data.me.recentlyViewedEntities.length > 0}
         <div class={flex({ flexDirection: 'column', gap: '16px', width: '800px' })}>
           <h2 class={css({ fontSize: '18px', fontWeight: 'semibold', color: 'text.default' })}>최근 본 항목</h2>
           <div class={flex({ flexDirection: 'column', gap: '8px' })}>
-            {#each $query.me.recentlyViewedEntities.slice(0, 5) as entity (entity.id)}
+            {#each query.data.me.recentlyViewedEntities.slice(0, 5) as entity (entity.id)}
               <a
                 class={css({
                   padding: '12px',
@@ -219,12 +182,14 @@
         <Button
           onclick={async () => {
             const resp = await createDocument({
-              siteId: $query.me.sites[0].id,
+              input: {
+                siteId: query.data.me.sites[0].id,
+              },
             });
 
             mixpanel.track('create_document', { via: 'empty_home' });
 
-            await goto(`/${resp.entity.slug}`);
+            await goto(`/${resp.createDocument.entity.slug}`);
           }}
         >
           새 문서 만들기
@@ -234,7 +199,7 @@
 
     <div class={flex({ flexDirection: 'column', gap: '16px', width: 'full' })}>
       <h2 class={css({ fontSize: '18px', fontWeight: 'semibold', color: 'text.default' })}>최근 활동</h2>
-      <ActivityGrid $user={$query.me} />
+      <ActivityGrid user$key={query.data.me} />
     </div>
   </div>
 </div>

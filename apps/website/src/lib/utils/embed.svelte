@@ -1,7 +1,9 @@
 <script lang="ts" module>
-  import { graphql } from '$graphql';
+  import { mearieClient } from '$lib/graphql';
+  import { graphql } from '$mearie';
+  import type { VariablesOf } from '@mearie/svelte';
 
-  export const unfurlEmbed = graphql(`
+  const unfurlEmbedMutation = graphql(`
     mutation EmbedNodeView_UnfurlEmbed_Mutation($input: UnfurlEmbedInput!) {
       unfurlEmbed(input: $input) {
         id
@@ -13,4 +15,6 @@
       }
     }
   `);
+
+  export const unfurlEmbed = (variables: VariablesOf<typeof unfurlEmbedMutation>) => mearieClient.mutation(unfurlEmbedMutation, variables);
 </script>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createFragment, createMutation } from '@mearie/svelte';
   import { css, cx } from '@typie/styled-system/css';
   import { center } from '@typie/styled-system/patterns';
   import { Icon, TextInput } from '@typie/ui/components';
@@ -10,21 +11,23 @@
   import { siteSchema } from '@/validation';
   import UploadIcon from '~icons/lucide/upload';
   import { env } from '$env/dynamic/public';
-  import { fragment, graphql } from '$graphql';
   import { LoadableImg, SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
   import { uploadBlobAsImage } from '$lib/utils';
+  import { graphql } from '$mearie';
   import PlanUpgradeModal from '../PlanUpgradeModal.svelte';
-  import type { DashboardLayout_SiteSettingsModal_GeneralTab_site, DashboardLayout_SiteSettingsModal_GeneralTab_user } from '$graphql';
+  import type {
+    DashboardLayout_SiteSettingsModal_GeneralTab_site$key,
+    DashboardLayout_SiteSettingsModal_GeneralTab_user$key,
+  } from '$mearie';
 
   type Props = {
-    $site: DashboardLayout_SiteSettingsModal_GeneralTab_site;
-    $user: DashboardLayout_SiteSettingsModal_GeneralTab_user;
+    site$key: DashboardLayout_SiteSettingsModal_GeneralTab_site$key;
+    user$key: DashboardLayout_SiteSettingsModal_GeneralTab_user$key;
   };
 
-  let { $site: _site, $user: _user }: Props = $props();
+  let { site$key, user$key }: Props = $props();
 
-  const site = fragment(
-    _site,
+  const site = createFragment(
     graphql(`
       fragment DashboardLayout_SiteSettingsModal_GeneralTab_site on Site {
         id
@@ -37,10 +40,10 @@
         }
       }
     `),
+    () => site$key,
   );
 
-  const user = fragment(
-    _user,
+  const user = createFragment(
     graphql(`
       fragment DashboardLayout_SiteSettingsModal_GeneralTab_user on User {
         id
@@ -51,30 +54,35 @@
         }
       }
     `),
+    () => user$key,
   );
 
-  const updateSite = graphql(`
-    mutation DashboardLayout_SiteSettingsModal_GeneralTab_UpdateSite_Mutation($input: UpdateSiteInput!) {
-      updateSite(input: $input) {
-        id
-        name
-
-        logo {
+  const [updateSite] = createMutation(
+    graphql(`
+      mutation DashboardLayout_SiteSettingsModal_GeneralTab_UpdateSite_Mutation($input: UpdateSiteInput!) {
+        updateSite(input: $input) {
           id
-          ...Img_image
+          name
+
+          logo {
+            id
+            ...Img_image
+          }
         }
       }
-    }
-  `);
+    `),
+  );
 
-  const updateSiteSlug = graphql(`
-    mutation DashboardLayout_SiteSettingsModal_GeneralTab_UpdateSiteSlug_Mutation($input: UpdateSiteSlugInput!) {
-      updateSiteSlug(input: $input) {
-        id
-        slug
+  const [updateSiteSlug] = createMutation(
+    graphql(`
+      mutation DashboardLayout_SiteSettingsModal_GeneralTab_UpdateSiteSlug_Mutation($input: UpdateSiteSlugInput!) {
+        updateSiteSlug(input: $input) {
+          id
+          slug
+        }
       }
-    }
-  `);
+    `),
+  );
 
   const form = createForm({
     schema: z.object({
@@ -82,13 +90,13 @@
       logoId: z.string(),
     }),
     onSubmit: async (data) => {
-      await updateSite({ siteId: $site.id, name: data.name, logoId: data.logoId });
+      await updateSite({ input: { siteId: site.data.id, name: data.name, logoId: data.logoId } });
       mixpanel.track('update_site');
       Toast.success('스페이스 설정이 업데이트됐어요.');
     },
     defaultValues: {
-      name: $site.name,
-      logoId: $site.logo.id,
+      name: site.data.name,
+      logoId: site.data.logo.id,
     },
   });
 
@@ -97,7 +105,7 @@
       slug: siteSchema.slug,
     }),
     onSubmit: async (data) => {
-      await updateSiteSlug({ siteId: $site.id, slug: data.slug });
+      await updateSiteSlug({ input: { siteId: site.data.id, slug: data.slug } });
       mixpanel.track('update_site_slug');
       Toast.success('스페이스 주소가 변경됐어요.');
     },
@@ -107,7 +115,7 @@
       }
     },
     defaultValues: {
-      slug: $site.slug,
+      slug: site.data.slug,
     },
   });
 
@@ -132,7 +140,7 @@
         {/snippet}
         {#snippet value()}
           <label class={cx('group', center({ position: 'relative', size: '32px', cursor: 'pointer' }))}>
-            <LoadableImg id={form.fields.logoId} style={css.raw({ size: '32px', borderRadius: '4px' })} alt={$site.name} size={64} />
+            <LoadableImg id={form.fields.logoId} style={css.raw({ size: '32px', borderRadius: '4px' })} alt={site.data.name} size={64} />
             <div
               class={css({
                 display: 'none',
@@ -205,9 +213,9 @@
           <div class={css({ position: 'relative' })}>
             <TextInput
               style={css.raw({ width: '[280px]', height: '32px', fontSize: '13px' })}
-              disabled={!$user.subscription}
+              disabled={!user.data.subscription}
               onblur={() => {
-                if ($user.subscription && slugForm.state.isDirty) {
+                if (user.data.subscription && slugForm.state.isDirty) {
                   slugForm.handleSubmit();
                 }
               }}
@@ -230,7 +238,7 @@
                 </span>
               {/snippet}
             </TextInput>
-            {#if !$user.subscription}
+            {#if !user.data.subscription}
               <button
                 class={css({
                   position: 'absolute',
@@ -259,4 +267,6 @@
   </SettingsCard>
 </div>
 
-<PlanUpgradeModal {$user} bind:open={planUpgradeModalOpen}>스페이스 주소 기능은 FULL ACCESS 플랜에서 사용할 수 있어요.</PlanUpgradeModal>
+<PlanUpgradeModal user$key={user.data} bind:open={planUpgradeModalOpen}>
+  스페이스 주소 기능은 FULL ACCESS 플랜에서 사용할 수 있어요.
+</PlanUpgradeModal>

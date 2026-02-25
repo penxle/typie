@@ -7,28 +7,12 @@
   import SettingsIcon from '~icons/lucide/settings';
   import UsersIcon from '~icons/lucide/users';
   import { page } from '$app/state';
-  import { graphql } from '$graphql';
   import { AdminIcon, AdminImpersonateBanner } from '$lib/components/admin';
+  import { hydrateQuery } from '$lib/graphql';
 
-  let { children } = $props();
+  let { data, children } = $props();
 
-  const query = graphql(`
-    query AdminLayout_Query {
-      me @required {
-        id
-        name
-        email
-        role
-
-        avatar {
-          id
-          url
-        }
-      }
-
-      ...AdminImpersonateBanner_query
-    }
-  `);
+  const query = $derived(hydrateQuery(() => data.query));
 
   const navItems = [
     { href: '/admin', label: '홈', icon: HomeIcon },
@@ -49,7 +33,7 @@
 </script>
 
 <div class={flex({ flexDirection: 'column', height: '[100dvh]', backgroundColor: 'gray.900', fontFamily: 'mono' })}>
-  <AdminImpersonateBanner {$query} />
+  <AdminImpersonateBanner query$key={query.data} />
 
   <div class={flex({ flexGrow: '1', overflow: 'hidden' })}>
     <aside
@@ -130,16 +114,16 @@
               flexShrink: '0',
             })}
           >
-            {#if $query.me.avatar}
-              <img alt={$query.me.name} src={$query.me.avatar.url} />
+            {#if query.data.me.avatar}
+              <img alt={query.data.me.name} src={query.data.me.avatar.url} />
             {/if}
           </div>
           <div class={css({ flex: '1', minWidth: '0' })}>
             <div class={css({ fontSize: '11px', color: 'amber.500', truncate: true })}>
-              {$query.me.name.toUpperCase()}
+              {query.data.me.name.toUpperCase()}
             </div>
             <div class={css({ fontSize: '10px', color: 'amber.400', truncate: true })}>
-              {$query.me.email}
+              {query.data.me.email}
             </div>
           </div>
         </div>

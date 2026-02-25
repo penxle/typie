@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createFragment, createMutation } from '@mearie/svelte';
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { tooltip } from '@typie/ui/actions';
@@ -25,24 +26,23 @@
   import Trash2Icon from '~icons/lucide/trash-2';
   import { goto, pushState } from '$app/navigation';
   import { page } from '$app/state';
-  import { fragment, graphql } from '$graphql';
   import { Img } from '$lib/components';
+  import { graphql } from '$mearie';
   import EntityTree from './@tree/EntityTree.svelte';
   import PlanUsageWidget from './PlanUsageWidget.svelte';
   import Profile from './Profile.svelte';
   import ThemeSwitch from './ThemeSwitch.svelte';
   import TrialWidget from './TrialWidget.svelte';
-  import type { DashboardLayout_Sidebar_site, DashboardLayout_Sidebar_user } from '$graphql';
+  import type { DashboardLayout_Sidebar_site$key, DashboardLayout_Sidebar_user$key } from '$mearie';
 
   type Props = {
-    $site: DashboardLayout_Sidebar_site;
-    $user: DashboardLayout_Sidebar_user;
+    site$key: DashboardLayout_Sidebar_site$key;
+    user$key: DashboardLayout_Sidebar_user$key;
   };
 
-  let { $site: _site, $user: _user }: Props = $props();
+  let { site$key, user$key }: Props = $props();
 
-  const user = fragment(
-    _user,
+  const user = createFragment(
     graphql(`
       fragment DashboardLayout_Sidebar_user on User {
         id
@@ -58,12 +58,13 @@
         ...DashboardLayout_TrialWidget_user
       }
     `),
+    () => user$key,
   );
 
   const currentStreak = $derived.by(() => {
     const today = dayjs.kst().startOf('day');
     const activeDates = new Set(
-      $user.characterCountChanges.filter((c) => c.additions > 0).map((c) => dayjs(c.date as string).format('YYYY-MM-DD')),
+      user.data.characterCountChanges.filter((c) => c.additions > 0).map((c) => dayjs(c.date as string).format('YYYY-MM-DD')),
     );
 
     let streak = 0;
@@ -81,8 +82,7 @@
     return streak;
   });
 
-  const site = fragment(
-    _site,
+  const site = createFragment(
     graphql(`
       fragment DashboardLayout_Sidebar_site on Site {
         id
@@ -98,28 +98,33 @@
         ...DashboardLayout_TrashModal_site
       }
     `),
+    () => site$key,
   );
 
-  const createDocument = graphql(`
-    mutation DashboardLayout_Sidebar_CreateDocument_Mutation($input: CreateDocumentInput!) {
-      createDocument(input: $input) {
-        id
-
-        entity {
+  const [createDocument] = createMutation(
+    graphql(`
+      mutation DashboardLayout_Sidebar_CreateDocument_Mutation($input: CreateDocumentInput!) {
+        createDocument(input: $input) {
           id
-          slug
+
+          entity {
+            id
+            slug
+          }
         }
       }
-    }
-  `);
+    `),
+  );
 
-  const createFolder = graphql(`
-    mutation DashboardLayout_Sidebar_CreateFolder_Mutation($input: CreateFolderInput!) {
-      createFolder(input: $input) {
-        id
+  const [createFolder] = createMutation(
+    graphql(`
+      mutation DashboardLayout_Sidebar_CreateFolder_Mutation($input: CreateFolderInput!) {
+        createFolder(input: $input) {
+          id
+        }
       }
-    }
-  `);
+    `),
+  );
 
   const app = getAppContext();
 
@@ -301,7 +306,7 @@
       })}
     >
       <div class={css({ minWidth: '0', flexShrink: '1', overflow: 'hidden' })}>
-        <Profile {$user} />
+        <Profile user$key={user.data} />
       </div>
 
       <div class={flex({ alignItems: 'center', gap: '8px', flexShrink: '0' })}>
@@ -342,13 +347,15 @@
           })}
           onclick={async () => {
             const resp = await createFolder({
-              siteId: $site.id,
-              name: '새 폴더',
+              input: {
+                siteId: site.data.id,
+                name: '새 폴더',
+              },
             });
 
             mixpanel.track('create_folder', { via: 'tree' });
 
-            app.state.newFolderId = resp.id;
+            app.state.newFolderId = resp.createFolder.id;
           }}
           type="button"
           use:tooltip={{ message: '새 폴더 생성' }}
@@ -366,11 +373,13 @@
           })}
           onclick={async () => {
             const resp = await createDocument({
-              siteId: $site.id,
+              input: {
+                siteId: site.data.id,
+              },
             });
 
             mixpanel.track('create_document', { via: 'tree' });
-            await goto(`/${resp.entity.slug}`);
+            await goto(`/${resp.createDocument.entity.slug}`);
           }}
           type="button"
           use:tooltip={{ message: '새 문서 생성' }}
@@ -492,8 +501,8 @@
       )}
     >
       <div class={flex({ alignItems: 'center', gap: '6px' })}>
-        <Img style={css.raw({ size: '16px', borderRadius: '4px' })} $image={$site.logo} alt={$site.name} size={32} />
-        <span class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>{$site.name}</span>
+        <Img style={css.raw({ size: '16px', borderRadius: '4px' })} alt={site.data.name} image$key={site.data.logo} size={32} />
+        <span class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>{site.data.name}</span>
       </div>
       <div class={flex({ alignItems: 'center', gap: '2px', opacity: '0', _groupHover: { opacity: '100' }, transition: 'common' })}>
         <a
@@ -504,7 +513,7 @@
             transition: 'common',
             _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
           })}
-          href={$site.url}
+          href={site.data.url}
           rel="noopener noreferrer"
           target="_blank"
           use:tooltip={{ message: '스페이스 열기' }}
@@ -569,12 +578,12 @@
           overflowY: 'auto',
         })}
       >
-        <EntityTree {$site} />
+        <EntityTree site$key={site.data} />
       </div>
     </div>
 
-    <PlanUsageWidget {$user} />
-    <TrialWidget {$user} />
+    <PlanUsageWidget user$key={user.data} />
+    <TrialWidget user$key={user.data} />
 
     <div
       class={flex({
@@ -624,7 +633,7 @@
           <Icon icon={NewspaperIcon} size={16} />
         </a>
 
-        {#if $user.role === 'ADMIN'}
+        {#if user.data.role === 'ADMIN'}
           <a
             class={center({
               borderRadius: '8px',

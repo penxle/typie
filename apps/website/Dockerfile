@@ -23,7 +23,6 @@ RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash \
 FROM builder AS build
 
 COPY out/json/ .
-COPY out/full/packages/sark/bin/sark.js ./packages/sark/bin/sark.js
 RUN bun install --no-save
 
 COPY out/full/ .

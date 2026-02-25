@@ -1,31 +1,31 @@
 <script lang="ts">
+  import { createFragment } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { center } from '@typie/styled-system/patterns';
   import { tooltip } from '@typie/ui/actions';
   import { Icon } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import mixpanel from 'mixpanel-browser';
-  import { fragment, graphql } from '$graphql';
+  import { graphql } from '$mearie';
   import PlanUpgradeModal from '../../PlanUpgradeModal.svelte';
   import { getViewContext } from '../@split-view/context.svelte';
   import type { TooltipParameter } from '@typie/ui/actions';
   import type { AppPreference } from '@typie/ui/context';
   import type { Component } from 'svelte';
-  import type { Editor_TopToolbar_PanelTabButton_user } from '$graphql';
+  import type { Editor_TopToolbar_PanelTabButton_user$key } from '$mearie';
 
   type Props = {
     tab: AppPreference['panelTabByViewId'][string];
     label: string;
     icon: Component;
     keys?: TooltipParameter['keys'];
-    $user: Editor_TopToolbar_PanelTabButton_user;
+    user$key: Editor_TopToolbar_PanelTabButton_user$key;
     needSubscription?: boolean;
   };
 
-  let { tab, label, icon, keys, $user: _user, needSubscription }: Props = $props();
+  let { tab, label, icon, keys, user$key, needSubscription }: Props = $props();
 
-  const user = fragment(
-    _user,
+  const user = createFragment(
     graphql(`
       fragment Editor_TopToolbar_PanelTabButton_user on User {
         id
@@ -36,9 +36,10 @@
         }
       }
     `),
+    () => user$key,
   );
 
-  const needPlanUpgrade = $derived(needSubscription && !$user.subscription);
+  const needPlanUpgrade = $derived(needSubscription && !user.data.subscription);
 
   let planUpgradeModalOpen = $state(false);
 
@@ -118,6 +119,8 @@
   {/if}
 </button>
 
-{#if $user}
-  <PlanUpgradeModal {$user} bind:open={planUpgradeModalOpen}>{label} 기능은 FULL ACCESS 플랜에서 사용할 수 있어요.</PlanUpgradeModal>
+{#if user.data}
+  <PlanUpgradeModal user$key={user.data} bind:open={planUpgradeModalOpen}>
+    {label} 기능은 FULL ACCESS 플랜에서 사용할 수 있어요.
+  </PlanUpgradeModal>
 {/if}

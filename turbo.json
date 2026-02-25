@@ -4,7 +4,7 @@
   "tasks": {
     "codegen": {
       "dependsOn": ["^build"],
-      "outputs": [".svelte-kit/**", ".sark/**", "styled-system/**"]
+      "outputs": [".svelte-kit/**", ".mearie/**", "styled-system/**"]
     },
     "build": {
       "dependsOn": ["codegen", "^build"],

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createFragment } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Icon } from '@typie/ui/components';
@@ -8,17 +9,16 @@
   import GoalIcon from '~icons/lucide/goal';
   import TrendingDownIcon from '~icons/lucide/trending-down';
   import TrendingUpIcon from '~icons/lucide/trending-up';
-  import { fragment, graphql } from '$graphql';
-  import type { Editor_Panel_PanelInfo_CharacterCountChange_post } from '$graphql';
+  import { graphql } from '$mearie';
+  import type { Editor_Panel_PanelInfo_CharacterCountChange_post$key } from '$mearie';
 
   type Props = {
-    $post: Editor_Panel_PanelInfo_CharacterCountChange_post;
+    post$key: Editor_Panel_PanelInfo_CharacterCountChange_post$key;
   };
 
-  let { $post: _post }: Props = $props();
+  let { post$key }: Props = $props();
 
-  const post = fragment(
-    _post,
+  const post = createFragment(
     graphql(`
       fragment Editor_Panel_PanelInfo_CharacterCountChange_post on Post {
         id
@@ -29,10 +29,11 @@
         }
       }
     `),
+    () => post$key,
   );
 
   let open = $state(false);
-  const difference = $derived($post.characterCountChange.additions - $post.characterCountChange.deletions);
+  const difference = $derived(post.data.characterCountChange.additions - post.data.characterCountChange.deletions);
 </script>
 
 <details class={flex({ flexDirection: 'column', marginBottom: open ? '12px' : '0' })} bind:open>
@@ -72,12 +73,12 @@
 
       <dl class={flex({ justifyContent: 'space-between', gap: '8px', fontSize: '13px' })}>
         <dt class={css({ color: 'text.faint' })}>입력한 글자</dt>
-        <dd class={css({ fontWeight: 'medium', color: 'text.subtle' })}>{comma($post.characterCountChange.additions)}자</dd>
+        <dd class={css({ fontWeight: 'medium', color: 'text.subtle' })}>{comma(post.data.characterCountChange.additions)}자</dd>
       </dl>
 
       <dl class={flex({ justifyContent: 'space-between', gap: '8px', fontSize: '13px' })}>
         <dt class={css({ color: 'text.faint' })}>지운 글자</dt>
-        <dd class={css({ fontWeight: 'medium', color: 'text.subtle' })}>{comma($post.characterCountChange.deletions)}자</dd>
+        <dd class={css({ fontWeight: 'medium', color: 'text.subtle' })}>{comma(post.data.characterCountChange.deletions)}자</dd>
       </dl>
     </div>
   {/if}
