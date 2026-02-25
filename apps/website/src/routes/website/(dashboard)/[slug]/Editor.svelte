@@ -135,7 +135,6 @@
               }
             }
 
-            ...Editor_Limit_site
             ...Editor_Placeholder_site
             ...Editor_TopToolbar_site
           }
@@ -148,6 +147,7 @@
             }
 
             ...Editor_BottomToolbar_user
+            ...Editor_Limit_user
           }
 
           node {
@@ -1403,7 +1403,7 @@
   </div>
 {/if}
 
-<Limit {$query} $site={entity.site} {editor} />
+<Limit {$query} $user={entity.user} {editor} />
 <PasteModal
   onconfirm={(mode) => {
     onPasteConfirm(mode);

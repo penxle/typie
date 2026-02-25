@@ -9,6 +9,7 @@ export const pubsub = createPubSub<{
   'document:sync': [documentId: string, { target: string; type: DocumentSyncType; data: string }];
   'site:update': [siteId: string, { scope: 'site' } | { scope: 'entity'; entityId: string }];
   'site:usage:update': [siteId: string, null];
+  'user:usage:update': [userId: string, null];
 }>({
   eventTarget: createRedisEventTarget({
     publishClient: new Redis({ name: 'primary', sentinels: [{ host: env.REDIS_URL }] }),

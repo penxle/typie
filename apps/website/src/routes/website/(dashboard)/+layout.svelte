@@ -175,16 +175,14 @@
     }
   `);
 
-  const siteUsageUpdateStream = graphql(`
-    subscription DashboardLayout_SiteUsageUpdateStream($siteId: ID!) {
-      siteUsageUpdateStream(siteId: $siteId) {
-        ... on Site {
-          id
+  const userUsageUpdateStream = graphql(`
+    subscription DashboardLayout_UserUsageUpdateStream($userId: ID!) {
+      userUsageUpdateStream(userId: $userId) {
+        id
 
-          usage {
-            totalCharacterCount
-            totalBlobSize
-          }
+        usage {
+          totalCharacterCount
+          totalBlobSize
         }
       }
     }
@@ -213,7 +211,7 @@
   $effect(() => {
     return untrack(() => {
       const unsubscribe = siteUpdateStream.subscribe({ siteId: $query.me.sites[0].id });
-      const unsubscribe2 = siteUsageUpdateStream.subscribe({ siteId: $query.me.sites[0].id });
+      const unsubscribe2 = userUsageUpdateStream.subscribe({ userId: $query.me.id });
 
       return () => {
         unsubscribe();

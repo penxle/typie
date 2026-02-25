@@ -7,14 +7,13 @@
   import { defaultPlanRules } from '@/const';
   import { fragment, graphql } from '$graphql';
   import PlanUpgradeModal from './PlanUpgradeModal.svelte';
-  import type { DashboardLayout_PlanUsageWidget_site, DashboardLayout_PlanUsageWidget_user } from '$graphql';
+  import type { DashboardLayout_PlanUsageWidget_user } from '$graphql';
 
   type Props = {
-    $site: DashboardLayout_PlanUsageWidget_site;
     $user: DashboardLayout_PlanUsageWidget_user;
   };
 
-  let { $site: _site, $user: _user }: Props = $props();
+  let { $user: _user }: Props = $props();
 
   let planUpgradeModalOpen = $state(false);
 
@@ -24,6 +23,11 @@
       fragment DashboardLayout_PlanUsageWidget_user on User {
         id
         ...DashboardLayout_PlanUpgradeModal_user
+
+        usage {
+          totalCharacterCount
+          totalBlobSize
+        }
 
         subscription {
           id
@@ -41,20 +45,6 @@
     `),
   );
 
-  const site = fragment(
-    _site,
-    graphql(`
-      fragment DashboardLayout_PlanUsageWidget_site on Site {
-        id
-
-        usage {
-          totalCharacterCount
-          totalBlobSize
-        }
-      }
-    `),
-  );
-
   const app = getAppContext();
 
   const planRule = $derived($user.subscription?.plan?.rule ?? defaultPlanRules);
@@ -64,7 +54,7 @@
       return -1;
     }
 
-    return Math.min(1, $site.usage.totalCharacterCount / planRule.maxTotalCharacterCount);
+    return Math.min(1, $user.usage.totalCharacterCount / planRule.maxTotalCharacterCount);
   });
 
   const totalBlobSizeProgress = $derived.by(() => {
@@ -72,7 +62,7 @@
       return -1;
     }
 
-    return Math.min(1, Number($site.usage.totalBlobSize) / planRule.maxTotalBlobSize);
+    return Math.min(1, Number($user.usage.totalBlobSize) / planRule.maxTotalBlobSize);
   });
 
   $effect(() => {
@@ -110,7 +100,7 @@
         <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>글자 수</div>
 
         <div class={css({ fontSize: '12px', color: 'text.faint' })}>
-          {comma($site.usage.totalCharacterCount)}자 / {comma(planRule.maxTotalCharacterCount)}자
+          {comma($user.usage.totalCharacterCount)}자 / {comma(planRule.maxTotalCharacterCount)}자
         </div>
       </div>
 
@@ -139,7 +129,7 @@
         <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>파일 업로드</div>
 
         <div class={css({ fontSize: '12px', color: 'text.faint' })}>
-          {formatBytes(Number($site.usage.totalBlobSize))} / {formatBytes(planRule.maxTotalBlobSize)}
+          {formatBytes(Number($user.usage.totalBlobSize))} / {formatBytes(planRule.maxTotalBlobSize)}
         </div>
       </div>
 

@@ -95,7 +95,6 @@
         }
 
         ...DashboardLayout_EntityTree_site
-        ...DashboardLayout_PlanUsageWidget_site
         ...DashboardLayout_TrashModal_site
       }
     `),
@@ -574,7 +573,7 @@
       </div>
     </div>
 
-    <PlanUsageWidget {$site} {$user} />
+    <PlanUsageWidget {$user} />
     <TrialWidget {$user} />
 
     <div

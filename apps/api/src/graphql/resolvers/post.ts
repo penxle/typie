@@ -730,7 +730,7 @@ builder.mutationFields((t) => ({
       });
 
       pubsub.publish('site:update', input.siteId, { scope: 'site' });
-      pubsub.publish('site:usage:update', input.siteId, null);
+      pubsub.publish('user:usage:update', ctx.session.userId, null);
 
       await enqueueJob('post:index', post.id);
 
@@ -938,7 +938,7 @@ builder.mutationFields((t) => ({
       });
 
       pubsub.publish('site:update', entity.siteId, { scope: 'site' });
-      pubsub.publish('site:usage:update', entity.siteId, null);
+      pubsub.publish('user:usage:update', ctx.session.userId, null);
 
       await enqueueJob('post:index', newPost.id);
 
@@ -979,7 +979,7 @@ builder.mutationFields((t) => ({
 
       pubsub.publish('site:update', entity.siteId, { scope: 'site' });
       pubsub.publish('site:update', entity.siteId, { scope: 'entity', entityId: entity.id });
-      pubsub.publish('site:usage:update', entity.siteId, null);
+      pubsub.publish('user:usage:update', ctx.session.userId, null);
 
       await enqueueJob('post:index', input.postId);
 

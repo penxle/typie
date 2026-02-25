@@ -74,12 +74,12 @@
           ...DashboardLayout_UserMenu_user
           ...Editor_BottomToolbar_FontFamily_user
           ...Editor_BottomToolbar_FontWeight_user
+          ...Editor_Limit_user
 
           sites {
             id
 
             ...Editor_TopToolbar_site
-            ...Editor_Limit_site
           }
         }
       }
