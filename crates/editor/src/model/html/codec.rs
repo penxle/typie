@@ -334,14 +334,18 @@ pub struct ParsedAnnotations {
 }
 
 pub fn parse_inline_styles(elem: &ElementRef, rules: &[StyleParseRule]) -> Vec<Style> {
-    let tag = elem.value().name();
+    let value = elem.value();
+    let tag = value.name();
+    let has_style = value.attr("style").is_some();
     let mut styles = Vec::new();
 
     for rule in rules {
         let matches = if let Some(rule_tag) = rule.tag {
             rule_tag == tag
-        } else if rule.style_key.is_some() || rule.data_attr.is_some() {
-            true
+        } else if rule.style_key.is_some() {
+            has_style
+        } else if let Some(data_attr) = rule.data_attr {
+            value.attr(data_attr).is_some()
         } else {
             false
         };
@@ -360,15 +364,16 @@ pub fn parse_inline_annotations(
     elem: &ElementRef,
     rules: &[AnnotationParseRule],
 ) -> ParsedAnnotations {
-    let tag = elem.value().name();
+    let value = elem.value();
+    let tag = value.name();
     let mut annotations = Vec::new();
     let mut custom_content = None;
 
     for rule in rules {
         let matches = if let Some(rule_tag) = rule.tag {
             rule_tag == tag
-        } else if rule.data_attr.is_some() {
-            true
+        } else if let Some(data_attr) = rule.data_attr {
+            value.attr(data_attr).is_some()
         } else {
             false
         };

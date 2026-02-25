@@ -13,6 +13,13 @@ fn test_theme() -> Theme {
     let tokens: &[(&str, u32)] = &[
         ("selection", 0x33_80_ff_ff),
         ("text.black", 0x18_18_1b_ff),
+        ("text.white", 0xff_ff_ff_ff),
+        ("text.rose", 0xf4_3f_5e_ff),
+        ("text.lime", 0x84_cc_16_ff),
+        ("text.blue", 0x3b_82_f6_ff),
+        ("text.purple", 0xa8_55_f7_ff),
+        ("text.gray", 0x8c_8c_8d_ff),
+        ("text.lightgray", 0xc5_c5_c6_ff),
         ("ui.text.default", 0x18_18_1b_ff),
         ("ui.text.muted", 0x8c_8c_8d_ff),
         ("ui.text.subtle", 0xc5_c5_c6_ff),
@@ -179,6 +186,60 @@ fn bench_editing(c: &mut Criterion) {
             },
             |runtime| {
                 runtime.update(Message::PasteText {
+                    text: paste_text.clone(),
+                });
+                runtime.tick();
+                runtime.render_page(0);
+                runtime.flush();
+            },
+            BATCH,
+        );
+    });
+
+    group.bench_function("paste_large_html_code", |b| {
+        let paste_html = include_str!("fixtures/paste_html_code_sample.html").to_string();
+        let paste_text = "paste html benchmark".to_string();
+
+        b.iter_batched_ref(
+            || {
+                init_test_env();
+
+                let doc = Rc::new(Doc::new());
+                let initial_state = State::new(
+                    doc,
+                    Selection::collapsed(Position::new(NodeId::ROOT, 0, Affinity::default())),
+                );
+
+                let p_id = NodeId::new();
+                let state = transact!(initial_state, |tr| {
+                    tr.doc()
+                        .node(NodeId::ROOT)
+                        .unwrap()
+                        .as_mut()
+                        .insert_child_with_id(0, p_id, Node::Paragraph(Default::default()))
+                        .unwrap();
+                });
+
+                let state = transact!(state, |tr| {
+                    tr.set_selection(Selection::collapsed(Position::new(
+                        p_id,
+                        0,
+                        Affinity::default(),
+                    )));
+                });
+
+                let mut runtime = Runtime::new(800.0, 1.0, state);
+                runtime.update(Message::Initialize {
+                    theme: test_theme(),
+                });
+                runtime.tick();
+                runtime.flush();
+                runtime.layout();
+                runtime
+            },
+            |runtime| {
+                runtime.update(Message::PasteHtml {
+                    html: paste_html.clone(),
                     text: paste_text.clone(),
                 });
                 runtime.tick();

@@ -37,7 +37,8 @@
     ".claude/**",
     "AGENTS.md",
     "CLAUDE.md",
-    "crates/editor/assets/**"
+    "crates/editor/assets/**",
+    "crates/editor/benches/fixtures/**"
   ],
   "dictionaries": ["cspell.txt"],
   "dictionaryDefinitions": [

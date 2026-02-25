@@ -1,13 +1,36 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 pub use crate::utils::{LengthUnit, convert_length};
 
-pub fn parse_styles(style: &str) -> HashMap<String, String> {
-    style
-        .split(';')
-        .filter_map(|p| p.split_once(':'))
-        .map(|(k, v)| (k.trim().to_lowercase(), v.trim().into()))
-        .collect()
+const STYLE_CACHE_LIMIT: usize = 512;
+
+thread_local! {
+    static STYLE_CACHE: RefCell<HashMap<String, Arc<HashMap<String, String>>>> = RefCell::new(HashMap::new());
+}
+
+pub fn parse_styles(style: &str) -> Arc<HashMap<String, String>> {
+    STYLE_CACHE.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        if let Some(parsed) = cache.get(style) {
+            return Arc::clone(parsed);
+        }
+
+        let parsed = Arc::new(
+            style
+                .split(';')
+                .filter_map(|p| p.split_once(':'))
+                .map(|(k, v)| (k.trim().to_lowercase(), v.trim().into()))
+                .collect(),
+        );
+
+        if cache.len() >= STYLE_CACHE_LIMIT {
+            cache.clear();
+        }
+        cache.insert(style.to_string(), Arc::clone(&parsed));
+        parsed
+    })
 }
 
 pub fn parse_font_size(s: &str) -> Option<f32> {

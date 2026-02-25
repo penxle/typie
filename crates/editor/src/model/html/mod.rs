@@ -17,6 +17,7 @@ use codec::{
 };
 use scraper::{ElementRef, Html as HtmlDoc, Node as ScraperNode, Selector};
 use std::cell::Cell;
+use std::sync::OnceLock;
 pub use utils::{LengthUnit, parse_as, parse_font_size, parse_styles};
 
 impl Fragment {
@@ -43,15 +44,21 @@ impl Fragment {
     }
 
     pub fn from_html(html: &str) -> Result<Self> {
-        let doc = HtmlDoc::parse_document(html);
+        let parse_as_document =
+            html.contains("<html") || html.contains("<body") || html.contains("<head");
+        let doc = if parse_as_document {
+            HtmlDoc::parse_document(html)
+        } else {
+            HtmlDoc::parse_fragment(html)
+        };
         let mut builder = Fragment::builder();
 
         let (open_start, open_end) = parse_meta(&doc);
 
-        let schema = Schema::default();
-        let node_rules = collect_node_parse_rules();
-        let style_rules = collect_style_parse_rules();
-        let annotation_rules = collect_annotation_parse_rules();
+        let schema = parse_schema();
+        let node_rules = node_parse_rules();
+        let style_rules = style_parse_rules();
+        let annotation_rules = annotation_parse_rules();
 
         let body = find_body(&doc).unwrap_or_else(|| doc.root_element());
         let pending_text_id = Cell::new(None);
@@ -62,10 +69,10 @@ impl Fragment {
             &mut builder,
             &[],
             &[],
-            &schema,
-            &node_rules,
-            &style_rules,
-            &annotation_rules,
+            schema,
+            node_rules,
+            style_rules,
+            annotation_rules,
             &pending_text_id,
         )?;
 
@@ -78,14 +85,44 @@ impl Fragment {
     }
 }
 
+fn parse_schema() -> &'static Schema {
+    static SCHEMA: OnceLock<Schema> = OnceLock::new();
+    SCHEMA.get_or_init(Schema::default)
+}
+
+fn node_parse_rules() -> &'static [NodeParseRule] {
+    static RULES: OnceLock<Vec<NodeParseRule>> = OnceLock::new();
+    RULES.get_or_init(collect_node_parse_rules).as_slice()
+}
+
+fn style_parse_rules() -> &'static [StyleParseRule] {
+    static RULES: OnceLock<Vec<StyleParseRule>> = OnceLock::new();
+    RULES.get_or_init(collect_style_parse_rules).as_slice()
+}
+
+fn annotation_parse_rules() -> &'static [AnnotationParseRule] {
+    static RULES: OnceLock<Vec<AnnotationParseRule>> = OnceLock::new();
+    RULES.get_or_init(collect_annotation_parse_rules).as_slice()
+}
+
+fn body_selector() -> &'static Selector {
+    static SELECTOR: OnceLock<Selector> = OnceLock::new();
+    SELECTOR.get_or_init(|| Selector::parse("body").expect("body selector should parse"))
+}
+
+fn typ_frag_meta_selector() -> &'static Selector {
+    static SELECTOR: OnceLock<Selector> = OnceLock::new();
+    SELECTOR.get_or_init(|| {
+        Selector::parse(r#"meta[name="typ-frag"]"#).expect("typ-frag meta selector should parse")
+    })
+}
+
 fn find_body<'a>(doc: &'a HtmlDoc) -> Option<ElementRef<'a>> {
-    let sel = Selector::parse("body").unwrap();
-    doc.select(&sel).next()
+    doc.select(body_selector()).next()
 }
 
 fn parse_meta(doc: &HtmlDoc) -> (usize, usize) {
-    let sel = Selector::parse(r#"meta[name="typ-frag"]"#).unwrap();
-    doc.select(&sel)
+    doc.select(typ_frag_meta_selector())
         .next()
         .map(|m| {
             let os = m
