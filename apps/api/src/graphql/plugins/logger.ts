@@ -1,4 +1,5 @@
 import { logger } from '@typie/lib';
+import { handleStreamOrSingleExecutionResult } from 'graphql-yoga';
 import type { Plugin } from 'graphql-yoga';
 import type { Context } from '@/context';
 
@@ -33,11 +34,20 @@ const truncateVariables = (variables: Record<string, unknown> | null | undefined
 
 export const useLogger = (): Plugin<Context> => ({
   onExecute: ({ args }) => {
-    log.info('Executing operation {*}', {
-      operationName: args.operationName,
-      variables: truncateVariables(args.variableValues),
-      ip: args.contextValue.ip,
-      userId: args.contextValue.session?.userId,
-    });
+    return {
+      onExecuteDone(payload) {
+        return handleStreamOrSingleExecutionResult(payload, ({ result }) => {
+          if (result.errors?.some((e) => e.extensions?.code === 'RATE_LIMITED')) {
+            return;
+          }
+          log.info('Executing operation {*}', {
+            operationName: args.operationName,
+            variables: truncateVariables(args.variableValues),
+            ip: args.contextValue.ip,
+            userId: args.contextValue.session?.userId,
+          });
+        });
+      },
+    };
   },
 });

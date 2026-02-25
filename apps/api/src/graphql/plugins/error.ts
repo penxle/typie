@@ -33,6 +33,8 @@ class UnexpectedError extends GraphQLError {
 const transformError = (error: unknown): GraphQLError => {
   if (error instanceof TypieError) {
     return error;
+  } else if (error instanceof GraphQLError && error.extensions?.code === 'RATE_LIMITED') {
+    return error;
   } else if (error instanceof GraphQLError && error.originalError) {
     return transformError(error.originalError);
   } else if (error instanceof Error) {
