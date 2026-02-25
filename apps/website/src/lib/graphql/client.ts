@@ -1,4 +1,4 @@
-import { cacheExchange, createClient, dedupExchange, httpExchange, subscriptionExchange } from '@mearie/svelte';
+import { cacheExchange, createClient, dedupExchange, httpExchange, setClient, subscriptionExchange } from '@mearie/svelte';
 import { createClient as createWsClient } from 'graphql-ws';
 import ky from 'ky';
 import { browser } from '$app/environment';
@@ -52,3 +52,11 @@ export const mearieClient = createClient({
 });
 
 export const cache = mearieClient.extension('cache');
+
+export function setupMearieContext() {
+  if (browser) {
+    setClient(mearieClient);
+  } else {
+    setClient(createClient({ schema, exchanges: [cacheExchange()], scalars }));
+  }
+}
