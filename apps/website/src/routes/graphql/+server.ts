@@ -24,6 +24,7 @@ export const POST: RequestHandler = async ({ request, cookies, getClientAddress 
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      Connection: 'close',
       'X-Client-IP': getClientAddress(),
       ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       ...(deviceId ? { 'X-Device-Id': deviceId } : {}),
