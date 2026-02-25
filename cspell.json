@@ -23,6 +23,7 @@
     "*.tf",
     "*.py",
     "*.sh",
+    "*.bak",
     "justfile",
     "**/vendor/**",
     "**/pkg/**",

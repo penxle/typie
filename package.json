@@ -4,12 +4,7 @@
   "private": true,
   "type": "module",
   "workspaces": [
-    "apps/api",
-    "apps/bmo",
-    "apps/caddy",
-    "apps/literoom",
-    "apps/mobile",
-    "apps/website",
+    "apps/*",
     "crates/*",
     "packages/*"
   ],
