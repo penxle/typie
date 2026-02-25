@@ -9,6 +9,7 @@ docs/*
 apps/api/drizzle/*
 apps/mobile/android/*
 apps/mobile/ios/*
+crates/editor/benches/fixtures/**
 
 **/build/**
 **/vendor/**

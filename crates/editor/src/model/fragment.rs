@@ -579,7 +579,7 @@ impl Fragment {
         }
     }
 
-    pub fn with_fresh_ids_for_doc(&self, doc: &Doc) -> Self {
+    pub fn with_fresh_ids_for_doc(self, doc: &Doc) -> Self {
         let mut id_map = FxHashMap::default();
         for old_id in self.collect_all_ids() {
             if doc.node(old_id).is_some() {
@@ -587,7 +587,7 @@ impl Fragment {
             }
         }
         if id_map.is_empty() {
-            return self.clone();
+            return self;
         }
         self.remap_ids(&id_map)
     }
@@ -2352,7 +2352,7 @@ mod tests {
 
         let original_ids: Vec<NodeId> = fragment.nodes.keys().copied().collect();
 
-        let result = fragment.with_fresh_ids_for_doc(&doc_state.doc);
+        let result = fragment.clone().with_fresh_ids_for_doc(&doc_state.doc);
 
         for old_id in &original_ids {
             if doc_state.doc.node(*old_id).is_some() {
