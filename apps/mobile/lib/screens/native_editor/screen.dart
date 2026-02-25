@@ -14,7 +14,6 @@ import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/graphql/widget.dart';
 import 'package:typie/hooks/service.dart';
-import 'package:typie/icons/lucide_lab.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/native/editor_native.dart';
 import 'package:typie/screens/editor/limit.dart';
@@ -155,8 +154,7 @@ class _Content extends HookWidget {
                 heading: Heading(
                   titleIcon: document?.type == GDocumentType.TEMPLATE
                       ? LucideLightIcons.layout_template
-                      : LucideLabIcons.text_square,
-                  titleIconColor: context.colors.accentBrand,
+                      : LucideLightIcons.file_text,
                   title: headingTitle,
                   backgroundColor: context.colors.surfaceDefault,
                   onTap: () => editorContext.controller?.clearFocus(),
