@@ -686,6 +686,18 @@ class EditorTextInputView: UIView, UITextInput, UITextViewDelegate {
     _cursor = Self.cursorSentinelOffset + start + length
   }
 
+  private func _normalizedSelectionRange(_ range: NSRange?, textLength: Int) -> NSRange {
+    guard let range else {
+      return NSRange(location: textLength, length: 0)
+    }
+
+    let start = _clampOffset(range.location, max: textLength)
+    let end = _clampOffset(range.location + range.length, max: textLength)
+    let normalizedStart = Swift.min(start, end)
+    let normalizedEnd = Swift.max(start, end)
+    return NSRange(location: normalizedStart, length: normalizedEnd - normalizedStart)
+  }
+
   func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {
     guard !_isSyncingInputTextViewState else { return true }
 
@@ -735,7 +747,30 @@ class EditorTextInputView: UIView, UITextInput, UITextViewDelegate {
 
   func textViewDidChangeSelection(_ textView: UITextView) {
     guard !_isSyncingInputTextViewState else { return }
-    _syncSelectionStateFromTextView(textView, textLength: (textView.text ?? "").count)
+
+    let currentText = textView.text ?? ""
+    let textLength = currentText.count
+    let previousRange = _normalizedSelectionRange(_pendingSelectionRange, textLength: textLength)
+
+    _syncSelectionStateFromTextView(textView, textLength: textLength)
+
+    guard textView.markedTextRange == nil, currentText == _shadowText else { return }
+
+    let nextRange = _normalizedSelectionRange(_pendingSelectionRange, textLength: textLength)
+    guard previousRange.length == 0, nextRange.length == 0 else { return }
+
+    let delta = nextRange.location - previousRange.location
+    guard delta != 0 else { return }
+
+    let direction = delta > 0 ? "right" : "left"
+    for _ in 0..<abs(delta) {
+      onNavigate?(direction, false)
+    }
+
+    let shadowEnd = _shadowText.count
+    _pendingSelectionRange = NSRange(location: shadowEnd, length: 0)
+    _cursor = Self.cursorSentinelOffset + shadowEnd
+    _syncInputTextViewState(selectedOffset: shadowEnd)
   }
 
   func textViewDidEndEditing(_ textView: UITextView) {
