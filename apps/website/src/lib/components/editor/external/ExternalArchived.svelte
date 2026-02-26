@@ -20,6 +20,7 @@
   const archivedData = $derived(el.data as ArchivedData);
   const isEditable = $derived(!editor.isReadOnly());
   const asset = $derived(archivedData.id ? editor.archivedAssets.get(archivedData.id) : undefined);
+  const hasPreviewButton = $derived(isEditable && !!asset?.content);
 
   let modalOpen = $state(false);
 </script>
@@ -34,6 +35,7 @@
         backgroundColor: 'surface.muted',
         width: 'full',
         height: '48px',
+        minWidth: '0',
       })}
     >
       <div
@@ -44,22 +46,57 @@
           paddingY: '12px',
           fontSize: '14px',
           color: 'text.disabled',
+          flex: '[1 999 0px]',
+          minWidth: '0',
         })}
       >
-        <Icon icon={ArchiveIcon} size={20} />
-        보관된 블록
+        <Icon class={css({ flexShrink: '0' })} icon={ArchiveIcon} size={20} />
+        <span
+          class={css({
+            flex: '1',
+            minWidth: '0',
+            display: 'block',
+            overflow: 'hidden',
+            whiteSpace: 'nowrap',
+            textOverflow: 'ellipsis',
+          })}
+        >
+          보관된 블록
+        </span>
       </div>
 
-      {#if isEditable && asset?.content}
-        <div class={css({ marginRight: '12px' })}>
+      {#if hasPreviewButton}
+        <div
+          class={css({
+            marginRight: '12px',
+            display: 'flex',
+            justifyContent: 'flex-end',
+            flex: '[0 1 96px]',
+            minWidth: '0',
+            overflow: 'hidden',
+          })}
+        >
           <Button
+            style={css.raw({ width: 'full', maxWidth: 'full', minWidth: '0', overflow: 'hidden' })}
             onclick={() => {
               modalOpen = true;
+            }}
+            onpointerdown={(event: PointerEvent) => {
+              event.stopPropagation();
             }}
             size="sm"
             variant="secondary"
           >
-            내용 보기
+            <span
+              class={css({
+                display: 'block',
+                overflow: 'hidden',
+                whiteSpace: 'nowrap',
+                textOverflow: 'ellipsis',
+              })}
+            >
+              내용 보기
+            </span>
           </Button>
         </div>
       {/if}

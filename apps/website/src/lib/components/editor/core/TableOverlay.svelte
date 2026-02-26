@@ -177,20 +177,48 @@
     return overlay.rowHeights[rowIndex];
   }
 
-  function handleTablePointerMove(e: PointerEvent) {
-    const layer = e.currentTarget as HTMLElement;
-    const rect = layer.getBoundingClientRect();
-    const localX = e.clientX - rect.left;
-    const localY = e.clientY - rect.top;
+  function updateHoveredPointerFromClient(clientX: number, clientY: number): void {
+    if (!tableOverlayRoot) {
+      return;
+    }
 
+    const rect = tableOverlayRoot.getBoundingClientRect();
+    const localX = clientX - rect.left;
+    const localY = clientY - rect.top;
     hoveredPointer = { x: localX, y: localY };
   }
 
-  function handleTablePointerLeave(event: PointerEvent) {
-    const relatedTarget = event.relatedTarget;
-    if (tableOverlayRoot && relatedTarget instanceof Node && tableOverlayRoot.contains(relatedTarget)) {
+  function isClientInTableInteractionArea(clientX: number, clientY: number): boolean {
+    if (!tableOverlayRoot) {
+      return false;
+    }
+
+    const targetEl = document.elementFromPoint(clientX, clientY);
+    if (targetEl instanceof Node && tableOverlayRoot.contains(targetEl)) {
+      return true;
+    }
+
+    const rect = tableOverlayRoot.getBoundingClientRect();
+    return clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom;
+  }
+
+  function syncHoverFromWindowPointer(clientX: number, clientY: number): void {
+    const inside = isClientInTableInteractionArea(clientX, clientY);
+    isTableHovered = inside;
+    if (!inside) {
+      hoveredPointer = null;
       return;
     }
+
+    updateHoveredPointerFromClient(clientX, clientY);
+  }
+
+  function handleWindowPointerMove(event: PointerEvent): void {
+    syncHoverFromWindowPointer(event.clientX, event.clientY);
+  }
+
+  function handleWindowPointerLeave(): void {
+    isTableHovered = false;
     hoveredPointer = null;
   }
 
@@ -237,6 +265,8 @@
   });
 </script>
 
+<svelte:window on:pointerleave|capture={handleWindowPointerLeave} on:pointermove|capture={handleWindowPointerMove} />
+
 <div
   bind:this={tableOverlayRoot}
   style:left="{overlay.bounds.x}px"
@@ -249,28 +279,8 @@
   })}
   data-external-element
   data-table-overlay={overlay.tableId}
-  onpointerenter={() => (isTableHovered = true)}
-  onpointerleave={() => {
-    isTableHovered = false;
-    hoveredPointer = null;
-  }}
   role="presentation"
 >
-  <div
-    style:left="0"
-    style:top="0"
-    style:width="{overlay.bounds.width}px"
-    style:height="{overlay.bounds.height}px"
-    class={css({
-      position: 'absolute',
-      pointerEvents: 'auto',
-      cursor: 'text',
-    })}
-    onpointerleave={handleTablePointerLeave}
-    onpointermove={handleTablePointerMove}
-    role="presentation"
-  ></div>
-
   {#if activeColIndex !== null}
     {@const left = getColLeft(activeColIndex)}
     {@const width = getColWidth(activeColIndex)}

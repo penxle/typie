@@ -197,6 +197,7 @@
           backgroundColor: 'surface.muted',
           width: 'full',
           height: '48px',
+          minWidth: '0',
         })}
         use:anchor
       >
@@ -208,48 +209,79 @@
             paddingY: '12px',
             fontSize: '14px',
             color: 'text.disabled',
+            flex: '[1 999 0px]',
+            minWidth: '0',
           })}
         >
           {#if inflight}
-            <RingSpinner style={css.raw({ size: '20px' })} />
-            링크 임베드 중...
+            <RingSpinner style={css.raw({ size: '20px', flexShrink: '0' })} />
+            <span
+              class={css({
+                flex: '1',
+                minWidth: '0',
+                overflow: 'hidden',
+                whiteSpace: 'nowrap',
+                textOverflow: 'ellipsis',
+              })}
+            >
+              링크 임베드 중...
+            </span>
           {:else}
-            <Icon icon={FileUpIcon} size={20} />
-            {#if isEditable}
-              링크 임베드(Youtube, Google Drive, 일반 링크 등)
-            {:else}
-              링크 임베드 없음
-            {/if}
+            <Icon class={css({ flexShrink: '0' })} icon={FileUpIcon} size={20} />
+            <span
+              class={css({
+                flex: '1',
+                minWidth: '0',
+                overflow: 'hidden',
+                whiteSpace: 'nowrap',
+                textOverflow: 'ellipsis',
+              })}
+            >
+              {#if isEditable}
+                링크 임베드(Youtube, Google Drive, 일반 링크 등)
+              {:else}
+                링크 임베드 없음
+              {/if}
+            </span>
           {/if}
         </div>
 
         {#if isEditable}
-          <Menu>
-            {#snippet button({ open }: { open: boolean })}
-              <div
-                class={css(
-                  {
-                    marginRight: '12px',
-                    borderRadius: '4px',
-                    padding: '2px',
-                    color: 'text.disabled',
-                    opacity: '0',
-                    transition: 'common',
-                    _hover: { backgroundColor: 'interactive.hover' },
-                    _groupHover: { opacity: '100' },
-                  },
-                  open && { opacity: '100' },
-                )}
-              >
-                <Icon icon={EllipsisIcon} size={20} />
-              </div>
-            {/snippet}
+          <div
+            class={css({
+              marginRight: '12px',
+              display: 'flex',
+              flex: '[0 1 24px]',
+              minWidth: '0',
+              overflow: 'hidden',
+            })}
+          >
+            <Menu>
+              {#snippet button({ open }: { open: boolean })}
+                <div
+                  class={css(
+                    {
+                      borderRadius: '4px',
+                      padding: '2px',
+                      color: 'text.disabled',
+                      opacity: '0',
+                      transition: 'common',
+                      _hover: { backgroundColor: 'interactive.hover' },
+                      _groupHover: { opacity: '100' },
+                    },
+                    open && { opacity: '100' },
+                  )}
+                >
+                  <Icon icon={EllipsisIcon} size={20} />
+                </div>
+              {/snippet}
 
-            <MenuItem onclick={handleDelete} variant="danger">
-              <Icon icon={Trash2Icon} size={12} />
-              <span>삭제</span>
-            </MenuItem>
-          </Menu>
+              <MenuItem onclick={handleDelete} variant="danger">
+                <Icon icon={Trash2Icon} size={12} />
+                <span>삭제</span>
+              </MenuItem>
+            </Menu>
+          </div>
         {/if}
       </div>
     {/if}
