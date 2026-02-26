@@ -8,7 +8,7 @@ import * as jose from 'jose';
 import { nanoid } from 'nanoid';
 import * as R from 'remeda';
 import { redis } from '@/cache';
-import { db, firstOrThrow, UserSessions } from '@/db';
+import { db, first, UserSessions } from '@/db';
 import { publicKey } from '@/utils';
 import type { Context as HonoContext } from 'hono';
 
@@ -107,29 +107,35 @@ export const deriveContext = async (c: ServerContext): Promise<Context> => {
   const authorization = c.req.header('Authorization');
   const accessToken = authorization?.match(/^Bearer\s+(.+)$/)?.[1];
   if (accessToken) {
-    try {
-      const { payload } = await jose.jwtVerify(accessToken, publicKey);
-      const { sub, sid } = payload;
+    const payload = await jose.jwtVerify(accessToken, publicKey).then(
+      ({ payload }) => payload,
+      () => {
+        throw new HTTPException(401);
+      },
+    );
 
-      if (!sub || !sid) {
-        throw new Error('Invalid access token');
-      }
+    const { sub, sid } = payload;
 
-      const session = await db
-        .select({ id: UserSessions.id, userId: UserSessions.userId })
-        .from(UserSessions)
-        .where(and(eq(UserSessions.id, sid as string), eq(UserSessions.userId, sub)))
-        .then(firstOrThrow);
-
-      const impersonatedUserId = await redis.get(`admin:impersonate:${session.id}`);
-
-      ctx.session = {
-        id: session.id,
-        userId: impersonatedUserId ?? session.userId,
-      };
-    } catch {
+    if (typeof sub !== 'string' || typeof sid !== 'string') {
       throw new HTTPException(401);
     }
+
+    const session = await db
+      .select({ id: UserSessions.id, userId: UserSessions.userId })
+      .from(UserSessions)
+      .where(and(eq(UserSessions.id, sid), eq(UserSessions.userId, sub)))
+      .then(first);
+
+    if (!session) {
+      throw new HTTPException(401);
+    }
+
+    const impersonatedUserId = await redis.get(`admin:impersonate:${session.id}`);
+
+    ctx.session = {
+      id: session.id,
+      userId: impersonatedUserId ?? session.userId,
+    };
   }
 
   return ctx;
