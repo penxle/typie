@@ -214,6 +214,7 @@
   const handleResizeStart = (event: PointerEvent, reverse: boolean) => {
     const target = event.currentTarget as HTMLElement;
     target.setPointerCapture(event.pointerId);
+    event.stopPropagation();
     event.preventDefault();
 
     isResizing = true;
@@ -320,6 +321,9 @@
           })}
           aria-label="이미지 삭제"
           onclick={handleDelete}
+          onpointerdown={(event) => {
+            event.stopPropagation();
+          }}
           type="button"
         >
           <Icon icon={Trash2Icon} size={16} />
