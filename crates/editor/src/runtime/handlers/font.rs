@@ -49,11 +49,11 @@ impl Runtime {
             }
         }
 
-        if let Node::Text(text_node) = node_ref.node() {
+        if let Some(Node::Text(text_node)) = node_ref.node() {
             let defaults = self.doc().default_attrs();
             let overrides = node_ref
                 .parent()
-                .map(|p| p.node().style_overrides())
+                .and_then(|p| p.node().map(|n| n.style_overrides()))
                 .unwrap_or_default();
             let ruby_family = defaults.font_family().to_string();
             let ruby_weight = defaults.font_weight();

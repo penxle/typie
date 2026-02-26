@@ -190,7 +190,7 @@ impl Layout for TableNode {
             let widths: Vec<Option<f32>> = first_row
                 .children()
                 .map(|cell| {
-                    if let Node::TableCell(cell_node) = cell.node() {
+                    if let Some(Node::TableCell(cell_node)) = cell.node() {
                         cell_node.col_width
                     } else {
                         None

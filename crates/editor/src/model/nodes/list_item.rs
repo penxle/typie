@@ -43,7 +43,7 @@ impl Layout for ListItemNode {
 
         let marker_type = if let Some(parent) = ctx.node.parent() {
             match parent.node() {
-                crate::model::Node::OrderedList(_) => {
+                Some(crate::model::Node::OrderedList(_)) => {
                     let index = ctx.node.index().unwrap_or(0) + 1;
                     crate::layout::elements::list_marker::ListMarkerType::Ordered(index)
                 }
@@ -69,24 +69,30 @@ impl Layout for ListItemNode {
             max_width = max_width.max(child_width);
         }
 
-        let (baseline, line_mid, marker_height) = child_nodes
-            .get(0)
-            .and_then(|positioned| {
-                positioned.node.children.as_ref().and_then(|children| {
-                    children.first().and_then(|first_line| {
-                        if let Some(Element::Line(line_element)) = &first_line.node.element {
-                            let baseline = first_line.position.y + line_element.metric.baseline;
-                            let line_mid = first_line.position.y
-                                + line_element.metric.top
-                                + line_element.metric.height / 2.0;
-                            Some((baseline, line_mid, line_element.metric.height))
-                        } else {
-                            None
-                        }
-                    })
+        let Some((baseline, line_mid, marker_height)) = child_nodes.get(0).and_then(|positioned| {
+            positioned.node.children.as_ref().and_then(|children| {
+                children.first().and_then(|first_line| {
+                    if let Some(Element::Line(line_element)) = &first_line.node.element {
+                        let baseline = first_line.position.y + line_element.metric.baseline;
+                        let line_mid = first_line.position.y
+                            + line_element.metric.top
+                            + line_element.metric.height / 2.0;
+                        Some((baseline, line_mid, line_element.metric.height))
+                    } else {
+                        None
+                    }
                 })
             })
-            .expect("ListItemNode layout: ListItem must have a paragraph");
+        }) else {
+            return LayoutNode {
+                size: Size::new(max_width + CONTENT_OFFSET, y_offset),
+                element: None,
+                children: Some(child_nodes),
+                page_break_policy: Default::default(),
+                render_hints: Default::default(),
+                scope_id: None,
+            };
+        };
 
         let marker_node = LayoutNode {
             size: Size::new(MARKER_WIDTH, marker_height),

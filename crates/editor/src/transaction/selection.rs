@@ -16,7 +16,7 @@ fn collect_text_context(
     local_offset: usize,
 ) -> Option<(String, Vec<(NodeId, usize, usize, usize)>, usize)> {
     let child = doc.node(child_id)?;
-    if !matches!(child.node(), Node::Text(_)) {
+    if !matches!(child.node(), Some(Node::Text(_))) {
         return None;
     }
 
@@ -24,7 +24,7 @@ fn collect_text_context(
 
     let mut current = child.node_id();
     while let Some(prev) = doc.node(current)?.prev_sibling() {
-        if matches!(prev.node(), Node::Text(_)) {
+        if matches!(prev.node(), Some(Node::Text(_))) {
             ordered_text_nodes.insert(0, prev.node_id());
             current = prev.node_id();
         } else {
@@ -36,7 +36,7 @@ fn collect_text_context(
 
     let mut current = child.node_id();
     while let Some(next) = doc.node(current)?.next_sibling() {
-        if matches!(next.node(), Node::Text(_)) {
+        if matches!(next.node(), Some(Node::Text(_))) {
             ordered_text_nodes.push(next.node_id());
             current = next.node_id();
         } else {
@@ -50,7 +50,7 @@ fn collect_text_context(
 
     for nid in &ordered_text_nodes {
         let n = doc.node(*nid)?;
-        let Node::Text(text_node) = n.node() else {
+        let Some(Node::Text(text_node)) = n.node() else {
             return None;
         };
         let len = text_node.text.char_len();
@@ -113,9 +113,9 @@ pub fn paragraph_range_at(doc: &Doc, position: Position) -> Option<(NodeId, usiz
     let node = doc.node(position.node_id)?;
     let paragraph = node
         .ancestors()
-        .find(|n| matches!(n.node(), Node::Paragraph(_)))?;
+        .find(|n| matches!(n.node(), Some(Node::Paragraph(_))))?;
     let last_child = paragraph.last_child()?;
-    let Node::Text(last_text) = last_child.node() else {
+    let Some(Node::Text(last_text)) = last_child.node() else {
         return None;
     };
     let end =
@@ -181,7 +181,7 @@ impl Transaction {
             let child = self.node(child_id).context("Child not found")?;
 
             match child.node() {
-                Node::Text(_) => {
+                Some(Node::Text(_)) => {
                     let this_id = child_id;
                     let this_offset = local_offset;
                     let this = child;
@@ -195,7 +195,7 @@ impl Transaction {
                         .context("Node not found")?
                         .prev_sibling()
                     {
-                        if let Node::Text(_) = prev_sibling.node() {
+                        if let Some(Node::Text(_)) = prev_sibling.node() {
                             ordered_text_nodes.insert(0, prev_sibling.node_id());
                             current_node_id = prev_sibling.node_id();
                         } else {
@@ -212,7 +212,7 @@ impl Transaction {
                         .context("Node not found")?
                         .next_sibling()
                     {
-                        if let Node::Text(_) = next_sibling.node() {
+                        if let Some(Node::Text(_)) = next_sibling.node() {
                             ordered_text_nodes.push(next_sibling.node_id());
                             current_node_id = next_sibling.node_id();
                         } else {
@@ -226,7 +226,7 @@ impl Transaction {
 
                     for node_id in ordered_text_nodes {
                         let node = self.node(node_id).context("Text node not found")?;
-                        let Node::Text(text_node) = node.node() else {
+                        let Some(Node::Text(text_node)) = node.node() else {
                             return Ok(false);
                         };
 
@@ -339,7 +339,7 @@ impl Transaction {
             let child = self.node(child_id).context("Child not found")?;
 
             match child.node() {
-                Node::Text(_) => {
+                Some(Node::Text(_)) => {
                     let this_id = child_id;
                     let this_offset = local_offset;
                     let this = child;
@@ -353,7 +353,7 @@ impl Transaction {
                         .context("Node not found")?
                         .prev_sibling()
                     {
-                        if let Node::Text(_) = prev_sibling.node() {
+                        if let Some(Node::Text(_)) = prev_sibling.node() {
                             ordered_text_nodes.insert(0, prev_sibling.node_id());
                             current_node_id = prev_sibling.node_id();
                         } else {
@@ -370,7 +370,7 @@ impl Transaction {
                         .context("Node not found")?
                         .next_sibling()
                     {
-                        if let Node::Text(_) = next_sibling.node() {
+                        if let Some(Node::Text(_)) = next_sibling.node() {
                             ordered_text_nodes.push(next_sibling.node_id());
                             current_node_id = next_sibling.node_id();
                         } else {
@@ -384,7 +384,7 @@ impl Transaction {
 
                     for node_id in ordered_text_nodes {
                         let node = self.node(node_id).context("Text node not found")?;
-                        let Node::Text(text_node) = node.node() else {
+                        let Some(Node::Text(text_node)) = node.node() else {
                             return Ok(false);
                         };
 
@@ -454,7 +454,7 @@ impl Transaction {
         let this = self.node(position.node_id).context("Node not found")?;
         let paragraph = match this
             .ancestors()
-            .find(|n| matches!(n.node(), Node::Paragraph(_)))
+            .find(|n| matches!(n.node(), Some(Node::Paragraph(_))))
         {
             Some(p) => p,
             None => return Ok(false),
@@ -465,7 +465,7 @@ impl Transaction {
             None => return Ok(false),
         };
 
-        let Node::Text(last_child_text) = last_child.node() else {
+        let Some(Node::Text(last_child_text)) = last_child.node() else {
             return Ok(false);
         };
 
@@ -495,7 +495,7 @@ impl Transaction {
             .node(next_block_id)
             .context("move_to_next_block: Next block not found")?;
 
-        if next_block.spec().selectable {
+        if next_block.spec().map_or(false, |s| s.selectable) {
             if let (Some(parent), Some(index)) = (next_block.parent(), next_block.index()) {
                 self.set_selection(Selection::new(
                     Position::new(parent.node_id(), index, Affinity::Downstream),

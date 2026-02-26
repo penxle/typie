@@ -122,7 +122,10 @@ impl Fragment {
 
         let mut builder = Self::builder();
 
-        let table_frag_node = FragmentNode::new(table.node().clone(), None);
+        let table_frag_node = FragmentNode::new(
+            table.node().cloned().context("Table node decode failed")?,
+            None,
+        );
         builder = builder.add((table_id, table_frag_node));
 
         let row_ids: Vec<_> = table.children().map(|c| c.node_id()).collect();
@@ -130,7 +133,10 @@ impl Fragment {
         for r in r_start..=r_end {
             if let Some(&row_id) = row_ids.get(r) {
                 let row = doc.node(row_id).context("Row not found")?;
-                let row_frag_node = FragmentNode::new(row.node().clone(), Some(table_id));
+                let row_frag_node = FragmentNode::new(
+                    row.node().cloned().context("Row node decode failed")?,
+                    Some(table_id),
+                );
                 builder = builder.add((row_id, row_frag_node));
 
                 let cell_ids: Vec<_> = row.children().map(|c| c.node_id()).collect();
@@ -138,7 +144,10 @@ impl Fragment {
                 for c in c_start..=c_end {
                     if let Some(&cell_id) = cell_ids.get(c) {
                         let cell = doc.node(cell_id).context("Cell not found")?;
-                        let cell_frag_node = FragmentNode::new(cell.node().clone(), Some(row_id));
+                        let cell_frag_node = FragmentNode::new(
+                            cell.node().cloned().context("Cell node decode failed")?,
+                            Some(row_id),
+                        );
                         builder = builder.add((cell_id, cell_frag_node));
 
                         Self::collect_descendants(doc, cell_id, &mut builder)?;
@@ -158,7 +167,10 @@ impl Fragment {
         if let Some(node) = doc.node(parent_id) {
             for child in node.children() {
                 let child_id = child.node_id();
-                let frag_node = FragmentNode::new(child.node().clone(), Some(parent_id));
+                let Some(node_data) = child.node().cloned() else {
+                    continue;
+                };
+                let frag_node = FragmentNode::new(node_data, Some(parent_id));
 
                 builder.nodes.insert(child_id, frag_node);
                 Self::collect_descendants(doc, child_id, builder)?;
@@ -286,7 +298,7 @@ impl Fragment {
             return Self::extract_range(doc, from, to);
         };
 
-        if from_child_id == to_child_id && matches!(from_child.node(), Node::Text(_)) {
+        if from_child_id == to_child_id && matches!(from_child.node(), Some(Node::Text(_))) {
             return Self::extract_single_text_node(doc, from_child_id, from_local, to_local);
         }
 
@@ -299,7 +311,7 @@ impl Fragment {
         from_offset: usize,
         to_offset: usize,
     ) -> bool {
-        if matches!(node.node(), Node::Text(_)) {
+        if matches!(node.node(), Some(Node::Text(_))) {
             return false;
         }
 
@@ -307,12 +319,15 @@ impl Fragment {
             return false;
         }
 
-        node.spec().content.is_leaf()
+        node.spec().map_or(false, |s| s.content.is_leaf())
     }
 
     fn extract_atomic_node(node_id: NodeId, node: &NodeRef<'_>) -> Self {
         let parent_id = node.parent().map(|n| n.node_id());
-        let fragment_node = FragmentNode::new(node.node().clone(), parent_id);
+        let Some(node_data) = node.node().cloned() else {
+            return Self::empty();
+        };
+        let fragment_node = FragmentNode::new(node_data, parent_id);
         Self::builder()
             .add((node_id, fragment_node))
             .open_start(0)
@@ -487,9 +502,10 @@ impl Fragment {
     }
 
     pub fn flatten_for_merge_at(self, doc: &Doc, insert_pos: Position) -> Self {
-        let parent_disc = doc
-            .node(insert_pos.node_id)
-            .and_then(|n| n.parent().map(|p| std::mem::discriminant(p.node())));
+        let parent_disc = doc.node(insert_pos.node_id).and_then(|n| {
+            let parent = n.parent()?;
+            parent.node().map(std::mem::discriminant)
+        });
         self.flatten_for_merge(parent_disc)
     }
 
@@ -957,7 +973,7 @@ impl Fragment {
         to_offset: usize,
     ) -> Result<Self> {
         let node = doc.node(node_id).context("Node not found")?;
-        let Node::Text(text_node) = node.node() else {
+        let Some(Node::Text(text_node)) = node.node() else {
             anyhow::bail!("Expected text node");
         };
 
@@ -1042,13 +1058,25 @@ impl Fragment {
             for ancestor_id in ancestors_to_add.into_iter().rev() {
                 let ancestor = doc.node(ancestor_id).context("Ancestor not found")?;
                 let ancestor_parent_id = ancestor.parent().map(|n| n.node_id());
-                let fragment_node = FragmentNode::new(ancestor.node().clone(), ancestor_parent_id);
+                let fragment_node = FragmentNode::new(
+                    ancestor
+                        .node()
+                        .cloned()
+                        .context("Ancestor node decode failed")?,
+                    ancestor_parent_id,
+                );
                 collected.insert(ancestor_id, fragment_node);
                 visited.insert(ancestor_id);
             }
 
             let parent_id = from_node.parent().map(|n| n.node_id());
-            let fragment_node = FragmentNode::new(from_node.node().clone(), parent_id);
+            let fragment_node = FragmentNode::new(
+                from_node
+                    .node()
+                    .cloned()
+                    .context("From node decode failed")?,
+                parent_id,
+            );
             collected.insert(from_node_id, fragment_node);
             visited.insert(from_node_id);
         }
@@ -1063,7 +1091,7 @@ impl Fragment {
             let parent_id = node.parent().map(|n| n.node_id());
 
             match node.node() {
-                Node::Text(text_node) => {
+                Some(Node::Text(text_node)) => {
                     let text = &text_node.text;
                     let char_count = text.char_len();
 
@@ -1077,13 +1105,14 @@ impl Fragment {
                         visited.insert(from_child_id);
                     }
                 }
-                _ => {
+                Some(other) => {
                     if from_local == 0 {
-                        let fragment_node = FragmentNode::new(node.node().clone(), parent_id);
+                        let fragment_node = FragmentNode::new(other.clone(), parent_id);
                         collected.insert(from_child_id, fragment_node);
                         visited.insert(from_child_id);
                     }
                 }
+                None => {}
             }
         }
 
@@ -1116,7 +1145,10 @@ impl Fragment {
             if !visited.contains(&next_id) {
                 let node = doc.node(next_id).context("Node not found")?;
                 let parent_id = node.parent().map(|n| n.node_id());
-                let fragment_node = FragmentNode::new(node.node().clone(), parent_id);
+                let fragment_node = FragmentNode::new(
+                    node.node().cloned().context("Node decode failed")?,
+                    parent_id,
+                );
 
                 collected.insert(next_id, fragment_node);
                 visited.insert(next_id);
@@ -1131,7 +1163,10 @@ impl Fragment {
         {
             let to_node = doc.node(to_node_id).context("To node not found")?;
             let parent_id = to_node.parent().map(|n| n.node_id());
-            let fragment_node = FragmentNode::new(to_node.node().clone(), parent_id);
+            let fragment_node = FragmentNode::new(
+                to_node.node().cloned().context("To node decode failed")?,
+                parent_id,
+            );
             collected.insert(to_node_id, fragment_node);
             visited.insert(to_node_id);
         }
@@ -1145,7 +1180,7 @@ impl Fragment {
                 let parent_id = node.parent().map(|n| n.node_id());
 
                 match node.node() {
-                    Node::Text(text_node) => {
+                    Some(Node::Text(text_node)) => {
                         let text = &text_node.text;
                         if to_local > 0 {
                             let sliced_text = text.slice(0, to_local);
@@ -1156,14 +1191,15 @@ impl Fragment {
                             collected.insert(to_child_id, fragment_node);
                         }
                     }
-                    _ => {
+                    Some(other) => {
                         if to_local > 0 {
-                            let fragment_node = FragmentNode::new(node.node().clone(), parent_id);
+                            let fragment_node = FragmentNode::new(other.clone(), parent_id);
                             collected.insert(to_child_id, fragment_node);
                             visited.insert(to_child_id);
                             Self::collect_subtree(doc, to_child_id, collected, visited)?;
                         }
                     }
+                    None => {}
                 }
             }
         }
@@ -1181,7 +1217,10 @@ impl Fragment {
         for child in node.children() {
             let child_id = child.node_id();
             if !visited.contains(&child_id) {
-                let fragment_node = FragmentNode::new(child.node().clone(), Some(node_id));
+                let Some(node_data) = child.node().cloned() else {
+                    continue;
+                };
+                let fragment_node = FragmentNode::new(node_data, Some(node_id));
                 collected.insert(child_id, fragment_node);
                 visited.insert(child_id);
                 Self::collect_subtree(doc, child_id, collected, visited)?;

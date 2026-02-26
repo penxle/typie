@@ -14,7 +14,7 @@ pub struct NodeRef<'a> {
     inner: &'a DocInner,
     node_id: NodeId,
     parent_id: OnceCell<Option<NodeId>>,
-    node: OnceCell<Node>,
+    node: OnceCell<Option<Node>>,
 }
 
 impl<'a> NodeRef<'a> {
@@ -44,8 +44,8 @@ impl<'a> NodeRef<'a> {
         self.node_id
     }
 
-    pub fn node_type(&self) -> NodeType {
-        self.node().as_type()
+    pub fn node_type(&self) -> Option<NodeType> {
+        Some(self.node()?.as_type())
     }
 
     pub fn index(&self) -> Option<usize> {
@@ -60,7 +60,7 @@ impl<'a> NodeRef<'a> {
             map.get("parent")
                 .and_then(|v| v.into_value().ok())
                 .and_then(|v| v.into_string().ok())
-                .map(|v| NodeId::from_string(&v).unwrap())
+                .and_then(|v| NodeId::from_string(&v))
         })
     }
 
@@ -100,14 +100,13 @@ impl<'a> NodeRef<'a> {
         Some(Self::new_unchecked(self.inner, child_id))
     }
 
-    pub fn node(&self) -> &Node {
-        self.node.get_or_init(|| {
-            let map = self
-                .inner
-                .get_node_map(self.node_id)
-                .expect("Node map not found");
-            Node::decode(&map).expect("Failed to decode node")
-        })
+    pub fn node(&self) -> Option<&Node> {
+        self.node
+            .get_or_init(|| {
+                let map = self.inner.get_node_map(self.node_id)?;
+                Node::decode(&map).ok()
+            })
+            .as_ref()
     }
 
     pub fn children(&self) -> NodeRefIter<'_> {
@@ -229,16 +228,16 @@ impl<'a> NodeRef<'a> {
         path
     }
 
-    pub fn spec(&self) -> &NodeSpec {
-        self.inner.schema.node_spec(self.node_type())
+    pub fn spec(&self) -> Option<&NodeSpec> {
+        Some(self.inner.schema.node_spec(self.node_type()?))
     }
 
     pub fn is_inline(&self) -> bool {
-        self.spec().inline
+        self.spec().map(|s| s.inline).unwrap_or(false)
     }
 
     pub fn is_block(&self) -> bool {
-        !self.spec().inline
+        !self.is_inline()
     }
 
     pub fn cascade_attrs(&self) -> Option<Vec<Attr>> {

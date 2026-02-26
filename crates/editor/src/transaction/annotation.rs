@@ -41,7 +41,7 @@ impl Transaction {
             );
 
             let node = self.node_mut(text_node_id).context("Text node not found")?;
-            if let Node::Text(text_node) = node.node() {
+            if let Some(Node::Text(text_node)) = node.node() {
                 text_node
                     .text
                     .apply_annotation(start_offset..end_offset, &annotation)?;
@@ -85,7 +85,7 @@ impl Transaction {
 
         for (text_node_id, start_offset, end_offset) in ranges {
             let node = self.node_mut(text_node_id).context("Text node not found")?;
-            if let Node::Text(text_node) = node.node() {
+            if let Some(Node::Text(text_node)) = node.node() {
                 text_node
                     .text
                     .remove_annotation(start_offset..end_offset, ann_type)?;
@@ -123,7 +123,7 @@ impl Transaction {
 
         for (text_node_id, start_offset, end_offset) in ranges {
             let node = self.node_mut(text_node_id).context("Text node not found")?;
-            if let Node::Text(text_node) = node.node() {
+            if let Some(Node::Text(text_node)) = node.node() {
                 text_node
                     .text
                     .remove_annotation(start_offset..end_offset, ann_type)?;
@@ -160,7 +160,10 @@ impl Transaction {
         let mut cursor_text_node: Option<(NodeId, usize)> = None;
 
         for child in block.children() {
-            match child.node() {
+            let Some(child_node) = child.node() else {
+                continue;
+            };
+            match child_node {
                 Node::Text(text_node) => {
                     let text_len = text_node.text.char_len();
                     let child_end = current_block_offset + text_len;
@@ -218,7 +221,10 @@ impl Transaction {
         };
 
         for child in block.children() {
-            match child.node() {
+            let Some(child_node) = child.node() else {
+                continue;
+            };
+            match child_node {
                 Node::Text(text_node) => {
                     let segments = text_node.text.get_segments();
                     let mut current_offset = 0;
@@ -243,7 +249,7 @@ impl Transaction {
                     }
                 }
                 _ => {
-                    if !child.spec().inline {
+                    if !child.spec().map_or(false, |s| s.inline) {
                         self.find_annotation_in_block(child.node_id(), ann_type, result);
                     }
                 }
@@ -263,7 +269,7 @@ impl Transaction {
             let Some(node) = self.node(text_node_id) else {
                 continue;
             };
-            if let Node::Text(text_node) = node.node() {
+            if let Some(Node::Text(text_node)) = node.node() {
                 let segments = text_node.text.get_segments();
                 let mut current_offset = 0;
 

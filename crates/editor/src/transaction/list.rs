@@ -21,7 +21,9 @@ impl Transaction {
             return Ok(false);
         };
 
-        let parent_type = parent.node().as_type();
+        let Some(parent_type) = parent.node().map(|n| n.as_type()) else {
+            return Ok(false);
+        };
         if parent_type != NodeType::ListItem {
             return Ok(false);
         }
@@ -30,7 +32,9 @@ impl Transaction {
             return Ok(false);
         };
 
-        let grand_parent_type = grand_parent.node().as_type();
+        let Some(grand_parent_type) = grand_parent.node().map(|n| n.as_type()) else {
+            return Ok(false);
+        };
         if !matches!(
             grand_parent_type,
             NodeType::BulletList | NodeType::OrderedList
@@ -55,7 +59,7 @@ impl Transaction {
         let mut second_para_id: Option<NodeId> = None;
         let mut para_count = 0;
         for child in list_item.children() {
-            if matches!(child.node(), Node::Paragraph(_)) {
+            if matches!(child.node(), Some(Node::Paragraph(_))) {
                 para_count += 1;
                 if para_count == 2 {
                     second_para_id = Some(child.node_id());
@@ -145,7 +149,7 @@ impl Transaction {
             .context("Block not found")?;
         let parent = block.parent().context("Parent not found")?;
 
-        if parent.node().as_type() != NodeType::ListItem {
+        if parent.node_type() != Some(NodeType::ListItem) {
             return Ok(false);
         }
 
@@ -157,10 +161,10 @@ impl Transaction {
             let prev_id = prev.node_id();
 
             let grand_parent = list_item.parent().context("Grand parent not found")?;
-            let list_type = grand_parent.node().as_type();
+            let list_type = grand_parent.node_type();
 
             let target_list_id = if let Some(last_child) = prev.last_child() {
-                if last_child.node().as_type() == list_type {
+                if last_child.node_type() == list_type {
                     Some(last_child.node_id())
                 } else {
                     None
@@ -173,8 +177,8 @@ impl Transaction {
                 id
             } else {
                 let new_list = match list_type {
-                    NodeType::BulletList => Node::BulletList(BulletListNode::default()),
-                    NodeType::OrderedList => Node::OrderedList(OrderedListNode::default()),
+                    Some(NodeType::BulletList) => Node::BulletList(BulletListNode::default()),
+                    Some(NodeType::OrderedList) => Node::OrderedList(OrderedListNode::default()),
                     _ => return Ok(false),
                 };
 
@@ -212,7 +216,7 @@ impl Transaction {
             .node(selection.head.node_id)
             .context("Block not found")?;
 
-        if !matches!(block.node(), Node::Paragraph(_)) {
+        if !matches!(block.node(), Some(Node::Paragraph(_))) {
             return Ok(false);
         }
 
@@ -222,7 +226,7 @@ impl Transaction {
         }
 
         let parent = block.parent().context("Parent not found")?;
-        if parent.node().as_type() != NodeType::ListItem {
+        if parent.node_type() != Some(NodeType::ListItem) {
             return Ok(false);
         }
 
@@ -234,7 +238,7 @@ impl Transaction {
         if let Some(next_sibling) = list_item.next_sibling() {
             let next_sibling_id = next_sibling.node_id();
 
-            if next_sibling.node().as_type() == NodeType::ListItem {
+            if next_sibling.node_type() == Some(NodeType::ListItem) {
                 let children_ids: Vec<NodeId> =
                     next_sibling.children().map(|c| c.node_id()).collect();
                 let count = list_item.children().count();
@@ -281,7 +285,7 @@ impl Transaction {
         }
 
         let parent = block.parent().context("Parent not found")?;
-        if parent.node().as_type() != NodeType::ListItem {
+        if parent.node_type() != Some(NodeType::ListItem) {
             return Ok(false);
         }
 
@@ -294,7 +298,7 @@ impl Transaction {
 
         let prev_sibling_id = prev_sibling.node_id();
 
-        if prev_sibling.node().as_type() == NodeType::ListItem {
+        if prev_sibling.node_type() == Some(NodeType::ListItem) {
             let children_ids: Vec<NodeId> = list_item.children().map(|c| c.node_id()).collect();
             let count = prev_sibling.children().count();
 
@@ -351,15 +355,13 @@ impl Transaction {
 
         if should_lift {
             for block_id in blocks {
-                let node_type = self.doc().node(block_id).map(|n| n.node_type());
+                let node_type = self.doc().node(block_id).and_then(|n| n.node_type());
                 if node_type == Some(NodeType::ListItem) {
                     let children: Vec<NodeId> = self
                         .doc()
                         .node(block_id)
-                        .unwrap()
-                        .children()
-                        .map(|c| c.node_id())
-                        .collect();
+                        .map(|n| n.children().map(|c| c.node_id()).collect())
+                        .unwrap_or_default();
                     for child_id in children {
                         let _ = self.lift_node(child_id);
                     }
@@ -404,21 +406,24 @@ impl Transaction {
     ) -> Result<Option<NodeId>> {
         let block = self.node(block_id).context("Block not found")?;
         let parent = block.parent().context("Parent not found")?;
-        let parent_type = parent.node().as_type();
+        let parent_type = parent.node_type();
 
         let target_block_id = block_id;
 
-        let list_info = if parent_type == NodeType::ListItem {
+        let list_info = if parent_type == Some(NodeType::ListItem) {
             let list = parent.parent().context("List not found")?;
-            Some((list.node_id(), list.node().as_type()))
-        } else if matches!(parent_type, NodeType::BulletList | NodeType::OrderedList) {
+            Some((list.node_id(), list.node_type()))
+        } else if matches!(
+            parent_type,
+            Some(NodeType::BulletList) | Some(NodeType::OrderedList)
+        ) {
             Some((parent.node_id(), parent_type))
         } else {
             None
         };
 
         if let Some((list_id, list_node_type)) = list_info {
-            if list_node_type == list_type {
+            if list_node_type == Some(list_type) {
                 return Ok(Some(list_id));
             } else if converted_lists.contains(&list_id) {
                 return Ok(current_list_id);
@@ -462,11 +467,11 @@ impl Transaction {
             .context("Block not found")?;
         let parent = block.parent().context("Parent not found")?;
 
-        if parent.node().as_type() == NodeType::ListItem {
+        if parent.node_type() == Some(NodeType::ListItem) {
             let list_item = parent;
             let list = list_item.parent().context("List not found")?;
 
-            if list.node().as_type() == list_type {
+            if list.node_type() == Some(list_type) {
                 return self.lift_list_item();
             } else {
                 let list_id = list.node_id();
@@ -526,7 +531,7 @@ impl Transaction {
 
         let block_type = self
             .node(block_id)
-            .map(|n| n.node_type())
+            .and_then(|n| n.node_type())
             .unwrap_or(NodeType::Paragraph);
 
         if matches!(block_type, NodeType::BulletList | NodeType::OrderedList) {
@@ -540,7 +545,7 @@ impl Transaction {
             let count = list.children().count();
             let new_list_item_id = self
                 .node_mut(list_id)
-                .unwrap()
+                .context("List not found")?
                 .as_mut()
                 .insert_child(count, Node::ListItem(ListItemNode::default()))?;
             self.move_node(block_id, new_list_item_id, 0)?;
@@ -556,18 +561,18 @@ impl Transaction {
         };
 
         if let Some(parent) = block.parent() {
-            if parent.node().as_type() == NodeType::ListItem {
+            if parent.node_type() == Some(NodeType::ListItem) {
                 return parent
                     .parent()
-                    .map(|gp| gp.node().as_type() == list_type)
+                    .map(|gp| gp.node_type() == Some(list_type))
                     .unwrap_or(false);
             }
         }
 
-        if block.node().as_type() == NodeType::ListItem {
+        if block.node_type() == Some(NodeType::ListItem) {
             return block
                 .parent()
-                .map(|p| p.node().as_type() == list_type)
+                .map(|p| p.node_type() == Some(list_type))
                 .unwrap_or(false);
         }
 
@@ -583,7 +588,7 @@ impl Transaction {
         let new_list_node = self.new_list_node(list_type)?;
         let new_list_id = self
             .node_mut(parent_id)
-            .unwrap()
+            .context("wrap_block_in_new_list: parent node not found")?
             .as_mut()
             .insert_child(block_index, new_list_node)?;
 
@@ -591,7 +596,7 @@ impl Transaction {
 
         let new_list_item_id = self
             .node_mut(new_list_id)
-            .unwrap()
+            .context("wrap_block_in_new_list: new list node not found")?
             .as_mut()
             .insert_child(0, Node::ListItem(ListItemNode::default()))?;
 
@@ -603,7 +608,7 @@ impl Transaction {
         let list = self
             .node(list_id)
             .context("List not found for conversion")?;
-        let current_type = list.node().as_type();
+        let current_type = list.node_type().context("List node type not found")?;
 
         if current_type == target_type {
             return Ok(list_id);
@@ -657,7 +662,7 @@ impl Transaction {
             None => return Ok(None),
         };
 
-        if parent.node().as_type() != NodeType::ListItem {
+        if parent.node_type() != Some(NodeType::ListItem) {
             return Ok(None);
         }
 
@@ -665,7 +670,7 @@ impl Transaction {
         let list_item = self.node(list_item_id).context("List item not found")?;
         let list = list_item.parent().context("List not found")?;
         let list_id = list.node_id();
-        let list_type = list.node().as_type();
+        let list_type = list.node_type().context("List node type not found")?;
 
         if !matches!(list_type, NodeType::BulletList | NodeType::OrderedList) {
             return Ok(None);
@@ -674,7 +679,7 @@ impl Transaction {
         let list_index_in_parent = list.index().context("List index not found")?;
         let owner = list.parent().context("List owner not found")?;
         let owner_id = owner.node_id();
-        let owner_type = owner.node().as_type();
+        let owner_type = owner.node_type().context("Owner node type not found")?;
 
         let list_item_children: Vec<NodeId> = list_item.children().map(|c| c.node_id()).collect();
         let target_block_index_in_list_item = list_item_children

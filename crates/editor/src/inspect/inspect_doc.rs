@@ -31,7 +31,9 @@ fn print_node(node: NodeRef, prefix: &str, is_last: bool, output: &mut String) {
 
 fn format_node_info(node: &NodeRef) -> String {
     let id = node.node_id();
-    let node_data = node.node();
+    let Some(node_data) = node.node() else {
+        return format!("[undecodable] {}", id);
+    };
 
     match node_data {
         Node::Root(_) => {

@@ -251,7 +251,7 @@ fn first_row_col_ratios(doc: &Doc, table_id: NodeId, col_count: usize) -> Option
             let widths: Vec<Option<f32>> = first_row
                 .children()
                 .map(|cell| match cell.node() {
-                    Node::TableCell(cell_node) => cell_node.col_width,
+                    Some(Node::TableCell(cell_node)) => cell_node.col_width,
                     _ => None,
                 })
                 .collect();
@@ -283,7 +283,7 @@ fn table_col_ratios(doc: &Doc, table_id: NodeId, col_count: usize) -> Vec<f32> {
 fn table_proportion(doc: &Doc, table_id: NodeId) -> f32 {
     doc.node(table_id)
         .and_then(|node| match node.node() {
-            Node::Table(table_node) => Some(table_node.proportion),
+            Some(Node::Table(table_node)) => Some(table_node.proportion),
             _ => None,
         })
         .filter(|value| value.is_finite())

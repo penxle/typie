@@ -237,7 +237,7 @@ fn collect_selected_non_text_blocks(doc: &Doc, selection: &Selection) -> Vec<Nod
         .into_iter()
         .filter(|&id| {
             doc.node(id)
-                .map(|n| !n.spec().is_textblock(doc.schema()))
+                .map(|n| !n.spec().map_or(false, |s| s.is_textblock(doc.schema())))
                 .unwrap_or(false)
         })
         .collect()
@@ -395,7 +395,7 @@ pub fn is_selectable_block_hit(doc: &Doc, hit_selection: &Selection) -> bool {
     };
 
     doc.node(child_id)
-        .map(|child| child.spec().selectable)
+        .map(|child| child.spec().map_or(false, |s| s.selectable))
         .unwrap_or(false)
 }
 

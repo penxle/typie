@@ -570,7 +570,7 @@ mod tests {
             &cache,
         );
         let constraints = BoxConstraints::new(0.0, 400.0, 0.0, f32::INFINITY);
-        paragraph.node().layout(&ctx, constraints)
+        paragraph.node().unwrap().layout(&ctx, constraints)
     }
 
     fn selection_rects(line: &LineElement, selections: &[SelectionDecor]) -> Vec<Rect> {

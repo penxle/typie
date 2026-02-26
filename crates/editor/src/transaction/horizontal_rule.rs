@@ -31,7 +31,7 @@ impl Transaction {
         };
 
         let current_variant = match selected_node.node() {
-            Node::HorizontalRule(node) => node.variant,
+            Some(Node::HorizontalRule(node)) => node.variant,
             _ => return Ok(false),
         };
 

@@ -42,7 +42,7 @@ impl FoldNode {
     fn layout_title(&self, ctx: &LayoutContext, inner_width: f32) -> Option<Rc<LayoutNode>> {
         let first_child = ctx.node.children().next()?;
 
-        if !matches!(first_child.node(), Node::FoldTitle(_)) {
+        if !matches!(first_child.node(), Some(Node::FoldTitle(_))) {
             return None;
         }
 
@@ -55,7 +55,7 @@ impl FoldNode {
         let constraints = BoxConstraints::new(content_width, content_width, 0.0, f32::MAX);
 
         let fold_content = ctx.node.children().nth(1)?;
-        if !matches!(fold_content.node(), Node::FoldContent(_)) {
+        if !matches!(fold_content.node(), Some(Node::FoldContent(_))) {
             return None;
         }
 

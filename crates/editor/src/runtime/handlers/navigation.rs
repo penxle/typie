@@ -19,7 +19,7 @@ impl Runtime {
             .doc
             .node(common_ancestor_id)?
             .ancestors()
-            .find(|ancestor| ancestor.spec().isolating)
+            .find(|ancestor| ancestor.spec().map_or(false, |s| s.isolating))
             .map(|ancestor| ancestor.node_id())
     }
 
@@ -96,15 +96,16 @@ impl Runtime {
     pub(crate) fn handle_select_all(&mut self) -> Vec<Effect> {
         if let Some(isolating_id) = self.common_isolating_ancestor_id(&self.state.selection) {
             if let Some(isolating) = self.state.doc.node(isolating_id) {
-                let start = leaf_block_start(&isolating);
-                let end = leaf_block_end(&isolating);
-
-                if let Ok((from, to)) = self.state.selection.as_sorted(&self.state.doc) {
-                    if start != from || end != to {
-                        return self.transact(move |tr| {
-                            tr.set_selection(Selection::new(start, end));
-                            Ok(true)
-                        });
+                if let (Some(start), Some(end)) =
+                    (leaf_block_start(&isolating), leaf_block_end(&isolating))
+                {
+                    if let Ok((from, to)) = self.state.selection.as_sorted(&self.state.doc) {
+                        if start != from || end != to {
+                            return self.transact(move |tr| {
+                                tr.set_selection(Selection::new(start, end));
+                                Ok(true)
+                            });
+                        }
                     }
                 }
             }
@@ -115,8 +116,12 @@ impl Runtime {
         let doc_end = Cursor::move_to_document_end(&ctx, self.pages());
 
         if let (Some(start_sel), Some(end_sel)) = (doc_start, doc_end) {
-            let (start, _) = start_sel.as_sorted(&self.state.doc).unwrap();
-            let (_, end) = end_sel.as_sorted(&self.state.doc).unwrap();
+            let Ok((start, _)) = start_sel.as_sorted(&self.state.doc) else {
+                return vec![];
+            };
+            let Ok((_, end)) = end_sel.as_sorted(&self.state.doc) else {
+                return vec![];
+            };
             self.transact(move |tr| {
                 tr.set_selection(Selection::new(start, end));
                 Ok(true)
@@ -370,20 +375,24 @@ impl Runtime {
             if !selection.is_collapsed() {
                 match direction {
                     Direction::Left => {
-                        let (from, _) = selection.as_sorted(&self.state.doc).unwrap();
-                        let resolved = move_from_block_position(&self.state.doc, from, false);
-                        return (resolved.clone(), resolved);
+                        if let Ok((from, _)) = selection.as_sorted(&self.state.doc) {
+                            let resolved = move_from_block_position(&self.state.doc, from, false);
+                            return (resolved.clone(), resolved);
+                        }
                     }
                     Direction::Right => {
-                        let (_, to) = selection.as_sorted(&self.state.doc).unwrap();
-                        let resolved = move_from_block_position(&self.state.doc, to, true);
-                        return (resolved.clone(), resolved);
+                        if let Ok((_, to)) = selection.as_sorted(&self.state.doc) {
+                            let resolved = move_from_block_position(&self.state.doc, to, true);
+                            return (resolved.clone(), resolved);
+                        }
                     }
                     _ => {}
                 }
             }
 
-            let (from, to) = selection.as_sorted(&self.state.doc).unwrap();
+            let (from, to) = selection
+                .as_sorted(&self.state.doc)
+                .unwrap_or((selection.anchor, selection.head));
             let base = match direction {
                 Direction::Left
                 | Direction::Up

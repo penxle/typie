@@ -93,7 +93,9 @@ pub(crate) fn register_font(
 }
 
 pub fn add_font_base(family: &str, weight: u16, data: &[u8]) {
-    let decompressed = decode_tpft(data);
+    let Ok(decompressed) = decode_tpft(data) else {
+        return;
+    };
     let split_offset = u32::from_be_bytes(decompressed[0..4].try_into().unwrap()) as usize;
     let sfnt = decompressed[4..].to_vec();
     let shared = Arc::new(SharedFontData::new(sfnt));
@@ -129,7 +131,9 @@ pub fn add_font_base(family: &str, weight: u16, data: &[u8]) {
 }
 
 pub fn add_font_chunk(family: &str, weight: u16, data: &[u8]) {
-    let chunk_data = decode_tpft(data);
+    let Ok(chunk_data) = decode_tpft(data) else {
+        return;
+    };
     let num_entries = u32::from_be_bytes(chunk_data[0..4].try_into().unwrap()) as usize;
 
     GLOBALS.with(|globals| {

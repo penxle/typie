@@ -107,7 +107,9 @@ pub fn byte_to_char_offset_with_map(char_to_byte: &[usize], byte_offset: usize) 
 }
 
 pub fn compute_word_boundaries(text: &str) -> Vec<usize> {
-    let provider = get_icu_provider();
+    let Some(provider) = get_icu_provider() else {
+        return (0..=text.chars().count()).collect();
+    };
     let deserializing_provider = provider.as_deserializing();
     let segmenter = WordSegmenter::try_new_dictionary_unstable(
         &deserializing_provider,
@@ -127,7 +129,9 @@ pub fn compute_sentence_boundaries(text: &str) -> Vec<usize> {
     use icu_provider::buf::AsDeserializingBufferProvider;
     use icu_segmenter::SentenceSegmenter;
 
-    let provider = get_icu_provider();
+    let Some(provider) = get_icu_provider() else {
+        return (0..=text.chars().count()).collect();
+    };
     let deserializing_provider = provider.as_deserializing();
     let segmenter =
         SentenceSegmenter::try_new_unstable(&deserializing_provider, Default::default())
@@ -145,7 +149,9 @@ pub fn compute_grapheme_boundaries(text: &str) -> Vec<usize> {
     use icu_provider::buf::AsDeserializingBufferProvider;
     use icu_segmenter::GraphemeClusterSegmenter;
 
-    let provider = get_icu_provider();
+    let Some(provider) = get_icu_provider() else {
+        return (0..=text.chars().count()).collect();
+    };
     let deserializing_provider = provider.as_deserializing();
     let segmenter = GraphemeClusterSegmenter::try_new_unstable(&deserializing_provider)
         .expect("Failed to create GraphemeClusterSegmenter");

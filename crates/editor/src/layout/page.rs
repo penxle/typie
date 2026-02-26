@@ -136,7 +136,7 @@ impl Page {
         self.scopes.locate_all_at_point(&[x, y]).min_by(|a, b| {
             let a_area = a.size.width * a.size.height;
             let b_area = b.size.width * b.size.height;
-            a_area.partial_cmp(&b_area).unwrap()
+            a_area.total_cmp(&b_area)
         })
     }
 
@@ -178,14 +178,14 @@ impl Page {
 
     pub fn first_in_scope(&self, scope_id: NodeId) -> Option<&ElementEntry> {
         self.elements_in_scope(scope_id)
-            .min_by(|a, b| a.pos.y.partial_cmp(&b.pos.y).unwrap())
+            .min_by(|a, b| a.pos.y.total_cmp(&b.pos.y))
     }
 
     pub fn last_in_scope(&self, scope_id: NodeId) -> Option<&ElementEntry> {
         self.elements_in_scope(scope_id).max_by(|a, b| {
             let a_bottom = a.pos.y + a.size.height;
             let b_bottom = b.pos.y + b.size.height;
-            a_bottom.partial_cmp(&b_bottom).unwrap()
+            a_bottom.total_cmp(&b_bottom)
         })
     }
 
@@ -292,10 +292,10 @@ impl Page {
 
         let best_scope = candidate_scopes
             .iter()
-            .min_by(|a, b| score_scope(a).partial_cmp(&score_scope(b)).unwrap());
+            .min_by(|a, b| score_scope(a).total_cmp(&score_scope(b)));
         let best_scopeless = scopeless_elements
             .iter()
-            .min_by(|a, b| score_element(a).partial_cmp(&score_element(b)).unwrap());
+            .min_by(|a, b| score_element(a).total_cmp(&score_element(b)));
 
         match (best_scope, best_scopeless) {
             (Some(scope), Some(element)) => {
@@ -374,10 +374,10 @@ impl Page {
 
         let best_scope = candidate_scopes
             .iter()
-            .min_by(|a, b| score_scope(a).partial_cmp(&score_scope(b)).unwrap());
+            .min_by(|a, b| score_scope(a).total_cmp(&score_scope(b)));
         let best_scopeless = scopeless_elements
             .iter()
-            .min_by(|a, b| score_element(a).partial_cmp(&score_element(b)).unwrap());
+            .min_by(|a, b| score_element(a).total_cmp(&score_element(b)));
 
         match (best_scope, best_scopeless) {
             (Some(scope), Some(element)) => {
@@ -518,7 +518,7 @@ impl Page {
                 let e_bottom = e.pos.y + e.size.height;
                 scope_match && exclude_match && node_match && e_bottom <= y + EPSILON
             })
-            .min_by(|a, b| score_fn(a).partial_cmp(&score_fn(b)).unwrap())
+            .min_by(|a, b| score_fn(a).total_cmp(&score_fn(b)))
     }
 
     fn find_below_impl(
@@ -553,7 +553,7 @@ impl Page {
                 let node_match = exclude_element.is_none_or(|ptr| e.element != ptr);
                 scope_match && exclude_match && node_match && e.pos.y >= y - EPSILON
             })
-            .min_by(|a, b| score_fn(a).partial_cmp(&score_fn(b)).unwrap())
+            .min_by(|a, b| score_fn(a).total_cmp(&score_fn(b)))
     }
 
     fn collect_elements_and_scopes<'a>(

@@ -82,7 +82,7 @@ fn resolve_affinity_after_edit(
     offset: usize,
     default_affinity: Affinity,
 ) -> Affinity {
-    let is_hard_break = |node: &NodeRef| matches!(node.node(), Node::HardBreak(_));
+    let is_hard_break = |node: &NodeRef| matches!(node.node(), Some(Node::HardBreak(_)));
 
     let block = match tr.node(block_id) {
         Some(b) => b,
@@ -115,7 +115,7 @@ fn resolve_affinity_after_edit(
     };
 
     let boundary = match child.node() {
-        Node::Text(text) => match local_offset {
+        Some(Node::Text(text)) => match local_offset {
             0 => Some((prev_is_hard_break(), false)),
             len if len == text.text.char_len() => Some((false, next_is_hard_break())),
             _ => None,
@@ -201,7 +201,10 @@ impl Transaction {
         let pending_styles: Vec<Style> = {
             let mut allowed = FxHashSet::default();
             for ancestor in paragraph.ancestors() {
-                let spec = self.doc().schema().node_spec(ancestor.node().as_type());
+                let Some(ancestor_data) = ancestor.node() else {
+                    continue;
+                };
+                let spec = self.doc().schema().node_spec(ancestor_data.as_type());
                 match spec.styles {
                     Some(items) if !items.is_empty() => {
                         for &item in items {
@@ -223,7 +226,7 @@ impl Transaction {
         {
             let child = self.node_mut(child_id).context("Child not found")?;
 
-            if let Node::Text(text_node) = child.node() {
+            if let Some(Node::Text(text_node)) = child.node() {
                 let char_count = bytecount::num_chars(s.as_bytes());
 
                 child.as_mut().update(|node| {
@@ -386,20 +389,20 @@ impl Transaction {
             let prev_offset = calculate_offset_before_child(&paragraph, prev_id);
 
             match prev.node() {
-                Node::Text(prev_text) => {
+                Some(Node::Text(prev_text)) => {
                     let text_content = prev_text.text.to_string();
                     let prev_grapheme_offset =
                         find_prev_grapheme_boundary(&text_content, prev_text.text.char_len());
 
                     (prev_offset + prev_grapheme_offset, head.offset)
                 }
-                Node::HardBreak(_) => (prev_offset, head.offset),
+                Some(Node::HardBreak(_)) => (prev_offset, head.offset),
                 _ => {
                     return Ok(false);
                 }
             }
         } else {
-            if let Node::Text(text_node) = this.node() {
+            if let Some(Node::Text(text_node)) = this.node() {
                 let text_content = text_node.text.to_string();
                 let prev_grapheme_offset = find_prev_grapheme_boundary(&text_content, local_offset);
                 let global_offset_before_child =
@@ -465,7 +468,7 @@ impl Transaction {
         let this = self.node(child_id).context("Child not found")?;
 
         let text_len = match this.node() {
-            Node::Text(text) => text.text.char_len(),
+            Some(Node::Text(text)) => text.text.char_len(),
             _ => 1,
         };
 
@@ -478,19 +481,19 @@ impl Transaction {
             let next_offset = calculate_offset_before_child(&paragraph, next_id);
 
             match next.node() {
-                Node::Text(next_text) => {
+                Some(Node::Text(next_text)) => {
                     let text_content = next_text.text.to_string();
                     let next_grapheme_offset = find_next_grapheme_boundary(&text_content, 0);
 
                     (head.offset, next_offset + next_grapheme_offset)
                 }
-                Node::HardBreak(_) => (head.offset, next_offset + 1),
+                Some(Node::HardBreak(_)) => (head.offset, next_offset + 1),
                 _ => {
                     return Ok(false);
                 }
             }
         } else {
-            if let Node::Text(text_node) = this.node() {
+            if let Some(Node::Text(text_node)) = this.node() {
                 let text_content = text_node.text.to_string();
                 let next_grapheme_offset = find_next_grapheme_boundary(&text_content, local_offset);
                 let global_offset_before_child =
@@ -649,11 +652,11 @@ impl Transaction {
         let to_node = self.doc().node(to.node_id).context("To node not found")?;
 
         let find_isolating = |node: &NodeRef<'_>| {
-            if node.spec().isolating {
+            if node.spec().map_or(false, |s| s.isolating) {
                 return Some(node.node_id());
             }
             node.ancestors()
-                .find(|a| a.spec().isolating)
+                .find(|a| a.spec().map_or(false, |s| s.isolating))
                 .map(|n| n.node_id())
         };
 
@@ -697,7 +700,10 @@ impl Transaction {
             lowest_common_ancestor_id(self.doc(), from.node_id, to.node_id).unwrap_or(NodeId::ROOT);
         let lca = self.doc().node(lca_id).context("LCA not found")?;
 
-        if lca.spec().is_textblock(self.doc().schema()) {
+        if lca
+            .spec()
+            .map_or(false, |s| s.is_textblock(self.doc().schema()))
+        {
             self.push_effect(Effect::NodeChanged {
                 node_id: from.node_id,
             });
@@ -726,7 +732,7 @@ impl Transaction {
                 children
                     .iter()
                     .position(|&child| contains_pos(child, from))
-                    .unwrap()
+                    .context("child position not found in LCA children")?
             };
 
             let end = if to.node_id == lca_id {
@@ -770,8 +776,8 @@ impl Transaction {
         self.doc()
             .node(node_id)
             .map(|n| {
-                let spec = n.spec();
-                spec.isolating || spec.structural
+                n.spec()
+                    .map_or(false, |spec| spec.isolating || spec.structural)
             })
             .unwrap_or(false)
     }
@@ -791,7 +797,10 @@ impl Transaction {
             Position::new(child_id, 0, Affinity::Downstream)
         };
 
-        let child = self.doc().node(child_id).unwrap();
+        let child = self
+            .doc()
+            .node(child_id)
+            .context("barrier child not found")?;
         let child_len = block_content_len(&child);
 
         let seg_to = if is_last_in_range && to.node_id != lca_id {
@@ -804,7 +813,7 @@ impl Transaction {
             && seg_from.offset == 0
             && seg_to.node_id == child_id
             && seg_to.offset == child_len;
-        let is_not_structural = !child.spec().structural;
+        let is_not_structural = !child.spec().map_or(false, |s| s.structural);
 
         if covers_entire_node && is_not_structural {
             self.delete_node_recursive(child_id)?;
@@ -876,7 +885,7 @@ impl Transaction {
             let children_now: Vec<_> = self
                 .doc()
                 .node(lca_id)
-                .unwrap()
+                .context("node not found during lift operation")?
                 .children()
                 .map(|c| c.node_id())
                 .collect();
@@ -885,8 +894,13 @@ impl Transaction {
             }
 
             let container_id = children_now[start_group];
-            let container = self.doc().node(container_id).unwrap();
-            if !container.spec().is_textblock(self.doc().schema()) {
+            let Some(container) = self.doc().node(container_id) else {
+                break;
+            };
+            if !container
+                .spec()
+                .map_or(false, |s| s.is_textblock(self.doc().schema()))
+            {
                 if let Some(first_child) = container.first_child() {
                     self.try_lift_block(first_child.node_id(), lca_id, start_group)?;
                     continue;
@@ -899,7 +913,10 @@ impl Transaction {
 
     fn find_first_textblock_pos(&self, node_id: NodeId) -> Option<Position> {
         let node = self.doc().node(node_id)?;
-        if node.spec().is_textblock(self.doc().schema()) {
+        if node
+            .spec()
+            .map_or(false, |s| s.is_textblock(self.doc().schema()))
+        {
             return Some(Position::new(node_id, 0, Affinity::Downstream));
         }
         for child in node.children() {
@@ -912,7 +929,10 @@ impl Transaction {
 
     fn find_last_textblock_pos(&self, node_id: NodeId) -> Option<Position> {
         let node = self.doc().node(node_id)?;
-        if node.spec().is_textblock(self.doc().schema()) {
+        if node
+            .spec()
+            .map_or(false, |s| s.is_textblock(self.doc().schema()))
+        {
             let len = block_content_len(&node);
             return Some(Position::new(node_id, len, Affinity::Downstream));
         }
@@ -2716,7 +2736,7 @@ mod tests {
         let p_node = new_state.doc.node(p).unwrap();
         let text_child = p_node.first_child().unwrap();
 
-        if let Node::Text(text_node) = text_child.node() {
+        if let Some(Node::Text(text_node)) = text_child.node() {
             let segments = text_node.text.get_segments();
             assert!(segments.len() >= 2);
             let last_segment = segments.last().unwrap();
@@ -2771,7 +2791,7 @@ mod tests {
         let p_node = new_state.doc.node(p).unwrap();
         let text_child = p_node.first_child().unwrap();
 
-        if let Node::Text(text_node) = text_child.node() {
+        if let Some(Node::Text(text_node)) = text_child.node() {
             let segments = text_node.text.get_segments();
             assert_eq!(segments.len(), 1);
             assert!(
@@ -3896,7 +3916,7 @@ mod tests {
         let ft_node = new_state.doc.node(ft).unwrap();
         let text_child = ft_node.first_child().unwrap();
 
-        if let Node::Text(text_node) = text_child.node() {
+        if let Some(Node::Text(text_node)) = text_child.node() {
             for seg in text_node.text.get_segments() {
                 assert!(
                     seg.styles.is_empty(),
@@ -3933,7 +3953,7 @@ mod tests {
         let ft_node = new_state.doc.node(ft).unwrap();
         let text_child = ft_node.first_child().unwrap();
 
-        if let Node::Text(text_node) = text_child.node() {
+        if let Some(Node::Text(text_node)) = text_child.node() {
             for seg in text_node.text.get_segments() {
                 assert!(
                     seg.styles.is_empty(),

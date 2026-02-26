@@ -18,6 +18,13 @@ enum StartPosition {
 }
 
 impl<'a> BlockTraverser<'a> {
+    pub fn empty(doc: &'a Doc) -> Self {
+        Self {
+            doc,
+            stack: Vec::new(),
+        }
+    }
+
     pub fn new(doc: &'a Doc, start_node: NodeId) -> Result<Self> {
         Self::with_start(doc, start_node, StartPosition::AtStart)
     }

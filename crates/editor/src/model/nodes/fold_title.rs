@@ -48,7 +48,7 @@ impl Layout for FoldTitleNode {
         let mut text = ctx
             .node
             .children()
-            .filter_map(|child| match child.node() {
+            .filter_map(|child| match child.node()? {
                 Node::Text(node) => Some(node.text.to_string()),
                 _ => None,
             })

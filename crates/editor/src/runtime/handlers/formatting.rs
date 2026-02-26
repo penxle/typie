@@ -413,7 +413,7 @@ mod tests {
         runtime.update(Message::ClearFormatting);
 
         let node = runtime.state().doc.node(p).unwrap();
-        if let Node::Paragraph(para) = node.node() {
+        if let Some(Node::Paragraph(para)) = node.node() {
             assert_eq!(
                 para.line_height, custom_line_height,
                 "expected line_height {} (document default) after ClearFormatting, got {}",
@@ -457,7 +457,7 @@ mod tests {
         runtime.update(Message::ClearFormatting);
 
         let node = runtime.state().doc.node(p2).unwrap();
-        if let Node::Paragraph(para) = node.node() {
+        if let Some(Node::Paragraph(para)) = node.node() {
             assert_eq!(
                 para.line_height, custom_line_height,
                 "empty paragraph line_height: expected {}, got {}",
@@ -565,7 +565,7 @@ mod tests {
         let p_node = doc.node(p).unwrap();
         let mut found_bold_d = false;
         for child in p_node.children() {
-            if let Node::Text(text_node) = child.node() {
+            if let Some(Node::Text(text_node)) = child.node() {
                 for seg in text_node.text.get_segments() {
                     if seg.text.contains('d')
                         && seg.styles.iter().any(|s| {
@@ -609,7 +609,7 @@ mod tests {
         let p1_node = runtime.state().doc.node(p1).unwrap();
         let mut found_updated = false;
         for child in p1_node.children() {
-            if let Node::Text(text_node) = child.node() {
+            if let Some(Node::Text(text_node)) = child.node() {
                 for seg in text_node.text.get_segments() {
                     for ann in &seg.annotations {
                         if let Annotation::Link(link) = ann {
@@ -629,7 +629,7 @@ mod tests {
         let p2_node = runtime.state().doc.node(p2).unwrap();
         let mut found_original = false;
         for child in p2_node.children() {
-            if let Node::Text(text_node) = child.node() {
+            if let Some(Node::Text(text_node)) = child.node() {
                 for seg in text_node.text.get_segments() {
                     for ann in &seg.annotations {
                         if let Annotation::Link(link) = ann {
@@ -683,7 +683,7 @@ mod tests {
         let has_link = |runtime: &Runtime, para_id: NodeId| -> bool {
             let para = runtime.state().doc.node(para_id).unwrap();
             para.children().any(|child| {
-                if let Node::Text(text_node) = child.node() {
+                if let Some(Node::Text(text_node)) = child.node() {
                     text_node.text.get_segments().iter().any(|seg| {
                         seg.annotations
                             .iter()
@@ -739,7 +739,7 @@ mod tests {
         // p1's link annotation should be removed
         let p1_node = runtime.state().doc.node(p1).unwrap();
         for child in p1_node.children() {
-            if let Node::Text(text_node) = child.node() {
+            if let Some(Node::Text(text_node)) = child.node() {
                 for seg in text_node.text.get_segments() {
                     assert!(
                         seg.annotations.is_empty(),
@@ -754,7 +754,7 @@ mod tests {
         let p2_node = runtime.state().doc.node(p2).unwrap();
         let mut found_link = false;
         for child in p2_node.children() {
-            if let Node::Text(text_node) = child.node() {
+            if let Some(Node::Text(text_node)) = child.node() {
                 for seg in text_node.text.get_segments() {
                     if seg
                         .annotations
@@ -795,7 +795,7 @@ mod tests {
         let p_node = runtime.state().doc.node(p).unwrap();
         let mut found_link = false;
         for child in p_node.children() {
-            if let Node::Text(text_node) = child.node() {
+            if let Some(Node::Text(text_node)) = child.node() {
                 for seg in text_node.text.get_segments() {
                     if seg
                         .annotations
@@ -837,7 +837,7 @@ mod tests {
         let mut first_link_present = false;
         let mut second_link_present = false;
         for child in p_node.children() {
-            if let Node::Text(text_node) = child.node() {
+            if let Some(Node::Text(text_node)) = child.node() {
                 for seg in text_node.text.get_segments() {
                     for ann in &seg.annotations {
                         if let Annotation::Link(link) = ann {
@@ -880,7 +880,7 @@ mod tests {
 
         let p_node = runtime.state().doc.node(p).unwrap();
         for child in p_node.children() {
-            if let Node::Text(text_node) = child.node() {
+            if let Some(Node::Text(text_node)) = child.node() {
                 for seg in text_node.text.get_segments() {
                     assert!(
                         seg.annotations.is_empty(),

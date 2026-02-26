@@ -62,7 +62,7 @@ impl InsertResult {
                         parent
                             .children()
                             .nth(anchor.offset)
-                            .map(|child| leaf_block_start(&child))
+                            .and_then(|child| leaf_block_start(&child))
                     })
                     .unwrap_or(*anchor);
 
@@ -72,7 +72,7 @@ impl InsertResult {
                             parent
                                 .children()
                                 .nth(head.offset - 1)
-                                .map(|child| leaf_block_end(&child))
+                                .and_then(|child| leaf_block_end(&child))
                         })
                         .unwrap_or(*head)
                 } else {
@@ -128,7 +128,7 @@ impl Transaction {
                 {
                     if from_child_id == to_child_id {
                         let child = self.doc().node(from_child_id).context("Child not found")?;
-                        if matches!(child.node(), Node::Text(_)) {
+                        if matches!(child.node(), Some(Node::Text(_))) {
                             self.replace_within_same_text_node(
                                 from_child_id,
                                 from_local_offset,
@@ -147,10 +147,10 @@ impl Transaction {
                                 find_child_at_offset(&parent, offset)
                             {
                                 let child = self.doc().node(child_id).context("Child not found")?;
-                                if !child.spec().content.is_leaf() {
+                                if !child.spec().map_or(true, |s| s.content.is_leaf()) {
                                     let child_len = child.children().fold(0, |acc, c| {
                                         acc + match c.node() {
-                                            Node::Text(t) => t.text.char_len(),
+                                            Some(Node::Text(t)) => t.text.char_len(),
                                             _ => 1,
                                         }
                                     });
@@ -219,7 +219,10 @@ impl Transaction {
             let is_last = current_id == end_id;
             let next_id = node.next_sibling().map(|n| n.node_id());
 
-            node.as_mut().move_to(parent_id.unwrap(), index)?;
+            node.as_mut().move_to(
+                parent_id.context("Parent ID not found for move_node_range")?,
+                index,
+            )?;
             index += 1;
 
             if is_last {
@@ -272,7 +275,7 @@ impl Transaction {
     ) -> Result<bool> {
         let text_len = {
             let node = self.doc().node(node_id).context("Node not found")?;
-            if let Node::Text(text_node) = node.node() {
+            if let Some(Node::Text(text_node)) = node.node() {
                 text_node.text.len()
             } else {
                 anyhow::bail!("Node is not a text node");
@@ -332,7 +335,7 @@ impl Transaction {
     ) -> Result<()> {
         let node = self.doc().node(node_id).context("Node not found")?;
 
-        if let Node::Text(text_node) = node.node() {
+        if let Some(Node::Text(text_node)) = node.node() {
             let byte_offset = text_node.text.char_to_byte(char_offset);
             match direction {
                 DeleteDirection::FromOffset => {
@@ -496,11 +499,9 @@ impl Transaction {
 
     pub(crate) fn clean_up_empty_ancestors(&mut self, mut node_id: NodeId) -> Result<()> {
         loop {
-            let node = self.doc().node(node_id);
-            if node.is_none() {
+            let Some(node) = self.doc().node(node_id) else {
                 break;
-            }
-            let node = node.unwrap();
+            };
 
             let parent_id = node.parent().map(|n| n.node_id());
             let has_children = node.first_child().is_some();
@@ -509,7 +510,7 @@ impl Transaction {
                 break;
             }
 
-            let spec = node.spec();
+            let spec = node.spec().context("Node spec not found")?;
             if spec.content.allows_empty() {
                 break;
             }
@@ -539,7 +540,7 @@ impl Transaction {
             .node(text_node_id)
             .context("Text node not found")?;
 
-        let Node::Text(text) = text_node.node() else {
+        let Some(Node::Text(text)) = text_node.node() else {
             anyhow::bail!("Expected text node but got different node type");
         };
 
@@ -573,8 +574,8 @@ impl Transaction {
             let to_child = self.doc().node(to_child_id).context("To child not found")?;
 
             (
-                matches!(from_child.node(), Node::Text(_)),
-                matches!(to_child.node(), Node::Text(_)),
+                matches!(from_child.node(), Some(Node::Text(_))),
+                matches!(to_child.node(), Some(Node::Text(_))),
             )
         };
 
@@ -586,7 +587,7 @@ impl Transaction {
                     .doc()
                     .node(from_child_id)
                     .context("replace_within_same_block: From child not found")?;
-                if let Node::Text(text) = from_child.node() {
+                if let Some(Node::Text(text)) = from_child.node() {
                     text.text.char_to_byte(from_local_offset)
                 } else {
                     0
@@ -609,7 +610,7 @@ impl Transaction {
         if to_is_text {
             let to_byte_offset = {
                 let to_child = self.doc().node(to_child_id).context("To child not found")?;
-                if let Node::Text(text) = to_child.node() {
+                if let Some(Node::Text(text)) = to_child.node() {
                     text.text.char_to_byte(to_local_offset)
                 } else {
                     0
@@ -638,12 +639,12 @@ impl Transaction {
                 let parent = self.doc().node(parent_id).context("Parent not found 2")?;
                 if let Some((child_id, _)) = find_child_at_offset(&parent, offset) {
                     let child = self.doc().node(child_id).context("Child not found")?;
-                    let is_leaf = child.spec().content.is_leaf();
-                    let is_selectable = child.spec().selectable;
+                    let is_leaf = child.spec().map_or(true, |s| s.content.is_leaf());
+                    let is_selectable = child.spec().map_or(false, |s| s.selectable);
                     let len = if !is_leaf {
                         child.children().fold(0, |acc, c| {
                             acc + match c.node() {
-                                Node::Text(t) => t.text.char_len(),
+                                Some(Node::Text(t)) => t.text.char_len(),
                                 _ => 1,
                             }
                         })
@@ -725,7 +726,7 @@ impl Transaction {
                     let preserved_selection = *self.selection();
 
                     if let Some(child_node) = self.doc().node(child_id) {
-                        if !child_node.spec().content.allows_empty()
+                        if !child_node.spec().map_or(true, |s| s.content.allows_empty())
                             && child_node.first_child().is_none()
                         {
                             self.delete_node_recursive(child_id)?;
@@ -841,7 +842,7 @@ impl Transaction {
         let target_is_paragraph = self
             .doc()
             .node(position.node_id)
-            .map_or(false, |n| matches!(n.node(), Node::Paragraph(_)));
+            .map_or(false, |n| matches!(n.node(), Some(Node::Paragraph(_))));
 
         let can_use_open_insert = fragment.is_open()
             && target_is_paragraph
@@ -856,12 +857,12 @@ impl Transaction {
                 .and_then(|node| {
                     node.parent().map(|parent| {
                         let index = node.index().unwrap_or(0);
-                        let offset = if matches!(parent.node(), Node::Paragraph(_)) {
+                        let offset = if matches!(parent.node(), Some(Node::Paragraph(_))) {
                             parent
                                 .children()
                                 .take(index)
                                 .map(|c| match c.node() {
-                                    Node::Text(t) => t.text.char_len(),
+                                    Some(Node::Text(t)) => t.text.char_len(),
                                     _ => 1,
                                 })
                                 .sum()
@@ -913,8 +914,15 @@ impl Transaction {
             .and_then(|node| {
                 node.parent().map(|parent| {
                     let index = node.index().unwrap_or(0);
-                    let offset = if parent.spec().is_textblock(self.doc().schema()) {
-                        parent.children().take(index).map(|c| c.node().len()).sum()
+                    let offset = if parent
+                        .spec()
+                        .map_or(false, |s| s.is_textblock(self.doc().schema()))
+                    {
+                        parent
+                            .children()
+                            .take(index)
+                            .map(|c| c.node().map_or(1, |n| n.len()))
+                            .sum()
                     } else {
                         index
                     };
@@ -957,7 +965,7 @@ impl Transaction {
         let dest_overrides = self
             .doc()
             .node(position.node_id)
-            .map(|n| n.node().style_overrides())
+            .and_then(|n| n.node().map(|node| node.style_overrides()))
             .unwrap_or_default();
 
         let dest_override_family = dest_overrides.iter().find_map(|s| match s {
@@ -1205,7 +1213,7 @@ impl Transaction {
             .context("Node not found")?;
         let fragment_is_open = fragment.open_start() > 0 || fragment.open_end() > 0;
 
-        match target.node() {
+        match target.node().context("Node decode failed")? {
             Node::Text(_) => {
                 let parent_id = target.parent().context("Text has no parent")?.node_id();
                 let index = target.index().context("Text has no index")?;
@@ -1246,7 +1254,8 @@ impl Transaction {
 
         loop {
             let parent = self.node(pos.node_id).context("Parent not found")?;
-            let content = &parent.spec().content;
+            let spec = parent.spec().context("Parent spec not found")?;
+            let content = &spec.content;
 
             if fragment_types.iter().all(|t| content.matches(*t)) {
                 break;
@@ -1272,7 +1281,8 @@ impl Transaction {
     ) -> Result<Position> {
         loop {
             let parent = self.node(pos.node_id).context("Parent not found")?;
-            let content = &parent.spec().content;
+            let spec = parent.spec().context("Parent spec not found")?;
+            let content = &spec.content;
 
             if fragment_types.iter().all(|t| content.matches(*t)) {
                 break;
@@ -1351,7 +1361,7 @@ impl Transaction {
         let parent_id = parent.node_id();
         let node_index = node.index().context("Node has no index")?;
 
-        let new_node_data = node.node().clone();
+        let new_node_data = node.node().context("Node decode failed")?.clone();
 
         let new_node_id = self
             .node_mut(parent_id)
@@ -1386,7 +1396,11 @@ impl Transaction {
         let top_level_ids = remapped.top_level_node_ids();
 
         // For selectable nodes inserted into non-textblock, return block position after
-        if !target.spec().is_textblock(self.doc().schema()) && top_level_ids.len() == 1 {
+        if !target
+            .spec()
+            .map_or(false, |s| s.is_textblock(self.doc().schema()))
+            && top_level_ids.len() == 1
+        {
             if let Some(frag_node) = remapped.node(top_level_ids[0]) {
                 let node_type = frag_node.data().as_type();
                 let spec = self.state.doc.schema().node_spec(node_type);
@@ -1400,7 +1414,10 @@ impl Transaction {
             }
         }
 
-        let inserted_count = if target.spec().is_textblock(self.doc().schema()) {
+        let inserted_count = if target
+            .spec()
+            .map_or(false, |s| s.is_textblock(self.doc().schema()))
+        {
             let top_level_set: std::collections::HashSet<_> = top_level_ids.iter().collect();
             remapped
                 .iter()
@@ -1454,7 +1471,7 @@ impl Transaction {
                 let mut stack: Vec<NodeId> = node.children().map(|c| c.node_id()).collect();
                 while let Some(id) = stack.pop() {
                     if let Some(child) = self.doc().node(id) {
-                        if child.spec().is_textblock(schema) {
+                        if child.spec().map_or(false, |s| s.is_textblock(schema)) {
                             textblock_ids.push(id);
                         }
                         for g in child.children() {
@@ -1519,11 +1536,10 @@ impl Transaction {
             .context("Block not found")?;
         let children_ids: Vec<NodeId> = block.children().map(|n| n.node_id()).collect();
         let doc = self.doc();
-        let children_refs: Vec<_> = children_ids
+        let children_refs: Vec<_> = children_ids.iter().filter_map(|id| doc.node(*id)).collect();
+        let children = children_refs
             .iter()
-            .map(|id| doc.node(*id).unwrap())
-            .collect();
-        let children = children_refs.iter().map(|n| (n.node_id(), n.node()));
+            .filter_map(|n| n.node().map(|node| (n.node_id(), node)));
         let plans = Node::plan_consecutive_text_merges(children);
 
         for (keep_id, remove_ids, segments) in plans {
@@ -1550,8 +1566,11 @@ impl Transaction {
         let node1 = self.doc().node(node1_id).context("Node1 not found")?;
         let node2 = self.doc().node(node2_id).context("Node2 not found")?;
 
-        Ok(Self::same_node_type(&node1.node(), &node2.node())
-            && Self::compatible_content(node1.spec(), node2.spec()))
+        let n1 = node1.node().context("Node1 decode failed")?;
+        let n2 = node2.node().context("Node2 decode failed")?;
+        let s1 = node1.spec().context("Node1 spec not found")?;
+        let s2 = node2.spec().context("Node2 spec not found")?;
+        Ok(Self::same_node_type(n1, n2) && Self::compatible_content(s1, s2))
     }
 
     fn same_node_type(node1: &Node, node2: &Node) -> bool {
@@ -1610,7 +1629,7 @@ impl Transaction {
 
         if let Some(open_node_id) = open_node_id {
             if let Some(open_node) = self.doc().node(open_node_id) {
-                if matches!(open_node.node(), Node::Text(_)) {
+                if matches!(open_node.node(), Some(Node::Text(_))) {
                     return Ok(None);
                 }
             }
@@ -1627,8 +1646,8 @@ impl Transaction {
                 return Ok(None);
             }
 
-            if matches!(open_node.node(), Node::Text(_))
-                || matches!(target_node.node(), Node::Text(_))
+            if matches!(open_node.node(), Some(Node::Text(_)))
+                || matches!(target_node.node(), Some(Node::Text(_)))
             {
                 return Ok(None);
             }
@@ -1723,7 +1742,7 @@ impl Transaction {
             find_child_at_offset(&parent_node, position.offset)
         {
             let child = self.doc().node(child_id).context("Child not found")?;
-            if let Node::Text(text_node) = child.node() {
+            if let Some(Node::Text(text_node)) = child.node() {
                 if local_offset > 0 && local_offset < text_node.text.char_len() {
                     let (head_text, tail_text) = self.split_text_node_at(child_id, local_offset)?;
 
@@ -1889,8 +1908,11 @@ impl Transaction {
 
             let mut current_id = block_id;
             while current_id != target_parent_id {
-                let current_node = self.doc().node(current_id).unwrap();
-                let parent_node = current_node.parent().unwrap();
+                let current_node = self
+                    .doc()
+                    .node(current_id)
+                    .context("Node not found in lift")?;
+                let parent_node = current_node.parent().context("Parent not found in lift")?;
 
                 if current_node.prev_sibling().is_some() {
                     return Ok(());
@@ -1905,18 +1927,24 @@ impl Transaction {
             let source_parent_id = self
                 .doc()
                 .node(block_id)
-                .unwrap()
+                .context("Block not found in lift")?
                 .parent()
-                .unwrap()
+                .context("Block parent not found in lift")?
                 .node_id();
 
             (current_id, source_parent_id)
         };
 
         let (destination_id, destination_prev_sibling, is_recursive_lift) = {
-            let target_node = self.doc().node(target_parent_id).unwrap();
+            let target_node = self
+                .doc()
+                .node(target_parent_id)
+                .context("Target parent not found in lift")?;
 
-            if !target_node.spec().isolating && !target_node.spec().structural {
+            if target_node
+                .spec()
+                .map_or(false, |s| !s.isolating && !s.structural)
+            {
                 let container_prev_sibling = target_node.prev_sibling().map(|n| n.node_id());
                 if let Some(parent) = target_node.parent() {
                     (parent.node_id(), container_prev_sibling, true)
@@ -1967,7 +1995,9 @@ impl Transaction {
         };
 
         let first_top_type = first_top.data().as_type();
-        let parent_spec = parent.spec();
+        let Some(parent_spec) = parent.spec() else {
+            return false;
+        };
         parent_spec.content.matches(first_top_type)
     }
 
@@ -2109,7 +2139,8 @@ impl Transaction {
                         .doc()
                         .node(node_id)
                         .context("Inserted node not found")?;
-                    let end_pos = leaf_block_end(&inserted_node);
+                    let end_pos =
+                        leaf_block_end(&inserted_node).context("Cannot find leaf block end")?;
                     last_para_id = end_pos.node_id;
                     last_para_content_len = end_pos.offset;
 
@@ -2169,7 +2200,10 @@ impl Transaction {
         let split_at = position.offset;
 
         for child in block.children() {
-            match child.node() {
+            let Some(child_data) = child.node() else {
+                continue;
+            };
+            match child_data {
                 Node::Text(text_node) => {
                     let char_count = text_node.text.char_len();
                     let child_start = current_offset;
@@ -2194,9 +2228,9 @@ impl Transaction {
                 }
                 _ => {
                     if current_offset < split_at {
-                        left_children.push(SplitChild::Node(child.node().clone()));
+                        left_children.push(SplitChild::Node(child_data.clone()));
                     } else {
-                        right_children.push(SplitChild::Node(child.node().clone()));
+                        right_children.push(SplitChild::Node(child_data.clone()));
                     }
                     current_offset += 1;
                 }
@@ -2208,7 +2242,7 @@ impl Transaction {
 
     fn split_text_node_at(&self, node_id: NodeId, offset: usize) -> Result<(Text, Text)> {
         let node = self.doc().node(node_id).context("Node not found")?;
-        let text_node = match node.node() {
+        let text_node = match node.node().context("Node decode failed")? {
             Node::Text(t) => t,
             _ => anyhow::bail!("Not a text node"),
         };
@@ -2284,8 +2318,11 @@ impl Transaction {
                 from_subtree_root
                     .next_sibling()
                     .map(|n| n.node_id())
-                    .unwrap(),
-                to_subtree_root.prev_sibling().map(|n| n.node_id()).unwrap(),
+                    .context("From subtree root has no next sibling")?,
+                to_subtree_root
+                    .prev_sibling()
+                    .map(|n| n.node_id())
+                    .context("To subtree root has no prev sibling")?,
             ))
         } else {
             None
@@ -2768,17 +2805,17 @@ mod tests {
         let root = doc.node(NodeId::ROOT).expect("Root should exist");
         let fold = root
             .children()
-            .find(|c| matches!(c.node(), Node::Fold(_)))
+            .find(|c| matches!(c.node(), Some(Node::Fold(_))))
             .expect("Fold should exist");
         let fold_title = fold
             .children()
-            .find(|c| matches!(c.node(), Node::FoldTitle(_)))
+            .find(|c| matches!(c.node(), Some(Node::FoldTitle(_))))
             .expect("FoldTitle should exist");
 
         // Verify FoldTitle has exactly 1 text child (merged), not 2 separate ones
         let text_children: Vec<_> = fold_title
             .children()
-            .filter(|c| matches!(c.node(), Node::Text(_)))
+            .filter(|c| matches!(c.node(), Some(Node::Text(_))))
             .collect();
 
         assert_eq!(
@@ -2789,7 +2826,7 @@ mod tests {
         );
 
         // Verify the merged text content
-        if let Node::Text(t) = text_children[0].node() {
+        if let Some(Node::Text(t)) = text_children[0].node() {
             assert_eq!(
                 t.text.as_str(),
                 "NewWorld",

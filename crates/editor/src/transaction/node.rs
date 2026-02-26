@@ -53,7 +53,7 @@ impl Transaction {
             let parent_node = self
                 .node(insert_pos.node_id)
                 .context("Parent node not found")?;
-            let parent_spec = parent_node.spec();
+            let parent_spec = parent_node.spec().context("Parent spec not found")?;
 
             let allows = parent_spec.content.matches(node_type);
 
@@ -63,7 +63,7 @@ impl Transaction {
                     None => return Ok(false),
                 };
                 let grandparent_id = grandparent.node_id();
-                let grandparent_spec = grandparent.spec();
+                let grandparent_spec = grandparent.spec().context("Grandparent spec not found")?;
 
                 if !grandparent_spec.content.matches(node_type) {
                     return Ok(false);
@@ -85,7 +85,7 @@ impl Transaction {
                     let parent_next_id = parent_node.next_sibling().map(|n| n.node_id());
                     let parent_last_child_id = parent_node.last_child().map(|n| n.node_id());
 
-                    if let Node::Text(text_node) = child.node() {
+                    if let Some(Node::Text(text_node)) = child.node() {
                         let (head, tail) = text_node.text.split_at(local_offset);
 
                         Some((
@@ -112,7 +112,10 @@ impl Transaction {
                         parent_index,
                         prev_sibling,
                         next_sibling,
-                        parent_node.node().clone(),
+                        parent_node
+                            .node()
+                            .context("Parent node decode failed")?
+                            .clone(),
                         child_info,
                     )),
                 )
@@ -247,7 +250,10 @@ impl Transaction {
                 Some(parent_id) => {
                     let parent = self.node(parent_id).context("Parent not found")?;
 
-                    if predicate(parent.node(), &block_ids) {
+                    let Some(parent_data) = parent.node() else {
+                        return Ok(None);
+                    };
+                    if predicate(parent_data, &block_ids) {
                         return Ok(Some(selection));
                     }
 
@@ -349,7 +355,7 @@ impl Transaction {
 
             let block_types: Vec<NodeType> = blocks
                 .iter()
-                .map(|id| self.node(*id).unwrap().node().as_type())
+                .filter_map(|id| self.node(*id).and_then(|n| n.node().map(|n| n.as_type())))
                 .collect();
 
             let parent_allows_wrapper = parent_spec.content.matches(wrapper_type);
@@ -409,7 +415,7 @@ impl Transaction {
         let wrapper_spec = self.doc().schema().node_spec(wrapper.as_type());
         let block_types: Vec<NodeType> = block_ids
             .iter()
-            .map(|id| self.node(*id).unwrap().node().as_type())
+            .filter_map(|id| self.node(*id).and_then(|n| n.node().map(|n| n.as_type())))
             .collect();
 
         if !block_types.iter().all(|t| wrapper_spec.content.matches(*t)) {
@@ -453,7 +459,7 @@ impl Transaction {
 
         let parent = self.node(parent_id).context("Parent not found")?;
 
-        if parent.spec().isolating {
+        if parent.spec().map_or(false, |s| s.isolating) {
             return Ok(false);
         }
 
@@ -464,10 +470,10 @@ impl Transaction {
             }
         };
 
-        let grandparent_spec = grandparent.spec();
+        let grandparent_spec = grandparent.spec().context("Grandparent spec not found")?;
         let block_types: Vec<NodeType> = block_ids
             .iter()
-            .map(|id| self.node(*id).unwrap().node().as_type())
+            .filter_map(|id| self.node(*id).and_then(|n| n.node().map(|n| n.as_type())))
             .collect();
 
         if !block_types
@@ -480,11 +486,11 @@ impl Transaction {
         let remaining_child_types: Vec<NodeType> = parent
             .children()
             .filter(|child| !block_ids.contains(&child.node_id()))
-            .map(|child| child.node().as_type())
+            .filter_map(|child| child.node_type())
             .collect();
 
         if !remaining_child_types.is_empty() {
-            let parent_spec = parent.spec();
+            let parent_spec = parent.spec().context("Parent spec not found")?;
             if parent_spec
                 .content
                 .validate(&remaining_child_types)
@@ -535,7 +541,10 @@ impl Transaction {
                 .position(|&id| id == block_ids[0])
                 .context("Lift block not found in parent")?;
 
-            let parent_node_data = parent_node.node().clone();
+            let parent_node_data = parent_node
+                .node()
+                .context("Parent node decode failed")?
+                .clone();
             let parent_index = parent_node.index().context("Parent node has no index")?;
             let grandparent = self
                 .node_mut(grandparent_id)
@@ -618,10 +627,10 @@ impl Transaction {
             .node(selection.head.node_id)
             .context("Node not found")?;
 
-        if let Node::Paragraph(_) = this.node() {
+        if let Some(Node::Paragraph(_)) = this.node() {
             if this.children().count() == 0 {
                 if let Some(parent) = this.parent() {
-                    if parent.spec().isolating {
+                    if parent.spec().map_or(false, |s| s.isolating) {
                         return Ok(false);
                     }
                 }
@@ -645,7 +654,7 @@ impl Transaction {
 
         let child_id = descendant_ancestors
             .iter()
-            .find(|&id| self.node(*id).unwrap().parent_id() == Some(ancestor_id))
+            .find(|&id| self.node(*id).and_then(|n| n.parent_id()) == Some(ancestor_id))
             .copied()
             .context("Child not found in ancestors")?;
 

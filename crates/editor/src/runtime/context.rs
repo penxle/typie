@@ -112,7 +112,10 @@ impl<'a> Context<'a> {
         };
 
         if let Some(block) = self.state.doc.node(start_id) {
-            if block.spec().is_textblock(self.state.doc.schema()) {
+            if block
+                .spec()
+                .map_or(false, |s| s.is_textblock(self.state.doc.schema()))
+            {
                 return true;
             }
         }
@@ -132,7 +135,10 @@ impl<'a> Context<'a> {
                 break;
             }
             if let Some(block) = self.state.doc.node(node_id) {
-                if block.spec().is_textblock(self.state.doc.schema()) {
+                if block
+                    .spec()
+                    .map_or(false, |s| s.is_textblock(self.state.doc.schema()))
+                {
                     return true;
                 }
             }
@@ -148,7 +154,9 @@ impl<'a> Context<'a> {
         }
 
         if let Some(container) = self.state.doc.node(selection.head.node_id) {
-            return container.spec().is_textblock(self.state.doc.schema());
+            return container
+                .spec()
+                .map_or(false, |s| s.is_textblock(self.state.doc.schema()));
         }
 
         false

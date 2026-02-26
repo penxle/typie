@@ -40,17 +40,15 @@ pub fn load_icu_data(data: &[u8]) -> Result<(), String> {
     Ok(())
 }
 
-pub fn get_icu_provider() -> &'static BlobDataProvider {
-    ICU_DATA_PROVIDER
-        .get()
-        .expect("ICU data not initialized. Call load_icu_data first.")
+pub fn get_icu_provider() -> Option<&'static BlobDataProvider> {
+    ICU_DATA_PROVIDER.get()
 }
 
-pub fn get_general_category_map() -> &'static CodePointMapData<GeneralCategory> {
-    GENERAL_CATEGORY_DATA.get_or_init(|| {
-        let provider = get_icu_provider();
+pub fn get_general_category_map() -> Option<&'static CodePointMapData<GeneralCategory>> {
+    let provider = get_icu_provider()?;
+    Some(GENERAL_CATEGORY_DATA.get_or_init(|| {
         let deserializing_provider = provider.as_deserializing();
         CodePointMapData::<GeneralCategory>::try_new_unstable(&deserializing_provider)
-            .expect("Failed to load GeneralCategory data")
-    })
+            .expect("Failed to load GeneralCategory data from valid provider")
+    }))
 }

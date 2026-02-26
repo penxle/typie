@@ -95,7 +95,12 @@ impl<'a> LayoutContext<'a> {
         let mut font_size = font_size.unwrap_or(1200);
 
         // style_overrides: highest priority (node-type-specific hardcoded overrides)
-        for style in self.node.node().style_overrides() {
+        let style_overrides = self
+            .node
+            .node()
+            .map(|n| n.style_overrides())
+            .unwrap_or_default();
+        for style in style_overrides {
             match &style {
                 Style::FontFamily(f) => family = f.family.clone(),
                 Style::FontWeight(w) => weight = w.weight,
@@ -134,7 +139,20 @@ impl<'a> LayoutContext<'a> {
         let prev = self.cache.borrow_mut().take_prev(node_id);
 
         let child_ctx = self.with_node(child);
-        let layout = child.node().layout(&child_ctx, constraints);
+        let Some(node) = child.node() else {
+            // Undecodable node: return a minimal placeholder (1px height to avoid zero-height layout issues)
+            let empty = Rc::new(LayoutNode {
+                size: crate::types::Size::new(constraints.max_width, 1.0),
+                element: None,
+                children: None,
+                page_break_policy: Default::default(),
+                render_hints: Default::default(),
+                scope_id: None,
+            });
+            self.cache.borrow_mut().insert(node_id, Rc::clone(&empty));
+            return empty;
+        };
+        let layout = node.layout(&child_ctx, constraints);
         let rc = Rc::new(layout);
 
         let result = if let Some(prev_layout) = prev {
@@ -224,7 +242,7 @@ mod tests {
             &view_states,
             &cache,
         );
-        let layout_without_preedit = root.node().layout(&ctx, constraints);
+        let layout_without_preedit = root.node().unwrap().layout(&ctx, constraints);
         let line_without_preedit =
             first_line(&layout_without_preedit).expect("라인을 찾을 수 있어야 함");
         assert!(
@@ -256,7 +274,7 @@ mod tests {
             &view_states,
             &cache,
         );
-        let layout_with_preedit = root.node().layout(&ctx_with_preedit, constraints);
+        let layout_with_preedit = root.node().unwrap().layout(&ctx_with_preedit, constraints);
         let line_with_preedit =
             first_line(&layout_with_preedit).expect("preedit 적용 후에도 라인이 필요함");
 

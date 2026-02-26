@@ -60,13 +60,19 @@ pub struct DocumentSettings {
     pub layout_mode: LayoutMode,
 }
 
-impl DocumentSettings {
-    pub fn new() -> Self {
+impl Default for DocumentSettings {
+    fn default() -> Self {
         Self {
             block_gap: 100,
             paragraph_indent: 100,
             layout_mode: LayoutMode::default(),
         }
+    }
+}
+
+impl DocumentSettings {
+    pub fn new() -> Self {
+        Self::default()
     }
 }
 

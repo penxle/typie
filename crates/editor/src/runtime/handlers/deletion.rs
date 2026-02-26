@@ -176,7 +176,10 @@ impl Runtime {
         let is_external = self
             .doc()
             .node(node_id)
-            .map(|n| n.node().is_external(self.doc().schema()))
+            .map(|n| {
+                n.node()
+                    .map_or(false, |node| node.is_external(self.doc().schema()))
+            })
             .unwrap_or(false);
 
         self.transact(move |tr| {

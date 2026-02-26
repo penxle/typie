@@ -28,7 +28,7 @@ impl Runtime {
                 return Ok(false);
             };
 
-            if !matches!(node_ref.node(), Node::Image(_)) {
+            if !matches!(node_ref.node(), Some(Node::Image(_))) {
                 return Ok(false);
             }
 
@@ -53,7 +53,7 @@ impl Runtime {
                 return Ok(false);
             };
 
-            if !matches!(node_ref.node(), Node::Image(_)) {
+            if !matches!(node_ref.node(), Some(Node::Image(_))) {
                 return Ok(false);
             }
 

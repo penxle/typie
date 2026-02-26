@@ -9,8 +9,8 @@ impl Runtime {
         let mut fold_content_id = None;
         for child in fold.children() {
             match child.node() {
-                Node::FoldTitle(_) => fold_title_id = Some(child.node_id()),
-                Node::FoldContent(_) => fold_content_id = Some(child.node_id()),
+                Some(Node::FoldTitle(_)) => fold_title_id = Some(child.node_id()),
+                Some(Node::FoldContent(_)) => fold_content_id = Some(child.node_id()),
                 _ => {}
             }
         }
@@ -20,7 +20,7 @@ impl Runtime {
 
         let selection = self.state.selection;
         let fold_title = self.doc().node(fold_title_id)?;
-        let target = leaf_block_end(&fold_title);
+        let target = leaf_block_end(&fold_title)?;
 
         let is_in_fold_content = |node_id: NodeId| {
             node_id == fold_content_id || self.doc().is_ancestor(fold_content_id, node_id)

@@ -144,9 +144,9 @@ impl Selection {
         };
 
         if from.node_id == to.node_id {
-            let is_textblock = doc
-                .node(from.node_id)
-                .map_or(false, |n| n.spec().is_textblock(doc.schema()));
+            let is_textblock = doc.node(from.node_id).map_or(false, |n| {
+                n.spec().map_or(false, |s| s.is_textblock(doc.schema()))
+            });
 
             if is_textblock {
                 return extract_block_text_range(doc, from.node_id, from.offset, to.offset);
@@ -197,10 +197,10 @@ fn extract_block_text_full(doc: &Doc, block_id: NodeId) -> String {
     let mut result = String::new();
     for child in block.children() {
         match child.node() {
-            Node::Text(text_node) => {
+            Some(Node::Text(text_node)) => {
                 result.push_str(&text_node.text.as_str());
             }
-            Node::HardBreak(_) => {
+            Some(Node::HardBreak(_)) => {
                 result.push('\n');
             }
             _ => {}

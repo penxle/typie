@@ -58,25 +58,28 @@ impl Doc {
 
         let map = loro.get_map(SETTINGS_KEY);
         let mut settings = DocumentSettings::new();
-        settings.encode(&map).unwrap();
+        settings
+            .encode(&map)
+            .expect("Doc::new: failed to encode default settings");
 
         let nodes = loro.get_map("nodes");
 
         let map = nodes
             .insert_container(&NodeId::ROOT.to_string(), LoroMap::new())
-            .unwrap();
+            .expect("Doc::new: failed to insert root node container");
         let mut root = Node::Root(RootNode::default());
-        root.encode(&map).unwrap();
+        root.encode(&map)
+            .expect("Doc::new: failed to encode root node");
 
         {
             let defaults = DefaultAttrs::default();
             let cascade_map = map
                 .insert_container(CASCADE_ATTRS_KEY, LoroMap::new())
-                .unwrap();
+                .expect("Doc::new: failed to insert cascade attrs container");
             for attr in defaults.to_attrs() {
                 cascade_map
                     .insert(attr.key(), attr.to_loro_value())
-                    .unwrap();
+                    .expect("Doc::new: failed to insert default cascade attr");
             }
         }
 
@@ -85,17 +88,17 @@ impl Doc {
         Self { inner }
     }
 
-    pub fn from_snapshot(snapshot: Vec<u8>) -> Self {
+    pub fn from_snapshot(snapshot: Vec<u8>) -> anyhow::Result<Self> {
         let schema = Rc::new(Schema::default());
 
-        let loro = LoroDoc::from_snapshot(&snapshot).unwrap();
+        let loro = LoroDoc::from_snapshot(&snapshot).context("Failed to decode snapshot")?;
         loro.config_default_text_style(Some(StyleConfig {
             expand: ExpandType::None,
         }));
 
         let inner = DocInner::new(loro, schema);
 
-        Self { inner }
+        Ok(Self { inner })
     }
 
     pub fn loro_doc(&self) -> &LoroDoc {
@@ -269,7 +272,7 @@ impl Doc {
 
     pub fn settings(&self) -> DocumentSettings {
         let map = self.inner.loro.get_map(SETTINGS_KEY);
-        DocumentSettings::decode(&map).unwrap()
+        DocumentSettings::decode(&map).unwrap_or_default()
     }
 
     pub fn update_settings(&self, f: impl FnOnce(&mut DocumentSettings)) -> Result<()> {
@@ -306,7 +309,7 @@ impl Doc {
             .node(NodeId::ROOT)
             .context("Root node does not exist")?;
         anyhow::ensure!(
-            root.node_type() == NodeType::Root,
+            root.node_type() == Some(NodeType::Root),
             "Root node has wrong type: {:?}",
             root.node_type()
         );
@@ -325,7 +328,9 @@ impl Doc {
                 .node(id)
                 .with_context(|| format!("Node {} is referenced but does not exist", id))?;
 
-            let node_type = node_ref.node_type();
+            let node_type = node_ref
+                .node_type()
+                .with_context(|| format!("Node {} could not be decoded", id))?;
 
             // Check forbidden_descendants violation
             anyhow::ensure!(
@@ -392,14 +397,17 @@ impl Doc {
 
             // grandparent_must_be check
             let node_ref = self.node(id).unwrap();
-            let spec = self.inner.schema.node_spec(node_ref.node_type());
+            let Some(nt) = node_ref.node_type() else {
+                continue;
+            };
+            let spec = self.inner.schema.node_spec(nt);
             if let Some(required_grandparent) = spec.grandparent_must_be {
                 let parent_id = node_ref.parent_id();
                 let grandparent_type = parent_id
                     .and_then(|pid| self.node(pid))
                     .and_then(|p| p.parent_id())
                     .and_then(|gid| self.node(gid))
-                    .map(|g| g.node_type());
+                    .and_then(|g| g.node_type());
 
                 anyhow::ensure!(
                     grandparent_type == Some(required_grandparent),
@@ -417,12 +425,12 @@ impl Doc {
 
     pub fn validate_node(&self, node_id: NodeId) -> Result<()> {
         let node_ref = self.node(node_id).context("Node not found")?;
-        let node_type = node_ref.node_type();
+        let node_type = node_ref.node_type().context("Node decode failed")?;
         let spec = self.inner.schema.node_spec(node_type);
 
         let child_types: Vec<NodeType> = node_ref
             .children()
-            .map(|child| child.node().as_type())
+            .filter_map(|child| child.node().map(|n| n.as_type()))
             .collect();
 
         spec.content.validate(&child_types).with_context(|| {
@@ -432,7 +440,7 @@ impl Doc {
             )
         })?;
 
-        if let Node::Text(text_node) = node_ref.node() {
+        if let Some(Node::Text(text_node)) = node_ref.node() {
             let allowed_styles = self.allowed_styles_for(node_id);
             let allowed_annotations = self.allowed_annotations_for(node_id);
 
@@ -484,7 +492,10 @@ impl Doc {
 
         let skip_count = if skip_self { 1 } else { 0 };
         for ancestor in node.ancestors().skip(skip_count) {
-            let spec = self.inner.schema.node_spec(ancestor.node().as_type());
+            let Some(node_type) = ancestor.node_type() else {
+                continue;
+            };
+            let spec = self.inner.schema.node_spec(node_type);
             match get_field(spec) {
                 Some(items) if !items.is_empty() => {
                     for &item in items {

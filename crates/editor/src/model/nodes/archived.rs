@@ -65,7 +65,16 @@ impl Layout for ArchivedNode {
             id: self.id.clone(),
         };
 
-        let parent_block = ctx.node.parent().expect("Archived node must have a parent");
+        let Some(parent_block) = ctx.node.parent() else {
+            return LayoutNode {
+                size: Size::new(constraints.max_width, 1.0),
+                element: None,
+                children: None,
+                page_break_policy: Default::default(),
+                render_hints: Default::default(),
+                scope_id: None,
+            };
+        };
 
         let element = ExternalElement::new(
             ctx.node.node_id(),

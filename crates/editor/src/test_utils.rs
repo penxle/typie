@@ -829,7 +829,7 @@ macro_rules! __doc_create_node_with_id {
             $crate::test_utils::__apply_default_attrs($tr.doc(), $id);
 
             if let Some(node) = $tr.doc().node($id) {
-                if let $crate::model::Node::Text(text_node) = node.node() {
+                if let Some($crate::model::Node::Text(text_node)) = node.node() {
                     for (start, end, style) in pending_styles {
                         let _ = text_node.text.apply_style(start..end, &style);
                     }
@@ -870,7 +870,7 @@ macro_rules! __doc_create_node_with_id {
             $crate::test_utils::__apply_default_attrs($tr.doc(), $id);
 
             if let Some(node) = $tr.doc().node($id) {
-                if let $crate::model::Node::Text(text_node) = node.node() {
+                if let Some($crate::model::Node::Text(text_node)) = node.node() {
                     for (start, end, style) in pending_styles {
                         let _ = text_node.text.apply_style(start..end, &style);
                     }
@@ -911,7 +911,7 @@ macro_rules! __doc_create_node_with_id {
             $crate::test_utils::__apply_default_attrs($tr.doc(), $id);
 
             if let Some(node) = $tr.doc().node($id) {
-                if let $crate::model::Node::Text(text_node) = node.node() {
+                if let Some($crate::model::Node::Text(text_node)) = node.node() {
                     for (range, styles) in style_ranges {
                         for style in styles {
                             let _ = text_node.text.apply_style(range.clone(), &style);
@@ -953,7 +953,7 @@ macro_rules! __doc_create_node_with_id {
             let styles = __parse_styles!($($styles)*);
             if !styles.is_empty() {
                 if let Some(node) = $tr.doc().node($id) {
-                    if let $crate::model::Node::Text(text_node) = node.node() {
+                    if let Some($crate::model::Node::Text(text_node)) = node.node() {
                         for style in styles {
                             let _ = text_node.text.apply_style(0..text_len, &style);
                         }
@@ -990,7 +990,7 @@ macro_rules! __doc_create_node_with_id {
             let styles = __parse_styles!($($styles)*);
             if !styles.is_empty() {
                 if let Some(node) = $tr.doc().node($id) {
-                    if let $crate::model::Node::Text(text_node) = node.node() {
+                    if let Some($crate::model::Node::Text(text_node)) = node.node() {
                         for style in styles {
                             let _ = text_node.text.apply_style(0..text_len, &style);
                         }
@@ -1813,7 +1813,12 @@ fn collect_nodes_dfs(
     result: &mut Vec<crate::model::Node>,
 ) {
     if let Some(node_ref) = doc.node(node_id) {
-        result.push(node_ref.node().clone());
+        result.push(
+            node_ref
+                .node()
+                .expect("test: node should be decodable")
+                .clone(),
+        );
 
         for child in node_ref.children() {
             collect_nodes_dfs(doc, child.node_id(), result);
@@ -1846,7 +1851,7 @@ fn position_to_path_position(
 pub fn __apply_default_attrs(doc: &crate::model::Doc, node_id: crate::model::NodeId) {
     let defaults = doc.default_attrs().to_styles();
     if let Some(node) = doc.node(node_id) {
-        if let crate::model::Node::Text(text_node) = node.node() {
+        if let Some(crate::model::Node::Text(text_node)) = node.node() {
             __apply_default_attrs_to_text(&text_node.text, &defaults);
         }
     }

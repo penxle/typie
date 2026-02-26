@@ -13,7 +13,7 @@ pub fn find_child_at_offset(block: &NodeRef, offset: usize) -> Option<(NodeId, u
         let id = child.node_id();
 
         match child.node() {
-            Node::Text(text) => {
+            Some(Node::Text(text)) => {
                 let text_len = text.text.char_len();
                 if offset >= current_offset && offset < current_offset + text_len {
                     return Some((child.node_id(), offset - current_offset));
@@ -65,14 +65,14 @@ pub fn find_text_at_offset(
     let (child_id, internal_offset) = find_child_at_offset(block, offset)?;
     let child = doc.node(child_id)?;
     match child.node() {
-        Node::Text(t) => Some((child_id, internal_offset, t.text.into_loro_text())),
+        Some(Node::Text(t)) => Some((child_id, internal_offset, t.text.into_loro_text())),
         _ => {
             // boundary case: text와 hard break 사이에서 text를 우선
             if offset > 0 {
                 let (prev_child_id, prev_internal) = find_child_at_offset(block, offset - 1)?;
                 let prev_child = doc.node(prev_child_id)?;
                 match prev_child.node() {
-                    Node::Text(t) => {
+                    Some(Node::Text(t)) => {
                         Some((prev_child_id, prev_internal + 1, t.text.into_loro_text()))
                     }
                     _ => None,
@@ -97,7 +97,7 @@ pub fn calculate_offset_before_child(block: &NodeRef, target_child_id: NodeId) -
         }
 
         match child.node() {
-            Node::Text(text) => {
+            Some(Node::Text(text)) => {
                 offset += text.text.char_len();
             }
             _ => {
@@ -142,7 +142,7 @@ pub fn position_in_selection(doc: &Doc, pos: Position, selection: &Selection) ->
                     break;
                 };
 
-                if node.node_type() == NodeType::TableCell {
+                if node.node_type() == Some(NodeType::TableCell) {
                     if let Some(row) = node.parent() {
                         if row.parent().map(|t| t.node_id()) == Some(table_id) {
                             let r_idx = row.index().unwrap_or(0);
@@ -153,7 +153,7 @@ pub fn position_in_selection(doc: &Doc, pos: Position, selection: &Selection) ->
                                 && c_idx <= c_end;
                         }
                     }
-                } else if node.node_type() == NodeType::Table && id == table_id {
+                } else if node.node_type() == Some(NodeType::Table) && id == table_id {
                     break;
                 }
 
@@ -182,8 +182,9 @@ pub fn position_in_selection(doc: &Doc, pos: Position, selection: &Selection) ->
         return false;
     };
 
-    let after_start = compare_positions(doc, from, pos).unwrap() != Ordering::Greater;
-    let before_end = compare_positions(doc, pos, to).unwrap() != Ordering::Greater;
+    let after_start =
+        compare_positions(doc, from, pos).map_or(false, |ord| ord != Ordering::Greater);
+    let before_end = compare_positions(doc, pos, to).map_or(false, |ord| ord != Ordering::Greater);
     after_start && before_end
 }
 
@@ -197,56 +198,38 @@ fn position_path(doc: &Doc, pos: Position) -> Result<Vec<usize>> {
     Ok(path)
 }
 
-pub fn leaf_block_start(node: &NodeRef<'_>) -> Position {
-    if node.spec().is_textblock(node.schema()) {
-        return Position::new(node.node_id(), 0, Affinity::Downstream);
+pub fn leaf_block_start(node: &NodeRef<'_>) -> Option<Position> {
+    if node.spec().map_or(false, |s| s.is_textblock(node.schema())) {
+        return Some(Position::new(node.node_id(), 0, Affinity::Downstream));
     }
 
-    if node.spec().content.is_leaf() || node.first_child().is_none() {
-        let parent_id = node
-            .parent_id()
-            .context("leaf_block_start: node has no parent")
-            .unwrap();
-        let idx = node
-            .index()
-            .context("leaf_block_start: node has no index")
-            .unwrap();
-        return Position::new(parent_id, idx, Affinity::Downstream);
+    if node.spec().map_or(false, |s| s.content.is_leaf()) || node.first_child().is_none() {
+        let parent_id = node.parent_id()?;
+        let idx = node.index()?;
+        return Some(Position::new(parent_id, idx, Affinity::Downstream));
     }
 
-    let child = node
-        .first_child()
-        .context("leaf_block_start: node has no first child")
-        .unwrap();
+    let child = node.first_child()?;
     leaf_block_start(&child)
 }
 
-pub fn leaf_block_end(node: &NodeRef<'_>) -> Position {
-    if node.spec().is_textblock(node.schema()) {
-        return Position::new(
+pub fn leaf_block_end(node: &NodeRef<'_>) -> Option<Position> {
+    if node.spec().map_or(false, |s| s.is_textblock(node.schema())) {
+        return Some(Position::new(
             node.node_id(),
             block_content_len(node),
             Affinity::Downstream,
-        );
+        ));
     }
 
-    if node.spec().content.is_leaf() || node.last_child().is_none() {
-        let parent_id = node
-            .parent_id()
-            .context("leaf_block_end: node has no parent")
-            .unwrap();
-        let idx = node
-            .index()
-            .context("leaf_block_end: node has no index")
-            .unwrap();
+    if node.spec().map_or(false, |s| s.content.is_leaf()) || node.last_child().is_none() {
+        let parent_id = node.parent_id()?;
+        let idx = node.index()?;
         // TODO: Upstream으로 바꿔야 함
-        return Position::new(parent_id, idx + 1, Affinity::Downstream);
+        return Some(Position::new(parent_id, idx + 1, Affinity::Downstream));
     }
 
-    let child = node
-        .last_child()
-        .context("leaf_block_end: node has no last child")
-        .unwrap();
+    let child = node.last_child()?;
     leaf_block_end(&child)
 }
 
@@ -255,7 +238,7 @@ pub fn move_from_block_position(doc: &Doc, position: Position, go_forward: bool)
         return position;
     };
 
-    if node.spec().is_textblock(node.schema()) {
+    if node.spec().map_or(false, |s| s.is_textblock(node.schema())) {
         return position;
     }
 
@@ -263,7 +246,9 @@ pub fn move_from_block_position(doc: &Doc, position: Position, go_forward: bool)
 
     if go_forward {
         if position.offset < children.len() {
-            return leaf_block_start(&children[position.offset]);
+            if let Some(pos) = leaf_block_start(&children[position.offset]) {
+                return pos;
+            }
         }
 
         if let Some(next_pos) = find_next_cursor_position_forward(doc, node.node_id()) {
@@ -271,14 +256,23 @@ pub fn move_from_block_position(doc: &Doc, position: Position, go_forward: bool)
         }
 
         if let Some(last) = children.last() {
-            return leaf_block_end(last);
+            if let Some(pos) = leaf_block_end(last) {
+                return pos;
+            }
         }
 
-        return leaf_block_end(&doc.node(NodeId::ROOT).unwrap());
+        if let Some(root) = doc.node(NodeId::ROOT) {
+            if let Some(pos) = leaf_block_end(&root) {
+                return pos;
+            }
+        }
+        return position;
     } else {
         if position.offset > 0 && !children.is_empty() {
             let child_idx = (position.offset - 1).min(children.len() - 1);
-            return leaf_block_end(&children[child_idx]);
+            if let Some(pos) = leaf_block_end(&children[child_idx]) {
+                return pos;
+            }
         }
 
         if let Some(prev_pos) = find_prev_cursor_position_backward(doc, node.node_id()) {
@@ -286,10 +280,17 @@ pub fn move_from_block_position(doc: &Doc, position: Position, go_forward: bool)
         }
 
         if let Some(first) = children.first() {
-            return leaf_block_start(first);
+            if let Some(pos) = leaf_block_start(first) {
+                return pos;
+            }
         }
 
-        return leaf_block_start(&doc.node(NodeId::ROOT).unwrap());
+        if let Some(root) = doc.node(NodeId::ROOT) {
+            if let Some(pos) = leaf_block_start(&root) {
+                return pos;
+            }
+        }
+        return position;
     }
 }
 
@@ -299,7 +300,7 @@ fn find_next_cursor_position_forward(doc: &Doc, node_id: NodeId) -> Option<Posit
     let mut traverser = BlockTraverser::new_after_subtree(doc, node_id).ok()?;
     let next_block = traverser.next()?;
     let node = doc.node(next_block)?;
-    Some(leaf_block_start(&node))
+    leaf_block_start(&node)
 }
 
 fn find_prev_cursor_position_backward(doc: &Doc, node_id: NodeId) -> Option<Position> {
@@ -308,7 +309,7 @@ fn find_prev_cursor_position_backward(doc: &Doc, node_id: NodeId) -> Option<Posi
     let mut traverser = BlockTraverser::new_before_subtree(doc, node_id).ok()?;
     let prev_block = traverser.prev()?;
     let node = doc.node(prev_block)?;
-    Some(leaf_block_end(&node))
+    leaf_block_end(&node)
 }
 
 #[cfg(test)]
@@ -331,10 +332,10 @@ mod tests {
         let root_id = NodeId::ROOT;
         let image = doc.node(img).unwrap();
 
-        let start_pos = leaf_block_start(&image);
+        let start_pos = leaf_block_start(&image).unwrap();
         assert_eq!(start_pos, Position::new(root_id, 0, Affinity::Downstream));
 
-        let end_pos = leaf_block_end(&image);
+        let end_pos = leaf_block_end(&image).unwrap();
         assert_eq!(end_pos, Position::new(root_id, 1, Affinity::Downstream));
     }
 
@@ -348,10 +349,10 @@ mod tests {
         let root_id = NodeId::ROOT;
         let blockquote = doc.node(bq).unwrap();
 
-        let start_pos = leaf_block_start(&blockquote);
+        let start_pos = leaf_block_start(&blockquote).unwrap();
         assert_eq!(start_pos, Position::new(root_id, 0, Affinity::Downstream));
 
-        let end_pos = leaf_block_end(&blockquote);
+        let end_pos = leaf_block_end(&blockquote).unwrap();
         assert_eq!(end_pos, Position::new(root_id, 1, Affinity::Downstream));
     }
 
@@ -367,10 +368,10 @@ mod tests {
 
         let blockquote = doc.node(bq).unwrap();
 
-        let start_pos = leaf_block_start(&blockquote);
+        let start_pos = leaf_block_start(&blockquote).unwrap();
         assert_eq!(start_pos, Position::new(p, 0, Affinity::Downstream));
 
-        let end_pos = leaf_block_end(&blockquote);
+        let end_pos = leaf_block_end(&blockquote).unwrap();
         assert_eq!(end_pos, Position::new(p, 1, Affinity::Downstream));
     }
 
@@ -383,10 +384,10 @@ mod tests {
 
         let paragraph = doc.node(p).unwrap();
 
-        let start_pos = leaf_block_start(&paragraph);
+        let start_pos = leaf_block_start(&paragraph).unwrap();
         assert_eq!(start_pos, Position::new(p, 0, Affinity::Downstream));
 
-        let end_pos = leaf_block_end(&paragraph);
+        let end_pos = leaf_block_end(&paragraph).unwrap();
         assert_eq!(end_pos, Position::new(p, 5, Affinity::Downstream));
     }
 
@@ -409,10 +410,10 @@ mod tests {
 
         let blockquote = doc.node(bq).unwrap();
 
-        let start_pos = leaf_block_start(&blockquote);
+        let start_pos = leaf_block_start(&blockquote).unwrap();
         assert_eq!(start_pos, Position::new(p, 0, Affinity::Downstream));
 
-        let end_pos = leaf_block_end(&blockquote);
+        let end_pos = leaf_block_end(&blockquote).unwrap();
         assert_eq!(end_pos, Position::new(p, 6, Affinity::Downstream));
     }
 
@@ -429,10 +430,10 @@ mod tests {
 
         let blockquote = doc.node(bq).unwrap();
 
-        let start_pos = leaf_block_start(&blockquote);
+        let start_pos = leaf_block_start(&blockquote).unwrap();
         assert_eq!(start_pos, Position::new(bq, 0, Affinity::Downstream));
 
-        let end_pos = leaf_block_end(&blockquote);
+        let end_pos = leaf_block_end(&blockquote).unwrap();
         assert_eq!(end_pos, Position::new(bq, 1, Affinity::Downstream));
     }
 

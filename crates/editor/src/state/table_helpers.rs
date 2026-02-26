@@ -57,14 +57,14 @@ pub fn find_table_cell(doc: &Doc, node_id: NodeId) -> Option<(NodeId, NodeId, us
             break;
         };
 
-        if node.node_type() == NodeType::TableCell {
+        if node.node_type() == Some(NodeType::TableCell) {
             let cell = node;
             let row = cell.parent()?;
-            if row.node_type() != NodeType::TableRow {
+            if row.node_type() != Some(NodeType::TableRow) {
                 return None;
             }
             let table = row.parent()?;
-            if table.node_type() != NodeType::Table {
+            if table.node_type() != Some(NodeType::Table) {
                 return None;
             }
 
@@ -74,7 +74,7 @@ pub fn find_table_cell(doc: &Doc, node_id: NodeId) -> Option<(NodeId, NodeId, us
             return Some((cell.node_id(), table.node_id(), row_idx, col_idx));
         }
 
-        if node.node_type() == NodeType::Table {
+        if node.node_type() == Some(NodeType::Table) {
             break;
         }
 

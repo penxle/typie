@@ -89,7 +89,7 @@ impl Transaction {
             return false;
         };
 
-        if !matches!(node.node(), Node::Paragraph(_)) {
+        if !matches!(node.node(), Some(Node::Paragraph(_))) {
             return false;
         }
 
@@ -539,7 +539,7 @@ mod tests {
         let text_node = p01
             .first_child()
             .expect("Cell B should still have text node");
-        if let Node::Text(t) = text_node.node() {
+        if let Some(Node::Text(t)) = text_node.node() {
             assert_eq!(
                 t.text.to_string(),
                 "B",
@@ -616,7 +616,7 @@ mod tests {
             .first_child()
             .expect("dropped text should create a text node");
 
-        let Node::Text(text) = text_node.node() else {
+        let Some(Node::Text(text)) = text_node.node() else {
             panic!("first child should be text");
         };
 
