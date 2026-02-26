@@ -97,7 +97,6 @@ class EditorController extends ChangeNotifier {
   void dispatch(Map<String, dynamic> message) {
     if (!editor.isDisposed) {
       editor.dispatch(message);
-      onDispatched?.call(message);
     }
   }
 
@@ -116,7 +115,6 @@ class EditorController extends ChangeNotifier {
 
   final ValueNotifier<RemarkOverlayInfo?> remarkScrollTarget = ValueNotifier(null);
   final ValueNotifier<RemarkOverlayInfo?> remarkHighlightTarget = ValueNotifier(null);
-  void Function(Map<String, dynamic> message)? onDispatched;
 
   void scrollToRemark(RemarkOverlayInfo remark) {
     remarkScrollTarget.value = null;

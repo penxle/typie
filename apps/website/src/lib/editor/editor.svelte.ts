@@ -96,7 +96,6 @@ export class Editor {
   #rafId: number | null = null;
   #flushPending = false;
   #awake = false;
-  #inputFastPathQueued = false;
   #renderDebugEnabled = false;
   #layoutDebugEnabled = false;
   #settledResolvers: (() => void)[] = [];
@@ -335,50 +334,6 @@ export class Editor {
     if (!this.#awake) {
       this.#awake = true;
       this.#ensureActive();
-    }
-  }
-
-  #wakeUpInputFastPath(): void {
-    if (!this.#awake) {
-      this.#awake = true;
-    }
-
-    if (!this.#running || this.#inputFastPathQueued) {
-      return;
-    }
-
-    this.#inputFastPathQueued = true;
-    queueMicrotask(() => {
-      this.#inputFastPathQueued = false;
-      if (!this.#running || !this.#awake) {
-        return;
-      }
-
-      if (this.#rafId !== null) {
-        cancelAnimationFrame(this.#rafId);
-        this.#rafId = null;
-      }
-
-      this.#tick();
-    });
-  }
-
-  #isInputFastPathMessage(message: Message): boolean {
-    switch (message.type) {
-      case 'input':
-      case 'replaceBackward':
-      case 'deleteBackward':
-      case 'deleteWordBackward':
-      case 'deleteSentenceBackward':
-      case 'compositionStart':
-      case 'compositionUpdate':
-      case 'compositionEnd':
-      case 'commitPreedit': {
-        return true;
-      }
-      default: {
-        return false;
-      }
     }
   }
 
@@ -666,11 +621,7 @@ export class Editor {
 
   dispatch(message: Message): Editor {
     this.#wasmEditor?.enqueueMessage(message);
-    if (this.#isInputFastPathMessage(message)) {
-      this.#wakeUpInputFastPath();
-    } else {
-      this.#wakeUp();
-    }
+    this.#wakeUp();
 
     return this;
   }
