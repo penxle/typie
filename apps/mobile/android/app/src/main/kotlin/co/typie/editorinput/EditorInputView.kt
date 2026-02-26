@@ -9,7 +9,9 @@ import android.view.View
 import android.view.inputmethod.BaseInputConnection
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
+import android.view.inputmethod.InputConnectionWrapper
 import android.view.inputmethod.InputMethodManager
+import android.widget.EditText
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
@@ -63,7 +65,7 @@ class EditorInputView(
 class EditorInputNativeView(
   context: Context,
   private val channel: MethodChannel
-) : View(context) {
+) : EditText(context) {
 
   private var isComposing = false
   private var composingText = ""
@@ -71,15 +73,17 @@ class EditorInputNativeView(
   private var cursorY = 0.0
   private var cursorHeight = 20.0
   private var lastDeleteTime = 0L
-  private var batchEditDepth = 0
-  private var pendingCacheInvalidation = false
   private var composingRegionLength = 0
-  private var lastCommitWasAutocorrect = false
 
   private val inputMethodManager: InputMethodManager
     get() = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
 
   init {
+    setText("")
+    setSelection(0)
+    isCursorVisible = false
+    inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+    imeOptions = EditorInfo.IME_FLAG_NO_FULLSCREEN or EditorInfo.IME_FLAG_NO_ENTER_ACTION or EditorInfo.IME_ACTION_NONE
     setOnFocusChangeListener { _, hasFocus ->
       if (!hasFocus) {
         channel.invokeMethod("focusLost", emptyMap<String, Any>())
@@ -185,11 +189,20 @@ class EditorInputNativeView(
   override fun onCreateInputConnection(outAttrs: EditorInfo): InputConnection {
     outAttrs.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
     outAttrs.imeOptions = EditorInfo.IME_FLAG_NO_FULLSCREEN or EditorInfo.IME_FLAG_NO_ENTER_ACTION or EditorInfo.IME_ACTION_NONE
+    val target = super.onCreateInputConnection(outAttrs) ?: return BaseInputConnection(this, true)
 
-    return object : BaseInputConnection(this, true) {
+    return object : InputConnectionWrapper(target, true) {
+
+      private var hasDeferredFinishComposing = false
+
+      private val deferredFinishComposingRunnable = Runnable {
+        if (!hasDeferredFinishComposing) return@Runnable
+        hasDeferredFinishComposing = false
+        finishComposingNow()
+      }
 
       private fun notifyCursorUpdate() {
-        val editable = getEditable() ?: return
+        val editable = text ?: return
         inputMethodManager.updateSelection(
           this@EditorInputNativeView,
           Selection.getSelectionStart(editable),
@@ -199,7 +212,24 @@ class EditorInputNativeView(
         )
       }
 
+      private fun cancelDeferredFinishComposing() {
+        if (!hasDeferredFinishComposing) return
+        hasDeferredFinishComposing = false
+        this@EditorInputNativeView.removeCallbacks(deferredFinishComposingRunnable)
+      }
+
+      private fun finishComposingNow(): Boolean {
+        composingRegionLength = 0
+        if (isComposing) {
+          commitComposingState()
+        }
+        val result = super.finishComposingText()
+        notifyCursorUpdate()
+        return result
+      }
+
       private fun handleNewline() {
+        cancelDeferredFinishComposing()
         commitComposingState()
         super.finishComposingText()
         channel.invokeMethod("performAction", mapOf("action" to "newline"))
@@ -207,23 +237,11 @@ class EditorInputNativeView(
         notifyCursorUpdate()
       }
 
-      override fun beginBatchEdit(): Boolean {
-        batchEditDepth++
-        return super.beginBatchEdit()
-      }
-
-      override fun endBatchEdit(): Boolean {
-        batchEditDepth--
-        if (batchEditDepth == 0 && pendingCacheInvalidation) {
-          pendingCacheInvalidation = false
-          inputMethodManager.updateSelection(
-            this@EditorInputNativeView, 0, 0, -1, -1)
-        }
-        return super.endBatchEdit()
-      }
-
       override fun commitText(text: CharSequence?, newCursorPosition: Int): Boolean {
+        cancelDeferredFinishComposing()
         val str = text?.toString().orEmpty()
+        val isSingleWhitespaceCommit = str.length == 1 && str[0].isWhitespace()
+        var shouldInsertText = str.isNotEmpty()
 
         if (consumeComposingRegion()) {
           if (str.isNotEmpty()) insertTextOrNewline(str)
@@ -232,35 +250,26 @@ class EditorInputNativeView(
           return true
         }
 
-        val skipCacheInvalidation: Boolean
-        if (isComposing) {
-          skipCacheInvalidation = (str != composingText)
-          lastCommitWasAutocorrect = skipCacheInvalidation
+        if (isComposing && isSingleWhitespaceCommit) {
+          commitComposingState()
+        } else if (isComposing && str == composingText) {
+          commitComposingState()
+          shouldInsertText = false
+        } else if (isComposing) {
           isComposing = false
           composingText = ""
           channel.invokeMethod("cancelMarkedText", emptyMap<String, Any>())
-        } else {
-          skipCacheInvalidation = lastCommitWasAutocorrect
-          lastCommitWasAutocorrect = false
         }
 
-        if (str.isNotEmpty()) insertTextOrNewline(str)
+        if (shouldInsertText) insertTextOrNewline(str)
         super.commitText(text, newCursorPosition)
 
-        if (!skipCacheInvalidation) {
-          if (batchEditDepth > 0) {
-            pendingCacheInvalidation = true
-          } else {
-            inputMethodManager.updateSelection(
-              this@EditorInputNativeView, 0, 0, -1, -1)
-          }
-        }
         notifyCursorUpdate()
         return true
       }
 
       override fun setComposingText(text: CharSequence?, newCursorPosition: Int): Boolean {
-        pendingCacheInvalidation = false
+        cancelDeferredFinishComposing()
         val str = text?.toString().orEmpty()
 
         if (consumeComposingRegion()) {
@@ -269,7 +278,7 @@ class EditorInputNativeView(
             composingText = str
             channel.invokeMethod("setMarkedText", mapOf("text" to str))
           }
-          super.setComposingText(text, newCursorPosition)
+          super.setComposingText(str, newCursorPosition)
           notifyCursorUpdate()
           return true
         }
@@ -282,26 +291,31 @@ class EditorInputNativeView(
           channel.invokeMethod("setMarkedText", mapOf("text" to str))
         }
 
-        super.setComposingText(text, newCursorPosition)
+        super.setComposingText(str, newCursorPosition)
         notifyCursorUpdate()
         return true
       }
 
       override fun finishComposingText(): Boolean {
-        composingRegionLength = 0
         if (isComposing) {
-          commitComposingState()
+          cancelDeferredFinishComposing()
+          hasDeferredFinishComposing = true
+          this@EditorInputNativeView.post(deferredFinishComposingRunnable)
+          return true
         }
-        super.finishComposingText()
-        notifyCursorUpdate()
-        return true
+        cancelDeferredFinishComposing()
+        return finishComposingNow()
       }
 
       override fun deleteSurroundingText(beforeLength: Int, afterLength: Int): Boolean {
+        cancelDeferredFinishComposing()
         if (isComposing) {
           cancelComposingState()
-          repeat(beforeLength) { performDelete() }
-        } else if (beforeLength > 0) {
+          super.commitText("", 1)
+          notifyCursorUpdate()
+          return true
+        }
+        if (beforeLength > 0) {
           repeat(beforeLength) { performDelete() }
         }
         super.deleteSurroundingText(beforeLength, afterLength)
@@ -320,6 +334,7 @@ class EditorInputNativeView(
       }
 
       override fun sendKeyEvent(event: KeyEvent): Boolean {
+        cancelDeferredFinishComposing()
         if (event.action != KeyEvent.ACTION_DOWN) return true
 
         DPAD_ACTIONS[event.keyCode]?.let { action ->
@@ -352,6 +367,9 @@ class EditorInputNativeView(
             true
           }
           KeyEvent.KEYCODE_SPACE -> {
+            if (event.deviceId == KeyCharacterMap.VIRTUAL_KEYBOARD) {
+              return super.sendKeyEvent(event)
+            }
             commitComposingState()
             super.finishComposingText()
             channel.invokeMethod("insertText", mapOf("text" to " "))
@@ -386,6 +404,7 @@ class EditorInputNativeView(
       }
 
       override fun performEditorAction(actionCode: Int): Boolean {
+        cancelDeferredFinishComposing()
         handleNewline()
         return true
       }
