@@ -1,6 +1,7 @@
 machine:
-  network:
-    hostname: beaver
-
   nodeLabels:
     volumes.typie.io/local-path: 'true'
+---
+apiVersion: v1alpha1
+kind: HostnameConfig
+hostname: beaver

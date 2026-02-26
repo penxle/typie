@@ -1,10 +1,8 @@
 machine:
-  network:
-    interfaces:
-      - deviceSelector:
-          busPath: '0*'
-        vip:
-          ip: 115.68.42.145
-
   certSANs:
     - talos.k8s.typie.io
+---
+apiVersion: v1alpha1
+kind: Layer2VIPConfig
+name: 115.68.42.145
+link: enp0s1

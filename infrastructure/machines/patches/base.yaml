@@ -1,16 +1,7 @@
 machine:
   install:
     disk: /dev/vda
-    image: factory.talos.dev/metal-installer/d16652227f171d277b6bd35af6f88ce5d9d48906f80a938476b5fea6e7803e6b:v1.11.2
-
-  network:
-    interfaces:
-      - deviceSelector:
-          busPath: '0*'
-        dhcp: true
-    nameservers:
-      - 1.1.1.1
-      - 1.0.0.1
+    image: factory.talos.dev/metal-installer/00d2f5d6e5b7b42bedaf6b6b2a400aa7dcc5d00aafa19236337e3d3b7982695a:v1.12.4
 
   kubelet:
     extraConfig:
@@ -57,3 +48,13 @@ cluster:
 
   proxy:
     disabled: true
+---
+apiVersion: v1alpha1
+kind: DHCPv4Config
+name: enp0s1
+---
+apiVersion: v1alpha1
+kind: ResolverConfig
+nameservers:
+  - address: 1.1.1.1
+  - address: 1.0.0.1
