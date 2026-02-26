@@ -268,15 +268,24 @@
   {/snippet}
 
   <div class={flex({ flexDirection: 'column', borderLeftWidth: '1px', marginLeft: '24px' })} aria-hidden={!open} role="tree">
-    {#if children.loading}
-      <div class={css({ paddingX: '8px', paddingY: '6px', color: 'text.disabled' })}>
+    {#if children.loading || children.data?.entity.children == null}
+      <div class={css({ paddingLeft: '14px', paddingRight: '8px', paddingY: '6px', color: 'text.disabled' })}>
         <RingSpinner style={css.raw({ size: '14px' })} />
       </div>
     {:else}
-      {#each children.data?.entity?.children ?? [] as entity (entity.id)}
+      {#each children.data.entity.children as entity (entity.id)}
         <Entity entity$key={entity} />
       {:else}
-        <div class={css({ paddingX: '8px', paddingY: '6px', fontSize: '14px', fontWeight: 'medium', color: 'text.disabled' })}>
+        <div
+          class={css({
+            paddingLeft: '14px',
+            paddingRight: '8px',
+            paddingY: '6px',
+            fontSize: '14px',
+            fontWeight: 'medium',
+            color: 'text.disabled',
+          })}
+        >
           폴더가 비어있어요
         </div>
       {/each}
