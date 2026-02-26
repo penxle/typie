@@ -2,6 +2,8 @@
   import { css } from '@typie/styled-system/css';
   import { center } from '@typie/styled-system/patterns';
   import { token } from '@typie/styled-system/tokens';
+  import { onMount } from 'svelte';
+  import { pollBootstrapAssertion } from '$lib/bootstrap';
   import type { Snippet } from 'svelte';
 
   type Props = {
@@ -9,6 +11,8 @@
   };
 
   let { children }: Props = $props();
+
+  onMount(pollBootstrapAssertion);
 </script>
 
 <div
