@@ -26,7 +26,13 @@ try {
   await $`sops -d secrets.enc.yaml > ${tempDir}/secrets.yaml`.quiet();
   await $`sops -d patches/secrets.enc.yaml > ${tempDir}/patches-secrets.yaml`.quiet();
 
-  await $`cd ${tempDir} && talosctl gen config k8s https://controlplane.k8s.typie.io:6443 --with-secrets secrets.yaml --kubernetes-version 1.34.1`.quiet();
+  await $`cd ${tempDir} && talosctl gen config k8s https://controlplane.k8s.typie.io:6443 --with-secrets secrets.yaml --kubernetes-version 1.35.1`.quiet();
+
+  // talosctl gen config generates HostnameConfig { auto: stable } by default.
+  // Strip it so node patches can supply their own HostnameConfig { hostname: ... }.
+  for (const base of ['controlplane.yaml', 'worker.yaml']) {
+    await $`sh -c ${`yq 'select(.kind != "HostnameConfig")' ${tempDir}/${base} > ${tempDir}/${base}.tmp && mv ${tempDir}/${base}.tmp ${tempDir}/${base}`}`.quiet();
+  }
 
   await Promise.all(
     NODES.map(async ([name, type]) => {
@@ -38,8 +44,12 @@ try {
 
         await $`sh -c ${patchCmd}`.quiet();
         console.log(`${name} patched`);
-      } catch {
-        console.log(`${name} patch failed`);
+      } catch (err) {
+        let stderr = String(err);
+        if (err instanceof Error && 'stderr' in err && err.stderr instanceof Buffer) {
+          stderr = err.stderr.toString();
+        }
+        console.error(`${name} patch failed:\n${stderr}`);
         throw new Error(`${name} patch failed`);
       }
     }),
@@ -53,8 +63,12 @@ try {
         try {
           await $`talosctl apply-config --nodes ${name} --file ${tempDir}/${name}.yaml`.quiet();
           console.log(`${name} deployed`);
-        } catch {
-          console.log(`${name} deployment failed`);
+        } catch (err) {
+          let stderr = String(err);
+          if (err instanceof Error && 'stderr' in err && err.stderr instanceof Buffer) {
+            stderr = err.stderr.toString();
+          }
+          console.error(`${name} deployment failed:\n${stderr}`);
           throw new Error(`${name} deployment failed`);
         }
       }),
