@@ -1,6 +1,8 @@
-import { json } from '@sveltejs/kit';
+import { createHash } from 'node:crypto';
+import { error, json } from '@sveltejs/kit';
+import { env as privateEnv } from '$env/dynamic/private';
 import { env } from '$env/dynamic/public';
-import type { Bootstrap } from '$lib/bootstrap.server';
+import type { Bootstrap } from '$lib/bootstrap';
 import type { RequestHandler } from './$types';
 
 const CACHE_TTL = 60_000;
@@ -40,7 +42,30 @@ async function getBootstrap(): Promise<Bootstrap | null> {
   return fetching;
 }
 
-export const GET: RequestHandler = async () => {
+export const GET: RequestHandler = async ({ getClientAddress, cookies }) => {
   const bootstrap = await getBootstrap();
+
+  if (bootstrap?.maintenance.enabled && bootstrap.maintenance.platforms.includes('web')) {
+    const clientIp = getClientAddress();
+    if (!['127.0.0.1', '::1', ...bootstrap.maintenance.allowedIps].includes(clientIp)) {
+      const bypassKeyHash = cookies.get('typie-bb');
+      if (privateEnv.PRIVATE_BOOTSTRAP_BYPASS_KEY) {
+        const expectedHash = createHash('sha256').update(privateEnv.PRIVATE_BOOTSTRAP_BYPASS_KEY).digest('hex');
+        if (bypassKeyHash === expectedHash) {
+          return json(bootstrap);
+        }
+      }
+      error(503, {
+        message: bootstrap.maintenance.message,
+        code: 'maintenance',
+        maintenance: {
+          title: bootstrap.maintenance.title,
+          message: bootstrap.maintenance.message,
+          until: bootstrap.maintenance.until,
+        },
+      });
+    }
+  }
+
   return json(bootstrap);
 };

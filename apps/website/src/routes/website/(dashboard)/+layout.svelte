@@ -14,6 +14,7 @@
   import { updated } from '$app/state';
   import Logo from '$assets/logos/logo.svg?component';
   import { env } from '$env/dynamic/public';
+  import { pollBootstrapAssertion } from '$lib/bootstrap';
   import { AdminImpersonateBanner } from '$lib/components/admin';
   import { hydrateQuery } from '$lib/graphql';
   import { wasm } from '$lib/wasm';
@@ -189,6 +190,8 @@
       });
     }
   });
+
+  onMount(pollBootstrapAssertion);
 
   onMount(() => {
     if (query.data.me.referral && !app.preference.current.referralWelcomeModalShown) {

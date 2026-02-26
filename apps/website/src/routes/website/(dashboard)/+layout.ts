@@ -2,12 +2,16 @@ import { redirect } from '@sveltejs/kit';
 import { serializeOAuthState } from '@typie/ui/utils';
 import qs from 'query-string';
 import { env } from '$env/dynamic/public';
+import { checkBootstrapAssertion } from '$lib/bootstrap';
 import { loadQuery } from '$lib/graphql';
 import { graphql } from '$mearie';
+import type { LayoutLoad } from './$types';
 
 export const ssr = false;
 
-export const load = async (event) => {
+export const load: LayoutLoad = async (event) => {
+  await checkBootstrapAssertion(event.fetch);
+
   const query = await loadQuery(
     event,
     graphql(`
