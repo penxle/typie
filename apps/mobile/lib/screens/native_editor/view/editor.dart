@@ -384,7 +384,9 @@ class EditorView extends HookWidget {
         final wasVisible = isKeyboardVisible.value;
         if (height > 0) {
           keyboardHeight.value = height;
-          bottomToolbarMode.value = BottomToolbarMode.hidden;
+          if (!wasVisible) {
+            bottomToolbarMode.value = BottomToolbarMode.hidden;
+          }
         }
         isKeyboardVisible.value = height > 0;
 
