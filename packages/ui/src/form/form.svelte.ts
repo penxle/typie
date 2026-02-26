@@ -1,3 +1,4 @@
+import { isAggregatedError } from '@mearie/svelte';
 import { z } from 'zod';
 import type { Awaitable } from '../utils';
 
@@ -94,7 +95,7 @@ export class Form<Schema extends z.ZodTypeAny, D extends Partial<z.infer<Schema>
         await this.#options.onSubmit(data);
         submitSucceeded = true;
       } catch (err) {
-        const unwrapped = err instanceof AggregateError && err.errors.length === 1 ? err.errors[0] : err;
+        const unwrapped = isAggregatedError(err) && err.errors.length === 1 ? err.errors[0] : err;
         this.#options.onError?.(unwrapped);
         throw unwrapped;
       }
