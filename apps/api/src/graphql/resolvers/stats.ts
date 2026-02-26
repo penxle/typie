@@ -1,7 +1,18 @@
 import dayjs from 'dayjs';
 import { sql } from 'drizzle-orm';
 import { redis } from '@/cache';
-import { db, Entities, Plans, PostCharacterCountChanges, Posts, Sites, Subscriptions, Users } from '@/db';
+import {
+  db,
+  DocumentCharacterCountChanges,
+  Documents,
+  Entities,
+  Plans,
+  PostCharacterCountChanges,
+  Posts,
+  Sites,
+  Subscriptions,
+  Users,
+} from '@/db';
 import { PlanAvailability, SubscriptionState, UserState } from '@/enums';
 import { builder } from '../builder';
 
@@ -76,33 +87,34 @@ builder.queryField('stats', (t) =>
           WITH date_series AS (
             SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
           ),
-          current_period AS (
-            SELECT COUNT(DISTINCT ${PostCharacterCountChanges.userId})::int as count
-            FROM ${PostCharacterCountChanges}
-            INNER JOIN ${Posts} ON ${PostCharacterCountChanges.postId} = ${Posts.id}
-            INNER JOIN ${Entities} ON ${Posts.entityId} = ${Entities.id}
-            INNER JOIN ${Sites} ON ${Entities.siteId} = ${Sites.id}
-            WHERE ${PostCharacterCountChanges.bucket} >= ${twentyFourHoursAgo}
-              AND ${PostCharacterCountChanges.bucket} < ${now}
-              AND ${Entities.createdAt} != ${Sites.createdAt}
-          ),
-          previous_period AS (
-            SELECT COUNT(DISTINCT ${PostCharacterCountChanges.userId})::int as count
-            FROM ${PostCharacterCountChanges}
-            INNER JOIN ${Posts} ON ${PostCharacterCountChanges.postId} = ${Posts.id}
-            INNER JOIN ${Entities} ON ${Posts.entityId} = ${Entities.id}
-            INNER JOIN ${Sites} ON ${Entities.siteId} = ${Sites.id}
-            WHERE ${PostCharacterCountChanges.bucket} >= ${fortyEightHoursAgo}
-              AND ${PostCharacterCountChanges.bucket} < ${twentyFourHoursAgo}
-              AND ${Entities.createdAt} != ${Sites.createdAt}
-          ),
           valid_user_activities AS (
-            SELECT DISTINCT ${PostCharacterCountChanges.userId}, ${PostCharacterCountChanges.bucket}
+            SELECT ${PostCharacterCountChanges.userId} AS user_id, ${PostCharacterCountChanges.bucket} AS bucket
             FROM ${PostCharacterCountChanges}
             INNER JOIN ${Posts} ON ${PostCharacterCountChanges.postId} = ${Posts.id}
             INNER JOIN ${Entities} ON ${Posts.entityId} = ${Entities.id}
             INNER JOIN ${Sites} ON ${Entities.siteId} = ${Sites.id}
             WHERE ${Entities.createdAt} != ${Sites.createdAt}
+
+            UNION
+
+            SELECT ${DocumentCharacterCountChanges.userId} AS user_id, ${DocumentCharacterCountChanges.bucket} AS bucket
+            FROM ${DocumentCharacterCountChanges}
+            INNER JOIN ${Documents} ON ${DocumentCharacterCountChanges.documentId} = ${Documents.id}
+            INNER JOIN ${Entities} ON ${Documents.entityId} = ${Entities.id}
+            INNER JOIN ${Sites} ON ${Entities.siteId} = ${Sites.id}
+            WHERE ${Entities.createdAt} != ${Sites.createdAt}
+          ),
+          current_period AS (
+            SELECT COUNT(DISTINCT user_id)::int as count
+            FROM valid_user_activities
+            WHERE bucket >= ${twentyFourHoursAgo}
+              AND bucket < ${now}
+          ),
+          previous_period AS (
+            SELECT COUNT(DISTINCT user_id)::int as count
+            FROM valid_user_activities
+            WHERE bucket >= ${fortyEightHoursAgo}
+              AND bucket < ${twentyFourHoursAgo}
           )
           SELECT 
             date_series.date::text as date,
@@ -176,55 +188,18 @@ builder.queryField('stats', (t) =>
           WITH date_series AS (
             SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
           ),
-          real_posts AS (
-            SELECT DISTINCT ${Posts.id}, ${Posts.createdAt} AS created_at
-            FROM ${Posts}
-            INNER JOIN ${Entities} ON ${Posts.entityId} = ${Entities.id}
+          real_documents AS (
+            SELECT DISTINCT ${Documents.id}, ${Documents.createdAt} AS created_at
+            FROM ${Documents}
+            INNER JOIN ${Entities} ON ${Documents.entityId} = ${Entities.id}
             INNER JOIN ${Sites} ON ${Entities.siteId} = ${Sites.id}
             WHERE ${Entities.createdAt} != ${Sites.createdAt}
           )
           SELECT 
             date_series.date::text as date,
-            COALESCE(COUNT(rp.id), 0)::int as value
+            COALESCE(COUNT(rd.id), 0)::int as value
           FROM date_series
-          LEFT JOIN real_posts rp ON rp.created_at < (date_series.date + interval '1 day')
-          GROUP BY date_series.date
-          ORDER BY date_series.date
-        `);
-
-      const getPostsNew = () =>
-        db.execute(sql`
-          WITH date_series AS (
-            SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
-          ),
-          real_posts AS (
-            SELECT DISTINCT ${Posts.id}, ${Posts.createdAt} AS created_at
-            FROM ${Posts}
-            INNER JOIN ${Entities} ON ${Posts.entityId} = ${Entities.id}
-            INNER JOIN ${Sites} ON ${Entities.siteId} = ${Sites.id}
-            WHERE ${Entities.createdAt} != ${Sites.createdAt}
-          ),
-          current_period AS (
-            SELECT COUNT(rp.id)::int as count
-            FROM real_posts rp
-            WHERE rp.created_at >= ${twentyFourHoursAgo}
-              AND rp.created_at < ${now}
-          ),
-          previous_period AS (
-            SELECT COUNT(rp.id)::int as count
-            FROM real_posts rp
-            WHERE rp.created_at >= ${fortyEightHoursAgo}
-              AND rp.created_at < ${twentyFourHoursAgo}
-          )
-          SELECT 
-            date_series.date::text as date,
-            CASE 
-              WHEN date_series.date = CURRENT_DATE - INTERVAL '1 day' THEN COALESCE((SELECT count FROM previous_period), 0)
-              WHEN date_series.date = CURRENT_DATE THEN COALESCE((SELECT count FROM current_period), 0)
-              ELSE COALESCE(COUNT(rp.id), 0)
-            END::int as value
-          FROM date_series
-          LEFT JOIN real_posts rp ON DATE(rp.created_at) = date_series.date
+          LEFT JOIN real_documents rd ON rd.created_at < (date_series.date + interval '1 day')
           GROUP BY date_series.date
           ORDER BY date_series.date
         `);
@@ -234,16 +209,29 @@ builder.queryField('stats', (t) =>
         db.execute(sql`
           WITH date_series AS (
             SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
+          ),
+          valid_character_changes AS (
+            SELECT ${PostCharacterCountChanges.bucket} AS bucket, ${PostCharacterCountChanges.additions} AS additions
+            FROM ${PostCharacterCountChanges}
+            INNER JOIN ${Posts} ON ${PostCharacterCountChanges.postId} = ${Posts.id}
+            INNER JOIN ${Entities} ON ${Posts.entityId} = ${Entities.id}
+            INNER JOIN ${Sites} ON ${Entities.siteId} = ${Sites.id}
+            WHERE ${Entities.createdAt} != ${Sites.createdAt}
+
+            UNION ALL
+
+            SELECT ${DocumentCharacterCountChanges.bucket} AS bucket, ${DocumentCharacterCountChanges.additions} AS additions
+            FROM ${DocumentCharacterCountChanges}
+            INNER JOIN ${Documents} ON ${DocumentCharacterCountChanges.documentId} = ${Documents.id}
+            INNER JOIN ${Entities} ON ${Documents.entityId} = ${Entities.id}
+            INNER JOIN ${Sites} ON ${Entities.siteId} = ${Sites.id}
+            WHERE ${Entities.createdAt} != ${Sites.createdAt}
           )
           SELECT 
             date_series.date::text as date,
-            COALESCE(SUM(${PostCharacterCountChanges.additions}), 0)::int as value
+            COALESCE(SUM(vcc.additions), 0)::int as value
           FROM date_series
-          LEFT JOIN ${PostCharacterCountChanges} ON ${PostCharacterCountChanges.bucket} < (date_series.date + interval '1 day')
-          LEFT JOIN ${Posts} ON ${PostCharacterCountChanges.postId} = ${Posts.id}
-          LEFT JOIN ${Entities} ON ${Posts.entityId} = ${Entities.id}
-          LEFT JOIN ${Sites} ON ${Entities.siteId} = ${Sites.id}
-          WHERE ${Entities.createdAt} != ${Sites.createdAt} OR ${Entities.createdAt} IS NULL
+          LEFT JOIN valid_character_changes vcc ON vcc.bucket < (date_series.date + interval '1 day')
           GROUP BY date_series.date
           ORDER BY date_series.date
         `);
@@ -253,33 +241,34 @@ builder.queryField('stats', (t) =>
           WITH date_series AS (
             SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
           ),
-          current_period AS (
-            SELECT SUM(${PostCharacterCountChanges.additions})::int as total
-            FROM ${PostCharacterCountChanges}
-            INNER JOIN ${Posts} ON ${PostCharacterCountChanges.postId} = ${Posts.id}
-            INNER JOIN ${Entities} ON ${Posts.entityId} = ${Entities.id}
-            INNER JOIN ${Sites} ON ${Entities.siteId} = ${Sites.id}
-            WHERE ${PostCharacterCountChanges.bucket} >= ${twentyFourHoursAgo}
-              AND ${PostCharacterCountChanges.bucket} < ${now}
-              AND ${Entities.createdAt} != ${Sites.createdAt}
-          ),
-          previous_period AS (
-            SELECT SUM(${PostCharacterCountChanges.additions})::int as total
-            FROM ${PostCharacterCountChanges}
-            INNER JOIN ${Posts} ON ${PostCharacterCountChanges.postId} = ${Posts.id}
-            INNER JOIN ${Entities} ON ${Posts.entityId} = ${Entities.id}
-            INNER JOIN ${Sites} ON ${Entities.siteId} = ${Sites.id}
-            WHERE ${PostCharacterCountChanges.bucket} >= ${fortyEightHoursAgo}
-              AND ${PostCharacterCountChanges.bucket} < ${twentyFourHoursAgo}
-              AND ${Entities.createdAt} != ${Sites.createdAt}
-          ),
           valid_character_changes AS (
-            SELECT ${PostCharacterCountChanges.bucket}, ${PostCharacterCountChanges.additions}
+            SELECT ${PostCharacterCountChanges.bucket} AS bucket, ${PostCharacterCountChanges.additions} AS additions
             FROM ${PostCharacterCountChanges}
             INNER JOIN ${Posts} ON ${PostCharacterCountChanges.postId} = ${Posts.id}
             INNER JOIN ${Entities} ON ${Posts.entityId} = ${Entities.id}
             INNER JOIN ${Sites} ON ${Entities.siteId} = ${Sites.id}
             WHERE ${Entities.createdAt} != ${Sites.createdAt}
+
+            UNION ALL
+
+            SELECT ${DocumentCharacterCountChanges.bucket} AS bucket, ${DocumentCharacterCountChanges.additions} AS additions
+            FROM ${DocumentCharacterCountChanges}
+            INNER JOIN ${Documents} ON ${DocumentCharacterCountChanges.documentId} = ${Documents.id}
+            INNER JOIN ${Entities} ON ${Documents.entityId} = ${Entities.id}
+            INNER JOIN ${Sites} ON ${Entities.siteId} = ${Sites.id}
+            WHERE ${Entities.createdAt} != ${Sites.createdAt}
+          ),
+          current_period AS (
+            SELECT SUM(additions)::int as total
+            FROM valid_character_changes
+            WHERE bucket >= ${twentyFourHoursAgo}
+              AND bucket < ${now}
+          ),
+          previous_period AS (
+            SELECT SUM(additions)::int as total
+            FROM valid_character_changes
+            WHERE bucket >= ${fortyEightHoursAgo}
+              AND bucket < ${twentyFourHoursAgo}
           )
           SELECT 
             date_series.date::text as date,
@@ -320,7 +309,6 @@ builder.queryField('stats', (t) =>
         subscriptionsRevenue,
         subscriptionsActive,
         postsTotal,
-        postsNew,
         charactersInput,
         charactersDaily,
         systemServiceDays,
@@ -331,7 +319,6 @@ builder.queryField('stats', (t) =>
         getSubscriptionsRevenue(),
         getSubscriptionsActive(),
         getPostsTotal(),
-        getPostsNew(),
         getCharactersInput(),
         getCharactersDaily(),
         getSystemServiceDays(),
@@ -358,7 +345,6 @@ builder.queryField('stats', (t) =>
 
         // Post metrics
         postsTotal: transformToData(postsTotal),
-        postsNew: transformToData(postsNew),
 
         // Character metrics
         charactersInput: transformToData(charactersInput),
