@@ -359,7 +359,29 @@ class EditorInputNativeView(
             notifyCursorUpdate()
             true
           }
-          else -> super.sendKeyEvent(event)
+          else -> {
+            val isNumberKey =
+              (event.keyCode in KeyEvent.KEYCODE_0..KeyEvent.KEYCODE_9) ||
+              (event.keyCode in KeyEvent.KEYCODE_NUMPAD_0..KeyEvent.KEYCODE_NUMPAD_9)
+            val unicode = event.unicodeChar
+            if (
+              isNumberKey &&
+              unicode != 0 &&
+              !event.isCtrlPressed &&
+              !event.isAltPressed &&
+              !event.isMetaPressed
+            ) {
+              val text = unicode.toChar().toString()
+              commitComposingState()
+              super.finishComposingText()
+              channel.invokeMethod("insertText", mapOf("text" to text))
+              super.commitText(text, 1)
+              notifyCursorUpdate()
+              return true
+            }
+
+            super.sendKeyEvent(event)
+          }
         }
       }
 
