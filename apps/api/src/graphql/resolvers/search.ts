@@ -75,13 +75,6 @@ builder.queryFields((t) => ({
         federation: {},
         queries: [
           {
-            indexUid: 'posts',
-            q: args.query.trim(),
-            filter: [`siteId = ${args.siteId}`],
-            attributesToCrop: ['*'],
-            attributesToHighlight: ['title', 'subtitle', 'text'],
-          },
-          {
             indexUid: 'documents',
             q: args.query.trim(),
             filter: [`siteId = ${args.siteId}`],
@@ -95,16 +88,6 @@ builder.queryFields((t) => ({
         totalHits: result.estimatedTotalHits ?? 0,
         hits: result.hits.map((hit) => {
           const indexUid = hit._federation?.indexUid;
-
-          if (indexUid === 'posts') {
-            return {
-              type: SearchHitType.POST,
-              title: sanitizeHtml(hit._formatted?.title),
-              subtitle: sanitizeHtml(hit._formatted?.subtitle),
-              text: sanitizeHtml(hit._formatted?.text),
-              post: hit.id,
-            };
-          }
 
           if (indexUid === 'documents') {
             return {
