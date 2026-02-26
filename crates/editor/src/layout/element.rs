@@ -213,6 +213,10 @@ impl Element {
 
     pub fn hash_render_cache_signature<H: Hasher>(&self, state: &mut H) -> bool {
         match self {
+            Element::Line(e) => {
+                e.hash_render_cache_signature(state);
+                true
+            }
             Element::CalloutBackground(e) => {
                 e.hash(state);
                 true
@@ -229,8 +233,7 @@ impl Element {
                 e.hash(state);
                 true
             }
-            Element::Line(_)
-            | Element::External(_)
+            Element::External(_)
             | Element::Blockquote(_)
             | Element::BlockquoteQuote(_)
             | Element::CalloutIcon(_)

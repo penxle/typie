@@ -11,6 +11,7 @@ use rustc_hash::FxHashSet;
 use skrifa::FontRef;
 use skrifa::instance::{LocationRef, Size as SkriFaSize};
 use std::fmt;
+use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -151,6 +152,89 @@ impl LineElement {
             ruby_segments,
             background_segments,
             has_page_break,
+        }
+    }
+
+    pub fn hash_render_cache_signature<H: Hasher>(&self, state: &mut H) {
+        self.metric.start_offset.hash(state);
+        self.metric.end_offset.hash(state);
+        self.hash_text_slice_signature(state);
+        self.hash_style_signature(state);
+        self.has_page_break.hash(state);
+        self.is_empty.hash(state);
+        match &self.preedit {
+            Some(preedit) => {
+                1u8.hash(state);
+                preedit.offset.hash(state);
+                preedit.text.hash(state);
+            }
+            None => {
+                0u8.hash(state);
+            }
+        }
+        self.ruby_segments.len().hash(state);
+        for segment in &self.ruby_segments {
+            segment.start_offset.hash(state);
+            segment.end_offset.hash(state);
+            segment.ruby_text.hash(state);
+        }
+        self.background_segments.len().hash(state);
+        for segment in &self.background_segments {
+            segment.start_offset.hash(state);
+            segment.end_offset.hash(state);
+            segment.color_key.hash(state);
+        }
+    }
+
+    fn hash_text_slice_signature<H: Hasher>(&self, state: &mut H) {
+        let start_byte = char_to_byte_offset(&self.text, self.metric.start_offset);
+        let end_byte = char_to_byte_offset(&self.text, self.metric.end_offset);
+        if let Some(slice) = self.text.get(start_byte..end_byte) {
+            slice.hash(state);
+        } else {
+            self.text.hash(state);
+            self.metric.start_offset.hash(state);
+            self.metric.end_offset.hash(state);
+        }
+    }
+
+    fn hash_style_signature<H: Hasher>(&self, state: &mut H) {
+        if let Some(layout_line) = self.layout.get(self.line_idx) {
+            layout_line.items().count().hash(state);
+            for item in layout_line.items() {
+                if let parley::PositionedLayoutItem::GlyphRun(glyph_run) = item {
+                    let style = glyph_run.style();
+                    style.brush.hash(state);
+                    style.underline.is_some().hash(state);
+                    style.strikethrough.is_some().hash(state);
+                    glyph_run.offset().to_bits().hash(state);
+
+                    let run = glyph_run.run();
+                    run.font_size().to_bits().hash(state);
+
+                    let synthesis = run.synthesis();
+                    synthesis.embolden().hash(state);
+                    match synthesis.skew() {
+                        Some(skew) => {
+                            1u8.hash(state);
+                            skew.to_bits().hash(state);
+                        }
+                        None => {
+                            0u8.hash(state);
+                        }
+                    }
+
+                    let font = run.font();
+                    font.index.hash(state);
+                    font.data.id().hash(state);
+
+                    let coords = run.normalized_coords();
+                    coords.len().hash(state);
+                    for coord in coords {
+                        coord.hash(state);
+                    }
+                }
+            }
         }
     }
 
