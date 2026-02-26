@@ -195,6 +195,10 @@ fn apply_style_to_builder(
     range: std::ops::Range<usize>,
     font_size: u32,
 ) {
+    if range.start >= range.end {
+        return;
+    }
+
     match style {
         Style::FontFamily(m) => builder.push(
             StyleProperty::FontFamily(FontFamily::Single(FontFamilyName::Named(
@@ -238,12 +242,51 @@ fn apply_annotation_to_builder(
     annotation: &Annotation,
     range: std::ops::Range<usize>,
 ) {
+    if range.start >= range.end {
+        return;
+    }
+
     match annotation {
         Annotation::Link(_) => {
             builder.push(StyleProperty::Underline(true), range.clone());
             builder.push(StyleProperty::Brush("ui.text.faint".to_string()), range);
         }
         Annotation::Ruby(_) => {}
+    }
+}
+
+fn apply_pending_styles_to_builder(
+    builder: &mut parley::RangedBuilder<'_, String>,
+    styles: &[Style],
+    range: std::ops::Range<usize>,
+    default_font_size: u32,
+) {
+    if range.start >= range.end {
+        return;
+    }
+
+    let font_size = styles
+        .iter()
+        .find_map(|style| {
+            if let Style::FontSize(font_size) = style {
+                Some(font_size.size)
+            } else {
+                None
+            }
+        })
+        .unwrap_or(default_font_size);
+
+    let has_embolden = styles.iter().any(|style| matches!(style, Style::Bold(_)));
+    for style in styles {
+        if has_embolden && let Style::FontWeight(weight_style) = style {
+            let target_weight = weight_style.weight.max(700) as f32;
+            builder.push(
+                StyleProperty::FontWeight(FontWeight::new(target_weight)),
+                range.clone(),
+            );
+            continue;
+        }
+        apply_style_to_builder(builder, style, range.clone(), font_size);
     }
 }
 
@@ -554,72 +597,16 @@ impl Layout for ParagraphNode {
                 }
             }
 
-            if let Some(preedit) = preedit {
-                if let Some(ps) = pending_styles {
-                    let preedit_start = preedit.offset;
-                    let preedit_end = preedit_start + preedit.text.chars().count();
-                    let range = char_to_byte_offset_with_map(&char_to_byte, preedit_start)
-                        ..char_to_byte_offset_with_map(&char_to_byte, preedit_end);
-
-                    let preedit_font_size = ps
-                        .styles
-                        .iter()
-                        .find_map(|s| {
-                            if let Style::FontSize(fs) = s {
-                                Some(fs.size)
-                            } else {
-                                None
-                            }
-                        })
-                        .unwrap_or(1200);
-
-                    let has_embolden = ps.styles.iter().any(|s| matches!(s, Style::Bold(_)));
-                    for style in &ps.styles {
-                        if has_embolden && let Style::FontWeight(weight_style) = style {
-                            let target_weight = weight_style.weight.max(700) as f32;
-                            builder.push(
-                                StyleProperty::FontWeight(FontWeight::new(target_weight)),
-                                range.clone(),
-                            );
-                            continue;
-                        }
-                        apply_style_to_builder(
-                            &mut builder,
-                            style,
-                            range.clone(),
-                            preedit_font_size,
-                        );
-                    }
-                }
+            if let (Some(preedit), Some(ps)) = (preedit, pending_styles) {
+                let preedit_start = preedit.offset;
+                let preedit_end = preedit_start + preedit.text.chars().count();
+                let range = char_to_byte_offset_with_map(&char_to_byte, preedit_start)
+                    ..char_to_byte_offset_with_map(&char_to_byte, preedit_end);
+                apply_pending_styles_to_builder(&mut builder, &ps.styles, range, 1200);
             }
 
-            if is_text_empty {
-                if let Some(ps) = pending_styles {
-                    let range = 0..text.len();
-                    let font_size = ps
-                        .styles
-                        .iter()
-                        .find_map(|s| {
-                            if let Style::FontSize(fs) = s {
-                                Some(fs.size)
-                            } else {
-                                None
-                            }
-                        })
-                        .unwrap_or(1200);
-                    let has_embolden = ps.styles.iter().any(|s| matches!(s, Style::Bold(_)));
-                    for style in &ps.styles {
-                        if has_embolden && let Style::FontWeight(weight_style) = style {
-                            let target_weight = weight_style.weight.max(700) as f32;
-                            builder.push(
-                                StyleProperty::FontWeight(FontWeight::new(target_weight)),
-                                range.clone(),
-                            );
-                            continue;
-                        }
-                        apply_style_to_builder(&mut builder, style, range.clone(), font_size);
-                    }
-                }
+            if is_text_empty && let Some(ps) = pending_styles {
+                apply_pending_styles_to_builder(&mut builder, &ps.styles, 0..text.len(), 1200);
             }
 
             let parent_is_root = ctx
@@ -782,7 +769,8 @@ mod tests {
     use super::*;
     use crate::layout::LayoutCache;
     use crate::model::{
-        BackgroundColorStyle, Decorations, DefaultAttrs, PendingStylesDecor, PreeditDecor,
+        BackgroundColorStyle, Decorations, DefaultAttrs, FontWeightStyle, PendingStylesDecor,
+        PreeditDecor,
     };
     use crate::runtime::ViewStates;
     use crate::types::BoxConstraints;
@@ -806,6 +794,54 @@ mod tests {
         let settings = doc.settings();
         let default_attrs = DefaultAttrs::default();
         let decorations = Decorations::default();
+        let cache = RefCell::new(LayoutCache::new());
+        let view_states = ViewStates::default();
+        let ctx = LayoutContext::new(
+            &para,
+            &settings,
+            &default_attrs,
+            &decorations,
+            1.0,
+            &view_states,
+            &cache,
+        );
+        let constraints = BoxConstraints::new(0.0, 800.0, 0.0, f32::INFINITY);
+
+        if let Node::Paragraph(paragraph) = para.node() {
+            paragraph.layout(&ctx, constraints);
+        } else {
+            panic!("paragraph node expected");
+        }
+    }
+
+    #[test]
+    fn layout_skips_empty_preedit_range_when_pending_styles_exist() {
+        let mut p = id!();
+
+        let state = state! {
+            doc {
+                @p paragraph {
+                    text { "AB" }
+                }
+            }
+            selection { (p, 1) }
+        };
+
+        let mut decorations = Decorations::default();
+        decorations.preedit = Some(PreeditDecor {
+            node_id: p,
+            offset: 1,
+            text: "".into(),
+        });
+        decorations.pending_styles = PendingStylesDecor {
+            node_id: p,
+            styles: vec![Style::FontWeight(FontWeightStyle { weight: 700 })],
+        };
+
+        let doc = &state.doc;
+        let para = doc.node(p).unwrap();
+        let settings = doc.settings();
+        let default_attrs = DefaultAttrs::default();
         let cache = RefCell::new(LayoutCache::new());
         let view_states = ViewStates::default();
         let ctx = LayoutContext::new(
