@@ -59,7 +59,7 @@ tsify = { version = "0.5", features = ["js"], optional = true }
 uuid = { version = "1.21", features = ["v4", "serde"] }
 wasm-bindgen = { version = "0.2", optional = true }
 wasm-bindgen-futures = { version = "0.4", optional = true }
-web-sys = { version = "0.3", features = ["console"], optional = true }
+web-sys = { version = "0.3", features = ["console", "Window", "Performance"], optional = true }
 write-fonts = "0.45"
 yazi = "0.2"
 zeno = "0.3"

@@ -1,3 +1,4 @@
+use crate::layout::elements::LineElement;
 use crate::layout::{Element, Page, PositionedNode};
 use crate::model::NodeId;
 use crate::render::geometry::CacheRect;
@@ -10,7 +11,7 @@ use tiny_skia::Pixmap;
 
 const SCALE_FACTOR_MATCH_EPSILON: f64 = 1e-6;
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone, PartialEq)]
 pub(super) struct PageRenderSnapshot {
     nodes: FxHashMap<SnapshotNodeKey, CacheRect>,
 }
@@ -21,9 +22,7 @@ enum SnapshotNodeKey {
     RenderLine {
         block_id: NodeId,
         line_idx: usize,
-        layout_ptr: usize,
-        scope_id: Option<NodeId>,
-        default_text_color_hash: Option<u64>,
+        signature: u64,
     },
     RenderStableElement {
         kind: Discriminant<Element>,
@@ -57,14 +56,7 @@ impl SnapshotNodeKey {
             return Some(Self::RenderLine {
                 block_id: line.block_id,
                 line_idx: line.line_idx,
-                layout_ptr: Rc::as_ptr(&line.layout) as usize,
-                scope_id: positioned.node.scope_id,
-                default_text_color_hash: positioned
-                    .node
-                    .render_hints
-                    .default_text_color
-                    .as_ref()
-                    .map(|value| hash_str(value.as_str())),
+                signature: render_line_signature(positioned, line),
             });
         }
 
@@ -85,6 +77,20 @@ impl SnapshotNodeKey {
 fn hash_str(value: &str) -> u64 {
     let mut hasher = FxHasher::default();
     value.hash(&mut hasher);
+    hasher.finish()
+}
+
+fn render_line_signature(positioned: &PositionedNode, line: &LineElement) -> u64 {
+    let mut hasher = FxHasher::default();
+    line.hash_render_cache_signature(&mut hasher);
+    positioned.node.scope_id.hash(&mut hasher);
+    positioned
+        .node
+        .render_hints
+        .default_text_color
+        .as_ref()
+        .map(|value| hash_str(value.as_str()))
+        .hash(&mut hasher);
     hasher.finish()
 }
 
@@ -173,11 +179,15 @@ pub(super) struct PageRenderCache {
     pub(super) snapshot: PageRenderSnapshot,
     pub(super) snapshot_initialized: bool,
     pub(super) base_pixmap: Pixmap,
+    pub(super) background_pixmap: Pixmap,
+    pub(super) content_pixmap: Pixmap,
 }
 
 impl PageRenderCache {
     pub(super) fn new(width: u32, height: u32, scale_factor: f64) -> Self {
         let base_pixmap = Pixmap::new(width.max(1), height.max(1)).unwrap();
+        let background_pixmap = Pixmap::new(width.max(1), height.max(1)).unwrap();
+        let content_pixmap = Pixmap::new(width.max(1), height.max(1)).unwrap();
         Self {
             width,
             height,
@@ -185,6 +195,8 @@ impl PageRenderCache {
             snapshot: PageRenderSnapshot::default(),
             snapshot_initialized: false,
             base_pixmap,
+            background_pixmap,
+            content_pixmap,
         }
     }
 
@@ -206,6 +218,8 @@ impl PageRenderCache {
     ) -> Self {
         let mut resized = Self::new(width, height, scale_factor);
         copy_pixmap_overlap(&self.base_pixmap, &mut resized.base_pixmap);
+        copy_pixmap_overlap(&self.background_pixmap, &mut resized.background_pixmap);
+        copy_pixmap_overlap(&self.content_pixmap, &mut resized.content_pixmap);
         resized.snapshot = self.snapshot;
         resized.snapshot_initialized = self.snapshot_initialized;
         resized

@@ -540,7 +540,9 @@ mod tests {
     use crate::state::build_selection_decorations;
     use crate::state::selection_helpers::collect_blocks_in_range;
     use crate::types::{Affinity, BoxConstraints, Rect, Size};
+    use rustc_hash::FxHasher;
     use std::cell::RefCell;
+    use std::hash::Hasher;
 
     fn selections_from_state(state: &State) -> Vec<SelectionDecor> {
         build_selection_decorations(&state.doc, &state.selection, None)
@@ -575,6 +577,12 @@ mod tests {
 
     fn selection_rects(line: &LineElement, selections: &[SelectionDecor]) -> Vec<Rect> {
         line.compute_selection_rects(Point::zero(), selections)
+    }
+
+    fn line_signature(line: &LineElement) -> u64 {
+        let mut hasher = FxHasher::default();
+        line.hash_render_cache_signature(&mut hasher);
+        hasher.finish()
     }
 
     #[test]
@@ -625,6 +633,61 @@ mod tests {
             rect.width() > 0.0,
             "preedit 밑줄 width는 양수여야 함: {}",
             rect.width()
+        );
+    }
+
+    #[test]
+    fn line_render_cache_signature_changes_when_italic_toggles() {
+        let mut p1 = id!();
+        let state_plain = state! {
+            doc {
+                @p1 paragraph {
+                    text { "hello" }
+                }
+            }
+        };
+
+        let mut p2 = id!();
+        let state_italic = state! {
+            doc {
+                @p2 paragraph {
+                    text(styles: [italic()]) { "hello" }
+                }
+            }
+        };
+
+        let plain_layout = layout_for_paragraph(&state_plain, p1);
+        let italic_layout = layout_for_paragraph(&state_italic, p2);
+
+        let plain_line = plain_layout
+            .children
+            .as_ref()
+            .and_then(|children| {
+                children
+                    .iter()
+                    .find_map(|child| match child.node.element.as_ref() {
+                        Some(Element::Line(line)) => Some(line),
+                        _ => None,
+                    })
+            })
+            .expect("plain layout should contain line");
+        let italic_line = italic_layout
+            .children
+            .as_ref()
+            .and_then(|children| {
+                children
+                    .iter()
+                    .find_map(|child| match child.node.element.as_ref() {
+                        Some(Element::Line(line)) => Some(line),
+                        _ => None,
+                    })
+            })
+            .expect("italic layout should contain line");
+
+        assert_ne!(
+            line_signature(plain_line),
+            line_signature(italic_line),
+            "italic on/off should change line render cache signature"
         );
     }
 
