@@ -1,11 +1,11 @@
 import { map, pipe } from '@mearie/core/stream';
-import { isGraphQLError } from '@mearie/svelte';
+import { isAggregatedError, isGraphQLError } from '@mearie/svelte';
 import { FormError } from '@typie/ui/form';
 import { TypieError } from '@/errors';
 import type { Exchange } from '@mearie/svelte';
 
 export function unwrapError(err: unknown): unknown {
-  return err instanceof AggregateError && err.errors.length === 1 ? err.errors[0] : err;
+  return isAggregatedError(err) && err.errors.length === 1 ? err.errors[0] : err;
 }
 
 export const errorExchange = (): Exchange => {
