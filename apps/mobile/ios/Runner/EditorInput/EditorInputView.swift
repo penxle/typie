@@ -302,6 +302,10 @@ class EditorTextInputView: UIView, UITextInput, UITextViewDelegate {
   private func _resignInputResponder() {
     if let bridge = _inputTextView, bridge.isFirstResponder {
       _ = bridge.resignFirstResponder()
+
+      if isFirstResponder {
+        _ = resignFirstResponder()
+      }
     } else {
       _ = resignFirstResponder()
     }
