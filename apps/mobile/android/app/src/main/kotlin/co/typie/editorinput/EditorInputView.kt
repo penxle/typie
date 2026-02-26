@@ -69,9 +69,6 @@ class EditorInputNativeView(
 
   private var isComposing = false
   private var composingText = ""
-  private var cursorX = 0.0
-  private var cursorY = 0.0
-  private var cursorHeight = 20.0
   private var lastDeleteTime = 0L
   private var composingRegionLength = 0
 
@@ -148,17 +145,12 @@ class EditorInputNativeView(
   }
 
   fun updateCursor(x: Double, y: Double, height: Double) {
-    cursorX = x
-    cursorY = y
-    cursorHeight = height
   }
 
   fun resetInputContext() {
     commitComposingState()
     inputMethodManager.restartInput(this)
   }
-
-  override fun onCheckIsTextEditor(): Boolean = true
 
   override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
     val meta = event.metaState and (META_CTRL or META_SHIFT or META_ALT)
@@ -193,14 +185,6 @@ class EditorInputNativeView(
 
     return object : InputConnectionWrapper(target, true) {
 
-      private var hasDeferredFinishComposing = false
-
-      private val deferredFinishComposingRunnable = Runnable {
-        if (!hasDeferredFinishComposing) return@Runnable
-        hasDeferredFinishComposing = false
-        finishComposingNow()
-      }
-
       private fun notifyCursorUpdate() {
         val editable = text ?: return
         inputMethodManager.updateSelection(
@@ -210,12 +194,6 @@ class EditorInputNativeView(
           BaseInputConnection.getComposingSpanStart(editable),
           BaseInputConnection.getComposingSpanEnd(editable)
         )
-      }
-
-      private fun cancelDeferredFinishComposing() {
-        if (!hasDeferredFinishComposing) return
-        hasDeferredFinishComposing = false
-        this@EditorInputNativeView.removeCallbacks(deferredFinishComposingRunnable)
       }
 
       private fun finishComposingNow(): Boolean {
@@ -229,7 +207,6 @@ class EditorInputNativeView(
       }
 
       private fun handleNewline() {
-        cancelDeferredFinishComposing()
         commitComposingState()
         super.finishComposingText()
         channel.invokeMethod("performAction", mapOf("action" to "newline"))
@@ -238,7 +215,6 @@ class EditorInputNativeView(
       }
 
       override fun commitText(text: CharSequence?, newCursorPosition: Int): Boolean {
-        cancelDeferredFinishComposing()
         val str = text?.toString().orEmpty()
         val isSingleWhitespaceCommit = str.length == 1 && str[0].isWhitespace()
         var shouldInsertText = str.isNotEmpty()
@@ -269,7 +245,6 @@ class EditorInputNativeView(
       }
 
       override fun setComposingText(text: CharSequence?, newCursorPosition: Int): Boolean {
-        cancelDeferredFinishComposing()
         val str = text?.toString().orEmpty()
 
         if (consumeComposingRegion()) {
@@ -297,18 +272,10 @@ class EditorInputNativeView(
       }
 
       override fun finishComposingText(): Boolean {
-        if (isComposing) {
-          cancelDeferredFinishComposing()
-          hasDeferredFinishComposing = true
-          this@EditorInputNativeView.post(deferredFinishComposingRunnable)
-          return true
-        }
-        cancelDeferredFinishComposing()
         return finishComposingNow()
       }
 
       override fun deleteSurroundingText(beforeLength: Int, afterLength: Int): Boolean {
-        cancelDeferredFinishComposing()
         if (isComposing) {
           cancelComposingState()
           super.commitText("", 1)
@@ -334,7 +301,6 @@ class EditorInputNativeView(
       }
 
       override fun sendKeyEvent(event: KeyEvent): Boolean {
-        cancelDeferredFinishComposing()
         if (event.action != KeyEvent.ACTION_DOWN) return true
 
         DPAD_ACTIONS[event.keyCode]?.let { action ->
@@ -404,7 +370,6 @@ class EditorInputNativeView(
       }
 
       override fun performEditorAction(actionCode: Int): Boolean {
-        cancelDeferredFinishComposing()
         handleNewline()
         return true
       }
