@@ -8,7 +8,7 @@ impl Runtime {
             return vec![];
         };
 
-        let Node::Callout(callout) = node_ref.node() else {
+        let Some(Node::Callout(callout)) = node_ref.node() else {
             return vec![];
         };
 
@@ -40,7 +40,7 @@ impl Runtime {
                 break;
             };
 
-            if matches!(node.node(), Node::Callout(_)) {
+            if matches!(node.node(), Some(Node::Callout(_))) {
                 return self.cycle_callout_variant(node_id);
             }
 

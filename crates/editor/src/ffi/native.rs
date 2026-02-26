@@ -403,7 +403,7 @@ pub extern "C" fn editor_application_create_editor(
         {
             let editor = if !snapshot.is_null() && snapshot_len > 0 {
                 let data = unsafe { std::slice::from_raw_parts(snapshot, snapshot_len) };
-                EditorInner::with_snapshot(scale_factor, data.to_vec())
+                EditorInner::with_snapshot(scale_factor, data.to_vec())?
             } else {
                 EditorInner::new(scale_factor)
             };
@@ -422,19 +422,21 @@ impl EditorInner {
         let doc = Rc::new(Doc::new());
         let width = Self::get_width(&doc);
 
-        let root = doc.node(NodeId::ROOT).unwrap();
+        let root = doc
+            .node(NodeId::ROOT)
+            .expect("Doc::new: ROOT node must exist after construction");
         let paragraph_id = root
             .as_mut()
             .insert_child(0, Node::Paragraph(ParagraphNode::default()))
-            .unwrap();
+            .expect("Doc::new: failed to insert initial paragraph");
 
         Self::create(scale_factor, doc, paragraph_id, width)
     }
 
-    fn with_snapshot(scale_factor: f64, snapshot: Vec<u8>) -> Self {
-        let doc = Rc::new(Doc::from_snapshot(snapshot));
+    fn with_snapshot(scale_factor: f64, snapshot: Vec<u8>) -> FfiResult<Self> {
+        let doc = Rc::new(Doc::from_snapshot(snapshot).map_err(|e| e.to_string())?);
         let width = Self::get_width(&doc);
-        Self::create(scale_factor, doc, NodeId::ROOT, width)
+        Ok(Self::create(scale_factor, doc, NodeId::ROOT, width))
     }
 
     fn create(scale_factor: f64, doc: Rc<Doc>, cursor_node: NodeId, width: f32) -> Self {
@@ -919,7 +921,9 @@ pub extern "C" fn editor_get_character_counts(
 }
 
 fn count_all(text: &str) -> (u32, u32, u32) {
-    let gc_data = get_general_category_map();
+    let Some(gc_data) = get_general_category_map() else {
+        return (0, 0, 0);
+    };
     let gc_map = gc_data.as_borrowed();
 
     let mut with_ws: u32 = 0;

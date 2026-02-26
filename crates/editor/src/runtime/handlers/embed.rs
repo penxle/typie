@@ -16,7 +16,7 @@ impl Runtime {
                 return Ok(false);
             };
 
-            if !matches!(node_ref.node(), Node::Embed(_)) {
+            if !matches!(node_ref.node(), Some(Node::Embed(_))) {
                 return Ok(false);
             }
 

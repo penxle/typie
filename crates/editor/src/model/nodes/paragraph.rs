@@ -67,7 +67,7 @@ fn extract_ruby_segments(ctx: &LayoutContext) -> Vec<RubySegment> {
     let preedit_info = preedit.map(|preedit| (preedit.offset, preedit.text.chars().count()));
 
     for child in ctx.node.children() {
-        if let Node::Text(node) = child.node() {
+        if let Some(Node::Text(node)) = child.node() {
             let segments = node.text.get_segments();
 
             for segment in segments {
@@ -94,7 +94,7 @@ fn extract_ruby_segments(ctx: &LayoutContext) -> Vec<RubySegment> {
 
                 offset += segment_len;
             }
-        } else if let Node::HardBreak(_) = child.node() {
+        } else if let Some(Node::HardBreak(_)) = child.node() {
             offset += 1;
         }
     }
@@ -120,7 +120,7 @@ fn extract_background_segments(ctx: &LayoutContext) -> Vec<BackgroundSegment> {
     let preedit_info = preedit.map(|preedit| (preedit.offset, preedit.text.chars().count()));
 
     for child in ctx.node.children() {
-        if let Node::Text(node) = child.node() {
+        if let Some(Node::Text(node)) = child.node() {
             let segments = node.text.get_segments();
 
             for segment in segments {
@@ -149,7 +149,7 @@ fn extract_background_segments(ctx: &LayoutContext) -> Vec<BackgroundSegment> {
 
                 offset += segment_len;
             }
-        } else if let Node::HardBreak(_) = child.node() {
+        } else if let Some(Node::HardBreak(_)) = child.node() {
             offset += 1;
         }
     }
@@ -462,7 +462,7 @@ impl Layout for ParagraphNode {
         let mut text = ctx
             .node
             .children()
-            .filter_map(|child| match child.node() {
+            .filter_map(|child| match child.node()? {
                 Node::Text(node) => Some(node.text.to_string()),
                 Node::HardBreak(_) => Some("\n".to_string()),
                 _ => None,
@@ -523,7 +523,7 @@ impl Layout for ParagraphNode {
             let mut offset = 0;
             for child in ctx.node.children() {
                 match child.node() {
-                    Node::Text(node) => {
+                    Some(Node::Text(node)) => {
                         let segments = node.text.get_segments();
                         let mut segment_offset = 0;
 
@@ -590,7 +590,7 @@ impl Layout for ParagraphNode {
 
                         offset += segment_offset;
                     }
-                    Node::HardBreak(_) => {
+                    Some(Node::HardBreak(_)) => {
                         offset += 1;
                     }
                     _ => continue,
@@ -612,7 +612,7 @@ impl Layout for ParagraphNode {
             let parent_is_root = ctx
                 .node
                 .parent()
-                .map(|parent| matches!(parent.node(), Node::Root(_)))
+                .map(|parent| matches!(parent.node(), Some(Node::Root(_))))
                 .unwrap_or(false);
             let indent = if parent_is_root {
                 (ctx.settings.paragraph_indent as f32 / 100.0 * 16.0).max(0.0)
@@ -698,7 +698,7 @@ impl Layout for ParagraphNode {
             .node
             .children()
             .last()
-            .map(|child| matches!(child.node(), Node::PageBreak(_)))
+            .map(|child| matches!(child.node(), Some(Node::PageBreak(_))))
             .unwrap_or(false);
 
         let mut children = Vec::new();
@@ -807,7 +807,7 @@ mod tests {
         );
         let constraints = BoxConstraints::new(0.0, 800.0, 0.0, f32::INFINITY);
 
-        if let Node::Paragraph(paragraph) = para.node() {
+        if let Some(Node::Paragraph(paragraph)) = para.node() {
             paragraph.layout(&ctx, constraints);
         } else {
             panic!("paragraph node expected");

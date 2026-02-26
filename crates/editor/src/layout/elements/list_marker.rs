@@ -90,7 +90,9 @@ impl ListMarkerElement {
 
         let x = self.marker_width - BULLET_SIZE - BULLET_OFFSET;
         let y = self.line_mid - BULLET_SIZE / 2.0;
-        let rect = tiny_skia::Rect::from_xywh(x, y, BULLET_SIZE, BULLET_SIZE).unwrap();
+        let Some(rect) = tiny_skia::Rect::from_xywh(x, y, BULLET_SIZE, BULLET_SIZE) else {
+            return;
+        };
 
         sink.fill_rect(rect, &paint, transform);
     }

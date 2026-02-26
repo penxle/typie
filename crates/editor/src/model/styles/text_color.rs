@@ -13,7 +13,10 @@ pub struct TextColorStyle {
 
 impl StyleHtmlCodec for TextColorStyle {
     fn to_dom(&self) -> DomSpec {
-        let [r, g, b, _] = rgba_from_u32(Theme::text_color_rgba(&self.color).unwrap());
+        let Some(rgba) = Theme::text_color_rgba(&self.color) else {
+            return DomSpec::Hole;
+        };
+        let [r, g, b, _] = rgba_from_u32(rgba);
         DomSpec::el("span")
             .style(format!("color:#{:02x}{:02x}{:02x}", r, g, b))
             .data("text-color", &self.color)

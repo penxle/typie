@@ -21,7 +21,7 @@ pub(crate) fn compute_styles_at_cursor(doc: &Doc, position: &Position) -> Vec<St
         return resolve_style_cascade(doc, position.node_id);
     };
 
-    if let Node::Text(text_node) = child.node() {
+    if let Some(Node::Text(text_node)) = child.node() {
         let segments = text_node.text.get_segments();
         let mut current_offset = 0;
 
@@ -58,7 +58,7 @@ pub(crate) fn compute_styles_at_char_position(doc: &Doc, position: &Position) ->
         return cascade;
     };
 
-    if let Node::Text(text_node) = child.node() {
+    if let Some(Node::Text(text_node)) = child.node() {
         let segments = text_node.text.get_segments();
         let mut current_offset = 0;
 
@@ -116,7 +116,7 @@ fn apply_style_to_range(
         }
 
         let node = tr.node_mut(text_node_id).context("Text node not found")?;
-        if let Node::Text(text_node) = node.node() {
+        if let Some(Node::Text(text_node)) = node.node() {
             let range = start_offset..end_offset;
             text_node.text.apply_style(range, style)?;
             tr.push_effect(Effect::NodeChanged {
@@ -140,7 +140,9 @@ fn collect_empty_textblocks_in_range(
 
     if !is_rectangular && to.offset == 0 && from.node_id != to.node_id {
         if let Some(block) = tr.node(to.node_id) {
-            if block.spec().is_textblock(tr.doc().schema())
+            if block
+                .spec()
+                .map_or(false, |s| s.is_textblock(tr.doc().schema()))
                 && block_content_len(&block) == 0
                 && !block_ids.contains(&to.node_id)
             {
@@ -151,7 +153,11 @@ fn collect_empty_textblocks_in_range(
 
     block_ids.retain(|&id| {
         tr.node(id)
-            .map(|b| b.spec().is_textblock(tr.doc().schema()) && block_content_len(&b) == 0)
+            .map(|b| {
+                b.spec()
+                    .map_or(false, |s| s.is_textblock(tr.doc().schema()))
+                    && block_content_len(&b) == 0
+            })
             .unwrap_or(false)
     });
 
@@ -204,7 +210,7 @@ fn remove_style_from_range(
 
     for (text_node_id, start_offset, end_offset) in ranges {
         let node = tr.node_mut(text_node_id).context("Text node not found")?;
-        if let Node::Text(text_node) = node.node() {
+        if let Some(Node::Text(text_node)) = node.node() {
             let range = start_offset..end_offset;
             text_node.text.remove_style(range, style_type)?;
             tr.push_effect(Effect::NodeChanged {
@@ -253,7 +259,7 @@ fn check_range_has_style(
 
     for (text_node_id, start_offset, end_offset) in ranges {
         let node = tr.node(text_node_id).context("Text node not found")?;
-        if let Node::Text(text_node) = node.node() {
+        if let Some(Node::Text(text_node)) = node.node() {
             let segments = text_node.text.get_segments();
 
             let mut current_offset = 0;
@@ -283,7 +289,7 @@ fn check_range_is_bold(tr: &Transaction, from: Position, to: Position) -> Result
 
     for (text_node_id, start_offset, end_offset) in ranges {
         let node = tr.node(text_node_id).context("Text node not found")?;
-        if let Node::Text(text_node) = node.node() {
+        if let Some(Node::Text(text_node)) = node.node() {
             let segments = text_node.text.get_segments();
             let mut current_offset = 0;
 
@@ -404,7 +410,7 @@ fn apply_font_style_normalized(
         }
 
         let node = tr.node(text_node_id).context("Text node not found")?;
-        if let Node::Text(text_node) = node.node() {
+        if let Some(Node::Text(text_node)) = node.node() {
             let segments = text_node.text.get_segments();
             let mut current_offset = 0;
 
@@ -510,7 +516,7 @@ fn apply_font_style_normalized(
 
     for (text_node_id, start, end, styles, remove_types, font_detected) in actions {
         let node = tr.node_mut(text_node_id).context("Text node not found")?;
-        if let Node::Text(text_node) = node.node() {
+        if let Some(Node::Text(text_node)) = node.node() {
             for st in &remove_types {
                 text_node.text.remove_style(start..end, *st)?;
             }
@@ -569,7 +575,7 @@ fn collect_style_codepoints_in_selection(
         let Some(node) = tr.node(text_node_id) else {
             continue;
         };
-        if let Node::Text(text_node) = node.node() {
+        if let Some(Node::Text(text_node)) = node.node() {
             let segments = text_node.text.get_segments();
             let mut current_offset = 0;
 
@@ -875,7 +881,7 @@ impl Transaction {
                 for style in &default_styles {
                     if allowed.contains(&style.as_type()) {
                         let node = self.node_mut(text_node_id).context("Text node not found")?;
-                        if let Node::Text(text_node) = node.node() {
+                        if let Some(Node::Text(text_node)) = node.node() {
                             text_node.text.apply_style(range.clone(), style)?;
                         }
                     }
@@ -886,7 +892,7 @@ impl Transaction {
                         && !default_styles.iter().any(|s| s.as_type() == style_type)
                     {
                         let node = self.node_mut(text_node_id).context("Text node not found")?;
-                        if let Node::Text(text_node) = node.node() {
+                        if let Some(Node::Text(text_node)) = node.node() {
                             text_node.text.remove_style(range.clone(), style_type)?;
                         }
                     }
@@ -1058,7 +1064,7 @@ impl Transaction {
 
         for &(text_node_id, start_offset, end_offset) in &ranges {
             let node = self.node(text_node_id).context("Text node not found")?;
-            if let Node::Text(text_node) = node.node() {
+            if let Some(Node::Text(text_node)) = node.node() {
                 let segments = text_node.text.get_segments();
                 let mut current_offset = 0;
 
@@ -1133,7 +1139,7 @@ impl Transaction {
             let node = self
                 .node_mut(action.node_id)
                 .context("Text node not found")?;
-            if let Node::Text(text_node) = node.node() {
+            if let Some(Node::Text(text_node)) = node.node() {
                 let range = action.start..action.end;
                 if action.embolden {
                     text_node
@@ -1193,7 +1199,7 @@ impl Transaction {
 
         for &(text_node_id, start_offset, end_offset) in &ranges {
             let node = self.node(text_node_id).context("Text node not found")?;
-            if let Node::Text(text_node) = node.node() {
+            if let Some(Node::Text(text_node)) = node.node() {
                 let segments = text_node.text.get_segments();
                 let mut current_offset = 0;
 
@@ -1263,7 +1269,7 @@ impl Transaction {
             let node = self
                 .node_mut(action.node_id)
                 .context("Text node not found")?;
-            if let Node::Text(text_node) = node.node() {
+            if let Some(Node::Text(text_node)) = node.node() {
                 let range = action.start..action.end;
                 if action.remove_bold {
                     text_node
@@ -1320,7 +1326,11 @@ impl Transaction {
         }
 
         if let Some(node_ref) = self.doc().node(node_id) {
-            for style in &node_ref.node().style_overrides() {
+            for style in &node_ref
+                .node()
+                .map(|n| n.style_overrides())
+                .unwrap_or_default()
+            {
                 match style {
                     Style::FontFamily(f) => family = f.family.clone(),
                     Style::FontWeight(w) => weight = w.weight,

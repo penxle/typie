@@ -195,7 +195,9 @@ impl LineElement {
 
     fn is_soft_wrap_prev(&self) -> bool {
         if self.line_idx > 0 {
-            let prev_line = self.layout.lines().nth(self.line_idx - 1).unwrap();
+            let Some(prev_line) = self.layout.lines().nth(self.line_idx - 1) else {
+                return false;
+            };
             prev_line.break_reason() != parley::layout::BreakReason::Explicit
         } else {
             false

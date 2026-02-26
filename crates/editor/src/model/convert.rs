@@ -304,7 +304,7 @@ mod tests {
         assert!(json.nodes.contains_key(&NodeId::ROOT.to_string()));
 
         let new_snapshot = json_to_snapshot(&json).unwrap();
-        let new_doc = Doc::from_snapshot(new_snapshot);
+        let new_doc = Doc::from_snapshot(new_snapshot).expect("test: snapshot should decode");
 
         assert_eq!(doc.to_plain_text(), new_doc.to_plain_text());
     }
@@ -332,7 +332,7 @@ mod tests {
 
         let json = snapshot_to_json(&snapshot).unwrap();
         let new_snapshot = json_to_snapshot(&json).unwrap();
-        let new_doc = Doc::from_snapshot(new_snapshot);
+        let new_doc = Doc::from_snapshot(new_snapshot).expect("test: snapshot should decode");
 
         assert_eq!(doc.to_plain_text(), new_doc.to_plain_text());
     }
@@ -381,12 +381,12 @@ mod tests {
         let deserialized: DocumentJson = serde_json::from_str(&serialized).unwrap();
 
         let new_snapshot = json_to_snapshot(&deserialized).unwrap();
-        let new_doc = Doc::from_snapshot(new_snapshot);
+        let new_doc = Doc::from_snapshot(new_snapshot).expect("test: snapshot should decode");
 
         let orig_root = doc.node(NodeId::ROOT).unwrap();
         let orig_para = orig_root.child(0).unwrap();
         let orig_text = orig_para.child(0).unwrap();
-        let original_segments = match orig_text.node() {
+        let original_segments = match orig_text.node().unwrap() {
             Node::Text(t) => t.text.get_segments(),
             _ => panic!("expected text node"),
         };
@@ -394,7 +394,7 @@ mod tests {
         let new_root = new_doc.node(NodeId::ROOT).unwrap();
         let new_para = new_root.child(0).unwrap();
         let new_text = new_para.child(0).unwrap();
-        let new_segments = match new_text.node() {
+        let new_segments = match new_text.node().unwrap() {
             Node::Text(t) => t.text.get_segments(),
             _ => panic!("expected text node"),
         };
@@ -436,7 +436,7 @@ mod tests {
         let deserialized: DocumentJson = serde_json::from_str(&serialized).unwrap();
 
         let new_snapshot = json_to_snapshot(&deserialized).unwrap();
-        let new_doc = Doc::from_snapshot(new_snapshot);
+        let new_doc = Doc::from_snapshot(new_snapshot).expect("test: snapshot should decode");
 
         assert_eq!(doc.to_plain_text(), new_doc.to_plain_text());
     }
@@ -479,7 +479,7 @@ mod tests {
         let serialized = serde_json::to_string(&json).unwrap();
         let deserialized: DocumentJson = serde_json::from_str(&serialized).unwrap();
         let new_snapshot = json_to_snapshot(&deserialized).unwrap();
-        let new_doc = Doc::from_snapshot(new_snapshot);
+        let new_doc = Doc::from_snapshot(new_snapshot).expect("test: snapshot should decode");
 
         let new_para = new_doc.node(para_id).unwrap();
         let remarks = new_para.remarks();
@@ -545,7 +545,7 @@ mod tests {
         let snapshot = doc.export(DocExportMode::Snapshot).unwrap();
         let json = snapshot_to_json(&snapshot).unwrap();
         let new_snapshot = json_to_snapshot(&json).unwrap();
-        let new_doc = Doc::from_snapshot(new_snapshot);
+        let new_doc = Doc::from_snapshot(new_snapshot).expect("test: snapshot should decode");
 
         new_doc.validate_exhaustive().unwrap();
     }

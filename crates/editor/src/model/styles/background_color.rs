@@ -25,7 +25,10 @@ impl StyleHtmlCodec for BackgroundColorStyle {
             return DomSpec::Hole;
         }
         let key = &self.color;
-        let [r, g, b, _] = rgba_from_u32(Theme::bg_color_rgba(key).unwrap());
+        let Some(rgba) = Theme::bg_color_rgba(key) else {
+            return DomSpec::Hole;
+        };
+        let [r, g, b, _] = rgba_from_u32(rgba);
         DomSpec::el("span")
             .style(format!("background-color:#{:02x}{:02x}{:02x}", r, g, b))
             .data("bg-color", key)

@@ -48,7 +48,7 @@ pub struct SelectionAttributes {
 fn extract_block_attrs(node: &NodeRef) -> Vec<BlockAttr> {
     let mut result = Vec::new();
     for ancestor in node.ancestors() {
-        if let Node::Paragraph(p) = ancestor.node() {
+        if let Some(Node::Paragraph(p)) = ancestor.node() {
             result.push(BlockAttr::TextAlign(p.align));
             result.push(BlockAttr::LineHeight(p.line_height));
         }
@@ -149,7 +149,7 @@ pub(crate) fn end_boundary_node(doc: &Doc, pos: Position) -> Result<Option<NodeI
         .context("end_boundary_node: Block node not found")?;
     let block_id = block_node.node_id();
 
-    if pos.offset == 0 && !matches!(block_node.node(), Node::Root(_)) {
+    if pos.offset == 0 && !matches!(block_node.node(), Some(Node::Root(_))) {
         return Ok(Some(block_id));
     }
 
@@ -182,7 +182,9 @@ pub(crate) fn end_boundary_node(doc: &Doc, pos: Position) -> Result<Option<NodeI
 }
 
 pub fn block_content_len(node: &NodeRef<'_>) -> usize {
-    node.children().map(|child| child.node().len()).sum()
+    node.children()
+        .map(|child| child.node().map_or(1, |n| n.len())) // undecodable nodes count as 1 (atomic)
+        .sum()
 }
 
 // selection 범위 내 block의 start_offset과 end_offset을 계산
@@ -240,7 +242,7 @@ pub fn build_selection_decorations(
             continue;
         };
 
-        if !block.spec().is_textblock(doc.schema()) {
+        if !block.spec().map_or(false, |s| s.is_textblock(doc.schema())) {
             continue;
         }
 
@@ -288,16 +290,15 @@ fn collect_structure_decorations(
         }
         StructureSelectionInfo::Structural(block_ids) => {
             for &block_id in block_ids {
-                if should_skip_block_decoration(
-                    doc,
-                    doc.node(block_id).unwrap(),
-                    processed_structural_nodes,
-                ) {
+                let Some(node) = doc.node(block_id) else {
+                    continue;
+                };
+                if should_skip_block_decoration(doc, node, processed_structural_nodes) {
                     continue;
                 }
 
                 if let Some(node) = doc.node(block_id) {
-                    if matches!(node.node(), Node::Table(_)) {
+                    if matches!(node.node(), Some(Node::Table(_))) {
                         for row in node.children() {
                             for cell in row.children() {
                                 let cell_id = cell.node_id();
@@ -306,7 +307,7 @@ fn collect_structure_decorations(
                                 }
                             }
                         }
-                    } else if matches!(node.node(), Node::Fold(_)) {
+                    } else if matches!(node.node(), Some(Node::Fold(_))) {
                         decorations.push(SelectionDecor::Fold { node_id: block_id });
                         processed_structural_nodes.insert(block_id);
                     }
@@ -422,7 +423,7 @@ fn add_ancestor_decorations(
 
         for child in ancestor.children() {
             let child_id = child.node_id();
-            let child_len = child.node().len();
+            let child_len = child.node().map_or(1, |n| n.len()); // undecodable nodes count as 1 (atomic)
 
             if child_id == start_child_id {
                 found_start = true;
@@ -497,7 +498,9 @@ pub fn compute_selection_attrs(
     let mut effective_block_ids: Vec<NodeId> = block_ids.to_vec();
     if to.offset == 0 && from.node_id != to.node_id && !effective_block_ids.contains(&to.node_id) {
         if let Some(node) = doc.node(to.node_id) {
-            if node.spec().is_textblock(doc.schema()) && block_content_len(&node) == 0 {
+            if node.spec().map_or(false, |s| s.is_textblock(doc.schema()))
+                && block_content_len(&node) == 0
+            {
                 effective_block_ids.push(to.node_id);
             }
         }
@@ -602,7 +605,7 @@ fn accumulate_block_attrs(
 
     for child in block.children() {
         match child.node() {
-            Node::Text(text_node) => {
+            Some(Node::Text(text_node)) => {
                 let text_len = text_node.text.char_len();
                 let child_end = current_offset + text_len;
 
@@ -651,7 +654,7 @@ fn accumulate_block_attrs(
 
                 current_offset = child_end;
             }
-            Node::HardBreak(_) => {
+            Some(Node::HardBreak(_)) => {
                 current_offset += 1;
             }
             _ => {}
@@ -689,7 +692,7 @@ where
         .into_iter()
         .filter(|&block_id| {
             doc.node(block_id)
-                .map(|node| filter(node.node()))
+                .and_then(|node| node.node().map(|n| filter(n)))
                 .unwrap_or(false)
         })
         .collect())
@@ -796,7 +799,7 @@ pub fn collect_text_ranges_in_selection(
             .node(block_id)
             .with_context(|| format!("Block {block_id} not found"))?;
 
-        if !block.spec().is_textblock(doc.schema()) {
+        if !block.spec().map_or(false, |s| s.is_textblock(doc.schema())) {
             continue;
         }
 
@@ -831,7 +834,7 @@ fn collect_text_ranges_in_textblock(
 
     for child in parent.children() {
         match child.node() {
-            Node::Text(text_node) => {
+            Some(Node::Text(text_node)) => {
                 let text_len = text_node.text.char_len();
                 let child_end = current_offset + text_len;
 
@@ -846,7 +849,7 @@ fn collect_text_ranges_in_textblock(
 
                 current_offset = child_end;
             }
-            Node::HardBreak(_) => {
+            Some(Node::HardBreak(_)) => {
                 current_offset += 1;
             }
             _ => {}
@@ -909,7 +912,10 @@ fn collect_relevant_blocks(doc: &Doc, selection: &Selection) -> Result<Vec<NodeI
         let mut current_id = Some(node_id);
         while let Some(id) = current_id {
             if let Some(node) = doc.node(id) {
-                if node.spec().is_structural_root(doc.schema()) {
+                if node
+                    .spec()
+                    .map_or(false, |s| s.is_structural_root(doc.schema()))
+                {
                     block_ids.insert(id);
                 }
                 current_id = node.parent().map(|n| n.node_id());

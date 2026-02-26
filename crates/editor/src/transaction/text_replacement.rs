@@ -272,7 +272,10 @@ impl Transaction {
                 break;
             }
 
-            match child.node() {
+            let Some(child_data) = child.node() else {
+                continue;
+            };
+            match child_data {
                 Node::Text(text_node) => {
                     let char_len = text_node.text.char_len();
                     let remaining = head.offset - current_offset;

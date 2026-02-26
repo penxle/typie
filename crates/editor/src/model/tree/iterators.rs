@@ -9,8 +9,10 @@ pub struct BlockTextIterator<'a> {
 
 impl<'a> BlockTextIterator<'a> {
     pub fn new(doc: &'a Doc) -> Self {
-        let traverser = BlockTraverser::new(doc, NodeId::ROOT)
-            .unwrap_or_else(|_| BlockTraverser::new(doc, NodeId::ROOT).unwrap());
+        let traverser = match BlockTraverser::new(doc, NodeId::ROOT) {
+            Ok(t) => t,
+            Err(_) => BlockTraverser::empty(doc),
+        };
 
         Self { doc, traverser }
     }

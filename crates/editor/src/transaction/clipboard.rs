@@ -792,21 +792,21 @@ mod tests {
         let root = actual.doc.node(NodeId::ROOT).expect("root");
         let children: Vec<_> = root.children().collect();
         assert_eq!(children.len(), 3, "should have 3 children");
-        assert!(matches!(children[0].node(), Node::Paragraph(_)));
-        assert!(matches!(children[1].node(), Node::HorizontalRule(_)));
-        assert!(matches!(children[2].node(), Node::Paragraph(_)));
+        assert!(matches!(children[0].node(), Some(Node::Paragraph(_))));
+        assert!(matches!(children[1].node(), Some(Node::HorizontalRule(_))));
+        assert!(matches!(children[2].node(), Some(Node::Paragraph(_))));
 
         let first_text = children[0]
             .first_child()
             .expect("first para should have child");
-        if let Node::Text(t) = first_text.node() {
+        if let Some(Node::Text(t)) = first_text.node() {
             assert_eq!(t.text.to_string(), "A");
         }
 
         let last_text = children[2]
             .first_child()
             .expect("last para should have child");
-        if let Node::Text(t) = last_text.node() {
+        if let Some(Node::Text(t)) = last_text.node() {
             assert_eq!(t.text.to_string(), "B");
         }
     }
@@ -1325,14 +1325,14 @@ mod tests {
 
         let para = &children[0];
         assert!(
-            matches!(para.node(), Node::Paragraph(_)),
+            matches!(para.node(), Some(Node::Paragraph(_))),
             "child should be a paragraph"
         );
 
         let text_child = para.first_child();
         assert!(text_child.is_some(), "paragraph should have a text child");
 
-        if let Node::Text(t) = text_child.unwrap().node() {
+        if let Some(Node::Text(t)) = text_child.unwrap().node() {
             assert_eq!(t.text.to_string(), "New text");
         } else {
             panic!("Expected text node");
@@ -1366,7 +1366,7 @@ mod tests {
             .iter()
             .filter_map(|child| {
                 child.first_child().and_then(|tc| {
-                    if let Node::Text(t) = tc.node() {
+                    if let Some(Node::Text(t)) = tc.node() {
                         Some(t.text.to_string())
                     } else {
                         None
@@ -1482,10 +1482,10 @@ mod tests {
         let root = actual.doc.node(NodeId::ROOT).expect("root");
         let has_table = root
             .descendants()
-            .any(|n| matches!(n.node(), Node::Table(_)));
+            .any(|n| matches!(n.node(), Some(Node::Table(_))));
         let has_outer_text = root
             .descendants()
-            .any(|n| matches!(n.node(), Node::Text(t) if t.text.as_str() == "outer"));
+            .any(|n| matches!(n.node(), Some(Node::Text(t)) if t.text.as_str() == "outer"));
 
         assert!(has_table, "pasted fragment should contain a table");
         assert!(
@@ -1547,13 +1547,13 @@ mod tests {
         let root = actual.doc.node(NodeId::ROOT).expect("root");
         let has_fold = root
             .descendants()
-            .any(|n| matches!(n.node(), Node::Fold(_)));
+            .any(|n| matches!(n.node(), Some(Node::Fold(_))));
         let has_source_text = root
             .descendants()
-            .any(|n| matches!(n.node(), Node::Text(t) if t.text.as_str() == "cell-start"));
+            .any(|n| matches!(n.node(), Some(Node::Text(t)) if t.text.as_str() == "cell-start"));
         let has_inner_fold_text = root
             .descendants()
-            .any(|n| matches!(n.node(), Node::Text(t) if t.text.as_str() == "inner-fold"));
+            .any(|n| matches!(n.node(), Some(Node::Text(t)) if t.text.as_str() == "inner-fold"));
 
         assert!(has_fold, "pasted table_cell content should keep fold block");
         assert!(
@@ -1613,13 +1613,13 @@ mod tests {
         let root = actual.doc.node(NodeId::ROOT).expect("root");
         let has_bullet_list = root
             .descendants()
-            .any(|n| matches!(n.node(), Node::BulletList(_)));
+            .any(|n| matches!(n.node(), Some(Node::BulletList(_))));
         let has_item_text = root
             .descendants()
-            .any(|n| matches!(n.node(), Node::Text(t) if t.text.as_str() == "item"));
+            .any(|n| matches!(n.node(), Some(Node::Text(t)) if t.text.as_str() == "item"));
         let has_sub_item_text = root
             .descendants()
-            .any(|n| matches!(n.node(), Node::Text(t) if t.text.as_str() == "sub-item"));
+            .any(|n| matches!(n.node(), Some(Node::Text(t)) if t.text.as_str() == "sub-item"));
 
         assert!(
             has_bullet_list,
@@ -1967,7 +1967,7 @@ mod tests {
         let mut two_styles = None;
 
         for node in root.descendants() {
-            if let Node::Text(text_node) = node.node() {
+            if let Some(Node::Text(text_node)) = node.node() {
                 for seg in text_node.text.get_segments() {
                     if seg.text == "1" {
                         one_styles = Some(seg.styles.clone());
@@ -2047,7 +2047,7 @@ mod tests {
         let mut decorated_styles = None;
 
         for node in root.descendants() {
-            if let Node::Text(text_node) = node.node() {
+            if let Some(Node::Text(text_node)) = node.node() {
                 for seg in text_node.text.get_segments() {
                     if seg.text == "plain" {
                         plain_styles = Some(seg.styles.clone());

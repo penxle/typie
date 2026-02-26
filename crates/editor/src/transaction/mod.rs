@@ -68,7 +68,7 @@ impl Transaction {
         let Some(child) = self.node(child_id) else {
             return false;
         };
-        matches!(child.node(), Node::Text(t) if !t.text.get_segments().is_empty())
+        matches!(child.node(), Some(Node::Text(t)) if !t.text.get_segments().is_empty())
     }
 
     pub fn set_preferred_x(&mut self, preferred_x: Option<f32>) {
@@ -206,7 +206,10 @@ impl Transaction {
             return;
         };
 
-        if node.spec().is_textblock(self.doc().schema()) {
+        if node
+            .spec()
+            .map_or(false, |s| s.is_textblock(self.doc().schema()))
+        {
             return;
         }
 
@@ -218,7 +221,7 @@ impl Transaction {
             return;
         };
 
-        if child.spec().selectable {
+        if child.spec().map_or(false, |s| s.selectable) {
             if self.state.read_only {
                 return;
             }
@@ -233,7 +236,10 @@ impl Transaction {
             return;
         };
 
-        if child.spec().is_textblock(self.doc().schema()) {
+        if child
+            .spec()
+            .map_or(false, |s| s.is_textblock(self.doc().schema()))
+        {
             let new_pos = Position::new(child_id, 0, Affinity::Downstream);
             self.state.selection = Selection::collapsed(new_pos);
             return;
@@ -244,7 +250,10 @@ impl Transaction {
                 continue;
             };
 
-            if block.spec().is_textblock(self.doc().schema()) {
+            if block
+                .spec()
+                .map_or(false, |s| s.is_textblock(self.doc().schema()))
+            {
                 let new_pos = Position::new(block_id, 0, Affinity::Downstream);
                 self.state.selection = Selection::collapsed(new_pos);
                 return;
@@ -272,7 +281,7 @@ impl Transaction {
                 continue;
             };
 
-            let Node::Text(text_node) = node_ref.node() else {
+            let Some(Node::Text(text_node)) = node_ref.node() else {
                 continue;
             };
 
@@ -459,10 +468,10 @@ impl Transaction {
 
         let needs_paragraph = last_child
             .as_ref()
-            .filter(|c| matches!(c.node(), Node::Paragraph(_)))
+            .filter(|c| matches!(c.node(), Some(Node::Paragraph(_))))
             .map(|c| {
                 c.children()
-                    .any(|gc| matches!(gc.node(), Node::PageBreak(_)))
+                    .any(|gc| matches!(gc.node(), Some(Node::PageBreak(_))))
             })
             .unwrap_or(false);
 
@@ -773,19 +782,19 @@ mod tests {
         let doc = &actual.doc;
         let root = doc.node(NodeId::ROOT).unwrap();
         let table = root.first_child().unwrap();
-        assert_eq!(table.node_type(), NodeType::Table);
+        assert_eq!(table.node_type(), Some(NodeType::Table));
         let row = table.first_child().unwrap();
         let cell = row.first_child().unwrap();
         let fold = cell.first_child().unwrap();
-        assert_eq!(fold.node_type(), NodeType::Fold);
+        assert_eq!(fold.node_type(), Some(NodeType::Fold));
         let fold_content = fold.children().nth(1).unwrap();
-        assert_eq!(fold_content.node_type(), NodeType::FoldContent);
+        assert_eq!(fold_content.node_type(), Some(NodeType::FoldContent));
 
         // FoldContent 안에 Table이 없어야 함
         for child in fold_content.children() {
             assert_ne!(
                 child.node_type(),
-                NodeType::Table,
+                Some(NodeType::Table),
                 "Nested table should have been removed by normalization"
             );
         }
@@ -826,7 +835,7 @@ mod tests {
 
         let has_table = fold_content
             .children()
-            .any(|c| c.node_type() == NodeType::Table);
+            .any(|c| c.node_type() == Some(NodeType::Table));
         assert!(has_table, "Non-nested table should be preserved");
     }
 
@@ -883,7 +892,7 @@ mod tests {
         for child in inner_fc.children() {
             assert_ne!(
                 child.node_type(),
-                NodeType::Table,
+                Some(NodeType::Table),
                 "Deeply nested table should have been removed"
             );
         }
@@ -916,7 +925,7 @@ mod tests {
         let root = doc.node(NodeId::ROOT).unwrap();
         let table_count = root
             .children()
-            .filter(|c| c.node_type() == NodeType::Table)
+            .filter(|c| c.node_type() == Some(NodeType::Table))
             .count();
         assert_eq!(table_count, 1);
     }

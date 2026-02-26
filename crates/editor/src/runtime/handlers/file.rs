@@ -21,7 +21,7 @@ impl Runtime {
                 return Ok(false);
             };
 
-            if !matches!(node_ref.node(), Node::File(_)) {
+            if !matches!(node_ref.node(), Some(Node::File(_))) {
                 return Ok(false);
             }
 

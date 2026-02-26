@@ -49,7 +49,14 @@ fn format_node(node: NodeRef, indent_level: usize, labeler: &Labeler, output: &m
     let indent = INDENT.repeat(indent_level);
     let prefix = labeler.prefix(node.node_id());
 
-    match node.node() {
+    let Some(node_data) = node.node() else {
+        let indent = INDENT.repeat(indent_level);
+        let prefix = labeler.prefix(node.node_id());
+        output.push_str(&format!("{indent}{prefix}[undecodable] {{}}\n"));
+        return;
+    };
+
+    match node_data {
         Node::Paragraph(paragraph) => {
             let attrs = format_paragraph_attrs(paragraph);
             format_container_node(

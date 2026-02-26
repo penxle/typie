@@ -25,7 +25,7 @@ impl Transaction {
             let fold_content_spec = self.doc().schema().node_spec(fold_content_type);
             let block_types: Vec<NodeType> = blocks
                 .iter()
-                .map(|id| self.node(*id).unwrap().node().as_type())
+                .filter_map(|id| self.node(*id).and_then(|n| n.node().map(|n| n.as_type())))
                 .collect();
 
             block_types
@@ -64,7 +64,7 @@ impl Transaction {
             }
         }
 
-        let parent_spec = parent.spec();
+        let parent_spec = parent.spec().context("Parent spec not found")?;
         let fold_type = NodeType::Fold;
         if !parent_spec.content.matches(fold_type) {
             return Ok(None);
@@ -130,7 +130,7 @@ impl Transaction {
 
         let fold_content_id = fold
             .children()
-            .find(|child| matches!(child.node(), Node::FoldContent(_)))
+            .find(|child| matches!(child.node(), Some(Node::FoldContent(_))))
             .map(|child| child.node_id())
             .context("FoldContent not found")?;
 
@@ -154,7 +154,9 @@ impl Transaction {
             let first_node = self
                 .node(first_unwrapped)
                 .context("First unwrapped node not found")?;
-            Selection::collapsed(leaf_block_start(&first_node))
+            Selection::collapsed(
+                leaf_block_start(&first_node).context("Cannot find leaf block start")?,
+            )
         } else {
             let fallback_offset = parent_prev
                 .and_then(|prev_id| self.node(prev_id).and_then(|n| n.index()))
@@ -178,7 +180,7 @@ impl Transaction {
         if let Some(node_id) = selected_single_block_id(self.doc(), &selection) {
             if self
                 .node(node_id)
-                .map(|node| matches!(node.node(), Node::Fold(_)))
+                .map(|node| matches!(node.node(), Some(Node::Fold(_))))
                 .unwrap_or(false)
             {
                 return Some(node_id);
@@ -187,7 +189,7 @@ impl Transaction {
 
         let head_fold = self.node(selection.head.node_id).and_then(|node| {
             node.ancestors()
-                .find(|ancestor| matches!(ancestor.node(), Node::Fold(_)))
+                .find(|ancestor| matches!(ancestor.node(), Some(Node::Fold(_))))
                 .map(|ancestor| ancestor.node_id())
         });
 
@@ -197,7 +199,7 @@ impl Transaction {
 
         let anchor_fold = self.node(selection.anchor.node_id).and_then(|node| {
             node.ancestors()
-                .find(|ancestor| matches!(ancestor.node(), Node::Fold(_)))
+                .find(|ancestor| matches!(ancestor.node(), Some(Node::Fold(_))))
                 .map(|ancestor| ancestor.node_id())
         });
 

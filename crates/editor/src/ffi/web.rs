@@ -30,7 +30,7 @@ pub struct Codepoints(Vec<u32>);
 
 fn to_js_value<T: Serialize>(value: &T) -> JsValue {
     let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
-    value.serialize(&serializer).unwrap()
+    value.serialize(&serializer).unwrap_or(JsValue::NULL)
 }
 
 #[wasm_bindgen]
@@ -100,11 +100,15 @@ impl Application {
     }
 
     #[wasm_bindgen(js_name = createEditor)]
-    pub fn create_editor(&self, scale_factor: f64, snapshot: Option<Vec<u8>>) -> Editor {
+    pub fn create_editor(
+        &self,
+        scale_factor: f64,
+        snapshot: Option<Vec<u8>>,
+    ) -> Result<Editor, JsValue> {
         if let Some(snapshot) = snapshot {
             Editor::new_with_snapshot(scale_factor, snapshot)
         } else {
-            Editor::new(scale_factor)
+            Ok(Editor::new(scale_factor))
         }
     }
 
@@ -163,7 +167,8 @@ impl Application {
             .map_err(|e| JsValue::from_str(&format!("{:?}", e)))?;
         let snapshot =
             json_to_snapshot(&doc_json).map_err(|e| JsValue::from_str(&format!("{:?}", e)))?;
-        let doc = Doc::from_snapshot(snapshot);
+        let doc =
+            Doc::from_snapshot(snapshot).map_err(|e| JsValue::from_str(&format!("{:?}", e)))?;
         doc.validate_exhaustive()
             .map_err(|e| JsValue::from_str(&format!("{:?}", e)))
     }
@@ -251,11 +256,13 @@ impl Editor {
             LayoutMode::Continuous { max_width, .. } => max_width + 2.0 * CONTINUOUS_PAGE_MARGIN,
         };
 
-        let root = doc.node(NodeId::ROOT).unwrap();
+        let root = doc
+            .node(NodeId::ROOT)
+            .expect("Doc::new: ROOT node must exist after construction");
         let paragraph_id = root
             .as_mut()
             .insert_child(0, Node::Paragraph(ParagraphNode::default()))
-            .unwrap();
+            .expect("Doc::new: failed to insert initial paragraph");
 
         let state = State::new(
             doc,
@@ -269,13 +276,14 @@ impl Editor {
         Self { runtime }
     }
 
-    fn new_with_snapshot(scale_factor: f64, snapshot: Vec<u8>) -> Self {
-        let doc = Rc::new(Doc::from_snapshot(snapshot));
+    fn new_with_snapshot(scale_factor: f64, snapshot: Vec<u8>) -> Result<Self, JsValue> {
+        let doc =
+            Rc::new(Doc::from_snapshot(snapshot).map_err(|e| JsValue::from_str(&e.to_string()))?);
         let layout_mode = doc.settings().layout_mode;
-        let selection_pos = {
-            let root = doc.node(NodeId::ROOT).unwrap();
-            leaf_block_end(&root)
-        };
+        let selection_pos = doc
+            .node(NodeId::ROOT)
+            .and_then(|root| leaf_block_end(&root))
+            .unwrap_or(Position::new(NodeId::ROOT, 0, Affinity::Downstream));
 
         let width = match layout_mode {
             LayoutMode::Paginated { page_width, .. } => page_width,
@@ -288,7 +296,7 @@ impl Editor {
 
         runtime.layout();
 
-        Self { runtime }
+        Ok(Self { runtime })
     }
 }
 
@@ -311,28 +319,37 @@ impl Editor {
     }
 
     #[wasm_bindgen(js_name = export)]
-    pub fn export(&self, mode: DocExportMode) -> Vec<u8> {
-        self.runtime.doc().export(mode).unwrap()
+    pub fn export(&self, mode: DocExportMode) -> Result<Vec<u8>, JsValue> {
+        self.runtime
+            .doc()
+            .export(mode)
+            .map_err(|e| JsValue::from_str(&e.to_string()))
     }
 
     #[wasm_bindgen(js_name = importUpdates)]
-    pub fn import_updates(&mut self, updates: Vec<u8>) {
-        self.runtime.import_updates(&updates).unwrap()
+    pub fn import_updates(&mut self, updates: Vec<u8>) -> Result<(), JsValue> {
+        self.runtime
+            .import_updates(&updates)
+            .map_err(|e| JsValue::from_str(&e.to_string()))
     }
 
     #[wasm_bindgen(js_name = insertTemplateFragment)]
-    pub fn insert_template_fragment(&mut self, snapshot: Vec<u8>) {
-        self.runtime.insert_template_fragment(snapshot).unwrap()
+    pub fn insert_template_fragment(&mut self, snapshot: Vec<u8>) -> Result<(), JsValue> {
+        self.runtime
+            .insert_template_fragment(snapshot)
+            .map_err(|e| JsValue::from_str(&e.to_string()))
     }
 
     #[wasm_bindgen(js_name = importUpdatesBatch)]
-    pub fn import_updates_batch(&mut self, updates_batch: js_sys::Array) {
+    pub fn import_updates_batch(&mut self, updates_batch: js_sys::Array) -> Result<(), JsValue> {
         let batch: Vec<Vec<u8>> = updates_batch
             .iter()
             .filter_map(|v| v.dyn_into::<js_sys::Uint8Array>().ok())
             .map(|arr| arr.to_vec())
             .collect();
-        self.runtime.import_updates_batch(&batch).unwrap()
+        self.runtime
+            .import_updates_batch(&batch)
+            .map_err(|e| JsValue::from_str(&e.to_string()))
     }
 
     #[wasm_bindgen(js_name = checkout)]
@@ -506,7 +523,7 @@ impl Editor {
         }
 
         let snapshot = loro_doc.export(loro::ExportMode::Snapshot).ok()?;
-        let history_doc = Doc::from_snapshot(snapshot);
+        let history_doc = Doc::from_snapshot(snapshot).ok()?;
         history_doc.loro_doc().checkout(&target_frontiers).ok()?;
 
         Some(count_all(&history_doc.to_plain_text()).0)
@@ -622,7 +639,9 @@ impl Editor {
 }
 
 fn count_all(text: &str) -> (u32, u32, u32) {
-    let gc_data = get_general_category_map();
+    let Some(gc_data) = get_general_category_map() else {
+        return (0, 0, 0);
+    };
     let gc_map = gc_data.as_borrowed();
 
     let mut with_ws: u32 = 0;

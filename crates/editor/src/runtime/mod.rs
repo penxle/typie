@@ -251,7 +251,7 @@ impl Runtime {
             .map(|root| {
                 root.descendants()
                     .filter_map(|node| match node.node() {
-                        Node::Fold(_) => Some(node.node_id()),
+                        Some(Node::Fold(_)) => Some(node.node_id()),
                         _ => None,
                     })
                     .collect::<Vec<_>>()
@@ -342,7 +342,7 @@ impl Runtime {
     }
 
     pub fn insert_template_fragment(&mut self, snapshot: Vec<u8>) -> Result<()> {
-        let template_doc = std::rc::Rc::new(Doc::from_snapshot(snapshot));
+        let template_doc = std::rc::Rc::new(Doc::from_snapshot(snapshot)?);
         let template_settings = template_doc.settings();
         let template_default_attrs = template_doc.default_attrs();
         let fragment = Fragment::from_doc(&template_doc)?;
@@ -711,7 +711,7 @@ impl Runtime {
     fn selection_type_for_id(&self, node_id: NodeId) -> u32 {
         self.doc()
             .node(node_id)
-            .map(|node| slate::selection_type(node.node_type()))
+            .and_then(|node| node.node_type().map(|nt| slate::selection_type(nt)))
             .unwrap_or(slate::SELECTION_TYPE_NONE)
     }
 
@@ -994,7 +994,7 @@ impl Runtime {
             return Vec::new();
         };
 
-        let Node::Text(text_node) = child.node() else {
+        let Some(Node::Text(text_node)) = child.node() else {
             return Vec::new();
         };
 
@@ -1827,7 +1827,7 @@ impl Runtime {
         let mut offset = 0;
         for child in node.children() {
             match child.node() {
-                Node::Text(text) => offset += text.text.char_len(),
+                Some(Node::Text(text)) => offset += text.text.char_len(),
                 _ => offset += 1,
             }
         }
@@ -2028,7 +2028,9 @@ mod tests {
             800.0,
             1.0,
             State::new(
-                Rc::new(Doc::from_snapshot(snapshot.clone())),
+                Rc::new(
+                    Doc::from_snapshot(snapshot.clone()).expect("test: snapshot should decode"),
+                ),
                 Selection::collapsed(Position::new(p1, 0, Affinity::Downstream)),
             ),
         );
@@ -2037,7 +2039,7 @@ mod tests {
             800.0,
             1.0,
             State::new(
-                Rc::new(Doc::from_snapshot(snapshot)),
+                Rc::new(Doc::from_snapshot(snapshot).expect("test: snapshot should decode")),
                 Selection::collapsed(Position::new(p1, 0, Affinity::Downstream)),
             ),
         );
@@ -2137,7 +2139,9 @@ mod tests {
             800.0,
             1.0,
             State::new(
-                Rc::new(Doc::from_snapshot(snapshot.clone())),
+                Rc::new(
+                    Doc::from_snapshot(snapshot.clone()).expect("test: snapshot should decode"),
+                ),
                 Selection::collapsed(Position::new(p1, 0, Affinity::Downstream)),
             ),
         );
@@ -2146,7 +2150,7 @@ mod tests {
             800.0,
             1.0,
             State::new(
-                Rc::new(Doc::from_snapshot(snapshot)),
+                Rc::new(Doc::from_snapshot(snapshot).expect("test: snapshot should decode")),
                 Selection::collapsed(Position::new(p1, 0, Affinity::Downstream)),
             ),
         );
@@ -2219,7 +2223,9 @@ mod tests {
             800.0,
             1.0,
             State::new(
-                Rc::new(Doc::from_snapshot(snapshot.clone())),
+                Rc::new(
+                    Doc::from_snapshot(snapshot.clone()).expect("test: snapshot should decode"),
+                ),
                 Selection::collapsed(Position::new(p1, 0, Affinity::Downstream)),
             ),
         );
@@ -2228,7 +2234,7 @@ mod tests {
             800.0,
             1.0,
             State::new(
-                Rc::new(Doc::from_snapshot(snapshot)),
+                Rc::new(Doc::from_snapshot(snapshot).expect("test: snapshot should decode")),
                 Selection::collapsed(Position::new(p1, 0, Affinity::Downstream)),
             ),
         );
@@ -2314,7 +2320,9 @@ mod tests {
             800.0,
             1.0,
             State::new(
-                Rc::new(Doc::from_snapshot(snapshot.clone())),
+                Rc::new(
+                    Doc::from_snapshot(snapshot.clone()).expect("test: snapshot should decode"),
+                ),
                 Selection::collapsed(Position::new(p1, 0, Affinity::Downstream)),
             ),
         );
@@ -2323,7 +2331,7 @@ mod tests {
             800.0,
             1.0,
             State::new(
-                Rc::new(Doc::from_snapshot(snapshot)),
+                Rc::new(Doc::from_snapshot(snapshot).expect("test: snapshot should decode")),
                 Selection::collapsed(Position::new(p1, 0, Affinity::Downstream)),
             ),
         );
@@ -2457,7 +2465,7 @@ mod tests {
         let state = runtime.state();
         let paragraph = state.doc.node(p).unwrap();
         let second_node = state.doc.node(second).unwrap();
-        let Node::Text(second_text) = second_node.node() else {
+        let Some(Node::Text(second_text)) = second_node.node() else {
             panic!("Second node is not text");
         };
 
@@ -2761,7 +2769,7 @@ mod tests {
         let first_item = outer_list.first_child().expect("first list item not found");
         let nested_list_id = first_item
             .children()
-            .find(|c| matches!(c.node(), Node::OrderedList(_)))
+            .find(|c| matches!(c.node(), Some(Node::OrderedList(_))))
             .map(|c| c.node_id())
             .expect("nested list not created");
 
@@ -3046,7 +3054,7 @@ mod tests {
         runtime.update(Message::CycleCalloutVariant);
 
         let callout_node = runtime.doc().node(callout).unwrap();
-        let Node::Callout(callout_data) = callout_node.node() else {
+        let Some(Node::Callout(callout_data)) = callout_node.node() else {
             panic!("node should be callout");
         };
         assert_eq!(callout_data.variant, CalloutVariant::Info);
@@ -3071,7 +3079,7 @@ mod tests {
         runtime.update(Message::CycleCalloutVariant);
 
         let callout_node = runtime.doc().node(callout).unwrap();
-        let Node::Callout(callout_data) = callout_node.node() else {
+        let Some(Node::Callout(callout_data)) = callout_node.node() else {
             panic!("node should be callout");
         };
         assert_eq!(callout_data.variant, CalloutVariant::Success);

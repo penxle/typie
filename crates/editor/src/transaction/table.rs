@@ -24,7 +24,7 @@ impl Transaction {
         };
 
         let parent_id = parent.node_id();
-        let parent_spec = parent.spec();
+        let parent_spec = parent.spec().context("Parent spec not found")?;
 
         let table_type = NodeType::Table;
         if !parent_spec.content.matches(table_type) {
@@ -193,7 +193,7 @@ impl Transaction {
             let widths: Vec<Option<f32>> = first_row
                 .children()
                 .map(|cell| {
-                    if let Node::TableCell(cell_node) = cell.node() {
+                    if let Some(Node::TableCell(cell_node)) = cell.node() {
                         cell_node.col_width
                     } else {
                         None
@@ -298,7 +298,7 @@ impl Transaction {
                 let table_node = self.node(table_id).context("Table not found")?;
                 if let Some(target_row) = table_node.children().nth(target_row_idx) {
                     if let Some(first_cell) = target_row.first_child() {
-                        Some(leaf_block_start(&first_cell))
+                        leaf_block_start(&first_cell)
                     } else {
                         None
                     }
@@ -337,7 +337,7 @@ impl Transaction {
             let widths: Vec<Option<f32>> = first_row
                 .children()
                 .map(|cell| {
-                    if let Node::TableCell(cell_node) = cell.node() {
+                    if let Some(Node::TableCell(cell_node)) = cell.node() {
                         cell_node.col_width
                     } else {
                         None
@@ -376,8 +376,9 @@ impl Transaction {
             if let Some(first_row_id) = row_ids.first() {
                 if let Some(first_row) = self.node(*first_row_id) {
                     if let Some(target_cell) = first_row.children().nth(target_col_idx) {
-                        let pos = leaf_block_start(&target_cell);
-                        self.set_selection(Selection::collapsed(pos));
+                        if let Some(pos) = leaf_block_start(&target_cell) {
+                            self.set_selection(Selection::collapsed(pos));
+                        }
                     }
                 }
             }
@@ -498,7 +499,7 @@ impl Transaction {
 
     pub fn select_table(&mut self, table_id: NodeId) -> Result<bool> {
         let table_node = self.node(table_id).context("Table not found")?;
-        if !matches!(table_node.node(), Node::Table(_)) {
+        if !matches!(table_node.node(), Some(Node::Table(_))) {
             return Ok(false);
         }
 
@@ -520,8 +521,8 @@ impl Transaction {
             return Ok(false);
         };
 
-        let start_pos = leaf_block_start(&row_node);
-        let end_pos = leaf_block_end(&row_node);
+        let start_pos = leaf_block_start(&row_node).context("Cannot find start of row")?;
+        let end_pos = leaf_block_end(&row_node).context("Cannot find end of row")?;
 
         self.set_selection(Selection::new(start_pos, end_pos));
 
@@ -545,8 +546,8 @@ impl Transaction {
             return Ok(false);
         };
 
-        let start_pos = leaf_block_start(&first_cell);
-        let end_pos = leaf_block_end(&last_cell);
+        let start_pos = leaf_block_start(&first_cell).context("Cannot find start of first cell")?;
+        let end_pos = leaf_block_end(&last_cell).context("Cannot find end of last cell")?;
 
         self.set_selection(Selection::new(start_pos, end_pos));
 
@@ -607,7 +608,7 @@ impl Transaction {
         Ok(first_row
             .children()
             .map(|cell| {
-                if let Node::TableCell(cell_node) = cell.node() {
+                if let Some(Node::TableCell(cell_node)) = cell.node() {
                     cell_node.col_width
                 } else {
                     None
@@ -805,7 +806,7 @@ mod tests {
         let root = doc.node(NodeId::ROOT).unwrap();
         let table = root
             .children()
-            .find(|n| n.node_type() == NodeType::Table)
+            .find(|n| n.node_type() == Some(NodeType::Table))
             .unwrap();
         let row = table.first_child().unwrap();
         let cell1 = row.first_child().unwrap();
@@ -930,7 +931,7 @@ mod tests {
         let widths: Vec<f32> = first_row
             .children()
             .map(|cell| {
-                if let Node::TableCell(cell_node) = cell.node() {
+                if let Some(Node::TableCell(cell_node)) = cell.node() {
                     cell_node.col_width.unwrap()
                 } else {
                     panic!("Expected table cell");
@@ -1031,9 +1032,9 @@ mod tests {
         let doc = actual.doc;
 
         let n3_node = doc.node(n3).expect("n3 should exist");
-        if let Node::Paragraph(_p) = n3_node.node() {
+        if let Some(Node::Paragraph(_p)) = n3_node.node() {
             let text_child = n3_node.first_child().expect("n3 should have text child");
-            if let Node::Text(t) = text_child.node() {
+            if let Some(Node::Text(t)) = text_child.node() {
                 assert_eq!(t.text.to_string(), "56", "Expected '4' to be deleted");
             } else {
                 panic!("n3 child should be text");
@@ -1157,7 +1158,7 @@ mod tests {
         let widths: Vec<f32> = first_row
             .children()
             .map(|cell| {
-                if let Node::TableCell(cell_node) = cell.node() {
+                if let Some(Node::TableCell(cell_node)) = cell.node() {
                     cell_node.col_width.unwrap()
                 } else {
                     panic!("Expected table cell");
@@ -1213,7 +1214,7 @@ mod tests {
         let widths: Vec<_> = first_row
             .children()
             .map(|cell| {
-                if let Node::TableCell(cell_node) = cell.node() {
+                if let Some(Node::TableCell(cell_node)) = cell.node() {
                     cell_node.col_width
                 } else {
                     None
@@ -1245,7 +1246,7 @@ mod tests {
         });
 
         let table = actual.doc.node(t).unwrap();
-        if let Node::Table(table_node) = table.node() {
+        if let Some(Node::Table(table_node)) = table.node() {
             assert_eq!(table_node.proportion, 0.8);
         } else {
             panic!("Expected table node");
@@ -1275,7 +1276,7 @@ mod tests {
         });
 
         let table = actual.doc.node(t).unwrap();
-        if let Node::Table(table_node) = table.node() {
+        if let Some(Node::Table(table_node)) = table.node() {
             assert_eq!(table_node.proportion, 1.0);
         } else {
             panic!("Expected table node");

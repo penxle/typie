@@ -19,15 +19,17 @@ pub(crate) fn clone_block_type(node: &Node) -> Option<Node> {
 }
 
 fn can_join_content(node_a: &NodeRef, node_b: &NodeRef) -> bool {
-    node_a.is_block() && node_b.is_block() && node_a.spec().content == node_b.spec().content
+    node_a.is_block()
+        && node_b.is_block()
+        && node_a.spec().map(|s| &s.content) == node_b.spec().map(|s| &s.content)
 }
 
 fn find_last_joinable_block(node: &NodeRef, target_content: &ContentExpr) -> Option<NodeId> {
-    if node.is_block() && &node.spec().content == target_content {
+    if node.is_block() && node.spec().map(|s| &s.content) == Some(target_content) {
         return Some(node.node_id());
     }
 
-    if node.spec().isolating {
+    if node.spec().map_or(false, |s| s.isolating) {
         return None;
     }
 
@@ -39,11 +41,11 @@ fn find_last_joinable_block(node: &NodeRef, target_content: &ContentExpr) -> Opt
 }
 
 fn find_first_joinable_block(node: &NodeRef, target_content: &ContentExpr) -> Option<NodeId> {
-    if node.is_block() && &node.spec().content == target_content {
+    if node.is_block() && node.spec().map(|s| &s.content) == Some(target_content) {
         return Some(node.node_id());
     }
 
-    if node.spec().isolating {
+    if node.spec().map_or(false, |s| s.isolating) {
         return None;
     }
 
@@ -62,7 +64,7 @@ impl Transaction {
         select_next: bool,
     ) -> Result<bool> {
         let sibling = self.node(sibling_id).context("Sibling not found")?;
-        if !sibling.spec().selectable {
+        if !sibling.spec().map_or(false, |s| s.selectable) {
             return Ok(false);
         }
 
@@ -113,7 +115,7 @@ impl Transaction {
             let parent = this.parent().context("Parent not found")?;
             let parent_last_child_id = parent.last_child().map(|n| n.node_id());
 
-            match this.node() {
+            match this.node().context("Node decode failed")? {
                 Node::Text(text_node) => {
                     let grandparent = parent.parent().context("Grandparent not found")?;
                     let grandparent_id = grandparent.node_id();
@@ -127,7 +129,8 @@ impl Transaction {
                         .context("Grandparent not found")?;
                     let new_block_id = grandparent.as_mut().insert_child(
                         parent_index + 1,
-                        clone_block_type(&parent.node()).context("Cannot clone block type")?,
+                        clone_block_type(parent.node().context("Parent decode failed")?)
+                            .context("Cannot clone block type")?,
                     )?;
 
                     if local_offset == 0 {
@@ -197,7 +200,8 @@ impl Transaction {
                         .context("Grandparent not found")?;
                     let new_block_id = grandparent.as_mut().insert_child(
                         parent_index + 1,
-                        clone_block_type(&parent.node()).context("Cannot clone block type")?,
+                        clone_block_type(parent.node().context("Parent decode failed")?)
+                            .context("Cannot clone block type")?,
                     )?;
 
                     let first_child_to_move = if local_offset == 0 {
@@ -253,7 +257,8 @@ impl Transaction {
             let parent = self.node_mut(parent_id).context("Parent not found")?;
             let new_block_id = parent.as_mut().insert_child(
                 paragraph_index + 1,
-                clone_block_type(&paragraph.node()).context("Cannot clone block type")?,
+                clone_block_type(paragraph.node().context("Paragraph decode failed")?)
+                    .context("Cannot clone block type")?,
             )?;
 
             self.push_effect(Effect::NodeChanged {
@@ -306,7 +311,10 @@ impl Transaction {
         }
 
         let block = self.node(block_id).context("Block not found")?;
-        if block.spec().is_textblock(self.doc().schema()) {
+        if block
+            .spec()
+            .map_or(false, |s| s.is_textblock(self.doc().schema()))
+        {
             return Ok(false);
         }
 
@@ -323,7 +331,7 @@ impl Transaction {
             return Ok(false);
         }
 
-        let insert_before = matches!(parent.node(), Node::Root(_))
+        let insert_before = matches!(parent.node(), Some(Node::Root(_)))
             && parent.first_child().map(|child| child.node_id()) == Some(block_id);
         let prev = if insert_before {
             block.prev_sibling().map(|n| n.node_id())
@@ -403,7 +411,11 @@ impl Transaction {
         let prev_sibling = self
             .node(prev_sibling_id)
             .context("Previous sibling not found")?;
-        let current_content = current_block.spec().content.clone();
+        let current_content = current_block
+            .spec()
+            .context("Current block spec not found")?
+            .content
+            .clone();
 
         let target_block_id = if can_join_content(&current_block, &prev_sibling) {
             prev_sibling.node_id()
@@ -420,7 +432,10 @@ impl Transaction {
                 .context("Target block not found")?;
             let mut offset = 0;
             for child in target_block.children() {
-                match child.node() {
+                let Some(child_data) = child.node() else {
+                    continue;
+                };
+                match child_data {
                     Node::Text(text) => {
                         offset += text.text.char_len();
                     }
@@ -477,7 +492,7 @@ impl Transaction {
         {
             let child = self.node(child_id).context("Child not found")?;
             match child.node() {
-                Node::Text(text) => {
+                Some(Node::Text(text)) => {
                     let text_len = text.text.char_len();
                     local_offset == text_len
                 }
@@ -514,7 +529,11 @@ impl Transaction {
         let next_sibling = self
             .node(next_sibling_id)
             .context("Next sibling not found")?;
-        let current_content = current_block.spec().content.clone();
+        let current_content = current_block
+            .spec()
+            .context("Current block spec not found")?
+            .content
+            .clone();
 
         let target_block_id = if can_join_content(&current_block, &next_sibling) {
             next_sibling.node_id()
@@ -531,7 +550,10 @@ impl Transaction {
                 .context("Current block not found")?;
             let mut offset = 0;
             for child in current_block.children() {
-                match child.node() {
+                let Some(child_data) = child.node() else {
+                    continue;
+                };
+                match child_data {
                     Node::Text(text) => {
                         offset += text.text.char_len();
                     }
@@ -583,7 +605,7 @@ impl Transaction {
 
         for block_id in blocks {
             let block = self.node_mut(block_id).context("Block not found")?;
-            if let Node::Paragraph(_) = block.node() {
+            if let Some(Node::Paragraph(_)) = block.node() {
                 block.as_mut().update(|node| {
                     if let Node::Paragraph(p) = node {
                         p.align = align;
@@ -604,7 +626,7 @@ impl Transaction {
 
         for block_id in blocks {
             let block = self.node_mut(block_id).context("Block not found")?;
-            if let Node::Paragraph(_) = block.node() {
+            if let Some(Node::Paragraph(_)) = block.node() {
                 block.as_mut().update(|node| {
                     if let Node::Paragraph(p) = node {
                         p.line_height = line_height;
@@ -630,7 +652,7 @@ impl Transaction {
                 .into_iter()
                 .filter(|&id| {
                     self.node(id)
-                        .map(|node| matches!(node.node(), Node::Paragraph(_)))
+                        .map(|node| matches!(node.node(), Some(Node::Paragraph(_))))
                         .unwrap_or(false)
                 })
                 .collect()
@@ -641,7 +663,7 @@ impl Transaction {
 
             let (_, to) = selection.as_sorted(self.doc())?;
             if let Some(node) = self.node(to.node_id) {
-                if matches!(node.node(), Node::Paragraph(_)) && !ids.contains(&to.node_id) {
+                if matches!(node.node(), Some(Node::Paragraph(_))) && !ids.contains(&to.node_id) {
                     ids.push(to.node_id);
                 }
             }
@@ -1915,7 +1937,7 @@ mod tests {
         let second_para = root.children().nth(1).unwrap();
         let text_node = second_para.children().next().unwrap();
 
-        if let Node::Text(t) = text_node.node() {
+        if let Some(Node::Text(t)) = text_node.node() {
             let segments = t.text.get_segments();
             assert_eq!(segments.len(), 1);
             let seg = &segments[0];
@@ -2003,7 +2025,7 @@ mod tests {
 
         let root = actual.doc.node(NodeId::ROOT).unwrap();
         let first_child = root.first_child().unwrap();
-        if let Node::Paragraph(para) = first_child.node() {
+        if let Some(Node::Paragraph(para)) = first_child.node() {
             assert!(
                 para.line_height == 160,
                 "Inserted paragraph should inherit line_height from cascade, got: {}",

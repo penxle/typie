@@ -233,7 +233,7 @@ fn find_element_above(page: &Page, x: f32, y: f32) -> Option<&ElementEntry> {
             let a_bottom = a.pos.y + a.size.height;
             let b_bottom = b.pos.y + b.size.height;
 
-            match a_bottom.partial_cmp(&b_bottom).unwrap() {
+            match a_bottom.total_cmp(&b_bottom) {
                 std::cmp::Ordering::Equal => {
                     let a_contains_x = x >= a.pos.x && x < a.pos.x + a.size.width;
                     let b_contains_x = x >= b.pos.x && x < b.pos.x + b.size.width;
@@ -241,7 +241,7 @@ fn find_element_above(page: &Page, x: f32, y: f32) -> Option<&ElementEntry> {
                     match (a_contains_x, b_contains_x) {
                         (true, false) => std::cmp::Ordering::Greater,
                         (false, true) => std::cmp::Ordering::Less,
-                        _ => a.pos.x.partial_cmp(&b.pos.x).unwrap(),
+                        _ => a.pos.x.total_cmp(&b.pos.x),
                     }
                 }
                 ordering => ordering,
@@ -255,7 +255,7 @@ fn find_element_below(page: &Page, x: f32, y: f32) -> Option<&ElementEntry> {
     page.spatial_index()
         .locate_in_envelope(&search_below)
         .filter(|entry| entry.pos.y >= y)
-        .min_by(|a, b| match a.pos.y.partial_cmp(&b.pos.y).unwrap() {
+        .min_by(|a, b| match a.pos.y.total_cmp(&b.pos.y) {
             std::cmp::Ordering::Equal => {
                 let a_contains_x = x >= a.pos.x && x < a.pos.x + a.size.width;
                 let b_contains_x = x >= b.pos.x && x < b.pos.x + b.size.width;
@@ -263,7 +263,7 @@ fn find_element_below(page: &Page, x: f32, y: f32) -> Option<&ElementEntry> {
                 match (a_contains_x, b_contains_x) {
                     (true, false) => std::cmp::Ordering::Less,
                     (false, true) => std::cmp::Ordering::Greater,
-                    _ => a.pos.x.partial_cmp(&b.pos.x).unwrap(),
+                    _ => a.pos.x.total_cmp(&b.pos.x),
                 }
             }
             ordering => ordering,
