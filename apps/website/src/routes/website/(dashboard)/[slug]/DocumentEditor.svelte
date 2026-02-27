@@ -209,7 +209,14 @@
     () => ({
       skip: !documentSyncReady || !documentId,
       onData: async (data) => {
-        await handleSyncPayload(data.documentSyncStream);
+        const currentDocumentId = documentId;
+        const currentPersistence = persistence;
+        if (!currentDocumentId || !currentPersistence) return;
+
+        await handleSyncPayload(data.documentSyncStream, {
+          documentId: currentDocumentId,
+          persistence: currentPersistence,
+        });
       },
     }),
   );
@@ -252,8 +259,11 @@
   const document = $derived(entity?.node.__typename === 'Document' ? entity.node : null);
   const documentId = $derived(document?.id ?? null);
   const title = $derived(document?.title ?? '');
-  const serverSnapshot = $derived(ctx.serverSnapshot);
-  const serverVersion = $derived(ctx.serverVersion);
+  const serverSnapshot = $derived(
+    ctx.serverVersion === null ? (document?.snapshot ? Uint8Array.fromBase64(document.snapshot) : undefined) : ctx.serverSnapshot,
+  );
+  const serverVersion = $derived(ctx.serverVersion ?? document?.version ?? null);
+  const serverGeneration = $derived(ctx.serverVersion === null ? (document?.generation ?? 0) : ctx.serverGeneration);
   const assets = $derived(document?.assets);
 
   const fontFamilies = $derived(document?.fontFamilies ?? []);
@@ -312,6 +322,7 @@
   const clientId = nanoid();
   let syncUpdateTimeout: ReturnType<typeof setTimeout> | null = null;
   let persistence: IndexeddbPersistence | null = null;
+  let syncPrimed = false;
   let connectionStatus = $state<'connecting' | 'connected' | 'disconnected'>('connecting');
   let lastHeartbeatAt = $state(dayjs());
   let planUpgradeModalOpen = $state(false);
@@ -415,7 +426,22 @@
     };
   });
 
-  async function handleSyncPayload(payload: { type: DocumentSyncType; data: string }) {
+  type SyncGuard = {
+    documentId: string;
+    persistence: IndexeddbPersistence;
+  };
+
+  function isSyncGuardActive(guard?: SyncGuard): boolean {
+    if (!guard) return true;
+    return documentId === guard.documentId && persistence === guard.persistence;
+  }
+
+  async function handleSyncPayload(payload: { type: DocumentSyncType; data: string; documentId?: string }, guard?: SyncGuard) {
+    if (payload.documentId && payload.documentId !== documentId) return;
+    if (!isSyncGuardActive(guard)) return;
+
+    const targetPersistence = guard?.persistence ?? persistence;
+
     switch (payload.type) {
       case DocumentSyncType.HEARTBEAT: {
         lastHeartbeatAt = dayjs(payload.data);
@@ -427,11 +453,12 @@
         break;
       }
       case DocumentSyncType.VECTOR: {
-        if (persistence) await persistence.saveCheckpoint(Uint8Array.fromBase64(payload.data));
+        if (targetPersistence) await targetPersistence.saveCheckpoint(Uint8Array.fromBase64(payload.data));
         break;
       }
       case DocumentSyncType.RESET: {
-        if (persistence) await persistence.clear();
+        if (targetPersistence) await targetPersistence.clear();
+        if (!isSyncGuardActive(guard)) return;
         const reset = JSON.parse(payload.data);
         ctx.serverSnapshot = Uint8Array.fromBase64(reset.snapshot);
         ctx.serverVersion = reset.version;
@@ -445,18 +472,28 @@
   async function doSync(
     input: { clientId: string; documentId: string; type: DocumentSyncType; data: string },
     options?: { metadata?: { subscription?: { transport?: boolean } } },
+    guard?: SyncGuard,
   ) {
     const results = await syncDocument({ input }, options);
+    if (!isSyncGuardActive(guard)) return;
+
     for (const payload of results.syncDocument) {
-      await handleSyncPayload(payload);
+      if (!isSyncGuardActive(guard)) return;
+      await handleSyncPayload(payload, guard);
     }
   }
+
   $effect(() => {
     const currentDocumentId = documentId;
     if (!currentDocumentId) return;
 
     documentSyncReady = false;
-    persistence = new IndexeddbPersistence(currentDocumentId);
+    syncPrimed = false;
+    const runPersistence = new IndexeddbPersistence(currentDocumentId);
+    persistence = runPersistence;
+    const syncGuard: SyncGuard = { documentId: currentDocumentId, persistence: runPersistence };
+
+    const isActiveRun = () => currentDocumentId === documentId && persistence === runPersistence;
 
     const handleOnline = () => {
       const isFresh = dayjs().diff(lastHeartbeatAt, 'seconds') <= DISCONNECT_THRESHOLD;
@@ -488,36 +525,48 @@
     let forceSyncInterval: ReturnType<typeof setInterval> | null = null;
 
     editor.ready.then(async () => {
-      if (currentDocumentId !== documentId) return;
+      if (!isActiveRun()) return;
 
-      const local = await persistence?.load();
-      if (local && persistence && persistence.generation === ctx.serverGeneration) {
+      const local = await runPersistence.load();
+      if (!isActiveRun()) return;
+
+      if (local && runPersistence.generation === serverGeneration) {
         editor.importUpdatesBatch([local.snapshot, ...local.updates]);
-      } else if (persistence) {
-        await persistence.clear();
-        if (ctx.serverSnapshot) {
-          editor.importUpdatesBatch([ctx.serverSnapshot]);
+      } else {
+        await runPersistence.clear();
+        if (!isActiveRun()) return;
+
+        if (serverSnapshot) {
+          editor.importUpdatesBatch([serverSnapshot]);
         }
         const snapshot = editor.export({ type: 'snapshot' });
         const version = editor.export({ type: 'version' });
         if (snapshot && version && serverVersion) {
-          await persistence.saveSnapshot(snapshot, version, ctx.serverGeneration);
-          await persistence.saveCheckpoint(Uint8Array.fromBase64(serverVersion));
+          await runPersistence.saveSnapshot(snapshot, version, serverGeneration);
+          await runPersistence.saveCheckpoint(Uint8Array.fromBase64(serverVersion));
         }
       }
 
+      if (!isActiveRun()) return;
       editor.contentReady = true;
 
-      fullSyncInterval = setInterval(() => fullSync(), 60_000);
-      forceSyncInterval = setInterval(() => forceSync(), 10_000);
+      // eslint-disable-next-line @typescript-eslint/no-empty-function
+      await forceSync(syncGuard).catch(() => {});
+      if (!isActiveRun()) return;
 
-      await fullSync();
+      fullSyncInterval = setInterval(() => fullSync(syncGuard), 60_000);
+      forceSyncInterval = setInterval(() => forceSync(syncGuard), 10_000);
+
+      await fullSync(syncGuard);
+      if (!isActiveRun()) return;
 
       documentSyncReady = true;
     });
 
     return () => {
+      const canFlushRemoteUpdate = syncPrimed;
       documentSyncReady = false;
+      syncPrimed = false;
       if (fullSyncInterval) clearInterval(fullSyncInterval);
       if (forceSyncInterval) clearInterval(forceSyncInterval);
       clearInterval(heartbeatInterval);
@@ -527,44 +576,62 @@
       }
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
-      if (currentDocumentId && persistence && persistence.checkpoint.length > 0) {
-        const updates = editor.export({ type: 'updates-from', version: persistence.checkpoint });
+      if (canFlushRemoteUpdate && currentDocumentId && runPersistence.checkpoint.length > 0) {
+        const updates = editor.export({ type: 'updates-from', version: runPersistence.checkpoint });
         if (updates?.length) {
-          doSync({
-            clientId,
-            documentId: currentDocumentId,
-            type: DocumentSyncType.UPDATE,
-            data: updates.toBase64(),
-          });
+          doSync(
+            {
+              clientId,
+              documentId: currentDocumentId,
+              type: DocumentSyncType.UPDATE,
+              data: updates.toBase64(),
+            },
+            undefined,
+            syncGuard,
+          );
         }
       }
-      persistence?.destroy();
-      persistence = null;
+      runPersistence.destroy();
+      if (persistence === runPersistence) {
+        persistence = null;
+      }
     };
   });
 
-  async function fullSync() {
-    if (!documentId) return;
+  async function fullSync(guard?: SyncGuard) {
+    const targetDocumentId = guard?.documentId ?? documentId;
+    const targetPersistence = guard?.persistence ?? persistence;
+    if (!targetDocumentId) return;
+    if (!isSyncGuardActive(guard)) return;
 
     const snapshot = editor.export({ type: 'snapshot' });
     const version = editor.export({ type: 'version' });
-    if (persistence && snapshot && version) {
-      await persistence.saveSnapshot(snapshot, version);
+    if (targetPersistence && snapshot && version) {
+      await targetPersistence.saveSnapshot(snapshot, version);
     }
+
+    if (!isSyncGuardActive(guard)) return;
+    if (!syncPrimed) return;
 
     const update = editor.export({ type: 'all-updates' });
     if (update?.length) {
-      await doSync({
-        clientId,
-        documentId,
-        type: DocumentSyncType.UPDATE,
-        data: update.toBase64(),
-      });
+      await doSync(
+        {
+          clientId,
+          documentId: targetDocumentId,
+          type: DocumentSyncType.UPDATE,
+          data: update.toBase64(),
+        },
+        undefined,
+        guard,
+      );
     }
   }
 
-  async function forceSync() {
-    if (!documentId) return;
+  async function forceSync(guard?: SyncGuard) {
+    const targetDocumentId = guard?.documentId ?? documentId;
+    if (!targetDocumentId) return;
+    if (!isSyncGuardActive(guard)) return;
 
     const version = editor.export({ type: 'version' });
     if (!version) return;
@@ -572,45 +639,57 @@
     await doSync(
       {
         clientId,
-        documentId,
+        documentId: targetDocumentId,
         type: DocumentSyncType.VECTOR,
         data: version.toBase64(),
       },
       { metadata: { subscription: { transport: true } } },
+      guard,
     );
+    if (!isSyncGuardActive(guard)) return;
+    syncPrimed = true;
   }
 
   function handleDocChanged() {
-    if (!documentId) return;
+    const currentDocumentId = documentId;
+    const currentPersistence = persistence;
+    if (!currentDocumentId || !currentPersistence) return;
+    const syncGuard: SyncGuard = {
+      documentId: currentDocumentId,
+      persistence: currentPersistence,
+    };
 
-    if (persistence && persistence.version.length > 0) {
-      const update = editor.export({ type: 'updates-from', version: persistence.version });
+    if (currentPersistence.version.length > 0) {
+      const update = editor.export({ type: 'updates-from', version: currentPersistence.version });
       if (update?.length) {
-        persistence.saveUpdate(update);
+        currentPersistence.saveUpdate(update);
       }
     }
+
+    if (!syncPrimed) return;
 
     if (syncUpdateTimeout) {
       clearTimeout(syncUpdateTimeout);
     }
 
     syncUpdateTimeout = setTimeout(async () => {
-      if (!documentId) return;
+      if (!isSyncGuardActive(syncGuard)) return;
 
       const update =
-        persistence && persistence.checkpoint.length > 0
-          ? editor.export({ type: 'updates-from', version: persistence.checkpoint })
+        syncGuard.persistence.checkpoint.length > 0
+          ? editor.export({ type: 'updates-from', version: syncGuard.persistence.checkpoint })
           : undefined;
 
       if (update?.length) {
         await doSync(
           {
             clientId,
-            documentId,
+            documentId: syncGuard.documentId,
             type: DocumentSyncType.UPDATE,
             data: update.toBase64(),
           },
           { metadata: { subscription: { transport: true } } },
+          syncGuard,
         );
       }
     }, 1000);
