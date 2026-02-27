@@ -12,7 +12,7 @@
   import TrashIcon from '~icons/lucide/trash';
   import { SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
   import { cache } from '$lib/graphql';
-  import { wasm } from '$lib/wasm';
+  import { initWasm } from '$lib/wasm';
   import { graphql } from '$mearie';
   import type { DashboardLayout_PreferenceModal_TextReplacementTab_user$key } from '$mearie';
 
@@ -242,7 +242,7 @@
     resetForm();
   };
 
-  const validateForm = (): boolean => {
+  const validateForm = async (): Promise<boolean> => {
     if (!formMatch.trim()) {
       formError = '찾을 텍스트를 입력해 주세요.';
       return false;
@@ -255,16 +255,19 @@
       formError = '찾을 텍스트와 삽입할 텍스트가 같아요.';
       return false;
     }
-    if (formRegex && !wasm.validateRegex(formMatch)) {
-      formError = '유효하지 않은 정규식이에요.';
-      return false;
+    if (formRegex) {
+      const wasm = await initWasm();
+      if (!wasm.validateRegex(formMatch)) {
+        formError = '유효하지 않은 정규식이에요.';
+        return false;
+      }
     }
     formError = '';
     return true;
   };
 
   const handleSave = async () => {
-    if (!validateForm()) return;
+    if (!(await validateForm())) return;
 
     if (creatingNew) {
       const lastOrder = customItems.at(-1)?.order ?? undefined;

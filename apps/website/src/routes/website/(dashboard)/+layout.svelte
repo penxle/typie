@@ -19,7 +19,7 @@
   import { AdminImpersonateBanner } from '$lib/components/admin';
   import { preloadEditorWasm } from '$lib/editor/editor.svelte';
   import { hydrateQuery } from '$lib/graphql';
-  import { wasm } from '$lib/wasm';
+  import { initWasm } from '$lib/wasm';
   import { graphql } from '$mearie';
   import { setupPaneGroup } from './[slug]/@pane/context.svelte';
   import { setupEditorRegistry } from './[slug]/@pane/editor-registry.svelte';
@@ -165,11 +165,17 @@
   );
 
   $effect(() => {
-    wasm.setTextReplacementRules(JSON.parse(textReplacementRulesJson));
+    const rules = textReplacementRulesJson;
+    initWasm().then((wasm) => {
+      wasm.setTextReplacementRules(JSON.parse(rules));
+    });
   });
 
   $effect(() => {
-    wasm.setAutoSurroundEnabled(app.preference.current.autoSurroundEnabled);
+    const enabled = app.preference.current.autoSurroundEnabled;
+    initWasm().then((wasm) => {
+      wasm.setAutoSurroundEnabled(enabled);
+    });
   });
 
   $effect(() => {

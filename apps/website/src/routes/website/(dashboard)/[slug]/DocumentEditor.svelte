@@ -24,7 +24,7 @@
   import { getEditorContext } from '$lib/editor/context.svelte';
   import { Editor } from '$lib/editor/editor.svelte';
   import { IndexeddbPersistence } from '$lib/editor/persistence';
-  import { wasm } from '$lib/wasm';
+  import { initWasm } from '$lib/wasm';
   import { graphql } from '$mearie';
   import DocumentMenu from '../@context-menu/DocumentMenu.svelte';
   import FontUploadModal from '../FontUploadModal.svelte';
@@ -263,7 +263,9 @@
           .filter((f) => f.state === 'ACTIVE')
           .map((f) => [f.familyName, f.fonts.filter((font) => font.state === 'ACTIVE').map((font) => font.weight)]),
       );
-      wasm.setAvailableFonts(availableFonts);
+      initWasm().then((wasm) => {
+        wasm.setAvailableFonts(availableFonts);
+      });
       editor.fontFamilies = fontFamilies;
     }
   });

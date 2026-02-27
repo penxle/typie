@@ -22,7 +22,7 @@
   import { setupEditorContext } from '$lib/editor/context.svelte';
   import { Editor } from '$lib/editor/editor.svelte';
   import { unwrapError } from '$lib/graphql';
-  import { wasm } from '$lib/wasm';
+  import { initWasm } from '$lib/wasm';
   import { graphql } from '$mearie';
   import ContentNavigation from './ContentNavigation.svelte';
   import DocumentActionMenu from './DocumentActionMenu.svelte';
@@ -251,7 +251,9 @@
           .filter((f) => f.state === 'ACTIVE')
           .map((f) => [f.familyName, f.fonts.filter((font) => font.state === 'ACTIVE').map((font) => font.weight)]),
       );
-      wasm.setAvailableFonts(availableFonts);
+      initWasm().then((wasm) => {
+        wasm.setAvailableFonts(availableFonts);
+      });
       editor.fontFamilies = fontFamilies;
     }
   });
