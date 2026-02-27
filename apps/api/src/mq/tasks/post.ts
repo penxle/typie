@@ -42,6 +42,8 @@ const getBlobSize = (node: Node) => {
 };
 
 export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: string) => {
+  return;
+
   const lock = new Lock(`post:${postId}`);
 
   const acquired = await lock.tryAcquire();
@@ -303,6 +305,8 @@ export const PostSyncCollectJob = defineJob('post:sync:collect', async (postId: 
 });
 
 export const PostSyncScanCron = defineCron('post:sync:scan', '* * * * *', async () => {
+  return;
+
   const keys = await redis.keys('post:sync:updates:*');
 
   await Promise.all(
@@ -314,6 +318,8 @@ export const PostSyncScanCron = defineCron('post:sync:scan', '* * * * *', async 
 });
 
 export const PostIndexJob = defineJob('post:index', async (postId: string) => {
+  return;
+
   const post = await db
     .select({
       id: Posts.id,
@@ -345,6 +351,8 @@ export const PostIndexJob = defineJob('post:index', async (postId: string) => {
 });
 
 export const PostCompactJob = defineJob('post:compact', async (postId: string) => {
+  return;
+
   const lock = new Lock(`post:${postId}`);
 
   const acquired = await lock.tryAcquire();
@@ -404,7 +412,7 @@ export const PostCompactJob = defineJob('post:compact', async (postId: string) =
         windowedSnapshots.set(window, {
           id: snapshot.id,
           createdAt: snapshot.createdAt,
-          userIds: new Set([...windowedSnapshot.userIds, ...userIds]),
+          userIds: new Set([...(windowedSnapshot?.userIds ?? []), ...userIds]),
         });
       } else {
         windowedSnapshots.set(window, {
@@ -556,6 +564,8 @@ export const PostCompactJob = defineJob('post:compact', async (postId: string) =
 });
 
 export const PostCompactScanCron = defineCron('post:compact:scan', '0 * * * *', async () => {
+  return;
+
   const now = dayjs();
 
   const threshold1h = now.subtract(1, 'hour');
