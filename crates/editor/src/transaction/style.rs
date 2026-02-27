@@ -44,18 +44,16 @@ pub(crate) fn compute_styles_at_cursor(doc: &Doc, position: &Position) -> Vec<St
 /// at the given offset (>= start, < end), unlike `compute_styles_at_cursor` which
 /// uses cursor semantics (> start, <= end).
 pub(crate) fn compute_styles_at_char_position(doc: &Doc, position: &Position) -> Vec<Style> {
-    let cascade = resolve_style_cascade(doc, position.node_id);
-
     let Some(node) = doc.node(position.node_id) else {
-        return cascade;
+        return resolve_style_cascade(doc, position.node_id);
     };
 
     let Some((child_id, local_offset)) = find_child_at_offset(&node, position.offset) else {
-        return cascade;
+        return resolve_style_cascade(doc, position.node_id);
     };
 
     let Some(child) = doc.node(child_id) else {
-        return cascade;
+        return resolve_style_cascade(doc, position.node_id);
     };
 
     if let Some(Node::Text(text_node)) = child.node() {
@@ -65,13 +63,13 @@ pub(crate) fn compute_styles_at_char_position(doc: &Doc, position: &Position) ->
         for segment in segments {
             let segment_len = segment.text.chars().count();
             if local_offset >= current_offset && local_offset < current_offset + segment_len {
-                return fill_missing_styles(segment.styles, &cascade);
+                return segment.styles;
             }
             current_offset += segment_len;
         }
     }
 
-    cascade
+    resolve_style_cascade(doc, position.node_id)
 }
 
 pub(crate) fn resolve_style_cascade(doc: &Doc, node_id: NodeId) -> Vec<Style> {
@@ -89,15 +87,6 @@ pub(crate) fn resolve_style_cascade(doc: &Doc, node_id: NodeId) -> Vec<Style> {
         }
     }
     Attr::extract_styles(&attrs)
-}
-
-fn fill_missing_styles(mut styles: Vec<Style>, defaults: &[Style]) -> Vec<Style> {
-    for default in defaults {
-        if !styles.iter().any(|s| s.as_type() == default.as_type()) {
-            styles.push(default.clone());
-        }
-    }
-    styles
 }
 
 fn apply_style_to_range(

@@ -3889,6 +3889,38 @@ mod tests {
     }
 
     #[test]
+    fn delete_selection_after_unmarking_italic_does_not_restore_stale_pending_style() {
+        let mut p = id!();
+
+        let state = state! {
+            doc {
+                @p paragraph {}
+            }
+            selection { (p, 0) }
+        };
+
+        let mut tr = Transaction::new(&state);
+        tr.toggle_style(Style::Italic(ItalicStyle {})).unwrap();
+        tr.insert_text("abc").unwrap();
+        tr.set_selection(Selection::new(
+            Position::new(p, 0, Affinity::Downstream),
+            Position::new(p, 3, Affinity::Upstream),
+        ));
+        tr.toggle_style(Style::Italic(ItalicStyle {})).unwrap();
+        tr.delete_selection().unwrap();
+        let (view, _) = tr.commit().unwrap();
+
+        assert!(
+            !view
+                .pending_styles
+                .iter()
+                .any(|m| matches!(m, Style::Italic(_))),
+            "pending_styles should not contain italic after unmark + delete-all, got: {:?}",
+            view.pending_styles
+        );
+    }
+
+    #[test]
     fn insert_text_filters_pending_styles_by_node_spec() {
         let mut ft = id!();
 
