@@ -180,6 +180,7 @@ export class Editor {
   });
 
   pendingScrollConsumer = $state<'cursor' | 'typewriter' | null>(null);
+  #pendingDocChanged = false;
   #pendingTypewriterRequest = false;
   #typewriterAvailable = false;
 
@@ -361,6 +362,12 @@ export class Editor {
       if (this.#slateReader.hasDirty) {
         this.#readSlate(this.#slateReader);
       }
+      // Defer callbacks that may call into WASM (and grow memory) until after
+      // #readSlate has finished reading from the shared DataView.
+      if (this.#pendingDocChanged) {
+        this.#pendingDocChanged = false;
+        this.#onDocChanged?.();
+      }
       this.#pendingTypewriterRequest = false;
 
       if (!this.#flushPending) {
@@ -391,7 +398,7 @@ export class Editor {
 
   #readSlate(slate: SlateReader): void {
     if (slate.isDirty(DIRTY_DOC_CHANGED)) {
-      this.#onDocChanged?.();
+      this.#pendingDocChanged = true;
       this.characterCountsVersion++;
     }
 
