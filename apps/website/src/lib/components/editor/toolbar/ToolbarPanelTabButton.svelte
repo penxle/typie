@@ -7,15 +7,15 @@
   import { getAppContext } from '@typie/ui/context';
   import mixpanel from 'mixpanel-browser';
   import { graphql } from '$mearie';
-  import { getViewContext } from '../../../../routes/website/(dashboard)/[slug]/@split-view/context.svelte';
+  import { getPane, getPaneGroup } from '../../../../routes/website/(dashboard)/[slug]/@pane/context.svelte';
   import PlanUpgradeModal from '../../../../routes/website/(dashboard)/PlanUpgradeModal.svelte';
   import type { TooltipParameter } from '@typie/ui/actions';
-  import type { AppPreference } from '@typie/ui/context';
   import type { Component } from 'svelte';
   import type { DocumentEditor_TopToolbar_PanelTabButton_user$key } from '$mearie';
+  import type { PanelTab } from '../../../../routes/website/(dashboard)/[slug]/@pane/context.svelte';
 
   type Props = {
-    tab: AppPreference['panelTabByViewId'][string];
+    tab: PanelTab;
     label: string;
     icon: Component;
     keys?: TooltipParameter['keys'];
@@ -45,10 +45,11 @@
 
   const app = getAppContext();
 
-  const splitViewId = getViewContext().id;
+  const paneId = getPane().id;
+  const paneGroup = getPaneGroup();
 
-  const isExpanded = $derived(app.preference.current.panelExpandedByViewId[splitViewId]);
-  const isTab = $derived(app.preference.current.panelTabByViewId[splitViewId] === tab);
+  const isExpanded = $derived(paneGroup.state.current.panelExpandedByPaneId[paneId]);
+  const isTab = $derived(paneGroup.state.current.panelTabByPaneId[paneId] === tab);
 
   const toolbarSize = $derived(app.preference.current.toolbarStyle === 'compact' ? 'medium' : 'large');
 </script>
@@ -77,29 +78,29 @@
 
     if (isExpanded) {
       if (isTab) {
-        app.preference.current.panelExpandedByViewId = {
-          ...app.preference.current.panelExpandedByViewId,
-          [splitViewId]: false,
+        paneGroup.state.current.panelExpandedByPaneId = {
+          ...paneGroup.state.current.panelExpandedByPaneId,
+          [paneId]: false,
         };
         mixpanel.track('toggle_panel_expanded', { expanded: false });
       } else {
-        app.preference.current.panelTabByViewId = {
-          ...app.preference.current.panelTabByViewId,
-          [splitViewId]: tab,
+        paneGroup.state.current.panelTabByPaneId = {
+          ...paneGroup.state.current.panelTabByPaneId,
+          [paneId]: tab,
         };
         mixpanel.track('toggle_panel_tab', { tab });
       }
     } else {
-      app.preference.current.panelExpandedByViewId = {
-        ...app.preference.current.panelExpandedByViewId,
-        [splitViewId]: true,
+      paneGroup.state.current.panelExpandedByPaneId = {
+        ...paneGroup.state.current.panelExpandedByPaneId,
+        [paneId]: true,
       };
       if (isTab) {
         mixpanel.track('toggle_panel_expanded', { expanded: true });
       } else {
-        app.preference.current.panelTabByViewId = {
-          ...app.preference.current.panelTabByViewId,
-          [splitViewId]: tab,
+        paneGroup.state.current.panelTabByPaneId = {
+          ...paneGroup.state.current.panelTabByPaneId,
+          [paneId]: tab,
         };
         mixpanel.track('toggle_panel_tab', { tab });
       }

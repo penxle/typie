@@ -11,7 +11,8 @@
 
   let { onFocus, onBlur }: Props = $props();
 
-  const { editor } = getEditorContext();
+  const ctx = getEditorContext();
+  const { editor } = ctx;
 
   let inputEl = $state<HTMLInputElement>();
 
@@ -239,7 +240,7 @@
   };
 
   $effect(() => {
-    inputEl?.focus({ preventScroll: true });
+    if (ctx.paneFocused) inputEl?.focus({ preventScroll: true });
   });
 </script>
 

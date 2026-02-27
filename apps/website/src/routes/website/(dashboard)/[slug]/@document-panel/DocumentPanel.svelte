@@ -7,7 +7,7 @@
   import { clamp } from '@typie/ui/utils';
   import ConstructionIcon from '~icons/lucide/construction';
   import { graphql } from '$mearie';
-  import { getViewContext } from '../@split-view/context.svelte';
+  import { getPane, getPaneGroup } from '../@pane/context.svelte';
   import DocumentPanelAi from './DocumentPanelAi.svelte';
   import DocumentPanelInfo from './DocumentPanelInfo.svelte';
   import DocumentPanelNote from './DocumentPanelNote.svelte';
@@ -62,10 +62,11 @@
 
   const app = getAppContext();
 
-  const splitViewId = getViewContext().id;
+  const paneId = getPane().id;
+  const paneGroup = getPaneGroup();
 
   const isExpanded = $derived(
-    Boolean(app.preference.current.panelExpandedByViewId[splitViewId] && app.preference.current.panelTabByViewId[splitViewId]),
+    Boolean(paneGroup.state.current.panelExpandedByPaneId[paneId] && paneGroup.state.current.panelTabByPaneId[paneId]),
   );
 
   type Resizer = {
@@ -153,19 +154,19 @@
   ></div>
 
   {#if isExpanded}
-    {#if app.preference.current.panelTabByViewId[splitViewId] === 'settings'}
+    {#if paneGroup.state.current.panelTabByPaneId[paneId] === 'settings'}
       <DocumentPanelSettings {editor} />
-    {:else if app.preference.current.panelTabByViewId[splitViewId] === 'info'}
+    {:else if paneGroup.state.current.panelTabByPaneId[paneId] === 'info'}
       <DocumentPanelInfo document$key={document.data} {editor} user$key={user.data} />
-    {:else if app.preference.current.panelTabByViewId[splitViewId] === 'note'}
+    {:else if paneGroup.state.current.panelTabByPaneId[paneId] === 'note'}
       <DocumentPanelNote entity$key={document.data.entity} />
-    {:else if app.preference.current.panelTabByViewId[splitViewId] === 'timeline'}
+    {:else if paneGroup.state.current.panelTabByPaneId[paneId] === 'timeline'}
       <DocumentPanelTimeline document$key={document.data} {editor} />
-    {:else if app.preference.current.panelTabByViewId[splitViewId] === 'spellcheck'}
+    {:else if paneGroup.state.current.panelTabByPaneId[paneId] === 'spellcheck'}
       <DocumentPanelSpellcheck document$key={document.data} {editor} user$key={user.data} />
-    {:else if app.preference.current.panelTabByViewId[splitViewId] === 'ai'}
+    {:else if paneGroup.state.current.panelTabByPaneId[paneId] === 'ai'}
       <DocumentPanelAi document$key={document.data} {editor} user$key={user.data} />
-    {:else if app.preference.current.panelTabByViewId[splitViewId] === 'remarks'}
+    {:else if paneGroup.state.current.panelTabByPaneId[paneId] === 'remarks'}
       <DocumentPanelRemark {editor} />
     {:else}
       <div

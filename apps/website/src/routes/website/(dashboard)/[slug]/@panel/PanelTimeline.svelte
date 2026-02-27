@@ -5,7 +5,6 @@
   import { center, flex, wrap } from '@typie/styled-system/patterns';
   import { createFloatingActions, infiniteScroll, portal, tooltip } from '@typie/ui/actions';
   import { Icon, RingSpinner } from '@typie/ui/components';
-  import { getAppContext } from '@typie/ui/context';
   import { Toast } from '@typie/ui/notification';
   import { getEditorContext } from '@typie/ui/tiptap';
   import { clamp, debounce, throttle } from '@typie/ui/utils';
@@ -25,7 +24,7 @@
   import MinusIcon from '~icons/lucide/minus';
   import PlusIcon from '~icons/lucide/plus';
   import { graphql } from '$mearie';
-  import { getViewContext } from '../@split-view/context.svelte';
+  import { getPane, getPaneGroup } from '../@pane/context.svelte';
   import type { Editor } from '@tiptap/core';
   import type { PageLayout, Ref } from '@typie/ui/utils';
   import type { Action } from 'svelte/action';
@@ -82,8 +81,8 @@
     () => ({ skip: !queryVars }),
   );
 
-  const app = getAppContext();
-  const view = getViewContext();
+  const pane = getPane();
+  const paneGroup = getPaneGroup();
   const editorContext = getEditorContext();
 
   const editorContainer = $derived((editor?.current.view.dom.closest('.editor-scroll-container') as HTMLElement)?.parentElement);
@@ -419,7 +418,7 @@
     const revertUpdate = Y.encodeStateAsUpdateV2(snapshotDoc, currentStateVector);
     Y.applyUpdateV2(doc, revertUpdate, 'snapshot');
 
-    app.preference.current.panelExpandedByViewId[view.id] = false;
+    paneGroup.state.current.panelExpandedByPaneId[pane.id] = false;
     Toast.success(`${dayjs(query.data.post.snapshots[sliderIndex]?.createdAt).formatAsSmart()} 시점으로 복원되었습니다`);
     mixpanel.track('timeline_restore');
   };

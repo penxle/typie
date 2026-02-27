@@ -13,7 +13,7 @@
   import CheckIcon from '~icons/lucide/check';
   import PenIcon from '~icons/lucide/pen';
   import BookmarkFilledIcon from '~icons/typie/bookmark-filled';
-  import { getViewContext } from '../@split-view/context.svelte';
+  import { getPane } from '../@pane/context.svelte';
   import type { Editor } from '@tiptap/core';
   import type { AnchorPosition } from '@typie/ui/anchor';
   import type { Ref } from '@typie/ui/utils';
@@ -33,7 +33,7 @@
 
   let { editor, doc }: Props = $props();
 
-  const view = getViewContext();
+  const pane = getPane();
 
   let anchors = $state<Anchor[]>([]);
   let currentNode = $state<Anchor | null>(null);
@@ -221,7 +221,7 @@
   $effect(() => {
     if (currentNode) {
       setTimeout(() => {
-        const elementInPanel = document.querySelector(`[data-view-id="${view.id}"] [data-anchor-current="true"]`);
+        const elementInPanel = document.querySelector(`[data-pane-id="${pane.id}"] [data-anchor-current="true"]`);
         if (elementInPanel) {
           elementInPanel.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }

@@ -15,9 +15,9 @@
   import XIcon from '~icons/lucide/x';
   import { cache } from '$lib/graphql';
   import { graphql } from '$mearie';
-  import { getSplitViewContext } from '../[slug]/@split-view/context.svelte';
-  import { getEditorRegistry } from '../[slug]/@split-view/editor-registry.svelte';
-  import { findViewById } from '../[slug]/@split-view/utils';
+  import { getPaneGroup } from '../[slug]/@pane/context.svelte';
+  import { getEditorRegistry } from '../[slug]/@pane/editor-registry.svelte';
+  import { findMemberById } from '../[slug]/@pane/tree';
   import { setupWidgetContext } from './widget-context.svelte';
   import WidgetPalette from './WidgetPalette.svelte';
   import { WIDGET_COMPONENTS } from './widgets';
@@ -45,15 +45,15 @@
   );
 
   const editorRegistry = getEditorRegistry();
-  const splitView = getSplitViewContext();
+  const paneGroup = getPaneGroup();
 
-  const focusedViewId = $derived(splitView.state.current.focusedViewId);
+  const focusedPaneId = $derived(paneGroup.state.current.focusedPaneId);
 
-  const focusedView = $derived(
-    focusedViewId && splitView.state.current.view ? findViewById(splitView.state.current.view, focusedViewId) : null,
+  const focusedMember = $derived(
+    focusedPaneId && paneGroup.state.current.root ? findMemberById(paneGroup.state.current.root, focusedPaneId) : null,
   );
 
-  const focusedViewSlug = $derived(focusedView?.type === 'item' ? focusedView.slug : null);
+  const focusedPaneSlug = $derived(focusedMember?.type === 'pane' && focusedMember.kind === 'entity' ? focusedMember.slug : null);
 
   const postQuery = createQuery(
     graphql(`
@@ -74,8 +74,8 @@
         }
       }
     `),
-    () => ({ slug: focusedViewSlug ?? '' }),
-    () => ({ skip: !focusedViewSlug }),
+    () => ({ slug: focusedPaneSlug ?? '' }),
+    () => ({ skip: !focusedPaneSlug }),
   );
 
   const [createWidgetMutation] = createMutation(
@@ -123,10 +123,10 @@
     `),
   );
 
-  const editor = $derived(focusedViewId && focusedViewSlug ? editorRegistry.getTipTap(focusedViewId, focusedViewSlug) : undefined);
-  const nativeEditor = $derived(focusedViewId && focusedViewSlug ? editorRegistry.getNative(focusedViewId, focusedViewSlug) : undefined);
+  const editor = $derived(focusedPaneId && focusedPaneSlug ? editorRegistry.getTipTap(focusedPaneId, focusedPaneSlug) : undefined);
+  const nativeEditor = $derived(focusedPaneId && focusedPaneSlug ? editorRegistry.getNative(focusedPaneId, focusedPaneSlug) : undefined);
   const _document = $derived(
-    focusedViewSlug && postQuery.data?.entity?.node?.__typename === 'Document' ? postQuery.data.entity.node : undefined,
+    focusedPaneSlug && postQuery.data?.entity?.node?.__typename === 'Document' ? postQuery.data.entity.node : undefined,
   );
   const app = getAppContext();
 

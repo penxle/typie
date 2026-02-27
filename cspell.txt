@@ -99,6 +99,7 @@ rabbitmq
 remeda
 repaste
 resizer
+resizers
 resvg
 retriable
 ridi

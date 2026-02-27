@@ -4,7 +4,6 @@
   import { center, flex, wrap } from '@typie/styled-system/patterns';
   import { createFloatingActions, infiniteScroll, portal, tooltip } from '@typie/ui/actions';
   import { Icon, RingSpinner } from '@typie/ui/components';
-  import { getAppContext } from '@typie/ui/context';
   import { Toast } from '@typie/ui/notification';
   import { clamp, debounce, throttle } from '@typie/ui/utils';
   import dayjs from 'dayjs';
@@ -19,7 +18,7 @@
   import PlusIcon from '~icons/lucide/plus';
   import { idleCallback } from '$lib/editor/utils';
   import { graphql } from '$mearie';
-  import { getViewContext } from '../@split-view/context.svelte';
+  import { getPane, getPaneGroup } from '../@pane/context.svelte';
   import type { Action } from 'svelte/action';
   import type { PointerEventHandler } from 'svelte/elements';
   import type { Editor } from '$lib/editor/editor.svelte';
@@ -71,8 +70,8 @@
     () => ({ skip: !queryVars }),
   );
 
-  const app = getAppContext();
-  const view = getViewContext();
+  const pane = getPane();
+  const paneGroup = getPaneGroup();
 
   let editorContainer = $derived.by(() => editor.scrollContainerEl);
 
@@ -307,7 +306,7 @@
     editor.checkoutToLatest();
     editor.revertTo(versionData);
 
-    app.preference.current.panelExpandedByViewId[view.id] = false;
+    paneGroup.state.current.panelExpandedByPaneId[pane.id] = false;
     Toast.success(`${dayjs(version.createdAt).formatAsSmart()} 시점으로 복원되었습니다`);
     mixpanel.track('document_timeline_restore');
   };

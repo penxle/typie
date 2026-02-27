@@ -4,7 +4,7 @@
   import mixpanel from 'mixpanel-browser';
   import { IS_MAC } from '$lib/editor/constants';
   import { graphql } from '$mearie';
-  import { getSplitViewContext } from './[slug]/@split-view/context.svelte';
+  import { getPaneGroup } from './[slug]/@pane/context.svelte';
   import type { DashboardLayout_Shortcuts_query$key } from '$mearie';
 
   type Props = {
@@ -14,7 +14,7 @@
   let { query$key }: Props = $props();
 
   const app = getAppContext();
-  const splitView = getSplitViewContext();
+  const paneGroup = getPaneGroup();
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const query = createFragment(
@@ -49,15 +49,15 @@
       if (!app.state.current) return;
 
       event.preventDefault();
-      if (splitView.state.current.focusedViewId) {
-        app.state.findReplaceOpenByViewId[splitView.state.current.focusedViewId] = true;
+      if (paneGroup.state.current.focusedPaneId) {
+        paneGroup.findReplaceOpenByPaneId[paneGroup.state.current.focusedPaneId] = true;
       }
 
       return;
     }
 
     if (event.code === 'Escape') {
-      if (splitView.state.current.focusedViewId && app.state.findReplaceOpenByViewId[splitView.state.current.focusedViewId]) {
+      if (paneGroup.state.current.focusedPaneId && paneGroup.findReplaceOpenByPaneId[paneGroup.state.current.focusedPaneId]) {
         return;
       }
 

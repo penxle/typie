@@ -4,7 +4,6 @@
   import { center, flex } from '@typie/styled-system/patterns';
   import { portal } from '@typie/ui/actions';
   import { Icon } from '@typie/ui/components';
-  import { getAppContext } from '@typie/ui/context';
   import { Toast } from '@typie/ui/notification';
   import { elementScrollViewport, handleDragScroll } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
@@ -15,7 +14,7 @@
   import FileIcon from '~icons/lucide/file';
   import FolderIcon from '~icons/lucide/folder';
   import { graphql } from '$mearie';
-  import { getDragDropContext } from '../[slug]/@split-view/drag-context.svelte';
+  import { getPaneGroup } from '../[slug]/@pane/context.svelte';
   import SelectedEntitiesBar from './@selection/SelectedEntitiesBar.svelte';
   import Entity from './Entity.svelte';
   import { setupTreeContext } from './state.svelte';
@@ -152,7 +151,6 @@
 
   type ViewDrop = {
     target: 'view';
-    viewId: string;
   };
 
   type Drop = TreeDrop | TrashDrop | ViewDrop;
@@ -181,9 +179,8 @@
   let lastPointerX = $state<number>(0);
   let lastPointerY = $state<number>(0);
 
-  const app = getAppContext();
   const treeState = setupTreeContext();
-  const dragDropContext = getDragDropContext();
+  const paneGroup = getPaneGroup();
 
   $effect(() => {
     treeState.element = tree;
@@ -226,10 +223,7 @@
       treeState.lastSelectedEntityId = undefined;
     }
 
-    if (app.state.current && !validEntityIds.has(app.state.current)) {
-      app.state.ancestors = [];
-      app.state.current = undefined;
-    }
+    // app.state.current는 URL slug 기반으로 +page.svelte에서 관리
   });
 
   // NOTE: 링크 관련 브라우저 기본 동작 방지
@@ -321,26 +315,15 @@
       document.elementFromPoint(clientX, clientY)?.closest<HTMLElement>('[data-id]') ??
       document.elementFromPoint(clientX, clientY)?.closest<HTMLElement>('[role="tree"]')?.querySelector('& > [data-id]:last-child');
 
-    const splitViewElement = document.elementFromPoint(clientX, clientY)?.closest<HTMLElement>('[data-view-id]');
-
-    if (!targetElement && splitViewElement && dragging.eligible) {
-      if (dragDropContext && !dragDropContext.state.isDragging) {
-        const entityType = dragging.element.dataset.type;
-        const entitySlug = dragging.element.dataset.slug;
-
-        if (entitySlug && entityType && ['post', 'document'].includes(entityType)) {
-          dragDropContext.startDrag({
-            slug: entitySlug,
-            type: entityType as 'post' | 'document',
-          });
-        }
+    if (!targetElement && dragging.eligible) {
+      const zone = paneGroup.hitTest(clientX, clientY);
+      if (zone) {
+        paneGroup.activeZone = zone;
+        dragging.indicator = {};
+        dragging.drop = { target: 'view' as const };
+        clearFolderHoverTimeout();
+        return;
       }
-
-      dragging.indicator = {};
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      dragging.drop = { target: 'view' as const, viewId: splitViewElement.dataset.viewId! };
-      clearFolderHoverTimeout();
-      return;
     }
 
     if (!targetElement) {
@@ -348,8 +331,8 @@
       return;
     }
 
-    if (dragDropContext.state.isDragging) {
-      dragDropContext.cancelDrag();
+    if (paneGroup.activeZone) {
+      paneGroup.cancelDrag();
     }
 
     const entityId = dragging.element.dataset.id;
@@ -604,8 +587,14 @@
         mixpanel.track('move_entities', { totalCount: selectedIds.length, parentEntityId: parentId ?? null, lowerOrder, upperOrder });
         return;
       } else if (target === 'view') {
+        const entitySlug = dragging.element.dataset.slug;
+        const entityType = dragging.element.dataset.type;
+        if (entitySlug && entityType) {
+          paneGroup.executeDrop({ slug: entitySlug, type: entityType as 'post' | 'document' });
+        } else {
+          paneGroup.cancelDrag();
+        }
         endDragging();
-        // NOTE: DropZone 에서 처리
         return;
       }
     }
@@ -629,12 +618,8 @@
       dragging.element.releasePointerCapture(dragging.event.pointerId);
     }
 
-    if (dragDropContext.state.isDragging) {
-      if (canceled) {
-        dragDropContext.cancelDrag();
-      } else {
-        dragDropContext.drop();
-      }
+    if (canceled) {
+      paneGroup.cancelDrag();
     }
 
     dragging = null;

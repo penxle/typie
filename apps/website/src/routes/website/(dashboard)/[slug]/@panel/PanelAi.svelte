@@ -18,7 +18,7 @@
   import XIcon from '~icons/lucide/x';
   import { pushState } from '$app/navigation';
   import { graphql } from '$mearie';
-  import { getViewContext } from '../@split-view/context.svelte';
+  import { getPane } from '../@pane/context.svelte';
   import type { Editor } from '@tiptap/core';
   import type { Ref } from '@typie/ui/utils';
   import type { Editor_Panel_PanelAi_user$key } from '$mearie';
@@ -55,7 +55,7 @@
     () => user$key,
   );
 
-  const view = getViewContext();
+  const pane = getPane();
   const aiOptIn = $derived((user.data.preferences.aiOptIn as boolean | undefined) ?? false);
 
   let inflight = $state(false);
@@ -453,7 +453,7 @@
               if (prevFeedback) {
                 scrollToFeedback(prevFeedback);
                 const prevElement = document.querySelector(
-                  `[data-view-id="${view.id}"] [data-panel-ai-feedback="${prevFeedback.id}"]`,
+                  `[data-pane-id="${pane.id}"] [data-panel-ai-feedback="${prevFeedback.id}"]`,
                 ) as HTMLElement;
                 prevElement?.focus();
               }
@@ -464,7 +464,7 @@
               if (nextFeedback) {
                 scrollToFeedback(nextFeedback);
                 const nextElement = document.querySelector(
-                  `[data-view-id="${view.id}"] [data-panel-ai-feedback="${nextFeedback.id}"]`,
+                  `[data-pane-id="${pane.id}"] [data-panel-ai-feedback="${nextFeedback.id}"]`,
                 ) as HTMLElement;
                 nextElement?.focus();
               }

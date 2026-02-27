@@ -6,8 +6,6 @@ export type AppPreference = {
   sidebarWidth: number;
   sidebarHidden: boolean;
   sidebarTrigger: 'hover' | 'click';
-  panelExpandedByViewId: Record<string, boolean>;
-  panelTabByViewId: Record<string, 'info' | 'note' | 'anchors' | 'spellcheck' | 'ai' | 'timeline' | 'settings' | 'remarks'>;
   hasOpenedPanelOnce: boolean;
 
   panelWidth: number;
@@ -55,8 +53,6 @@ type AppState = {
   shareOpen: string[];
   statsOpen: boolean;
   upgradeOpen: boolean;
-  findReplaceOpenByViewId: Record<string, boolean>;
-
   progress: {
     totalCharacterCount: number;
     totalBlobSize: number;
@@ -74,7 +70,8 @@ type AppTimerState = {
   keepFocus: boolean;
 };
 
-type AppContext = {
+export type AppContext = {
+  userId: string;
   preference: LocalStore<AppPreference>;
   state: AppState;
   timerState: SessionStore<AppTimerState>;
@@ -95,8 +92,6 @@ export const setupAppContext = (userId: string) => {
     shareOpen: [],
     statsOpen: false,
     upgradeOpen: false,
-    findReplaceOpenByViewId: {},
-
     progress: {
       totalCharacterCount: 0,
       totalBlobSize: 0,
@@ -106,13 +101,12 @@ export const setupAppContext = (userId: string) => {
   });
 
   const context: AppContext = {
+    userId,
     preference: new LocalStore<AppPreference>(`typie:pref:${userId}`, {
       sidebarWidth: 240,
       sidebarHidden: false,
       sidebarTrigger: 'hover',
 
-      panelExpandedByViewId: {},
-      panelTabByViewId: {},
       hasOpenedPanelOnce: false,
       panelWidth: 250,
 

@@ -25,7 +25,7 @@
   import { unwrapError } from '$lib/graphql';
   import { getPostYjsAttrs } from '$lib/utils/yjs-post';
   import { graphql } from '$mearie';
-  import { getSplitViewContext, getViewContext } from '../[slug]/@split-view/context.svelte';
+  import { getPane, getPaneGroup } from '../[slug]/@pane/context.svelte';
   import PdfExportModal from './PdfExportModal.svelte';
   import type { PageLayout } from '@typie/ui/utils';
   import type { Snippet } from 'svelte';
@@ -55,8 +55,8 @@
   let { post, entity, via, pageLayout, layoutMode, children }: Props = $props();
 
   const app = getAppContext();
-  const splitView = getSplitViewContext();
-  const view = getViewContext();
+  const paneGroup = getPaneGroup();
+  const pane = getPane();
 
   let showPdfExportModal = $state(false);
   let exportModalPageLayout = $state<PageLayout | undefined>();
@@ -299,18 +299,15 @@
     }
   };
 
-  const handleAddSplitView = (direction: 'horizontal' | 'vertical') => {
-    if (view) {
-      splitView.addView(entity.slug, {
-        viewId: view.id,
-        direction,
-        position: 'after',
-      });
-    } else {
-      splitView.addViewAtRoot(entity.slug, direction);
-    }
+  const handleAddPane = (direction: 'horizontal' | 'vertical') => {
+    const targetPaneId = pane?.id ?? paneGroup.state.current.focusedPaneId;
+    if (!targetPaneId) return;
 
-    mixpanel.track('add_split_view', { via, direction });
+    paneGroup.addPane(
+      { kind: 'entity', slug: entity.slug },
+      { paneId: targetPaneId, side: direction === 'horizontal' ? 'right' : 'bottom' },
+    );
+    mixpanel.track('add_pane', { via, direction });
   };
 </script>
 
@@ -330,8 +327,8 @@
   </div>
 {/snippet}
 
-<MenuItem icon={Columns2Icon} onclick={() => handleAddSplitView('horizontal')}>오른쪽에 열기</MenuItem>
-<MenuItem icon={Rows2Icon} onclick={() => handleAddSplitView('vertical')}>아래에 열기</MenuItem>
+<MenuItem icon={Columns2Icon} onclick={() => handleAddPane('horizontal')}>오른쪽에 열기</MenuItem>
+<MenuItem icon={Rows2Icon} onclick={() => handleAddPane('vertical')}>아래에 열기</MenuItem>
 
 <MenuItem external href={entity.url} icon={GlobeIcon} type="link">스페이스에서 열기</MenuItem>
 
