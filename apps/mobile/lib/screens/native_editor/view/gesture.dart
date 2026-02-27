@@ -107,7 +107,7 @@ class GestureController {
   final HorizontalScrollMetrics Function() getHorizontalMetrics;
   final GestureStateMachine state;
 
-  static const _edgeThreshold = 60.0;
+  static const _edgeThreshold = 30.0;
   static const _minScrollSpeed = 4.0;
   static const _maxScrollSpeed = 16.0;
 
