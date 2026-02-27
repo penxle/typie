@@ -1,3 +1,4 @@
+use crate::global::font_version;
 use crate::layout::cursor::{CursorNavigable, CursorNavigation, NavigationContext};
 use crate::model::{NodeId, PreeditDecor, SelectionDecor};
 use crate::state::{Position, Selection};
@@ -227,6 +228,7 @@ impl LineElement {
                     let font = run.font();
                     font.index.hash(state);
                     font.data.id().hash(state);
+                    font_version(font.data.as_ref().as_ptr()).hash(state);
 
                     let coords = run.normalized_coords();
                     coords.len().hash(state);
