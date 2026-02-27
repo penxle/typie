@@ -29,7 +29,10 @@ use blend::{
 };
 use cache::{PageRenderCache, PageRenderSnapshot, node_paint_bounds, same_scale_factor};
 use debug_overlay::render_debug_overlay;
-use geometry::{CacheRect, PixelRect, clear_layout_rect, merge_and_clamp_rects};
+use geometry::{
+    CacheRect, PixelRect, clear_layout_rect, collect_non_overlapping_pixel_rects,
+    merge_and_clamp_rects,
+};
 use paint_diagnostics::{PaintDebugFrame, PaintDiagnosticsState, collect_layout_dirty_rects};
 use profiling::{profile_elapsed_ms, profile_now};
 use renderer::{

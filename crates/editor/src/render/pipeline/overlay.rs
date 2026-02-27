@@ -111,22 +111,30 @@ impl Renderer {
                 }
             } else {
                 overlay_profile.content_clipped_render = true;
-                overlay_profile.content_clip_rect_count = selection_data.clip_rects.len();
-                for rect in selection_data.clip_rects.iter().copied() {
-                    let started_at = profiling_enabled.then(profile_now);
-                    Self::render_content_phase_clipped(
-                        pixmap,
-                        glyph_renderer,
-                        scale_factor,
-                        theme,
-                        is_focused,
-                        page,
-                        doc,
-                        rect,
-                    );
-                    overlay_profile.content_clipped_pass_count += 1;
-                    if let Some(started_at) = started_at {
-                        overlay_profile.content_clipped_ms += profile_elapsed_ms(started_at);
+                let clip_pixel_rects = collect_non_overlapping_pixel_rects(
+                    &selection_data.clip_rects,
+                    scale,
+                    pixmap.width(),
+                    pixmap.height(),
+                );
+                if !clip_pixel_rects.is_empty() {
+                    overlay_profile.content_clip_rect_count = selection_data.clip_rects.len();
+                    for pixel_rect in clip_pixel_rects {
+                        let started_at = profiling_enabled.then(profile_now);
+                        Self::render_content_phase_clipped(
+                            pixmap,
+                            glyph_renderer,
+                            scale_factor,
+                            theme,
+                            is_focused,
+                            page,
+                            doc,
+                            pixel_rect.to_layout_rect(scale),
+                        );
+                        overlay_profile.content_clipped_pass_count += 1;
+                        if let Some(started_at) = started_at {
+                            overlay_profile.content_clipped_ms += profile_elapsed_ms(started_at);
+                        }
                     }
                 }
             }
@@ -278,8 +286,14 @@ impl Renderer {
             };
         }
 
-        for rect in selection_data.clip_rects.iter().copied() {
-            Self::render_selection_phase(
+        let clip_pixel_rects = collect_non_overlapping_pixel_rects(
+            &selection_data.clip_rects,
+            scale,
+            pixmap.width(),
+            pixmap.height(),
+        );
+        for pixel_rect in clip_pixel_rects {
+            Self::render_selection_phase_clipped(
                 pixmap,
                 glyph_renderer,
                 scale_factor,
@@ -288,8 +302,7 @@ impl Renderer {
                 page,
                 selections,
                 doc,
-                Some(rect),
-                Point::zero(),
+                pixel_rect.to_layout_rect(scale),
             );
         }
 
@@ -368,6 +381,69 @@ impl Renderer {
             &ctx,
             &RenderHints::default(),
             clip,
+        );
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(in super::super) fn render_selection_phase_clipped(
+        pixmap: &mut PixmapMut,
+        glyph_renderer: &mut GlyphRenderer,
+        scale_factor: f64,
+        theme: &Theme,
+        is_focused: bool,
+        page: &Page,
+        selections: &[SelectionDecor],
+        doc: &Doc,
+        clip_rect: CacheRect,
+    ) {
+        let scale = scale_factor as f32;
+        let Some(pixel_rect) =
+            PixelRect::from_layout_rect(clip_rect, scale, pixmap.width(), pixmap.height())
+        else {
+            return;
+        };
+        let clipped_layout_rect = pixel_rect.to_layout_rect(scale);
+        let origin = Point::new(clipped_layout_rect.x, clipped_layout_rect.y);
+        let Some(mut tile_pixmap) = Pixmap::new(pixel_rect.width, pixel_rect.height) else {
+            Self::render_selection_phase(
+                pixmap,
+                glyph_renderer,
+                scale_factor,
+                theme,
+                is_focused,
+                page,
+                selections,
+                doc,
+                Some(clipped_layout_rect),
+                origin,
+            );
+            return;
+        };
+
+        {
+            let mut tile = tile_pixmap.as_mut();
+            Self::render_selection_phase(
+                &mut tile,
+                glyph_renderer,
+                scale_factor,
+                theme,
+                is_focused,
+                page,
+                selections,
+                doc,
+                Some(clipped_layout_rect),
+                origin,
+            );
+        }
+
+        let paint = PixmapPaint::default();
+        pixmap.draw_pixmap(
+            pixel_rect.x as i32,
+            pixel_rect.y as i32,
+            tile_pixmap.as_ref(),
+            &paint,
+            Transform::identity(),
+            None,
         );
     }
 
