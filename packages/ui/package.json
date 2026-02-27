@@ -29,7 +29,7 @@
     "@iconify-json/lucide": "^1.2.91",
     "@iconify-json/simple-icons": "^1.2.71",
     "@iconify-json/twemoji": "^1.2.5",
-    "@mearie/svelte": "^0.2.4",
+    "@mearie/svelte": "^0.2.5",
     "@pandacss/dev": "^1.8.2",
     "@sveltejs/kit": "^2.52.0",
     "@sveltejs/vite-plugin-svelte": "^6.2.4",

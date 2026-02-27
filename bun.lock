@@ -182,8 +182,8 @@
         "@iconify-json/lucide": "^1.2.91",
         "@iconify-json/simple-icons": "^1.2.71",
         "@iconify-json/twemoji": "^1.2.5",
-        "@mearie/core": "^0.2.2",
-        "@mearie/svelte": "^0.2.4",
+        "@mearie/core": "^0.2.3",
+        "@mearie/svelte": "^0.2.5",
         "@number-flow/svelte": "^0.3.11",
         "@observablehq/plot": "^0.6.17",
         "@pandacss/dev": "^1.8.2",
@@ -324,7 +324,7 @@
         "@iconify-json/lucide": "^1.2.91",
         "@iconify-json/simple-icons": "^1.2.71",
         "@iconify-json/twemoji": "^1.2.5",
-        "@mearie/svelte": "^0.2.4",
+        "@mearie/svelte": "^0.2.5",
         "@pandacss/dev": "^1.8.2",
         "@sveltejs/kit": "^2.52.0",
         "@sveltejs/vite-plugin-svelte": "^6.2.4",
@@ -1013,7 +1013,7 @@
 
     "@mearie/config": ["@mearie/config@0.1.1", "", { "dependencies": { "c12": "4.0.0-beta.3", "zod": "^4.3.6" } }, "sha512-evk3Wgy+/hD5jFhfk1IFX7PsmA2rLnx+W2rhxqyFEHKtV1jvEmtGrK7zv/okAR8kL+n2aB9LFdJSn2c01limQA=="],
 
-    "@mearie/core": ["@mearie/core@0.2.2", "", { "dependencies": { "@mearie/shared": "0.2.1" } }, "sha512-Cve55NOTbYEkrB5iaNxSCNyloLaw2zMDfPWkaHHXSJUNSnbcGu5hCNRQ3uvSJB0CA7TrvAeuapiBDuYG1KeeVA=="],
+    "@mearie/core": ["@mearie/core@0.2.3", "", { "dependencies": { "@mearie/shared": "0.2.1" } }, "sha512-Iy/JYG4GJntW1dLHeuli4QVmyrjq/tA6oGAmIYioOk0cST0HkXz3rmsrGmJ7Fw6ZjX3jVOLwRkPZfLTdb/wQSQ=="],
 
     "@mearie/native": ["@mearie/native@0.2.1", "", { "optionalDependencies": { "@mearie/native-darwin-arm64": "0.2.1", "@mearie/native-darwin-x64": "0.2.1", "@mearie/native-linux-arm64-gnu": "0.2.1", "@mearie/native-linux-x64-gnu": "0.2.1", "@mearie/native-win32-x64-msvc": "0.2.1" } }, "sha512-6Txp9Ln4GVHUycwO0Cfz+K9XreNkiZTkGYX9EUjqlBPWr9tRwv3oN/s5D1AbCfTz7+4ysz99N7Jw2mAC+5mORQ=="],
 
@@ -1029,7 +1029,7 @@
 
     "@mearie/shared": ["@mearie/shared@0.2.1", "", {}, "sha512-EOxeC9axfDlHYdRqaT3ByFukF3bKqSuaMjpxlVlEk/9e63kOE36DQDNOXiJFwD0nXd9S95+STNVKJgMbf8zGkQ=="],
 
-    "@mearie/svelte": ["@mearie/svelte@0.2.4", "", { "dependencies": { "@mearie/core": "0.2.2" }, "peerDependencies": { "svelte": "^5.0.0" } }, "sha512-v3bm0+aAHfFup9v8Kr/EAtxb43nnAhwloBJ6V8jxl0pBOJ/PUPL3PoAzfNnRmpB91J3t0J7Lt3Et0iTNYKaPGA=="],
+    "@mearie/svelte": ["@mearie/svelte@0.2.5", "", { "dependencies": { "@mearie/core": "0.2.3" }, "peerDependencies": { "svelte": "^5.0.0" } }, "sha512-eJLKoMxT9owOWYSTtcMdfln5E6hFqFbLCes5hQokc1gHnCcZ1VUfaeDVmBheL48wti7Bd2msAAZ3spKBH5t3WQ=="],
 
     "@mearie/vite": ["@mearie/vite@0.1.3", "", { "dependencies": { "@mearie/codegen": "0.1.3", "@mearie/config": "0.1.1" } }, "sha512-5ulZzF+4BAo9FRPa93XwbgVHaOWkqlhLpiwpQxotIouo3JMsgpV49JjAbwuCVfrRkIDDDNRhKjKey8oLm0aIhA=="],
 
