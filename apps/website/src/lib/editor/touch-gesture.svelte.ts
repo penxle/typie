@@ -156,8 +156,6 @@ type PressRecord = {
   selectionHit: boolean;
 };
 
-type HapticKind = 'tap' | 'selection' | 'handle' | 'dragArm' | 'dragStart';
-
 export class TouchGestureController {
   #editor: Editor;
   #phase: TouchPhase = $state('idle');
@@ -178,7 +176,6 @@ export class TouchGestureController {
   #contextMenuRequestId = 0;
   #suppressNativeContextMenuUntil = 0;
   #wasTouchMenuOpenOnPointerDown = false;
-  #lastHapticAt = 0;
 
   constructor(editor: Editor) {
     this.#editor = editor;
@@ -288,7 +285,6 @@ export class TouchGestureController {
       this.#doubleTapStart = { x: e.clientX, y: e.clientY };
       this.#suppressTapOnPointerUp = true;
       this.#lastTap = null;
-      this.#vibrate('tap');
       return;
     }
 
@@ -434,7 +430,6 @@ export class TouchGestureController {
     this.#setDragCandidate(false);
     this.#setDragArmed(false);
     this.#suppressNativeContextMenuUntil = performance.now() + 600;
-    this.#vibrate('handle');
     this.#dispatchDragSelectionAtCurrentPoint();
   }
 
@@ -469,7 +464,6 @@ export class TouchGestureController {
     this.#editor.closeContextMenu();
     this.#clearLongPressTimer();
     this.#stopAutoScroll();
-    this.#vibrate('dragStart');
   }
 
   handleNativeDragEnd(): void {
@@ -504,7 +498,6 @@ export class TouchGestureController {
         this.#setDragCandidate(true);
         this.#setDragArmed(true);
         this.#suppressTapOnPointerUp = true;
-        this.#vibrate('dragArm');
         this.#updateAutoScroll();
         return;
       }
@@ -513,7 +506,6 @@ export class TouchGestureController {
       this.#setPhase('doubleTapPending');
       this.#doubleTapStart = { x: point.x, y: point.y };
       this.#suppressTapOnPointerUp = true;
-      this.#vibrate('selection');
     }, TOUCH_LONG_PRESS_MS);
   }
 
@@ -706,32 +698,6 @@ export class TouchGestureController {
     }
 
     this.#dragCandidate = candidate;
-  }
-
-  #vibrate(kind: HapticKind): void {
-    if (typeof navigator === 'undefined' || typeof navigator.vibrate !== 'function') {
-      return;
-    }
-
-    if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
-      return;
-    }
-
-    if (typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
-      return;
-    }
-
-    const now = performance.now();
-    const minInterval = kind === 'tap' ? 40 : 90;
-    if (now - this.#lastHapticAt < minInterval) {
-      return;
-    }
-    this.#lastHapticAt = now;
-
-    const pattern: number | number[] =
-      kind === 'dragArm' ? [10, 20, 12] : kind === 'selection' ? 14 : kind === 'handle' ? 12 : kind === 'dragStart' ? 10 : 8;
-
-    navigator.vibrate(pattern);
   }
 
   #clearNativeSelection(): void {
