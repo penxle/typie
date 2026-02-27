@@ -244,26 +244,26 @@
     }
   };
 
-  const layoutMode = $derived(editor.layout.layoutMode);
-  const isPaginated = $derived(layoutMode.type === 'paginated');
+  const layoutMode = $derived(editor.layout?.layoutMode);
+  const isPaginated = $derived(layoutMode?.type === 'paginated');
 
   const mmToPx = (mm: number) => Math.round((mm * 96) / 25.4);
   const pxToMm = (px: number) => Math.round((px * 25.4) / 96);
 
   const selectedPagePreset = $derived.by(() => {
-    if (layoutMode.type !== 'paginated') return 'a4';
+    if (layoutMode?.type !== 'paginated') return 'a4';
     const widthMm = pxToMm(layoutMode.pageWidth);
     const heightMm = pxToMm(layoutMode.pageHeight);
     const found = values.pageLayout.find((p) => p.width === widthMm && p.height === heightMm);
     return found?.value ?? 'custom';
   });
 
-  const currentWidthMm = $derived(layoutMode.type === 'paginated' ? pxToMm(layoutMode.pageWidth) : 210);
-  const currentHeightMm = $derived(layoutMode.type === 'paginated' ? pxToMm(layoutMode.pageHeight) : 297);
-  const currentMarginTopMm = $derived(layoutMode.type === 'paginated' ? pxToMm(layoutMode.pageMarginTop) : 25);
-  const currentMarginBottomMm = $derived(layoutMode.type === 'paginated' ? pxToMm(layoutMode.pageMarginBottom) : 25);
-  const currentMarginLeftMm = $derived(layoutMode.type === 'paginated' ? pxToMm(layoutMode.pageMarginLeft) : 25);
-  const currentMarginRightMm = $derived(layoutMode.type === 'paginated' ? pxToMm(layoutMode.pageMarginRight) : 25);
+  const currentWidthMm = $derived(layoutMode?.type === 'paginated' ? pxToMm(layoutMode.pageWidth) : 210);
+  const currentHeightMm = $derived(layoutMode?.type === 'paginated' ? pxToMm(layoutMode.pageHeight) : 297);
+  const currentMarginTopMm = $derived(layoutMode?.type === 'paginated' ? pxToMm(layoutMode.pageMarginTop) : 25);
+  const currentMarginBottomMm = $derived(layoutMode?.type === 'paginated' ? pxToMm(layoutMode.pageMarginBottom) : 25);
+  const currentMarginLeftMm = $derived(layoutMode?.type === 'paginated' ? pxToMm(layoutMode.pageMarginLeft) : 25);
+  const currentMarginRightMm = $derived(layoutMode?.type === 'paginated' ? pxToMm(layoutMode.pageMarginRight) : 25);
 
   const getMaxMargin = (dimension: 'width' | 'height') => {
     const size = dimension === 'width' ? currentWidthMm : currentHeightMm;
@@ -297,7 +297,7 @@
   const handlePagePresetChange = (value: string) => {
     if (value === 'custom') return;
     const preset = values.pageLayout.find((p) => p.value === value);
-    if (preset && layoutMode.type === 'paginated') {
+    if (preset && layoutMode?.type === 'paginated') {
       editor.dispatch({
         type: 'setLayoutMode',
         mode: {
@@ -315,7 +315,7 @@
   };
 
   const handleWidthChange = (e: Event) => {
-    if (layoutMode.type !== 'paginated') return;
+    if (!layoutMode || layoutMode.type !== 'paginated') return;
     const target = e.target as HTMLInputElement;
     const value = Math.max(100, Number(target.value));
     target.value = String(value);
@@ -334,7 +334,7 @@
   };
 
   const handleHeightChange = (e: Event) => {
-    if (layoutMode.type !== 'paginated') return;
+    if (!layoutMode || layoutMode.type !== 'paginated') return;
     const target = e.target as HTMLInputElement;
     const value = Math.max(100, Number(target.value));
     target.value = String(value);
@@ -353,7 +353,7 @@
   };
 
   const handleMarginChange = (side: 'top' | 'bottom' | 'left' | 'right', e: Event) => {
-    if (layoutMode.type !== 'paginated') return;
+    if (!layoutMode || layoutMode.type !== 'paginated') return;
     const target = e.target as HTMLInputElement;
     const maxMargin = side === 'top' || side === 'bottom' ? getMaxMargin('height') : getMaxMargin('width');
     const value = clamp(Number(target.value), 0, maxMargin);
@@ -722,143 +722,145 @@
       <HorizontalDivider style={css.raw({ marginY: '12px' })} color="secondary" />
     {/if}
 
-    <div class={css({ paddingX: '20px', fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>레이아웃</div>
-
-    <div class={flex({ flexDirection: 'column', gap: '6px', paddingX: '20px' })}>
-      <div class={flex({ alignItems: 'center', gap: '8px' })}>
-        <Icon style={css.raw({ color: 'text.faint' })} icon={FileTextIcon} />
-        <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>레이아웃 모드</div>
-      </div>
-      <div class={css({ width: '140px' })}>
-        <SegmentButtons
-          items={[
-            { label: '스크롤', value: 'continuous' },
-            { label: '페이지', value: 'paginated' },
-          ]}
-          onselect={handleLayoutModeChange}
-          size="sm"
-          value={layoutMode.type}
-        />
-      </div>
-    </div>
-
-    {#if isPaginated}
-      <div class={flex({ flexDirection: 'column', gap: '6px', paddingX: '20px' })}>
-        <div class={flex({ alignItems: 'center', gap: '8px' })}>
-          <Icon style={css.raw({ color: 'text.faint' })} icon={FileIcon} />
-          <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>페이지 크기 (mm)</div>
-        </div>
-        <Select
-          items={[...values.pageLayout, { label: '직접 지정', value: 'custom' }]}
-          onselect={handlePagePresetChange}
-          value={selectedPagePreset}
-        />
-        <div class={flex({ flexDirection: 'column', gap: '8px' })}>
-          <div class={grid({ columns: 2, columnGap: '12px', rowGap: '8px', paddingLeft: '8px' })}>
-            <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '4px' })}>
-              <div class={css({ fontSize: '12px', color: 'text.subtle', width: '32px' })}>너비</div>
-              <TextInput
-                style={css.raw({ width: '80px' })}
-                min="100"
-                onchange={handleWidthChange}
-                size="sm"
-                type="number"
-                value={currentWidthMm}
-              />
-            </div>
-            <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '4px' })}>
-              <div class={css({ fontSize: '12px', color: 'text.subtle', width: '32px' })}>높이</div>
-              <TextInput
-                style={css.raw({ width: '80px' })}
-                min="100"
-                onchange={handleHeightChange}
-                size="sm"
-                type="number"
-                value={currentHeightMm}
-              />
-            </div>
-          </div>
-        </div>
-      </div>
+    {#if layoutMode}
+      <div class={css({ paddingX: '20px', fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>레이아웃</div>
 
       <div class={flex({ flexDirection: 'column', gap: '6px', paddingX: '20px' })}>
         <div class={flex({ alignItems: 'center', gap: '8px' })}>
-          <Icon style={css.raw({ color: 'text.faint' })} icon={RulerDimensionLineIcon} />
-          <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>여백 (mm)</div>
+          <Icon style={css.raw({ color: 'text.faint' })} icon={FileTextIcon} />
+          <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>레이아웃 모드</div>
         </div>
-        <div class={grid({ columns: 2, columnGap: '12px', rowGap: '8px', paddingLeft: '8px' })}>
-          <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '4px' })}>
-            <div class={css({ fontSize: '12px', color: 'text.subtle' })}>상단</div>
-            <TextInput
-              style={css.raw({ width: '80px' })}
-              max={String(getMaxMargin('height'))}
-              min="0"
-              onchange={(e) => handleMarginChange('top', e)}
-              size="sm"
-              type="number"
-              value={currentMarginTopMm}
-            />
-          </div>
-          <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '4px' })}>
-            <div class={css({ fontSize: '12px', color: 'text.subtle' })}>하단</div>
-            <TextInput
-              style={css.raw({ width: '80px' })}
-              max={String(getMaxMargin('height'))}
-              min="0"
-              onchange={(e) => handleMarginChange('bottom', e)}
-              size="sm"
-              type="number"
-              value={currentMarginBottomMm}
-            />
-          </div>
-          <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '4px' })}>
-            <div class={css({ fontSize: '12px', color: 'text.subtle' })}>왼쪽</div>
-            <TextInput
-              style={css.raw({ width: '80px' })}
-              max={String(getMaxMargin('width'))}
-              min="0"
-              onchange={(e) => handleMarginChange('left', e)}
-              size="sm"
-              type="number"
-              value={currentMarginLeftMm}
-            />
-          </div>
-          <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '4px' })}>
-            <div class={css({ fontSize: '12px', color: 'text.subtle' })}>오른쪽</div>
-            <TextInput
-              style={css.raw({ width: '80px' })}
-              max={String(getMaxMargin('width'))}
-              min="0"
-              onchange={(e) => handleMarginChange('right', e)}
-              size="sm"
-              type="number"
-              value={currentMarginRightMm}
-            />
-          </div>
-        </div>
-      </div>
-    {:else}
-      <div class={flex({ flexDirection: 'column', gap: '8px', paddingX: '20px' })}>
-        <div class={flex({ alignItems: 'center', gap: '8px' })}>
-          <Icon style={css.raw({ color: 'text.faint' })} icon={RulerDimensionLineIcon} />
-          <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>본문 폭</div>
-        </div>
-        <div class={css({ width: '200px' })}>
+        <div class={css({ width: '140px' })}>
           <SegmentButtons
             items={[
-              { label: '400px', value: 400 },
-              { label: '600px', value: 600 },
-              { label: '800px', value: 800 },
+              { label: '스크롤', value: 'continuous' },
+              { label: '페이지', value: 'paginated' },
             ]}
-            onselect={handleMaxWidthChange}
+            onselect={handleLayoutModeChange}
             size="sm"
-            value={layoutMode.type === 'continuous' ? layoutMode.maxWidth : 600}
+            value={layoutMode.type}
           />
         </div>
       </div>
-    {/if}
 
-    <HorizontalDivider style={css.raw({ marginY: '12px' })} color="secondary" />
+      {#if isPaginated}
+        <div class={flex({ flexDirection: 'column', gap: '6px', paddingX: '20px' })}>
+          <div class={flex({ alignItems: 'center', gap: '8px' })}>
+            <Icon style={css.raw({ color: 'text.faint' })} icon={FileIcon} />
+            <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>페이지 크기 (mm)</div>
+          </div>
+          <Select
+            items={[...values.pageLayout, { label: '직접 지정', value: 'custom' }]}
+            onselect={handlePagePresetChange}
+            value={selectedPagePreset}
+          />
+          <div class={flex({ flexDirection: 'column', gap: '8px' })}>
+            <div class={grid({ columns: 2, columnGap: '12px', rowGap: '8px', paddingLeft: '8px' })}>
+              <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '4px' })}>
+                <div class={css({ fontSize: '12px', color: 'text.subtle', width: '32px' })}>너비</div>
+                <TextInput
+                  style={css.raw({ width: '80px' })}
+                  min="100"
+                  onchange={handleWidthChange}
+                  size="sm"
+                  type="number"
+                  value={currentWidthMm}
+                />
+              </div>
+              <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '4px' })}>
+                <div class={css({ fontSize: '12px', color: 'text.subtle', width: '32px' })}>높이</div>
+                <TextInput
+                  style={css.raw({ width: '80px' })}
+                  min="100"
+                  onchange={handleHeightChange}
+                  size="sm"
+                  type="number"
+                  value={currentHeightMm}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class={flex({ flexDirection: 'column', gap: '6px', paddingX: '20px' })}>
+          <div class={flex({ alignItems: 'center', gap: '8px' })}>
+            <Icon style={css.raw({ color: 'text.faint' })} icon={RulerDimensionLineIcon} />
+            <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>여백 (mm)</div>
+          </div>
+          <div class={grid({ columns: 2, columnGap: '12px', rowGap: '8px', paddingLeft: '8px' })}>
+            <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '4px' })}>
+              <div class={css({ fontSize: '12px', color: 'text.subtle' })}>상단</div>
+              <TextInput
+                style={css.raw({ width: '80px' })}
+                max={String(getMaxMargin('height'))}
+                min="0"
+                onchange={(e) => handleMarginChange('top', e)}
+                size="sm"
+                type="number"
+                value={currentMarginTopMm}
+              />
+            </div>
+            <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '4px' })}>
+              <div class={css({ fontSize: '12px', color: 'text.subtle' })}>하단</div>
+              <TextInput
+                style={css.raw({ width: '80px' })}
+                max={String(getMaxMargin('height'))}
+                min="0"
+                onchange={(e) => handleMarginChange('bottom', e)}
+                size="sm"
+                type="number"
+                value={currentMarginBottomMm}
+              />
+            </div>
+            <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '4px' })}>
+              <div class={css({ fontSize: '12px', color: 'text.subtle' })}>왼쪽</div>
+              <TextInput
+                style={css.raw({ width: '80px' })}
+                max={String(getMaxMargin('width'))}
+                min="0"
+                onchange={(e) => handleMarginChange('left', e)}
+                size="sm"
+                type="number"
+                value={currentMarginLeftMm}
+              />
+            </div>
+            <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '4px' })}>
+              <div class={css({ fontSize: '12px', color: 'text.subtle' })}>오른쪽</div>
+              <TextInput
+                style={css.raw({ width: '80px' })}
+                max={String(getMaxMargin('width'))}
+                min="0"
+                onchange={(e) => handleMarginChange('right', e)}
+                size="sm"
+                type="number"
+                value={currentMarginRightMm}
+              />
+            </div>
+          </div>
+        </div>
+      {:else}
+        <div class={flex({ flexDirection: 'column', gap: '8px', paddingX: '20px' })}>
+          <div class={flex({ alignItems: 'center', gap: '8px' })}>
+            <Icon style={css.raw({ color: 'text.faint' })} icon={RulerDimensionLineIcon} />
+            <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>본문 폭</div>
+          </div>
+          <div class={css({ width: '200px' })}>
+            <SegmentButtons
+              items={[
+                { label: '400px', value: 400 },
+                { label: '600px', value: 600 },
+                { label: '800px', value: 800 },
+              ]}
+              onselect={handleMaxWidthChange}
+              size="sm"
+              value={layoutMode.type === 'continuous' ? layoutMode.maxWidth : 600}
+            />
+          </div>
+        </div>
+      {/if}
+
+      <HorizontalDivider style={css.raw({ marginY: '12px' })} color="secondary" />
+    {/if}
 
     <div class={css({ paddingX: '20px', fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>세부 레이아웃</div>
 

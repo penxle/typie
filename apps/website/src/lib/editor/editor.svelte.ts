@@ -122,13 +122,7 @@ export class Editor {
 
   renderVersion = $state(0);
 
-  layout = $state({
-    pages: [] as { width: number; height: number }[],
-    layoutMode: {
-      type: 'continuous',
-      maxWidth: defaultValues.maxWidth,
-    } as LayoutMode,
-  });
+  layout: { pages: { width: number; height: number }[]; layoutMode: LayoutMode } | null = $state(null);
 
   selection: Selection | null = $state(null);
 
@@ -410,7 +404,11 @@ export class Editor {
       const s = slate.readSettings();
       this.settings.paragraphIndent = s.paragraphIndent;
       this.settings.blockGap = s.blockGap;
-      this.layout.layoutMode = s.layoutMode;
+      if (this.layout) {
+        this.layout.layoutMode = s.layoutMode;
+      } else {
+        this.layout = { pages: [], layoutMode: s.layoutMode };
+      }
     }
 
     if (slate.isDirty(DIRTY_DEFAULT_ATTRS)) {
@@ -454,7 +452,11 @@ export class Editor {
     }
 
     if (slate.isDirty(DIRTY_PAGES)) {
-      this.layout.pages = slate.readPages();
+      if (this.layout) {
+        this.layout.pages = slate.readPages();
+      } else {
+        this.layout = { pages: slate.readPages(), layoutMode: { type: 'continuous', maxWidth: defaultValues.maxWidth } };
+      }
     }
 
     if (slate.isDirty(DIRTY_CURSOR)) {
@@ -753,7 +755,7 @@ export class Editor {
       return fromTarget;
     }
 
-    if (this.layout.layoutMode.type === 'paginated') {
+    if (this.layout?.layoutMode.type === 'paginated') {
       const el = document.elementFromPoint(e.clientX, e.clientY);
       if (el instanceof HTMLElement) {
         return this.#resolvePageCoordinateFromElement(e, el);
@@ -762,7 +764,7 @@ export class Editor {
 
     const { containerEl, pageElements } = this.extensionArea;
     if (containerEl && pageElements.length > 0) {
-      const coord = findNearestPageCoordinate(e, pageElements, this.layout.pages[0]?.width ?? 0);
+      const coord = findNearestPageCoordinate(e, pageElements, this.layout?.pages[0]?.width ?? 0);
       if (coord) {
         return {
           pageIdx: coord.pageIdx,
@@ -1243,7 +1245,7 @@ export class Editor {
         const end = Math.max(pageIdx, el.pageIdx);
         let dist = 0;
         for (let i = start; i < end; i++) {
-          dist += (this.layout.pages[i]?.height ?? 0) + PAGE_GAP;
+          dist += (this.layout?.pages[i]?.height ?? 0) + PAGE_GAP;
         }
         relativePageY = el.pageIdx < pageIdx ? -dist : dist;
       }

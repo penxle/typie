@@ -968,7 +968,7 @@
                     alignItems: 'center',
                     paddingTop: '60px',
                     width: 'full',
-                    ...(editor.layout.layoutMode.type === 'paginated' && { paddingBottom: '20px' }),
+                    ...(editor.layout?.layoutMode.type === 'paginated' && { paddingBottom: '20px' }),
                   })}
                 >
                   <div
@@ -1054,7 +1054,7 @@
                       use:autosize
                     ></textarea>
 
-                    {#if editor.layout.layoutMode.type !== 'paginated'}
+                    {#if editor.layout?.layoutMode.type !== 'paginated'}
                       <HorizontalDivider style={css.raw({ marginTop: '10px' })} />
                     {/if}
                   </div>

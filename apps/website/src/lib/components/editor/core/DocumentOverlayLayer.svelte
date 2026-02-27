@@ -20,7 +20,7 @@
     return grouped;
   });
 
-  const pageGap = $derived(editor.layout.layoutMode.type === 'paginated' ? PAGE_GAP : 0);
+  const pageGap = $derived(editor.layout?.layoutMode.type === 'paginated' ? PAGE_GAP : 0);
 </script>
 
 {#if !editor.readOnly}
@@ -42,7 +42,7 @@
         height: 'full',
       })}
     >
-      {#each editor.layout.pages as page, pageIdx (`page-${pageIdx}`)}
+      {#each editor.layout?.pages ?? [] as page, pageIdx (`page-${pageIdx}`)}
         {@const overlays = tableOverlaysByPage.get(pageIdx) ?? []}
         <div
           style:width={`${page.width}px`}

@@ -16,15 +16,15 @@
 
   const { editor } = getEditorContext();
 
-  const pageWidth = $derived(editor.layout.pages[page]?.width ?? 0);
-  const pageHeight = $derived(editor.layout.pages[page]?.height ?? 0);
-  const marginTop = $derived(editor.layout.layoutMode.type === 'paginated' ? editor.layout.layoutMode.pageMarginTop : 0);
-  const marginBottom = $derived(editor.layout.layoutMode.type === 'paginated' ? editor.layout.layoutMode.pageMarginBottom : 0);
-  const marginLeft = $derived(editor.layout.layoutMode.type === 'paginated' ? editor.layout.layoutMode.pageMarginLeft : 0);
-  const marginRight = $derived(editor.layout.layoutMode.type === 'paginated' ? editor.layout.layoutMode.pageMarginRight : 0);
-  const layoutMode = $derived(editor.layout.layoutMode);
+  const pageWidth = $derived(editor.layout?.pages[page]?.width ?? 0);
+  const pageHeight = $derived(editor.layout?.pages[page]?.height ?? 0);
+  const marginTop = $derived(editor.layout?.layoutMode.type === 'paginated' ? editor.layout.layoutMode.pageMarginTop : 0);
+  const marginBottom = $derived(editor.layout?.layoutMode.type === 'paginated' ? editor.layout.layoutMode.pageMarginBottom : 0);
+  const marginLeft = $derived(editor.layout?.layoutMode.type === 'paginated' ? editor.layout.layoutMode.pageMarginLeft : 0);
+  const marginRight = $derived(editor.layout?.layoutMode.type === 'paginated' ? editor.layout.layoutMode.pageMarginRight : 0);
+  const layoutMode = $derived(editor.layout?.layoutMode);
   const externalElements = $derived(editor.externalElements.filter((el) => el.pageIdx === page));
-  const isPaginated = $derived(layoutMode.type === 'paginated');
+  const isPaginated = $derived(layoutMode?.type === 'paginated');
 
   // NOTE: iOS에서 캔버스 롱프레스 시 텍스트 인식해서 선택되는 동작을 막음
   const disableCanvasPointer = $derived(editor.readOnly); // TODO: 항상 disable 해도 안전한지 확인하기

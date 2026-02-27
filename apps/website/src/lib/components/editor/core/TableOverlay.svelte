@@ -83,11 +83,11 @@
     if ((overlay.contentWidth ?? 0) > 0) {
       return overlay.contentWidth;
     }
-    const layoutMode = editor.layout.layoutMode;
-    if (layoutMode.type === 'paginated') {
+    const layoutMode = editor.layout?.layoutMode;
+    if (layoutMode?.type === 'paginated') {
       return Math.max(0, layoutMode.pageWidth - layoutMode.pageMarginLeft - layoutMode.pageMarginRight);
     }
-    return Math.max(0, layoutMode.maxWidth);
+    return Math.max(0, layoutMode?.type === 'continuous' ? layoutMode.maxWidth : 0);
   }
 
   function minTableWidth(colCount: number): number {

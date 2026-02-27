@@ -54,7 +54,7 @@
   const { editor } = getEditorContext();
 
   const toolbarSize = $derived(app.preference.current.toolbarStyle === 'compact' ? 'medium' : 'large');
-  const layoutMode = $derived(editor.layout.layoutMode);
+  const layoutMode = $derived(editor.layout?.layoutMode);
 </script>
 
 <div
@@ -227,7 +227,7 @@
       {/snippet}
     </ToolbarDropdownButton>
 
-    {#if layoutMode.type === 'paginated'}
+    {#if layoutMode?.type === 'paginated'}
       <VerticalDivider style={css.raw({ height: '16px' })} />
 
       <ToolbarButton

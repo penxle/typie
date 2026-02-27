@@ -113,7 +113,7 @@
     editor.handleDragEnter(e);
   };
 
-  const isPaginated = $derived(editor.layout.layoutMode.type === 'paginated');
+  const isPaginated = $derived(editor.layout?.layoutMode.type === 'paginated');
   const viewPadding = $derived(isPaginated ? PAGINATED_VIEW_PADDING : editor.readOnly ? 0 : CONTINUOUS_VIEW_PADDING);
 </script>
 
@@ -195,7 +195,7 @@
   tabindex="0"
   use:touchPanLock={editor.touchGesture.panLockActive}
 >
-  {#each editor.layout.pages, i}
+  {#each editor.layout?.pages ?? [], i}
     <Page page={i} bind:containerEl={containerEls[i]} />
   {/each}
   <DocumentOverlayLayer />
