@@ -855,7 +855,7 @@ mod tests {
         );
         let constraints = BoxConstraints::new(0.0, 800.0, 0.0, f32::INFINITY);
 
-        if let Node::Paragraph(paragraph) = para.node() {
+        if let Some(Node::Paragraph(paragraph)) = para.node() {
             paragraph.layout(&ctx, constraints);
         } else {
             panic!("paragraph node expected");
