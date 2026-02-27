@@ -280,6 +280,8 @@ export const DocumentGCJob = defineJob('document:gc', async (documentId: string)
       const gcVersion = doc.version().encode();
       const gcUpdate = doc.export({ mode: 'update', from: prevVersion });
 
+      lock.signal.throwIfAborted();
+
       await db
         .update(DocumentContents)
         .set({
