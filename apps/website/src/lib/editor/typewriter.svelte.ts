@@ -91,8 +91,8 @@ export function setupTypewriter(getTargetEl: () => HTMLElement | undefined, defa
       return defaultPadding;
     }
 
-    const layoutMode = editor.layout.layoutMode;
-    const trailingBottomMargin = layoutMode.type === 'paginated' ? layoutMode.pageMarginBottom : CONTINUOUS_PAGE_MARGIN;
+    const layoutMode = editor.layout?.layoutMode;
+    const trailingBottomMargin = layoutMode?.type === 'paginated' ? layoutMode.pageMarginBottom : CONTINUOUS_PAGE_MARGIN;
     const cursorHeight = editor.cursor.bounds?.height ?? 0;
     const collapsedSelectionHeight = editor.selection?.collapsed
       ? (editor.selection.headBounds?.bounds.height ?? cursorHeight)
@@ -110,7 +110,7 @@ export function setupTypewriter(getTargetEl: () => HTMLElement | undefined, defa
   $effect(() => {
     void editor.cursor.bounds;
     void editor.selection;
-    void editor.layout.layoutMode;
+    void editor.layout?.layoutMode;
     void app.preference.current.typewriterEnabled;
     void app.preference.current.typewriterPosition;
     void scrollContainerHeight;

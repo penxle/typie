@@ -19,7 +19,7 @@
   import type { Snippet } from 'svelte';
   import type { Editor } from '$lib/editor/editor.svelte';
   import type { FontFamily } from '$lib/editor/fonts';
-  import type { LayoutMode, Position } from '$lib/editor/types';
+  import type { Position } from '$lib/editor/types';
 
   type Props = {
     unit?: 'px' | 'cm';
@@ -99,7 +99,7 @@
   });
 
   $effect(() => {
-    if (editor.layout.pages.length > 0 && editor.contentReady && !initialized) {
+    if ((editor.layout?.pages.length ?? 0) > 0 && editor.contentReady && !initialized) {
       initialized = true;
       tick().then(() => onEditorReady?.(editor));
     }
@@ -132,20 +132,20 @@
     };
   });
 
-  const layoutMode = $derived<LayoutMode>(editor.layout.layoutMode);
-  const showRuler = $derived(!readOnly && layoutMode.type === 'paginated');
-  const pages = $derived(editor.layout.pages);
+  const layoutMode = $derived(editor.layout?.layoutMode);
+  const showRuler = $derived(!readOnly && layoutMode?.type === 'paginated');
+  const pages = $derived(editor.layout?.pages ?? []);
   const pageWidth = $derived(pages[0]?.width ?? 0);
-  const marginTop = $derived(layoutMode.type === 'paginated' ? layoutMode.pageMarginTop : 0);
-  const marginBottom = $derived(layoutMode.type === 'paginated' ? layoutMode.pageMarginBottom : 0);
-  const marginLeft = $derived(layoutMode.type === 'paginated' ? layoutMode.pageMarginLeft : 0);
-  const marginRight = $derived(layoutMode.type === 'paginated' ? layoutMode.pageMarginRight : 0);
+  const marginTop = $derived(layoutMode?.type === 'paginated' ? layoutMode.pageMarginTop : 0);
+  const marginBottom = $derived(layoutMode?.type === 'paginated' ? layoutMode.pageMarginBottom : 0);
+  const marginLeft = $derived(layoutMode?.type === 'paginated' ? layoutMode.pageMarginLeft : 0);
+  const marginRight = $derived(layoutMode?.type === 'paginated' ? layoutMode.pageMarginRight : 0);
 
-  const pageGap = $derived(layoutMode.type === 'paginated' ? PAGE_GAP : 0);
-  const continuousPageMargin = $derived(layoutMode.type === 'paginated' ? 0 : CONTINUOUS_PAGE_MARGIN);
-  const viewPadding = $derived(layoutMode.type === 'paginated' ? PAGINATED_VIEW_PADDING : readOnly ? 0 : CONTINUOUS_VIEW_PADDING);
+  const pageGap = $derived(layoutMode?.type === 'paginated' ? PAGE_GAP : 0);
+  const continuousPageMargin = $derived(layoutMode?.type === 'paginated' ? 0 : CONTINUOUS_PAGE_MARGIN);
+  const viewPadding = $derived(layoutMode?.type === 'paginated' ? PAGINATED_VIEW_PADDING : readOnly ? 0 : CONTINUOUS_VIEW_PADDING);
   const width = $derived(
-    layoutMode.type === 'continuous'
+    layoutMode?.type === 'continuous'
       ? Math.max(CONTINUOUS_MIN_WIDTH - continuousPageMargin * 2, containerClientWidth - viewPadding * 2)
       : containerClientWidth - viewPadding * 2,
   );
@@ -174,7 +174,7 @@
         flex: '1',
         gap: '0',
         overflow: 'hidden',
-        ...(layoutMode.type === 'paginated' && { backgroundColor: 'surface.subtle' }),
+        ...(layoutMode?.type === 'paginated' && { backgroundColor: 'surface.subtle' }),
       })}
     >
       {#if showRuler}
@@ -246,7 +246,7 @@
         }}
       >
         <div
-          style:min-width={layoutMode.type === 'paginated' ? 'max-content' : `${CONTINUOUS_MIN_WIDTH}px`}
+          style:min-width={layoutMode?.type === 'paginated' ? 'max-content' : `${CONTINUOUS_MIN_WIDTH}px`}
           class={flex({
             direction: 'column',
             position: 'relative',
@@ -255,10 +255,10 @@
         >
           {#if header}
             <div
-              style:width={layoutMode.type === 'paginated' ? `${pageWidth + viewPadding * 2}px` : '100%'}
-              style:max-width={layoutMode.type === 'paginated'
+              style:width={layoutMode?.type === 'paginated' ? `${pageWidth + viewPadding * 2}px` : '100%'}
+              style:max-width={layoutMode?.type === 'paginated'
                 ? 'none'
-                : `${layoutMode.maxWidth + (viewPadding + continuousPageMargin) * 2}px`}
+                : `${(layoutMode?.type === 'continuous' ? layoutMode.maxWidth : 0) + (viewPadding + continuousPageMargin) * 2}px`}
               style:padding-inline={`${viewPadding + continuousPageMargin}px`}
               class={flex({
                 flexDirection: 'column',
@@ -284,10 +284,10 @@
           <View />
           {#if footer}
             <div
-              style:width={layoutMode.type === 'paginated' ? `${pageWidth + viewPadding * 2}px` : '100%'}
-              style:max-width={layoutMode.type === 'paginated'
+              style:width={layoutMode?.type === 'paginated' ? `${pageWidth + viewPadding * 2}px` : '100%'}
+              style:max-width={layoutMode?.type === 'paginated'
                 ? 'none'
-                : `${layoutMode.maxWidth + (viewPadding + continuousPageMargin) * 2}px`}
+                : `${(layoutMode?.type === 'continuous' ? layoutMode.maxWidth : 0) + (viewPadding + continuousPageMargin) * 2}px`}
               style:padding-inline={`${viewPadding + continuousPageMargin}px`}
               class={flex({
                 flexDirection: 'column',

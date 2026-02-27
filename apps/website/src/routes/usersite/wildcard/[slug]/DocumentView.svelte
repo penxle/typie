@@ -425,7 +425,7 @@
                     </div>
                   </div>
 
-                  {#if editor.layout.layoutMode.type !== 'paginated'}
+                  {#if editor.layout?.layoutMode.type !== 'paginated'}
                     <HorizontalDivider style={css.raw({ marginBottom: '24px' })} />
                   {/if}
                 </div>
@@ -513,7 +513,7 @@
                   </div>
                 </div>
 
-                {#if editor.layout.layoutMode.type !== 'paginated'}
+                {#if editor.layout?.layoutMode.type !== 'paginated'}
                   <HorizontalDivider style={css.raw({ marginBottom: '24px' })} />
                 {/if}
               </div>

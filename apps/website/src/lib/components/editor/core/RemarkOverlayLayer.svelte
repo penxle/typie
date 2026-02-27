@@ -28,7 +28,7 @@
   });
 
   $effect(() => {
-    void editor.layout.layoutMode;
+    void editor.layout?.layoutMode;
 
     let disposed = false;
 
@@ -104,7 +104,7 @@
 >
   {#key layoutRefreshVersion}
     {#each remarkGroups as group (group.nodeId)}
-      {@const page = editor.layout.pages[group.pageIdx]}
+      {@const page = editor.layout?.pages[group.pageIdx]}
       {@const offset = pageOffset(group.pageIdx)}
       {#if page && offset}
         <div
@@ -127,7 +127,7 @@
 
     {#if !editor.readOnly && editor.currentBlock && !currentBlockHasRemarks}
       {@const block = editor.currentBlock}
-      {@const page = editor.layout.pages[block.pageIdx]}
+      {@const page = editor.layout?.pages[block.pageIdx]}
       {@const offset = pageOffset(block.pageIdx)}
       {#if page && offset}
         {#key block.nodeId}

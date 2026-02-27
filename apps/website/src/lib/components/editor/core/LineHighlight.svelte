@@ -12,7 +12,7 @@
   const pageIdx = $derived(editor.cursor.pageIdx);
   const bounds = $derived(editor.cursor.bounds);
 
-  const isPaginated = $derived(editor.layout.layoutMode.type === 'paginated');
+  const isPaginated = $derived(editor.layout?.layoutMode.type === 'paginated');
 
   const top = $derived.by(() => {
     if (!bounds) return 0;
