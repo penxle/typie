@@ -122,19 +122,55 @@ impl Runtime {
         fonts
     }
 
-    pub(crate) fn handle_fonts_loaded(&mut self, family: String, weight: u16) -> Vec<Effect> {
-        if let Some(nodes) = self.missing_font_nodes.remove(&(family.clone(), weight)) {
-            if nodes.contains(&NodeId::ROOT) {
-                return vec![Effect::FullLayoutInvalidation, Effect::LayoutChanged];
-            }
+    pub(crate) fn handle_fonts_loaded(
+        &mut self,
+        family: String,
+        weight: u16,
+        codepoints: Vec<u32>,
+    ) -> Vec<Effect> {
+        let key = (family.clone(), weight);
 
-            if !nodes.is_empty() {
-                return nodes
-                    .into_iter()
-                    .map(|node_id| Effect::NodeChanged { node_id })
-                    .collect();
+        // Remove loaded codepoints from the embedded pending set
+        if let Some((_, pending_cps)) = self.missing_font_nodes.get_mut(&key) {
+            for cp in &codepoints {
+                pending_cps.remove(cp);
             }
         }
+
+        let all_loaded = self
+            .missing_font_nodes
+            .get(&key)
+            .map_or(true, |(_, cps)| cps.is_empty());
+
+        if all_loaded {
+            // All codepoints loaded — consume missing_font_nodes
+            if let Some((nodes, _)) = self.missing_font_nodes.remove(&key) {
+                if nodes.contains(&NodeId::ROOT) {
+                    return vec![Effect::FullLayoutInvalidation, Effect::LayoutChanged];
+                }
+                if !nodes.is_empty() {
+                    return nodes
+                        .into_iter()
+                        .map(|node_id| Effect::NodeChanged { node_id })
+                        .collect();
+                }
+            }
+        } else {
+            // More codepoints pending — return effects but keep missing_font_nodes
+            if let Some((nodes, _)) = self.missing_font_nodes.get(&key) {
+                if nodes.contains(&NodeId::ROOT) {
+                    return vec![Effect::FullLayoutInvalidation, Effect::LayoutChanged];
+                }
+                if !nodes.is_empty() {
+                    return nodes
+                        .iter()
+                        .copied()
+                        .map(|node_id| Effect::NodeChanged { node_id })
+                        .collect();
+                }
+            }
+        }
+
         Vec::new()
     }
 }

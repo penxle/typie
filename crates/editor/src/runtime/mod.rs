@@ -101,7 +101,7 @@ pub struct Runtime {
     undo_manager: UndoManager,
 
     loaded_font_codepoints: FxHashMap<(String, u16), FxHashSet<u32>>,
-    missing_font_nodes: FxHashMap<(String, u16), FxHashSet<NodeId>>,
+    missing_font_nodes: FxHashMap<(String, u16), (FxHashSet<NodeId>, FxHashSet<u32>)>,
 
     selection_cache: Option<SelectionSnapshot>,
     pending: PendingUpdates,
@@ -1564,13 +1564,15 @@ impl Runtime {
                     }
 
                     if !newly_detected.is_empty() {
-                        let nodes_for_font = self.missing_font_nodes.entry(key).or_default();
+                        let (nodes_for_font, cps_for_font) =
+                            self.missing_font_nodes.entry(key).or_default();
                         if font_affected_nodes.is_empty() {
                             // fallback
                             nodes_for_font.insert(NodeId::ROOT);
                         } else {
                             nodes_for_font.extend(font_affected_nodes.iter().copied());
                         }
+                        cps_for_font.extend(newly_detected.iter().copied());
                     }
                 }
                 Effect::DocChanged => {
@@ -1995,7 +1997,7 @@ mod tests {
             },
         ]);
 
-        let nodes = runtime
+        let (nodes, _) = runtime
             .missing_font_nodes
             .get(&(String::from("PasteFont"), 400))
             .expect("pasted range should be tracked for missing font");
@@ -2105,7 +2107,7 @@ mod tests {
         let tracks_root = target
             .missing_font_nodes
             .values()
-            .any(|nodes| nodes.contains(&NodeId::ROOT));
+            .any(|(nodes, _)| nodes.contains(&NodeId::ROOT));
         assert!(
             !tracks_root,
             "external doc change font tracking should avoid root fallback when diff is text-only"
@@ -2114,7 +2116,7 @@ mod tests {
         let has_non_root_tracking = target
             .missing_font_nodes
             .values()
-            .any(|nodes| !nodes.is_empty());
+            .any(|(nodes, _)| !nodes.is_empty());
         assert!(
             has_non_root_tracking,
             "external doc change font tracking should keep non-root nodes from diff"
@@ -2295,7 +2297,7 @@ mod tests {
         let tracks_root = target
             .missing_font_nodes
             .values()
-            .any(|nodes| nodes.contains(&NodeId::ROOT));
+            .any(|(nodes, _)| nodes.contains(&NodeId::ROOT));
         assert!(
             tracks_root,
             "fallback font tracking should use root invalidation"
@@ -2388,7 +2390,7 @@ mod tests {
         let tracks_root = target
             .missing_font_nodes
             .values()
-            .any(|nodes| nodes.contains(&NodeId::ROOT));
+            .any(|(nodes, _)| nodes.contains(&NodeId::ROOT));
         assert!(
             !tracks_root,
             "mixed diff with explicit changed nodes should avoid root fallback"
@@ -2396,7 +2398,7 @@ mod tests {
         let has_non_root_tracking = target
             .missing_font_nodes
             .values()
-            .any(|nodes| !nodes.is_empty());
+            .any(|(nodes, _)| !nodes.is_empty());
         assert!(
             has_non_root_tracking,
             "mixed diff should keep non-root font invalidation targets"
