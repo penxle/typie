@@ -5,7 +5,7 @@
   import { getAppContext } from '@typie/ui/context';
   import { clamp } from '@typie/ui/utils';
   import { graphql } from '$mearie';
-  import { getViewContext } from '../@split-view/context.svelte';
+  import { getPane, getPaneGroup } from '../@pane/context.svelte';
   import PanelAi from './PanelAi.svelte';
   import PanelAnchors from './PanelAnchors.svelte';
   import PanelBodySettings from './PanelBodySettings.svelte';
@@ -65,10 +65,11 @@
 
   const app = getAppContext();
 
-  const splitViewId = getViewContext().id;
+  const paneId = getPane().id;
+  const paneGroup = getPaneGroup();
 
   const isExpanded = $derived(
-    Boolean(app.preference.current.panelExpandedByViewId[splitViewId] && app.preference.current.panelTabByViewId[splitViewId]),
+    Boolean(paneGroup.state.current.panelExpandedByPaneId[paneId] && paneGroup.state.current.panelTabByPaneId[paneId]),
   );
 
   type Resizer = {
@@ -156,31 +157,31 @@
   ></div>
 
   {#if isExpanded}
-    {#if app.preference.current.panelTabByViewId[splitViewId] === 'info'}
+    {#if paneGroup.state.current.panelTabByPaneId[paneId] === 'info'}
       <PanelInfo {editor} post$key={post.data} user$key={user.data} />
     {/if}
 
-    {#if app.preference.current.panelTabByViewId[splitViewId] === 'note'}
+    {#if paneGroup.state.current.panelTabByPaneId[paneId] === 'note'}
       <PanelNote entity$key={post.data.entity} />
     {/if}
 
-    {#if app.preference.current.panelTabByViewId[splitViewId] === 'anchors'}
+    {#if paneGroup.state.current.panelTabByPaneId[paneId] === 'anchors'}
       <PanelAnchors {doc} {editor} />
     {/if}
 
-    {#if app.preference.current.panelTabByViewId[splitViewId] === 'spellcheck'}
+    {#if paneGroup.state.current.panelTabByPaneId[paneId] === 'spellcheck'}
       <PanelSpellcheck {editor} user$key={user.data} />
     {/if}
 
-    {#if app.preference.current.panelTabByViewId[splitViewId] === 'ai'}
+    {#if paneGroup.state.current.panelTabByPaneId[paneId] === 'ai'}
       <PanelAi {editor} user$key={user.data} />
     {/if}
 
-    {#if app.preference.current.panelTabByViewId[splitViewId] === 'timeline'}
+    {#if paneGroup.state.current.panelTabByPaneId[paneId] === 'timeline'}
       <PanelTimeline {doc} {editor} post$key={post.data} {viewEditor} bind:viewDoc />
     {/if}
 
-    {#if app.preference.current.panelTabByViewId[splitViewId] === 'settings'}
+    {#if paneGroup.state.current.panelTabByPaneId[paneId] === 'settings'}
       <PanelBodySettings {doc} {editor} />
     {/if}
   {/if}

@@ -11,17 +11,18 @@
   import mixpanel from 'mixpanel-browser';
   import qs from 'query-string';
   import { onMount } from 'svelte';
+  import { browser } from '$app/environment';
   import { updated } from '$app/state';
   import Logo from '$assets/logos/logo.svg?component';
   import { env } from '$env/dynamic/public';
   import { pollBootstrapAssertion } from '$lib/bootstrap';
   import { AdminImpersonateBanner } from '$lib/components/admin';
+  import { preloadEditorWasm } from '$lib/editor/editor.svelte';
   import { hydrateQuery } from '$lib/graphql';
   import { wasm } from '$lib/wasm';
   import { graphql } from '$mearie';
-  import { setupSplitViewContext } from './[slug]/@split-view/context.svelte';
-  import { setupDragDropContext } from './[slug]/@split-view/drag-context.svelte';
-  import { setupEditorRegistry } from './[slug]/@split-view/editor-registry.svelte';
+  import { setupPaneGroup } from './[slug]/@pane/context.svelte';
+  import { setupEditorRegistry } from './[slug]/@pane/editor-registry.svelte';
   import Notes from './@notes/Notes.svelte';
   import PreferenceModal from './@preference/PreferenceModal.svelte';
   import ShareModal from './@share/ShareModal.svelte';
@@ -35,6 +36,10 @@
   import Sidebar from './Sidebar.svelte';
   import TrialExpiredModal from './TrialExpiredModal.svelte';
   import UserSurveyModal from './UserSurveyModal.svelte';
+
+  if (browser) {
+    preloadEditorWasm();
+  }
 
   let { data, children } = $props();
 
@@ -118,8 +123,7 @@
 
   const app = setupAppContext(query.data.me.id);
 
-  setupSplitViewContext(query.data.me.id);
-  setupDragDropContext();
+  setupPaneGroup(app);
   setupEditorRegistry();
 
   let referralWelcomeModalOpen = $state(false);

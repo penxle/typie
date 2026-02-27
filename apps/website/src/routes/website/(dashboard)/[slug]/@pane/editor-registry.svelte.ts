@@ -11,40 +11,40 @@ export type EditorEntry = { type: 'tiptap'; editor: Ref<TipTapEditor> } | { type
 class EditorRegistry {
   #entries = new SvelteMap<string, EditorEntry>();
 
-  registerTipTap(viewId: string, slug: string, editor: Ref<TipTapEditor> | undefined) {
+  registerTipTap(paneId: string, slug: string, editor: Ref<TipTapEditor> | undefined) {
     if (editor) {
-      const key = `${viewId}-${slug}`;
+      const key = `${paneId}-${slug}`;
       this.#entries.set(key, { type: 'tiptap', editor });
     }
   }
 
-  registerNative(viewId: string, slug: string, editor: NativeEditor | undefined) {
+  registerNative(paneId: string, slug: string, editor: NativeEditor | undefined) {
     if (editor) {
-      const key = `${viewId}-${slug}`;
+      const key = `${paneId}-${slug}`;
       this.#entries.set(key, { type: 'native', editor });
     }
   }
 
-  unregister(viewId: string, slug: string) {
-    const key = `${viewId}-${slug}`;
+  unregister(paneId: string, slug: string) {
+    const key = `${paneId}-${slug}`;
     this.#entries.delete(key);
   }
 
-  get(viewId: string, slug: string): EditorEntry | undefined {
-    const key = `${viewId}-${slug}`;
+  get(paneId: string, slug: string): EditorEntry | undefined {
+    const key = `${paneId}-${slug}`;
     return this.#entries.get(key);
   }
 
-  getTipTap(viewId: string, slug: string): Ref<TipTapEditor> | undefined {
-    const entry = this.get(viewId, slug);
+  getTipTap(paneId: string, slug: string): Ref<TipTapEditor> | undefined {
+    const entry = this.get(paneId, slug);
     if (entry?.type === 'tiptap') {
       return entry.editor;
     }
     return undefined;
   }
 
-  getNative(viewId: string, slug: string): NativeEditor | undefined {
-    const entry = this.get(viewId, slug);
+  getNative(paneId: string, slug: string): NativeEditor | undefined {
+    const entry = this.get(paneId, slug);
     if (entry?.type === 'native') {
       return entry.editor;
     }

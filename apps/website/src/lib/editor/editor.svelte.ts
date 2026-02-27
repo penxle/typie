@@ -67,6 +67,10 @@ function ensureInitialized(): Promise<void> {
   return initPromise;
 }
 
+export function preloadEditorWasm(): void {
+  void ensureInitialized();
+}
+
 const CLICK_INTERVAL = 500;
 const CLICK_DISTANCE = 5;
 
@@ -199,6 +203,7 @@ export class Editor {
   pointerState = $state(0);
   readOnly = $state(false);
   protectContent = $state(false);
+  contentReady = $state(false);
 
   placeholder = $state({
     visible: false,

@@ -18,7 +18,7 @@
   import LineHeightIcon from '~icons/typie/line-height';
   import RubyIcon from '~icons/typie/ruby';
   import { graphql } from '$mearie';
-  import { getViewContext } from '../@split-view/context.svelte';
+  import { getPane, getPaneGroup } from '../@pane/context.svelte';
   import ToolbarButton from './ToolbarButton.svelte';
   import ToolbarColorGrid from './ToolbarColorGrid.svelte';
   import ToolbarDropdownButton from './ToolbarDropdownButton.svelte';
@@ -61,7 +61,8 @@
 
   const app = getAppContext();
   const editorContext = getEditorContext();
-  const splitViewId = getViewContext().id;
+  const paneId = getPane().id;
+  const paneGroup = getPaneGroup();
 
   let canUndo = $state(false);
   let canRedo = $state(false);
@@ -421,7 +422,7 @@
       keys={['Mod', 'F']}
       label="찾기, 바꾸기"
       onclick={() => {
-        app.state.findReplaceOpenByViewId[splitViewId] = !app.state.findReplaceOpenByViewId[splitViewId];
+        paneGroup.findReplaceOpenByPaneId[paneId] = !paneGroup.findReplaceOpenByPaneId[paneId];
       }}
       size="small"
     />

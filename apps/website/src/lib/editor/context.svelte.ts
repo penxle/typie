@@ -13,6 +13,8 @@ export class EditorContext {
   user = $state<EditorContext_user$key | null>(null);
 
   resetKey = $state(0);
+
+  paneFocused = $state(false);
 }
 
 const EDITOR_KEY = Symbol('editor');

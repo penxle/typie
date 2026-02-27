@@ -48,7 +48,7 @@
 
   const app = getAppContext();
   const treeState = getTreeContext();
-  const active = $derived(app.state.current === document.data.entity.id);
+  const active = $derived(app.state.current === document.data.entity.slug);
   const selected = $derived(treeState.selectedEntityIds.has(document.data.entity.id));
 
   let element = $state<HTMLAnchorElement>();

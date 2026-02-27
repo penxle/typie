@@ -18,7 +18,7 @@
   import CopyXIcon from '~icons/lucide/copy-x';
   import XIcon from '~icons/lucide/x';
   import { graphql } from '$mearie';
-  import { getViewContext } from '../@split-view/context.svelte';
+  import { getPane } from '../@pane/context.svelte';
   import type { Editor } from '@tiptap/core';
   import type { Ref } from '@typie/ui/utils';
   import type { Editor_Panel_PanelSpellcheck_user$key } from '$mearie';
@@ -54,7 +54,7 @@
     () => user$key,
   );
 
-  const view = getViewContext();
+  const pane = getPane();
 
   let inflight = $state(false);
   let mounted = $state(false);
@@ -178,7 +178,7 @@
       if (newActiveError && newActiveError !== activeError) {
         activeError = newActiveError;
         setTimeout(() => {
-          const errorElement = document.querySelector(`[data-view-id="${view.id}"] [data-panel-spellcheck-error="${newActiveError.id}"]`);
+          const errorElement = document.querySelector(`[data-pane-id="${pane.id}"] [data-panel-spellcheck-error="${newActiveError.id}"]`);
           if (errorElement) {
             errorElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
           }
@@ -262,7 +262,7 @@
   });
 
   onMount(() => {
-    const container = document.querySelector(`[data-view-id="${view.id}"] .editor-scroll-container`);
+    const container = document.querySelector(`[data-pane-id="${pane.id}"] .editor-scroll-container`);
     if (!container) return;
 
     ({ anchor, floating } = createFloatingActions({
@@ -416,7 +416,7 @@
               if (prevError) {
                 scrollToError(prevError);
                 const prevElement = document.querySelector(
-                  `[data-view-id="${view.id}"] [data-panel-spellcheck-error="${prevError.id}"]`,
+                  `[data-pane-id="${pane.id}"] [data-panel-spellcheck-error="${prevError.id}"]`,
                 ) as HTMLElement;
                 prevElement?.focus();
               }
@@ -427,7 +427,7 @@
               if (nextError) {
                 scrollToError(nextError);
                 const nextElement = document.querySelector(
-                  `[data-view-id="${view.id}"] [data-panel-spellcheck-error="${nextError.id}"]`,
+                  `[data-pane-id="${pane.id}"] [data-panel-spellcheck-error="${nextError.id}"]`,
                 ) as HTMLElement;
                 nextElement?.focus();
               }

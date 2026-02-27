@@ -12,14 +12,13 @@
     PAGE_GAP,
     PAGINATED_VIEW_PADDING,
   } from '$lib/editor/constants';
-  import { setupEditorContext } from '$lib/editor/context.svelte';
-  import { Editor } from '$lib/editor/editor.svelte';
   import { getEditorTheme } from '$lib/editor/theme';
   import View from './core/View.svelte';
   import HorizontalRuler from './ui/HorizontalRuler.svelte';
   import Scrollbar from './ui/Scrollbar.svelte';
   import VerticalRuler from './ui/VerticalRuler.svelte';
   import type { Snippet } from 'svelte';
+  import type { Editor } from '$lib/editor/editor.svelte';
   import type { FontFamily } from '$lib/editor/fonts';
   import type { LayoutMode, Position } from '$lib/editor/types';
 
@@ -29,7 +28,7 @@
     snapshot?: Uint8Array;
     readOnly?: boolean;
     useWindowScroll?: boolean;
-    editor?: Editor;
+    editor: Editor;
     fontFamilies: readonly FontFamily[];
     onDocChanged?: () => void;
     onSelectionChanged?: (anchor: Position, head: Position) => void;
@@ -46,7 +45,7 @@
     snapshot,
     readOnly = false,
     useWindowScroll = false,
-    editor: externalEditor,
+    editor,
     fontFamilies,
     onDocChanged,
     onSelectionChanged,
@@ -56,12 +55,6 @@
     footer,
     children,
   }: Props = $props();
-
-  const editor = externalEditor ?? new Editor();
-  if (!externalEditor) {
-    const ctx = setupEditorContext();
-    ctx.editor = editor;
-  }
 
   const theme = getThemeContext();
 
@@ -107,7 +100,7 @@
   });
 
   $effect(() => {
-    if (editor.layout.pages.length > 0 && !initialized) {
+    if (editor.layout.pages.length > 0 && editor.contentReady && !initialized) {
       initialized = true;
       tick().then(() => onEditorReady?.(editor));
     }

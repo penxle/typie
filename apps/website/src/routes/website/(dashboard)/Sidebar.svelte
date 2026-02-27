@@ -25,9 +25,9 @@
   import StickyNoteIcon from '~icons/lucide/sticky-note';
   import Trash2Icon from '~icons/lucide/trash-2';
   import { goto, pushState } from '$app/navigation';
-  import { page } from '$app/state';
   import { Img } from '$lib/components';
   import { graphql } from '$mearie';
+  import { getPaneGroup } from './[slug]/@pane/context.svelte';
   import EntityTree from './@tree/EntityTree.svelte';
   import PlanUsageWidget from './PlanUsageWidget.svelte';
   import Profile from './Profile.svelte';
@@ -127,6 +127,7 @@
   );
 
   const app = getAppContext();
+  const paneGroup = getPaneGroup();
 
   type Resizer = {
     deltaX: number;
@@ -404,7 +405,7 @@
             backgroundColor: 'surface.muted',
           },
         })}
-        aria-current={page.route.id === '/website/(dashboard)/home' ? 'page' : undefined}
+        aria-current={paneGroup.panes.find((p) => p.id === paneGroup.state.current.focusedPaneId)?.kind === 'home' ? 'page' : undefined}
         href="/home"
       >
         <Icon style={css.raw({ color: 'text.faint' })} icon={HomeIcon} size={14} />

@@ -36,13 +36,12 @@
   import PostMenu from '../@context-menu/PostMenu.svelte';
   import PlanUpgradeModal from '../PlanUpgradeModal.svelte';
   import Anchors from './@anchor/Anchors.svelte';
+  import CloseButton from './@pane/CloseButton.svelte';
+  import { getPane, getPaneGroup } from './@pane/context.svelte';
+  import { dragPane } from './@pane/dnd';
+  import { getEditorRegistry } from './@pane/editor-registry.svelte';
+  import { PANE_MIN_SIZE } from './@pane/geometry';
   import Panel from './@panel/Panel.svelte';
-  import CloseSplitView from './@split-view/CloseSplitView.svelte';
-  import { getSplitViewContext, getViewContext } from './@split-view/context.svelte';
-  import { getDragDropContext } from './@split-view/drag-context.svelte';
-  import { dragView } from './@split-view/drag-view-action';
-  import { getEditorRegistry } from './@split-view/editor-registry.svelte';
-  import { VIEW_BUFFER_SIZE, VIEW_MIN_SIZE } from './@split-view/utils';
   import BottomToolbar from './@toolbar/BottomToolbar.svelte';
   import TopToolbar from './@toolbar/TopToolbar.svelte';
   import FloatingFindReplace from './FloatingFindReplace.svelte';
@@ -79,7 +78,7 @@
           ...DashboardLayout_PlanUpgradeModal_user
         }
 
-        entities(slugs: $slugs) {
+        entity(slug: $slug) {
           id
           slug
           url
@@ -241,14 +240,12 @@
   const editorContext = setupEditorContext();
 
   const app = getAppContext();
-  const splitView = getSplitViewContext();
-  const splitViewId = getViewContext().id;
-  const dragDropContext = getDragDropContext();
+  const paneGroup = getPaneGroup();
+  const paneId = getPane().id;
   const editorRegistry = getEditorRegistry();
-  const dragViewProps = $derived({ dragDropContext, viewId: splitViewId });
+  const dragPaneProps = $derived({ paneGroup, paneId });
   const clientId = nanoid();
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-  let entity = $state<(typeof query.data.entities)[number]>(query.data.entities.find((entity) => entity.slug === slug)!);
+  let entity = $state(query.data.entity);
 
   const selectionsStore = new LocalStore<
     Record<
@@ -266,10 +263,7 @@
     void slug;
 
     untrack(() => {
-      const next = query.data.entities.find((entity) => entity.slug === slug);
-      if (next) {
-        entity = next;
-      }
+      entity = query.data.entity;
     });
   });
 
@@ -331,11 +325,11 @@
 
   $effect(() => {
     const _slug = slug;
-    editorRegistry.registerTipTap(splitViewId, slug, editor);
+    editorRegistry.registerTipTap(paneId, slug, editor);
 
     return () => {
       // NOTE: 이유를 모르겠지만 여기서 slug 직접 접근하면 에러 남
-      editorRegistry.unregister(splitViewId, _slug);
+      editorRegistry.unregister(paneId, _slug);
     };
   });
 
@@ -427,9 +421,7 @@
     });
   });
 
-  const currentViewZenModeEnabled = $derived(
-    app.preference.current.zenModeEnabled && splitViewId === splitView.state.current.focusedViewId,
-  );
+  const currentViewZenModeEnabled = $derived(app.preference.current.zenModeEnabled && paneId === paneGroup.state.current.focusedPaneId);
 
   $effect(() => {
     if (currentViewZenModeEnabled) {
@@ -779,13 +771,6 @@
       };
     });
   });
-
-  $effect(() => {
-    if (focused) {
-      app.state.ancestors = entity.ancestors.map((ancestor) => ancestor.id);
-      app.state.current = entity.id;
-    }
-  });
 </script>
 
 <svelte:window
@@ -828,7 +813,7 @@
           userSelect: 'none',
         })}
         role="region"
-        use:dragView={dragViewProps}
+        use:dragPane={dragPaneProps}
       >
         <div class={flex({ alignItems: 'center', gap: '4px', overflowX: 'hidden' })}>
           <Icon style={css.raw({ color: 'text.disabled' })} icon={FolderIcon} size={12} />
@@ -971,9 +956,9 @@
           >
             <Icon icon={Maximize2Icon} size={16} />
           </button>
-          <CloseSplitView>
+          <CloseButton>
             <Icon icon={XIcon} size={16} />
-          </CloseSplitView>
+          </CloseButton>
         </div>
       </div>
 
@@ -1002,7 +987,7 @@
             <div
               bind:this={scrollContainer}
               id="editor-container"
-              style:min-width={`${VIEW_MIN_SIZE - VIEW_BUFFER_SIZE}px`}
+              style:min-width={`${PANE_MIN_SIZE}px`}
               class={cx(
                 'editor-scroll-container',
                 flex({
@@ -1351,8 +1336,8 @@
                 {Math.round(editorScale * 100)}%
               </div>
             {/if}
-            {#if editor && app.state.findReplaceOpenByViewId[splitViewId] && !editorContext?.timeline}
-              <FloatingFindReplace close={() => (app.state.findReplaceOpenByViewId[splitViewId] = false)} {editor} />
+            {#if editor && paneGroup.findReplaceOpenByPaneId[paneId] && !editorContext?.timeline}
+              <FloatingFindReplace close={() => (paneGroup.findReplaceOpenByPaneId[paneId] = false)} {editor} />
             {/if}
 
             {#if editor && anchors && !editorContext?.timeline}

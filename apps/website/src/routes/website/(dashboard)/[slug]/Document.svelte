@@ -1,6 +1,5 @@
 <script lang="ts">
   import { createFragment } from '@mearie/svelte';
-  import { settled } from 'svelte';
   import { setupEditorContext } from '$lib/editor/context.svelte';
   import { graphql } from '$mearie';
   import DocumentEditor from './DocumentEditor.svelte';
@@ -14,12 +13,15 @@
 
   let { query$key, slug, focused }: Props = $props();
 
+  // Document는 slug마다 {#key}로 새로 생성/삭제되므로 생성 시점의 값을 캡처.
+  const mountedSlug = slug;
+
   const query = createFragment(
     graphql(`
       fragment Document_query on Query {
         ...DocumentEditor_query
 
-        entities(slugs: $slugs) {
+        entity(slug: $slug) {
           id
           slug
 
@@ -84,10 +86,11 @@
 
   const ctx = setupEditorContext();
 
-  const entity = $derived(query.data.entities.find((e) => e.slug === slug));
+  const entity = $derived(query.data.entity);
+  const documentId = $derived(entity?.node.__typename === 'Document' ? entity.node.id : null);
 
-  $effect.pre(() => {
-    ctx.documentId = entity?.node.__typename === 'Document' ? entity.node.id : null;
+  $effect(() => {
+    ctx.documentId = documentId;
     ctx.serverSnapshot =
       entity?.node.__typename === 'Document' && entity.node.snapshot ? Uint8Array.fromBase64(entity.node.snapshot) : undefined;
     ctx.serverVersion = entity?.node.__typename === 'Document' ? entity.node.version : null;
@@ -95,21 +98,27 @@
   });
 
   let mounted = $state(true);
+  let mountedTimer: ReturnType<typeof setTimeout> | null = null;
 
   $effect(() => {
+    const prevDocumentId = documentId;
     void ctx.resetKey;
 
     return () => {
-      mounted = false;
-      settled().then(() => {
-        mounted = true;
-      });
+      if (prevDocumentId !== null) {
+        if (mountedTimer !== null) clearTimeout(mountedTimer);
+        mounted = false;
+        mountedTimer = setTimeout(() => {
+          mountedTimer = null;
+          mounted = true;
+        }, 0);
+      }
     };
   });
 </script>
 
 {#if entity?.node.__typename === 'Document'}
   {#if mounted}
-    <DocumentEditor {focused} query$key={query.data} {slug} />
+    <DocumentEditor {focused} query$key={query.data} slug={mountedSlug} />
   {/if}
 {/if}

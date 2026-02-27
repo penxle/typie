@@ -30,11 +30,10 @@
   import FontUploadModal from '../FontUploadModal.svelte';
   import PlanUpgradeModal from '../PlanUpgradeModal.svelte';
   import DocumentPanel from './@document-panel/DocumentPanel.svelte';
-  import CloseSplitView from './@split-view/CloseSplitView.svelte';
-  import { getSplitViewContext, getViewContext } from './@split-view/context.svelte';
-  import { getDragDropContext } from './@split-view/drag-context.svelte';
-  import { dragView } from './@split-view/drag-view-action';
-  import { getEditorRegistry } from './@split-view/editor-registry.svelte';
+  import CloseButton from './@pane/CloseButton.svelte';
+  import { getPane, getPaneGroup } from './@pane/context.svelte';
+  import { dragPane } from './@pane/dnd';
+  import { getEditorRegistry } from './@pane/editor-registry.svelte';
   import DocumentFindReplace from './DocumentFindReplace.svelte';
   import DocumentTemplateModal from './DocumentTemplateModal.svelte';
   import EditorV2NoticeModal from './EditorV2NoticeModal.svelte';
@@ -50,6 +49,11 @@
   };
 
   let { query$key, slug, focused }: Props = $props();
+
+  // DocumentEditor는 slug마다 새로 생성/삭제(mounted 메커니즘)되므로 생성 시점의 값을 캡처.
+  // slug를 $derived 안에서 reactive하게 읽으면 언마운트 도중 View.svelte의 prop getter 체인이
+  // entity = undefined인 상태에서 호출되어 크래시가 발생한다.
+  const mountedSlug = slug;
 
   const query = createFragment(
     graphql(`
@@ -73,7 +77,7 @@
           }
         }
 
-        entities(slugs: $slugs) {
+        entity(slug: $slug) {
           id
           slug
           url
@@ -175,7 +179,7 @@
     () => query$key,
   );
 
-  const entity = $derived(query.data.entities.find((e) => e.slug === slug));
+  const entity = $derived(query.data.entity);
 
   const [syncDocument] = createMutation(
     graphql(`
@@ -230,21 +234,24 @@
   `);
 
   const app = getAppContext();
-  const splitView = getSplitViewContext();
-  const viewContext = getViewContext();
-  const dragDropContext = getDragDropContext();
+  const paneGroup = getPaneGroup();
+  const pane = getPane();
   const editorRegistry = getEditorRegistry();
-  const dragViewProps = $derived({ dragDropContext, viewId: viewContext.id });
+  const dragPaneProps = $derived({ paneGroup, paneId: pane.id });
 
   const ctx = getEditorContext();
   const editor = new Editor();
   ctx.editor = editor;
   ctx.user = query.data.me;
 
+  $effect(() => {
+    ctx.paneFocused = focused;
+  });
+
   const document = $derived(entity?.node.__typename === 'Document' ? entity.node : null);
   const documentId = $derived(document?.id ?? null);
   const title = $derived(document?.title ?? '');
-  const serverSnapshot = ctx.serverSnapshot;
+  const serverSnapshot = $derived(ctx.serverSnapshot);
   const serverVersion = $derived(ctx.serverVersion);
   const assets = $derived(document?.assets);
 
@@ -389,9 +396,7 @@
     });
   }
 
-  const currentViewZenModeEnabled = $derived(
-    app.preference.current.zenModeEnabled && viewContext.id === splitView.state.current.focusedViewId,
-  );
+  const currentViewZenModeEnabled = $derived(app.preference.current.zenModeEnabled && pane.id === paneGroup.state.current.focusedPaneId);
 
   $effect(() => {
     if (currentViewZenModeEnabled) {
@@ -400,18 +405,10 @@
   });
 
   $effect(() => {
-    if (focused && entity) {
-      app.state.ancestors = entity.ancestors.map((ancestor) => ancestor.id);
-      app.state.current = entity.id;
-    }
-  });
-
-  $effect(() => {
-    const _slug = slug;
-    editorRegistry.registerNative(viewContext.id, slug, editor);
+    editorRegistry.registerNative(pane.id, mountedSlug, editor);
 
     return () => {
-      editorRegistry.unregister(viewContext.id, _slug);
+      editorRegistry.unregister(pane.id, mountedSlug);
     };
   });
 
@@ -495,6 +492,9 @@
         editor.importUpdatesBatch([local.snapshot, ...local.updates]);
       } else if (persistence) {
         await persistence.clear();
+        if (ctx.serverSnapshot) {
+          editor.importUpdatesBatch([ctx.serverSnapshot]);
+        }
         const snapshot = editor.export({ type: 'snapshot' });
         const version = editor.export({ type: 'version' });
         if (snapshot && version && serverVersion) {
@@ -502,6 +502,8 @@
           await persistence.saveCheckpoint(Uint8Array.fromBase64(serverVersion));
         }
       }
+
+      editor.contentReady = true;
 
       fullSyncInterval = setInterval(() => fullSync(), 60_000);
       forceSyncInterval = setInterval(() => forceSync(), 10_000);
@@ -622,7 +624,7 @@
   }
 
   function handleEditorReady() {
-    if (!documentId) return;
+    if (!documentId || !focused) return;
     const saved = selectionsStore.current[documentId];
     if (!saved) {
       titleEl?.focus();
@@ -692,7 +694,7 @@
           userSelect: 'none',
         })}
         role="region"
-        use:dragView={dragViewProps}
+        use:dragPane={dragPaneProps}
       >
         <div class={flex({ alignItems: 'center', gap: '4px', overflowX: 'hidden' })}>
           <Icon style={css.raw({ color: 'text.disabled' })} icon={FolderIcon} size={12} />
@@ -898,9 +900,9 @@
           >
             <Icon icon={Maximize2Icon} size={16} />
           </button>
-          <CloseSplitView>
+          <CloseButton>
             <Icon icon={XIcon} size={16} />
-          </CloseSplitView>
+          </CloseButton>
         </div>
       </div>
 

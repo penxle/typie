@@ -234,6 +234,7 @@
 
   const ctx = setupEditorContext();
   const editor = new Editor();
+  editor.contentReady = true;
   ctx.editor = editor;
 
   const document = $derived(entityView.data.node.__typename === 'DocumentView' ? entityView.data.node : null);
