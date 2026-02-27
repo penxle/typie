@@ -209,26 +209,23 @@ PODS:
     - nanopb/encode (= 3.30910.0)
   - nanopb/decode (3.30910.0)
   - nanopb/encode (3.30910.0)
-  - naver_login_sdk (0.0.1):
+  - naver_login_sdk (3.2.0):
     - Alamofire (~> 5.10.1)
     - Flutter
     - naveridlogin-sdk-ios (~> 4.2.3)
   - naveridlogin-sdk-ios (4.2.3)
   - package_info_plus (0.4.5):
     - Flutter
-  - path_provider_foundation (0.0.1):
-    - Flutter
-    - FlutterMacOS
   - permission_handler_apple (9.3.0):
     - Flutter
   - pointer_interceptor_ios (0.0.1):
     - Flutter
   - PromisesObjC (2.4.0)
-  - SDWebImage (5.21.6):
-    - SDWebImage/Core (= 5.21.6)
-  - SDWebImage/Core (5.21.6)
+  - SDWebImage (5.21.7):
+    - SDWebImage/Core (= 5.21.7)
+  - SDWebImage/Core (5.21.7)
   - Sentry/HybridSDK (8.56.2)
-  - sentry_flutter (9.13.0):
+  - sentry_flutter (9.14.0):
     - Flutter
     - FlutterMacOS
     - Sentry/HybridSDK (= 8.56.2)
@@ -266,7 +263,6 @@ DEPENDENCIES:
   - mixpanel_flutter (from `.symlinks/plugins/mixpanel_flutter/ios`)
   - naver_login_sdk (from `.symlinks/plugins/naver_login_sdk/ios`)
   - package_info_plus (from `.symlinks/plugins/package_info_plus/ios`)
-  - path_provider_foundation (from `.symlinks/plugins/path_provider_foundation/darwin`)
   - permission_handler_apple (from `.symlinks/plugins/permission_handler_apple/ios`)
   - pointer_interceptor_ios (from `.symlinks/plugins/pointer_interceptor_ios/ios`)
   - sentry_flutter (from `.symlinks/plugins/sentry_flutter/ios`)
@@ -341,8 +337,6 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/naver_login_sdk/ios"
   package_info_plus:
     :path: ".symlinks/plugins/package_info_plus/ios"
-  path_provider_foundation:
-    :path: ".symlinks/plugins/path_provider_foundation/darwin"
   permission_handler_apple:
     :path: ".symlinks/plugins/permission_handler_apple/ios"
   pointer_interceptor_ios:
@@ -399,16 +393,15 @@ SPEC CHECKSUMS:
   Mixpanel-swift: 630484a1b61cb90820aa34492798d542d9f1d0f1
   mixpanel_flutter: b0c5273729fb9e02920a3100b35055c53f4d7229
   nanopb: fad817b59e0457d11a5dfbde799381cd727c1275
-  naver_login_sdk: a13c3bf251ec87a0b86206e49850d7bff84de6a8
+  naver_login_sdk: daf2302b38c4060e606a2bd9572f7bc38445d47e
   naveridlogin-sdk-ios: d9d46d02119d303023d7000cd5963864d5bb89e5
   package_info_plus: af8e2ca6888548050f16fa2f1938db7b5a5df499
-  path_provider_foundation: bb55f6dbba17d0dccd6737fe6f7f34fbd0376880
   permission_handler_apple: 4ed2196e43d0651e8ff7ca3483a069d469701f2d
   pointer_interceptor_ios: da06a662d5bfd329602b45b2ab41bc0fb5fdb0f0
   PromisesObjC: f5707f49cb48b9636751c5b2e7d227e43fba9f47
-  SDWebImage: 1bb6a1b84b6fe87b972a102bdc77dd589df33477
+  SDWebImage: e9fc87c1aab89a8ab1bbd74eba378c6f53be8abf
   Sentry: b53951377b78e21a734f5dc8318e333dbfc682d7
-  sentry_flutter: dbed9a62ae39716b685a80140705c330d200d941
+  sentry_flutter: 841fa2fe08dc72eb95e2320b76e3f751f3400cf5
   share_plus: 50da8cb520a8f0f65671c6c6a99b3617ed10a58a
   shared_preferences_foundation: 7036424c3d8ec98dfe75ff1667cb0cd531ec82bb
   sign_in_with_apple: c5dcc141574c8c54d5ac99dd2163c0c72ad22418

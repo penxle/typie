@@ -12,7 +12,7 @@
     "codegen:watch": "doppler run -- dart run build_runner watch --delete-conflicting-outputs"
   },
   "devDependencies": {
-    "@iconify-json/lucide": "^1.2.91",
+    "@iconify-json/lucide": "^1.2.94",
     "@iconify-json/lucide-lab": "^1.2.3",
     "@iconify/tools": "^5.0.3",
     "change-case-all": "^2.1.0",
