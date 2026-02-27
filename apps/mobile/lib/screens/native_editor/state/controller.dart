@@ -125,6 +125,9 @@ class EditorController extends ChangeNotifier {
 
   void setFocused(bool focused) {
     if (_state.isFocused != focused) {
+      if (!focused) {
+        pendingScrollMode = null;
+      }
       _state = _state.copyWith(isFocused: focused);
       dispatch({'type': 'setFocused', 'focused': focused});
       notifyListeners();
