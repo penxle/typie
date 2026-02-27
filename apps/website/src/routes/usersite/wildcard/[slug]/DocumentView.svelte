@@ -10,6 +10,7 @@
   import mixpanel from 'mixpanel-browser';
   import { nanoid } from 'nanoid';
   import qs from 'query-string';
+  import { fade } from 'svelte/transition';
   import { z } from 'zod';
   import { TypieError } from '@/errors';
   import LockIcon from '~icons/lucide/lock';
@@ -27,6 +28,7 @@
   import ContentNavigation from './ContentNavigation.svelte';
   import DocumentActionMenu from './DocumentActionMenu.svelte';
   import DocumentEmojiReaction from './DocumentEmojiReaction.svelte';
+  import DocumentViewSkeleton from './DocumentViewSkeleton.svelte';
   import PostViewBodyUnavailable from './PostViewBodyUnavailable.svelte';
   import ReadOnlyTouchSelectionSuppress from './ReadOnlyTouchSelectionSuppress.svelte';
   import ShareLinkPopover from './ShareLinkPopover.svelte';
@@ -237,7 +239,14 @@
   editor.contentReady = true;
   ctx.editor = editor;
 
+  let editorReady = $state(false);
+
   const document = $derived(entityView.data.node.__typename === 'DocumentView' ? entityView.data.node : null);
+
+  $effect(() => {
+    void document?.id;
+    editorReady = false;
+  });
 
   $effect(() => {
     editor.protectContent = document?.protectContent ?? false;
@@ -367,9 +376,16 @@
       {#key document.id}
         {#if document.protectContent}
           <ContentProtect>
-            <EditorComponent {editor} {fontFamilies} readOnly snapshot={bodySnapshot} useWindowScroll>
+            <EditorComponent
+              {editor}
+              {fontFamilies}
+              onEditorReady={() => (editorReady = true)}
+              readOnly
+              snapshot={bodySnapshot}
+              useWindowScroll
+            >
               {#snippet header()}
-                <div class={css({ paddingTop: { base: '48px', md: '80px' } })}>
+                <div class={css({ position: 'relative', paddingTop: { base: '48px', md: '80px' } })}>
                   <nav class={flex({ alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginBottom: '20px' })}>
                     <a class={flex({ alignItems: 'center', gap: '6px' })} href={entityView.data.site.url}>
                       {#if entityView.data.site.logo}
@@ -428,6 +444,20 @@
                   {#if editor.layout?.layoutMode.type !== 'paginated'}
                     <HorizontalDivider style={css.raw({ marginBottom: '24px' })} />
                   {/if}
+
+                  {#if !editorReady}
+                    <div
+                      class={css({
+                        position: 'absolute',
+                        left: '0',
+                        right: '0',
+                        backgroundColor: 'surface.default',
+                      })}
+                      out:fade={{ duration: 150 }}
+                    >
+                      <DocumentViewSkeleton />
+                    </div>
+                  {/if}
                 </div>
               {/snippet}
 
@@ -458,9 +488,16 @@
             </EditorComponent>
           </ContentProtect>
         {:else}
-          <EditorComponent {editor} {fontFamilies} readOnly snapshot={bodySnapshot} useWindowScroll>
+          <EditorComponent
+            {editor}
+            {fontFamilies}
+            onEditorReady={() => (editorReady = true)}
+            readOnly
+            snapshot={bodySnapshot}
+            useWindowScroll
+          >
             {#snippet header()}
-              <div class={css({ paddingTop: { base: '48px', md: '80px' } })}>
+              <div class={css({ position: 'relative', paddingTop: { base: '48px', md: '80px' } })}>
                 <nav class={flex({ alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginBottom: '20px' })}>
                   <a class={flex({ alignItems: 'center', gap: '6px' })} href={entityView.data.site.url}>
                     {#if entityView.data.site.logo}
@@ -515,6 +552,20 @@
 
                 {#if editor.layout?.layoutMode.type !== 'paginated'}
                   <HorizontalDivider style={css.raw({ marginBottom: '24px' })} />
+                {/if}
+
+                {#if !editorReady}
+                  <div
+                    class={css({
+                      position: 'absolute',
+                      left: '0',
+                      right: '0',
+                      backgroundColor: 'surface.default',
+                    })}
+                    out:fade={{ duration: 150 }}
+                  >
+                    <DocumentViewSkeleton />
+                  </div>
                 {/if}
               </div>
             {/snippet}
