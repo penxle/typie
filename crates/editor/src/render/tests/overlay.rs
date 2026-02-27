@@ -217,6 +217,177 @@ fn selection_overlay_does_not_double_blend_selected_content() {
 }
 
 #[test]
+fn selection_fast_path_avoids_double_fill_for_pixel_snapped_overlap() {
+    let mut pixmap = Pixmap::new(32, 32).expect("pixmap");
+    let mut frame = pixmap.as_mut();
+    let color = tiny_skia::Color::from_rgba8(64, 128, 255, 77);
+
+    // 두 rect는 layout 좌표에서는 분리돼 있지만, floor/ceil 후에는 (10, 10) 픽셀에서 겹친다.
+    let rects = vec![
+        CacheRect::from_xywh(10.51, 0.0, 10.0, 10.49).expect("first rect"),
+        CacheRect::from_xywh(0.0, 10.51, 10.49, 10.0).expect("second rect"),
+    ];
+
+    Renderer::fill_layout_rects_src_over(&mut frame, &rects, 1.0, color);
+
+    let premul = color.premultiply().to_color_u8();
+    let overlap = rgba_at(pixmap.data(), 32, 10, 10);
+
+    assert_eq!(
+        overlap,
+        [premul.red(), premul.green(), premul.blue(), premul.alpha()],
+        "pixel snapping으로 rect가 겹쳐도 selection tint는 한 번만 적용돼야 함"
+    );
+}
+
+#[test]
+fn selection_non_text_clipped_phase_avoids_double_fill_for_pixel_snapped_overlap() {
+    let cell_id = NodeId::new();
+    let page = root_with_children(
+        Some(vec![PositionedNode {
+            position: Point::zero(),
+            node: Rc::new(LayoutNode {
+                size: Size::new(24.0, 24.0),
+                element: Some(Element::TableCell(TableCellElement::new(
+                    Size::new(24.0, 24.0),
+                    cell_id,
+                ))),
+                children: None,
+                page_break_policy: PageBreakPolicy::default(),
+                render_hints: RenderHints::default(),
+                scope_id: Some(cell_id),
+            }),
+        }]),
+        Size::new(32.0, 32.0),
+    );
+
+    let doc = Doc::new();
+    let mut renderer = Renderer::new(1.0, FrameDiagnostics::new());
+    renderer.set_size(32.0, 32.0, 1.0);
+
+    let mut colors = FxHashMap::default();
+    colors.insert("selection".to_string(), 0xff_00_00_ff);
+    renderer.set_theme(Theme { colors });
+
+    let mut output = vec![0u8; 32 * 32 * 4];
+    let mut pixmap = PixmapMut::from_bytes(&mut output, 32, 32).expect("pixmap");
+    let selection_data = SelectionOverlayData {
+        clip_rects: vec![
+            CacheRect::from_xywh(10.51, 0.0, 10.0, 10.49).expect("first rect"),
+            CacheRect::from_xywh(0.0, 10.51, 10.49, 10.0).expect("second rect"),
+        ],
+        text_paint_rects: vec![],
+        has_non_text_selection: true,
+    };
+
+    Renderer::render_selection_overlay(
+        &mut pixmap,
+        &mut renderer.glyph_renderer,
+        renderer.scale_factor,
+        &renderer.theme,
+        renderer.is_focused,
+        &page,
+        &[SelectionDecor::Cell { node_id: cell_id }],
+        &doc,
+        &selection_data,
+    );
+
+    let expected = renderer
+        .theme
+        .color_with_alpha("selection", 77)
+        .premultiply()
+        .to_color_u8();
+    let overlap = rgba_at(&output, 32, 10, 10);
+    assert_eq!(
+        overlap,
+        [
+            expected.red(),
+            expected.green(),
+            expected.blue(),
+            expected.alpha()
+        ],
+        "non-text clipped selection phase에서도 pixel 중복 페인트가 없어야 함"
+    );
+}
+
+#[test]
+fn selection_non_text_clipped_phase_respects_disjoint_clip_regions() {
+    let cell_id = NodeId::new();
+    let page = root_with_children(
+        Some(vec![PositionedNode {
+            position: Point::zero(),
+            node: Rc::new(LayoutNode {
+                size: Size::new(24.0, 24.0),
+                element: Some(Element::TableCell(TableCellElement::new(
+                    Size::new(24.0, 24.0),
+                    cell_id,
+                ))),
+                children: None,
+                page_break_policy: PageBreakPolicy::default(),
+                render_hints: RenderHints::default(),
+                scope_id: Some(cell_id),
+            }),
+        }]),
+        Size::new(32.0, 32.0),
+    );
+
+    let doc = Doc::new();
+    let mut renderer = Renderer::new(1.0, FrameDiagnostics::new());
+    renderer.set_size(32.0, 32.0, 1.0);
+
+    let mut colors = FxHashMap::default();
+    colors.insert("selection".to_string(), 0xff_00_00_ff);
+    renderer.set_theme(Theme { colors });
+
+    let mut output = vec![0u8; 32 * 32 * 4];
+    let mut pixmap = PixmapMut::from_bytes(&mut output, 32, 32).expect("pixmap");
+    let selection_data = SelectionOverlayData {
+        clip_rects: vec![
+            CacheRect::from_xywh(0.0, 0.0, 8.0, 24.0).expect("left clip"),
+            CacheRect::from_xywh(16.0, 0.0, 8.0, 24.0).expect("right clip"),
+        ],
+        text_paint_rects: vec![],
+        has_non_text_selection: true,
+    };
+
+    Renderer::render_selection_overlay(
+        &mut pixmap,
+        &mut renderer.glyph_renderer,
+        renderer.scale_factor,
+        &renderer.theme,
+        renderer.is_focused,
+        &page,
+        &[SelectionDecor::Cell { node_id: cell_id }],
+        &doc,
+        &selection_data,
+    );
+
+    let expected = renderer
+        .theme
+        .color_with_alpha("selection", 77)
+        .premultiply()
+        .to_color_u8();
+    let inside = rgba_at(&output, 32, 4, 12);
+    let outside = rgba_at(&output, 32, 12, 12);
+
+    assert_eq!(
+        inside,
+        [
+            expected.red(),
+            expected.green(),
+            expected.blue(),
+            expected.alpha()
+        ],
+        "clip 내부 픽셀은 selection 색으로 칠해져야 함"
+    );
+    assert_eq!(
+        outside,
+        [0, 0, 0, 0],
+        "clip 밖 픽셀은 non-text selection에서도 칠해지면 안 됨"
+    );
+}
+
+#[test]
 fn render_debug_marker_tracks_selection_overlay_repaint() {
     let line_id = NodeId::new();
     let cell_id = NodeId::new();

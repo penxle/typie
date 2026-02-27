@@ -372,13 +372,10 @@ impl Renderer {
         let dst_stride = pixmap.width() as usize * 4;
         let src_data = content_layer.data();
         let dst_data = pixmap.data_mut();
+        let pixel_rects =
+            collect_non_overlapping_pixel_rects(clip_rects, scale, max_width, max_height);
 
-        for rect in clip_rects {
-            let Some(pixel_rect) = PixelRect::from_layout_rect(*rect, scale, max_width, max_height)
-            else {
-                continue;
-            };
-
+        for pixel_rect in pixel_rects {
             let row_bytes = pixel_rect.width as usize * 4;
             let x_offset = pixel_rect.x as usize * 4;
             let y_start = pixel_rect.y as usize;
@@ -508,12 +505,9 @@ impl Renderer {
         let max_height = pixmap.height();
         let stride = pixmap.width() as usize * 4;
         let data = pixmap.data_mut();
-        for rect in rects {
-            let Some(pixel_rect) = PixelRect::from_layout_rect(*rect, scale, max_width, max_height)
-            else {
-                continue;
-            };
+        let pixel_rects = collect_non_overlapping_pixel_rects(rects, scale, max_width, max_height);
 
+        for pixel_rect in pixel_rects {
             let row_bytes = pixel_rect.width as usize * 4;
             let x_offset = pixel_rect.x as usize * 4;
             let y_start = pixel_rect.y as usize;

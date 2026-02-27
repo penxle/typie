@@ -163,6 +163,94 @@ pub(super) fn merge_and_clamp_rects(
     merged
 }
 
+pub(super) fn collect_non_overlapping_pixel_rects(
+    rects: &[CacheRect],
+    scale: f32,
+    max_width: u32,
+    max_height: u32,
+) -> Vec<PixelRect> {
+    let mut non_overlapping = Vec::new();
+
+    for rect in rects {
+        let Some(pixel_rect) = PixelRect::from_layout_rect(*rect, scale, max_width, max_height)
+        else {
+            continue;
+        };
+
+        append_pixel_rect_without_overlap(&mut non_overlapping, pixel_rect);
+    }
+
+    non_overlapping
+}
+
+fn append_pixel_rect_without_overlap(out: &mut Vec<PixelRect>, rect: PixelRect) {
+    let mut pending = vec![rect];
+
+    for existing in out.iter().copied() {
+        let mut next = Vec::new();
+        for candidate in pending {
+            next.extend(subtract_pixel_rect(candidate, existing));
+        }
+        if next.is_empty() {
+            return;
+        }
+        pending = next;
+    }
+
+    out.extend(pending);
+}
+
+fn subtract_pixel_rect(rect: PixelRect, overlap: PixelRect) -> Vec<PixelRect> {
+    let ix0 = rect.x.max(overlap.x);
+    let iy0 = rect.y.max(overlap.y);
+    let ix1 = rect.right().min(overlap.right());
+    let iy1 = rect.bottom().min(overlap.bottom());
+
+    if ix0 >= ix1 || iy0 >= iy1 {
+        return vec![rect];
+    }
+
+    let mut parts = Vec::with_capacity(4);
+
+    if rect.y < iy0 {
+        parts.push(PixelRect {
+            x: rect.x,
+            y: rect.y,
+            width: rect.width,
+            height: iy0 - rect.y,
+        });
+    }
+
+    if iy1 < rect.bottom() {
+        parts.push(PixelRect {
+            x: rect.x,
+            y: iy1,
+            width: rect.width,
+            height: rect.bottom() - iy1,
+        });
+    }
+
+    if rect.x < ix0 {
+        parts.push(PixelRect {
+            x: rect.x,
+            y: iy0,
+            width: ix0 - rect.x,
+            height: iy1 - iy0,
+        });
+    }
+
+    if ix1 < rect.right() {
+        parts.push(PixelRect {
+            x: ix1,
+            y: iy0,
+            width: rect.right() - ix1,
+            height: iy1 - iy0,
+        });
+    }
+
+    parts
+}
+
 pub(super) fn clear_layout_rect(pixmap: &mut Pixmap, rect: CacheRect, scale: f32) {
     let Some(pixel_rect) =
         PixelRect::from_layout_rect(rect, scale, pixmap.width(), pixmap.height())
