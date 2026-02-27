@@ -57,6 +57,8 @@ class PageItem extends HookWidget {
     final retryAttempts = useRef(0);
     final retryTimer = useRef<Timer?>(null);
     final isRenderTaskRunning = useRef(false);
+    final hasQueuedRender = useRef(false);
+    final latestLogicalSize = useRef<Size>(Size.zero)..value = Size(logicalPageWidth, logicalPageHeight);
 
     void resetRetryState() {
       retryAttempts.value = 0;
@@ -92,6 +94,7 @@ class PageItem extends HookWidget {
 
     Future<void> render() async {
       if (isRenderTaskRunning.value) {
+        hasQueuedRender.value = true;
         return;
       }
       isRenderTaskRunning.value = true;
@@ -99,34 +102,42 @@ class PageItem extends HookWidget {
       renderer.value ??= EditorTextureRenderer(editor: editor);
       final r = renderer.value!;
       try {
-        if (r.textureId == null) {
-          await r.create(pageIndex);
+        while (isMounted.value) {
+          hasQueuedRender.value = false;
+
+          if (r.textureId == null) {
+            await r.create(pageIndex);
+            if (!isMounted.value) {
+              return;
+            }
+          }
+          if (r.textureId == null) {
+            scheduleRetry(render);
+            return;
+          }
+
+          final didRender = await r.render(pageIndex);
           if (!isMounted.value) {
             return;
           }
-        }
-        if (r.textureId == null) {
-          scheduleRetry(render);
-          return;
-        }
+          if (!didRender) {
+            scheduleRetry(render);
+            return;
+          }
 
-        final didRender = await r.render(pageIndex);
-        if (!isMounted.value) {
-          return;
-        }
-        if (!didRender) {
-          scheduleRetry(render);
-          return;
-        }
+          resetRetryState();
+          textureId.value = r.textureId;
+          textureSize.value = latestLogicalSize.value;
 
-        resetRetryState();
-        textureId.value = r.textureId;
-        textureSize.value = Size(logicalPageWidth, logicalPageHeight);
+          final pending = scope.pendingScroll.value;
+          if (pending != null) {
+            scope.pendingScroll.value = null;
+            pending();
+          }
 
-        final pending = scope.pendingScroll.value;
-        if (pending != null) {
-          scope.pendingScroll.value = null;
-          pending();
+          if (!hasQueuedRender.value) {
+            return;
+          }
         }
       } finally {
         isRenderTaskRunning.value = false;
