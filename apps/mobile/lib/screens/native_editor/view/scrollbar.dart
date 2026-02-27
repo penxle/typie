@@ -18,8 +18,6 @@ const _trackWidth = 12.0;
 const _thumbWidth = 8.0;
 const _indicatorHeight = 24.0;
 const _indicatorGap = 14.0;
-const _thumbHitPadding = 20.0;
-const _thumbHitWidth = 44.0;
 
 enum _ScrollVisibilitySource { user, auto }
 
@@ -239,73 +237,77 @@ class EditorScrollbar extends HookWidget {
         if (hasVerticalScroll)
           Positioned(
             right: 0,
-            top: safeTop,
-            bottom: safeBottom + (hasHorizontalScroll ? _trackWidth : 0),
+            top: safeTop + thumbTop,
             width: _trackWidth,
+            height: thumbHeight,
             child: AnimatedOpacity(
               opacity: isVisible.value || isDraggingV.value ? (isUserScrollVisible ? 1.0 : 0.65) : 0.0,
               duration: const Duration(milliseconds: 300),
               child: IgnorePointer(
-                child: _VerticalScrollbarThumb(
-                  thumbTop: thumbTop,
-                  thumbHeight: thumbHeight,
-                  isDragging: isDraggingV.value,
-                  isUserScrollVisible: isUserScrollVisible,
+                ignoring: !isVisible.value && !isDraggingV.value,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTapDown: (details) {
+                    isDraggingV.value = true;
+                    dragStartThumbTop.value = thumbTop;
+                    dragStartY.value = details.globalPosition.dy;
+                    cancelHideTimer();
+                    showTemporarily(source: _ScrollVisibilitySource.user);
+                  },
+                  onTapUp: (_) {
+                    isDraggingV.value = false;
+                    showTemporarily(source: _ScrollVisibilitySource.user);
+                  },
+                  onTapCancel: () {},
+                  onPanStart: (details) {
+                    isDraggingV.value = true;
+                    dragStartThumbTop.value = thumbTop;
+                    dragStartY.value = details.globalPosition.dy;
+                    cancelHideTimer();
+                    showTemporarily(source: _ScrollVisibilitySource.user);
+                  },
+                  onPanUpdate: (details) {
+                    final dragVerticalPosition = resolveScrollPosition(verticalScrollController);
+                    if (!isDraggingV.value ||
+                        dragVerticalPosition == null ||
+                        !dragVerticalPosition.hasContentDimensions) {
+                      return;
+                    }
+                    final currentMaxExtent = dragVerticalPosition.maxScrollExtent;
+                    final deltaY = details.globalPosition.dy - dragStartY.value;
+                    final newThumbTop = dragStartThumbTop.value + deltaY;
+                    final ratio = thumbTravelV > 0
+                        ? ((newThumbTop - _trackPadding) / thumbTravelV).clamp(0.0, 1.0)
+                        : 0.0;
+                    dragVerticalPosition.jumpTo(ratio * currentMaxExtent);
+                    rebuildTrigger.value++;
+                  },
+                  onPanEnd: (_) {
+                    isDraggingV.value = false;
+                    showTemporarily(source: _ScrollVisibilitySource.user);
+                  },
+                  onPanCancel: () {
+                    isDraggingV.value = false;
+                    showTemporarily(source: _ScrollVisibilitySource.user);
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: _trackPadding),
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 100),
+                        width: _thumbWidth,
+                        height: thumbHeight,
+                        decoration: BoxDecoration(
+                          color: isDraggingV.value
+                              ? context.colors.surfaceInverse.withValues(alpha: isUserScrollVisible ? 0.8 : 0.45)
+                              : context.colors.surfaceInverse.withValues(alpha: isUserScrollVisible ? 0.5 : 0.22),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-            ),
-          ),
-        if (hasVerticalScroll)
-          Positioned(
-            right: 0,
-            top: safeTop + thumbTop - _thumbHitPadding,
-            width: _thumbHitWidth,
-            height: thumbHeight + _thumbHitPadding * 2,
-            child: IgnorePointer(
-              ignoring: !isVisible.value && !isDraggingV.value,
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTapDown: (details) {
-                  isDraggingV.value = true;
-                  dragStartThumbTop.value = thumbTop;
-                  dragStartY.value = details.globalPosition.dy;
-                  cancelHideTimer();
-                  showTemporarily(source: _ScrollVisibilitySource.user);
-                },
-                onTapUp: (_) {
-                  isDraggingV.value = false;
-                  showTemporarily(source: _ScrollVisibilitySource.user);
-                },
-                onTapCancel: () {},
-                onPanStart: (details) {
-                  isDraggingV.value = true;
-                  dragStartThumbTop.value = thumbTop;
-                  dragStartY.value = details.globalPosition.dy;
-                  cancelHideTimer();
-                  showTemporarily(source: _ScrollVisibilitySource.user);
-                },
-                onPanUpdate: (details) {
-                  final dragVerticalPosition = resolveScrollPosition(verticalScrollController);
-                  if (!isDraggingV.value ||
-                      dragVerticalPosition == null ||
-                      !dragVerticalPosition.hasContentDimensions) {
-                    return;
-                  }
-                  final currentMaxExtent = dragVerticalPosition.maxScrollExtent;
-                  final deltaY = details.globalPosition.dy - dragStartY.value;
-                  final newThumbTop = dragStartThumbTop.value + deltaY;
-                  final ratio = thumbTravelV > 0 ? ((newThumbTop - _trackPadding) / thumbTravelV).clamp(0.0, 1.0) : 0.0;
-                  dragVerticalPosition.jumpTo(ratio * currentMaxExtent);
-                  rebuildTrigger.value++;
-                },
-                onPanEnd: (_) {
-                  isDraggingV.value = false;
-                  showTemporarily(source: _ScrollVisibilitySource.user);
-                },
-                onPanCancel: () {
-                  isDraggingV.value = false;
-                  showTemporarily(source: _ScrollVisibilitySource.user);
-                },
               ),
             ),
           ),
@@ -340,158 +342,86 @@ class EditorScrollbar extends HookWidget {
           ),
         if (hasHorizontalScroll)
           Positioned(
-            left: safeLeft + safeBottom,
-            right: safeRight + safeBottom + (hasVerticalScroll ? _trackWidth : 0),
+            left: safeLeft + safeBottom + thumbLeft,
             bottom: 0,
+            width: thumbWidthH,
             height: _trackWidth,
             child: AnimatedOpacity(
               opacity: isVisible.value || isDraggingH.value ? (isUserScrollVisible ? 1.0 : 0.65) : 0.0,
               duration: const Duration(milliseconds: 300),
               child: IgnorePointer(
-                child: _HorizontalScrollbarThumb(
-                  thumbLeft: thumbLeft,
-                  thumbWidth: thumbWidthH,
-                  isDragging: isDraggingH.value,
-                  isUserScrollVisible: isUserScrollVisible,
+                ignoring: !isVisible.value && !isDraggingH.value,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTapDown: (details) {
+                    isDraggingH.value = true;
+                    dragStartThumbLeft.value = thumbLeft;
+                    dragStartX.value = details.globalPosition.dx;
+                    cancelHideTimer();
+                    showTemporarily(source: _ScrollVisibilitySource.user);
+                  },
+                  onTapUp: (_) {
+                    isDraggingH.value = false;
+                    showTemporarily(source: _ScrollVisibilitySource.user);
+                  },
+                  onTapCancel: () {},
+                  onPanStart: (details) {
+                    isDraggingH.value = true;
+                    dragStartThumbLeft.value = thumbLeft;
+                    dragStartX.value = details.globalPosition.dx;
+                    cancelHideTimer();
+                    showTemporarily(source: _ScrollVisibilitySource.user);
+                  },
+                  onPanUpdate: (details) {
+                    final dragHorizontalMetrics = resolveHorizontalScrollMetrics(
+                      controller: horizontalScrollController,
+                      contentWidth: geometry.contentWidth,
+                      fallbackViewportDimension: viewWidth,
+                    );
+                    final dragHorizontalPosition = dragHorizontalMetrics.activePosition;
+                    if (!isDraggingH.value ||
+                        dragHorizontalPosition == null ||
+                        !dragHorizontalMetrics.canScrollHorizontally) {
+                      return;
+                    }
+                    final currentMaxExtent = dragHorizontalPosition.maxScrollExtent;
+                    final deltaX = details.globalPosition.dx - dragStartX.value;
+                    final newThumbLeft = dragStartThumbLeft.value + deltaX;
+                    final ratio = thumbTravelH > 0
+                        ? ((newThumbLeft - _trackPadding) / thumbTravelH).clamp(0.0, 1.0)
+                        : 0.0;
+                    dragHorizontalPosition.jumpTo(ratio * currentMaxExtent);
+                    rebuildTrigger.value++;
+                  },
+                  onPanEnd: (_) {
+                    isDraggingH.value = false;
+                    showTemporarily(source: _ScrollVisibilitySource.user);
+                  },
+                  onPanCancel: () {
+                    isDraggingH.value = false;
+                    showTemporarily(source: _ScrollVisibilitySource.user);
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: _trackPadding),
+                    child: Align(
+                      alignment: Alignment.bottomCenter,
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 100),
+                        width: thumbWidthH,
+                        height: _thumbWidth,
+                        decoration: BoxDecoration(
+                          color: isDraggingH.value
+                              ? context.colors.surfaceInverse.withValues(alpha: isUserScrollVisible ? 0.8 : 0.45)
+                              : context.colors.surfaceInverse.withValues(alpha: isUserScrollVisible ? 0.5 : 0.22),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),
           ),
-        if (hasHorizontalScroll)
-          Positioned(
-            left: safeLeft + safeBottom + thumbLeft - _thumbHitPadding,
-            bottom: 0,
-            width: thumbWidthH + _thumbHitPadding * 2,
-            height: _thumbHitWidth,
-            child: IgnorePointer(
-              ignoring: !isVisible.value && !isDraggingH.value,
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTapDown: (details) {
-                  isDraggingH.value = true;
-                  dragStartThumbLeft.value = thumbLeft;
-                  dragStartX.value = details.globalPosition.dx;
-                  cancelHideTimer();
-                  showTemporarily(source: _ScrollVisibilitySource.user);
-                },
-                onTapUp: (_) {
-                  isDraggingH.value = false;
-                  showTemporarily(source: _ScrollVisibilitySource.user);
-                },
-                onTapCancel: () {},
-                onPanStart: (details) {
-                  isDraggingH.value = true;
-                  dragStartThumbLeft.value = thumbLeft;
-                  dragStartX.value = details.globalPosition.dx;
-                  cancelHideTimer();
-                  showTemporarily(source: _ScrollVisibilitySource.user);
-                },
-                onPanUpdate: (details) {
-                  final dragHorizontalMetrics = resolveHorizontalScrollMetrics(
-                    controller: horizontalScrollController,
-                    contentWidth: geometry.contentWidth,
-                    fallbackViewportDimension: viewWidth,
-                  );
-                  final dragHorizontalPosition = dragHorizontalMetrics.activePosition;
-                  if (!isDraggingH.value ||
-                      dragHorizontalPosition == null ||
-                      !dragHorizontalMetrics.canScrollHorizontally) {
-                    return;
-                  }
-                  final currentMaxExtent = dragHorizontalPosition.maxScrollExtent;
-                  final deltaX = details.globalPosition.dx - dragStartX.value;
-                  final newThumbLeft = dragStartThumbLeft.value + deltaX;
-                  final ratio = thumbTravelH > 0
-                      ? ((newThumbLeft - _trackPadding) / thumbTravelH).clamp(0.0, 1.0)
-                      : 0.0;
-                  dragHorizontalPosition.jumpTo(ratio * currentMaxExtent);
-                  rebuildTrigger.value++;
-                },
-                onPanEnd: (_) {
-                  isDraggingH.value = false;
-                  showTemporarily(source: _ScrollVisibilitySource.user);
-                },
-                onPanCancel: () {
-                  isDraggingH.value = false;
-                  showTemporarily(source: _ScrollVisibilitySource.user);
-                },
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-class _VerticalScrollbarThumb extends StatelessWidget {
-  const _VerticalScrollbarThumb({
-    required this.thumbTop,
-    required this.thumbHeight,
-    required this.isDragging,
-    required this.isUserScrollVisible,
-  });
-
-  final double thumbTop;
-  final double thumbHeight;
-  final bool isDragging;
-  final bool isUserScrollVisible;
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        Positioned(
-          right: _trackPadding,
-          top: thumbTop,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 100),
-            width: _thumbWidth,
-            height: thumbHeight,
-            decoration: BoxDecoration(
-              color: isDragging
-                  ? context.colors.surfaceInverse.withValues(alpha: isUserScrollVisible ? 0.8 : 0.45)
-                  : context.colors.surfaceInverse.withValues(alpha: isUserScrollVisible ? 0.5 : 0.22),
-              borderRadius: BorderRadius.circular(4),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _HorizontalScrollbarThumb extends StatelessWidget {
-  const _HorizontalScrollbarThumb({
-    required this.thumbLeft,
-    required this.thumbWidth,
-    required this.isDragging,
-    required this.isUserScrollVisible,
-  });
-
-  final double thumbLeft;
-  final double thumbWidth;
-  final bool isDragging;
-  final bool isUserScrollVisible;
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        Positioned(
-          left: thumbLeft,
-          bottom: _trackPadding,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 100),
-            width: thumbWidth,
-            height: _thumbWidth,
-            decoration: BoxDecoration(
-              color: isDragging
-                  ? context.colors.surfaceInverse.withValues(alpha: isUserScrollVisible ? 0.8 : 0.45)
-                  : context.colors.surfaceInverse.withValues(alpha: isUserScrollVisible ? 0.5 : 0.22),
-              borderRadius: BorderRadius.circular(4),
-            ),
-          ),
-        ),
       ],
     );
   }
