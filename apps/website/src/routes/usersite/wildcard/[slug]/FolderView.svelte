@@ -6,6 +6,7 @@
   import dayjs from 'dayjs';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
   import FolderIcon from '~icons/lucide/folder';
+  import { env } from '$env/dynamic/public';
   import { Img } from '$lib/components';
   import { graphql } from '$mearie';
   import ShareLinkPopover from './ShareLinkPopover.svelte';
@@ -125,6 +126,7 @@
 {#if entityView.data.node.__typename === 'FolderView'}
   <Helmet
     description={`${entityView.data.node.name}에서 공유된 폴더 ${folders.length}개, 포스트 ${posts.length}개를 확인하세요.`}
+    image={{ size: 'large', src: `${env.PUBLIC_API_URL}/og/${entityView.data.id}` }}
     title={entityView.data.node.name}
   />
 

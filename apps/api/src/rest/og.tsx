@@ -48,6 +48,9 @@ const fonts = await loadFonts([
   'SUIT-ExtraBold.otf',
   'NotoSansKR-Medium.ttf',
   'NotoSansKR-ExtraBold.ttf',
+  'Paperlogy-4Regular.ttf',
+  'Paperlogy-7Bold.ttf',
+  'DeepMindSans-Regular.ttf',
 ]);
 
 const colors = {
@@ -99,6 +102,9 @@ og.get('/:entityId', async (c) => {
       { name: 'SUIT', data: fonts['SUIT-ExtraBold.otf'], weight: 800 },
       { name: 'NotoSansKR', data: fonts['NotoSansKR-Medium.ttf'], weight: 500 },
       { name: 'NotoSansKR', data: fonts['NotoSansKR-ExtraBold.ttf'], weight: 800 },
+      { name: 'Paperlogy', data: fonts['Paperlogy-4Regular.ttf'], weight: 400 },
+      { name: 'Paperlogy', data: fonts['Paperlogy-7Bold.ttf'], weight: 700 },
+      { name: 'DeepMindSans', data: fonts['DeepMindSans-Regular.ttf'], weight: 400 },
     ],
     loadAdditionalAsset: async (code, segment) => {
       const svg = await match(code)
@@ -176,9 +182,11 @@ const renderFolder = async (entityId: string) => {
   const folder = await db
     .select({
       name: Folders.name,
+      thumbnailPath: Images.path,
     })
     .from(Entities)
     .innerJoin(Folders, eq(Folders.entityId, Entities.id))
+    .leftJoin(Images, eq(Images.id, Folders.thumbnailId))
     .where(eq(Entities.id, entityId))
     .then(first);
 
@@ -186,16 +194,83 @@ const renderFolder = async (entityId: string) => {
     throw new HTTPException(404);
   }
 
-  return <div>{folder.name}</div>;
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        width: '1200px',
+        height: '630px',
+        fontFamily: 'Paperlogy',
+        backgroundColor: colors.white,
+      }}
+    >
+      <div style={{ width: '1200px', height: '6px', backgroundColor: '#fd9a00' }} />
+
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between',
+          flex: 1,
+          padding: '80px 100px',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '60px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', flex: 1 }}>
+            <div
+              style={{
+                display: 'block',
+                fontSize: '56px',
+                fontWeight: 700,
+                color: colors.gray[950],
+                lineHeight: '1.3',
+                lineClamp: 2,
+                wordBreak: 'break-all',
+              }}
+            >
+              {folder.name}
+            </div>
+          </div>
+
+          {folder.thumbnailPath && (
+            <img
+              src={await toDataUri(folder.thumbnailPath)}
+              width={200}
+              height={200}
+              style={{ objectFit: 'cover', borderRadius: '12px' }}
+            />
+          )}
+        </div>
+
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            fontSize: '28px',
+            fontWeight: 400,
+            color: colors.gray[400],
+          }}
+        >
+          <span>TYPIE &mdash; 작가를 위한 글쓰기 도구</span>
+          <span style={{ fontFamily: 'DeepMindSans' }}>typie.co</span>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 const renderDocument = async (entityId: string) => {
   const document = await db
     .select({
       title: Documents.title,
+      subtitle: Documents.subtitle,
+      thumbnailPath: Images.path,
     })
     .from(Entities)
     .innerJoin(Documents, eq(Documents.entityId, Entities.id))
+    .leftJoin(Images, eq(Images.id, Documents.thumbnailId))
     .where(eq(Entities.id, entityId))
     .then(first);
 
@@ -207,18 +282,79 @@ const renderDocument = async (entityId: string) => {
     <div
       style={{
         display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
+        flexDirection: 'column',
         width: '1200px',
         height: '630px',
-        fontFamily: 'SUIT, Pretendard, NotoSansKR, KoPubWorldDotum',
-        fontSize: '60px',
-        fontWeight: 800,
-        color: colors.gray[950],
-        backgroundColor: colors.gray[100],
+        fontFamily: 'Paperlogy',
+        backgroundColor: colors.white,
       }}
     >
-      {document.title ?? '(제목 없음)'}
+      <div style={{ width: '1200px', height: '6px', backgroundColor: '#fd9a00' }} />
+
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between',
+          flex: 1,
+          padding: '80px 100px',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '60px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', flex: 1 }}>
+            <div
+              style={{
+                display: 'block',
+                fontSize: '56px',
+                fontWeight: 700,
+                color: colors.gray[950],
+                lineHeight: '1.3',
+                lineClamp: 2,
+                wordBreak: 'break-all',
+              }}
+            >
+              {document.title ?? '(제목 없음)'}
+            </div>
+
+            {document.subtitle && (
+              <div
+                style={{
+                  display: 'block',
+                  fontSize: '30px',
+                  fontWeight: 400,
+                  color: colors.gray[500],
+                  lineClamp: 1,
+                }}
+              >
+                {document.subtitle}
+              </div>
+            )}
+          </div>
+
+          {document.thumbnailPath && (
+            <img
+              src={await toDataUri(document.thumbnailPath)}
+              width={200}
+              height={200}
+              style={{ objectFit: 'cover', borderRadius: '12px' }}
+            />
+          )}
+        </div>
+
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            fontSize: '28px',
+            fontWeight: 400,
+            color: colors.gray[400],
+          }}
+        >
+          <span>TYPIE &mdash; 작가를 위한 글쓰기 도구</span>
+          <span style={{ fontFamily: 'DeepMindSans' }}>typie.co</span>
+        </div>
+      </div>
     </div>
   );
 };
