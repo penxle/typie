@@ -7,6 +7,7 @@ import android.view.KeyCharacterMap
 import android.view.KeyEvent
 import android.view.View
 import android.view.inputmethod.BaseInputConnection
+import android.view.inputmethod.CorrectionInfo
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import android.view.inputmethod.InputConnectionWrapper
@@ -82,6 +83,11 @@ class EditorInputNativeView(
   private var composingRegionEnd = -1
   private var composingPrefixToStrip = ""
   private var hasPendingRegionNormalization = false
+  private var batchEditDepth = 0
+  private var batchEditStartText = ""
+  private var batchEditStartSelectionStart = -1
+  private var batchEditStartSelectionEnd = -1
+  private var batchEditHadBridgedMutation = false
 
   private val inputMethodManager: InputMethodManager
     get() = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
@@ -95,6 +101,12 @@ class EditorInputNativeView(
 
   private fun clearComposingPrefixTracking() {
     composingPrefixToStrip = ""
+  }
+
+  private fun noteBridgedTextMutation() {
+    if (batchEditDepth > 0) {
+      batchEditHadBridgedMutation = true
+    }
   }
 
   private fun currentComposingRegionText(): String {
@@ -273,6 +285,7 @@ class EditorInputNativeView(
       return false
     }
 
+    // 커서 이동 후 stale region 삭제 방지
     val currentSeed = editable.subSequence(normalizedStart, normalizedEnd).toString()
     if (currentSeed != pendingRegion.seed) {
       clearComposingRegionTracking()
@@ -304,6 +317,7 @@ class EditorInputNativeView(
   }
 
   private fun performDelete() {
+    noteBridgedTextMutation()
     channel.invokeMethod("deleteBackward", emptyMap<String, Any>())
   }
 
@@ -317,6 +331,9 @@ class EditorInputNativeView(
   }
 
   private fun insertTextOrNewline(text: String) {
+    if (text.isNotEmpty()) {
+      noteBridgedTextMutation()
+    }
     if (text == "\n") {
       channel.invokeMethod("performAction", mapOf("action" to "newline"))
     } else {
@@ -400,9 +417,61 @@ class EditorInputNativeView(
       private fun handleNewline() {
         commitComposingState()
         super.finishComposingText()
+        noteBridgedTextMutation()
         channel.invokeMethod("performAction", mapOf("action" to "newline"))
         super.commitText("\n", 1)
         notifyCursorUpdate()
+      }
+
+      private fun reconcileBatchTextMutation(beforeText: String, afterText: String): Boolean {
+        // Gboard 더블 스페이스(. )처럼 batch edit 직접 변경되는 케이스 동기화
+        if (beforeText == afterText) return false
+        if (isComposing) return false
+        if (composingRegionLength > 0 || hasPendingRegionNormalization || composingPrefixToStrip.isNotEmpty()) return false
+        if (batchEditStartSelectionStart < 0 || batchEditStartSelectionEnd < 0) return false
+        if (batchEditStartSelectionStart != batchEditStartSelectionEnd) return false
+
+        val editable = text ?: return false
+        val composingStart = BaseInputConnection.getComposingSpanStart(editable)
+        val composingEnd = BaseInputConnection.getComposingSpanEnd(editable)
+        if (composingStart >= 0 && composingEnd >= composingStart) return false
+
+        val startCursor = batchEditStartSelectionStart.coerceIn(0, beforeText.length)
+        val beforePrefix = beforeText.substring(0, startCursor)
+        val beforeSuffix = beforeText.substring(startCursor)
+        // 커서 뒤 텍스트가 유지되는 치환만 브리지
+        if (!afterText.endsWith(beforeSuffix)) return false
+        val coreAfter = afterText.substring(0, afterText.length - beforeSuffix.length)
+
+        var commonPrefix = 0
+        val minLength = kotlin.math.min(beforePrefix.length, coreAfter.length)
+        while (commonPrefix < minLength && beforePrefix[commonPrefix] == coreAfter[commonPrefix]) {
+          commonPrefix += 1
+        }
+
+        val removedLength = beforePrefix.length - commonPrefix
+        val insertedText = coreAfter.substring(commonPrefix)
+        if (removedLength <= 0 && insertedText.isEmpty()) return false
+
+        val selectionStart = Selection.getSelectionStart(editable)
+        val selectionEnd = Selection.getSelectionEnd(editable)
+        if (selectionStart < 0 || selectionEnd < 0 || selectionStart != selectionEnd) return false
+
+        val expectedCursor = commonPrefix + insertedText.length
+        if (selectionStart != expectedCursor) return false
+
+        if (removedLength > 0) {
+          noteBridgedTextMutation()
+          channel.invokeMethod("replaceBackward", mapOf("length" to removedLength, "text" to insertedText))
+          return true
+        }
+
+        if (insertedText.isNotEmpty()) {
+          insertTextOrNewline(insertedText)
+          return true
+        }
+
+        return false
       }
 
       override fun commitText(text: CharSequence?, newCursorPosition: Int): Boolean {
@@ -486,6 +555,38 @@ class EditorInputNativeView(
         return finishComposingNow()
       }
 
+      override fun beginBatchEdit(): Boolean {
+        if (batchEditDepth == 0) {
+          batchEditStartText = text?.toString().orEmpty()
+          val editable = text
+          batchEditStartSelectionStart = editable?.let { Selection.getSelectionStart(it) } ?: -1
+          batchEditStartSelectionEnd = editable?.let { Selection.getSelectionEnd(it) } ?: -1
+          batchEditHadBridgedMutation = false
+        }
+        batchEditDepth += 1
+        return super.beginBatchEdit()
+      }
+
+      override fun endBatchEdit(): Boolean {
+        val result = super.endBatchEdit()
+        if (batchEditDepth > 0) {
+          batchEditDepth -= 1
+        }
+        if (batchEditDepth == 0) {
+          val finalText = text?.toString().orEmpty()
+          // 배치 내 브리지 반영이 있으면 중복 반영 금지
+          val shouldReconcile = !batchEditHadBridgedMutation && finalText != batchEditStartText
+          if (shouldReconcile) {
+            reconcileBatchTextMutation(batchEditStartText, finalText)
+          }
+          batchEditStartText = finalText
+          batchEditStartSelectionStart = -1
+          batchEditStartSelectionEnd = -1
+          batchEditHadBridgedMutation = false
+        }
+        return result
+      }
+
       override fun deleteSurroundingText(beforeLength: Int, afterLength: Int): Boolean {
         if (isComposing) {
           cancelComposingState()
@@ -503,6 +604,22 @@ class EditorInputNativeView(
 
       override fun deleteSurroundingTextInCodePoints(beforeLength: Int, afterLength: Int): Boolean {
         return deleteSurroundingText(beforeLength, afterLength)
+      }
+
+      override fun commitCorrection(correctionInfo: CorrectionInfo?): Boolean {
+        val oldText = correctionInfo?.oldText?.toString().orEmpty()
+        val newText = correctionInfo?.newText?.toString().orEmpty()
+
+        if (oldText.isNotEmpty()) {
+          noteBridgedTextMutation()
+          channel.invokeMethod("replaceBackward", mapOf("length" to oldText.length, "text" to newText))
+        } else if (newText.isNotEmpty()) {
+          insertTextOrNewline(newText)
+        }
+
+        val result = super.commitCorrection(correctionInfo)
+        notifyCursorUpdate()
+        return result
       }
 
       override fun setComposingRegion(start: Int, end: Int): Boolean {
@@ -583,7 +700,7 @@ class EditorInputNativeView(
             }
             commitComposingState()
             super.finishComposingText()
-            channel.invokeMethod("insertText", mapOf("text" to " "))
+            insertTextOrNewline(" ")
             super.commitText(" ", 1)
             notifyCursorUpdate()
             true
@@ -603,7 +720,7 @@ class EditorInputNativeView(
               val text = unicode.toChar().toString()
               commitComposingState()
               super.finishComposingText()
-              channel.invokeMethod("insertText", mapOf("text" to text))
+              insertTextOrNewline(text)
               super.commitText(text, 1)
               notifyCursorUpdate()
               return true
