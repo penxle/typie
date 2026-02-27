@@ -15,7 +15,7 @@ use image::*;
 use outline::*;
 use skrifa::{
     GlyphId, MetadataProvider,
-    bitmap::{BitmapData, BitmapStrikes, Origin},
+    bitmap::{BitmapData, BitmapStrikes, MaskData, Origin},
     instance::{NormalizedCoord as SkrifaNormalizedCoord, Size as SkrifaSize},
     outline::OutlineGlyphCollection,
     raw::TableProvider,
@@ -368,13 +368,13 @@ impl<'a> Scaler<'a> {
             ),
         };
 
-        // Decode bitmap data into RGBA
+        // Decode bitmap data to either RGBA or alpha mask.
         let src_buf_size = (src_width * src_height * 4) as usize;
         self.state.scratch0.clear();
         self.state.scratch0.resize(src_buf_size, 0);
 
         let decoded = match &bitmap_glyph.data {
-            BitmapData::Png(png_data) => {
+            BitmapData::Png(png_data) if color => {
                 self.state.scratch1.clear();
                 let (dw, dh) =
                     decode_png(png_data, &mut self.state.scratch1, &mut self.state.scratch0)?;
@@ -382,7 +382,7 @@ impl<'a> Scaler<'a> {
                 premultiply_rgba(&mut self.state.scratch0[..(dw * dh * 4) as usize]);
                 Some((dw, dh))
             }
-            BitmapData::Bgra(data) => {
+            BitmapData::Bgra(data) if color => {
                 // Convert BGRA to premultiplied RGBA
                 for (i, chunk) in data.chunks_exact(4).enumerate() {
                     let (b, g, r, a) = (chunk[0], chunk[1], chunk[2], chunk[3]);
@@ -404,22 +404,56 @@ impl<'a> Scaler<'a> {
                 }
                 Some((src_width, src_height))
             }
-            BitmapData::Mask(mask_data) => {
-                // Alpha-only mask → we produce a Mask content
-                image.data.clear();
-                image.data.extend_from_slice(mask_data.data);
+            BitmapData::Mask(mask_data) if !color => {
+                let decoded_len = (src_width * src_height) as usize;
+                self.state.scratch0.clear();
+                self.state.scratch0.resize(decoded_len, 0);
+                if !decode_bitmap_mask(mask_data, src_width, src_height, &mut self.state.scratch0) {
+                    return None;
+                }
+
+                let dst_width = ((src_width as f32) * scale).ceil() as u32;
+                let dst_height = ((src_height as f32) * scale).ceil() as u32;
+                if dst_width == 0 || dst_height == 0 {
+                    return None;
+                }
+
+                if scale != 1.0 {
+                    image.data.resize((dst_width * dst_height) as usize, 0);
+                    if !bitmap::resize(
+                        &self.state.scratch0,
+                        src_width,
+                        src_height,
+                        1,
+                        &mut image.data,
+                        dst_width,
+                        dst_height,
+                        bitmap::Filter::Mitchell,
+                        Some(&mut self.state.scratch1),
+                    ) {
+                        return None;
+                    }
+                } else {
+                    image.data.clear();
+                    image.data.extend_from_slice(&self.state.scratch0);
+                }
+
                 let left = (bearing_x * scale) as i32;
                 let top = -(bearing_y * scale) as i32;
                 image.placement = Placement {
                     left,
                     top,
-                    width: src_width,
-                    height: src_height,
+                    width: dst_width,
+                    height: dst_height,
                 };
                 image.content = Content::Mask;
-                image.source = Source::Bitmap(strike);
+                image.source = match color {
+                    true => Source::ColorBitmap(strike),
+                    false => Source::Bitmap(strike),
+                };
                 return Some(true);
             }
+            _ => return None,
         }?;
 
         let (dw, dh) = decoded;
@@ -467,6 +501,57 @@ impl<'a> Scaler<'a> {
         image.content = Content::Color;
         Some(true)
     }
+}
+
+fn decode_bitmap_mask(mask: &MaskData<'_>, width: u32, height: u32, target: &mut [u8]) -> bool {
+    let pixel_count = width as usize * height as usize;
+    if target.len() < pixel_count {
+        return false;
+    }
+
+    let bpp = match mask.bpp {
+        1 | 2 | 4 | 8 => mask.bpp as usize,
+        _ => return false,
+    };
+
+    let max_sample = ((1u16 << bpp) - 1) as u16;
+    let row_bits = width as usize * bpp;
+    let stride_bits = if mask.is_packed {
+        row_bits
+    } else {
+        row_bits.next_multiple_of(8)
+    };
+    let total_bits = stride_bits * height as usize;
+    let required_bytes = total_bits.div_ceil(8);
+    if mask.data.len() < required_bytes {
+        return false;
+    }
+
+    let mut out = 0usize;
+    for y in 0..height as usize {
+        let row_base = y * stride_bits;
+        for x in 0..width as usize {
+            let sample = read_packed_sample(mask.data, row_base + x * bpp, bpp);
+            target[out] = if bpp == 8 {
+                sample
+            } else {
+                ((sample as u16 * 255 + max_sample / 2) / max_sample) as u8
+            };
+            out += 1;
+        }
+    }
+    true
+}
+
+fn read_packed_sample(data: &[u8], bit_start: usize, bpp: usize) -> u8 {
+    let mut sample = 0u8;
+    for bit in 0..bpp {
+        let bit_index = bit_start + bit;
+        let byte = data[bit_index / 8];
+        let shift = 7 - (bit_index % 8);
+        sample = (sample << 1) | ((byte >> shift) & 1);
+    }
+    sample
 }
 
 /// Builder type for rendering a glyph into an image.
@@ -680,5 +765,57 @@ fn premultiply_rgba(data: &mut [u8]) {
             chunk[1] = ((chunk[1] as u16 * a) / 255) as u8;
             chunk[2] = ((chunk[2] as u16 * a) / 255) as u8;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::decode_bitmap_mask;
+    use skrifa::bitmap::MaskData;
+
+    #[test]
+    fn decode_bitmap_mask_1bpp_unpacked() {
+        let mask = MaskData {
+            bpp: 1,
+            is_packed: false,
+            data: &[0b1010_0101],
+        };
+        let mut out = [0u8; 8];
+        assert!(decode_bitmap_mask(&mask, 8, 1, &mut out));
+        assert_eq!(out, [255, 0, 255, 0, 0, 255, 0, 255]);
+    }
+
+    #[test]
+    fn decode_bitmap_mask_2bpp_unpacked() {
+        let mask = MaskData {
+            bpp: 2,
+            is_packed: false,
+            data: &[0b0001_1011],
+        };
+        let mut out = [0u8; 4];
+        assert!(decode_bitmap_mask(&mask, 4, 1, &mut out));
+        assert_eq!(out, [0, 85, 170, 255]);
+    }
+
+    #[test]
+    fn decode_bitmap_mask_packed_and_unpacked_match() {
+        let mut packed_out = [0u8; 6];
+        let packed = MaskData {
+            bpp: 1,
+            is_packed: true,
+            data: &[0b1010_1100],
+        };
+        assert!(decode_bitmap_mask(&packed, 3, 2, &mut packed_out));
+
+        let mut unpacked_out = [0u8; 6];
+        let unpacked = MaskData {
+            bpp: 1,
+            is_packed: false,
+            data: &[0b1010_0000, 0b0110_0000],
+        };
+        assert!(decode_bitmap_mask(&unpacked, 3, 2, &mut unpacked_out));
+
+        assert_eq!(packed_out, [255, 0, 255, 0, 255, 255]);
+        assert_eq!(unpacked_out, packed_out);
     }
 }
