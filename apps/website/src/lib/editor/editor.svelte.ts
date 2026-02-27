@@ -3,7 +3,7 @@ import { Tip } from '@typie/ui/notification';
 import { nanoid } from 'nanoid';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { defaultValues } from '@/const';
-import { wasm } from '$lib/wasm';
+import { initWasm, wasm } from '$lib/wasm';
 import { PAGE_GAP } from './constants';
 import { ensureRequiredFallbackFont, ensureRequiredFont, filterUncoveredCodepoints, initFonts, preloadRemainingChunks } from './fonts';
 import {
@@ -59,6 +59,7 @@ let initPromise: Promise<void> | null = null;
 function ensureInitialized(): Promise<void> {
   if (!initPromise) {
     initPromise = (async () => {
+      await initWasm();
       const icuPostcard = await fetch(icuPostcardUrl).then((res) => res.arrayBuffer());
       wasm.loadIcuData(new Uint8Array(icuPostcard));
       await initFonts(wasm);
