@@ -102,18 +102,21 @@
     blockGap?: number;
   };
 
-  const template = $derived<PresetPreference>((user.data.preferences as Record<string, unknown>)?.template ?? {});
+  const userId = $derived(user.data?.id);
+  const preferences = $derived((user.data?.preferences as Record<string, unknown> | undefined) ?? {});
+  const documentFontFamilies = $derived(user.data?.documentFontFamilies ?? []);
+  const template = $derived<PresetPreference>((preferences.template as PresetPreference | undefined) ?? {});
 
   const fontFamily = $derived(template.fontFamily ?? defaultValues.fontFamily);
   const fontSize = $derived(template.fontSize ?? defaultValues.fontSize);
   const fontWeight = $derived(template.fontWeight ?? defaultValues.fontWeight);
 
   const fontFamilyItems = $derived(
-    user.data.documentFontFamilies.filter((f) => f.state === 'ACTIVE').map((f) => ({ value: f.familyName, label: f.displayName })),
+    documentFontFamilies.filter((f) => f.state === 'ACTIVE').map((f) => ({ value: f.familyName, label: f.displayName })),
   );
 
   const currentFontFamilyFonts = $derived.by(() => {
-    const family = user.data.documentFontFamilies.find((f) => f.familyName === fontFamily);
+    const family = documentFontFamilies.find((f) => f.familyName === fontFamily);
     if (!family) return [];
     return [...new Map(family.fonts.filter((f) => f.state === 'ACTIVE').map((f) => [f.weight, f])).values()].toSorted(
       (a, b) => a.weight - b.weight,
@@ -129,14 +132,12 @@
     })),
   );
 
-  const representativeFontMap = $derived(
-    new Map(user.data.documentFontFamilies.map((f) => [f.familyName, getRepresentativeFont(f.fonts)])),
-  );
+  const representativeFontMap = $derived(new Map(documentFontFamilies.map((f) => [f.familyName, getRepresentativeFont(f.fonts)])));
 
   const weightFontIdMap = $derived(new Map(currentFontFamilyFonts.map((f) => [f.weight, f.id])));
 
   const getClosestWeight = (familyName: string, targetWeight: number) => {
-    const family = user.data.documentFontFamilies.find((f) => f.familyName === familyName);
+    const family = documentFontFamilies.find((f) => f.familyName === familyName);
     if (!family) return targetWeight;
 
     const weights = [...new Set(family.fonts.filter((f) => f.state === 'ACTIVE').map((f) => f.weight))].toSorted((a, b) => a - b);
@@ -175,7 +176,9 @@
   const updateTemplate = async (updates: Partial<PresetPreference>) => {
     const newTemplate = { ...template, ...updates };
     await updatePreferences({ input: { value: { template: newTemplate } } });
-    cache.invalidate({ __typename: 'User', id: user.data.id, field: 'preferences' });
+    if (userId) {
+      cache.invalidate({ __typename: 'User', id: userId, field: 'preferences' });
+    }
 
     mixpanel.track('update_post_template', {
       updates: Object.keys(updates),
@@ -184,7 +187,9 @@
 
   const resetTemplate = async () => {
     await updatePreferences({ input: { value: { template: {} } } });
-    cache.invalidate({ __typename: 'User', id: user.data.id, field: 'preferences' });
+    if (userId) {
+      cache.invalidate({ __typename: 'User', id: userId, field: 'preferences' });
+    }
 
     mixpanel.track('reset_post_template');
   };

@@ -379,6 +379,20 @@ class EditorView extends HookWidget {
       );
     }
 
+    bool canApplyCursorScrollNow() {
+      final verticalPosition = resolveScrollPosition(verticalScrollController);
+      return verticalPosition != null && verticalPosition.hasContentDimensions;
+    }
+
+    void runCursorScroll(CursorInfo targetCursor, {required bool typewriter}) {
+      suppressScrollbarTimer.value?.cancel();
+      suppressScrollbarShow.value = true;
+      scrollToCursorWith(targetCursor, typewriter: typewriter);
+      suppressScrollbarTimer.value = Timer(const Duration(milliseconds: 150), () {
+        suppressScrollbarShow.value = false;
+      });
+    }
+
     useEffect(() {
       final subscription = keyboard.onHeightChange.listen((double height) {
         final wasVisible = isKeyboardVisible.value;
@@ -437,8 +451,35 @@ class EditorView extends HookWidget {
     final currentLayout = state.state.layout;
     final isPaginatedLayout = currentLayout is PaginatedLayout;
     final cursor = state.state.cursor;
-    final isDropping = useValueListenable(dndController.isDropping);
     final didApplyPaginatedInitialZoom = useRef(false);
+
+    useEffect(() {
+      void applyPendingCursorScroll() {
+        final pendingMode = controller.pendingScrollMode;
+        final nextLayout = controller.state.layout;
+        final nextCursor = controller.state.cursor;
+        if (pendingMode == null ||
+            nextLayout == null ||
+            nextCursor == null ||
+            isLongPressing.value ||
+            dndController.isDropping.value ||
+            !controller.state.isFocused) {
+          return;
+        }
+
+        final useTypewriter = pref.typewriterEnabled && pendingMode == ScrollMode.typewriter;
+        controller.pendingScrollMode = null;
+        if (canApplyCursorScrollNow()) {
+          pendingScroll.value = null;
+          runCursorScroll(nextCursor, typewriter: useTypewriter);
+        } else {
+          pendingScroll.value = () => runCursorScroll(nextCursor, typewriter: useTypewriter);
+        }
+      }
+
+      controller.addListener(applyPendingCursorScroll);
+      return () => controller.removeListener(applyPendingCursorScroll);
+    }, [controller, dndController, currentDisplayZoom, pref.typewriterEnabled]);
 
     useEffect(() {
       if (!isPaginatedLayout) {
@@ -472,8 +513,6 @@ class EditorView extends HookWidget {
       return null;
     }, [state.state.selection, state.state.attrs, state.state.externalElements, state.state.isFocused]);
 
-    final lastScrollRenderVersion = useRef<Object?>(state.state.renderVersion);
-
     useEffect(() {
       if (cursor == null) {
         return null;
@@ -499,33 +538,6 @@ class EditorView extends HookWidget {
             geo.contentStartX(viewportWidth: viewportWidth, horizontalScrollOffset: horizontalScrollOffset) +
             geo.toDisplayX(cursor.x);
         inputController.updateCursor(screenX, screenY, geo.toDisplayY(cursor.height), cursor.precedingCharWidths);
-      }
-
-      final shouldScroll =
-          controller.pendingScrollMode != null &&
-          currentLayout != null &&
-          !isLongPressing.value &&
-          !isDropping &&
-          state.state.isFocused;
-
-      if (shouldScroll) {
-        if (lastScrollRenderVersion.value != state.state.renderVersion) {
-          lastScrollRenderVersion.value = state.state.renderVersion;
-          final capturedCursor = cursor;
-          final useTypewriter =
-              cursor.visible && pref.typewriterEnabled && controller.pendingScrollMode == ScrollMode.typewriter;
-          if (controller.pendingScrollMode != null) {
-            controller.pendingScrollMode = null;
-          }
-          pendingScroll.value = () {
-            suppressScrollbarTimer.value?.cancel();
-            suppressScrollbarShow.value = true;
-            scrollToCursorWith(capturedCursor, typewriter: useTypewriter);
-            suppressScrollbarTimer.value = Timer(const Duration(milliseconds: 150), () {
-              suppressScrollbarShow.value = false;
-            });
-          };
-        }
       }
       return null;
     }, [cursor, state.state.renderVersion, currentDisplayZoom]);

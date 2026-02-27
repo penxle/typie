@@ -49,8 +49,10 @@
     () => user$key,
   );
 
+  const documentFontFamilies = $derived(user.data?.documentFontFamilies ?? []);
+
   const userFontFamilies = $derived(
-    user.data.documentFontFamilies
+    documentFontFamilies
       .filter((f) => f.source === 'USER' && f.state === 'ACTIVE')
       .map((family) => ({
         ...family,
@@ -114,7 +116,7 @@
         _hover: { backgroundColor: 'surface.muted' },
       })}
       onclick={() => {
-        if (user.data.subscription) {
+        if (user.data?.subscription) {
           uploadModalOpen = true;
         } else {
           planUpgradeOpen = true;
@@ -216,7 +218,9 @@
   {/if}
 </div>
 
-<FontUploadModal userId={user.data.id} bind:open={uploadModalOpen} />
-<PlanUpgradeModal user$key={user.data} bind:open={planUpgradeOpen}>
-  폰트 업로드 기능은 FULL ACCESS 플랜에서 사용할 수 있어요.
-</PlanUpgradeModal>
+{#if user.data}
+  <FontUploadModal userId={user.data.id} bind:open={uploadModalOpen} />
+  <PlanUpgradeModal user$key={user.data} bind:open={planUpgradeOpen}>
+    폰트 업로드 기능은 FULL ACCESS 플랜에서 사용할 수 있어요.
+  </PlanUpgradeModal>
+{/if}
