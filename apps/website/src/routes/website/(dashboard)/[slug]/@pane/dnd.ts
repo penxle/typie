@@ -129,6 +129,7 @@ export const dragPane: Action<HTMLElement, DragPaneOptions> = (node, options) =>
   const POST_HOLD_DRAG_THRESHOLD = 5;
 
   node.style.cursor = 'grab';
+  node.style.touchAction = 'none';
 
   const clearHold = () => {
     if (holdTimer) {
@@ -137,11 +138,24 @@ export const dragPane: Action<HTMLElement, DragPaneOptions> = (node, options) =>
     }
   };
 
+  const resetState = () => {
+    clearHold();
+    isDragging = false;
+    holdActivated = false;
+    activePointerId = -1;
+    options.paneGroup.draggingPaneId = null;
+    node.style.cursor = 'grab';
+    document.body.style.cursor = '';
+  };
+
   const handlePointerDown = (e: PointerEvent) => {
     const target = e.target as HTMLElement;
     if (target.closest('button, [role="button"], [role="menu"], a[href], input, textarea, select')) {
       return;
     }
+
+    e.preventDefault();
+    clearHold();
 
     startX = e.clientX;
     startY = e.clientY;
@@ -150,8 +164,11 @@ export const dragPane: Action<HTMLElement, DragPaneOptions> = (node, options) =>
 
     holdActivated = false;
     holdTimer = setTimeout(() => {
+      holdTimer = null;
+      if (!node.hasPointerCapture(activePointerId)) return;
       holdActivated = true;
       options.paneGroup.draggingPaneId = options.paneId;
+      node.style.cursor = 'grabbing';
       document.body.style.cursor = 'grabbing';
     }, HOLD_DURATION);
   };
@@ -167,6 +184,7 @@ export const dragPane: Action<HTMLElement, DragPaneOptions> = (node, options) =>
         holdActivated = true;
         isDragging = true;
         options.paneGroup.draggingPaneId = options.paneId;
+        node.style.cursor = 'grabbing';
         document.body.style.cursor = 'grabbing';
       } else {
         return;
@@ -176,6 +194,7 @@ export const dragPane: Action<HTMLElement, DragPaneOptions> = (node, options) =>
     if (!isDragging) {
       if (dist > POST_HOLD_DRAG_THRESHOLD) {
         isDragging = true;
+        node.style.cursor = 'grabbing';
         document.body.style.cursor = 'grabbing';
       } else {
         return;
@@ -186,44 +205,38 @@ export const dragPane: Action<HTMLElement, DragPaneOptions> = (node, options) =>
   };
 
   const handlePointerUp = (e: PointerEvent) => {
-    clearHold();
-
     if (isDragging) {
       const dragItem: DragPane = { type: 'pane', paneId: options.paneId };
       options.paneGroup.executeDrop(dragItem);
     }
 
-    isDragging = false;
-    holdActivated = false;
-    activePointerId = -1;
-    options.paneGroup.draggingPaneId = null;
-    document.body.style.cursor = '';
+    resetState();
     if (node.hasPointerCapture(e.pointerId)) {
       node.releasePointerCapture(e.pointerId);
     }
   };
 
   const handlePointerCancel = (e: PointerEvent) => {
-    clearHold();
-    isDragging = false;
-    holdActivated = false;
-    activePointerId = -1;
-    document.body.style.cursor = '';
+    resetState();
     options.paneGroup.cancelDrag();
     if (node.hasPointerCapture(e.pointerId)) {
       node.releasePointerCapture(e.pointerId);
     }
   };
 
+  const handleLostPointerCapture = () => {
+    resetState();
+    options.paneGroup.cancelDrag();
+  };
+
   const handleKeyDown = (e: KeyboardEvent) => {
     if (e.key === 'Escape' && (holdActivated || holdTimer)) {
-      clearHold();
-      isDragging = false;
-      holdActivated = false;
-      document.body.style.cursor = '';
       options.paneGroup.cancelDrag();
-      node.releasePointerCapture(activePointerId);
-      activePointerId = -1;
+      const capturedPointerId = activePointerId;
+      resetState();
+      if (capturedPointerId !== -1 && node.hasPointerCapture(capturedPointerId)) {
+        node.releasePointerCapture(capturedPointerId);
+      }
     }
   };
 
@@ -231,6 +244,7 @@ export const dragPane: Action<HTMLElement, DragPaneOptions> = (node, options) =>
   node.addEventListener('pointermove', handlePointerMove);
   node.addEventListener('pointerup', handlePointerUp);
   node.addEventListener('pointercancel', handlePointerCancel);
+  node.addEventListener('lostpointercapture', handleLostPointerCapture);
   document.addEventListener('keydown', handleKeyDown);
 
   return {
@@ -238,10 +252,12 @@ export const dragPane: Action<HTMLElement, DragPaneOptions> = (node, options) =>
       options = newOptions;
     },
     destroy() {
+      clearHold();
       node.removeEventListener('pointerdown', handlePointerDown);
       node.removeEventListener('pointermove', handlePointerMove);
       node.removeEventListener('pointerup', handlePointerUp);
       node.removeEventListener('pointercancel', handlePointerCancel);
+      node.removeEventListener('lostpointercapture', handleLostPointerCapture);
       document.removeEventListener('keydown', handleKeyDown);
     },
   };
