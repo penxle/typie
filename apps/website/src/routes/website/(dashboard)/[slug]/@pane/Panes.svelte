@@ -1,5 +1,7 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
+  import { getAppContext } from '@typie/ui/context';
+  import { fade } from 'svelte/transition';
   import { getPaneGroup } from './context.svelte';
   import EntityPane from './EntityPane.svelte';
   import { computeLayout } from './geometry';
@@ -13,6 +15,7 @@
 
   let { root }: Props = $props();
 
+  const app = getAppContext();
   const context = getPaneGroup();
 
   let rootRef = $state<HTMLDivElement>();
@@ -55,7 +58,8 @@
   });
 
   const getOverlayRect = (paneRect: { left: number; top: number; width: number; height: number }, dropZone: DropZone) => {
-    const inset = 20;
+    const inset = 6;
+    const gap = 3;
     switch (dropZone) {
       case 'center': {
         return {
@@ -66,16 +70,36 @@
         };
       }
       case 'left': {
-        return { left: paneRect.left, top: paneRect.top, width: paneRect.width / 2, height: paneRect.height };
+        return {
+          left: paneRect.left + inset,
+          top: paneRect.top + inset,
+          width: paneRect.width / 2 - inset - gap,
+          height: paneRect.height - inset * 2,
+        };
       }
       case 'right': {
-        return { left: paneRect.left + paneRect.width / 2, top: paneRect.top, width: paneRect.width / 2, height: paneRect.height };
+        return {
+          left: paneRect.left + paneRect.width / 2 + gap,
+          top: paneRect.top + inset,
+          width: paneRect.width / 2 - inset - gap,
+          height: paneRect.height - inset * 2,
+        };
       }
       case 'top': {
-        return { left: paneRect.left, top: paneRect.top, width: paneRect.width, height: paneRect.height / 2 };
+        return {
+          left: paneRect.left + inset,
+          top: paneRect.top + inset,
+          width: paneRect.width - inset * 2,
+          height: paneRect.height / 2 - inset - gap,
+        };
       }
       case 'bottom': {
-        return { left: paneRect.left, top: paneRect.top + paneRect.height / 2, width: paneRect.width, height: paneRect.height / 2 };
+        return {
+          left: paneRect.left + inset,
+          top: paneRect.top + paneRect.height / 2 + gap,
+          width: paneRect.width - inset * 2,
+          height: paneRect.height / 2 - inset - gap,
+        };
       }
     }
   };
@@ -95,23 +119,28 @@
     {@const rect = layout?.panes.get(pane.id)}
     {#if rect}
       <div
-        style:position="absolute"
         style:left="{rect.left}px"
         style:top="{rect.top}px"
         style:width="{rect.width}px"
         style:height="{rect.height}px"
-        style:overflow="hidden"
-        style:display="grid"
+        style:opacity={context.draggingPaneId === pane.id ? '0.4' : undefined}
+        style:scale={context.draggingPaneId === pane.id ? '0.99' : undefined}
+        style:z-index={app.preference.current.zenModeEnabled && context.state.current.focusedPaneId === pane.id ? '70' : undefined}
+        class={css({
+          position: 'absolute',
+          overflow: 'hidden',
+          display: 'grid',
+          isolation: 'isolate',
+          transition: '[opacity 150ms ease-out, scale 150ms ease-out]',
+        })}
       >
-        {#key pane.kind === 'entity' ? pane.slug : pane.kind}
-          <div style:grid-area="1/1" style:min-width="0" style:min-height="0">
-            {#if pane.kind === 'entity'}
-              <EntityPane {pane} />
-            {:else if pane.kind === 'home'}
-              <HomePane {pane} />
-            {/if}
-          </div>
-        {/key}
+        <div class={css({ gridArea: '[1/1]', minWidth: '0', minHeight: '0' })}>
+          {#if pane.kind === 'entity'}
+            <EntityPane {pane} />
+          {:else if pane.kind === 'home'}
+            <HomePane {pane} />
+          {/if}
+        </div>
       </div>
     {/if}
   {/each}
@@ -122,24 +151,51 @@
     {/each}
   {/if}
 
+  {#if context.enabled && !context.draggingPaneId && !app.preference.current.zenModeEnabled && layout}
+    {@const focusedRect = layout.panes.get(context.state.current.focusedPaneId ?? '')}
+    {#if focusedRect}
+      <div
+        style:left="{focusedRect.left}px"
+        style:top="{focusedRect.top}px"
+        style:width="{focusedRect.width}px"
+        style:height="{focusedRect.height}px"
+        class={css({
+          position: 'absolute',
+          pointerEvents: 'none',
+          boxShadow: '[0 0 0 1px token(colors.border.default)]',
+          zIndex: 'overEditor',
+        })}
+        transition:fade|global={{ duration: 150 }}
+      ></div>
+    {/if}
+  {/if}
+
+  {#if context.draggingPaneId}
+    <div class={css({ position: 'absolute', inset: '0', zIndex: 'ghost' })}></div>
+  {/if}
+
   {#if context.activeZone && layout}
     {@const paneRect = layout.panes.get(context.activeZone.paneId)}
     {#if paneRect}
       {@const overlayRect = getOverlayRect(paneRect, context.activeZone.dropZone)}
       <div
-        style:position="absolute"
         style:left="{overlayRect.left}px"
         style:top="{overlayRect.top}px"
         style:width="{overlayRect.width}px"
         style:height="{overlayRect.height}px"
-        style:pointer-events="none"
-        style:transition="0.1s ease-in-out"
         class={css({
-          backgroundColor: 'surface.dark',
-          opacity: '[0.4]',
-          borderRadius: '4px',
+          position: 'absolute',
+          pointerEvents: 'none',
+          transition:
+            '[left 150ms cubic-bezier(0.2,0,0,1), top 150ms cubic-bezier(0.2,0,0,1), width 150ms cubic-bezier(0.2,0,0,1), height 150ms cubic-bezier(0.2,0,0,1)]',
+          backgroundColor: { base: '[rgb(0 135 255 / 0.08)]', _dark: '[rgb(102 160 238 / 0.15)]' },
+          borderWidth: '[1.5px]',
+          borderStyle: 'solid',
+          borderColor: { base: '[rgb(0 135 255 / 0.3)]', _dark: '[rgb(102 160 238 / 0.4)]' },
+          borderRadius: '8px',
           zIndex: 'ghost',
         })}
+        in:fade|global={{ duration: 150 }}
       ></div>
     {/if}
   {/if}

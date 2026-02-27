@@ -8,6 +8,7 @@
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
   import { onMount } from 'svelte';
+  import { fade } from 'svelte/transition';
   import { match } from 'ts-pattern';
   import { DocumentType, PostType } from '@/enums';
   import FileIcon from '~icons/lucide/file';
@@ -20,6 +21,7 @@
   import ActivityGrid from '../../@stats/ActivityGrid.svelte';
   import CloseButton from './CloseButton.svelte';
   import { getPaneGroup, setupPane } from './context.svelte';
+  import PaneSkeleton from './PaneSkeleton.svelte';
   import type { Pane } from './types';
 
   type HomePane = Extract<Pane, { kind: 'home' }>;
@@ -180,19 +182,17 @@
       <Helmet title="홈" />
     {/if}
 
-    {#if paneGroup.enabled}
-      <CloseButton style={css.raw({ position: 'absolute', top: '6px', right: '8px', zIndex: '1' })}>
-        <Icon icon={XIcon} size={16} />
-      </CloseButton>
-    {/if}
-
-    <div class={center({ padding: '32px', marginX: 'auto', minHeight: 'fit', width: 'full', overflow: 'auto' })}>
+    <div class={css({ width: 'full', height: 'full', overflowY: 'auto' })}>
       <div
-        class={center({
+        class={flex({
           flexDirection: 'column',
+          justifyContent: 'center',
           gap: '32px',
           width: '800px',
           maxWidth: 'full',
+          minHeight: 'full',
+          marginX: 'auto',
+          padding: '64px',
         })}
       >
         <div class={flex({ flexDirection: 'column', gap: '12px' })}>
@@ -302,15 +302,24 @@
         </div>
       </div>
     </div>
-  {:else}
-    <div class={center({ size: 'full' })}>
-      <Logo
-        class={css({
-          size: '32px',
-          filter: '[grayscale(100%)]',
-          animation: 'pulse 2s ease-in-out infinite',
-        })}
-      />
+  {/if}
+
+  {#if !query.data}
+    <div
+      class={css({
+        position: 'absolute',
+        inset: '0',
+        backgroundColor: 'surface.default',
+      })}
+      out:fade={{ duration: 150 }}
+    >
+      <PaneSkeleton {pane} />
     </div>
+  {/if}
+
+  {#if paneGroup.enabled && !app.preference.current.zenModeEnabled}
+    <CloseButton style={css.raw({ position: 'absolute', top: '6px', right: '8px', zIndex: '1' })}>
+      <Icon icon={XIcon} size={16} />
+    </CloseButton>
   {/if}
 </div>

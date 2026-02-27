@@ -9,9 +9,10 @@
     query$key: Document_query$key;
     slug: string;
     focused: boolean;
+    onReady?: () => void;
   };
 
-  let { query$key, slug, focused }: Props = $props();
+  let { query$key, slug, focused, onReady }: Props = $props();
 
   // Document는 slug마다 {#key}로 새로 생성/삭제되므로 생성 시점의 값을 캡처.
   const mountedSlug = slug;
@@ -119,6 +120,6 @@
 
 {#if entity?.node.__typename === 'Document'}
   {#if mounted}
-    <DocumentEditor {focused} query$key={query.data} slug={mountedSlug} />
+    <DocumentEditor {focused} {onReady} query$key={query.data} slug={mountedSlug} />
   {/if}
 {/if}

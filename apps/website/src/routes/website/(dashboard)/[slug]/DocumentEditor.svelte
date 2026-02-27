@@ -46,9 +46,10 @@
     query$key: DocumentEditor_query$key;
     slug: string;
     focused: boolean;
+    onReady?: () => void;
   };
 
-  let { query$key, slug, focused }: Props = $props();
+  let { query$key, slug, focused, onReady }: Props = $props();
 
   // DocumentEditor는 slug마다 새로 생성/삭제(mounted 메커니즘)되므로 생성 시점의 값을 캡처.
   // slug를 $derived 안에서 reactive하게 읽으면 언마운트 도중 View.svelte의 prop getter 체인이
@@ -626,21 +627,18 @@
   }
 
   function handleEditorReady() {
-    if (!documentId || !focused) return;
+    if (!documentId) return;
+    editorReady = true;
+    onReady?.();
+
     const saved = selectionsStore.current[documentId];
-    if (!saved) {
-      titleEl?.focus();
-      return;
-    }
-    if (saved.type === 'element') {
-      if (saved.element === 'title') titleEl?.focus();
-      else if (saved.element === 'subtitle') subtitleEl?.focus();
-    } else if (saved.selection) {
+
+    if (saved?.selection) {
       const sel = saved.selection as {
         anchor: { nodeId: string; offset: number; affinity: Affinity };
         head: { nodeId: string; offset: number; affinity: Affinity };
       };
-      editor
+      const chain = editor
         .dispatch({
           type: 'setSelection',
           anchorNodeId: sel.anchor.nodeId,
@@ -650,10 +648,20 @@
           headOffset: sel.head.offset,
           headAffinity: sel.head.affinity,
         })
-        .scrollIntoView({ mode: 'typewriter' })
-        .focus();
+        .scrollIntoView({ mode: 'typewriter' });
+      if (focused) {
+        chain.focus();
+      }
     }
-    editorReady = true;
+
+    if (!focused) return;
+
+    if (!saved) {
+      titleEl?.focus();
+    } else if (saved.type === 'element') {
+      if (saved.element === 'title') titleEl?.focus();
+      else if (saved.element === 'subtitle') subtitleEl?.focus();
+    }
   }
 
   function focusTitleFromHeader() {
@@ -894,6 +902,7 @@
                 mixpanel.track('zen_mode_disabled', { via: 'document' });
               }
             }}
+            onpointerdown={(e) => e.preventDefault()}
             type="button"
             use:tooltip={{
               message: app.preference.current.zenModeEnabled ? '집중 모드 끄기' : '집중 모드 켜기',
@@ -1054,7 +1063,7 @@
               <SpellcheckPopover {editor} />
             </EditorComponent>
             {#if showFindReplace}
-              <DocumentFindReplace close={() => (showFindReplace = false)} {editor} />
+              <DocumentFindReplace close={() => (showFindReplace = false)} {editor} {focused} />
             {/if}
           </div>
         </div>
@@ -1116,6 +1125,7 @@
               app.preference.current.zenModeEnabled = false;
               mixpanel.track('zen_mode_disabled', { via: 'close_button' });
             }}
+            onpointerdown={(e) => e.preventDefault()}
             type="button"
             use:tooltip={{
               message: '집중 모드 끄기',

@@ -20,6 +20,7 @@
   import PlusIcon from '~icons/lucide/plus';
   import TableProperties from '~icons/lucide/table-properties';
   import Trash2Icon from '~icons/lucide/trash-2';
+  import { getEditorContext } from '$lib/editor/context.svelte';
   import type { Editor } from '$lib/editor/editor.svelte';
   import type { TableOverlay as TableOverlayType } from '$lib/editor/slate';
 
@@ -32,6 +33,7 @@
   const TABLE_BORDER_WIDTH = 1;
   const TABLE_RESIZE_LIMIT_EPSILON = 0.5;
 
+  const ctx = getEditorContext();
   let { editor, overlay }: Props = $props();
 
   let resizing = $state<{
@@ -198,6 +200,10 @@
       return true;
     }
 
+    if (targetEl instanceof Node && !editor.scrollContainerEl?.contains(targetEl)) {
+      return false;
+    }
+
     const rect = tableOverlayRoot.getBoundingClientRect();
     return clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom;
   }
@@ -252,13 +258,13 @@
   $effect(() => {
     if (menuOpenColIndex !== null || menuOpenRowIndex !== null || menuOpen) {
       editor.inputElement?.blur();
-    } else {
+    } else if (ctx.paneFocused) {
       editor.inputElement?.focus();
     }
 
     return () => {
       // Table 삭제 후 즉시 focus
-      if (menuOpenColIndex !== null || menuOpenRowIndex !== null || menuOpen) {
+      if (ctx.paneFocused && (menuOpenColIndex !== null || menuOpenRowIndex !== null || menuOpen)) {
         editor.inputElement?.focus();
       }
     };

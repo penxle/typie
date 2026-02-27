@@ -1,13 +1,10 @@
 <script lang="ts">
   import { createQuery } from '@mearie/svelte';
-  import { css } from '@typie/styled-system/css';
-  import { center } from '@typie/styled-system/patterns';
   import { getAppContext } from '@typie/ui/context';
   import { nanoid } from 'nanoid';
   import { untrack } from 'svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
-  import Logo from '$assets/logos/logo.svg?component';
   import { graphql } from '$mearie';
   import WidgetGroup from '../@widgets/WidgetGroup.svelte';
   import { getPaneGroup } from './@pane/context.svelte';
@@ -49,34 +46,30 @@
 
       if (paneGroup.state.current.root) {
         if (isHome) {
-          const existing = panes.find((p) => p.kind === 'home');
-          if (existing) {
-            paneGroup.state.current.focusedPaneId = existing.id;
-          } else {
-            const focusedPaneId = paneGroup.state.current.focusedPaneId;
-            if (focusedPaneId) {
-              paneGroup.replacePane(focusedPaneId, { kind: 'home' });
-            }
+          const focusedPaneId = paneGroup.state.current.focusedPaneId;
+          const focusedPane = focusedPaneId ? panes.find((p) => p.id === focusedPaneId) : null;
+          if (focusedPane?.kind === 'home') {
+            // 이미 focused pane이 home → skip
+          } else if (focusedPaneId) {
+            paneGroup.replacePane(focusedPaneId, { kind: 'home' });
           }
         } else {
-          const existing = panes.find((p) => p.kind === 'entity' && p.slug === slug);
-          if (existing) {
-            paneGroup.state.current.focusedPaneId = existing.id;
+          const focusedPaneId = paneGroup.state.current.focusedPaneId;
+          const focusedPane = focusedPaneId ? panes.find((p) => p.id === focusedPaneId) : null;
+          if (focusedPane?.kind === 'entity' && focusedPane.slug === slug) {
+            // 이미 focused pane이 해당 slug → skip
+          } else if (focusedPaneId) {
+            paneGroup.replacePane(focusedPaneId, { kind: 'entity', slug });
           } else {
-            const focusedPaneId = paneGroup.state.current.focusedPaneId;
-            if (focusedPaneId) {
-              paneGroup.replacePane(focusedPaneId, { kind: 'entity', slug });
-            } else {
-              const paneId = nanoid();
-              paneGroup.state.current.root = {
-                id: nanoid(),
-                type: 'axis',
-                direction: 'horizontal',
-                children: [{ id: paneId, type: 'pane', kind: 'entity', slug }],
-                flexes: [1],
-              };
-              paneGroup.state.current.focusedPaneId = paneId;
-            }
+            const paneId = nanoid();
+            paneGroup.state.current.root = {
+              id: nanoid(),
+              type: 'axis',
+              direction: 'horizontal',
+              children: [{ id: paneId, type: 'pane', kind: 'entity', slug }],
+              flexes: [1],
+            };
+            paneGroup.state.current.focusedPaneId = paneId;
           }
         }
       } else {
@@ -111,23 +104,8 @@
   const loaded = $derived(!!query.data && !query.loading);
 </script>
 
-{#if loaded && query.data && slug && root}
+{#if slug && root}
   <Panes {root} />
-{:else}
-  <div
-    class={center({
-      size: 'full',
-      backgroundColor: 'surface.default',
-    })}
-  >
-    <Logo
-      class={css({
-        size: '32px',
-        filter: '[grayscale(100%)]',
-        animation: 'pulse 2s ease-in-out infinite',
-      })}
-    />
-  </div>
 {/if}
 
 {#if loaded && query.data}

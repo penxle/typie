@@ -16,10 +16,11 @@
 
   type Props = {
     editor: Editor;
+    focused: boolean;
     close: () => void;
   };
 
-  let { editor, close }: Props = $props();
+  let { editor, focused, close }: Props = $props();
 
   let findInputEl: HTMLInputElement;
 
@@ -38,6 +39,8 @@
   });
 
   const handleKeydown = (e: KeyboardEvent) => {
+    if (!focused) return;
+
     if ((IS_MAC ? e.metaKey : e.ctrlKey) && e.code === 'KeyF') {
       e.preventDefault();
 

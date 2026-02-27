@@ -4,16 +4,17 @@
   import { center, flex } from '@typie/styled-system/patterns';
   import { Helmet, Icon } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
+  import { fade } from 'svelte/transition';
   import { EntityState } from '@/enums';
   import FileXIcon from '~icons/lucide/file-x';
   import XIcon from '~icons/lucide/x';
-  import Logo from '$assets/logos/logo.svg?component';
   import { fb } from '$lib/analytics';
   import { graphql } from '$mearie';
   import Document from '../Document.svelte';
   import Editor from '../Editor.svelte';
   import CloseButton from './CloseButton.svelte';
   import { getPaneGroup, setupPane } from './context.svelte';
+  import PaneSkeleton from './PaneSkeleton.svelte';
   import type { Pane } from './types';
 
   type EntityPane = Extract<Pane, { kind: 'entity' }>;
@@ -123,6 +124,12 @@
     }
   });
 
+  let editorReady = $state(false);
+
+  const showSkeleton = $derived(
+    !query.data || !entity || (entity.state === EntityState.ACTIVE && entity.node.__typename === 'Document' && !editorReady),
+  );
+
   setupPane(pane);
 </script>
 
@@ -153,17 +160,13 @@
       {#if entity?.node.__typename === 'Post'}
         <Editor {focused} query$key={query.data} slug={entity.slug} />
       {:else if entity?.node.__typename === 'Document'}
-        <Document {focused} query$key={query.data} slug={entity.slug} />
+        <Document {focused} onReady={() => (editorReady = true)} query$key={query.data} slug={entity.slug} />
       {/if}
     {:else}
       {@const name = entity?.node.__typename === 'Post' ? '포스트' : '문서'}
       {#if focused}
         <Helmet title={`삭제된 ${name}`} />
       {/if}
-
-      <CloseButton style={css.raw({ position: 'absolute', top: '6px', right: '8px' })}>
-        <Icon icon={XIcon} size={16} />
-      </CloseButton>
 
       <div class={center({ flexDirection: 'column', gap: '20px', size: 'full', textAlign: 'center' })}>
         <Icon style={css.raw({ size: '56px', color: 'text.subtle', '& *': { strokeWidth: '[1.25px]' } })} icon={FileXIcon} />
@@ -178,19 +181,25 @@
         </div>
       </div>
     {/if}
-  {:else}
-    <div class={center({ size: 'full' })}>
-      <CloseButton style={css.raw({ position: 'absolute', top: '6px', right: '8px' })}>
-        <Icon icon={XIcon} size={16} />
-      </CloseButton>
+  {/if}
 
-      <Logo
-        class={css({
-          size: '32px',
-          filter: '[grayscale(100%)]',
-          animation: 'pulse 2s ease-in-out infinite',
-        })}
-      />
+  {#if showSkeleton}
+    <div
+      class={css({
+        position: 'absolute',
+        inset: '0',
+        zIndex: 'overEditor',
+        backgroundColor: 'surface.default',
+      })}
+      out:fade={{ duration: 150 }}
+    >
+      <PaneSkeleton {pane} />
     </div>
+  {/if}
+
+  {#if !app.preference.current.zenModeEnabled}
+    <CloseButton style={css.raw({ position: 'absolute', top: '6px', right: '8px', zIndex: 'overEditor' })}>
+      <Icon icon={XIcon} size={16} />
+    </CloseButton>
   {/if}
 </div>

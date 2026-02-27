@@ -31,6 +31,7 @@ export const setupPaneGroup = (app: AppContext) => {
   const userId = app.userId;
 
   let activeZone = $state<{ paneId: string; dropZone: DropZone } | null>(null);
+  let draggingPaneId = $state<string | null>(null);
   const findReplaceOpenByPaneId = $state<Record<string, boolean>>({});
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- imperatively read, not reactive state
   const paneRects = new Map<string, Rect>();
@@ -135,6 +136,12 @@ export const setupPaneGroup = (app: AppContext) => {
     set activeZone(value) {
       activeZone = value;
     },
+    get draggingPaneId() {
+      return draggingPaneId;
+    },
+    set draggingPaneId(value) {
+      draggingPaneId = value;
+    },
     rootElement: null,
     paneRects,
     hitTest(x: number, y: number) {
@@ -148,10 +155,12 @@ export const setupPaneGroup = (app: AppContext) => {
       if (!activeZone) return false;
       const result = resolveDrop(item, activeZone, context.state.current.root, context);
       activeZone = null;
+      draggingPaneId = null;
       return result;
     },
     cancelDrag() {
       activeZone = null;
+      draggingPaneId = null;
     },
   };
 
