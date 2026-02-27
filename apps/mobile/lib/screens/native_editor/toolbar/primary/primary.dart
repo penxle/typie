@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/context/theme.dart';
 import 'package:typie/icons/lucide_light.dart';
+import 'package:typie/screens/native_editor/state/scroll_mode.dart';
 import 'package:typie/screens/native_editor/toolbar/buttons/icon.dart';
 import 'package:typie/screens/native_editor/toolbar/scope.dart';
 import 'package:typie/services/keyboard.dart';
@@ -107,7 +108,7 @@ class NativeEditorPrimaryToolbar extends HookWidget {
                   scope.commitComposing();
                   scope.requestFocus();
                   scope.dispatch({'type': 'navigate', 'direction': 'left', 'extend': false});
-                  scope.controller.scrollIntoView();
+                  scope.controller.scrollIntoView(mode: ScrollMode.typewriter);
                 },
               ),
               IconToolbarButton(
@@ -117,7 +118,7 @@ class NativeEditorPrimaryToolbar extends HookWidget {
                   scope.commitComposing();
                   scope.requestFocus();
                   scope.dispatch({'type': 'navigate', 'direction': 'right', 'extend': false});
-                  scope.controller.scrollIntoView();
+                  scope.controller.scrollIntoView(mode: ScrollMode.typewriter);
                 },
               ),
               ClipRect(

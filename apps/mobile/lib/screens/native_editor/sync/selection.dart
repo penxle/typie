@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/widgets.dart';
 import 'package:typie/screens/native_editor/state/controller.dart';
+import 'package:typie/screens/native_editor/state/scroll_mode.dart';
 import 'package:typie/services/state.dart';
 
 class SelectionSyncManager {
@@ -95,7 +96,8 @@ class SelectionSyncManager {
             'headOffset': savedHead['offset'],
             'headAffinity': savedHead['affinity'],
           })
-          ..requestFocus();
+          ..requestFocus()
+          ..scrollIntoView(mode: ScrollMode.typewriter);
       }
     } catch (err) {
       titleFocusNode.requestFocus();
