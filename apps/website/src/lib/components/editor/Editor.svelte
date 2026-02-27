@@ -1,10 +1,9 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
-  import { center, flex, grid } from '@typie/styled-system/patterns';
+  import { flex, grid } from '@typie/styled-system/patterns';
   import { getThemeContext } from '@typie/ui/context';
   import { elementScrollViewport, handleDragScroll, windowScrollViewport } from '@typie/ui/utils';
   import { tick, untrack } from 'svelte';
-  import Logo from '$assets/logos/logo.svg?component';
   import {
     CONTINUOUS_MIN_WIDTH,
     CONTINUOUS_PAGE_MARGIN,
@@ -308,16 +307,6 @@
       {#if !useWindowScroll}
         <Scrollbar scrollContainer={scrollContainerEl} />
       {/if}
-    </div>
-  {:else}
-    <div class={center({ flex: '1', size: 'full' })}>
-      <Logo
-        class={css({
-          size: '32px',
-          filter: '[grayscale(100%)]',
-          animation: 'pulse 2s ease-in-out infinite',
-        })}
-      />
     </div>
   {/if}
 </div>

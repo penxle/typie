@@ -240,7 +240,10 @@
   };
 
   $effect(() => {
-    if (ctx.paneFocused) inputEl?.focus({ preventScroll: true });
+    if (ctx.paneFocused) {
+      if (editor.scrollContainerEl?.contains(document.activeElement)) return;
+      inputEl?.focus({ preventScroll: true });
+    }
   });
 </script>
 

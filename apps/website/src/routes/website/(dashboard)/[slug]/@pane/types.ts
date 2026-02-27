@@ -60,6 +60,7 @@ export type PaneGroup = {
   findReplaceOpenByPaneId: Record<string, boolean>;
 
   activeZone: { paneId: string; dropZone: DropZone } | null;
+  draggingPaneId: string | null;
   rootElement: HTMLElement | null;
 
   paneRects: Map<string, Rect>;

@@ -8,11 +8,25 @@ export const computeDropZone = (x: number, y: number, rect: Rect): DropZone => {
   const relY = y - rect.top;
   const centerMargin = 0.3;
 
-  if (relX < rect.width * centerMargin) return 'left';
-  if (relX > rect.width * (1 - centerMargin)) return 'right';
-  if (relY < rect.height * centerMargin) return 'top';
-  if (relY > rect.height * (1 - centerMargin)) return 'bottom';
-  return 'center';
+  const distLeft = relX;
+  const distRight = rect.width - relX;
+  const distTop = relY;
+  const distBottom = rect.height - relY;
+
+  if (
+    distLeft > rect.width * centerMargin &&
+    distRight > rect.width * centerMargin &&
+    distTop > rect.height * centerMargin &&
+    distBottom > rect.height * centerMargin
+  ) {
+    return 'center';
+  }
+
+  const min = Math.min(distLeft, distRight, distTop, distBottom);
+  if (min === distLeft) return 'left';
+  if (min === distRight) return 'right';
+  if (min === distTop) return 'top';
+  return 'bottom';
 };
 
 export const hitTest = (
@@ -25,11 +39,31 @@ export const hitTest = (
   const localX = x - rootRect.left;
   const localY = y - rootRect.top;
 
+  let closestPaneId: string | null = null;
+  let closestDist = Infinity;
+
   for (const [paneId, rect] of paneRects) {
-    if (localX >= rect.left && localX <= rect.left + rect.width && localY >= rect.top && localY <= rect.top + rect.height) {
+    const dx = Math.max(rect.left - localX, 0, localX - (rect.left + rect.width));
+    const dy = Math.max(rect.top - localY, 0, localY - (rect.top + rect.height));
+
+    if (dx === 0 && dy === 0) {
       return { paneId, dropZone: computeDropZone(localX, localY, rect) };
     }
+
+    const dist = dx + dy;
+    if (dist < closestDist) {
+      closestDist = dist;
+      closestPaneId = paneId;
+    }
   }
+
+  if (closestPaneId && closestDist <= 8) {
+    const rect = paneRects.get(closestPaneId);
+    if (rect) {
+      return { paneId: closestPaneId, dropZone: computeDropZone(localX, localY, rect) };
+    }
+  }
+
   return null;
 };
 
@@ -85,11 +119,23 @@ type DragPaneOptions = {
 
 export const dragPane: Action<HTMLElement, DragPaneOptions> = (node, options) => {
   let isDragging = false;
+  let holdActivated = false;
+  let holdTimer: ReturnType<typeof setTimeout> | null = null;
+  let activePointerId = -1;
   let startX = 0;
   let startY = 0;
-  const DRAG_THRESHOLD = 5;
+  const HOLD_DURATION = 300;
+  const IMMEDIATE_DRAG_THRESHOLD = 8;
+  const POST_HOLD_DRAG_THRESHOLD = 5;
 
   node.style.cursor = 'grab';
+
+  const clearHold = () => {
+    if (holdTimer) {
+      clearTimeout(holdTimer);
+      holdTimer = null;
+    }
+  };
 
   const handlePointerDown = (e: PointerEvent) => {
     const target = e.target as HTMLElement;
@@ -99,14 +145,36 @@ export const dragPane: Action<HTMLElement, DragPaneOptions> = (node, options) =>
 
     startX = e.clientX;
     startY = e.clientY;
+    activePointerId = e.pointerId;
     node.setPointerCapture(e.pointerId);
+
+    holdActivated = false;
+    holdTimer = setTimeout(() => {
+      holdActivated = true;
+      options.paneGroup.draggingPaneId = options.paneId;
+      document.body.style.cursor = 'grabbing';
+    }, HOLD_DURATION);
   };
 
   const handlePointerMove = (e: PointerEvent) => {
     if (!node.hasPointerCapture(e.pointerId)) return;
 
+    const dist = Math.abs(e.clientX - startX) + Math.abs(e.clientY - startY);
+
+    if (!holdActivated) {
+      if (dist > IMMEDIATE_DRAG_THRESHOLD) {
+        clearHold();
+        holdActivated = true;
+        isDragging = true;
+        options.paneGroup.draggingPaneId = options.paneId;
+        document.body.style.cursor = 'grabbing';
+      } else {
+        return;
+      }
+    }
+
     if (!isDragging) {
-      if (Math.abs(e.clientX - startX) + Math.abs(e.clientY - startY) > DRAG_THRESHOLD) {
+      if (dist > POST_HOLD_DRAG_THRESHOLD) {
         isDragging = true;
         document.body.style.cursor = 'grabbing';
       } else {
@@ -118,12 +186,17 @@ export const dragPane: Action<HTMLElement, DragPaneOptions> = (node, options) =>
   };
 
   const handlePointerUp = (e: PointerEvent) => {
+    clearHold();
+
     if (isDragging) {
       const dragItem: DragPane = { type: 'pane', paneId: options.paneId };
       options.paneGroup.executeDrop(dragItem);
     }
 
     isDragging = false;
+    holdActivated = false;
+    activePointerId = -1;
+    options.paneGroup.draggingPaneId = null;
     document.body.style.cursor = '';
     if (node.hasPointerCapture(e.pointerId)) {
       node.releasePointerCapture(e.pointerId);
@@ -131,7 +204,10 @@ export const dragPane: Action<HTMLElement, DragPaneOptions> = (node, options) =>
   };
 
   const handlePointerCancel = (e: PointerEvent) => {
+    clearHold();
     isDragging = false;
+    holdActivated = false;
+    activePointerId = -1;
     document.body.style.cursor = '';
     options.paneGroup.cancelDrag();
     if (node.hasPointerCapture(e.pointerId)) {
@@ -139,10 +215,23 @@ export const dragPane: Action<HTMLElement, DragPaneOptions> = (node, options) =>
     }
   };
 
+  const handleKeyDown = (e: KeyboardEvent) => {
+    if (e.key === 'Escape' && (holdActivated || holdTimer)) {
+      clearHold();
+      isDragging = false;
+      holdActivated = false;
+      document.body.style.cursor = '';
+      options.paneGroup.cancelDrag();
+      node.releasePointerCapture(activePointerId);
+      activePointerId = -1;
+    }
+  };
+
   node.addEventListener('pointerdown', handlePointerDown);
   node.addEventListener('pointermove', handlePointerMove);
   node.addEventListener('pointerup', handlePointerUp);
   node.addEventListener('pointercancel', handlePointerCancel);
+  document.addEventListener('keydown', handleKeyDown);
 
   return {
     update(newOptions: DragPaneOptions) {
@@ -153,6 +242,7 @@ export const dragPane: Action<HTMLElement, DragPaneOptions> = (node, options) =>
       node.removeEventListener('pointermove', handlePointerMove);
       node.removeEventListener('pointerup', handlePointerUp);
       node.removeEventListener('pointercancel', handlePointerCancel);
+      document.removeEventListener('keydown', handleKeyDown);
     },
   };
 };

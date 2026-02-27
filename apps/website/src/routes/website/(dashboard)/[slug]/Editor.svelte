@@ -948,6 +948,7 @@
                 mixpanel.track('zen_mode_disabled', { via: 'editor' });
               }
             }}
+            onpointerdown={(e) => e.preventDefault()}
             type="button"
             use:tooltip={{
               message: app.preference.current.zenModeEnabled ? '집중 모드 끄기' : '집중 모드 켜기',
@@ -1399,6 +1400,7 @@
                 app.preference.current.zenModeEnabled = false;
                 mixpanel.track('zen_mode_disabled', { via: 'close_button' });
               }}
+              onpointerdown={(e) => e.preventDefault()}
               type="button"
               use:tooltip={{
                 message: '집중 모드 끄기',
