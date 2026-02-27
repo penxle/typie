@@ -414,6 +414,16 @@ class EditorInputNativeView(
         return true
       }
 
+      override fun getTextBeforeCursor(maxChars: Int, flags: Int): CharSequence {
+        val before = super.getTextBeforeCursor(maxChars, flags)
+        return if (before.isNullOrEmpty()) " " else before
+      }
+
+      override fun getTextAfterCursor(maxChars: Int, flags: Int): CharSequence {
+        val after = super.getTextAfterCursor(maxChars, flags)
+        return if (after.isNullOrEmpty()) " " else after
+      }
+
       override fun setSelection(start: Int, end: Int): Boolean {
         val editable = text
         val composingStart = editable?.let { BaseInputConnection.getComposingSpanStart(it) } ?: -1
