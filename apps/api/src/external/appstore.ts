@@ -1,6 +1,7 @@
 import { AppStoreServerAPIClient, Environment, SignedDataVerifier, Status } from '@apple/app-store-server-library';
 import ky from 'ky';
 import { env } from '@/env';
+import type { ConsumptionRequest } from '@apple/app-store-server-library';
 
 const certificateUrls = [
   'https://www.apple.com/appleca/AppleIncRootCertificate.cer',
@@ -77,4 +78,19 @@ export const decodeNotification = async (signedPayload: string) => {
   }
 
   throw new Error('Notification verification failed');
+};
+
+export const sendConsumptionData = async (transactionId: string, consumptionRequest: ConsumptionRequest) => {
+  for (const environment of environments) {
+    const client = clients[environment];
+
+    try {
+      await client.sendConsumptionData(transactionId, consumptionRequest);
+      return;
+    } catch {
+      // pass
+    }
+  }
+
+  throw new Error('Failed to send consumption data');
 };
