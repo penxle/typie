@@ -94,6 +94,8 @@ class EditorView extends HookWidget {
     final longPressPosition = useValueNotifier<Offset?>(null);
     final handleDragPosition = useValueNotifier<Offset?>(null);
     final pendingScroll = useValueNotifier<VoidCallback?>(null);
+    final pendingScrollPageIdx = useValueNotifier<int?>(null);
+    final renderedCursor = useValueNotifier<CursorInfo?>(controller.state.cursor);
     final zoomViewportWidth = useValueNotifier<double>(0);
     final displayZoom = useValueNotifier<double>(1);
     final renderZoom = useValueNotifier<double>(1);
@@ -393,6 +395,78 @@ class EditorView extends HookWidget {
       });
     }
 
+    void syncInputCursorPosition([CursorInfo? nextCursor]) {
+      if (!context.mounted) {
+        return;
+      }
+      final activeCursor = nextCursor ?? renderedCursor.value;
+      final layout = controller.state.layout;
+      if (layout == null || activeCursor == null || !activeCursor.visible) {
+        return;
+      }
+
+      final verticalScrollOffset = resolveScrollOffset(verticalScrollController);
+      final zoom = layout is PaginatedLayout ? currentDisplayZoom : 1.0;
+      final geo = ContentGeometry(
+        layout: layout,
+        pages: controller.state.pages,
+        titleAreaHeight: titleAreaHeight.value,
+        zoom: zoom,
+      );
+      final horizontalMetrics = resolveHorizontalScrollMetrics(
+        controller: horizontalScrollController,
+        contentWidth: geo.contentWidth,
+        fallbackViewportDimension: MediaQuery.sizeOf(context).width,
+      );
+      final viewportWidth = horizontalMetrics.viewportDimension;
+      final horizontalScrollOffset = horizontalMetrics.scrollOffset;
+      final screenY = geo.titleAreaHeight + geo.cursorTopInPages(activeCursor) - verticalScrollOffset;
+      final screenX =
+          geo.contentStartX(viewportWidth: viewportWidth, horizontalScrollOffset: horizontalScrollOffset) +
+          geo.toDisplayX(activeCursor.x);
+      inputController.updateCursor(
+        screenX,
+        screenY,
+        geo.toDisplayY(activeCursor.height),
+        activeCursor.precedingCharWidths,
+      );
+    }
+
+    void queueRenderSynchronizedCursorUpdate({
+      required CursorInfo nextCursor,
+      required bool typewriter,
+      required int? targetPageIdx,
+    }) {
+      pendingScrollPageIdx.value = targetPageIdx;
+      pendingScroll.value = () {
+        pendingScrollPageIdx.value = null;
+        renderedCursor.value = nextCursor;
+        runCursorScroll(nextCursor, typewriter: typewriter);
+        syncInputCursorPosition(nextCursor);
+      };
+    }
+
+    void applyCursorScrollAndVisual(CursorInfo nextCursor, {required bool typewriter}) {
+      if (typewriter) {
+        queueRenderSynchronizedCursorUpdate(
+          nextCursor: nextCursor,
+          typewriter: true,
+          targetPageIdx: nextCursor.pageIdx,
+        );
+        return;
+      }
+
+      if (canApplyCursorScrollNow()) {
+        pendingScroll.value = null;
+        pendingScrollPageIdx.value = null;
+        renderedCursor.value = nextCursor;
+        runCursorScroll(nextCursor, typewriter: typewriter);
+        syncInputCursorPosition(nextCursor);
+      } else {
+        queueRenderSynchronizedCursorUpdate(nextCursor: nextCursor, typewriter: typewriter, targetPageIdx: null);
+      }
+    }
+
     useEffect(() {
       final subscription = keyboard.onHeightChange.listen((double height) {
         final wasVisible = isKeyboardVisible.value;
@@ -450,7 +524,7 @@ class EditorView extends HookWidget {
     final state = useListenable(controller);
     final currentLayout = state.state.layout;
     final isPaginatedLayout = currentLayout is PaginatedLayout;
-    final cursor = state.state.cursor;
+    final renderedCursorValue = useValueListenable(renderedCursor);
     final didApplyPaginatedInitialZoom = useRef(false);
 
     useEffect(() {
@@ -458,28 +532,59 @@ class EditorView extends HookWidget {
         final pendingMode = controller.pendingScrollMode;
         final nextLayout = controller.state.layout;
         final nextCursor = controller.state.cursor;
-        if (pendingMode == null ||
-            nextLayout == null ||
-            nextCursor == null ||
-            isLongPressing.value ||
-            dndController.isDropping.value ||
-            !controller.state.isFocused) {
+
+        if (nextCursor == null) {
+          if (pendingMode != null) {
+            controller.pendingScrollMode = null;
+          }
+          pendingScroll.value = null;
+          pendingScrollPageIdx.value = null;
+          renderedCursor.value = null;
           return;
         }
 
-        final useTypewriter = pref.typewriterEnabled && pendingMode == ScrollMode.typewriter;
-        controller.pendingScrollMode = null;
-        if (canApplyCursorScrollNow()) {
+        final focused = controller.state.isFocused;
+        final blockedByInteraction = isLongPressing.value || dndController.isDropping.value || !focused;
+        if (blockedByInteraction || nextLayout == null || !nextCursor.visible) {
+          if (pendingMode != null) {
+            controller.pendingScrollMode = null;
+          }
           pendingScroll.value = null;
-          runCursorScroll(nextCursor, typewriter: useTypewriter);
+          pendingScrollPageIdx.value = null;
+          renderedCursor.value = nextCursor;
+          return;
+        }
+
+        if (pendingMode != null) {
+          final useTypewriter = pref.typewriterEnabled && pendingMode == ScrollMode.typewriter;
+          controller.pendingScrollMode = null;
+          applyCursorScrollAndVisual(nextCursor, typewriter: useTypewriter);
+          return;
+        }
+
+        if (pref.typewriterEnabled) {
+          applyCursorScrollAndVisual(nextCursor, typewriter: true);
         } else {
-          pendingScroll.value = () => runCursorScroll(nextCursor, typewriter: useTypewriter);
+          renderedCursor.value = nextCursor;
         }
       }
 
       controller.addListener(applyPendingCursorScroll);
       return () => controller.removeListener(applyPendingCursorScroll);
     }, [controller, dndController, currentDisplayZoom, pref.typewriterEnabled]);
+
+    useEffect(() {
+      void onScroll() {
+        syncInputCursorPosition();
+      }
+
+      verticalScrollController.addListener(onScroll);
+      horizontalScrollController.addListener(onScroll);
+      return () {
+        verticalScrollController.removeListener(onScroll);
+        horizontalScrollController.removeListener(onScroll);
+      };
+    }, [verticalScrollController, horizontalScrollController, currentDisplayZoom]);
 
     useEffect(() {
       if (!isPaginatedLayout) {
@@ -514,33 +619,9 @@ class EditorView extends HookWidget {
     }, [state.state.selection, state.state.attrs, state.state.externalElements, state.state.isFocused]);
 
     useEffect(() {
-      if (cursor == null) {
-        return null;
-      }
-
-      if (cursor.visible) {
-        final verticalScrollOffset = resolveScrollOffset(verticalScrollController);
-        final geo = ContentGeometry(
-          layout: currentLayout!,
-          pages: controller.state.pages,
-          titleAreaHeight: titleAreaHeight.value,
-          zoom: isPaginatedLayout ? currentDisplayZoom : 1.0,
-        );
-        final horizontalMetrics = resolveHorizontalScrollMetrics(
-          controller: horizontalScrollController,
-          contentWidth: geo.contentWidth,
-          fallbackViewportDimension: MediaQuery.sizeOf(context).width,
-        );
-        final viewportWidth = horizontalMetrics.viewportDimension;
-        final horizontalScrollOffset = horizontalMetrics.scrollOffset;
-        final screenY = geo.titleAreaHeight + geo.cursorTopInPages(cursor) - verticalScrollOffset;
-        final screenX =
-            geo.contentStartX(viewportWidth: viewportWidth, horizontalScrollOffset: horizontalScrollOffset) +
-            geo.toDisplayX(cursor.x);
-        inputController.updateCursor(screenX, screenY, geo.toDisplayY(cursor.height), cursor.precedingCharWidths);
-      }
+      syncInputCursorPosition(renderedCursorValue);
       return null;
-    }, [cursor, state.state.renderVersion, currentDisplayZoom]);
+    }, [renderedCursorValue, state.state.renderVersion, currentDisplayZoom]);
 
     void scrollToOverlay({required int pageIdx, required double x, required double y, required double width}) {
       if (currentLayout == null) {
@@ -660,6 +741,8 @@ class EditorView extends HookWidget {
           titleFocusNode: titleFocusNode,
           subtitleFocusNode: subtitleFocusNode,
           pendingScroll: pendingScroll,
+          pendingScrollPageIdx: pendingScrollPageIdx,
+          renderedCursor: renderedCursor,
           displayZoom: displayZoom,
           renderZoom: renderZoom,
           setZoom: setZoom,
