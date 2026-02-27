@@ -5,6 +5,7 @@ private final class EditorBridgeTextView: UITextView {
   var onBeginFloatingCursor: ((CGPoint) -> Void)?
   var onUpdateFloatingCursor: ((CGPoint) -> Void)?
   var onEndFloatingCursor: (() -> Void)?
+  var onAdjustTextPosition: ((Int) -> Void)?
   var onShortcutAction: ((String) -> Void)?
 
   override var undoManager: UndoManager? {
@@ -21,6 +22,11 @@ private final class EditorBridgeTextView: UITextView {
 
   override func endFloatingCursor() {
     onEndFloatingCursor?()
+  }
+
+  @objc(adjustTextPositionByCharacterOffset:)
+  func adjustTextPositionByCharacterOffset(_ offset: Int) {
+    onAdjustTextPosition?(offset)
   }
 
   override func copy(_ sender: Any?) {
@@ -159,6 +165,9 @@ class EditorInputView: NSObject, FlutterPlatformView {
 class EditorTextInputView: UIView, UITextInput, UITextViewDelegate {
   private static let cursorSentinelOffset: Int = 10000
   private static let maxShadowTextLength: Int = 256
+  private static let navigationLeftPadding: Int = 64
+  private static let navigationRightPadding: Int = 64
+  private static let shadowFillUnit: String = " "
 
   var onInsertText: ((String) -> Void)?
   var onDeleteBackward: (() -> Void)?
@@ -183,6 +192,10 @@ class EditorTextInputView: UIView, UITextInput, UITextViewDelegate {
   private var _isSyncingInputTextViewState: Bool = false
   private var _precedingCharWidths: [Double] = []
   private static weak var _activeInputView: EditorTextInputView?
+  private var _pendingTextEdit: (range: NSRange, text: String, beforeText: String)?
+  private var _suppressSelectionNavigateOnce: Bool = false
+  private var _lastSelectionTextLength: Int?
+  private var _isNavigationShadowMode: Bool = false
 
   private var cursorX: Double = 0
   private var cursorY: Double = 0
@@ -239,6 +252,9 @@ class EditorTextInputView: UIView, UITextInput, UITextViewDelegate {
     textView.onEndFloatingCursor = { [weak self] in
       self?.endFloatingCursor()
     }
+    textView.onAdjustTextPosition = { [weak self] offset in
+      self?.adjustTextPosition(byCharacterOffset: offset)
+    }
     textView.onShortcutAction = { [weak self] action in
       self?._handleShortcutAction(action)
     }
@@ -246,6 +262,39 @@ class EditorTextInputView: UIView, UITextInput, UITextViewDelegate {
     addSubview(textView)
     _inputTextView = textView
     _syncInputTextViewState()
+  }
+
+  private func _reanchorNavigationShadow(precedingCount: Int? = nil) {
+    guard _markedText == nil else { return }
+
+    let leftCount = max(precedingCount ?? _precedingCharWidths.count, 0)
+    let minimumLength = max(
+      Self.navigationLeftPadding + 1 + Self.navigationRightPadding,
+      leftCount + Self.navigationRightPadding
+    )
+    if _shadowText.count < minimumLength {
+      _shadowText = String(repeating: Self.shadowFillUnit, count: minimumLength)
+    } else {
+      _normalizeShadowTextContent()
+    }
+
+    let maxAnchor = _clampOffset(_shadowText.count - Self.navigationRightPadding, max: _shadowText.count)
+    let anchor = _clampOffset(max(Self.navigationLeftPadding, leftCount), max: maxAnchor)
+    _isNavigationShadowMode = true
+    _pendingSelectionRange = NSRange(location: anchor, length: 0)
+    _cursor = Self.cursorSentinelOffset + anchor
+    _syncInputTextViewState(selectedOffset: anchor)
+  }
+
+  private func _prepareNavigationShadow(
+    precedingCount: Int? = nil,
+    resetSelectionTracking: Bool = false
+  ) {
+    if resetSelectionTracking {
+      _suppressSelectionNavigateOnce = false
+      _lastSelectionTextLength = nil
+    }
+    _reanchorNavigationShadow(precedingCount: precedingCount)
   }
 
   private func _syncInputTextViewState(selectedOffset: Int? = nil) {
@@ -265,6 +314,10 @@ class EditorTextInputView: UIView, UITextInput, UITextViewDelegate {
 
   private func _resetShadowState(syncInputTextView: Bool) {
     _pendingSelectionRange = nil
+    _pendingTextEdit = nil
+    _lastSelectionTextLength = nil
+    _suppressSelectionNavigateOnce = false
+    _isNavigationShadowMode = false
     _shadowText = ""
     _cursor = Self.cursorSentinelOffset
     if syncInputTextView {
@@ -381,6 +434,7 @@ class EditorTextInputView: UIView, UITextInput, UITextViewDelegate {
       }
 
       if self._becomeInputResponder() {
+        self._prepareNavigationShadow(resetSelectionTracking: true)
         Self._activeInputView = self
         return
       }
@@ -388,6 +442,7 @@ class EditorTextInputView: UIView, UITextInput, UITextViewDelegate {
       DispatchQueue.main.async { [weak self] in
         guard let self = self else { return }
         if self._becomeInputResponder() {
+          self._prepareNavigationShadow(resetSelectionTracking: true)
           Self._activeInputView = self
         }
       }
@@ -426,6 +481,9 @@ class EditorTextInputView: UIView, UITextInput, UITextViewDelegate {
     cursorHeight = height
     if let widths = precedingCharWidths {
       _precedingCharWidths = widths
+      if _isNavigationShadowMode || _shadowText.isEmpty {
+        _prepareNavigationShadow(precedingCount: widths.count)
+      }
     }
   }
 
@@ -458,6 +516,15 @@ class EditorTextInputView: UIView, UITextInput, UITextViewDelegate {
   func endFloatingCursor() {
     _floatingCursorStart = nil
     onFloatingCursorEnd?()
+  }
+
+  func adjustTextPosition(byCharacterOffset offset: Int) {
+    guard offset != 0 else { return }
+    _clearMarkedText(notify: onUnmarkText)
+    let direction = offset > 0 ? "right" : "left"
+    for _ in 0..<abs(offset) {
+      onNavigate?(direction, false)
+    }
   }
 
   private var _keyRepeatTimer: Timer?
@@ -657,8 +724,17 @@ class EditorTextInputView: UIView, UITextInput, UITextViewDelegate {
       prefix += 1
     }
 
-    let deleteLength = oldChars.count - prefix
-    let insertedText = String(newChars[prefix..<newChars.count])
+    var oldSuffix = oldChars.count
+    var newSuffix = newChars.count
+    while oldSuffix > prefix,
+          newSuffix > prefix,
+          oldChars[oldSuffix - 1] == newChars[newSuffix - 1] {
+      oldSuffix -= 1
+      newSuffix -= 1
+    }
+
+    let deleteLength = oldSuffix - prefix
+    let insertedText = String(newChars[prefix..<newSuffix])
 
     if deleteLength == 0 {
       if !insertedText.isEmpty {
@@ -679,11 +755,91 @@ class EditorTextInputView: UIView, UITextInput, UITextViewDelegate {
     onReplaceBackward?(deleteLength, insertedText)
   }
 
+  private func _deleteLengthForUTF16Range(_ range: NSRange, in text: String) -> Int {
+    let nsText = text as NSString
+    let utf16Length = nsText.length
+    let utf16Start = _clampOffset(range.location, max: utf16Length)
+    let utf16End = _clampOffset(range.location + range.length, max: utf16Length)
+    let clampedLength = Swift.max(0, utf16End - utf16Start)
+
+    let deleted = nsText.substring(with: NSRange(location: utf16Start, length: clampedLength))
+    return deleted.count
+  }
+
+  private func _dispatchTextEdit(range: NSRange, replacementText: String, previousText: String) {
+    let deleteLength = _deleteLengthForUTF16Range(range, in: previousText)
+
+    if replacementText.isEmpty {
+      if deleteLength == 1 {
+        onDeleteBackward?()
+      } else if deleteLength > 1 {
+        onReplaceBackward?(deleteLength, "")
+      }
+      return
+    }
+
+    if deleteLength == 0 {
+      onInsertText?(replacementText)
+    } else {
+      onReplaceBackward?(deleteLength, replacementText)
+    }
+  }
+
+  private func _appliesPendingTextEdit(_ pending: (range: NSRange, text: String, beforeText: String), to currentText: String) -> Bool {
+    let before = pending.beforeText as NSString
+    guard pending.range.location >= 0,
+          pending.range.length >= 0,
+          pending.range.location + pending.range.length <= before.length else {
+      return false
+    }
+
+    let expected = before.replacingCharacters(in: pending.range, with: pending.text)
+    return expected == currentText
+  }
+
+  private func _normalizeShadowTextContent() {
+    guard !_shadowText.isEmpty else { return }
+    _shadowText = String(repeating: Self.shadowFillUnit, count: _shadowText.count)
+  }
+
+  private func _repinAfterBoundaryBackspace() {
+    _prepareNavigationShadow(precedingCount: max(_precedingCharWidths.count, 1))
+  }
+
   private func _syncSelectionStateFromTextView(_ textView: UITextView, textLength: Int) {
     let start = _clampOffset(textView.selectedRange.location, max: textLength)
     let length = _clampOffset(textView.selectedRange.length, max: textLength - start)
     _pendingSelectionRange = NSRange(location: start, length: length)
     _cursor = Self.cursorSentinelOffset + start + length
+  }
+
+  private func _isWhitespaceSelection(_ range: NSRange, in text: String) -> Bool {
+    guard range.length > 0 else { return false }
+
+    let chars = Array(text)
+    let start = _clampOffset(range.location, max: chars.count)
+    let end = _clampOffset(range.location + range.length, max: chars.count)
+    guard end > start else { return false }
+
+    for idx in start..<end where !chars[idx].isWhitespace {
+      return false
+    }
+
+    return true
+  }
+
+  private func _collapseSelectionIfNeeded(textLength: Int, currentText: String) -> Bool {
+    guard !_isNavigationShadowMode else { return false }
+    let range = _normalizedSelectionRange(_pendingSelectionRange, textLength: textLength)
+    guard range.length > 0 else { return false }
+    guard currentText.contains(where: { !$0.isWhitespace }) else { return false }
+    guard _isWhitespaceSelection(range, in: currentText) else { return false }
+
+    let collapseOffset = range.location + range.length
+    _pendingSelectionRange = NSRange(location: collapseOffset, length: 0)
+    _cursor = Self.cursorSentinelOffset + collapseOffset
+    _syncInputTextViewState(selectedOffset: collapseOffset)
+    return true
   }
 
   private func _normalizedSelectionRange(_ range: NSRange?, textLength: Int) -> NSRange {
@@ -700,11 +856,15 @@ class EditorTextInputView: UIView, UITextInput, UITextViewDelegate {
 
   func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {
     guard !_isSyncingInputTextViewState else { return true }
+    _pendingTextEdit = nil
+
+    if _markedText != nil && text.isEmpty {
+      _suppressSelectionNavigateOnce = true
+    }
 
     if text.isEmpty, range.length == 0, range.location == 0, textView.markedTextRange == nil {
       onDeleteBackward?()
-      _pendingSelectionRange = NSRange(location: 0, length: 0)
-      _cursor = Self.cursorSentinelOffset
+      _repinAfterBoundaryBackspace()
       return false
     }
 
@@ -716,6 +876,10 @@ class EditorTextInputView: UIView, UITextInput, UITextViewDelegate {
       }
       _resetShadowState(syncInputTextView: true)
       return false
+    }
+
+    if textView.markedTextRange == nil, _markedText == nil {
+      _pendingTextEdit = (range: range, text: text, beforeText: textView.text ?? "")
     }
 
     return true
@@ -730,6 +894,8 @@ class EditorTextInputView: UIView, UITextInput, UITextViewDelegate {
     if let markedRange = textView.markedTextRange,
        let markedText = textView.text(in: markedRange),
        !markedText.isEmpty {
+      _pendingTextEdit = nil
+      _isNavigationShadowMode = false
       if _markedText != markedText {
         _markedText = markedText
         onSetMarkedText?(markedText)
@@ -737,11 +903,21 @@ class EditorTextInputView: UIView, UITextInput, UITextViewDelegate {
       return
     }
 
+    let hadMarkedText = _markedText != nil
     _clearMarkedText(notify: onCancelMarkedText)
+    if hadMarkedText {
+      _suppressSelectionNavigateOnce = true
+    }
 
     let previousText = _shadowText
     _shadowText = currentText
-    _dispatchTextDelta(from: previousText, to: currentText)
+    _isNavigationShadowMode = false
+    if let pending = _pendingTextEdit, _appliesPendingTextEdit(pending, to: currentText) {
+      _dispatchTextEdit(range: pending.range, replacementText: pending.text, previousText: previousText)
+    } else {
+      _dispatchTextDelta(from: previousText, to: currentText)
+    }
+    _pendingTextEdit = nil
     _truncateShadowTextIfNeeded(syncInputTextView: true)
   }
 
@@ -750,11 +926,36 @@ class EditorTextInputView: UIView, UITextInput, UITextViewDelegate {
 
     let currentText = textView.text ?? ""
     let textLength = currentText.count
+
+    if let lastLength = _lastSelectionTextLength, lastLength != textLength {
+      _lastSelectionTextLength = textLength
+      _syncSelectionStateFromTextView(textView, textLength: textLength)
+      return
+    }
+    _lastSelectionTextLength = textLength
+
     let previousRange = _normalizedSelectionRange(_pendingSelectionRange, textLength: textLength)
 
     _syncSelectionStateFromTextView(textView, textLength: textLength)
 
+    if _markedText != nil {
+      return
+    }
+
+    if _suppressSelectionNavigateOnce {
+      _suppressSelectionNavigateOnce = false
+      return
+    }
+
+    if _floatingCursorStart != nil {
+      return
+    }
+
     guard textView.markedTextRange == nil, currentText == _shadowText else { return }
+
+    if _collapseSelectionIfNeeded(textLength: textLength, currentText: currentText) {
+      return
+    }
 
     let nextRange = _normalizedSelectionRange(_pendingSelectionRange, textLength: textLength)
     guard previousRange.length == 0, nextRange.length == 0 else { return }
@@ -766,11 +967,20 @@ class EditorTextInputView: UIView, UITextInput, UITextViewDelegate {
     for _ in 0..<abs(delta) {
       onNavigate?(direction, false)
     }
+    _normalizeShadowTextContent()
 
-    let shadowEnd = _shadowText.count
-    _pendingSelectionRange = NSRange(location: shadowEnd, length: 0)
-    _cursor = Self.cursorSentinelOffset + shadowEnd
-    _syncInputTextViewState(selectedOffset: shadowEnd)
+    let anchor: Int
+    if textLength >= 2 {
+      anchor = textLength / 2
+    } else if textLength == 1 {
+      anchor = direction == "right" ? 0 : 1
+    } else {
+      anchor = 0
+    }
+
+    _pendingSelectionRange = NSRange(location: anchor, length: 0)
+    _cursor = Self.cursorSentinelOffset + anchor
+    _syncInputTextViewState(selectedOffset: anchor)
   }
 
   func textViewDidEndEditing(_ textView: UITextView) {

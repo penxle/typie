@@ -89,8 +89,8 @@ class InputController {
     if (isComposing) {
       isComposing = false;
       dispatch({'type': 'commitPreedit'});
+      inputKey.currentState?.resetInputContext();
     }
-    inputKey.currentState?.resetInputContext();
   }
 
   void onInsertText(String text) {
