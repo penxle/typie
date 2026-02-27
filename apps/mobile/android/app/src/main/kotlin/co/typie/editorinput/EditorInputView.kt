@@ -105,7 +105,6 @@ class EditorInputNativeView(
     val activePrefix = composingPrefixToStrip
     if (activePrefix.isNotEmpty()) {
       if (text.startsWith(activePrefix)) {
-        clearComposingPrefixTracking()
         return text.substring(activePrefix.length.coerceAtMost(text.length))
       }
       clearComposingPrefixTracking()
@@ -339,6 +338,7 @@ class EditorInputNativeView(
           isComposing = false
           composingText = ""
           clearComposingRegionTracking()
+          clearComposingPrefixTracking()
           channel.invokeMethod("cancelMarkedText", emptyMap<String, Any>())
         }
 
