@@ -4,6 +4,7 @@ import 'package:typie/screens/native_editor/controller/dnd_controller.dart';
 import 'package:typie/screens/native_editor/controller/input.dart';
 import 'package:typie/screens/native_editor/controller/ticker.dart';
 import 'package:typie/screens/native_editor/state/controller.dart';
+import 'package:typie/screens/native_editor/state/state.dart';
 import 'package:typie/screens/native_editor/view/geometry.dart';
 
 class ContentScope extends InheritedWidget {
@@ -25,6 +26,8 @@ class ContentScope extends InheritedWidget {
     required this.titleFocusNode,
     required this.subtitleFocusNode,
     required this.pendingScroll,
+    required this.pendingScrollPageIdx,
+    required this.renderedCursor,
     required this.dndController,
     required this.displayZoom,
     required this.renderZoom,
@@ -50,6 +53,8 @@ class ContentScope extends InheritedWidget {
   final FocusNode titleFocusNode;
   final FocusNode subtitleFocusNode;
   final ValueNotifier<VoidCallback?> pendingScroll;
+  final ValueNotifier<int?> pendingScrollPageIdx;
+  final ValueNotifier<CursorInfo?> renderedCursor;
   final ValueNotifier<double> displayZoom;
   final ValueNotifier<double> renderZoom;
   final void Function(double zoom, {bool commitRender}) setZoom;

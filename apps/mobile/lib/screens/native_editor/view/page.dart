@@ -29,10 +29,10 @@ class PageItem extends HookWidget {
     final scope = ContentScope.of(context);
     final pref = useService<Pref>();
     final editorState = scope.controller.state;
+    final renderedCursor = useValueListenable(scope.renderedCursor);
 
     final layout = editorState.layout!;
-    final cursor = editorState.cursor;
-    final pageCursor = cursor?.pageIdx == pageIndex ? cursor : null;
+    final pageCursor = renderedCursor?.pageIdx == pageIndex ? renderedCursor : null;
     final isFocused = editorState.isFocused;
     final isPaginated = layout is PaginatedLayout;
     final margins = layout is PaginatedLayout ? layout : null;
@@ -44,7 +44,6 @@ class PageItem extends HookWidget {
     final effectiveDisplayZoom = isPaginated ? displayZoom : 1.0;
     final effectiveRenderZoom = isPaginated ? renderZoom : 1.0;
     final bottomGap = scope.geometry.gapAfterPage(pageIndex);
-    final pageHeight = scope.geometry.pageHeightAt(pageIndex);
 
     final editor = scope.editor;
     final renderVersion = editorState.renderVersion;
@@ -121,6 +120,9 @@ class PageItem extends HookWidget {
             return;
           }
           if (!didRender) {
+            if (hasQueuedRender.value) {
+              continue;
+            }
             scheduleRetry(render);
             return;
           }
@@ -130,8 +132,11 @@ class PageItem extends HookWidget {
           textureSize.value = latestLogicalSize.value;
 
           final pending = scope.pendingScroll.value;
-          if (pending != null) {
+          final pendingPageIdx = scope.pendingScrollPageIdx.value;
+          final canApplyPending = pendingPageIdx == null || pendingPageIdx == pageIndex;
+          if (pending != null && canApplyPending) {
             scope.pendingScroll.value = null;
+            scope.pendingScrollPageIdx.value = null;
             pending();
           }
 
@@ -166,6 +171,7 @@ class PageItem extends HookWidget {
     }, [renderVersion, effectiveRenderZoom]);
 
     final hasTexture = textureId.value != null && textureSize.value != null;
+    final baseSize = textureSize.value ?? latestLogicalSize.value;
 
     final pageDecoration = isPaginated
         ? BoxDecoration(
@@ -181,111 +187,101 @@ class PageItem extends HookWidget {
           )
         : null;
 
-    if (hasTexture) {
-      final baseSize = textureSize.value!;
-      final backgroundOverlayLayer = SizedBox.fromSize(
-        size: baseSize,
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [LineHighlight(cursorInfo: pageCursor, isFocused: isFocused, enabled: lineHighlightEnabled)],
+    final backgroundOverlayLayer = SizedBox.fromSize(
+      size: baseSize,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [LineHighlight(cursorInfo: pageCursor, isFocused: isFocused, enabled: lineHighlightEnabled)],
+      ),
+    );
+    final foregroundOverlayLayer = SizedBox.fromSize(
+      size: baseSize,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          _SearchHighlightOverlay(pageIndex: pageIndex, overlays: editorState.search.overlays),
+          _SpellcheckOverlay(pageIndex: pageIndex, overlays: editorState.spellcheck.overlays),
+          _AiFeedbackOverlay(pageIndex: pageIndex, overlays: editorState.aiFeedback.overlays),
+          _RemarkHighlightOverlay(pageIndex: pageIndex, controller: scope.controller),
+          Cursor(cursorInfo: pageCursor, isFocused: isFocused),
+          ElementOverlay(pageIndex: pageIndex),
+          if (isPaginated && margins != null)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: CustomPaint(
+                  painter: _CropMarkerPainter(
+                    marginTop: margins.pageMarginTop,
+                    marginBottom: margins.pageMarginBottom,
+                    marginLeft: margins.pageMarginLeft,
+                    marginRight: margins.pageMarginRight,
+                    color: context.colors.textDefault.withValues(alpha: 0.15),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+
+    Widget content;
+    if (isPaginated && !isUnitZoom(effectiveDisplayZoom)) {
+      final scaledSize = Size(baseSize.width * effectiveDisplayZoom, baseSize.height * effectiveDisplayZoom);
+      final scaledBackgroundOverlay = OverflowBox(
+        alignment: Alignment.topLeft,
+        minWidth: baseSize.width,
+        maxWidth: baseSize.width,
+        minHeight: baseSize.height,
+        maxHeight: baseSize.height,
+        child: Transform.scale(
+          alignment: Alignment.topLeft,
+          scale: effectiveDisplayZoom,
+          child: backgroundOverlayLayer,
         ),
       );
-      final foregroundOverlayLayer = SizedBox.fromSize(
+      final scaledForegroundOverlay = OverflowBox(
+        alignment: Alignment.topLeft,
+        minWidth: baseSize.width,
+        maxWidth: baseSize.width,
+        minHeight: baseSize.height,
+        maxHeight: baseSize.height,
+        child: Transform.scale(
+          alignment: Alignment.topLeft,
+          scale: effectiveDisplayZoom,
+          child: foregroundOverlayLayer,
+        ),
+      );
+      content = SizedBox.fromSize(
+        size: scaledSize,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Positioned.fill(child: scaledBackgroundOverlay),
+            if (hasTexture) Positioned.fill(child: Texture(textureId: textureId.value!)),
+            Positioned.fill(child: scaledForegroundOverlay),
+          ],
+        ),
+      );
+    } else {
+      content = SizedBox.fromSize(
         size: baseSize,
         child: Stack(
           clipBehavior: Clip.none,
           children: [
-            _SearchHighlightOverlay(pageIndex: pageIndex, overlays: editorState.search.overlays),
-            _SpellcheckOverlay(pageIndex: pageIndex, overlays: editorState.spellcheck.overlays),
-            _AiFeedbackOverlay(pageIndex: pageIndex, overlays: editorState.aiFeedback.overlays),
-            _RemarkHighlightOverlay(pageIndex: pageIndex, controller: scope.controller),
-            Cursor(cursorInfo: pageCursor, isFocused: isFocused),
-            ElementOverlay(pageIndex: pageIndex),
-            if (isPaginated && margins != null)
-              Positioned.fill(
-                child: IgnorePointer(
-                  child: CustomPaint(
-                    painter: _CropMarkerPainter(
-                      marginTop: margins.pageMarginTop,
-                      marginBottom: margins.pageMarginBottom,
-                      marginLeft: margins.pageMarginLeft,
-                      marginRight: margins.pageMarginRight,
-                      color: context.colors.textDefault.withValues(alpha: 0.15),
-                    ),
-                  ),
-                ),
-              ),
+            backgroundOverlayLayer,
+            if (hasTexture) SizedBox.expand(child: Texture(textureId: textureId.value!)),
+            foregroundOverlayLayer,
           ],
         ),
       );
-
-      Widget content;
-      if (isPaginated && !isUnitZoom(effectiveDisplayZoom)) {
-        final scaledSize = Size(baseSize.width * effectiveDisplayZoom, baseSize.height * effectiveDisplayZoom);
-        final scaledBackgroundOverlay = OverflowBox(
-          alignment: Alignment.topLeft,
-          minWidth: baseSize.width,
-          maxWidth: baseSize.width,
-          minHeight: baseSize.height,
-          maxHeight: baseSize.height,
-          child: Transform.scale(
-            alignment: Alignment.topLeft,
-            scale: effectiveDisplayZoom,
-            child: backgroundOverlayLayer,
-          ),
-        );
-        final scaledForegroundOverlay = OverflowBox(
-          alignment: Alignment.topLeft,
-          minWidth: baseSize.width,
-          maxWidth: baseSize.width,
-          minHeight: baseSize.height,
-          maxHeight: baseSize.height,
-          child: Transform.scale(
-            alignment: Alignment.topLeft,
-            scale: effectiveDisplayZoom,
-            child: foregroundOverlayLayer,
-          ),
-        );
-        content = SizedBox.fromSize(
-          size: scaledSize,
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              Positioned.fill(child: scaledBackgroundOverlay),
-              Positioned.fill(child: Texture(textureId: textureId.value!)),
-              Positioned.fill(child: scaledForegroundOverlay),
-            ],
-          ),
-        );
-      } else {
-        content = SizedBox.fromSize(
-          size: baseSize,
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              backgroundOverlayLayer,
-              SizedBox.expand(child: Texture(textureId: textureId.value!)),
-              foregroundOverlayLayer,
-            ],
-          ),
-        );
-      }
-
-      if (pageDecoration != null) {
-        content = DecoratedBox(decoration: pageDecoration, child: content);
-      }
-
-      return Padding(
-        padding: EdgeInsets.only(bottom: bottomGap),
-        child: content,
-      );
     }
 
-    return Container(
-      height: pageHeight,
-      margin: EdgeInsets.only(bottom: bottomGap),
-      decoration: pageDecoration,
-      child: const SizedBox.shrink(),
+    if (pageDecoration != null) {
+      content = DecoratedBox(decoration: pageDecoration, child: content);
+    }
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottomGap),
+      child: content,
     );
   }
 }

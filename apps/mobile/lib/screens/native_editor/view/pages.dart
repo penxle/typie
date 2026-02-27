@@ -32,6 +32,7 @@ class PageList extends HookWidget {
 
     final pages = state.state.pages;
     final cursor = state.state.cursor;
+    final renderedCursor = useValueListenable(scope.renderedCursor);
     final isFocused = state.state.isFocused;
     final isSelecting = state.state.isSelecting;
     final fromHandle = state.state.selection?.fromBounds;
@@ -666,6 +667,7 @@ class PageList extends HookWidget {
                                       pageIndex: i,
                                       pageTop: geo.titleAreaHeight + offsets[i],
                                       pageBottom: geo.titleAreaHeight + offsets[i] + geo.pageHeightAt(i),
+                                      activeCursorPageIdx: renderedCursor?.pageIdx,
                                     ),
                                   ],
                                 ],
@@ -1258,11 +1260,18 @@ class _TrackedHorizontalScrollView extends HookWidget {
 }
 
 class _PageSlot extends HookWidget {
-  const _PageSlot({required this.pageIndex, required this.pageTop, required this.pageBottom, super.key});
+  const _PageSlot({
+    required this.pageIndex,
+    required this.pageTop,
+    required this.pageBottom,
+    required this.activeCursorPageIdx,
+    super.key,
+  });
 
   final int pageIndex;
   final double pageTop;
   final double pageBottom;
+  final int? activeCursorPageIdx;
 
   @override
   Widget build(BuildContext context) {
@@ -1270,6 +1279,9 @@ class _PageSlot extends HookWidget {
     final verticalScrollController = scope.verticalScrollController;
 
     bool computeVisibility() {
+      if (activeCursorPageIdx == pageIndex) {
+        return true;
+      }
       final verticalPosition = resolveScrollPosition(verticalScrollController);
       if (verticalPosition == null || !verticalPosition.hasContentDimensions) {
         return true;
@@ -1295,7 +1307,7 @@ class _PageSlot extends HookWidget {
       verticalScrollController.addListener(updateVisibility);
       updateVisibility();
       return () => verticalScrollController.removeListener(updateVisibility);
-    }, [verticalScrollController, pageTop, pageBottom]);
+    }, [verticalScrollController, pageTop, pageBottom, activeCursorPageIdx]);
 
     final pageHeight = pageBottom - pageTop;
 
