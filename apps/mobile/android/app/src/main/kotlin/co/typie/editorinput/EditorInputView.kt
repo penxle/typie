@@ -71,9 +71,67 @@ class EditorInputNativeView(
   private var composingText = ""
   private var lastDeleteTime = 0L
   private var composingRegionLength = 0
+  private var composingRegionStart = -1
+  private var composingRegionEnd = -1
+  private var composingPrefixToStrip = ""
+  private var hasPendingRegionNormalization = false
 
   private val inputMethodManager: InputMethodManager
     get() = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+
+  private fun clearComposingRegionTracking() {
+    composingRegionLength = 0
+    composingRegionStart = -1
+    composingRegionEnd = -1
+    hasPendingRegionNormalization = false
+  }
+
+  private fun clearComposingPrefixTracking() {
+    composingPrefixToStrip = ""
+  }
+
+  private fun currentComposingRegionText(): String {
+    val editable = text ?: return ""
+    if (composingRegionStart < 0 || composingRegionEnd < 0) return ""
+    val start = composingRegionStart.coerceIn(0, editable.length)
+    val end = composingRegionEnd.coerceIn(0, editable.length)
+    if (end <= start) return ""
+    return editable.subSequence(start, end).toString()
+  }
+
+  private fun normalizeSeededComposingText(text: String): String {
+    if (text.isEmpty()) return text
+
+    val activePrefix = composingPrefixToStrip
+    if (activePrefix.isNotEmpty()) {
+      if (text.startsWith(activePrefix)) {
+        clearComposingPrefixTracking()
+        return text.substring(activePrefix.length.coerceAtMost(text.length))
+      }
+      clearComposingPrefixTracking()
+    }
+
+    if (!hasPendingRegionNormalization || composingRegionLength <= 0) return text
+    hasPendingRegionNormalization = false
+
+    val seed = currentComposingRegionText()
+    if (seed.isEmpty()) {
+      clearComposingRegionTracking()
+      return text
+    }
+
+    if (text.length > seed.length && text.startsWith(seed)) {
+      val normalized = text.substring(seed.length)
+      if (normalized.isNotEmpty()) {
+        composingPrefixToStrip = seed
+      }
+      return normalized
+    }
+
+    clearComposingRegionTracking()
+    clearComposingPrefixTracking()
+    return text
+  }
 
   init {
     setText("")
@@ -94,7 +152,8 @@ class EditorInputNativeView(
       composingText = ""
       channel.invokeMethod("unmarkText", emptyMap<String, Any>())
     }
-    composingRegionLength = 0
+    clearComposingRegionTracking()
+    clearComposingPrefixTracking()
   }
 
   private fun cancelComposingState() {
@@ -103,13 +162,51 @@ class EditorInputNativeView(
       composingText = ""
       channel.invokeMethod("cancelMarkedText", emptyMap<String, Any>())
     }
-    composingRegionLength = 0
+    clearComposingRegionTracking()
+    clearComposingPrefixTracking()
   }
 
   private fun consumeComposingRegion(): Boolean {
     if (composingRegionLength <= 0) return false
+
+    if (composingPrefixToStrip.isNotEmpty()) {
+      clearComposingRegionTracking()
+      return false
+    }
+
+    if (!isComposing) {
+      return false
+    }
+
+    val editable = text
+    if (editable == null) {
+      clearComposingRegionTracking()
+      return false
+    }
+
+    val composingStart = BaseInputConnection.getComposingSpanStart(editable)
+    val composingEnd = BaseInputConnection.getComposingSpanEnd(editable)
+    val hasComposingSpan = composingStart >= 0 && composingEnd >= composingStart
+
+    val selectionStart = Selection.getSelectionStart(editable)
+    val selectionEnd = Selection.getSelectionEnd(editable)
+    val selectionInsideComposing =
+      hasComposingSpan &&
+      selectionStart in composingStart..composingEnd &&
+      selectionEnd in composingStart..composingEnd
+
+    if (hasComposingSpan && !selectionInsideComposing) {
+      clearComposingRegionTracking()
+      return false
+    }
+
+    if (!hasComposingSpan) {
+      clearComposingRegionTracking()
+      return false
+    }
+
     repeat(composingRegionLength) { performDelete() }
-    composingRegionLength = 0
+    clearComposingRegionTracking()
     return true
   }
 
@@ -197,7 +294,8 @@ class EditorInputNativeView(
       }
 
       private fun finishComposingNow(): Boolean {
-        composingRegionLength = 0
+        clearComposingRegionTracking()
+        clearComposingPrefixTracking()
         if (isComposing) {
           commitComposingState()
         }
@@ -215,15 +313,21 @@ class EditorInputNativeView(
       }
 
       override fun commitText(text: CharSequence?, newCursorPosition: Int): Boolean {
-        val str = text?.toString().orEmpty()
+        val rawStr = text?.toString().orEmpty()
+        val str = normalizeSeededComposingText(rawStr)
+        val wasRegionNormalized = (str != rawStr)
+        val superText: CharSequence? = if (str == rawStr) text else str
         val isSingleWhitespaceCommit = str.length == 1 && str[0].isWhitespace()
         var shouldInsertText = str.isNotEmpty()
 
-        if (consumeComposingRegion()) {
+        if (!wasRegionNormalized && consumeComposingRegion()) {
           if (str.isNotEmpty()) insertTextOrNewline(str)
-          super.commitText(text, newCursorPosition)
+          super.commitText(superText, newCursorPosition)
           notifyCursorUpdate()
           return true
+        }
+        if (wasRegionNormalized) {
+          clearComposingRegionTracking()
         }
 
         if (isComposing && isSingleWhitespaceCommit) {
@@ -234,28 +338,35 @@ class EditorInputNativeView(
         } else if (isComposing) {
           isComposing = false
           composingText = ""
+          clearComposingRegionTracking()
           channel.invokeMethod("cancelMarkedText", emptyMap<String, Any>())
         }
 
         if (shouldInsertText) insertTextOrNewline(str)
-        super.commitText(text, newCursorPosition)
+        super.commitText(superText, newCursorPosition)
 
         notifyCursorUpdate()
         return true
       }
 
       override fun setComposingText(text: CharSequence?, newCursorPosition: Int): Boolean {
-        val str = text?.toString().orEmpty()
+        val rawStr = text?.toString().orEmpty()
+        val str = normalizeSeededComposingText(rawStr)
+        val wasRegionNormalized = (str != rawStr)
+        val superText: CharSequence? = if (str == rawStr) text else str
 
-        if (consumeComposingRegion()) {
+        if (!wasRegionNormalized && consumeComposingRegion()) {
           if (str.isNotEmpty()) {
             isComposing = true
             composingText = str
             channel.invokeMethod("setMarkedText", mapOf("text" to str))
           }
-          super.setComposingText(str, newCursorPosition)
+          super.setComposingText(superText, newCursorPosition)
           notifyCursorUpdate()
           return true
+        }
+        if (wasRegionNormalized) {
+          clearComposingRegionTracking()
         }
 
         if (str.isEmpty()) {
@@ -266,7 +377,7 @@ class EditorInputNativeView(
           channel.invokeMethod("setMarkedText", mapOf("text" to str))
         }
 
-        super.setComposingText(str, newCursorPosition)
+        super.setComposingText(superText, newCursorPosition)
         notifyCursorUpdate()
         return true
       }
@@ -295,9 +406,33 @@ class EditorInputNativeView(
       }
 
       override fun setComposingRegion(start: Int, end: Int): Boolean {
-        composingRegionLength = kotlin.math.abs(end - start)
+        composingRegionStart = kotlin.math.min(start, end).coerceAtLeast(0)
+        composingRegionEnd = kotlin.math.max(start, end).coerceAtLeast(0)
+        composingRegionLength = (composingRegionEnd - composingRegionStart).coerceAtLeast(0)
+        hasPendingRegionNormalization = composingRegionLength > 0
         super.setComposingRegion(start, end)
         return true
+      }
+
+      override fun setSelection(start: Int, end: Int): Boolean {
+        val editable = text
+        val composingStart = editable?.let { BaseInputConnection.getComposingSpanStart(it) } ?: -1
+        val composingEnd = editable?.let { BaseInputConnection.getComposingSpanEnd(it) } ?: -1
+        val hasComposingSpan = composingStart >= 0 && composingEnd >= composingStart
+        val movedOutsideComposing =
+          hasComposingSpan && (start < composingStart || start > composingEnd || end < composingStart || end > composingEnd)
+
+        if (composingRegionLength > 0 && (!hasComposingSpan || movedOutsideComposing)) {
+          clearComposingRegionTracking()
+        }
+
+        if (isComposing && movedOutsideComposing) {
+          cancelComposingState()
+        }
+
+        val result = super.setSelection(start, end)
+        notifyCursorUpdate()
+        return result
       }
 
       override fun sendKeyEvent(event: KeyEvent): Boolean {
