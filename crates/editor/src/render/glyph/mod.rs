@@ -92,6 +92,21 @@ impl GlyphRenderer {
         } else {
             0.0
         };
+        let render_sources = if has_skew || embolden {
+            [
+                Source::ColorOutline(0),
+                Source::Outline,
+                Source::ColorBitmap(StrikeWith::BestFit),
+                Source::Bitmap(StrikeWith::BestFit),
+            ]
+        } else {
+            [
+                Source::ColorOutline(0),
+                Source::ColorBitmap(StrikeWith::BestFit),
+                Source::Outline,
+                Source::Bitmap(StrikeWith::BestFit),
+            ]
+        };
 
         for glyph in glyphs {
             if glyph.id == 0 {
@@ -154,15 +169,11 @@ impl GlyphRenderer {
                     y: 0.0,
                 });
 
-                let cached = Render::new(&[
-                    Source::ColorOutline(0),
-                    Source::ColorBitmap(StrikeWith::BestFit),
-                    Source::Outline,
-                ])
-                .offset(Vector::new(subpixel_offset_x, subpixel_offset_y))
-                .embolden(embolden_amount)
-                .transform(skew_transform)
-                .render(&mut scaler, glyph_id);
+                let cached = Render::new(&render_sources)
+                    .offset(Vector::new(subpixel_offset_x, subpixel_offset_y))
+                    .embolden(embolden_amount)
+                    .transform(skew_transform)
+                    .render(&mut scaler, glyph_id);
 
                 let cached = match cached {
                     Some(image) => CachedGlyph::Rendered(image),
