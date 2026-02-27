@@ -67,6 +67,13 @@ class EditorInputNativeView(
   private val channel: MethodChannel
 ) : EditText(context) {
 
+  private data class PendingRegionSnapshot(
+    val length: Int,
+    val start: Int,
+    val end: Int,
+    val seed: String
+  )
+
   private var isComposing = false
   private var composingText = ""
   private var lastDeleteTime = 0L
@@ -209,6 +216,93 @@ class EditorInputNativeView(
     return true
   }
 
+  private fun capturePendingRegionSnapshot(): PendingRegionSnapshot? {
+    if (!hasPendingRegionNormalization) return null
+    if (composingRegionLength <= 0) return null
+    return PendingRegionSnapshot(
+      length = composingRegionLength,
+      start = composingRegionStart,
+      end = composingRegionEnd,
+      seed = currentComposingRegionText(),
+    )
+  }
+
+  private fun shouldConsumePendingRegionForReplacement(
+    rawText: String,
+    pendingRegion: PendingRegionSnapshot
+  ): Boolean {
+    val seed = pendingRegion.seed
+    if (rawText.isEmpty() || seed.isEmpty()) return false
+    if (pendingRegion.start < 0 || pendingRegion.end <= pendingRegion.start) return false
+    if (seed.length != pendingRegion.length) return false
+    if (rawText.startsWith(seed)) return false
+
+    val editable = text ?: return false
+    val normalizedStart = pendingRegion.start.coerceIn(0, editable.length)
+    val normalizedEnd = pendingRegion.end.coerceIn(0, editable.length)
+    if (normalizedEnd <= normalizedStart) return false
+
+    val currentSeed = editable.subSequence(normalizedStart, normalizedEnd).toString()
+    if (currentSeed != seed) return false
+
+    val selectionStart = Selection.getSelectionStart(editable)
+    val selectionEnd = Selection.getSelectionEnd(editable)
+    val selectionInsideRegion = selectionStart in normalizedStart..normalizedEnd && selectionEnd in normalizedStart..normalizedEnd
+    if (!selectionInsideRegion) return false
+
+    return true
+  }
+
+  private fun consumePendingRegionSnapshot(pendingRegion: PendingRegionSnapshot): Boolean {
+    val length = pendingRegion.length
+    if (length <= 0) return false
+    if (isComposing) return false
+    if (composingPrefixToStrip.isNotEmpty()) {
+      clearComposingRegionTracking()
+      return false
+    }
+
+    val editable = text ?: run {
+      clearComposingRegionTracking()
+      return false
+    }
+    val normalizedStart = pendingRegion.start.coerceIn(0, editable.length)
+    val normalizedEnd = pendingRegion.end.coerceIn(0, editable.length)
+    if (normalizedEnd <= normalizedStart) {
+      clearComposingRegionTracking()
+      return false
+    }
+
+    val currentSeed = editable.subSequence(normalizedStart, normalizedEnd).toString()
+    if (currentSeed != pendingRegion.seed) {
+      clearComposingRegionTracking()
+      return false
+    }
+
+    val selectionStart = Selection.getSelectionStart(editable)
+    val selectionEnd = Selection.getSelectionEnd(editable)
+    val selectionInsideRegion = selectionStart in normalizedStart..normalizedEnd && selectionEnd in normalizedStart..normalizedEnd
+    if (!selectionInsideRegion) {
+      clearComposingRegionTracking()
+      return false
+    }
+
+    repeat(length) { performDelete() }
+    clearComposingRegionTracking()
+    return true
+  }
+
+  private fun tryConsumePendingRegionForReplacement(
+    rawText: String,
+    wasRegionNormalized: Boolean,
+    pendingRegion: PendingRegionSnapshot?
+  ) {
+    if (wasRegionNormalized) return
+    if (pendingRegion == null) return
+    if (!shouldConsumePendingRegionForReplacement(rawText, pendingRegion)) return
+    consumePendingRegionSnapshot(pendingRegion)
+  }
+
   private fun performDelete() {
     channel.invokeMethod("deleteBackward", emptyMap<String, Any>())
   }
@@ -313,11 +407,14 @@ class EditorInputNativeView(
 
       override fun commitText(text: CharSequence?, newCursorPosition: Int): Boolean {
         val rawStr = text?.toString().orEmpty()
+        val pendingRegion = capturePendingRegionSnapshot()
         val str = normalizeSeededComposingText(rawStr)
         val wasRegionNormalized = (str != rawStr)
         val superText: CharSequence? = if (str == rawStr) text else str
         val isSingleWhitespaceCommit = str.length == 1 && str[0].isWhitespace()
         var shouldInsertText = str.isNotEmpty()
+
+        tryConsumePendingRegionForReplacement(rawStr, wasRegionNormalized, pendingRegion)
 
         if (!wasRegionNormalized && consumeComposingRegion()) {
           if (str.isNotEmpty()) insertTextOrNewline(str)
@@ -351,9 +448,12 @@ class EditorInputNativeView(
 
       override fun setComposingText(text: CharSequence?, newCursorPosition: Int): Boolean {
         val rawStr = text?.toString().orEmpty()
+        val pendingRegion = capturePendingRegionSnapshot()
         val str = normalizeSeededComposingText(rawStr)
         val wasRegionNormalized = (str != rawStr)
         val superText: CharSequence? = if (str == rawStr) text else str
+
+        tryConsumePendingRegionForReplacement(rawStr, wasRegionNormalized, pendingRegion)
 
         if (!wasRegionNormalized && consumeComposingRegion()) {
           if (str.isNotEmpty()) {
