@@ -28,9 +28,10 @@ pub struct Glyph {
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 struct GlyphCacheKey {
     font_hash: u64,
+    font_index: u32,
     glyph_id: u32,
     size_q4: u32,
-    has_skew: bool,
+    glyph_transform: Option<[u32; 6]>,
     embolden: bool,
     subpixel_x: u8,
     subpixel_y: u8,
@@ -38,7 +39,6 @@ struct GlyphCacheKey {
 
 enum CachedGlyph {
     Rendered(Image),
-    None,
 }
 
 pub struct GlyphRenderer {
@@ -66,10 +66,10 @@ impl GlyphRenderer {
         glyphs: &[Glyph],
     ) {
         let font_data = font.data.as_ref();
-        let font_hash = calculate_font_hash(font_data);
+        let font_hash = calculate_font_hash(font);
         let size_q4 = (font_size * 4.0).round() as u32;
         let quantized_size = size_q4 as f32 / 4.0;
-        let has_skew = glyph_transform.is_some();
+        let glyph_transform_bits = transform_to_bits(glyph_transform);
 
         let mut font_ref_lazy: Option<FontRef> = None;
 
@@ -92,7 +92,7 @@ impl GlyphRenderer {
         } else {
             0.0
         };
-        let render_sources = if has_skew || embolden {
+        let render_sources = if glyph_transform.is_some() || embolden {
             [
                 Source::ColorOutline(0),
                 Source::Outline,
@@ -122,9 +122,10 @@ impl GlyphRenderer {
 
             let cache_key = GlyphCacheKey {
                 font_hash,
+                font_index: font.index,
                 glyph_id: glyph.id,
                 size_q4,
-                has_skew,
+                glyph_transform: glyph_transform_bits,
                 embolden,
                 subpixel_x,
                 subpixel_y,
@@ -133,12 +134,13 @@ impl GlyphRenderer {
             if !self.cache.contains_key(&cache_key) {
                 let font_ref = match font_ref_lazy {
                     Some(ref f) => f,
-                    None => match FontRef::new(font_data) {
+                    None => match FontRef::from_index(font_data, font.index) {
                         Ok(f) => font_ref_lazy.insert(f),
                         Err(e) => {
                             error!(
-                                "[GlyphRenderer] FontRef::new failed: {:?}, font_data.len={}",
+                                "[GlyphRenderer] FontRef::from_index failed: {:?}, font_index={}, font_data.len={}",
                                 e,
+                                font.index,
                                 font_data.len()
                             );
                             continue;
@@ -150,7 +152,7 @@ impl GlyphRenderer {
                 let subpixel_offset_x = subpixel_x as f32 * (1.0 / SUBPIXEL_POS_COUNT as f32);
                 let subpixel_offset_y = subpixel_y as f32 * (1.0 / SUBPIXEL_POS_COUNT as f32);
 
-                let id = [font_hash, 0];
+                let id = [font_hash, font.index as u64];
                 let mut scaler = self
                     .scale_context
                     .builder(font_ref.clone(), id)
@@ -175,11 +177,9 @@ impl GlyphRenderer {
                     .transform(skew_transform)
                     .render(&mut scaler, glyph_id);
 
-                let cached = match cached {
-                    Some(image) => CachedGlyph::Rendered(image),
-                    None => CachedGlyph::None,
-                };
-                self.cache.insert(cache_key, cached);
+                if let Some(image) = cached {
+                    self.cache.insert(cache_key, CachedGlyph::Rendered(image));
+                }
             }
 
             match self.cache.get(&cache_key) {
@@ -234,19 +234,20 @@ impl GlyphRenderer {
         F: FnMut(&Path),
     {
         let font_data = font.data.as_ref();
-        let font_ref = match FontRef::new(font_data) {
+        let font_ref = match FontRef::from_index(font_data, font.index) {
             Ok(font_ref) => font_ref,
             Err(e) => {
                 error!(
-                    "[GlyphRenderer] FontRef::new failed for outline export: {:?}, font_data.len={}",
+                    "[GlyphRenderer] FontRef::from_index failed for outline export: {:?}, font_index={}, font_data.len={}",
                     e,
+                    font.index,
                     font_data.len()
                 );
                 return;
             }
         };
 
-        let font_hash = calculate_font_hash(font_data);
+        let font_hash = calculate_font_hash(font);
         let size_q4 = (font_size * 4.0).round() as u32;
         let quantized_size = size_q4 as f32 / 4.0;
         let embolden_amount = if embolden {
@@ -276,7 +277,7 @@ impl GlyphRenderer {
 
             let mut scaler = self
                 .scale_context
-                .builder(font_ref.clone(), [font_hash, 0])
+                .builder(font_ref.clone(), [font_hash, font.index as u64])
                 .size(quantized_size)
                 .hint(true)
                 .build();
@@ -373,10 +374,25 @@ fn quantize_subpixel(fract: f32) -> u8 {
     (fixed & SUBPIXEL_MASK) as u8
 }
 
-fn calculate_font_hash(font_data: &[u8]) -> u64 {
+fn transform_to_bits(transform: Option<Transform>) -> Option<[u32; 6]> {
+    transform.map(|t| {
+        [
+            t.sx.to_bits(),
+            t.ky.to_bits(),
+            t.kx.to_bits(),
+            t.sy.to_bits(),
+            t.tx.to_bits(),
+            t.ty.to_bits(),
+        ]
+    })
+}
+
+fn calculate_font_hash(font: &FontData) -> u64 {
+    let font_data = font.data.as_ref();
     let mut hasher = rustc_hash::FxHasher::default();
     font_data.as_ptr().hash(&mut hasher);
     font_data.len().hash(&mut hasher);
     crate::global::font_version(font_data.as_ptr()).hash(&mut hasher);
+    font.index.hash(&mut hasher);
     hasher.finish()
 }
