@@ -450,9 +450,10 @@ define_messages! {
     FontsLoaded {
         family: String,
         weight: u16,
+        codepoints: Vec<u32>,
     }
     => when When::True
-    => handle(rt) { rt.handle_fonts_loaded(family, weight) },
+    => handle(rt) { rt.handle_fonts_loaded(family, weight, codepoints) },
 
     Escape
     => when When::True

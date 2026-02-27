@@ -562,7 +562,7 @@ export class Editor {
         uncovered.length > 0 ? ensureRequiredFallbackFont(wasm, weight, uncovered) : undefined,
       ),
     ]).then(() => {
-      this.dispatch({ type: 'fontsLoaded', family, weight });
+      this.dispatch({ type: 'fontsLoaded', family, weight, codepoints });
     });
   }
 
