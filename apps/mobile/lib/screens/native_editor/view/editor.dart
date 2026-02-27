@@ -899,6 +899,10 @@ class _DocumentPlaceholder extends StatelessWidget {
           return const SizedBox.shrink();
         }
 
+        if (titleAreaHeight.value <= 0) {
+          return const SizedBox.shrink();
+        }
+
         final layout = controller.state.layout;
         if (layout == null) {
           return const SizedBox.shrink();
