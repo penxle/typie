@@ -570,8 +570,9 @@ class _PageMarginSection extends StatelessWidget {
       spacing: 8,
       children: [
         const _Option(icon: LucideLightIcons.ruler_dimension_line, label: '여백 (mm)', trailing: SizedBox.shrink()),
-        Row(
+        Wrap(
           spacing: 8,
+          runSpacing: 8,
           children: [
             Tappable(
               onTap: () => _editPageMargin(context, scope, pageLayout, 'top'),

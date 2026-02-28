@@ -457,8 +457,9 @@ class _PageMarginSection extends StatelessWidget {
       spacing: 8,
       children: [
         const _Option(icon: LucideLightIcons.ruler_dimension_line, label: '여백 (mm)', trailing: SizedBox.shrink()),
-        Row(
+        Wrap(
           spacing: 8,
+          runSpacing: 8,
           children: [
             _marginButton(context, 'top', '위', _pxToMm(layoutMode.pageMarginTop)),
             _marginButton(context, 'bottom', '아래', _pxToMm(layoutMode.pageMarginBottom)),
