@@ -71,6 +71,7 @@
               title
               subtitle
               excerpt
+              createdAt
               updatedAt
               thumbnail {
                 id
@@ -87,6 +88,7 @@
               title
               subtitle
               excerpt
+              createdAt
               updatedAt
               thumbnail {
                 id
@@ -100,6 +102,7 @@
           id
           name
           url
+          dateDisplay
 
           logo {
             id
@@ -332,9 +335,13 @@
                       </p>
                     {/if}
 
-                    <p class={css({ marginTop: '10px', fontSize: '13px', color: 'text.faint' })}>
-                      {dayjs(entity.node.updatedAt).format('YYYY. M. D.')}
-                    </p>
+                    {#if entityView.data.site.dateDisplay !== 'NONE'}
+                      <p class={css({ marginTop: '10px', fontSize: '13px', color: 'text.faint' })}>
+                        {dayjs(entityView.data.site.dateDisplay === 'CREATED_AT' ? entity.node.createdAt : entity.node.updatedAt).format(
+                          'YYYY. M. D.',
+                        )}
+                      </p>
+                    {/if}
                   </div>
 
                   {#if entity.node.thumbnail}

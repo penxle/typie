@@ -198,6 +198,13 @@ export const SingleSignOnProvider = {
   NAVER: 'NAVER',
 } as const;
 
+export type SiteDateDisplay = keyof typeof SiteDateDisplay;
+export const SiteDateDisplay = {
+  NONE: 'NONE',
+  CREATED_AT: 'CREATED_AT',
+  UPDATED_AT: 'UPDATED_AT',
+} as const;
+
 export type SiteState = keyof typeof SiteState;
 export const SiteState = {
   ACTIVE: 'ACTIVE',

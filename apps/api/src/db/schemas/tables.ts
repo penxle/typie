@@ -704,6 +704,7 @@ export const Sites = pgTable(
     slug: text('slug').notNull(),
     name: text('name').notNull(),
     state: E._SiteState('state').notNull().default('ACTIVE'),
+    dateDisplay: E._SiteDateDisplay('date_display').notNull().default('UPDATED_AT'),
     createdAt: datetime('created_at')
       .notNull()
       .default(sql`now()`),

@@ -4,9 +4,11 @@
   import { flex } from '@typie/styled-system/patterns';
   import { Icon, Modal } from '@typie/ui/components';
   import OrbitIcon from '~icons/lucide/orbit';
+  import PaletteIcon from '~icons/lucide/palette';
   import { replaceState } from '$app/navigation';
   import { page } from '$app/state';
   import { graphql } from '$mearie';
+  import DesignTab from './DesignTab.svelte';
   import GeneralTab from './GeneralTab.svelte';
   import type { Component } from 'svelte';
   import type { DashboardLayout_SiteSettingsModal_site$key, DashboardLayout_SiteSettingsModal_user$key } from '$mearie';
@@ -32,6 +34,7 @@
         id
 
         ...DashboardLayout_SiteSettingsModal_GeneralTab_site
+        ...DashboardLayout_SiteSettingsModal_DesignTab_site
       }
     `),
     () => site$key,
@@ -54,6 +57,12 @@
       label: '일반',
       icon: OrbitIcon,
       component: GeneralTab,
+    },
+    {
+      path: '/site-settings/design',
+      label: '디자인',
+      icon: PaletteIcon,
+      component: DesignTab,
     },
   ];
 
