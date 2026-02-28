@@ -29,7 +29,7 @@ class PageItem extends HookWidget {
     final scope = ContentScope.of(context);
     final pref = useService<Pref>();
     final editorState = scope.controller.state;
-    final renderedCursor = useValueListenable(scope.renderedCursor);
+    final renderedCursor = useValueListenable(scope.presentedViewport).cursor;
 
     final layout = editorState.layout!;
     final pageCursor = renderedCursor?.pageIdx == pageIndex ? renderedCursor : null;

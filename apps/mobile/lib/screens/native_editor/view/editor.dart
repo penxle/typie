@@ -95,7 +95,12 @@ class EditorView extends HookWidget {
     final handleDragPosition = useValueNotifier<Offset?>(null);
     final pendingScroll = useValueNotifier<VoidCallback?>(null);
     final pendingScrollPageIdx = useValueNotifier<int?>(null);
-    final renderedCursor = useValueNotifier<CursorInfo?>(controller.state.cursor);
+    final presentedViewport = useValueNotifier<PresentedViewport>(
+      PresentedViewport.base(
+        cursor: controller.state.cursor,
+        renderVersion: controller.state.cursor == null ? null : controller.state.renderVersion,
+      ),
+    );
     final zoomViewportWidth = useValueNotifier<double>(0);
     final displayZoom = useValueNotifier<double>(1);
     final renderZoom = useValueNotifier<double>(1);
@@ -408,6 +413,9 @@ class EditorView extends HookWidget {
       suppressScrollbarTimer.value = Timer(const Duration(milliseconds: 150), () {
         suppressScrollbarTimer.value = null;
         setSuppressScrollbarVisibility(false);
+        if (presentedViewport.value.hasProjectedMetrics) {
+          presentedViewport.value = presentedViewport.value.clearProjection();
+        }
       });
     }
 
@@ -415,7 +423,7 @@ class EditorView extends HookWidget {
       if (!context.mounted) {
         return;
       }
-      final activeCursor = nextCursor ?? renderedCursor.value;
+      final activeCursor = nextCursor ?? presentedViewport.value.cursor;
       final layout = controller.state.layout;
       if (layout == null || activeCursor == null || !activeCursor.visible) {
         return;
@@ -448,6 +456,55 @@ class EditorView extends HookWidget {
       );
     }
 
+    PresentedViewport buildPresentedViewportSnapshot({required CursorInfo? cursor, required bool projectTypewriter}) {
+      final renderVersion = cursor == null ? null : controller.state.renderVersion;
+      if (!projectTypewriter || cursor == null) {
+        return PresentedViewport.base(cursor: cursor, renderVersion: renderVersion);
+      }
+
+      final layout = controller.state.layout;
+      final verticalPosition = resolveScrollPosition(verticalScrollController);
+      if (layout == null || !cursor.visible || verticalPosition == null || !verticalPosition.hasContentDimensions) {
+        return PresentedViewport.base(cursor: cursor, renderVersion: renderVersion);
+      }
+
+      final zoom = layout is PaginatedLayout ? currentDisplayZoom : 1.0;
+      final geo = ContentGeometry(
+        titleAreaHeight: titleAreaHeight.value,
+        layout: layout,
+        pages: controller.state.pages,
+        selection: controller.state.selection,
+        zoom: zoom,
+      );
+      final viewportHeight = verticalPosition.viewportDimension;
+      final cursorHeight = geo.toDisplayY(cursor.height);
+      final availableRange = viewportHeight - cursorHeight;
+      final targetScroll = geo.cursorTopInContent(cursor) - availableRange * pref.typewriterPosition;
+      final totalContentHeight = geo.totalContentHeight(
+        viewportHeight: viewportHeight,
+        cursor: cursor,
+        typewriterEnabled: true,
+        typewriterPosition: pref.typewriterPosition,
+      );
+      final maxScrollExtent = (totalContentHeight - viewportHeight).clamp(0.0, double.infinity);
+      final scrollOffset = targetScroll.clamp(0.0, maxScrollExtent);
+
+      return PresentedViewport.projected(
+        cursor: cursor,
+        renderVersion: renderVersion,
+        projectedScrollOffset: scrollOffset,
+        projectedMaxScrollExtent: maxScrollExtent,
+        projectedViewportHeight: viewportHeight,
+      );
+    }
+
+    void setRenderedCursorSnapshot(CursorInfo? nextCursor, {bool projectTypewriter = false}) {
+      presentedViewport.value = buildPresentedViewportSnapshot(
+        cursor: nextCursor,
+        projectTypewriter: projectTypewriter,
+      );
+    }
+
     void queueRenderSynchronizedCursorUpdate({
       required CursorInfo nextCursor,
       required bool typewriter,
@@ -456,7 +513,7 @@ class EditorView extends HookWidget {
       pendingScrollPageIdx.value = targetPageIdx;
       pendingScroll.value = () {
         pendingScrollPageIdx.value = null;
-        renderedCursor.value = nextCursor;
+        setRenderedCursorSnapshot(nextCursor, projectTypewriter: typewriter);
         runCursorScroll(nextCursor, typewriter: typewriter);
         syncInputCursorPosition(nextCursor);
       };
@@ -475,7 +532,7 @@ class EditorView extends HookWidget {
       if (canApplyCursorScrollNow()) {
         pendingScroll.value = null;
         pendingScrollPageIdx.value = null;
-        renderedCursor.value = nextCursor;
+        setRenderedCursorSnapshot(nextCursor, projectTypewriter: typewriter);
         runCursorScroll(nextCursor, typewriter: typewriter);
         syncInputCursorPosition(nextCursor);
       } else {
@@ -540,7 +597,7 @@ class EditorView extends HookWidget {
     final state = useListenable(controller);
     final currentLayout = state.state.layout;
     final isPaginatedLayout = currentLayout is PaginatedLayout;
-    final renderedCursorValue = useValueListenable(renderedCursor);
+    final renderedCursorValue = useValueListenable(presentedViewport).cursor;
     final didApplyPaginatedInitialZoom = useRef(false);
 
     useEffect(() {
@@ -555,7 +612,7 @@ class EditorView extends HookWidget {
           }
           pendingScroll.value = null;
           pendingScrollPageIdx.value = null;
-          renderedCursor.value = null;
+          setRenderedCursorSnapshot(null);
           return;
         }
 
@@ -567,7 +624,7 @@ class EditorView extends HookWidget {
           }
           pendingScroll.value = null;
           pendingScrollPageIdx.value = null;
-          renderedCursor.value = nextCursor;
+          setRenderedCursorSnapshot(nextCursor);
           return;
         }
 
@@ -581,7 +638,7 @@ class EditorView extends HookWidget {
         if (pref.typewriterEnabled) {
           applyCursorScrollAndVisual(nextCursor, typewriter: true);
         } else {
-          renderedCursor.value = nextCursor;
+          setRenderedCursorSnapshot(nextCursor);
         }
       }
 
@@ -758,7 +815,7 @@ class EditorView extends HookWidget {
           subtitleFocusNode: subtitleFocusNode,
           pendingScroll: pendingScroll,
           pendingScrollPageIdx: pendingScrollPageIdx,
-          renderedCursor: renderedCursor,
+          presentedViewport: presentedViewport,
           displayZoom: displayZoom,
           renderZoom: renderZoom,
           setZoom: setZoom,

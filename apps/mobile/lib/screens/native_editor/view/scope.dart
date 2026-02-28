@@ -7,6 +7,34 @@ import 'package:typie/screens/native_editor/state/controller.dart';
 import 'package:typie/screens/native_editor/state/state.dart';
 import 'package:typie/screens/native_editor/view/geometry.dart';
 
+class PresentedViewport {
+  const PresentedViewport.base({required this.cursor, required this.renderVersion})
+    : projectedScrollOffset = null,
+      projectedMaxScrollExtent = null,
+      projectedViewportHeight = null;
+
+  const PresentedViewport.projected({
+    required this.cursor,
+    required this.renderVersion,
+    required this.projectedScrollOffset,
+    required this.projectedMaxScrollExtent,
+    required this.projectedViewportHeight,
+  });
+
+  final CursorInfo? cursor;
+  final Object? renderVersion;
+  final double? projectedScrollOffset;
+  final double? projectedMaxScrollExtent;
+  final double? projectedViewportHeight;
+
+  bool get hasProjectedMetrics =>
+      projectedScrollOffset != null && projectedMaxScrollExtent != null && projectedViewportHeight != null;
+
+  PresentedViewport clearProjection() {
+    return PresentedViewport.base(cursor: cursor, renderVersion: renderVersion);
+  }
+}
+
 class ContentScope extends InheritedWidget {
   const ContentScope({
     required super.child,
@@ -27,7 +55,7 @@ class ContentScope extends InheritedWidget {
     required this.subtitleFocusNode,
     required this.pendingScroll,
     required this.pendingScrollPageIdx,
-    required this.renderedCursor,
+    required this.presentedViewport,
     required this.dndController,
     required this.displayZoom,
     required this.renderZoom,
@@ -54,7 +82,7 @@ class ContentScope extends InheritedWidget {
   final FocusNode subtitleFocusNode;
   final ValueNotifier<VoidCallback?> pendingScroll;
   final ValueNotifier<int?> pendingScrollPageIdx;
-  final ValueNotifier<CursorInfo?> renderedCursor;
+  final ValueNotifier<PresentedViewport> presentedViewport;
   final ValueNotifier<double> displayZoom;
   final ValueNotifier<double> renderZoom;
   final void Function(double zoom, {bool commitRender}) setZoom;

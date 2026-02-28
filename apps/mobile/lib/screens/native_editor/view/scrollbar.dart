@@ -41,7 +41,15 @@ class EditorScrollbar extends HookWidget {
     final isEditorFocused = useValueListenable(toolbarScope.isEditorFocused);
     final layout = state.state.layout!;
     final pages = state.state.pages;
-    final cursor = state.state.cursor;
+    final currentStateCursor = state.state.cursor;
+    final presentedViewport = useValueListenable(scope.presentedViewport);
+    final currentRenderedCursor = presentedViewport.cursor;
+    final currentStateRenderVersion = state.state.renderVersion;
+    final hasAlignedRenderedCursor =
+        currentRenderedCursor != null && presentedViewport.renderVersion == currentStateRenderVersion;
+    final alignedPresentedViewport = hasAlignedRenderedCursor ? presentedViewport : null;
+
+    final cursor = hasAlignedRenderedCursor ? currentRenderedCursor : currentStateCursor;
     useValueListenable(scope.titleAreaHeight);
     useValueListenable(scope.displayZoom);
     final typewriterEnabled = pref.typewriterEnabled;
@@ -131,7 +139,7 @@ class EditorScrollbar extends HookWidget {
       fallbackViewportDimension: viewWidth,
     );
 
-    double calculateTotalContentHeight() {
+    double calculateFallbackTotalContentHeight() {
       final viewportHeight = hasVerticalClients ? verticalPosition.viewportDimension : viewHeight;
       return geometry.totalContentHeight(
         viewportHeight: viewportHeight,
@@ -146,17 +154,34 @@ class EditorScrollbar extends HookWidget {
     final actualViewHeight = hasVerticalClients ? verticalPosition.viewportDimension : viewHeight;
     final actualViewWidth = hasHorizontalScroll ? horizontalMetrics.viewportDimension : viewWidth;
 
-    final totalContentHeight = calculateTotalContentHeight();
-    final calculatedMaxScrollExtent = math.max<double>(0, totalContentHeight - actualViewHeight);
-    final hasVerticalScroll = calculatedMaxScrollExtent > 0;
+    final fallbackTotalContentHeight = calculateFallbackTotalContentHeight();
+    final fallbackMaxScrollExtent = math.max<double>(0, fallbackTotalContentHeight - actualViewHeight);
+    final positionMaxScrollExtent = hasVerticalClients ? math.max<double>(0, verticalPosition.maxScrollExtent) : 0.0;
+    final shouldUseTypewriterProjection = alignedPresentedViewport?.hasProjectedMetrics ?? false;
+
+    late final double maxScrollExtent;
+    late final double scrollOffset;
+    late final double viewportDimension;
+
+    if (hasVerticalClients && shouldUseTypewriterProjection) {
+      maxScrollExtent = alignedPresentedViewport!.projectedMaxScrollExtent!;
+      scrollOffset = alignedPresentedViewport.projectedScrollOffset!.clamp(0.0, maxScrollExtent);
+      viewportDimension = alignedPresentedViewport.projectedViewportHeight!;
+    } else if (hasVerticalClients) {
+      maxScrollExtent = positionMaxScrollExtent;
+      scrollOffset = verticalPosition.pixels.clamp(0.0, maxScrollExtent);
+      viewportDimension = actualViewHeight;
+    } else {
+      maxScrollExtent = fallbackMaxScrollExtent;
+      scrollOffset = 0.0;
+      viewportDimension = actualViewHeight;
+    }
+
+    final hasVerticalScroll = hasScrollableExtent(maxScrollExtent);
 
     if (!hasVerticalScroll && !hasHorizontalScroll) {
       return const SizedBox.shrink();
     }
-
-    final scrollOffset = hasVerticalClients ? verticalPosition.pixels.clamp(0.0, calculatedMaxScrollExtent) : 0.0;
-    final maxScrollExtent = calculatedMaxScrollExtent;
-    final viewportDimension = actualViewHeight;
 
     final horizontalScrollOffset = hasHorizontalScroll ? horizontalMetrics.scrollOffset : 0.0;
     final horizontalMaxScrollExtent = hasHorizontalScroll

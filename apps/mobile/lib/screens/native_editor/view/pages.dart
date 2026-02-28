@@ -32,7 +32,7 @@ class PageList extends HookWidget {
 
     final pages = state.state.pages;
     final cursor = state.state.cursor;
-    final renderedCursor = useValueListenable(scope.renderedCursor);
+    final renderedCursor = useValueListenable(scope.presentedViewport).cursor;
     final isFocused = state.state.isFocused;
     final isSelecting = state.state.isSelecting;
     final fromHandle = state.state.selection?.fromBounds;
