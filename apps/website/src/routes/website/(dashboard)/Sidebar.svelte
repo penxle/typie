@@ -129,6 +129,23 @@
   const app = getAppContext();
   const paneGroup = getPaneGroup();
 
+  const getAdjacentOrders = () => {
+    if (!app.state.current) return {};
+
+    const currentEl = document.querySelector<HTMLElement>(`[data-slug="${app.state.current}"]`);
+    if (!currentEl) return {};
+
+    const lowerOrder = currentEl.dataset.order;
+
+    let nextEl = currentEl.nextElementSibling as HTMLElement | null;
+    while (nextEl && !Object.hasOwn(nextEl.dataset, 'id')) {
+      nextEl = nextEl.nextElementSibling as HTMLElement | null;
+    }
+    const upperOrder = nextEl?.dataset.order;
+
+    return { lowerOrder, upperOrder };
+  };
+
   type Resizer = {
     deltaX: number;
     event: PointerEvent;
@@ -347,10 +364,14 @@
             _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
           })}
           onclick={async () => {
+            const { lowerOrder, upperOrder } = getAdjacentOrders();
             const resp = await createFolder({
               input: {
                 siteId: site.data.id,
                 name: '새 폴더',
+                parentEntityId: app.state.ancestors.at(-1),
+                lowerOrder,
+                upperOrder,
               },
             });
 
@@ -373,9 +394,13 @@
             _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
           })}
           onclick={async () => {
+            const { lowerOrder, upperOrder } = getAdjacentOrders();
             const resp = await createDocument({
               input: {
                 siteId: site.data.id,
+                parentEntityId: app.state.ancestors.at(-1),
+                lowerOrder,
+                upperOrder,
               },
             });
 

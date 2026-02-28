@@ -79,8 +79,10 @@ enum CouponState {
 }
 
 input CreateDocumentInput {
+  lowerOrder: String
   parentEntityId: ID
   siteId: ID!
+  upperOrder: String
 }
 
 input CreateDocumentReactionInput {
@@ -89,9 +91,11 @@ input CreateDocumentReactionInput {
 }
 
 input CreateFolderInput {
+  lowerOrder: String
   name: String!
   parentEntityId: ID
   siteId: ID!
+  upperOrder: String
 }
 
 input CreateNoteInput {
