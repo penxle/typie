@@ -321,6 +321,8 @@
   const DISCONNECT_THRESHOLD = 3;
   const clientId = nanoid();
   let syncUpdateTimeout: ReturnType<typeof setTimeout> | null = null;
+  let titleUpdateTimeout: ReturnType<typeof setTimeout> | null = null;
+  let subtitleUpdateTimeout: ReturnType<typeof setTimeout> | null = null;
   let persistence: IndexeddbPersistence | null = null;
   let syncPrimed = false;
   let connectionStatus = $state<'connecting' | 'connected' | 'disconnected'>('connecting');
@@ -362,6 +364,8 @@
   let subtitleEl = $state<HTMLTextAreaElement>();
   let localTitle = $state('');
   let localSubtitle = $state('');
+  let titleFocused = $state(false);
+  let subtitleFocused = $state(false);
   let titleDirty = $state(false);
   let subtitleDirty = $state(false);
 
@@ -377,37 +381,45 @@
         subtitleDirty = false;
       }
 
-      if (!titleDirty) {
+      if (!titleDirty && !titleFocused) {
         localTitle = serverTitle;
       }
-      if (!subtitleDirty) {
+      if (!subtitleDirty && !subtitleFocused) {
         localSubtitle = serverSubtitle;
       }
     }
   });
 
-  async function handleTitleChanged() {
-    if (!documentId) return;
-
-    titleDirty = true;
-    await updateDocument({
-      input: {
-        documentId,
-        title: localTitle || null,
-      },
-    });
+  function flushTitleUpdate() {
+    if (!titleUpdateTimeout) return;
+    clearTimeout(titleUpdateTimeout);
+    titleUpdateTimeout = null;
+    if (documentId) {
+      updateDocument({ input: { documentId, title: localTitle || null } });
+    }
   }
 
-  async function handleSubtitleChanged() {
-    if (!documentId) return;
+  function flushSubtitleUpdate() {
+    if (!subtitleUpdateTimeout) return;
+    clearTimeout(subtitleUpdateTimeout);
+    subtitleUpdateTimeout = null;
+    if (documentId) {
+      updateDocument({ input: { documentId, subtitle: localSubtitle || null } });
+    }
+  }
 
+  function handleTitleChanged() {
+    if (!documentId) return;
+    titleDirty = true;
+    if (titleUpdateTimeout) clearTimeout(titleUpdateTimeout);
+    titleUpdateTimeout = setTimeout(flushTitleUpdate, 300);
+  }
+
+  function handleSubtitleChanged() {
+    if (!documentId) return;
     subtitleDirty = true;
-    await updateDocument({
-      input: {
-        documentId,
-        subtitle: localSubtitle || null,
-      },
-    });
+    if (subtitleUpdateTimeout) clearTimeout(subtitleUpdateTimeout);
+    subtitleUpdateTimeout = setTimeout(flushSubtitleUpdate, 300);
   }
 
   const currentViewZenModeEnabled = $derived(app.preference.current.zenModeEnabled && pane.id === paneGroup.state.current.focusedPaneId);
@@ -574,6 +586,8 @@
         clearTimeout(syncUpdateTimeout);
         syncUpdateTimeout = null;
       }
+      flushTitleUpdate();
+      flushSubtitleUpdate();
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
       if (canFlushRemoteUpdate && currentDocumentId && runPersistence.checkpoint.length > 0) {
@@ -1063,7 +1077,12 @@
                       autocapitalize="off"
                       autocomplete="off"
                       maxlength={100}
+                      onblur={() => {
+                        titleFocused = false;
+                        flushTitleUpdate();
+                      }}
                       onfocus={() => {
+                        titleFocused = true;
                         if (documentId) {
                           selectionsStore.current = {
                             ...selectionsStore.current,
@@ -1102,7 +1121,12 @@
                       autocapitalize="off"
                       autocomplete="off"
                       maxlength={100}
+                      onblur={() => {
+                        subtitleFocused = false;
+                        flushSubtitleUpdate();
+                      }}
                       onfocus={() => {
+                        subtitleFocused = true;
                         if (documentId) {
                           selectionsStore.current = {
                             ...selectionsStore.current,
