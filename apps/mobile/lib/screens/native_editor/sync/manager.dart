@@ -46,6 +46,8 @@ class SyncManager {
 
   bool _disposed = false;
 
+  bool get _editorUnavailable => _disposed || editor.isDisposed;
+
   Future<void> start() async {
     final connectivityResult = await Connectivity().checkConnectivity();
     if (connectivityResult.contains(ConnectivityResult.none)) {
@@ -90,12 +92,12 @@ class SyncManager {
   }
 
   void handleDocChanged() {
-    if (_disposed) {
+    if (_editorUnavailable) {
       return;
     }
 
     if (_persistence.version.isNotEmpty) {
-      final updates = editor.export(DocExportMode.updatesFrom, _persistence.version);
+      final updates = _safeExport(DocExportMode.updatesFrom, _persistence.version);
       if (updates != null) {
         unawaited(_persistence.saveUpdate(updates));
       }
@@ -106,12 +108,12 @@ class SyncManager {
   }
 
   Future<void> _sendUpdates() async {
-    if (_disposed) {
+    if (_editorUnavailable) {
       return;
     }
 
     final updates = _persistence.checkpoint.isNotEmpty
-        ? editor.export(DocExportMode.updatesFrom, _persistence.checkpoint)
+        ? _safeExport(DocExportMode.updatesFrom, _persistence.checkpoint)
         : null;
     if (updates == null || updates.isEmpty) {
       return;
@@ -125,22 +127,22 @@ class SyncManager {
   }
 
   Future<void> fullSync() async {
-    if (_disposed) {
+    if (_editorUnavailable) {
       return;
     }
 
-    final snapshot = editor.export(DocExportMode.snapshot);
-    final version = editor.export(DocExportMode.version);
+    final snapshot = _safeExport(DocExportMode.snapshot);
+    final version = _safeExport(DocExportMode.version);
 
     if (snapshot != null && version != null) {
       await _persistence.saveSnapshot(snapshot, Uint8List.fromList(version));
     }
 
-    if (_disposed) {
+    if (_editorUnavailable) {
       return;
     }
 
-    final update = editor.export(DocExportMode.allUpdates);
+    final update = _safeExport(DocExportMode.allUpdates);
     if (update != null && update.isNotEmpty) {
       try {
         await _doSync(type: GDocumentSyncType.UPDATE, data: base64Encode(update));
@@ -151,11 +153,11 @@ class SyncManager {
   }
 
   Future<void> forceSync() async {
-    if (_disposed) {
+    if (_editorUnavailable) {
       return;
     }
 
-    final version = editor.export(DocExportMode.version);
+    final version = _safeExport(DocExportMode.version);
     if (version == null) {
       return;
     }
@@ -168,6 +170,10 @@ class SyncManager {
   }
 
   Future<void> _doSync({required GDocumentSyncType type, required String data}) async {
+    if (_disposed) {
+      return;
+    }
+
     final result = await client.request(
       GNativeEditor_SyncDocument_MutationReq(
         (b) => b
@@ -184,12 +190,16 @@ class SyncManager {
   }
 
   Future<void> _handleSyncPayload(GDocumentSyncType type, String data) async {
+    if (_disposed) {
+      return;
+    }
+
     switch (type) {
       case GDocumentSyncType.HEARTBEAT:
         _lastHeartbeatAt = DateTime.parse(data);
         connectionStatus.value = ConnectionStatus.connected;
       case GDocumentSyncType.UPDATE:
-        editor.importUpdates(Uint8List.fromList(base64Decode(data)));
+        _safeImportUpdates(Uint8List.fromList(base64Decode(data)));
       case GDocumentSyncType.VECTOR:
         await _persistence.saveCheckpoint(Uint8List.fromList(base64Decode(data)));
       case GDocumentSyncType.RESET:
@@ -215,6 +225,9 @@ class SyncManager {
 
   void dispose() {
     _disposed = true;
+    final checkpoint = _persistence.checkpoint;
+    final pendingUpdates = checkpoint.isNotEmpty ? _exportDuringDispose(DocExportMode.updatesFrom, checkpoint) : null;
+
     _syncUpdateTimer?.cancel();
     _forceSyncTimer?.cancel();
     _fullSyncTimer?.cancel();
@@ -222,24 +235,69 @@ class SyncManager {
     unawaited(_subscription?.cancel());
     unawaited(_connectivitySubscription?.cancel());
 
-    if (_persistence.checkpoint.isNotEmpty) {
-      final updates = editor.export(DocExportMode.updatesFrom, _persistence.checkpoint);
-      if (updates != null && updates.isNotEmpty) {
-        unawaited(
-          client.request(
-            GNativeEditor_SyncDocument_MutationReq(
-              (b) => b
-                ..vars.input.clientId = _clientId
-                ..vars.input.documentId = documentId
-                ..vars.input.type = GDocumentSyncType.UPDATE
-                ..vars.input.data = base64Encode(updates),
-            ),
+    if (pendingUpdates != null && pendingUpdates.isNotEmpty) {
+      unawaited(
+        client.request(
+          GNativeEditor_SyncDocument_MutationReq(
+            (b) => b
+              ..vars.input.clientId = _clientId
+              ..vars.input.documentId = documentId
+              ..vars.input.type = GDocumentSyncType.UPDATE
+              ..vars.input.data = base64Encode(pendingUpdates),
           ),
-        );
-      }
+        ),
+      );
     }
 
     _persistence.dispose();
     connectionStatus.dispose();
+  }
+
+  Uint8List? _exportDuringDispose(int mode, [Uint8List? from]) {
+    if (editor.isDisposed) {
+      return null;
+    }
+
+    try {
+      if (from != null) {
+        return editor.export(mode, from);
+      }
+      return editor.export(mode);
+    } on EditorException catch (err) {
+      debugPrint('SyncManager final export skipped (editor disposed): $err');
+      return null;
+    }
+  }
+
+  Uint8List? _safeExport(int mode, [Uint8List? from]) {
+    if (_editorUnavailable) {
+      return null;
+    }
+
+    try {
+      if (from != null) {
+        return editor.export(mode, from);
+      }
+      return editor.export(mode);
+    } on EditorException catch (err) {
+      if (!_disposed) {
+        debugPrint('SyncManager export skipped (editor disposed): $err');
+      }
+      return null;
+    }
+  }
+
+  void _safeImportUpdates(Uint8List updates) {
+    if (_editorUnavailable) {
+      return;
+    }
+
+    try {
+      editor.importUpdates(updates);
+    } on EditorException catch (err) {
+      if (!_disposed) {
+        debugPrint('SyncManager import skipped (editor disposed): $err');
+      }
+    }
   }
 }
