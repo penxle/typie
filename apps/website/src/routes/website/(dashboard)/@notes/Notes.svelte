@@ -273,11 +273,11 @@
           },
         });
         mixpanel.track('move_note');
-        cache.invalidate({ __typename: 'Query', field: 'notes' });
+        cache.invalidate({ __typename: 'Query', $field: 'notes' });
 
         const movedNote = sortedNotes.find((n) => n.id === noteId);
         if (movedNote?.entity?.id) {
-          cache.invalidate({ __typename: 'Entity', id: movedNote.entity.id, field: 'notes' });
+          cache.invalidate({ __typename: 'Entity', id: movedNote.entity.id, $field: 'notes' });
         }
       } catch {
         localNoteOrder = query.data.notes.map((note) => note.id);
@@ -348,9 +348,9 @@
       relatedToEntity: !!selectedEntityId,
       via,
     });
-    cache.invalidate({ __typename: 'Query', field: 'notes' });
+    cache.invalidate({ __typename: 'Query', $field: 'notes' });
     if (selectedEntityId) {
-      cache.invalidate({ __typename: 'Entity', id: selectedEntityId, field: 'notes' });
+      cache.invalidate({ __typename: 'Entity', id: selectedEntityId, $field: 'notes' });
     }
 
     inputValue = '';
@@ -360,11 +360,11 @@
   const handleDeleteNote = async (noteId: string) => {
     await deleteNote({ input: { noteId } });
     mixpanel.track('delete_note');
-    cache.invalidate({ __typename: 'Query', field: 'notes' });
+    cache.invalidate({ __typename: 'Query', $field: 'notes' });
 
     const note = query.data.notes.find((n) => n.id === noteId);
     if (note?.entity?.id) {
-      cache.invalidate({ __typename: 'Entity', id: note.entity.id, field: 'notes' });
+      cache.invalidate({ __typename: 'Entity', id: note.entity.id, $field: 'notes' });
     }
   };
 
@@ -409,7 +409,7 @@
 
   $effect(() => {
     if (app.state.notesOpen) {
-      cache.invalidate({ __typename: 'Query', field: 'notes' });
+      cache.invalidate({ __typename: 'Query', $field: 'notes' });
 
       if (inputEl) {
         inputEl.focus();
