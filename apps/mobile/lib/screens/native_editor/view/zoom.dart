@@ -3,7 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 
 const minDocumentDisplayWidth = 100.0;
-const maxDocumentDisplayViewportMultiplier = 2.0;
+const maxDocumentZoom = 2.0;
 const fitWidthZoomSnapThreshold = 0.02;
 const unitZoomSnapThreshold = 0.02;
 const renderZoomDebounce = Duration(milliseconds: 120);
@@ -63,18 +63,11 @@ void clearPreferredHorizontalScrollPosition(ScrollController controller, ScrollP
   }
 }
 
-ZoomBounds computePaginatedZoomBounds({
-  required double pageWidth,
-  required double viewportWidth,
-  double minDisplayWidth = minDocumentDisplayWidth,
-  double maxViewportMultiplier = maxDocumentDisplayViewportMultiplier,
-}) {
+ZoomBounds computePaginatedZoomBounds({required double pageWidth, double minDisplayWidth = minDocumentDisplayWidth}) {
   final safePageWidth = pageWidth.isFinite && pageWidth > 0 ? pageWidth : 1.0;
-  final safeViewportWidth = viewportWidth.isFinite && viewportWidth > 0 ? viewportWidth : safePageWidth;
 
   final minZoom = (minDisplayWidth / safePageWidth).clamp(0.01, double.infinity);
-  final maxDisplayWidth = math.max(safeViewportWidth * maxViewportMultiplier, safePageWidth);
-  final maxZoom = (maxDisplayWidth / safePageWidth).clamp(minZoom, double.infinity);
+  final maxZoom = maxDocumentZoom.clamp(minZoom, double.infinity);
 
   return (min: minZoom, max: maxZoom);
 }
@@ -87,7 +80,7 @@ double clampDocumentZoom(double zoom, {required ZoomBounds bounds}) {
 }
 
 double computePaginatedFitWidthZoom({required double pageWidth, required double viewportWidth}) {
-  final bounds = computePaginatedZoomBounds(pageWidth: pageWidth, viewportWidth: viewportWidth);
+  final bounds = computePaginatedZoomBounds(pageWidth: pageWidth);
   final safePageWidth = pageWidth.isFinite && pageWidth > 0 ? pageWidth : 1.0;
   final safeViewportWidth = viewportWidth.isFinite && viewportWidth > 0 ? viewportWidth : safePageWidth;
   return (safeViewportWidth / safePageWidth).clamp(bounds.min, bounds.max);
@@ -99,7 +92,7 @@ double computeInitialPaginatedZoom({required double pageWidth, required double v
 }
 
 double clampPaginatedZoom({required double zoom, required double pageWidth, required double viewportWidth}) {
-  final bounds = computePaginatedZoomBounds(pageWidth: pageWidth, viewportWidth: viewportWidth);
+  final bounds = computePaginatedZoomBounds(pageWidth: pageWidth);
   final clamped = clampDocumentZoom(zoom, bounds: bounds);
   final fitWidthZoom = computePaginatedFitWidthZoom(pageWidth: pageWidth, viewportWidth: viewportWidth);
   final unitZoom = clampDocumentZoom(1, bounds: bounds);
