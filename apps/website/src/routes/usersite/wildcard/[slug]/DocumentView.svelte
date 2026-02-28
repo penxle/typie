@@ -10,6 +10,7 @@
   import mixpanel from 'mixpanel-browser';
   import { nanoid } from 'nanoid';
   import qs from 'query-string';
+  import { onMount } from 'svelte';
   import { fade } from 'svelte/transition';
   import { z } from 'zod';
   import { TypieError } from '@/errors';
@@ -239,7 +240,12 @@
   editor.contentReady = true;
   ctx.editor = editor;
 
+  let hydrated = $state(false);
   let editorReady = $state(false);
+
+  onMount(() => {
+    hydrated = true;
+  });
 
   const document = $derived(entityView.data.node.__typename === 'DocumentView' ? entityView.data.node : null);
 
@@ -373,6 +379,78 @@
   {#if document.documentBody.__typename === 'DocumentViewBodyAvailable'}
     {#if bodySnapshot}
       <ReadOnlyTouchSelectionSuppress enabled={editor.touchGesture.gestureActive} />
+
+      {#snippet documentHeader()}
+        <div class={css({ paddingTop: { base: '48px', md: '80px' } })}>
+          <nav class={flex({ alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginBottom: '20px' })}>
+            <a class={flex({ alignItems: 'center', gap: '6px' })} href={entityView.data.site.url}>
+              {#if entityView.data.site.logo}
+                <Img
+                  style={css.raw({ size: '18px', borderRadius: '4px', objectFit: 'cover' })}
+                  alt={`${entityView.data.site.name} 로고`}
+                  image$key={entityView.data.site.logo}
+                  size={24}
+                />
+              {/if}
+              <span class={css({ fontSize: '13px', color: 'text.faint', _hover: { color: 'text.muted' } })}>
+                {entityView.data.site.name}
+              </span>
+            </a>
+
+            {#each entityView.data.ancestors as ancestor (ancestor.id)}
+              {#if ancestor.node.__typename === 'FolderView'}
+                <span class={css({ fontSize: '13px', color: 'text.faint' })}>/</span>
+                <a class={css({ fontSize: '13px', color: 'text.faint', _hover: { color: 'text.muted' } })} href={`/${ancestor.slug}`}>
+                  {ancestor.node.name}
+                </a>
+              {/if}
+            {/each}
+          </nav>
+
+          <div class={css({ fontSize: { base: '24px', lg: '28px' }, fontWeight: 'bold' })}>
+            {document.title}
+          </div>
+
+          {#if document.subtitle}
+            <div class={css({ marginTop: '8px', fontSize: { base: '14px', lg: '16px' }, fontWeight: 'medium' })}>
+              {document.subtitle}
+            </div>
+          {/if}
+
+          <div class={flex({ align: 'center', justify: 'space-between', marginTop: '24px', paddingBottom: '16px' })}>
+            <div class={flex({ align: 'center', gap: '8px', fontSize: '13px', color: 'text.faint' })}>
+              {#if document.allowReaction && document.reactions.length > 0}
+                <div class={flex({ align: 'center', gap: '3px' })}>
+                  <Icon icon={SmileIcon} />
+                  <span>{comma(document.reactions.length)}</span>
+                </div>
+              {/if}
+            </div>
+
+            <div class={flex({ align: 'center', marginLeft: 'auto', gap: '12px', color: 'text.muted' })}>
+              <ShareLinkPopover href={entityView.data.url} />
+
+              <DocumentActionMenu entityView$key={entityView.data} />
+            </div>
+          </div>
+
+          {#if editor.layout?.layoutMode.type !== 'paginated'}
+            <HorizontalDivider style={css.raw({ marginBottom: '24px' })} />
+          {/if}
+        </div>
+      {/snippet}
+
+      {#if hydrated && !editorReady}
+        <div
+          style:max-width="640px"
+          style:padding-inline="20px"
+          class={flex({ flexDirection: 'column', width: 'full', marginX: 'auto' })}
+          out:fade={{ duration: 150 }}
+        >
+          <DocumentViewSkeleton />
+        </div>
+      {/if}
+
       {#key document.id}
         {#if document.protectContent}
           <ContentProtect>
@@ -385,80 +463,7 @@
               useWindowScroll
             >
               {#snippet header()}
-                <div class={css({ position: 'relative', paddingTop: { base: '48px', md: '80px' } })}>
-                  <nav class={flex({ alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginBottom: '20px' })}>
-                    <a class={flex({ alignItems: 'center', gap: '6px' })} href={entityView.data.site.url}>
-                      {#if entityView.data.site.logo}
-                        <Img
-                          style={css.raw({ size: '18px', borderRadius: '4px', objectFit: 'cover' })}
-                          alt={`${entityView.data.site.name} 로고`}
-                          image$key={entityView.data.site.logo}
-                          size={24}
-                        />
-                      {/if}
-                      <span class={css({ fontSize: '13px', color: 'text.faint', _hover: { color: 'text.muted' } })}>
-                        {entityView.data.site.name}
-                      </span>
-                    </a>
-
-                    {#each entityView.data.ancestors as ancestor (ancestor.id)}
-                      {#if ancestor.node.__typename === 'FolderView'}
-                        <span class={css({ fontSize: '13px', color: 'text.faint' })}>/</span>
-                        <a
-                          class={css({ fontSize: '13px', color: 'text.faint', _hover: { color: 'text.muted' } })}
-                          href={`/${ancestor.slug}`}
-                        >
-                          {ancestor.node.name}
-                        </a>
-                      {/if}
-                    {/each}
-                  </nav>
-
-                  <div class={css({ fontSize: { base: '24px', lg: '28px' }, fontWeight: 'bold' })}>
-                    {document.title}
-                  </div>
-
-                  {#if document.subtitle}
-                    <div class={css({ marginTop: '8px', fontSize: { base: '14px', lg: '16px' }, fontWeight: 'medium' })}>
-                      {document.subtitle}
-                    </div>
-                  {/if}
-
-                  <div class={flex({ align: 'center', justify: 'space-between', marginTop: '24px', paddingBottom: '16px' })}>
-                    <div class={flex({ align: 'center', gap: '8px', fontSize: '13px', color: 'text.faint' })}>
-                      {#if document.allowReaction && document.reactions.length > 0}
-                        <div class={flex({ align: 'center', gap: '3px' })}>
-                          <Icon icon={SmileIcon} />
-                          <span>{comma(document.reactions.length)}</span>
-                        </div>
-                      {/if}
-                    </div>
-
-                    <div class={flex({ align: 'center', marginLeft: 'auto', gap: '12px', color: 'text.muted' })}>
-                      <ShareLinkPopover href={entityView.data.url} />
-
-                      <DocumentActionMenu entityView$key={entityView.data} />
-                    </div>
-                  </div>
-
-                  {#if editor.layout?.layoutMode.type !== 'paginated'}
-                    <HorizontalDivider style={css.raw({ marginBottom: '24px' })} />
-                  {/if}
-
-                  {#if !editorReady}
-                    <div
-                      class={css({
-                        position: 'absolute',
-                        left: '0',
-                        right: '0',
-                        backgroundColor: 'surface.default',
-                      })}
-                      out:fade={{ duration: 150 }}
-                    >
-                      <DocumentViewSkeleton />
-                    </div>
-                  {/if}
-                </div>
+                {@render documentHeader()}
               {/snippet}
 
               {#snippet footer()}
@@ -497,77 +502,7 @@
             useWindowScroll
           >
             {#snippet header()}
-              <div class={css({ position: 'relative', paddingTop: { base: '48px', md: '80px' } })}>
-                <nav class={flex({ alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginBottom: '20px' })}>
-                  <a class={flex({ alignItems: 'center', gap: '6px' })} href={entityView.data.site.url}>
-                    {#if entityView.data.site.logo}
-                      <Img
-                        style={css.raw({ size: '18px', borderRadius: '4px', objectFit: 'cover' })}
-                        alt={`${entityView.data.site.name} 로고`}
-                        image$key={entityView.data.site.logo}
-                        size={24}
-                      />
-                    {/if}
-                    <span class={css({ fontSize: '13px', color: 'text.faint', _hover: { color: 'text.muted' } })}>
-                      {entityView.data.site.name}
-                    </span>
-                  </a>
-
-                  {#each entityView.data.ancestors as ancestor (ancestor.id)}
-                    {#if ancestor.node.__typename === 'FolderView'}
-                      <span class={css({ fontSize: '13px', color: 'text.faint' })}>/</span>
-                      <a class={css({ fontSize: '13px', color: 'text.faint', _hover: { color: 'text.muted' } })} href={`/${ancestor.slug}`}>
-                        {ancestor.node.name}
-                      </a>
-                    {/if}
-                  {/each}
-                </nav>
-
-                <div class={css({ fontSize: { base: '24px', lg: '28px' }, fontWeight: 'bold' })}>
-                  {document.title}
-                </div>
-
-                {#if document.subtitle}
-                  <div class={css({ marginTop: '8px', fontSize: { base: '14px', lg: '16px' }, fontWeight: 'medium' })}>
-                    {document.subtitle}
-                  </div>
-                {/if}
-
-                <div class={flex({ align: 'center', justify: 'space-between', marginTop: '24px', paddingBottom: '16px' })}>
-                  <div class={flex({ align: 'center', gap: '8px', fontSize: '13px', color: 'text.faint' })}>
-                    {#if document.allowReaction && document.reactions.length > 0}
-                      <div class={flex({ align: 'center', gap: '3px' })}>
-                        <Icon icon={SmileIcon} />
-                        <span>{comma(document.reactions.length)}</span>
-                      </div>
-                    {/if}
-                  </div>
-
-                  <div class={flex({ align: 'center', gap: '12px', marginLeft: 'auto', color: 'text.muted' })}>
-                    <ShareLinkPopover href={entityView.data.url} />
-
-                    <DocumentActionMenu entityView$key={entityView.data} />
-                  </div>
-                </div>
-
-                {#if editor.layout?.layoutMode.type !== 'paginated'}
-                  <HorizontalDivider style={css.raw({ marginBottom: '24px' })} />
-                {/if}
-
-                {#if !editorReady}
-                  <div
-                    class={css({
-                      position: 'absolute',
-                      left: '0',
-                      right: '0',
-                      backgroundColor: 'surface.default',
-                    })}
-                    out:fade={{ duration: 150 }}
-                  >
-                    <DocumentViewSkeleton />
-                  </div>
-                {/if}
-              </div>
+              {@render documentHeader()}
             {/snippet}
 
             {#snippet footer()}
