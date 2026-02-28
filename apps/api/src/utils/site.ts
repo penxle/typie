@@ -1,9 +1,20 @@
 import { and, eq } from 'drizzle-orm';
-import * as Y from 'yjs';
-import { Entities, first, firstOrThrow, Folders, PostContents, Posts, PostSnapshotContributors, PostSnapshots, Sites } from '@/db';
+import { LoroDoc } from 'loro-crdt';
+import {
+  DocumentContents,
+  Documents,
+  DocumentVersionContributors,
+  DocumentVersions,
+  Entities,
+  first,
+  firstOrThrow,
+  Folders,
+  Sites,
+} from '@/db';
 import { EntityState, EntityType } from '@/enums';
 import { compressZstd } from './compression';
-import { generatePermalink, generateSlug, makeYDoc } from './entity';
+import { generatePermalink, generateSlug } from './entity';
+import { wasm } from './wasm';
 import type { Transaction } from '@/db';
 
 type CreateSiteParams = {
@@ -81,17 +92,17 @@ export const createSite = async ({ userId, name, slug, logoId, tx }: CreateSiteP
       });
     }
 
-    const templatePosts = await tx
+    const templateDocuments = await tx
       .select({
-        id: Posts.id,
-        title: Posts.title,
-        subtitle: Posts.subtitle,
-        maxWidth: Posts.maxWidth,
+        title: Documents.title,
+        subtitle: Documents.subtitle,
         content: {
-          body: PostContents.body,
-          text: PostContents.text,
-          characterCount: PostContents.characterCount,
-          blobSize: PostContents.blobSize,
+          json: DocumentContents.json,
+          text: DocumentContents.text,
+          characterCount: DocumentContents.characterCount,
+          blobSize: DocumentContents.blobSize,
+          snapshot: DocumentContents.snapshot,
+          version: DocumentContents.version,
         },
         entity: {
           depth: Entities.depth,
@@ -99,71 +110,64 @@ export const createSite = async ({ userId, name, slug, logoId, tx }: CreateSiteP
           order: Entities.order,
         },
       })
-      .from(Posts)
-      .innerJoin(Entities, eq(Posts.entityId, Entities.id))
-      .innerJoin(PostContents, eq(Posts.id, PostContents.postId))
+      .from(Documents)
+      .innerJoin(Entities, eq(Documents.entityId, Entities.id))
+      .innerJoin(DocumentContents, eq(Documents.id, DocumentContents.documentId))
       .where(and(eq(Entities.siteId, templateSite.id), eq(Entities.state, EntityState.ACTIVE)));
 
-    for (const post of templatePosts) {
-      const doc = makeYDoc({
-        title: post.title,
-        subtitle: post.subtitle,
-        body: post.content.body,
-        maxWidth: post.maxWidth,
-      });
-
-      const snapshot = Y.snapshot(doc);
-
+    for (const doc of templateDocuments) {
       const newEntity = await tx
         .insert(Entities)
         .values({
           userId,
           siteId: site.id,
-          parentId: post.entity.parentId ? folderEntityIdMap.get(post.entity.parentId) : null,
+          parentId: doc.entity.parentId ? folderEntityIdMap.get(doc.entity.parentId) : null,
           slug: generateSlug(),
           permalink: generatePermalink(),
-          type: EntityType.POST,
-          order: post.entity.order,
-          depth: post.entity.depth,
+          type: EntityType.DOCUMENT,
+          order: doc.entity.order,
+          depth: doc.entity.depth,
         })
         .returning({ id: Entities.id })
         .then(firstOrThrow);
 
-      const newPost = await tx
-        .insert(Posts)
+      const newDocument = await tx
+        .insert(Documents)
         .values({
           entityId: newEntity.id,
-          title: post.title,
-          subtitle: post.subtitle,
-          maxWidth: post.maxWidth,
+          title: doc.title,
+          subtitle: doc.subtitle,
         })
-        .returning()
+        .returning({ id: Documents.id })
         .then(firstOrThrow);
 
-      await tx.insert(PostContents).values({
-        postId: newPost.id,
-        body: post.content.body,
-        text: post.content.text,
-        characterCount: post.content.characterCount,
-        blobSize: post.content.blobSize,
-        update: Y.encodeStateAsUpdateV2(doc),
-        vector: Y.encodeStateVector(doc),
+      const json = await wasm.snapshotToJson(new Uint8Array(doc.content.snapshot));
+      const freshSnapshot = await wasm.jsonToSnapshot(json);
+      const freshDoc = new LoroDoc();
+      freshDoc.import(freshSnapshot);
+      const freshVersion = freshDoc.version().encode();
+
+      await tx.insert(DocumentContents).values({
+        documentId: newDocument.id,
+        json,
+        text: doc.content.text,
+        characterCount: doc.content.characterCount,
+        blobSize: doc.content.blobSize,
+        snapshot: freshSnapshot,
+        version: freshVersion,
       });
 
-      const snapshotData = Y.encodeSnapshotV2(snapshot);
-      const compressedSnapshot = await compressZstd(snapshotData);
-
-      const postSnapshot = await tx
-        .insert(PostSnapshots)
+      const documentVersion = await tx
+        .insert(DocumentVersions)
         .values({
-          postId: newPost.id,
-          snapshot: compressedSnapshot,
+          documentId: newDocument.id,
+          version: await compressZstd(freshVersion),
         })
-        .returning({ id: PostSnapshots.id })
+        .returning({ id: DocumentVersions.id })
         .then(firstOrThrow);
 
-      await tx.insert(PostSnapshotContributors).values({
-        snapshotId: postSnapshot.id,
+      await tx.insert(DocumentVersionContributors).values({
+        versionId: documentVersion.id,
         userId,
       });
     }
