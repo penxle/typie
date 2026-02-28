@@ -1,13 +1,16 @@
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import fontkit from '@pdf-lib/fontkit';
+import * as Sentry from '@sentry/bun';
 import { LineCapStyle, LineJoinStyle, PDFDocument, popGraphicsState, pushGraphicsState, rgb, setLineJoin } from 'pdf-lib';
 import sharp from 'sharp';
 import * as aws from '@/external/aws';
 import { decompressZstd } from '@/utils/compression';
 import { outlineTextToSvg } from '@/utils/font';
+import { computeDesiredSize } from './external';
 import type { PDFFont, PDFImage, PDFPage } from 'pdf-lib';
-import type { ResolvedExternalImage } from './external';
-import type { VectorExternalElement, VectorOp, VectorPage, VectorPathCommand, VectorTextOp } from './vector';
+import type { VectorOp, VectorPage, VectorPathCommand, VectorTextOp } from './codec';
+import type { Asset, ImageAsset } from './external';
+import type { ExternalElement } from './slate';
 
 const CSS_PX_TO_PDF_PT = 72 / 96;
 const PLACEHOLDER_BACKGROUND = rgb(0.965, 0.965, 0.969);
@@ -95,14 +98,14 @@ const toSvgPath = (commands: VectorPathCommand[]): string => {
   return parts.join(' ');
 };
 
-const drawVectorOp = (page: import('pdf-lib').PDFPage, op: VectorOp, pdfHeight: number): void => {
+const drawVectorOp = (ctx: PdfContext, page: PDFPage, op: VectorOp): void => {
   const path = toSvgPath(op.path);
   if (!path) return;
 
   if (op.type === 'fillPath') {
     page.drawSvgPath(path, {
       x: 0,
-      y: pdfHeight,
+      y: ctx.pageHeight,
       scale: CSS_PX_TO_PDF_PT,
       color: toRgb(op.color),
       opacity: toOpacity(op.color),
@@ -117,7 +120,7 @@ const drawVectorOp = (page: import('pdf-lib').PDFPage, op: VectorOp, pdfHeight: 
 
   page.drawSvgPath(path, {
     x: 0,
-    y: pdfHeight,
+    y: ctx.pageHeight,
     scale: CSS_PX_TO_PDF_PT,
     borderColor: toRgb(op.color),
     borderOpacity: toOpacity(op.color),
@@ -130,7 +133,7 @@ const drawVectorOp = (page: import('pdf-lib').PDFPage, op: VectorOp, pdfHeight: 
   }
 };
 
-const drawInvisibleTextOp = (page: PDFPage, op: VectorTextOp, pdfHeight: number, font: PDFFont): void => {
+const drawInvisibleTextOp = (ctx: PdfContext, page: PDFPage, op: VectorTextOp, font: PDFFont): void => {
   if (!op.text) return;
   const size = op.size * CSS_PX_TO_PDF_PT;
   if (!Number.isFinite(size) || size <= 0) return;
@@ -138,7 +141,7 @@ const drawInvisibleTextOp = (page: PDFPage, op: VectorTextOp, pdfHeight: number,
   try {
     page.drawText(op.text, {
       x: toPdf(op.x),
-      y: pdfHeight - toPdf(op.y),
+      y: ctx.pageHeight - toPdf(op.y),
       size,
       font,
       color: rgb(0, 0, 0),
@@ -156,14 +159,14 @@ const toPdfRect = (bounds: { x: number; y: number; width: number; height: number
   height: toPdf(bounds.height),
 });
 
-const externalBlockLabel = (external: VectorExternalElement): string => {
+const externalBlockLabel = (external: ExternalElement): string => {
   if (external.data.type === 'image') return '이미지';
   if (external.data.type === 'file') return '파일';
   if (external.data.type === 'embed') return '임베드';
   return '보관된 블록';
 };
 
-const unsupportedMessage = (external: VectorExternalElement): string => `지원되지 않는 블록입니다 (${externalBlockLabel(external)})`;
+const unsupportedMessage = (external: ExternalElement): string => `지원되지 않는 블록입니다 (${externalBlockLabel(external)})`;
 
 const parseOutlinedPlaceholderSvg = (svg: string): OutlinedPlaceholderLabel | null => {
   const viewBoxMatch = svg.match(/viewBox="([^"]+)"/);
@@ -200,7 +203,7 @@ const getPlaceholderFontData = (): Promise<Uint8Array | null> => {
         const compressed = await object.Body.transformToByteArray();
         return await decompressZstd(compressed);
       } catch (err) {
-        console.warn('[pdf] failed to load placeholder font', err);
+        Sentry.captureException(err);
         return null;
       }
     })();
@@ -226,7 +229,7 @@ const getHiddenTextFontData = (): Promise<Uint8Array | null> => {
 
         return new Uint8Array(await object.Body.transformToByteArray());
       } catch (err) {
-        console.warn('[pdf] failed to load hidden text font', err);
+        Sentry.captureException(err);
         return null;
       }
     })();
@@ -251,7 +254,7 @@ const getOutlinedPlaceholderLabel = (message: string): Promise<OutlinedPlacehold
       const svg = await outlineTextToSvg(fontData, message);
       return parseOutlinedPlaceholderSvg(svg);
     } catch (err) {
-      console.warn(`[pdf] failed to outline placeholder label: ${message}`, err);
+      Sentry.captureException(err);
       return null;
     }
   })();
@@ -343,7 +346,7 @@ const drawUniformHatch = (page: PDFPage, rect: PdfRect): void => {
   }
 };
 
-const drawUnsupportedLabel = async (page: PDFPage, external: VectorExternalElement, rect: PdfRect): Promise<void> => {
+const drawUnsupportedLabel = async (page: PDFPage, external: ExternalElement, rect: PdfRect): Promise<void> => {
   const outlined = await getOutlinedPlaceholderLabel(unsupportedMessage(external));
   if (!outlined) {
     return;
@@ -379,8 +382,8 @@ const drawUnsupportedLabel = async (page: PDFPage, external: VectorExternalEleme
   }
 };
 
-const drawUnsupportedExternal = async (page: PDFPage, external: VectorExternalElement, pdfHeight: number): Promise<void> => {
-  const rect = toPdfRect(external.bounds, pdfHeight);
+const drawUnsupportedExternal = async (ctx: PdfContext, page: PDFPage, external: ExternalElement): Promise<void> => {
+  const rect = toPdfRect(external.bounds, ctx.pageHeight);
   if (rect.width <= 0 || rect.height <= 0) return;
 
   page.drawRectangle({
@@ -397,108 +400,74 @@ const drawUnsupportedExternal = async (page: PDFPage, external: VectorExternalEl
   await drawUnsupportedLabel(page, external, rect);
 };
 
-const embedExternalImage = async (pdfDoc: PDFDocument, asset: ResolvedExternalImage): Promise<PDFImage | null> => {
+type PdfContext = {
+  doc: PDFDocument;
+  assets: ReadonlyMap<string, Asset>;
+  embeddedImages: Map<string, PDFImage | null>;
+  pageWidth: number;
+  pageHeight: number;
+};
+
+const embedExternalImage = async (ctx: PdfContext, asset: ImageAsset): Promise<PDFImage | null> => {
   try {
     if (asset.format === 'image/png') {
-      return await pdfDoc.embedPng(asset.bytes);
-    }
-    if (asset.format === 'image/jpeg' || asset.format === 'image/jpg') {
-      return await pdfDoc.embedJpg(asset.bytes);
+      return await ctx.doc.embedPng(asset.bytes);
     }
 
-    const pngBytes = await sharp(asset.bytes, { failOn: 'none', limitInputPixels: false }).png().toBuffer();
-    return await pdfDoc.embedPng(new Uint8Array(pngBytes));
+    if (asset.format === 'image/jpeg' || asset.format === 'image/jpg') {
+      return await ctx.doc.embedJpg(asset.bytes);
+    }
+
+    const bytes = await sharp(asset.bytes, { failOn: 'none', limitInputPixels: false }).png().toBuffer();
+    return await ctx.doc.embedPng(new Uint8Array(bytes));
   } catch (err) {
-    console.warn(`[pdf] failed to embed image ${asset.id}`, err);
+    Sentry.captureException(err);
     return null;
   }
 };
 
-const resolveImageRenderSize = (
-  bounds: VectorExternalElement['bounds'],
-  proportion: number,
-  asset: ResolvedExternalImage,
-): { width: number; height: number } => {
-  if (asset.width <= 0 || asset.height <= 0) {
-    return { width: bounds.width, height: bounds.height };
-  }
+const drawExternalImage = (ctx: PdfContext, page: PDFPage, image: PDFImage, external: ExternalElement, asset: ImageAsset): boolean => {
+  const { width, height } = computeDesiredSize(external, asset);
+  if (width <= 0 || height <= 0) return false;
 
-  const aspectRatio = asset.height / asset.width;
-  const desiredWidth = Math.min(asset.width, bounds.width * proportion);
-  const desiredHeight = desiredWidth * aspectRatio;
-
-  if (desiredHeight <= bounds.height) {
-    return { width: desiredWidth, height: desiredHeight };
-  }
-
-  const fittedHeight = bounds.height;
-  const fittedWidth = fittedHeight / aspectRatio;
-  return { width: Math.min(fittedWidth, bounds.width), height: fittedHeight };
-};
-
-const drawExternalImage = (
-  page: PDFPage,
-  image: PDFImage,
-  external: VectorExternalElement,
-  proportion: number,
-  asset: ResolvedExternalImage,
-  pdfHeight: number,
-): boolean => {
-  const size = resolveImageRenderSize(external.bounds, proportion, asset);
-  if (size.width <= 0 || size.height <= 0) {
-    return false;
-  }
-
-  const x = external.bounds.x + (external.bounds.width - size.width) / 2;
+  const x = external.bounds.x + (external.bounds.width - width) / 2;
   const y = external.bounds.y;
 
   page.drawImage(image, {
     x: toPdf(x),
-    y: pdfHeight - toPdf(y + size.height),
-    width: toPdf(size.width),
-    height: toPdf(size.height),
+    y: ctx.pageHeight - toPdf(y + height),
+    width: toPdf(width),
+    height: toPdf(height),
   });
 
   return true;
 };
 
-const drawExternalElement = async (
-  page: PDFPage,
-  pdfDoc: PDFDocument,
-  external: VectorExternalElement,
-  imageAssets: ReadonlyMap<string, ResolvedExternalImage>,
-  embeddedImageCache: Map<string, PDFImage | null>,
-  pdfHeight: number,
-): Promise<void> => {
+const drawExternalElement = async (ctx: PdfContext, page: PDFPage, external: ExternalElement): Promise<void> => {
   if (external.data.type !== 'image') {
-    await drawUnsupportedExternal(page, external, pdfHeight);
+    await drawUnsupportedExternal(ctx, page, external);
     return;
   }
 
-  if (!external.data.id) {
-    await drawUnsupportedExternal(page, external, pdfHeight);
-    return;
-  }
-
-  const asset = imageAssets.get(external.data.id);
+  const asset = ctx.assets.get(external.nodeId);
   if (!asset) {
-    await drawUnsupportedExternal(page, external, pdfHeight);
+    await drawUnsupportedExternal(ctx, page, external);
     return;
   }
 
-  let embeddedImage = embeddedImageCache.get(asset.id);
+  let embeddedImage = ctx.embeddedImages.get(asset.id);
   if (embeddedImage === undefined) {
-    embeddedImage = await embedExternalImage(pdfDoc, asset);
-    embeddedImageCache.set(asset.id, embeddedImage);
+    embeddedImage = await embedExternalImage(ctx, asset);
+    ctx.embeddedImages.set(asset.id, embeddedImage);
   }
 
   if (!embeddedImage) {
-    await drawUnsupportedExternal(page, external, pdfHeight);
+    await drawUnsupportedExternal(ctx, page, external);
     return;
   }
 
-  if (!drawExternalImage(page, embeddedImage, external, external.data.proportion, asset, pdfHeight)) {
-    await drawUnsupportedExternal(page, external, pdfHeight);
+  if (!drawExternalImage(ctx, page, embeddedImage, external, asset)) {
+    await drawUnsupportedExternal(ctx, page, external);
   }
 };
 
@@ -506,45 +475,57 @@ export async function createPdfFromVectorPages(
   pages: VectorPage[],
   title: string,
   author: string,
-  imageAssets: ReadonlyMap<string, ResolvedExternalImage> = new Map(),
+  externals: readonly ExternalElement[],
+  assets: ReadonlyMap<string, Asset>,
 ): Promise<Uint8Array> {
-  const pdfDoc = await PDFDocument.create();
-  const embeddedImageCache = new Map<string, PDFImage | null>();
+  const doc = await PDFDocument.create();
+  const firstPage = pages[0];
+  if (!firstPage) {
+    return doc.save();
+  }
+
+  const ctx: PdfContext = {
+    doc,
+    assets,
+    embeddedImages: new Map(),
+    pageWidth: firstPage.width * CSS_PX_TO_PDF_PT,
+    pageHeight: firstPage.height * CSS_PX_TO_PDF_PT,
+  };
+
   let hiddenTextFont: PDFFont | null = null;
   const hiddenTextFontData = await getHiddenTextFontData();
   if (hiddenTextFontData) {
     try {
-      pdfDoc.registerFontkit(fontkit);
-      hiddenTextFont = await pdfDoc.embedFont(hiddenTextFontData, { subset: true });
+      doc.registerFontkit(fontkit);
+      hiddenTextFont = await doc.embedFont(hiddenTextFontData, { subset: true });
     } catch (err) {
       console.warn('[pdf] failed to embed hidden text font', err);
     }
   }
 
-  pdfDoc.setTitle(title);
-  pdfDoc.setAuthor(author);
-  pdfDoc.setCreator('타이피 (https://typie.co)');
-  pdfDoc.setProducer('타이피 (https://typie.co)');
+  doc.setTitle(title);
+  doc.setAuthor(author);
+  doc.setCreator('타이피 (https://typie.co)');
+  doc.setProducer('타이피 (https://typie.co)');
 
-  for (const pageData of pages) {
-    const pdfWidth = pageData.width * CSS_PX_TO_PDF_PT;
-    const pdfHeight = pageData.height * CSS_PX_TO_PDF_PT;
-    const page = pdfDoc.addPage([pdfWidth, pdfHeight]);
+  for (const [i, pageData] of pages.entries()) {
+    const page = doc.addPage([ctx.pageWidth, ctx.pageHeight]);
 
     for (const op of pageData.ops) {
-      drawVectorOp(page, op, pdfHeight);
+      drawVectorOp(ctx, page, op);
     }
 
-    for (const external of pageData.externalElements) {
-      await drawExternalElement(page, pdfDoc, external, imageAssets, embeddedImageCache, pdfHeight);
+    for (const external of externals) {
+      if (external.pageIdx !== i) continue;
+      await drawExternalElement(ctx, page, external);
     }
 
     if (hiddenTextFont) {
       for (const textOp of pageData.textOps) {
-        drawInvisibleTextOp(page, textOp, pdfHeight, hiddenTextFont);
+        drawInvisibleTextOp(ctx, page, textOp, hiddenTextFont);
       }
     }
   }
 
-  return pdfDoc.save();
+  return doc.save();
 }

@@ -1,0 +1,93 @@
+import type { Theme } from '@typie/editor';
+
+const colorToU32 = (color: string): number => {
+  const clean = color.replace('#', '');
+  if (clean.length !== 6) {
+    return 0x00_00_00_ff;
+  }
+  const r = Number.parseInt(clean.slice(0, 2), 16);
+  const g = Number.parseInt(clean.slice(2, 4), 16);
+  const b = Number.parseInt(clean.slice(4, 6), 16);
+  return ((r << 24) | (g << 16) | (b << 8) | 0xff) >>> 0;
+};
+
+const COLORS: Record<string, string> = {
+  'ui.surface.default': '#ffffff',
+  'ui.surface.subtle': '#fafafa',
+  'ui.surface.muted': '#f4f4f5',
+  'ui.surface.dark': '#3f3f46',
+  'ui.text.default': '#18181b',
+  'ui.text.subtle': '#3f3f46',
+  'ui.text.muted': '#52525c',
+  'ui.text.faint': '#71717b',
+  'ui.text.disabled': '#9f9fa9',
+  'ui.text.bright': '#ffffff',
+  'ui.text.danger': '#fb2c36',
+  'ui.text.success': '#008236',
+  'ui.text.link': '#006cff',
+  'ui.text.brand': '#fd9a00',
+  'ui.interactive.hover': '#e4e4e7',
+  'ui.interactive.disabled': '#e4e4e7',
+  'ui.accent.brand.default': '#fd9a00',
+  'ui.accent.brand.hover': '#e17100',
+  'ui.accent.brand.active': '#bb4d00',
+  'ui.accent.brand.subtle': '#fef3c6',
+  'ui.accent.danger.default': '#e7000b',
+  'ui.accent.danger.hover': '#fb2c36',
+  'ui.accent.danger.active': '#c10007',
+  'ui.accent.danger.subtle': '#fef2f2',
+  'ui.accent.success.subtle': '#f0fdf4',
+  'ui.border.default': '#e4e4e7',
+  'ui.border.strong': '#d4d4d8',
+  'ui.border.subtle': '#f4f4f5',
+  'ui.border.brand': '#e17100',
+  'ui.border.danger': '#e7000b',
+  'ui.shadow.default': '#09090b',
+  'ui.control.scrollbar.default': '#e4e4e7',
+  'ui.control.scrollbar.hover': '#d4d4d8',
+  'ui.decoration.grid.default': '#f4f4f5',
+  'ui.decoration.grid.subtle': '#fafafa',
+  'ui.decoration.grid.brand': '#fef3c6',
+  'ui.decoration.grid.brand.subtle': '#fffbeb',
+  'ui.callout.info': '#3b82f6',
+  'ui.callout.success': '#22c55e',
+  'ui.callout.warning': '#f97316',
+  'ui.callout.danger': '#dc2626',
+  'ui.blockquote.message-sent': '#248bf5',
+  'ui.blockquote.message-received': '#e5e5ea',
+  'text.bright': '#ffffff',
+  'text.black': '#18181b',
+  'text.darkgray': '#525254',
+  'text.gray': '#8c8c8d',
+  'text.lightgray': '#c5c5c6',
+  'text.white': '#ffffff',
+  'text.red': '#ef4444',
+  'text.orange': '#f97316',
+  'text.amber': '#f59e0b',
+  'text.yellow': '#eab308',
+  'text.lime': '#84cc16',
+  'text.green': '#22c55e',
+  'text.emerald': '#10b981',
+  'text.teal': '#14b8a6',
+  'text.cyan': '#06b6d4',
+  'text.sky': '#0ea5e9',
+  'text.blue': '#3b82f6',
+  'text.indigo': '#6366f1',
+  'text.violet': '#8b5cf6',
+  'text.purple': '#a855f7',
+  'text.fuchsia': '#d946ef',
+  'text.pink': '#ec4899',
+  'text.rose': '#f43f5e',
+  'bg.gray': '#f1f1f2',
+  'bg.red': '#fdebec',
+  'bg.orange': '#ffecd5',
+  'bg.yellow': '#fef3c7',
+  'bg.green': '#dff3e3',
+  'bg.blue': '#e7f3f8',
+  'bg.purple': '#f0e7fe',
+  selection: '#99ccff',
+};
+
+export const DEFAULT_THEME: Theme = {
+  colors: new Map(Object.entries(COLORS).map(([key, value]) => [key, colorToU32(value)])),
+};

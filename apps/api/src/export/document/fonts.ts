@@ -207,14 +207,20 @@ export async function ensureRequiredFont(app: Application, family: string, font:
 }
 
 export async function ensureRequiredFallbackFont(app: Application, weight: number, codepoints: number[]): Promise<void> {
-  const tasks: { family: string; font: Font; codepoints: number[] }[] = [];
+  const tasks: { family: string; font: { weight: number; url: string }; codepoints: number[] }[] = [];
   let remaining = codepoints;
 
   for (const fallbackFontFamily of fallbackFontFamilies) {
     if (remaining.length === 0) break;
 
-    const fallbackFont = fallbackFontFamily.fonts.find((f) => f.weight === weight);
-    if (!fallbackFont) continue;
+    if (fallbackFontFamily.fonts.length === 0) continue;
+    const fallbackFont = fallbackFontFamily.fonts.reduce((prev, curr) => {
+      const prevDiff = Math.abs(prev.weight - weight);
+      const currDiff = Math.abs(curr.weight - weight);
+      if (currDiff < prevDiff) return curr;
+      if (currDiff === prevDiff && curr.weight > prev.weight) return curr;
+      return prev;
+    });
 
     const covered = remaining.filter((cp) => hasCodepoint(fallbackFont, cp));
     if (covered.length === 0) continue;
@@ -233,6 +239,7 @@ export async function ensureRequiredFallbackFont(app: Application, weight: numbe
     tasks.map(async ({ family, font, codepoints }) => {
       await loadBase(app, family, font);
       await loadChunks(app, family, font, codepoints);
+      app.setFallbackFonts([...fallbackFontFamilies.map((f) => f.familyName), ...phantomFontFamilies.map((f) => f.familyName)]);
     }),
   );
 }
