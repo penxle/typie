@@ -58,6 +58,8 @@ class EditorController extends ChangeNotifier {
   final ValueNotifier<String?> floatingNodeId = ValueNotifier(null);
   final ValueNotifier<NativeEditorCharacterCounts?> characterCounts = ValueNotifier(null);
   final ValueNotifier<int> characterCountsVersion = ValueNotifier(0);
+  bool _disposed = false;
+  bool get isDisposed => _disposed || editor.isDisposed;
 
   Map<int, Map<String, TrackedItemRange>> _trackedItemRanges = {};
 
@@ -95,8 +97,15 @@ class EditorController extends ChangeNotifier {
   }
 
   void dispatch(Map<String, dynamic> message) {
-    if (!editor.isDisposed) {
+    if (isDisposed) {
+      return;
+    }
+    try {
       editor.dispatch(message);
+    } on EditorException catch (err) {
+      if (!_disposed) {
+        debugPrint('EditorController dispatch skipped: $err');
+      }
     }
   }
 
@@ -159,7 +168,7 @@ class EditorController extends ChangeNotifier {
   }
 
   void refreshCharacterCounts() {
-    if (editor.isDisposed) {
+    if (isDisposed) {
       return;
     }
     try {
@@ -175,6 +184,7 @@ class EditorController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     floatingContext.dispose();
     floatingNodeId.dispose();
     characterCounts.dispose();

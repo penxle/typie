@@ -151,26 +151,27 @@ class DndController {
   void handleDragStart(int pageIdx, double x, double y, ui.Offset initialPoint) {
     _isDragging = true;
     unawaited(prepareDragImage(pageIdx, x, y, initialPoint));
-    editor.dispatch({'type': 'dragStart', 'pageIdx': pageIdx, 'x': x, 'y': y});
-    controller.scrollIntoView();
+    controller
+      ..dispatch({'type': 'dragStart', 'pageIdx': pageIdx, 'x': x, 'y': y})
+      ..scrollIntoView();
   }
 
   void handleDragEnter() {
     isDropping.value = true;
-    editor.dispatch({'type': 'dragEnter'});
+    controller.dispatch({'type': 'dragEnter'});
   }
 
   void handleDragLeave() {
     isDropping.value = false;
-    editor.dispatch({'type': 'dragLeave'});
+    controller.dispatch({'type': 'dragLeave'});
   }
 
   void handleDragOver(int pageIdx, double x, double y) {
     if (pageIdx < 0) {
-      editor.dispatch({'type': 'dragLeave'});
+      controller.dispatch({'type': 'dragLeave'});
       return;
     }
-    editor.dispatch({'type': 'dragOver', 'pageIdx': pageIdx, 'x': x, 'y': y});
+    controller.dispatch({'type': 'dragOver', 'pageIdx': pageIdx, 'x': x, 'y': y});
   }
 
   final ValueNotifier<bool> isDropping = ValueNotifier(false);
@@ -192,17 +193,18 @@ class DndController {
     // 내부 드래그인 경우
     final localData = item.localData;
     if (localData is Map && localData['isInternal'] == true) {
-      editor.dispatch({
-        'type': 'drop',
-        'pageIdx': pageIdx,
-        'x': x,
-        'y': y,
-        'text': localData['text'],
-        'html': localData['html'],
-        'fragment': localData['fragment'],
-        'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
-      });
-      controller.scrollIntoView();
+      controller
+        ..dispatch({
+          'type': 'drop',
+          'pageIdx': pageIdx,
+          'x': x,
+          'y': y,
+          'text': localData['text'],
+          'html': localData['html'],
+          'fragment': localData['fragment'],
+          'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
+        })
+        ..scrollIntoView();
       return;
     }
 
@@ -225,17 +227,18 @@ class DndController {
 
       final text = await completer.future;
       if (text != null && text.isNotEmpty) {
-        editor.dispatch({
-          'type': 'drop',
-          'pageIdx': pageIdx,
-          'x': x,
-          'y': y,
-          'text': text,
-          'html': null,
-          'fragment': null,
-          'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
-        });
-        controller.scrollIntoView();
+        controller
+          ..dispatch({
+            'type': 'drop',
+            'pageIdx': pageIdx,
+            'x': x,
+            'y': y,
+            'text': text,
+            'html': null,
+            'fragment': null,
+            'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
+          })
+          ..scrollIntoView();
         return;
       }
     }
@@ -254,6 +257,6 @@ class DndController {
 
   void _handleDragEnd() {
     isDropping.value = false;
-    editor.dispatch({'type': 'dragEnd'});
+    controller.dispatch({'type': 'dragEnd'});
   }
 }

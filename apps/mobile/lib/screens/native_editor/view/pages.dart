@@ -42,7 +42,6 @@ class PageList extends HookWidget {
 
     final verticalScrollController = scope.verticalScrollController;
     final horizontalScrollController = scope.horizontalScrollController;
-    final editor = scope.editor;
     final handleMetricsRevision = useValueNotifier(0);
 
     useValueListenable(scope.titleAreaHeight);
@@ -102,7 +101,6 @@ class PageList extends HookWidget {
       () => GestureController(
         verticalScrollController: verticalScrollController,
         horizontalScrollController: horizontalScrollController,
-        editor: editor,
         controller: scope.controller,
         getPageAtPosition: getPageAtPosition,
         getPointerX: (localX) {
@@ -289,24 +287,23 @@ class PageList extends HookWidget {
           scope.inputController.openInput();
 
           final pointerX = gesture.getPointerX(localPosition.dx);
-          editor
-            ..dispatch({
-              'type': 'pointerDown',
-              'pageIdx': pageIdx,
-              'x': pointerX,
-              'y': localY,
-              'clickCount': 2,
-              'button': 'primary',
-              'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
-            })
-            ..dispatch({
-              'type': 'pointerUp',
-              'pageIdx': pageIdx,
-              'x': pointerX,
-              'y': localY,
-              'button': 'primary',
-              'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
-            });
+          scope.controller.dispatch({
+            'type': 'pointerDown',
+            'pageIdx': pageIdx,
+            'x': pointerX,
+            'y': localY,
+            'clickCount': 2,
+            'button': 'primary',
+            'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
+          });
+          scope.controller.dispatch({
+            'type': 'pointerUp',
+            'pageIdx': pageIdx,
+            'x': pointerX,
+            'y': localY,
+            'button': 'primary',
+            'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
+          });
 
           gesture.clearTapHistory();
 
@@ -393,7 +390,7 @@ class PageList extends HookWidget {
           final pointerX = gesture.getPointerX(localPosition.dx);
           final context = resolveDoubleTapDragSelectionContext();
           if (context != null && pageIdx >= 0) {
-            editor.dispatch({
+            scope.controller.dispatch({
               'type': 'extendSelectionTo',
               'anchorPageIdx': context.anchor.pageIdx,
               'anchorX': context.anchor.x,
@@ -465,7 +462,7 @@ class PageList extends HookWidget {
           final (pageIdx, localY) = getPageAtPosition(selectionScreenPosition.dy);
           if (pageIdx >= 0) {
             final pointerX = gesture.getPointerX(selectionScreenPosition.dx);
-            editor.dispatch({
+            scope.controller.dispatch({
               'type': 'extendSelectionTo',
               'anchorPageIdx': dragContext.anchorHandle.pageIdx,
               'anchorX': dragContext.anchorHandle.x,
@@ -558,24 +555,23 @@ class PageList extends HookWidget {
 
           if (pageIdx >= 0) {
             final pointerX = gesture.getPointerX(viewportPosition.dx);
-            editor
-              ..dispatch({
-                'type': 'pointerDown',
-                'pageIdx': pageIdx,
-                'x': pointerX,
-                'y': localY,
-                'clickCount': 1,
-                'button': 'primary',
-                'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
-              })
-              ..dispatch({
-                'type': 'pointerUp',
-                'pageIdx': pageIdx,
-                'x': pointerX,
-                'y': localY,
-                'button': 'primary',
-                'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
-              });
+            scope.controller.dispatch({
+              'type': 'pointerDown',
+              'pageIdx': pageIdx,
+              'x': pointerX,
+              'y': localY,
+              'clickCount': 1,
+              'button': 'primary',
+              'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
+            });
+            scope.controller.dispatch({
+              'type': 'pointerUp',
+              'pageIdx': pageIdx,
+              'x': pointerX,
+              'y': localY,
+              'button': 'primary',
+              'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
+            });
             scope.controller.scrollIntoView();
           }
 
@@ -737,24 +733,23 @@ class PageList extends HookWidget {
 
           final prevCursor = cursor;
 
-          editor
-            ..dispatch({
-              'type': 'pointerDown',
-              'pageIdx': pageIdx,
-              'x': pointerX,
-              'y': localY,
-              'clickCount': clickCount,
-              'button': 'primary',
-              'modifier': {'shift': isShiftHeader, 'ctrl': false, 'alt': false, 'meta': false},
-            })
-            ..dispatch({
-              'type': 'pointerUp',
-              'pageIdx': pageIdx,
-              'x': pointerX,
-              'y': localY,
-              'button': 'primary',
-              'modifier': {'shift': isShiftHeader, 'ctrl': false, 'alt': false, 'meta': false},
-            });
+          scope.controller.dispatch({
+            'type': 'pointerDown',
+            'pageIdx': pageIdx,
+            'x': pointerX,
+            'y': localY,
+            'clickCount': clickCount,
+            'button': 'primary',
+            'modifier': {'shift': isShiftHeader, 'ctrl': false, 'alt': false, 'meta': false},
+          });
+          scope.controller.dispatch({
+            'type': 'pointerUp',
+            'pageIdx': pageIdx,
+            'x': pointerX,
+            'y': localY,
+            'button': 'primary',
+            'modifier': {'shift': isShiftHeader, 'ctrl': false, 'alt': false, 'meta': false},
+          });
 
           if (clickCount != 1) {
             scope.controller.scrollIntoView();
