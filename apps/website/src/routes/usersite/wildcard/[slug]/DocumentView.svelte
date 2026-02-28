@@ -249,9 +249,17 @@
 
   const document = $derived(entityView.data.node.__typename === 'DocumentView' ? entityView.data.node : null);
 
+  const documentId = $derived(document?.id);
+
   $effect(() => {
-    void document?.id;
+    void documentId;
     editorReady = false;
+  });
+
+  $effect(() => {
+    if ((editor.layout?.pages.length ?? 0) > 0 && editor.contentReady) {
+      editorReady = true;
+    }
   });
 
   $effect(() => {
@@ -440,28 +448,61 @@
         </div>
       {/snippet}
 
-      {#if hydrated && !editorReady}
-        <div
-          style:max-width="640px"
-          style:padding-inline="20px"
-          class={flex({ flexDirection: 'column', width: 'full', marginX: 'auto' })}
-          out:fade={{ duration: 150 }}
-        >
-          <DocumentViewSkeleton />
-        </div>
-      {/if}
+      <div class={css({ position: 'relative' })}>
+        {#if hydrated && !editorReady}
+          <div
+            style:max-width="640px"
+            style:padding-inline="20px"
+            class={flex({
+              position: 'absolute',
+              inset: '0',
+              zIndex: '1',
+              flexDirection: 'column',
+              width: 'full',
+              marginX: 'auto',
+            })}
+            out:fade={{ duration: 150 }}
+          >
+            <DocumentViewSkeleton />
+          </div>
+        {/if}
 
-      {#key document.id}
-        {#if document.protectContent}
-          <ContentProtect>
-            <EditorComponent
-              {editor}
-              {fontFamilies}
-              onEditorReady={() => (editorReady = true)}
-              readOnly
-              snapshot={bodySnapshot}
-              useWindowScroll
-            >
+        {#key document.id}
+          {#if document.protectContent}
+            <ContentProtect>
+              <EditorComponent {editor} {fontFamilies} readOnly snapshot={bodySnapshot} useWindowScroll>
+                {#snippet header()}
+                  {@render documentHeader()}
+                {/snippet}
+
+                {#snippet footer()}
+                  <div
+                    class={flex({
+                      align: 'flex-start',
+                      justify: 'space-between',
+                      gap: '8px',
+                      marginTop: '20px',
+                      paddingBottom: '10px',
+                      width: 'full',
+                    })}
+                  >
+                    <DocumentEmojiReaction documentView$key={document} />
+
+                    <div class={flex({ align: 'center', gap: '12px', marginLeft: 'auto', color: 'text.muted' })}>
+                      <ShareLinkPopover href={entityView.data.url} />
+
+                      <DocumentActionMenu entityView$key={entityView.data} />
+                    </div>
+                  </div>
+
+                  <div class={css({ paddingBottom: { base: '60px', lg: '80px' } })}>
+                    <ContentNavigation entityView$key={entityView.data} />
+                  </div>
+                {/snippet}
+              </EditorComponent>
+            </ContentProtect>
+          {:else}
+            <EditorComponent {editor} {fontFamilies} readOnly snapshot={bodySnapshot} useWindowScroll>
               {#snippet header()}
                 {@render documentHeader()}
               {/snippet}
@@ -479,10 +520,8 @@
                 >
                   <DocumentEmojiReaction documentView$key={document} />
 
-                  <div class={flex({ align: 'center', gap: '12px', marginLeft: 'auto', color: 'text.muted' })}>
+                  <div class={flex({ align: 'center', marginLeft: 'auto' })}>
                     <ShareLinkPopover href={entityView.data.url} />
-
-                    <DocumentActionMenu entityView$key={entityView.data} />
                   </div>
                 </div>
 
@@ -491,45 +530,9 @@
                 </div>
               {/snippet}
             </EditorComponent>
-          </ContentProtect>
-        {:else}
-          <EditorComponent
-            {editor}
-            {fontFamilies}
-            onEditorReady={() => (editorReady = true)}
-            readOnly
-            snapshot={bodySnapshot}
-            useWindowScroll
-          >
-            {#snippet header()}
-              {@render documentHeader()}
-            {/snippet}
-
-            {#snippet footer()}
-              <div
-                class={flex({
-                  align: 'flex-start',
-                  justify: 'space-between',
-                  gap: '8px',
-                  marginTop: '20px',
-                  paddingBottom: '10px',
-                  width: 'full',
-                })}
-              >
-                <DocumentEmojiReaction documentView$key={document} />
-
-                <div class={flex({ align: 'center', marginLeft: 'auto' })}>
-                  <ShareLinkPopover href={entityView.data.url} />
-                </div>
-              </div>
-
-              <div class={css({ paddingBottom: { base: '60px', lg: '80px' } })}>
-                <ContentNavigation entityView$key={entityView.data} />
-              </div>
-            {/snippet}
-          </EditorComponent>
-        {/if}
-      {/key}
+          {/if}
+        {/key}
+      </div>
     {/if}
   {:else if document.documentBody.__typename === 'DocumentViewBodyUnavailable'}
     <div class={flex({ align: 'center', justify: 'center', minHeight: '[100dvh]', fontSize: '16px', fontWeight: 'medium' })}>
