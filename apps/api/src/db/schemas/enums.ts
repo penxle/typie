@@ -25,6 +25,7 @@ export const _PostType = createPgEnum('_post_type', E.PostType);
 export const _DocumentContentRating = createPgEnum('_document_content_rating', E.DocumentContentRating);
 export const _DocumentType = createPgEnum('_document_type', E.DocumentType);
 export const _PreorderPaymentState = createPgEnum('_preorder_payment_state', E.PreorderPaymentState);
+export const _SiteDateDisplay = createPgEnum('_site_date_display', E.SiteDateDisplay);
 export const _SiteState = createPgEnum('_site_state', E.SiteState);
 export const _SingleSignOnProvider = createPgEnum('_single_sign_on_provider', E.SingleSignOnProvider);
 export const _SubscriptionState = createPgEnum('_subscription_state', E.SubscriptionState);

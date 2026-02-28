@@ -595,6 +595,7 @@ interface IPost {
 }
 
 interface ISite {
+  dateDisplay: SiteDateDisplay!
   fonts: [Font!]!
   id: ID!
   logo: Image!
@@ -1158,6 +1159,7 @@ enum SingleSignOnProvider {
 }
 
 type Site implements ISite {
+  dateDisplay: SiteDateDisplay!
   deletedEntities: [Entity!]!
   documentTemplates: [Document!]!
   entities: [Entity!]!
@@ -1174,6 +1176,12 @@ type Site implements ISite {
   view: SiteView!
 }
 
+enum SiteDateDisplay {
+  CREATED_AT
+  NONE
+  UPDATED_AT
+}
+
 enum SiteState {
   ACTIVE
   DELETED
@@ -1187,6 +1195,7 @@ type SiteUsage {
 }
 
 type SiteView implements ISite {
+  dateDisplay: SiteDateDisplay!
   entities: [EntityView!]!
   fonts: [Font!]!
   id: ID!
@@ -1415,6 +1424,7 @@ input UpdatePreferencesInput {
 }
 
 input UpdateSiteInput {
+  dateDisplay: SiteDateDisplay
   logoId: ID
   name: String
   siteId: ID!

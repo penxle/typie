@@ -211,9 +211,13 @@
                     </p>
                   {/if}
 
-                  <p class={css({ marginTop: '10px', fontSize: '13px', color: 'text.faint' })}>
-                    {dayjs(entity.node.updatedAt).format('YYYY. M. D.')}
-                  </p>
+                  {#if query.data.siteView.dateDisplay !== 'NONE'}
+                    <p class={css({ marginTop: '10px', fontSize: '13px', color: 'text.faint' })}>
+                      {dayjs(query.data.siteView.dateDisplay === 'CREATED_AT' ? entity.node.createdAt : entity.node.updatedAt).format(
+                        'YYYY. M. D.',
+                      )}
+                    </p>
+                  {/if}
                 </div>
 
                 {#if entity.node.thumbnail}

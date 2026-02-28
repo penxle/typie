@@ -21,7 +21,7 @@ import {
   Users,
   validateDbId,
 } from '@/db';
-import { DocumentType, EntityState, EntityType, EntityVisibility, FontState, PostType, SiteState } from '@/enums';
+import { DocumentType, EntityState, EntityType, EntityVisibility, FontState, PostType, SiteDateDisplay, SiteState } from '@/enums';
 import { env } from '@/env';
 import { NotFoundError, TypieError } from '@/errors';
 import { pubsub } from '@/pubsub';
@@ -41,6 +41,8 @@ ISite.implement({
     slug: t.exposeString('slug'),
     name: t.exposeString('name'),
     logo: t.expose('logoId', { type: Image }),
+
+    dateDisplay: t.expose('dateDisplay', { type: SiteDateDisplay }),
 
     url: t.string({ resolve: (self) => env.USERSITE_URL.replace('*', self.slug) }),
 
@@ -289,6 +291,7 @@ builder.mutationFields((t) => ({
       siteId: t.input.id({ validate: validateDbId(TableCode.SITES) }),
       name: t.input.string({ required: false }),
       logoId: t.input.id({ required: false }),
+      dateDisplay: t.input.field({ type: SiteDateDisplay, required: false }),
     },
     resolve: async (_, { input }, ctx) => {
       await assertSitePermission({
@@ -296,12 +299,15 @@ builder.mutationFields((t) => ({
         siteId: input.siteId,
       });
 
-      const updateData: { name?: string; logoId?: string } = {};
+      const updateData: { name?: string; logoId?: string; dateDisplay?: SiteDateDisplay } = {};
       if (input.name !== undefined && input.name !== null) {
         updateData.name = input.name;
       }
       if (input.logoId !== undefined && input.logoId !== null) {
         updateData.logoId = input.logoId;
+      }
+      if (input.dateDisplay !== undefined && input.dateDisplay !== null) {
+        updateData.dateDisplay = input.dateDisplay;
       }
 
       if (Object.keys(updateData).length === 0) {

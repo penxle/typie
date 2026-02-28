@@ -10,6 +10,7 @@ export const load = async (event) => {
           siteView(origin: $origin) {
             id
             name
+            dateDisplay
 
             logo {
               id
@@ -39,6 +40,7 @@ export const load = async (event) => {
                   title
                   subtitle
                   excerpt
+                  createdAt
                   updatedAt
                   thumbnail {
                     id
@@ -55,6 +57,7 @@ export const load = async (event) => {
                   title
                   subtitle
                   excerpt
+                  createdAt
                   updatedAt
                   thumbnail {
                     id
