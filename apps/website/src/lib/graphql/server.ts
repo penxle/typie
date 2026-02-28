@@ -1,4 +1,4 @@
-import { cacheExchange, createClient, httpExchange, isExchangeError, isGraphQLError } from '@mearie/svelte';
+import { AggregatedError, cacheExchange, createClient, httpExchange, isExchangeError, isGraphQLError } from '@mearie/svelte';
 import { error, redirect } from '@sveltejs/kit';
 import { TypieError } from '@/errors';
 import { env } from '$env/dynamic/public';
@@ -44,7 +44,7 @@ export async function loadQuery<T extends Artifact<'query'>>(
       __hydration: { artifact: query, variables: variables ?? ({} as VariablesOf<T>), cacheSnapshot },
     };
   } catch (err) {
-    if (err instanceof AggregateError) {
+    if (err instanceof AggregatedError) {
       for (const inner of err.errors) {
         if (inner instanceof TypieError) {
           if (inner.status === 401) {
