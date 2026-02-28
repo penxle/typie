@@ -138,6 +138,19 @@
     }
   };
 
+  const findSiblingSlug = (slug: string): string | undefined => {
+    const el = globalThis.document.querySelector<HTMLElement>(`[data-slug="${slug}"]`);
+    if (!el) return;
+
+    let next = el.nextElementSibling as HTMLElement | null;
+    while (next && !next.dataset.slug) next = next.nextElementSibling as HTMLElement | null;
+    if (next?.dataset.slug) return next.dataset.slug;
+
+    let prev = el.previousElementSibling as HTMLElement | null;
+    while (prev && !prev.dataset.slug) prev = prev.previousElementSibling as HTMLElement | null;
+    return prev?.dataset.slug;
+  };
+
   const handleDelete = () => {
     Dialog.confirm({
       title: '문서 삭제',
@@ -146,8 +159,21 @@
       action: 'danger',
       actionLabel: '삭제',
       actionHandler: async () => {
+        const siblingSlug = findSiblingSlug(entity.slug);
+
         await deleteDocument({ input: { documentId: document.id } });
         mixpanel.track('delete_document', { via });
+
+        const focusedPane = paneGroup.panes.find((p) => p.id === paneGroup.state.current.focusedPaneId);
+        if (focusedPane?.kind !== 'entity' || focusedPane.slug !== entity.slug) return;
+
+        if (paneGroup.panes.length > 1) {
+          paneGroup.removePane(focusedPane.id);
+        } else if (siblingSlug) {
+          paneGroup.replacePane(focusedPane.id, { kind: 'entity', slug: siblingSlug });
+        } else {
+          paneGroup.replacePane(focusedPane.id, { kind: 'home' });
+        }
       },
     });
   };

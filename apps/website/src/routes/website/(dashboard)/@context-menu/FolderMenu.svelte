@@ -21,6 +21,7 @@
   import TriangleAlertIcon from '~icons/lucide/triangle-alert';
   import { goto } from '$app/navigation';
   import { graphql } from '$mearie';
+  import { getPaneGroup } from '../[slug]/@pane/context.svelte';
   import { maxDepth } from '../@tree/utils';
 
   type Props = {
@@ -123,6 +124,7 @@
   );
 
   const app = getAppContext();
+  const paneGroup = getPaneGroup();
 
   let loadingDescendants = $state(false);
   let loadingInfo = $state(false);
@@ -226,6 +228,17 @@
       actionHandler: async () => {
         await deleteFolder({ input: { folderId: folder.id } });
         mixpanel.track('delete_folder', { via });
+
+        if (!app.state.ancestors.includes(entity.id)) return;
+
+        const focusedPaneId = paneGroup.state.current.focusedPaneId;
+        if (!focusedPaneId) return;
+
+        if (paneGroup.panes.length > 1) {
+          paneGroup.removePane(focusedPaneId);
+        } else {
+          paneGroup.replacePane(focusedPaneId, { kind: 'home' });
+        }
       },
     });
   }}
