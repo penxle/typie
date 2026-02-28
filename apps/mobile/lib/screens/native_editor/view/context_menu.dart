@@ -200,7 +200,7 @@ class _MenuBubble extends HookWidget {
           _MenuButton(
             label: '잘라내기',
             onTap: () async {
-              await clipboard.cut(scope.editor, scope.editor.dispatch);
+              await clipboard.cut(scope.editor, scope.controller.dispatch);
               onDismiss();
             },
           ),
@@ -211,7 +211,7 @@ class _MenuBubble extends HookWidget {
             unawaited(
               EditorClipboard().getPastePayload().then((payload) {
                 if (payload != null) {
-                  scope.editor.dispatch(payload);
+                  scope.controller.dispatch(payload);
                   scope.controller.scrollIntoView();
                 }
                 onDismiss();
@@ -238,7 +238,7 @@ class _MenuBubble extends HookWidget {
           _MenuButton(
             label: '단어',
             onTap: () {
-              scope.editor.dispatch({'type': 'selectWord'});
+              scope.controller.dispatch({'type': 'selectWord'});
               scope.controller.scrollIntoView();
               isExpanded.value = false;
             },
@@ -247,7 +247,7 @@ class _MenuBubble extends HookWidget {
           _MenuButton(
             label: '문장',
             onTap: () {
-              scope.editor.dispatch({'type': 'selectSentence'});
+              scope.controller.dispatch({'type': 'selectSentence'});
               scope.controller.scrollIntoView();
               isExpanded.value = false;
             },
@@ -256,7 +256,7 @@ class _MenuBubble extends HookWidget {
           _MenuButton(
             label: '문단',
             onTap: () {
-              scope.editor.dispatch({'type': 'selectParagraph'});
+              scope.controller.dispatch({'type': 'selectParagraph'});
               scope.controller.scrollIntoView();
               isExpanded.value = false;
             },
@@ -265,7 +265,7 @@ class _MenuBubble extends HookWidget {
           _MenuButton(
             label: '전체',
             onTap: () {
-              scope.editor.dispatch({'type': 'selectAll'});
+              scope.controller.dispatch({'type': 'selectAll'});
               isExpanded.value = false;
             },
           ),

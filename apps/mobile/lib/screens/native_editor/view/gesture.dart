@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:typie/native/editor_native.dart';
 import 'package:typie/screens/native_editor/state/controller.dart';
 import 'package:typie/screens/native_editor/state/state.dart';
 import 'package:typie/screens/native_editor/view/geometry.dart';
@@ -90,7 +89,6 @@ class GestureController {
   GestureController({
     required this.verticalScrollController,
     required this.horizontalScrollController,
-    required this.editor,
     required this.controller,
     required this.getPageAtPosition,
     required this.getPointerX,
@@ -100,7 +98,6 @@ class GestureController {
 
   final ScrollController verticalScrollController;
   final ScrollController horizontalScrollController;
-  final NativeEditor editor;
   final EditorController controller;
   final (int, double) Function(double y) getPageAtPosition;
   final double Function(double localX) getPointerX;
@@ -469,13 +466,13 @@ class GestureController {
         _lastDispatchedPosition = currentPosition;
 
         if (dropPosition.value != null) {
-          editor.dispatch({'type': 'dragOver', 'pageIdx': pageIdx, 'x': pointerX, 'y': localY});
+          controller.dispatch({'type': 'dragOver', 'pageIdx': pageIdx, 'x': pointerX, 'y': localY});
           return;
         }
 
         final anchorHandle = _dragAnchorHandle;
         if (_draggingHandleType != null && anchorHandle != null) {
-          editor.dispatch({
+          controller.dispatch({
             'type': 'extendSelectionTo',
             'anchorPageIdx': anchorHandle.pageIdx,
             'anchorX': anchorHandle.x,
@@ -486,7 +483,7 @@ class GestureController {
             if (_doubleTapInitialRange != null) 'doubleTapInitialRange': _doubleTapInitialRange,
           });
         } else if (_draggingHandleType == null) {
-          editor
+          controller
             ..dispatch({
               'type': 'pointerDown',
               'pageIdx': pageIdx,
@@ -503,8 +500,8 @@ class GestureController {
               'y': localY,
               'button': 'primary',
               'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
-            });
-          controller.scrollIntoView();
+            })
+            ..scrollIntoView();
         }
       }
     });
