@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
@@ -119,6 +120,7 @@ class PageList extends HookWidget {
         isLongPressing: scope.isLongPressing,
       ),
     );
+    final wheelZoomSession = useMemoized(PinchZoomSession.new);
     final gestureState = gesture.state;
     final pinch = useMemoized(PinchGestureController.new);
     final resumedPanPointer = useRef<int?>(null);
@@ -507,6 +509,88 @@ class PageList extends HookWidget {
           resumedPanPointer.value = null;
           resumedPanLastLocalPosition.value = null;
           resumedPanActive.value = false;
+        }
+
+        bool handlePointerZoom(PointerScrollEvent event, Set<LogicalKeyboardKey> keysPressed) {
+          if (!geo.isPaginated) {
+            return false;
+          }
+
+          final isZoomModifierPressed =
+              keysPressed.contains(LogicalKeyboardKey.controlLeft) ||
+              keysPressed.contains(LogicalKeyboardKey.controlRight) ||
+              keysPressed.contains(LogicalKeyboardKey.metaLeft) ||
+              keysPressed.contains(LogicalKeyboardKey.metaRight);
+          if (!isZoomModifierPressed) {
+            return false;
+          }
+
+          final layout = scope.controller.state.layout;
+          if (layout is! PaginatedLayout) {
+            return false;
+          }
+
+          final zoomDelta = event.scrollDelta.dy.abs() >= event.scrollDelta.dx.abs()
+              ? event.scrollDelta.dy
+              : event.scrollDelta.dx;
+          if (zoomDelta == 0) {
+            return true;
+          }
+
+          final nextZoom = clampPaginatedZoom(
+            zoom: zoom * math.exp(-zoomDelta / 240),
+            pageWidth: layout.pageWidth,
+            viewportWidth: viewWidth,
+          );
+          if (zoomEquals(nextZoom, zoom)) {
+            return true;
+          }
+
+          final focal = event.localPosition;
+          final logicalX = gesture.getPointerX(focal.dx);
+          final (pageIdx, logicalY) = getPageAtPosition(focal.dy);
+          wheelZoomSession.captureAnchor(pageIdx: pageIdx, logicalX: logicalX, logicalY: logicalY);
+
+          scope.setZoom(nextZoom);
+          wheelZoomSession.syncViewport(
+            focal: focal,
+            geometry: ContentGeometry(
+              layout: layout,
+              pages: scope.controller.state.pages,
+              titleAreaHeight: scope.titleAreaHeight.value,
+              selection: scope.controller.state.selection,
+              zoom: nextZoom,
+            ),
+            viewportWidth: viewWidth,
+            horizontalScrollController: horizontalScrollController,
+            verticalScrollController: verticalScrollController,
+            isMounted: () => context.mounted,
+            isPinching: () => true,
+          );
+          return true;
+        }
+
+        void handlePointerScroll(PointerScrollEvent event) {
+          final keysPressed = HardwareKeyboard.instance.logicalKeysPressed;
+          if (handlePointerZoom(event, keysPressed)) {
+            return;
+          }
+          final isShiftPressed =
+              keysPressed.contains(LogicalKeyboardKey.shiftLeft) || keysPressed.contains(LogicalKeyboardKey.shiftRight);
+
+          var scrollDx = event.scrollDelta.dx;
+          var scrollDy = event.scrollDelta.dy;
+
+          if (allowHorizontalPan && isShiftPressed && scrollDx == 0 && scrollDy != 0) {
+            scrollDx = scrollDy;
+            scrollDy = 0;
+          }
+
+          if (scrollDx == 0 && scrollDy == 0) {
+            return;
+          }
+
+          gesture.applyRawPanDelta(delta: Offset(-scrollDx, -scrollDy), allowHorizontal: allowHorizontalPan);
         }
 
         void startLongPress(Offset globalPosition) {
@@ -979,6 +1063,15 @@ class PageList extends HookWidget {
           },
           child: Listener(
             behavior: HitTestBehavior.translucent,
+            onPointerSignal: (event) {
+              if (event is! PointerScrollEvent) {
+                return;
+              }
+              if (pinch.isPinching) {
+                return;
+              }
+              handlePointerScroll(event);
+            },
             onPointerDown: (event) {
               clearResumedPanState();
               pinch.addPointer(event.pointer, event.localPosition);
