@@ -9,7 +9,6 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
 import 'package:gql_tristate_value/gql_tristate_value.dart';
@@ -54,6 +53,7 @@ import 'package:typie/services/blob.dart';
 import 'package:typie/services/preference.dart';
 import 'package:typie/widgets/forms/form.dart';
 import 'package:typie/widgets/forms/text_field.dart';
+import 'package:typie/widgets/haptic_reorderable.dart';
 import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/screen.dart';
 import 'package:typie/widgets/vertical_divider.dart';
@@ -586,14 +586,13 @@ class _EntityList extends HookWidget {
                   ),
                 )
               else
-                ReorderableList(
+                HapticReorderableList(
+                  orderedIds: [for (final item in entities) item.id],
                   controller: primaryScrollController,
                   physics: const AlwaysScrollableScrollPhysics(),
                   padding: Pad(horizontal: 20, top: 14, bottom: isSelecting.value ? 90 : 14),
-                  itemCount: entities.length,
                   itemBuilder: (context, index) {
                     return Padding(
-                      key: Key(entities[index].id),
                       padding: const Pad(vertical: 6),
                       child: GestureDetector(
                         onTap: () {
@@ -1093,6 +1092,14 @@ class _EntityList extends HookWidget {
                   },
                   proxyDecorator: (child, index, animation) => child,
                   onReorder: (oldIndex, newIndex) async {
+                    var adjustedNewIndex = newIndex;
+                    if (oldIndex < newIndex) {
+                      adjustedNewIndex -= 1;
+                    }
+                    if (oldIndex == adjustedNewIndex) {
+                      return;
+                    }
+
                     final dragging = entities[oldIndex];
                     String? lowerOrder;
                     String? upperOrder;
@@ -1133,12 +1140,6 @@ class _EntityList extends HookWidget {
                     );
 
                     unawaited(mixpanel.track('move_entity', properties: {'via': 'reorder'}));
-                  },
-                  onReorderStart: (index) async {
-                    await HapticFeedback.lightImpact();
-                  },
-                  onReorderEnd: (index) async {
-                    await HapticFeedback.lightImpact();
                   },
                 ),
               if (isSelecting.value)
