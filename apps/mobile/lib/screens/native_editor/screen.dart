@@ -485,7 +485,13 @@ class _EditorContent extends HookWidget {
       }
 
       if (loadedSnapshot.value != null && loadedSnapshot.value != snapshotValue) {
-        currentEditor.importUpdates(base64Decode(snapshotValue));
+        try {
+          currentEditor.importUpdates(base64Decode(snapshotValue));
+        } on EditorException catch (err) {
+          if (!currentEditor.isDisposed) {
+            debugPrint('NativeEditorScreen snapshot import skipped: $err');
+          }
+        }
       }
       loadedSnapshot.value = snapshotValue;
 
@@ -499,10 +505,16 @@ class _EditorContent extends HookWidget {
       }
 
       final theme = getEditorTheme(brightness);
-      currentEditor.dispatch({
-        'type': 'setTheme',
-        'theme': {'colors': theme},
-      });
+      try {
+        currentEditor.dispatch({
+          'type': 'setTheme',
+          'theme': {'colors': theme},
+        });
+      } on EditorException catch (err) {
+        if (!currentEditor.isDisposed) {
+          debugPrint('NativeEditorScreen theme dispatch skipped: $err');
+        }
+      }
 
       return null;
     }, [editor.value, brightness]);
@@ -543,8 +555,15 @@ class _EditorContent extends HookWidget {
       editorContext.controller = editorController.value;
 
       return () {
-        editorController.value?.dispose();
+        final staleController = editorController.value;
         editorController.value = null;
+        if (staleController != null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!staleController.isDisposed) {
+              staleController.dispose();
+            }
+          });
+        }
       };
     }, [editor.value]);
 
@@ -570,26 +589,41 @@ class _EditorContent extends HookWidget {
       );
 
       Future<void> init() async {
-        final local = await persistence.load();
+        try {
+          final local = await persistence.load();
+          if (currentEditor.isDisposed || syncManager.value == null) {
+            return;
+          }
 
-        if (local != null && local.snapshot != null && persistence.generation == editorContext.serverGeneration) {
-          currentEditor.importUpdatesBatch([local.snapshot!, ...local.updates]);
-        } else {
-          await persistence.clear();
-          final snap = currentEditor.export(DocExportMode.snapshot);
-          final version = currentEditor.export(DocExportMode.version);
-          final serverVersion = document?.version.value ?? '';
-          if (snap != null && version != null && serverVersion.isNotEmpty) {
-            await persistence.saveSnapshot(
-              snap,
-              Uint8List.fromList(version),
-              generation: editorContext.serverGeneration,
-            );
-            await persistence.saveCheckpoint(Uint8List.fromList(base64Decode(serverVersion)));
+          if (local != null && local.snapshot != null && persistence.generation == editorContext.serverGeneration) {
+            currentEditor.importUpdatesBatch([local.snapshot!, ...local.updates]);
+          } else {
+            await persistence.clear();
+            if (currentEditor.isDisposed) {
+              return;
+            }
+            final snap = currentEditor.export(DocExportMode.snapshot);
+            final version = currentEditor.export(DocExportMode.version);
+            final serverVersion = document?.version.value ?? '';
+            if (snap != null && version != null && serverVersion.isNotEmpty) {
+              await persistence.saveSnapshot(
+                snap,
+                Uint8List.fromList(version),
+                generation: editorContext.serverGeneration,
+              );
+              await persistence.saveCheckpoint(Uint8List.fromList(base64Decode(serverVersion)));
+            }
+          }
+
+          if (currentEditor.isDisposed || syncManager.value == null) {
+            return;
+          }
+          await syncManager.value!.start();
+        } on EditorException catch (err) {
+          if (!currentEditor.isDisposed) {
+            debugPrint('NativeEditorScreen sync init skipped: $err');
           }
         }
-
-        await syncManager.value!.start();
       }
 
       unawaited(init());

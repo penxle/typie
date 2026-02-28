@@ -113,6 +113,20 @@ class EditorView extends HookWidget {
       return () => renderZoomTimer.value?.cancel();
     }, []);
 
+    useEffect(() {
+      return () {
+        suppressScrollbarTimer.value?.cancel();
+        suppressScrollbarTimer.value = null;
+      };
+    }, []);
+
+    void setSuppressScrollbarVisibility(bool visible) {
+      if (!context.mounted) {
+        return;
+      }
+      suppressScrollbarShow.value = visible;
+    }
+
     void setZoom(double zoom, {bool commitRender = false}) {
       final layout = controller.state.layout;
       final next = switch (layout) {
@@ -310,10 +324,11 @@ class EditorView extends HookWidget {
           return;
         }
         suppressScrollbarTimer.value?.cancel();
-        suppressScrollbarShow.value = true;
+        setSuppressScrollbarVisibility(true);
         unawaited(verticalPosition.animateTo(0, duration: const Duration(milliseconds: 100), curve: Curves.easeOut));
         suppressScrollbarTimer.value = Timer(const Duration(milliseconds: 150), () {
-          suppressScrollbarShow.value = false;
+          suppressScrollbarTimer.value = null;
+          setSuppressScrollbarVisibility(false);
         });
       }
 
@@ -388,10 +403,11 @@ class EditorView extends HookWidget {
 
     void runCursorScroll(CursorInfo targetCursor, {required bool typewriter}) {
       suppressScrollbarTimer.value?.cancel();
-      suppressScrollbarShow.value = true;
+      setSuppressScrollbarVisibility(true);
       scrollToCursorWith(targetCursor, typewriter: typewriter);
       suppressScrollbarTimer.value = Timer(const Duration(milliseconds: 150), () {
-        suppressScrollbarShow.value = false;
+        suppressScrollbarTimer.value = null;
+        setSuppressScrollbarVisibility(false);
       });
     }
 
@@ -763,12 +779,7 @@ class EditorView extends HookWidget {
               final currentSize = (width, height, scaleFactor);
               if (lastSize.value != currentSize) {
                 lastSize.value = currentSize;
-                controller.editor.dispatch({
-                  'type': 'resize',
-                  'width': width,
-                  'height': height,
-                  'scaleFactor': scaleFactor,
-                });
+                controller.dispatch({'type': 'resize', 'width': width, 'height': height, 'scaleFactor': scaleFactor});
               }
               return Column(
                 children: [
@@ -887,6 +898,10 @@ class _DocumentPlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (controller.isDisposed) {
+      return const SizedBox.shrink();
+    }
+
     return ListenableBuilder(
       listenable: Listenable.merge([controller, titleAreaHeight, displayZoom]),
       builder: (context, _) {
