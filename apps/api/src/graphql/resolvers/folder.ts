@@ -271,6 +271,8 @@ builder.mutationFields((t) => ({
       siteId: t.input.id({ validate: validateDbId(TableCode.SITES) }),
       parentEntityId: t.input.id({ required: false, validate: validateDbId(TableCode.ENTITIES) }),
       name: t.input.string(),
+      lowerOrder: t.input.string({ required: false }),
+      upperOrder: t.input.string({ required: false }),
     },
     resolve: async (_, { input }, ctx) => {
       await assertSitePermission({
@@ -296,18 +298,24 @@ builder.mutationFields((t) => ({
         depth = parentEntity.depth + 1;
       }
 
-      const last = await db
-        .select({ order: Entities.order })
-        .from(Entities)
-        .where(
-          and(
-            eq(Entities.siteId, input.siteId),
-            input.parentEntityId ? eq(Entities.parentId, input.parentEntityId) : isNull(Entities.parentId),
-          ),
-        )
-        .orderBy(desc(Entities.order))
-        .limit(1)
-        .then(first);
+      let orderLower: string | null = input.lowerOrder ?? null;
+
+      if (!input.lowerOrder) {
+        const last = await db
+          .select({ order: Entities.order })
+          .from(Entities)
+          .where(
+            and(
+              eq(Entities.siteId, input.siteId),
+              input.parentEntityId ? eq(Entities.parentId, input.parentEntityId) : isNull(Entities.parentId),
+            ),
+          )
+          .orderBy(desc(Entities.order))
+          .limit(1)
+          .then(first);
+
+        orderLower = last?.order ?? null;
+      }
 
       const folder = await db.transaction(async (tx) => {
         const entity = await tx
@@ -319,7 +327,7 @@ builder.mutationFields((t) => ({
             slug: generateSlug(),
             permalink: generatePermalink(),
             type: EntityType.FOLDER,
-            order: generateFractionalOrder({ lower: last?.order, upper: null }),
+            order: generateFractionalOrder({ lower: orderLower, upper: input.upperOrder ?? null }),
             depth,
           })
           .returning({ id: Entities.id })

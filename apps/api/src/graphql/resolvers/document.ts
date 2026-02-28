@@ -683,6 +683,8 @@ builder.mutationFields((t) => ({
     input: {
       siteId: t.input.id({ validate: validateDbId(TableCode.SITES) }),
       parentEntityId: t.input.id({ required: false, validate: validateDbId(TableCode.ENTITIES) }),
+      lowerOrder: t.input.string({ required: false }),
+      upperOrder: t.input.string({ required: false }),
     },
     resolve: async (_, { input }, ctx) => {
       await assertSitePermission({
@@ -708,18 +710,24 @@ builder.mutationFields((t) => ({
         depth = parentEntity.depth + 1;
       }
 
-      const last = await db
-        .select({ order: Entities.order })
-        .from(Entities)
-        .where(
-          and(
-            eq(Entities.siteId, input.siteId),
-            input.parentEntityId ? eq(Entities.parentId, input.parentEntityId) : isNull(Entities.parentId),
-          ),
-        )
-        .orderBy(desc(Entities.order))
-        .limit(1)
-        .then(first);
+      let orderLower: string | null = input.lowerOrder ?? null;
+
+      if (!input.lowerOrder) {
+        const last = await db
+          .select({ order: Entities.order })
+          .from(Entities)
+          .where(
+            and(
+              eq(Entities.siteId, input.siteId),
+              input.parentEntityId ? eq(Entities.parentId, input.parentEntityId) : isNull(Entities.parentId),
+            ),
+          )
+          .orderBy(desc(Entities.order))
+          .limit(1)
+          .then(first);
+
+        orderLower = last?.order ?? null;
+      }
 
       const preference = await db
         .select({ value: UserPreferences.value })
@@ -739,7 +747,7 @@ builder.mutationFields((t) => ({
             slug: generateSlug(),
             permalink: generatePermalink(),
             type: EntityType.DOCUMENT,
-            order: generateFractionalOrder({ lower: last?.order, upper: null }),
+            order: generateFractionalOrder({ lower: orderLower, upper: input.upperOrder ?? null }),
             depth,
           })
           .returning({ id: Entities.id })
