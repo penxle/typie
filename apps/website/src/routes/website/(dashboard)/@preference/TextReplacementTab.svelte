@@ -186,7 +186,7 @@
   });
 
   const invalidateCache = () => {
-    cache.invalidate({ __typename: 'User', id: user.data.id, field: 'textReplacements' });
+    cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'textReplacements' });
   };
 
   const toggleState = async (item: NormalizedItem) => {

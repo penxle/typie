@@ -177,7 +177,7 @@
     const newTemplate = { ...template, ...updates };
     await updatePreferences({ input: { value: { template: newTemplate } } });
     if (userId) {
-      cache.invalidate({ __typename: 'User', id: userId, field: 'preferences' });
+      cache.invalidate({ __typename: 'User', id: userId, $field: 'preferences' });
     }
 
     mixpanel.track('update_post_template', {
@@ -188,7 +188,7 @@
   const resetTemplate = async () => {
     await updatePreferences({ input: { value: { template: {} } } });
     if (userId) {
-      cache.invalidate({ __typename: 'User', id: userId, field: 'preferences' });
+      cache.invalidate({ __typename: 'User', id: userId, $field: 'preferences' });
     }
 
     mixpanel.track('reset_post_template');

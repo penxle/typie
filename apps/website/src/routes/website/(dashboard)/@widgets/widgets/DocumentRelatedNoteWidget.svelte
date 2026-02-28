@@ -181,7 +181,7 @@
       mixpanel.track('create_related_note', {
         via,
       });
-      cache.invalidate({ __typename: 'Entity', id: relatedDocument.data.entity.id, field: 'notes' });
+      cache.invalidate({ __typename: 'Entity', id: relatedDocument.data.entity.id, $field: 'notes' });
     }
   };
 
@@ -190,7 +190,7 @@
 
     await deleteNote({ input: { noteId } });
     mixpanel.track('delete_related_note');
-    cache.invalidate({ __typename: 'Entity', id: relatedDocument.data.entity.id, field: 'notes' });
+    cache.invalidate({ __typename: 'Entity', id: relatedDocument.data.entity.id, $field: 'notes' });
   };
 
   const handleDragStart = (noteId: string) => {
@@ -232,7 +232,7 @@
           },
         });
         mixpanel.track('move_related_note');
-        cache.invalidate({ __typename: 'Entity', id: relatedDocument.data.entity.id, field: 'notes' });
+        cache.invalidate({ __typename: 'Entity', id: relatedDocument.data.entity.id, $field: 'notes' });
       } catch {
         localNoteOrder = relatedDocument.data.entity.notes.map((note) => note.id);
         Toast.error('노트 순서 변경에 실패했습니다. 잠시 후 다시 시도해주세요.');

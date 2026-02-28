@@ -49,7 +49,7 @@
         value: {},
       },
     });
-    cache.invalidate({ __typename: 'User', id: user.data.id, field: 'surveys' });
+    cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'surveys' });
   }
 
   async function handleClose() {

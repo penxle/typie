@@ -141,7 +141,7 @@
           },
         });
 
-        cache.invalidate({ __typename: 'User', id: user.data.id, field: 'billingKey' });
+        cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'billingKey' });
         mixpanel.track('update_payment_billing_key');
         fb.track('AddPaymentInfo');
       }

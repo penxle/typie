@@ -72,9 +72,11 @@
       try {
         const path = await uploadBlob(file);
         const resp = await persistBlobAsFont({ input: { path } });
-        cache.invalidate({ __typename: 'User', id: userId, field: 'fontFamilies' });
-        cache.invalidate({ __typename: 'User', id: userId, field: 'documentFontFamilies' });
-        cache.invalidate({ __typename: 'Document', field: 'fontFamilies' });
+        cache.invalidate(
+          { __typename: 'User', id: userId, $field: 'fontFamilies' },
+          { __typename: 'User', id: userId, $field: 'documentFontFamilies' },
+          { __typename: 'Document', $field: 'fontFamilies' },
+        );
 
         results.push({
           name: resp.persistBlobAsFont.family.displayName,

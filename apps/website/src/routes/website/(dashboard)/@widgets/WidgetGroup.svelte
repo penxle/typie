@@ -297,7 +297,7 @@
         via,
       });
     } finally {
-      await cache.invalidate({ __typename: 'Query', field: 'widgets' });
+      await cache.invalidate({ __typename: 'Query', $field: 'widgets' });
     }
   };
 
@@ -315,7 +315,7 @@
       optimisticDeletedWidgetIds = optimisticDeletedWidgetIds.filter((existingId) => existingId !== id);
       throw err;
     } finally {
-      await cache.invalidate({ __typename: 'Query', field: 'widgets' });
+      await cache.invalidate({ __typename: 'Query', $field: 'widgets' });
     }
   };
 
@@ -324,7 +324,7 @@
       // await updateWidgetMutation({ input: { widgetId, data } }, { optimistic: { id: widgetId, data } });
       await updateWidgetMutation({ input: { widgetId, data } });
     } finally {
-      cache.invalidate({ __typename: 'Query', field: 'widgets' });
+      cache.invalidate({ __typename: 'Query', $field: 'widgets' });
     }
   };
 
@@ -385,7 +385,7 @@
       if (wasAttaching) {
         optimisticDeletedWidgetIds = optimisticDeletedWidgetIds.filter((id) => id !== widgetId);
       }
-      await cache.invalidate({ __typename: 'Query', field: 'widgets' });
+      await cache.invalidate({ __typename: 'Query', $field: 'widgets' });
     }
   };
 
@@ -432,7 +432,7 @@
         });
       }
     } finally {
-      await cache.invalidate({ __typename: 'Query', field: 'widgets' });
+      await cache.invalidate({ __typename: 'Query', $field: 'widgets' });
     }
   };
 
@@ -1020,7 +1020,7 @@
             via: 'drag_free',
           });
         }
-        await cache.invalidate({ __typename: 'Query', field: 'widgets' });
+        await cache.invalidate({ __typename: 'Query', $field: 'widgets' });
       } finally {
         if (dragging === currentDragging) {
           dragging = null;
