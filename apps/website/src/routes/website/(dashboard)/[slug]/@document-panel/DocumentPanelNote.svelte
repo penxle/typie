@@ -1,19 +1,17 @@
 <script lang="ts">
   import { createFragment, createMutation } from '@mearie/svelte';
-  import { css, cx } from '@typie/styled-system/css';
+  import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
-  import { token } from '@typie/styled-system/tokens';
-  import { autosize, tooltip } from '@typie/ui/actions';
-  import { Button, Icon, Popover } from '@typie/ui/components';
+  import { tooltip } from '@typie/ui/actions';
+  import { Button, Icon } from '@typie/ui/components';
   import { Toast } from '@typie/ui/notification';
-  import { animateFlip, debounce, elementScrollViewport, getNoteColors, getRandomNoteColor, handleDragScroll } from '@typie/ui/utils';
+  import { animateFlip, elementScrollViewport, getRandomNoteColor, handleDragScroll } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
-  import GripVerticalIcon from '~icons/lucide/grip-vertical';
   import PlusIcon from '~icons/lucide/plus';
   import StickyNoteIcon from '~icons/lucide/sticky-note';
-  import Trash2Icon from '~icons/lucide/trash-2';
   import { cache } from '$lib/graphql';
   import { graphql } from '$mearie';
+  import DocumentPanelNoteItem from './DocumentPanelNoteItem.svelte';
   import type { DocumentPanel_Note_entity$key } from '$mearie';
 
   type Props = {
@@ -28,14 +26,8 @@
         id
         notes {
           id
-          content
-          color
           order
-          createdAt
-          updatedAt
-          entity {
-            id
-          }
+          ...DocumentPanelNoteItem_note
         }
       }
     `),
@@ -53,28 +45,6 @@
           entity {
             id
           }
-        }
-      }
-    `),
-  );
-
-  const [updateNote] = createMutation(
-    graphql(`
-      mutation DocumentPanelNote_UpdateNote_Mutation($input: UpdateNoteInput!) {
-        updateNote(input: $input) {
-          id
-          content
-          updatedAt
-        }
-      }
-    `),
-  );
-
-  const [deleteNote] = createMutation(
-    graphql(`
-      mutation DocumentPanelNote_DeleteNote_Mutation($input: DeleteNoteInput!) {
-        deleteNote(input: $input) {
-          id
         }
       }
     `),
@@ -113,29 +83,7 @@
 
   const notes = $derived(sortedNotes || []);
 
-  let noteContents = $state<Record<string, string>>({});
-  let focusedNoteId = $state<string | null>(null);
-
   let lastAddedNoteId = $state<string>();
-
-  $effect(() => {
-    if (notes) {
-      notes.forEach((note) => {
-        if (note.id !== focusedNoteId) {
-          noteContents[note.id] = note.content;
-        }
-      });
-    }
-  });
-
-  const saveNote = debounce(async (noteId: string, content: string) => {
-    await updateNote({
-      input: {
-        noteId,
-        content,
-      },
-    });
-  }, 500);
 
   const handleAddNote = async (via: string) => {
     const randomColor = getRandomNoteColor();
@@ -154,12 +102,6 @@
       });
       cache.invalidate({ __typename: 'Entity', id: entity.data.id, $field: 'notes' });
     }
-  };
-
-  const handleDeleteNote = async (noteId: string) => {
-    await deleteNote({ input: { noteId } });
-    mixpanel.track('delete_related_note');
-    cache.invalidate({ __typename: 'Entity', id: entity.data.id, $field: 'notes' });
   };
 
   const handleDragStart = (noteId: string) => {
@@ -330,198 +272,14 @@
       </div>
     {:else}
       {#each notes as note (note.id)}
-        {@const color = getNoteColors().find((color) => color.value === note.color)?.color ?? token('colors.prosemirror.white')}
-        {@const isDragging = dragging?.noteId === note.id}
-        <div
-          style:background-color={`color-mix(in srgb, ${token('colors.prosemirror.white')}, ${color} 75%)`}
-          style:opacity={isDragging ? '0.5' : '1'}
-          class={cx(
-            'group',
-            flex({
-              flexDirection: 'column',
-              gap: '8px',
-              position: 'relative',
-              clipPath: 'polygon(0 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%)',
-              transition: 'common',
-              _after: {
-                content: '""',
-                position: 'absolute',
-                bottom: '0',
-                right: '0',
-                width: '12px',
-                height: '12px',
-                background: '[linear-gradient(315deg, rgba(255, 255, 255, 0.3) 50%, rgba(0, 0, 0, 0.08) 50%)]',
-                boxShadow: '[1px 1px 2px rgba(0, 0, 0, 0.1)]',
-              },
-            }),
-          )}
-          data-related-note-id={note.id}
-          ondragend={handleDragEnd}
-          ondragenter={() => handleDragEnter(note.id)}
-          ondragover={(e) => {
-            e.preventDefault();
-          }}
-          role="listitem"
-        >
-          <button
-            class={center({
-              position: 'absolute',
-              top: '8px',
-              right: '8px',
-              size: '24px',
-              borderRadius: '4px',
-              color: 'text.faint',
-              cursor: 'grab',
-              transition: 'common',
-              opacity: '0',
-              _groupHover: {
-                opacity: dragging ? '0' : '100',
-              },
-              _hover: {
-                color: 'text.default',
-                backgroundColor: 'surface.dark/10',
-              },
-              _active: {
-                cursor: 'grabbing',
-              },
-            })}
-            draggable="true"
-            ondragend={handleDragEnd}
-            ondragstart={(e) => {
-              if (e.dataTransfer) {
-                e.dataTransfer.effectAllowed = 'move';
-                e.dataTransfer.setData('text', noteContents[note.id] || '');
-
-                const noteElement = e.currentTarget.closest('[data-related-note-id]') as HTMLElement;
-                if (noteElement) {
-                  const rect = noteElement.getBoundingClientRect();
-                  const ghost = document.createElement('div');
-
-                  const cloned = noteElement.cloneNode(true) as HTMLElement;
-                  cloned.style.pointerEvents = 'none';
-                  cloned.style.transform = 'rotate(1.5deg) scale(1.05)';
-                  cloned.style.opacity = '0.8';
-                  cloned.style.width = '100%';
-                  cloned.style.height = '100%';
-                  ghost.append(cloned);
-
-                  ghost.style.position = 'absolute';
-                  ghost.style.width = `${rect.width}px`;
-                  ghost.style.height = `${rect.height}px`;
-                  ghost.style.minHeight = `${rect.height}px`;
-                  ghost.style.top = '-1000px';
-                  ghost.style.left = '-1000px';
-
-                  document.body.append(ghost);
-
-                  const offsetX = e.clientX - rect.left;
-                  const offsetY = e.clientY - rect.top;
-
-                  e.dataTransfer.setDragImage(ghost, offsetX, offsetY);
-
-                  setTimeout(() => {
-                    ghost.remove();
-                  });
-                }
-              }
-
-              handleDragStart(note.id);
-            }}
-            type="button"
-            use:tooltip={{ message: '드래그해서 순서 변경', placement: 'top', force: dragging === null ? undefined : false }}
-          >
-            <Icon icon={GripVerticalIcon} size={16} />
-          </button>
-
-          <textarea
-            class={css({
-              width: 'full',
-              fontSize: '13px',
-              padding: '12px',
-              color: 'text.default',
-              backgroundColor: 'transparent',
-              resize: 'none',
-            })}
-            onblur={() => {
-              focusedNoteId = null;
-            }}
-            onfocus={() => {
-              focusedNoteId = note.id;
-            }}
-            oninput={(e) => {
-              saveNote(note.id, e.currentTarget.value);
-            }}
-            onkeydown={(e) => {
-              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.isComposing) {
-                e.preventDefault();
-                handleAddNote('shortcut');
-              }
-            }}
-            placeholder="기억할 내용이나 작성에 도움이 되는 내용을 자유롭게 적어보세요."
-            rows={3}
-            bind:value={noteContents[note.id]}
-            use:autosize={{ cacheKey: `document-panel-note-${note.id}` }}
-          ></textarea>
-
-          <Popover
-            style={center.raw({
-              position: 'absolute',
-              bottom: '8px',
-              right: '8px',
-              size: '24px',
-              borderRadius: '4px',
-              color: 'text.faint',
-              cursor: 'pointer',
-              transition: 'common',
-              opacity: '0',
-              _groupHover: {
-                opacity: dragging ? '0' : '100',
-              },
-              _hover: {
-                color: 'text.default',
-                backgroundColor: 'surface.dark/10',
-              },
-              _focus: {
-                opacity: '100',
-                color: 'text.default',
-                backgroundColor: 'surface.dark/10',
-              },
-            })}
-            contentStyle={css.raw({ paddingX: '0', paddingY: '0' })}
-          >
-            {#snippet trigger()}
-              <Icon icon={Trash2Icon} size={14} />
-            {/snippet}
-            {#snippet children({ close })}
-              <button
-                class={flex({
-                  alignItems: 'center',
-                  gap: '8px',
-                  paddingX: '12px',
-                  paddingY: '8px',
-                  fontSize: '13px',
-                  fontWeight: 'medium',
-                  color: 'text.default',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  transition: 'common',
-                  _hover: {
-                    backgroundColor: 'accent.danger.subtle',
-                    color: 'accent.danger.default',
-                  },
-                })}
-                onclick={() => {
-                  handleDeleteNote(note.id);
-                  close();
-                }}
-                type="button"
-              >
-                <Icon icon={Trash2Icon} size={14} />
-                노트 삭제
-              </button>
-            {/snippet}
-          </Popover>
-        </div>
+        <DocumentPanelNoteItem
+          draggingNoteId={dragging?.noteId ?? null}
+          note$key={note}
+          onAddNote={() => handleAddNote('shortcut')}
+          onDragEnd={handleDragEnd}
+          onDragEnter={() => handleDragEnter(note.id)}
+          onDragStart={() => handleDragStart(note.id)}
+        />
       {/each}
     {/if}
   </div>
