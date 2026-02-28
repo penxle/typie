@@ -225,15 +225,22 @@
           '&::-webkit-scrollbar': { display: 'none' },
         })}
         {@attach (el) => {
+          let timeoutId: ReturnType<typeof setTimeout>;
           const observer = new ResizeObserver(() => {
-            containerClientWidth = el.clientWidth;
-            containerClientHeight = el.clientHeight;
+            clearTimeout(timeoutId);
+            timeoutId = setTimeout(() => {
+              containerClientWidth = el.clientWidth;
+              containerClientHeight = el.clientHeight;
+            }, 50);
           });
           observer.observe(el);
           containerClientWidth = el.clientWidth;
           containerClientHeight = el.clientHeight;
 
-          return () => observer.disconnect();
+          return () => {
+            clearTimeout(timeoutId);
+            observer.disconnect();
+          };
         }}
         onscroll={(e) => {
           const target = e.currentTarget;

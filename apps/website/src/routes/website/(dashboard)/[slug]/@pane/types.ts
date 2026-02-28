@@ -47,6 +47,12 @@ export type PanePlacement = {
 
 export type Rect = { left: number; top: number; width: number; height: number };
 
+export type ActiveResizer = {
+  rect: Rect;
+  direction: 'horizontal' | 'vertical';
+  dragOffset: number;
+};
+
 export type PaneGroup = {
   state: LocalStore<PaneGroupState>;
   readonly panes: Pane[];
@@ -59,6 +65,7 @@ export type PaneGroup = {
 
   findReplaceOpenByPaneId: Record<string, boolean>;
 
+  activeResizer: ActiveResizer | null;
   activeZone: { paneId: string; dropZone: DropZone } | null;
   draggingPaneId: string | null;
   rootElement: HTMLElement | null;
