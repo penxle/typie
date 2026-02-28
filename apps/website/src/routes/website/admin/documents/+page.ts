@@ -12,11 +12,11 @@ export const load = async (event) => {
     query: await loadQuery(
       event,
       graphql(`
-        query AdminPosts_Query($search: String, $offset: Int!, $limit: Int!) {
-          adminPosts(search: $search, offset: $offset, limit: $limit) {
+        query AdminDocuments_Query($search: String, $offset: Int!, $limit: Int!) {
+          adminDocuments(search: $search, offset: $offset, limit: $limit) {
             totalCount
 
-            posts {
+            documents {
               id
               title
               subtitle
@@ -24,8 +24,6 @@ export const load = async (event) => {
               createdAt
               updatedAt
               contentRating
-              excerpt
-              reactionCount
               characterCount
               entity {
                 id
@@ -58,7 +56,7 @@ export const load = async (event) => {
                 }
               }
 
-              coverImage {
+              thumbnail {
                 id
                 url
               }

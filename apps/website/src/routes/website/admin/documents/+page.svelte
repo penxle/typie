@@ -19,9 +19,9 @@
 
 <div class={flex({ flexDirection: 'column', gap: '24px', color: 'amber.500' })}>
   <div>
-    <h2 class={css({ fontSize: '18px', color: 'amber.500' })}>POST MANAGEMENT</h2>
+    <h2 class={css({ fontSize: '18px', color: 'amber.500' })}>DOCUMENT MANAGEMENT</h2>
     <p class={css({ marginTop: '8px', fontSize: '13px', color: 'amber.400' })}>
-      TOTAL POSTS: {query.data.adminPosts.totalCount}
+      TOTAL DOCUMENTS: {query.data.adminDocuments.totalCount}
     </p>
   </div>
 
@@ -81,7 +81,7 @@
 
     <AdminTable
       columns={[
-        { key: '$post', label: 'POST', width: '25%' },
+        { key: '$document', label: 'DOCUMENT', width: '25%' },
         { key: '$id', label: 'ID', width: '10%' },
         { key: '$user', label: 'USER', width: '15%' },
         { key: '$path', label: 'PATH', width: '20%' },
@@ -89,10 +89,10 @@
         { key: '$state', label: 'STATE', width: '10%' },
         { key: '$updatedAt', label: 'UPDATED', width: '10%' },
       ]}
-      data={[...query.data.adminPosts.posts]}
+      data={[...query.data.adminDocuments.documents]}
       dataKey="id"
     >
-      {#snippet $post(post)}
+      {#snippet $document(doc)}
         <div class={flex({ alignItems: 'center', gap: '16px' })}>
           <div
             class={css({
@@ -102,8 +102,8 @@
               overflow: 'hidden',
             })}
           >
-            {#if post.coverImage?.url}
-              <img alt={post.title} src={post.coverImage.url} />
+            {#if doc.thumbnail?.url}
+              <img alt={doc.title} src={doc.thumbnail.url} />
             {/if}
           </div>
           <div>
@@ -113,32 +113,32 @@
                 color: 'amber.500',
                 _hover: { textDecoration: 'underline' },
               })}
-              href="/admin/posts/{post.id}"
+              href="/admin/documents/{doc.id}"
             >
-              {post.title}
+              {doc.title}
             </a>
-            {#if post.subtitle}
+            {#if doc.subtitle}
               <div class={css({ fontSize: '11px', color: 'amber.400' })}>
-                {post.subtitle}
+                {doc.subtitle}
               </div>
             {/if}
           </div>
         </div>
       {/snippet}
 
-      {#snippet $id(post)}
+      {#snippet $id(doc)}
         <div class={flex({ flexDirection: 'column', gap: '2px' })}>
           <span class={css({ fontSize: '11px', color: 'gray.400' })}>
-            {post.id}
+            {doc.id}
           </span>
           <span class={css({ fontSize: '11px', color: 'gray.400' })}>
-            {post.entity.id}
+            {doc.entity.id}
           </span>
         </div>
       {/snippet}
 
-      {#snippet $user(post)}
-        {#if post.entity?.user}
+      {#snippet $user(doc)}
+        {#if doc.entity?.user}
           <div class={flex({ alignItems: 'center', gap: '8px' })}>
             <div
               class={css({
@@ -149,8 +149,8 @@
                 flexShrink: '0',
               })}
             >
-              {#if post.entity.user.avatar?.url}
-                <img alt={post.entity.user.name} src={post.entity.user.avatar.url} />
+              {#if doc.entity.user.avatar?.url}
+                <img alt={doc.entity.user.name} src={doc.entity.user.avatar.url} />
               {/if}
             </div>
             <div>
@@ -160,9 +160,9 @@
                   color: 'amber.500',
                   _hover: { textDecoration: 'underline' },
                 })}
-                href="/admin/users/{post.entity.user.id}"
+                href="/admin/users/{doc.entity.user.id}"
               >
-                {post.entity.user.name}
+                {doc.entity.user.name}
               </a>
             </div>
           </div>
@@ -171,14 +171,14 @@
         {/if}
       {/snippet}
 
-      {#snippet $path(post)}
+      {#snippet $path(doc)}
         <div class={flex({ fontSize: '12px', color: 'amber.400', alignItems: 'center', gap: '4px' })}>
-          {#if post.entity.ancestors.length > 0}
-            {#each post.entity.ancestors as ancestor, i (ancestor.id)}
+          {#if doc.entity.ancestors.length > 0}
+            {#each doc.entity.ancestors as ancestor, i (ancestor.id)}
               <span>
                 {ancestor.node.__typename === 'Folder' ? ancestor.node.name : ancestor.node.title}
               </span>
-              {#if i < post.entity.ancestors.length - 1}
+              {#if i < doc.entity.ancestors.length - 1}
                 <AdminIcon icon={ChevronRightIcon} size={12} />
               {/if}
             {/each}
@@ -188,30 +188,30 @@
         </div>
       {/snippet}
 
-      {#snippet $characters(post)}
+      {#snippet $characters(doc)}
         <span class={css({ fontSize: '12px', color: 'amber.400' })}>
-          {comma(post.characterCount)} CHARS
+          {comma(doc.characterCount)} CHARS
         </span>
       {/snippet}
 
-      {#snippet $state(post)}
+      {#snippet $state(doc)}
         <span
           class={css({
             fontSize: '12px',
-            color: post.entity.state === 'ACTIVE' ? 'green.400' : 'red.400',
+            color: doc.entity.state === 'ACTIVE' ? 'green.400' : 'red.400',
           })}
         >
-          {post.entity.state}
+          {doc.entity.state}
         </span>
       {/snippet}
 
-      {#snippet $updatedAt(post)}
+      {#snippet $updatedAt(doc)}
         <span class={css({ fontSize: '12px', color: 'amber.400' })}>
-          {dayjs(post.updatedAt).formatAsDateTime()}
+          {dayjs(doc.updatedAt).formatAsDateTime()}
         </span>
       {/snippet}
     </AdminTable>
 
-    <AdminPagination totalCount={query.data.adminPosts.totalCount} bind:pageNumber={pageNumber.current} />
+    <AdminPagination totalCount={query.data.adminDocuments.totalCount} bind:pageNumber={pageNumber.current} />
   </div>
 </div>

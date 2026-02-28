@@ -1,14 +1,27 @@
 import { and, count, desc, eq, getTableColumns, ilike, or, sql } from 'drizzle-orm';
 import { fetchBootstrap, putBootstrap } from '@/bootstrap';
 import { redis } from '@/cache';
-import { db, Entities, first, firstOrThrow, pg, Posts, TableCode, UserPaymentCredits, Users, UserSessions, validateDbId } from '@/db';
-import { EntityState, PostType, UserRole, UserState } from '@/enums';
+import {
+  db,
+  Documents,
+  Entities,
+  first,
+  firstOrThrow,
+  pg,
+  Posts,
+  TableCode,
+  UserPaymentCredits,
+  Users,
+  UserSessions,
+  validateDbId,
+} from '@/db';
+import { DocumentType, EntityState, PostType, UserRole, UserState } from '@/enums';
 import { TypieError } from '@/errors';
 import { enqueueJob } from '@/mq';
 import { assertAdminPermission } from '@/utils/permission';
 import { bootstrapSchema } from '@/validation';
 import { builder } from '../builder';
-import { Post, User } from '../objects';
+import { Document, Post, User } from '../objects';
 
 builder.queryFields((t) => ({
   adminUsers: t.withAuth({ session: true }).field({
@@ -130,6 +143,71 @@ builder.queryFields((t) => ({
       await assertAdminPermission({ sessionId: ctx.session.id });
 
       return postId;
+    },
+  }),
+
+  adminDocuments: t.withAuth({ session: true }).field({
+    type: builder.simpleObject('AdminDocumentsResult', {
+      fields: (t) => ({
+        documents: t.field({ type: [Document] }),
+        totalCount: t.int(),
+      }),
+    }),
+    args: {
+      search: t.arg.string({ required: false }),
+      type: t.arg({ type: DocumentType, required: false }),
+      state: t.arg({ type: EntityState, required: false }),
+      offset: t.arg.int({ defaultValue: 0 }),
+      limit: t.arg.int({ defaultValue: 20 }),
+    },
+    resolve: async (_, args, ctx) => {
+      await assertAdminPermission({ sessionId: ctx.session.id });
+
+      let list$ = db.select(getTableColumns(Documents)).from(Documents).innerJoin(Entities, eq(Documents.entityId, Entities.id)).$dynamic();
+      let count$ = db.select({ totalCount: count() }).from(Documents).innerJoin(Entities, eq(Documents.entityId, Entities.id)).$dynamic();
+
+      const conditions = [];
+
+      if (args.type) {
+        conditions.push(eq(Documents.type, args.type));
+      }
+
+      if (args.state) {
+        conditions.push(eq(Entities.state, args.state));
+      }
+
+      if (args.search) {
+        conditions.push(
+          or(
+            ilike(Documents.title, `%${args.search}%`),
+            ilike(Documents.subtitle, `%${args.search}%`),
+            eq(Documents.id, args.search),
+            eq(Entities.slug, args.search),
+            eq(Entities.permalink, args.search),
+          ),
+        );
+      }
+
+      if (conditions.length > 0) {
+        list$ = list$.where(and(...conditions));
+        count$ = count$.where(and(...conditions));
+      }
+
+      list$ = list$.orderBy(desc(Documents.createdAt)).limit(args.limit).offset(args.offset);
+
+      const [documents, { totalCount }] = await Promise.all([list$, count$.then(firstOrThrow)]);
+
+      return { documents, totalCount };
+    },
+  }),
+
+  adminDocument: t.withAuth({ session: true }).field({
+    type: Document,
+    args: { documentId: t.arg.string({ validate: validateDbId(TableCode.DOCUMENTS) }) },
+    resolve: async (_, { documentId }, ctx) => {
+      await assertAdminPermission({ sessionId: ctx.session.id });
+
+      return documentId;
     },
   }),
 

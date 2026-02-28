@@ -6,8 +6,8 @@ export const load = async (event) => {
     query: await loadQuery(
       event,
       graphql(`
-        query AdminPost_Query($postId: String!) {
-          adminPost(postId: $postId) {
+        query AdminDocument_Query($documentId: String!) {
+          adminDocument(documentId: $documentId) {
             id
             title
             subtitle
@@ -19,7 +19,7 @@ export const load = async (event) => {
             updatedAt
             excerpt
             password
-            coverImage {
+            thumbnail {
               id
               url
             }
@@ -52,11 +52,6 @@ export const load = async (event) => {
                   id
                   url
                 }
-                postCount
-                subscription {
-                  id
-                  state
-                }
               }
             }
             reactionCount
@@ -65,7 +60,7 @@ export const load = async (event) => {
         }
       `),
       {
-        postId: event.params.postId,
+        documentId: event.params.documentId,
       },
     ),
   };

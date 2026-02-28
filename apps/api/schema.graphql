@@ -1,3 +1,8 @@
+type AdminDocumentsResult {
+  documents: [Document!]!
+  totalCount: Int!
+}
+
 input AdminEnqueuePostCompactInput {
   postId: String!
 }
@@ -1020,6 +1025,8 @@ input PurgeEntitiesInput {
 
 type Query {
   activeWritersCount: Int!
+  adminDocument(documentId: String!): Document!
+  adminDocuments(limit: Int! = 20, offset: Int! = 0, search: String, state: EntityState, type: DocumentType): AdminDocumentsResult!
   adminPost(postId: String!): Post!
   adminPosts(limit: Int! = 20, offset: Int! = 0, search: String, state: EntityState, type: PostType): AdminPostsResult!
   adminRawQuery(params: [JSON!], query: String!): [JSON!]!
