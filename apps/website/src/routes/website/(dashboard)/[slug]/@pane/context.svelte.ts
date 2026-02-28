@@ -30,6 +30,7 @@ export const getPaneGroup = () => {
 export const setupPaneGroup = (app: AppContext) => {
   const userId = app.userId;
 
+  let activeResizer = $state<import('./types').ActiveResizer | null>(null);
   let activeZone = $state<{ paneId: string; dropZone: DropZone } | null>(null);
   let draggingPaneId = $state<string | null>(null);
   const findReplaceOpenByPaneId = $state<Record<string, boolean>>({});
@@ -143,6 +144,14 @@ export const setupPaneGroup = (app: AppContext) => {
 
     get findReplaceOpenByPaneId() {
       return findReplaceOpenByPaneId;
+    },
+
+    // resizer drag
+    get activeResizer() {
+      return activeResizer;
+    },
+    set activeResizer(value) {
+      activeResizer = value;
     },
 
     // drag-drop

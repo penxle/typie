@@ -170,6 +170,23 @@
     {/if}
   {/if}
 
+  {#if context.activeResizer}
+    {@const r = context.activeResizer}
+    <div
+      style:position="absolute"
+      style:left="{r.direction === 'horizontal' ? r.rect.left + r.dragOffset : r.rect.left}px"
+      style:top="{r.direction === 'horizontal' ? r.rect.top : r.rect.top + r.dragOffset}px"
+      style:width="{r.rect.width}px"
+      style:height="{r.rect.height}px"
+      class={css({
+        backgroundColor: 'accent.brand.default',
+        opacity: '50',
+        pointerEvents: 'none',
+        zIndex: 'overEditor',
+      })}
+    ></div>
+  {/if}
+
   {#if context.draggingPaneId}
     <div class={css({ position: 'absolute', inset: '0', zIndex: 'ghost' })}></div>
   {/if}
