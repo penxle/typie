@@ -1,4 +1,34 @@
-import type { VectorOp, VectorPage, VectorPathCommand, VectorTextOp } from './vector';
+export type VectorPathCommand =
+  | { type: 'moveTo'; x: number; y: number }
+  | { type: 'lineTo'; x: number; y: number }
+  | { type: 'quadTo'; cx: number; cy: number; x: number; y: number }
+  | { type: 'cubicTo'; c1x: number; c1y: number; c2x: number; c2y: number; x: number; y: number }
+  | { type: 'closePath' };
+
+export type VectorOp =
+  | { type: 'fillPath'; path: VectorPathCommand[]; color: [number, number, number, number]; fillRule: 'winding' | 'evenOdd' }
+  | {
+      type: 'strokePath';
+      path: VectorPathCommand[];
+      color: [number, number, number, number];
+      width: number;
+      lineCap: 'butt' | 'round' | 'square';
+      lineJoin: 'miter' | 'round' | 'bevel';
+    };
+
+export type VectorTextOp = {
+  text: string;
+  x: number;
+  y: number;
+  size: number;
+};
+
+export type VectorPage = {
+  width: number;
+  height: number;
+  ops: VectorOp[];
+  textOps: VectorTextOp[];
+};
 
 const BINARY_MAGIC = 0x31_56_45_54; // TVE1
 
@@ -86,7 +116,7 @@ const readString = (view: DataView, offsetRef: { value: number }): string => {
   return new TextDecoder().decode(bytes);
 };
 
-export const parseVectorPageBinary = (bytes: Uint8Array): Omit<VectorPage, 'externalElements'> => {
+export const parseVectorPageBinary = (bytes: Uint8Array): VectorPage => {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const offset = { value: 0 };
 
