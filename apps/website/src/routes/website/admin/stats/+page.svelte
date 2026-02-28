@@ -165,9 +165,9 @@
             )
             SELECT
               periods.period,
-              COUNT(DISTINCT post_character_count_changes.user_id) AS value
+              COUNT(DISTINCT document_character_count_changes.user_id) AS value
             FROM periods
-            LEFT JOIN post_character_count_changes ON date_trunc($1, post_character_count_changes.bucket AT TIME ZONE 'Asia/Seoul')::date = periods.period
+            LEFT JOIN document_character_count_changes ON date_trunc($1, document_character_count_changes.bucket AT TIME ZONE 'Asia/Seoul')::date = periods.period
             GROUP BY periods.period
             ORDER BY periods.period
           `,
