@@ -70,12 +70,12 @@ export async function generateDocumentPdf(params: GenerateDocumentPdfParams): Pr
         type: 'setLayoutMode',
         mode: {
           type: 'paginated',
-          pageWidth: pageLayout.width * MM_TO_PX,
-          pageHeight: pageLayout.height * MM_TO_PX,
-          pageMarginTop: pageLayout.marginTop * MM_TO_PX,
-          pageMarginBottom: pageLayout.marginBottom * MM_TO_PX,
-          pageMarginLeft: pageLayout.marginLeft * MM_TO_PX,
-          pageMarginRight: pageLayout.marginRight * MM_TO_PX,
+          pageWidth: Math.round(pageLayout.width * MM_TO_PX),
+          pageHeight: Math.round(pageLayout.height * MM_TO_PX),
+          pageMarginTop: Math.round(pageLayout.marginTop * MM_TO_PX),
+          pageMarginBottom: Math.round(pageLayout.marginBottom * MM_TO_PX),
+          pageMarginLeft: Math.round(pageLayout.marginLeft * MM_TO_PX),
+          pageMarginRight: Math.round(pageLayout.marginRight * MM_TO_PX),
         },
       });
 
