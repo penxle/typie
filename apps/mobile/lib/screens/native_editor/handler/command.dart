@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:typie/native/slate_reader.dart';
 import 'package:typie/screens/native_editor/external/models.dart';
 import 'package:typie/screens/native_editor/state/controller.dart';
@@ -464,17 +465,29 @@ class CommandHandler {
 
       unawaited(
         Future.wait([
-          manager.ensureRequiredFont(req.family, font, req.codepoints).then((_) {
-            unawaited(manager.preloadRemainingChunks(req.family, font));
-          }),
-          manager.filterUncoveredCodepoints(font, req.codepoints).then((uncovered) async {
-            if (uncovered.isNotEmpty) {
-              await manager.ensureRequiredFallbackFont(req.weight, uncovered);
-            }
-          }),
-        ]).then((_) {
-          controller.dispatch({'type': 'fontsLoaded', 'family': req.family, 'weight': req.weight});
-        }),
+              manager.ensureRequiredFont(req.family, font, req.codepoints).then((_) {
+                unawaited(manager.preloadRemainingChunks(req.family, font));
+              }),
+              manager.filterUncoveredCodepoints(font, req.codepoints).then((uncovered) async {
+                if (uncovered.isNotEmpty) {
+                  await manager.ensureRequiredFallbackFont(req.weight, uncovered);
+                }
+              }),
+            ])
+            .then((_) {
+              if (controller.isDisposed) {
+                return;
+              }
+              controller.dispatch({
+                'type': 'fontsLoaded',
+                'family': req.family,
+                'weight': req.weight,
+                'codepoints': req.codepoints,
+              });
+            })
+            .catchError((Object err) {
+              debugPrint('Font load handler skipped: $err');
+            }),
       );
     }
   }
