@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
 import 'package:pointer_interceptor/pointer_interceptor.dart';
@@ -22,6 +23,8 @@ extension BottomSheetExtension on BuildContext {
     bool dismissKeyboardOnTap = true,
     void Function(double)? onHeightCalculated,
   }) {
+    unawaited(HapticFeedback.lightImpact());
+
     return router.root.pushWidget(
       child,
       opaque: false,

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:jiffy/jiffy.dart';
 import 'package:typie/context/theme.dart';
@@ -323,9 +324,17 @@ class ActivityGrid extends HookWidget {
       return null;
     }
 
-    void showActivityTooltip(Activity? activity, int weekIndex, int dayIndex) {
+    void showActivityTooltip(Activity? activity, int weekIndex, int dayIndex, {required bool withHaptic}) {
       if (activity != null) {
         tooltipTimer.value?.cancel();
+        final prevSelectedCell = selectedCell.value;
+        final isCellChanged =
+            prevSelectedCell == null ||
+            prevSelectedCell.weekIndex != weekIndex ||
+            prevSelectedCell.dayIndex != dayIndex;
+        if (withHaptic && isCellChanged) {
+          unawaited(HapticFeedback.selectionClick());
+        }
         selectedCell.value = (weekIndex: weekIndex, dayIndex: dayIndex);
         tooltipData.value = (activity: activity, weekIndex: weekIndex, dayIndex: dayIndex);
       }
@@ -339,10 +348,10 @@ class ActivityGrid extends HookWidget {
       });
     }
 
-    void handleTooltipInteraction(Offset localPosition) {
+    void handleTooltipInteraction(Offset localPosition, {bool withHaptic = false}) {
       final result = getActivityAtPosition(localPosition);
       if (result != null) {
-        showActivityTooltip(result.activity, result.weekIndex, result.dayIndex);
+        showActivityTooltip(result.activity, result.weekIndex, result.dayIndex, withHaptic: withHaptic);
       }
     }
 
@@ -352,11 +361,11 @@ class ActivityGrid extends HookWidget {
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onVerticalDragStart: (details) => handleTooltipInteraction(details.localPosition),
-      onVerticalDragUpdate: (details) => handleTooltipInteraction(details.localPosition),
+      onVerticalDragStart: (details) => handleTooltipInteraction(details.localPosition, withHaptic: true),
+      onVerticalDragUpdate: (details) => handleTooltipInteraction(details.localPosition, withHaptic: true),
       onVerticalDragEnd: (_) => handleInteractionEnd(),
-      onPanStart: (details) => handleTooltipInteraction(details.localPosition),
-      onPanUpdate: (details) => handleTooltipInteraction(details.localPosition),
+      onPanStart: (details) => handleTooltipInteraction(details.localPosition, withHaptic: true),
+      onPanUpdate: (details) => handleTooltipInteraction(details.localPosition, withHaptic: true),
       onPanEnd: (_) => handleInteractionEnd(),
       onTapDown: (details) => handleTooltipInteraction(details.localPosition),
       onTapUp: (_) => handleInteractionEnd(),

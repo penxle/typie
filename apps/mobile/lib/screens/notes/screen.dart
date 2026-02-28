@@ -4,7 +4,6 @@ import 'dart:math';
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:flutter_sticky_header/flutter_sticky_header.dart';
 import 'package:gap/gap.dart';
@@ -29,6 +28,7 @@ import 'package:typie/screens/notes/__generated__/notes_move_note_mutation.req.g
 import 'package:typie/screens/notes/__generated__/notes_query.data.gql.dart';
 import 'package:typie/screens/notes/__generated__/notes_query.req.gql.dart';
 import 'package:typie/screens/notes/__generated__/notes_update_note_mutation.req.gql.dart';
+import 'package:typie/widgets/haptic_reorderable.dart';
 import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/note.dart';
 import 'package:typie/widgets/screen.dart';
@@ -344,6 +344,9 @@ class _NotesContent extends HookWidget {
       if (oldIndex < newIndex) {
         adjustedNewIndex -= 1;
       }
+      if (oldIndex == adjustedNewIndex) {
+        return;
+      }
 
       final movedNoteId = notesList[oldIndex].id;
       final movedNote = notesList.removeAt(oldIndex);
@@ -504,15 +507,9 @@ class _SliverNotesReorderableList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SliverReorderableList(
-      itemCount: notes.length,
+    return SliverHapticReorderableList(
+      orderedIds: [for (final note in notes) note.id],
       onReorder: onReorder,
-      onReorderStart: (index) async {
-        await HapticFeedback.lightImpact();
-      },
-      onReorderEnd: (index) async {
-        await HapticFeedback.lightImpact();
-      },
       proxyDecorator: (child, index, animation) => Material(type: MaterialType.transparency, child: child),
       itemBuilder: (context, index) {
         final note = notes[index];
@@ -556,7 +553,6 @@ class _SliverNotesReorderableList extends StatelessWidget {
         final entityIcon = getEntityIcon();
 
         return Padding(
-          key: ValueKey(note.id),
           padding: Pad(horizontal: 20, bottom: index == notes.length - 1 ? 0 : 12),
           child: NoteCard(
             color: note.color,

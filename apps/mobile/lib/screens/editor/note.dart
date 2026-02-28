@@ -4,7 +4,6 @@ import 'dart:math';
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:back_button_interceptor/back_button_interceptor.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gql_tristate_value/gql_tristate_value.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
@@ -24,6 +23,7 @@ import 'package:typie/screens/editor/__generated__/post_related_notes_query.req.
 import 'package:typie/screens/editor/__generated__/update_note_mutation.req.gql.dart';
 import 'package:typie/screens/editor/scope.dart';
 import 'package:typie/screens/editor/values.dart';
+import 'package:typie/widgets/haptic_reorderable.dart';
 import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/note.dart';
 import 'package:typie/widgets/screen.dart';
@@ -256,6 +256,9 @@ class _NoteContent extends HookWidget {
       if (oldIndex < newIndex) {
         targetIndex -= 1;
       }
+      if (oldIndex == targetIndex) {
+        return;
+      }
 
       final movedNoteId = sortedNotes[oldIndex].id;
 
@@ -341,18 +344,12 @@ class _NoteContent extends HookWidget {
                 ],
               ),
             )
-          : ReorderableListView.builder(
+          : HapticReorderableListView.builder(
+              orderedIds: [for (final note in sortedNotes) note.id],
               scrollController: scrollController,
               padding: Pad(horizontal: 20, top: 12, bottom: MediaQuery.viewPaddingOf(context).bottom + 20),
-              itemCount: sortedNotes.length,
               buildDefaultDragHandles: false,
               proxyDecorator: (child, index, animation) => child,
-              onReorderStart: (index) async {
-                await HapticFeedback.lightImpact();
-              },
-              onReorderEnd: (index) async {
-                await HapticFeedback.lightImpact();
-              },
               onReorder: handleMoveNote,
               itemBuilder: (context, index) {
                 final note = sortedNotes[index];
@@ -361,7 +358,6 @@ class _NoteContent extends HookWidget {
                 final isExpanded = expandedNotes.value.contains(note.id);
 
                 return Padding(
-                  key: ValueKey(note.id),
                   padding: Pad(bottom: index == sortedNotes.length - 1 ? 0 : 12),
                   child: NoteCard(
                     color: note.color,

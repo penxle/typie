@@ -36,6 +36,7 @@ class PageList extends HookWidget {
     final renderedCursor = useValueListenable(scope.presentedViewport).cursor;
     final isFocused = state.state.isFocused;
     final isSelecting = state.state.isSelecting;
+    final selection = state.state.selection;
     final fromHandle = state.state.selection?.fromBounds;
     final toHandle = state.state.selection?.toBounds;
     final tableOverlays = useValueListenable(scope.controller.tableOverlays);
@@ -147,17 +148,73 @@ class PageList extends HookWidget {
 
     final prevFromHandle = useRef<SelectionHandleInfo?>(null);
     final prevToHandle = useRef<SelectionHandleInfo?>(null);
+    final prevSelectionRangeKey = useRef<String?>(null);
     final wasSelecting = useRef(false);
 
+    bool didHandlePositionChange(SelectionHandleInfo? previous, SelectionHandleInfo? current) {
+      if (previous == null || current == null) {
+        return false;
+      }
+
+      return previous.pageIdx != current.pageIdx || previous.x != current.x || previous.y != current.y;
+    }
+
+    String? selectionRangeKey(EditorSelection? value) {
+      if (value == null) {
+        return null;
+      }
+
+      final anchor = value.range['anchor'] as Map<String, dynamic>?;
+      final head = value.range['head'] as Map<String, dynamic>?;
+      if (anchor == null || head == null) {
+        return null;
+      }
+
+      return '${anchor['nodeId']}:${anchor['offset']}:${anchor['affinity']}'
+          '|${head['nodeId']}:${head['offset']}:${head['affinity']}'
+          '|${value.collapsed ? 1 : 0}';
+    }
+
     useEffect(() {
+      final isLongPressing = scope.isLongPressing.value;
+      final previousSelectionRangeKey = prevSelectionRangeKey.value;
+      final currentSelectionRangeKey = selectionRangeKey(selection);
       final isCollapsed = fromHandle == null || toHandle == null;
       final handleDragCanceledByTableSelection =
           isTableCellSelectorSelection && !gesture.isCellHandleDragging && gesture.hasTextHandleDrag;
       final justFinishedSelecting = wasSelecting.value && !isSelecting;
       final selectionChanged = fromHandle != prevFromHandle.value || toHandle != prevToHandle.value;
+      final hasPreviousSelectionSnapshot = previousSelectionRangeKey != null;
+      final handlesJustAppeared =
+          hasPreviousSelectionSnapshot &&
+          prevFromHandle.value == null &&
+          prevToHandle.value == null &&
+          fromHandle != null &&
+          toHandle != null;
+      final anyHandleMoved =
+          didHandlePositionChange(prevFromHandle.value, fromHandle) ||
+          didHandlePositionChange(prevToHandle.value, toHandle);
+      final longPressSelectionMoved =
+          isLongPressing &&
+          previousSelectionRangeKey != null &&
+          currentSelectionRangeKey != null &&
+          previousSelectionRangeKey != currentSelectionRangeKey &&
+          !handlesJustAppeared;
 
       final shouldResetTextHandleDrag =
           !gesture.isCellHandleDragging && (isCollapsed || handleDragCanceledByTableSelection);
+
+      if (handlesJustAppeared) {
+        unawaited(HapticFeedback.selectionClick());
+      }
+
+      if (!gesture.isCellHandleDragging && gesture.hasTextHandleDrag && anyHandleMoved) {
+        unawaited(HapticFeedback.selectionClick());
+      }
+
+      if (longPressSelectionMoved) {
+        unawaited(HapticFeedback.selectionClick());
+      }
 
       if (shouldResetTextHandleDrag) {
         gesture.stopSelectionHandlesAndAutoScroll();
@@ -177,8 +234,9 @@ class PageList extends HookWidget {
       wasSelecting.value = isSelecting;
       prevFromHandle.value = fromHandle;
       prevToHandle.value = toHandle;
+      prevSelectionRangeKey.value = currentSelectionRangeKey;
       return null;
-    }, [fromHandle, toHandle, isSelecting, isTableCellSelectorSelection]);
+    }, [selection, fromHandle, toHandle, isSelecting, isTableCellSelectorSelection, scope.isLongPressing.value]);
 
     return LayoutBuilder(
       builder: (context, constraints) {
