@@ -101,9 +101,17 @@ export function createFloatingActions(options?: CreateFloatingActionsOptions): C
       return;
     }
 
-    // NOTE: 메뉴나 포탈 내부 클릭 무시
-    if (event.target instanceof Element && (event.target.closest('[role="menu"]') || event.target.closest('[data-portal]'))) {
+    // NOTE: 메뉴 내부 클릭 무시
+    if (event.target instanceof Element && event.target.closest('[role="menu"]')) {
       return;
+    }
+
+    // NOTE: 참조 요소를 포함하지 않는 외부 포탈 내부 클릭 무시
+    if (event.target instanceof Element) {
+      const portalElement = event.target.closest('[data-portal]');
+      if (portalElement && !portalElement.contains(referenceElement as Node)) {
+        return;
+      }
     }
 
     if (options?.onClickOutside && !floatingElement?.contains(event.target as Node)) {
