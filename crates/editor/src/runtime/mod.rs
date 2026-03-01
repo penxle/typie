@@ -129,7 +129,7 @@ pub struct Runtime {
     last_table_overlays: Vec<TableOverlay>,
     text_replacement_undo: Option<ReplacementUndoState>,
 
-    repaste_text: Option<(Selection, String, Vec<Style>)>,
+    repaste_text: Option<(Selection, String, Vec<Style>, Option<ParagraphNode>)>,
 }
 
 impl Runtime {
@@ -1766,6 +1766,7 @@ impl Runtime {
                     selection,
                     text,
                     styles,
+                    paragraph_attrs,
                 } => {
                     let structure_selection = compute_structure_selection(self.doc(), &selection);
                     font_affected_nodes.extend(collect_selected_block_ids(
@@ -1773,7 +1774,7 @@ impl Runtime {
                         &selection,
                         &structure_selection,
                     ));
-                    self.repaste_text = Some((selection, text, styles));
+                    self.repaste_text = Some((selection, text, styles, paragraph_attrs));
                     self.pending.repaste = true;
                 }
             }
@@ -3337,6 +3338,7 @@ mod tests {
                 selection,
                 text: "A\nB".to_string(),
                 styles: Vec::new(),
+                paragraph_attrs: None,
             },
         ]);
 

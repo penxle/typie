@@ -81,6 +81,15 @@ impl Transaction {
             .cloned()
             .collect();
 
+        // Save the current paragraph's attrs before insert_fragment may overwrite them
+        let paragraph_attrs = self
+            .doc()
+            .node(self.selection().head.node_id)
+            .and_then(|n| match n.node() {
+                Some(crate::model::Node::Paragraph(p)) => Some(p.clone()),
+                _ => None,
+            });
+
         let fragment = fragment
             .with_fresh_ids_for_doc(self.doc())
             .fill_missing_styles(&fill_styles);
@@ -98,6 +107,7 @@ impl Transaction {
                     selection,
                     text,
                     styles,
+                    paragraph_attrs,
                 });
             }
         }
@@ -110,7 +120,7 @@ impl Transaction {
 mod tests {
     use super::*;
     use crate::layout::{Element, LayoutNode};
-    use crate::model::{Node, NodeId, TableBorderStyle};
+    use crate::model::{Node, NodeId, TableBorderStyle, TextAlign};
     use crate::runtime::Message;
     use crate::runtime::slate::DIRTY_RENDER_REQUIRED;
     use crate::types::Affinity;
@@ -2201,6 +2211,7 @@ mod tests {
                     selection,
                     text,
                     styles,
+                    ..
                 } => Some((selection, text, styles)),
                 _ => None,
             })
@@ -2218,5 +2229,262 @@ mod tests {
             after_repaste.doc.to_plain_text().contains("A"),
             "repaste-as-text should keep pasted plain text"
         );
+    }
+
+    // === Paragraph settings (line_height, align) preservation tests ===
+
+    #[test]
+    fn paste_fragment_into_empty_paragraph_uses_fragment_settings() {
+        // When pasting into an empty paragraph, all paragraphs should use the fragment's settings.
+        // e.g., current paragraph has line_height 220 but is empty,
+        // pasting 3 paragraphs with line_height 160 should produce 3 paragraphs with line_height 160.
+        let mut p = id!();
+
+        let initial = state! {
+            doc {
+                @p paragraph(line_height: 220,) {}
+            }
+            selection { (p, 0) }
+        };
+
+        let fragment = fragment! {
+            open_start: 1, open_end: 1,
+            paragraph(line_height: 160,) { text { "AAA" } }
+            paragraph(line_height: 160,) { text { "BBB" } }
+            paragraph(line_height: 160,) { text { "CCC" } }
+        };
+
+        let actual = transact!(initial, |tr| tr.paste_fragment(fragment, None).unwrap());
+
+        // Verify paragraph settings via doc inspection
+        let doc = &actual.doc;
+        let root = doc.node(NodeId::ROOT).unwrap();
+        let paras: Vec<_> = root.children().collect();
+        assert_eq!(paras.len(), 3);
+
+        for (i, para) in paras.iter().enumerate() {
+            let p = match para.node().unwrap() {
+                Node::Paragraph(p) => p,
+                _ => panic!("expected paragraph"),
+            };
+            assert_eq!(
+                p.line_height, 160,
+                "Paragraph {} should use fragment's line_height (160), got {}",
+                i, p.line_height
+            );
+        }
+
+        assert_eq!(doc.to_plain_text(), "AAA\nBBB\nCCC");
+    }
+
+    #[test]
+    fn paste_fragment_into_nonempty_paragraph_first_uses_current_rest_uses_fragment() {
+        // When pasting into a non-empty paragraph, the first paragraph uses the current
+        // paragraph's settings, and the remaining paragraphs use the fragment's original settings.
+        // e.g., current paragraph has line_height 220 with text,
+        // pasting 3 paragraphs with line_height 160 should produce:
+        //   line_height 220 (existing content + first pasted paragraph content),
+        //   line_height 160, line_height 160
+        let mut p = id!();
+
+        let initial = state! {
+            doc {
+                @p paragraph(line_height: 220,) {
+                    text { "Hello" }
+                }
+            }
+            selection { (p, 5) }
+        };
+
+        let fragment = fragment! {
+            open_start: 1, open_end: 1,
+            paragraph(line_height: 160,) { text { "AAA" } }
+            paragraph(line_height: 160,) { text { "BBB" } }
+            paragraph(line_height: 160,) { text { "CCC" } }
+        };
+
+        let actual = transact!(initial, |tr| tr.paste_fragment(fragment, None).unwrap());
+
+        // Verify paragraph settings via doc inspection
+        let doc = &actual.doc;
+        let root = doc.node(NodeId::ROOT).unwrap();
+        let paras: Vec<_> = root.children().collect();
+        assert_eq!(paras.len(), 3);
+
+        let p0 = match paras[0].node().unwrap() {
+            Node::Paragraph(p) => p,
+            _ => panic!("expected paragraph"),
+        };
+        let p1 = match paras[1].node().unwrap() {
+            Node::Paragraph(p) => p,
+            _ => panic!("expected paragraph"),
+        };
+        let p2 = match paras[2].node().unwrap() {
+            Node::Paragraph(p) => p,
+            _ => panic!("expected paragraph"),
+        };
+
+        assert_eq!(
+            p0.line_height, 220,
+            "First paragraph should keep current paragraph's line_height"
+        );
+        assert_eq!(
+            p1.line_height, 160,
+            "Second paragraph should use fragment's line_height"
+        );
+        assert_eq!(
+            p2.line_height, 160,
+            "Third paragraph should use fragment's line_height"
+        );
+
+        assert_eq!(doc.to_plain_text(), "HelloAAA\nBBB\nCCC");
+    }
+
+    #[test]
+    fn paste_fragment_into_nonempty_paragraph_preserves_align() {
+        // Same as above but for align attribute.
+        let mut p = id!();
+
+        let initial = state! {
+            doc {
+                @p paragraph(align: TextAlign::Center,) {
+                    text { "Hello" }
+                }
+            }
+            selection { (p, 5) }
+        };
+
+        let fragment = fragment! {
+            open_start: 1, open_end: 1,
+            paragraph(align: TextAlign::Right,) { text { "AAA" } }
+            paragraph(align: TextAlign::Right,) { text { "BBB" } }
+        };
+
+        let actual = transact!(initial, |tr| tr.paste_fragment(fragment, None).unwrap());
+
+        let doc = &actual.doc;
+        let root = doc.node(NodeId::ROOT).unwrap();
+        let paras: Vec<_> = root.children().collect();
+        assert_eq!(paras.len(), 2);
+
+        let p0 = match paras[0].node().unwrap() {
+            Node::Paragraph(p) => p,
+            _ => panic!("expected paragraph"),
+        };
+        let p1 = match paras[1].node().unwrap() {
+            Node::Paragraph(p) => p,
+            _ => panic!("expected paragraph"),
+        };
+
+        assert_eq!(
+            p0.align,
+            TextAlign::Center,
+            "First paragraph should keep current paragraph's align"
+        );
+        assert_eq!(
+            p1.align,
+            TextAlign::Right,
+            "Second paragraph should use fragment's align"
+        );
+    }
+
+    #[test]
+    fn repaste_nonempty_paragraph_uses_original_settings() {
+        // Repaste into a non-empty paragraph should use the original paragraph's settings (220)
+        // for all paragraphs, even though the pasted fragment had line_height 160.
+        let mut p = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph(line_height: 220,) {
+                    text { "Hello" }
+                }
+            }
+            selection { (p, 5) }
+        };
+
+        let fragment = fragment! {
+            open_start: 1, open_end: 1,
+            paragraph(line_height: 160,) { text { "AAA" } }
+            paragraph(line_height: 160,) { text { "BBB" } }
+            paragraph(line_height: 160,) { text { "CCC" } }
+        };
+
+        let pasted_text = fragment.to_plain_text();
+        rt.update(Message::PasteHtml {
+            html: fragment.to_html(),
+            text: pasted_text,
+        });
+
+        rt.update(Message::RepasteAsText);
+
+        let doc = &rt.state().doc;
+        let root = doc.node(NodeId::ROOT).unwrap();
+        for child in root.children() {
+            if let Some(Node::Paragraph(para)) = child.node() {
+                assert_eq!(
+                    para.line_height, 220,
+                    "After repaste, all paragraphs should have the original paragraph's line_height (220), got {}",
+                    para.line_height
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn repaste_empty_paragraph_uses_original_settings() {
+        // Even when pasting into an empty paragraph (which adopts the fragment's settings),
+        // repaste should restore the ORIGINAL paragraph's settings (220).
+        let mut p = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph(line_height: 220,) {}
+            }
+            selection { (p, 0) }
+        };
+
+        let fragment = fragment! {
+            open_start: 1, open_end: 1,
+            paragraph(line_height: 160,) { text { "AAA" } }
+            paragraph(line_height: 160,) { text { "BBB" } }
+            paragraph(line_height: 160,) { text { "CCC" } }
+        };
+
+        let pasted_text = fragment.to_plain_text();
+        rt.update(Message::PasteHtml {
+            html: fragment.to_html(),
+            text: pasted_text,
+        });
+
+        // After paste, paragraphs should have fragment's settings (160)
+        {
+            let doc = &rt.state().doc;
+            let root = doc.node(NodeId::ROOT).unwrap();
+            let first_para = root.children().next().unwrap();
+            if let Some(Node::Paragraph(para)) = first_para.node() {
+                assert_eq!(
+                    para.line_height, 160,
+                    "After paste into empty paragraph, should use fragment's settings"
+                );
+            }
+        }
+
+        rt.update(Message::RepasteAsText);
+
+        // After repaste, all paragraphs should use the original paragraph's settings (220)
+        let doc = &rt.state().doc;
+        let root = doc.node(NodeId::ROOT).unwrap();
+        for child in root.children() {
+            if let Some(Node::Paragraph(para)) = child.node() {
+                assert_eq!(
+                    para.line_height, 220,
+                    "After repaste, all paragraphs should have the original paragraph's line_height (220), got {}",
+                    para.line_height
+                );
+            }
+        }
     }
 }

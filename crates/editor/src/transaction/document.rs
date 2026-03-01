@@ -2063,6 +2063,20 @@ impl Transaction {
                     let mut content_len = 0;
 
                     if is_first {
+                        // When the current paragraph is empty, adopt the fragment's paragraph settings
+                        if left_children.is_empty() && split_offset == 0 {
+                            if let Node::Paragraph(frag_para) = frag_node.data() {
+                                let frag_para = frag_para.clone();
+                                let node_ref =
+                                    self.node_mut(position.node_id).context("Block not found")?;
+                                node_ref.as_mut().update(|node| {
+                                    if let Node::Paragraph(p) = node {
+                                        *p = frag_para;
+                                    }
+                                })?;
+                            }
+                        }
+
                         let mut idx = left_count;
                         let para = self
                             .doc()
@@ -2090,7 +2104,7 @@ impl Transaction {
                         parent.as_mut().insert_child_with_id(
                             insert_at,
                             new_para_id,
-                            Node::Paragraph(ParagraphNode::default()),
+                            frag_node.data().clone(),
                         )?;
 
                         let new_para = self
