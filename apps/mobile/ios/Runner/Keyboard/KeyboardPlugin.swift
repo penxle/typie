@@ -68,10 +68,6 @@ class KeyboardPlugin: NSObject, FlutterStreamHandler {
     }
 
     let height = keyboardVisibleHeight(from: keyboardFrame)
-    guard height > 0 else {
-      return
-    }
-
     sendKeyboardHeight(height)
   }
   

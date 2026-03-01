@@ -542,16 +542,17 @@ class EditorView extends HookWidget {
 
     useEffect(() {
       final subscription = keyboard.onHeightChange.listen((double height) {
+        final nextHeight = height < 0 ? 0.0 : height;
         final wasVisible = isKeyboardVisible.value;
-        if (height > 0) {
-          keyboardHeight.value = height;
+        keyboardHeight.value = nextHeight;
+        if (nextHeight > 0) {
           if (!wasVisible) {
             bottomToolbarMode.value = BottomToolbarMode.hidden;
           }
         }
-        isKeyboardVisible.value = height > 0;
+        isKeyboardVisible.value = nextHeight > 0;
 
-        if (!wasVisible && height > 0) {
+        if (!wasVisible && nextHeight > 0) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             final verticalPosition = resolveScrollPosition(verticalScrollController);
             if (verticalPosition == null || !verticalPosition.hasContentDimensions) {

@@ -19,7 +19,8 @@ class ContentGeometry {
 
   static const pageGap = 24.0;
   static const pagePadding = 40.0;
-  static const continuousPageMargin = 20.0;
+  static const typewriterMinBottomPadding = 48.0;
+  static const typewriterPaddingSafety = 1.0;
 
   double get effectiveZoom => isPaginated ? zoom : 1.0;
 
@@ -32,8 +33,6 @@ class ContentGeometry {
   double get horizontalPadding => 0;
   double get contentWidth => pageWidthAt(0) + horizontalPadding * 2;
   double get defaultBottomPadding => isPaginated ? toDisplayY(pagePadding) : 200.0;
-  double get trailingBottomMargin =>
-      layout is PaginatedLayout ? toDisplayY((layout as PaginatedLayout).pageMarginBottom) : continuousPageMargin;
 
   double _logicalPageWidthAt(int index) {
     if (layout case PaginatedLayout(:final pageWidth)) {
@@ -85,17 +84,6 @@ class ContentGeometry {
 
   double cursorTopInContent(CursorInfo cursor) => cursorTopInPages(cursor) + titleAreaHeight;
 
-  double? get collapsedSelectionHandleHeight {
-    if (!(selection?.collapsed ?? false)) {
-      return null;
-    }
-    final h = selection?.headBounds?.height ?? selection?.anchorBounds?.height;
-    if (h == null) {
-      return null;
-    }
-    return toDisplayY(h);
-  }
-
   List<double> computeCumulativePageOffsets() {
     final offsets = <double>[0];
     for (var i = 0; i < pages.length; i++) {
@@ -111,18 +99,22 @@ class ContentGeometry {
     bool typewriterEnabled = false,
     double typewriterPosition = 0.5,
   }) {
+    final minimumBottomPadding = typewriterEnabled ? typewriterMinBottomPadding : defaultBottomPadding;
+
     if (!typewriterEnabled || cursor == null) {
-      return defaultBottomPadding;
+      return minimumBottomPadding;
     }
 
     final cursorHeight = toDisplayY(cursor.height);
-    final handleHeight = collapsedSelectionHandleHeight ?? cursorHeight;
-    final cursorLeading = math.max(0, handleHeight - cursorHeight);
     final spaceNeededBelowCursorTop = (1 - typewriterPosition) * (viewportHeight - cursorHeight) + cursorHeight;
-    final intrinsicSpaceBelowLastLine = trailingBottomMargin + cursorHeight + cursorLeading;
-    final requiredPadding = spaceNeededBelowCursorTop - intrinsicSpaceBelowLastLine;
+    final spaceAvailableBelowCursorTop = (titleAreaHeight + pagesContentHeight - cursorTopInContent(cursor)).clamp(
+      0.0,
+      double.infinity,
+    );
 
-    return math.max(defaultBottomPadding, requiredPadding);
+    final requiredPadding = spaceNeededBelowCursorTop - spaceAvailableBelowCursorTop + typewriterPaddingSafety;
+
+    return math.max(minimumBottomPadding, requiredPadding);
   }
 
   double totalContentHeight({
