@@ -2,7 +2,7 @@ import dayjs from 'dayjs';
 import { sql } from 'drizzle-orm';
 import { redis } from '@/cache';
 import {
-  db,
+  dbr,
   DocumentCharacterCountChanges,
   Documents,
   Entities,
@@ -35,7 +35,7 @@ builder.queryField('stats', (t) =>
 
       // User metrics
       const getUsersTotal = () =>
-        db.execute(sql`
+        dbr.execute(sql`
           WITH date_series AS (
             SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
           )
@@ -50,7 +50,7 @@ builder.queryField('stats', (t) =>
         `);
 
       const getUsersNew = () =>
-        db.execute(sql`
+        dbr.execute(sql`
           WITH date_series AS (
             SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
           ),
@@ -83,7 +83,7 @@ builder.queryField('stats', (t) =>
         `);
 
       const getUsersActive = () =>
-        db.execute(sql`
+        dbr.execute(sql`
           WITH date_series AS (
             SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
           ),
@@ -131,7 +131,7 @@ builder.queryField('stats', (t) =>
 
       // Subscription metrics
       const getSubscriptionsRevenue = () =>
-        db.execute(sql`
+        dbr.execute(sql`
           WITH date_series AS (
             SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
           ),
@@ -161,7 +161,7 @@ builder.queryField('stats', (t) =>
         `);
 
       const getSubscriptionsActive = () =>
-        db.execute(sql`
+        dbr.execute(sql`
           WITH date_series AS (
             SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
           ),
@@ -184,7 +184,7 @@ builder.queryField('stats', (t) =>
 
       // Post metrics
       const getPostsTotal = () =>
-        db.execute(sql`
+        dbr.execute(sql`
           WITH date_series AS (
             SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
           ),
@@ -206,7 +206,7 @@ builder.queryField('stats', (t) =>
 
       // Character metrics
       const getCharactersInput = () =>
-        db.execute(sql`
+        dbr.execute(sql`
           WITH date_series AS (
             SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
           ),
@@ -237,7 +237,7 @@ builder.queryField('stats', (t) =>
         `);
 
       const getCharactersDaily = () =>
-        db.execute(sql`
+        dbr.execute(sql`
           WITH date_series AS (
             SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
           ),
@@ -285,7 +285,7 @@ builder.queryField('stats', (t) =>
 
       // System metrics
       const getSystemServiceDays = () =>
-        db.execute(sql`
+        dbr.execute(sql`
           WITH service_launch AS (
             SELECT MIN(${Users.createdAt})::date as launch_date
             FROM ${Users}
