@@ -4,7 +4,9 @@ use crate::model::{
     TextAlign,
 };
 use crate::runtime::tracked_items::TrackedItemOverlay;
-use crate::runtime::{ExternalElement, LinkOverlay, SelectionHandleBounds, TableOverlay};
+use crate::runtime::{
+    DropIndicator, ExternalElement, LinkOverlay, SelectionHandleBounds, TableOverlay,
+};
 use crate::state::Selection;
 use crate::state::selection_helpers::{BlockAttr, SelectionAttributes};
 use crate::types::{Affinity, PointerStyle, Rect, TextBound};
@@ -220,6 +222,12 @@ define_slate! {
         pub current_block_y: f32,
         pub current_block_width: f32,
         pub current_block_height: f32,
+
+        pub drop_indicator_page_idx: i32,
+        pub drop_indicator_x: f32,
+        pub drop_indicator_y: f32,
+        pub drop_indicator_width: f32,
+        pub drop_indicator_height: f32,
     }
 }
 
@@ -768,6 +776,44 @@ impl Slab {
             slate.placeholder_height = 0.0;
         }
         slate.dirty |= DIRTY_PLACEHOLDER;
+    }
+
+    pub fn write_drop_indicator(&mut self, slate: &mut Slate, indicator: Option<&DropIndicator>) {
+        if let Some(indicator) = indicator {
+            match indicator {
+                DropIndicator::Inline {
+                    page_idx,
+                    x,
+                    y,
+                    height,
+                } => {
+                    slate.drop_indicator_page_idx = *page_idx as i32;
+                    slate.drop_indicator_x = *x;
+                    slate.drop_indicator_y = *y;
+                    slate.drop_indicator_width = 1.0;
+                    slate.drop_indicator_height = *height;
+                }
+                DropIndicator::Block {
+                    page_idx,
+                    x,
+                    y,
+                    width,
+                } => {
+                    slate.drop_indicator_page_idx = *page_idx as i32;
+                    slate.drop_indicator_x = *x;
+                    slate.drop_indicator_y = *y;
+                    slate.drop_indicator_width = *width;
+                    slate.drop_indicator_height = 1.0;
+                }
+            }
+            return;
+        }
+
+        slate.drop_indicator_page_idx = -1;
+        slate.drop_indicator_x = 0.0;
+        slate.drop_indicator_y = 0.0;
+        slate.drop_indicator_width = 0.0;
+        slate.drop_indicator_height = 0.0;
     }
 
     pub fn write_link_overlays(&mut self, slate: &mut Slate, overlays: &[LinkOverlay]) {

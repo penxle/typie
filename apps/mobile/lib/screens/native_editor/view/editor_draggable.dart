@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_thumbhash/flutter_thumbhash.dart';
 import 'package:super_drag_and_drop/super_drag_and_drop.dart';
 import 'package:typie/screens/native_editor/external/models.dart';
@@ -58,6 +60,7 @@ class EditorDraggable extends StatelessWidget {
           resolved.localY,
           Offset(resolved.localPosition.dx, resolved.localPosition.dy),
         );
+        unawaited(HapticFeedback.lightImpact());
         return scope.dndController.createDragItem();
       },
       allowedOperations: () => [DropOperation.copy, DropOperation.move],
