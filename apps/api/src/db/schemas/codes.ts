@@ -33,6 +33,7 @@ export const TableCode = {
   POST_SNAPSHOTS: 'PS',
   PREORDER_PAYMENTS: 'PP',
   PREORDER_USERS: 'PU',
+  REDIRECTS: 'RDR',
   REFERRALS: 'RFR',
   REFERRAL_CODES: 'RFRC',
   SITES: 'S',

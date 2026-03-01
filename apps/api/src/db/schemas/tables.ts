@@ -301,12 +301,8 @@ export const Entities = pgTable(
       .default(sql`now()`),
   },
   (t) => [
-    uniqueIndex()
-      .on(t.slug)
-      .where(eq(t.state, sql`'ACTIVE'`)),
-    uniqueIndex()
-      .on(t.permalink)
-      .where(eq(t.state, sql`'ACTIVE'`)),
+    uniqueIndex().on(t.slug),
+    uniqueIndex().on(t.permalink),
     unique().on(t.siteId, t.parentId, t.order).nullsNotDistinct(),
     index().on(t.userId, t.state),
     index().on(t.siteId, t.state),
@@ -657,6 +653,22 @@ export const PreorderUsers = pgTable('preorder_users', {
     .default(sql`now()`),
 });
 
+export const Redirects = pgTable(
+  'redirects',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.REDIRECTS)),
+    type: E._RedirectType('type').notNull(),
+    from: text('from').notNull(),
+    to: text('to').notNull(),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [uniqueIndex().on(t.type, t.from)],
+);
+
 export const Referrals = pgTable('referrals', {
   id: text('id')
     .primaryKey()
@@ -709,12 +721,7 @@ export const Sites = pgTable(
       .notNull()
       .default(sql`now()`),
   },
-  (t) => [
-    uniqueIndex()
-      .on(t.slug)
-      .where(eq(t.state, sql`'ACTIVE'`)),
-    index().on(t.userId, t.state),
-  ],
+  (t) => [uniqueIndex().on(t.slug), index().on(t.userId, t.state)],
 );
 
 export const Subscriptions = pgTable(
