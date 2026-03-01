@@ -8,7 +8,7 @@ impl Runtime {
                 return self.transact(|tr| {
                     tr.delete_selection()?;
                     tr.normalize()?;
-                    tr.paste_fragment(frag, Some(text))
+                    tr.paste_fragment(frag, None)
                 });
             }
         }
