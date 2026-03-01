@@ -192,9 +192,9 @@
               class={css({
                 position: 'absolute',
                 pointerEvents: 'none',
-                backgroundColor: 'accent.brand.subtle',
+                backgroundColor: { base: 'accent.brand.subtle', _dark: '[#544a2e]' },
                 borderRadius: '2px',
-                mixBlendMode: 'multiply',
+                mixBlendMode: { base: 'multiply', _dark: 'screen' },
               })}
             ></div>
           {/each}
@@ -208,14 +208,14 @@
             style:top={`${bound.y}px`}
             style:width={`${bound.width}px`}
             style:height={`${bound.height}px`}
-            style:background-color={editor.searchMatches.find((v) => v.id === item.id)?.active
-              ? 'rgba(255, 165, 0, 0.5)'
-              : 'rgba(255, 255, 0, 0.5)'}
             class={css({
               position: 'absolute',
               pointerEvents: 'none',
               borderRadius: '2px',
-              mixBlendMode: 'multiply',
+              mixBlendMode: { base: 'multiply', _dark: 'screen' },
+              backgroundColor: editor.searchMatches.find((v) => v.id === item.id)?.active
+                ? { base: '[#ffd280]', _dark: '[#a06828]' }
+                : { base: '[#ffff80]', _dark: '[#544a2e]' },
             })}
           ></div>
         {/each}
