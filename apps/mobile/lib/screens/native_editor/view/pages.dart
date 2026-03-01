@@ -616,7 +616,7 @@ class PageList extends HookWidget {
             : const _NonGestureBouncingScrollPhysics();
 
         final contentBottomPadding = geo.bottomPadding(
-          viewportHeight: resolveScrollPosition(verticalScrollController)?.viewportDimension ?? viewHeight,
+          viewportHeight: viewHeight,
           cursor: cursor,
           typewriterEnabled: pref.typewriterEnabled,
           typewriterPosition: pref.typewriterPosition,
@@ -1346,6 +1346,7 @@ class PageList extends HookWidget {
               endTextHandleDrag();
             },
             child: Stack(
+              fit: StackFit.expand,
               clipBehavior: Clip.none,
               children: [
                 NotificationListener<ScrollMetricsNotification>(
