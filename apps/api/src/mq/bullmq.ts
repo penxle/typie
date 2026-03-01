@@ -43,7 +43,7 @@ export const worker = new Worker(
     }),
 
     autorun: false,
-    concurrency: 50,
+    concurrency: 10,
   },
 );
 
