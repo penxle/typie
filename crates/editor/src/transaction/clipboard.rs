@@ -90,6 +90,9 @@ impl Transaction {
                 _ => None,
             });
 
+        // Extract plain text from the fragment itself, not from external clipboard
+        let plain_text = text.unwrap_or_else(|| fragment.to_plain_text());
+
         let fragment = fragment
             .with_fresh_ids_for_doc(self.doc())
             .fill_missing_styles(&fill_styles);
@@ -98,14 +101,14 @@ impl Transaction {
             self.set_selection(selection);
         }
 
-        if let Some(text) = text.filter(|t| !t.is_empty()) {
+        if !plain_text.is_empty() {
             if let Some(selection) = result
                 .as_inline_range_selection(self.doc())
                 .or_else(|| result.as_range_selection())
             {
                 self.push_effect(Effect::HtmlPasted {
                     selection,
-                    text,
+                    text: plain_text,
                     styles,
                     paragraph_attrs,
                 });
@@ -2199,10 +2202,8 @@ mod tests {
             }
         };
 
-        let pasted_text = fragment.to_plain_text();
-        let (after_paste, effects) = transact_with_effect!(initial, |tr| tr
-            .paste_fragment(fragment, Some(pasted_text.clone()))
-            .unwrap());
+        let (after_paste, effects) =
+            transact_with_effect!(initial, |tr| tr.paste_fragment(fragment, None).unwrap());
 
         let (selection, text, styles) = effects
             .into_iter()
