@@ -40,7 +40,7 @@ class EditorDraggable extends StatelessWidget {
     }
 
     return DragItemWidget(
-      dragItemProvider: (request) {
+      dragItemProvider: (request) async {
         if (gesture.state.active) {
           return null;
         }
@@ -61,7 +61,11 @@ class EditorDraggable extends StatelessWidget {
           Offset(resolved.localPosition.dx, resolved.localPosition.dy),
         );
         unawaited(HapticFeedback.lightImpact());
-        return scope.dndController.createDragItem();
+        final item = await scope.dndController.createDragItem();
+        if (item == null) {
+          scope.dndController.handleDragEnd();
+        }
+        return item;
       },
       allowedOperations: () => [DropOperation.copy, DropOperation.move],
       liftBuilder: (context, _) {
