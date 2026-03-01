@@ -1051,6 +1051,7 @@
               onEditorReady={handleEditorReady}
               onExitedDocumentStart={() => subtitleEl?.focus()}
               onSelectionChanged={handleSelectionChanged}
+              resizing={paneGroup.resizing}
               snapshot={serverSnapshot}
               unit="cm"
             >

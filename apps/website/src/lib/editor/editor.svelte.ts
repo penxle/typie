@@ -120,6 +120,8 @@ export class Editor {
 
   fontFamilies = $state<readonly FontFamily[]>([]);
 
+  containerResizing = $state(false);
+
   renderVersion = $state(0);
 
   layout: { pages: { width: number; height: number }[]; layoutMode: LayoutMode } | null = $state(null);
