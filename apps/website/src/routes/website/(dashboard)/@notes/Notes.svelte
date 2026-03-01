@@ -10,10 +10,8 @@
   import { tick, untrack } from 'svelte';
   import { fly } from 'svelte/transition';
   import { match } from 'ts-pattern';
-  import { PostType } from '@/enums';
   import CornerDownLeftIcon from '~icons/lucide/corner-down-left';
   import FileIcon from '~icons/lucide/file';
-  import LayoutTemplateIcon from '~icons/lucide/layout-template';
   import { beforeNavigate } from '$app/navigation';
   import { page } from '$app/state';
   import { cache } from '$lib/graphql';
@@ -41,11 +39,6 @@
             node {
               __typename
 
-              ... on Post {
-                id
-                title
-                type
-              }
               ... on Document {
                 id
                 title
@@ -68,11 +61,6 @@
             node {
               __typename
 
-              ... on Post {
-                id
-                title
-                type
-              }
               ... on Document {
                 id
                 title
@@ -93,12 +81,6 @@
 
           node {
             __typename
-
-            ... on Post {
-              id
-              title
-              type
-            }
 
             ... on Document {
               id
@@ -125,12 +107,6 @@
 
             node {
               __typename
-
-              ... on Post {
-                id
-                title
-                type
-              }
             }
           }
         }
@@ -151,12 +127,6 @@
 
             node {
               __typename
-
-              ... on Post {
-                id
-                title
-                type
-              }
             }
           }
         }
@@ -196,10 +166,9 @@
 
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     return match(note.entity!.node)
-      .with({ __typename: 'Post' }, (node) => node.title)
       .with({ __typename: 'Document' }, (node) => node.title)
       .with({ __typename: 'Folder' }, () => null)
-      .exhaustive();
+      .otherwise(() => null);
   });
 
   let editingNoteId = $state<string | null>(null);
@@ -213,18 +182,13 @@
       .slice(0, 10)
       .map((entity) =>
         match(entity.node)
-          .with({ __typename: 'Post' }, (node) => ({
-            entity,
-            title: node.title,
-            icon: node.type === PostType.TEMPLATE ? LayoutTemplateIcon : FileIcon,
-          }))
           .with({ __typename: 'Document' }, (node) => ({
             entity,
             title: node.title,
             icon: FileIcon,
           }))
           .with({ __typename: 'Folder' }, () => null)
-          .exhaustive(),
+          .otherwise(() => null),
       )
       .filter((hit): hit is NonNullable<typeof hit> => hit !== null),
   );

@@ -25,8 +25,6 @@
     "@sveltejs/kit": "^2.52.0",
     "@sveltejs/vite-plugin-svelte": "^6.2.4",
     "@tauri-apps/cli": "^2.10.0",
-    "@tiptap/core": "^3.20.0",
-    "@tiptap/pm": "^3.20.0",
     "@typie/lib": "workspace:*",
     "@typie/styled-system": "workspace:*",
     "@typie/tsconfig": "workspace:*",
@@ -53,10 +51,6 @@
     "universal-cookie": "^8.0.1",
     "unplugin-icons": "^23.0.1",
     "vite": "^7.3.1",
-    "y-indexeddb": "^9.0.12",
-    "y-prosemirror": "^1.3.7",
-    "y-protocols": "^1.0.7",
-    "yjs": "^13.6.29",
     "zeed-dom": "^0.17.7",
     "zod": "^4.3.6"
   }

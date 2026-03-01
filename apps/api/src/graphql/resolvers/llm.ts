@@ -1,13 +1,11 @@
 import { GoogleGenAI, ThinkingLevel } from '@google/genai';
 import * as Sentry from '@sentry/bun';
-import { Node } from '@tiptap/pm/model';
 import dedent from 'dedent';
 import { Repeater } from 'graphql-yoga';
 import pMap from 'p-map';
 import { rapidhash } from 'rapidhash-js';
 import { redis } from '@/cache';
 import { env } from '@/env';
-import { schema, textSerializers } from '@/pm';
 import { builder } from '../builder';
 
 const ai = new GoogleGenAI({
@@ -24,16 +22,6 @@ type Feedback = {
   end: string;
   feedback: string;
 };
-
-const LiteraryFeedbackResult = builder.simpleObject('LiteraryFeedbackResult', {
-  fields: (t) => ({
-    from: t.int(),
-    to: t.int(),
-    startText: t.string(),
-    endText: t.string(),
-    feedback: t.string(),
-  }),
-});
 
 const systemPrompt = dedent`
   당신은 글을 읽는 첫 번째 독자입니다.
@@ -111,45 +99,6 @@ const withRetry = async <T>(fn: () => Promise<T>, maxRetries = MAX_RETRIES, init
     }
   }
   throw lastError;
-};
-
-const extractTextAndMappings = (body: unknown) => {
-  const node = Node.fromJSON(schema, body);
-
-  let text = '';
-  let textOffset = 0;
-  const textNodeMappings: { textStart: number; textEnd: number; pmStart: number }[] = [];
-
-  node.nodesBetween(0, node.content.size, (childNode, pos, parent, index) => {
-    const textSerializer = textSerializers[childNode.type.name];
-    if (textSerializer) {
-      if (parent) {
-        const range = { from: 0, to: node.content.size };
-        const serialized = textSerializer({ node: childNode, pos, parent, index, range });
-        text += serialized;
-        textOffset += serialized.length;
-      }
-      return false;
-    }
-
-    if (childNode.isBlock && pos > 0) {
-      text += '\n';
-      textOffset += 1;
-    }
-
-    if (childNode.isText && childNode.text) {
-      const content = childNode.text;
-      textNodeMappings.push({
-        textStart: textOffset,
-        textEnd: textOffset + content.length,
-        pmStart: pos,
-      });
-      text += content;
-      textOffset += content.length;
-    }
-  });
-
-  return { text, textNodeMappings };
 };
 
 const createChunks = (text: string) => {
@@ -242,34 +191,6 @@ const summarizeChunk = async (chunkText: string): Promise<string> => {
   return summary;
 };
 
-const createMapRange = (text: string, textNodeMappings: { textStart: number; textEnd: number; pmStart: number }[]) => {
-  return (startText: string, endText: string, searchStart = 0) => {
-    const rangeStart = text.indexOf(startText, searchStart);
-    if (rangeStart === -1) {
-      return null;
-    }
-
-    const endSearchStart = startText === endText ? rangeStart : rangeStart + startText.length;
-    const endIndex = text.indexOf(endText, endSearchStart);
-    if (endIndex === -1) {
-      return null;
-    }
-    const rangeEnd = endIndex + endText.length;
-
-    const startMapping = textNodeMappings.find((m) => rangeStart >= m.textStart && rangeStart < m.textEnd);
-    const endMapping = textNodeMappings.find((m) => rangeEnd > m.textStart && rangeEnd <= m.textEnd);
-
-    if (!startMapping || !endMapping) {
-      return null;
-    }
-
-    const from = startMapping.pmStart + (rangeStart - startMapping.textStart);
-    const to = endMapping.pmStart + (rangeEnd - endMapping.textStart);
-
-    return { from, to };
-  };
-};
-
 type ChunkContext = {
   precedingSummary: string;
   followingSummary: string;
@@ -360,12 +281,6 @@ const analyzeChunkWithContext = async (context: ChunkContext, onFeedback: (feedb
   await redis.setex(cacheKey, CACHE_TTL, JSON.stringify(feedbacks));
 };
 
-type AnalysisPayload =
-  | { type: 'feedback'; data: { from: number; to: number; startText: string; endText: string; feedback: string } }
-  | { type: 'progress'; data: { current: number; total: number; phase: 'summarizing' | 'analyzing' } }
-  | { type: 'complete' }
-  | { type: 'error' };
-
 const LiteraryAnalysisProgress = builder.simpleObject('LiteraryAnalysisProgress', {
   fields: (t) => ({
     current: t.int(),
@@ -373,114 +288,6 @@ const LiteraryAnalysisProgress = builder.simpleObject('LiteraryAnalysisProgress'
     phase: t.string(),
   }),
 });
-
-builder.subscriptionFields((t) => ({
-  literaryAnalysisStream: t.withAuth({ session: true }).field({
-    type: builder.simpleObject('LiteraryAnalysisPayload', {
-      fields: (t) => ({
-        type: t.string(),
-        feedback: t.field({ type: LiteraryFeedbackResult, nullable: true }),
-        progress: t.field({ type: LiteraryAnalysisProgress, nullable: true }),
-      }),
-    }),
-    args: {
-      body: t.arg({ type: 'JSON' }),
-    },
-    subscribe: (_, args, ctx) => {
-      const { text, textNodeMappings } = extractTextAndMappings(args.body);
-
-      return new Repeater<AnalysisPayload>(async (push, stop) => {
-        ctx.c.req.raw.signal.addEventListener('abort', () => {
-          stop();
-        });
-
-        if (!text.trim()) {
-          push({ type: 'complete' });
-          stop();
-          return;
-        }
-
-        const chunks = createChunks(text);
-        const mapRange = createMapRange(text, textNodeMappings);
-
-        try {
-          const summaries: string[] = [];
-          await pMap(
-            chunks,
-            async (chunk, index) => {
-              const summary = await summarizeChunk(chunk.text);
-              summaries[index] = summary;
-              push({
-                type: 'progress',
-                data: { current: summaries.filter(Boolean).length, total: chunks.length, phase: 'summarizing' },
-              });
-            },
-            { concurrency: SUMMARIZE_CONCURRENCY },
-          );
-
-          let analyzedCount = 0;
-          push({
-            type: 'progress',
-            data: { current: 0, total: chunks.length, phase: 'analyzing' },
-          });
-          await pMap(
-            chunks,
-            async (chunk, i) => {
-              const precedingSummary = summaries.slice(0, i).join('\n\n');
-              const followingSummary = summaries.slice(i + 1).join('\n\n');
-
-              await analyzeChunkWithContext(
-                {
-                  precedingSummary,
-                  followingSummary,
-                  currentText: chunk.text,
-                },
-                (feedback) => {
-                  const range = mapRange(feedback.start, feedback.end, chunk.start);
-
-                  if (range) {
-                    push({
-                      type: 'feedback',
-                      data: {
-                        from: range.from,
-                        to: range.to,
-                        startText: feedback.start,
-                        endText: feedback.end,
-                        feedback: feedback.feedback,
-                      },
-                    });
-                  }
-                },
-              );
-
-              analyzedCount++;
-              push({
-                type: 'progress',
-                data: { current: analyzedCount, total: chunks.length, phase: 'analyzing' },
-              });
-            },
-            { concurrency: ANALYZE_CONCURRENCY },
-          );
-
-          push({ type: 'complete' });
-        } catch (err) {
-          Sentry.captureException(err);
-          console.error(err);
-          push({ type: 'error' });
-        }
-
-        stop();
-      });
-    },
-    resolve: (payload: AnalysisPayload) => {
-      return {
-        type: payload.type,
-        feedback: payload.type === 'feedback' ? payload.data : null,
-        progress: payload.type === 'progress' ? payload.data : null,
-      };
-    },
-  }),
-}));
 
 const DocumentLiteraryFeedbackResult = builder.simpleObject('DocumentLiteraryFeedbackResult', {
   fields: (t) => ({

@@ -1,27 +1,13 @@
 import { and, count, desc, eq, getTableColumns, ilike, or, sql } from 'drizzle-orm';
 import { fetchBootstrap, putBootstrap } from '@/bootstrap';
 import { redis } from '@/cache';
-import {
-  db,
-  Documents,
-  Entities,
-  first,
-  firstOrThrow,
-  pgr,
-  Posts,
-  TableCode,
-  UserPaymentCredits,
-  Users,
-  UserSessions,
-  validateDbId,
-} from '@/db';
-import { DocumentType, EntityState, PostType, UserRole, UserState } from '@/enums';
+import { db, Documents, Entities, first, firstOrThrow, pgr, TableCode, UserPaymentCredits, Users, UserSessions, validateDbId } from '@/db';
+import { DocumentType, EntityState, UserRole, UserState } from '@/enums';
 import { TypieError } from '@/errors';
-import { enqueueJob } from '@/mq';
 import { assertAdminPermission } from '@/utils/permission';
 import { bootstrapSchema } from '@/validation';
 import { builder } from '../builder';
-import { Document, Post, User } from '../objects';
+import { Document, User } from '../objects';
 
 builder.queryFields((t) => ({
   adminUsers: t.withAuth({ session: true }).field({
@@ -78,71 +64,6 @@ builder.queryFields((t) => ({
       await assertAdminPermission({ sessionId: ctx.session.id });
 
       return userId;
-    },
-  }),
-
-  adminPosts: t.withAuth({ session: true }).field({
-    type: builder.simpleObject('AdminPostsResult', {
-      fields: (t) => ({
-        posts: t.field({ type: [Post] }),
-        totalCount: t.int(),
-      }),
-    }),
-    args: {
-      search: t.arg.string({ required: false }),
-      type: t.arg({ type: PostType, required: false }),
-      state: t.arg({ type: EntityState, required: false }),
-      offset: t.arg.int({ defaultValue: 0 }),
-      limit: t.arg.int({ defaultValue: 20 }),
-    },
-    resolve: async (_, args, ctx) => {
-      await assertAdminPermission({ sessionId: ctx.session.id });
-
-      let list$ = db.select(getTableColumns(Posts)).from(Posts).innerJoin(Entities, eq(Posts.entityId, Entities.id)).$dynamic();
-      let count$ = db.select({ totalCount: count() }).from(Posts).innerJoin(Entities, eq(Posts.entityId, Entities.id)).$dynamic();
-
-      const conditions = [];
-
-      if (args.type) {
-        conditions.push(eq(Posts.type, args.type));
-      }
-
-      if (args.state) {
-        conditions.push(eq(Entities.state, args.state));
-      }
-
-      if (args.search) {
-        conditions.push(
-          or(
-            ilike(Posts.title, `%${args.search}%`),
-            ilike(Posts.subtitle, `%${args.search}%`),
-            eq(Posts.id, args.search),
-            eq(Entities.slug, args.search),
-            eq(Entities.permalink, args.search),
-          ),
-        );
-      }
-
-      if (conditions.length > 0) {
-        list$ = list$.where(and(...conditions));
-        count$ = count$.where(and(...conditions));
-      }
-
-      list$ = list$.orderBy(desc(Posts.createdAt)).limit(args.limit).offset(args.offset);
-
-      const [posts, { totalCount }] = await Promise.all([list$, count$.then(firstOrThrow)]);
-
-      return { posts, totalCount };
-    },
-  }),
-
-  adminPost: t.withAuth({ session: true }).field({
-    type: Post,
-    args: { postId: t.arg.string({ validate: validateDbId(TableCode.POSTS) }) },
-    resolve: async (_, { postId }, ctx) => {
-      await assertAdminPermission({ sessionId: ctx.session.id });
-
-      return postId;
     },
   }),
 
@@ -302,18 +223,6 @@ builder.mutationFields((t) => ({
       await assertAdminPermission({ sessionId: ctx.session.id });
 
       await redis.del(`admin:impersonate:${ctx.session.id}`);
-
-      return true;
-    },
-  }),
-
-  adminEnqueuePostCompact: t.withAuth({ session: true }).fieldWithInput({
-    type: 'Boolean',
-    input: { postId: t.input.string({ validate: validateDbId(TableCode.POSTS) }) },
-    resolve: async (_, { input }, ctx) => {
-      await assertAdminPermission({ sessionId: ctx.session.id });
-
-      await enqueueJob('post:compact', input.postId);
 
       return true;
     },

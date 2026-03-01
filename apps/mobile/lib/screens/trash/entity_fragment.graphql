@@ -21,14 +21,6 @@ fragment TrashScreen_Entity_entity on Entity {
       name
     }
 
-    ... on Post {
-      id
-      title
-      type
-      excerpt
-      updatedAt
-    }
-
     ... on Document {
       id
       title

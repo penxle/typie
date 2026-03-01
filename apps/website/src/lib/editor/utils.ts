@@ -1,26 +1,35 @@
 import { values } from '$lib/editor/values';
 
+export const mmToPx = (mm: number) => Math.round((mm * 96) / 25.4);
+export const pxToMm = (px: number) => Math.round((px * 25.4) / 96);
+
 export type PageLayoutPreset = (typeof values.pageLayout)[number]['value'];
 export type PageLayout = {
-  width: number;
-  height: number;
-  marginTop: number;
-  marginBottom: number;
-  marginLeft: number;
-  marginRight: number;
+  pageWidth: number;
+  pageHeight: number;
+  pageMarginTop: number;
+  pageMarginBottom: number;
+  pageMarginLeft: number;
+  pageMarginRight: number;
 };
 
-export const createPaginatedLayout = (preset: PageLayoutPreset = 'a4') => {
+export const createPaginatedLayout = (preset: PageLayoutPreset = 'a4'): PageLayout => {
   // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-  const layout = values.pageLayout.find((p) => p.value === preset)!;
-  return {
-    width: layout.width,
-    height: layout.height,
-    marginTop: layout.margin.top,
-    marginBottom: layout.margin.bottom,
-    marginLeft: layout.margin.left,
-    marginRight: layout.margin.right,
-  };
+  return { ...values.pageLayout.find((p) => p.value === preset)!.layout };
+};
+
+const MIN_CONTENT_SIZE_PX = mmToPx(50);
+
+export const getMaxMargin = (side: 'top' | 'bottom' | 'left' | 'right', layout: PageLayout): number => {
+  if (side === 'left') {
+    return Math.max(0, layout.pageWidth - layout.pageMarginRight - MIN_CONTENT_SIZE_PX);
+  } else if (side === 'right') {
+    return Math.max(0, layout.pageWidth - layout.pageMarginLeft - MIN_CONTENT_SIZE_PX);
+  } else if (side === 'top') {
+    return Math.max(0, layout.pageHeight - layout.pageMarginBottom - MIN_CONTENT_SIZE_PX);
+  } else {
+    return Math.max(0, layout.pageHeight - layout.pageMarginTop - MIN_CONTENT_SIZE_PX);
+  }
 };
 
 export const getPageElement = (element: HTMLElement): HTMLElement | null => {

@@ -7,8 +7,6 @@
   import PlusIcon from '~icons/lucide/plus';
   import { dragPaletteWidget } from './drag-palette-widget-action';
   import { WIDGET_CATEGORIES, WIDGET_COMPONENTS, WIDGET_METADATA } from './widgets';
-  import type { Editor } from '@tiptap/core';
-  import type { Ref } from '@typie/ui/utils';
   import type { Editor as NativeEditor } from '$lib/editor/editor.svelte';
   import type {
     Editor_Widget_CharacterCountChangeWidget_document$key,
@@ -18,8 +16,7 @@
 
   type Props = {
     open: boolean;
-    editor?: Ref<Editor>;
-    nativeEditor?: NativeEditor;
+    editor?: NativeEditor;
     document$key?: Editor_Widget_CharacterCountChangeWidget_document$key & Editor_Widget_DocumentRelatedNoteWidget_document$key;
     addedWidgets?: WidgetType[];
     onDragStart: (e: PointerEvent, widgetType: WidgetType, target: HTMLElement) => void;
@@ -31,7 +28,6 @@
   let {
     open = $bindable(false),
     editor,
-    nativeEditor,
     document$key: _document,
     addedWidgets = [],
     onDragStart,
@@ -53,7 +49,6 @@
 
   $effect(() => {
     widgetContext.env.editor = editor;
-    widgetContext.env.nativeEditor = nativeEditor;
     widgetContext.env.document$key = _document;
     widgetContext.env.editMode = false;
     widgetContext.env.palette = true;

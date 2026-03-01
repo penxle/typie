@@ -3,12 +3,10 @@
   import { center, flex } from '@typie/styled-system/patterns';
   import { token } from '@typie/styled-system/tokens';
   import { Icon, Popover } from '@typie/ui/components';
-  import { values } from '@typie/ui/tiptap/values-base';
+  import { getNoteColor } from '@typie/ui/utils';
   import { tick } from 'svelte';
   import { fly } from 'svelte/transition';
-  import { PostType } from '@/enums';
   import FileIcon from '~icons/lucide/file';
-  import LayoutTemplateIcon from '~icons/lucide/layout-template';
   import Trash2Icon from '~icons/lucide/trash-2';
 
   type Props = {
@@ -71,9 +69,7 @@
     }
   });
 
-  const color = $derived(
-    values.textBackgroundColor.find((color) => color.value === note.color)?.color ?? token('colors.prosemirror.white'),
-  );
+  const color = $derived(getNoteColor(note.color)?.color ?? token('colors.prosemirror.white'));
 </script>
 
 <div
@@ -183,14 +179,9 @@
           })}
           href={`/${note.entity.slug}`}
         >
-          <Icon
-            icon={note.entity.node.__typename === 'Post' && note.entity.node.type === PostType.TEMPLATE ? LayoutTemplateIcon : FileIcon}
-            size={12}
-          />
+          <Icon icon={FileIcon} size={12} />
           <span class={css({ fontSize: '12px', fontWeight: 'medium', lineClamp: '1' })}>
-            {note.entity.node.__typename === 'Post' || note.entity.node.__typename === 'Document'
-              ? note.entity.node.title || '(제목 없음)'
-              : '(제목 없음)'}
+            {note.entity.node.__typename === 'Document' ? note.entity.node.title || '(제목 없음)' : '(제목 없음)'}
           </span>
         </a>
       {/if}

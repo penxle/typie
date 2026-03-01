@@ -1,68 +1,9 @@
 import { faker } from '@faker-js/faker';
-import { getText } from '@tiptap/core';
-import { Node } from '@tiptap/pm/model';
 import { inArray } from 'drizzle-orm';
 import { LoroDoc, LoroList, LoroMap } from 'loro-crdt';
-import { prosemirrorToYXmlFragment } from 'y-prosemirror';
-import * as Y from 'yjs';
 import { defaultValues } from '@/const';
 import { db, Files, Images } from '@/db';
-import { PostLayoutMode } from '@/enums';
-import { schema, textSerializers } from '@/pm';
 import { wasm } from '@/utils/wasm';
-import type { JSONContent } from '@tiptap/core';
-
-type MakeYDocParams = {
-  title?: string | null;
-  subtitle?: string | null;
-  maxWidth?: number;
-  body: JSONContent;
-  storedMarks?: unknown[];
-  initialMarks?: unknown[];
-  anchors?: Record<string, string | null>;
-  layoutMode?: PostLayoutMode;
-  pageLayout?: unknown;
-};
-export const makeYDoc = ({
-  title,
-  subtitle,
-  maxWidth,
-  body,
-  storedMarks,
-  initialMarks,
-  anchors,
-  layoutMode,
-  pageLayout,
-}: MakeYDocParams) => {
-  const node = Node.fromJSON(schema, body);
-  const doc = new Y.Doc();
-
-  doc.transact(() => {
-    const map = doc.getMap('attrs');
-    map.set('title', title ?? '');
-    map.set('subtitle', subtitle ?? '');
-    map.set('maxWidth', maxWidth ?? 800);
-    map.set('storedMarks', storedMarks ?? []);
-    map.set('initialMarks', initialMarks ?? []);
-    map.set('anchors', anchors ?? {});
-    map.set('layoutMode', layoutMode ?? PostLayoutMode.SCROLL);
-    map.set('pageLayout', pageLayout ?? null);
-
-    const fragment = doc.getXmlFragment('body');
-    prosemirrorToYXmlFragment(node, fragment);
-  });
-
-  return doc;
-};
-
-export const makeText = (body: JSONContent) => {
-  const node = Node.fromJSON(schema, body);
-
-  return getText(node, {
-    blockSeparator: '\n',
-    textSerializers,
-  }).trim();
-};
 
 export const generateSlug = () => faker.string.hexadecimal({ length: 32, casing: 'lower', prefix: '' });
 export const generatePermalink = () => faker.string.alphanumeric({ length: 6, casing: 'mixed' });
@@ -92,21 +33,20 @@ type TemplatePreset = {
   backgroundColor?: string;
   letterSpacing?: number;
   lineHeight?: number;
-  layoutMode?: PostLayoutMode;
-  maxWidth?: number;
-  pageLayout?: {
-    width: number;
-    height: number;
-    marginTop: number;
-    marginBottom: number;
-    marginLeft: number;
-    marginRight: number;
-  } | null;
+  layout?:
+    | { type: 'continuous'; maxWidth: number }
+    | {
+        type: 'paginated';
+        pageWidth: number;
+        pageHeight: number;
+        pageMarginTop: number;
+        pageMarginBottom: number;
+        pageMarginLeft: number;
+        pageMarginRight: number;
+      };
   paragraphIndent?: number;
   blockGap?: number;
 };
-
-const mmToPx = (mm: number) => Math.round((mm * 96) / 25.4);
 
 export const makeLoroDoc = (template?: TemplatePreset) => {
   const doc = new LoroDoc();
@@ -136,18 +76,18 @@ export const makeLoroDoc = (template?: TemplatePreset) => {
   settings.set('block_gap', blockGap);
   settings.set('paragraph_indent', paragraphIndent);
 
-  const layoutMode = settings.setContainer('layout_mode', new LoroMap());
-  if (template?.layoutMode === PostLayoutMode.PAGE && template.pageLayout) {
-    layoutMode.set('type', 'paginated');
-    layoutMode.set('page_width', mmToPx(template.pageLayout.width));
-    layoutMode.set('page_height', mmToPx(template.pageLayout.height));
-    layoutMode.set('page_margin_top', mmToPx(template.pageLayout.marginTop));
-    layoutMode.set('page_margin_bottom', mmToPx(template.pageLayout.marginBottom));
-    layoutMode.set('page_margin_left', mmToPx(template.pageLayout.marginLeft));
-    layoutMode.set('page_margin_right', mmToPx(template.pageLayout.marginRight));
+  const loroLayout = settings.setContainer('layout_mode', new LoroMap());
+  if (template?.layout?.type === 'paginated') {
+    loroLayout.set('type', 'paginated');
+    loroLayout.set('page_width', template.layout.pageWidth);
+    loroLayout.set('page_height', template.layout.pageHeight);
+    loroLayout.set('page_margin_top', template.layout.pageMarginTop);
+    loroLayout.set('page_margin_bottom', template.layout.pageMarginBottom);
+    loroLayout.set('page_margin_left', template.layout.pageMarginLeft);
+    loroLayout.set('page_margin_right', template.layout.pageMarginRight);
   } else {
-    layoutMode.set('type', 'continuous');
-    layoutMode.set('max_width', template?.maxWidth ?? defaultValues.maxWidth);
+    loroLayout.set('type', 'continuous');
+    loroLayout.set('max_width', template?.layout?.type === 'continuous' ? template.layout.maxWidth : defaultValues.maxWidth);
   }
 
   const paragraphId = faker.string.uuid().replaceAll('-', '');

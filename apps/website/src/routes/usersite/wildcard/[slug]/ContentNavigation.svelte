@@ -27,15 +27,6 @@
           node {
             __typename
 
-            ... on PostView {
-              id
-              title
-              thumbnail {
-                id
-                ...Img_image
-              }
-            }
-
             ... on DocumentView {
               id
               title
@@ -54,15 +45,6 @@
           node {
             __typename
 
-            ... on PostView {
-              id
-              title
-              thumbnail {
-                id
-                ...Img_image
-              }
-            }
-
             ... on DocumentView {
               id
               title
@@ -78,16 +60,8 @@
     () => entityView$key,
   );
 
-  const prevNode = $derived(
-    entityView.data.prev?.node.__typename === 'PostView' || entityView.data.prev?.node.__typename === 'DocumentView'
-      ? entityView.data.prev.node
-      : null,
-  );
-  const nextNode = $derived(
-    entityView.data.next?.node.__typename === 'PostView' || entityView.data.next?.node.__typename === 'DocumentView'
-      ? entityView.data.next.node
-      : null,
-  );
+  const prevNode = $derived(entityView.data.prev?.node.__typename === 'DocumentView' ? entityView.data.prev.node : null);
+  const nextNode = $derived(entityView.data.next?.node.__typename === 'DocumentView' ? entityView.data.next.node : null);
 </script>
 
 {#if prevNode || nextNode}

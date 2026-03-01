@@ -10,33 +10,19 @@ export const load = async (event) => {
         me {
           id
 
-          ...UsersiteWildcardSlugPage_PostView_user
           ...UsersiteWildcardSlugPage_DocumentView_user
         }
 
         entityView(origin: $origin, slug: $slug) {
           id
+          slug
 
           node {
             __typename
-
-            ... on PostView {
-              id
-
-              document {
-                id
-
-                entity {
-                  id
-                  slug
-                }
-              }
-            }
           }
 
           ...UsersiteWildcardSlugPage_DocumentView_entityView
           ...UsersiteWildcardSlugPage_FolderView_entityView
-          ...UsersiteWildcardSlugPage_PostView_entityView
         }
       }
     `),
@@ -46,8 +32,8 @@ export const load = async (event) => {
     },
   );
 
-  if (query.data.entityView.node.__typename === 'PostView' && query.data.entityView.node.document) {
-    redirect(302, `/${query.data.entityView.node.document.entity.slug}`);
+  if (query.data.entityView.slug !== event.params.slug) {
+    redirect(302, `/${query.data.entityView.slug}`);
   }
 
   return { query };

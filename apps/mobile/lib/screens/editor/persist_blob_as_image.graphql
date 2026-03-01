@@ -1,9 +1,0 @@
-mutation EditorScreen_PersistBlobAsImage_Mutation($input: PersistBlobAsImageInput!) {
-  persistBlobAsImage(input: $input) {
-    id
-    url
-    ratio
-    placeholder
-    size
-  }
-}

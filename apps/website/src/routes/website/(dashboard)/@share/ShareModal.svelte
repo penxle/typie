@@ -6,7 +6,6 @@
   import { graphql } from '$mearie';
   import Document from './Document.svelte';
   import Folder from './Folder.svelte';
-  import Post from './Post.svelte';
 
   const app = getAppContext();
 
@@ -24,12 +23,6 @@
               id
 
               ...DashboardLayout_Share_Folder_folder
-            }
-
-            ... on Post {
-              id
-
-              ...DashboardLayout_Share_Post_post
             }
 
             ... on Document {
@@ -61,13 +54,10 @@
   {#if loaded && entitiesQuery.data}
     {@const entities = entitiesQuery.data.entities}
     {@const allFolders = entities.every((e) => e.type === 'FOLDER')}
-    {@const allPosts = entities.every((e) => e.type === 'POST')}
     {@const allDocuments = entities.every((e) => e.type === 'DOCUMENT')}
 
     {#if allFolders}
       <Folder folders$key={entitiesQuery.data.entities.map((e) => e.node).filter((e) => e.__typename === 'Folder')} />
-    {:else if allPosts}
-      <Post posts$key={entitiesQuery.data.entities.map((e) => e.node).filter((e) => e.__typename === 'Post')} />
     {:else if allDocuments}
       <Document documents$key={entitiesQuery.data.entities.map((e) => e.node).filter((e) => e.__typename === 'Document')} />
     {/if}

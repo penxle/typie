@@ -3,7 +3,6 @@
   import { graphql } from '$mearie';
   import TrashDocument from './TrashDocument.svelte';
   import TrashFolder from './TrashFolder.svelte';
-  import TrashPost from './TrashPost.svelte';
   import type { DashboardLayout_TrashTree_TrashEntity_entity$key, DashboardLayout_TrashTree_TrashFolder_entity$key } from '$mearie';
 
   type Props = {
@@ -25,11 +24,6 @@
             ...DashboardLayout_TrashTree_TrashFolder_folder
           }
 
-          ... on Post {
-            id
-            ...DashboardLayout_TrashTree_TrashPost_post
-          }
-
           ... on Document {
             id
             ...DashboardLayout_TrashTree_TrashDocument_document
@@ -47,8 +41,6 @@
 
 {#if entity.data.node.__typename === 'Folder'}
   <TrashFolder entities$key={children} folder$key={entity.data.node} />
-{:else if entity.data.node.__typename === 'Post'}
-  <TrashPost post$key={entity.data.node} />
 {:else if entity.data.node.__typename === 'Document'}
   <TrashDocument document$key={entity.data.node} />
 {/if}

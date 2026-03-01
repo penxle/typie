@@ -42,7 +42,7 @@ export const load = async (event) => {
               sites {
                 id
               }
-              postCount
+              documentCount
               totalCharacterCount
               marketingConsent
               personalIdentity {

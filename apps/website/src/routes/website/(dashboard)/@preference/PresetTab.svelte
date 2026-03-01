@@ -6,12 +6,11 @@
   import { Icon, SearchableDropdown, SegmentButtons, Select, TextInput } from '@typie/ui/components';
   import { getThemeContext } from '@typie/ui/context';
   import { Dialog } from '@typie/ui/notification';
-  import { clamp, getMaxMargin } from '@typie/ui/utils';
+  import { clamp } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import { tick } from 'svelte';
   import { fly } from 'svelte/transition';
   import { defaultValues } from '@/const';
-  import { PostLayoutMode } from '@/enums';
   import AlignVerticalSpaceAroundIcon from '~icons/lucide/align-vertical-space-around';
   import ArrowRightToLineIcon from '~icons/lucide/arrow-right-to-line';
   import CheckIcon from '~icons/lucide/check';
@@ -28,15 +27,15 @@
   import LetterSpacingIcon from '~icons/typie/letter-spacing';
   import LineHeightIcon from '~icons/typie/line-height';
   import { FontSpecimen, SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
+  import { ToolbarColorGrid } from '$lib/components/editor/toolbar';
   import { getRepresentativeFont } from '$lib/editor/fonts';
   import { THEME_COLORS } from '$lib/editor/theme';
-  import { createPaginatedLayout } from '$lib/editor/utils';
+  import { createPaginatedLayout, getMaxMargin, mmToPx, pxToMm } from '$lib/editor/utils';
   import { values } from '$lib/editor/values';
   import { cache } from '$lib/graphql';
   import { graphql } from '$mearie';
-  import ToolbarColorGrid from '../[slug]/@toolbar/ToolbarColorGrid.svelte';
   import type { ThemeVariant } from '$lib/editor/theme';
-  import type { PageLayout, PageLayoutPreset } from '$lib/editor/utils';
+  import type { PageLayoutPreset } from '$lib/editor/utils';
   import type { DashboardLayout_PreferenceModal_PresetTab_user$key } from '$mearie';
 
   type Props = {
@@ -95,9 +94,17 @@
     backgroundColor?: string;
     letterSpacing?: number;
     lineHeight?: number;
-    layoutMode?: PostLayoutMode;
-    maxWidth?: number;
-    pageLayout?: PageLayout | null;
+    layout?:
+      | { type: 'continuous'; maxWidth: number }
+      | {
+          type: 'paginated';
+          pageWidth: number;
+          pageHeight: number;
+          pageMarginTop: number;
+          pageMarginBottom: number;
+          pageMarginLeft: number;
+          pageMarginRight: number;
+        };
     paragraphIndent?: number;
     blockGap?: number;
   };
@@ -160,9 +167,9 @@
   const backgroundColor = $derived(template.backgroundColor ?? defaultValues.backgroundColor);
   const letterSpacing = $derived(template.letterSpacing ?? defaultValues.letterSpacing);
   const lineHeight = $derived(template.lineHeight ?? defaultValues.lineHeight);
-  const layoutMode = $derived(template.layoutMode ?? PostLayoutMode.SCROLL);
-  const maxWidth = $derived(template.maxWidth ?? defaultValues.maxWidth);
-  const pageLayout = $derived(template.pageLayout ?? null);
+  const layout = $derived<NonNullable<PresetPreference['layout']>>(
+    template.layout ?? { type: 'continuous', maxWidth: defaultValues.maxWidth },
+  );
   const paragraphIndent = $derived(template.paragraphIndent ?? defaultValues.paragraphIndent);
   const blockGap = $derived(template.blockGap ?? defaultValues.blockGap);
 
@@ -171,8 +178,6 @@
     values.textBackgroundColor.map((c) => ({ label: c.label, value: c.value, color: c.themeKey ? tc[c.themeKey] : null })),
   );
 
-  const isPageLayoutEnabled = $derived(layoutMode === PostLayoutMode.PAGE);
-
   const updateTemplate = async (updates: Partial<PresetPreference>) => {
     const newTemplate = { ...template, ...updates };
     await updatePreferences({ input: { value: { template: newTemplate } } });
@@ -180,7 +185,7 @@
       cache.invalidate({ __typename: 'User', id: userId, $field: 'preferences' });
     }
 
-    mixpanel.track('update_post_template', {
+    mixpanel.track('update_document_template', {
       updates: Object.keys(updates),
     });
   };
@@ -191,7 +196,7 @@
       cache.invalidate({ __typename: 'User', id: userId, $field: 'preferences' });
     }
 
-    mixpanel.track('reset_post_template');
+    mixpanel.track('reset_document_template');
   };
 
   let textColorOpened = $state(false);
@@ -751,27 +756,28 @@
           <div class={css({ width: '140px' })}>
             <SegmentButtons
               items={[
-                { label: '스크롤', value: PostLayoutMode.SCROLL },
-                { label: '페이지', value: PostLayoutMode.PAGE },
+                { label: '스크롤', value: 'continuous' },
+                { label: '페이지', value: 'paginated' },
               ]}
-              onselect={(value: PostLayoutMode) => {
-                if (value === PostLayoutMode.PAGE && !pageLayout) {
+              onselect={(value: 'continuous' | 'paginated') => {
+                if (value === 'paginated') {
                   updateTemplate({
-                    layoutMode: value,
-                    pageLayout: createPaginatedLayout('a4'),
+                    layout: layout.type === 'paginated' ? layout : { type: 'paginated', ...createPaginatedLayout('a4') },
                   });
                 } else {
-                  updateTemplate({ layoutMode: value });
+                  updateTemplate({
+                    layout: { type: 'continuous', maxWidth: layout.type === 'continuous' ? layout.maxWidth : defaultValues.maxWidth },
+                  });
                 }
               }}
               size="sm"
-              value={layoutMode}
+              value={layout.type}
             />
           </div>
         {/snippet}
       </SettingsRow>
 
-      {#if isPageLayoutEnabled && pageLayout}
+      {#if layout.type === 'paginated'}
         <SettingsDivider />
         <SettingsRow>
           {#snippet label()}
@@ -786,52 +792,45 @@
                 items={[...values.pageLayout, { label: '직접 지정', value: 'custom' }]}
                 onselect={(value: string) => {
                   if (value !== 'custom') {
-                    updateTemplate({ pageLayout: createPaginatedLayout(value as PageLayoutPreset) });
+                    updateTemplate({ layout: { type: 'paginated', ...createPaginatedLayout(value as PageLayoutPreset) } });
                   }
                 }}
-                value={values.pageLayout.find((p) => p.width === pageLayout.width && p.height === pageLayout.height)?.value ?? 'custom'}
+                value={layout.type === 'paginated'
+                  ? (values.pageLayout.find((p) => p.layout.pageWidth === layout.pageWidth && p.layout.pageHeight === layout.pageHeight)
+                      ?.value ?? 'custom')
+                  : 'custom'}
               />
               <div class={flex({ gap: '6px', alignItems: 'center' })}>
                 <TextInput
                   style={css.raw({ width: '70px' })}
                   min="100"
                   onchange={(e) => {
-                    if (!pageLayout) return;
+                    if (layout.type !== 'paginated') return;
                     const target = e.target as HTMLInputElement;
                     const value = Math.max(100, Number(target.value));
                     target.value = String(value);
-                    updateTemplate({
-                      pageLayout: {
-                        ...pageLayout,
-                        width: value,
-                      },
-                    });
+                    updateTemplate({ layout: { ...layout, pageWidth: mmToPx(value) } });
                   }}
                   placeholder="너비"
                   size="sm"
                   type="number"
-                  value={pageLayout.width}
+                  value={layout.type === 'paginated' ? pxToMm(layout.pageWidth) : 0}
                 />
                 <span class={css({ fontSize: '12px', color: 'text.faint' })}>×</span>
                 <TextInput
                   style={css.raw({ width: '70px' })}
                   min="100"
                   onchange={(e) => {
-                    if (!pageLayout) return;
+                    if (layout.type !== 'paginated') return;
                     const target = e.target as HTMLInputElement;
                     const value = Math.max(100, Number(target.value));
                     target.value = String(value);
-                    updateTemplate({
-                      pageLayout: {
-                        ...pageLayout,
-                        height: value,
-                      },
-                    });
+                    updateTemplate({ layout: { ...layout, pageHeight: mmToPx(value) } });
                   }}
                   placeholder="높이"
                   size="sm"
                   type="number"
-                  value={pageLayout.height}
+                  value={layout.type === 'paginated' ? pxToMm(layout.pageHeight) : 0}
                 />
               </div>
             </div>
@@ -853,92 +852,72 @@
                 <Icon style={css.raw({ color: 'text.faint' })} icon={PanelTopIcon} size={14} />
                 <TextInput
                   style={css.raw({ width: '56px' })}
-                  max={pageLayout ? String(getMaxMargin('top', pageLayout)) : undefined}
+                  max={layout.type === 'paginated' ? String(pxToMm(getMaxMargin('top', layout))) : undefined}
                   min="0"
                   oninput={(e) => {
-                    if (!pageLayout) return;
+                    if (layout.type !== 'paginated') return;
                     const target = e.target as HTMLInputElement;
-                    const value = clamp(Number(target.value), 0, getMaxMargin('top', pageLayout));
-                    target.value = String(value);
-                    updateTemplate({
-                      pageLayout: {
-                        ...pageLayout,
-                        marginTop: value,
-                      },
-                    });
+                    const valuePx = clamp(mmToPx(Number(target.value)), 0, getMaxMargin('top', layout));
+                    target.value = String(pxToMm(valuePx));
+                    updateTemplate({ layout: { ...layout, pageMarginTop: valuePx } });
                   }}
                   size="sm"
                   type="number"
-                  value={pageLayout.marginTop}
+                  value={layout.type === 'paginated' ? pxToMm(layout.pageMarginTop) : 0}
                 />
               </div>
               <div class={flex({ gap: '4px', alignItems: 'center' })}>
                 <Icon style={css.raw({ color: 'text.faint' })} icon={PanelBottomIcon} size={14} />
                 <TextInput
                   style={css.raw({ width: '56px' })}
-                  max={pageLayout ? String(getMaxMargin('bottom', pageLayout)) : undefined}
+                  max={layout.type === 'paginated' ? String(pxToMm(getMaxMargin('bottom', layout))) : undefined}
                   min="0"
                   oninput={(e) => {
-                    if (!pageLayout) return;
+                    if (layout.type !== 'paginated') return;
                     const target = e.target as HTMLInputElement;
-                    const value = clamp(Number(target.value), 0, getMaxMargin('bottom', pageLayout));
-                    target.value = String(value);
-                    updateTemplate({
-                      pageLayout: {
-                        ...pageLayout,
-                        marginBottom: value,
-                      },
-                    });
+                    const valuePx = clamp(mmToPx(Number(target.value)), 0, getMaxMargin('bottom', layout));
+                    target.value = String(pxToMm(valuePx));
+                    updateTemplate({ layout: { ...layout, pageMarginBottom: valuePx } });
                   }}
                   size="sm"
                   type="number"
-                  value={pageLayout.marginBottom}
+                  value={layout.type === 'paginated' ? pxToMm(layout.pageMarginBottom) : 0}
                 />
               </div>
               <div class={flex({ gap: '4px', alignItems: 'center' })}>
                 <Icon style={css.raw({ color: 'text.faint' })} icon={PanelLeftIcon} size={14} />
                 <TextInput
                   style={css.raw({ width: '56px' })}
-                  max={pageLayout ? String(getMaxMargin('left', pageLayout)) : undefined}
+                  max={layout.type === 'paginated' ? String(pxToMm(getMaxMargin('left', layout))) : undefined}
                   min="0"
                   onchange={(e) => {
-                    if (!pageLayout) return;
+                    if (layout.type !== 'paginated') return;
                     const target = e.target as HTMLInputElement;
-                    const value = clamp(Number(target.value), 0, getMaxMargin('left', pageLayout));
-                    target.value = String(value);
-                    updateTemplate({
-                      pageLayout: {
-                        ...pageLayout,
-                        marginLeft: value,
-                      },
-                    });
+                    const valuePx = clamp(mmToPx(Number(target.value)), 0, getMaxMargin('left', layout));
+                    target.value = String(pxToMm(valuePx));
+                    updateTemplate({ layout: { ...layout, pageMarginLeft: valuePx } });
                   }}
                   size="sm"
                   type="number"
-                  value={pageLayout.marginLeft}
+                  value={layout.type === 'paginated' ? pxToMm(layout.pageMarginLeft) : 0}
                 />
               </div>
               <div class={flex({ gap: '4px', alignItems: 'center' })}>
                 <Icon style={css.raw({ color: 'text.faint' })} icon={PanelRightIcon} size={14} />
                 <TextInput
                   style={css.raw({ width: '56px' })}
-                  max={pageLayout ? String(getMaxMargin('right', pageLayout)) : undefined}
+                  max={layout.type === 'paginated' ? String(pxToMm(getMaxMargin('right', layout))) : undefined}
                   min="0"
                   oninput={(e) => {
-                    if (!pageLayout) return;
+                    if (layout.type !== 'paginated') return;
                     const target = e.target as HTMLInputElement;
-                    const value = clamp(Number(target.value), 0, getMaxMargin('right', pageLayout));
-                    target.value = String(value);
-                    updateTemplate({
-                      pageLayout: {
-                        ...pageLayout,
-                        marginRight: value,
-                      },
-                    });
+                    const valuePx = clamp(mmToPx(Number(target.value)), 0, getMaxMargin('right', layout));
+                    target.value = String(pxToMm(valuePx));
+                    updateTemplate({ layout: { ...layout, pageMarginRight: valuePx } });
                   }}
                   size="sm"
                   type="number"
-                  value={pageLayout.marginRight}
+                  value={layout.type === 'paginated' ? pxToMm(layout.pageMarginRight) : 0}
                 />
               </div>
             </div>
@@ -946,7 +925,7 @@
         </SettingsRow>
       {/if}
 
-      {#if !isPageLayoutEnabled}
+      {#if layout.type === 'continuous'}
         <SettingsDivider />
         <SettingsRow>
           {#snippet label()}
@@ -964,10 +943,10 @@
                   { label: '800px', value: 800 },
                 ]}
                 onselect={(value) => {
-                  updateTemplate({ maxWidth: value });
+                  updateTemplate({ layout: { type: 'continuous', maxWidth: value } });
                 }}
                 size="sm"
-                value={maxWidth}
+                value={layout.type === 'continuous' ? layout.maxWidth : defaultValues.maxWidth}
               />
             </div>
           {/snippet}

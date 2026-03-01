@@ -3,8 +3,8 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/context/bottom_sheet.dart';
 import 'package:typie/context/theme.dart';
 import 'package:typie/icons/lucide_light.dart';
-import 'package:typie/screens/editor/toolbar/buttons/floating.dart';
 import 'package:typie/screens/native_editor/external/models.dart';
+import 'package:typie/screens/native_editor/toolbar/buttons/floating.dart';
 import 'package:typie/screens/native_editor/toolbar/scope.dart';
 
 class NativeEditorArchivedFloatingToolbar extends HookWidget {

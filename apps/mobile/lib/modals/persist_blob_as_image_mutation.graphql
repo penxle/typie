@@ -1,4 +1,4 @@
-mutation SharePost_PersistBlobAsImage_Mutation($input: PersistBlobAsImageInput!) {
+mutation Share_PersistBlobAsImage_Mutation($input: PersistBlobAsImageInput!) {
   persistBlobAsImage(input: $input) {
     id
     url

@@ -3,8 +3,7 @@
   import { css } from '@typie/styled-system/css';
   import { flex, grid } from '@typie/styled-system/patterns';
   import { Button, Checkbox, HorizontalDivider, Icon, Modal, Select, TextInput } from '@typie/ui/components';
-  import { getAppContext } from '@typie/ui/context';
-  import { clamp, getMaxMargin } from '@typie/ui/utils';
+  import { clamp } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import FileIcon from '~icons/lucide/file';
   import MoveHorizontalIcon from '~icons/lucide/move-horizontal';
@@ -14,13 +13,11 @@
   import PanelRightDashedIcon from '~icons/lucide/panel-right-dashed';
   import PanelTopDashedIcon from '~icons/lucide/panel-top-dashed';
   import RulerDimensionLineIcon from '~icons/lucide/ruler-dimension-line';
-  import { createPaginatedLayout } from '$lib/editor/utils';
+  import { createPaginatedLayout, getMaxMargin, mmToPx, pxToMm } from '$lib/editor/utils';
   import { values } from '$lib/editor/values';
   import { graphql } from '$mearie';
   import type { LayoutMode } from '@typie/editor';
   import type { PageLayout, PageLayoutPreset } from '$lib/editor/utils';
-
-  const PX_TO_MM = 25.4 / 96;
 
   type Props = {
     open: boolean;
@@ -32,12 +29,10 @@
 
   let { open = $bindable(), documentId, slug, via, onClose }: Props = $props();
 
-  const app = getAppContext();
-
   let loaded = $state(false);
   let isExporting = $state(false);
   let useCurrentSettings = $state(false);
-  let pageLayout = $state<PageLayout>(app.preference.current.lastPdfPageLayout ?? createPaginatedLayout('a4'));
+  let pageLayout = $state<PageLayout>(createPaginatedLayout('a4'));
 
   const documentQuery = createQuery(
     graphql(`
@@ -63,18 +58,6 @@
     `),
   );
 
-  const convertLayoutModeToPageLayout = (mode: LayoutMode): PageLayout | undefined => {
-    if (mode.type !== 'paginated') return undefined;
-    return {
-      width: Math.round(mode.pageWidth * PX_TO_MM),
-      height: Math.round(mode.pageHeight * PX_TO_MM),
-      marginTop: Math.round(mode.pageMarginTop * PX_TO_MM),
-      marginBottom: Math.round(mode.pageMarginBottom * PX_TO_MM),
-      marginLeft: Math.round(mode.pageMarginLeft * PX_TO_MM),
-      marginRight: Math.round(mode.pageMarginRight * PX_TO_MM),
-    };
-  };
-
   $effect(() => {
     if (open) {
       loaded = false;
@@ -92,15 +75,19 @@
     if (loaded && documentQuery.data) {
       const layoutMode = documentQuery.data.document.layoutMode as LayoutMode;
       const isPaginated = layoutMode.type === 'paginated';
-      const converted = convertLayoutModeToPageLayout(layoutMode);
 
-      useCurrentSettings = isPaginated && !!converted;
-      if (converted && isPaginated) {
-        pageLayout = { ...converted };
+      useCurrentSettings = isPaginated;
+      if (isPaginated) {
+        pageLayout = {
+          pageWidth: layoutMode.pageWidth,
+          pageHeight: layoutMode.pageHeight,
+          pageMarginTop: layoutMode.pageMarginTop,
+          pageMarginBottom: layoutMode.pageMarginBottom,
+          pageMarginLeft: layoutMode.pageMarginLeft,
+          pageMarginRight: layoutMode.pageMarginRight,
+        };
       } else {
-        pageLayout = app.preference.current.lastPdfPageLayout
-          ? { ...app.preference.current.lastPdfPageLayout }
-          : createPaginatedLayout('a4');
+        pageLayout = createPaginatedLayout('a4');
       }
     }
   });
@@ -117,23 +104,17 @@
     URL.revokeObjectURL(url);
   };
 
-  const handleConfirm = async (currentPageLayout: PageLayout | undefined) => {
-    const layout = useCurrentSettings && currentPageLayout ? currentPageLayout : pageLayout;
-
-    if (!useCurrentSettings) {
-      app.preference.current.lastPdfPageLayout = pageLayout;
-    }
-
+  const handleConfirm = async () => {
     isExporting = true;
     const result = await exportDocumentAsPdf({
       input: {
         documentId,
-        width: layout.width,
-        height: layout.height,
-        marginTop: layout.marginTop,
-        marginBottom: layout.marginBottom,
-        marginLeft: layout.marginLeft,
-        marginRight: layout.marginRight,
+        pageWidth: pageLayout.pageWidth,
+        pageHeight: pageLayout.pageHeight,
+        pageMarginTop: pageLayout.pageMarginTop,
+        pageMarginBottom: pageLayout.pageMarginBottom,
+        pageMarginLeft: pageLayout.pageMarginLeft,
+        pageMarginRight: pageLayout.pageMarginRight,
       },
     });
     isExporting = false;
@@ -155,13 +136,12 @@
   {#if loaded && documentQuery.data}
     {@const layoutMode = documentQuery.data.document.layoutMode as LayoutMode}
     {@const currentPageEnabled = layoutMode.type === 'paginated'}
-    {@const currentPageLayout = convertLayoutModeToPageLayout(layoutMode)}
 
     <div class={css({ padding: '20px' })}>
       <h2 class={css({ fontSize: '18px', fontWeight: 'semibold', marginBottom: '16px' })}>PDF로 내보내기</h2>
 
       <div class={flex({ flexDirection: 'column', gap: '16px', paddingY: '8px' })}>
-        {#if currentPageEnabled && currentPageLayout}
+        {#if currentPageEnabled}
           <Checkbox bind:checked={useCurrentSettings}>
             <span class={css({ fontSize: '14px' })}>현재 페이지 설정 사용</span>
           </Checkbox>
@@ -189,7 +169,9 @@
                   if (value === 'custom') return;
                   pageLayout = createPaginatedLayout(value as PageLayoutPreset);
                 }}
-                value={values.pageLayout.find((p) => p.width === pageLayout.width && p.height === pageLayout.height)?.value ?? 'custom'}
+                value={values.pageLayout.find(
+                  (p) => p.layout.pageWidth === pageLayout.pageWidth && p.layout.pageHeight === pageLayout.pageHeight,
+                )?.value ?? 'custom'}
               />
             </div>
 
@@ -205,11 +187,11 @@
                     const target = e.target as HTMLInputElement;
                     const value = Math.max(100, Number(target.value));
                     target.value = String(value);
-                    pageLayout = { ...pageLayout, width: value };
+                    pageLayout = { ...pageLayout, pageWidth: mmToPx(value) };
                   }}
                   size="sm"
                   type="number"
-                  value={pageLayout.width}
+                  value={pxToMm(pageLayout.pageWidth)}
                 />
               </div>
               <div class={flex({ alignItems: 'center', gap: '8px' })}>
@@ -223,11 +205,11 @@
                     const target = e.target as HTMLInputElement;
                     const value = Math.max(100, Number(target.value));
                     target.value = String(value);
-                    pageLayout = { ...pageLayout, height: value };
+                    pageLayout = { ...pageLayout, pageHeight: mmToPx(value) };
                   }}
                   size="sm"
                   type="number"
-                  value={pageLayout.height}
+                  value={pxToMm(pageLayout.pageHeight)}
                 />
               </div>
             </div>
@@ -245,17 +227,17 @@
                 <TextInput
                   style={css.raw({ width: '100px' })}
                   disabled={useCurrentSettings}
-                  max={String(getMaxMargin('top', pageLayout))}
+                  max={String(pxToMm(getMaxMargin('top', pageLayout)))}
                   min="0"
                   oninput={(e) => {
                     const target = e.target as HTMLInputElement;
-                    const value = clamp(Number(target.value), 0, getMaxMargin('top', pageLayout));
-                    target.value = String(value);
-                    pageLayout = { ...pageLayout, marginTop: value };
+                    const valuePx = clamp(mmToPx(Number(target.value)), 0, getMaxMargin('top', pageLayout));
+                    target.value = String(pxToMm(valuePx));
+                    pageLayout = { ...pageLayout, pageMarginTop: valuePx };
                   }}
                   size="sm"
                   type="number"
-                  value={pageLayout.marginTop}
+                  value={pxToMm(pageLayout.pageMarginTop)}
                 />
               </div>
               <div class={flex({ alignItems: 'center', gap: '8px' })}>
@@ -264,17 +246,17 @@
                 <TextInput
                   style={css.raw({ width: '100px' })}
                   disabled={useCurrentSettings}
-                  max={String(getMaxMargin('bottom', pageLayout))}
+                  max={String(pxToMm(getMaxMargin('bottom', pageLayout)))}
                   min="0"
                   oninput={(e) => {
                     const target = e.target as HTMLInputElement;
-                    const value = clamp(Number(target.value), 0, getMaxMargin('bottom', pageLayout));
-                    target.value = String(value);
-                    pageLayout = { ...pageLayout, marginBottom: value };
+                    const valuePx = clamp(mmToPx(Number(target.value)), 0, getMaxMargin('bottom', pageLayout));
+                    target.value = String(pxToMm(valuePx));
+                    pageLayout = { ...pageLayout, pageMarginBottom: valuePx };
                   }}
                   size="sm"
                   type="number"
-                  value={pageLayout.marginBottom}
+                  value={pxToMm(pageLayout.pageMarginBottom)}
                 />
               </div>
               <div class={flex({ alignItems: 'center', gap: '8px' })}>
@@ -283,17 +265,17 @@
                 <TextInput
                   style={css.raw({ width: '100px' })}
                   disabled={useCurrentSettings}
-                  max={String(getMaxMargin('left', pageLayout))}
+                  max={String(pxToMm(getMaxMargin('left', pageLayout)))}
                   min="0"
                   oninput={(e) => {
                     const target = e.target as HTMLInputElement;
-                    const value = clamp(Number(target.value), 0, getMaxMargin('left', pageLayout));
-                    target.value = String(value);
-                    pageLayout = { ...pageLayout, marginLeft: value };
+                    const valuePx = clamp(mmToPx(Number(target.value)), 0, getMaxMargin('left', pageLayout));
+                    target.value = String(pxToMm(valuePx));
+                    pageLayout = { ...pageLayout, pageMarginLeft: valuePx };
                   }}
                   size="sm"
                   type="number"
-                  value={pageLayout.marginLeft}
+                  value={pxToMm(pageLayout.pageMarginLeft)}
                 />
               </div>
               <div class={flex({ alignItems: 'center', gap: '8px' })}>
@@ -302,17 +284,17 @@
                 <TextInput
                   style={css.raw({ width: '100px' })}
                   disabled={useCurrentSettings}
-                  max={String(getMaxMargin('right', pageLayout))}
+                  max={String(pxToMm(getMaxMargin('right', pageLayout)))}
                   min="0"
                   oninput={(e) => {
                     const target = e.target as HTMLInputElement;
-                    const value = clamp(Number(target.value), 0, getMaxMargin('right', pageLayout));
-                    target.value = String(value);
-                    pageLayout = { ...pageLayout, marginRight: value };
+                    const valuePx = clamp(mmToPx(Number(target.value)), 0, getMaxMargin('right', pageLayout));
+                    target.value = String(pxToMm(valuePx));
+                    pageLayout = { ...pageLayout, pageMarginRight: valuePx };
                   }}
                   size="sm"
                   type="number"
-                  value={pageLayout.marginRight}
+                  value={pxToMm(pageLayout.pageMarginRight)}
                 />
               </div>
             </div>
@@ -322,7 +304,7 @@
 
       <div class={flex({ gap: '8px', justifyContent: 'flex-end', marginTop: '20px' })}>
         <Button onclick={onClose} variant="secondary">취소</Button>
-        <Button loading={isExporting} onclick={() => handleConfirm(currentPageLayout)}>내보내기</Button>
+        <Button loading={isExporting} onclick={handleConfirm}>내보내기</Button>
       </div>
     </div>
   {/if}

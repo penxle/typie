@@ -21,7 +21,6 @@ import 'package:typie/hooks/route_resumed.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/routers/app.gr.dart';
-import 'package:typie/screens/editor/values.dart';
 import 'package:typie/screens/notes/__generated__/notes_create_note_mutation.req.gql.dart';
 import 'package:typie/screens/notes/__generated__/notes_delete_note_mutation.req.gql.dart';
 import 'package:typie/screens/notes/__generated__/notes_move_note_mutation.req.gql.dart';
@@ -219,15 +218,10 @@ class _NotesContent extends HookWidget {
       );
     }
 
-    List<Map<String, dynamic>> getNoteColors() {
-      final backgroundColors = editorValues['textBackgroundColor']!;
-      return backgroundColors.where((item) => item['value'] != 'none').toList();
-    }
-
     String getRandomNoteColor() {
-      final colors = getNoteColors();
+      const noteColors = ['gray', 'red', 'orange', 'yellow', 'green', 'blue', 'purple'];
       final random = Random();
-      return colors[random.nextInt(colors.length)]['value'] as String;
+      return noteColors[random.nextInt(noteColors.length)];
     }
 
     Future<void> handleCreateNote() async {
@@ -314,9 +308,6 @@ class _NotesContent extends HookWidget {
         return null;
       }
       final node = selectedEntity.node;
-      if (node.G__typename == 'Post') {
-        return (node as GNotesScreen_QueryData_me_recentlyViewedEntities_node__asPost).title;
-      }
       if (node.G__typename == 'Document') {
         return (node as GNotesScreen_QueryData_me_recentlyViewedEntities_node__asDocument).title;
       }
@@ -375,10 +366,6 @@ class _NotesContent extends HookWidget {
       }
 
       final node = entity!.node;
-      if (node.G__typename == 'Post') {
-        await context.router.push(EditorRoute(slug: entity.slug));
-        return;
-      }
       if (node.G__typename == 'Document') {
         await context.router.push(NativeEditorRoute(slug: entity.slug));
       }
@@ -522,9 +509,6 @@ class _SliverNotesReorderableList extends StatelessWidget {
             return null;
           }
           final node = note.entity!.node;
-          if (node.G__typename == 'Post') {
-            return (node as GNotesScreen_QueryData_notes_entity_node__asPost).title;
-          }
           if (node.G__typename == 'Document') {
             return (node as GNotesScreen_QueryData_notes_entity_node__asDocument).title;
           }
@@ -536,10 +520,6 @@ class _SliverNotesReorderableList extends StatelessWidget {
             return null;
           }
           final node = note.entity!.node;
-          if (node.G__typename == 'Post') {
-            final postNode = node as GNotesScreen_QueryData_notes_entity_node__asPost;
-            return postNode.type == GPostType.TEMPLATE ? LucideLightIcons.shapes : LucideLightIcons.file;
-          }
           if (node.G__typename == 'Document') {
             final documentNode = node as GNotesScreen_QueryData_notes_entity_node__asDocument;
             return documentNode.documentType == GDocumentType.TEMPLATE
@@ -655,11 +635,6 @@ class _EntitySelector extends StatelessWidget {
                   String? title;
                   IconData? icon;
 
-                  if (node.G__typename == 'Post') {
-                    final postNode = node as GNotesScreen_QueryData_me_recentlyViewedEntities_node__asPost;
-                    title = postNode.title;
-                    icon = postNode.type == GPostType.TEMPLATE ? LucideLightIcons.shapes : LucideLightIcons.file;
-                  }
                   if (node.G__typename == 'Document') {
                     final documentNode = node as GNotesScreen_QueryData_me_recentlyViewedEntities_node__asDocument;
                     title = documentNode.title;

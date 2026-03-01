@@ -11,7 +11,6 @@
   import { fb } from '$lib/analytics';
   import { graphql } from '$mearie';
   import Document from '../Document.svelte';
-  import Editor from '../Editor.svelte';
   import CloseButton from './CloseButton.svelte';
   import { getPaneGroup, setupPane } from './context.svelte';
   import PaneSkeleton from './PaneSkeleton.svelte';
@@ -47,24 +46,10 @@
 
           node {
             __typename
-
-            ... on Post {
-              id
-
-              document {
-                id
-
-                entity {
-                  id
-                  slug
-                }
-              }
-            }
           }
         }
 
         ...Document_query
-        ...Editor_query
       }
     `),
     () => ({ slug: pane.slug }),
@@ -95,15 +80,14 @@
   const entity = $derived(query.data?.entity);
 
   $effect(() => {
-    if (focused && entity) {
-      app.state.ancestors = entity.ancestors.map((ancestor) => ancestor.id);
+    if (entity && entity.slug !== pane.slug) {
+      paneGroup.replacePane(pane.id, { kind: 'entity', slug: entity?.slug });
     }
   });
 
   $effect(() => {
-    if (entity?.node.__typename === 'Post' && entity.node.document) {
-      const documentSlug = entity.node.document.entity.slug;
-      paneGroup.replacePane(pane.id, { kind: 'entity', slug: documentSlug });
+    if (focused && entity) {
+      app.state.ancestors = entity.ancestors.map((ancestor) => ancestor.id);
     }
   });
 
@@ -157,13 +141,11 @@
 >
   {#if query.data && entity}
     {#if entity?.state === EntityState.ACTIVE}
-      {#if entity?.node.__typename === 'Post'}
-        <Editor {focused} query$key={query.data} slug={entity.slug} />
-      {:else if entity?.node.__typename === 'Document'}
+      {#if entity?.node.__typename === 'Document'}
         <Document {focused} onReady={() => (editorReady = true)} query$key={query.data} slug={entity.slug} />
       {/if}
     {:else}
-      {@const name = entity?.node.__typename === 'Post' ? '포스트' : '문서'}
+      {@const name = '문서'}
       {#if focused}
         <Helmet title={`삭제된 ${name}`} />
       {/if}

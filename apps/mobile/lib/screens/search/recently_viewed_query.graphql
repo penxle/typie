@@ -9,14 +9,6 @@ query SearchScreen_RecentlyViewed_Query {
       node {
         __typename
 
-        ... on Post {
-          id
-          title
-          excerpt
-          type
-          updatedAt
-        }
-
         ... on Document {
           id
           title

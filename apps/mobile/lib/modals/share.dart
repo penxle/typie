@@ -25,7 +25,6 @@ import 'package:typie/modals/__generated__/share_entities_query.data.gql.dart';
 import 'package:typie/modals/__generated__/share_entities_query.req.gql.dart';
 import 'package:typie/modals/__generated__/update_documents_option_mutation.req.gql.dart';
 import 'package:typie/modals/__generated__/update_folders_option_mutation.req.gql.dart';
-import 'package:typie/modals/__generated__/update_posts_option_mutation.req.gql.dart';
 import 'package:typie/services/blob.dart';
 import 'package:typie/widgets/forms/form.dart';
 import 'package:typie/widgets/forms/select.dart';
@@ -45,14 +44,11 @@ class ShareBottomSheet extends StatelessWidget {
       builder: (context, client, data) {
         final entities = data.entities;
         final allFolders = entities.every((e) => e.type == GEntityType.FOLDER);
-        final allPosts = entities.every((e) => e.type == GEntityType.POST);
         final allDocuments = entities.every((e) => e.type == GEntityType.DOCUMENT);
 
         String title;
         if (allFolders) {
           title = entities.length == 1 ? '이 폴더 공유하기' : '폴더 ${entities.length}개 공유하기';
-        } else if (allPosts) {
-          title = entities.length == 1 ? '이 포스트 공유하기' : '포스트 ${entities.length}개 공유하기';
         } else if (allDocuments) {
           title = entities.length == 1 ? '이 문서 공유하기' : '문서 ${entities.length}개 공유하기';
         } else {
@@ -69,12 +65,6 @@ class ShareBottomSheet extends StatelessWidget {
                     .whereType<GShareEntities_QueryData_entities_node__asFolder>()
                     .toList();
                 return ShareFoldersContent(folders: folders, entities: entities.toList(), client: client);
-              } else if (allPosts) {
-                final posts = entities
-                    .map((e) => e.node)
-                    .whereType<GShareEntities_QueryData_entities_node__asPost>()
-                    .toList();
-                return SharePostsContent(posts: posts, entities: entities.toList(), client: client);
               } else if (allDocuments) {
                 final documents = entities
                     .map((e) => e.node)
@@ -87,412 +77,6 @@ class ShareBottomSheet extends StatelessWidget {
               return const SizedBox.shrink();
             },
           ),
-        );
-      },
-    );
-  }
-}
-
-class SharePostsContent extends HookWidget {
-  const SharePostsContent({required this.posts, required this.entities, required this.client, super.key});
-
-  final List<GShareEntities_QueryData_entities_node__asPost> posts;
-  final List<GShareEntities_QueryData_entities> entities;
-  final GraphQLClient client;
-
-  @override
-  Widget build(BuildContext context) {
-    final mixpanel = useService<Mixpanel>();
-    final blob = useService<Blob>();
-    final passwordController = useTextEditingController();
-    final rotationController = useAnimationController(duration: const Duration(milliseconds: 500));
-    final scaleController = useAnimationController(duration: const Duration(milliseconds: 250));
-    final random = useRef(Random());
-
-    final thumbnailUrl = useState<String?>(posts.first.thumbnail?.url);
-    final thumbnailUploading = useState(false);
-    final thumbnailIndeterminate = posts.length > 1 && posts.any((p) => p.thumbnail?.id != posts.first.thumbnail?.id);
-
-    final rotationAnimation = useMemoized(
-      () =>
-          Tween<double>(begin: 0, end: 1).animate(CurvedAnimation(parent: rotationController, curve: Curves.easeInOut)),
-      [rotationController],
-    );
-
-    final scaleAnimation = useMemoized(
-      () =>
-          Tween<double>(begin: 1, end: 1.2).animate(CurvedAnimation(parent: scaleController, curve: Curves.easeInOut)),
-      [scaleController],
-    );
-
-    final initialPassword = posts.length > 1 && posts.any((p) => p.password != posts.first.password)
-        ? null
-        : posts.first.password;
-
-    void generateRandomPassword() {
-      const digits = '0123456789';
-      final password = List.generate(4, (index) => digits[random.value.nextInt(digits.length)]).join();
-      passwordController.text = password;
-
-      unawaited(rotationController.forward(from: 0));
-      unawaited(scaleController.forward(from: 0).then((_) => scaleController.reverse()));
-    }
-
-    Future<void> handleThumbnailUpload() async {
-      final result = await FilePicker.platform.pickFiles(type: FileType.image);
-      if (result == null) {
-        return;
-      }
-
-      final pickedFile = result.files.firstOrNull;
-      if (pickedFile == null) {
-        return;
-      }
-
-      final file = File(pickedFile.path!);
-      thumbnailUploading.value = true;
-
-      try {
-        final path = await blob.upload(file);
-        final resp = await client.request(GSharePost_PersistBlobAsImage_MutationReq((b) => b..vars.input.path = path));
-
-        await client.request(
-          GSharePost_UpdatePostsOption_MutationReq(
-            (b) => b
-              ..vars.input.postIds.addAll(posts.map((p) => p.id))
-              ..vars.input.thumbnailId = Value.present(resp.persistBlobAsImage.id),
-          ),
-        );
-
-        thumbnailUrl.value = resp.persistBlobAsImage.url;
-        unawaited(mixpanel.track('update_post_thumbnail', properties: {'count': posts.length}));
-      } finally {
-        thumbnailUploading.value = false;
-      }
-    }
-
-    Future<void> handleThumbnailRemove() async {
-      await client.request(
-        GSharePost_UpdatePostsOption_MutationReq(
-          (b) => b
-            ..vars.input.postIds.addAll(posts.map((p) => p.id))
-            ..vars.input.thumbnailId = const Value.present(null),
-        ),
-      );
-      thumbnailUrl.value = null;
-      unawaited(mixpanel.track('remove_post_thumbnail', properties: {'count': posts.length}));
-    }
-
-    return HookForm(
-      submitMode: HookFormSubmitMode.onChange,
-      onSubmit: (form) async {
-        final dirtyData = form.getDirtyFieldsData();
-        if (dirtyData.isEmpty) {
-          return;
-        }
-
-        final builder = GSharePost_UpdatePostsOption_MutationReqBuilder();
-        builder.vars.input.postIds.addAll(posts.map((p) => p.id));
-
-        if (dirtyData.containsKey('visibility')) {
-          builder.vars.input.visibility = Value.present(form.data['visibility'] as GEntityVisibility);
-        }
-
-        if (dirtyData.containsKey('contentRating')) {
-          builder.vars.input.contentRating = Value.present(form.data['contentRating'] as GPostContentRating);
-        }
-
-        if (dirtyData.containsKey('hasPassword') || dirtyData.containsKey('password')) {
-          builder.vars.input.password = Value.present(
-            form.data['hasPassword'] as bool ? form.data['password'] as String? : null,
-          );
-        }
-
-        if (dirtyData.containsKey('allowReaction')) {
-          builder.vars.input.allowReaction = Value.present(form.data['allowReaction'] as bool);
-        }
-
-        if (dirtyData.containsKey('protectContent')) {
-          builder.vars.input.protectContent = Value.present(form.data['protectContent'] as bool);
-        }
-
-        await client.request(builder.build());
-
-        final trackProperties = <String, dynamic>{'count': posts.length};
-        for (final entry in dirtyData.entries) {
-          if (entry.value is EnumClass) {
-            trackProperties[entry.key] = (entry.value as EnumClass).name;
-          } else {
-            trackProperties[entry.key] = entry.value;
-          }
-        }
-        trackProperties['hasPassword'] = form.data['hasPassword'] as bool? ?? false;
-
-        unawaited(mixpanel.track('update_post_option', properties: trackProperties));
-      },
-      builder: (context, form) {
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                spacing: 32,
-                children: [
-                  _Section(
-                    title: '포스트 조회 권한',
-                    children: [
-                      _Option(
-                        icon: LucideLightIcons.blend,
-                        label: '공개 범위',
-                        trailing: HookFormSelect(
-                          name: 'visibility',
-                          initialValue: entities.first.visibility,
-                          values: entities.map((e) => e.visibility).toList(),
-                          items: const [
-                            HookFormSelectItem(
-                              icon: LucideLightIcons.globe,
-                              label: '공개',
-                              description: '누구나 볼 수 있어요.',
-                              value: GEntityVisibility.PUBLIC,
-                            ),
-                            HookFormSelectItem(
-                              icon: LucideLightIcons.link,
-                              label: '링크가 있는 사람',
-                              description: '링크가 있는 누구나 볼 수 있어요.',
-                              value: GEntityVisibility.UNLISTED,
-                            ),
-                            HookFormSelectItem(
-                              icon: LucideLightIcons.lock,
-                              label: '비공개',
-                              description: '나만 볼 수 있어요.',
-                              value: GEntityVisibility.PRIVATE,
-                            ),
-                          ],
-                        ),
-                      ),
-                      _Option(
-                        icon: LucideLightIcons.id_card,
-                        label: '연령 제한',
-                        trailing: HookFormSelect(
-                          name: 'contentRating',
-                          initialValue: posts.first.contentRating,
-                          values: posts.map((p) => p.contentRating).toList(),
-                          items: const [
-                            HookFormSelectItem(label: '없음', value: GPostContentRating.ALL),
-                            HookFormSelectItem(label: '15세', value: GPostContentRating.R15),
-                            HookFormSelectItem(label: '성인', value: GPostContentRating.R19),
-                          ],
-                        ),
-                      ),
-                      _Option(
-                        icon: LucideLightIcons.lock_keyhole,
-                        label: '비밀번호 보호',
-                        trailing: HookFormSwitch(
-                          name: 'hasPassword',
-                          initialValue:
-                              posts.map((p) => p.password != null).toSet().length == 1 && posts.first.password != null,
-                          values: posts.map((p) => p.password != null).toList(),
-                        ),
-                      ),
-                      if (form.data['hasPassword'] as bool? ?? false)
-                        HookFormTextField(
-                          name: 'password',
-                          label: '비밀번호',
-                          placeholder: '비밀번호를 입력해주세요.',
-                          keyboardType: TextInputType.visiblePassword,
-                          controller: passwordController,
-                          initialValue: initialPassword,
-                          suffix: GestureDetector(
-                            onTap: generateRandomPassword,
-                            behavior: HitTestBehavior.opaque,
-                            child: Padding(
-                              padding: const EdgeInsets.all(4),
-                              child: RotationTransition(
-                                turns: rotationAnimation,
-                                child: ScaleTransition(
-                                  scale: scaleAnimation,
-                                  child: Icon(LucideLightIcons.dice_5, size: 20, color: context.colors.textSubtle),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                  _Section(
-                    title: '썸네일',
-                    children: [
-                      SizedBox(
-                        height: 48,
-                        child: Row(
-                          children: [
-                            Icon(LucideLightIcons.image, size: 20, color: context.colors.textSubtle),
-                            const Gap(8),
-                            Expanded(
-                              child: Text('미리보기 이미지', style: TextStyle(fontSize: 16, color: context.colors.textSubtle)),
-                            ),
-                            if (thumbnailIndeterminate)
-                              Tappable(
-                                onTap: () {
-                                  if (!thumbnailUploading.value) {
-                                    unawaited(handleThumbnailUpload());
-                                  }
-                                },
-                                child: Container(
-                                  width: 64,
-                                  height: 36,
-                                  decoration: BoxDecoration(
-                                    color: context.colors.surfaceMuted,
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  alignment: Alignment.center,
-                                  child: Text(
-                                    thumbnailUploading.value ? '...' : '다름',
-                                    style: TextStyle(fontSize: 12, color: context.colors.textFaint),
-                                  ),
-                                ),
-                              )
-                            else if (thumbnailUrl.value != null)
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Tappable(
-                                    onTap: () {
-                                      if (!thumbnailUploading.value) {
-                                        unawaited(handleThumbnailUpload());
-                                      }
-                                    },
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(6),
-                                      child: Image.network(
-                                        thumbnailUrl.value!,
-                                        width: 64,
-                                        height: 36,
-                                        fit: BoxFit.cover,
-                                      ),
-                                    ),
-                                  ),
-                                  const Gap(4),
-                                  Tappable(
-                                    onTap: () => unawaited(handleThumbnailRemove()),
-                                    child: Container(
-                                      width: 24,
-                                      height: 24,
-                                      alignment: Alignment.center,
-                                      child: Icon(LucideLightIcons.trash_2, size: 14, color: context.colors.textFaint),
-                                    ),
-                                  ),
-                                ],
-                              )
-                            else
-                              Tappable(
-                                onTap: () {
-                                  if (!thumbnailUploading.value) {
-                                    unawaited(handleThumbnailUpload());
-                                  }
-                                },
-                                child: Container(
-                                  width: 64,
-                                  height: 36,
-                                  decoration: BoxDecoration(
-                                    border: Border.all(color: context.colors.borderStrong),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  alignment: Alignment.center,
-                                  child: thumbnailUploading.value
-                                      ? Text('...', style: TextStyle(fontSize: 12, color: context.colors.textFaint))
-                                      : Icon(LucideLightIcons.image, size: 14, color: context.colors.textFaint),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  _Section(
-                    title: '포스트 상호작용',
-                    children: [
-                      _Option(
-                        icon: LucideLightIcons.smile,
-                        label: '이모지 반응',
-                        trailing: HookFormSelect(
-                          name: 'allowReaction',
-                          initialValue: posts.first.allowReaction,
-                          values: posts.map((p) => p.allowReaction).toList(),
-                          items: const [
-                            HookFormSelectItem(icon: LucideLightIcons.users_round, label: '누구나', value: true),
-                            HookFormSelectItem(icon: LucideLightIcons.ban, label: '비허용', value: false),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  _Section(
-                    title: '포스트 보호',
-                    children: [
-                      _Option(
-                        icon: LucideLightIcons.shield,
-                        label: '내용 보호',
-                        trailing: HookFormSwitch(
-                          name: 'protectContent',
-                          initialValue:
-                              posts.map((p) => p.protectContent).toSet().length == 1 && posts.first.protectContent,
-                          values: posts.map((p) => p.protectContent).toList(),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            Builder(
-              builder: (context) {
-                return Tappable(
-                  onTap: () async {
-                    final box = context.findRenderObject() as RenderBox?;
-
-                    try {
-                      if (posts.length == 1) {
-                        await SharePlus.instance.share(
-                          ShareParams(
-                            title: posts.first.title,
-                            uri: Uri.parse(entities.first.url),
-                            sharePositionOrigin: box!.localToGlobal(Offset.zero) & box.size,
-                          ),
-                        );
-                      } else {
-                        final urls = entities.map((e) => e.url).join('\n');
-                        await SharePlus.instance.share(
-                          ShareParams(
-                            title: '${posts.length}개의 포스트',
-                            text: urls,
-                            sharePositionOrigin: box!.localToGlobal(Offset.zero) & box.size,
-                          ),
-                        );
-                      }
-
-                      unawaited(mixpanel.track('copy_post_share_url', properties: {'count': posts.length}));
-                    } catch (_) {
-                      // pass
-                    }
-                  },
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: context.colors.surfaceInverse,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    padding: const Pad(vertical: 16),
-                    child: Text(
-                      '공유하기',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: context.colors.textInverse),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                );
-              },
-            ),
-          ],
         );
       },
     );
@@ -561,7 +145,7 @@ class ShareDocumentsContent extends HookWidget {
 
       try {
         final path = await blob.upload(file);
-        final resp = await client.request(GSharePost_PersistBlobAsImage_MutationReq((b) => b..vars.input.path = path));
+        final resp = await client.request(GShare_PersistBlobAsImage_MutationReq((b) => b..vars.input.path = path));
 
         await client.request(
           GShareDocument_UpdateDocumentsOption_MutationReq(
@@ -941,7 +525,7 @@ class ShareFoldersContent extends HookWidget {
 
       try {
         final path = await blob.upload(file);
-        final resp = await client.request(GSharePost_PersistBlobAsImage_MutationReq((b) => b..vars.input.path = path));
+        final resp = await client.request(GShare_PersistBlobAsImage_MutationReq((b) => b..vars.input.path = path));
 
         await client.request(
           GShareFolder_UpdateFoldersOption_MutationReq(

@@ -61,12 +61,6 @@ export const InAppPurchaseStore = {
   GOOGLE_PLAY: 'GOOGLE_PLAY',
 } as const;
 
-export type ExportLayoutMode = keyof typeof ExportLayoutMode;
-export const ExportLayoutMode = {
-  SCROLL: 'SCROLL',
-  PAGE: 'PAGE',
-} as const;
-
 export type NoteState = keyof typeof NoteState;
 export const NoteState = {
   ACTIVE: 'ACTIVE',
@@ -129,15 +123,6 @@ export type PostType = keyof typeof PostType;
 export const PostType = {
   NORMAL: 'NORMAL',
   TEMPLATE: 'TEMPLATE',
-} as const;
-
-export type PostSyncType = keyof typeof PostSyncType;
-export const PostSyncType = {
-  HEARTBEAT: 'HEARTBEAT',
-  UPDATE: 'UPDATE',
-  VECTOR: 'VECTOR',
-  AWARENESS: 'AWARENESS',
-  PRESENCE: 'PRESENCE',
 } as const;
 
 export type DocumentSyncType = keyof typeof DocumentSyncType;

@@ -1,0 +1,5 @@
+mutation DocumentNote_DeleteNote_Mutation($input: DeleteNoteInput!) {
+  deleteNote(input: $input) {
+    id
+  }
+}

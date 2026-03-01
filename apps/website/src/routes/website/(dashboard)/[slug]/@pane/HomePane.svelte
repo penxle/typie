@@ -10,7 +10,7 @@
   import { onMount } from 'svelte';
   import { fade } from 'svelte/transition';
   import { match } from 'ts-pattern';
-  import { DocumentType, PostType } from '@/enums';
+  import { DocumentType } from '@/enums';
   import FileIcon from '~icons/lucide/file';
   import FilePenIcon from '~icons/lucide/file-pen';
   import LayoutTemplateIcon from '~icons/lucide/layout-template';
@@ -44,7 +44,7 @@
           sites {
             id
 
-            firstEntity(type: POST) {
+            firstEntity(type: DOCUMENT) {
               id
               slug
             }
@@ -57,14 +57,6 @@
 
             node {
               __typename
-
-              ... on Post {
-                id
-                title
-                subtitle
-                type
-                excerpt
-              }
 
               ... on Document {
                 id
@@ -237,16 +229,15 @@
                       <div class={flex({ alignItems: 'center', gap: '8px' })}>
                         <Icon
                           style={css.raw({ size: '16px', color: 'text.subtle', flexShrink: '0' })}
-                          icon={(entity.node.__typename === 'Post' && entity.node.type === PostType.TEMPLATE) ||
-                          (entity.node.__typename === 'Document' && entity.node.documentType === DocumentType.TEMPLATE)
+                          icon={entity.node.__typename === 'Document' && entity.node.documentType === DocumentType.TEMPLATE
                             ? LayoutTemplateIcon
                             : FileIcon}
                         />
                         <div class={css({ fontSize: '14px', color: 'text.default', fontWeight: 'medium' })}>
-                          {entity.node.__typename === 'Post' || entity.node.__typename === 'Document' ? entity.node.title : ''}
+                          {entity.node.__typename === 'Document' ? entity.node.title : ''}
                         </div>
                       </div>
-                      {#if (entity.node.__typename === 'Post' || entity.node.__typename === 'Document') && entity.node.excerpt}
+                      {#if entity.node.__typename === 'Document' && entity.node.excerpt}
                         <div class={css({ fontSize: '13px', color: 'text.subtle', paddingLeft: '24px', lineClamp: '1' })}>
                           {entity.node.excerpt}
                         </div>

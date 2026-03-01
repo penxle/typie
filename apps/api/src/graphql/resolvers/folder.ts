@@ -1,6 +1,6 @@
 import dayjs from 'dayjs';
 import { and, desc, eq, getTableColumns, inArray, isNull, sql } from 'drizzle-orm';
-import { db, DocumentContents, Documents, Entities, first, firstOrThrow, Folders, Notes, Posts, TableCode, validateDbId } from '@/db';
+import { db, DocumentContents, Documents, Entities, first, firstOrThrow, Folders, Notes, TableCode, validateDbId } from '@/db';
 import { EntityState, EntityType, EntityVisibility, NoteState } from '@/enums';
 import { TypieError } from '@/errors';
 import { enqueueJob } from '@/mq';
@@ -126,27 +126,7 @@ Folder.implement({
     }),
 
     postCount: t.int({
-      resolve: async (self) => {
-        const rows = await db.execute<{ count: number }>(
-          sql`
-            WITH RECURSIVE descendant_entities AS (
-              SELECT id, type
-              FROM ${Entities}
-              WHERE parent_id = ${self.entityId}
-              AND state = ${EntityState.ACTIVE}
-              UNION ALL
-              SELECT e.id, e.type
-              FROM ${Entities} e
-              JOIN descendant_entities de ON e.parent_id = de.id
-              WHERE e.state = ${EntityState.ACTIVE}
-            )
-            SELECT COUNT(*) AS count
-            FROM descendant_entities
-            WHERE type = ${EntityType.POST}
-          `,
-        );
-        return Number(rows[0]?.count || 0);
-      },
+      resolve: async () => 0,
     }),
   }),
 });
@@ -208,28 +188,7 @@ FolderView.implement({
     }),
 
     postCount: t.int({
-      resolve: async (self) => {
-        const rows = await db.execute<{ count: number }>(
-          sql`
-            WITH RECURSIVE descendant_entities AS (
-              SELECT id, type, visibility
-              FROM ${Entities}
-              WHERE parent_id = ${self.entityId}
-              AND state = ${EntityState.ACTIVE}
-              UNION ALL
-              SELECT e.id, e.type, e.visibility
-              FROM ${Entities} e
-              JOIN descendant_entities de ON e.parent_id = de.id
-              WHERE e.state = ${EntityState.ACTIVE}
-            )
-            SELECT COUNT(*) AS count
-            FROM descendant_entities
-            WHERE type = ${EntityType.POST}
-            AND visibility IN (${EntityVisibility.UNLISTED}, ${EntityVisibility.PUBLIC})
-          `,
-        );
-        return Number(rows[0]?.count || 0);
-      },
+      resolve: async () => 0,
     }),
   }),
 });
@@ -431,20 +390,6 @@ builder.mutationFields((t) => ({
         pubsub.publish('site:update', folder.siteId, { scope: 'entity', entityId });
       }
       pubsub.publish('user:usage:update', ctx.session.userId, null);
-
-      const deletedPosts = await db
-        .select({ id: Posts.id })
-        .from(Posts)
-        .where(
-          inArray(
-            Posts.entityId,
-            descendants.filter(({ type }) => type === EntityType.POST).map(({ id }) => id),
-          ),
-        );
-
-      for (const post of deletedPosts) {
-        await enqueueJob('post:index', post.id);
-      }
 
       const deletedDocuments = await db
         .select({ id: Documents.id })

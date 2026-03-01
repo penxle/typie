@@ -2,7 +2,7 @@ import { PutObjectCommand } from '@aws-sdk/client-s3';
 import * as Sentry from '@sentry/bun';
 import argon2 from 'argon2';
 import dayjs from 'dayjs';
-import { and, desc, eq, getTableColumns, gt, gte, inArray, isNotNull, isNull, lt, ne, or, sql, sum } from 'drizzle-orm';
+import { and, desc, eq, gt, gte, inArray, isNotNull, lt, ne, sql, sum } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import qs from 'query-string';
 import * as uuid from 'uuid';
@@ -20,7 +20,6 @@ import {
   PaymentInvoices,
   Plans,
   PostCharacterCountChanges,
-  Posts,
   ReferralCodes,
   Referrals,
   Sites,
@@ -155,15 +154,14 @@ User.implement({
       type: [Entity],
       resolve: async (self) => {
         return await db
-          .select(getTableColumns(Entities))
+          .select()
           .from(Entities)
-          .leftJoin(Posts, eq(Posts.entityId, Entities.id))
           .where(
             and(
               eq(Entities.userId, self.id),
               eq(Entities.state, EntityState.ACTIVE),
               isNotNull(Entities.viewedAt),
-              or(ne(Entities.type, EntityType.POST), isNull(Posts.documentId)),
+              ne(Entities.type, EntityType.POST),
             ),
           )
           .orderBy(desc(Entities.viewedAt))
@@ -221,25 +219,7 @@ User.implement({
 
     recentPosts: t.field({
       type: [Post],
-      resolve: async (self, _, ctx) => {
-        const loader = ctx.loader({
-          name: 'User.recentPosts',
-          many: true,
-          load: async (ids) => {
-            return await db
-              .select()
-              .from(Posts)
-              .innerJoin(Entities, eq(Posts.entityId, Entities.id))
-              .where(and(inArray(Entities.userId, ids), eq(Entities.state, EntityState.ACTIVE)))
-              .orderBy(desc(Posts.updatedAt))
-              .limit(5);
-          },
-          key: ({ entities: { userId } }) => userId,
-        });
-
-        const rows = await loader.load(self.id);
-        return rows.map((row) => row.posts);
-      },
+      resolve: async () => [],
     }),
 
     characterCountChanges: t.field({
@@ -370,14 +350,16 @@ User.implement({
     }),
 
     postCount: t.int({
+      resolve: async () => 0,
+    }),
+
+    documentCount: t.int({
       resolve: async (user) => {
         const result = await db
           .select({ count: sql<number>`count(*)` })
-          .from(Posts)
-          .innerJoin(Entities, eq(Posts.entityId, Entities.id))
-          .where(and(eq(Entities.userId, user.id), eq(Entities.state, EntityState.ACTIVE)))
+          .from(Entities)
+          .where(and(eq(Entities.userId, user.id), eq(Entities.type, EntityType.DOCUMENT), eq(Entities.state, EntityState.ACTIVE)))
           .then(firstOrThrow);
-
         return Number(result.count);
       },
     }),

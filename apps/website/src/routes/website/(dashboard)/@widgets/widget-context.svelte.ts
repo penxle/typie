@@ -1,6 +1,4 @@
 import { getContext, setContext } from 'svelte';
-import type { Editor } from '@tiptap/core';
-import type { Ref } from '@typie/ui/utils';
 import type { Editor as NativeEditor } from '$lib/editor/editor.svelte';
 import type { Editor_Widget_CharacterCountChangeWidget_document$key, Editor_Widget_DocumentRelatedNoteWidget_document$key } from '$mearie';
 
@@ -16,8 +14,7 @@ export type WidgetPosition = {
 type WidgetEnvironment = {
   editMode: boolean;
   palette: boolean;
-  editor?: Ref<Editor>;
-  nativeEditor?: NativeEditor;
+  editor?: NativeEditor;
   document$key?: (Editor_Widget_CharacterCountChangeWidget_document$key & Editor_Widget_DocumentRelatedNoteWidget_document$key) | undefined;
 };
 
@@ -28,7 +25,6 @@ export class WidgetContext {
     editMode: false,
     palette: false,
     editor: undefined,
-    nativeEditor: undefined,
     document$key: undefined,
   });
 

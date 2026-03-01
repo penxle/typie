@@ -182,8 +182,8 @@ builder.queryField('stats', (t) =>
           ORDER BY date_series.date
         `);
 
-      // Post metrics
-      const getPostsTotal = () =>
+      // Document metrics
+      const getDocumentsTotal = () =>
         dbr.execute(sql`
           WITH date_series AS (
             SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
@@ -308,7 +308,7 @@ builder.queryField('stats', (t) =>
         usersActive,
         subscriptionsRevenue,
         subscriptionsActive,
-        postsTotal,
+        documentsTotal,
         charactersInput,
         charactersDaily,
         systemServiceDays,
@@ -318,7 +318,7 @@ builder.queryField('stats', (t) =>
         getUsersActive(),
         getSubscriptionsRevenue(),
         getSubscriptionsActive(),
-        getPostsTotal(),
+        getDocumentsTotal(),
         getCharactersInput(),
         getCharactersDaily(),
         getSystemServiceDays(),
@@ -343,8 +343,8 @@ builder.queryField('stats', (t) =>
         subscriptionsRevenue: transformToData(subscriptionsRevenue),
         subscriptionsActive: transformToData(subscriptionsActive),
 
-        // Post metrics
-        postsTotal: transformToData(postsTotal),
+        // Document metrics
+        documentsTotal: transformToData(documentsTotal),
 
         // Character metrics
         charactersInput: transformToData(charactersInput),

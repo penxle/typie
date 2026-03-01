@@ -25,7 +25,7 @@
   type EntityNode = {
     id: string;
     node: {
-      __typename: 'Document' | 'Folder' | 'Post';
+      __typename: 'Document' | 'Folder';
     };
     children?: EntityNode[];
     ' $_DashboardLayout_EntityTree_Entity_entity'?: unknown;
@@ -590,7 +590,7 @@
         const entitySlug = dragging.element.dataset.slug;
         const entityType = dragging.element.dataset.type;
         if (entitySlug && entityType) {
-          paneGroup.executeDrop({ slug: entitySlug, type: entityType as 'post' | 'document' });
+          paneGroup.executeDrop({ slug: entitySlug, type: entityType as 'document' });
         } else {
           paneGroup.cancelDrag();
         }
@@ -627,7 +627,6 @@
 
   const draggingEntityCount = $derived.by(() => {
     let count = {
-      post: 0,
       document: 0,
       folder: 0,
     };
@@ -645,11 +644,7 @@
             collect(entity.children);
           }
         } else if (entityIds.has(entity.id)) {
-          if (entity.node.__typename === 'Post') {
-            count.post++;
-          } else if (entity.node.__typename === 'Document') {
-            count.document++;
-          }
+          count.document++;
         }
       });
     };
@@ -696,7 +691,7 @@
     <Entity entity$key={entity} />
   {:else}
     <div class={center({ flexGrow: '1' })}>
-      <p class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.disabled' })}>아직 포스트가 없어요</p>
+      <p class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.disabled' })}>아직 문서가 없어요</p>
     </div>
   {/each}
 
@@ -755,12 +750,6 @@
           <div class={center({ gap: '2px' })}>
             <Icon style={css.raw({ color: 'text.bright' })} icon={FolderIcon} size={14} />
             {draggingEntityCount.folder}
-          </div>
-        {/if}
-        {#if draggingEntityCount.post > 0}
-          <div class={center({ gap: '2px' })}>
-            <Icon style={css.raw({ color: 'text.bright' })} icon={FileIcon} size={14} />
-            {draggingEntityCount.post}
           </div>
         {/if}
         {#if draggingEntityCount.document > 0}

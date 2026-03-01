@@ -3,7 +3,6 @@
   import { graphql } from '$mearie';
   import Document from './Document.svelte';
   import Folder from './Folder.svelte';
-  import Post from './Post.svelte';
   import type { DashboardLayout_EntityTree_Entity_entity$key } from '$mearie';
 
   type Props = {
@@ -26,16 +25,6 @@
             ...DashboardLayout_EntityTree_Folder_folder
           }
 
-          ... on Post {
-            id
-
-            document {
-              id
-            }
-
-            ...DashboardLayout_EntityTree_Post_post
-          }
-
           ... on Document {
             id
             ...DashboardLayout_EntityTree_Document_document
@@ -49,8 +38,6 @@
 
 {#if entity.data.node.__typename === 'Folder'}
   <Folder folder$key={entity.data.node} />
-{:else if entity.data.node.__typename === 'Post' && !entity.data.node.document}
-  <Post post$key={entity.data.node} />
 {:else if entity.data.node.__typename === 'Document'}
   <Document document$key={entity.data.node} />
 {/if}

@@ -20,20 +20,6 @@ query ShareEntities_Query($entityIds: [ID!]!) {
         }
       }
 
-      ... on Post {
-        id
-        title
-        password
-        contentRating
-        allowReaction
-        protectContent
-
-        thumbnail {
-          id
-          url
-        }
-      }
-
       ... on Document {
         id
         title

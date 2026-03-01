@@ -33,13 +33,14 @@
   import LetterSpacingIcon from '~icons/typie/letter-spacing';
   import LineHeightIcon from '~icons/typie/line-height';
   import { FontSpecimen } from '$lib/components';
+  import { ToolbarColorGrid } from '$lib/components/editor/toolbar';
   import { getRepresentativeFont } from '$lib/editor/fonts';
   import { THEME_COLORS } from '$lib/editor/theme';
-  import { createPaginatedLayout } from '$lib/editor/utils';
+  import { createPaginatedLayout, getMaxMargin, mmToPx, pxToMm } from '$lib/editor/utils';
   import { values } from '$lib/editor/values';
-  import ToolbarColorGrid from '../@toolbar/ToolbarColorGrid.svelte';
   import type { Editor } from '$lib/editor/editor.svelte';
   import type { ThemeVariant } from '$lib/editor/theme';
+  import type { PageLayoutPreset } from '$lib/editor/utils';
 
   type Props = {
     editor: Editor;
@@ -245,90 +246,13 @@
   };
 
   const layoutMode = $derived(editor.layout?.layoutMode);
-  const isPaginated = $derived(layoutMode?.type === 'paginated');
-
-  const mmToPx = (mm: number) => Math.round((mm * 96) / 25.4);
-  const pxToMm = (px: number) => Math.round((px * 25.4) / 96);
-  const minContentSizeMm = 50;
-
-  const clampMarginsToPageSize = ({
-    pageWidthMm,
-    pageHeightMm,
-    marginTopMm,
-    marginBottomMm,
-    marginLeftMm,
-    marginRightMm,
-  }: {
-    pageWidthMm: number;
-    pageHeightMm: number;
-    marginTopMm: number;
-    marginBottomMm: number;
-    marginLeftMm: number;
-    marginRightMm: number;
-  }) => {
-    const fitAxis = (startMarginMm: number, endMarginMm: number, pageSizeMm: number) => {
-      const start = Math.max(0, startMarginMm);
-      const end = Math.max(0, endMarginMm);
-      const maxTotalMargin = Math.max(0, pageSizeMm - minContentSizeMm);
-      const totalMargin = start + end;
-
-      if (totalMargin <= maxTotalMargin) {
-        return { start, end };
-      }
-
-      if (totalMargin === 0) {
-        return { start: 0, end: 0 };
-      }
-
-      const ratio = maxTotalMargin / totalMargin;
-      const nextStart = start * ratio;
-      return {
-        start: nextStart,
-        end: Math.max(0, maxTotalMargin - nextStart),
-      };
-    };
-
-    const vertical = fitAxis(marginTopMm, marginBottomMm, pageHeightMm);
-    const horizontal = fitAxis(marginLeftMm, marginRightMm, pageWidthMm);
-
-    return {
-      top: vertical.start,
-      bottom: vertical.end,
-      left: horizontal.start,
-      right: horizontal.end,
-    };
-  };
-
   const selectedPagePreset = $derived.by(() => {
     if (layoutMode?.type !== 'paginated') return 'a4';
-    const widthMm = pxToMm(layoutMode.pageWidth);
-    const heightMm = pxToMm(layoutMode.pageHeight);
-    const found = values.pageLayout.find((p) => p.width === widthMm && p.height === heightMm);
-    return found?.value ?? 'custom';
+    return (
+      values.pageLayout.find((p) => p.layout.pageWidth === layoutMode.pageWidth && p.layout.pageHeight === layoutMode.pageHeight)?.value ??
+      'custom'
+    );
   });
-
-  const currentWidthMm = $derived(layoutMode?.type === 'paginated' ? pxToMm(layoutMode.pageWidth) : 210);
-  const currentHeightMm = $derived(layoutMode?.type === 'paginated' ? pxToMm(layoutMode.pageHeight) : 297);
-  const currentMarginTopMm = $derived(layoutMode?.type === 'paginated' ? pxToMm(layoutMode.pageMarginTop) : 25);
-  const currentMarginBottomMm = $derived(layoutMode?.type === 'paginated' ? pxToMm(layoutMode.pageMarginBottom) : 25);
-  const currentMarginLeftMm = $derived(layoutMode?.type === 'paginated' ? pxToMm(layoutMode.pageMarginLeft) : 25);
-  const currentMarginRightMm = $derived(layoutMode?.type === 'paginated' ? pxToMm(layoutMode.pageMarginRight) : 25);
-
-  const getMaxMargin = (side: 'top' | 'bottom' | 'left' | 'right') => {
-    if (layoutMode?.type !== 'paginated') return 0;
-
-    const widthMm = pxToMm(layoutMode.pageWidth);
-    const heightMm = pxToMm(layoutMode.pageHeight);
-    const marginTopMm = pxToMm(layoutMode.pageMarginTop);
-    const marginBottomMm = pxToMm(layoutMode.pageMarginBottom);
-    const marginLeftMm = pxToMm(layoutMode.pageMarginLeft);
-    const marginRightMm = pxToMm(layoutMode.pageMarginRight);
-
-    if (side === 'left') return Math.max(0, widthMm - marginRightMm - minContentSizeMm);
-    if (side === 'right') return Math.max(0, widthMm - marginLeftMm - minContentSizeMm);
-    if (side === 'top') return Math.max(0, heightMm - marginBottomMm - minContentSizeMm);
-    return Math.max(0, heightMm - marginTopMm - minContentSizeMm);
-  };
 
   const handleLayoutModeChange = (mode: 'continuous' | 'paginated') => {
     if (mode === 'paginated') {
@@ -337,12 +261,7 @@
         type: 'setLayoutMode',
         mode: {
           type: 'paginated',
-          pageWidth: mmToPx(layout.width),
-          pageHeight: mmToPx(layout.height),
-          pageMarginTop: mmToPx(layout.marginTop),
-          pageMarginBottom: mmToPx(layout.marginBottom),
-          pageMarginLeft: mmToPx(layout.marginLeft),
-          pageMarginRight: mmToPx(layout.marginRight),
+          ...layout,
         },
       });
     } else {
@@ -356,18 +275,14 @@
 
   const handlePagePresetChange = (value: string) => {
     if (value === 'custom') return;
-    const preset = values.pageLayout.find((p) => p.value === value);
-    if (preset && layoutMode?.type === 'paginated') {
+    const layout = createPaginatedLayout(value as PageLayoutPreset);
+    if (layoutMode?.type === 'paginated') {
       editor.dispatch({
         type: 'setLayoutMode',
         mode: {
-          type: 'paginated',
-          pageWidth: mmToPx(preset.width),
-          pageHeight: mmToPx(preset.height),
-          pageMarginTop: mmToPx(preset.margin.top),
-          pageMarginBottom: mmToPx(preset.margin.bottom),
-          pageMarginLeft: mmToPx(preset.margin.left),
-          pageMarginRight: mmToPx(preset.margin.right),
+          ...layoutMode,
+          pageWidth: layout.pageWidth,
+          pageHeight: layout.pageHeight,
         },
       });
       mixpanel.track('change_document_page_size', { preset: value });
@@ -377,75 +292,37 @@
   const handleWidthChange = (e: Event) => {
     if (!layoutMode || layoutMode.type !== 'paginated') return;
     const target = e.target as HTMLInputElement;
-    const nextWidthMm = Math.max(100, Number(target.value));
-    target.value = String(nextWidthMm);
-    const normalizedMargins = clampMarginsToPageSize({
-      pageWidthMm: nextWidthMm,
-      pageHeightMm: pxToMm(layoutMode.pageHeight),
-      marginTopMm: pxToMm(layoutMode.pageMarginTop),
-      marginBottomMm: pxToMm(layoutMode.pageMarginBottom),
-      marginLeftMm: pxToMm(layoutMode.pageMarginLeft),
-      marginRightMm: pxToMm(layoutMode.pageMarginRight),
-    });
+    const value = Math.max(100, Number(target.value));
+    target.value = String(value);
 
     editor.dispatch({
       type: 'setLayoutMode',
-      mode: {
-        type: 'paginated',
-        pageWidth: mmToPx(nextWidthMm),
-        pageHeight: layoutMode.pageHeight,
-        pageMarginTop: mmToPx(normalizedMargins.top),
-        pageMarginBottom: mmToPx(normalizedMargins.bottom),
-        pageMarginLeft: mmToPx(normalizedMargins.left),
-        pageMarginRight: mmToPx(normalizedMargins.right),
-      },
+      mode: { ...layoutMode, pageWidth: mmToPx(value) },
     });
   };
 
   const handleHeightChange = (e: Event) => {
     if (!layoutMode || layoutMode.type !== 'paginated') return;
     const target = e.target as HTMLInputElement;
-    const nextHeightMm = Math.max(100, Number(target.value));
-    target.value = String(nextHeightMm);
-    const normalizedMargins = clampMarginsToPageSize({
-      pageWidthMm: pxToMm(layoutMode.pageWidth),
-      pageHeightMm: nextHeightMm,
-      marginTopMm: pxToMm(layoutMode.pageMarginTop),
-      marginBottomMm: pxToMm(layoutMode.pageMarginBottom),
-      marginLeftMm: pxToMm(layoutMode.pageMarginLeft),
-      marginRightMm: pxToMm(layoutMode.pageMarginRight),
-    });
+    const value = Math.max(100, Number(target.value));
+    target.value = String(value);
 
     editor.dispatch({
       type: 'setLayoutMode',
-      mode: {
-        type: 'paginated',
-        pageWidth: layoutMode.pageWidth,
-        pageHeight: mmToPx(nextHeightMm),
-        pageMarginTop: mmToPx(normalizedMargins.top),
-        pageMarginBottom: mmToPx(normalizedMargins.bottom),
-        pageMarginLeft: mmToPx(normalizedMargins.left),
-        pageMarginRight: mmToPx(normalizedMargins.right),
-      },
+      mode: { ...layoutMode, pageHeight: mmToPx(value) },
     });
   };
 
   const handleMarginChange = (side: 'top' | 'bottom' | 'left' | 'right', e: Event) => {
     if (!layoutMode || layoutMode.type !== 'paginated') return;
     const target = e.target as HTMLInputElement;
-    const maxMargin = getMaxMargin(side);
-    const value = clamp(Number(target.value), 0, maxMargin);
-    target.value = String(value);
+    const valuePx = clamp(mmToPx(Number(target.value)), 0, getMaxMargin(side, layoutMode));
+    target.value = String(pxToMm(valuePx));
     editor.dispatch({
       type: 'setLayoutMode',
       mode: {
-        type: 'paginated',
-        pageWidth: layoutMode.pageWidth,
-        pageHeight: layoutMode.pageHeight,
-        pageMarginTop: side === 'top' ? mmToPx(value) : layoutMode.pageMarginTop,
-        pageMarginBottom: side === 'bottom' ? mmToPx(value) : layoutMode.pageMarginBottom,
-        pageMarginLeft: side === 'left' ? mmToPx(value) : layoutMode.pageMarginLeft,
-        pageMarginRight: side === 'right' ? mmToPx(value) : layoutMode.pageMarginRight,
+        ...layoutMode,
+        [`pageMargin${side.charAt(0).toUpperCase() + side.slice(1)}`]: valuePx,
       },
     });
   };
@@ -821,7 +698,7 @@
         </div>
       </div>
 
-      {#if isPaginated}
+      {#if layoutMode?.type === 'paginated'}
         <div class={flex({ flexDirection: 'column', gap: '6px', paddingX: '20px' })}>
           <div class={flex({ alignItems: 'center', gap: '8px' })}>
             <Icon style={css.raw({ color: 'text.faint' })} icon={FileIcon} />
@@ -842,7 +719,7 @@
                   onchange={handleWidthChange}
                   size="sm"
                   type="number"
-                  value={currentWidthMm}
+                  value={pxToMm(layoutMode.pageWidth)}
                 />
               </div>
               <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '4px' })}>
@@ -853,7 +730,7 @@
                   onchange={handleHeightChange}
                   size="sm"
                   type="number"
-                  value={currentHeightMm}
+                  value={pxToMm(layoutMode.pageHeight)}
                 />
               </div>
             </div>
@@ -870,48 +747,48 @@
               <div class={css({ fontSize: '12px', color: 'text.subtle' })}>상단</div>
               <TextInput
                 style={css.raw({ width: '80px' })}
-                max={String(getMaxMargin('top'))}
+                max={String(pxToMm(getMaxMargin('top', layoutMode)))}
                 min="0"
                 onchange={(e) => handleMarginChange('top', e)}
                 size="sm"
                 type="number"
-                value={currentMarginTopMm}
+                value={pxToMm(layoutMode.pageMarginTop)}
               />
             </div>
             <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '4px' })}>
               <div class={css({ fontSize: '12px', color: 'text.subtle' })}>하단</div>
               <TextInput
                 style={css.raw({ width: '80px' })}
-                max={String(getMaxMargin('bottom'))}
+                max={String(pxToMm(getMaxMargin('bottom', layoutMode)))}
                 min="0"
                 onchange={(e) => handleMarginChange('bottom', e)}
                 size="sm"
                 type="number"
-                value={currentMarginBottomMm}
+                value={pxToMm(layoutMode.pageMarginBottom)}
               />
             </div>
             <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '4px' })}>
               <div class={css({ fontSize: '12px', color: 'text.subtle' })}>왼쪽</div>
               <TextInput
                 style={css.raw({ width: '80px' })}
-                max={String(getMaxMargin('left'))}
+                max={String(pxToMm(getMaxMargin('left', layoutMode)))}
                 min="0"
                 onchange={(e) => handleMarginChange('left', e)}
                 size="sm"
                 type="number"
-                value={currentMarginLeftMm}
+                value={pxToMm(layoutMode.pageMarginLeft)}
               />
             </div>
             <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '4px' })}>
               <div class={css({ fontSize: '12px', color: 'text.subtle' })}>오른쪽</div>
               <TextInput
                 style={css.raw({ width: '80px' })}
-                max={String(getMaxMargin('right'))}
+                max={String(pxToMm(getMaxMargin('right', layoutMode)))}
                 min="0"
                 onchange={(e) => handleMarginChange('right', e)}
                 size="sm"
                 type="number"
-                value={currentMarginRightMm}
+                value={pxToMm(layoutMode.pageMarginRight)}
               />
             </div>
           </div>

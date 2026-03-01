@@ -142,7 +142,7 @@ class MoveEntityModal extends HookWidget {
                       }
                     },
                     child: Text(
-                      '내 포스트',
+                      '내 문서',
                       style: TextStyle(fontWeight: currentEntity.value == null ? FontWeight.w600 : null),
                     ),
                   ),
