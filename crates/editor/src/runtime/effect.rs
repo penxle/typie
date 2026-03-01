@@ -1,4 +1,4 @@
-use crate::model::Style;
+use crate::model::{ParagraphNode, Style};
 use crate::runtime::text_replacement::ReplacementUndoState;
 use crate::state::Selection;
 use crate::{model::NodeId, state::Position, types::PointerStyle};
@@ -41,6 +41,7 @@ pub enum Effect {
         selection: Selection,
         text: String,
         styles: Vec<Style>,
+        paragraph_attrs: Option<ParagraphNode>,
     },
 }
 

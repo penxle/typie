@@ -722,6 +722,25 @@ impl Fragment {
         (left, right)
     }
 
+    pub fn with_paragraph_attrs(self, attrs: ParagraphNode) -> Self {
+        let mut new_nodes = IndexMap::with_capacity(self.nodes.len());
+        for (id, node) in &self.nodes {
+            if let Node::Paragraph(_) = node.data() {
+                new_nodes.insert(
+                    *id,
+                    FragmentNode::new(Node::Paragraph(attrs.clone()), node.parent()),
+                );
+            } else {
+                new_nodes.insert(*id, node.clone());
+            }
+        }
+        Self {
+            nodes: new_nodes,
+            open_start: self.open_start,
+            open_end: self.open_end,
+        }
+    }
+
     pub fn fill_missing_styles(self, defaults: &[Style]) -> Self {
         if defaults.is_empty() {
             return self;

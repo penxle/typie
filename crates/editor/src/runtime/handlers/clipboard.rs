@@ -29,7 +29,7 @@ impl Runtime {
     }
 
     pub(crate) fn handle_repaste_as_text(&mut self) -> Vec<Effect> {
-        let Some((selection, text, styles)) = self.repaste_text.take() else {
+        let Some((selection, text, styles, paragraph_attrs)) = self.repaste_text.take() else {
             return vec![];
         };
 
@@ -37,7 +37,14 @@ impl Runtime {
             return vec![];
         };
 
-        self.transact(|tr| tr.replace_range(from, to, Fragment::from_text(&text, &styles)))
+        let fragment = Fragment::from_text(&text, &styles);
+        let fragment = if let Some(attrs) = paragraph_attrs {
+            fragment.with_paragraph_attrs(attrs)
+        } else {
+            fragment
+        };
+
+        self.transact(|tr| tr.replace_range(from, to, fragment))
     }
 }
 
