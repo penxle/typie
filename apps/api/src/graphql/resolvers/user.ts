@@ -19,7 +19,6 @@ import {
   FontFamilies,
   PaymentInvoices,
   Plans,
-  PostCharacterCountChanges,
   ReferralCodes,
   Referrals,
   Sites,
@@ -227,61 +226,24 @@ User.implement({
       resolve: async (self) => {
         const startOfTomorrow = dayjs.kst().startOf('day').add(1, 'day');
 
-        const postDate = sql<string>`DATE(${PostCharacterCountChanges.bucket} AT TIME ZONE 'Asia/Seoul')`.mapWith(dayjs.kst);
         const documentDate = sql<string>`DATE(${DocumentCharacterCountChanges.bucket} AT TIME ZONE 'Asia/Seoul')`.mapWith(dayjs.kst);
 
-        const [postChanges, documentChanges] = await Promise.all([
-          db
-            .select({
-              date: postDate,
-              additions: sum(PostCharacterCountChanges.additions).mapWith(Number),
-              deletions: sum(PostCharacterCountChanges.deletions).mapWith(Number),
-            })
-            .from(PostCharacterCountChanges)
-            .where(
-              and(
-                eq(PostCharacterCountChanges.userId, self.id),
-                gte(PostCharacterCountChanges.bucket, startOfTomorrow.subtract(365, 'days')),
-                lt(PostCharacterCountChanges.bucket, startOfTomorrow),
-              ),
-            )
-            .groupBy(postDate),
-          db
-            .select({
-              date: documentDate,
-              additions: sum(DocumentCharacterCountChanges.additions).mapWith(Number),
-              deletions: sum(DocumentCharacterCountChanges.deletions).mapWith(Number),
-            })
-            .from(DocumentCharacterCountChanges)
-            .where(
-              and(
-                eq(DocumentCharacterCountChanges.userId, self.id),
-                gte(DocumentCharacterCountChanges.bucket, startOfTomorrow.subtract(365, 'days')),
-                lt(DocumentCharacterCountChanges.bucket, startOfTomorrow),
-              ),
-            )
-            .groupBy(documentDate),
-        ]);
-
-        const merged = new Map<string, { date: dayjs.Dayjs; additions: number; deletions: number }>();
-
-        for (const row of postChanges) {
-          const key = row.date.format('YYYY-MM-DD');
-          merged.set(key, { date: row.date, additions: row.additions || 0, deletions: row.deletions || 0 });
-        }
-
-        for (const row of documentChanges) {
-          const key = row.date.format('YYYY-MM-DD');
-          const existing = merged.get(key);
-          if (existing) {
-            existing.additions += row.additions || 0;
-            existing.deletions += row.deletions || 0;
-          } else {
-            merged.set(key, { date: row.date, additions: row.additions || 0, deletions: row.deletions || 0 });
-          }
-        }
-
-        return [...merged.values()].toSorted((a, b) => a.date.unix() - b.date.unix());
+        return db
+          .select({
+            date: documentDate,
+            additions: sum(DocumentCharacterCountChanges.additions).mapWith(Number),
+            deletions: sum(DocumentCharacterCountChanges.deletions).mapWith(Number),
+          })
+          .from(DocumentCharacterCountChanges)
+          .where(
+            and(
+              eq(DocumentCharacterCountChanges.userId, self.id),
+              gte(DocumentCharacterCountChanges.bucket, startOfTomorrow.subtract(365, 'days')),
+              lt(DocumentCharacterCountChanges.bucket, startOfTomorrow),
+            ),
+          )
+          .groupBy(documentDate)
+          .orderBy(documentDate);
       },
     }),
 
@@ -366,23 +328,14 @@ User.implement({
 
     totalCharacterCount: t.int({
       resolve: async (user) => {
-        const [postResult, documentResult] = await Promise.all([
-          db
-            .select({
-              total: sql<number>`COALESCE(SUM(${PostCharacterCountChanges.additions}), 0) - COALESCE(SUM(${PostCharacterCountChanges.deletions}), 0)`,
-            })
-            .from(PostCharacterCountChanges)
-            .where(eq(PostCharacterCountChanges.userId, user.id))
-            .then(firstOrThrow),
-          db
-            .select({
-              total: sql<number>`COALESCE(SUM(${DocumentCharacterCountChanges.additions}), 0) - COALESCE(SUM(${DocumentCharacterCountChanges.deletions}), 0)`,
-            })
-            .from(DocumentCharacterCountChanges)
-            .where(eq(DocumentCharacterCountChanges.userId, user.id))
-            .then(firstOrThrow),
-        ]);
-        return Math.max(0, Number(postResult.total) + Number(documentResult.total));
+        const result = await db
+          .select({
+            total: sql<number>`COALESCE(SUM(${DocumentCharacterCountChanges.additions}), 0) - COALESCE(SUM(${DocumentCharacterCountChanges.deletions}), 0)`,
+          })
+          .from(DocumentCharacterCountChanges)
+          .where(eq(DocumentCharacterCountChanges.userId, user.id))
+          .then(firstOrThrow);
+        return Math.max(0, Number(result.total));
       },
     }),
 

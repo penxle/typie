@@ -1,18 +1,7 @@
 import dayjs from 'dayjs';
 import { sql } from 'drizzle-orm';
 import { redis } from '@/cache';
-import {
-  dbr,
-  DocumentCharacterCountChanges,
-  Documents,
-  Entities,
-  Plans,
-  PostCharacterCountChanges,
-  Posts,
-  Sites,
-  Subscriptions,
-  Users,
-} from '@/db';
+import { dbr, DocumentCharacterCountChanges, Documents, Entities, Plans, Sites, Subscriptions, Users } from '@/db';
 import { PlanAvailability, SubscriptionState, UserState } from '@/enums';
 import { builder } from '../builder';
 
@@ -88,15 +77,6 @@ builder.queryField('stats', (t) =>
             SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
           ),
           valid_user_activities AS (
-            SELECT ${PostCharacterCountChanges.userId} AS user_id, ${PostCharacterCountChanges.bucket} AS bucket
-            FROM ${PostCharacterCountChanges}
-            INNER JOIN ${Posts} ON ${PostCharacterCountChanges.postId} = ${Posts.id}
-            INNER JOIN ${Entities} ON ${Posts.entityId} = ${Entities.id}
-            INNER JOIN ${Sites} ON ${Entities.siteId} = ${Sites.id}
-            WHERE ${Entities.createdAt} != ${Sites.createdAt}
-
-            UNION
-
             SELECT ${DocumentCharacterCountChanges.userId} AS user_id, ${DocumentCharacterCountChanges.bucket} AS bucket
             FROM ${DocumentCharacterCountChanges}
             INNER JOIN ${Documents} ON ${DocumentCharacterCountChanges.documentId} = ${Documents.id}
@@ -211,15 +191,6 @@ builder.queryField('stats', (t) =>
             SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
           ),
           valid_character_changes AS (
-            SELECT ${PostCharacterCountChanges.bucket} AS bucket, ${PostCharacterCountChanges.additions} AS additions
-            FROM ${PostCharacterCountChanges}
-            INNER JOIN ${Posts} ON ${PostCharacterCountChanges.postId} = ${Posts.id}
-            INNER JOIN ${Entities} ON ${Posts.entityId} = ${Entities.id}
-            INNER JOIN ${Sites} ON ${Entities.siteId} = ${Sites.id}
-            WHERE ${Entities.createdAt} != ${Sites.createdAt}
-
-            UNION ALL
-
             SELECT ${DocumentCharacterCountChanges.bucket} AS bucket, ${DocumentCharacterCountChanges.additions} AS additions
             FROM ${DocumentCharacterCountChanges}
             INNER JOIN ${Documents} ON ${DocumentCharacterCountChanges.documentId} = ${Documents.id}
@@ -227,7 +198,7 @@ builder.queryField('stats', (t) =>
             INNER JOIN ${Sites} ON ${Entities.siteId} = ${Sites.id}
             WHERE ${Entities.createdAt} != ${Sites.createdAt}
           )
-          SELECT 
+          SELECT
             date_series.date::text as date,
             COALESCE(SUM(vcc.additions), 0)::int as value
           FROM date_series
@@ -242,15 +213,6 @@ builder.queryField('stats', (t) =>
             SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
           ),
           valid_character_changes AS (
-            SELECT ${PostCharacterCountChanges.bucket} AS bucket, ${PostCharacterCountChanges.additions} AS additions
-            FROM ${PostCharacterCountChanges}
-            INNER JOIN ${Posts} ON ${PostCharacterCountChanges.postId} = ${Posts.id}
-            INNER JOIN ${Entities} ON ${Posts.entityId} = ${Entities.id}
-            INNER JOIN ${Sites} ON ${Entities.siteId} = ${Sites.id}
-            WHERE ${Entities.createdAt} != ${Sites.createdAt}
-
-            UNION ALL
-
             SELECT ${DocumentCharacterCountChanges.bucket} AS bucket, ${DocumentCharacterCountChanges.additions} AS additions
             FROM ${DocumentCharacterCountChanges}
             INNER JOIN ${Documents} ON ${DocumentCharacterCountChanges.documentId} = ${Documents.id}
