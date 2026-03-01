@@ -706,18 +706,16 @@ class EditorInputNativeView(
             true
           }
           else -> {
-            val isNumberKey =
-              (event.keyCode in KeyEvent.KEYCODE_0..KeyEvent.KEYCODE_9) ||
-              (event.keyCode in KeyEvent.KEYCODE_NUMPAD_0..KeyEvent.KEYCODE_NUMPAD_9)
             val unicode = event.unicodeChar
-            if (
-              isNumberKey &&
-              unicode != 0 &&
+            val isHardwarePrintableKey =
+              event.deviceId != KeyCharacterMap.VIRTUAL_KEYBOARD &&
+              unicode >= 0x20 &&
+              (unicode and KeyCharacterMap.COMBINING_ACCENT == 0) &&
               !event.isCtrlPressed &&
               !event.isAltPressed &&
               !event.isMetaPressed
-            ) {
-              val text = unicode.toChar().toString()
+            if (isHardwarePrintableKey) {
+              val text = String(Character.toChars(unicode))
               commitComposingState()
               super.finishComposingText()
               insertTextOrNewline(text)
