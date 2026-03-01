@@ -6,6 +6,7 @@
     "@anthropic-ai/claude-agent-sdk": "^0.2.62",
     "@aws-sdk/client-dynamodb": "^3.999.0",
     "@aws-sdk/client-lambda": "^3.999.0",
+    "@aws-sdk/client-s3": "^3.999.0",
     "@aws-sdk/client-ssm": "^3.999.0",
     "@aws-sdk/lib-dynamodb": "^3.999.0",
     "@slack/web-api": "^7.14.1",

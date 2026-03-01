@@ -52,6 +52,6 @@ resource "aws_s3_object" "bootstrap_json" {
   content      = local.bootstrap_content
 
   lifecycle {
-    ignore_changes = [content]
+    ignore_changes = all
   }
 }

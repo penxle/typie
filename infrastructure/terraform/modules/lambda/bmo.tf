@@ -43,6 +43,7 @@ resource "aws_iam_role_policy" "bmo_dynamodb" {
       Action = [
         "dynamodb:GetItem",
         "dynamodb:PutItem",
+        "dynamodb:DeleteItem",
       ]
       Resource = aws_dynamodb_table.bmo_sessions.arn
     }]
@@ -143,6 +144,41 @@ resource "aws_lambda_function" "bmo_worker" {
   environment {
     variables = {}
   }
+}
+
+resource "aws_lambda_function_event_invoke_config" "bmo_worker" {
+  function_name                = aws_lambda_function.bmo_worker.function_name
+  maximum_retry_attempts       = 0
+  maximum_event_age_in_seconds = 960
+}
+
+resource "aws_iam_role_policy" "bmo_s3" {
+  name = "bmo-s3"
+  role = aws_iam_role.bmo_lambda.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = "s3:ListBucket"
+        Resource = "arn:aws:s3:::typie-misc"
+        Condition = {
+          StringLike = {
+            "s3:prefix" = ["bmo/sessions/*"]
+          }
+        }
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+        ]
+        Resource = "arn:aws:s3:::typie-misc/bmo/sessions/*"
+      },
+    ]
+  })
 }
 
 resource "aws_dynamodb_table" "bmo_sessions" {
