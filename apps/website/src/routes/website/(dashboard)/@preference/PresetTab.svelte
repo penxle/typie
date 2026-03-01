@@ -32,7 +32,6 @@
   import { THEME_COLORS } from '$lib/editor/theme';
   import { createPaginatedLayout, getMaxMargin, mmToPx, pxToMm } from '$lib/editor/utils';
   import { values } from '$lib/editor/values';
-  import { cache } from '$lib/graphql';
   import { graphql } from '$mearie';
   import type { ThemeVariant } from '$lib/editor/theme';
   import type { PageLayoutPreset } from '$lib/editor/utils';
@@ -81,6 +80,7 @@
       mutation DashboardLayout_PreferenceModal_PresetTab_UpdatePreferences_Mutation($input: UpdatePreferencesInput!) {
         updatePreferences(input: $input) {
           id
+          preferences
         }
       }
     `),
@@ -109,7 +109,6 @@
     blockGap?: number;
   };
 
-  const userId = $derived(user.data?.id);
   const preferences = $derived((user.data?.preferences as Record<string, unknown> | undefined) ?? {});
   const documentFontFamilies = $derived(user.data?.documentFontFamilies ?? []);
   const template = $derived<PresetPreference>((preferences.template as PresetPreference | undefined) ?? {});
@@ -180,10 +179,21 @@
 
   const updateTemplate = async (updates: Partial<PresetPreference>) => {
     const newTemplate = { ...template, ...updates };
-    await updatePreferences({ input: { value: { template: newTemplate } } });
-    if (userId) {
-      cache.invalidate({ __typename: 'User', id: userId, $field: 'preferences' });
-    }
+    await updatePreferences(
+      { input: { value: { template: newTemplate } } },
+      {
+        metadata: {
+          cache: {
+            optimisticResponse: {
+              updatePreferences: {
+                id: user.data.id,
+                preferences: { ...preferences, template: newTemplate },
+              },
+            },
+          },
+        },
+      },
+    );
 
     mixpanel.track('update_document_template', {
       updates: Object.keys(updates),
@@ -192,9 +202,6 @@
 
   const resetTemplate = async () => {
     await updatePreferences({ input: { value: { template: {} } } });
-    if (userId) {
-      cache.invalidate({ __typename: 'User', id: userId, $field: 'preferences' });
-    }
 
     mixpanel.track('reset_document_template');
   };
