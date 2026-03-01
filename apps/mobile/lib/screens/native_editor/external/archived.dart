@@ -16,7 +16,14 @@ class ArchivedWidget extends StatelessWidget {
           children: [
             Icon(LucideLightIcons.archive, size: 20, color: context.colors.textDisabled),
             const SizedBox(width: 12),
-            Text('보관된 블록', style: TextStyle(fontSize: 14, color: context.colors.textDisabled)),
+            Expanded(
+              child: Text(
+                '보관된 블록',
+                style: TextStyle(fontSize: 14, color: context.colors.textDisabled),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         ),
       ),

@@ -168,7 +168,14 @@ class ImageWidget extends HookWidget {
           children: [
             Icon(LucideLightIcons.image, size: 20, color: context.colors.textDisabled),
             const SizedBox(width: 12),
-            Text('이미지', style: TextStyle(fontSize: 14, color: context.colors.textDisabled)),
+            Expanded(
+              child: Text(
+                '이미지',
+                style: TextStyle(fontSize: 14, color: context.colors.textDisabled),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         ),
       ),

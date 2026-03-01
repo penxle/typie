@@ -125,7 +125,14 @@ class FileWidget extends HookWidget {
           children: [
             Icon(LucideLightIcons.file, size: 20, color: context.colors.textDisabled),
             const SizedBox(width: 12),
-            Text('파일', style: TextStyle(fontSize: 14, color: context.colors.textDisabled)),
+            Expanded(
+              child: Text(
+                '파일',
+                style: TextStyle(fontSize: 14, color: context.colors.textDisabled),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         ),
       ),
