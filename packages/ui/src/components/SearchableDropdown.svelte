@@ -187,7 +187,7 @@
       _hover: {
         backgroundColor: 'surface.muted',
       },
-      '& > input:focus': {
+      _focusWithin: {
         backgroundColor: 'surface.muted',
       },
     },
@@ -277,6 +277,7 @@
           active={value === item.value}
           onclick={() => {
             onchange(item.value, { shouldFocus: true });
+            inputElement?.blur();
             close();
           }}
         >
@@ -292,6 +293,7 @@
         <DropdownMenuItem
           onclick={() => {
             extraItem.onclick();
+            inputElement?.blur();
             close();
           }}
         >
