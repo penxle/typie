@@ -2,7 +2,7 @@ import dayjs from 'dayjs';
 import { sql } from 'drizzle-orm';
 import { redis } from '@/cache';
 import { dbr, DocumentCharacterCountChanges, Documents, Entities, Plans, Sites, Subscriptions, Users } from '@/db';
-import { PlanAvailability, SubscriptionState, UserState } from '@/enums';
+import { PlanAvailability, UserState } from '@/enums';
 import { builder } from '../builder';
 
 builder.queryField('stats', (t) =>
@@ -127,8 +127,7 @@ builder.queryField('stats', (t) =>
               END AS monthly_fee
             FROM ${Subscriptions}
             INNER JOIN ${Plans} ON ${Subscriptions.planId} = ${Plans.id}
-            WHERE ${Subscriptions.state} IN (${SubscriptionState.ACTIVE}, ${SubscriptionState.WILL_EXPIRE}, ${SubscriptionState.IN_GRACE_PERIOD})
-              AND ${Subscriptions.expiresAt} >= ${thirtyDaysAgo}
+            WHERE ${Subscriptions.expiresAt} >= ${thirtyDaysAgo}
           )
           SELECT 
             date_series.date::text as date,
@@ -149,8 +148,7 @@ builder.queryField('stats', (t) =>
             SELECT ${Subscriptions.id}, ${Subscriptions.startsAt}, ${Subscriptions.expiresAt}
             FROM ${Subscriptions}
             INNER JOIN ${Plans} ON ${Subscriptions.planId} = ${Plans.id}
-            WHERE ${Subscriptions.state} IN (${SubscriptionState.ACTIVE}, ${SubscriptionState.WILL_EXPIRE}, ${SubscriptionState.IN_GRACE_PERIOD})
-              AND ${Plans.availability} != ${PlanAvailability.TRIAL}
+            WHERE ${Plans.availability} != ${PlanAvailability.TRIAL}
           )
           SELECT
             date_series.date::text as date,

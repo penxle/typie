@@ -92,7 +92,10 @@ iap.post('/appstore', async (c) => {
     })
     .with('EXPIRED', 'GRACE_PERIOD_EXPIRED', async () => {
       if (subscription) {
-        await db.update(Subscriptions).set({ state: SubscriptionState.EXPIRED }).where(eq(Subscriptions.id, subscription.id));
+        await db
+          .update(Subscriptions)
+          .set({ state: SubscriptionState.EXPIRED, expiresAt: sql`LEAST(${Subscriptions.expiresAt}, NOW())` })
+          .where(eq(Subscriptions.id, subscription.id));
       }
     })
     .with('DID_CHANGE_RENEWAL_PREF', async () => {
@@ -125,7 +128,10 @@ iap.post('/appstore', async (c) => {
     })
     .with('REFUND', 'REVOKE', async () => {
       if (subscription) {
-        await db.update(Subscriptions).set({ state: SubscriptionState.EXPIRED }).where(eq(Subscriptions.id, subscription.id));
+        await db
+          .update(Subscriptions)
+          .set({ state: SubscriptionState.EXPIRED, expiresAt: sql`LEAST(${Subscriptions.expiresAt}, NOW())` })
+          .where(eq(Subscriptions.id, subscription.id));
       }
     })
     .with('CONSUMPTION_REQUEST', async () => {
@@ -202,7 +208,11 @@ iap.post('/appstore', async (c) => {
       if (subscription) {
         await db
           .update(Subscriptions)
-          .set({ state: notification.subtype === 'GRACE_PERIOD' ? SubscriptionState.IN_GRACE_PERIOD : SubscriptionState.EXPIRED })
+          .set(
+            notification.subtype === 'GRACE_PERIOD'
+              ? { state: SubscriptionState.IN_GRACE_PERIOD }
+              : { state: SubscriptionState.EXPIRED, expiresAt: sql`LEAST(${Subscriptions.expiresAt}, NOW())` },
+          )
           .where(eq(Subscriptions.id, subscription.id));
       }
     })
@@ -294,7 +304,10 @@ iap.post('/googleplay', async (c) => {
       })
       .with('SUBSCRIPTION_STATE_EXPIRED', async () => {
         if (subscription) {
-          await db.update(Subscriptions).set({ state: SubscriptionState.EXPIRED }).where(eq(Subscriptions.id, subscription.id));
+          await db
+            .update(Subscriptions)
+            .set({ state: SubscriptionState.EXPIRED, expiresAt: sql`LEAST(${Subscriptions.expiresAt}, NOW())` })
+            .where(eq(Subscriptions.id, subscription.id));
         }
       })
       .with('SUBSCRIPTION_STATE_CANCELED', async () => {
@@ -309,7 +322,10 @@ iap.post('/googleplay', async (c) => {
       })
       .with('SUBSCRIPTION_STATE_ON_HOLD', async () => {
         if (subscription) {
-          await db.update(Subscriptions).set({ state: SubscriptionState.EXPIRED }).where(eq(Subscriptions.id, subscription.id));
+          await db
+            .update(Subscriptions)
+            .set({ state: SubscriptionState.EXPIRED, expiresAt: sql`LEAST(${Subscriptions.expiresAt}, NOW())` })
+            .where(eq(Subscriptions.id, subscription.id));
         }
       })
       .with('SUBSCRIPTION_STATE_PAUSED', async () => {
@@ -355,7 +371,10 @@ iap.post('/googleplay', async (c) => {
         .then(first);
 
       if (subscription) {
-        await db.update(Subscriptions).set({ state: SubscriptionState.EXPIRED }).where(eq(Subscriptions.id, subscription.id));
+        await db
+          .update(Subscriptions)
+          .set({ state: SubscriptionState.EXPIRED, expiresAt: sql`LEAST(${Subscriptions.expiresAt}, NOW())` })
+          .where(eq(Subscriptions.id, subscription.id));
       }
     }
   } else {

@@ -1,6 +1,6 @@
 import * as Sentry from '@sentry/bun';
 import dayjs from 'dayjs';
-import { and, eq, lte } from 'drizzle-orm';
+import { and, eq, lte, sql } from 'drizzle-orm';
 import { SUBSCRIPTION_GRACE_DAYS } from '@/const';
 import { db, first, firstOrThrow, PaymentInvoices, Plans, Subscriptions, UserBillingKeys } from '@/db';
 import { PaymentInvoiceState, PlanAvailability, SubscriptionState } from '@/enums';
@@ -131,7 +131,10 @@ export const SubscriptionRenewalRetryJob = defineJob('subscription:renewal:retry
       }
 
       if (gracePeriodEndsAt.isBefore(dayjs())) {
-        await tx.update(Subscriptions).set({ state: SubscriptionState.EXPIRED }).where(eq(Subscriptions.id, invoice.subscription.id));
+        await tx
+          .update(Subscriptions)
+          .set({ state: SubscriptionState.EXPIRED, expiresAt: sql`LEAST(${Subscriptions.expiresAt}, NOW())` })
+          .where(eq(Subscriptions.id, invoice.subscription.id));
         await tx.update(PaymentInvoices).set({ state: PaymentInvoiceState.CANCELED }).where(eq(PaymentInvoices.id, invoice.id));
 
         await enqueueJob('email:subscription-expired', invoice.subscription.id, { delay: 5 * 60 * 1000 });
@@ -185,7 +188,10 @@ export const SubscriptionRenewalCancelJob = defineJob('subscription:renewal:canc
       .where(eq(Subscriptions.id, subscriptionId))
       .then(firstOrThrow);
 
-    await tx.update(Subscriptions).set({ state: SubscriptionState.EXPIRED }).where(eq(Subscriptions.id, subscriptionId));
+    await tx
+      .update(Subscriptions)
+      .set({ state: SubscriptionState.EXPIRED, expiresAt: sql`LEAST(${Subscriptions.expiresAt}, NOW())` })
+      .where(eq(Subscriptions.id, subscriptionId));
 
     const billingKey = await tx
       .delete(UserBillingKeys)

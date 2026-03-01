@@ -298,7 +298,10 @@ builder.mutationFields((t) => ({
 
       return await db.transaction(async (tx) => {
         if (existingSubscription) {
-          await tx.update(Subscriptions).set({ state: SubscriptionState.EXPIRED }).where(eq(Subscriptions.id, existingSubscription.id));
+          await tx
+            .update(Subscriptions)
+            .set({ state: SubscriptionState.EXPIRED, expiresAt: sql`LEAST(${Subscriptions.expiresAt}, NOW())` })
+            .where(eq(Subscriptions.id, existingSubscription.id));
         }
 
         const subscription = await tx
@@ -496,7 +499,10 @@ builder.mutationFields((t) => ({
 
       return await db.transaction(async (tx) => {
         if (trialSubscription) {
-          await tx.update(Subscriptions).set({ state: SubscriptionState.EXPIRED }).where(eq(Subscriptions.id, trialSubscription.id));
+          await tx
+            .update(Subscriptions)
+            .set({ state: SubscriptionState.EXPIRED, expiresAt: sql`LEAST(${Subscriptions.expiresAt}, NOW())` })
+            .where(eq(Subscriptions.id, trialSubscription.id));
         }
 
         await tx
@@ -567,7 +573,11 @@ builder.mutationFields((t) => ({
 
         return await tx
           .update(Subscriptions)
-          .set({ state: activeSubscription.state === SubscriptionState.ACTIVE ? SubscriptionState.WILL_EXPIRE : SubscriptionState.EXPIRED })
+          .set(
+            activeSubscription.state === SubscriptionState.ACTIVE
+              ? { state: SubscriptionState.WILL_EXPIRE }
+              : { state: SubscriptionState.EXPIRED, expiresAt: sql`LEAST(${Subscriptions.expiresAt}, NOW())` },
+          )
           .where(eq(Subscriptions.id, activeSubscription.id))
           .returning()
           .then(firstOrThrow);
