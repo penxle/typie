@@ -261,6 +261,42 @@ class PageList extends HookWidget {
           return gesture.isConsecutiveTap(localPosition: localPosition, now: now);
         }
 
+        String? zoomSnapKey(double value) {
+          final layout = scope.controller.state.layout;
+          if (layout is! PaginatedLayout || viewWidth <= 0) {
+            return null;
+          }
+
+          final fitWidthZoom = computePaginatedFitWidthZoom(pageWidth: layout.pageWidth, viewportWidth: viewWidth);
+          final unitZoom = clampDocumentZoom(1, bounds: computePaginatedZoomBounds(pageWidth: layout.pageWidth));
+
+          if (zoomEquals(value, fitWidthZoom)) {
+            return 'fit-width';
+          }
+          if (zoomEquals(value, unitZoom)) {
+            return 'unit';
+          }
+          return null;
+        }
+
+        void maybeSendZoomSnapHaptic({required double previousZoom, required double nextZoom}) {
+          if (zoomEquals(previousZoom, nextZoom)) {
+            return;
+          }
+
+          final nextSnap = zoomSnapKey(nextZoom);
+          if (nextSnap == null) {
+            return;
+          }
+
+          final previousSnap = zoomSnapKey(previousZoom);
+          if (previousSnap == nextSnap) {
+            return;
+          }
+
+          unawaited(HapticFeedback.selectionClick());
+        }
+
         void beginPinchIfNeeded() {
           final started = pinch.beginIfNeeded(
             isPaginated: geo.isPaginated,
@@ -308,6 +344,9 @@ class PageList extends HookWidget {
             horizontalScrollController: horizontalScrollController,
             verticalScrollController: verticalScrollController,
             isMounted: () => context.mounted,
+            onZoomChanged: (previousZoom, nextZoom) {
+              maybeSendZoomSnapHaptic(previousZoom: previousZoom, nextZoom: nextZoom);
+            },
           );
         }
 
@@ -609,6 +648,7 @@ class PageList extends HookWidget {
           final (pageIdx, logicalY) = getPageAtPosition(focal.dy);
           wheelZoomSession.captureAnchor(pageIdx: pageIdx, logicalX: logicalX, logicalY: logicalY);
 
+          maybeSendZoomSnapHaptic(previousZoom: zoom, nextZoom: nextZoom);
           scope.setZoom(nextZoom);
           wheelZoomSession.syncViewport(
             focal: focal,
