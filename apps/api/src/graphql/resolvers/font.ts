@@ -16,7 +16,7 @@ Font.implement({
 
     family: t.expose('familyId', { type: FontFamily }),
 
-    url: t.string({ resolve: (font) => `https://typie.net/fonts/${font.path}/web.woff2` }),
+    url: t.string({ resolve: (font) => `https://typie.net/fonts/${font.path}` }),
   }),
 });
 

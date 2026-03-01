@@ -5,11 +5,8 @@ import { isAggregatedError } from '@mearie/svelte';
 import * as Sentry from '@sentry/sveltekit';
 import { sequence } from '@sveltejs/kit/hooks';
 import { logger, logging } from '@typie/lib/svelte';
-import { GlobalWindow } from 'happy-dom';
 import { env } from '$env/dynamic/public';
 import type { Handle, HandleServerError } from '@sveltejs/kit';
-
-globalThis.__happydom__ = { window: new GlobalWindow() };
 
 Sentry.init({
   dsn: env.PUBLIC_SENTRY_DSN,
