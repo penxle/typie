@@ -125,9 +125,9 @@
           <div class={grid({ gridTemplateColumns: 'repeat(2, 1fr)', gap: '24px', marginBottom: '32px' })}>
             <div>
               <div class={css({ fontSize: '24px', color: 'amber.500', marginBottom: '4px' })}>
-                {query.data.adminUser.postCount}
+                {query.data.adminUser.documentCount}
               </div>
-              <div class={css({ fontSize: '11px', color: 'amber.400' })}>POSTS</div>
+              <div class={css({ fontSize: '11px', color: 'amber.400' })}>DOCUMENTS</div>
             </div>
 
             <div>
@@ -136,40 +136,6 @@
               </div>
               <div class={css({ fontSize: '11px', color: 'amber.400' })}>CHARACTERS</div>
             </div>
-          </div>
-
-          <!-- RECENT POSTS -->
-          <div>
-            <h4 class={css({ fontSize: '14px', color: 'amber.500', marginBottom: '16px' })}>RECENT POSTS</h4>
-            {#if query.data.adminUser.recentPosts.length > 0}
-              <div class={flex({ flexDirection: 'column', gap: '12px' })}>
-                {#each query.data.adminUser.recentPosts as post (post.id)}
-                  <div
-                    class={css({
-                      borderWidth: '1px',
-                      borderColor: 'amber.500',
-                      padding: '12px',
-                    })}
-                  >
-                    <a
-                      class={css({
-                        fontSize: '12px',
-                        color: 'amber.500',
-                        _hover: { textDecoration: 'underline' },
-                      })}
-                      href="/admin/posts/{post.id}"
-                    >
-                      {post.title || '(UNTITLED)'}
-                    </a>
-                    <div class={css({ fontSize: '10px', color: 'amber.400', marginTop: '4px' })}>
-                      {dayjs(post.createdAt).formatAsDateTime()}
-                    </div>
-                  </div>
-                {/each}
-              </div>
-            {:else}
-              <div class={css({ fontSize: '12px', color: 'gray.400' })}>NO POSTS CREATED</div>
-            {/if}
           </div>
         </div>
 

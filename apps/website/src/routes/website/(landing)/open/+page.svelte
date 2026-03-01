@@ -368,7 +368,7 @@
                 marginBottom: '16px',
               })}
             >
-              Total Posts
+              Total Documents
             </span>
             <p
               class={css({
@@ -380,7 +380,7 @@
                 marginBottom: '12px',
               })}
             >
-              {formatWithUnit(query.data.stats.postsTotal.current, '개')}
+              {formatWithUnit(query.data.stats.documentsTotal.current, '개')}
             </p>
             <p class={css({ fontSize: '14px', color: 'dark.gray.500' })}>타이피에서 작성된 글</p>
           </div>

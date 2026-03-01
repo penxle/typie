@@ -36,9 +36,6 @@ export const load = async (event) => {
                   ... on Folder {
                     name
                   }
-                  ... on Post {
-                    title
-                  }
                   ... on Document {
                     title
                   }

@@ -34,9 +34,8 @@
     `),
   );
 
-  const { folderIds, postIds, documentIds } = $derived.by(() => {
+  const { folderIds, documentIds } = $derived.by(() => {
     const folderIds: string[] = [];
-    const postIds: string[] = [];
     const documentIds: string[] = [];
 
     const entityIds = tree.selectedEntityIds;
@@ -46,8 +45,6 @@
         if (entityIds.has(entity.id)) {
           if (entity.type === 'Folder') {
             folderIds.push(entity.id);
-          } else if (entity.type === 'Post') {
-            postIds.push(entity.id);
           } else if (entity.type === 'Document') {
             documentIds.push(entity.id);
           }
@@ -61,7 +58,7 @@
 
     collect(tree.entities);
 
-    return { folderIds, postIds, documentIds };
+    return { folderIds, documentIds };
   });
 </script>
 
@@ -71,12 +68,6 @@
       <div class={center({ gap: '2px' })}>
         <Icon style={css.raw({ color: 'text.disabled' })} icon={FolderIcon} size={14} />
         {folderIds.length}개
-      </div>
-    {/if}
-    {#if postIds.length > 0}
-      <div class={center({ gap: '2px' })}>
-        <Icon style={css.raw({ color: 'text.disabled' })} icon={FileIcon} size={14} />
-        {postIds.length}개
       </div>
     {/if}
     {#if documentIds.length > 0}
@@ -99,18 +90,6 @@
     }}
   >
     폴더 {folderIds.length}개 공유 및 게시
-  </MenuItem>
-{/if}
-
-{#if postIds.length > 0}
-  <MenuItem
-    icon={BlendIcon}
-    onclick={() => {
-      app.state.shareOpen = postIds;
-      mixpanel.track('open_post_share_modal', { via: 'multi_entities_menu', count: postIds.length });
-    }}
-  >
-    포스트 {postIds.length}개 공유 및 게시
   </MenuItem>
 {/if}
 
@@ -174,11 +153,7 @@
   >
     <Icon style={css.raw({ color: 'text.danger' })} icon={TriangleAlertIcon} size={14} />
     <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.danger' })}>
-      {[
-        folderIds.length > 0 && `${folderIds.length}개의 폴더`,
-        postIds.length > 0 && `${postIds.length}개의 포스트`,
-        documentIds.length > 0 && `${documentIds.length}개의 문서`,
-      ]
+      {[folderIds.length > 0 && `${folderIds.length}개의 폴더`, documentIds.length > 0 && `${documentIds.length}개의 문서`]
         .filter(Boolean)
         .join(', ')}가 삭제돼요
     </span>

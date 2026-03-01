@@ -124,9 +124,25 @@ export const values = {
   ],
 
   pageLayout: [
-    { label: 'A4 (210mm × 297mm)', value: 'a4', width: 210, height: 297, margin: { top: 25, bottom: 25, left: 25, right: 25 } },
-    { label: 'A5 (148mm × 210mm)', value: 'a5', width: 148, height: 210, margin: { top: 20, bottom: 20, left: 20, right: 20 } },
-    { label: 'B5 (176mm × 250mm)', value: 'b5', width: 176, height: 250, margin: { top: 15, bottom: 15, left: 15, right: 15 } },
-    { label: 'B6 (125mm × 176mm)', value: 'b6', width: 125, height: 176, margin: { top: 10, bottom: 10, left: 10, right: 10 } },
+    {
+      label: 'A4 (210mm × 297mm)',
+      value: 'a4',
+      layout: { pageWidth: 794, pageHeight: 1123, pageMarginTop: 94, pageMarginBottom: 94, pageMarginLeft: 94, pageMarginRight: 94 },
+    },
+    {
+      label: 'A5 (148mm × 210mm)',
+      value: 'a5',
+      layout: { pageWidth: 559, pageHeight: 794, pageMarginTop: 76, pageMarginBottom: 76, pageMarginLeft: 76, pageMarginRight: 76 },
+    },
+    {
+      label: 'B5 (176mm × 250mm)',
+      value: 'b5',
+      layout: { pageWidth: 665, pageHeight: 945, pageMarginTop: 57, pageMarginBottom: 57, pageMarginLeft: 57, pageMarginRight: 57 },
+    },
+    {
+      label: 'B6 (125mm × 176mm)',
+      value: 'b6',
+      layout: { pageWidth: 472, pageHeight: 665, pageMarginTop: 38, pageMarginBottom: 38, pageMarginLeft: 38, pageMarginRight: 38 },
+    },
   ],
 } as const;

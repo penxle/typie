@@ -228,7 +228,11 @@
             {#if query.data.adminDocument.entity.ancestors.length > 0}
               {#each query.data.adminDocument.entity.ancestors as ancestor, i (ancestor.id)}
                 <span>
-                  {ancestor.node.__typename === 'Folder' ? ancestor.node.name : ancestor.node.title}
+                  {ancestor.node.__typename === 'Folder'
+                    ? ancestor.node.name
+                    : ancestor.node.__typename === 'Document'
+                      ? ancestor.node.title
+                      : ''}
                 </span>
                 {#if i < query.data.adminDocument.entity.ancestors.length - 1}
                   <AdminIcon icon={ChevronRightIcon} size={12} />

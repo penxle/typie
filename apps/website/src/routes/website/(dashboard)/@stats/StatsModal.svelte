@@ -21,7 +21,7 @@
         me @required {
           id
           name
-          postCount
+          documentCount
           totalCharacterCount
 
           characterCountChanges {
@@ -211,9 +211,9 @@
         </div>
 
         <div class={css(cardStyle, { flex: '1' })}>
-          <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.faint', marginBottom: '8px' })}>총 포스트</div>
+          <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.faint', marginBottom: '8px' })}>총 문서</div>
           <div class={css({ fontSize: '28px', fontWeight: 'bold', color: 'text.default', fontVariantNumeric: 'tabular-nums' })}>
-            {query.data.me.postCount}
+            {query.data.me.documentCount}
           </div>
         </div>
 

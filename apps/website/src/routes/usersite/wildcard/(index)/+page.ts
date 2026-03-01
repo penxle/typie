@@ -28,27 +28,10 @@ export const load = async (event) => {
                   id
                   name
                   folderCount
-                  postCount
+                  documentCount
                   thumbnail {
                     id
                     ...Img_image
-                  }
-                }
-
-                ... on PostView {
-                  id
-                  title
-                  subtitle
-                  excerpt
-                  createdAt
-                  updatedAt
-                  thumbnail {
-                    id
-                    ...Img_image
-                  }
-
-                  document {
-                    id
                   }
                 }
 

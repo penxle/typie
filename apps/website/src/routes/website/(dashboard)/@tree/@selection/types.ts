@@ -1,6 +1,6 @@
 export type TreeEntity = {
   id: string;
-  type: 'Post' | 'Document' | 'Folder';
+  type: 'Document' | 'Folder';
   children?: TreeEntity[];
   parentId?: string;
 };

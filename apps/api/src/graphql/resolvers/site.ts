@@ -1,5 +1,5 @@
 import dayjs from 'dayjs';
-import { and, asc, desc, eq, getTableColumns, gt, inArray, isNull, or, sql, sum } from 'drizzle-orm';
+import { and, asc, desc, eq, getTableColumns, gt, inArray, isNull, ne, or, sql, sum } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import escape from 'escape-string-regexp';
 import { match } from 'ts-pattern';
@@ -14,14 +14,12 @@ import {
   firstOrThrowWith,
   FontFamilies,
   Fonts,
-  PostContents,
-  Posts,
   Sites,
   TableCode,
   Users,
   validateDbId,
 } from '@/db';
-import { DocumentType, EntityState, EntityType, EntityVisibility, FontState, PostType, SiteDateDisplay, SiteState } from '@/enums';
+import { DocumentType, EntityState, EntityType, EntityVisibility, FontState, SiteDateDisplay, SiteState } from '@/enums';
 import { env } from '@/env';
 import { NotFoundError, TypieError } from '@/errors';
 import { pubsub } from '@/pubsub';
@@ -78,7 +76,14 @@ Site.implement({
             return await db
               .select()
               .from(Entities)
-              .where(and(inArray(Entities.siteId, ids), eq(Entities.state, EntityState.ACTIVE), isNull(Entities.parentId)))
+              .where(
+                and(
+                  inArray(Entities.siteId, ids),
+                  eq(Entities.state, EntityState.ACTIVE),
+                  ne(Entities.type, EntityType.POST),
+                  isNull(Entities.parentId),
+                ),
+              )
               .orderBy(asc(Entities.order));
           },
           key: ({ siteId }) => siteId,
@@ -119,14 +124,7 @@ Site.implement({
 
     templates: t.field({
       type: [Post],
-      resolve: async (self) => {
-        return await db
-          .select(getTableColumns(Posts))
-          .from(Posts)
-          .innerJoin(Entities, eq(Posts.entityId, Entities.id))
-          .where(and(eq(Entities.siteId, self.id), eq(Posts.type, PostType.TEMPLATE), eq(Entities.state, EntityState.ACTIVE)))
-          .orderBy(asc(Posts.createdAt));
-      },
+      resolve: async () => [],
     }),
 
     documentTemplates: t.field({
@@ -150,32 +148,20 @@ Site.implement({
         }),
       }),
       resolve: async (self) => {
-        const [postRow, documentRow] = await Promise.all([
-          db
-            .select({
-              totalCharacterCount: sum(PostContents.characterCount).mapWith(Number),
-              totalBlobSize: sum(PostContents.blobSize).mapWith(Number),
-            })
-            .from(PostContents)
-            .innerJoin(Posts, eq(PostContents.postId, Posts.id))
-            .innerJoin(Entities, eq(Posts.entityId, Entities.id))
-            .where(and(eq(Entities.siteId, self.id), eq(Entities.state, EntityState.ACTIVE)))
-            .then(firstOrThrow),
-          db
-            .select({
-              totalCharacterCount: sum(DocumentContents.characterCount).mapWith(Number),
-              totalBlobSize: sum(DocumentContents.blobSize).mapWith(Number),
-            })
-            .from(DocumentContents)
-            .innerJoin(Documents, eq(DocumentContents.documentId, Documents.id))
-            .innerJoin(Entities, eq(Documents.entityId, Entities.id))
-            .where(and(eq(Entities.siteId, self.id), eq(Entities.state, EntityState.ACTIVE)))
-            .then(firstOrThrow),
-        ]);
+        const documentRow = await db
+          .select({
+            totalCharacterCount: sum(DocumentContents.characterCount).mapWith(Number),
+            totalBlobSize: sum(DocumentContents.blobSize).mapWith(Number),
+          })
+          .from(DocumentContents)
+          .innerJoin(Documents, eq(DocumentContents.documentId, Documents.id))
+          .innerJoin(Entities, eq(Documents.entityId, Entities.id))
+          .where(and(eq(Entities.siteId, self.id), eq(Entities.state, EntityState.ACTIVE)))
+          .then(firstOrThrow);
 
         return {
-          totalCharacterCount: (postRow.totalCharacterCount || 0) + (documentRow.totalCharacterCount || 0),
-          totalBlobSize: String((postRow.totalBlobSize || 0) + (documentRow.totalBlobSize || 0)),
+          totalCharacterCount: documentRow.totalCharacterCount || 0,
+          totalBlobSize: String(documentRow.totalBlobSize || 0),
         };
       },
     }),
@@ -192,6 +178,7 @@ Site.implement({
             and(
               eq(Entities.siteId, self.id),
               eq(Entities.state, EntityState.DELETED),
+              ne(Entities.type, EntityType.POST),
               gt(Entities.deletedAt, dayjs().subtract(30, 'days')),
               or(isNull(parentEntities.id), eq(parentEntities.state, EntityState.ACTIVE)),
             ),
@@ -226,6 +213,7 @@ SiteView.implement({
                 and(
                   inArray(Entities.siteId, ids),
                   eq(Entities.state, EntityState.ACTIVE),
+                  ne(Entities.type, EntityType.POST),
                   eq(Entities.visibility, EntityVisibility.PUBLIC),
                   isNull(Entities.parentId),
                 ),

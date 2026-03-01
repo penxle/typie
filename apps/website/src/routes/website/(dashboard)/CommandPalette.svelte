@@ -12,7 +12,7 @@
   import { tick } from 'svelte';
   import { SvelteMap } from 'svelte/reactivity';
   import { match } from 'ts-pattern';
-  import { DocumentType, PostType } from '@/enums';
+  import { DocumentType } from '@/enums';
   import ArrowDownIcon from '~icons/lucide/arrow-down';
   import ArrowUpIcon from '~icons/lucide/arrow-up';
   import CornerDownLeftIcon from '~icons/lucide/corner-down-left';
@@ -58,12 +58,6 @@
           node {
             __typename
 
-            ... on Post {
-              id
-              title
-              type
-            }
-
             ... on Document {
               id
               title
@@ -86,23 +80,6 @@
 
           hits {
             __typename
-
-            ... on SearchHitPost {
-              title
-              subtitle
-              text
-
-              post {
-                id
-                title
-                type
-
-                entity {
-                  id
-                  slug
-                }
-              }
-            }
 
             ... on SearchHitDocument {
               title
@@ -262,12 +239,6 @@
           .slice(0, 5)
           .map((entity) =>
             match(entity.node)
-              .with({ __typename: 'Post' }, (node) => ({
-                __typename: 'SearchHitRecent' as const,
-                entity,
-                title: node.title || '제목 없음',
-                icon: node.type === PostType.TEMPLATE ? LayoutTemplateIcon : FileIcon,
-              }))
               .with({ __typename: 'Document' }, (node) => ({
                 __typename: 'SearchHitRecent' as const,
                 entity,
@@ -275,7 +246,7 @@
                 icon: node.documentType === DocumentType.TEMPLATE ? LayoutTemplateIcon : FileIcon,
               }))
               .with({ __typename: 'Folder' }, () => null)
-              .exhaustive(),
+              .otherwise(() => null),
           )
           .filter((hit): hit is NonNullable<typeof hit> => hit !== null)
       : [],
@@ -287,10 +258,11 @@
       idx,
       action: match(hit)
         .with({ __typename: 'SearchHitCommand' }, (hit) => hit.action)
-        .with({ __typename: 'SearchHitPost' }, (hit) => () => goto(`/${hit.post.entity.slug}`))
         .with({ __typename: 'SearchHitDocument' }, (hit) => () => goto(`/${hit.document.entity.slug}`))
         .with({ __typename: 'SearchHitRecent' }, (hit) => () => goto(`/${hit.entity.slug}`))
-        .exhaustive(),
+        .otherwise(() => () => {
+          /* noop */
+        }),
     })),
   );
   const searchHitsByType = $derived.by(() => {
@@ -501,10 +473,9 @@
       >
         {match(type)
           .with('SearchHitCommand', () => '액션')
-          .with('SearchHitPost', () => '포스트')
           .with('SearchHitDocument', () => '문서')
           .with('SearchHitRecent', () => '최근 본 항목')
-          .exhaustive()}
+          .otherwise(() => '')}
       </div>
 
       {#each hits as hit (hit.idx)}
@@ -543,32 +514,6 @@
             </div>
 
             <span class={css({ fontSize: '14px', fontWeight: 'medium' })}>{hit.name}</span>
-          {:else if hit.__typename === 'SearchHitPost'}
-            <div
-              class={center({ flexShrink: '0', borderRadius: '6px', size: '24px', color: 'text.faint', backgroundColor: 'surface.muted' })}
-            >
-              {#if hit.post.type === PostType.TEMPLATE}
-                <Icon icon={LayoutTemplateIcon} size={16} />
-              {:else}
-                <Icon icon={FileIcon} size={16} />
-              {/if}
-            </div>
-
-            <div class={css({ fontSize: '14px', fontWeight: 'medium', truncate: true })}>
-              {#if hit.title}
-                <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-                {@html hit.title}
-              {:else}
-                {hit.post.title}
-              {/if}
-            </div>
-
-            {#if hit.text}
-              <div class={css({ color: 'text.muted', fontSize: '12px', truncate: true })}>
-                <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-                {@html hit.text}
-              </div>
-            {/if}
           {:else if hit.__typename === 'SearchHitDocument'}
             <div
               class={center({ flexShrink: '0', borderRadius: '6px', size: '24px', color: 'text.faint', backgroundColor: 'surface.muted' })}

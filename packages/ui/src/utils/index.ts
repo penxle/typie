@@ -8,7 +8,6 @@ export * from './flip-animation';
 export * from './json';
 export * from './note-colors';
 export * from './number';
-export * from './page-layout';
 export * from './ref';
 export * from './remeda';
 export * from './scroll-viewport';

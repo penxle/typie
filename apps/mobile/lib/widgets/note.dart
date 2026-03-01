@@ -2,7 +2,7 @@ import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:typie/context/theme.dart';
 import 'package:typie/icons/lucide_light.dart';
-import 'package:typie/screens/editor/values.dart';
+import 'package:typie/screens/native_editor/toolbar/values.dart';
 import 'package:typie/widgets/tappable.dart';
 
 class _NoteFoldClipper extends CustomClipper<Path> {

@@ -146,7 +146,7 @@
       {#snippet $activity(user)}
         <div class={css({ fontSize: '12px' })}>
           <div class={css({ color: 'amber.500' })}>
-            {user.postCount} POSTS
+            {user.documentCount} DOCUMENTS
           </div>
           <div class={css({ fontSize: '11px', color: 'amber.400' })}>
             {comma(user.totalCharacterCount)} CHARS

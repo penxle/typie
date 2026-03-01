@@ -1,5 +1,5 @@
 import dayjs from 'dayjs';
-import { and, asc, desc, eq, getTableColumns, gt, inArray, isNull, lt, ne, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, isNull, lt, ne, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import escape from 'escape-string-regexp';
 import { match } from 'ts-pattern';
@@ -21,7 +21,6 @@ import {
 import { EntityAvailability, EntityState, EntityType, EntityVisibility, NoteState, RedirectType, SiteState } from '@/enums';
 import { env } from '@/env';
 import { NotFoundError, TypieError } from '@/errors';
-import { enqueueJob } from '@/mq';
 import { pubsub } from '@/pubsub';
 import { generateFractionalOrder } from '@/utils';
 import { assertSitePermission } from '@/utils/permission';
@@ -99,7 +98,7 @@ Entity.implement({
             return await db
               .select()
               .from(Entities)
-              .where(and(inArray(Entities.parentId, ids), eq(Entities.state, EntityState.ACTIVE)))
+              .where(and(inArray(Entities.parentId, ids), eq(Entities.state, EntityState.ACTIVE), ne(Entities.type, EntityType.POST)))
               .orderBy(asc(Entities.order));
           },
           // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
@@ -124,6 +123,7 @@ Entity.implement({
                 and(
                   inArray(Entities.parentId, ids),
                   eq(Entities.state, EntityState.DELETED),
+                  ne(Entities.type, EntityType.POST),
                   gt(Entities.deletedAt, dayjs().subtract(30, 'days')),
                 ),
               )
@@ -244,7 +244,14 @@ EntityView.implement({
         return await db
           .select()
           .from(Entities)
-          .where(and(eq(Entities.parentId, self.id), eq(Entities.state, EntityState.ACTIVE), inArray(Entities.visibility, visibilities)))
+          .where(
+            and(
+              eq(Entities.parentId, self.id),
+              eq(Entities.state, EntityState.ACTIVE),
+              ne(Entities.type, EntityType.POST),
+              inArray(Entities.visibility, visibilities),
+            ),
+          )
           .orderBy(asc(Entities.order));
       },
     }),
@@ -278,7 +285,7 @@ EntityView.implement({
       type: EntityView,
       nullable: true,
       resolve: async (self) => {
-        if (self.type !== EntityType.POST && self.type !== EntityType.DOCUMENT) return null;
+        if (self.type !== EntityType.DOCUMENT) return null;
 
         let visibilities: EntityVisibility[] = [EntityVisibility.PUBLIC];
 
@@ -295,18 +302,16 @@ EntityView.implement({
         }
 
         return await db
-          .select(getTableColumns(Entities))
+          .select()
           .from(Entities)
-          .leftJoin(Posts, eq(Posts.entityId, Entities.id))
           .where(
             and(
               eq(Entities.siteId, self.siteId),
               self.parentId ? eq(Entities.parentId, self.parentId) : isNull(Entities.parentId),
               eq(Entities.state, EntityState.ACTIVE),
-              inArray(Entities.type, [EntityType.POST, EntityType.DOCUMENT]),
+              eq(Entities.type, EntityType.DOCUMENT),
               inArray(Entities.visibility, visibilities),
               lt(Entities.order, self.order),
-              or(ne(Entities.type, EntityType.POST), isNull(Posts.documentId)),
             ),
           )
           .orderBy(desc(Entities.order))
@@ -319,7 +324,7 @@ EntityView.implement({
       type: EntityView,
       nullable: true,
       resolve: async (self) => {
-        if (self.type !== EntityType.POST && self.type !== EntityType.DOCUMENT) return null;
+        if (self.type !== EntityType.DOCUMENT) return null;
 
         let visibilities: EntityVisibility[] = [EntityVisibility.PUBLIC];
 
@@ -336,18 +341,16 @@ EntityView.implement({
         }
 
         return await db
-          .select(getTableColumns(Entities))
+          .select()
           .from(Entities)
-          .leftJoin(Posts, eq(Posts.entityId, Entities.id))
           .where(
             and(
               eq(Entities.siteId, self.siteId),
               self.parentId ? eq(Entities.parentId, self.parentId) : isNull(Entities.parentId),
               eq(Entities.state, EntityState.ACTIVE),
-              inArray(Entities.type, [EntityType.POST, EntityType.DOCUMENT]),
+              eq(Entities.type, EntityType.DOCUMENT),
               inArray(Entities.visibility, visibilities),
               gt(Entities.order, self.order),
-              or(ne(Entities.type, EntityType.POST), isNull(Posts.documentId)),
             ),
           )
           .orderBy(asc(Entities.order))
@@ -872,20 +875,8 @@ builder.mutationFields((t) => ({
         pubsub.publish('site:update', siteId, { scope: 'site' });
         pubsub.publish('user:usage:update', ctx.session.userId, null);
 
-        const postEntityIds: string[] = [];
-
         for (const entity of deletedEntities) {
           pubsub.publish('site:update', siteId, { scope: 'entity', entityId: entity.id });
-          if (entity.type === EntityType.POST) {
-            postEntityIds.push(entity.id);
-          }
-        }
-
-        if (postEntityIds.length > 0) {
-          const posts = await tx.select({ id: Posts.id }).from(Posts).where(inArray(Posts.entityId, postEntityIds));
-          for (const post of posts) {
-            await enqueueJob('post:index', post.id);
-          }
         }
 
         return deletedEntities;
@@ -982,14 +973,6 @@ builder.mutationFields((t) => ({
 
         pubsub.publish('site:update', entity.siteId, { scope: 'site' });
         pubsub.publish('user:usage:update', ctx.session.userId, null);
-
-        const postEntityIds = updatedEntities.filter(({ type }) => type === EntityType.POST).map(({ id }) => id);
-        if (postEntityIds.length > 0) {
-          const posts = await tx.select({ id: Posts.id }).from(Posts).where(inArray(Posts.entityId, postEntityIds));
-          const postIds = posts.map(({ id }) => id);
-
-          await Promise.all(postIds.map((postId) => enqueueJob('post:index', postId)));
-        }
 
         return entity.id;
       });

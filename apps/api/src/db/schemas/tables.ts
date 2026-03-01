@@ -4,7 +4,6 @@ import { TableCode } from './codes';
 import * as E from './enums';
 import { createDbId } from './id';
 import { bytea, datetime } from './types';
-import type { JSONContent } from '@tiptap/core';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import type { CouponCondition, PageLayout, PlanRules } from './json';
 
@@ -489,7 +488,7 @@ export const PostContents = pgTable(
       .notNull()
       .unique()
       .references(() => Posts.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-    body: jsonb('body').notNull().$type<JSONContent>(),
+    body: jsonb('body').notNull().$type<Record<string, unknown>>(),
     text: text('text').notNull(),
     characterCount: integer('character_count').notNull().default(0),
     blobSize: bigint('blob_size', { mode: 'number' }).notNull().default(0),

@@ -34,27 +34,24 @@ async function ensureInstanceReady(app: Application): Promise<void> {
 }
 
 const SCALE_FACTOR = 2;
-const MM_TO_PX = 96 / 25.4;
-
-export type PageLayout = {
-  width: number;
-  height: number;
-  marginTop: number;
-  marginBottom: number;
-  marginLeft: number;
-  marginRight: number;
-};
 
 export type GenerateDocumentPdfParams = {
   snapshot: Uint8Array;
   title: string;
   author: string;
   fonts: FontFamily[];
-  pageLayout: PageLayout;
+  layout: {
+    pageWidth: number;
+    pageHeight: number;
+    pageMarginTop: number;
+    pageMarginBottom: number;
+    pageMarginLeft: number;
+    pageMarginRight: number;
+  };
 };
 
 export async function generateDocumentPdf(params: GenerateDocumentPdfParams): Promise<Uint8Array> {
-  const { snapshot, title, author, fonts, pageLayout } = params;
+  const { snapshot, title, author, fonts, layout } = params;
   return wasm.use(async (wasm) => {
     await ensureInstanceReady(wasm);
 
@@ -70,12 +67,12 @@ export async function generateDocumentPdf(params: GenerateDocumentPdfParams): Pr
         type: 'setLayoutMode',
         mode: {
           type: 'paginated',
-          pageWidth: Math.round(pageLayout.width * MM_TO_PX),
-          pageHeight: Math.round(pageLayout.height * MM_TO_PX),
-          pageMarginTop: Math.round(pageLayout.marginTop * MM_TO_PX),
-          pageMarginBottom: Math.round(pageLayout.marginBottom * MM_TO_PX),
-          pageMarginLeft: Math.round(pageLayout.marginLeft * MM_TO_PX),
-          pageMarginRight: Math.round(pageLayout.marginRight * MM_TO_PX),
+          pageWidth: layout.pageWidth,
+          pageHeight: layout.pageHeight,
+          pageMarginTop: layout.pageMarginTop,
+          pageMarginBottom: layout.pageMarginBottom,
+          pageMarginLeft: layout.pageMarginLeft,
+          pageMarginRight: layout.pageMarginRight,
         },
       });
 

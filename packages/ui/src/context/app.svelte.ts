@@ -1,6 +1,5 @@
 import { getContext, setContext } from 'svelte';
 import { LocalStore, SessionStore } from '../state';
-import type { PageLayout } from '../utils';
 
 export type AppPreference = {
   sidebarWidth: number;
@@ -34,7 +33,6 @@ export type AppPreference = {
 
   experimental_pdfExportEnabled: boolean;
   experimental_docxExportEnabled: boolean;
-  lastPdfPageLayout: PageLayout | null;
 
   referralWelcomeModalShown: boolean;
 
@@ -131,8 +129,6 @@ export const setupAppContext = (userId: string) => {
       searchMatchWholeWord: false,
 
       experimental_pdfExportEnabled: false,
-
-      lastPdfPageLayout: null,
 
       experimental_docxExportEnabled: false,
 

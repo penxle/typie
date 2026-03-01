@@ -76,16 +76,6 @@
                 name
               }
 
-              ... on Post {
-                id
-                title
-
-                characterCountChange {
-                  additions
-                  deletions
-                }
-              }
-
               ... on Document {
                 id
                 title

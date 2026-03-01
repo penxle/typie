@@ -114,7 +114,7 @@
             })}
             onclick={() => {
               app.state.shareOpen = [document.data.entity.id];
-              mixpanel.track('open_post_share_modal', { via: 'panel' });
+              mixpanel.track('open_document_share_modal', { via: 'panel' });
             }}
             type="button"
           >

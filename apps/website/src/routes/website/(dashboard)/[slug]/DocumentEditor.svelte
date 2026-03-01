@@ -431,7 +431,7 @@
   });
 
   $effect(() => {
-    editorRegistry.registerNative(pane.id, mountedSlug, editor);
+    editorRegistry.register(pane.id, mountedSlug, editor);
 
     return () => {
       editorRegistry.unregister(pane.id, mountedSlug);

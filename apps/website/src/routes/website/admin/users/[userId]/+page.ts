@@ -48,13 +48,7 @@ export const load = async (event) => {
               phoneNumber
             }
             marketingConsent
-            recentPosts {
-              id
-              title
-              createdAt
-              updatedAt
-            }
-            postCount
+            documentCount
             totalCharacterCount
             billingKey {
               id

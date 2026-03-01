@@ -59,27 +59,10 @@
               id
               name
               folderCount
-              postCount
+              documentCount
               thumbnail {
                 id
                 ...Img_image
-              }
-            }
-
-            ... on PostView {
-              id
-              title
-              subtitle
-              excerpt
-              createdAt
-              updatedAt
-              thumbnail {
-                id
-                ...Img_image
-              }
-
-              document {
-                id
               }
             }
 
@@ -115,11 +98,7 @@
   );
 
   const folders = $derived(entityView.data.children.filter((child) => child.node.__typename === 'FolderView'));
-  const posts = $derived(
-    entityView.data.children.filter(
-      (child) => child.node.__typename === 'DocumentView' || (child.node.__typename === 'PostView' && !child.node.document),
-    ),
-  );
+  const documents = $derived(entityView.data.children.filter((child) => child.node.__typename === 'DocumentView'));
 </script>
 
 <svelte:head>
@@ -128,7 +107,7 @@
 
 {#if entityView.data.node.__typename === 'FolderView'}
   <Helmet
-    description={`${entityView.data.node.name}에서 공유된 폴더 ${folders.length}개, 포스트 ${posts.length}개를 확인하세요.`}
+    description={`${entityView.data.node.name}에서 공유된 폴더 ${folders.length}개, 문서 ${documents.length}개를 확인하세요.`}
     image={{ size: 'large', src: `${env.PUBLIC_API_URL}/og/${entityView.data.id}` }}
     title={entityView.data.node.name}
   />
@@ -176,16 +155,16 @@
         </h1>
 
         <div class={flex({ alignItems: 'center', gap: '8px', marginTop: '8px' })}>
-          {#if folders.length > 0 || posts.length > 0}
+          {#if folders.length > 0 || documents.length > 0}
             <p class={css({ fontSize: '14px', color: 'text.muted' })}>
               {#if folders.length > 0}
                 폴더 {folders.length}개
               {/if}
-              {#if folders.length > 0 && posts.length > 0}
+              {#if folders.length > 0 && documents.length > 0}
                 ·
               {/if}
-              {#if posts.length > 0}
-                포스트 {posts.length}개
+              {#if documents.length > 0}
+                문서 {documents.length}개
               {/if}
             </p>
           {/if}
@@ -253,16 +232,16 @@
                     >
                       <span class="folder-name">{entity.node.name}</span>
                     </p>
-                    {#if entity.node.folderCount > 0 || entity.node.postCount > 0}
+                    {#if entity.node.folderCount > 0 || entity.node.documentCount > 0}
                       <p class={css({ marginTop: '2px', fontSize: '13px', color: 'text.faint' })}>
                         {#if entity.node.folderCount > 0}
                           폴더 {entity.node.folderCount}개
                         {/if}
-                        {#if entity.node.folderCount > 0 && entity.node.postCount > 0}
+                        {#if entity.node.folderCount > 0 && entity.node.documentCount > 0}
                           ·
                         {/if}
-                        {#if entity.node.postCount > 0}
-                          포스트 {entity.node.postCount}개
+                        {#if entity.node.documentCount > 0}
+                          문서 {entity.node.documentCount}개
                         {/if}
                       </p>
                     {/if}
@@ -276,11 +255,11 @@
         </section>
       {/if}
 
-      {#if posts.length > 0}
+      {#if documents.length > 0}
         <section>
           <div class={flex({ flexDirection: 'column' })}>
-            {#each posts as entity, index (entity.id)}
-              {#if entity.node.__typename === 'PostView' || entity.node.__typename === 'DocumentView'}
+            {#each documents as entity, index (entity.id)}
+              {#if entity.node.__typename === 'DocumentView'}
                 <a
                   class={flex({
                     gap: '24px',
@@ -288,7 +267,7 @@
                     borderTopWidth: index === 0 ? '0' : '1px',
                     borderColor: 'border.subtle',
                     cursor: 'pointer',
-                    _hover: { '& .post-title': { color: 'text.muted' } },
+                    _hover: { '& .document-title': { color: 'text.muted' } },
                   })}
                   href={`/${entity.slug}`}
                 >
@@ -303,7 +282,7 @@
                         transition: 'colors',
                       })}
                     >
-                      <span class="post-title">{entity.node.title}</span>
+                      <span class="document-title">{entity.node.title}</span>
                     </h2>
 
                     {#if entity.node.subtitle}
@@ -370,7 +349,7 @@
         </section>
       {/if}
 
-      {#if folders.length === 0 && posts.length === 0}
+      {#if folders.length === 0 && documents.length === 0}
         <div
           class={flex({
             flexDirection: 'column',

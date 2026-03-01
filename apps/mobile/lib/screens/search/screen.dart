@@ -119,46 +119,6 @@ class SearchScreen extends HookWidget {
                   itemCount: data.search.hits.length,
                   itemBuilder: (context, index) {
                     return data.search.hits[index].when(
-                      searchHitPost: (post) => Tappable(
-                        onTap: () async {
-                          await context.router.push(EditorRoute(slug: post.post.entity.slug));
-                        },
-                        child: Container(
-                          decoration: BoxDecoration(
-                            border: Border.all(color: context.colors.borderStrong),
-                            borderRadius: BorderRadius.circular(8),
-                            color: context.colors.surfaceDefault,
-                          ),
-                          padding: const Pad(horizontal: 16, vertical: 12),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            spacing: 4,
-                            children: [
-                              Row(
-                                spacing: 8,
-                                children: [
-                                  if (post.post.type == GPostType.TEMPLATE)
-                                    const Icon(LucideLightIcons.shapes, size: 18),
-                                  Expanded(
-                                    child: _HTMLText(
-                                      post.title ?? '(제목 없음)',
-                                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-                                    ),
-                                  ),
-                                  Text(
-                                    post.post.updatedAt.ago,
-                                    style: TextStyle(fontSize: 14, color: context.colors.textSubtle),
-                                  ),
-                                ],
-                              ),
-                              _HTMLText(
-                                post.text ?? '(내용 없음)',
-                                style: TextStyle(fontSize: 14, color: context.colors.textSubtle),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
                       searchHitDocument: (document) => Tappable(
                         onTap: () async {
                           await context.router.push(NativeEditorRoute(slug: document.document.entity.slug));
@@ -223,7 +183,6 @@ class _RecentlyViewedItem extends StatelessWidget {
     return GestureDetector(
       onTap: () async {
         await entity.node.when(
-          post: (_) => context.router.push(EditorRoute(slug: entity.slug)),
           document: (_) => context.router.push(NativeEditorRoute(slug: entity.slug)),
           orElse: Future<void>.value,
         );
@@ -237,33 +196,6 @@ class _RecentlyViewedItem extends StatelessWidget {
         ),
         padding: const Pad(horizontal: 16, vertical: 12),
         child: entity.node.when(
-          post: (post) => Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            spacing: 4,
-            children: [
-              Row(
-                spacing: 8,
-                children: [
-                  if (post.type == GPostType.TEMPLATE) const Icon(LucideLightIcons.shapes, size: 18),
-                  Expanded(
-                    child: Text(
-                      post.title,
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-                      overflow: TextOverflow.ellipsis,
-                      maxLines: 1,
-                    ),
-                  ),
-                  Text(post.updatedAt.ago, style: TextStyle(fontSize: 14, color: context.colors.textSubtle)),
-                ],
-              ),
-              Text(
-                post.excerpt.isEmpty ? '(내용 없음)' : post.excerpt,
-                style: TextStyle(fontSize: 14, color: context.colors.textSubtle),
-                overflow: TextOverflow.ellipsis,
-                maxLines: 1,
-              ),
-            ],
-          ),
           document: (document) => Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             spacing: 4,

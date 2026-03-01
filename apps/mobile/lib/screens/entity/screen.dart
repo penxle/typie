@@ -34,9 +34,7 @@ import 'package:typie/screens/entity/__generated__/create_document_mutation.req.
 import 'package:typie/screens/entity/__generated__/create_folder_mutation.req.gql.dart';
 import 'package:typie/screens/entity/__generated__/delete_document_mutation.req.gql.dart';
 import 'package:typie/screens/entity/__generated__/delete_folder_mutation.req.gql.dart';
-import 'package:typie/screens/entity/__generated__/delete_post_mutation.req.gql.dart';
 import 'package:typie/screens/entity/__generated__/duplicate_document_mutation.req.gql.dart';
-import 'package:typie/screens/entity/__generated__/duplicate_post_mutation.req.gql.dart';
 import 'package:typie/screens/entity/__generated__/entity_fragment.data.gql.dart';
 import 'package:typie/screens/entity/__generated__/move_entity_mutation.req.gql.dart';
 import 'package:typie/screens/entity/__generated__/persist_blob_as_image_mutation.req.gql.dart';
@@ -60,10 +58,6 @@ import 'package:typie/widgets/vertical_divider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 const maxDepth = 3;
-
-List<GEntityScreen_Entity_entity> _filterEntities(List<GEntityScreen_Entity_entity> entities) {
-  return entities.where((e) => e.node.maybeWhen(post: (post) => post.document == null, orElse: () => true)).toList();
-}
 
 @RoutePage()
 class EntityRouter extends AutoRouter {
@@ -97,7 +91,7 @@ class _WithSiteId extends HookWidget {
       operation: GEntityScreen_WithSiteId_QueryReq((b) => b..vars.siteId = pref.siteId),
       refreshNotifier: refreshNotifier,
       builder: (context, client, data) {
-        return _EntityList(null, _filterEntities(data.site.entities.toList()), site: data.site);
+        return _EntityList(null, data.site.entities.toList(), site: data.site);
       },
     );
   }
@@ -119,7 +113,7 @@ class _WithEntityId extends HookWidget {
       operation: GEntityScreen_WithEntityId_QueryReq((b) => b..vars.entityId = entityId),
       refreshNotifier: refreshNotifier,
       builder: (context, client, data) {
-        return _EntityList(data.entity, _filterEntities(data.entity.children.toList()));
+        return _EntityList(data.entity, data.entity.children.toList());
       },
     );
   }
@@ -303,7 +297,7 @@ class _EntityList extends HookWidget {
                           },
                           child: Text(
                             entity == null
-                                ? currentSiteName.value ?? '내 포스트'
+                                ? currentSiteName.value ?? '내 문서'
                                 : textEditingController.text.isEmpty
                                 ? folder!.name
                                 : textEditingController.text,
@@ -614,7 +608,6 @@ class _EntityList extends HookWidget {
                           unawaited(
                             entities[index].node.when(
                               folder: (folder) => context.router.push(EntityRoute(entityId: entities[index].id)),
-                              post: (post) => context.router.push(EditorRoute(slug: entities[index].slug)),
                               document: (document) =>
                                   context.router.push(NativeEditorRoute(slug: entities[index].slug)),
                               orElse: () => throw UnimplementedError(),
@@ -784,115 +777,6 @@ class _EntityList extends HookWidget {
                                                 'delete_folder',
                                                 properties: {'via': 'entity_folder_menu'},
                                               ),
-                                            );
-                                          },
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                ],
-                              ),
-                            ),
-                            post: (post) => context.showBottomSheet(
-                              child: BottomMenu(
-                                header: _BottomMenuHeader(entity: entities[index], siteName: currentSiteName.value),
-                                items: [
-                                  BottomMenuItem(
-                                    icon: LucideLightIcons.file_symlink,
-                                    label: '다른 폴더로 옮기기',
-                                    onTap: () async {
-                                      unawaited(
-                                        mixpanel.track('move_entity_try', properties: {'via': 'entity_post_menu'}),
-                                      );
-
-                                      await context.showBottomSheet(
-                                        intercept: true,
-                                        child: MoveEntityModal.single(entity: entities[index], via: 'entity_post_menu'),
-                                      );
-                                    },
-                                  ),
-                                  BottomMenuItem(
-                                    icon: LucideLightIcons.external_link,
-                                    label: '스페이스에서 열기',
-                                    onTap: () async {
-                                      unawaited(
-                                        mixpanel.track('open_post_in_browser', properties: {'via': 'entity_post_menu'}),
-                                      );
-
-                                      final url = Uri.parse(entities[index].url);
-                                      await launchUrl(url, mode: LaunchMode.externalApplication);
-                                    },
-                                  ),
-                                  BottomMenuItem(
-                                    icon: LucideLightIcons.blend,
-                                    label: '공유하기',
-                                    onTap: () async {
-                                      unawaited(
-                                        mixpanel.track(
-                                          'open_post_share_modal',
-                                          properties: {'via': 'entity_post_menu'},
-                                        ),
-                                      );
-
-                                      await context.showBottomSheet(
-                                        intercept: true,
-                                        child: ShareBottomSheet(entityIds: [entities[index].id]),
-                                      );
-                                    },
-                                  ),
-                                  BottomMenuItem(
-                                    icon: LucideLightIcons.copy,
-                                    label: '복제하기',
-                                    onTap: () async {
-                                      await client.request(
-                                        GEntityScreen_DuplicatePost_MutationReq((b) => b..vars.input.postId = post.id),
-                                      );
-
-                                      unawaited(
-                                        mixpanel.track('duplicate_post', properties: {'via': 'entity_post_menu'}),
-                                      );
-                                    },
-                                  ),
-                                  const BottomMenuSeparator(),
-                                  if (!isSelecting.value && !isReordering.value) ...[
-                                    BottomMenuItem(
-                                      icon: LucideLightIcons.square_check,
-                                      label: '여러 항목 선택하기',
-                                      onTap: () {
-                                        isSelecting.value = true;
-                                        selectedItems.value = {entities[index].id};
-                                      },
-                                    ),
-                                    BottomMenuItem(
-                                      icon: LucideLightIcons.chevrons_up_down,
-                                      label: '순서 변경하기',
-                                      onTap: () {
-                                        isReordering.value = true;
-                                      },
-                                    ),
-                                    const BottomMenuSeparator(),
-                                  ],
-                                  BottomMenuItem(
-                                    icon: LucideLightIcons.trash_2,
-                                    label: '삭제하기',
-                                    onTap: () async {
-                                      await context.showModal(
-                                        intercept: true,
-                                        child: ConfirmModal(
-                                          title: '포스트 삭제',
-                                          message: '"${post.title}" 포스트를 삭제하시겠어요? 삭제 후 30일 동안 휴지통에 보관돼요.',
-                                          confirmText: '삭제하기',
-                                          confirmTextColor: context.colors.textBright,
-                                          confirmBackgroundColor: context.colors.accentDanger,
-                                          onConfirm: () async {
-                                            await client.request(
-                                              GEntityScreen_DeletePost_MutationReq(
-                                                (b) => b..vars.input.postId = post.id,
-                                              ),
-                                            );
-
-                                            unawaited(
-                                              mixpanel.track('delete_post', properties: {'via': 'entity_post_menu'}),
                                             );
                                           },
                                         ),
@@ -1076,7 +960,6 @@ class _EntityList extends HookWidget {
                                     padding: const Pad(vertical: 12),
                                     child: entities[index].node.when(
                                       folder: (_) => _Folder(entities[index]),
-                                      post: (_) => _Post(entities[index]),
                                       document: (_) => _Document(entities[index]),
                                       orElse: () => throw UnimplementedError(),
                                     ),
@@ -1191,45 +1074,6 @@ class _Folder extends StatelessWidget {
   }
 }
 
-class _Post extends StatelessWidget {
-  const _Post(this.entity);
-
-  final GEntityScreen_Entity_entity entity;
-  GEntityScreen_Entity_entity_node__asPost get post => entity.node as GEntityScreen_Entity_entity_node__asPost;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: 4,
-      children: [
-        Row(
-          spacing: 8,
-          children: [
-            if (post.postType == GPostType.TEMPLATE) const Icon(LucideLightIcons.shapes, size: 18),
-            Expanded(
-              child: Text(
-                post.title,
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-                overflow: TextOverflow.ellipsis,
-                maxLines: 1,
-              ),
-            ),
-            if (post.postType == GPostType.NORMAL)
-              Text(post.updatedAt.ago, style: TextStyle(fontSize: 14, color: context.colors.textSubtle)),
-          ],
-        ),
-        Text(
-          post.excerpt.isEmpty ? '(내용 없음)' : post.excerpt,
-          style: TextStyle(fontSize: 14, color: context.colors.textSubtle),
-          overflow: TextOverflow.ellipsis,
-          maxLines: 1,
-        ),
-      ],
-    );
-  }
-}
-
 class _Document extends StatelessWidget {
   const _Document(this.entity);
 
@@ -1291,7 +1135,6 @@ class _BottomMenuHeader extends StatelessWidget {
             Icon(
               entity?.node.when(
                     folder: (_) => LucideLightIcons.folder,
-                    post: (_) => LucideLightIcons.file,
                     document: (doc) => doc.documentType == GDocumentType.TEMPLATE
                         ? LucideLightIcons.layout_template
                         : LucideLightIcons.file_text,
@@ -1304,12 +1147,11 @@ class _BottomMenuHeader extends StatelessWidget {
               child: Text(
                 entity?.node.when(
                       folder: (folder) => folder.name,
-                      post: (post) => post.title,
                       document: (document) => document.title,
                       orElse: () => throw UnimplementedError(),
                     ) ??
                     siteName ??
-                    '내 포스트',
+                    '내 문서',
                 style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
                 overflow: TextOverflow.ellipsis,
                 maxLines: 1,
@@ -1326,7 +1168,7 @@ class _BottomMenuHeader extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Text(siteName ?? '내 포스트', style: TextStyle(fontSize: 14, color: context.colors.textSubtle)),
+                    Text(siteName ?? '내 문서', style: TextStyle(fontSize: 14, color: context.colors.textSubtle)),
                     ...?entity?.ancestors
                         .map(
                           (ancestor) => [
@@ -1343,12 +1185,7 @@ class _BottomMenuHeader extends StatelessWidget {
                         .flattened,
                   ],
                 ),
-                if (entity!.node.when(
-                  folder: (folder) => true,
-                  post: (post) => true,
-                  document: (document) => true,
-                  orElse: () => false,
-                ))
+                if (entity!.node.when(folder: (folder) => true, document: (document) => true, orElse: () => false))
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -1380,13 +1217,12 @@ class _BottomMenuHeader extends StatelessWidget {
                             if (folder.folderCount > 0) {
                               parts.add('폴더 ${folder.folderCount.comma}개');
                             }
-                            if (folder.postCount > 0) {
-                              parts.add('포스트 ${folder.postCount.comma}개');
+                            if (folder.documentCount > 0) {
+                              parts.add('문서 ${folder.documentCount.comma}개');
                             }
                             parts.add('총 ${folder.characterCount.comma}자');
                             return parts.join(' · ');
                           },
-                          post: (post) => '총 ${post.characterCount.comma}자',
                           document: (document) => '총 ${document.characterCount.comma}자',
                           orElse: () => '',
                         ),

@@ -55,7 +55,7 @@
 
   const focusedPaneSlug = $derived(focusedMember?.type === 'pane' && focusedMember.kind === 'entity' ? focusedMember.slug : null);
 
-  const postQuery = createQuery(
+  const entityQuery = createQuery(
     graphql(`
       query WidgetGroup_Query($slug: String!) {
         entity(slug: $slug) {
@@ -123,10 +123,9 @@
     `),
   );
 
-  const editor = $derived(focusedPaneId && focusedPaneSlug ? editorRegistry.getTipTap(focusedPaneId, focusedPaneSlug) : undefined);
-  const nativeEditor = $derived(focusedPaneId && focusedPaneSlug ? editorRegistry.getNative(focusedPaneId, focusedPaneSlug) : undefined);
+  const editor = $derived(focusedPaneId && focusedPaneSlug ? editorRegistry.get(focusedPaneId, focusedPaneSlug) : undefined);
   const _document = $derived(
-    focusedPaneSlug && postQuery.data?.entity?.node?.__typename === 'Document' ? postQuery.data.entity.node : undefined,
+    focusedPaneSlug && entityQuery.data?.entity?.node?.__typename === 'Document' ? entityQuery.data.entity.node : undefined,
   );
   const app = getAppContext();
 
@@ -524,7 +523,6 @@
   $effect(() => {
     widgetContext.env.editMode = editMode;
     widgetContext.env.editor = editor;
-    widgetContext.env.nativeEditor = nativeEditor;
     widgetContext.env.document$key = _document;
   });
 
@@ -993,7 +991,6 @@
   ]}
   document$key={_document}
   {editor}
-  {nativeEditor}
   onDragCancel={() => {
     dragging = null;
   }}

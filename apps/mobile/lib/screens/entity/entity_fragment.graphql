@@ -13,26 +13,8 @@ fragment EntityScreen_Entity_entity on Entity {
       name
       maxDescendantFoldersDepth
       characterCount
+      documentCount
       folderCount
-      postCount
-    }
-
-    ... on Post {
-      id
-      title
-      postType: type
-      excerpt
-      updatedAt
-      characterCount
-
-      document {
-        id
-      }
-
-      characterCountChange {
-        additions
-        deletions
-      }
     }
 
     ... on Document {

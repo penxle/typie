@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:typie/icons/lucide_light.dart';
-import 'package:typie/screens/editor/toolbar/buttons/floating.dart';
+import 'package:typie/screens/native_editor/toolbar/buttons/floating.dart';
 import 'package:typie/screens/native_editor/toolbar/scope.dart';
 
 class NativeEditorCalloutFloatingToolbar extends StatelessWidget {

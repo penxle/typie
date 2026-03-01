@@ -10,7 +10,6 @@ import 'package:typie/context/modal.dart';
 import 'package:typie/context/theme.dart';
 import 'package:typie/context/toast.dart';
 import 'package:typie/extensions/jiffy.dart';
-import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/graphql/widget.dart';
 import 'package:typie/hooks/service.dart';
@@ -91,14 +90,13 @@ class _TrashList extends HookWidget {
     String getEntityTitle(GTrashScreen_Entity_entity entity) {
       return entity.node.when(
         folder: (folder) => folder.name,
-        post: (post) => post.title,
         document: (document) => document.title,
         orElse: () => '',
       );
     }
 
     String getEntityType(GTrashScreen_Entity_entity entity) {
-      return entity.node.when(folder: (_) => '폴더', post: (_) => '포스트', document: (_) => '문서', orElse: () => '');
+      return entity.node.when(folder: (_) => '폴더', document: (_) => '문서', orElse: () => '');
     }
 
     String getEntityTypename(GTrashScreen_Entity_entity entity) {
@@ -313,9 +311,6 @@ class _TrashList extends HookWidget {
                         folder: (folder) async {
                           await context.router.push(TrashRoute(entityId: entity.id));
                         },
-                        post: (_) async {
-                          await showEntityMenu(entity);
-                        },
                         document: (_) async {
                           await showEntityMenu(entity);
                         },
@@ -325,9 +320,6 @@ class _TrashList extends HookWidget {
                     onLongPress: () async {
                       await entity.node.when(
                         folder: (folder) async {
-                          await showEntityMenu(entity);
-                        },
-                        post: (_) async {
                           await showEntityMenu(entity);
                         },
                         document: (_) async {
@@ -347,7 +339,6 @@ class _TrashList extends HookWidget {
                           padding: const Pad(horizontal: 16, vertical: 12),
                           child: entity.node.when(
                             folder: (_) => _Folder(entity),
-                            post: (_) => _Post(entity),
                             document: (_) => _Document(entity),
                             orElse: () => throw UnimplementedError(),
                           ),
@@ -383,44 +374,6 @@ class _Folder extends StatelessWidget {
           ),
         ),
         const Icon(LucideLightIcons.chevron_right, size: 16),
-      ],
-    );
-  }
-}
-
-class _Post extends StatelessWidget {
-  const _Post(this.entity);
-
-  final GTrashScreen_Entity_entity entity;
-  GTrashScreen_Entity_entity_node__asPost get post => entity.node as GTrashScreen_Entity_entity_node__asPost;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: 4,
-      children: [
-        Row(
-          spacing: 8,
-          children: [
-            Expanded(
-              child: Text(
-                post.title,
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-                overflow: TextOverflow.ellipsis,
-                maxLines: 1,
-              ),
-            ),
-            if (post.type == GPostType.NORMAL)
-              Text(post.updatedAt.ago, style: TextStyle(fontSize: 14, color: context.colors.textSubtle)),
-          ],
-        ),
-        Text(
-          post.excerpt.isEmpty ? '(내용 없음)' : post.excerpt,
-          style: TextStyle(fontSize: 14, color: context.colors.textSubtle),
-          overflow: TextOverflow.ellipsis,
-          maxLines: 1,
-        ),
       ],
     );
   }
@@ -480,7 +433,6 @@ class _BottomMenuHeader extends StatelessWidget {
             Icon(
               entity?.node.when(
                     folder: (_) => LucideLightIcons.folder,
-                    post: (_) => LucideLightIcons.file,
                     document: (_) => LucideLightIcons.file,
                     orElse: () => throw UnimplementedError(),
                   ) ??
@@ -491,7 +443,6 @@ class _BottomMenuHeader extends StatelessWidget {
               child: Text(
                 entity?.node.when(
                       folder: (folder) => folder.name,
-                      post: (post) => post.title,
                       document: (document) => document.title,
                       orElse: () => throw UnimplementedError(),
                     ) ??

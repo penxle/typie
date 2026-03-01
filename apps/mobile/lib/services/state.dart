@@ -14,14 +14,6 @@ class AppState {
     return AppState._(box);
   }
 
-  String? getSerializedPostSelection(String slug) {
-    return _box.get('post_selection_$slug') as String?;
-  }
-
-  Future<void> setSerializedPostSelection(String slug, String selection) async {
-    await _box.put('post_selection_$slug', selection);
-  }
-
   String? getSerializedDocumentSelection(String slug) {
     return _box.get('document_selection_$slug') as String?;
   }

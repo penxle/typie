@@ -200,7 +200,7 @@
         ? null
         : form.fields.visibility === EntityVisibility.PRIVATE
           ? '지금은 링크가 있어도 나만 볼 수 있어요'
-          : '링크가 있는 누구나 폴더와 폴더 내의 링크 공개 포스트를 볼 수 있어요',
+          : '링크가 있는 누구나 폴더와 폴더 내의 링크 공개 문서를 볼 수 있어요',
       placement: 'top',
       keepOnClick: true,
     }}
@@ -234,13 +234,13 @@
           {
             icon: GlobeIcon,
             label: '공개',
-            description: '누구나 폴더와 폴더 내의 공개 포스트를 볼 수 있어요.',
+            description: '누구나 폴더와 폴더 내의 공개 문서를 볼 수 있어요.',
             value: EntityVisibility.PUBLIC,
           },
           {
             icon: LinkIcon,
             label: '링크가 있는 사람',
-            description: '링크가 있는 누구나 폴더와 폴더 내의 링크 공개 포스트를 볼 수 있어요.',
+            description: '링크가 있는 누구나 폴더와 폴더 내의 링크 공개 문서를 볼 수 있어요.',
             value: EntityVisibility.UNLISTED,
           },
           {

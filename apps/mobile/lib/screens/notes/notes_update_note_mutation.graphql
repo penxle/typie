@@ -8,11 +8,6 @@ mutation NotesScreen_UpdateNote_Mutation($input: UpdateNoteInput!) {
       slug
       node {
         __typename
-        ... on Post {
-          id
-          title
-          type
-        }
       }
     }
   }

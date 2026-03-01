@@ -25,11 +25,11 @@
   import { unwrapError } from '$lib/graphql';
   import { initWasm } from '$lib/wasm';
   import { graphql } from '$mearie';
+  import BodyUnavailable from './BodyUnavailable.svelte';
   import ContentNavigation from './ContentNavigation.svelte';
   import DocumentActionMenu from './DocumentActionMenu.svelte';
   import DocumentEmojiReaction from './DocumentEmojiReaction.svelte';
   import DocumentViewSkeleton from './DocumentViewSkeleton.svelte';
-  import PostViewBodyUnavailable from './PostViewBodyUnavailable.svelte';
   import ReadOnlyTouchSelectionSuppress from './ReadOnlyTouchSelectionSuppress.svelte';
   import ShareLinkPopover from './ShareLinkPopover.svelte';
   import type { UsersiteWildcardSlugPage_DocumentView_entityView$key, UsersiteWildcardSlugPage_DocumentView_user$key } from '$mearie';
@@ -514,7 +514,7 @@
   {:else if document.documentBody.__typename === 'DocumentViewBodyUnavailable'}
     <div class={flex({ align: 'center', justify: 'center', minHeight: '[100dvh]', fontSize: '16px', fontWeight: 'medium' })}>
       {#if document.documentBody.reason === 'REQUIRE_IDENTITY_VERIFICATION'}
-        <PostViewBodyUnavailable description="본인 인증이 필요한 글이에요" icon={ShieldAlertIcon} title="연령제한글">
+        <BodyUnavailable description="본인 인증이 필요한 글이에요" icon={ShieldAlertIcon} title="연령제한글">
           {#if user.data}
             <Button style={css.raw({ width: 'full' })} onclick={handleVerification} variant="secondary">본인 인증</Button>
           {:else}
@@ -522,16 +522,16 @@
               로그인 후 본인 인증하기
             </Button>
           {/if}
-        </PostViewBodyUnavailable>
+        </BodyUnavailable>
       {:else if document.documentBody.reason === 'REQUIRE_MINIMUM_AGE'}
-        <PostViewBodyUnavailable
+        <BodyUnavailable
           description="이 글은 연령 기준에 따라 현재 계정으로는 열람이 제한되어 있어요"
           icon={ShieldAlertIcon}
           title="연령제한글"
         />
       {:else if document.documentBody.reason === 'REQUIRE_PASSWORD'}
         <form onsubmit={form.handleSubmit}>
-          <PostViewBodyUnavailable description="해당 내용은 비밀번호 입력이 필요해요" icon={LockIcon} title="비밀글">
+          <BodyUnavailable description="해당 내용은 비밀번호 입력이 필요해요" icon={LockIcon} title="비밀글">
             <div class={flex({ direction: 'column', gap: '4px' })}>
               <TextInput
                 id="password"
@@ -547,7 +547,7 @@
             </div>
 
             <Button style={css.raw({ marginTop: '8px', width: 'full' })} type="submit">확인</Button>
-          </PostViewBodyUnavailable>
+          </BodyUnavailable>
         </form>
       {:else}
         {document.documentBody.reason}

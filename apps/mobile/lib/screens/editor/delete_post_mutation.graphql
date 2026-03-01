@@ -1,5 +1,0 @@
-mutation EditorScreen_DeletePost_Mutation($input: DeletePostInput!) {
-  deletePost(input: $input) {
-    id
-  }
-}

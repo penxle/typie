@@ -3,10 +3,6 @@ type AdminDocumentsResult {
   totalCount: Int!
 }
 
-input AdminEnqueuePostCompactInput {
-  postId: String!
-}
-
 input AdminGiveCreditInput {
   amount: Int!
   userId: String!
@@ -14,11 +10,6 @@ input AdminGiveCreditInput {
 
 input AdminImpersonateInput {
   userId: String!
-}
-
-type AdminPostsResult {
-  posts: [Post!]!
-  totalCount: Int!
 }
 
 type AdminUsersResult {
@@ -65,14 +56,6 @@ input CheckSpellingDocumentInput {
   text: String!
 }
 
-input CheckSpellingInput {
-  body: JSON!
-}
-
-input ConvertPostToDocumentInput {
-  postId: ID!
-}
-
 enum CouponState {
   ACTIVE
   DISABLED
@@ -102,16 +85,6 @@ input CreateNoteInput {
   color: String!
   content: String!
   entityId: ID
-}
-
-input CreatePostInput {
-  parentEntityId: ID
-  siteId: ID!
-}
-
-input CreatePostReactionInput {
-  emoji: String!
-  postId: ID!
 }
 
 input CreateTextReplacementInput {
@@ -157,10 +130,6 @@ input DeleteFolderInput {
 
 input DeleteNoteInput {
   noteId: ID!
-}
-
-input DeletePostInput {
-  postId: ID!
 }
 
 input DeleteTextReplacementInput {
@@ -349,10 +318,6 @@ input DuplicateDocumentInput {
   documentId: ID!
 }
 
-input DuplicatePostInput {
-  postId: ID!
-}
-
 type Embed {
   description: String
   html: String
@@ -433,45 +398,15 @@ enum EntityVisibility {
 
 input ExportDocumentAsPdfInput {
   documentId: ID!
-  height: Float!
-  marginBottom: Float!
-  marginLeft: Float!
-  marginRight: Float!
-  marginTop: Float!
-  width: Float!
+  pageHeight: Int!
+  pageMarginBottom: Int!
+  pageMarginLeft: Int!
+  pageMarginRight: Int!
+  pageMarginTop: Int!
+  pageWidth: Int!
 }
 
 type ExportDocumentAsPdfResult {
-  data: Binary!
-  filename: String!
-}
-
-enum ExportLayoutMode {
-  PAGE
-  SCROLL
-}
-
-input ExportPostAsDocxInput {
-  entityId: ID!
-}
-
-type ExportPostAsDocxResult {
-  data: Binary!
-  filename: String!
-}
-
-input ExportPostAsPdfInput {
-  entityId: ID!
-  height: Float!
-  layoutMode: ExportLayoutMode!
-  marginBottom: Float!
-  marginLeft: Float!
-  marginRight: Float!
-  marginTop: Float!
-  width: Float!
-}
-
-type ExportPostAsPdfResult {
   data: Binary!
   filename: String!
 }
@@ -649,24 +584,10 @@ The `JSON` scalar type represents JSON values as specified by [ECMA-404](http://
 """
 scalar JSON
 
-type LiteraryAnalysisPayload {
-  feedback: LiteraryFeedbackResult
-  progress: LiteraryAnalysisProgress
-  type: String!
-}
-
 type LiteraryAnalysisProgress {
   current: Int!
   phase: String!
   total: Int!
-}
-
-type LiteraryFeedbackResult {
-  endText: String!
-  feedback: String!
-  from: Int!
-  startText: String!
-  to: Int!
 }
 
 input LoginWithEmailInput {
@@ -708,7 +629,6 @@ input MoveWidgetInput {
 }
 
 type Mutation {
-  adminEnqueuePostCompact(input: AdminEnqueuePostCompactInput!): Boolean!
   adminGiveCredit(input: AdminGiveCreditInput!): Boolean!
   adminImpersonate(input: AdminImpersonateInput!): Boolean!
   adminStopImpersonation: Boolean!
@@ -718,15 +638,11 @@ type Mutation {
   authorizeSingleSignOn(input: AuthorizeSingleSignOnInput!): String!
   cancelPlanChange: Subscription_!
   cancelSubscriptionCancellation: Subscription_!
-  checkSpelling(input: CheckSpellingInput!): [SpellingError!]!
   checkSpellingDocument(input: CheckSpellingDocumentInput!): [DocumentSpellingError!]!
-  convertPostToDocument(input: ConvertPostToDocumentInput!): Document!
   createDocument(input: CreateDocumentInput!): Document!
   createDocumentReaction(input: CreateDocumentReactionInput!): DocumentReaction!
   createFolder(input: CreateFolderInput!): Folder!
   createNote(input: CreateNoteInput!): Note!
-  createPost(input: CreatePostInput!): Post!
-  createPostReaction(input: CreatePostReactionInput!): PostReaction!
   createTextReplacement(input: CreateTextReplacementInput!): TextReplacementNode!
   createWidget(input: CreateWidgetInput!): Widget!
   createWsSession: String!
@@ -735,16 +651,12 @@ type Mutation {
   deleteEntities(input: DeleteEntitiesInput!): [Entity!]!
   deleteFolder(input: DeleteFolderInput!): Folder!
   deleteNote(input: DeleteNoteInput!): Note!
-  deletePost(input: DeletePostInput!): Post!
   deleteTextReplacement(input: DeleteTextReplacementInput!): TextReplacementNode!
   deleteUser: Boolean!
   deleteWidget(input: DeleteWidgetInput!): Widget!
   dumpLocalStorage(input: DumpLocalStorageInput!): User!
   duplicateDocument(input: DuplicateDocumentInput!): Document!
-  duplicatePost(input: DuplicatePostInput!): Post!
   exportDocumentAsPdf(input: ExportDocumentAsPdfInput!): ExportDocumentAsPdfResult!
-  exportPostAsDocx(input: ExportPostAsDocxInput!): ExportPostAsDocxResult!
-  exportPostAsPdf(input: ExportPostAsPdfInput!): ExportPostAsPdfResult!
   generateActivityImage: Binary!
   generateRandomName: String!
   generateSingleSignOnAuthorizationUrl(input: GenerateSingleSignOnAuthorizationUrlInput!): String!
@@ -767,7 +679,6 @@ type Mutation {
   registerPushNotificationToken(input: RegisterPushNotificationTokenInput!): Boolean!
   renameFolder(input: RenameFolderInput!): Folder!
   reportDocument(input: ReportDocumentInput!): Boolean!
-  reportPost(input: ReportPostInput!): Boolean!
   resetPassword(input: ResetPasswordInput!): Boolean!
   resetPreferences: User!
   schedulePlanChange(input: SchedulePlanChangeInput!): Subscription_!
@@ -780,10 +691,8 @@ type Mutation {
   subscribePlanWithBillingKey(input: SubscribePlanWithBillingKeyInput!): Subscription_!
   subscribePlanWithTrial: Subscription_!
   syncDocument(input: SyncDocumentInput!): [SyncDocumentPayload!]!
-  syncPost(input: SyncPostInput!): Boolean!
   unfurlEmbed(input: UnfurlEmbedInput!): Embed!
   unlockDocumentView(input: UnlockDocumentViewInput!): DocumentView!
-  unlockPostView(input: UnlockPostViewInput!): PostView!
   updateBillingKey(input: UpdateBillingKeyInput!): UserBillingKey!
   updateBootstrap(input: UpdateBootstrapInput!): JSON!
   updateDocument(input: UpdateDocumentInput!): Document!
@@ -795,9 +704,6 @@ type Mutation {
   updateMarketingConsent(input: UpdateMarketingConsentInput!): User!
   updateNote(input: UpdateNoteInput!): Note!
   updatePassword(input: UpdatePasswordInput!): User!
-  updatePostOption(input: UpdatePostOptionInput!): Post!
-  updatePostType(input: UpdatePostTypeInput!): Post!
-  updatePostsOption(input: UpdatePostsOptionInput!): [Post!]!
   updatePreferences(input: UpdatePreferencesInput!): User!
   updateSite(input: UpdateSiteInput!): Site!
   updateSiteSlug(input: UpdateSiteSlugInput!): Site!
@@ -953,20 +859,6 @@ type PostSnapshotMeta {
   id: ID!
 }
 
-type PostSyncStreamPayload {
-  data: String!
-  postId: ID!
-  type: PostSyncType!
-}
-
-enum PostSyncType {
-  AWARENESS
-  HEARTBEAT
-  PRESENCE
-  UPDATE
-  VECTOR
-}
-
 enum PostType {
   NORMAL
   TEMPLATE
@@ -1032,12 +924,9 @@ type Query {
   activeWritersCount: Int!
   adminDocument(documentId: String!): Document!
   adminDocuments(limit: Int! = 20, offset: Int! = 0, search: String, state: EntityState, type: DocumentType): AdminDocumentsResult!
-  adminPost(postId: String!): Post!
-  adminPosts(limit: Int! = 20, offset: Int! = 0, search: String, state: EntityState, type: PostType): AdminPostsResult!
   adminRawQuery(params: [JSON!], query: String!): [JSON!]!
   adminUser(userId: String!): User!
   adminUsers(limit: Int! = 20, offset: Int! = 0, role: UserRole, search: String, state: UserState): AdminUsersResult!
-  announcements: [PostView!]!
   creditCode(code: String!): CreditCode!
   defaultPlanRule: PlanRule!
   document(slug: String!): Document!
@@ -1061,7 +950,6 @@ type Query {
   siteView(origin: String!): SiteView!
   stats: JSON!
   userView(id: ID!): UserView!
-  welcome: Welcome!
   widgets: [Widget!]!
 }
 
@@ -1106,11 +994,6 @@ input RenameFolderInput {
 
 input ReportDocumentInput {
   documentId: ID!
-  reason: String
-}
-
-input ReportPostInput {
-  postId: ID!
   reason: String
 }
 
@@ -1230,14 +1113,6 @@ input SpellcheckTextMappingInput {
   textStart: Int!
 }
 
-type SpellingError {
-  context: String!
-  corrections: [String!]!
-  explanation: String!
-  from: Int!
-  to: Int!
-}
-
 input SubmitFeedbackInput {
   content: String!
   mood: String
@@ -1257,8 +1132,6 @@ input SubscribePlanWithBillingKeyInput {
 type Subscription {
   documentSyncStream(clientId: String!, documentId: ID!): DocumentSyncStreamPayload!
   literaryAnalysisDocumentStream(mappings: [DocumentTextMappingInput!]!, text: String!): DocumentLiteraryAnalysisPayload!
-  literaryAnalysisStream(body: JSON!): LiteraryAnalysisPayload!
-  postSyncStream(clientId: String!, postId: ID!): PostSyncStreamPayload!
   siteUpdateStream(siteId: ID!): SiteUpdateStreamPayload!
   siteUsageUpdateStream(siteId: ID!): Site!
   userUsageUpdateStream(userId: ID!): User!
@@ -1291,13 +1164,6 @@ input SyncDocumentInput {
 type SyncDocumentPayload {
   data: String!
   type: DocumentSyncType!
-}
-
-input SyncPostInput {
-  clientId: String!
-  data: String!
-  postId: ID!
-  type: PostSyncType!
 }
 
 type TextReplacement {
@@ -1335,11 +1201,6 @@ input UnfurlEmbedInput {
 input UnlockDocumentViewInput {
   documentId: ID!
   password: String!
-}
-
-input UnlockPostViewInput {
-  password: String!
-  postId: ID!
 }
 
 input UpdateBillingKeyInput {
@@ -1409,33 +1270,6 @@ input UpdatePasswordInput {
   newPassword: String!
 }
 
-input UpdatePostOptionInput {
-  allowReaction: Boolean!
-  availability: EntityAvailability
-  contentRating: PostContentRating!
-  password: String
-  postId: ID!
-  protectContent: Boolean!
-  thumbnailId: ID
-  visibility: EntityVisibility!
-}
-
-input UpdatePostTypeInput {
-  postId: ID!
-  type: PostType!
-}
-
-input UpdatePostsOptionInput {
-  allowReaction: Boolean
-  availability: EntityAvailability
-  contentRating: PostContentRating
-  password: String
-  postIds: [ID!]!
-  protectContent: Boolean
-  thumbnailId: ID
-  visibility: EntityVisibility
-}
-
 input UpdatePreferencesInput {
   value: JSON!
 }
@@ -1478,6 +1312,7 @@ type User implements IUser {
   characterCountChanges: [CharacterCountChange!]!
   createdAt: DateTime!
   credit: Int!
+  documentCount: Int!
   documentFontFamilies: [DocumentFontFamily!]!
   email: String!
   fontFamilies: [FontFamily!]!
@@ -1562,14 +1397,6 @@ input VerifyPersonalIdentityInput {
 
 input ViewEntityInput {
   entityId: ID!
-}
-
-type Welcome {
-  body: JSON!
-  bodyMobile: JSON!
-  name: String!
-  update: Binary!
-  updateMobile: Binary!
 }
 
 type Widget {

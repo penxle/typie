@@ -28,7 +28,7 @@ export type PaneGroupState = {
 
 export type DragItem = {
   slug: string;
-  type: 'post' | 'document';
+  type: 'document';
 };
 
 export type DragPane = {

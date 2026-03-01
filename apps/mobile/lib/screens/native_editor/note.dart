@@ -15,12 +15,12 @@ import 'package:typie/graphql/widget.dart';
 import 'package:typie/hooks/debounce.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_light.dart';
-import 'package:typie/screens/editor/__generated__/create_note_mutation.req.gql.dart';
-import 'package:typie/screens/editor/__generated__/delete_note_mutation.req.gql.dart';
-import 'package:typie/screens/editor/__generated__/move_note_mutation.req.gql.dart';
-import 'package:typie/screens/editor/__generated__/post_related_notes_query.data.gql.dart';
-import 'package:typie/screens/editor/__generated__/post_related_notes_query.req.gql.dart';
-import 'package:typie/screens/editor/__generated__/update_note_mutation.req.gql.dart';
+import 'package:typie/screens/native_editor/__generated__/create_note_mutation.req.gql.dart';
+import 'package:typie/screens/native_editor/__generated__/delete_note_mutation.req.gql.dart';
+import 'package:typie/screens/native_editor/__generated__/document_note_query.data.gql.dart';
+import 'package:typie/screens/native_editor/__generated__/document_note_query.req.gql.dart';
+import 'package:typie/screens/native_editor/__generated__/move_note_mutation.req.gql.dart';
+import 'package:typie/screens/native_editor/__generated__/update_note_mutation.req.gql.dart';
 import 'package:typie/screens/native_editor/toolbar/values.dart';
 import 'package:typie/widgets/haptic_reorderable.dart';
 import 'package:typie/widgets/heading.dart';
@@ -44,11 +44,11 @@ class DocumentNote extends HookWidget {
     }
 
     return GraphQLOperation(
-      operation: GPostRelatedNotesScreen_QueryReq((b) => b..vars.entityId = entityId),
+      operation: GDocumentNote_QueryReq((b) => b..vars.entityId = entityId),
       refreshNotifier: refreshNotifier,
       builder: (context, client, queryData) {
         final notes = queryData.entity.notes.toList();
-        final sortedNotes = List<GPostRelatedNotesScreen_QueryData_entity_notes>.from(notes)
+        final sortedNotes = List<GDocumentNote_QueryData_entity_notes>.from(notes)
           ..sort((a, b) => a.order.compareTo(b.order));
 
         return _NoteContent(
@@ -72,7 +72,7 @@ class _NoteContent extends HookWidget {
     required this.isActive,
   });
 
-  final List<GPostRelatedNotesScreen_QueryData_entity_notes> sortedNotes;
+  final List<GDocumentNote_QueryData_entity_notes> sortedNotes;
   final String entityId;
   final Future<void> Function() onBack;
   final RefreshNotifier refreshNotifier;
@@ -197,7 +197,7 @@ class _NoteContent extends HookWidget {
     Future<void> handleAddNote() async {
       final randomColor = getRandomNoteColor();
 
-      final request = GPostRelatedNotesScreen_CreateNote_MutationReq(
+      final request = GDocumentNote_CreateNote_MutationReq(
         (b) => b
           ..vars.input.entityId = Value.present(entityId)
           ..vars.input.content = ''
@@ -217,7 +217,7 @@ class _NoteContent extends HookWidget {
       noteLocalUpdatedAt.value[noteId] = DateTime.now();
 
       debounce.call(() async {
-        final request = GPostRelatedNotesScreen_UpdateNote_MutationReq(
+        final request = GDocumentNote_UpdateNote_MutationReq(
           (b) => b
             ..vars.input.noteId = noteId
             ..vars.input.content = Value.present(content),
@@ -238,7 +238,7 @@ class _NoteContent extends HookWidget {
             debounce.cancel(noteId);
             noteLocalUpdatedAt.value.remove(noteId);
 
-            final request = GPostRelatedNotesScreen_DeleteNote_MutationReq((b) => b..vars.input.noteId = noteId);
+            final request = GDocumentNote_DeleteNote_MutationReq((b) => b..vars.input.noteId = noteId);
 
             await client.request(request);
 
@@ -266,7 +266,7 @@ class _NoteContent extends HookWidget {
       final lowerNote = targetIndex > 0 ? sortedNotes[targetIndex - 1] : null;
       final upperNote = targetIndex < sortedNotes.length - 1 ? sortedNotes[targetIndex + 1] : null;
 
-      final request = GPostRelatedNotesScreen_MoveNote_MutationReq(
+      final request = GDocumentNote_MoveNote_MutationReq(
         (b) => b
           ..vars.input.noteId = movedNoteId
           ..vars.input.lowerOrder = Value.present(lowerNote?.order)
