@@ -9,6 +9,7 @@ impl Runtime {
             return vec![];
         }
 
+        let settings_before_undo = self.doc().settings();
         let selection_before_undo = self.capture_history_selection(self.state.selection);
         let top_undo_marker_before = self.top_undo_marker();
         self.clear_history_pop_events();
@@ -45,13 +46,19 @@ impl Runtime {
             .unwrap_or_else(|| self.validate_selection(self.state.selection));
         let new_styles = compute_styles_at_cursor(&self.state.doc, &self.state.selection.head);
         self.state.pending_styles = new_styles;
+        let settings_after_undo = self.doc().settings();
+        let settings_changed = settings_after_undo != settings_before_undo;
 
-        vec![
+        let mut effects = vec![
             Effect::FullLayoutInvalidation,
             Effect::DocChanged,
             Effect::SelectionChanged,
             Effect::PendingStylesChanged,
-        ]
+        ];
+        if settings_changed {
+            effects.push(Effect::SettingsChanged);
+        }
+        effects
     }
 
     pub(crate) fn handle_redo(&mut self) -> Vec<Effect> {
@@ -61,6 +68,7 @@ impl Runtime {
             return vec![];
         }
 
+        let settings_before_redo = self.doc().settings();
         let selection_before_redo = self.capture_history_selection(self.state.selection);
         let top_redo_marker_before = self.top_redo_marker();
         self.clear_history_pop_events();
@@ -97,13 +105,19 @@ impl Runtime {
             .unwrap_or_else(|| self.validate_selection(self.state.selection));
         let new_styles = compute_styles_at_cursor(&self.state.doc, &self.state.selection.head);
         self.state.pending_styles = new_styles;
+        let settings_after_redo = self.doc().settings();
+        let settings_changed = settings_after_redo != settings_before_redo;
 
-        vec![
+        let mut effects = vec![
             Effect::FullLayoutInvalidation,
             Effect::DocChanged,
             Effect::SelectionChanged,
             Effect::PendingStylesChanged,
-        ]
+        ];
+        if settings_changed {
+            effects.push(Effect::SettingsChanged);
+        }
+        effects
     }
 }
 

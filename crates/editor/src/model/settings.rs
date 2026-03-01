@@ -53,7 +53,7 @@ impl Hash for LayoutMode {
     }
 }
 
-#[derive(Debug, Clone, Codec)]
+#[derive(Debug, Clone, PartialEq, Codec)]
 pub struct DocumentSettings {
     pub block_gap: u32,
     pub paragraph_indent: u32,
