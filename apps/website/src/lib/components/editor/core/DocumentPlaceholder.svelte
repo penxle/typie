@@ -55,7 +55,7 @@
       onclick={loadTemplate}
       type="button"
     >
-      <Icon style={css.raw({ display: 'inline-block', marginRight: '4px', marginBottom: '3px' })} icon={LayoutTemplateIcon} size={16} />
+      <Icon style={css.raw({ display: 'inline-block', marginBottom: '3px' })} icon={LayoutTemplateIcon} size={16} />
       <span>템플릿 불러오기</span>
     </button>
   </div>
