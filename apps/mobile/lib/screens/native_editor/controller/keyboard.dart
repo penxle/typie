@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-
 import 'package:typie/screens/native_editor/state/scroll_mode.dart';
 
 Map<String, dynamic> _nav(String direction, bool extend) => {
@@ -55,7 +54,7 @@ class KeyboardHandler {
     final physical = event.physicalKey;
 
     if (key == LogicalKeyboardKey.arrowLeft || physical == PhysicalKeyboardKey.arrowLeft) {
-      if (defaultTargetPlatform == TargetPlatform.iOS && meta) {
+      if (meta) {
         return _nav('lineStart', shift);
       } else if (wordModifier) {
         return _nav('wordLeft', shift);
@@ -63,7 +62,7 @@ class KeyboardHandler {
         return _nav('left', shift);
       }
     } else if (key == LogicalKeyboardKey.arrowRight || physical == PhysicalKeyboardKey.arrowRight) {
-      if (defaultTargetPlatform == TargetPlatform.iOS && meta) {
+      if (meta) {
         return _nav('lineEnd', shift);
       } else if (wordModifier) {
         return _nav('wordRight', shift);
@@ -71,7 +70,7 @@ class KeyboardHandler {
         return _nav('right', shift);
       }
     } else if (key == LogicalKeyboardKey.arrowUp || physical == PhysicalKeyboardKey.arrowUp) {
-      if (defaultTargetPlatform == TargetPlatform.iOS && meta) {
+      if (meta) {
         return _nav('documentStart', shift);
       } else if (alt) {
         return _nav('sentenceUp', shift);
@@ -79,7 +78,7 @@ class KeyboardHandler {
         return _nav('up', shift);
       }
     } else if (key == LogicalKeyboardKey.arrowDown || physical == PhysicalKeyboardKey.arrowDown) {
-      if (defaultTargetPlatform == TargetPlatform.iOS && meta) {
+      if (meta) {
         return _nav('documentEnd', shift);
       } else if (alt) {
         return _nav('sentenceDown', shift);

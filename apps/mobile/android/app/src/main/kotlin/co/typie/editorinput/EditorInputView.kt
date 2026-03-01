@@ -665,10 +665,16 @@ class EditorInputNativeView(
       override fun sendKeyEvent(event: KeyEvent): Boolean {
         if (event.action != KeyEvent.ACTION_DOWN) return true
 
-        DPAD_ACTIONS[event.keyCode]?.let { action ->
+        resolveNavigationDirection(event)?.let { direction ->
           commitComposingState()
           super.finishComposingText()
-          channel.invokeMethod("shortcut", mapOf("action" to action))
+          channel.invokeMethod(
+            "navigate",
+            mapOf(
+              "direction" to direction,
+              "extend" to event.isShiftPressed
+            )
+          )
           notifyCursorUpdate()
           return true
         }
@@ -744,13 +750,6 @@ class EditorInputNativeView(
     private const val META_ALT = KeyEvent.META_ALT_ON
     private const val META_CTRL_SHIFT = META_CTRL or META_SHIFT
 
-    private val DPAD_ACTIONS = mapOf(
-      KeyEvent.KEYCODE_DPAD_LEFT to "navigateLeft",
-      KeyEvent.KEYCODE_DPAD_RIGHT to "navigateRight",
-      KeyEvent.KEYCODE_DPAD_UP to "navigateUp",
-      KeyEvent.KEYCODE_DPAD_DOWN to "navigateDown",
-    )
-
     private val SHORTCUTS = listOf(
       Shortcut(KeyEvent.KEYCODE_A, META_CTRL, "selectAll"),
       Shortcut(KeyEvent.KEYCODE_B, META_CTRL, "toggleBold"),
@@ -770,5 +769,25 @@ class EditorInputNativeView(
       Shortcut(KeyEvent.KEYCODE_X, META_CTRL, "cut"),
       Shortcut(KeyEvent.KEYCODE_V, META_CTRL, "paste"),
     )
+  }
+
+  private fun resolveNavigationDirection(event: KeyEvent): String? {
+    return when (event.keyCode) {
+      KeyEvent.KEYCODE_DPAD_LEFT ->
+        if (event.isMetaPressed) "lineStart" else if (event.isCtrlPressed) "wordLeft" else "left"
+      KeyEvent.KEYCODE_DPAD_RIGHT ->
+        if (event.isMetaPressed) "lineEnd" else if (event.isCtrlPressed) "wordRight" else "right"
+      KeyEvent.KEYCODE_DPAD_UP ->
+        if (event.isMetaPressed) "documentStart" else if (event.isAltPressed) "sentenceUp" else "up"
+      KeyEvent.KEYCODE_DPAD_DOWN ->
+        if (event.isMetaPressed) "documentEnd" else if (event.isAltPressed) "sentenceDown" else "down"
+      KeyEvent.KEYCODE_MOVE_HOME ->
+        if (event.isCtrlPressed) "documentStart" else "lineStart"
+      KeyEvent.KEYCODE_MOVE_END ->
+        if (event.isCtrlPressed) "documentEnd" else "lineEnd"
+      KeyEvent.KEYCODE_PAGE_UP -> "pageUp"
+      KeyEvent.KEYCODE_PAGE_DOWN -> "pageDown"
+      else -> null
+    }
   }
 }

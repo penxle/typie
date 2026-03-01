@@ -155,18 +155,7 @@ class InputController {
 
   void onShortcut(String action) {
     onInputAttempt?.call();
-    final direction = switch (action) {
-      'navigateLeft' => 'left',
-      'navigateRight' => 'right',
-      'navigateUp' => 'up',
-      'navigateDown' => 'down',
-      _ => null,
-    };
-
-    if (direction != null) {
-      dispatch({'type': 'navigate', 'direction': direction, 'extend': false});
-      scrollIntoView(mode: ScrollMode.typewriter);
-    } else if (action == 'copy') {
+    if (action == 'copy') {
       unawaited(EditorClipboard().copy(editor));
     } else if (action == 'cut') {
       unawaited(
