@@ -1405,9 +1405,11 @@ pub fn build_metrics(
         top += line_metrics.line_height;
 
         let mut clusters = Vec::new();
-        let mut advance_x = 0.0;
+        let mut advance_x: f32 = 0.0;
         let mut inline_prefix = 0.0;
         let mut seen_glyph = false;
+        let mut min_cluster_x: Option<f32> = None;
+        let mut max_cluster_right: Option<f32> = None;
         let mut max_ascent_overflow = 0.0f32;
         let mut max_descent_overflow = 0.0f32;
 
@@ -1415,8 +1417,9 @@ pub fn build_metrics(
 
         for item in line.items() {
             match item {
-                parley::PositionedLayoutItem::GlyphRun(run) => {
-                    let run = run.run();
+                parley::PositionedLayoutItem::GlyphRun(glyph_run) => {
+                    let run = glyph_run.run();
+                    let run_offset = glyph_run.offset();
 
                     if !indices.insert(run.index()) {
                         continue;
@@ -1438,8 +1441,11 @@ pub fn build_metrics(
                         }
                     }
 
+                    let mut run_advance = 0.0;
                     for cluster in run.clusters() {
                         let text_range = cluster.text_range();
+                        let cluster_width = cluster.advance();
+                        let cluster_x = run_offset + run_advance;
 
                         clusters.push(ClusterMetric {
                             start_offset: byte_to_char_offset_with_map(
@@ -1447,13 +1453,26 @@ pub fn build_metrics(
                                 text_range.start,
                             ),
                             end_offset: byte_to_char_offset_with_map(&char_to_byte, text_range.end),
-                            x: snap_to_pixel(advance_x - inline_prefix, scale_factor),
-                            width: cluster.advance(),
+                            x: cluster_x,
+                            width: cluster_width,
                         });
 
-                        advance_x += cluster.advance();
+                        min_cluster_x = Some(
+                            min_cluster_x
+                                .map(|min_x| min_x.min(cluster_x))
+                                .unwrap_or(cluster_x),
+                        );
+                        max_cluster_right = Some(
+                            max_cluster_right
+                                .map(|max_x| max_x.max(cluster_x + cluster_width))
+                                .unwrap_or(cluster_x + cluster_width),
+                        );
+
+                        run_advance += cluster_width;
                         seen_glyph = true;
                     }
+
+                    advance_x = advance_x.max(run_offset + run_advance);
                 }
                 parley::PositionedLayoutItem::InlineBox(inline_box) => {
                     advance_x += inline_box.width;
@@ -1490,16 +1509,25 @@ pub fn build_metrics(
             grapheme_offsets.push(line_end_char);
         }
 
-        let content_width = advance_x - inline_prefix;
+        let left = min_cluster_x.unwrap_or(line_metrics.offset + inline_prefix);
+        let content_width = match (min_cluster_x, max_cluster_right) {
+            (Some(min_x), Some(max_x)) => (max_x - min_x).max(0.0),
+            _ => (advance_x - inline_prefix).max(0.0),
+        };
+        let cluster_origin = min_cluster_x.unwrap_or(0.0);
+        for cluster in &mut clusters {
+            cluster.x = snap_to_pixel(cluster.x - cluster_origin, scale_factor);
+        }
 
         lines.push(LineMetric {
             top: snap_to_pixel(line_top, scale_factor),
-            left: snap_to_pixel(line_metrics.offset + inline_prefix, scale_factor),
+            left: snap_to_pixel(left, scale_factor),
             height,
             leading,
             baseline: snap_to_pixel(line_metrics.baseline, scale_factor),
             ascent: snap_to_pixel(line_metrics.ascent, scale_factor),
-            content_width: snap_to_pixel(content_width, scale_factor),
+            // NOTE: width를 스냅하면 실제 glyph 폭보다 작아져 overflow가 생길 수 있어 원본값 유지
+            content_width,
             start_offset: line_start_char,
             end_offset: line_end_char,
             clusters,
