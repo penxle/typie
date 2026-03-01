@@ -925,7 +925,8 @@ builder.mutationFields((t) => ({
             .then(first)
             .then((result) => result?.order ?? null);
 
-      const depthDelta = isParentActive ? 0 : -entity.depth;
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      const depthDelta = isParentActive ? entity.parentEntity!.depth + 1 - entity.depth : -entity.depth;
 
       return await db.transaction(async (tx) => {
         if (!isParentActive) {
