@@ -242,6 +242,48 @@ double _getMaxMargin(String side, PaginatedLayout layoutMode) {
   };
 }
 
+Map<String, double> _normalizeMarginsForPageSize({
+  required double pageWidthMm,
+  required double pageHeightMm,
+  required double marginTopMm,
+  required double marginBottomMm,
+  required double marginLeftMm,
+  required double marginRightMm,
+}) {
+  Map<String, double> fitAxisMargins({
+    required double startMarginMm,
+    required double endMarginMm,
+    required double pageSizeMm,
+  }) {
+    final start = startMarginMm.clamp(0, double.infinity).toDouble();
+    final end = endMarginMm.clamp(0, double.infinity).toDouble();
+    final maxTotalMargin = (pageSizeMm - _minContentSizeMm).clamp(0, double.infinity).toDouble();
+    final totalMargin = start + end;
+
+    if (totalMargin <= maxTotalMargin) {
+      return {'start': start, 'end': end};
+    }
+
+    if (totalMargin == 0) {
+      return {'start': 0, 'end': 0};
+    }
+
+    final ratio = maxTotalMargin / totalMargin;
+    final nextStart = start * ratio;
+    return {'start': nextStart, 'end': (maxTotalMargin - nextStart).clamp(0, double.infinity).toDouble()};
+  }
+
+  final vertical = fitAxisMargins(startMarginMm: marginTopMm, endMarginMm: marginBottomMm, pageSizeMm: pageHeightMm);
+  final horizontal = fitAxisMargins(startMarginMm: marginLeftMm, endMarginMm: marginRightMm, pageSizeMm: pageWidthMm);
+
+  return {
+    'top': vertical['start']!,
+    'bottom': vertical['end']!,
+    'left': horizontal['start']!,
+    'right': horizontal['end']!,
+  };
+}
+
 class _PageSizeSection extends StatelessWidget {
   const _PageSizeSection({required this.layoutMode, required this.dispatch});
 
@@ -256,16 +298,17 @@ class _PageSizeSection extends StatelessWidget {
       }
 
       final size = _pageSizeMap[preset]!;
+      final margins = _defaultPageMargins[preset]!;
       dispatch({
         'type': 'setLayoutMode',
         'mode': {
           'type': 'paginated',
           'pageWidth': _mmToPx(size['width']!),
           'pageHeight': _mmToPx(size['height']!),
-          'pageMarginTop': layoutMode.pageMarginTop,
-          'pageMarginBottom': layoutMode.pageMarginBottom,
-          'pageMarginLeft': layoutMode.pageMarginLeft,
-          'pageMarginRight': layoutMode.pageMarginRight,
+          'pageMarginTop': _mmToPx(margins['top']!),
+          'pageMarginBottom': _mmToPx(margins['bottom']!),
+          'pageMarginLeft': _mmToPx(margins['left']!),
+          'pageMarginRight': _mmToPx(margins['right']!),
         },
       });
     }
@@ -411,17 +454,26 @@ class _PageSizeSection extends StatelessWidget {
     );
 
     if (newValue != null && newValue != currentValue) {
-      final newPx = _mmToPx(newValue!.toDouble());
+      final nextWidthMm = dimension == 'width' ? newValue!.toDouble() : _pxToMm(layoutMode.pageWidth);
+      final nextHeightMm = dimension == 'height' ? newValue!.toDouble() : _pxToMm(layoutMode.pageHeight);
+      final normalizedMargins = _normalizeMarginsForPageSize(
+        pageWidthMm: nextWidthMm,
+        pageHeightMm: nextHeightMm,
+        marginTopMm: _pxToMm(layoutMode.pageMarginTop),
+        marginBottomMm: _pxToMm(layoutMode.pageMarginBottom),
+        marginLeftMm: _pxToMm(layoutMode.pageMarginLeft),
+        marginRightMm: _pxToMm(layoutMode.pageMarginRight),
+      );
       dispatch({
         'type': 'setLayoutMode',
         'mode': {
           'type': 'paginated',
-          'pageWidth': dimension == 'width' ? newPx : layoutMode.pageWidth,
-          'pageHeight': dimension == 'height' ? newPx : layoutMode.pageHeight,
-          'pageMarginTop': layoutMode.pageMarginTop,
-          'pageMarginBottom': layoutMode.pageMarginBottom,
-          'pageMarginLeft': layoutMode.pageMarginLeft,
-          'pageMarginRight': layoutMode.pageMarginRight,
+          'pageWidth': _mmToPx(nextWidthMm),
+          'pageHeight': _mmToPx(nextHeightMm),
+          'pageMarginTop': _mmToPx(normalizedMargins['top']!),
+          'pageMarginBottom': _mmToPx(normalizedMargins['bottom']!),
+          'pageMarginLeft': _mmToPx(normalizedMargins['left']!),
+          'pageMarginRight': _mmToPx(normalizedMargins['right']!),
         },
       });
     }
