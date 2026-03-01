@@ -326,19 +326,6 @@ User.implement({
       },
     }),
 
-    totalCharacterCount: t.int({
-      resolve: async (user) => {
-        const result = await db
-          .select({
-            total: sql<number>`COALESCE(SUM(${DocumentCharacterCountChanges.additions}), 0) - COALESCE(SUM(${DocumentCharacterCountChanges.deletions}), 0)`,
-          })
-          .from(DocumentCharacterCountChanges)
-          .where(eq(DocumentCharacterCountChanges.userId, user.id))
-          .then(firstOrThrow);
-        return Math.max(0, Number(result.total));
-      },
-    }),
-
     usage: t.field({
       type: t.builder.simpleObject('UserUsage', {
         fields: (t) => ({

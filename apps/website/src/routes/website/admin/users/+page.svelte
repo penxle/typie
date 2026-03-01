@@ -149,7 +149,7 @@
             {user.documentCount} DOCUMENTS
           </div>
           <div class={css({ fontSize: '11px', color: 'amber.400' })}>
-            {comma(user.totalCharacterCount)} CHARS
+            {comma(user.usage.totalCharacterCount)} CHARS
           </div>
         </div>
       {/snippet}
