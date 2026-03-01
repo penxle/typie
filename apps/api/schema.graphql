@@ -535,7 +535,6 @@ interface IPost {
 
 interface ISite {
   dateDisplay: SiteDateDisplay!
-  fonts: [Font!]!
   id: ID!
   logo: Image!
   name: String!
@@ -1064,14 +1063,12 @@ type Site implements ISite {
   documentTemplates: [Document!]!
   entities: [Entity!]!
   firstEntity(type: EntityType!): Entity
-  fonts: [Font!]!
   id: ID!
   logo: Image!
   name: String!
   slug: String!
   templates: [Post!]!
   url: String!
-  usage: SiteUsage! @deprecated(reason: "Use User.usage instead")
   user: User!
   view: SiteView!
 }
@@ -1089,18 +1086,11 @@ enum SiteState {
 
 union SiteUpdateStreamPayload = Entity | Site
 
-type SiteUsage {
-  totalBlobSize: BigInt!
-  totalCharacterCount: Int!
-}
-
 type SiteView implements ISite {
   dateDisplay: SiteDateDisplay!
   entities: [EntityView!]!
-  fonts: [Font!]!
   id: ID!
   logo: Image!
-  myMasqueradeName: String!
   name: String!
   slug: String!
   url: String!

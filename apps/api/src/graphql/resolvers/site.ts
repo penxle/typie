@@ -1,33 +1,18 @@
 import dayjs from 'dayjs';
-import { and, asc, desc, eq, getTableColumns, gt, inArray, isNull, ne, or, sql, sum } from 'drizzle-orm';
+import { and, asc, desc, eq, getTableColumns, gt, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import escape from 'escape-string-regexp';
 import { match } from 'ts-pattern';
 import { clearLoaders } from '@/context';
-import {
-  db,
-  DocumentContents,
-  Documents,
-  Entities,
-  first,
-  firstOrThrow,
-  firstOrThrowWith,
-  FontFamilies,
-  Fonts,
-  Sites,
-  TableCode,
-  Users,
-  validateDbId,
-} from '@/db';
-import { DocumentType, EntityState, EntityType, EntityVisibility, FontState, SiteDateDisplay, SiteState } from '@/enums';
+import { db, Documents, Entities, first, firstOrThrow, firstOrThrowWith, Sites, TableCode, Users, validateDbId } from '@/db';
+import { DocumentType, EntityState, EntityType, EntityVisibility, SiteDateDisplay, SiteState } from '@/enums';
 import { env } from '@/env';
 import { NotFoundError, TypieError } from '@/errors';
 import { pubsub } from '@/pubsub';
-import { generateRandomName } from '@/utils/name';
 import { assertSitePermission } from '@/utils/permission';
 import { siteSchema } from '@/validation';
 import { builder } from '../builder';
-import { Document, Entity, EntityView, Font, Image, ISite, isTypeOf, Post, Site, SiteView, User } from '../objects';
+import { Document, Entity, EntityView, Image, ISite, isTypeOf, Post, Site, SiteView, User } from '../objects';
 
 /**
  * * Types
@@ -43,19 +28,6 @@ ISite.implement({
     dateDisplay: t.expose('dateDisplay', { type: SiteDateDisplay }),
 
     url: t.string({ resolve: (self) => env.USERSITE_URL.replace('*', self.slug) }),
-
-    fonts: t.field({
-      type: [Font],
-      resolve: async (self) => {
-        const fonts = await db
-          .select(getTableColumns(Fonts))
-          .from(Fonts)
-          .innerJoin(FontFamilies, eq(Fonts.familyId, FontFamilies.id))
-          .where(and(eq(FontFamilies.userId, self.userId), eq(Fonts.state, FontState.ACTIVE)));
-
-        return fonts.toSorted((a, b) => (a.fullName ?? '').localeCompare(b.fullName ?? ''));
-      },
-    }),
   }),
 });
 
@@ -139,33 +111,6 @@ Site.implement({
       },
     }),
 
-    usage: t.field({
-      deprecationReason: 'Use User.usage instead',
-      type: t.builder.simpleObject('SiteUsage', {
-        fields: (t) => ({
-          totalCharacterCount: t.int(),
-          totalBlobSize: t.field({ type: 'BigInt' }),
-        }),
-      }),
-      resolve: async (self) => {
-        const documentRow = await db
-          .select({
-            totalCharacterCount: sum(DocumentContents.characterCount).mapWith(Number),
-            totalBlobSize: sum(DocumentContents.blobSize).mapWith(Number),
-          })
-          .from(DocumentContents)
-          .innerJoin(Documents, eq(DocumentContents.documentId, Documents.id))
-          .innerJoin(Entities, eq(Documents.entityId, Entities.id))
-          .where(and(eq(Entities.siteId, self.id), eq(Entities.state, EntityState.ACTIVE)))
-          .then(firstOrThrow);
-
-        return {
-          totalCharacterCount: documentRow.totalCharacterCount || 0,
-          totalBlobSize: String(documentRow.totalBlobSize || 0),
-        };
-      },
-    }),
-
     deletedEntities: t.field({
       type: [Entity],
       resolve: async (self) => {
@@ -193,12 +138,6 @@ SiteView.implement({
   isTypeOf: isTypeOf(TableCode.SITES),
   interfaces: [ISite],
   fields: (t) => ({
-    myMasqueradeName: t.string({
-      resolve: async (self, _, ctx) => {
-        return generateRandomName(`${self.id}:${ctx.session?.userId ?? ctx.deviceId}`);
-      },
-    }),
-
     entities: t.field({
       type: [EntityView],
       resolve: async (self, _, ctx) => {
