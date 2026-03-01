@@ -214,11 +214,12 @@ class AppBottomSheet extends StatelessWidget {
 }
 
 class AppFullBottomSheet extends StatelessWidget {
-  const AppFullBottomSheet({required this.title, required this.child, this.padding, super.key});
+  const AppFullBottomSheet({required this.title, required this.child, this.padding, this.closeButtonLabel, super.key});
 
   final String title;
   final EdgeInsetsGeometry? padding;
   final Widget child;
+  final String? closeButtonLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -246,7 +247,38 @@ class AppFullBottomSheet extends StatelessWidget {
                 onTap: () async {
                   await context.router.maybePop();
                 },
-                child: Icon(LucideLightIcons.x, size: 24, color: context.colors.textDefault),
+                child: closeButtonLabel == null
+                    ? Icon(LucideLightIcons.x, size: 24, color: context.colors.textDefault)
+                    : Padding(
+                        padding: const Pad(vertical: 6),
+                        child: IntrinsicWidth(
+                          child: Container(
+                            constraints: const BoxConstraints(minWidth: 56, minHeight: 32),
+                            decoration: BoxDecoration(
+                              border: Border.all(color: context.colors.borderStrong),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            padding: const Pad(horizontal: 12),
+                            child: Center(
+                              child: Text(
+                                closeButtonLabel!,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  height: 1,
+                                  color: context.colors.textDefault,
+                                ),
+                                strutStyle: const StrutStyle(
+                                  fontSize: 14,
+                                  height: 1,
+                                  leading: 0,
+                                  forceStrutHeight: true,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
               ),
               middle: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500)),
             ),

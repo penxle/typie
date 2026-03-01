@@ -57,6 +57,7 @@ class ShareBottomSheet extends StatelessWidget {
 
         return AppFullBottomSheet(
           title: title,
+          closeButtonLabel: '완료',
           child: Builder(
             builder: (context) {
               if (allFolders) {
