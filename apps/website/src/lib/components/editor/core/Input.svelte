@@ -239,9 +239,27 @@
     }
   };
 
+  let pointerDownOutsideEditor = false;
+
+  $effect(() => {
+    const paneEl = editor.scrollContainerEl?.closest('[data-pane-id]') as HTMLElement | null;
+    if (!paneEl) return;
+
+    const handlePointerDown = (e: PointerEvent) => {
+      if (editor.extensionArea.containerEl?.contains(e.target as Node)) return;
+      pointerDownOutsideEditor = true;
+      requestAnimationFrame(() => {
+        pointerDownOutsideEditor = false;
+      });
+    };
+
+    paneEl.addEventListener('pointerdown', handlePointerDown, true);
+    return () => paneEl.removeEventListener('pointerdown', handlePointerDown, true);
+  });
+
   $effect(() => {
     if (ctx.paneFocused) {
-      if (editor.scrollContainerEl?.contains(document.activeElement)) return;
+      if (pointerDownOutsideEditor) return;
       inputEl?.focus({ preventScroll: true });
     }
   });
