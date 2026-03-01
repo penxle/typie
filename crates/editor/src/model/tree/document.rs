@@ -208,7 +208,7 @@ impl Doc {
     pub fn to_text_with_mappings(&self) -> (String, Vec<TextMapping>) {
         let mut full_text = String::new();
         let mut mappings = Vec::new();
-        let mut char_offset = 0usize;
+        let mut utf16_offset = 0usize;
 
         for (block_id, _) in self.iter_blocks() {
             let mut block_offset = 0;
@@ -218,31 +218,31 @@ impl Doc {
                     Some(NodeType::Text) => {
                         if let Some(segments) = self.get_text_segments(child_id) {
                             for seg in segments {
-                                let text_start = char_offset;
-                                let char_len = seg.text.chars().count();
+                                let text_start = utf16_offset;
+                                let utf16_len = seg.text.encode_utf16().count();
                                 full_text.push_str(&seg.text);
-                                char_offset += char_len;
+                                utf16_offset += utf16_len;
 
                                 mappings.push(TextMapping {
                                     node_id: block_id,
                                     text_start,
-                                    text_end: char_offset,
+                                    text_end: utf16_offset,
                                     block_offset,
                                 });
 
-                                block_offset += char_len;
+                                block_offset += utf16_len;
                             }
                         }
                     }
                     Some(NodeType::HardBreak) => {
-                        let text_start = char_offset;
+                        let text_start = utf16_offset;
                         full_text.push('\n');
-                        char_offset += 1;
+                        utf16_offset += 1;
 
                         mappings.push(TextMapping {
                             node_id: block_id,
                             text_start,
-                            text_end: char_offset,
+                            text_end: utf16_offset,
                             block_offset,
                         });
 
@@ -254,13 +254,13 @@ impl Doc {
 
             if !full_text.is_empty() && !full_text.ends_with('\n') {
                 full_text.push('\n');
-                let text_start = char_offset;
-                char_offset += 1;
+                let text_start = utf16_offset;
+                utf16_offset += 1;
 
                 mappings.push(TextMapping {
                     node_id: block_id,
                     text_start,
-                    text_end: char_offset,
+                    text_end: utf16_offset,
                     block_offset,
                 });
             }
@@ -662,4 +662,126 @@ pub struct LinkRange {
     pub start_offset: usize,
     pub end_offset: usize,
     pub href: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::{FontWeightStyle, Node, ParagraphNode, Style, Text, TextNode, TextSegment};
+
+    /// Emoji above U+FFFF (e.g. 😀 U+1F600) requires 2 UTF-16 code units (surrogate pair)
+    /// but counts as 1 Rust char. Since to_text_with_mappings uses chars().count(),
+    /// text_start/text_end are in Unicode scalar values, not UTF-16 code units.
+    /// JavaScript consumers interpret these offsets as UTF-16 string indices,
+    /// so all offsets after any such emoji drift by 1 per surrogate pair.
+    #[test]
+    fn test_emoji_causes_text_offset_drift() {
+        let doc = Doc::new();
+        let root = doc.node(NodeId::ROOT).unwrap();
+
+        // Paragraph 1: "ab😀cd"
+        let para1_id = root
+            .as_mut()
+            .insert_child(0, Node::Paragraph(ParagraphNode::default()))
+            .unwrap();
+        doc.node(para1_id)
+            .unwrap()
+            .as_mut()
+            .insert_child(
+                0,
+                Node::Text(TextNode {
+                    text: Text::from("ab😀cd"),
+                }),
+            )
+            .unwrap();
+
+        // Paragraph 2: "ef"
+        let para2_id = root
+            .as_mut()
+            .insert_child(1, Node::Paragraph(ParagraphNode::default()))
+            .unwrap();
+        doc.node(para2_id)
+            .unwrap()
+            .as_mut()
+            .insert_child(
+                0,
+                Node::Text(TextNode {
+                    text: Text::from("ef"),
+                }),
+            )
+            .unwrap();
+
+        let (text, mappings) = doc.to_text_with_mappings();
+        assert_eq!(text, "ab😀cd\nef\n");
+
+        let ef_mapping = mappings
+            .iter()
+            .find(|m| m.node_id == para2_id && m.block_offset == 0)
+            .expect("mapping for 'ef'");
+
+        // "ab😀cd\n" = 7 UTF-16 code units (a,b,😀×2,c,d,\n)
+        // so "ef" should start at UTF-16 index 7, not char index 6
+        let expected_start = "ab😀cd\n".encode_utf16().count();
+        assert_eq!(expected_start, 7);
+        assert_eq!(
+            ef_mapping.text_start, expected_start,
+            "text_start for 'ef': expected {} (UTF-16) but got {} (chars)",
+            expected_start, ef_mapping.text_start
+        );
+    }
+
+    /// block_offset also uses chars().count(), so within a single block
+    /// containing emoji, subsequent segments' block_offset values are
+    /// wrong for UTF-16 consumers.
+    #[test]
+    fn test_emoji_causes_block_offset_drift() {
+        let doc = Doc::new();
+        let root = doc.node(NodeId::ROOT).unwrap();
+
+        // Single paragraph: "ab😀" (plain) + "cd" (bold) — two styled segments
+        let para_id = root
+            .as_mut()
+            .insert_child(0, Node::Paragraph(ParagraphNode::default()))
+            .unwrap();
+        let text = Text::from_segments(&[
+            TextSegment {
+                text: "ab😀".to_string(),
+                styles: vec![],
+                annotations: vec![],
+            },
+            TextSegment {
+                text: "cd".to_string(),
+                styles: vec![Style::FontWeight(FontWeightStyle { weight: 700 })],
+                annotations: vec![],
+            },
+        ]);
+        doc.node(para_id)
+            .unwrap()
+            .as_mut()
+            .insert_child(0, Node::Text(TextNode { text }))
+            .unwrap();
+
+        let (full_text, mappings) = doc.to_text_with_mappings();
+        assert_eq!(full_text, "ab😀cd\n");
+
+        // Find the mapping for "cd" by extracting text via UTF-16 offsets
+        let utf16: Vec<u16> = full_text.encode_utf16().collect();
+        let cd_mapping = mappings
+            .iter()
+            .find(|m| {
+                String::from_utf16(&utf16[m.text_start..m.text_end])
+                    .map(|s| s == "cd")
+                    .unwrap_or(false)
+            })
+            .expect("mapping for 'cd'");
+
+        // "ab😀" = 4 UTF-16 code units, so "cd" starts at block offset 4
+        let expected_block_offset = "ab😀".encode_utf16().count();
+        assert_eq!(expected_block_offset, 4);
+        assert_eq!(
+            cd_mapping.block_offset, expected_block_offset,
+            "block_offset for 'cd': expected {} (UTF-16) but got {} (chars)",
+            expected_block_offset, cd_mapping.block_offset
+        );
+    }
 }
