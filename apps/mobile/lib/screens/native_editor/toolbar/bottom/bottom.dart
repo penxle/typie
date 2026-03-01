@@ -20,10 +20,18 @@ class NativeEditorBottomToolbar extends HookWidget {
     final isKeyboardVisible = useValueListenable(scope.isKeyboardVisible);
     final keyboardType = useValueListenable(scope.keyboardType);
     final bottomToolbarMode = useValueListenable(scope.bottomToolbarMode);
+    final lastSoftwareKeyboardHeight = useRef<double>(0);
 
     final mediaQuery = MediaQuery.of(context);
     final expandedHeightFallback = mediaQuery.viewPadding.bottom + mediaQuery.size.height * 0.2;
-    final softwareExpandedHeight = keyboardHeight > 0 ? keyboardHeight : expandedHeightFallback;
+    if (keyboardType == KeyboardType.software && keyboardHeight > 0) {
+      lastSoftwareKeyboardHeight.value = keyboardHeight;
+    }
+    // 소프트 키보드에서만 마지막 높이를 재사용하고, 확장 높이는 fallback 이상으로 보장한다.
+    final softwareExpandedHeight =
+        keyboardType == KeyboardType.software && lastSoftwareKeyboardHeight.value > expandedHeightFallback
+        ? lastSoftwareKeyboardHeight.value
+        : expandedHeightFallback;
     final hardwareVisibleHeight = switch (bottomToolbarMode) {
       BottomToolbarMode.hidden => keyboardHeight,
       _ => keyboardHeight > expandedHeightFallback ? keyboardHeight : expandedHeightFallback,
