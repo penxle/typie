@@ -435,6 +435,27 @@
       "when": 1772259246412,
       "tag": "0061_slim_charles_xavier",
       "breakpoints": false
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1772345168190,
+      "tag": "0062_premium_virginia_dare",
+      "breakpoints": false
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1772346861644,
+      "tag": "0063_sturdy_brood",
+      "breakpoints": false
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1772347350375,
+      "tag": "0064_white_paper_doll",
+      "breakpoints": false
     }
   ]
 }

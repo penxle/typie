@@ -69,6 +69,7 @@ export const DocumentReaction = createObjectRef('DocumentReaction', T.DocumentRe
 export const PostReaction = createObjectRef('PostReaction', T.PostReactions);
 export const PostSnapshot = createObjectRef('PostSnapshot', T.PostSnapshots);
 export const DocumentVersion = createObjectRef('DocumentVersion', T.DocumentVersions);
+export const Redirect = createObjectRef('Redirect', T.Redirects);
 export const Referral = createObjectRef('Referral', T.Referrals);
 export const Site = createObjectRef('Site', T.Sites);
 export const Subscription = createObjectRef('Subscription_', T.Subscriptions);

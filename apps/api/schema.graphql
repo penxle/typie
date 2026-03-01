@@ -1054,6 +1054,7 @@ type Query {
   permalink(permalink: String!): Permalink!
   post(slug: String!): Post!
   randomName: String!
+  redirect(from: String!, type: RedirectType!): Redirect
   search(query: String!, siteId: ID!): SearchResult!
   seed: Float!
   site(siteId: ID!): Site!
@@ -1075,6 +1076,18 @@ input RecoverEntityInput {
 
 input RedeemCreditCodeInput {
   code: String!
+}
+
+type Redirect {
+  from: String!
+  id: ID!
+  to: String!
+  type: RedirectType!
+}
+
+enum RedirectType {
+  PERMALINK
+  SLUG
 }
 
 type Referral {

@@ -13,11 +13,12 @@ import {
   Folders,
   Notes,
   Posts,
+  Redirects,
   Sites,
   TableCode,
   validateDbId,
 } from '@/db';
-import { EntityAvailability, EntityState, EntityType, EntityVisibility, NoteState, SiteState } from '@/enums';
+import { EntityAvailability, EntityState, EntityType, EntityVisibility, NoteState, RedirectType, SiteState } from '@/enums';
 import { env } from '@/env';
 import { NotFoundError, TypieError } from '@/errors';
 import { enqueueJob } from '@/mq';
@@ -373,11 +374,19 @@ builder.queryFields((t) => ({
         throw new TypieError({ code: 'invalid_argument' });
       }
 
+      const slug = args.entityId ? undefined : args.slug;
+
       const entity = await db
         .select()
         .from(Entities)
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        .where(args.entityId ? eq(Entities.id, args.entityId) : eq(Entities.slug, args.slug!))
+        .where(
+          args.entityId
+            ? eq(Entities.id, args.entityId)
+            : eq(
+                Entities.slug,
+                sql<string>`COALESCE((SELECT ${Redirects.to} FROM ${Redirects} WHERE ${Redirects.type} = ${RedirectType.SLUG} AND ${Redirects.from} = ${slug as string}), ${slug as string})`,
+              ),
+        )
         .then(firstOrThrowWith(new NotFoundError()));
 
       if (entity.availability === EntityAvailability.PRIVATE) {
@@ -404,11 +413,19 @@ builder.queryFields((t) => ({
         throw new TypieError({ code: 'invalid_argument' });
       }
 
+      const slugs = args.entityIds ? undefined : args.slugs;
+
       const entities = await db
         .select()
         .from(Entities)
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        .where(args.entityIds ? inArray(Entities.id, args.entityIds) : inArray(Entities.slug, args.slugs!));
+        .where(
+          args.entityIds
+            ? inArray(Entities.id, args.entityIds)
+            : inArray(
+                Entities.slug,
+                sql`(SELECT COALESCE((SELECT ${Redirects.to} FROM ${Redirects} WHERE ${Redirects.type} = ${RedirectType.SLUG} AND ${Redirects.from} = s.val), s.val) FROM unnest(${slugs as string[]}::text[]) AS s(val))`,
+              ),
+        );
 
       if (entities.length === 0) {
         return [];
@@ -451,7 +468,16 @@ builder.queryFields((t) => ({
       const entity = await db
         .select()
         .from(Entities)
-        .where(and(eq(Entities.siteId, site.id), eq(Entities.slug, args.slug), eq(Entities.state, EntityState.ACTIVE)))
+        .where(
+          and(
+            eq(Entities.siteId, site.id),
+            eq(Entities.state, EntityState.ACTIVE),
+            eq(
+              Entities.slug,
+              sql<string>`COALESCE((SELECT ${Redirects.to} FROM ${Redirects} WHERE ${Redirects.type} = ${RedirectType.SLUG} AND ${Redirects.from} = ${args.slug}), ${args.slug})`,
+            ),
+          ),
+        )
         .then(firstOrThrowWith(new NotFoundError()));
 
       if (entity.visibility === EntityVisibility.PRIVATE) {
@@ -480,7 +506,15 @@ builder.queryFields((t) => ({
         .select({ siteSlug: Sites.slug, entitySlug: Entities.slug })
         .from(Entities)
         .innerJoin(Sites, eq(Entities.siteId, Sites.id))
-        .where(and(eq(Entities.permalink, args.permalink), eq(Entities.state, EntityState.ACTIVE)))
+        .where(
+          and(
+            eq(Entities.state, EntityState.ACTIVE),
+            eq(
+              Entities.permalink,
+              sql<string>`COALESCE((SELECT ${Redirects.to} FROM ${Redirects} WHERE ${Redirects.type} = ${RedirectType.PERMALINK} AND ${Redirects.from} = ${args.permalink}), ${args.permalink})`,
+            ),
+          ),
+        )
         .then(firstOrThrowWith(new NotFoundError()));
 
       return {

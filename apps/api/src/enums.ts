@@ -177,6 +177,12 @@ export const PostViewBodyUnavailableReason = {
   REQUIRE_MINIMUM_AGE: 'REQUIRE_MINIMUM_AGE',
 } as const;
 
+export type RedirectType = keyof typeof RedirectType;
+export const RedirectType = {
+  SLUG: 'SLUG',
+  PERMALINK: 'PERMALINK',
+} as const;
+
 export type PreorderPaymentState = keyof typeof PreorderPaymentState;
 export const PreorderPaymentState = {
   PENDING: 'PENDING',

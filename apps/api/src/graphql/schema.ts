@@ -13,6 +13,7 @@ import './resolvers/note';
 import './resolvers/stats';
 import './resolvers/payment';
 import './resolvers/post';
+import './resolvers/redirect';
 import './resolvers/search';
 import './resolvers/site';
 import './resolvers/text';
