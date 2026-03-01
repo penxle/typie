@@ -34,7 +34,7 @@ class CommandHandler {
       }
 
       if (dirty & (1 << 16) != 0) {
-        _handleRenderRequired(controller);
+        _handleRenderRequired(controller, reader);
       }
 
       if (dirty & (1 << 0) != 0) {
@@ -98,8 +98,24 @@ class CommandHandler {
     controller.markCharacterCountsDirty();
   }
 
-  static void _handleRenderRequired(EditorController controller) {
-    controller.updateState((state) => state.copyWith(renderVersion: Object()));
+  static void _handleRenderRequired(EditorController controller, SlateReader reader) {
+    final dropIndicator = _readDropIndicator(reader);
+    controller.updateState((state) => state.copyWith(renderVersion: Object(), dropIndicator: dropIndicator));
+  }
+
+  static DropIndicatorInfo? _readDropIndicator(SlateReader reader) {
+    final pageIdx = reader.getI32('drop_indicator_page_idx');
+    if (pageIdx < 0) {
+      return null;
+    }
+
+    return DropIndicatorInfo(
+      pageIdx: pageIdx,
+      x: reader.getF32('drop_indicator_x'),
+      y: reader.getF32('drop_indicator_y'),
+      width: reader.getF32('drop_indicator_width'),
+      height: reader.getF32('drop_indicator_height'),
+    );
   }
 
   static void _handleSettingsChanged(EditorController controller, SlateReader reader) {

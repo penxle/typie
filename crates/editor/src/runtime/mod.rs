@@ -1062,6 +1062,8 @@ impl Runtime {
         }
 
         if self.pending.render {
+            self.slab
+                .write_drop_indicator(&mut self.slate, self.pending.drop_indicator.as_ref());
             self.slate.mark_render_required();
             self.pending.render = false;
         }

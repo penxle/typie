@@ -39,6 +39,8 @@ class PageList extends HookWidget {
     final selection = state.state.selection;
     final fromHandle = state.state.selection?.fromBounds;
     final toHandle = state.state.selection?.toBounds;
+    final dropIndicator = state.state.dropIndicator;
+    final isDropping = useValueListenable(scope.dndController.isDropping);
     final tableOverlays = useValueListenable(scope.controller.tableOverlays);
     final isTableCellSelectorSelection = tableOverlays.any((overlay) => overlay.isFocused && overlay.showCellSelector);
 
@@ -98,6 +100,14 @@ class PageList extends HookWidget {
     final longPressPosition = scope.longPressPosition;
     final handleDragPosition = scope.handleDragPosition;
     final dropPosition = useValueNotifier<Offset?>(null);
+    final previousDropIndicatorKey = useRef<String?>(null);
+
+    String? dropIndicatorKey(DropIndicatorInfo? info) {
+      if (info == null) {
+        return null;
+      }
+      return '${info.pageIdx}:${info.x}:${info.y}:${info.width}:${info.height}';
+    }
 
     final gesture = useMemoized(
       () => GestureController(
@@ -237,6 +247,16 @@ class PageList extends HookWidget {
       prevSelectionRangeKey.value = currentSelectionRangeKey;
       return null;
     }, [selection, fromHandle, toHandle, isSelecting, isTableCellSelectorSelection, scope.isLongPressing.value]);
+
+    useEffect(() {
+      final nextKey = dropIndicatorKey(dropIndicator);
+      final previousKey = previousDropIndicatorKey.value;
+      if (isDropping && previousKey != null && nextKey != null && previousKey != nextKey) {
+        unawaited(HapticFeedback.selectionClick());
+      }
+      previousDropIndicatorKey.value = nextKey;
+      return null;
+    }, [dropIndicator, isDropping]);
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -1157,6 +1177,7 @@ class PageList extends HookWidget {
 
             final pointerX = gesture.getPointerX(position.dx);
 
+            unawaited(HapticFeedback.lightImpact());
             await scope.dndController.handleDrop(pageIdx: pageIdx, x: pointerX, y: localY, session: event.session);
           },
           child: Listener(
