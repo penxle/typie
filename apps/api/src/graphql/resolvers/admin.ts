@@ -7,7 +7,7 @@ import {
   Entities,
   first,
   firstOrThrow,
-  pg,
+  pgr,
   Posts,
   TableCode,
   UserPaymentCredits,
@@ -251,7 +251,7 @@ builder.queryFields((t) => ({
     resolve: async (_, { query, params }, ctx) => {
       await assertAdminPermission({ sessionId: ctx.session.id });
 
-      const result = await pg.begin('READ ONLY', async (sql) => {
+      const result = await pgr.begin('READ ONLY', async (sql) => {
         return await sql.unsafe(query, params ?? []);
       });
 

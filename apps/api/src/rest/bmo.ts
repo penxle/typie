@@ -1,12 +1,8 @@
 import dedent from 'dedent';
 import { Hono } from 'hono';
-import postgres from 'postgres';
+import { pgr } from '@/db';
 import { env } from '@/env';
 import type { Env } from '@/context';
-
-const sql = postgres(env.DATABASE_URL, {
-  prepare: false,
-});
 
 export const bmo = new Hono<Env>();
 
@@ -32,7 +28,7 @@ bmo.post('/query', async (c) => {
       const heartbeat = setInterval(() => controller.enqueue(encoder.encode(' ')), 1000);
 
       try {
-        const result = await sql.begin('READ ONLY', async (sql) => {
+        const result = await pgr.begin('READ ONLY', async (sql) => {
           const rows = await sql.unsafe(query);
           return { success: true as const, count: rows.length, rows: [...rows] };
         });
@@ -171,7 +167,7 @@ bmo.get('/schema', async (c) => {
   }
 
   if (!schema) {
-    await sql.begin('READ ONLY', async (sql) => {
+    await pgr.begin('READ ONLY', async (sql) => {
       const result = await sql.unsafe(getSchemaQuery);
       schema = result[0].schema;
     });

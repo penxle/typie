@@ -18,6 +18,18 @@ export const db = drizzle(pg, {
   logger: new DrizzleLogger(),
 });
 
+export const pgr = postgres(env.DATABASE_RO_URL ?? env.DATABASE_URL, {
+  max: dev ? 5 : 20,
+  connect_timeout: 5,
+  idle_timeout: 30,
+  prepare: false,
+});
+
+export const dbr = drizzle(pgr, {
+  schema: { ...tables, ...enums },
+  logger: new DrizzleLogger(),
+});
+
 export type Database = typeof db;
 export type Transaction = Database extends PgDatabase<infer T, infer U, infer V> ? PgTransaction<T, U, V> : never;
 
