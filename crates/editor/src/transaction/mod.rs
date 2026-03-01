@@ -34,6 +34,7 @@ pub struct Transaction {
     initial: State,
     state: State,
     effects: Vec<Effect>,
+    pending_txn_len_before: usize,
 }
 
 impl Transaction {
@@ -42,6 +43,7 @@ impl Transaction {
             initial: state.clone(),
             state: state.clone(),
             effects: Vec::new(),
+            pending_txn_len_before: state.doc.loro_doc().get_pending_txn_len(),
         }
     }
 
@@ -164,7 +166,11 @@ impl Transaction {
         }
         self.validate()?;
 
-        if self.state.doc.frontiers() != self.initial.frontiers {
+        let pending_txn_len = self.state.doc.loro_doc().get_pending_txn_len();
+        let doc_changed = pending_txn_len > self.pending_txn_len_before
+            || self.state.doc.frontiers() != self.initial.frontiers;
+
+        if doc_changed {
             self.effects.push(Effect::DocChanged);
         }
 
@@ -183,9 +189,10 @@ impl Transaction {
         }
 
         if defer_loro_commit {
-            self.state.pending_loro_commit = true;
-        } else {
+            self.state.pending_loro_commit = self.initial.pending_loro_commit || doc_changed;
+        } else if self.initial.pending_loro_commit || doc_changed {
             self.state.doc.loro_doc().commit();
+            self.state.pending_loro_commit = false;
         }
 
         self.state.frontiers = self.state.doc.frontiers();

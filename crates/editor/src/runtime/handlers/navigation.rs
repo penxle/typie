@@ -245,6 +245,17 @@ impl Runtime {
             return Vec::new();
         };
 
+        let anchor_exists = self.doc().node(anchor_id).is_some();
+        let head_exists = self.doc().node(head_id).is_some();
+        if !anchor_exists || !head_exists {
+            self.state.doc.clear_children_cache();
+            let anchor_exists_after = self.doc().node(anchor_id).is_some();
+            let head_exists_after = self.doc().node(head_id).is_some();
+            if !anchor_exists_after || !head_exists_after {
+                return Vec::new();
+            }
+        }
+
         let anchor = Position::new(anchor_id, anchor_offset, anchor_affinity);
         let head = Position::new(head_id, head_offset, head_affinity);
         let selection = self.validate_selection(Selection::new(anchor, head));

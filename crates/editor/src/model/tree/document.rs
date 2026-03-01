@@ -132,19 +132,18 @@ impl Doc {
         }
     }
 
-    pub fn import_updates(&self, updates: &[u8]) -> Result<()> {
+    pub fn import_updates(&self, updates: &[u8], origin: &str) -> Result<()> {
         self.inner
             .loro
-            .import(updates)
-            .context("Failed to import updates")?;
+            .import_with(updates, origin)
+            .context("Failed to import updates with origin")?;
         Ok(())
     }
 
-    pub fn import_updates_batch(&self, updates_batch: &[Vec<u8>]) -> Result<()> {
-        self.inner
-            .loro
-            .import_batch(updates_batch)
-            .context("Failed to import updates batch")?;
+    pub fn import_updates_batch(&self, updates_batch: &[Vec<u8>], origin: &str) -> Result<()> {
+        for updates in updates_batch {
+            self.import_updates(updates, origin)?;
+        }
         Ok(())
     }
 
@@ -280,7 +279,6 @@ impl Doc {
         let mut settings = DocumentSettings::decode(&map)?;
         f(&mut settings);
         settings.encode(&map)?;
-        self.inner.loro.commit();
         Ok(())
     }
 
@@ -288,7 +286,6 @@ impl Doc {
         if let Some(root) = self.node(NodeId::ROOT) {
             root.as_mut().set_cascade_attrs(&attrs.to_attrs())?;
         }
-        self.inner.loro.commit();
         Ok(())
     }
 

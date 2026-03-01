@@ -1987,7 +1987,7 @@ fn test_pagination_margin_clicks() {
 fn test_document_end() {
     let mut n1 = id!();
     let mut n2 = id!();
-    let rt = runtime! {
+    let mut rt = runtime! {
         viewport { continuous { width: 800.0 } }
         doc {
             @n1 paragraph {
@@ -2052,9 +2052,9 @@ fn test_document_end() {
         selection { (n1, 0) }
     };
 
-    rt.doc()
-        .update_settings(|s| s.block_gap = 0)
-        .expect("block gap 설정 실패");
+    rt.update(Message::SetBlockGap { gap: 0 });
+    rt.flush();
+    rt.layout();
 
     let pages = rt.pages();
     let new_selection = Cursor::move_to_document_end(&ctx(&rt.state()), &pages).unwrap();
@@ -2068,7 +2068,7 @@ fn test_document_end() {
 fn test_document_start_in_continuous_mode() {
     let mut n1 = id!();
     let mut n2 = id!();
-    let rt = runtime! {
+    let mut rt = runtime! {
         viewport { continuous { width: 800.0 } }
         doc {
             @n1 paragraph {
@@ -2088,9 +2088,9 @@ fn test_document_start_in_continuous_mode() {
         selection { (n2, 0) }
     };
 
-    rt.doc()
-        .update_settings(|s| s.block_gap = 0)
-        .expect("block gap 설정 실패");
+    rt.update(Message::SetBlockGap { gap: 0 });
+    rt.flush();
+    rt.layout();
 
     let pages = rt.pages();
     let selection = Cursor::move_to_document_start(&ctx(&rt.state()), &pages).unwrap();

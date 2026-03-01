@@ -3,6 +3,7 @@ mod context;
 mod dnd;
 mod effect;
 mod handlers;
+mod history_state;
 mod layout_engine;
 mod layout_invalidation;
 mod message;
@@ -23,7 +24,10 @@ use crate::layout::Page;
 use crate::layout::cursor::{Cursor, NavigationContext};
 use crate::layout::query::{find_drag_image_bounds, find_node_bounds, is_selectable_block_hit};
 use crate::model::*;
-use crate::render::{DragImageResult, RenderInfo, RenderResult, Renderer};
+#[cfg(feature = "native")]
+use crate::render::RenderInfo;
+use crate::render::{DragImageResult, RenderResult, Renderer};
+use crate::runtime::history_state::RuntimeHistory;
 use crate::runtime::text_replacement::ReplacementUndoState;
 use crate::state::ancestor_helpers::lowest_common_ancestor_id;
 use crate::state::selection_helpers::{
@@ -33,7 +37,9 @@ use crate::state::selection_helpers::{
 use crate::state::{
     Position, Preedit, Selection, find_child_at_offset, find_text_at_offset, position_in_selection,
 };
-use crate::transaction::{Transaction, paragraph_range_at, sentence_range_at, word_range_at};
+use crate::transaction::{
+    Transaction, compute_styles_at_cursor, paragraph_range_at, sentence_range_at, word_range_at,
+};
 use crate::types::{Affinity, PointerStyle, Rect};
 use anyhow::Result;
 pub use cmd::*;
@@ -50,6 +56,9 @@ use slate::{Slab, Slate};
 pub use state::*;
 pub use tracked_items::{RawTrackedItem, TrackedItem};
 pub use view_state::*;
+
+pub(in crate::runtime) const ORIGIN_REMOTE_PREFIX: &str = "remote/";
+pub(in crate::runtime) const ORIGIN_REMOTE_SYNC: &str = "remote/sync";
 
 fn reapply_styles(text_node: &loro::LoroText, offset: usize, len: usize, styles: &[Style]) {
     for style in styles {
@@ -111,8 +120,7 @@ pub struct Runtime {
     pub slate: Slate,
     pub slab: Slab,
 
-    undo_selections: Vec<Selection>,
-    redo_selections: Vec<Selection>,
+    history: RuntimeHistory,
 
     cached_plain_text: Option<String>,
 
@@ -127,7 +135,8 @@ pub struct Runtime {
 impl Runtime {
     pub fn new(width: f32, scale_factor: f64, state: State) -> Self {
         let mut undo_manager = UndoManager::new(state.doc.loro_doc());
-        undo_manager.set_merge_interval(1000);
+        let history = RuntimeHistory::new();
+        history.configure_undo_manager(&mut undo_manager);
         let diagnostics = FrameDiagnostics::new();
 
         Self {
@@ -165,8 +174,7 @@ impl Runtime {
             pointer: PointerState::default(),
             slate: Slate::default(),
             slab: Slab::new(),
-            undo_selections: Vec::new(),
-            redo_selections: Vec::new(),
+            history,
             cached_plain_text: None,
             tracked_items: Vec::new(),
             is_focused: true,
@@ -276,9 +284,10 @@ impl Runtime {
     }
 
     pub fn import_updates(&mut self, updates: &[u8]) -> Result<()> {
+        self.flush();
         let old_frontiers = self.state.doc.frontiers();
         let old_state_frontiers = self.state.doc.loro_doc().state_frontiers();
-        self.state.doc.import_updates(updates)?;
+        self.state.doc.import_updates(updates, ORIGIN_REMOTE_SYNC)?;
         let new_frontiers = self.state.doc.frontiers();
 
         if old_frontiers != new_frontiers {
@@ -289,9 +298,12 @@ impl Runtime {
     }
 
     pub fn import_updates_batch(&mut self, updates_batch: &[Vec<u8>]) -> Result<()> {
+        self.flush();
         let old_frontiers = self.state.doc.frontiers();
         let old_state_frontiers = self.state.doc.loro_doc().state_frontiers();
-        self.state.doc.import_updates_batch(updates_batch)?;
+        self.state
+            .doc
+            .import_updates_batch(updates_batch, ORIGIN_REMOTE_SYNC)?;
         let new_frontiers = self.state.doc.frontiers();
 
         if old_frontiers != new_frontiers {
@@ -301,12 +313,13 @@ impl Runtime {
         Ok(())
     }
 
-    #[allow(dead_code)]
-    pub fn export(&self, mode: DocExportMode) -> Result<Vec<u8>> {
+    pub fn export(&mut self, mode: DocExportMode) -> Result<Vec<u8>> {
+        self.flush();
         self.state.doc.export(mode)
     }
 
     pub fn checkout(&mut self, version: &[u8]) -> Result<()> {
+        self.flush();
         let vv = loro::VersionVector::decode(version)?;
         if !self.state.doc.loro_doc().oplog_vv().includes_vv(&vv) {
             anyhow::bail!("Cannot checkout to unknown version");
@@ -319,6 +332,7 @@ impl Runtime {
     }
 
     pub fn checkout_to_latest(&mut self) -> Result<()> {
+        self.flush();
         let old_state_frontiers = self.state.doc.loro_doc().state_frontiers();
         self.state.doc.checkout_to_latest()?;
         self.handle_external_doc_change(Some(old_state_frontiers));
@@ -330,6 +344,7 @@ impl Runtime {
     }
 
     pub fn revert_to(&mut self, version: &[u8]) -> Result<()> {
+        self.flush();
         let vv = loro::VersionVector::decode(version)?;
         if !self.state.doc.loro_doc().oplog_vv().includes_vv(&vv) {
             anyhow::bail!("Cannot revert to unknown version");
@@ -348,12 +363,8 @@ impl Runtime {
         let fragment = Fragment::from_doc(&template_doc)?;
 
         let effects = self.transact(|tr| {
-            tr.doc().update_settings(|s| {
-                s.block_gap = template_settings.block_gap;
-                s.paragraph_indent = template_settings.paragraph_indent;
-                s.layout_mode = template_settings.layout_mode;
-            })?;
-            tr.doc().update_default_attrs(template_default_attrs)?;
+            let _ = tr.set_document_settings(template_settings)?;
+            let _ = tr.set_default_attrs(template_default_attrs)?;
 
             let children: Vec<NodeId> = tr.doc().get_children_ids(NodeId::ROOT).to_vec();
             for child_id in children {
@@ -365,8 +376,6 @@ impl Runtime {
                 Affinity::Downstream,
             )));
             tr.paste_fragment(fragment, None)?;
-
-            tr.push_effect(Effect::SettingsChanged);
             Ok(true)
         });
         self.process_effects(effects);
@@ -512,6 +521,8 @@ impl Runtime {
         replacement: &str,
     ) -> Result<()> {
         use anyhow::Context;
+        let previous_selection_snapshot = self.capture_history_selection(self.state.selection);
+        let pending_txn_len_before = self.state.doc.loro_doc().get_pending_txn_len();
         let doc_handle = self.state.doc.clone();
 
         let node = doc_handle
@@ -559,7 +570,14 @@ impl Runtime {
             reapply_styles(&text_node, start_internal, replacement_len, &styles);
         }
 
-        self.state.pending_loro_commit = true;
+        let pending_txn_len_after = self.state.doc.loro_doc().get_pending_txn_len();
+        let doc_changed = pending_txn_len_after > pending_txn_len_before;
+
+        if doc_changed {
+            self.capture_history_for_pending_doc_change(previous_selection_snapshot);
+        }
+
+        self.state.pending_loro_commit = self.state.pending_loro_commit || doc_changed;
         self.handle_external_doc_change(None);
 
         Ok(())
@@ -570,6 +588,8 @@ impl Runtime {
         replacements: &[(NodeId, usize, usize, &str)],
     ) -> Result<()> {
         use anyhow::Context;
+        let previous_selection_snapshot = self.capture_history_selection(self.state.selection);
+        let pending_txn_len_before = self.state.doc.loro_doc().get_pending_txn_len();
 
         let mut indices: Vec<usize> = (0..replacements.len()).collect();
         indices.sort_by(|&a, &b| {
@@ -628,7 +648,14 @@ impl Runtime {
             }
         }
 
-        self.state.pending_loro_commit = true;
+        let pending_txn_len_after = self.state.doc.loro_doc().get_pending_txn_len();
+        let doc_changed = pending_txn_len_after > pending_txn_len_before;
+
+        if doc_changed {
+            self.capture_history_for_pending_doc_change(previous_selection_snapshot);
+        }
+
+        self.state.pending_loro_commit = self.state.pending_loro_commit || doc_changed;
         self.handle_external_doc_change(None);
 
         Ok(())
@@ -899,7 +926,7 @@ impl Runtime {
         Some(crate::render::encode_vector_page(&vector_page))
     }
 
-    #[allow(dead_code)]
+    #[cfg(feature = "native")]
     pub fn get_render_info(&mut self, page_index: usize) -> Option<RenderInfo> {
         let layout_mode = self.doc().settings().layout_mode;
         let page = self.layout_engine.pages().get(page_index)?;
@@ -920,7 +947,7 @@ impl Runtime {
         })
     }
 
-    #[allow(dead_code)]
+    #[cfg(feature = "native")]
     pub fn render_page_to(&mut self, page_index: usize, dst: &mut [u8]) -> bool {
         let snapshot = self.selection_snapshot();
 
@@ -1036,6 +1063,7 @@ impl Runtime {
         for msg in messages {
             self.process_message(msg);
         }
+
         self.build_output();
         self.slate.slab_len = self.slab.len() as u32;
         self.slate.slab_capacity = self.slab.data.capacity() as u32;
@@ -1043,14 +1071,36 @@ impl Runtime {
 
     pub fn flush(&mut self) {
         if self.state.pending_loro_commit {
+            let history_flush = self.begin_history_flush();
             self.state.doc.loro_doc().commit();
             self.state.pending_loro_commit = false;
+            self.finish_history_flush(history_flush);
         }
     }
 
     fn process_message(&mut self, msg: Message) {
+        self.ensure_valid_selection_state();
+        if Self::requires_flush_before_handle(&msg) {
+            self.flush();
+        }
         let effects = msg.handle(self);
         self.process_effects(effects);
+    }
+
+    fn requires_flush_before_handle(msg: &Message) -> bool {
+        matches!(msg, Message::Undo | Message::Redo)
+    }
+
+    fn ensure_valid_selection_state(&mut self) {
+        let validated = self.validate_selection(self.state.selection);
+        if validated != self.state.selection {
+            self.state.selection = validated;
+            self.state.pending_styles =
+                compute_styles_at_cursor(&self.state.doc, &self.state.selection.head);
+            self.pending.selection = true;
+            self.pending.cursor = true;
+            self.pending.active_styles = true;
+        }
     }
 
     fn build_output(&mut self) {
@@ -1538,6 +1588,10 @@ impl Runtime {
     }
 
     pub fn update(&mut self, msg: Message) {
+        self.ensure_valid_selection_state();
+        if Self::requires_flush_before_handle(&msg) {
+            self.flush();
+        }
         let effects = msg.handle(self);
         self.process_effects(effects);
     }
@@ -1738,19 +1792,12 @@ impl Runtime {
         self.transact_internal(f, true)
     }
 
-    #[allow(dead_code)]
-    fn transact_immediate<F>(&mut self, f: F) -> Vec<Effect>
-    where
-        F: FnOnce(&mut Transaction) -> Result<bool>,
-    {
-        self.transact_internal(f, false)
-    }
-
     fn transact_internal<F>(&mut self, f: F, defer_commit: bool) -> Vec<Effect>
     where
         F: FnOnce(&mut Transaction) -> Result<bool>,
     {
         let previous_selection = self.state.selection;
+        let previous_selection_snapshot = self.capture_history_selection(previous_selection);
 
         let mut tr = Transaction::new(&self.state);
 
@@ -1775,14 +1822,26 @@ impl Runtime {
 
         match result {
             Ok((new_state, effects)) => {
-                let doc_changed = effects.iter().any(|e| matches!(e, Effect::DocChanged));
-                let _selection_changed = effects
+                let doc_changed = effects.iter().any(|e| {
+                    matches!(
+                        e,
+                        Effect::DocChanged
+                            | Effect::NodeChanged { .. }
+                            | Effect::SubtreeChanged { .. }
+                            | Effect::StructureChanged
+                    )
+                }) || new_state.frontiers != self.state.frontiers;
+                let selection_changed = effects
                     .iter()
                     .any(|e| matches!(e, Effect::SelectionChanged));
 
                 if doc_changed {
-                    self.undo_selections.push(previous_selection);
-                    self.redo_selections.clear();
+                    self.capture_history_for_pending_doc_change(previous_selection_snapshot);
+                } else if selection_changed {
+                    if self.state.pending_loro_commit {
+                        self.flush();
+                    }
+                    self.schedule_split_next_history_group();
                 }
 
                 self.state = new_state;
@@ -1818,6 +1877,13 @@ impl Runtime {
     }
 
     fn validate_position(&self, position: Position) -> Position {
+        if let Some(node) = self.doc().node(position.node_id) {
+            let max_offset = self.calculate_max_offset(&node);
+            let adjusted_offset = position.offset.min(max_offset);
+            return Position::new(position.node_id, adjusted_offset, position.affinity);
+        }
+
+        self.state.doc.clear_children_cache();
         if let Some(node) = self.doc().node(position.node_id) {
             let max_offset = self.calculate_max_offset(&node);
             let adjusted_offset = position.offset.min(max_offset);
@@ -1937,6 +2003,1230 @@ mod tests {
             .expect("tracked item should resolve after replacement");
         assert_eq!(after.1, 10);
         assert_eq!(after.2, 15);
+    }
+
+    #[test]
+    fn test_undo_restores_selection_after_replace_text_in_block() {
+        let mut p = id!();
+        let mut runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {
+                    text { "hello world" }
+                }
+            }
+            selection { (p, 2) }
+        };
+
+        runtime
+            .replace_text_in_block(p, 0, 5, "hi")
+            .expect("replace_text_in_block should succeed");
+        runtime.flush();
+
+        runtime.update(Message::SetSelection {
+            anchor_node_id: p.to_string(),
+            anchor_offset: 11,
+            anchor_affinity: Affinity::Downstream,
+            head_node_id: p.to_string(),
+            head_offset: 11,
+            head_affinity: Affinity::Downstream,
+        });
+
+        runtime.update(Message::Undo);
+
+        assert_eq!(runtime.doc().to_plain_text(), "hello world");
+        assert_eq!(
+            runtime.state().selection,
+            Selection::collapsed(Position::new(p, 2, Affinity::Downstream)),
+            "undo should restore selection captured before replacement"
+        );
+    }
+
+    #[test]
+    fn test_undo_restores_selection_after_replace_text_in_blocks() {
+        let mut p = id!();
+        let mut runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {
+                    text { "hello world" }
+                }
+            }
+            selection { (p, 3) }
+        };
+
+        let replacements = vec![(p, 0, 5, "hi"), (p, 6, 11, "planet")];
+        runtime
+            .replace_text_in_blocks(&replacements)
+            .expect("replace_text_in_blocks should succeed");
+        runtime.flush();
+
+        runtime.update(Message::SetSelection {
+            anchor_node_id: p.to_string(),
+            anchor_offset: 9,
+            anchor_affinity: Affinity::Downstream,
+            head_node_id: p.to_string(),
+            head_offset: 9,
+            head_affinity: Affinity::Downstream,
+        });
+
+        runtime.update(Message::Undo);
+
+        assert_eq!(runtime.doc().to_plain_text(), "hello world");
+        assert_eq!(
+            runtime.state().selection,
+            Selection::collapsed(Position::new(p, 3, Affinity::Downstream)),
+            "undo should restore selection captured before bulk replacement"
+        );
+    }
+
+    #[test]
+    fn test_undo_respects_selection_boundary_between_inputs() {
+        let mut p = id!();
+        let mut runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {
+                    text { "A" }
+                }
+            }
+            selection { (p, 1) }
+        };
+
+        runtime.update(Message::Input {
+            text: "x".to_string(),
+        });
+
+        runtime.update(Message::SetSelection {
+            anchor_node_id: p.to_string(),
+            anchor_offset: 0,
+            anchor_affinity: Affinity::Downstream,
+            head_node_id: p.to_string(),
+            head_offset: 0,
+            head_affinity: Affinity::Downstream,
+        });
+
+        runtime.update(Message::Input {
+            text: "y".to_string(),
+        });
+
+        runtime.update(Message::SetSelection {
+            anchor_node_id: p.to_string(),
+            anchor_offset: 3,
+            anchor_affinity: Affinity::Downstream,
+            head_node_id: p.to_string(),
+            head_offset: 3,
+            head_affinity: Affinity::Downstream,
+        });
+
+        runtime.update(Message::Input {
+            text: "z".to_string(),
+        });
+
+        runtime.update(Message::Undo);
+        assert_eq!(
+            runtime.doc().to_plain_text(),
+            "yAx",
+            "first undo should revert only the third input"
+        );
+        assert_eq!(
+            runtime.state().selection,
+            Selection::collapsed(Position::new(p, 3, Affinity::Downstream)),
+            "first undo should restore selection before third input"
+        );
+
+        runtime.update(Message::Undo);
+        assert_eq!(
+            runtime.doc().to_plain_text(),
+            "Ax",
+            "second undo should revert only the second input"
+        );
+        assert_eq!(
+            runtime.state().selection,
+            Selection::collapsed(Position::new(p, 0, Affinity::Downstream)),
+            "second undo should restore selection before second input"
+        );
+
+        runtime.update(Message::Undo);
+        assert_eq!(
+            runtime.doc().to_plain_text(),
+            "A",
+            "third undo should revert the first input"
+        );
+        assert_eq!(
+            runtime.state().selection,
+            Selection::collapsed(Position::new(p, 1, Affinity::Downstream)),
+            "third undo should restore selection before first input"
+        );
+    }
+
+    #[test]
+    fn test_undo_preserves_upstream_affinity_before_input() {
+        let mut p = id!();
+        let mut runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {
+                    text { "AB" }
+                }
+            }
+            selection { (p, 1, Affinity::Upstream) }
+        };
+
+        runtime.update(Message::Input {
+            text: "x".to_string(),
+        });
+
+        runtime.update(Message::Undo);
+
+        assert_eq!(
+            runtime.doc().to_plain_text(),
+            "AB",
+            "undo should revert inserted text"
+        );
+        assert_eq!(
+            runtime.state().selection,
+            Selection::collapsed(Position::new(p, 1, Affinity::Upstream)),
+            "undo should preserve pre-input affinity as well as position"
+        );
+    }
+
+    #[test]
+    fn test_undo_restores_latest_selection_after_undo_stack_rollover() {
+        let mut p = id!();
+        let mut runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {
+                    text { "" }
+                }
+            }
+            selection { (p, 0) }
+        };
+
+        let mut expected_text_before_last_input = String::new();
+        let mut expected_selection_before_last_input = runtime.state().selection;
+
+        for _round in 0..120 {
+            expected_text_before_last_input = runtime.doc().to_plain_text();
+            expected_selection_before_last_input = runtime.state().selection;
+
+            runtime.update(Message::Input {
+                text: "x".to_string(),
+            });
+
+            runtime.update(Message::SetSelection {
+                anchor_node_id: p.to_string(),
+                anchor_offset: 0,
+                anchor_affinity: Affinity::Downstream,
+                head_node_id: p.to_string(),
+                head_offset: 0,
+                head_affinity: Affinity::Downstream,
+            });
+        }
+
+        assert_eq!(
+            runtime.undo_manager.undo_count(),
+            100,
+            "precondition: undo stack should hit Loro's default max size"
+        );
+
+        runtime.update(Message::Undo);
+
+        assert_eq!(
+            runtime.doc().to_plain_text(),
+            expected_text_before_last_input
+        );
+        assert_eq!(
+            runtime.state().selection,
+            expected_selection_before_last_input,
+            "latest undo entry should restore the selection captured before the latest input"
+        );
+    }
+
+    #[test]
+    fn test_undo_roundtrip_matches_checkpoint_selection_under_mixed_input_and_moves() {
+        let mut p = id!();
+        let mut runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {
+                    text { "" }
+                }
+            }
+            selection { (p, 0) }
+        };
+
+        #[derive(Clone)]
+        struct Checkpoint {
+            text: String,
+            selection: Selection,
+        }
+
+        fn next_u32(seed: &mut u64) -> u32 {
+            *seed = seed
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            (*seed >> 32) as u32
+        }
+
+        fn pick<'a>(seed: &mut u64, items: &'a [&'a str]) -> &'a str {
+            let idx = (next_u32(seed) as usize) % items.len();
+            items[idx]
+        }
+
+        fn random_affinity(seed: &mut u64) -> Affinity {
+            if next_u32(seed) & 1 == 0 {
+                Affinity::Downstream
+            } else {
+                Affinity::Upstream
+            }
+        }
+
+        let mut seed = 0xCEA5EED_u64;
+        let mut checkpoints: Vec<Checkpoint> = Vec::new();
+        let rounds = 80;
+
+        for _ in 0..rounds {
+            let before_text = runtime.doc().to_plain_text();
+            let before_selection = runtime.state().selection;
+
+            if next_u32(&mut seed) & 1 == 0 {
+                let token = pick(&mut seed, &["a", "b", " ", "xy"]);
+                runtime.update(Message::Input {
+                    text: token.to_string(),
+                });
+            } else {
+                let sequence = pick(&mut seed, &["ㅎ,하,한", "ㄱ,가,각", "ㅂ,바,밥"]);
+                let mut parts = sequence.split(',');
+                let start = parts.next().unwrap_or_default().to_string();
+                let update = parts.next().unwrap_or_default().to_string();
+                runtime.update(Message::CompositionStart { text: start });
+                runtime.update(Message::CompositionUpdate { text: update });
+                runtime.update(Message::CommitPreedit);
+            }
+
+            let after_text = runtime.doc().to_plain_text();
+            if after_text != before_text {
+                checkpoints.push(Checkpoint {
+                    text: before_text,
+                    selection: before_selection,
+                });
+            }
+
+            let max_offset = runtime
+                .doc()
+                .node(p)
+                .map(|node| runtime.calculate_max_offset(&node))
+                .unwrap_or(0);
+            let offset = (next_u32(&mut seed) as usize) % (max_offset + 1);
+            let affinity = random_affinity(&mut seed);
+            runtime.update(Message::SetSelection {
+                anchor_node_id: p.to_string(),
+                anchor_offset: offset,
+                anchor_affinity: affinity,
+                head_node_id: p.to_string(),
+                head_offset: offset,
+                head_affinity: affinity,
+            });
+        }
+
+        let undo_steps = checkpoints.len().min(runtime.undo_manager.undo_count());
+        let mut last_undo_text: Option<String> = Some(runtime.doc().to_plain_text());
+        for undo_index in 0..undo_steps {
+            runtime.update(Message::Undo);
+            let actual_text = runtime.doc().to_plain_text();
+
+            let noop_undo = last_undo_text
+                .as_ref()
+                .map_or(false, |previous| previous == &actual_text);
+            last_undo_text = Some(actual_text.clone());
+            if noop_undo {
+                continue;
+            }
+
+            let mut matched_index = None;
+            for idx in (0..checkpoints.len()).rev() {
+                if checkpoints[idx].text == actual_text {
+                    matched_index = Some(idx);
+                    break;
+                }
+            }
+
+            let Some(matched_index) = matched_index else {
+                panic!(
+                    "undo#{}, no checkpoint matched content: {}",
+                    undo_index + 1,
+                    actual_text
+                );
+            };
+
+            let expected_selection = checkpoints[matched_index].selection;
+            assert_eq!(
+                runtime.state().selection,
+                expected_selection,
+                "undo#{} should restore selection for matched checkpoint idx={}",
+                undo_index + 1,
+                matched_index
+            );
+
+            checkpoints.truncate(matched_index);
+        }
+    }
+
+    #[test]
+    fn test_undo_roundtrip_matches_checkpoint_selection_across_dynamic_textblocks() {
+        let mut p = id!();
+        let mut runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {
+                    text { "" }
+                }
+            }
+            selection { (p, 0) }
+        };
+
+        #[derive(Clone)]
+        struct Checkpoint {
+            text: String,
+            selection: Selection,
+        }
+
+        fn next_u32(seed: &mut u64) -> u32 {
+            *seed = seed
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            (*seed >> 32) as u32
+        }
+
+        fn pick<'a>(seed: &mut u64, items: &'a [&'a str]) -> &'a str {
+            let idx = (next_u32(seed) as usize) % items.len();
+            items[idx]
+        }
+
+        fn random_affinity(seed: &mut u64) -> Affinity {
+            if next_u32(seed) & 1 == 0 {
+                Affinity::Downstream
+            } else {
+                Affinity::Upstream
+            }
+        }
+
+        fn collect_textblocks(runtime: &Runtime) -> Vec<NodeId> {
+            let mut ids = Vec::new();
+            let mut stack = vec![NodeId::ROOT];
+
+            while let Some(node_id) = stack.pop() {
+                let Some(node) = runtime.doc().node(node_id) else {
+                    continue;
+                };
+
+                if node
+                    .spec()
+                    .map_or(false, |spec| spec.is_textblock(runtime.doc().schema()))
+                {
+                    ids.push(node_id);
+                }
+
+                for child in node.children() {
+                    stack.push(child.node_id());
+                }
+            }
+
+            ids
+        }
+
+        let mut seed = 0xD1A0_2026_u64;
+        let mut checkpoints: Vec<Checkpoint> = Vec::new();
+        let rounds = 120;
+
+        for _ in 0..rounds {
+            let before_text = runtime.doc().to_plain_text();
+            let before_selection = runtime.state().selection;
+
+            match next_u32(&mut seed) % 3 {
+                0 => {
+                    let token = pick(&mut seed, &["a", "b", " ", "xy", "zz"]);
+                    runtime.update(Message::Input {
+                        text: token.to_string(),
+                    });
+                }
+                1 => {
+                    let sequence =
+                        pick(&mut seed, &["ㅎ,하,한", "ㄱ,가,각", "ㅂ,바,밥", "ㄴ,나,난"]);
+                    let mut parts = sequence.split(',');
+                    let start = parts.next().unwrap_or_default().to_string();
+                    let update = parts.next().unwrap_or_default().to_string();
+                    runtime.update(Message::CompositionStart { text: start });
+                    runtime.update(Message::CompositionUpdate { text: update });
+                    runtime.update(Message::CommitPreedit);
+                }
+                _ => {
+                    runtime.update(Message::InsertNewline);
+                }
+            }
+
+            let after_text = runtime.doc().to_plain_text();
+            if after_text != before_text {
+                checkpoints.push(Checkpoint {
+                    text: before_text,
+                    selection: before_selection,
+                });
+            }
+
+            let textblocks = collect_textblocks(&runtime);
+            assert!(
+                !textblocks.is_empty(),
+                "precondition: there should be at least one textblock"
+            );
+
+            let block_id = textblocks[(next_u32(&mut seed) as usize) % textblocks.len()];
+            let max_offset = runtime
+                .doc()
+                .node(block_id)
+                .map(|node| runtime.calculate_max_offset(&node))
+                .unwrap_or(0);
+            let offset = (next_u32(&mut seed) as usize) % (max_offset + 1);
+            let affinity = random_affinity(&mut seed);
+
+            runtime.update(Message::SetSelection {
+                anchor_node_id: block_id.to_string(),
+                anchor_offset: offset,
+                anchor_affinity: affinity,
+                head_node_id: block_id.to_string(),
+                head_offset: offset,
+                head_affinity: affinity,
+            });
+        }
+
+        let undo_steps = checkpoints.len().min(runtime.undo_manager.undo_count());
+        let mut last_undo_text: Option<String> = None;
+        for undo_index in 0..undo_steps {
+            runtime.update(Message::Undo);
+            let actual_text = runtime.doc().to_plain_text();
+
+            let noop_undo = last_undo_text
+                .as_ref()
+                .map_or(false, |previous| previous == &actual_text);
+            last_undo_text = Some(actual_text.clone());
+            if noop_undo {
+                continue;
+            }
+
+            let mut matched_index = None;
+            for idx in (0..checkpoints.len()).rev() {
+                if checkpoints[idx].text == actual_text {
+                    matched_index = Some(idx);
+                    break;
+                }
+            }
+
+            let Some(matched_index) = matched_index else {
+                panic!(
+                    "undo#{}, no checkpoint matched content: {}",
+                    undo_index + 1,
+                    actual_text
+                );
+            };
+
+            let expected_selection = checkpoints[matched_index].selection;
+            assert_eq!(
+                runtime.state().selection,
+                expected_selection,
+                "undo#{} should restore selection for matched checkpoint idx={}",
+                undo_index + 1,
+                matched_index
+            );
+
+            checkpoints.truncate(matched_index + 1);
+        }
+    }
+
+    #[test]
+    fn test_top_undo_marker_stability_for_merged_inputs() {
+        let mut p = id!();
+        let mut runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {
+                    text { "" }
+                }
+            }
+            selection { (p, 0) }
+        };
+
+        runtime.update(Message::Input {
+            text: "a".to_string(),
+        });
+        runtime.flush();
+        let marker_after_first = runtime.top_undo_marker();
+
+        runtime.update(Message::Input {
+            text: "b".to_string(),
+        });
+        runtime.flush();
+        let marker_after_second = runtime.top_undo_marker();
+
+        assert_eq!(
+            runtime.undo_manager.undo_count(),
+            1,
+            "consecutive inputs should merge into a single undo entry"
+        );
+
+        assert_eq!(
+            marker_after_first, marker_after_second,
+            "merged undo entry should keep the same top marker"
+        );
+    }
+
+    #[test]
+    fn test_merged_inputs_restore_selection_from_group_start() {
+        let mut p = id!();
+        let mut runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {
+                    text { "A" }
+                }
+            }
+            selection { (p, 1) }
+        };
+
+        runtime.update(Message::Input {
+            text: "x".to_string(),
+        });
+        runtime.update(Message::Input {
+            text: "y".to_string(),
+        });
+        runtime.update(Message::Input {
+            text: "z".to_string(),
+        });
+
+        runtime.update(Message::Undo);
+
+        assert_eq!(
+            runtime.doc().to_plain_text(),
+            "A",
+            "merged inputs should undo as one content step"
+        );
+        assert_eq!(
+            runtime.state().selection,
+            Selection::collapsed(Position::new(p, 1, Affinity::Downstream)),
+            "merged inputs should restore selection from the first input boundary"
+        );
+    }
+
+    #[test]
+    fn test_set_block_gap_keeps_history_selection_stack_aligned() {
+        let mut p = id!();
+        let mut runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {
+                    text { "A" }
+                }
+            }
+            selection { (p, 1) }
+        };
+
+        runtime.update(Message::SetBlockGap { gap: 101 });
+        runtime.flush();
+
+        assert_eq!(
+            runtime.undo_manager.undo_count(),
+            1,
+            "changing block gap should create exactly one undo step"
+        );
+        assert_eq!(
+            runtime.history_undo_marker_len(),
+            1,
+            "selection snapshot must be captured for setting changes"
+        );
+
+        runtime.update(Message::Undo);
+        assert_eq!(
+            runtime.state().selection,
+            Selection::collapsed(Position::new(p, 1, Affinity::Downstream)),
+            "undo should restore the pre-change selection"
+        );
+    }
+
+    #[test]
+    fn test_set_layout_mode_keeps_history_selection_stack_aligned() {
+        let mut p = id!();
+        let mut runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {
+                    text { "A" }
+                }
+            }
+            selection { (p, 1) }
+        };
+
+        runtime.update(Message::SetLayoutMode {
+            mode: LayoutMode::Continuous { max_width: 480.0 },
+        });
+        runtime.flush();
+
+        assert_eq!(
+            runtime.undo_manager.undo_count(),
+            1,
+            "changing layout mode should create exactly one undo step"
+        );
+        assert_eq!(
+            runtime.history_undo_marker_len(),
+            1,
+            "selection snapshot must be captured for layout-mode changes"
+        );
+
+        runtime.update(Message::Undo);
+        assert_eq!(
+            runtime.state().selection,
+            Selection::collapsed(Position::new(p, 1, Affinity::Downstream)),
+            "undo should restore the pre-change selection"
+        );
+    }
+
+    #[test]
+    fn test_selection_only_transaction_does_not_create_undo_entry() {
+        let mut p = id!();
+        let mut runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {
+                    text { "AB" }
+                }
+            }
+            selection { (p, 1) }
+        };
+
+        runtime.update(Message::SetSelection {
+            anchor_node_id: p.to_string(),
+            anchor_offset: 2,
+            anchor_affinity: Affinity::Downstream,
+            head_node_id: p.to_string(),
+            head_offset: 2,
+            head_affinity: Affinity::Downstream,
+        });
+        runtime.flush();
+
+        assert_eq!(
+            runtime.undo_manager.undo_count(),
+            0,
+            "selection-only transaction must not create undo entries"
+        );
+        assert_eq!(
+            runtime.history_undo_marker_len(),
+            0,
+            "selection snapshot stack must stay empty when no content changed"
+        );
+    }
+
+    #[test]
+    fn test_input_queues_pending_history_selection_before_flush() {
+        let mut p = id!();
+        let mut runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {
+                    text { "A" }
+                }
+            }
+            selection { (p, 1) }
+        };
+
+        runtime.update(Message::Input {
+            text: "x".to_string(),
+        });
+
+        assert!(
+            runtime.history_has_pending_selection(),
+            "doc-changing input must queue an undo selection snapshot before flush"
+        );
+        assert!(
+            runtime.history_has_pending_group_start_selection(),
+            "doc-changing input must remember group-start selection before flush"
+        );
+    }
+
+    #[test]
+    fn test_replace_text_in_block_queues_pending_history_selection_before_flush() {
+        let mut p = id!();
+        let mut runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {
+                    text { "hello" }
+                }
+            }
+            selection { (p, 2) }
+        };
+
+        runtime
+            .replace_text_in_block(p, 0, 1, "H")
+            .expect("replace_text_in_block should succeed");
+
+        assert!(
+            runtime.history_has_pending_selection(),
+            "block replacement must queue an undo selection snapshot before flush"
+        );
+        assert!(
+            runtime.history_has_pending_group_start_selection(),
+            "block replacement must remember group-start selection before flush"
+        );
+        assert!(
+            runtime.state.pending_loro_commit,
+            "block replacement should leave a pending loro commit"
+        );
+    }
+
+    #[test]
+    fn test_export_flushes_pending_commit_without_history_desync() {
+        let mut p = id!();
+        let mut runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {
+                    text { "A" }
+                }
+            }
+            selection { (p, 1) }
+        };
+
+        runtime.update(Message::Input {
+            text: "x".to_string(),
+        });
+        assert!(
+            runtime.state.pending_loro_commit,
+            "precondition: input should leave a pending local commit before export"
+        );
+
+        let _ = runtime
+            .export(DocExportMode::Snapshot)
+            .expect("runtime export should succeed");
+
+        assert_eq!(
+            runtime.undo_manager.undo_count() as usize,
+            runtime.history_undo_marker_len(),
+            "export must not introduce undo entries without matching selection snapshots"
+        );
+        assert_eq!(
+            runtime.undo_manager.undo_count(),
+            1,
+            "export should preserve one local undo item from the pending edit"
+        );
+
+        runtime.update(Message::Undo);
+        assert_eq!(runtime.doc().to_plain_text(), "A");
+        assert_eq!(
+            runtime.state().selection,
+            Selection::collapsed(Position::new(p, 1, Affinity::Downstream)),
+            "undo after export should restore pre-input selection"
+        );
+    }
+
+    #[test]
+    fn test_runtime_starts_with_empty_undo_history_for_snapshot_doc() {
+        let mut p = id!();
+        let mut source = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {
+                    text { "A" }
+                }
+            }
+            selection { (p, 1) }
+        };
+
+        source.update(Message::Input {
+            text: "x".to_string(),
+        });
+        source.flush();
+        assert!(
+            source.undo_manager.undo_count() > 0,
+            "precondition: source runtime should have local undo history"
+        );
+
+        let snapshot = source
+            .doc()
+            .export(DocExportMode::Snapshot)
+            .expect("source should export snapshot");
+        let restored = Rc::new(Doc::from_snapshot(snapshot).expect("snapshot should decode"));
+        let target_state = State::new(
+            restored,
+            Selection::collapsed(Position::new(p, 0, Affinity::Downstream)),
+        );
+        let target = Runtime::new(800.0, 1.0, target_state);
+
+        assert_eq!(
+            target.undo_manager.undo_count(),
+            0,
+            "new runtime should not inherit undo history that lacks selection snapshots"
+        );
+        assert_eq!(
+            target.history_undo_marker_len(),
+            0,
+            "new runtime should start with empty undo selection stack"
+        );
+    }
+
+    #[test]
+    fn test_flush_uses_group_start_selection_when_pending_snapshot_is_missing() {
+        let mut p = id!();
+        let mut runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {
+                    text { "A" }
+                }
+            }
+            selection { (p, 1) }
+        };
+
+        runtime.update(Message::Input {
+            text: "x".to_string(),
+        });
+        runtime.history_drop_pending_selection_for_test();
+        runtime.flush();
+
+        assert_eq!(runtime.undo_manager.undo_count(), 1);
+        assert_eq!(
+            runtime.history_undo_marker_len(),
+            1,
+            "group-start fallback should still capture one undo selection snapshot"
+        );
+        let marker = runtime
+            .history_first_undo_marker()
+            .expect("one undo marker should exist");
+        let stored_selection = runtime
+            .history_undo_selection_for_marker(marker)
+            .expect("one undo selection snapshot should exist");
+        assert_eq!(
+            stored_selection,
+            Selection::collapsed(Position::new(p, 1, Affinity::Downstream)),
+            "fallback should use selection captured at the start of the edit group"
+        );
+
+        runtime.update(Message::Undo);
+        assert_eq!(
+            runtime.state().selection,
+            Selection::collapsed(Position::new(p, 1, Affinity::Downstream)),
+            "undo should restore the fallback-captured group-start selection"
+        );
+    }
+
+    #[test]
+    fn test_group_start_fallback_survives_click_transaction_before_flush() {
+        let mut p = id!();
+        let mut runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {
+                    text { "A" }
+                }
+            }
+            selection { (p, 1) }
+        };
+
+        runtime.update(Message::Input {
+            text: "x".to_string(),
+        });
+        runtime.history_drop_pending_selection_for_test();
+
+        runtime.update(Message::SetSelection {
+            anchor_node_id: p.to_string(),
+            anchor_offset: 0,
+            anchor_affinity: Affinity::Downstream,
+            head_node_id: p.to_string(),
+            head_offset: 0,
+            head_affinity: Affinity::Downstream,
+        });
+
+        assert_eq!(runtime.undo_manager.undo_count(), 1);
+        assert_eq!(
+            runtime.history_undo_marker_len(),
+            1,
+            "fallback should keep undo snapshot even if a selection-only tx runs before flush"
+        );
+        let marker = runtime
+            .history_first_undo_marker()
+            .expect("one undo marker should exist");
+        let stored_selection = runtime
+            .history_undo_selection_for_marker(marker)
+            .expect("one undo selection snapshot should exist");
+        assert_eq!(
+            stored_selection,
+            Selection::collapsed(Position::new(p, 1, Affinity::Downstream)),
+            "fallback must keep the original pre-input selection, not the later click position"
+        );
+    }
+
+    #[test]
+    fn test_undo_keeps_content_and_selection_in_lockstep_across_inputs_and_moves() {
+        let mut p = id!();
+        let mut runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {
+                    text { "A" }
+                }
+            }
+            selection { (p, 1) }
+        };
+
+        let checkpoints = vec![
+            (
+                "yAx".to_string(),
+                Selection::collapsed(Position::new(p, 2, Affinity::Downstream)),
+            ),
+            (
+                "Ax".to_string(),
+                Selection::collapsed(Position::new(p, 0, Affinity::Downstream)),
+            ),
+            (
+                "A".to_string(),
+                Selection::collapsed(Position::new(p, 1, Affinity::Downstream)),
+            ),
+        ];
+
+        runtime.update(Message::Input {
+            text: "x".to_string(),
+        });
+        runtime.update(Message::SetSelection {
+            anchor_node_id: p.to_string(),
+            anchor_offset: 0,
+            anchor_affinity: Affinity::Downstream,
+            head_node_id: p.to_string(),
+            head_offset: 0,
+            head_affinity: Affinity::Downstream,
+        });
+        runtime.update(Message::Input {
+            text: "y".to_string(),
+        });
+        runtime.update(Message::SetSelection {
+            anchor_node_id: p.to_string(),
+            anchor_offset: 2,
+            anchor_affinity: Affinity::Downstream,
+            head_node_id: p.to_string(),
+            head_offset: 2,
+            head_affinity: Affinity::Downstream,
+        });
+        runtime.update(Message::Input {
+            text: "z".to_string(),
+        });
+        runtime.flush();
+
+        assert_eq!(runtime.doc().to_plain_text(), "yAzx");
+
+        for (expected_content, expected_selection) in checkpoints {
+            runtime.update(Message::Undo);
+            assert_eq!(
+                runtime.doc().to_plain_text(),
+                expected_content,
+                "undo should restore content in step with selection checkpoints",
+            );
+            assert_eq!(
+                runtime.state().selection,
+                expected_selection,
+                "selection must match the exact pre-input checkpoint for each undo step",
+            );
+        }
+    }
+
+    #[test]
+    fn test_undo_falls_back_to_validated_current_selection_when_snapshot_missing() {
+        let mut p = id!();
+        let mut runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {
+                    text { "A" }
+                }
+            }
+            selection { (p, 1) }
+        };
+
+        runtime.update(Message::Input {
+            text: "x".to_string(),
+        });
+        runtime.flush();
+
+        runtime.history_clear_undo_snapshots_for_test();
+
+        runtime.update(Message::Undo);
+
+        assert_eq!(runtime.doc().to_plain_text(), "A");
+        assert!(
+            runtime
+                .doc()
+                .node(runtime.state().selection.head.node_id)
+                .is_some(),
+            "selection node_id should always be valid after undo"
+        );
+    }
+
+    #[test]
+    fn test_reconcile_does_not_backfill_missing_history_selection_snapshots() {
+        let mut p = id!();
+        let mut runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {
+                    text { "A" }
+                }
+            }
+            selection { (p, 1) }
+        };
+
+        runtime.update(Message::Input {
+            text: "x".to_string(),
+        });
+        runtime.update(Message::SetSelection {
+            anchor_node_id: p.to_string(),
+            anchor_offset: 0,
+            anchor_affinity: Affinity::Downstream,
+            head_node_id: p.to_string(),
+            head_offset: 0,
+            head_affinity: Affinity::Downstream,
+        });
+        runtime.update(Message::Input {
+            text: "y".to_string(),
+        });
+        runtime.update(Message::SetSelection {
+            anchor_node_id: p.to_string(),
+            anchor_offset: 2,
+            anchor_affinity: Affinity::Downstream,
+            head_node_id: p.to_string(),
+            head_offset: 2,
+            head_affinity: Affinity::Downstream,
+        });
+
+        assert!(
+            runtime.undo_manager.undo_count() >= 2,
+            "precondition: test requires multiple undo steps"
+        );
+
+        let undo_count_before = runtime.undo_manager.undo_count() as usize;
+        runtime.history_clear_undo_snapshots_for_test();
+        runtime.sync_history_selection_state();
+        assert_eq!(
+            runtime.history_undo_marker_len(),
+            0,
+            "reconcile must not synthesize undo snapshots from current selection"
+        );
+        assert_eq!(
+            runtime.undo_manager.undo_count() as usize,
+            undo_count_before,
+            "reconcile should not mutate undo manager state"
+        );
+        assert_eq!(
+            runtime.history_redo_marker_len(),
+            runtime.undo_manager.redo_count() as usize,
+            "redo snapshots should still match redo stack size after reconcile"
+        );
+
+        runtime.update(Message::Undo);
+        assert!(
+            runtime
+                .doc()
+                .node(runtime.state().selection.head.node_id)
+                .is_some(),
+            "selection node_id should stay valid while undoing with missing snapshots"
+        );
+        assert!(
+            runtime.history_undo_marker_len() <= runtime.undo_manager.undo_count() as usize,
+            "undo snapshots should never exceed undo stack size"
+        );
+        assert_eq!(
+            runtime.history_redo_marker_len(),
+            runtime.undo_manager.redo_count() as usize,
+            "redo snapshots should stay aligned with redo count"
+        );
+    }
+
+    #[test]
+    fn test_resolve_history_selection_falls_back_to_current_selection_when_node_id_is_invalid() {
+        let mut p = id!();
+        let runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {
+                    text { "A" }
+                }
+            }
+            selection { (p, 1) }
+        };
+
+        let snapshot = history_state::HistorySelectionSnapshot {
+            selection: Selection::collapsed(Position::new(
+                NodeId::from_string("00000000-0000-0000-0000-0000000000ff").unwrap(),
+                1,
+                Affinity::Downstream,
+            )),
+        };
+
+        let restored = runtime.resolve_history_selection(&snapshot);
+        assert_eq!(
+            restored,
+            Selection::collapsed(Position::new(p, 1, Affinity::Downstream))
+        );
+    }
+
+    #[test]
+    fn test_resolve_history_selection_clamps_offset_when_node_exists() {
+        let mut p = id!();
+        let runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {
+                    text { "A" }
+                }
+            }
+            selection { (p, 1) }
+        };
+
+        let snapshot = history_state::HistorySelectionSnapshot {
+            selection: Selection::collapsed(Position::new(p, 999, Affinity::Upstream)),
+        };
+
+        let restored = runtime.resolve_history_selection(&snapshot);
+        assert_eq!(
+            restored,
+            Selection::collapsed(Position::new(p, 1, Affinity::Upstream)),
+            "existing node selection must still be offset-validated during history restore",
+        );
+    }
+
+    #[test]
+    fn test_update_repairs_invalid_selection_before_handling_message() {
+        let mut p = id!();
+        let mut runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {
+                    text { "A" }
+                }
+            }
+            selection { (p, 1) }
+        };
+
+        runtime.state.selection = Selection::collapsed(Position::new(
+            NodeId::from_string("00000000-0000-0000-0000-0000000000ff").unwrap(),
+            0,
+            Affinity::Downstream,
+        ));
+
+        runtime.update(Message::SelectAll);
+
+        assert!(
+            runtime
+                .doc()
+                .node(runtime.state().selection.head.node_id)
+                .is_some(),
+            "invalid selection should be repaired before message handling"
+        );
     }
 
     #[test]
@@ -2126,6 +3416,140 @@ mod tests {
     }
 
     #[test]
+    fn import_updates_does_not_create_undo_entries() {
+        let mut p = id!();
+        let base_state = state! {
+            doc {
+                @p paragraph { text { "A" } }
+            }
+            selection { (p, 0) }
+        };
+        let snapshot = base_state
+            .doc
+            .export(DocExportMode::Snapshot)
+            .expect("base should export snapshot");
+
+        let mut source = Runtime::new(
+            800.0,
+            1.0,
+            State::new(
+                Rc::new(
+                    Doc::from_snapshot(snapshot.clone()).expect("test: snapshot should decode"),
+                ),
+                Selection::collapsed(Position::new(p, 0, Affinity::Downstream)),
+            ),
+        );
+        let mut target = Runtime::new(
+            800.0,
+            1.0,
+            State::new(
+                Rc::new(Doc::from_snapshot(snapshot).expect("test: snapshot should decode")),
+                Selection::collapsed(Position::new(p, 0, Affinity::Downstream)),
+            ),
+        );
+
+        let version = source
+            .export(DocExportMode::Version)
+            .expect("source should export version");
+        source.update(Message::Input {
+            text: "x".to_string(),
+        });
+        source.flush();
+        let updates = source
+            .export(DocExportMode::UpdatesFrom { version })
+            .expect("source should export incremental updates");
+
+        assert_eq!(target.undo_manager.undo_count(), 0);
+        assert_eq!(target.history_undo_marker_len(), 0);
+
+        target
+            .import_updates(&updates)
+            .expect("target should import updates");
+
+        assert_eq!(
+            target.undo_manager.undo_count(),
+            0,
+            "external import should not create local undo entries"
+        );
+        assert_eq!(
+            target.history_undo_marker_len(),
+            0,
+            "external import should not create local undo selection snapshots"
+        );
+    }
+
+    #[test]
+    fn import_updates_batch_does_not_create_undo_entries() {
+        let mut p = id!();
+        let base_state = state! {
+            doc {
+                @p paragraph { text { "A" } }
+            }
+            selection { (p, 0) }
+        };
+        let snapshot = base_state
+            .doc
+            .export(DocExportMode::Snapshot)
+            .expect("base should export snapshot");
+
+        let mut source = Runtime::new(
+            800.0,
+            1.0,
+            State::new(
+                Rc::new(
+                    Doc::from_snapshot(snapshot.clone()).expect("test: snapshot should decode"),
+                ),
+                Selection::collapsed(Position::new(p, 0, Affinity::Downstream)),
+            ),
+        );
+        let mut target = Runtime::new(
+            800.0,
+            1.0,
+            State::new(
+                Rc::new(Doc::from_snapshot(snapshot).expect("test: snapshot should decode")),
+                Selection::collapsed(Position::new(p, 0, Affinity::Downstream)),
+            ),
+        );
+
+        let version_1 = source
+            .export(DocExportMode::Version)
+            .expect("source should export version");
+        source.update(Message::Input {
+            text: "x".to_string(),
+        });
+        source.flush();
+        let updates_1 = source
+            .export(DocExportMode::UpdatesFrom { version: version_1 })
+            .expect("source should export updates_1");
+
+        let version_2 = source
+            .export(DocExportMode::Version)
+            .expect("source should export version_2");
+        source.update(Message::Input {
+            text: "y".to_string(),
+        });
+        source.flush();
+        let updates_2 = source
+            .export(DocExportMode::UpdatesFrom { version: version_2 })
+            .expect("source should export updates_2");
+
+        target
+            .import_updates_batch(&[updates_1, updates_2])
+            .expect("target should import updates batch");
+
+        assert_eq!(
+            target.undo_manager.undo_count(),
+            0,
+            "external import batch should not create local undo entries"
+        );
+        assert_eq!(
+            target.history_undo_marker_len(),
+            0,
+            "external import batch should not create local undo selection snapshots"
+        );
+    }
+
+    #[test]
     fn import_updates_settings_change_marks_settings_without_font_request() {
         let mut p1 = id!();
         let base_state = state! {
@@ -2165,10 +3589,10 @@ mod tests {
         let version = source
             .export(DocExportMode::Version)
             .expect("source should export version");
-        source
-            .doc()
-            .update_settings(|s| s.layout_mode = LayoutMode::Continuous { max_width: 480.0 })
-            .expect("source should update settings");
+        source.update(Message::SetLayoutMode {
+            mode: LayoutMode::Continuous { max_width: 480.0 },
+        });
+        source.flush();
         let updates = source
             .export(DocExportMode::UpdatesFrom { version })
             .expect("source should export incremental updates");
@@ -2349,10 +3773,9 @@ mod tests {
         source
             .replace_text_in_block(p1, 0, 1, "A")
             .expect("source should replace text");
-        source
-            .doc()
-            .update_settings(|s| s.layout_mode = LayoutMode::Continuous { max_width: 480.0 })
-            .expect("source should update settings");
+        source.update(Message::SetLayoutMode {
+            mode: LayoutMode::Continuous { max_width: 480.0 },
+        });
         source.flush();
 
         let updates = source
@@ -2800,10 +4223,8 @@ mod tests {
 
         runtime.layout();
 
-        runtime
-            .doc()
-            .update_settings(|s| s.paragraph_indent = 100)
-            .unwrap();
+        runtime.update(Message::SetParagraphIndent { indent: 100 });
+        runtime.flush();
         runtime.layout();
 
         let p_layout_initial = runtime

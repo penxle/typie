@@ -1075,10 +1075,9 @@ pub extern "C" fn editor_export(
                 _ => return Err(format!("Invalid export mode: {mode}")),
             };
 
-            let editor = unsafe { &*(editor as *const EditorInner) };
+            let editor = unsafe { &mut *(editor as *mut EditorInner) };
             let data = editor
                 .runtime
-                .doc()
                 .export(export_mode)
                 .map_err(|e| format!("Failed to export: {e}"))?;
 
