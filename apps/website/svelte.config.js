@@ -28,4 +28,11 @@ export default {
     },
     version: { pollInterval: 60 * 1000 },
   },
+
+  vitePlugin: {
+    inspector: {
+      toggleKeyCombo: 'alt-x',
+      toggleButtonPos: 'bottom-right',
+    },
+  },
 };
