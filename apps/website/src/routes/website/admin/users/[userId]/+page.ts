@@ -49,10 +49,12 @@ export const load = async (event) => {
             }
             marketingConsent
             documentCount
-            totalCharacterCount
             billingKey {
               id
               name
+            }
+            usage {
+              totalCharacterCount
             }
           }
         }

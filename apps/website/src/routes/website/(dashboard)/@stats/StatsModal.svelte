@@ -22,11 +22,14 @@
           id
           name
           documentCount
-          totalCharacterCount
 
           characterCountChanges {
             date
             additions
+          }
+
+          usage {
+            totalCharacterCount
           }
 
           ...DashboardLayout_Stats_ActivityChart_user
@@ -106,7 +109,7 @@
 
   const streakData = $derived.by(() => {
     if (!query.data) return null;
-    return calculateStreakData([...query.data.me.characterCountChanges], query.data.me.totalCharacterCount);
+    return calculateStreakData([...query.data.me.characterCountChanges], query.data.me.usage.totalCharacterCount);
   });
 
   type WeekdayData = {
@@ -206,7 +209,7 @@
         <div class={css(cardStyle, { flex: '1' })}>
           <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.faint', marginBottom: '8px' })}>총 글자</div>
           <div class={css({ fontSize: '28px', fontWeight: 'bold', color: 'text.default', fontVariantNumeric: 'tabular-nums' })}>
-            {comma(query.data.me.totalCharacterCount)}
+            {comma(query.data.me.usage.totalCharacterCount)}
           </div>
         </div>
 

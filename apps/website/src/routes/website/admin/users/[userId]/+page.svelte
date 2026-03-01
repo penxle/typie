@@ -132,7 +132,7 @@
 
             <div>
               <div class={css({ fontSize: '24px', color: 'amber.500', marginBottom: '4px' })}>
-                {comma(query.data.adminUser.totalCharacterCount)}
+                {comma(query.data.adminUser.usage.totalCharacterCount)}
               </div>
               <div class={css({ fontSize: '11px', color: 'amber.400' })}>CHARACTERS</div>
             </div>
