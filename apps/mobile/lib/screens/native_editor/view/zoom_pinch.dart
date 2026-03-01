@@ -258,6 +258,7 @@ class PinchGestureController {
     required ScrollController horizontalScrollController,
     required ScrollController verticalScrollController,
     required bool Function() isMounted,
+    void Function(double previousZoom, double nextZoom)? onZoomChanged,
   }) {
     if (!_isPinching || !isPaginated) {
       return;
@@ -292,6 +293,7 @@ class PinchGestureController {
     );
     final zoomForSync = zoomEquals(nextZoom, currentZoom) ? currentZoom : nextZoom;
     if (zoomDiffers(nextZoom, currentZoom)) {
+      onZoomChanged?.call(currentZoom, nextZoom);
       setZoom(nextZoom);
     }
 
