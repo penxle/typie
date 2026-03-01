@@ -75,8 +75,12 @@ class _HapticReorderableListViewBuilder extends HookWidget {
         },
         onReorder: onReorder,
         itemBuilder: (context, index) {
+          final id = orderedIds[index];
           final child = itemBuilder(context, index);
-          return KeyedSubtree(key: tracker.keyFor(orderedIds[index]), child: child);
+          return KeyedSubtree(
+            key: ValueKey<String>(id),
+            child: _TrackedReorderItem(id: id, tracker: tracker, child: child),
+          );
         },
       ),
     );
@@ -130,8 +134,12 @@ class HapticReorderableList extends HookWidget {
         },
         onReorder: onReorder,
         itemBuilder: (context, index) {
+          final id = orderedIds[index];
           final child = itemBuilder(context, index);
-          return KeyedSubtree(key: tracker.keyFor(orderedIds[index]), child: child);
+          return KeyedSubtree(
+            key: ValueKey<String>(id),
+            child: _TrackedReorderItem(id: id, tracker: tracker, child: child),
+          );
         },
       ),
     );
@@ -171,21 +179,42 @@ class SliverHapticReorderableList extends HookWidget {
       },
       proxyDecorator: proxyDecorator,
       itemBuilder: (context, index) {
+        final id = orderedIds[index];
         final child = itemBuilder(context, index);
-        return Listener(
-          onPointerDown: tracker.handlePointerDown,
-          onPointerMove: tracker.handlePointerMove,
-          onPointerUp: tracker.handlePointerUp,
-          onPointerCancel: tracker.handlePointerCancel,
-          child: KeyedSubtree(key: tracker.keyFor(orderedIds[index]), child: child),
+        return KeyedSubtree(
+          key: ValueKey<String>(id),
+          child: Listener(
+            onPointerDown: tracker.handlePointerDown,
+            onPointerMove: tracker.handlePointerMove,
+            onPointerUp: tracker.handlePointerUp,
+            onPointerCancel: tracker.handlePointerCancel,
+            child: _TrackedReorderItem(id: id, tracker: tracker, child: child),
+          ),
         );
       },
     );
   }
 }
 
+class _TrackedReorderItem extends HookWidget {
+  const _TrackedReorderItem({required this.id, required this.tracker, required this.child});
+
+  final String id;
+  final _ReorderHapticTracker tracker;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    useEffect(() {
+      tracker.registerItemContext(id, context);
+      return () => tracker.unregisterItemContext(id, context);
+    });
+    return child;
+  }
+}
+
 class _ReorderHapticTracker {
-  final _itemKeys = <String, GlobalKey>{};
+  final _itemContexts = <String, BuildContext>{};
 
   List<String> _orderedIds = const [];
   int? _activePointer;
@@ -194,10 +223,20 @@ class _ReorderHapticTracker {
   int? _lastHoverSlot;
   bool _hasGlobalRoute = false;
 
-  GlobalKey keyFor(String id) => _itemKeys.putIfAbsent(id, GlobalKey.new);
+  void registerItemContext(String id, BuildContext context) {
+    _itemContexts[id] = context;
+  }
+
+  void unregisterItemContext(String id, BuildContext context) {
+    if (_itemContexts[id] == context) {
+      _itemContexts.remove(id);
+    }
+  }
 
   void updateOrderedIds(Iterable<String> ids) {
     _orderedIds = List<String>.unmodifiable(ids);
+    final idSet = _orderedIds.toSet();
+    _itemContexts.removeWhere((id, _) => !idSet.contains(id));
   }
 
   void handlePointerDown(PointerDownEvent event) {
@@ -299,7 +338,7 @@ class _ReorderHapticTracker {
         continue;
       }
 
-      final context = _itemKeys[id]?.currentContext;
+      final context = _itemContexts[id];
       final renderBox = context?.findRenderObject() as RenderBox?;
       if (renderBox == null || !renderBox.attached || !renderBox.hasSize) {
         continue;
