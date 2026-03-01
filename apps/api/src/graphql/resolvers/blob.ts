@@ -8,7 +8,6 @@ import ffmpeg from 'fluent-ffmpeg';
 import qs from 'query-string';
 import sharp from 'sharp';
 import { rgbaToThumbHash } from 'thumbhash';
-import { compress as toWoff2 } from 'wawoff2';
 import { db, Files, first, firstOrThrow, FontFamilies, Fonts, Images, TableCode, validateDbId } from '@/db';
 import { FontFamilyState } from '@/enums';
 import { stack } from '@/env';
@@ -386,22 +385,11 @@ builder.mutationFields((t) => ({
 
       const familyName = metadata.familyName ?? metadata.fullName ?? metadata.postScriptName;
       const filePath = path.join(path.dirname(input.path), path.basename(input.path, path.extname(input.path)));
-      const woff2 = await toWoff2(Buffer.from(buffer));
 
       const tagging = qs.stringify({
         UserId: ctx.session.userId,
         Environment: stack,
       });
-
-      await aws.s3.send(
-        new PutObjectCommand({
-          Bucket: 'typie-usercontents',
-          Key: `fonts/${filePath}/web.woff2`,
-          Body: woff2,
-          ContentType: 'font/woff2',
-          Tagging: tagging,
-        }),
-      );
 
       const fontName = metadata.postScriptName;
       const { manifest, base, chunks } = await processFont(fontName, buffer);
@@ -497,7 +485,7 @@ builder.mutationFields((t) => ({
             postScriptName: metadata.postScriptName,
             subfamilyDisplayName: metadata.subfamilyDisplayName,
             weight: metadata.weight,
-            size: woff2.length,
+            size: buffer.length,
             path: filePath,
           })
           .returning()

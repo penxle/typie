@@ -31,16 +31,6 @@ export const load: LayoutLoad = async (event) => {
             id
             name
 
-            fonts {
-              id
-              weight
-              url
-
-              family {
-                id
-              }
-            }
-
             ...DashboardLayout_Sidebar_site
             ...DashboardLayout_SiteSettingsModal_site
             ...DashboardLayout_TrashModal_site

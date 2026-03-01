@@ -45,19 +45,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
     ffmpeg \
-    ghostscript \
     tini \
     xz-utils \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /root/.bun /root/.bun
 
-RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash \
-    && apt-get install -y nodejs \
-    && rm -rf /var/lib/apt/lists/*
-
 COPY --from=prod-deps /app/ .
-RUN cd apps/api && npx playwright install-deps && npx playwright install chromium
 
 COPY --from=build /app/ .
 COPY vendor/sharp-debian.tar.xz ./vendor/

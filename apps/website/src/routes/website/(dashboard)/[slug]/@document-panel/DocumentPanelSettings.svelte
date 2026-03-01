@@ -279,11 +279,7 @@
     if (layoutMode?.type === 'paginated') {
       editor.dispatch({
         type: 'setLayoutMode',
-        mode: {
-          ...layoutMode,
-          pageWidth: layout.pageWidth,
-          pageHeight: layout.pageHeight,
-        },
+        mode: { type: 'paginated', ...layout },
       });
       mixpanel.track('change_document_page_size', { preset: value });
     }
@@ -295,9 +291,14 @@
     const value = Math.max(100, Number(target.value));
     target.value = String(value);
 
+    const newLayout = { ...layoutMode, pageWidth: mmToPx(value) };
     editor.dispatch({
       type: 'setLayoutMode',
-      mode: { ...layoutMode, pageWidth: mmToPx(value) },
+      mode: {
+        ...newLayout,
+        pageMarginLeft: Math.min(newLayout.pageMarginLeft, getMaxMargin('left', newLayout)),
+        pageMarginRight: Math.min(newLayout.pageMarginRight, getMaxMargin('right', newLayout)),
+      },
     });
   };
 
@@ -307,9 +308,14 @@
     const value = Math.max(100, Number(target.value));
     target.value = String(value);
 
+    const newLayout = { ...layoutMode, pageHeight: mmToPx(value) };
     editor.dispatch({
       type: 'setLayoutMode',
-      mode: { ...layoutMode, pageHeight: mmToPx(value) },
+      mode: {
+        ...newLayout,
+        pageMarginTop: Math.min(newLayout.pageMarginTop, getMaxMargin('top', newLayout)),
+        pageMarginBottom: Math.min(newLayout.pageMarginBottom, getMaxMargin('bottom', newLayout)),
+      },
     });
   };
 

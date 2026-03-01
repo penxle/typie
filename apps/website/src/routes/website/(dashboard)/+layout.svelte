@@ -121,15 +121,6 @@
   let userSurveyModalOpen = $state(false);
   let trialExpiredModalOpen = $state(false);
 
-  const fontFaces = $derived(
-    query.data.me.sites[0].fonts
-      .flatMap((font) => [
-        `@font-face { font-family: ${font.id}; src: url(${font.url}) format('woff2'); font-weight: ${font.weight}; font-display: block; }`,
-        `@font-face { font-family: ${font.family.id}; src: url(${font.url}) format('woff2'); font-weight: ${font.weight}; font-display: block; }`,
-      ])
-      .join('\n'),
-  );
-
   const textReplacementRulesJson = $derived.by(() =>
     stringify(
       query.data.me.textReplacements
@@ -219,11 +210,6 @@
     }
   });
 </script>
-
-<svelte:head>
-  <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-  {@html '<style type="text/css"' + `>${fontFaces}</` + 'style>'}
-</svelte:head>
 
 {#if isMobileDevice()}
   <div

@@ -8,7 +8,6 @@
     "./prettier": "./prettier.js"
   },
   "devDependencies": {
-    "@eslint/eslintrc": "^3.3.4",
     "@eslint/js": "^9.39.3",
     "@prettier/plugin-xml": "^3.4.2",
     "eslint-plugin-import": "^2.32.0",
