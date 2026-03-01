@@ -12,7 +12,7 @@
   let { widgetId }: Props = $props();
 </script>
 
-<Widget icon={ShapesIcon} title="새로운 위젯 기능">
+<Widget icon={ShapesIcon} title="편리한 위젯 기능">
   <div class={flex({ flexDirection: 'column', alignItems: 'center' })}>
     <div
       class={css({
