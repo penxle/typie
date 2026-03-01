@@ -189,6 +189,207 @@ class _EntityList extends HookWidget {
         isRenaming.value = false;
       },
       builder: (context, form) {
+        Future<void> showEntityMenu() async {
+          if (isRenaming.value || isSiteRenaming.value || isReordering.value || isSelecting.value) {
+            return;
+          }
+
+          await context.showBottomSheet(
+            child: BottomMenu(
+              header: _BottomMenuHeader(entity: entity, siteName: currentSiteName.value),
+              items: [
+                if (entity != null) ...[
+                  BottomMenuItem(
+                    icon: LucideLightIcons.folder_symlink,
+                    label: '다른 폴더로 옮기기',
+                    onTap: () async {
+                      unawaited(mixpanel.track('move_entity_try', properties: {'via': 'entity_menu'}));
+
+                      await context.showBottomSheet(
+                        intercept: true,
+                        child: MoveEntityModal.single(entity: entity!, via: 'entity_menu'),
+                      );
+                    },
+                  ),
+                  BottomMenuItem(
+                    icon: LucideLightIcons.external_link,
+                    label: '스페이스에서 열기',
+                    onTap: () async {
+                      unawaited(mixpanel.track('open_folder_in_browser', properties: {'via': 'entity_menu'}));
+
+                      final url = Uri.parse(entity!.url);
+                      await launchUrl(url, mode: LaunchMode.externalApplication);
+                    },
+                  ),
+                  BottomMenuItem(
+                    icon: LucideLightIcons.blend,
+                    label: '공유하기',
+                    onTap: () async {
+                      unawaited(mixpanel.track('open_folder_share_modal', properties: {'via': 'entity_menu'}));
+
+                      await context.showBottomSheet(intercept: true, child: ShareBottomSheet(entityIds: [entity!.id]));
+                    },
+                  ),
+                  const BottomMenuSeparator(),
+                ],
+                BottomMenuItem(
+                  icon: LucideLightIcons.square_pen,
+                  label: '여기에 문서 만들기',
+                  onTap: () async {
+                    final resp = await client.request(
+                      GEntityScreen_CreateDocument_MutationReq(
+                        (b) => b
+                          ..vars.input.siteId = pref.siteId
+                          ..vars.input.parentEntityId = Value.present(entity?.id),
+                      ),
+                    );
+
+                    unawaited(mixpanel.track('create_document', properties: {'via': 'entity_menu'}));
+
+                    if (context.mounted) {
+                      await context.router.push(NativeEditorRoute(slug: resp.createDocument.entity.slug));
+                    }
+                  },
+                ),
+                if ((entity?.depth ?? 0) < maxDepth - 1)
+                  BottomMenuItem(
+                    icon: LucideLightIcons.folder_plus,
+                    label: '여기에 폴더 만들기',
+                    onTap: () async {
+                      final resp = await client.request(
+                        GEntityScreen_CreateFolder_MutationReq(
+                          (b) => b
+                            ..vars.input.siteId = pref.siteId
+                            ..vars.input.parentEntityId = Value.present(entity?.id)
+                            ..vars.input.name = '새 폴더',
+                        ),
+                      );
+
+                      unawaited(mixpanel.track('create_folder'));
+
+                      if (context.mounted) {
+                        await context.router.push(EntityRoute(entityId: resp.createFolder.entity.id));
+                      }
+                    },
+                  ),
+                const BottomMenuSeparator(),
+                if (entities.isNotEmpty) ...[
+                  BottomMenuItem(
+                    icon: LucideLightIcons.square_check,
+                    label: '여러 항목 선택하기',
+                    onTap: () {
+                      isSelecting.value = true;
+                      selectedItems.value = {};
+                    },
+                  ),
+                  BottomMenuItem(
+                    icon: LucideLightIcons.chevrons_up_down,
+                    label: '순서 변경하기',
+                    onTap: () {
+                      isReordering.value = true;
+                    },
+                  ),
+                  const BottomMenuSeparator(),
+                ],
+                if (entity != null) ...[
+                  BottomMenuItem(
+                    icon: LucideLightIcons.pen_line,
+                    label: '이름 바꾸기',
+                    onTap: () {
+                      isRenaming.value = true;
+                    },
+                  ),
+                  BottomMenuItem(
+                    icon: LucideLightIcons.trash_2,
+                    label: '삭제하기',
+                    onTap: () async {
+                      await context.showModal(
+                        child: ConfirmModal(
+                          title: '폴더 삭제',
+                          message: '"${folder!.name}" 폴더를 삭제하시겠어요? 삭제 후 30일 동안 휴지통에 보관돼요.',
+                          confirmText: '삭제하기',
+                          confirmTextColor: context.colors.textBright,
+                          confirmBackgroundColor: context.colors.accentDanger,
+                          onConfirm: () async {
+                            await client.request(
+                              GEntityScreen_DeleteFolder_MutationReq((b) => b..vars.input.folderId = folder!.id),
+                            );
+
+                            unawaited(mixpanel.track('delete_folder'));
+
+                            if (context.mounted) {
+                              await context.router.maybePop();
+                            }
+                          },
+                        ),
+                      );
+                    },
+                  ),
+                ],
+                if (entity == null) ...[
+                  BottomMenuItem(
+                    icon: LucideLightIcons.image,
+                    label: '스페이스 로고 변경',
+                    onTap: () async {
+                      final result = await FilePicker.platform.pickFiles(type: FileType.image);
+                      if (result == null) {
+                        return;
+                      }
+
+                      final pickedFile = result.files.firstOrNull;
+                      if (pickedFile == null) {
+                        return;
+                      }
+
+                      final file = File(pickedFile.path!);
+                      final path = await blob.upload(file);
+                      final resp = await client.request(
+                        GEntityScreen_PersistBlobAsImage_MutationReq(
+                          (b) => b
+                            ..vars.input.path = path
+                            ..vars.input.modification = Value.present(
+                              JsonObject({
+                                'resize': {'width': 512, 'height': 512, 'fit': 'cover', 'withoutEnlargement': true},
+                                'format': 'png',
+                              }),
+                            ),
+                        ),
+                      );
+
+                      await client.request(
+                        GEntityScreen_UpdateSite_MutationReq(
+                          (b) => b
+                            ..vars.input.siteId = site!.id
+                            ..vars.input.logoId = Value.present(resp.persistBlobAsImage.id),
+                        ),
+                      );
+
+                      currentSiteLogoUrl.value = resp.persistBlobAsImage.url;
+                      unawaited(mixpanel.track('update_site_logo', properties: {'via': 'bottom_menu'}));
+                    },
+                  ),
+                  BottomMenuItem(
+                    icon: LucideLightIcons.pen_line,
+                    label: '스페이스 이름 변경',
+                    onTap: () {
+                      siteNameController.text = currentSiteName.value ?? '';
+                      isSiteRenaming.value = true;
+                    },
+                  ),
+                  const BottomMenuSeparator(),
+                  BottomMenuItem(
+                    icon: LucideLightIcons.trash_2,
+                    label: '휴지통',
+                    onTap: () async {
+                      await context.router.push(TrashRoute());
+                    },
+                  ),
+                ],
+              ],
+            ),
+          );
+        }
+
         return Screen(
           heading: Heading(
             titleWidget: Row(
@@ -319,217 +520,7 @@ class _EntityList extends HookWidget {
                 : null,
             actions: [
               if (!isRenaming.value && !isSiteRenaming.value && !isReordering.value && !isSelecting.value)
-                HeadingAction(
-                  icon: LucideLightIcons.ellipsis,
-                  onTap: () async {
-                    await context.showBottomSheet(
-                      child: BottomMenu(
-                        header: _BottomMenuHeader(entity: entity, siteName: currentSiteName.value),
-                        items: [
-                          if (entity != null) ...[
-                            BottomMenuItem(
-                              icon: LucideLightIcons.folder_symlink,
-                              label: '다른 폴더로 옮기기',
-                              onTap: () async {
-                                unawaited(mixpanel.track('move_entity_try', properties: {'via': 'entity_menu'}));
-
-                                await context.showBottomSheet(
-                                  intercept: true,
-                                  child: MoveEntityModal.single(entity: entity!, via: 'entity_menu'),
-                                );
-                              },
-                            ),
-                            BottomMenuItem(
-                              icon: LucideLightIcons.external_link,
-                              label: '스페이스에서 열기',
-                              onTap: () async {
-                                unawaited(mixpanel.track('open_folder_in_browser', properties: {'via': 'entity_menu'}));
-
-                                final url = Uri.parse(entity!.url);
-                                await launchUrl(url, mode: LaunchMode.externalApplication);
-                              },
-                            ),
-                            BottomMenuItem(
-                              icon: LucideLightIcons.blend,
-                              label: '공유하기',
-                              onTap: () async {
-                                unawaited(
-                                  mixpanel.track('open_folder_share_modal', properties: {'via': 'entity_menu'}),
-                                );
-
-                                await context.showBottomSheet(
-                                  intercept: true,
-                                  child: ShareBottomSheet(entityIds: [entity!.id]),
-                                );
-                              },
-                            ),
-                            const BottomMenuSeparator(),
-                          ],
-                          BottomMenuItem(
-                            icon: LucideLightIcons.square_pen,
-                            label: '여기에 문서 만들기',
-                            onTap: () async {
-                              final resp = await client.request(
-                                GEntityScreen_CreateDocument_MutationReq(
-                                  (b) => b
-                                    ..vars.input.siteId = pref.siteId
-                                    ..vars.input.parentEntityId = Value.present(entity?.id),
-                                ),
-                              );
-
-                              unawaited(mixpanel.track('create_document', properties: {'via': 'entity_menu'}));
-
-                              if (context.mounted) {
-                                await context.router.push(NativeEditorRoute(slug: resp.createDocument.entity.slug));
-                              }
-                            },
-                          ),
-                          if ((entity?.depth ?? 0) < maxDepth - 1)
-                            BottomMenuItem(
-                              icon: LucideLightIcons.folder_plus,
-                              label: '여기에 폴더 만들기',
-                              onTap: () async {
-                                final resp = await client.request(
-                                  GEntityScreen_CreateFolder_MutationReq(
-                                    (b) => b
-                                      ..vars.input.siteId = pref.siteId
-                                      ..vars.input.parentEntityId = Value.present(entity?.id)
-                                      ..vars.input.name = '새 폴더',
-                                  ),
-                                );
-
-                                unawaited(mixpanel.track('create_folder'));
-
-                                if (context.mounted) {
-                                  await context.router.push(EntityRoute(entityId: resp.createFolder.entity.id));
-                                }
-                              },
-                            ),
-                          const BottomMenuSeparator(),
-                          if (entities.isNotEmpty) ...[
-                            BottomMenuItem(
-                              icon: LucideLightIcons.square_check,
-                              label: '여러 항목 선택하기',
-                              onTap: () {
-                                isSelecting.value = true;
-                                selectedItems.value = {};
-                              },
-                            ),
-                            BottomMenuItem(
-                              icon: LucideLightIcons.chevrons_up_down,
-                              label: '순서 변경하기',
-                              onTap: () {
-                                isReordering.value = true;
-                              },
-                            ),
-                            const BottomMenuSeparator(),
-                          ],
-                          if (entity != null) ...[
-                            BottomMenuItem(
-                              icon: LucideLightIcons.pen_line,
-                              label: '이름 바꾸기',
-                              onTap: () {
-                                isRenaming.value = true;
-                              },
-                            ),
-                            BottomMenuItem(
-                              icon: LucideLightIcons.trash_2,
-                              label: '삭제하기',
-                              onTap: () async {
-                                await context.showModal(
-                                  child: ConfirmModal(
-                                    title: '폴더 삭제',
-                                    message: '"${folder!.name}" 폴더를 삭제하시겠어요? 삭제 후 30일 동안 휴지통에 보관돼요.',
-                                    confirmText: '삭제하기',
-                                    confirmTextColor: context.colors.textBright,
-                                    confirmBackgroundColor: context.colors.accentDanger,
-                                    onConfirm: () async {
-                                      await client.request(
-                                        GEntityScreen_DeleteFolder_MutationReq(
-                                          (b) => b..vars.input.folderId = folder!.id,
-                                        ),
-                                      );
-
-                                      unawaited(mixpanel.track('delete_folder'));
-
-                                      if (context.mounted) {
-                                        await context.router.maybePop();
-                                      }
-                                    },
-                                  ),
-                                );
-                              },
-                            ),
-                          ],
-                          if (entity == null) ...[
-                            BottomMenuItem(
-                              icon: LucideLightIcons.image,
-                              label: '스페이스 로고 변경',
-                              onTap: () async {
-                                final result = await FilePicker.platform.pickFiles(type: FileType.image);
-                                if (result == null) {
-                                  return;
-                                }
-
-                                final pickedFile = result.files.firstOrNull;
-                                if (pickedFile == null) {
-                                  return;
-                                }
-
-                                final file = File(pickedFile.path!);
-                                final path = await blob.upload(file);
-                                final resp = await client.request(
-                                  GEntityScreen_PersistBlobAsImage_MutationReq(
-                                    (b) => b
-                                      ..vars.input.path = path
-                                      ..vars.input.modification = Value.present(
-                                        JsonObject({
-                                          'resize': {
-                                            'width': 512,
-                                            'height': 512,
-                                            'fit': 'cover',
-                                            'withoutEnlargement': true,
-                                          },
-                                          'format': 'png',
-                                        }),
-                                      ),
-                                  ),
-                                );
-
-                                await client.request(
-                                  GEntityScreen_UpdateSite_MutationReq(
-                                    (b) => b
-                                      ..vars.input.siteId = site!.id
-                                      ..vars.input.logoId = Value.present(resp.persistBlobAsImage.id),
-                                  ),
-                                );
-
-                                currentSiteLogoUrl.value = resp.persistBlobAsImage.url;
-                                unawaited(mixpanel.track('update_site_logo', properties: {'via': 'bottom_menu'}));
-                              },
-                            ),
-                            BottomMenuItem(
-                              icon: LucideLightIcons.pen_line,
-                              label: '스페이스 이름 변경',
-                              onTap: () {
-                                siteNameController.text = currentSiteName.value ?? '';
-                                isSiteRenaming.value = true;
-                              },
-                            ),
-                            const BottomMenuSeparator(),
-                            BottomMenuItem(
-                              icon: LucideLightIcons.trash_2,
-                              label: '휴지통',
-                              onTap: () async {
-                                await context.router.push(TrashRoute());
-                              },
-                            ),
-                          ],
-                        ],
-                      ),
-                    );
-                  },
-                )
+                HeadingAction(icon: LucideLightIcons.ellipsis, onTap: showEntityMenu)
               else if (isSelecting.value)
                 HeadingAction(
                   icon: LucideLightIcons.x,
@@ -570,475 +561,484 @@ class _EntityList extends HookWidget {
                 ),
             ],
           ),
-          child: Stack(
-            children: [
-              if (entities.isEmpty)
-                Center(
-                  child: Text(
-                    '폴더가 비어있어요',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: context.colors.textFaint),
-                  ),
-                )
-              else
-                HapticReorderableList(
-                  orderedIds: [for (final item in entities) item.id],
-                  controller: primaryScrollController,
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: Pad(horizontal: 20, top: 14, bottom: isSelecting.value ? 90 : 14),
-                  itemBuilder: (context, index) {
-                    return Padding(
-                      padding: const Pad(vertical: 6),
-                      child: GestureDetector(
-                        onTap: () {
-                          if (isReordering.value) {
-                            return;
-                          }
-
-                          if (isSelecting.value) {
-                            final currentSelection = Set<String>.from(selectedItems.value);
-                            if (currentSelection.contains(entities[index].id)) {
-                              currentSelection.remove(entities[index].id);
-                            } else {
-                              currentSelection.add(entities[index].id);
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onLongPress: showEntityMenu,
+            child: Stack(
+              children: [
+                if (entities.isEmpty)
+                  Center(
+                    child: Text(
+                      '폴더가 비어있어요',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: context.colors.textFaint),
+                    ),
+                  )
+                else
+                  HapticReorderableList(
+                    orderedIds: [for (final item in entities) item.id],
+                    controller: primaryScrollController,
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: Pad(horizontal: 20, top: 14, bottom: isSelecting.value ? 90 : 14),
+                    itemBuilder: (context, index) {
+                      return Padding(
+                        padding: const Pad(vertical: 6),
+                        child: GestureDetector(
+                          onTap: () {
+                            if (isReordering.value) {
+                              return;
                             }
-                            selectedItems.value = currentSelection;
-                            return;
-                          }
 
-                          unawaited(
-                            entities[index].node.when(
-                              folder: (folder) => context.router.push(EntityRoute(entityId: entities[index].id)),
-                              document: (document) =>
-                                  context.router.push(NativeEditorRoute(slug: entities[index].slug)),
-                              orElse: () => throw UnimplementedError(),
-                            ),
-                          );
-                        },
-                        onLongPress: () async {
-                          if (isReordering.value) {
-                            return;
-                          }
+                            if (isSelecting.value) {
+                              final currentSelection = Set<String>.from(selectedItems.value);
+                              if (currentSelection.contains(entities[index].id)) {
+                                currentSelection.remove(entities[index].id);
+                              } else {
+                                currentSelection.add(entities[index].id);
+                              }
+                              selectedItems.value = currentSelection;
+                              return;
+                            }
 
-                          if (isSelecting.value && selectedItems.value.contains(entities[index].id)) {
-                            await context.showBottomSheet(
-                              child: MultiEntitiesMenu(
-                                selectedItems: selectedItems.value,
-                                entities: entities,
-                                onExitSelectionMode: () {
-                                  isSelecting.value = false;
-                                  selectedItems.value = {};
-                                },
-                                via: 'entity_long_press',
+                            unawaited(
+                              entities[index].node.when(
+                                folder: (folder) => context.router.push(EntityRoute(entityId: entities[index].id)),
+                                document: (document) =>
+                                    context.router.push(NativeEditorRoute(slug: entities[index].slug)),
+                                orElse: () => throw UnimplementedError(),
                               ),
                             );
-                            return;
-                          }
+                          },
+                          onLongPress: () async {
+                            if (isReordering.value) {
+                              return;
+                            }
 
-                          await entities[index].node.when(
-                            folder: (folder) => context.showBottomSheet(
-                              child: BottomMenu(
-                                header: _BottomMenuHeader(entity: entities[index], siteName: currentSiteName.value),
-                                items: [
-                                  BottomMenuItem(
-                                    icon: LucideLightIcons.folder_symlink,
-                                    label: '다른 폴더로 옮기기',
-                                    onTap: () async {
-                                      unawaited(
-                                        mixpanel.track('move_entity_try', properties: {'via': 'entity_folder_menu'}),
-                                      );
+                            if (isSelecting.value && selectedItems.value.contains(entities[index].id)) {
+                              await context.showBottomSheet(
+                                child: MultiEntitiesMenu(
+                                  selectedItems: selectedItems.value,
+                                  entities: entities,
+                                  onExitSelectionMode: () {
+                                    isSelecting.value = false;
+                                    selectedItems.value = {};
+                                  },
+                                  via: 'entity_long_press',
+                                ),
+                              );
+                              return;
+                            }
 
-                                      await context.showBottomSheet(
-                                        intercept: true,
-                                        child: MoveEntityModal.single(
-                                          entity: entities[index],
-                                          via: 'entity_folder_menu',
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                  BottomMenuItem(
-                                    icon: LucideLightIcons.external_link,
-                                    label: '스페이스에서 열기',
-                                    onTap: () async {
-                                      unawaited(
-                                        mixpanel.track(
-                                          'open_folder_in_browser',
-                                          properties: {'via': 'entity_folder_menu'},
-                                        ),
-                                      );
-
-                                      final url = Uri.parse(entities[index].url);
-                                      await launchUrl(url, mode: LaunchMode.externalApplication);
-                                    },
-                                  ),
-                                  BottomMenuItem(
-                                    icon: LucideLightIcons.blend,
-                                    label: '공유하기',
-                                    onTap: () async {
-                                      unawaited(
-                                        mixpanel.track(
-                                          'open_folder_share_modal',
-                                          properties: {'via': 'entity_folder_menu'},
-                                        ),
-                                      );
-
-                                      await context.showBottomSheet(
-                                        intercept: true,
-                                        child: ShareBottomSheet(entityIds: [entities[index].id]),
-                                      );
-                                    },
-                                  ),
-                                  const BottomMenuSeparator(),
-                                  BottomMenuItem(
-                                    icon: LucideLightIcons.square_pen,
-                                    label: '하위 문서 만들기',
-                                    onTap: () async {
-                                      final resp = await client.request(
-                                        GEntityScreen_CreateDocument_MutationReq(
-                                          (b) => b
-                                            ..vars.input.siteId = pref.siteId
-                                            ..vars.input.parentEntityId = Value.present(entities[index].id),
-                                        ),
-                                      );
-
-                                      unawaited(
-                                        mixpanel.track('create_document', properties: {'via': 'entity_folder_menu'}),
-                                      );
-
-                                      if (context.mounted) {
-                                        await context.router.push(
-                                          NativeEditorRoute(slug: resp.createDocument.entity.slug),
-                                        );
-                                      }
-                                    },
-                                  ),
-                                  if (entities[index].depth < maxDepth - 1)
+                            await entities[index].node.when(
+                              folder: (folder) => context.showBottomSheet(
+                                child: BottomMenu(
+                                  header: _BottomMenuHeader(entity: entities[index], siteName: currentSiteName.value),
+                                  items: [
                                     BottomMenuItem(
-                                      icon: LucideLightIcons.folder_plus,
-                                      label: '하위 폴더 만들기',
+                                      icon: LucideLightIcons.folder_symlink,
+                                      label: '다른 폴더로 옮기기',
+                                      onTap: () async {
+                                        unawaited(
+                                          mixpanel.track('move_entity_try', properties: {'via': 'entity_folder_menu'}),
+                                        );
+
+                                        await context.showBottomSheet(
+                                          intercept: true,
+                                          child: MoveEntityModal.single(
+                                            entity: entities[index],
+                                            via: 'entity_folder_menu',
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                    BottomMenuItem(
+                                      icon: LucideLightIcons.external_link,
+                                      label: '스페이스에서 열기',
+                                      onTap: () async {
+                                        unawaited(
+                                          mixpanel.track(
+                                            'open_folder_in_browser',
+                                            properties: {'via': 'entity_folder_menu'},
+                                          ),
+                                        );
+
+                                        final url = Uri.parse(entities[index].url);
+                                        await launchUrl(url, mode: LaunchMode.externalApplication);
+                                      },
+                                    ),
+                                    BottomMenuItem(
+                                      icon: LucideLightIcons.blend,
+                                      label: '공유하기',
+                                      onTap: () async {
+                                        unawaited(
+                                          mixpanel.track(
+                                            'open_folder_share_modal',
+                                            properties: {'via': 'entity_folder_menu'},
+                                          ),
+                                        );
+
+                                        await context.showBottomSheet(
+                                          intercept: true,
+                                          child: ShareBottomSheet(entityIds: [entities[index].id]),
+                                        );
+                                      },
+                                    ),
+                                    const BottomMenuSeparator(),
+                                    BottomMenuItem(
+                                      icon: LucideLightIcons.square_pen,
+                                      label: '하위 문서 만들기',
                                       onTap: () async {
                                         final resp = await client.request(
-                                          GEntityScreen_CreateFolder_MutationReq(
+                                          GEntityScreen_CreateDocument_MutationReq(
                                             (b) => b
                                               ..vars.input.siteId = pref.siteId
-                                              ..vars.input.parentEntityId = Value.present(entities[index].id)
-                                              ..vars.input.name = '새 폴더',
+                                              ..vars.input.parentEntityId = Value.present(entities[index].id),
                                           ),
                                         );
 
                                         unawaited(
-                                          mixpanel.track('create_folder', properties: {'via': 'entity_folder_menu'}),
+                                          mixpanel.track('create_document', properties: {'via': 'entity_folder_menu'}),
                                         );
 
                                         if (context.mounted) {
-                                          await context.router.push(EntityRoute(entityId: resp.createFolder.entity.id));
+                                          await context.router.push(
+                                            NativeEditorRoute(slug: resp.createDocument.entity.slug),
+                                          );
                                         }
                                       },
                                     ),
-                                  const BottomMenuSeparator(),
-                                  if (!isSelecting.value && !isReordering.value) ...[
+                                    if (entities[index].depth < maxDepth - 1)
+                                      BottomMenuItem(
+                                        icon: LucideLightIcons.folder_plus,
+                                        label: '하위 폴더 만들기',
+                                        onTap: () async {
+                                          final resp = await client.request(
+                                            GEntityScreen_CreateFolder_MutationReq(
+                                              (b) => b
+                                                ..vars.input.siteId = pref.siteId
+                                                ..vars.input.parentEntityId = Value.present(entities[index].id)
+                                                ..vars.input.name = '새 폴더',
+                                            ),
+                                          );
+
+                                          unawaited(
+                                            mixpanel.track('create_folder', properties: {'via': 'entity_folder_menu'}),
+                                          );
+
+                                          if (context.mounted) {
+                                            await context.router.push(
+                                              EntityRoute(entityId: resp.createFolder.entity.id),
+                                            );
+                                          }
+                                        },
+                                      ),
+                                    const BottomMenuSeparator(),
+                                    if (!isSelecting.value && !isReordering.value) ...[
+                                      BottomMenuItem(
+                                        icon: LucideLightIcons.square_check,
+                                        label: '여러 항목 선택하기',
+                                        onTap: () {
+                                          isSelecting.value = true;
+                                          selectedItems.value = {entities[index].id};
+                                        },
+                                      ),
+                                      BottomMenuItem(
+                                        icon: LucideLightIcons.chevrons_up_down,
+                                        label: '순서 변경하기',
+                                        onTap: () {
+                                          isReordering.value = true;
+                                        },
+                                      ),
+                                      const BottomMenuSeparator(),
+                                    ],
                                     BottomMenuItem(
-                                      icon: LucideLightIcons.square_check,
-                                      label: '여러 항목 선택하기',
-                                      onTap: () {
-                                        isSelecting.value = true;
-                                        selectedItems.value = {entities[index].id};
+                                      icon: LucideLightIcons.trash_2,
+                                      label: '삭제하기',
+                                      onTap: () async {
+                                        await context.showModal(
+                                          child: ConfirmModal(
+                                            title: '폴더 삭제',
+                                            message: '"${folder.name}" 폴더를 삭제하시겠어요? 삭제 후 30일 동안 휴지통에 보관돼요.',
+                                            confirmText: '삭제하기',
+                                            confirmTextColor: context.colors.textBright,
+                                            confirmBackgroundColor: context.colors.accentDanger,
+                                            onConfirm: () async {
+                                              await client.request(
+                                                GEntityScreen_DeleteFolder_MutationReq(
+                                                  (b) => b..vars.input.folderId = folder.id,
+                                                ),
+                                              );
+
+                                              unawaited(
+                                                mixpanel.track(
+                                                  'delete_folder',
+                                                  properties: {'via': 'entity_folder_menu'},
+                                                ),
+                                              );
+                                            },
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              document: (document) => context.showBottomSheet(
+                                child: BottomMenu(
+                                  header: _BottomMenuHeader(entity: entities[index], siteName: currentSiteName.value),
+                                  items: [
+                                    BottomMenuItem(
+                                      icon: LucideLightIcons.file_symlink,
+                                      label: '다른 폴더로 옮기기',
+                                      onTap: () async {
+                                        unawaited(
+                                          mixpanel.track(
+                                            'move_entity_try',
+                                            properties: {'via': 'entity_document_menu'},
+                                          ),
+                                        );
+
+                                        await context.showBottomSheet(
+                                          intercept: true,
+                                          child: MoveEntityModal.single(
+                                            entity: entities[index],
+                                            via: 'entity_document_menu',
+                                          ),
+                                        );
                                       },
                                     ),
                                     BottomMenuItem(
-                                      icon: LucideLightIcons.chevrons_up_down,
-                                      label: '순서 변경하기',
-                                      onTap: () {
-                                        isReordering.value = true;
+                                      icon: LucideLightIcons.external_link,
+                                      label: '스페이스에서 열기',
+                                      onTap: () async {
+                                        unawaited(
+                                          mixpanel.track(
+                                            'open_document_in_browser',
+                                            properties: {'via': 'entity_document_menu'},
+                                          ),
+                                        );
+
+                                        final url = Uri.parse(entities[index].url);
+                                        await launchUrl(url, mode: LaunchMode.externalApplication);
+                                      },
+                                    ),
+                                    BottomMenuItem(
+                                      icon: LucideLightIcons.blend,
+                                      label: '공유하기',
+                                      onTap: () async {
+                                        unawaited(
+                                          mixpanel.track(
+                                            'open_document_share_modal',
+                                            properties: {'via': 'entity_document_menu'},
+                                          ),
+                                        );
+
+                                        await context.showBottomSheet(
+                                          intercept: true,
+                                          child: ShareBottomSheet(entityIds: [entities[index].id]),
+                                        );
+                                      },
+                                    ),
+                                    BottomMenuItem(
+                                      icon: LucideLightIcons.copy,
+                                      label: '복제하기',
+                                      onTap: () async {
+                                        await client.request(
+                                          GEntityScreen_DuplicateDocument_MutationReq(
+                                            (b) => b..vars.input.documentId = document.id,
+                                          ),
+                                        );
+
+                                        unawaited(
+                                          mixpanel.track(
+                                            'duplicate_document',
+                                            properties: {'via': 'entity_document_menu'},
+                                          ),
+                                        );
                                       },
                                     ),
                                     const BottomMenuSeparator(),
-                                  ],
-                                  BottomMenuItem(
-                                    icon: LucideLightIcons.trash_2,
-                                    label: '삭제하기',
-                                    onTap: () async {
-                                      await context.showModal(
-                                        child: ConfirmModal(
-                                          title: '폴더 삭제',
-                                          message: '"${folder.name}" 폴더를 삭제하시겠어요? 삭제 후 30일 동안 휴지통에 보관돼요.',
-                                          confirmText: '삭제하기',
-                                          confirmTextColor: context.colors.textBright,
-                                          confirmBackgroundColor: context.colors.accentDanger,
-                                          onConfirm: () async {
-                                            await client.request(
-                                              GEntityScreen_DeleteFolder_MutationReq(
-                                                (b) => b..vars.input.folderId = folder.id,
-                                              ),
-                                            );
-
-                                            unawaited(
-                                              mixpanel.track(
-                                                'delete_folder',
-                                                properties: {'via': 'entity_folder_menu'},
-                                              ),
-                                            );
-                                          },
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                ],
-                              ),
-                            ),
-                            document: (document) => context.showBottomSheet(
-                              child: BottomMenu(
-                                header: _BottomMenuHeader(entity: entities[index], siteName: currentSiteName.value),
-                                items: [
-                                  BottomMenuItem(
-                                    icon: LucideLightIcons.file_symlink,
-                                    label: '다른 폴더로 옮기기',
-                                    onTap: () async {
-                                      unawaited(
-                                        mixpanel.track('move_entity_try', properties: {'via': 'entity_document_menu'}),
-                                      );
-
-                                      await context.showBottomSheet(
-                                        intercept: true,
-                                        child: MoveEntityModal.single(
-                                          entity: entities[index],
-                                          via: 'entity_document_menu',
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                  BottomMenuItem(
-                                    icon: LucideLightIcons.external_link,
-                                    label: '스페이스에서 열기',
-                                    onTap: () async {
-                                      unawaited(
-                                        mixpanel.track(
-                                          'open_document_in_browser',
-                                          properties: {'via': 'entity_document_menu'},
-                                        ),
-                                      );
-
-                                      final url = Uri.parse(entities[index].url);
-                                      await launchUrl(url, mode: LaunchMode.externalApplication);
-                                    },
-                                  ),
-                                  BottomMenuItem(
-                                    icon: LucideLightIcons.blend,
-                                    label: '공유하기',
-                                    onTap: () async {
-                                      unawaited(
-                                        mixpanel.track(
-                                          'open_document_share_modal',
-                                          properties: {'via': 'entity_document_menu'},
-                                        ),
-                                      );
-
-                                      await context.showBottomSheet(
-                                        intercept: true,
-                                        child: ShareBottomSheet(entityIds: [entities[index].id]),
-                                      );
-                                    },
-                                  ),
-                                  BottomMenuItem(
-                                    icon: LucideLightIcons.copy,
-                                    label: '복제하기',
-                                    onTap: () async {
-                                      await client.request(
-                                        GEntityScreen_DuplicateDocument_MutationReq(
-                                          (b) => b..vars.input.documentId = document.id,
-                                        ),
-                                      );
-
-                                      unawaited(
-                                        mixpanel.track(
-                                          'duplicate_document',
-                                          properties: {'via': 'entity_document_menu'},
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                  const BottomMenuSeparator(),
-                                  if (!isSelecting.value && !isReordering.value) ...[
+                                    if (!isSelecting.value && !isReordering.value) ...[
+                                      BottomMenuItem(
+                                        icon: LucideLightIcons.square_check,
+                                        label: '여러 항목 선택하기',
+                                        onTap: () {
+                                          isSelecting.value = true;
+                                          selectedItems.value = {entities[index].id};
+                                        },
+                                      ),
+                                      BottomMenuItem(
+                                        icon: LucideLightIcons.chevrons_up_down,
+                                        label: '순서 변경하기',
+                                        onTap: () {
+                                          isReordering.value = true;
+                                        },
+                                      ),
+                                      const BottomMenuSeparator(),
+                                    ],
                                     BottomMenuItem(
-                                      icon: LucideLightIcons.square_check,
-                                      label: '여러 항목 선택하기',
-                                      onTap: () {
-                                        isSelecting.value = true;
-                                        selectedItems.value = {entities[index].id};
+                                      icon: LucideLightIcons.trash_2,
+                                      label: '삭제하기',
+                                      onTap: () async {
+                                        await context.showModal(
+                                          intercept: true,
+                                          child: ConfirmModal(
+                                            title: '문서 삭제',
+                                            message: '"${document.title}" 문서를 삭제하시겠어요? 삭제 후 30일 동안 휴지통에 보관돼요.',
+                                            confirmText: '삭제하기',
+                                            confirmTextColor: context.colors.textBright,
+                                            confirmBackgroundColor: context.colors.accentDanger,
+                                            onConfirm: () async {
+                                              await client.request(
+                                                GEntityScreen_DeleteDocument_MutationReq(
+                                                  (b) => b..vars.input.documentId = document.id,
+                                                ),
+                                              );
+
+                                              unawaited(
+                                                mixpanel.track(
+                                                  'delete_document',
+                                                  properties: {'via': 'entity_document_menu'},
+                                                ),
+                                              );
+                                            },
+                                          ),
+                                        );
                                       },
                                     ),
-                                    BottomMenuItem(
-                                      icon: LucideLightIcons.chevrons_up_down,
-                                      label: '순서 변경하기',
-                                      onTap: () {
-                                        isReordering.value = true;
-                                      },
-                                    ),
-                                    const BottomMenuSeparator(),
                                   ],
-                                  BottomMenuItem(
-                                    icon: LucideLightIcons.trash_2,
-                                    label: '삭제하기',
-                                    onTap: () async {
-                                      await context.showModal(
-                                        intercept: true,
-                                        child: ConfirmModal(
-                                          title: '문서 삭제',
-                                          message: '"${document.title}" 문서를 삭제하시겠어요? 삭제 후 30일 동안 휴지통에 보관돼요.',
-                                          confirmText: '삭제하기',
-                                          confirmTextColor: context.colors.textBright,
-                                          confirmBackgroundColor: context.colors.accentDanger,
-                                          onConfirm: () async {
-                                            await client.request(
-                                              GEntityScreen_DeleteDocument_MutationReq(
-                                                (b) => b..vars.input.documentId = document.id,
-                                              ),
-                                            );
-
-                                            unawaited(
-                                              mixpanel.track(
-                                                'delete_document',
-                                                properties: {'via': 'entity_document_menu'},
-                                              ),
-                                            );
-                                          },
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                ],
+                                ),
                               ),
-                            ),
-                            orElse: () => throw UnimplementedError(),
-                          );
-                        },
-                        child: IntrinsicHeight(
-                          child: Container(
-                            decoration: BoxDecoration(
-                              border: Border.all(color: context.colors.borderStrong),
-                              borderRadius: const BorderRadius.all(Radius.circular(8)),
-                              color: isSelecting.value && selectedItems.value.contains(entities[index].id)
-                                  ? context.colors.accentBrand.withValues(alpha: 0.1)
-                                  : context.colors.surfaceDefault,
-                            ),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                if (isReordering.value) ...[
-                                  ReorderableDragStartListener(
-                                    index: index,
-                                    child: const Listener(
+                              orElse: () => throw UnimplementedError(),
+                            );
+                          },
+                          child: IntrinsicHeight(
+                            child: Container(
+                              decoration: BoxDecoration(
+                                border: Border.all(color: context.colors.borderStrong),
+                                borderRadius: const BorderRadius.all(Radius.circular(8)),
+                                color: isSelecting.value && selectedItems.value.contains(entities[index].id)
+                                    ? context.colors.accentBrand.withValues(alpha: 0.1)
+                                    : context.colors.surfaceDefault,
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  if (isReordering.value) ...[
+                                    ReorderableDragStartListener(
+                                      index: index,
+                                      child: const Listener(
+                                        behavior: HitTestBehavior.opaque,
+                                        child: Padding(
+                                          padding: Pad(all: 12),
+                                          child: Icon(LucideLightIcons.grip_vertical, size: 20),
+                                        ),
+                                      ),
+                                    ),
+                                    AppVerticalDivider(color: context.colors.borderStrong),
+                                  ] else if (isSelecting.value) ...[
+                                    Listener(
                                       behavior: HitTestBehavior.opaque,
                                       child: Padding(
-                                        padding: Pad(all: 12),
-                                        child: Icon(LucideLightIcons.grip_vertical, size: 20),
+                                        padding: const Pad(all: 12),
+                                        child: Icon(
+                                          selectedItems.value.contains(entities[index].id)
+                                              ? LucideLightIcons.square_check
+                                              : LucideLightIcons.square,
+                                          size: 20,
+                                          color: selectedItems.value.contains(entities[index].id)
+                                              ? context.colors.textDefault
+                                              : context.colors.textSubtle,
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                  AppVerticalDivider(color: context.colors.borderStrong),
-                                ] else if (isSelecting.value) ...[
-                                  Listener(
-                                    behavior: HitTestBehavior.opaque,
+                                    AppVerticalDivider(color: context.colors.borderStrong),
+                                  ],
+                                  const Gap(16),
+                                  Expanded(
                                     child: Padding(
-                                      padding: const Pad(all: 12),
-                                      child: Icon(
-                                        selectedItems.value.contains(entities[index].id)
-                                            ? LucideLightIcons.square_check
-                                            : LucideLightIcons.square,
-                                        size: 20,
-                                        color: selectedItems.value.contains(entities[index].id)
-                                            ? context.colors.textDefault
-                                            : context.colors.textSubtle,
+                                      padding: const Pad(vertical: 12),
+                                      child: entities[index].node.when(
+                                        folder: (_) => _Folder(entities[index]),
+                                        document: (_) => _Document(entities[index]),
+                                        orElse: () => throw UnimplementedError(),
                                       ),
                                     ),
                                   ),
-                                  AppVerticalDivider(color: context.colors.borderStrong),
+                                  const Gap(16),
                                 ],
-                                const Gap(16),
-                                Expanded(
-                                  child: Padding(
-                                    padding: const Pad(vertical: 12),
-                                    child: entities[index].node.when(
-                                      folder: (_) => _Folder(entities[index]),
-                                      document: (_) => _Document(entities[index]),
-                                      orElse: () => throw UnimplementedError(),
-                                    ),
-                                  ),
-                                ),
-                                const Gap(16),
-                              ],
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    );
-                  },
-                  proxyDecorator: (child, index, animation) => child,
-                  onReorder: (oldIndex, newIndex) async {
-                    var adjustedNewIndex = newIndex;
-                    if (oldIndex < newIndex) {
-                      adjustedNewIndex -= 1;
-                    }
-                    if (oldIndex == adjustedNewIndex) {
-                      return;
-                    }
+                      );
+                    },
+                    proxyDecorator: (child, index, animation) => child,
+                    onReorder: (oldIndex, newIndex) async {
+                      var adjustedNewIndex = newIndex;
+                      if (oldIndex < newIndex) {
+                        adjustedNewIndex -= 1;
+                      }
+                      if (oldIndex == adjustedNewIndex) {
+                        return;
+                      }
 
-                    final dragging = entities[oldIndex];
-                    String? lowerOrder;
-                    String? upperOrder;
+                      final dragging = entities[oldIndex];
+                      String? lowerOrder;
+                      String? upperOrder;
 
-                    if (newIndex >= entities.length) {
-                      lowerOrder = entities[entities.length - 1].order;
-                      entities
-                        ..remove(dragging)
-                        ..add(dragging);
-                    } else if (newIndex == 0) {
-                      upperOrder = entities[0].order;
-                      entities
-                        ..remove(dragging)
-                        ..insert(newIndex, dragging);
-                    } else {
-                      lowerOrder = entities[newIndex - 1].order;
-                      upperOrder = entities[newIndex].order;
-
-                      if (oldIndex > newIndex) {
-                        entities
-                          ..removeAt(oldIndex)
-                          ..insert(newIndex, dragging);
-                      } else {
+                      if (newIndex >= entities.length) {
+                        lowerOrder = entities[entities.length - 1].order;
                         entities
                           ..remove(dragging)
-                          ..insert(newIndex - 1, dragging);
+                          ..add(dragging);
+                      } else if (newIndex == 0) {
+                        upperOrder = entities[0].order;
+                        entities
+                          ..remove(dragging)
+                          ..insert(newIndex, dragging);
+                      } else {
+                        lowerOrder = entities[newIndex - 1].order;
+                        upperOrder = entities[newIndex].order;
+
+                        if (oldIndex > newIndex) {
+                          entities
+                            ..removeAt(oldIndex)
+                            ..insert(newIndex, dragging);
+                        } else {
+                          entities
+                            ..remove(dragging)
+                            ..insert(newIndex - 1, dragging);
+                        }
                       }
-                    }
 
-                    await client.request(
-                      GEntityScreen_MoveEntity_MutationReq(
-                        (b) => b
-                          ..vars.input.entityId = dragging.id
-                          ..vars.input.parentEntityId = Value.present(entity?.id)
-                          ..vars.input.lowerOrder = Value.present(lowerOrder)
-                          ..vars.input.upperOrder = Value.present(upperOrder),
-                      ),
-                    );
+                      await client.request(
+                        GEntityScreen_MoveEntity_MutationReq(
+                          (b) => b
+                            ..vars.input.entityId = dragging.id
+                            ..vars.input.parentEntityId = Value.present(entity?.id)
+                            ..vars.input.lowerOrder = Value.present(lowerOrder)
+                            ..vars.input.upperOrder = Value.present(upperOrder),
+                        ),
+                      );
 
-                    unawaited(mixpanel.track('move_entity', properties: {'via': 'reorder'}));
-                  },
-                ),
-              if (isSelecting.value)
-                SelectedEntitiesBar(
-                  isVisible: selectedItems.value.isNotEmpty,
-                  selectedItems: selectedItems.value,
-                  entities: entities,
-                  onClearSelection: () {
-                    selectedItems.value = {};
-                  },
-                  onExitSelectionMode: () {
-                    isSelecting.value = false;
-                    selectedItems.value = {};
-                  },
-                ),
-            ],
+                      unawaited(mixpanel.track('move_entity', properties: {'via': 'reorder'}));
+                    },
+                  ),
+                if (isSelecting.value)
+                  SelectedEntitiesBar(
+                    isVisible: selectedItems.value.isNotEmpty,
+                    selectedItems: selectedItems.value,
+                    entities: entities,
+                    onClearSelection: () {
+                      selectedItems.value = {};
+                    },
+                    onExitSelectionMode: () {
+                      isSelecting.value = false;
+                      selectedItems.value = {};
+                    },
+                  ),
+              ],
+            ),
           ),
         );
       },
