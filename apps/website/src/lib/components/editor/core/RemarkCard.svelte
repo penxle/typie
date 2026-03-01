@@ -150,7 +150,7 @@
         >
           {userQuery.data.userView.name}
         </span>
-        <TimeAgo style={{ fontSize: '11px', color: 'text.faint', flexShrink: '0' }} timestamp={createdAt} />
+        <TimeAgo style={css.raw({ fontSize: '11px', color: 'text.faint', flexShrink: '0' })} timestamp={createdAt} />
 
         {#if !readOnly}
           <div
@@ -165,8 +165,8 @@
             })}
           >
             <Menu
-              style={{ display: 'flex', padding: '0', borderWidth: '0', backgroundColor: 'transparent' }}
-              listStyle={{ minWidth: '100px' }}
+              style={css.raw({ display: 'flex', padding: '0', borderWidth: '0', backgroundColor: 'transparent' })}
+              listStyle={css.raw({ minWidth: '100px' })}
               offset={4}
               placement="bottom-end"
               bind:open={menuOpen}

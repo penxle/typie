@@ -572,28 +572,28 @@
 
       <div class={flex({ gap: '8px', alignItems: 'center', justifyContent: 'center', width: 'full' })}>
         {#if isRunning && !isPaused}
-          <Button style={{ width: 'full', fontSize: '13px', whiteSpace: 'nowrap' }} onclick={pause} size="md" variant="secondary">
+          <Button style={css.raw({ width: 'full', fontSize: '13px', whiteSpace: 'nowrap' })} onclick={pause} size="md" variant="secondary">
             <div class={flex({ gap: '4px', alignItems: 'center' })}>
               <Icon icon={PauseIcon} size={14} />
               일시정지
             </div>
           </Button>
         {:else if isPaused}
-          <Button style={{ flex: '1', fontSize: '13px', whiteSpace: 'nowrap' }} onclick={reset} size="md" variant="secondary">
+          <Button style={css.raw({ flex: '1', fontSize: '13px', whiteSpace: 'nowrap' })} onclick={reset} size="md" variant="secondary">
             <div class={flex({ gap: '4px', alignItems: 'center' })}>
               <Icon icon={RotateCcwIcon} size={14} />
               리셋
             </div>
           </Button>
 
-          <Button style={{ flex: '1', fontSize: '13px', whiteSpace: 'nowrap' }} onclick={start} size="md" variant="secondary">
+          <Button style={css.raw({ flex: '1', fontSize: '13px', whiteSpace: 'nowrap' })} onclick={start} size="md" variant="secondary">
             <div class={flex({ gap: '4px', alignItems: 'center' })}>
               <Icon icon={PlayIcon} size={14} />
               재개
             </div>
           </Button>
         {:else}
-          <Button style={{ width: 'full', fontSize: '13px' }} onclick={start} size="md" variant="primary">
+          <Button style={css.raw({ width: 'full', fontSize: '13px' })} onclick={start} size="md" variant="primary">
             <div class={flex({ gap: '4px', alignItems: 'center' })}>
               <Icon icon={PlayIcon} size={14} />
               시작

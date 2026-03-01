@@ -69,7 +69,7 @@
     >
       <div class={flex({ alignItems: 'center', gap: '16px' })}>
         <div class={flex({ alignItems: 'center', gap: '8px' })}>
-          <AdminIcon style={{ color: 'gray.900' }} icon={AlertTriangleIcon} size={16} />
+          <AdminIcon style={css.raw({ color: 'gray.900' })} icon={AlertTriangleIcon} size={16} />
           <span class={css({ fontWeight: 'bold', color: 'gray.900' })}>IMPERSONATING</span>
         </div>
 
@@ -83,7 +83,7 @@
             </span>
           </div>
 
-          <AdminIcon style={{ color: 'gray.700' }} icon={ArrowRightIcon} size={16} />
+          <AdminIcon style={css.raw({ color: 'gray.700' })} icon={ArrowRightIcon} size={16} />
 
           <div class={flex({ alignItems: 'center', gap: '6px' })}>
             <span class={css({ fontWeight: 'bold', color: 'gray.900' })}>

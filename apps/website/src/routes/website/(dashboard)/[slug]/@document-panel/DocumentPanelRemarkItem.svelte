@@ -87,7 +87,7 @@
         >
           {userQuery.data.userView.name}
         </span>
-        <TimeAgo style={{ fontSize: '11px', color: 'text.faint', flexShrink: '0' }} timestamp={remark.createdAt} />
+        <TimeAgo style={css.raw({ fontSize: '11px', color: 'text.faint', flexShrink: '0' })} timestamp={remark.createdAt} />
       {:else}
         <div
           class={css({

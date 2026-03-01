@@ -102,7 +102,7 @@
             onclick={() => (open = false)}
             type="button"
           >
-            <AdminIcon style={{ color: 'gray.900' }} icon={XIcon} size={16} />
+            <AdminIcon style={css.raw({ color: 'gray.900' })} icon={XIcon} size={16} />
           </button>
         </div>
       {/if}
