@@ -4,7 +4,7 @@ import type { HydratableQuery } from './server';
 
 export function hydrateQuery<T extends Artifact<'query'>>(getHydratable: () => HydratableQuery<T>) {
   const hydratable = getHydratable();
-  const { artifact, variables, cacheSnapshot } = hydratable.__hydration;
+  const { artifact, variables, cacheSnapshot } = hydratable[' $hydration'];
 
   const client = getClient();
   if (cacheSnapshot) {

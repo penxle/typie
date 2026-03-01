@@ -9,7 +9,7 @@ import type { Artifact, CacheSnapshot, DataOf, VariablesOf } from '@mearie/svelt
 
 export type HydratableQuery<T extends Artifact<'query'>> = {
   data: DataOf<T>;
-  __hydration: {
+  ' $hydration': {
     artifact: T;
     variables: VariablesOf<T>;
     cacheSnapshot: CacheSnapshot;
@@ -41,7 +41,7 @@ export async function loadQuery<T extends Artifact<'query'>>(
 
     return {
       data,
-      __hydration: { artifact: query, variables: variables ?? ({} as VariablesOf<T>), cacheSnapshot },
+      ' $hydration': { artifact: query, variables: variables ?? ({} as VariablesOf<T>), cacheSnapshot },
     };
   } catch (err) {
     if (err instanceof AggregatedError) {
