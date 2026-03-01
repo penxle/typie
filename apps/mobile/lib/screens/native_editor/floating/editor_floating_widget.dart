@@ -32,6 +32,22 @@ class NativeEditorFloatingWidget extends HookWidget {
     return Offset(position.dx.clamp(0.0, maxX), position.dy.clamp(0.0, maxY));
   }
 
+  Size _resolveVisibleContainerSize({required BuildContext context, required RenderBox editorContainer}) {
+    final containerSize = editorContainer.size;
+    final mediaQuery = MediaQuery.of(context);
+    final keyboardHeight = mediaQuery.viewInsets.bottom;
+
+    if (keyboardHeight <= 0) {
+      return containerSize;
+    }
+
+    final keyboardTop = mediaQuery.size.height - keyboardHeight;
+    final containerTop = editorContainer.localToGlobal(Offset.zero).dy;
+    final visibleHeight = (keyboardTop - containerTop).clamp(0.0, containerSize.height);
+
+    return Size(containerSize.width, visibleHeight);
+  }
+
   Offset _toAbsolutePosition(Offset relativePos, Size containerSize) {
     return Offset(relativePos.dx * containerSize.width, relativePos.dy * containerSize.height);
   }
@@ -50,7 +66,8 @@ class NativeEditorFloatingWidget extends HookWidget {
     final widgetKey = useMemoized(GlobalKey.new);
     final widgetSize = useState<Size?>(null);
 
-    final screenSize = MediaQuery.sizeOf(context);
+    final mediaQuery = MediaQuery.of(context);
+    final screenSize = mediaQuery.size;
     final relativePos = initialRelativePosition ?? const Offset(0.5, 0.5);
     final initialX = relativePos.dx * screenSize.width;
     final initialY = relativePos.dy * screenSize.height;
@@ -78,7 +95,8 @@ class NativeEditorFloatingWidget extends HookWidget {
           final editorContainer = context.findAncestorRenderObjectOfType<RenderBox>();
 
           if (renderBox != null && editorContainer != null && renderBox.hasSize && editorContainer.hasSize) {
-            final adjustedPosition = _clampPosition(position.value, renderBox.size, editorContainer.size);
+            final containerSize = _resolveVisibleContainerSize(context: context, editorContainer: editorContainer);
+            final adjustedPosition = _clampPosition(position.value, renderBox.size, containerSize);
 
             if (adjustedPosition != position.value) {
               position.value = adjustedPosition;
@@ -110,10 +128,11 @@ class NativeEditorFloatingWidget extends HookWidget {
           final relativePos = initialRelativePosition!;
           currentRelativePosition.value = relativePos;
 
-          final absolutePos = _toAbsolutePosition(relativePos, editorContainer.size);
-          position.value = _clampPosition(absolutePos, renderBox.size, editorContainer.size);
+          final containerSize = _resolveVisibleContainerSize(context: context, editorContainer: editorContainer);
+          final absolutePos = _toAbsolutePosition(relativePos, containerSize);
+          position.value = _clampPosition(absolutePos, renderBox.size, containerSize);
 
-          previousEditorSize.value = editorContainer.size;
+          previousEditorSize.value = containerSize;
           widgetSize.value = renderBox.size;
         }
       });
@@ -133,7 +152,10 @@ class NativeEditorFloatingWidget extends HookWidget {
           if (!isDragging.value && previousEditorSize.value != null) {
             final editorContainer = context.findAncestorRenderObjectOfType<RenderBox>();
             if (editorContainer != null && editorContainer.hasSize) {
-              final currentEditorSize = editorContainer.size;
+              final currentEditorSize = _resolveVisibleContainerSize(
+                context: context,
+                editorContainer: editorContainer,
+              );
 
               // NOTE: 크기가 변경되었을 때만 위치 재계산
               if (previousEditorSize.value != currentEditorSize) {
@@ -188,9 +210,11 @@ class NativeEditorFloatingWidget extends HookWidget {
               return;
             }
 
+            final containerSize = _resolveVisibleContainerSize(context: context, editorContainer: editorContainer);
+
             final newPosition = Offset(position.value.dx + details.delta.dx, position.value.dy + details.delta.dy);
 
-            final adjustedPosition = _clampPosition(newPosition, widgetSize.value!, editorContainer.size);
+            final adjustedPosition = _clampPosition(newPosition, widgetSize.value!, containerSize);
 
             position.value = adjustedPosition;
           },
@@ -198,7 +222,8 @@ class NativeEditorFloatingWidget extends HookWidget {
             isDragging.value = false;
             final editorContainer = context.findAncestorRenderObjectOfType<RenderBox>();
             if (editorContainer != null && editorContainer.hasSize) {
-              final relativePos = _toRelativePosition(position.value, editorContainer.size);
+              final containerSize = _resolveVisibleContainerSize(context: context, editorContainer: editorContainer);
+              final relativePos = _toRelativePosition(position.value, containerSize);
               currentRelativePosition.value = relativePos;
               onPositionChanged(relativePos);
             }
@@ -207,7 +232,8 @@ class NativeEditorFloatingWidget extends HookWidget {
             isDragging.value = false;
             final editorContainer = context.findAncestorRenderObjectOfType<RenderBox>();
             if (editorContainer != null && editorContainer.hasSize) {
-              final relativePos = _toRelativePosition(position.value, editorContainer.size);
+              final containerSize = _resolveVisibleContainerSize(context: context, editorContainer: editorContainer);
+              final relativePos = _toRelativePosition(position.value, containerSize);
               currentRelativePosition.value = relativePos;
               onPositionChanged(relativePos);
             }
