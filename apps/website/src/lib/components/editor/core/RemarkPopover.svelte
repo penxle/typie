@@ -306,8 +306,8 @@
       <div class={css({ display: 'flex', alignItems: 'center', gap: '2px' })}>
         {#if !editor.readOnly && remarks.length > 0}
           <Menu
-            style={{ display: 'flex', padding: '0', borderWidth: '0', backgroundColor: 'transparent' }}
-            listStyle={{ minWidth: '120px' }}
+            style={css.raw({ display: 'flex', padding: '0', borderWidth: '0', backgroundColor: 'transparent' })}
+            listStyle={css.raw({ minWidth: '120px' })}
             offset={4}
             placement="bottom-end"
             bind:open={headerMenuOpen}

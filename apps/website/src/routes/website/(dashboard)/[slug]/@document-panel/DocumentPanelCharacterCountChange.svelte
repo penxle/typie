@@ -38,7 +38,7 @@
 
 <details class={flex({ flexDirection: 'column', marginBottom: open ? '12px' : '0' })} bind:open>
   <summary class={flex({ alignItems: 'center', gap: '4px', cursor: 'pointer', marginBottom: open ? '8px' : '0', userSelect: 'none' })}>
-    <Icon style={{ color: 'text.faint' }} icon={GoalIcon} size={12} />
+    <Icon style={css.raw({ color: 'text.faint' })} icon={GoalIcon} size={12} />
     <div class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.subtle' })}>오늘의 기록</div>
     <Icon style={css.raw({ color: 'text.faint', transform: open ? 'rotate(90deg)' : 'rotate(0deg)' })} icon={IconChevronRight} size={14} />
     <div class={css({ flexGrow: '1' })}></div>
