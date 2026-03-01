@@ -282,10 +282,16 @@
         width: '8px',
         cursor: 'pointer',
         borderRadius: 'full',
-        backgroundColor: isUserScrollVisible ? 'control.scrollbar.hover' : 'control.scrollbar.default',
+        backgroundColor: isDraggingV
+          ? isUserScrollVisible
+            ? 'surface.dark/80'
+            : 'surface.dark/45'
+          : isUserScrollVisible
+            ? 'surface.dark/50'
+            : 'surface.dark/22',
         transition: 'colors',
-        _hover: { backgroundColor: 'control.scrollbar.hover' },
-        _active: { backgroundColor: 'control.scrollbar.hover' },
+        _hover: { backgroundColor: 'surface.dark/80' },
+        _active: { backgroundColor: 'surface.dark/80' },
       })}
       aria-valuemax={maxScrollV}
       aria-valuemin={0}
@@ -331,10 +337,16 @@
         height: '8px',
         cursor: 'pointer',
         borderRadius: 'full',
-        backgroundColor: isUserScrollVisible ? 'control.scrollbar.hover' : 'control.scrollbar.default',
+        backgroundColor: isDraggingH
+          ? isUserScrollVisible
+            ? 'surface.dark/80'
+            : 'surface.dark/45'
+          : isUserScrollVisible
+            ? 'surface.dark/50'
+            : 'surface.dark/22',
         transition: 'colors',
-        _hover: { backgroundColor: 'control.scrollbar.hover' },
-        _active: { backgroundColor: 'control.scrollbar.hover' },
+        _hover: { backgroundColor: 'surface.dark/80' },
+        _active: { backgroundColor: 'surface.dark/80' },
       })}
       aria-valuemax={maxScrollH}
       aria-valuemin={0}
