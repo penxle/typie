@@ -94,61 +94,63 @@
   const currentBlockHasRemarks = $derived(editor.currentBlock ? remarkGroups.some((g) => g.nodeId === editor.currentBlock?.nodeId) : false);
 </script>
 
-<div
-  class={css({
-    position: 'absolute',
-    inset: '0',
-    pointerEvents: 'none',
-    zIndex: '2',
-  })}
->
-  {#key layoutRefreshVersion}
-    {#each remarkGroups as group (group.nodeId)}
-      {@const page = editor.layout?.pages[group.pageIdx]}
-      {@const offset = pageOffset(group.pageIdx)}
-      {#if page && offset}
-        <div
-          style:position="absolute"
-          style:left="{offset.left + page.width + REMARK_GAP}px"
-          style:top="{offset.top + group.boundsY}px"
-          style:pointer-events="auto"
-          data-external-element
-        >
-          <RemarkPopover
-            {editor}
-            nodeId={group.nodeId}
-            onToggle={() => toggleGroup(group.nodeId)}
-            open={openGroupNodeId === group.nodeId}
-            remarks={group.remarks}
-          />
-        </div>
-      {/if}
-    {/each}
-
-    {#if !editor.readOnly && editor.currentBlock && !currentBlockHasRemarks}
-      {@const block = editor.currentBlock}
-      {@const page = editor.layout?.pages[block.pageIdx]}
-      {@const offset = pageOffset(block.pageIdx)}
-      {#if page && offset}
-        {#key block.nodeId}
+{#if !editor.containerResizing}
+  <div
+    class={css({
+      position: 'absolute',
+      inset: '0',
+      pointerEvents: 'none',
+      zIndex: '2',
+    })}
+  >
+    {#key layoutRefreshVersion}
+      {#each remarkGroups as group (group.nodeId)}
+        {@const page = editor.layout?.pages[group.pageIdx]}
+        {@const offset = pageOffset(group.pageIdx)}
+        {#if page && offset}
           <div
             style:position="absolute"
             style:left="{offset.left + page.width + REMARK_GAP}px"
-            style:top="{offset.top + block.bounds.y}px"
+            style:top="{offset.top + group.boundsY}px"
             style:pointer-events="auto"
             data-external-element
-            transition:fade|global={{ duration: 100 }}
           >
             <RemarkPopover
               {editor}
-              nodeId={block.nodeId}
-              onToggle={() => toggleGroup(block.nodeId)}
-              open={openGroupNodeId === block.nodeId}
-              remarks={[]}
+              nodeId={group.nodeId}
+              onToggle={() => toggleGroup(group.nodeId)}
+              open={openGroupNodeId === group.nodeId}
+              remarks={group.remarks}
             />
           </div>
-        {/key}
+        {/if}
+      {/each}
+
+      {#if !editor.readOnly && (editor.isFocused || openGroupNodeId === editor.currentBlock?.nodeId) && editor.currentBlock && !currentBlockHasRemarks}
+        {@const block = editor.currentBlock}
+        {@const page = editor.layout?.pages[block.pageIdx]}
+        {@const offset = pageOffset(block.pageIdx)}
+        {#if page && offset}
+          {#key block.nodeId}
+            <div
+              style:position="absolute"
+              style:left="{offset.left + page.width + REMARK_GAP}px"
+              style:top="{offset.top + block.bounds.y}px"
+              style:pointer-events="auto"
+              data-external-element
+              transition:fade|global={{ duration: 100 }}
+            >
+              <RemarkPopover
+                {editor}
+                nodeId={block.nodeId}
+                onToggle={() => toggleGroup(block.nodeId)}
+                open={openGroupNodeId === block.nodeId}
+                remarks={[]}
+              />
+            </div>
+          {/key}
+        {/if}
       {/if}
-    {/if}
-  {/key}
-</div>
+    {/key}
+  </div>
+{/if}

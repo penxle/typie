@@ -12,11 +12,9 @@
   let { resizer }: Props = $props();
 
   const context = getPaneGroup();
-  let isDragging = false;
-  let dragOffset = 0;
-  let startPosition = 0;
-  let minOffset = 0;
-  let maxOffset = 0;
+  let isDragging = $state(false);
+  let startPosition = $state(0);
+  let rafId: number | null = null;
   let initialFlexes: number[] = [];
 
   const getAxis = () => {
@@ -32,30 +30,11 @@
     e.preventDefault();
     e.stopPropagation();
     isDragging = true;
-    dragOffset = 0;
+    context.resizing = true;
 
     const isHorizontal = resizer.direction === 'horizontal';
     startPosition = isHorizontal ? e.clientX : e.clientY;
     initialFlexes = [...axis.flexes];
-
-    const totalSize = resizer.axisSize;
-    const totalFlex = initialFlexes.reduce((s, f) => s + f, 0);
-    const i = resizer.index;
-
-    let leftCompressible = 0;
-    for (let j = 0; j <= i; j++) {
-      const childMinFlex = (getMinSizeForMember(axis.children[j], resizer.direction) / totalSize) * totalFlex;
-      leftCompressible += initialFlexes[j] - childMinFlex;
-    }
-
-    let rightCompressible = 0;
-    for (let j = i + 1; j < axis.children.length; j++) {
-      const childMinFlex = (getMinSizeForMember(axis.children[j], resizer.direction) / totalSize) * totalFlex;
-      rightCompressible += initialFlexes[j] - childMinFlex;
-    }
-
-    minOffset = -(leftCompressible / totalFlex) * totalSize;
-    maxOffset = (rightCompressible / totalFlex) * totalSize;
 
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   };
@@ -137,24 +116,31 @@
   const handlePointerMove = (e: PointerEvent) => {
     if (!isDragging) return;
 
-    const isHorizontal = resizer.direction === 'horizontal';
-    const currentPosition = isHorizontal ? e.clientX : e.clientY;
-    dragOffset = Math.max(minOffset, Math.min(maxOffset, currentPosition - startPosition));
-    context.activeResizer = { rect: resizer.rect, direction: resizer.direction, dragOffset };
+    if (rafId !== null) {
+      cancelAnimationFrame(rafId);
+    }
+
+    rafId = requestAnimationFrame(() => {
+      const isHorizontal = resizer.direction === 'horizontal';
+      const currentPosition = isHorizontal ? e.clientX : e.clientY;
+      updateSizes(currentPosition);
+      rafId = null;
+    });
   };
 
   const handlePointerUp = (e: PointerEvent) => {
-    if (isDragging && dragOffset !== 0) {
-      updateSizes(startPosition + dragOffset);
-    }
     cleanupDrag(e);
   };
 
   const cleanupDrag = (e: PointerEvent) => {
+    if (rafId !== null) {
+      cancelAnimationFrame(rafId);
+      rafId = null;
+    }
+
     isDragging = false;
-    dragOffset = 0;
+    context.resizing = false;
     initialFlexes = [];
-    context.activeResizer = null;
     (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
   };
 </script>

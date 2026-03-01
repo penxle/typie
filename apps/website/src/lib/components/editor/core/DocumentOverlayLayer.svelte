@@ -23,7 +23,7 @@
   const pageGap = $derived(editor.layout?.layoutMode.type === 'paginated' ? PAGE_GAP : 0);
 </script>
 
-{#if !editor.readOnly}
+{#if !editor.readOnly && !editor.containerResizing}
   <div
     class={css({
       position: 'absolute',

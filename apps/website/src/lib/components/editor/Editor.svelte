@@ -26,6 +26,7 @@
     rulerThickness?: number;
     snapshot?: Uint8Array;
     readOnly?: boolean;
+    resizing?: boolean;
     useWindowScroll?: boolean;
     editor: Editor;
     fontFamilies: readonly FontFamily[];
@@ -43,6 +44,7 @@
     rulerThickness = 24,
     snapshot,
     readOnly = false,
+    resizing = false,
     useWindowScroll = false,
     editor,
     fontFamilies,
@@ -225,8 +227,20 @@
           '&::-webkit-scrollbar': { display: 'none' },
         })}
         {@attach (el) => {
+          let pending = false;
           let timeoutId: ReturnType<typeof setTimeout>;
+          let resizeEndTimeoutId: ReturnType<typeof setTimeout>;
           const observer = new ResizeObserver(() => {
+            editor.containerResizing = true;
+            clearTimeout(resizeEndTimeoutId);
+            resizeEndTimeoutId = setTimeout(() => {
+              editor.containerResizing = false;
+            }, 300);
+
+            if (resizing) {
+              pending = true;
+              return;
+            }
             clearTimeout(timeoutId);
             timeoutId = setTimeout(() => {
               containerClientWidth = el.clientWidth;
@@ -237,8 +251,20 @@
           containerClientWidth = el.clientWidth;
           containerClientHeight = el.clientHeight;
 
+          const teardown = $effect.root(() => {
+            $effect(() => {
+              if (!resizing && pending) {
+                pending = false;
+                containerClientWidth = el.clientWidth;
+                containerClientHeight = el.clientHeight;
+              }
+            });
+          });
+
           return () => {
             clearTimeout(timeoutId);
+            clearTimeout(resizeEndTimeoutId);
+            teardown();
             observer.disconnect();
           };
         }}
