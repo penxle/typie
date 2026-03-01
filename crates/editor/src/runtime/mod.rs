@@ -2690,6 +2690,57 @@ mod tests {
     }
 
     #[test]
+    fn test_undo_redo_layout_mode_change_marks_settings_dirty() {
+        let mut p = id!();
+        let mut runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {
+                    text { "A" }
+                }
+            }
+            selection { (p, 1) }
+        };
+
+        let initial_layout_mode = runtime.doc().settings().layout_mode;
+        let changed_layout_mode = LayoutMode::Continuous { max_width: 480.0 };
+
+        runtime.update(Message::SetLayoutMode {
+            mode: changed_layout_mode,
+        });
+        runtime.flush();
+        runtime.tick();
+
+        assert_eq!(runtime.doc().settings().layout_mode, changed_layout_mode);
+
+        runtime.update(Message::Undo);
+        runtime.tick();
+
+        assert_eq!(
+            runtime.doc().settings().layout_mode,
+            initial_layout_mode,
+            "undo should restore layout mode in document state"
+        );
+        assert!(
+            has_dirty_flag(&runtime, DIRTY_SETTINGS),
+            "undoing layout-mode change should emit settings payload for frontend"
+        );
+
+        runtime.update(Message::Redo);
+        runtime.tick();
+
+        assert_eq!(
+            runtime.doc().settings().layout_mode,
+            changed_layout_mode,
+            "redo should re-apply layout mode in document state"
+        );
+        assert!(
+            has_dirty_flag(&runtime, DIRTY_SETTINGS),
+            "redoing layout-mode change should emit settings payload for frontend"
+        );
+    }
+
+    #[test]
     fn test_selection_only_transaction_does_not_create_undo_entry() {
         let mut p = id!();
         let mut runtime = runtime! {
