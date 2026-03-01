@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
@@ -13,8 +14,8 @@ class DndController {
   final NativeEditor editor;
   final EditorController controller;
 
-  bool _isDragging = false;
-  bool get isDragging => _isDragging;
+  final ValueNotifier<bool> isDraggingState = ValueNotifier(false);
+  bool get isDragging => isDraggingState.value;
 
   Completer<void>? _imageCompleter;
   final ValueNotifier<
@@ -35,7 +36,8 @@ class DndController {
     dragUiImage.value = null;
     _imageCompleter = Completer<void>();
 
-    final result = await _tryRenderDragImage(pageIdx);
+    // TODO: 안드로이드 드래그 이미지 지원
+    final result = Platform.isAndroid ? null : await _tryRenderDragImage(pageIdx);
     if (result != null) {
       final decoded = await _decodeImageSafe(result.pixels, result.width, result.height);
       if (decoded != null) {
@@ -120,10 +122,16 @@ class DndController {
   Future<DragItem?> createDragItem() async {
     final pendingImage = _imageCompleter;
     if (pendingImage != null && !pendingImage.isCompleted) {
-      await pendingImage.future;
+      await pendingImage.future.timeout(const Duration(milliseconds: 250), onTimeout: () {});
     }
 
-    final clipboardData = editor.getClipboardData();
+    final Map<String, dynamic>? clipboardData;
+    try {
+      clipboardData = editor.getClipboardData();
+    } on EditorException catch (_) {
+      return null;
+    }
+
     if (clipboardData == null) {
       return null;
     }
@@ -137,19 +145,32 @@ class DndController {
     }
 
     final item = DragItem(localData: {'text': text, 'html': html, 'fragment': fragment, 'isInternal': true});
+    var hasTransferFormat = false;
 
     if (text != null && text.isNotEmpty) {
       item.add(Formats.plainText(text));
+      hasTransferFormat = true;
     }
     if (html != null && html.isNotEmpty) {
+      if (!hasTransferFormat) {
+        // Android requires a plain text fallback when providing HTML.
+        item.add(Formats.plainText(''));
+        hasTransferFormat = true;
+      }
       item.add(Formats.htmlText(html));
+      hasTransferFormat = true;
+    }
+
+    if (!hasTransferFormat) {
+      item.add(Formats.plainText(''));
     }
 
     return item;
   }
 
   void handleDragStart(int pageIdx, double x, double y, ui.Offset initialPoint) {
-    _isDragging = true;
+    isDraggingState.value = true;
+    isDropping.value = false;
     unawaited(prepareDragImage(pageIdx, x, y, initialPoint));
     controller
       ..dispatch({'type': 'dragStart', 'pageIdx': pageIdx, 'x': x, 'y': y})
@@ -182,7 +203,8 @@ class DndController {
     required double y,
     required DropSession session,
   }) async {
-    _isDragging = false;
+    isDraggingState.value = false;
+    isDropping.value = false;
 
     final item = session.items.firstOrNull;
     if (item == null) {
@@ -247,7 +269,7 @@ class DndController {
   }
 
   void handleDragEnd() {
-    _isDragging = false;
+    isDraggingState.value = false;
     dragUiImage.value = null;
     if (!(_imageCompleter?.isCompleted ?? true)) {
       _imageCompleter?.complete();

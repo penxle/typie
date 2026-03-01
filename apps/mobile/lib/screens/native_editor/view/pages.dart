@@ -40,7 +40,9 @@ class PageList extends HookWidget {
     final fromHandle = state.state.selection?.fromBounds;
     final toHandle = state.state.selection?.toBounds;
     final dropIndicator = state.state.dropIndicator;
+    final isDragging = useValueListenable(scope.dndController.isDraggingState);
     final isDropping = useValueListenable(scope.dndController.isDropping);
+    final isDndActive = isDragging || isDropping;
     final tableOverlays = useValueListenable(scope.controller.tableOverlays);
     final isTableCellSelectorSelection = tableOverlays.any((overlay) => overlay.isFocused && overlay.showCellSelector);
 
@@ -257,6 +259,13 @@ class PageList extends HookWidget {
       previousDropIndicatorKey.value = nextKey;
       return null;
     }, [dropIndicator, isDropping]);
+
+    useEffect(() {
+      if (isDndActive) {
+        gesture.cancelScrollDrag();
+      }
+      return null;
+    }, [isDndActive, gesture]);
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -611,7 +620,8 @@ class PageList extends HookWidget {
         final contentWidth = geo.contentWidth;
         final allowHorizontalPan = geo.isPaginated;
         final hasRangeSelection = !(state.state.selection?.collapsed ?? true);
-        final horizontalPhysics = isSelecting || !allowHorizontalPan
+        final scrollLocked = isSelecting || isDndActive;
+        final horizontalPhysics = scrollLocked || !allowHorizontalPan
             ? const NeverScrollableScrollPhysics()
             : const _NonGestureBouncingScrollPhysics();
 
@@ -689,6 +699,9 @@ class PageList extends HookWidget {
         }
 
         void handlePointerScroll(PointerScrollEvent event) {
+          if (isDndActive) {
+            return;
+          }
           final keysPressed = HardwareKeyboard.instance.logicalKeysPressed;
           if (handlePointerZoom(event, keysPressed)) {
             return;
@@ -801,10 +814,10 @@ class PageList extends HookWidget {
         }
 
         final listView = ScrollConfiguration(
-          behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false, dragDevices: isSelecting ? {} : null),
+          behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false, dragDevices: scrollLocked ? {} : null),
           child: SingleChildScrollView(
             controller: verticalScrollController,
-            physics: isSelecting ? const NeverScrollableScrollPhysics() : const _NonGestureBouncingScrollPhysics(),
+            physics: scrollLocked ? const NeverScrollableScrollPhysics() : const _NonGestureBouncingScrollPhysics(),
             child: Builder(
               builder: (_) {
                 final content = RawGestureDetector(
@@ -1072,6 +1085,9 @@ class PageList extends HookWidget {
             if (pinch.isPinching) {
               return;
             }
+            if (isDndActive) {
+              return;
+            }
             if (isSelecting) {
               return;
             }
@@ -1079,6 +1095,10 @@ class PageList extends HookWidget {
           },
           onPanStart: (details) {
             if (pinch.isPinching) {
+              return;
+            }
+            if (isDndActive) {
+              gesture.cancelScrollDrag();
               return;
             }
             if (gestureState.active) {
@@ -1090,10 +1110,18 @@ class PageList extends HookWidget {
             if (pinch.isPinching) {
               return;
             }
+            if (isDndActive) {
+              gesture.cancelScrollDrag();
+              return;
+            }
             gesture.updateScrollDrag(details);
           },
           onPanEnd: (details) {
             if (pinch.isPinching) {
+              return;
+            }
+            if (isDndActive) {
+              gesture.cancelScrollDrag();
               return;
             }
             if (gestureState.active) {
@@ -1103,6 +1131,10 @@ class PageList extends HookWidget {
           },
           onPanCancel: () {
             if (pinch.isPinching) {
+              return;
+            }
+            if (isDndActive) {
+              gesture.cancelScrollDrag();
               return;
             }
             if (gestureState.active) {
@@ -1206,6 +1238,14 @@ class PageList extends HookWidget {
 
               if (pinch.isPinching) {
                 updatePinchZoom();
+                return;
+              }
+
+              if (isDndActive) {
+                if (gesture.hasScrollDrag) {
+                  gesture.cancelScrollDrag();
+                }
+                clearResumedPanState();
                 return;
               }
 
