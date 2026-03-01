@@ -2,6 +2,7 @@ FROM public.ecr.aws/lambda/nodejs:24-arm64
 
 ENV HOME=/tmp
 
+RUN dnf install -y tar zstd && dnf clean all
 RUN npm install -g @anthropic-ai/claude-code
 
 WORKDIR ${LAMBDA_TASK_ROOT}
