@@ -28,17 +28,7 @@ impl Runtime {
     }
 
     pub(crate) fn handle_set_layout_mode(&mut self, mode: LayoutMode) -> Vec<Effect> {
-        if self.doc().settings().layout_mode == mode {
-            return vec![];
-        }
-
-        let _ = self.state.doc.update_settings(|s| s.layout_mode = mode);
-
-        vec![
-            Effect::LayoutChanged,
-            Effect::SettingsChanged,
-            Effect::DocChanged,
-        ]
+        self.transact(|tr| tr.set_layout_mode(mode))
     }
 
     pub(crate) fn handle_resize(

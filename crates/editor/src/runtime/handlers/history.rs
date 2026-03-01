@@ -3,20 +3,48 @@ use crate::transaction::compute_styles_at_cursor;
 
 impl Runtime {
     pub(crate) fn handle_undo(&mut self) -> Vec<Effect> {
+        self.flush();
+
         if !self.undo_manager.can_undo() {
             return vec![];
         }
 
-        self.redo_selections.push(self.state.selection);
+        let selection_before_undo = self.capture_history_selection(self.state.selection);
+        let top_undo_marker_before = self.top_undo_marker();
+        self.clear_history_pop_events();
+        let undo_executed = self.undo_manager.undo().unwrap_or(false);
+        let mut popped_markers = self.take_history_pop_markers(loro::UndoOrRedo::Undo);
 
-        let _ = self.undo_manager.undo();
+        if popped_markers.is_empty() {
+            if let Some(top_undo_marker_before) = top_undo_marker_before {
+                popped_markers.push(top_undo_marker_before);
+            }
+        }
+
+        let mut restored_snapshot = None;
+        for marker in popped_markers {
+            if let Some(snapshot) = self.history_take_undo_snapshot(marker) {
+                restored_snapshot = Some(snapshot);
+            }
+        }
+
+        if undo_executed && let Some(redo_marker) = self.top_redo_marker() {
+            self.history_record_redo_snapshot(redo_marker, selection_before_undo);
+        }
+
+        self.sync_history_selection_state();
         self.state.doc.clear_children_cache();
 
-        if let Some(selection) = self.undo_selections.pop() {
-            self.state.selection = self.validate_selection(selection);
-            let new_styles = compute_styles_at_cursor(&self.state.doc, &self.state.selection.head);
-            self.state.pending_styles = new_styles;
+        if !undo_executed {
+            return vec![];
         }
+
+        self.state.selection = restored_snapshot
+            .as_ref()
+            .map(|snapshot| self.resolve_history_selection(snapshot))
+            .unwrap_or_else(|| self.validate_selection(self.state.selection));
+        let new_styles = compute_styles_at_cursor(&self.state.doc, &self.state.selection.head);
+        self.state.pending_styles = new_styles;
 
         vec![
             Effect::FullLayoutInvalidation,
@@ -27,20 +55,48 @@ impl Runtime {
     }
 
     pub(crate) fn handle_redo(&mut self) -> Vec<Effect> {
+        self.flush();
+
         if !self.undo_manager.can_redo() {
             return vec![];
         }
 
-        self.undo_selections.push(self.state.selection);
+        let selection_before_redo = self.capture_history_selection(self.state.selection);
+        let top_redo_marker_before = self.top_redo_marker();
+        self.clear_history_pop_events();
+        let redo_executed = self.undo_manager.redo().unwrap_or(false);
+        let mut popped_markers = self.take_history_pop_markers(loro::UndoOrRedo::Redo);
 
-        let _ = self.undo_manager.redo();
+        if popped_markers.is_empty() {
+            if let Some(top_redo_marker_before) = top_redo_marker_before {
+                popped_markers.push(top_redo_marker_before);
+            }
+        }
+
+        let mut restored_snapshot = None;
+        for marker in popped_markers {
+            if let Some(snapshot) = self.history_take_redo_snapshot(marker) {
+                restored_snapshot = Some(snapshot);
+            }
+        }
+
+        if redo_executed && let Some(undo_marker) = self.top_undo_marker() {
+            self.history_record_undo_snapshot(undo_marker, selection_before_redo);
+        }
+
+        self.sync_history_selection_state();
         self.state.doc.clear_children_cache();
 
-        if let Some(selection) = self.redo_selections.pop() {
-            self.state.selection = self.validate_selection(selection);
-            let new_styles = compute_styles_at_cursor(&self.state.doc, &self.state.selection.head);
-            self.state.pending_styles = new_styles;
+        if !redo_executed {
+            return vec![];
         }
+
+        self.state.selection = restored_snapshot
+            .as_ref()
+            .map(|snapshot| self.resolve_history_selection(snapshot))
+            .unwrap_or_else(|| self.validate_selection(self.state.selection));
+        let new_styles = compute_styles_at_cursor(&self.state.doc, &self.state.selection.head);
+        self.state.pending_styles = new_styles;
 
         vec![
             Effect::FullLayoutInvalidation,

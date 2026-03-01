@@ -237,16 +237,17 @@ macro_rules! runtime {
         {
             let state = state! { $($rest)* };
             let mut runtime = $crate::runtime::Runtime::new($width as f32, 1.0, state);
-            runtime.doc().update_settings(|s| {
-                s.layout_mode = $crate::model::LayoutMode::Paginated {
+            runtime.update($crate::runtime::Message::SetLayoutMode {
+                mode: $crate::model::LayoutMode::Paginated {
                     page_width: $width as f32,
                     page_height: $height as f32,
                     page_margin_top: $margin as f32,
                     page_margin_bottom: $margin as f32,
                     page_margin_left: $margin as f32,
                     page_margin_right: $margin as f32,
-                };
-            }).unwrap();
+                },
+            });
+            runtime.flush();
             runtime.layout();
             runtime
         }
@@ -259,9 +260,12 @@ macro_rules! runtime {
         {
             let state = state! { $($rest)* };
             let mut runtime = $crate::runtime::Runtime::new($width as f32, 1.0, state);
-            runtime.doc().update_settings(|s| {
-                s.layout_mode = $crate::model::LayoutMode::Continuous { max_width: $width as f32 };
-            }).unwrap();
+            runtime.update($crate::runtime::Message::SetLayoutMode {
+                mode: $crate::model::LayoutMode::Continuous {
+                    max_width: $width as f32,
+                },
+            });
+            runtime.flush();
             runtime.layout();
             runtime
         }

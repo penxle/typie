@@ -319,9 +319,8 @@ impl Editor {
     }
 
     #[wasm_bindgen(js_name = export)]
-    pub fn export(&self, mode: DocExportMode) -> Result<Vec<u8>, JsValue> {
+    pub fn export(&mut self, mode: DocExportMode) -> Result<Vec<u8>, JsValue> {
         self.runtime
-            .doc()
             .export(mode)
             .map_err(|e| JsValue::from_str(&e.to_string()))
     }
@@ -508,7 +507,8 @@ impl Editor {
     }
 
     #[wasm_bindgen(js_name = getCharacterCountAtVersion)]
-    pub fn get_character_count_at_version(&self, version: Vec<u8>) -> Option<u32> {
+    pub fn get_character_count_at_version(&mut self, version: Vec<u8>) -> Option<u32> {
+        self.runtime.flush();
         let vv = loro::VersionVector::decode(&version).ok()?;
         let loro_doc = self.runtime.doc().loro_doc();
 
