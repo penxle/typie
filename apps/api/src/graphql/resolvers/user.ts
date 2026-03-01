@@ -658,7 +658,10 @@ builder.mutationFields((t) => ({
 
         await tx.update(Sites).set({ state: SiteState.DELETED }).where(eq(Sites.userId, ctx.session.userId));
 
-        await tx.update(Subscriptions).set({ state: SubscriptionState.EXPIRED }).where(eq(Subscriptions.userId, ctx.session.userId));
+        await tx
+          .update(Subscriptions)
+          .set({ state: SubscriptionState.EXPIRED, expiresAt: sql`LEAST(${Subscriptions.expiresAt}, NOW())` })
+          .where(eq(Subscriptions.userId, ctx.session.userId));
         await tx.delete(UserInAppPurchases).where(eq(UserInAppPurchases.userId, ctx.session.userId));
 
         const billingKey = await tx
