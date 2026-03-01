@@ -54,6 +54,7 @@ class EmbedWidget extends HookWidget {
               child: Text(
                 '링크 임베드(Youtube, Google Drive, 일반 링크 등)',
                 style: TextStyle(fontSize: 14, color: context.colors.textDisabled),
+                maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
             ),
@@ -77,7 +78,14 @@ class EmbedWidget extends HookWidget {
               child: CircularProgressIndicator(strokeWidth: 2, color: context.colors.textDisabled),
             ),
             const SizedBox(width: 12),
-            Text('링크 임베드 중...', style: TextStyle(fontSize: 14, color: context.colors.textDisabled)),
+            Expanded(
+              child: Text(
+                '링크 임베드 중...',
+                style: TextStyle(fontSize: 14, color: context.colors.textDisabled),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         ),
       ),
