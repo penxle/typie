@@ -14,6 +14,7 @@ import 'package:typie/icons/typie.dart';
 import 'package:typie/routers/app.gr.dart';
 import 'package:typie/screens/home/__generated__/create_document.req.gql.dart';
 import 'package:typie/screens/home/__generated__/site_update_stream.req.gql.dart';
+import 'package:typie/screens/native_editor/auto_discard.dart';
 import 'package:typie/services/preference.dart';
 import 'package:typie/widgets/responsive_container.dart';
 import 'package:typie/widgets/tappable.dart';
@@ -98,6 +99,7 @@ class HomeScreen extends HookWidget {
                         unawaited(mixpanel.track('create_document', properties: {'via': 'home'}));
 
                         if (context.mounted) {
+                          markAutoDiscardCandidate(result.createDocument.entity.slug);
                           await context.router.push(NativeEditorRoute(slug: result.createDocument.entity.slug));
                         }
                       },
