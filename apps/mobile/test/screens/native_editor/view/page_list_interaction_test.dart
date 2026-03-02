@@ -12,7 +12,6 @@ import 'package:typie/screens/native_editor/toolbar/scope.dart';
 import 'package:typie/screens/native_editor/view/context_menu.dart';
 import 'package:typie/screens/native_editor/view/input.dart';
 import 'package:typie/screens/native_editor/view/interaction/controller.dart';
-import 'package:typie/screens/native_editor/view/interaction/mode.dart';
 import 'package:typie/screens/native_editor/view/interaction/state.dart';
 import 'package:typie/screens/native_editor/view/pages.dart';
 import 'package:typie/screens/native_editor/view/scope.dart';
@@ -107,15 +106,10 @@ class _PageListHarnessDeps {
 
   factory _PageListHarnessDeps.create({
     bool selectionHit = false,
-    bool interactiveHit = false,
     Map<String, dynamic>? clipboardData,
     bool immediateSettledTicker = false,
   }) {
-    final editor = NativeEditor.test(
-      selectionHit: selectionHit,
-      interactiveHit: interactiveHit,
-      clipboardData: clipboardData,
-    );
+    final editor = NativeEditor.test(selectionHit: selectionHit, clipboardData: clipboardData);
     final controller = EditorController(editor: editor, fontManager: null)
       ..updateState(
         (_) => const EditorState(
@@ -588,6 +582,63 @@ void main() {
       expect(after, greaterThan(before));
     });
 
+    testWidgets('onPan path stays blocked while double-tap drag is pending and dragging', (tester) async {
+      final deps = _PageListHarnessDeps.create();
+      addTearDown(deps.dispose);
+      await tester.pumpWidget(deps.build());
+      await tester.pumpAndSettle();
+
+      final interaction = interactionControllerOf(tester);
+      final point = interactionPoint(tester, deps) + const Offset(0, 140);
+      final local = tester.getTopLeft(find.byType(PageList));
+      final localPoint = point - local;
+
+      await quickTap(tester, point);
+      final hold = await tester.startGesture(point);
+      await tester.pump(const Duration(milliseconds: 120));
+
+      final beforePendingPan = deps.verticalScrollController.offset;
+      interaction.onPanStart(DragStartDetails(globalPosition: point, localPosition: localPoint));
+      interaction.onPanUpdate(
+        DragUpdateDetails(
+          globalPosition: point + const Offset(0, -140),
+          localPosition: localPoint + const Offset(0, -140),
+          delta: const Offset(0, -140),
+        ),
+      );
+      await tester.pump();
+      final afterPendingPan = deps.verticalScrollController.offset;
+      expect((afterPendingPan - beforePendingPan).abs(), lessThan(0.1));
+
+      deps.controller.updateState((state) => state.copyWith(selection: seededRangeSelection()));
+      await tester.pump();
+      await hold.moveBy(const Offset(0, -90));
+      await tester.pump();
+      expect(deps.interactionState.snapshot().mode, InteractionMode.doubleTapSelecting);
+
+      final beforeDraggingPan = deps.verticalScrollController.offset;
+      interaction.onPanStart(
+        DragStartDetails(
+          globalPosition: point + const Offset(0, -90),
+          localPosition: localPoint + const Offset(0, -90),
+        ),
+      );
+      interaction.onPanUpdate(
+        DragUpdateDetails(
+          globalPosition: point + const Offset(0, -210),
+          localPosition: localPoint + const Offset(0, -210),
+          delta: const Offset(0, -120),
+        ),
+      );
+      interaction.onPanEnd(DragEndDetails());
+      await tester.pump();
+      final afterDraggingPan = deps.verticalScrollController.offset;
+      expect((afterDraggingPan - beforeDraggingPan).abs(), lessThan(0.1));
+
+      await hold.up();
+      await tester.pump();
+    });
+
     testWidgets('double-tap does not emit trailing single click', (tester) async {
       final deps = _PageListHarnessDeps.create();
       addTearDown(deps.dispose);
@@ -658,6 +709,46 @@ void main() {
         orElse: () => <String, dynamic>{},
       );
       expect(extendEvent.isNotEmpty, isTrue);
+    });
+
+    testWidgets('double-tap selection handle drag locks pan before first extension', (tester) async {
+      final deps = _PageListHarnessDeps.create();
+      addTearDown(deps.dispose);
+      await tester.pumpWidget(deps.build());
+      await tester.pumpAndSettle();
+
+      final point = interactionPoint(tester, deps);
+      await quickTap(tester, point);
+      await quickTap(tester, point);
+      deps.controller.updateState((state) => state.copyWith(selection: seededRangeSelection()));
+      await tester.pump();
+
+      final handles = find.byType(SelectionHandle);
+      expect(handles, findsWidgets);
+
+      deps.editor.clearTestDispatchedMessages();
+      final beforePan = deps.verticalScrollController.offset;
+
+      final drag = await tester.startGesture(tester.getCenter(handles.last));
+      await tester.pump();
+      await drag.moveBy(const Offset(0, -28));
+      await tester.pump();
+
+      final afterFirstMovePan = deps.verticalScrollController.offset;
+      final modeAfterFirstMove = deps.interactionState.snapshot().mode;
+
+      await drag.moveBy(const Offset(0, -52));
+      await tester.pump();
+      await drag.up();
+      await tester.pump();
+
+      final extendEvents = deps.editor.testDispatchedMessages
+          .where((message) => message['type'] == 'extendSelectionTo')
+          .toList();
+
+      expect((afterFirstMovePan - beforePan).abs(), lessThan(0.1));
+      expect(modeAfterFirstMove, InteractionMode.selectionHandleDragging);
+      expect(extendEvents, isNotEmpty);
     });
 
     testWidgets('long-press move keeps updating cursor and clears magnifier on release', (tester) async {
@@ -774,6 +865,51 @@ void main() {
       await tester.pump();
       final afterPan = deps.verticalScrollController.offset;
       expect(afterPan, greaterThan(beforePan + 1));
+    });
+
+    testWidgets('pointer cancel clears long-press, double-tap drag, and handle-drag session state', (tester) async {
+      final deps = _PageListHarnessDeps.create();
+      addTearDown(deps.dispose);
+      await tester.pumpWidget(deps.build());
+      await tester.pumpAndSettle();
+
+      final point = interactionPoint(tester, deps) + const Offset(0, 120);
+      final longPress = await tester.startGesture(point);
+      await tester.pump(const Duration(milliseconds: 600));
+      await longPress.moveBy(const Offset(0, -20));
+      await tester.pump();
+      expect(deps.longPressPosition.value, isNotNull);
+      await longPress.cancel();
+      await tester.pump();
+      expect(deps.longPressPosition.value, isNull);
+      expect(deps.interactionState.snapshot().mode, InteractionMode.idle);
+
+      final beforePanAfterLongPressCancel = deps.verticalScrollController.offset;
+      await dragPageList(tester, deps, dy: -240);
+      final afterPanAfterLongPressCancel = deps.verticalScrollController.offset;
+      expect(afterPanAfterLongPressCancel, greaterThan(beforePanAfterLongPressCancel + 1));
+
+      final dragPoint = point + const Offset(0, 120);
+      await quickTap(tester, dragPoint);
+      final doubleTapDrag = await tester.startGesture(dragPoint);
+      await tester.pump(const Duration(milliseconds: 120));
+      deps.controller.updateState((state) => state.copyWith(selection: seededRangeSelection()));
+      await tester.pump();
+      await doubleTapDrag.moveBy(const Offset(0, -80));
+      await tester.pump();
+      expect(deps.interactionState.snapshot().mode, InteractionMode.doubleTapSelecting);
+      expect(deps.handleDragPosition.value, isNotNull);
+
+      await doubleTapDrag.cancel();
+      await tester.pump();
+      expect(deps.interactionState.snapshot().mode, InteractionMode.idle);
+      expect(deps.longPressPosition.value, isNull);
+      expect(deps.handleDragPosition.value, isNull);
+
+      final beforePanAfterPointerCancel = deps.verticalScrollController.offset;
+      await dragPageList(tester, deps, dy: -240);
+      final afterPanAfterPointerCancel = deps.verticalScrollController.offset;
+      expect(afterPanAfterPointerCancel, greaterThan(beforePanAfterPointerCancel + 1));
     });
 
     testWidgets('long-press outside selection moves cursor', (tester) async {
@@ -930,6 +1066,33 @@ void main() {
       expect(find.byType(SelectionContextMenu), findsOneWidget);
     });
 
+    testWidgets('auxiliary gesture locks pan and unlocks immediately after end', (tester) async {
+      final deps = _PageListHarnessDeps.create();
+      addTearDown(deps.dispose);
+      await tester.pumpWidget(deps.build());
+      await tester.pumpAndSettle();
+
+      final interaction = interactionControllerOf(tester);
+      final started = interaction.startAuxiliaryGesture(AuxiliaryGestureKind.tableColumnResize);
+      expect(started, isTrue);
+      expect(deps.interactionState.snapshot().mode, InteractionMode.auxiliaryGesture);
+
+      final beforeLocked = deps.verticalScrollController.offset;
+      await dragPageList(tester, deps, dy: -260);
+      final afterLocked = deps.verticalScrollController.offset;
+      expect((afterLocked - beforeLocked).abs(), lessThan(0.1));
+
+      final ended = interaction.endAuxiliaryGesture();
+      expect(ended, isTrue);
+      await tester.pump();
+      expect(deps.interactionState.snapshot().mode, InteractionMode.idle);
+
+      final beforePan = deps.verticalScrollController.offset;
+      await dragPageList(tester, deps, dy: -260);
+      final afterPan = deps.verticalScrollController.offset;
+      expect(afterPan, greaterThan(beforePan + 1));
+    });
+
     testWidgets('selection dnd locks pan and unlocks after session end', (tester) async {
       final deps = _PageListHarnessDeps.create(selectionHit: true, clipboardData: {'text': 'hello'});
       addTearDown(deps.dispose);
@@ -958,6 +1121,89 @@ void main() {
       await dragPageList(tester, deps, dy: -260);
       final afterPan = deps.verticalScrollController.offset;
       expect(afterPan, greaterThan(beforePan + 1));
+    });
+
+    testWidgets('dnd lock blocks both onPan and onPointer pan paths until session end', (tester) async {
+      final deps = _PageListHarnessDeps.create(selectionHit: true, clipboardData: {'text': 'hello'});
+      addTearDown(deps.dispose);
+      await tester.pumpWidget(deps.build());
+      await tester.pumpAndSettle();
+
+      final interaction = interactionControllerOf(tester);
+      final point = interactionPoint(tester, deps);
+      final resolved = interaction.resolveSelectionDrag(point);
+      expect(resolved, isNotNull);
+
+      interaction.startLocalDndSession(resolved!);
+      await tester.pump();
+      expect(deps.interactionState.snapshot().mode, InteractionMode.dndLocal);
+
+      final localTopLeft = tester.getTopLeft(find.byType(PageList));
+      final localPoint = point - localTopLeft;
+
+      final beforeOnPan = deps.verticalScrollController.offset;
+      interaction.onPanStart(DragStartDetails(globalPosition: point, localPosition: localPoint));
+      interaction.onPanUpdate(
+        DragUpdateDetails(
+          globalPosition: point + const Offset(0, -180),
+          localPosition: localPoint + const Offset(0, -180),
+          delta: const Offset(0, -180),
+        ),
+      );
+      interaction.onPanEnd(DragEndDetails());
+      await tester.pump();
+      final afterOnPan = deps.verticalScrollController.offset;
+      expect((afterOnPan - beforeOnPan).abs(), lessThan(0.1));
+
+      final pointerDown = PointerDownEvent(pointer: 11, position: point);
+      final pointerMove = PointerMoveEvent(pointer: 11, position: point + const Offset(0, -180));
+      final pointerUp = PointerUpEvent(pointer: 11, position: point + const Offset(0, -180));
+
+      final beforeOnPointer = deps.verticalScrollController.offset;
+      interaction.onPointerDown(pointerDown);
+      interaction.onPointerMove(pointerMove);
+      interaction.onPointerUp(pointerUp);
+      await tester.pump();
+      final afterOnPointer = deps.verticalScrollController.offset;
+      expect((afterOnPointer - beforeOnPointer).abs(), lessThan(0.1));
+
+      interaction.endDndSession();
+      await tester.pump();
+      expect(deps.interactionState.snapshot().mode, InteractionMode.idle);
+
+      final beforePan = deps.verticalScrollController.offset;
+      await dragPageList(tester, deps, dy: -260);
+      final afterPan = deps.verticalScrollController.offset;
+      expect(afterPan, greaterThan(beforePan + 1));
+    });
+
+    testWidgets('local dnd leave and re-enter dispatches dragEnter', (tester) async {
+      final deps = _PageListHarnessDeps.create(selectionHit: true, clipboardData: {'text': 'hello'});
+      addTearDown(deps.dispose);
+      await tester.pumpWidget(deps.build());
+      await tester.pumpAndSettle();
+
+      final interaction = interactionControllerOf(tester);
+      final point = interactionPoint(tester, deps);
+      final resolved = interaction.resolveSelectionDrag(point);
+      expect(resolved, isNotNull);
+
+      interaction.startLocalDndSession(resolved!);
+      await tester.pump();
+      expect(deps.interactionState.snapshot().mode, InteractionMode.dndLocal);
+
+      deps.editor.clearTestDispatchedMessages();
+      interaction.onDropLeave(null);
+      await tester.pump();
+      expect(deps.interactionState.snapshot().mode, InteractionMode.dndLocal);
+
+      interaction.onDropEnter(null);
+      await tester.pump();
+
+      final dragEnterEvents = deps.editor.testDispatchedMessages
+          .where((message) => message['type'] == 'dragEnter')
+          .toList();
+      expect(dragEnterEvents.length, 1);
     });
   });
 }

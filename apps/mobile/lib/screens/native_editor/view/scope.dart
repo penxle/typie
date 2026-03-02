@@ -7,7 +7,6 @@ import 'package:typie/screens/native_editor/controller/ticker.dart';
 import 'package:typie/screens/native_editor/state/controller.dart';
 import 'package:typie/screens/native_editor/state/state.dart';
 import 'package:typie/screens/native_editor/view/geometry.dart';
-import 'package:typie/screens/native_editor/view/interaction/mode.dart';
 import 'package:typie/screens/native_editor/view/interaction/state.dart';
 
 class PresentedViewport {
