@@ -177,11 +177,11 @@
     >
       <PaneSkeleton {pane} />
     </div>
-  {/if}
 
-  {#if !app.preference.current.zenModeEnabled}
-    <CloseButton style={css.raw({ position: 'absolute', top: '6px', right: '8px', zIndex: 'overEditor' })}>
-      <Icon icon={XIcon} size={16} />
-    </CloseButton>
+    {#if !app.preference.current.zenModeEnabled}
+      <CloseButton style={css.raw({ position: 'absolute', top: '6px', right: '8px', zIndex: 'overEditor' })}>
+        <Icon icon={XIcon} size={16} />
+      </CloseButton>
+    {/if}
   {/if}
 </div>
