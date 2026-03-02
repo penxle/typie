@@ -450,6 +450,7 @@ class EditorScrollbar extends HookWidget {
                                     minHeight: thumbHeight,
                                     maxHeight: thumbHeight,
                                     child: AnimatedContainer(
+                                      key: const ValueKey('native-editor-scrollbar-thumb-vertical'),
                                       duration: const Duration(milliseconds: 250),
                                       curve: Curves.easeInOutBack,
                                       width: isDraggingV.value ? _activeThumbWidth : _thumbWidth,
@@ -572,6 +573,7 @@ class EditorScrollbar extends HookWidget {
                                     minHeight: 0,
                                     maxHeight: _activeThumbWidth * 2,
                                     child: AnimatedContainer(
+                                      key: const ValueKey('native-editor-scrollbar-thumb-horizontal'),
                                       duration: const Duration(milliseconds: 250),
                                       curve: Curves.easeInOutBack,
                                       width: double.infinity,
