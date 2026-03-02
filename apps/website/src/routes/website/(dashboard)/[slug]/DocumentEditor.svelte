@@ -10,13 +10,13 @@
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
   import { nanoid } from 'nanoid';
-  import { match } from 'ts-pattern';
   import { DocumentSyncType } from '@/enums';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
   import CrownIcon from '~icons/lucide/crown';
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import FolderIcon from '~icons/lucide/folder';
   import Maximize2Icon from '~icons/lucide/maximize-2';
+  import WifiOffIcon from '~icons/lucide/wifi-off';
   import XIcon from '~icons/lucide/x';
   import { dev } from '$app/environment';
   import { BottomToolbar, Editor as EditorComponent, TopToolbar } from '$lib/components/editor';
@@ -326,7 +326,22 @@
   let persistence: IndexeddbPersistence | null = null;
   let syncPrimed = false;
   let connectionStatus = $state<'connecting' | 'connected' | 'disconnected'>('connecting');
+  let showOfflineBanner = $state(false);
   let lastHeartbeatAt = $state(dayjs());
+
+  $effect(() => {
+    if (connectionStatus === 'connected') {
+      showOfflineBanner = false;
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      showOfflineBanner = true;
+    }, 60_000);
+
+    return () => clearTimeout(timer);
+  });
+
   let planUpgradeModalOpen = $state(false);
   let fontUploadModalOpen = $state(false);
   let fontPlanUpgradeModalOpen = $state(false);
@@ -863,27 +878,6 @@
 
           <FeedbackPopover />
 
-          <div class={center({ size: '24px' })}>
-            <div
-              style:background-color={match(connectionStatus)
-                .with('connecting', () => '#eab308')
-                .with('connected', () => '#22c55e')
-                .with('disconnected', () => '#ef4444')
-                .exhaustive()}
-              class={css({ size: '8px', borderRadius: 'full' })}
-              use:tooltip={{
-                message: match(connectionStatus)
-                  .with('connecting', () => '서버 연결 중...')
-                  .with('connected', () => '실시간 저장 중')
-                  .with('disconnected', () => '서버 연결 끊김')
-                  .exhaustive(),
-                placement: 'left',
-                offset: 12,
-                delay: 0,
-              }}
-            ></div>
-          </div>
-
           {#if showRenderDebugToggle}
             <button
               class={flex({
@@ -1044,6 +1038,33 @@
               backgroundColor: 'surface.default',
             })}
           >
+            {#if showOfflineBanner}
+              <div
+                class={flex({
+                  position: 'absolute',
+                  top: '0',
+                  left: '0',
+                  right: '0',
+                  zIndex: '1',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  paddingX: '20px',
+                  paddingY: '8px',
+                  backgroundColor: { base: 'amber.50', _dark: 'dark.amber.950' },
+                  fontSize: '13px',
+                  color: { base: 'amber.700', _dark: 'dark.amber.100' },
+                })}
+              >
+                <Icon
+                  style={css.raw({ flexShrink: '0', color: { base: 'amber.400', _dark: 'dark.amber.500' } })}
+                  icon={WifiOffIcon}
+                  size={14}
+                />
+                <span>오프라인 상태예요. 변경사항이 기기에 자동으로 저장되고, 온라인일 때 다시 동기화돼요.</span>
+              </div>
+            {/if}
+
             <EditorComponent
               {editor}
               {fontFamilies}
