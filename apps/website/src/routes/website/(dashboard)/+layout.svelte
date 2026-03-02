@@ -19,7 +19,7 @@
   import { AdminImpersonateBanner } from '$lib/components/admin';
   import { preloadEditorWasm } from '$lib/editor/editor.svelte';
   import { hydrateQuery } from '$lib/graphql';
-  import { initWasm } from '$lib/wasm';
+  import { initWasm } from '$lib/wasm.svelte';
   import { graphql } from '$mearie';
   import { setupPaneGroup } from './[slug]/@pane/context.svelte';
   import { setupEditorRegistry } from './[slug]/@pane/editor-registry.svelte';

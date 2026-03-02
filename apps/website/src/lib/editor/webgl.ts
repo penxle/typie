@@ -1,4 +1,4 @@
-import { wasm } from '$lib/wasm';
+import { wasm } from '$lib/wasm.svelte';
 
 const VERTEX_SHADER = `#version 300 es
 in vec2 a_position;

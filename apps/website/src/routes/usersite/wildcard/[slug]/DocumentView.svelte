@@ -23,7 +23,7 @@
   import { setupEditorContext } from '$lib/editor/context.svelte';
   import { Editor } from '$lib/editor/editor.svelte';
   import { unwrapError } from '$lib/graphql';
-  import { initWasm } from '$lib/wasm';
+  import { initWasm } from '$lib/wasm.svelte';
   import { graphql } from '$mearie';
   import BodyUnavailable from './BodyUnavailable.svelte';
   import ContentNavigation from './ContentNavigation.svelte';
