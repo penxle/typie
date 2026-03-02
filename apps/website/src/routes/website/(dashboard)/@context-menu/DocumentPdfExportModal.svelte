@@ -3,6 +3,7 @@
   import { css } from '@typie/styled-system/css';
   import { flex, grid } from '@typie/styled-system/patterns';
   import { Button, Checkbox, HorizontalDivider, Icon, Modal, Select, TextInput } from '@typie/ui/components';
+  import { Toast } from '@typie/ui/notification';
   import { clamp } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import FileIcon from '~icons/lucide/file';
@@ -29,8 +30,6 @@
 
   let { open = $bindable(), documentId, slug, via, onClose }: Props = $props();
 
-  let loaded = $state(false);
-  let isExporting = $state(false);
   let useCurrentSettings = $state(false);
   let pageLayout = $state<PageLayout>(createPaginatedLayout('a4'));
 
@@ -47,7 +46,7 @@
     () => ({ skip: !open }),
   );
 
-  const [exportDocumentAsPdf] = createMutation(
+  const [exportDocumentAsPdf, exportDocumentAsPdfResult] = createMutation(
     graphql(`
       mutation DocumentPdfExportModal_ExportDocumentAsPdf_Mutation($input: ExportDocumentAsPdfInput!) {
         exportDocumentAsPdf(input: $input) {
@@ -59,20 +58,7 @@
   );
 
   $effect(() => {
-    if (open) {
-      loaded = false;
-      documentQuery.refetch();
-    }
-  });
-
-  $effect(() => {
-    if (open && documentQuery.data && !documentQuery.loading) {
-      loaded = true;
-    }
-  });
-
-  $effect(() => {
-    if (loaded && documentQuery.data) {
+    if (documentQuery.data) {
       const layoutMode = documentQuery.data.document.layoutMode as LayoutMode;
       const isPaginated = layoutMode.type === 'paginated';
 
@@ -105,23 +91,25 @@
   };
 
   const handleConfirm = async () => {
-    isExporting = true;
-    const result = await exportDocumentAsPdf({
-      input: {
-        documentId,
-        pageWidth: Math.round(pageLayout.pageWidth),
-        pageHeight: Math.round(pageLayout.pageHeight),
-        pageMarginTop: Math.round(pageLayout.pageMarginTop),
-        pageMarginBottom: Math.round(pageLayout.pageMarginBottom),
-        pageMarginLeft: Math.round(pageLayout.pageMarginLeft),
-        pageMarginRight: Math.round(pageLayout.pageMarginRight),
-      },
-    });
-    isExporting = false;
+    try {
+      const result = await exportDocumentAsPdf({
+        input: {
+          documentId,
+          pageWidth: Math.round(pageLayout.pageWidth),
+          pageHeight: Math.round(pageLayout.pageHeight),
+          pageMarginTop: Math.round(pageLayout.pageMarginTop),
+          pageMarginBottom: Math.round(pageLayout.pageMarginBottom),
+          pageMarginLeft: Math.round(pageLayout.pageMarginLeft),
+          pageMarginRight: Math.round(pageLayout.pageMarginRight),
+        },
+      });
 
-    downloadPdf(result.exportDocumentAsPdf.data, result.exportDocumentAsPdf.filename);
-    mixpanel.track('export_document_pdf', { via });
-    onClose();
+      downloadPdf(result.exportDocumentAsPdf.data, result.exportDocumentAsPdf.filename);
+      mixpanel.track('export_document_pdf', { via });
+      onClose();
+    } catch {
+      Toast.error('PDF 내보내기에 실패했어요. 잠시 후 다시 시도해주세요.');
+    }
   };
 </script>
 
@@ -129,11 +117,11 @@
   style={css.raw({
     maxWidth: '400px',
   })}
-  loading={!loaded}
+  loading={documentQuery.loading}
   onclose={onClose}
   bind:open
 >
-  {#if loaded && documentQuery.data}
+  {#if documentQuery.data}
     {@const layoutMode = documentQuery.data.document.layoutMode as LayoutMode}
     {@const currentPageEnabled = layoutMode.type === 'paginated'}
 
@@ -304,7 +292,7 @@
 
       <div class={flex({ gap: '8px', justifyContent: 'flex-end', marginTop: '20px' })}>
         <Button onclick={onClose} variant="secondary">취소</Button>
-        <Button loading={isExporting} onclick={handleConfirm}>내보내기</Button>
+        <Button loading={exportDocumentAsPdfResult.loading} onclick={handleConfirm}>내보내기</Button>
       </div>
     </div>
   {/if}
