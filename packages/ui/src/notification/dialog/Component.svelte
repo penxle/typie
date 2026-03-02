@@ -47,6 +47,7 @@
         <Button
           onclick={() => {
             dialog.cancelHandler?.();
+            dialog.onclose?.();
             dismiss();
           }}
           size="md"
@@ -60,6 +61,7 @@
         data-dialog-primary
         onclick={() => {
           dialog.actionHandler?.();
+          dialog.onclose?.();
           dismiss();
         }}
         size="md"
