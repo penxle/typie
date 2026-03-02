@@ -160,6 +160,12 @@ export class EditorZoomController {
       return;
     }
 
+    const hasZoomModifier = event.metaKey || event.ctrlKey;
+    const shouldPreventBrowserZoom = hasZoomModifier && this.#wheelSessionMode !== 'scroll';
+    if (shouldPreventBrowserZoom && event.cancelable) {
+      event.preventDefault();
+    }
+
     const zoomDelta = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
     const deltaMagnitude = Math.abs(zoomDelta);
     if (deltaMagnitude === 0) {
@@ -183,7 +189,6 @@ export class EditorZoomController {
       this.#wheelLowDeltaStreak = 0;
     }
 
-    const hasZoomModifier = event.metaKey || event.ctrlKey;
     if (!this.#wheelSessionMode) {
       if (deltaMagnitude < EditorZoomController.WHEEL_MODE_SWITCH_MIN_DELTA_PX) {
         this.#scheduleWheelSessionReset();
@@ -196,8 +201,6 @@ export class EditorZoomController {
     if (this.#wheelSessionMode !== 'zoom') {
       return;
     }
-
-    event.preventDefault();
 
     const bounds = computePaginatedZoomBounds(pageWidth);
     const wheelBaseZoom = this.#wheelRawZoom ?? this.displayZoom;
