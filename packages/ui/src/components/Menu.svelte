@@ -3,7 +3,7 @@
   import { setContext, tick, untrack } from 'svelte';
   import { scale } from 'svelte/transition';
   import { afterNavigate } from '$app/navigation';
-  import { createFloatingActions, focusTrap, portal } from '../actions';
+  import { createFloatingActions, deactivateFocusTrap, focusTrap, portal } from '../actions';
   import { getAppContext } from '../context';
   import { pushEscapeHandler } from '../utils';
   import type { OffsetOptions, Placement } from '@floating-ui/dom';
@@ -61,8 +61,10 @@
   });
 
   const close = () => {
+    if (menuEl) {
+      deactivateFocusTrap(menuEl, { returnFocus: !!buttonEl });
+    }
     open = false;
-    // NOTE: 닫으면 focusTrap에 의해 자동으로 포커스 돌아감
   };
 
   setContext('close', close);
