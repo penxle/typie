@@ -9,40 +9,89 @@ export function cmToPx(cm: number, dpi = DPI): number {
 }
 
 export type Tick = {
+  logicalPosition: number;
   position: number;
   isMajor: boolean;
-  label?: string;
+  label?: number;
 };
 
-export function calculateTicks(totalSize: number, unit: 'px' | 'cm', dpi: number): Tick[] {
+type CalculateTicksOptions = {
+  totalSize: number;
+  unit: 'px' | 'cm';
+  dpi: number;
+  zoom?: number;
+};
+
+const MIN_MINOR_DISPLAY_PX = 5;
+const TARGET_MAJOR_DISPLAY_PX = 80;
+
+function pickNearest(value: number, candidates: readonly number[]): number {
+  let best = candidates[0] ?? value;
+  let bestScore = Number.POSITIVE_INFINITY;
+
+  for (const candidate of candidates) {
+    const score = Math.abs(candidate - value);
+    if (score < bestScore) {
+      best = candidate;
+      bestScore = score;
+    }
+  }
+
+  return best;
+}
+
+function pickMinorDivisor(majorDisplayPx: number): number {
+  const divisors = [10, 8, 5, 4, 2, 1] as const;
+  for (const divisor of divisors) {
+    if (majorDisplayPx / divisor >= MIN_MINOR_DISPLAY_PX) {
+      return divisor;
+    }
+  }
+  return 1;
+}
+
+export function calculateTicks({ totalSize, unit, dpi, zoom = 1 }: CalculateTicksOptions): Tick[] {
   const ticks: Tick[] = [];
+  const safeZoom = Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
 
   if (unit === 'px') {
-    const majorInterval = 100;
-    const minorInterval = 10;
+    const majorCandidates = [10, 20, 50, 100, 200, 500, 1000, 2000] as const;
+    const majorInterval = pickNearest(TARGET_MAJOR_DISPLAY_PX / safeZoom, majorCandidates);
+    const majorDisplayPx = majorInterval * safeZoom;
+    const minorDivisor = pickMinorDivisor(majorDisplayPx);
+    const minorInterval = majorInterval / minorDivisor;
+    const tickCount = Math.floor(totalSize / minorInterval);
 
-    for (let pos = 0; pos <= totalSize; pos += minorInterval) {
-      const isMajor = pos % majorInterval === 0;
+    for (let i = 0; i <= tickCount; i++) {
+      const logicalPosition = i * minorInterval;
+      const isMajor = i % minorDivisor === 0;
       ticks.push({
-        position: pos,
+        logicalPosition,
+        position: logicalPosition * safeZoom,
         isMajor,
-        label: isMajor ? pos.toString() : undefined,
+        label: isMajor ? logicalPosition : undefined,
       });
     }
   } else if (unit === 'cm') {
-    const minorIntervalCm = 0.25;
+    const majorCandidatesCm = [0.1, 0.2, 0.25, 0.5, 1, 2, 5, 10, 20] as const;
+    const targetMajorCm = pxToCm(TARGET_MAJOR_DISPLAY_PX / safeZoom, dpi);
+    const majorIntervalCm = pickNearest(targetMajorCm, majorCandidatesCm);
+    const majorDisplayPx = cmToPx(majorIntervalCm, dpi) * safeZoom;
+    const minorDivisor = pickMinorDivisor(majorDisplayPx);
+    const minorIntervalCm = majorIntervalCm / minorDivisor;
     const totalSizeCm = pxToCm(totalSize, dpi);
     const tickCount = Math.floor(totalSizeCm / minorIntervalCm);
 
     for (let i = 0; i <= tickCount; i++) {
       const cm = i * minorIntervalCm;
-      const isMajor = i % 4 === 0;
-      const position = cmToPx(cm, dpi);
+      const isMajor = i % minorDivisor === 0;
+      const logicalPosition = cmToPx(cm, dpi);
 
       ticks.push({
-        position,
+        logicalPosition,
+        position: logicalPosition * safeZoom,
         isMajor,
-        label: isMajor ? (i / 4).toString() : undefined,
+        label: isMajor ? cm : undefined,
       });
     }
   }
@@ -52,8 +101,15 @@ export function calculateTicks(totalSize: number, unit: 'px' | 'cm', dpi: number
 
 export function formatTickLabel(value: number, unit: 'px' | 'cm'): string {
   if (unit === 'px') {
-    return value.toString();
-  } else {
     return Math.round(value).toString();
+  } else {
+    const rounded = Math.round(value * 100) / 100;
+    if (Math.abs(rounded - Math.round(rounded)) < 0.0001) {
+      return Math.round(rounded).toString();
+    }
+    if (Math.abs(rounded * 10 - Math.round(rounded * 10)) < 0.0001) {
+      return rounded.toFixed(1);
+    }
+    return rounded.toFixed(2);
   }
 }

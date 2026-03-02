@@ -61,6 +61,16 @@
       addBothButtonHovered,
   );
   const isLastColumnHovered = $derived(hoveredColIndex === overlay.colWidthsAsPx.length - 1 || addColButtonHovered || addBothButtonHovered);
+  const displayZoom = $derived(editor.layout?.layoutMode.type === 'paginated' ? editor.displayZoom : 1);
+  const safeDisplayZoom = $derived(displayZoom > 0 ? displayZoom : 1);
+  const inverseDisplayZoom = $derived(1 / safeDisplayZoom);
+  const fixedControlTransform = $derived(displayZoom === 1 ? undefined : `scale(${inverseDisplayZoom})`);
+  const floatingToolbarOffset = $derived(38 / safeDisplayZoom);
+  const addTrackThickness = $derived(23 / safeDisplayZoom);
+  const addTrackPadding = $derived(5 / safeDisplayZoom);
+  const addButtonSize = $derived(18 / safeDisplayZoom);
+  const resizeIndicatorThickness = $derived(4 / safeDisplayZoom);
+  const resizeIndicatorHalfThickness = $derived(resizeIndicatorThickness / 2);
 
   function getVisualColX(colIndex: number, baseX: number): number {
     if (!resizing || resizing.colIndex !== colIndex) {
@@ -185,8 +195,8 @@
     }
 
     const rect = tableOverlayRoot.getBoundingClientRect();
-    const localX = clientX - rect.left;
-    const localY = clientY - rect.top;
+    const localX = (clientX - rect.left) / displayZoom;
+    const localY = (clientY - rect.top) / displayZoom;
     hoveredPointer = { x: localX, y: localY };
   }
 
@@ -304,118 +314,120 @@
         cursor: 'text',
       })}
     >
-      <Menu
-        offset={4}
-        onopen={() => {
-          menuOpenColIndex = activeColIndex;
-          editor.dispatch({ type: 'selectTableColumn', tableId: overlay.tableId, col: activeColIndex });
-        }}
-        ontransitionend={() => {
-          menuOpenColIndex = null;
-        }}
-        placement="bottom-start"
-      >
-        {#snippet button({ open })}
-          <button
-            class={center({
-              display: open || activeColIndex !== null ? 'flex' : 'none',
-              width: '24px',
-              height: '18px',
-              backgroundColor: open ? 'interactive.hover' : 'surface.default',
-              borderWidth: '1px',
-              borderColor: 'border.strong',
-              borderRadius: '4px',
-              color: open ? 'text.default' : 'text.faint',
-              boxShadow: 'small',
-              cursor: 'pointer',
-              _hover: {
-                backgroundColor: 'interactive.hover',
-                color: 'text.default',
-              },
-            })}
-            aria-pressed={open}
-            type="button"
-          >
-            <Icon icon={EllipsisIcon} size={14} />
-          </button>
-        {/snippet}
+      <div style:transform={fixedControlTransform} style:transform-origin="center center">
+        <Menu
+          offset={4}
+          onopen={() => {
+            menuOpenColIndex = activeColIndex;
+            editor.dispatch({ type: 'selectTableColumn', tableId: overlay.tableId, col: activeColIndex });
+          }}
+          ontransitionend={() => {
+            menuOpenColIndex = null;
+          }}
+          placement="bottom-start"
+        >
+          {#snippet button({ open })}
+            <button
+              class={center({
+                display: open || activeColIndex !== null ? 'flex' : 'none',
+                width: '24px',
+                height: '18px',
+                backgroundColor: open ? 'interactive.hover' : 'surface.default',
+                borderWidth: '1px',
+                borderColor: 'border.strong',
+                borderRadius: '4px',
+                color: open ? 'text.default' : 'text.faint',
+                boxShadow: 'small',
+                cursor: 'pointer',
+                _hover: {
+                  backgroundColor: 'interactive.hover',
+                  color: 'text.default',
+                },
+              })}
+              aria-pressed={open}
+              type="button"
+            >
+              <Icon icon={EllipsisIcon} size={14} />
+            </button>
+          {/snippet}
 
-        {#snippet children({ close })}
-          {#if activeColIndex > 0}
+          {#snippet children({ close })}
+            {#if activeColIndex > 0}
+              <MenuItem
+                onclick={() => {
+                  close();
+                  editor
+                    .dispatch({
+                      type: 'moveTableColumn',
+                      tableId: overlay.tableId,
+                      fromCol: activeColIndex,
+                      toCol: activeColIndex - 1,
+                    })
+                    .scrollIntoView();
+                  editor.focus();
+                }}
+              >
+                <Icon icon={MoveLeftIcon} size={14} />
+                <span>왼쪽으로 이동</span>
+              </MenuItem>
+            {/if}
+            {#if activeColIndex < overlay.colWidthsAsPx.length - 1}
+              <MenuItem
+                onclick={() => {
+                  close();
+                  editor
+                    .dispatch({
+                      type: 'moveTableColumn',
+                      tableId: overlay.tableId,
+                      fromCol: activeColIndex,
+                      toCol: activeColIndex + 1,
+                    })
+                    .scrollIntoView();
+                  editor.focus();
+                }}
+              >
+                <Icon icon={MoveRightIcon} size={14} />
+                <span>오른쪽으로 이동</span>
+              </MenuItem>
+            {/if}
             <MenuItem
               onclick={() => {
                 close();
-                editor
-                  .dispatch({
-                    type: 'moveTableColumn',
-                    tableId: overlay.tableId,
-                    fromCol: activeColIndex,
-                    toCol: activeColIndex - 1,
-                  })
-                  .scrollIntoView();
+                editor.dispatch({ type: 'addTableColumn', tableId: overlay.tableId, col: activeColIndex, before: true }).scrollIntoView();
                 editor.focus();
               }}
             >
-              <Icon icon={MoveLeftIcon} size={14} />
-              <span>왼쪽으로 이동</span>
+              <Icon icon={ArrowLeftToLineIcon} size={14} />
+              <span>왼쪽에 열 추가</span>
             </MenuItem>
-          {/if}
-          {#if activeColIndex < overlay.colWidthsAsPx.length - 1}
             <MenuItem
               onclick={() => {
                 close();
-                editor
-                  .dispatch({
-                    type: 'moveTableColumn',
-                    tableId: overlay.tableId,
-                    fromCol: activeColIndex,
-                    toCol: activeColIndex + 1,
-                  })
-                  .scrollIntoView();
+                editor.dispatch({ type: 'addTableColumn', tableId: overlay.tableId, col: activeColIndex, before: false }).scrollIntoView();
                 editor.focus();
               }}
             >
-              <Icon icon={MoveRightIcon} size={14} />
-              <span>오른쪽으로 이동</span>
+              <Icon icon={ArrowRightToLineIcon} size={14} />
+              <span>오른쪽에 열 추가</span>
             </MenuItem>
-          {/if}
-          <MenuItem
-            onclick={() => {
-              close();
-              editor.dispatch({ type: 'addTableColumn', tableId: overlay.tableId, col: activeColIndex, before: true }).scrollIntoView();
-              editor.focus();
-            }}
-          >
-            <Icon icon={ArrowLeftToLineIcon} size={14} />
-            <span>왼쪽에 열 추가</span>
-          </MenuItem>
-          <MenuItem
-            onclick={() => {
-              close();
-              editor.dispatch({ type: 'addTableColumn', tableId: overlay.tableId, col: activeColIndex, before: false }).scrollIntoView();
-              editor.focus();
-            }}
-          >
-            <Icon icon={ArrowRightToLineIcon} size={14} />
-            <span>오른쪽에 열 추가</span>
-          </MenuItem>
-          <MenuItem
-            onclick={() => {
-              close();
-              if (overlay.colWidthsAsPx.length <= 1) {
-                editor.dispatch({ type: 'deleteNode', nodeId: overlay.tableId }).scrollIntoView();
-              } else {
-                editor.dispatch({ type: 'deleteTableColumn', tableId: overlay.tableId, col: activeColIndex }).scrollIntoView();
-              }
-              editor.focus();
-            }}
-            variant="danger"
-          >
-            <Icon icon={Trash2Icon} size={14} />
-            <span>{overlay.colWidthsAsPx.length <= 1 ? '테이블 삭제' : '열 삭제'}</span>
-          </MenuItem>
-        {/snippet}
-      </Menu>
+            <MenuItem
+              onclick={() => {
+                close();
+                if (overlay.colWidthsAsPx.length <= 1) {
+                  editor.dispatch({ type: 'deleteNode', nodeId: overlay.tableId }).scrollIntoView();
+                } else {
+                  editor.dispatch({ type: 'deleteTableColumn', tableId: overlay.tableId, col: activeColIndex }).scrollIntoView();
+                }
+                editor.focus();
+              }}
+              variant="danger"
+            >
+              <Icon icon={Trash2Icon} size={14} />
+              <span>{overlay.colWidthsAsPx.length <= 1 ? '테이블 삭제' : '열 삭제'}</span>
+            </MenuItem>
+          {/snippet}
+        </Menu>
+      </div>
     </div>
   {/if}
 
@@ -436,108 +448,110 @@
         pointerEvents: 'auto',
       })}
     >
-      <Menu
-        offset={4}
-        onopen={() => {
-          menuOpenRowIndex = activeRowIndex;
-          editor.dispatch({ type: 'selectTableRow', tableId: overlay.tableId, row: globalRowIndex }).scrollIntoView();
-        }}
-        ontransitionend={() => {
-          menuOpenRowIndex = null;
-        }}
-        placement="right-start"
-      >
-        {#snippet button({ open })}
-          <button
-            class={center({
-              display: open || activeRowIndex !== null ? 'flex' : 'none',
-              width: '18px',
-              height: '24px',
-              backgroundColor: open ? 'interactive.hover' : 'surface.default',
-              borderWidth: '1px',
-              borderColor: 'border.strong',
-              borderRadius: '4px',
-              color: open ? 'text.default' : 'text.faint',
-              boxShadow: 'small',
-              cursor: 'pointer',
-              _hover: {
-                backgroundColor: 'interactive.hover',
-                color: 'text.default',
-              },
-            })}
-            aria-pressed={open}
-            type="button"
-          >
-            <Icon icon={EllipsisVerticalIcon} size={14} />
-          </button>
-        {/snippet}
+      <div style:transform={fixedControlTransform} style:transform-origin="center center">
+        <Menu
+          offset={4}
+          onopen={() => {
+            menuOpenRowIndex = activeRowIndex;
+            editor.dispatch({ type: 'selectTableRow', tableId: overlay.tableId, row: globalRowIndex }).scrollIntoView();
+          }}
+          ontransitionend={() => {
+            menuOpenRowIndex = null;
+          }}
+          placement="right-start"
+        >
+          {#snippet button({ open })}
+            <button
+              class={center({
+                display: open || activeRowIndex !== null ? 'flex' : 'none',
+                width: '18px',
+                height: '24px',
+                backgroundColor: open ? 'interactive.hover' : 'surface.default',
+                borderWidth: '1px',
+                borderColor: 'border.strong',
+                borderRadius: '4px',
+                color: open ? 'text.default' : 'text.faint',
+                boxShadow: 'small',
+                cursor: 'pointer',
+                _hover: {
+                  backgroundColor: 'interactive.hover',
+                  color: 'text.default',
+                },
+              })}
+              aria-pressed={open}
+              type="button"
+            >
+              <Icon icon={EllipsisVerticalIcon} size={14} />
+            </button>
+          {/snippet}
 
-        {#snippet children({ close })}
-          {#if globalRowIndex > 0}
+          {#snippet children({ close })}
+            {#if globalRowIndex > 0}
+              <MenuItem
+                onclick={() => {
+                  close();
+                  editor
+                    .dispatch({ type: 'moveTableRow', tableId: overlay.tableId, fromRow: globalRowIndex, toRow: globalRowIndex - 1 })
+                    .scrollIntoView();
+                  editor.focus();
+                }}
+              >
+                <Icon icon={MoveUpIcon} size={14} />
+                <span>위로 이동</span>
+              </MenuItem>
+            {/if}
+            {#if globalRowIndex < (overlay.totalRows ?? overlay.rowHeights.length) - 1}
+              <MenuItem
+                onclick={() => {
+                  close();
+                  editor
+                    .dispatch({ type: 'moveTableRow', tableId: overlay.tableId, fromRow: globalRowIndex, toRow: globalRowIndex + 1 })
+                    .scrollIntoView();
+                  editor.focus();
+                }}
+              >
+                <Icon icon={MoveDownIcon} size={14} />
+                <span>아래로 이동</span>
+              </MenuItem>
+            {/if}
             <MenuItem
               onclick={() => {
                 close();
-                editor
-                  .dispatch({ type: 'moveTableRow', tableId: overlay.tableId, fromRow: globalRowIndex, toRow: globalRowIndex - 1 })
-                  .scrollIntoView();
+                editor.dispatch({ type: 'addTableRow', tableId: overlay.tableId, row: globalRowIndex, before: true }).scrollIntoView();
                 editor.focus();
               }}
             >
-              <Icon icon={MoveUpIcon} size={14} />
-              <span>위로 이동</span>
+              <Icon icon={ArrowUpToLineIcon} size={14} />
+              <span>위에 행 추가</span>
             </MenuItem>
-          {/if}
-          {#if globalRowIndex < (overlay.totalRows ?? overlay.rowHeights.length) - 1}
             <MenuItem
               onclick={() => {
                 close();
-                editor
-                  .dispatch({ type: 'moveTableRow', tableId: overlay.tableId, fromRow: globalRowIndex, toRow: globalRowIndex + 1 })
-                  .scrollIntoView();
+                editor.dispatch({ type: 'addTableRow', tableId: overlay.tableId, row: globalRowIndex, before: false }).scrollIntoView();
                 editor.focus();
               }}
             >
-              <Icon icon={MoveDownIcon} size={14} />
-              <span>아래로 이동</span>
+              <Icon icon={ArrowDownToLineIcon} size={14} />
+              <span>아래에 행 추가</span>
             </MenuItem>
-          {/if}
-          <MenuItem
-            onclick={() => {
-              close();
-              editor.dispatch({ type: 'addTableRow', tableId: overlay.tableId, row: globalRowIndex, before: true }).scrollIntoView();
-              editor.focus();
-            }}
-          >
-            <Icon icon={ArrowUpToLineIcon} size={14} />
-            <span>위에 행 추가</span>
-          </MenuItem>
-          <MenuItem
-            onclick={() => {
-              close();
-              editor.dispatch({ type: 'addTableRow', tableId: overlay.tableId, row: globalRowIndex, before: false }).scrollIntoView();
-              editor.focus();
-            }}
-          >
-            <Icon icon={ArrowDownToLineIcon} size={14} />
-            <span>아래에 행 추가</span>
-          </MenuItem>
-          <MenuItem
-            onclick={() => {
-              close();
-              if ((overlay.totalRows ?? overlay.rowHeights.length) <= 1) {
-                editor.dispatch({ type: 'deleteNode', nodeId: overlay.tableId }).scrollIntoView();
-              } else {
-                editor.dispatch({ type: 'deleteTableRow', tableId: overlay.tableId, row: globalRowIndex }).scrollIntoView();
-              }
-              editor.focus();
-            }}
-            variant="danger"
-          >
-            <Icon icon={Trash2Icon} size={14} />
-            <span>{(overlay.totalRows ?? overlay.rowHeights.length) <= 1 ? '테이블 삭제' : '행 삭제'}</span>
-          </MenuItem>
-        {/snippet}
-      </Menu>
+            <MenuItem
+              onclick={() => {
+                close();
+                if ((overlay.totalRows ?? overlay.rowHeights.length) <= 1) {
+                  editor.dispatch({ type: 'deleteNode', nodeId: overlay.tableId }).scrollIntoView();
+                } else {
+                  editor.dispatch({ type: 'deleteTableRow', tableId: overlay.tableId, row: globalRowIndex }).scrollIntoView();
+                }
+                editor.focus();
+              }}
+              variant="danger"
+            >
+              <Icon icon={Trash2Icon} size={14} />
+              <span>{(overlay.totalRows ?? overlay.rowHeights.length) <= 1 ? '테이블 삭제' : '행 삭제'}</span>
+            </MenuItem>
+          {/snippet}
+        </Menu>
+      </div>
     </div>
   {/if}
 
@@ -546,12 +560,12 @@
     {@const visualX = getVisualColX(colIndex, colX)}
     {@const isResizing = resizing?.colIndex === colIndex}
     <button
-      style:left="{visualX - 2}px"
+      style:left="{visualX - resizeIndicatorHalfThickness}px"
       style:top="0"
+      style:width="{resizeIndicatorThickness}px"
       style:height="{overlay.bounds.height}px"
       class={css({
         position: 'absolute',
-        width: '4px',
         backgroundColor: isResizing ? 'accent.brand.default' : 'transparent',
         cursor: 'col-resize',
         pointerEvents: 'auto',
@@ -580,7 +594,7 @@
 
         const onMove = (me: PointerEvent) => {
           if (!target.hasPointerCapture(me.pointerId)) return;
-          const deltaX = me.clientX - startX;
+          const deltaX = (me.clientX - startX) / displayZoom;
           // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
           resizing = { ...resizing!, deltaX };
         };
@@ -641,11 +655,11 @@
   style:left="{overlay.bounds.x + overlay.bounds.width}px"
   style:top="{overlay.bounds.y}px"
   style:height="{overlay.bounds.height}px"
+  style:width="{addTrackThickness}px"
+  style:padding-left="{addTrackPadding}px"
   class={css({
     position: 'absolute',
-    width: '23px',
     translate: 'auto',
-    paddingLeft: '5px',
     pointerEvents: 'auto',
   })}
   data-external-element
@@ -655,8 +669,8 @@
   role="presentation"
 >
   <button
+    style:width="{addButtonSize}px"
     class={center({
-      width: '18px',
       height: 'full',
       borderRadius: '4px',
       fontSize: '14px',
@@ -688,7 +702,9 @@
     }}
     type="button"
   >
-    <Icon icon={PlusIcon} size={14} />
+    <span style:display="inline-flex" style:transform={fixedControlTransform} style:transform-origin="center center">
+      <Icon icon={PlusIcon} size={14} />
+    </span>
   </button>
 </div>
 
@@ -696,11 +712,11 @@
   style:left="{overlay.bounds.x}px"
   style:top="{overlay.bounds.y + overlay.bounds.height}px"
   style:width="{overlay.bounds.width}px"
+  style:height="{addTrackThickness}px"
+  style:padding-top="{addTrackPadding}px"
   class={css({
     position: 'absolute',
-    height: '23px',
     translate: 'auto',
-    paddingTop: '5px',
     pointerEvents: 'auto',
   })}
   data-external-element
@@ -711,9 +727,9 @@
 >
   {#if (overlay.startRowIndex ?? 0) + overlay.rowHeights.length === (overlay.totalRows ?? overlay.rowHeights.length)}
     <button
+      style:height="{addButtonSize}px"
       class={center({
         width: 'full',
-        height: '18px',
         borderRadius: '4px',
         fontSize: '14px',
         fontWeight: 'medium',
@@ -744,7 +760,9 @@
       }}
       type="button"
     >
-      <Icon icon={PlusIcon} size={14} />
+      <span style:display="inline-flex" style:transform={fixedControlTransform} style:transform-origin="center center">
+        <Icon icon={PlusIcon} size={14} />
+      </span>
     </button>
   {/if}
 </div>
@@ -752,13 +770,13 @@
 <div
   style:left="{overlay.bounds.x + overlay.bounds.width}px"
   style:top="{overlay.bounds.y + overlay.bounds.height}px"
+  style:width="{addTrackThickness}px"
+  style:height="{addTrackThickness}px"
+  style:padding-left="{addTrackPadding}px"
+  style:padding-top="{addTrackPadding}px"
   class={css({
     position: 'absolute',
-    width: '23px',
-    height: '23px',
     translate: 'auto',
-    paddingLeft: '5px',
-    paddingTop: '5px',
     pointerEvents: 'auto',
   })}
   data-external-element
@@ -769,9 +787,9 @@
 >
   {#if (overlay.startRowIndex ?? 0) + overlay.rowHeights.length === (overlay.totalRows ?? overlay.rowHeights.length)}
     <button
+      style:width="{addButtonSize}px"
+      style:height="{addButtonSize}px"
       class={center({
-        width: '18px',
-        height: '18px',
         borderRadius: 'full',
         fontSize: '14px',
         fontWeight: 'medium',
@@ -810,14 +828,18 @@
       }}
       type="button"
     >
-      <Icon icon={PlusIcon} size={14} />
+      <span style:display="inline-flex" style:transform={fixedControlTransform} style:transform-origin="center center">
+        <Icon icon={PlusIcon} size={14} />
+      </span>
     </button>
   {/if}
 </div>
 
 <div
   style:left="{overlay.bounds.x + overlay.bounds.width / 2}px"
-  style:top="{overlay.bounds.y - 38}px"
+  style:top="{overlay.bounds.y - floatingToolbarOffset}px"
+  style:transform={fixedControlTransform}
+  style:transform-origin="top center"
   class={center({
     position: 'absolute',
     width: 'auto',

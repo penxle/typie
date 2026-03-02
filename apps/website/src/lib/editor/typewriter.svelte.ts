@@ -48,9 +48,11 @@ export function setupTypewriter(getTargetEl: () => HTMLElement | undefined, defa
       return;
     }
 
+    const displayZoom = editor.layout?.layoutMode.type === 'paginated' ? editor.displayZoom : 1;
+
     const containerRect = containerEl.getBoundingClientRect();
-    const cursorTop = containerRect.top + bounds.y;
-    const cursorHeight = bounds.height;
+    const cursorTop = containerRect.top + bounds.y * displayZoom;
+    const cursorHeight = bounds.height * displayZoom;
 
     const scrollerRect = scroller.getBoundingClientRect();
     const position = app.preference.current.typewriterPosition ?? 0.5;
@@ -92,10 +94,11 @@ export function setupTypewriter(getTargetEl: () => HTMLElement | undefined, defa
     }
 
     const layoutMode = editor.layout?.layoutMode;
-    const trailingBottomMargin = layoutMode?.type === 'paginated' ? layoutMode.pageMarginBottom : CONTINUOUS_PAGE_MARGIN;
-    const cursorHeight = editor.cursor.bounds?.height ?? 0;
+    const displayZoom = layoutMode?.type === 'paginated' ? editor.displayZoom : 1;
+    const trailingBottomMargin = layoutMode?.type === 'paginated' ? layoutMode.pageMarginBottom * displayZoom : CONTINUOUS_PAGE_MARGIN;
+    const cursorHeight = (editor.cursor.bounds?.height ?? 0) * displayZoom;
     const collapsedSelectionHeight = editor.selection?.collapsed
-      ? (editor.selection.headBounds?.bounds.height ?? cursorHeight)
+      ? (editor.selection.headBounds?.bounds.height ?? cursorHeight / displayZoom) * displayZoom
       : cursorHeight;
     const cursorLeading = Math.max(0, collapsedSelectionHeight - cursorHeight);
     const position = app.preference.current.typewriterPosition ?? 0.5;

@@ -52,10 +52,11 @@
 
     const pageRect = pageEl.getBoundingClientRect();
     const containerRect = containerEl.getBoundingClientRect();
-    const anchorLeft = pageRect.left - containerRect.left + endpoint.bounds.x;
-    const anchorTop = pageRect.top - containerRect.top + endpoint.bounds.y;
+    const zoom = editor.layout?.layoutMode.type === 'paginated' ? editor.displayZoom : 1;
+    const anchorLeft = pageRect.left - containerRect.left + endpoint.bounds.x * zoom;
+    const anchorTop = pageRect.top - containerRect.top + endpoint.bounds.y * zoom;
 
-    const stemHeight = endpoint.bounds.height;
+    const stemHeight = endpoint.bounds.height * zoom;
     const totalHeight = HANDLE_RADIUS * 2 + stemHeight;
     const touchHeight = Math.max(totalHeight, TOUCH_TARGET_SIZE);
 

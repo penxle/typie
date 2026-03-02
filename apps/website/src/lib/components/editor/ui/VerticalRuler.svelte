@@ -8,10 +8,11 @@
     pageGap: number;
     marginTop: number;
     marginBottom: number;
+    zoom?: number;
+    offsetY?: number;
     unit?: 'px' | 'cm';
     dpi?: number;
     padding?: number;
-    ref?: HTMLElement | null;
   };
 
   let {
@@ -20,13 +21,14 @@
     pageGap,
     marginTop,
     marginBottom,
+    zoom = 1,
+    offsetY = 0,
     unit = 'px',
     dpi = 96,
     padding = 0,
-    ref = $bindable(null),
   }: Props = $props();
 
-  const getTicksForPage = (height: number) => calculateTicks(height, unit, dpi);
+  const getTicksForPage = (height: number) => calculateTicks({ totalSize: height, unit, dpi, zoom });
 
   const isInMargin = (position: number, pageHeight: number): boolean => {
     return position < marginTop || position > pageHeight - marginBottom;
@@ -34,7 +36,7 @@
 </script>
 
 <div
-  bind:this={ref}
+  style:transform={offsetY === 0 ? undefined : `translateY(-${offsetY}px)`}
   style:width="{thickness}px"
   style:padding-top="{padding}px"
   style:padding-bottom="{padding}px"
@@ -49,12 +51,12 @@
   {#each pages as page, i (i)}
     {@const ticks = getTicksForPage(page.height)}
     <div
-      style:height="{page.height}px"
-      style:margin-bottom="{i === pages.length - 1 ? 0 : pageGap}px"
+      style:height="{page.height * zoom}px"
+      style:margin-bottom="{i === pages.length - 1 ? 0 : pageGap * zoom}px"
       class={css({ position: 'relative' })}
     >
-      {#each ticks as tick (tick.position)}
-        {@const inMargin = isInMargin(tick.position, page.height)}
+      {#each ticks as tick (`${tick.logicalPosition}-${tick.isMajor ? 'm' : 's'}`)}
+        {@const inMargin = isInMargin(tick.logicalPosition, page.height)}
         {#if tick.isMajor}
           <div
             style:top="{tick.position}px"
@@ -80,7 +82,7 @@
                 color: inMargin ? 'text.disabled' : 'text.muted',
               })}
             >
-              {formatTickLabel(Number(tick.label), unit)}
+              {formatTickLabel(tick.label, unit)}
             </div>
           {/if}
         {:else}

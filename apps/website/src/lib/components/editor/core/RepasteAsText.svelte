@@ -22,10 +22,11 @@
 
       const pageRect = pageEl.getBoundingClientRect();
       const extensionRect = extensionAreaEl.getBoundingClientRect();
+      const zoom = editor.layout?.layoutMode.type === 'paginated' ? editor.displayZoom : 1;
 
       element.style.display = 'flex';
-      element.style.left = `${pageRect.left - extensionRect.left + bounds.x}px`;
-      element.style.top = `${pageRect.top - extensionRect.top + bounds.y + bounds.height + 4}px`;
+      element.style.left = `${pageRect.left - extensionRect.left + bounds.x * zoom}px`;
+      element.style.top = `${pageRect.top - extensionRect.top + (bounds.y + bounds.height) * zoom + 4}px`;
     } else {
       element.style.display = 'none';
     }

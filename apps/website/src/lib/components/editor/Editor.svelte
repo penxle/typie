@@ -1,21 +1,14 @@
 <script lang="ts">
-  import { css } from '@typie/styled-system/css';
   import { flex, grid } from '@typie/styled-system/patterns';
   import { getThemeContext } from '@typie/ui/context';
-  import { elementScrollViewport, handleDragScroll, windowScrollViewport } from '@typie/ui/utils';
+  import { handleDragScroll } from '@typie/ui/utils';
   import { tick, untrack } from 'svelte';
-  import {
-    CONTINUOUS_MIN_WIDTH,
-    CONTINUOUS_PAGE_MARGIN,
-    CONTINUOUS_VIEW_PADDING,
-    PAGE_GAP,
-    PAGINATED_VIEW_PADDING,
-  } from '$lib/editor/constants';
+  import { CONTINUOUS_MIN_WIDTH, CONTINUOUS_PAGE_MARGIN, CONTINUOUS_VIEW_PADDING, PAGINATED_VIEW_PADDING } from '$lib/editor/constants';
   import { getEditorTheme } from '$lib/editor/theme';
   import View from './core/View.svelte';
-  import HorizontalRuler from './ui/HorizontalRuler.svelte';
+  import EditorZoom from './ui/EditorZoom.svelte';
+  import RulerFrame from './ui/RulerFrame.svelte';
   import Scrollbar from './ui/Scrollbar.svelte';
-  import VerticalRuler from './ui/VerticalRuler.svelte';
   import type { Snippet } from 'svelte';
   import type { Editor } from '$lib/editor/editor.svelte';
   import type { FontFamily } from '$lib/editor/fonts';
@@ -62,25 +55,12 @@
   let containerClientWidth = $state(0);
   let containerClientHeight = $state(0);
   let scaleFactor = $state(1);
+  let zoomRenderScale = $state(1);
   let headerHeight = $state(0);
-  let horizontalRulerEl: HTMLDivElement | null = $state(null);
-  let verticalRulerEl: HTMLDivElement | null = $state(null);
+  let scrollLeft = $state(0);
+  let scrollTop = $state(0);
   let scrollContainerEl: HTMLElement | null = $state(null);
   let initialized = $state(false);
-
-  $effect(() => {
-    editor.scrollContainerEl = scrollContainerEl;
-  });
-
-  $effect(() => {
-    if (useWindowScroll) {
-      editor.scrollViewport = windowScrollViewport();
-    } else if (scrollContainerEl) {
-      editor.scrollViewport = elementScrollViewport(scrollContainerEl);
-    } else {
-      editor.scrollViewport = null;
-    }
-  });
 
   $effect(() => {
     untrack(() => {
@@ -109,7 +89,7 @@
 
   $effect(() => {
     if (width > 0 && containerClientHeight > 0 && scaleFactor > 0) {
-      editor.dispatch({ type: 'resize', width, height: containerClientHeight, scaleFactor });
+      editor.dispatch({ type: 'resize', width, height: containerClientHeight, scaleFactor: scaleFactor * zoomRenderScale });
     }
   });
 
@@ -135,17 +115,13 @@
   });
 
   const layoutMode = $derived(editor.layout?.layoutMode);
+  const isPaginated = $derived(layoutMode?.type === 'paginated');
+  const pageWidth = $derived(editor.layout?.pages[0]?.width ?? 0);
+  const effectiveDisplayZoom = $derived(isPaginated ? editor.displayZoom : 1);
   const showRuler = $derived(!readOnly && layoutMode?.type === 'paginated');
-  const pages = $derived(editor.layout?.pages ?? []);
-  const pageWidth = $derived(pages[0]?.width ?? 0);
-  const marginTop = $derived(layoutMode?.type === 'paginated' ? layoutMode.pageMarginTop : 0);
-  const marginBottom = $derived(layoutMode?.type === 'paginated' ? layoutMode.pageMarginBottom : 0);
-  const marginLeft = $derived(layoutMode?.type === 'paginated' ? layoutMode.pageMarginLeft : 0);
-  const marginRight = $derived(layoutMode?.type === 'paginated' ? layoutMode.pageMarginRight : 0);
-
-  const pageGap = $derived(layoutMode?.type === 'paginated' ? PAGE_GAP : 0);
   const continuousPageMargin = $derived(layoutMode?.type === 'paginated' ? 0 : CONTINUOUS_PAGE_MARGIN);
   const viewPadding = $derived(layoutMode?.type === 'paginated' ? PAGINATED_VIEW_PADDING : readOnly ? 0 : CONTINUOUS_VIEW_PADDING);
+  const paginatedContentWidth = $derived(pageWidth * effectiveDisplayZoom + viewPadding * 2);
   const width = $derived(
     layoutMode?.type === 'continuous'
       ? Math.max(CONTINUOUS_MIN_WIDTH - continuousPageMargin * 2, containerClientWidth - viewPadding * 2)
@@ -180,103 +156,19 @@
       })}
     >
       {#if showRuler}
-        <div
-          class={css({
-            borderRightWidth: '1px',
-            borderBottomWidth: '1px',
-            borderColor: 'border.strong',
-            backgroundColor: 'surface.default',
-          })}
-        ></div>
-
-        <div class={css({ overflow: 'hidden' })}>
-          {#if pageWidth}
-            <HorizontalRuler
-              {marginLeft}
-              {marginRight}
-              padding={viewPadding}
-              {pageWidth}
-              thickness={rulerThickness}
-              {unit}
-              bind:ref={horizontalRulerEl}
-            />
-          {/if}
-        </div>
-
-        <div class={css({ overflow: 'hidden' })}>
-          {#if pages.length > 0}
-            <VerticalRuler
-              {marginBottom}
-              {marginTop}
-              padding={headerHeight}
-              {pageGap}
-              {pages}
-              thickness={rulerThickness}
-              {unit}
-              bind:ref={verticalRulerEl}
-            />
-          {/if}
-        </div>
+        <RulerFrame headerPadding={headerHeight} pagePadding={viewPadding} {scrollLeft} {scrollTop} thickness={rulerThickness} {unit} />
       {/if}
 
-      <div
-        bind:this={scrollContainerEl}
-        class={css({
-          overflow: 'auto',
-          scrollbarWidth: 'none',
-          '&::-webkit-scrollbar': { display: 'none' },
-        })}
-        {@attach (el) => {
-          let pending = false;
-          let timeoutId: ReturnType<typeof setTimeout>;
-          let resizeEndTimeoutId: ReturnType<typeof setTimeout>;
-          const observer = new ResizeObserver(() => {
-            editor.containerResizing = true;
-            clearTimeout(resizeEndTimeoutId);
-            resizeEndTimeoutId = setTimeout(() => {
-              editor.containerResizing = false;
-            }, 300);
-
-            if (resizing) {
-              pending = true;
-              return;
-            }
-            clearTimeout(timeoutId);
-            timeoutId = setTimeout(() => {
-              containerClientWidth = el.clientWidth;
-              containerClientHeight = el.clientHeight;
-            }, 50);
-          });
-          observer.observe(el);
-          containerClientWidth = el.clientWidth;
-          containerClientHeight = el.clientHeight;
-
-          const teardown = $effect.root(() => {
-            $effect(() => {
-              if (!resizing && pending) {
-                pending = false;
-                containerClientWidth = el.clientWidth;
-                containerClientHeight = el.clientHeight;
-              }
-            });
-          });
-
-          return () => {
-            clearTimeout(timeoutId);
-            clearTimeout(resizeEndTimeoutId);
-            teardown();
-            observer.disconnect();
-          };
-        }}
-        onscroll={(e) => {
-          const target = e.currentTarget;
-          if (horizontalRulerEl) {
-            horizontalRulerEl.style.transform = `translateX(-${target.scrollLeft}px)`;
-          }
-          if (verticalRulerEl) {
-            verticalRulerEl.style.transform = `translateY(-${target.scrollTop}px)`;
-          }
-        }}
+      <EditorZoom
+        {editor}
+        {resizing}
+        {useWindowScroll}
+        bind:containerClientWidth
+        bind:containerClientHeight
+        bind:renderZoom={zoomRenderScale}
+        bind:scrollContainer={scrollContainerEl}
+        bind:scrollLeft
+        bind:scrollTop
       >
         <div
           style:min-width={layoutMode?.type === 'paginated' ? 'max-content' : `${CONTINUOUS_MIN_WIDTH}px`}
@@ -288,7 +180,8 @@
         >
           {#if header}
             <div
-              style:width={layoutMode?.type === 'paginated' ? `${pageWidth + viewPadding * 2}px` : '100%'}
+              style:width={layoutMode?.type === 'paginated' ? `${paginatedContentWidth}px` : '100%'}
+              style:min-width={layoutMode?.type === 'paginated' && !readOnly ? 'max-content' : undefined}
               style:max-width={layoutMode?.type === 'paginated'
                 ? 'none'
                 : `${(layoutMode?.type === 'continuous' ? layoutMode.maxWidth : 0) + (viewPadding + continuousPageMargin) * 2}px`}
@@ -317,7 +210,8 @@
           <View />
           {#if footer}
             <div
-              style:width={layoutMode?.type === 'paginated' ? `${pageWidth + viewPadding * 2}px` : '100%'}
+              style:width={layoutMode?.type === 'paginated' ? `${paginatedContentWidth}px` : '100%'}
+              style:min-width={layoutMode?.type === 'paginated' && !readOnly ? 'max-content' : undefined}
               style:max-width={layoutMode?.type === 'paginated'
                 ? 'none'
                 : `${(layoutMode?.type === 'continuous' ? layoutMode.maxWidth : 0) + (viewPadding + continuousPageMargin) * 2}px`}
@@ -336,7 +230,7 @@
             {@render children()}
           {/if}
         </div>
-      </div>
+      </EditorZoom>
       {#if !useWindowScroll}
         <Scrollbar scrollContainer={scrollContainerEl} />
       {/if}

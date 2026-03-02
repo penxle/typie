@@ -83,7 +83,11 @@ export const getOrderedSelectionHandles = (selection: Selection | null): Ordered
   };
 };
 
-const computeTouchContextMenuPosition = (selection: Selection | null, pageContainerEls: HTMLDivElement[]): TouchMenuPosition | null => {
+const computeTouchContextMenuPosition = (
+  selection: Selection | null,
+  pageContainerEls: HTMLDivElement[],
+  zoom = 1,
+): TouchMenuPosition | null => {
   const handles = getOrderedSelectionHandles(selection);
   if (!handles) {
     return null;
@@ -102,15 +106,16 @@ const computeTouchContextMenuPosition = (selection: Selection | null, pageContai
   const fromRect = fromPage.getBoundingClientRect();
   const toRect = toPage.getBoundingClientRect();
 
-  const fromLeft = fromRect.left + handles.from.bounds.x;
-  const fromRight = fromLeft + handles.from.bounds.width;
-  const fromTop = fromRect.top + handles.from.bounds.y;
-  const fromBottom = fromTop + handles.from.bounds.height;
+  const safeZoom = Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
+  const fromLeft = fromRect.left + handles.from.bounds.x * safeZoom;
+  const fromRight = fromLeft + handles.from.bounds.width * safeZoom;
+  const fromTop = fromRect.top + handles.from.bounds.y * safeZoom;
+  const fromBottom = fromTop + handles.from.bounds.height * safeZoom;
 
-  const toLeft = toRect.left + handles.to.bounds.x;
-  const toRight = toLeft + handles.to.bounds.width;
-  const toTop = toRect.top + handles.to.bounds.y;
-  const toBottom = toTop + handles.to.bounds.height;
+  const toLeft = toRect.left + handles.to.bounds.x * safeZoom;
+  const toRight = toLeft + handles.to.bounds.width * safeZoom;
+  const toTop = toRect.top + handles.to.bounds.y * safeZoom;
+  const toBottom = toTop + handles.to.bounds.height * safeZoom;
 
   const selectionLeft = Math.min(fromLeft, toLeft);
   const selectionRight = Math.max(fromRight, toRight);
@@ -517,7 +522,8 @@ export class TouchGestureController {
   }
 
   #openTouchContextMenuFromSelection(): void {
-    const position = computeTouchContextMenuPosition(this.#editor.selection, this.#editor.pageContainerEls);
+    const zoom = this.#editor.layout?.layoutMode.type === 'paginated' ? this.#editor.displayZoom : 1;
+    const position = computeTouchContextMenuPosition(this.#editor.selection, this.#editor.pageContainerEls, zoom);
     if (!position) {
       this.#editor.closeContextMenu();
       return;

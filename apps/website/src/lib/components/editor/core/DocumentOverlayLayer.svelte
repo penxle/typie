@@ -20,7 +20,8 @@
     return grouped;
   });
 
-  const pageGap = $derived(editor.layout?.layoutMode.type === 'paginated' ? PAGE_GAP : 0);
+  const displayZoom = $derived(editor.layout?.layoutMode.type === 'paginated' ? editor.displayZoom : 1);
+  const pageGap = $derived(editor.layout?.layoutMode.type === 'paginated' ? PAGE_GAP * displayZoom : 0);
 </script>
 
 {#if !editor.readOnly && !editor.containerResizing}
@@ -45,17 +46,28 @@
       {#each editor.layout?.pages ?? [] as page, pageIdx (`page-${pageIdx}`)}
         {@const overlays = tableOverlaysByPage.get(pageIdx) ?? []}
         <div
-          style:width={`${page.width}px`}
-          style:height={`${page.height}px`}
+          style:width={`${page.width * displayZoom}px`}
+          style:height={`${page.height * displayZoom}px`}
           class={css({
             position: 'relative',
             pointerEvents: 'none',
           })}
-          data-page-index={pageIdx}
         >
-          {#each overlays as overlay (`${overlay.tableId}-${overlay.startRowIndex}`)}
-            <TableOverlay {editor} {overlay} />
-          {/each}
+          <div
+            style:width={`${page.width}px`}
+            style:height={`${page.height}px`}
+            style:transform={displayZoom === 1 ? undefined : `scale(${displayZoom})`}
+            style:transform-origin={displayZoom === 1 ? undefined : 'top left'}
+            class={css({
+              position: 'relative',
+              pointerEvents: 'none',
+            })}
+            data-page-index={pageIdx}
+          >
+            {#each overlays as overlay (`${overlay.tableId}-${overlay.startRowIndex}`)}
+              <TableOverlay {editor} {overlay} />
+            {/each}
+          </div>
         </div>
       {/each}
     </div>

@@ -236,6 +236,7 @@ export class Editor {
   scrollViewport = $state<ScrollViewport | null>(null);
 
   pageContainerEls = $state<HTMLDivElement[]>([]);
+  displayZoom = $state(1);
   touchGesture = new TouchGestureController(this);
 
   #lastClickTime = 0;
@@ -615,9 +616,10 @@ export class Editor {
         const pageRect = pageEl.getBoundingClientRect();
         const scrollerRect = scroller.getBoundingClientRect();
         const bound = item.bounds[0];
-        const targetY = pageRect.top + bound.y - scrollerRect.top + scroller.scrollTop;
+        const zoom = this.#coordinateZoom();
+        const targetY = pageRect.top + bound.y * zoom - scrollerRect.top + scroller.scrollTop;
         const viewportCenter = scroller.clientHeight / 2;
-        const targetScroll = targetY - viewportCenter + bound.height / 2;
+        const targetScroll = targetY - viewportCenter + (bound.height * zoom) / 2;
         scroller.scrollTo({ top: Math.max(0, targetScroll), behavior: 'smooth' });
       }
     }
@@ -748,6 +750,13 @@ export class Editor {
     return this.#clickCount;
   }
 
+  #coordinateZoom(): number {
+    if (this.layout?.layoutMode.type !== 'paginated') {
+      return 1;
+    }
+    return Number.isFinite(this.displayZoom) && this.displayZoom > 0 ? this.displayZoom : 1;
+  }
+
   #resolvePointerCoordinate(
     e: MouseEvent | PointerEvent,
     targetEl: HTMLElement,
@@ -766,7 +775,7 @@ export class Editor {
 
     const { containerEl, pageElements } = this.extensionArea;
     if (containerEl && pageElements.length > 0) {
-      const coord = findNearestPageCoordinate(e, pageElements, this.layout?.pages[0]?.width ?? 0);
+      const coord = findNearestPageCoordinate(e, pageElements, this.layout?.pages[0]?.width ?? 0, this.#coordinateZoom());
       if (coord) {
         return {
           pageIdx: coord.pageIdx,
@@ -792,16 +801,21 @@ export class Editor {
     const pageIdx = Number.parseInt(pageElement.dataset.pageIndex!);
     const point = calculateRelativePosition(pageElement, e);
     const pageRect = pageElement.getBoundingClientRect();
+    const zoom = this.#coordinateZoom();
+    const logicalX = point.x / zoom;
+    const logicalY = point.y / zoom;
+    const logicalWidth = pageRect.width / zoom;
+    const logicalHeight = pageRect.height / zoom;
 
     // NOTE: continuous 모드에서 캔버스 경계에 걸친 table overlay 클릭 대응
-    if (point.x < 0 || point.y < 0 || point.x > pageRect.width || point.y > pageRect.height) {
+    if (logicalX < 0 || logicalY < 0 || logicalX > logicalWidth || logicalY > logicalHeight) {
       return null;
     }
 
     return {
       pageIdx,
-      x: point.x,
-      y: point.y,
+      x: logicalX,
+      y: logicalY,
       pageElement,
       isExtensionArea: false,
     };
@@ -856,12 +870,8 @@ export class Editor {
       return;
     }
 
-    const { pageIdx, x, y, pageElement } = resolved;
-
-    const rect = pageElement.getBoundingClientRect();
-    const relX = e.clientX - rect.left;
-    const relY = e.clientY - rect.top;
-    this.isDraggable = this.isSelectionHit(pageIdx, relX, relY);
+    const { pageIdx, x, y } = resolved;
+    this.isDraggable = this.isSelectionHit(pageIdx, x, y);
 
     if (e.button === 0) {
       if (!this.isDraggable) {
