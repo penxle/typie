@@ -88,6 +88,7 @@ class EditorInputNativeView(
   private var batchEditStartSelectionStart = -1
   private var batchEditStartSelectionEnd = -1
   private var batchEditHadBridgedMutation = false
+  private var batchEditHadComposingMutation = false
 
   private val inputMethodManager: InputMethodManager
     get() = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
@@ -106,6 +107,12 @@ class EditorInputNativeView(
   private fun noteBridgedTextMutation() {
     if (batchEditDepth > 0) {
       batchEditHadBridgedMutation = true
+    }
+  }
+
+  private fun noteComposingMutation() {
+    if (batchEditDepth > 0) {
+      batchEditHadComposingMutation = true
     }
   }
 
@@ -184,7 +191,7 @@ class EditorInputNativeView(
     clearComposingPrefixTracking()
   }
 
-  private fun consumeComposingRegion(): Boolean {
+  private fun consumeComposingRegion(requireActiveComposition: Boolean = true): Boolean {
     if (composingRegionLength <= 0) return false
 
     if (composingPrefixToStrip.isNotEmpty()) {
@@ -192,7 +199,7 @@ class EditorInputNativeView(
       return false
     }
 
-    if (!isComposing) {
+    if (requireActiveComposition && !isComposing) {
       return false
     }
 
@@ -517,25 +524,19 @@ class EditorInputNativeView(
 
       override fun setComposingText(text: CharSequence?, newCursorPosition: Int): Boolean {
         val rawStr = text?.toString().orEmpty()
-        val pendingRegion = capturePendingRegionSnapshot()
-        val str = normalizeSeededComposingText(rawStr)
-        val wasRegionNormalized = (str != rawStr)
-        val superText: CharSequence? = if (str == rawStr) text else str
+        noteComposingMutation()
+        // 디자인키보드의 천지인 키보드는 조합 문자열 전체(예: '살ㅇ' -> '살이' -> '살아')를 넘기므로
+        // setComposingText에서는 seed prefix 제거/삭제 브리지 없이 원문 조합을 그대로 반영한다.
+        val str = rawStr
+        val superText: CharSequence? = text
 
-        tryConsumePendingRegionForReplacement(rawStr, wasRegionNormalized, pendingRegion)
-
-        if (!wasRegionNormalized && consumeComposingRegion()) {
-          if (str.isNotEmpty()) {
-            isComposing = true
-            composingText = str
-            channel.invokeMethod("setMarkedText", mapOf("text" to str))
-          }
-          super.setComposingText(superText, newCursorPosition)
-          notifyCursorUpdate()
-          return true
-        }
-        if (wasRegionNormalized) {
-          clearComposingRegionTracking()
+        // 문제 시나리오:
+        // - LG 키보드에서 "안녕 " 입력 후 백스페이스를 누르면
+        //   setComposingRegion(0..2) + setComposingText("안녕")으로 재조합을 시작한다.
+        // - 이때 기존 범위를 먼저 소비하지 않으면 preedit이 뒤에 붙어 "안녕안녕"이 된다.
+        val shouldConsumeRegionOnComposeStart = !isComposing && str.isNotEmpty() && composingRegionLength > 0
+        if (shouldConsumeRegionOnComposeStart) {
+          consumeComposingRegion(requireActiveComposition = false)
         }
 
         if (str.isEmpty()) {
@@ -562,6 +563,7 @@ class EditorInputNativeView(
           batchEditStartSelectionStart = editable?.let { Selection.getSelectionStart(it) } ?: -1
           batchEditStartSelectionEnd = editable?.let { Selection.getSelectionEnd(it) } ?: -1
           batchEditHadBridgedMutation = false
+          batchEditHadComposingMutation = false
         }
         batchEditDepth += 1
         return super.beginBatchEdit()
@@ -575,7 +577,8 @@ class EditorInputNativeView(
         if (batchEditDepth == 0) {
           val finalText = text?.toString().orEmpty()
           // 배치 내 브리지 반영이 있으면 중복 반영 금지
-          val shouldReconcile = !batchEditHadBridgedMutation && finalText != batchEditStartText
+          // 조합 문자열 업데이트(setComposingText)로 바뀐 shadow text는 에디터 본문 변경으로 재해석하지 않는다.
+          val shouldReconcile = !batchEditHadBridgedMutation && !batchEditHadComposingMutation && finalText != batchEditStartText
           if (shouldReconcile) {
             reconcileBatchTextMutation(batchEditStartText, finalText)
           }
@@ -583,6 +586,7 @@ class EditorInputNativeView(
           batchEditStartSelectionStart = -1
           batchEditStartSelectionEnd = -1
           batchEditHadBridgedMutation = false
+          batchEditHadComposingMutation = false
         }
         return result
       }
@@ -610,6 +614,20 @@ class EditorInputNativeView(
         val oldText = correctionInfo?.oldText?.toString().orEmpty()
         val newText = correctionInfo?.newText?.toString().orEmpty()
 
+        // - "안넝" 입력 후 스페이스 자동수정이 걸리면 같은 batch에서
+        //   commitText("안녕") 직후 commitCorrection(old="", new="안녕")가 연달아 올 수 있다.
+        // - commitText에서 이미 브리지 삽입을 보냈다면 commitCorrection 삽입은 중복이다.
+        val shouldSkipInsertedCorrection =
+          oldText.isEmpty() &&
+          newText.isNotEmpty() &&
+          batchEditDepth > 0 &&
+          batchEditHadBridgedMutation
+        if (shouldSkipInsertedCorrection) {
+          val result = super.commitCorrection(correctionInfo)
+          notifyCursorUpdate()
+          return result
+        }
+
         if (oldText.isNotEmpty()) {
           noteBridgedTextMutation()
           channel.invokeMethod("replaceBackward", mapOf("length" to oldText.length, "text" to newText))
@@ -623,6 +641,7 @@ class EditorInputNativeView(
       }
 
       override fun setComposingRegion(start: Int, end: Int): Boolean {
+        noteComposingMutation()
         composingRegionStart = kotlin.math.min(start, end).coerceAtLeast(0)
         composingRegionEnd = kotlin.math.max(start, end).coerceAtLeast(0)
         composingRegionLength = (composingRegionEnd - composingRegionStart).coerceAtLeast(0)
