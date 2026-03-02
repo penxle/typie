@@ -15,6 +15,7 @@ import {
   DIRTY_EXITED_DOCUMENT_START,
   DIRTY_EXTERNAL_ELEMENTS,
   DIRTY_FONT_REQUIRED,
+  DIRTY_INTERACTIVE_OVERLAYS,
   DIRTY_LINK_OVERLAYS,
   DIRTY_PAGES,
   DIRTY_PLACEHOLDER,
@@ -36,7 +37,7 @@ import type { Placement } from '@floating-ui/dom';
 import type { DocExportMode, Editor as WasmEditor, Modifier, PointerButton } from '@typie/editor';
 import type { ScrollViewport } from '@typie/ui/utils';
 import type { FontFamily } from './fonts';
-import type { RemarkOverlay, TableOverlay, TrackedItem } from './slate';
+import type { InteractiveOverlay, RemarkOverlay, TableOverlay, TrackedItem } from './slate';
 import type { ThemeColors } from './theme';
 import type {
   AiFeedback,
@@ -217,6 +218,7 @@ export class Editor {
   searchMatches = $state<{ id: string; active: boolean }[]>([]);
 
   tableOverlays = $state<TableOverlay[]>([]);
+  interactiveOverlays: InteractiveOverlay[] = [];
 
   remarkOverlays = $state<RemarkOverlay[]>([]);
   remarkFocus = $state<{ nodeId: string; remarkId: string } | null>(null);
@@ -550,6 +552,10 @@ export class Editor {
       this.tableOverlays = slate.readTableOverlays();
     }
 
+    if (slate.isDirty(DIRTY_INTERACTIVE_OVERLAYS)) {
+      this.interactiveOverlays = slate.readInteractiveOverlays();
+    }
+
     if (slate.isDirty(DIRTY_REPASTE)) {
       const repaste = slate.readRepaste();
       this.repasteAsTextEnabled = repaste.enabled;
@@ -850,6 +856,25 @@ export class Editor {
     void this.settled().then(task);
   }
 
+  #findInteractiveOverlay(pageIdx: number, x: number, y: number): InteractiveOverlay | null {
+    for (const overlay of this.interactiveOverlays) {
+      if (
+        overlay.pageIdx === pageIdx &&
+        x >= overlay.bounds.x &&
+        x <= overlay.bounds.x + overlay.bounds.width &&
+        y >= overlay.bounds.y &&
+        y <= overlay.bounds.y + overlay.bounds.height
+      ) {
+        const p = overlay.passthrough;
+        if (p && x >= p.x && x <= p.x + p.width && y >= p.y && y <= p.y + p.height) {
+          continue;
+        }
+        return overlay;
+      }
+    }
+    return null;
+  }
+
   handlePointerDown(e: PointerEvent): void {
     if (!(e.target instanceof HTMLElement)) return;
 
@@ -859,6 +884,13 @@ export class Editor {
 
     if (isReadOnlyTouch) {
       const resolved = this.resolvePointerCoordinateFromClient(e.clientX, e.clientY);
+      if (resolved && e.button === 0) {
+        const hit = this.#findInteractiveOverlay(resolved.pageIdx, resolved.x, resolved.y);
+        if (hit?.kind === 0) {
+          this.dispatch({ type: 'toggleFold', nodeId: hit.nodeId });
+          return;
+        }
+      }
       this.isDraggable = resolved ? this.isSelectionHit(resolved.pageIdx, resolved.x, resolved.y) : false;
       this.touchGesture.handlePointerDown(e, resolved);
       return;
@@ -871,6 +903,19 @@ export class Editor {
     }
 
     const { pageIdx, x, y } = resolved;
+
+    if (e.button === 0 && !e.shiftKey) {
+      const hit = this.#findInteractiveOverlay(pageIdx, x, y);
+      if (hit) {
+        if (hit.kind === 0) {
+          this.dispatch({ type: 'toggleFold', nodeId: hit.nodeId });
+        } else if (hit.kind === 1 && !this.readOnly) {
+          this.dispatch({ type: 'cycleCalloutVariantAt', nodeId: hit.nodeId });
+        }
+        return;
+      }
+    }
+
     this.isDraggable = this.isSelectionHit(pageIdx, x, y);
 
     if (e.button === 0) {

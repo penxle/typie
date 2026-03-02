@@ -47,6 +47,15 @@ pub struct TableOverlay {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct InteractiveOverlay {
+    pub page_idx: usize,
+    pub node_id: NodeId,
+    pub kind: u32, // 0 = ToggleFold, 1 = CycleCalloutVariant
+    pub bounds: Rect,
+    pub passthrough: Option<Rect>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct RemarkOverlay {
     pub page_idx: usize,
     pub node_id: NodeId,

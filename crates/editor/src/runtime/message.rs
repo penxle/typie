@@ -604,4 +604,12 @@ define_messages! {
     RemoveRemark { node_id: String, remark_id: String }
     => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_remove_remark(node_id, remark_id) },
+
+    ToggleFold { node_id: String }
+    => when When::True
+    => handle(rt) { rt.handle_toggle_fold(node_id) },
+
+    CycleCalloutVariantAt { node_id: String }
+    => when When::key(ContextKey::CanEdit)
+    => handle(rt) { rt.handle_cycle_callout_variant_at(node_id) },
 }

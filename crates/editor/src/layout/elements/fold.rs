@@ -1,5 +1,4 @@
 use crate::layout::elements::{SplitEdges, Wrapper, WrapperPadding};
-use crate::layout::interactive::{InteractionKind, Interactive};
 use crate::model::NodeId;
 use crate::types::Size;
 
@@ -38,22 +37,6 @@ impl FoldTitleBackgroundElement {
             size,
             expanded,
             fold_id,
-        }
-    }
-}
-
-impl Interactive for FoldTitleElement {
-    fn interaction_kind(&self) -> InteractionKind {
-        InteractionKind::Toggle {
-            node_id: self.fold_id,
-        }
-    }
-}
-
-impl Interactive for FoldTitleBackgroundElement {
-    fn interaction_kind(&self) -> InteractionKind {
-        InteractionKind::Toggle {
-            node_id: self.fold_id,
         }
     }
 }

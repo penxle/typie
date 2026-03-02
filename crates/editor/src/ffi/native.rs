@@ -789,37 +789,6 @@ pub extern "C" fn editor_is_selection_hit(
     )
 }
 
-#[unsafe(no_mangle)]
-pub extern "C" fn editor_is_interactive_hit(
-    editor: *mut EditorHandle,
-    page_idx: usize,
-    x: f32,
-    y: f32,
-) -> i32 {
-    ffi!(
-        {
-            if editor.is_null() {
-                return Err("Editor is null".into());
-            }
-
-            let editor = unsafe { &*(editor as *const EditorInner) };
-            Ok(if let Some(page) = editor.runtime.pages().get(page_idx) {
-                if page
-                    .find_interactive_at(x, y, editor.runtime.is_read_only())
-                    .is_some()
-                {
-                    1
-                } else {
-                    0
-                }
-            } else {
-                0
-            })
-        },
-        -1
-    )
-}
-
 #[repr(C)]
 pub struct DragImageResult {
     pub width: u32,

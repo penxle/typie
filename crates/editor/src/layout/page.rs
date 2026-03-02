@@ -1,10 +1,10 @@
 use crate::layout::cursor::NavigationContext;
 use crate::layout::elements::external::ExternalElement;
-use crate::layout::interactive::InteractionKind;
 use crate::layout::{Element, PositionedNode};
 use crate::model::{LinkRange, NodeId};
+use crate::runtime::InteractiveOverlay;
 use crate::state::Position;
-use crate::types::{Point, PointerStyle, Size, TextBound};
+use crate::types::{Point, PointerStyle, Rect, Size, TextBound};
 use rstar::{AABB, PointDistance, RTree, RTreeObject};
 
 #[derive(Clone)]
@@ -105,12 +105,14 @@ pub struct Page {
     pub root: PositionedNode,
     elements: RTree<ElementEntry>,
     scopes: RTree<ScopeEntry>,
+    interactive: RTree<ElementEntry>,
 }
 
 impl Page {
     pub fn from_root(root: PositionedNode) -> Self {
         let mut elements = Vec::new();
         let mut scopes = Vec::new();
+        let mut interactive = Vec::new();
 
         let doc_scope = NodeId::ROOT;
 
@@ -120,15 +122,14 @@ impl Page {
             doc_scope,
             &mut elements,
             &mut scopes,
+            &mut interactive,
         );
-
-        let elements_tree = RTree::bulk_load(elements);
-        let scopes_tree = RTree::bulk_load(scopes);
 
         Self {
             root,
-            elements: elements_tree,
-            scopes: scopes_tree,
+            elements: RTree::bulk_load(elements),
+            scopes: RTree::bulk_load(scopes),
+            interactive: RTree::bulk_load(interactive),
         }
     }
 
@@ -562,6 +563,7 @@ impl Page {
         current_scope: NodeId,
         elements: &mut Vec<ElementEntry>,
         scopes: &mut Vec<ScopeEntry>,
+        interactive: &mut Vec<ElementEntry>,
     ) {
         let abs_pos = Point::new(
             offset.x + positioned.position.x,
@@ -592,12 +594,26 @@ impl Page {
                     element as *const Element,
                     new_scope,
                 ));
+            } else if element.interactive_props(false).is_some() {
+                interactive.push(ElementEntry::new(
+                    abs_pos,
+                    element.size(),
+                    element as *const Element,
+                    new_scope,
+                ));
             }
         }
 
         if let Some(children) = &positioned.node.children {
             for child in children {
-                Self::collect_elements_and_scopes(child, abs_pos, new_scope, elements, scopes);
+                Self::collect_elements_and_scopes(
+                    child,
+                    abs_pos,
+                    new_scope,
+                    elements,
+                    scopes,
+                    interactive,
+                );
             }
         }
     }
@@ -697,15 +713,114 @@ impl Page {
         }
     }
 
-    pub fn get_pointer_style(&self, x: f32, y: f32, read_only: bool) -> PointerStyle {
-        if let Some(kind) = self.find_interactive_at(x, y, read_only) {
-            if !read_only || kind.allow_in_read_only() {
-                return PointerStyle::Pointer;
+    pub fn collect_interactive_overlays(
+        &self,
+        page_idx: usize,
+        read_only: bool,
+        result: &mut Vec<InteractiveOverlay>,
+    ) {
+        let mut pending = Vec::new();
+        Self::collect_interactive_from_tree(
+            &self.root,
+            Point::zero(),
+            page_idx,
+            read_only,
+            &mut pending,
+        );
+
+        for (mut overlay, wants_passthrough) in pending {
+            if wants_passthrough {
+                overlay.passthrough = self.navigable_union_in(&overlay.bounds);
+            }
+            result.push(overlay);
+        }
+    }
+
+    fn navigable_union_in(&self, bounds: &Rect) -> Option<Rect> {
+        let envelope = AABB::from_corners(
+            [bounds.x, bounds.y],
+            [bounds.x + bounds.width, bounds.y + bounds.height],
+        );
+        let mut result: Option<Rect> = None;
+        for entry in self.elements.locate_in_envelope_intersecting(&envelope) {
+            let r = Rect::new(
+                entry.pos.x,
+                entry.pos.y,
+                entry.size.width,
+                entry.size.height,
+            );
+            result = Some(match result {
+                Some(prev) => {
+                    let x = prev.x.min(r.x);
+                    let y = prev.y.min(r.y);
+                    Rect::new(
+                        x,
+                        y,
+                        (prev.x + prev.width).max(r.x + r.width) - x,
+                        (prev.y + prev.height).max(r.y + r.height) - y,
+                    )
+                }
+                None => r,
+            });
+        }
+        result
+    }
+
+    fn collect_interactive_from_tree(
+        positioned: &PositionedNode,
+        offset: Point,
+        page_idx: usize,
+        read_only: bool,
+        result: &mut Vec<(InteractiveOverlay, bool)>,
+    ) {
+        let abs_pos = Point::new(
+            offset.x + positioned.position.x,
+            offset.y + positioned.position.y,
+        );
+
+        if let Some(ref element) = positioned.node.element {
+            if let Some(props) = element.interactive_props(read_only) {
+                let overlay = InteractiveOverlay {
+                    page_idx,
+                    node_id: props.node_id,
+                    kind: props.kind,
+                    bounds: Rect::new(
+                        abs_pos.x,
+                        abs_pos.y,
+                        element.size().width,
+                        element.size().height,
+                    ),
+                    passthrough: None,
+                };
+                result.push((overlay, props.wants_passthrough));
             }
         }
 
+        if let Some(children) = &positioned.node.children {
+            for child in children {
+                Self::collect_interactive_from_tree(child, abs_pos, page_idx, read_only, result);
+            }
+        }
+    }
+
+    pub fn get_pointer_style(&self, x: f32, y: f32, read_only: bool) -> PointerStyle {
         if let Some(entry) = self.spatial_index().locate_at_point(&[x, y]) {
+            if let Some(interactive) = self.interactive.locate_at_point(&[x, y]) {
+                if interactive
+                    .element()
+                    .interactive_props(read_only)
+                    .is_some_and(|p| !p.wants_passthrough)
+                {
+                    return interactive.element().cursor_visual();
+                }
+            }
             return entry.element().cursor_visual();
+        }
+
+        if let Some(interactive) = self.interactive.locate_at_point(&[x, y]) {
+            if interactive.element().interactive_props(read_only).is_some() {
+                return interactive.element().cursor_visual();
+            }
         }
 
         Self::traverse_for_pointer_style(&self.root, Point::zero(), x, y)
@@ -734,49 +849,6 @@ impl Page {
                         Self::traverse_for_pointer_style(child, Point::new(abs_x, abs_y), x, y)
                     {
                         return Some(cursor);
-                    }
-                }
-            }
-        }
-
-        None
-    }
-
-    pub fn find_interactive_at(&self, x: f32, y: f32, read_only: bool) -> Option<InteractionKind> {
-        if !read_only && self.is_over_cursor_navigable(x, y) {
-            return None;
-        }
-        Self::traverse_for_interactive(&self.root, Point::zero(), x, y)
-    }
-
-    fn is_over_cursor_navigable(&self, x: f32, y: f32) -> bool {
-        self.spatial_index().locate_at_point(&[x, y]).is_some()
-    }
-
-    fn traverse_for_interactive(
-        positioned: &PositionedNode,
-        offset: Point,
-        x: f32,
-        y: f32,
-    ) -> Option<InteractionKind> {
-        let abs_x = offset.x + positioned.position.x;
-        let abs_y = offset.y + positioned.position.y;
-        let node = &positioned.node;
-
-        if x >= abs_x && x <= abs_x + node.size.width && y >= abs_y && y <= abs_y + node.size.height
-        {
-            if let Some(ref element) = node.element {
-                if let Some(interactive) = element.as_interactive() {
-                    return Some(interactive.interaction_kind());
-                }
-            }
-
-            if let Some(children) = &node.children {
-                for child in children {
-                    if let Some(kind) =
-                        Self::traverse_for_interactive(child, Point::new(abs_x, abs_y), x, y)
-                    {
-                        return Some(kind);
                     }
                 }
             }

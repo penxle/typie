@@ -72,6 +72,13 @@ impl Runtime {
         effects
     }
 
+    pub(crate) fn handle_toggle_fold(&mut self, node_id: String) -> Vec<Effect> {
+        let Ok(node_id) = node_id.parse::<NodeId>() else {
+            return vec![];
+        };
+        self.toggle_view_state(node_id)
+    }
+
     pub(crate) fn handle_insert_fold(&mut self) -> Vec<Effect> {
         let mut created_fold_id = None;
         let mut effects = self.transact(|tr| {

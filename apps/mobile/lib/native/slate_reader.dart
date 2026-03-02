@@ -706,6 +706,67 @@ class SlateReader {
     return result;
   }
 
+  List<InteractiveOverlayRaw> readInteractiveOverlays() {
+    final count = getU32('interactive_overlays_count');
+    if (count == 0) {
+      return const [];
+    }
+
+    var pos = getU32('interactive_overlays_offset');
+    final result = <InteractiveOverlayRaw>[];
+
+    for (var i = 0; i < count; i++) {
+      final pageIdx = _slabU32(pos);
+      pos += 4;
+
+      final nodeIdByteLen = _slabU32(pos);
+      pos += 4;
+      final nodeIdBytes = _slabData.sublist(pos, pos + nodeIdByteLen);
+      final nodeId = _bytesToHex(nodeIdBytes);
+      final alignPad = (4 - ((pos + nodeIdByteLen) % 4)) % 4;
+      pos += nodeIdByteLen + alignPad;
+
+      final kind = _slabU32(pos);
+      pos += 4;
+
+      final boundsX = _slabF32(pos);
+      final boundsY = _slabF32(pos + 4);
+      final boundsW = _slabF32(pos + 8);
+      final boundsH = _slabF32(pos + 12);
+      pos += 16;
+
+      final hasPassthrough = _slabU32(pos);
+      pos += 4;
+
+      double? ptX, ptY, ptW, ptH;
+      if (hasPassthrough != 0) {
+        ptX = _slabF32(pos);
+        ptY = _slabF32(pos + 4);
+        ptW = _slabF32(pos + 8);
+        ptH = _slabF32(pos + 12);
+        pos += 16;
+      }
+
+      result.add(
+        InteractiveOverlayRaw(
+          pageIdx: pageIdx,
+          nodeId: nodeId,
+          kind: kind,
+          boundsX: boundsX,
+          boundsY: boundsY,
+          boundsW: boundsW,
+          boundsH: boundsH,
+          passthroughX: ptX,
+          passthroughY: ptY,
+          passthroughW: ptW,
+          passthroughH: ptH,
+        ),
+      );
+    }
+
+    return result;
+  }
+
   static String _bytesToHex(Uint8List bytes) {
     final hex = StringBuffer();
     for (final b in bytes) {
@@ -833,6 +894,52 @@ class _TableOverlayRaw {
   final List<double> colPositions;
   final List<double> rowHeights;
   final List<double> rowPositions;
+}
+
+class InteractiveOverlayRaw {
+  const InteractiveOverlayRaw({
+    required this.pageIdx,
+    required this.nodeId,
+    required this.kind,
+    required this.boundsX,
+    required this.boundsY,
+    required this.boundsW,
+    required this.boundsH,
+    this.passthroughX,
+    this.passthroughY,
+    this.passthroughW,
+    this.passthroughH,
+  });
+
+  final int pageIdx;
+  final String nodeId;
+  final int kind; // 0 = ToggleFold, 1 = CycleCalloutVariant
+  final double boundsX;
+  final double boundsY;
+  final double boundsW;
+  final double boundsH;
+  final double? passthroughX;
+  final double? passthroughY;
+  final double? passthroughW;
+  final double? passthroughH;
+
+  bool hitTest(int page, double x, double y) {
+    if (page != pageIdx) {
+      return false;
+    }
+    if (x < boundsX || x > boundsX + boundsW || y < boundsY || y > boundsY + boundsH) {
+      return false;
+    }
+    if (passthroughX != null) {
+      if (x >= passthroughX! &&
+          x <= passthroughX! + passthroughW! &&
+          y >= passthroughY! &&
+          y <= passthroughY! + passthroughH!) {
+        return false;
+      }
+    }
+    return true;
+  }
 }
 
 class _RemarkOverlayRaw {

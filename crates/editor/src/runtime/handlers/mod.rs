@@ -14,7 +14,6 @@ mod history;
 mod image;
 mod input;
 mod insertion;
-mod interaction;
 mod layout;
 mod navigation;
 mod pointer;

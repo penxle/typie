@@ -3,7 +3,6 @@ pub mod context;
 pub mod cursor;
 mod element;
 pub mod elements;
-pub mod interactive;
 mod page;
 mod paginator;
 pub mod query;

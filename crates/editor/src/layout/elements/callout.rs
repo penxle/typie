@@ -1,5 +1,4 @@
 use crate::layout::elements::{SplitEdges, Wrapper, WrapperPadding};
-use crate::layout::interactive::{InteractionKind, Interactive};
 use crate::model::{CalloutVariant, NodeId};
 use crate::types::Size;
 
@@ -53,14 +52,6 @@ impl CalloutIconElement {
             size,
             variant,
             node_id,
-        }
-    }
-}
-
-impl Interactive for CalloutIconElement {
-    fn interaction_kind(&self) -> InteractionKind {
-        InteractionKind::CycleCalloutVariant {
-            node_id: self.node_id,
         }
     }
 }

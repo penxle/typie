@@ -69,6 +69,10 @@ class CommandHandler {
         _handleTrackedItemsChanged(controller, reader);
       }
 
+      if (dirty & (1 << 12) != 0) {
+        _handleInteractiveOverlaysChanged(controller, reader);
+      }
+
       if (dirty & (1 << 14) != 0) {
         _handleTableOverlaysChanged(controller, reader);
       }
@@ -435,6 +439,10 @@ class CommandHandler {
         ),
       )
       ..setTrackedItemRanges(rangesByGroup);
+  }
+
+  static void _handleInteractiveOverlaysChanged(EditorController controller, SlateReader reader) {
+    controller.interactiveOverlays = reader.readInteractiveOverlays();
   }
 
   static void _handleTableOverlaysChanged(EditorController controller, SlateReader reader) {

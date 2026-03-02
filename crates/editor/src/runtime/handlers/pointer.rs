@@ -34,27 +34,6 @@ impl Runtime {
             return vec![];
         };
 
-        if button.is_primary() && !modifier.shift {
-            if let Some(kind) = page.find_interactive_at(x, y, self.is_read_only()) {
-                let should_interact = if self.is_read_only() {
-                    kind.allow_in_read_only()
-                } else {
-                    true
-                };
-
-                if should_interact {
-                    self.set_pointer_mode(PointerMode::Pressed {
-                        page_idx,
-                        start_x: x,
-                        start_y: y,
-                        document_position: self.state.selection.head,
-                        context: PressContext::Interactive(kind),
-                    });
-                    return vec![];
-                }
-            }
-        }
-
         let ctx = NavigationContext::new(&self.state.doc);
         let Some(hit_selection) = Cursor::hit_test(&ctx, page, x, y) else {
             return vec![];
@@ -333,23 +312,8 @@ impl Runtime {
             PointerMode::Pressed {
                 document_position,
                 context,
-                start_x,
-                start_y,
-                page_idx: start_page_idx,
+                ..
             } => match context {
-                PressContext::Interactive(kind) => {
-                    if let Some(page) = self.pages().get(*start_page_idx) {
-                        if page
-                            .find_interactive_at(*start_x, *start_y, self.is_read_only())
-                            .as_ref()
-                            == Some(kind)
-                        {
-                            effects.extend(self.handle_interaction(kind.clone()));
-                            self.reset_pointer();
-                            return effects;
-                        }
-                    }
-                }
                 PressContext::InSelection => {
                     let pos = *document_position;
                     effects.extend(self.transact(move |tr| {
