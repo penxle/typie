@@ -73,6 +73,36 @@ export function preloadEditorWasm(): void {
   void ensureInitialized();
 }
 
+/** 편집과 무관한 메시지 타입 (잠금 상태에서도 허용) */
+const NON_EDIT_MESSAGE_TYPES = new Set<Message['type']>([
+  'initialize',
+  'pointerDown',
+  'pointerMove',
+  'pointerUp',
+  'dragEnd',
+  'navigate',
+  'selectAll',
+  'selectWord',
+  'selectSentence',
+  'selectParagraph',
+  'resize',
+  'setTheme',
+  'fontsLoaded',
+  'escape',
+  'selectTable',
+  'selectTableRow',
+  'selectTableColumn',
+  'setExternalElementHeight',
+  'setFocused',
+  'setSelection',
+  'collapseSelection',
+  'extendSelectionTo',
+  'toggleFold',
+  'addRemark',
+  'updateRemark',
+  'removeRemark',
+]);
+
 const CLICK_INTERVAL = 500;
 const CLICK_DISTANCE = 5;
 
@@ -201,6 +231,7 @@ export class Editor {
   isFocused = $state(false);
   pointerState = $state(0);
   readOnly = $state(false);
+  locked = $state(false);
   protectContent = $state(false);
   contentReady = $state(false);
 
@@ -644,7 +675,18 @@ export class Editor {
     });
   }
 
+  #onEditBlocked?: () => void;
+
+  setEditBlockedHandler(handler: () => void): void {
+    this.#onEditBlocked = handler;
+  }
+
   dispatch(message: Message): Editor {
+    if (this.locked && !NON_EDIT_MESSAGE_TYPES.has(message.type)) {
+      this.#onEditBlocked?.();
+      return this;
+    }
+
     this.#wasmEditor?.enqueueMessage(message);
     this.#wakeUp();
 
@@ -1524,6 +1566,10 @@ export class Editor {
   }
 
   replaceTextInBlock(blockId: string, startOffset: number, endOffset: number, replacement: string): boolean {
+    if (this.locked) {
+      this.#onEditBlocked?.();
+      return false;
+    }
     const result = this.#wasmEditor?.replaceTextInBlock(blockId, startOffset, endOffset, replacement) ?? false;
     this.#wakeUp();
     return result;
@@ -1663,6 +1709,11 @@ export class Editor {
     const item = this.trackedItems.find((v) => v.group === 2 && v.id === match.id);
     if (!item) return;
 
+    if (this.locked) {
+      this.#onEditBlocked?.();
+      return;
+    }
+
     this.#wasmEditor.replaceTextInBlock(item.nodeId, item.startOffset, item.endOffset, replacement);
     this.#wasmEditor.removeTrackedItems(2, [item.id]);
     this.#wakeUp();
@@ -1678,6 +1729,11 @@ export class Editor {
 
   replaceAll(replacement: string): void {
     if (this.searchMatches.length === 0 || !this.#wasmEditor) return;
+
+    if (this.locked) {
+      this.#onEditBlocked?.();
+      return;
+    }
 
     const ids = new SvelteSet(this.searchMatches.map((v) => v.id));
     const items = this.trackedItems.filter((v) => v.group === 2 && ids.has(v.id));

@@ -1,0 +1,1 @@
+ALTER TABLE "documents" ADD COLUMN "locked" boolean DEFAULT false NOT NULL;

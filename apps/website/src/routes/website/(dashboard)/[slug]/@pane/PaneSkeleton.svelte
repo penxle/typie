@@ -99,11 +99,9 @@
       <div class={flex({ alignItems: 'center', gap: '4px' })}>
         <!-- Feedback button -->
         <div style:width="87px" style:height="22px" style:border-radius="4px" class={bar}></div>
-        <!-- Connection status -->
-        <div class={css({ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '24px', height: '24px' })}>
-          <div style:width="8px" style:height="8px" style:border-radius="50%" class={bar}></div>
-        </div>
         <!-- Menu button -->
+        <div style:width="24px" style:height="24px" style:border-radius="4px" class={bar}></div>
+        <!-- Lock button -->
         <div style:width="24px" style:height="24px" style:border-radius="4px" class={bar}></div>
         <!-- Zen mode button -->
         <div style:width="24px" style:height="24px" style:border-radius="4px" class={bar}></div>

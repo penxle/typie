@@ -5,16 +5,19 @@
   import { autosize, tooltip } from '@typie/ui/actions';
   import { Helmet, HorizontalDivider, Icon, Menu } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
-  import { Tip } from '@typie/ui/notification';
+  import { Tip, Toast } from '@typie/ui/notification';
   import { LocalStore } from '@typie/ui/state';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
   import { nanoid } from 'nanoid';
+  import { fly } from 'svelte/transition';
   import { DocumentSyncType } from '@/enums';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
   import CrownIcon from '~icons/lucide/crown';
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import FolderIcon from '~icons/lucide/folder';
+  import LockIcon from '~icons/lucide/lock';
+  import LockOpenIcon from '~icons/lucide/lock-open';
   import Maximize2Icon from '~icons/lucide/maximize-2';
   import WifiOffIcon from '~icons/lucide/wifi-off';
   import XIcon from '~icons/lucide/x';
@@ -116,6 +119,7 @@
               nullableTitle
               subtitle
               documentType: type
+              locked
               characterCount
               snapshot
               version
@@ -229,6 +233,7 @@
           title
           nullableTitle
           subtitle
+          locked
         }
       }
     `),
@@ -438,6 +443,54 @@
   }
 
   const currentViewZenModeEnabled = $derived(app.preference.current.zenModeEnabled && pane.id === paneGroup.state.current.focusedPaneId);
+
+  $effect(() => {
+    editor.locked = document?.locked ?? false;
+  });
+
+  let showEditLockedToast = $state(false);
+  let lockedToastTimer: ReturnType<typeof setTimeout> | null = null;
+
+  editor.setEditBlockedHandler(() => {
+    if (showEditLockedToast) return;
+    showEditLockedToast = true;
+    lockedToastTimer = setTimeout(() => {
+      showEditLockedToast = false;
+    }, 5000);
+  });
+
+  function toggleEditLock() {
+    const newValue = !editor.locked;
+
+    if (documentId) {
+      updateDocument(
+        { input: { documentId, locked: newValue } },
+        {
+          metadata: {
+            cache: {
+              optimisticResponse: {
+                updateDocument: {
+                  id: documentId,
+                  title: localTitle,
+                  nullableTitle: localTitle || null,
+                  subtitle: localSubtitle,
+                  locked: newValue,
+                },
+              },
+            },
+          },
+        },
+      );
+    }
+
+    Toast.success(
+      newValue
+        ? '편집 잠금이 설정되었어요. 편집 잠금을 해제하기 전까지 문서를 편집할 수 없어요.'
+        : '편집 잠금이 해제되었어요. 이제 문서를 편집할 수 있어요.',
+    );
+
+    mixpanel.track(newValue ? 'document_locked' : 'document_unlocked', { via: 'document' });
+  }
 
   $effect(() => {
     if (currentViewZenModeEnabled) {
@@ -945,7 +998,7 @@
           {/if}
 
           {#if query.data.me.id === entity.user.id}
-            <Menu>
+            <Menu placement="bottom-end">
               {#snippet button({ open })}
                 <button
                   class={center({
@@ -971,6 +1024,25 @@
 
               <DocumentMenu {document} {entity} via="editor" />
             </Menu>
+
+            <button
+              class={center({
+                borderRadius: '4px',
+                size: '24px',
+                color: editor.locked ? 'accent.brand.default' : 'text.faint',
+                transition: 'common',
+                _hover: {
+                  color: editor.locked ? 'accent.brand.hover' : 'text.subtle',
+                  backgroundColor: 'surface.muted',
+                },
+              })}
+              onclick={() => toggleEditLock()}
+              onpointerdown={(e) => e.preventDefault()}
+              type="button"
+              use:tooltip={{ message: editor.locked ? '편집 잠금 해제' : '편집 잠금' }}
+            >
+              <Icon icon={editor.locked ? LockIcon : LockOpenIcon} size={16} />
+            </button>
           {/if}
 
           <button
@@ -1062,6 +1134,69 @@
                   size={14}
                 />
                 <span>오프라인 상태예요. 변경사항이 기기에 자동으로 저장되고, 온라인일 때 다시 동기화돼요.</span>
+              </div>
+            {/if}
+
+            {#if showEditLockedToast}
+              <div
+                class={flex({
+                  position: 'absolute',
+                  top: currentViewZenModeEnabled ? '60px' : editor.layout?.layoutMode.type === 'paginated' ? '36px' : '12px',
+                  right: '12px',
+                  zIndex: 'sidebar',
+                  alignItems: 'center',
+                  gap: '10px',
+                  paddingX: '14px',
+                  paddingY: '10px',
+                  borderRadius: '6px',
+                  borderWidth: '1px',
+                  borderColor: 'border.default',
+                  backgroundColor: 'surface.default',
+                  boxShadow: 'small',
+                  fontSize: '13px',
+                  color: 'text.subtle',
+                })}
+                onpointerenter={() => {
+                  if (lockedToastTimer) {
+                    clearTimeout(lockedToastTimer);
+                    lockedToastTimer = null;
+                  }
+                }}
+                onpointerleave={() => {
+                  lockedToastTimer = setTimeout(() => {
+                    showEditLockedToast = false;
+                  }, 5000);
+                }}
+                role="alert"
+                transition:fly={{ y: -8, duration: 150 }}
+              >
+                <Icon style={css.raw({ flexShrink: '0' })} icon={LockIcon} size={14} />
+                <span>편집이 잠겨있는 문서예요.</span>
+                {#if query.data.me.id === entity.user.id}
+                  <button
+                    class={css({
+                      marginLeft: '4px',
+                      paddingX: '8px',
+                      paddingY: '4px',
+                      borderRadius: '4px',
+                      fontSize: '12px',
+                      fontWeight: 'medium',
+                      color: 'text.default',
+                      backgroundColor: 'surface.subtle',
+                      cursor: 'pointer',
+                      transition: 'common',
+                      _hover: { backgroundColor: 'surface.muted' },
+                    })}
+                    onclick={() => {
+                      toggleEditLock();
+                      showEditLockedToast = false;
+                      if (lockedToastTimer) clearTimeout(lockedToastTimer);
+                    }}
+                    type="button"
+                  >
+                    해제하기
+                  </button>
+                {/if}
               </div>
             {/if}
 

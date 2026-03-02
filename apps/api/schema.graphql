@@ -153,6 +153,7 @@ type Document implements IDocument {
   generation: Int!
   id: ID!
   layoutMode: JSON!
+  locked: Boolean!
   nullableTitle: String
   password: String
   protectContent: Boolean!
@@ -1206,6 +1207,7 @@ input UpdateBootstrapInput {
 
 input UpdateDocumentInput {
   documentId: ID!
+  locked: Boolean
   subtitle: String
   title: String
 }
