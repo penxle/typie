@@ -1066,6 +1066,12 @@
                   })}
                 >
                   <div
+                    style:padding-left={editor.layout?.layoutMode.type === 'paginated'
+                      ? `${editor.layout.layoutMode.pageMarginLeft * editor.displayZoom}px`
+                      : '0'}
+                    style:padding-right={editor.layout?.layoutMode.type === 'paginated'
+                      ? `${editor.layout.layoutMode.pageMarginRight * editor.displayZoom}px`
+                      : '0'}
                     class={flex({
                       flexDirection: 'column',
                       flexShrink: '0',

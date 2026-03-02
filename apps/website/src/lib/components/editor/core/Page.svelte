@@ -25,6 +25,9 @@
   const layoutMode = $derived(editor.layout?.layoutMode);
   const externalElements = $derived(editor.externalElements.filter((el) => el.pageIdx === page));
   const isPaginated = $derived(layoutMode?.type === 'paginated');
+  const displayZoom = $derived(isPaginated ? editor.displayZoom : 1);
+  const slotWidth = $derived(pageWidth * displayZoom);
+  const slotHeight = $derived(pageHeight * displayZoom);
 
   // NOTE: iOS에서 캔버스 롱프레스 시 텍스트 인식해서 선택되는 동작을 막음
   const disableCanvasPointer = $derived(editor.readOnly); // TODO: 항상 disable 해도 안전한지 확인하기
@@ -95,11 +98,14 @@
   });
 </script>
 
-<div class={css({ position: 'relative', maxWidth: 'full' })}>
+<div style:width={`${slotWidth}px`} style:height={`${slotHeight}px`} class={css({ position: 'relative', flexShrink: '0' })}>
   <div
     bind:this={containerEl}
     style:width={`${pageWidth}px`}
     style:height={`${pageHeight}px`}
+    style:transform={isPaginated && displayZoom !== 1 ? `scale(${displayZoom})` : undefined}
+    style:transform-origin={isPaginated && displayZoom !== 1 ? 'top left' : undefined}
+    style:will-change={isPaginated && displayZoom !== 1 ? 'transform' : undefined}
     class={css({
       position: 'relative',
       ...(isPaginated && {

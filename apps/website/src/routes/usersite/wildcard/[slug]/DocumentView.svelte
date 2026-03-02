@@ -286,6 +286,12 @@
         ? Uint8Array.fromBase64(document.snapshot)
         : undefined,
   );
+  const headerContentInsetLeft = $derived(
+    editor.layout?.layoutMode.type === 'paginated' ? editor.layout.layoutMode.pageMarginLeft * editor.displayZoom : 0,
+  );
+  const headerContentInsetRight = $derived(
+    editor.layout?.layoutMode.type === 'paginated' ? editor.layout.layoutMode.pageMarginRight * editor.displayZoom : 0,
+  );
   const assets = $derived(document?.assets);
 
   $effect(() => {
@@ -388,61 +394,67 @@
 
       {#snippet documentHeader()}
         <div class={css({ paddingTop: { base: '48px', md: '80px' } })}>
-          <nav class={flex({ alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginBottom: '20px' })}>
-            <a class={flex({ alignItems: 'center', gap: '6px' })} href={entityView.data.site.url}>
-              {#if entityView.data.site.logo}
-                <Img
-                  style={css.raw({ size: '18px', borderRadius: '4px', objectFit: 'cover' })}
-                  alt={`${entityView.data.site.name} 로고`}
-                  image$key={entityView.data.site.logo}
-                  size={24}
-                />
-              {/if}
-              <span class={css({ fontSize: '13px', color: 'text.faint', _hover: { color: 'text.muted' } })}>
-                {entityView.data.site.name}
-              </span>
-            </a>
+          <div
+            style:padding-left={`${headerContentInsetLeft}px`}
+            style:padding-right={`${headerContentInsetRight}px`}
+            class={flex({ direction: 'column', width: 'full' })}
+          >
+            <nav class={flex({ alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginBottom: '20px' })}>
+              <a class={flex({ alignItems: 'center', gap: '6px' })} href={entityView.data.site.url}>
+                {#if entityView.data.site.logo}
+                  <Img
+                    style={css.raw({ size: '18px', borderRadius: '4px', objectFit: 'cover' })}
+                    alt={`${entityView.data.site.name} 로고`}
+                    image$key={entityView.data.site.logo}
+                    size={24}
+                  />
+                {/if}
+                <span class={css({ fontSize: '13px', color: 'text.faint', _hover: { color: 'text.muted' } })}>
+                  {entityView.data.site.name}
+                </span>
+              </a>
 
-            {#each entityView.data.ancestors as ancestor (ancestor.id)}
-              {#if ancestor.node.__typename === 'FolderView'}
-                <span class={css({ fontSize: '13px', color: 'text.faint' })}>/</span>
-                <a class={css({ fontSize: '13px', color: 'text.faint', _hover: { color: 'text.muted' } })} href={`/${ancestor.slug}`}>
-                  {ancestor.node.name}
-                </a>
-              {/if}
-            {/each}
-          </nav>
+              {#each entityView.data.ancestors as ancestor (ancestor.id)}
+                {#if ancestor.node.__typename === 'FolderView'}
+                  <span class={css({ fontSize: '13px', color: 'text.faint' })}>/</span>
+                  <a class={css({ fontSize: '13px', color: 'text.faint', _hover: { color: 'text.muted' } })} href={`/${ancestor.slug}`}>
+                    {ancestor.node.name}
+                  </a>
+                {/if}
+              {/each}
+            </nav>
 
-          <div class={css({ fontSize: { base: '24px', lg: '28px' }, fontWeight: 'bold' })}>
-            {document.title}
+            <div class={css({ fontSize: { base: '24px', lg: '28px' }, fontWeight: 'bold' })}>
+              {document.title}
+            </div>
+
+            {#if document.subtitle}
+              <div class={css({ marginTop: '8px', fontSize: { base: '14px', lg: '16px' }, fontWeight: 'medium' })}>
+                {document.subtitle}
+              </div>
+            {/if}
+
+            <div class={flex({ align: 'center', justify: 'space-between', marginTop: '24px', paddingBottom: '16px' })}>
+              <div class={flex({ align: 'center', gap: '8px', fontSize: '13px', color: 'text.faint' })}>
+                {#if document.allowReaction && document.reactions.length > 0}
+                  <div class={flex({ align: 'center', gap: '3px' })}>
+                    <Icon icon={SmileIcon} />
+                    <span>{comma(document.reactions.length)}</span>
+                  </div>
+                {/if}
+              </div>
+
+              <div class={flex({ align: 'center', marginLeft: 'auto', gap: '12px', color: 'text.muted' })}>
+                <ShareLinkPopover href={entityView.data.url} />
+
+                <DocumentActionMenu entityView$key={entityView.data} />
+              </div>
+            </div>
+
+            {#if editor.layout?.layoutMode.type !== 'paginated'}
+              <HorizontalDivider style={css.raw({ marginBottom: '24px' })} />
+            {/if}
           </div>
-
-          {#if document.subtitle}
-            <div class={css({ marginTop: '8px', fontSize: { base: '14px', lg: '16px' }, fontWeight: 'medium' })}>
-              {document.subtitle}
-            </div>
-          {/if}
-
-          <div class={flex({ align: 'center', justify: 'space-between', marginTop: '24px', paddingBottom: '16px' })}>
-            <div class={flex({ align: 'center', gap: '8px', fontSize: '13px', color: 'text.faint' })}>
-              {#if document.allowReaction && document.reactions.length > 0}
-                <div class={flex({ align: 'center', gap: '3px' })}>
-                  <Icon icon={SmileIcon} />
-                  <span>{comma(document.reactions.length)}</span>
-                </div>
-              {/if}
-            </div>
-
-            <div class={flex({ align: 'center', marginLeft: 'auto', gap: '12px', color: 'text.muted' })}>
-              <ShareLinkPopover href={entityView.data.url} />
-
-              <DocumentActionMenu entityView$key={entityView.data} />
-            </div>
-          </div>
-
-          {#if editor.layout?.layoutMode.type !== 'paginated'}
-            <HorizontalDivider style={css.raw({ marginBottom: '24px' })} />
-          {/if}
         </div>
       {/snippet}
 

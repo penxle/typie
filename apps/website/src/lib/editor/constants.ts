@@ -12,7 +12,7 @@ export const CONTINUOUS_MIN_WIDTH = 300;
 export const CONTINUOUS_VIEW_PADDING = 20;
 export const CONTINUOUS_PAGE_MARGIN = 20;
 
-export const PAGINATED_VIEW_PADDING = 40;
+export const PAGINATED_VIEW_PADDING = 0;
 export const PAGE_GAP = 24;
 
 export const TOUCH_LONG_PRESS_MS = 500;

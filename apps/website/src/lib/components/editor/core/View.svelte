@@ -129,7 +129,7 @@
   bind:this={extensionAreaEl}
   style:padding-left="{viewPadding}px"
   style:padding-right="{viewPadding}px"
-  style:gap={isPaginated ? `${PAGE_GAP}px` : '0'}
+  style:gap={isPaginated ? `${PAGE_GAP * editor.displayZoom}px` : '0'}
   class={css(
     flex.raw({
       position: 'relative',

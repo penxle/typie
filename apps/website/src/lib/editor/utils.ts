@@ -79,8 +79,11 @@ export const findNearestPageCoordinate = (
   e: MouseEvent | PointerEvent,
   pageElements: HTMLElement[],
   pageWidth: number,
+  zoom = 1,
 ): ExtensionAreaCoordinate | null => {
   if (pageElements.length === 0) return null;
+
+  const safeZoom = Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
 
   const eventY = e.clientY;
 
@@ -115,15 +118,15 @@ export const findNearestPageCoordinate = (
 
   const pageRect = nearestPageEl.getBoundingClientRect();
 
-  const relativeX = Math.max(0, Math.min(pageWidth, e.clientX - pageRect.left));
+  const relativeX = Math.max(0, Math.min(pageWidth, (e.clientX - pageRect.left) / safeZoom));
 
   let relativeY: number;
   if (eventY < pageRect.top) {
     relativeY = 0;
   } else if (eventY > pageRect.bottom) {
-    relativeY = pageRect.height;
+    relativeY = pageRect.height / safeZoom;
   } else {
-    relativeY = eventY - pageRect.top;
+    relativeY = (eventY - pageRect.top) / safeZoom;
   }
 
   return {

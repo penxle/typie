@@ -7,15 +7,17 @@
     pageWidth: number;
     marginLeft: number;
     marginRight: number;
+    zoom?: number;
+    offsetX?: number;
     unit?: 'px' | 'cm';
     dpi?: number;
     padding?: number;
-    ref?: HTMLElement | null;
   };
 
-  let { thickness = 24, pageWidth, marginLeft, marginRight, unit = 'px', dpi = 96, padding = 0, ref = $bindable(null) }: Props = $props();
+  let { thickness = 24, pageWidth, marginLeft, marginRight, zoom = 1, offsetX = 0, unit = 'px', dpi = 96, padding = 0 }: Props = $props();
 
-  const ticks = $derived(calculateTicks(pageWidth, unit, dpi));
+  const visualPageWidth = $derived(pageWidth * zoom);
+  const ticks = $derived(calculateTicks({ totalSize: pageWidth, unit, dpi, zoom }));
 
   const isInMargin = (position: number): boolean => {
     return position < marginLeft || position > pageWidth - marginRight;
@@ -36,9 +38,13 @@
     userSelect: 'none',
   })}
 >
-  <div bind:this={ref} style:width="{pageWidth}px" class={css({ position: 'relative' })}>
-    {#each ticks as tick (tick.position)}
-      {@const inMargin = isInMargin(tick.position)}
+  <div
+    style:transform={offsetX === 0 ? undefined : `translateX(-${offsetX}px)`}
+    style:width="{visualPageWidth}px"
+    class={css({ position: 'relative' })}
+  >
+    {#each ticks as tick (`${tick.logicalPosition}-${tick.isMajor ? 'm' : 's'}`)}
+      {@const inMargin = isInMargin(tick.logicalPosition)}
       {#if tick.isMajor}
         <div
           style:left="{tick.position}px"
@@ -62,7 +68,7 @@
               color: inMargin ? 'text.disabled' : 'text.muted',
             })}
           >
-            {formatTickLabel(Number(tick.label), unit)}
+            {formatTickLabel(tick.label, unit)}
           </div>
         {/if}
       {:else}
