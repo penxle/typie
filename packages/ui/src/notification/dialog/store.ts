@@ -12,6 +12,8 @@ type Dialog = {
   action?: 'primary' | 'danger';
   actionLabel?: string;
   actionHandler?: () => void;
+
+  onclose?: () => void;
 };
 
 type Alert = Dialog & {
