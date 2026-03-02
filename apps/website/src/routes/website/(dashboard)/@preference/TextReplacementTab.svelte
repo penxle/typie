@@ -12,7 +12,7 @@
   import TrashIcon from '~icons/lucide/trash';
   import { SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
   import { cache } from '$lib/graphql';
-  import { initWasm } from '$lib/wasm';
+  import { initWasm } from '$lib/wasm.svelte';
   import { graphql } from '$mearie';
   import type { DashboardLayout_PreferenceModal_TextReplacementTab_user$key } from '$mearie';
 

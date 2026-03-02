@@ -3,7 +3,7 @@ import { Tip } from '@typie/ui/notification';
 import { nanoid } from 'nanoid';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { defaultValues } from '@/const';
-import { initWasm, wasm } from '$lib/wasm';
+import { initWasm, wasm } from '$lib/wasm.svelte';
 import { PAGE_GAP } from './constants';
 import { ensureRequiredFallbackFont, ensureRequiredFont, filterUncoveredCodepoints, initFonts, preloadRemainingChunks } from './fonts';
 import {

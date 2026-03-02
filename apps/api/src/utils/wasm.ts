@@ -51,12 +51,20 @@ async function createInstance(module: WebAssembly.Module): Promise<Application> 
 const available: Application[] = [];
 const waiting: ((app: Application) => void)[] = [];
 let poolReady: Promise<void> | null = null;
+let wasmModule: WebAssembly.Module | null = null;
 
 async function initPool(): Promise<void> {
   const wasmBuffer = await readFile(WASM_PATH);
-  const module = await WebAssembly.compile(wasmBuffer);
-  const instances = await Promise.all(Array.from({ length: POOL_SIZE }, () => createInstance(module)));
+  wasmModule = await WebAssembly.compile(wasmBuffer);
+  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+  const instances = await Promise.all(Array.from({ length: POOL_SIZE }, () => createInstance(wasmModule!)));
   available.push(...instances);
+}
+
+function returnToPool(app: Application): void {
+  const next = waiting.shift();
+  if (next) next(app);
+  else available.push(app);
 }
 
 async function use<T>(fn: (app: Application) => T): Promise<Awaited<T>> {
@@ -70,11 +78,18 @@ async function use<T>(fn: (app: Application) => T): Promise<Awaited<T>> {
 
   const app = available.pop() ?? (await new Promise<Application>((resolve) => waiting.push(resolve)));
   try {
-    return await fn(app);
-  } finally {
-    const next = waiting.shift();
-    if (next) next(app);
-    else available.push(app);
+    const result = await fn(app);
+    returnToPool(app);
+    return result;
+  } catch (err) {
+    if (err instanceof WebAssembly.RuntimeError && wasmModule) {
+      createInstance(wasmModule).then(returnToPool, () => {
+        /* noop*/
+      });
+    } else {
+      returnToPool(app);
+    }
+    throw err;
   }
 }
 
