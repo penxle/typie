@@ -1,38 +1,23 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter/scheduler.dart';
-import 'package:flutter/widgets.dart';
 import 'package:typie/screens/native_editor/view/interaction/input.dart';
 import 'package:typie/screens/native_editor/view/interaction/mode.dart';
 
 class EditorInteractionState {
   final ValueNotifier<InteractionSnapshot> _snapshotNotifier = ValueNotifier(const InteractionSnapshot());
-  bool _disposed = false;
-  final List<InteractionInput> _deferredInputs = [];
-  bool _deferredFlushScheduled = false;
 
   ValueListenable<InteractionSnapshot> get listenable => _snapshotNotifier;
 
   InteractionSnapshot snapshot() => _snapshotNotifier.value;
 
   void reset() {
-    _deferredInputs.clear();
-    _deferredFlushScheduled = false;
     _snapshotNotifier.value = const InteractionSnapshot();
   }
 
   void dispose() {
-    _disposed = true;
-    _deferredInputs.clear();
-    _deferredFlushScheduled = false;
     _snapshotNotifier.dispose();
   }
 
   void handle(InteractionInput input) {
-    if (_shouldDeferMutation()) {
-      _deferredInputs.add(input);
-      _scheduleDeferredFlush();
-      return;
-    }
     _applyInput(input);
   }
 
@@ -86,42 +71,6 @@ class EditorInteractionState {
     if (!_equalsSnapshot(previous, nextSnapshot)) {
       _snapshotNotifier.value = nextSnapshot;
     }
-  }
-
-  bool _shouldDeferMutation() {
-    if (_disposed) {
-      return false;
-    }
-    SchedulerPhase? phase;
-    try {
-      phase = SchedulerBinding.instance.schedulerPhase;
-    } catch (_) {
-      return false;
-    }
-    return phase == SchedulerPhase.persistentCallbacks;
-  }
-
-  void _scheduleDeferredFlush() {
-    if (_deferredFlushScheduled || _disposed) {
-      return;
-    }
-    _deferredFlushScheduled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _deferredFlushScheduled = false;
-      if (_disposed || _deferredInputs.isEmpty) {
-        _deferredInputs.clear();
-        return;
-      }
-
-      final pending = List<InteractionInput>.from(_deferredInputs);
-      _deferredInputs.clear();
-      for (final input in pending) {
-        if (_disposed) {
-          break;
-        }
-        _applyInput(input);
-      }
-    });
   }
 
   bool _equalsSnapshot(InteractionSnapshot a, InteractionSnapshot b) {
@@ -229,6 +178,12 @@ class EditorInteractionState {
 
   InteractionMode _handleDndMode({required InteractionMode currentMode, required InteractionInput input}) {
     if (input is DndStartInput) {
+      if (currentMode == InteractionMode.textHandleDragging ||
+          currentMode == InteractionMode.tableCellHandleDragging ||
+          currentMode == InteractionMode.longPressSelecting ||
+          currentMode == InteractionMode.doubleTapSelecting) {
+        return currentMode;
+      }
       return input.local ? InteractionMode.dndLocal : InteractionMode.dndExternal;
     }
 

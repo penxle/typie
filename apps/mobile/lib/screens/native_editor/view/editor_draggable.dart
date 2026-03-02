@@ -44,11 +44,12 @@ class EditorDraggable extends StatelessWidget {
         }
 
         onSessionCompleted = () {
-          if (request.session.dragCompleted.value == null) {
+          final op = request.session.dragCompleted.value;
+          if (op == null) {
             return;
           }
           clearSessionCompletedListener();
-          interactionController.endDndSession();
+          interactionController.onLocalDragCompleted(op);
         };
         request.session.dragCompleted.addListener(onSessionCompleted);
         isSessionListenerAttached = true;
