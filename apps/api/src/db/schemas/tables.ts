@@ -32,6 +32,7 @@ export const Documents = pgTable(
     contentRating: E._DocumentContentRating('content_rating').notNull().default('ALL'),
     allowReaction: boolean('allow_reaction').notNull().default(true),
     protectContent: boolean('protect_content').notNull().default(true),
+    locked: boolean('locked').notNull().default(false),
     thumbnailId: text('thumbnail_id').references(() => Images.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     type: E._DocumentType('type').notNull().default('NORMAL'),
     createdAt: datetime('created_at')

@@ -198,6 +198,7 @@ Document.implement({
     contentRating: t.expose('contentRating', { type: DocumentContentRating }),
     allowReaction: t.exposeBoolean('allowReaction'),
     protectContent: t.exposeBoolean('protectContent'),
+    locked: t.exposeBoolean('locked'),
 
     assets: t.field({
       type: [DocumentAsset],
@@ -1028,6 +1029,7 @@ builder.mutationFields((t) => ({
       documentId: t.input.id({ validate: validateDbId(TableCode.DOCUMENTS) }),
       title: t.input.string({ required: false }),
       subtitle: t.input.string({ required: false }),
+      locked: t.input.boolean({ required: false }),
     },
     resolve: async (_, { input }, ctx) => {
       const document = await db
@@ -1049,6 +1051,7 @@ builder.mutationFields((t) => ({
         .set({
           ...(input.title !== undefined && { title: input.title }),
           ...(input.subtitle !== undefined && { subtitle: input.subtitle }),
+          ...(input.locked != null && { locked: input.locked }),
           updatedAt: dayjs(),
         })
         .where(eq(Documents.id, input.documentId))
