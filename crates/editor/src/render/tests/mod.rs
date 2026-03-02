@@ -1,12 +1,12 @@
 use super::*;
 use crate::diagnostics::LayoutPassRecorder;
 use crate::layout::elements::{
-    BackgroundSegment, BlockquoteLineElement, CalloutBackgroundElement, CalloutIconElement,
-    FoldContentElement, LineElement, LineMetric, ListMarkerElement, ListMarkerType, RubySegment,
-    SplitEdges, TableBorderElement, TableCellElement,
+    BackgroundSegment, BlockquoteLineElement, BlockquoteMessageElement, CalloutBackgroundElement,
+    CalloutIconElement, FoldContentElement, LineElement, LineMetric, ListMarkerElement,
+    ListMarkerType, RubySegment, SplitEdges, TableBorderElement, TableCellElement,
 };
 use crate::layout::{LayoutNode, PageBreakPolicy};
-use crate::model::{CalloutVariant, NodeId, TableAlign, TableBorderStyle};
+use crate::model::{BlockquoteVariant, CalloutVariant, NodeId, TableAlign, TableBorderStyle};
 use crate::types::Size;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::rc::Rc;

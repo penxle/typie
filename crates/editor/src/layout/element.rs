@@ -93,6 +93,7 @@ impl Element {
     pub fn paint_overflow(&self) -> PaintOverflow {
         match self {
             Element::Line(e) => e.paint_overflow(),
+            Element::BlockquoteMessage(e) => e.paint_overflow(),
             _ => PaintOverflow::default(),
         }
     }

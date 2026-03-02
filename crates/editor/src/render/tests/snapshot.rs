@@ -93,6 +93,55 @@ fn snapshot_reuses_wrapper_by_stable_identity() {
 }
 
 #[test]
+fn snapshot_expands_dirty_rect_for_message_blockquote_tail() {
+    let block_id = NodeId::new();
+    let bubble_x = 40.0;
+    let bubble_y = 30.0;
+    let bubble_width = 120.0;
+    let bubble_height = 40.0;
+
+    let make_page = |variant| {
+        root_with_children(
+            Some(vec![PositionedNode {
+                position: Point::new(bubble_x, bubble_y),
+                node: Rc::new(LayoutNode {
+                    size: Size::new(bubble_width, bubble_height),
+                    element: Some(Element::BlockquoteMessage(BlockquoteMessageElement::new(
+                        Size::new(bubble_width, bubble_height),
+                        block_id,
+                        variant,
+                        SplitEdges::default(),
+                    ))),
+                    children: None,
+                    page_break_policy: PageBreakPolicy::default(),
+                    render_hints: RenderHints::default(),
+                    scope_id: None,
+                }),
+            }]),
+            Size::new(300.0, 200.0),
+        )
+    };
+
+    let sent_page = make_page(BlockquoteVariant::MessageSent);
+    let received_page = make_page(BlockquoteVariant::MessageReceived);
+
+    let snapshot_sent = PageRenderSnapshot::from_page(&sent_page);
+    let snapshot_received = PageRenderSnapshot::from_page(&received_page);
+    let rects = snapshot_sent.dirty_rects(&snapshot_received);
+
+    assert!(
+        rects
+            .iter()
+            .any(|rect| rect.right() > bubble_x + bubble_width),
+        "sent tail 영역을 지우기 위해 오른쪽 dirty rect 확장이 필요함"
+    );
+    assert!(
+        rects.iter().any(|rect| rect.x < bubble_x),
+        "received tail 영역을 그리기 위해 왼쪽 dirty rect 확장이 필요함"
+    );
+}
+
+#[test]
 fn snapshot_ignores_selection_only_table_cell_element() {
     let cell_id = NodeId::new();
 
