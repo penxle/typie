@@ -19,7 +19,7 @@ import 'package:typie/screens/native_editor/controller/upload.dart';
 import 'package:typie/screens/native_editor/external/models.dart';
 import 'package:typie/screens/native_editor/toolbar/scope.dart';
 import 'package:typie/screens/native_editor/view/interaction/controller.dart';
-import 'package:typie/screens/native_editor/view/interaction/mode.dart';
+import 'package:typie/screens/native_editor/view/interaction/state.dart';
 import 'package:typie/services/blob.dart';
 
 const _imageMinWidth = 100.0;
@@ -70,12 +70,12 @@ class ImageWidget extends HookWidget {
 
     final processedUploadId = useRef<String?>(null);
 
-    void startAuxiliaryGesture(AuxiliaryGestureKind kind) {
-      interactionController.startAuxiliaryGesture(kind);
+    bool startAuxiliaryGesture(AuxiliaryGestureKind kind) {
+      return interactionController.startAuxiliaryGesture(kind);
     }
 
-    void updateAuxiliaryGesture(AuxiliaryGestureKind kind) {
-      interactionController.updateAuxiliaryGesture(kind);
+    bool updateAuxiliaryGesture(AuxiliaryGestureKind kind) {
+      return interactionController.updateAuxiliaryGesture(kind);
     }
 
     void endAuxiliaryGesture() {
@@ -103,7 +103,9 @@ class ImageWidget extends HookWidget {
       return null;
     }, [isResizing, element.isSelected, hasImage, boundsWidth]);
 
-    useEffect(() => endAuxiliaryGesture, const []);
+    useEffect(() {
+      return endAuxiliaryGesture;
+    }, const []);
 
     if (!hasImage) {
       return _buildPlaceholder(context);
@@ -130,7 +132,9 @@ class ImageWidget extends HookWidget {
         return;
       }
 
-      startAuxiliaryGesture(AuxiliaryGestureKind.imageResize);
+      if (!startAuxiliaryGesture(AuxiliaryGestureKind.imageResize)) {
+        return;
+      }
 
       final startWidth = _resolveImageWidth(boundsWidth, displayProportion, originalWidth);
       resizeDraft.value = _ImageResizeDraft(
@@ -152,7 +156,10 @@ class ImageWidget extends HookWidget {
       final dx = (event.position.dx - current.startX) * (current.reverse ? -1 : 1);
       final nextWidth = _clampWidth(current.startWidth + dx * 2, boundsWidth, originalWidth);
       final nextProportion = _clampProportion(nextWidth / boundsWidth);
-      updateAuxiliaryGesture(AuxiliaryGestureKind.imageResize);
+      if (!updateAuxiliaryGesture(AuxiliaryGestureKind.imageResize)) {
+        resizeDraft.value = null;
+        return;
+      }
 
       resizeDraft.value = current.copyWith(proportion: nextProportion);
     }

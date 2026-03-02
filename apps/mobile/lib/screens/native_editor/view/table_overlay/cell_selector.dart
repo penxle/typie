@@ -203,11 +203,14 @@ class TableCellSelectorController {
       }
     }
 
-    interactionController.startTableCellHandleDrag(
+    final started = interactionController.startTableCellHandleDrag(
       anchorHandle: anchorHandle,
       viewportPosition: viewportPosition,
       cellHandleDragPosition: cellHandleDragPosition,
     );
+    if (!started) {
+      dragDraftState.value = null;
+    }
   }
 
   void updateDrag(DragUpdateDetails details) {
@@ -224,13 +227,16 @@ class TableCellSelectorController {
     if (viewportPosition == null) {
       return;
     }
-    interactionController.updateTableCellHandleDrag(
+    final updated = interactionController.updateTableCellHandleDrag(
       viewportPosition: viewportPosition,
       cellHandleDragPosition: cellHandleDragPosition,
       tableDropPosition: dropPosition,
       viewWidth: viewWidth,
       viewHeight: viewHeight,
     );
+    if (!updated) {
+      return;
+    }
   }
 
   void endDragFromPanEnd(DragEndDetails _) => endDrag();

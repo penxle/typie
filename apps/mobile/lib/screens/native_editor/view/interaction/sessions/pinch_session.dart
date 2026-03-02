@@ -1,15 +1,15 @@
-import 'package:flutter/widgets.dart';
-import 'package:typie/screens/native_editor/state/state.dart';
-import 'package:typie/screens/native_editor/view/geometry.dart';
-import 'package:typie/screens/native_editor/view/zoom.dart';
+part of '../controller.dart';
 
-class PinchZoomSession {
+typedef PinchPageResolver = (int pageIdx, double localY) Function(double y);
+
+class PinchViewportSession implements InteractionSession {
   PinchAnchor? _anchor;
   PinchScrollTarget? _pendingTarget;
   double _pendingContentWidth = 0;
   double _pendingViewportWidth = 0;
   bool _syncScheduled = false;
 
+  @override
   void reset() {
     _anchor = null;
     _pendingTarget = null;
@@ -174,8 +174,10 @@ class PinchZoomSession {
   }
 }
 
-class PinchGestureController {
-  final PinchZoomSession _session = PinchZoomSession();
+class PinchSession implements InteractionSession {
+  PinchSession({required PinchViewportSession viewportSession}) : _viewportSession = viewportSession;
+
+  final PinchViewportSession _viewportSession;
   final Map<int, Offset> _activePointers = {};
   double? _pinchStartDistance;
   double _pinchStartZoom = 1;
@@ -208,19 +210,20 @@ class PinchGestureController {
     _activePointers.remove(pointer);
   }
 
+  @override
   void reset() {
     _activePointers.clear();
     _pinchStartDistance = null;
     _pinchStartZoom = 1;
     _isPinching = false;
-    _session.reset();
+    _viewportSession.reset();
   }
 
   bool beginIfNeeded({
     required bool isPaginated,
     required double currentZoom,
     required double Function(double localX) resolveLogicalX,
-    required (int pageIdx, double localY) Function(double y) resolvePageAtPosition,
+    required PinchPageResolver resolvePageAtPosition,
   }) {
     if (!isPaginated || _activePointers.length < 2) {
       return false;
@@ -234,13 +237,13 @@ class PinchGestureController {
     _pinchStartDistance = distance;
     _pinchStartZoom = currentZoom;
     _isPinching = true;
-    _session.reset();
+    _viewportSession.reset();
 
     final focal = _currentPinchFocal();
     if (focal != null) {
       final logicalX = resolveLogicalX(focal.dx);
       final (pageIdx, logicalY) = resolvePageAtPosition(focal.dy);
-      _session.captureAnchor(pageIdx: pageIdx, logicalX: logicalX, logicalY: logicalY);
+      _viewportSession.captureAnchor(pageIdx: pageIdx, logicalX: logicalX, logicalY: logicalY);
     }
 
     return true;
@@ -252,7 +255,7 @@ class PinchGestureController {
     required double viewportWidth,
     required double currentZoom,
     required double Function(double localX) resolveLogicalX,
-    required (int pageIdx, double localY) Function(double y) resolvePageAtPosition,
+    required PinchPageResolver resolvePageAtPosition,
     required void Function(double zoom, {bool commitRender}) setZoom,
     required ContentGeometry Function(double zoom) geometryBuilder,
     required ScrollController horizontalScrollController,
@@ -284,7 +287,7 @@ class PinchGestureController {
 
     final logicalX = resolveLogicalX(focal.dx);
     final (pageIdx, logicalY) = resolvePageAtPosition(focal.dy);
-    _session.ensureAnchor(pageIdx: pageIdx, logicalX: logicalX, logicalY: logicalY);
+    _viewportSession.ensureAnchor(pageIdx: pageIdx, logicalX: logicalX, logicalY: logicalY);
 
     final nextZoom = clampPaginatedZoom(
       zoom: _pinchStartZoom * (distance / startDistance),
@@ -297,7 +300,7 @@ class PinchGestureController {
       setZoom(nextZoom);
     }
 
-    _session.syncViewport(
+    _viewportSession.syncViewport(
       focal: focal,
       geometry: geometryBuilder(zoomForSync),
       viewportWidth: viewportWidth,
@@ -314,7 +317,7 @@ class PinchGestureController {
     }
     _isPinching = false;
     _pinchStartDistance = null;
-    _session.reset();
+    _viewportSession.reset();
     setZoom(currentZoom, commitRender: true);
   }
 
@@ -322,6 +325,7 @@ class PinchGestureController {
     if (_activePointers.length < 2) {
       return null;
     }
+
     final points = _activePointers.values.toList(growable: false);
     if (points.length < 2) {
       return null;
@@ -333,10 +337,170 @@ class PinchGestureController {
     if (_activePointers.length < 2) {
       return null;
     }
+
     final points = _activePointers.values.toList(growable: false);
     if (points.length < 2) {
       return null;
     }
     return (points[0] + points[1]) / 2;
+  }
+}
+
+extension PinchInteractionMethods on EditorInteractionController {
+  String? _zoomSnapKey(double value) {
+    final layout = scope.controller.state.layout;
+    final viewWidth = readViewWidth();
+    if (layout is! PaginatedLayout || viewWidth <= 0) {
+      return null;
+    }
+
+    final fitWidthZoom = computePaginatedFitWidthZoom(pageWidth: layout.pageWidth, viewportWidth: viewWidth);
+    final unitZoom = clampDocumentZoom(1, bounds: computePaginatedZoomBounds(pageWidth: layout.pageWidth));
+
+    if (zoomEquals(value, fitWidthZoom)) {
+      return 'fit-width';
+    }
+    if (zoomEquals(value, unitZoom)) {
+      return 'unit';
+    }
+    return null;
+  }
+
+  void _maybeSendZoomSnapHaptic({required double previousZoom, required double nextZoom}) {
+    if (zoomEquals(previousZoom, nextZoom)) {
+      return;
+    }
+
+    final nextSnap = _zoomSnapKey(nextZoom);
+    if (nextSnap == null) {
+      return;
+    }
+
+    final previousSnap = _zoomSnapKey(previousZoom);
+    if (previousSnap == nextSnap) {
+      return;
+    }
+
+    unawaited(HapticFeedback.selectionClick());
+  }
+
+  void _beginPinchIfNeeded() {
+    final geometry = readGeometry();
+    final started = pinchSession.beginIfNeeded(
+      isPaginated: geometry.isPaginated,
+      currentZoom: scope.displayZoom.value,
+      resolveLogicalX: _resolvePointerX,
+      resolvePageAtPosition: getPageAtPosition,
+    );
+    if (!started) {
+      return;
+    }
+
+    _applyTransition(InteractionEvent.pinchStart);
+
+    _clearResumedPanState();
+
+    _tapSession.cancelTapTimer();
+    stopSelectionHandlesAndAutoScroll();
+    _panSession.cancelDrag();
+    _doubleTapDragSession.stop();
+    _longPressSession.end();
+    longPressPosition.value = null;
+    handleDragPosition.value = null;
+    showContextMenu.value = false;
+  }
+
+  void _updatePinchZoom() {
+    final geometry = readGeometry();
+    pinchSession.updateIfNeeded(
+      isPaginated: geometry.isPaginated,
+      layout: scope.controller.state.layout,
+      viewportWidth: readViewWidth(),
+      currentZoom: scope.displayZoom.value,
+      resolveLogicalX: _resolvePointerX,
+      resolvePageAtPosition: getPageAtPosition,
+      setZoom: scope.setZoom,
+      geometryBuilder: (nextZoom) => ContentGeometry(
+        layout: scope.controller.state.layout!,
+        pages: scope.controller.state.pages,
+        titleAreaHeight: scope.titleAreaHeight.value,
+        selection: scope.controller.state.selection,
+        zoom: nextZoom,
+      ),
+      horizontalScrollController: scope.horizontalScrollController,
+      verticalScrollController: scope.verticalScrollController,
+      isMounted: () => context.mounted,
+      onZoomChanged: (previousZoom, nextZoom) {
+        _maybeSendZoomSnapHaptic(previousZoom: previousZoom, nextZoom: nextZoom);
+      },
+    );
+  }
+
+  void _endPinchIfNeeded() {
+    pinchSession.endIfNeeded(currentZoom: scope.displayZoom.value, setZoom: scope.setZoom);
+    _applyTransition(InteractionEvent.pinchEnd);
+  }
+
+  bool _handlePointerZoom(PointerScrollEvent event, Set<LogicalKeyboardKey> keysPressed) {
+    final geometry = readGeometry();
+    if (!geometry.isPaginated) {
+      return false;
+    }
+
+    final isZoomModifierPressed =
+        keysPressed.contains(LogicalKeyboardKey.controlLeft) ||
+        keysPressed.contains(LogicalKeyboardKey.controlRight) ||
+        keysPressed.contains(LogicalKeyboardKey.metaLeft) ||
+        keysPressed.contains(LogicalKeyboardKey.metaRight);
+    if (!isZoomModifierPressed) {
+      return false;
+    }
+
+    final layout = scope.controller.state.layout;
+    if (layout is! PaginatedLayout) {
+      return false;
+    }
+
+    final zoomDelta = event.scrollDelta.dy.abs() >= event.scrollDelta.dx.abs()
+        ? event.scrollDelta.dy
+        : event.scrollDelta.dx;
+    if (zoomDelta == 0) {
+      return true;
+    }
+
+    final currentZoom = scope.displayZoom.value;
+    final nextZoom = clampPaginatedZoom(
+      zoom: currentZoom * math.exp(-zoomDelta / 240),
+      pageWidth: layout.pageWidth,
+      viewportWidth: readViewWidth(),
+    );
+    if (zoomEquals(nextZoom, currentZoom)) {
+      return true;
+    }
+
+    final focal = event.localPosition;
+    final logicalX = _resolvePointerX(focal.dx);
+    final (pageIdx, logicalY) = getPageAtPosition(focal.dy);
+    pinchViewportSession.captureAnchor(pageIdx: pageIdx, logicalX: logicalX, logicalY: logicalY);
+
+    _maybeSendZoomSnapHaptic(previousZoom: currentZoom, nextZoom: nextZoom);
+    scope.setZoom(nextZoom);
+
+    pinchViewportSession.syncViewport(
+      focal: focal,
+      geometry: ContentGeometry(
+        layout: layout,
+        pages: scope.controller.state.pages,
+        titleAreaHeight: scope.titleAreaHeight.value,
+        selection: scope.controller.state.selection,
+        zoom: nextZoom,
+      ),
+      viewportWidth: readViewWidth(),
+      horizontalScrollController: scope.horizontalScrollController,
+      verticalScrollController: scope.verticalScrollController,
+      isMounted: () => context.mounted,
+      isPinching: () => true,
+    );
+    return true;
   }
 }

@@ -12,15 +12,13 @@ import 'package:typie/screens/native_editor/view/context_menu.dart';
 import 'package:typie/screens/native_editor/view/editor_draggable.dart';
 import 'package:typie/screens/native_editor/view/geometry.dart';
 import 'package:typie/screens/native_editor/view/interaction/controller.dart';
-import 'package:typie/screens/native_editor/view/interaction/gesture_controller.dart';
-import 'package:typie/screens/native_editor/view/interaction/mode.dart';
+import 'package:typie/screens/native_editor/view/interaction/state.dart';
 import 'package:typie/screens/native_editor/view/page.dart';
 import 'package:typie/screens/native_editor/view/scope.dart';
 import 'package:typie/screens/native_editor/view/selection.dart';
 import 'package:typie/screens/native_editor/view/table_overlay.dart';
 import 'package:typie/screens/native_editor/view/title.dart';
 import 'package:typie/screens/native_editor/view/zoom.dart';
-import 'package:typie/screens/native_editor/view/zoom_pinch.dart';
 import 'package:typie/services/preference.dart';
 
 class PageList extends HookWidget {
@@ -56,91 +54,23 @@ class PageList extends HookWidget {
     useValueListenable(scope.titleAreaHeight);
     useValueListenable(scope.displayZoom);
 
-    (int pageIdx, double localY) getPageAtPosition(double y) => resolvePageAtPosition(scope, y);
-
     final showContextMenu = useState(false);
     final wasContextMenuOpen = useRef(false);
     final clipboard = useMemoized(EditorClipboard.new);
     final viewportWidth = useValueNotifier<double>(0);
     final viewportSize = useValueNotifier(Size.zero);
 
-    HorizontalScrollMetrics resolveHorizontalMetrics() {
-      final geo = scope.geometry;
-      return resolveHorizontalScrollMetrics(
-        controller: horizontalScrollController,
-        contentWidth: geo.contentWidth,
-        fallbackViewportDimension: viewportWidth.value,
-      );
-    }
-
     final longPressPosition = scope.longPressPosition;
-    final handleDragPosition = scope.handleDragPosition;
-    final dropPosition = useValueNotifier<Offset?>(null);
-    final interactionRegionKey = useMemoized(GlobalKey.new);
-    final gesture = useMemoized(
-      () => GestureController(
-        verticalScrollController: verticalScrollController,
-        horizontalScrollController: horizontalScrollController,
-        controller: scope.controller,
-        getPageAtPosition: getPageAtPosition,
-        getPointerX: (localX) {
-          final geo = scope.geometry;
-          final horizontalMetrics = resolveHorizontalMetrics();
-          final hScrollOffset = horizontalMetrics.scrollOffset;
-          return geo.toLogicalX(
-            localX -
-                geo.contentStartX(
-                  viewportWidth: horizontalMetrics.viewportDimension,
-                  horizontalScrollOffset: hScrollOffset,
-                ),
-          );
-        },
-        getHorizontalMetrics: resolveHorizontalMetrics,
-      ),
+    final interactionRuntime = useEditorInteractionRuntime(
+      context: context,
+      scope: scope,
+      showContextMenu: showContextMenu,
+      wasContextMenuOpen: wasContextMenuOpen,
+      viewportSize: viewportSize,
     );
-    final wheelZoomSession = useMemoized(PinchZoomSession.new);
-    final pinch = useMemoized(PinchGestureController.new);
-
-    final interactionControllerDeps = useMemoized(
-      () => EditorInteractionControllerDeps(
-        context: context,
-        interactionRegionKey: interactionRegionKey,
-        scope: scope,
-        gesture: gesture,
-        pinch: pinch,
-        wheelZoomSession: wheelZoomSession,
-        getPageAtPosition: getPageAtPosition,
-        showContextMenu: showContextMenu,
-        wasContextMenuOpen: wasContextMenuOpen,
-        longPressPosition: longPressPosition,
-        handleDragPosition: handleDragPosition,
-        dropPosition: dropPosition,
-        readViewWidth: () => viewportSize.value.width,
-        readViewHeight: () => viewportSize.value.height,
-        readGeometry: () => scope.geometry,
-      ),
-      [
-        scope.controller,
-        scope.inputController,
-        scope.interactionState,
-        scope.verticalScrollController,
-        scope.horizontalScrollController,
-        scope.longPressPosition,
-        scope.handleDragPosition,
-        scope.titleAreaHeight,
-        scope.displayZoom,
-        scope.renderZoom,
-        gesture,
-        pinch,
-        wheelZoomSession,
-      ],
-    );
-    final interactionController = useMemoized(() => EditorInteractionController(deps: interactionControllerDeps), [
-      interactionControllerDeps,
-    ]);
-
-    useEffect(() => gesture.dispose, const []);
-    useEffect(() => pinch.reset, [pinch]);
+    final interactionController = interactionRuntime.controller;
+    final interactionRegionKey = interactionRuntime.interactionRegionKey;
+    final dropPosition = interactionRuntime.dropPosition;
 
     useEffect(() {
       void onScroll() {
@@ -170,7 +100,9 @@ class PageList extends HookWidget {
         final currentSelectionRange = selectionRangeKey(selection);
         final isCollapsed = fromHandle == null || toHandle == null;
         final handleDragCanceledByTableSelection =
-            isTableCellSelectorSelection && !gesture.isCellHandleDragging && gesture.hasTextHandleDrag;
+            isTableCellSelectorSelection &&
+            !interactionController.isTableCellHandleDragging &&
+            interactionController.hasSelectionHandleDrag;
         final justFinishedSelecting = wasSelecting.value && !isSelecting;
         final selectionChanged = fromHandle != prevFromHandle.value || toHandle != prevToHandle.value;
         final hasPreviousSelectionSnapshot = previousSelectionRange != null;
@@ -193,14 +125,16 @@ class PageList extends HookWidget {
             previousSelectionRange != currentSelectionRange &&
             !handlesJustAppeared;
 
-        final shouldResetTextHandleDrag =
-            !gesture.isCellHandleDragging && (isCollapsed || handleDragCanceledByTableSelection);
+        final shouldResetSelectionHandleDrag =
+            !interactionController.isTableCellHandleDragging && (isCollapsed || handleDragCanceledByTableSelection);
 
         if (handlesJustAppeared) {
           unawaited(HapticFeedback.selectionClick());
         }
 
-        if (!gesture.isCellHandleDragging && gesture.hasTextHandleDrag && anyHandleMoved) {
+        if (!interactionController.isTableCellHandleDragging &&
+            interactionController.hasSelectionHandleDrag &&
+            anyHandleMoved) {
           unawaited(HapticFeedback.selectionClick());
         }
 
@@ -208,8 +142,8 @@ class PageList extends HookWidget {
           unawaited(HapticFeedback.selectionClick());
         }
 
-        if (shouldResetTextHandleDrag) {
-          gesture.stopSelectionHandlesAndAutoScroll();
+        if (shouldResetSelectionHandleDrag) {
+          interactionController.stopSelectionHandlesAndAutoScroll();
           showContextMenu.value = false;
         } else if (!isSelecting && !interactionController.interactionActive) {
           if (justFinishedSelecting || selectionChanged) {
@@ -244,19 +178,19 @@ class PageList extends HookWidget {
       if (!interactionSnapshot.isAuxiliaryGesture) {
         return null;
       }
-      gesture.stopAutoScroll();
+      interactionController.stopInteractionAutoScroll();
       if (showContextMenu.value) {
         showContextMenu.value = false;
       }
       return null;
-    }, [interactionSnapshot.isAuxiliaryGesture, gesture]);
+    }, [interactionSnapshot.isAuxiliaryGesture, interactionController]);
 
     useEffect(() {
       if (isDndActive) {
-        gesture.cancelScrollDrag();
+        interactionController.cancelInteractionScrollDrag();
       }
       return null;
-    }, [isDndActive, gesture]);
+    }, [isDndActive, interactionController]);
 
     return EditorInteractionControllerScope(
       controller: interactionController,
@@ -432,8 +366,8 @@ class PageList extends HookWidget {
                       handleMetricsRevision,
                     ]),
                     builder: (context, _) {
-                      final fromPos = gesture.getHandlePosition(fromHandle, geo);
-                      final toPos = gesture.getHandlePosition(toHandle, geo);
+                      final fromPos = interactionController.selectionHandleViewportPosition(fromHandle, geo);
+                      final toPos = interactionController.selectionHandleViewportPosition(toHandle, geo);
 
                       return Stack(
                         clipBehavior: Clip.none,
@@ -458,7 +392,7 @@ class PageList extends HookWidget {
                   ),
                   if (showContextMenu.value &&
                       longPressPosition.value == null &&
-                      !gesture.hasTextHandleDrag &&
+                      !interactionController.hasSelectionHandleDrag &&
                       !interactionController.interactionActive)
                     SelectionContextMenu(clipboard: clipboard, onDismiss: () => showContextMenu.value = false),
                 ],

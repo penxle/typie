@@ -6,7 +6,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/context/theme.dart';
 import 'package:typie/screens/native_editor/table/models.dart';
 import 'package:typie/screens/native_editor/view/interaction/controller.dart';
-import 'package:typie/screens/native_editor/view/interaction/mode.dart';
+import 'package:typie/screens/native_editor/view/interaction/state.dart';
 
 import 'constants.dart';
 import 'geometry.dart';
@@ -84,7 +84,9 @@ class TableColumnResizer extends HookWidget {
       if (activeResizePointer.value != null) {
         return;
       }
-      interactionController.startAuxiliaryGesture(AuxiliaryGestureKind.tableColumnResize);
+      if (!interactionController.startAuxiliaryGesture(AuxiliaryGestureKind.tableColumnResize)) {
+        return;
+      }
       activeResizePointer.value = event.pointer;
       resizeDraft.value = ColumnResizeDraft(
         tableId: overlay.tableId,
@@ -103,7 +105,11 @@ class TableColumnResizer extends HookWidget {
       if (current == null) {
         return;
       }
-      interactionController.updateAuxiliaryGesture(AuxiliaryGestureKind.tableColumnResize);
+      if (!interactionController.updateAuxiliaryGesture(AuxiliaryGestureKind.tableColumnResize)) {
+        activeResizePointer.value = null;
+        resizeDraft.value = null;
+        return;
+      }
       resizeDraft.value = current.copyWith(deltaX: event.position.dx - current.startX);
     }
 
