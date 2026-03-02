@@ -151,7 +151,10 @@ impl Runtime {
                 if !nodes.is_empty() {
                     return nodes
                         .into_iter()
-                        .map(|node_id| Effect::NodeChanged { node_id })
+                        .map(|node_id| Effect::NodeMutated {
+                            node_id,
+                            kind: crate::runtime::MutationKind::Attr,
+                        })
                         .collect();
                 }
             }
@@ -165,7 +168,10 @@ impl Runtime {
                     return nodes
                         .iter()
                         .copied()
-                        .map(|node_id| Effect::NodeChanged { node_id })
+                        .map(|node_id| Effect::NodeMutated {
+                            node_id,
+                            kind: crate::runtime::MutationKind::Attr,
+                        })
                         .collect();
                 }
             }

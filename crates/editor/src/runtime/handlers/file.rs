@@ -30,7 +30,7 @@ impl Runtime {
                     file.id = Some(file_id);
                 }
             })?;
-            tr.push_effect(Effect::NodeChanged { node_id });
+            tr.mark_attr_mutation(node_id);
             Ok(true)
         })
     }

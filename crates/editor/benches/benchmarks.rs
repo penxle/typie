@@ -302,7 +302,7 @@ fn bench_commit(c: &mut Criterion) {
             |runtime| {
                 let state = runtime.state();
                 let mut tr = Transaction::new(state);
-                tr.push_effect(Effect::StructureChanged);
+                tr.mark_structure_mutation(NodeId::ROOT);
                 tr.commit().unwrap();
             },
             BATCH,

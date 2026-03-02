@@ -160,13 +160,9 @@ impl Transaction {
 
         self.set_selection(Selection::new(from, new_to));
 
-        self.push_effect(Effect::NodeChanged {
-            node_id: from.node_id,
-        });
+        self.mark_text_mutation(from.node_id);
         if from.node_id != to.node_id {
-            self.push_effect(Effect::NodeChanged {
-                node_id: to.node_id,
-            });
+            self.mark_text_mutation(to.node_id);
         }
 
         Ok(true)
@@ -247,10 +243,8 @@ impl Transaction {
                     Affinity::Upstream,
                 )));
 
-                self.push_effect(Effect::NodeChanged { node_id: child_id });
-                self.push_effect(Effect::NodeChanged {
-                    node_id: selection.head.node_id,
-                });
+                self.mark_text_mutation(child_id);
+                self.mark_text_mutation(selection.head.node_id);
                 return Ok(true);
             }
         }
@@ -279,9 +273,7 @@ impl Transaction {
         self.replace_range(selection.head, selection.head, fragment)?;
         self.set_selection(new_selection);
 
-        self.push_effect(Effect::NodeChanged {
-            node_id: selection.head.node_id,
-        });
+        self.mark_text_mutation(selection.head.node_id);
         Ok(true)
     }
 
@@ -304,9 +296,7 @@ impl Transaction {
         self.replace_range(selection.head, selection.head, fragment)?;
         self.set_selection(new_selection);
 
-        self.push_effect(Effect::NodeChanged {
-            node_id: selection.head.node_id,
-        });
+        self.mark_text_mutation(selection.head.node_id);
         Ok(true)
     }
 
@@ -445,9 +435,7 @@ impl Transaction {
             self.push_effect(Effect::PendingStylesChanged);
         }
 
-        self.push_effect(Effect::NodeChanged {
-            node_id: head.node_id,
-        });
+        self.mark_text_mutation(head.node_id);
         Ok(true)
     }
 
@@ -536,9 +524,7 @@ impl Transaction {
             self.push_effect(Effect::PendingStylesChanged);
         }
 
-        self.push_effect(Effect::NodeChanged {
-            node_id: head.node_id,
-        });
+        self.mark_text_mutation(head.node_id);
         Ok(true)
     }
 
@@ -617,13 +603,9 @@ impl Transaction {
             return self.delete_across_isolating_boundary(from, to);
         }
 
-        self.push_effect(Effect::NodeChanged {
-            node_id: from.node_id,
-        });
+        self.mark_text_mutation(from.node_id);
         if from.node_id != to.node_id {
-            self.push_effect(Effect::NodeChanged {
-                node_id: to.node_id,
-            });
+            self.mark_text_mutation(to.node_id);
         }
 
         self.delete_range(from, to)?;
@@ -704,13 +686,9 @@ impl Transaction {
             .spec()
             .map_or(false, |s| s.is_textblock(self.doc().schema()))
         {
-            self.push_effect(Effect::NodeChanged {
-                node_id: from.node_id,
-            });
+            self.mark_text_mutation(from.node_id);
             if from.node_id != to.node_id {
-                self.push_effect(Effect::NodeChanged {
-                    node_id: to.node_id,
-                });
+                self.mark_text_mutation(to.node_id);
             }
             self.delete_range(from, to)?;
             return Ok(());
@@ -852,13 +830,9 @@ impl Transaction {
 
         match (group_from_pos, group_to_pos) {
             (Some(g_from), Some(g_to)) if g_from != g_to => {
-                self.push_effect(Effect::NodeChanged {
-                    node_id: g_from.node_id,
-                });
+                self.mark_text_mutation(g_from.node_id);
                 if g_from.node_id != g_to.node_id {
-                    self.push_effect(Effect::NodeChanged {
-                        node_id: g_to.node_id,
-                    });
+                    self.mark_text_mutation(g_to.node_id);
                 }
                 self.delete_range(g_from, g_to)?;
                 if start_group == start_idx && from.node_id == lca_id {
@@ -3361,7 +3335,7 @@ mod tests {
 
         let has_list_changed = effects
             .iter()
-            .any(|e| matches!(e, Effect::NodeChanged { node_id } if *node_id == list));
+            .any(|e| matches!(e, Effect::NodeMutated { node_id, kind: crate::runtime::MutationKind::Attr } if *node_id == list));
         assert!(
             has_list_changed,
             "NodeChanged for list should be emitted for layout recalculation. Effects: {:?}",
@@ -3395,7 +3369,7 @@ mod tests {
 
         let has_list_changed = effects
             .iter()
-            .any(|e| matches!(e, Effect::NodeChanged { node_id } if *node_id == list_id));
+            .any(|e| matches!(e, Effect::NodeMutated { node_id, kind: crate::runtime::MutationKind::Attr } if *node_id == list_id));
         assert!(
             has_list_changed,
             "NodeChanged for list {:?} should be emitted for layout recalculation. Effects: {:?}",

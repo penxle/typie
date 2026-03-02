@@ -251,7 +251,7 @@ mod tests {
 
         let has_paragraph_changed = effects
             .iter()
-            .any(|e| matches!(e, Effect::NodeChanged { node_id } if *node_id == p));
+            .any(|e| matches!(e, Effect::NodeMutated { node_id, kind: crate::runtime::MutationKind::Attr } if *node_id == p));
         assert!(
             has_paragraph_changed,
             "Effect::NodeChanged should be emitted for the paragraph when wrapping in blockquote"

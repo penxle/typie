@@ -1,6 +1,7 @@
 use crate::model::{
     BulletListNode, ListItemNode, Node, NodeId, NodeType, OrderedListNode, ParagraphNode,
 };
+#[cfg(test)]
 use crate::runtime::Effect;
 use crate::state::selection_helpers::{block_content_len, collect_top_level_blocks_in_range};
 use crate::state::{Position, Selection};
@@ -127,13 +128,9 @@ impl Transaction {
             self.lift_top_level_list_item(&ctx)?
         };
 
-        self.push_effect(Effect::NodeChanged {
-            node_id: ctx.list_id,
-        });
-        self.push_effect(Effect::NodeChanged {
-            node_id: ctx.owner_id,
-        });
-        self.push_effect(Effect::StructureChanged);
+        self.mark_attr_mutation(ctx.list_id);
+        self.mark_attr_mutation(ctx.owner_id);
+        self.mark_structure_mutation(ctx.owner_id);
 
         Ok(new_id)
     }
@@ -193,13 +190,9 @@ impl Transaction {
             let count = target_list.children().count();
             self.move_node(list_item_id, target_list_id, count)?;
 
-            self.push_effect(Effect::NodeChanged {
-                node_id: list_item_id,
-            });
-            self.push_effect(Effect::NodeChanged {
-                node_id: target_list_id,
-            });
-            self.push_effect(Effect::StructureChanged);
+            self.mark_attr_mutation(list_item_id);
+            self.mark_attr_mutation(target_list_id);
+            self.mark_structure_mutation(target_list_id);
             return Ok(true);
         }
 
@@ -247,12 +240,8 @@ impl Transaction {
                     self.move_node(child_id, list_item_id, count + i)?;
                 }
 
-                self.node_mut(next_sibling_id)
-                    .context("Next sibling not found")?
-                    .as_mut()
-                    .delete()?;
-                self.push_effect(Effect::NodeChanged { node_id: list_id });
-                self.push_effect(Effect::StructureChanged);
+                self.delete_node_recursive(next_sibling_id)?;
+                self.mark_attr_mutation(list_id);
                 return self.join_forward();
             }
         } else {
@@ -261,8 +250,7 @@ impl Transaction {
                 let next_block_id = next_block.node_id();
                 let count = list_item.children().count();
                 self.move_node(next_block_id, list_item_id, count)?;
-                self.push_effect(Effect::NodeChanged { node_id: list_id });
-                self.push_effect(Effect::StructureChanged);
+                self.mark_attr_mutation(list_id);
                 return self.join_forward();
             }
         }
@@ -306,10 +294,7 @@ impl Transaction {
                 self.move_node(child_id, prev_sibling_id, count + i)?;
             }
 
-            self.node_mut(list_item_id)
-                .context("List item not found")?
-                .as_mut()
-                .delete()?;
+            self.delete_node_recursive(list_item_id)?;
             return self.join_backward();
         }
 
@@ -392,8 +377,7 @@ impl Transaction {
             Position::new(start_node_id, start_offset, start_affinity),
             Position::new(end_node_id, end_offset, end_affinity),
         ));
-
-        self.push_effect(Effect::StructureChanged);
+        self.mark_structure_mutation(NodeId::ROOT);
         Ok(true)
     }
 
@@ -482,10 +466,7 @@ impl Transaction {
             let block_id = block.node_id();
 
             let new_list_id = self.wrap_block_in_new_list(block_id, list_type)?;
-            self.push_effect(Effect::NodeChanged {
-                node_id: new_list_id,
-            });
-            self.push_effect(Effect::StructureChanged);
+            self.mark_attr_mutation(new_list_id);
             return Ok(true);
         }
     }
@@ -496,15 +477,21 @@ impl Transaction {
         target_parent_id: NodeId,
         index: usize,
     ) -> Result<NodeId> {
+        let old_parent_id = self
+            .node(node_id)
+            .and_then(|node| node.parent().map(|parent| parent.node_id()));
         self.node_mut(node_id)
             .context("Node not found")?
             .as_mut()
             .move_to(target_parent_id, index)?;
-        self.push_effect(Effect::NodeChanged {
-            node_id: target_parent_id,
-        });
-        self.push_effect(Effect::NodeChanged { node_id });
-        self.push_effect(Effect::StructureChanged);
+        self.mark_attr_mutation(target_parent_id);
+        if let Some(parent_id) = old_parent_id {
+            if parent_id != target_parent_id {
+                self.mark_attr_mutation(parent_id);
+            }
+        }
+        self.mark_attr_mutation(node_id);
+        self.mark_structure_mutation(target_parent_id);
         Ok(node_id)
     }
 
@@ -592,7 +579,7 @@ impl Transaction {
             .as_mut()
             .insert_child(block_index, new_list_node)?;
 
-        self.push_effect(Effect::NodeChanged { node_id: parent_id });
+        self.mark_attr_mutation(parent_id);
 
         let new_list_item_id = self
             .node_mut(new_list_id)
@@ -625,7 +612,7 @@ impl Transaction {
             .as_mut()
             .insert_child(list_index, new_list_node)?;
 
-        self.push_effect(Effect::NodeChanged { node_id: parent_id });
+        self.mark_attr_mutation(parent_id);
 
         let children_ids: Vec<NodeId> = self
             .node(list_id)
@@ -636,18 +623,12 @@ impl Transaction {
 
         for (i, child_id) in children_ids.into_iter().enumerate() {
             self.move_node(child_id, new_list_id, i)?;
-            self.push_effect(Effect::NodeChanged { node_id: child_id });
+            self.mark_attr_mutation(child_id);
         }
 
-        self.node_mut(list_id)
-            .context("Old list not found")?
-            .as_mut()
-            .delete()?;
+        self.delete_node_recursive(list_id)?;
 
-        self.push_effect(Effect::NodeChanged {
-            node_id: new_list_id,
-        });
-        self.push_effect(Effect::StructureChanged);
+        self.mark_attr_mutation(new_list_id);
         Ok(new_list_id)
     }
 
@@ -732,11 +713,7 @@ impl Transaction {
     fn delete_list_if_empty(&mut self, list_id: NodeId) -> Result<()> {
         let list = self.node(list_id).context("List not found")?;
         if list.children().next().is_none() {
-            self.node_mut(list_id)
-                .context("List not found")?
-                .as_mut()
-                .delete()?;
-            self.push_effect(Effect::StructureChanged);
+            self.delete_node_recursive(list_id)?;
         }
 
         Ok(())
@@ -828,10 +805,7 @@ impl Transaction {
             }
         }
 
-        self.node_mut(ctx.list_item_id)
-            .context("List item not found")?
-            .as_mut()
-            .delete()?;
+        self.delete_node_recursive(ctx.list_item_id)?;
 
         if !after_items.is_empty() {
             let new_list_node = self.new_list_node(ctx.list_type)?;
@@ -1245,12 +1219,18 @@ mod tests {
 
         assert_state_eq!(final_state, expected);
 
-        let has_structure_changed = effects
-            .iter()
-            .any(|e| matches!(e, Effect::StructureChanged));
+        let has_structure_changed = effects.iter().any(|e| {
+            matches!(
+                e,
+                Effect::NodeMutated {
+                    kind: crate::runtime::MutationKind::Structure,
+                    ..
+                }
+            )
+        });
         assert!(
             has_structure_changed,
-            "Effect::StructureChanged should be emitted"
+            "MutationKind::Structure should be emitted"
         );
 
         let root = final_state.doc.node(NodeId::ROOT).unwrap();
@@ -1258,10 +1238,10 @@ mod tests {
 
         let has_bq_changed = effects
             .iter()
-            .any(|e| matches!(e, Effect::NodeChanged { node_id } if *node_id == bq_id));
+            .any(|e| matches!(e, Effect::NodeMutated { node_id, kind: crate::runtime::MutationKind::Attr } if *node_id == bq_id));
         assert!(
             has_bq_changed,
-            "Effect::NodeChanged should be emitted for the blockquote"
+            "MutationKind::Attr should be emitted for the blockquote"
         );
     }
 
@@ -1524,21 +1504,27 @@ mod tests {
 
         let (_, effects) = transact_with_effect!(initial, |tr| tr.toggle_ordered_list().unwrap());
 
-        let has_structure_changed = effects
-            .iter()
-            .any(|e| matches!(e, Effect::StructureChanged));
+        let has_structure_changed = effects.iter().any(|e| {
+            matches!(
+                e,
+                Effect::NodeMutated {
+                    kind: crate::runtime::MutationKind::Structure,
+                    ..
+                }
+            )
+        });
         assert!(
             has_structure_changed,
-            "Effect::StructureChanged should be emitted"
+            "MutationKind::Structure should be emitted"
         );
 
         let has_item_changed = effects
             .iter()
-            .any(|e| matches!(e, Effect::NodeChanged { node_id } if *node_id == list_item_id));
+            .any(|e| matches!(e, Effect::NodeMutated { node_id, kind: crate::runtime::MutationKind::Attr } if *node_id == list_item_id));
 
         assert!(
             has_item_changed,
-            "Effect::NodeChanged should be emitted for the list item"
+            "MutationKind::Attr should be emitted for the list item"
         );
     }
 }

@@ -225,10 +225,8 @@ impl Transaction {
         }
 
         let new_selection = self.selection().clone();
-        self.push_effect(Effect::NodeChanged {
-            node_id: new_selection.head.node_id,
-        });
-        self.push_effect(Effect::StructureChanged);
+        self.mark_attr_mutation(new_selection.head.node_id);
+        self.mark_structure_mutation(NodeId::ROOT);
         Ok(true)
     }
 
@@ -438,12 +436,9 @@ impl Transaction {
         )?;
 
         for block_id in &block_ids {
-            self.push_effect(Effect::NodeChanged { node_id: *block_id });
+            self.mark_attr_mutation(*block_id);
         }
-        self.push_effect(Effect::NodeChanged {
-            node_id: wrapper_id,
-        });
-        self.push_effect(Effect::StructureChanged);
+        self.mark_attr_mutation(wrapper_id);
         Ok(true)
     }
 
@@ -606,13 +601,10 @@ impl Transaction {
         }
 
         for block_id in &block_ids {
-            self.push_effect(Effect::NodeChanged { node_id: *block_id });
+            self.mark_attr_mutation(*block_id);
         }
-        self.push_effect(Effect::NodeChanged { node_id: parent_id });
-        self.push_effect(Effect::NodeChanged {
-            node_id: grandparent_id,
-        });
-        self.push_effect(Effect::StructureChanged);
+        self.mark_attr_mutation(parent_id);
+        self.mark_attr_mutation(grandparent_id);
         Ok(true)
     }
 

@@ -108,9 +108,7 @@ fn apply_style_to_range(
         if let Some(Node::Text(text_node)) = node.node() {
             let range = start_offset..end_offset;
             text_node.text.apply_style(range, style)?;
-            tr.push_effect(Effect::NodeChanged {
-                node_id: text_node_id,
-            });
+            tr.mark_attr_mutation(text_node_id);
         }
     }
 
@@ -202,9 +200,7 @@ fn remove_style_from_range(
         if let Some(Node::Text(text_node)) = node.node() {
             let range = start_offset..end_offset;
             text_node.text.remove_style(range, style_type)?;
-            tr.push_effect(Effect::NodeChanged {
-                node_id: text_node_id,
-            });
+            tr.mark_attr_mutation(text_node_id);
         }
     }
 
@@ -512,9 +508,7 @@ fn apply_font_style_normalized(
             for s in &styles {
                 text_node.text.apply_style(start..end, s)?;
             }
-            tr.push_effect(Effect::NodeChanged {
-                node_id: text_node_id,
-            });
+            tr.mark_attr_mutation(text_node_id);
         }
         for (family, weight) in font_detected {
             tr.push_effect(Effect::FontDetected {
@@ -887,9 +881,7 @@ impl Transaction {
                     }
                 }
 
-                self.push_effect(Effect::NodeChanged {
-                    node_id: text_node_id,
-                });
+                self.mark_attr_mutation(text_node_id);
             }
 
             let block_ids = collect_empty_textblocks_in_range(self, from, to)?;
@@ -1141,9 +1133,7 @@ impl Transaction {
                         .apply_style(range, &Style::FontWeight(FontWeightStyle { weight: w }))?;
                 }
             }
-            self.push_effect(Effect::NodeChanged {
-                node_id: action.node_id,
-            });
+            self.mark_attr_mutation(action.node_id);
         }
 
         for ((family, weight), codepoints) in font_effects {
@@ -1271,9 +1261,7 @@ impl Transaction {
                         .apply_style(range, &Style::FontWeight(FontWeightStyle { weight: w }))?;
                 }
             }
-            self.push_effect(Effect::NodeChanged {
-                node_id: action.node_id,
-            });
+            self.mark_attr_mutation(action.node_id);
         }
 
         for ((family, weight), codepoints) in font_effects {

@@ -3,15 +3,22 @@ use crate::runtime::text_replacement::ReplacementUndoState;
 use crate::state::Selection;
 use crate::{model::NodeId, state::Position, types::PointerStyle};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum MutationKind {
+    ViewState,
+    Attr,
+    Text,
+    Structure,
+    UnknownRemote,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Effect {
     DocChanged,
-    NodeChanged {
+    NodeMutated {
         node_id: NodeId,
-    }, // 노드와 조상 invalidate
-    SubtreeChanged {
-        node_id: NodeId,
-    }, // 노드와 자손 invalidate
+        kind: MutationKind,
+    },
     SelectionChanged,
     PendingStylesChanged,
     SettingsChanged,
@@ -32,7 +39,6 @@ pub enum Effect {
     DropTargetChanged {
         target: Option<Position>,
     },
-    StructureChanged, // 구조적 변경 (노드 추가 / 삭제)
     ExitedDocumentStart,
     TextReplacementApplied {
         undo_state: ReplacementUndoState,
@@ -49,8 +55,7 @@ impl Effect {
     pub fn priority(&self) -> u8 {
         match self {
             Effect::DocChanged => 0,
-            Effect::NodeChanged { .. } => 1,
-            Effect::SubtreeChanged { .. } => 2,
+            Effect::NodeMutated { .. } => 1,
             Effect::SelectionChanged => 3,
             Effect::PendingStylesChanged => 4,
             Effect::SettingsChanged => 5,
@@ -62,9 +67,8 @@ impl Effect {
             Effect::ExternalElementChanged => 11,
             Effect::PointerStyleChanged { .. } => 12,
             Effect::DropTargetChanged { .. } => 13,
-            Effect::StructureChanged => 14,
-            Effect::ExitedDocumentStart => 15,
-            Effect::TextReplacementApplied { .. } => 16,
+            Effect::ExitedDocumentStart => 14,
+            Effect::TextReplacementApplied { .. } => 15,
         }
     }
 }

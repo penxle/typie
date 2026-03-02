@@ -25,7 +25,7 @@ impl Runtime {
                     embed.id = Some(embed_id);
                 }
             })?;
-            tr.push_effect(Effect::NodeChanged { node_id });
+            tr.mark_attr_mutation(node_id);
             Ok(true)
         })
     }

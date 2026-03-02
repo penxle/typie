@@ -87,8 +87,7 @@ impl Transaction {
             )));
         }
 
-        self.push_effect(Effect::NodeChanged { node_id: table_id });
-        self.push_effect(Effect::StructureChanged);
+        self.mark_attr_mutation(table_id);
 
         Ok(Some(table_id))
     }
@@ -123,7 +122,7 @@ impl Transaction {
             })?;
         }
 
-        self.push_effect(Effect::SubtreeChanged { node_id: table_id });
+        self.mark_structure_mutation(table_id);
         self.push_effect(Effect::LayoutChanged);
 
         Ok(true)
@@ -172,8 +171,7 @@ impl Transaction {
             )?;
         }
 
-        self.push_effect(Effect::SubtreeChanged { node_id: table_id });
-        self.push_effect(Effect::StructureChanged);
+        self.mark_structure_mutation(table_id);
         self.push_effect(Effect::LayoutChanged);
 
         Ok(true)
@@ -251,8 +249,7 @@ impl Transaction {
             }
         }
 
-        self.push_effect(Effect::SubtreeChanged { node_id: table_id });
-        self.push_effect(Effect::StructureChanged);
+        self.mark_structure_mutation(table_id);
         self.push_effect(Effect::LayoutChanged);
 
         Ok(true)
@@ -314,8 +311,7 @@ impl Transaction {
 
         self.delete_node_recursive(row_id)?;
 
-        self.push_effect(Effect::SubtreeChanged { node_id: table_id });
-        self.push_effect(Effect::StructureChanged);
+        self.mark_structure_mutation(table_id);
 
         Ok(true)
     }
@@ -414,8 +410,7 @@ impl Transaction {
             }
         }
 
-        self.push_effect(Effect::SubtreeChanged { node_id: table_id });
-        self.push_effect(Effect::StructureChanged);
+        self.mark_structure_mutation(table_id);
 
         Ok(true)
     }
@@ -437,7 +432,7 @@ impl Transaction {
             }
         })?;
 
-        self.push_effect(Effect::NodeChanged { node_id: table_id });
+        self.mark_attr_mutation(table_id);
         self.push_effect(Effect::LayoutChanged);
 
         Ok(true)
@@ -452,7 +447,7 @@ impl Transaction {
             }
         })?;
 
-        self.push_effect(Effect::NodeChanged { node_id: table_id });
+        self.mark_attr_mutation(table_id);
         self.push_effect(Effect::LayoutChanged);
 
         Ok(true)
@@ -491,7 +486,7 @@ impl Transaction {
             }
         })?;
 
-        self.push_effect(Effect::SubtreeChanged { node_id: table_id });
+        self.mark_structure_mutation(table_id);
         self.push_effect(Effect::LayoutChanged);
 
         Ok(true)
@@ -591,8 +586,7 @@ impl Transaction {
             self.apply_first_row_col_widths(table_id, &col_widths)?;
         }
 
-        self.push_effect(Effect::SubtreeChanged { node_id: table_id });
-        self.push_effect(Effect::StructureChanged);
+        self.mark_structure_mutation(table_id);
         self.push_effect(Effect::LayoutChanged);
 
         Ok(true)
@@ -707,8 +701,7 @@ impl Transaction {
             cell_node.as_mut().move_to(*row_id, to_col)?;
         }
 
-        self.push_effect(Effect::SubtreeChanged { node_id: table_id });
-        self.push_effect(Effect::StructureChanged);
+        self.mark_structure_mutation(table_id);
         self.push_effect(Effect::LayoutChanged);
 
         Ok(true)
@@ -756,7 +749,7 @@ impl Transaction {
                     }
                 }
 
-                self.push_effect(Effect::SubtreeChanged { node_id: *table_id });
+                self.mark_structure_mutation(*table_id);
 
                 if let Some(para_id) = first_new_para_id {
                     self.set_selection(Selection::collapsed(Position::new(
