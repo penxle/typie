@@ -147,17 +147,6 @@ class EditorController extends ChangeNotifier {
     tableOverlays.value = overlays;
   }
 
-  void setSelecting(bool selecting) {
-    if (_state.isSelecting != selecting) {
-      _state = _state.copyWith(isSelecting: selecting);
-      if (_isBatching) {
-        _needsNotify = true;
-      } else {
-        notifyListeners();
-      }
-    }
-  }
-
   void setFloatingSelection({required String? context, required String? nodeId}) {
     if (floatingContext.value != context) {
       floatingContext.value = context;

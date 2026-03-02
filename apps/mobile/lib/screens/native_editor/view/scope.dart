@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:typie/native/editor_native.dart';
 import 'package:typie/screens/native_editor/controller/dnd_controller.dart';
@@ -6,6 +7,8 @@ import 'package:typie/screens/native_editor/controller/ticker.dart';
 import 'package:typie/screens/native_editor/state/controller.dart';
 import 'package:typie/screens/native_editor/state/state.dart';
 import 'package:typie/screens/native_editor/view/geometry.dart';
+import 'package:typie/screens/native_editor/view/interaction/mode.dart';
+import 'package:typie/screens/native_editor/view/interaction/state.dart';
 
 class PresentedViewport {
   const PresentedViewport.base({required this.cursor, required this.renderVersion})
@@ -43,7 +46,6 @@ class ContentScope extends InheritedWidget {
     required this.verticalScrollController,
     required this.horizontalScrollController,
     required this.inputController,
-    required this.isLongPressing,
     required this.longPressPosition,
     required this.handleDragPosition,
     required this.titleAreaHeight,
@@ -57,6 +59,8 @@ class ContentScope extends InheritedWidget {
     required this.pendingScrollPageIdx,
     required this.presentedViewport,
     required this.dndController,
+    required this.interactionState,
+    required this.interactionSnapshot,
     required this.displayZoom,
     required this.renderZoom,
     required this.setZoom,
@@ -66,11 +70,12 @@ class ContentScope extends InheritedWidget {
   final EditorController controller;
   final EditorTicker ticker;
   final DndController dndController;
+  final EditorInteractionState interactionState;
+  final ValueListenable<InteractionSnapshot> interactionSnapshot;
   final ScrollController verticalScrollController;
   final ScrollController horizontalScrollController;
   final InputController inputController;
 
-  final ValueNotifier<bool> isLongPressing;
   final ValueNotifier<Offset?> longPressPosition;
   final ValueNotifier<Offset?> handleDragPosition;
   final ValueNotifier<double> titleAreaHeight;

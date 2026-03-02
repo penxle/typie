@@ -14,9 +14,6 @@ class DndController {
   final NativeEditor editor;
   final EditorController controller;
 
-  final ValueNotifier<bool> isDraggingState = ValueNotifier(false);
-  bool get isDragging => isDraggingState.value;
-
   Completer<void>? _imageCompleter;
   final ValueNotifier<
     ({
@@ -169,8 +166,6 @@ class DndController {
   }
 
   void handleDragStart(int pageIdx, double x, double y, ui.Offset initialPoint) {
-    isDraggingState.value = true;
-    isDropping.value = false;
     unawaited(prepareDragImage(pageIdx, x, y, initialPoint));
     controller
       ..dispatch({'type': 'dragStart', 'pageIdx': pageIdx, 'x': x, 'y': y})
@@ -178,12 +173,10 @@ class DndController {
   }
 
   void handleDragEnter() {
-    isDropping.value = true;
     controller.dispatch({'type': 'dragEnter'});
   }
 
   void handleDragLeave() {
-    isDropping.value = false;
     controller.dispatch({'type': 'dragLeave'});
   }
 
@@ -195,17 +188,12 @@ class DndController {
     controller.dispatch({'type': 'dragOver', 'pageIdx': pageIdx, 'x': x, 'y': y});
   }
 
-  final ValueNotifier<bool> isDropping = ValueNotifier(false);
-
   Future<void> handleDrop({
     required int pageIdx,
     required double x,
     required double y,
     required DropSession session,
   }) async {
-    isDraggingState.value = false;
-    isDropping.value = false;
-
     final item = session.items.firstOrNull;
     if (item == null) {
       _handleDragEnd();
@@ -269,7 +257,6 @@ class DndController {
   }
 
   void handleDragEnd() {
-    isDraggingState.value = false;
     dragUiImage.value = null;
     if (!(_imageCompleter?.isCompleted ?? true)) {
       _imageCompleter?.complete();
@@ -278,7 +265,10 @@ class DndController {
   }
 
   void _handleDragEnd() {
-    isDropping.value = false;
     controller.dispatch({'type': 'dragEnd'});
+  }
+
+  void dispose() {
+    dragUiImage.dispose();
   }
 }

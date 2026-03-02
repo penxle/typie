@@ -250,7 +250,6 @@ abstract class EditorState with _$EditorState {
     @Default([]) List<PageSize> pages,
     CursorInfo? cursor,
     @Default(false) bool isFocused,
-    @Default(false) bool isSelecting,
     EditorSelection? selection,
     @Default([]) List<Map<String, dynamic>> attrs,
     @Default([]) List<ExternalElement> externalElements,

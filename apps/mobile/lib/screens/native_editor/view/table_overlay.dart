@@ -8,7 +8,7 @@ import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/screens/native_editor/state/state.dart';
 import 'package:typie/screens/native_editor/table/models.dart';
 import 'package:typie/screens/native_editor/view/document_overlay_layer.dart';
-import 'package:typie/screens/native_editor/view/gesture.dart';
+import 'package:typie/screens/native_editor/view/interaction/controller.dart';
 import 'package:typie/screens/native_editor/view/scope.dart';
 
 import 'table_overlay/cell_selector.dart';
@@ -21,19 +21,17 @@ typedef OverlayDispatch = void Function(Map<String, dynamic> message);
 
 class TableOverlay extends HookWidget {
   const TableOverlay({
-    required this.gesture,
+    required this.interactionController,
     required this.viewWidth,
     required this.viewHeight,
     required this.dropPosition,
-    required this.globalToViewport,
     super.key,
   });
 
-  final GestureController gesture;
+  final EditorInteractionController interactionController;
   final double viewWidth;
   final double viewHeight;
   final ValueNotifier<Offset?> dropPosition;
-  final Offset? Function(Offset globalPosition) globalToViewport;
 
   @override
   Widget build(BuildContext context) {
@@ -82,11 +80,10 @@ class TableOverlay extends HookWidget {
               height: overlayHeight,
               child: _FocusedTableOverlay(
                 overlay: focusedOverlay,
-                gesture: gesture,
+                interactionController: interactionController,
                 viewWidth: viewWidth,
                 viewHeight: viewHeight,
                 dropPosition: dropPosition,
-                globalToViewport: globalToViewport,
               ),
             ),
           ),
@@ -99,19 +96,17 @@ class TableOverlay extends HookWidget {
 class _FocusedTableOverlay extends HookWidget {
   const _FocusedTableOverlay({
     required this.overlay,
-    required this.gesture,
+    required this.interactionController,
     required this.viewWidth,
     required this.viewHeight,
     required this.dropPosition,
-    required this.globalToViewport,
   });
 
   final TableOverlayInfo overlay;
-  final GestureController gesture;
+  final EditorInteractionController interactionController;
   final double viewWidth;
   final double viewHeight;
   final ValueNotifier<Offset?> dropPosition;
-  final Offset? Function(Offset globalPosition) globalToViewport;
 
   @override
   Widget build(BuildContext context) {
@@ -271,7 +266,7 @@ class _FocusedTableOverlay extends HookWidget {
     final cellSelector = TableCellSelectorController(
       context: context,
       scope: scope,
-      gesture: gesture,
+      interactionController: interactionController,
       overlay: overlay,
       layout: layout,
       pages: pages,
@@ -284,7 +279,6 @@ class _FocusedTableOverlay extends HookWidget {
       viewWidth: viewWidth,
       viewHeight: viewHeight,
       dropPosition: dropPosition,
-      globalToViewport: globalToViewport,
     );
     final hasResizableColumn = overlay.colWidthsAsPx.isNotEmpty;
     final resizeCol = hasResizableColumn ? cellSelector.rightEdgeCol.clamp(0, overlay.colWidthsAsPx.length - 1) : 0;
@@ -336,6 +330,7 @@ class _FocusedTableOverlay extends HookWidget {
           ...[selectionOutlineWidget].whereType<Widget>(),
           if (hasResizableColumn)
             TableColumnResizer(
+              interactionController: interactionController,
               overlay: overlay,
               renderBounds: renderBounds,
               selectedCol: resizeCol,

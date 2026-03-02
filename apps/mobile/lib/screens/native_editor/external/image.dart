@@ -1,8 +1,11 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:flutter_thumbhash/flutter_thumbhash.dart';
 import 'package:path_provider/path_provider.dart';
@@ -15,7 +18,18 @@ import 'package:typie/screens/native_editor/__generated__/persist_blob_as_image.
 import 'package:typie/screens/native_editor/controller/upload.dart';
 import 'package:typie/screens/native_editor/external/models.dart';
 import 'package:typie/screens/native_editor/toolbar/scope.dart';
+import 'package:typie/screens/native_editor/view/interaction/controller.dart';
+import 'package:typie/screens/native_editor/view/interaction/mode.dart';
 import 'package:typie/services/blob.dart';
+
+const _imageMinWidth = 100.0;
+const _imageMinProportion = 0.1;
+const _imageMaxProportion = 1.0;
+const _imageProportionEpsilon = 0.001;
+const _resizeHandleTouchWidth = 24.0;
+const _resizeHandleVisualWidth = 8.0;
+const _resizeHandleHorizontalInset = 10.0;
+const _resizeHandleMaxHeight = 72.0;
 
 class ImageWidget extends HookWidget {
   const ImageWidget({required this.element, super.key});
@@ -44,9 +58,29 @@ class ImageWidget extends HookWidget {
 
     final proportion = imageData.proportion;
     final boundsWidth = element.bounds.width;
-    final imageWidth = boundsWidth * proportion;
+    final originalWidth = asset?.width.toDouble() ?? inflight?.width.toDouble() ?? 0;
+
+    final resizeDraft = useState<_ImageResizeDraft?>(null);
+    final activeResize = resizeDraft.value;
+    final isResizing = activeResize != null;
+    final displayProportion = activeResize?.proportion ?? proportion;
+    final interactionController = EditorInteractionControllerScope.of(context);
+
+    final imageWidth = _resolveImageWidth(boundsWidth, displayProportion, originalWidth);
 
     final processedUploadId = useRef<String?>(null);
+
+    void startAuxiliaryGesture(AuxiliaryGestureKind kind) {
+      interactionController.startAuxiliaryGesture(kind);
+    }
+
+    void updateAuxiliaryGesture(AuxiliaryGestureKind kind) {
+      interactionController.updateAuxiliaryGesture(kind);
+    }
+
+    void endAuxiliaryGesture() {
+      interactionController.endAuxiliaryGesture();
+    }
 
     useEffect(() {
       if (currentUploadId != null && currentUploadId != processedUploadId.value && inflight != null && asset == null) {
@@ -56,29 +90,146 @@ class ImageWidget extends HookWidget {
       return null;
     }, [currentUploadId, inflight, asset]);
 
+    useEffect(() {
+      if (!isResizing) {
+        return null;
+      }
+
+      final shouldReset = !element.isSelected || !hasImage || boundsWidth <= 0;
+      if (shouldReset) {
+        endAuxiliaryGesture();
+        resizeDraft.value = null;
+      }
+      return null;
+    }, [isResizing, element.isSelected, hasImage, boundsWidth]);
+
+    useEffect(() => endAuxiliaryGesture, const []);
+
     if (!hasImage) {
       return _buildPlaceholder(context);
     }
 
     final imageHeight = _calculateHeight(asset, inflight, imageWidth);
+    final imageLeft = _maxDouble(0, (boundsWidth - imageWidth) / 2);
+    final handleHeight = math.min(_resizeHandleMaxHeight, imageHeight / 3);
+    final handleTop = _maxDouble(0, (imageHeight - handleHeight) / 2);
+    final maxHandleLeft = _maxDouble(0, boundsWidth - _resizeHandleTouchWidth);
+    final leftHandleLeft = _clampDouble(
+      imageLeft + _resizeHandleHorizontalInset - _resizeHandleTouchWidth / 2,
+      0,
+      maxHandleLeft,
+    );
+    final rightHandleLeft = _clampDouble(
+      imageLeft + imageWidth - _resizeHandleHorizontalInset - _resizeHandleTouchWidth / 2,
+      0,
+      maxHandleLeft,
+    );
 
-    return Stack(
-      children: [
-        SizedBox(width: imageWidth, height: imageHeight, child: _buildImage(asset, inflight)),
-        if (isUploading)
-          Positioned.fill(
-            child: Container(
-              color: Colors.white.withValues(alpha: 0.5),
-              child: Center(
-                child: SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: context.colors.textDisabled),
+    void beginResize(PointerDownEvent event, {required bool reverse}) {
+      if (resizeDraft.value != null || boundsWidth <= 0) {
+        return;
+      }
+
+      startAuxiliaryGesture(AuxiliaryGestureKind.imageResize);
+
+      final startWidth = _resolveImageWidth(boundsWidth, displayProportion, originalWidth);
+      resizeDraft.value = _ImageResizeDraft(
+        pointer: event.pointer,
+        reverse: reverse,
+        startX: event.position.dx,
+        startWidth: startWidth,
+        proportion: _clampProportion(displayProportion),
+      );
+      unawaited(HapticFeedback.lightImpact());
+    }
+
+    void updateResize(PointerMoveEvent event) {
+      final current = resizeDraft.value;
+      if (current == null || event.pointer != current.pointer || boundsWidth <= 0) {
+        return;
+      }
+
+      final dx = (event.position.dx - current.startX) * (current.reverse ? -1 : 1);
+      final nextWidth = _clampWidth(current.startWidth + dx * 2, boundsWidth, originalWidth);
+      final nextProportion = _clampProportion(nextWidth / boundsWidth);
+      updateAuxiliaryGesture(AuxiliaryGestureKind.imageResize);
+
+      resizeDraft.value = current.copyWith(proportion: nextProportion);
+    }
+
+    void endResize(PointerEvent event) {
+      final current = resizeDraft.value;
+      if (current == null || event.pointer != current.pointer) {
+        return;
+      }
+
+      endAuxiliaryGesture();
+      resizeDraft.value = null;
+      unawaited(HapticFeedback.lightImpact());
+
+      final nextProportion = _clampProportion(current.proportion);
+      if ((nextProportion - proportion).abs() <= _imageProportionEpsilon) {
+        return;
+      }
+
+      scope.dispatch({'type': 'setImageProportion', 'nodeId': element.nodeId, 'proportion': nextProportion});
+      scope.controller.scrollIntoView();
+    }
+
+    return SizedBox(
+      width: boundsWidth,
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.topCenter,
+        children: [
+          SizedBox(width: imageWidth, height: imageHeight, child: _buildImage(asset, inflight)),
+          if (isUploading)
+            Positioned(
+              left: imageLeft,
+              top: 0,
+              width: imageWidth,
+              height: imageHeight,
+              child: Container(
+                color: Colors.white.withValues(alpha: 0.5),
+                child: Center(
+                  child: SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: context.colors.textDisabled),
+                  ),
                 ),
               ),
             ),
-          ),
-      ],
+          if (element.isSelected && imageWidth > 0 && handleHeight > 0)
+            Positioned(
+              left: leftHandleLeft,
+              top: handleTop,
+              width: _resizeHandleTouchWidth,
+              height: handleHeight,
+              child: _ImageResizeHandle(
+                active: isResizing,
+                onPointerDown: (event) => beginResize(event, reverse: true),
+                onPointerMove: updateResize,
+                onPointerUp: endResize,
+                onPointerCancel: endResize,
+              ),
+            ),
+          if (element.isSelected && imageWidth > 0 && handleHeight > 0)
+            Positioned(
+              left: rightHandleLeft,
+              top: handleTop,
+              width: _resizeHandleTouchWidth,
+              height: handleHeight,
+              child: _ImageResizeHandle(
+                active: isResizing,
+                onPointerDown: (event) => beginResize(event, reverse: false),
+                onPointerMove: updateResize,
+                onPointerUp: endResize,
+                onPointerCancel: endResize,
+              ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -121,6 +272,43 @@ class ImageWidget extends HookWidget {
         context.toast(ToastType.error, '이미지 업로드에 실패했습니다');
       }
     }
+  }
+
+  double _resolveImageWidth(double boundsWidth, double proportion, double originalWidth) {
+    if (boundsWidth <= 0) {
+      return 0;
+    }
+    final safeProportion = _clampProportion(proportion);
+    return _clampWidth(boundsWidth * safeProportion, boundsWidth, originalWidth);
+  }
+
+  double _clampWidth(double width, double boundsWidth, double originalWidth) {
+    if (boundsWidth <= 0) {
+      return 0;
+    }
+
+    final maxWidth = originalWidth > 0 ? math.min(originalWidth, boundsWidth) : boundsWidth;
+    final requestedMin = math.max(boundsWidth * _imageMinProportion, _imageMinWidth);
+    final minWidth = math.min(requestedMin, maxWidth);
+    return _clampDouble(width, minWidth, maxWidth);
+  }
+
+  double _clampProportion(double value) {
+    return _clampDouble(value, _imageMinProportion, _imageMaxProportion);
+  }
+
+  double _maxDouble(double a, double b) {
+    return a >= b ? a : b;
+  }
+
+  double _clampDouble(double value, double min, double max) {
+    if (value < min) {
+      return min;
+    }
+    if (value > max) {
+      return max;
+    }
+    return value;
   }
 
   double _calculateHeight(ImageAsset? asset, InflightImage? inflight, double width) {
@@ -179,6 +367,100 @@ class ImageWidget extends HookWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _ImageResizeHandle extends StatelessWidget {
+  const _ImageResizeHandle({
+    required this.active,
+    required this.onPointerDown,
+    required this.onPointerMove,
+    required this.onPointerUp,
+    required this.onPointerCancel,
+  });
+
+  final bool active;
+  final ValueChanged<PointerDownEvent> onPointerDown;
+  final ValueChanged<PointerMoveEvent> onPointerMove;
+  final ValueChanged<PointerEvent> onPointerUp;
+  final ValueChanged<PointerEvent> onPointerCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    return RawGestureDetector(
+      behavior: HitTestBehavior.opaque,
+      gestures: {
+        EagerGestureRecognizer: GestureRecognizerFactoryWithHandlers<EagerGestureRecognizer>(
+          EagerGestureRecognizer.new,
+          (EagerGestureRecognizer instance) {},
+        ),
+      },
+      child: Listener(
+        behavior: HitTestBehavior.opaque,
+        onPointerDown: onPointerDown,
+        onPointerMove: onPointerMove,
+        onPointerUp: onPointerUp,
+        onPointerCancel: onPointerCancel,
+        child: Align(
+          child: CustomPaint(
+            painter: _ImageResizeHandlePainter(active: active),
+            child: const SizedBox(height: double.infinity, width: _resizeHandleVisualWidth),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ImageResizeHandlePainter extends CustomPainter {
+  const _ImageResizeHandlePainter({required this.active});
+
+  final bool active;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.width <= 0 || size.height <= 0) {
+      return;
+    }
+
+    final paint = Paint()
+      ..color = active ? const Color.fromRGBO(255, 255, 255, 0.75) : const Color.fromRGBO(255, 255, 255, 0.55)
+      ..blendMode = BlendMode.difference
+      ..isAntiAlias = true;
+
+    final radius = Radius.circular(size.width / 2);
+    canvas.drawRRect(RRect.fromRectAndRadius(Offset.zero & size, radius), paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _ImageResizeHandlePainter oldDelegate) {
+    return oldDelegate.active != active;
+  }
+}
+
+class _ImageResizeDraft {
+  const _ImageResizeDraft({
+    required this.pointer,
+    required this.reverse,
+    required this.startX,
+    required this.startWidth,
+    required this.proportion,
+  });
+
+  final int pointer;
+  final bool reverse;
+  final double startX;
+  final double startWidth;
+  final double proportion;
+
+  _ImageResizeDraft copyWith({double? proportion}) {
+    return _ImageResizeDraft(
+      pointer: pointer,
+      reverse: reverse,
+      startX: startX,
+      startWidth: startWidth,
+      proportion: proportion ?? this.proportion,
     );
   }
 }

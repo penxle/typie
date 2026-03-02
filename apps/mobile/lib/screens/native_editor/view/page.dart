@@ -45,6 +45,7 @@ class PageItem extends HookWidget {
     final bottomGap = scope.geometry.gapAfterPage(pageIndex);
 
     final editor = scope.editor;
+    final skipNativeRender = editor.isTest;
     final renderVersion = editorState.renderVersion;
     final lineHighlightEnabled = pref.lineHighlightEnabled;
 
@@ -88,6 +89,9 @@ class PageItem extends HookWidget {
     }
 
     Future<void> render() async {
+      if (skipNativeRender) {
+        return;
+      }
       if (isRenderTaskRunning.value) {
         hasQueuedRender.value = true;
         return;

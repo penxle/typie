@@ -28,6 +28,7 @@ import 'package:typie/screens/native_editor/toolbar/scope.dart';
 import 'package:typie/screens/native_editor/toolbar/toolbar.dart';
 import 'package:typie/screens/native_editor/view/geometry.dart';
 import 'package:typie/screens/native_editor/view/input.dart';
+import 'package:typie/screens/native_editor/view/interaction/state.dart';
 import 'package:typie/screens/native_editor/view/magnifier.dart';
 import 'package:typie/screens/native_editor/view/pages.dart';
 import 'package:typie/screens/native_editor/view/repaste_as_text.dart';
@@ -90,9 +91,9 @@ class EditorView extends HookWidget {
     final titleAreaHeight = useValueNotifier<double>(0);
     final scrollMetricsRevision = useValueNotifier(0);
     useValueListenable(titleAreaHeight);
-    final isLongPressing = useValueNotifier(false);
     final longPressPosition = useValueNotifier<Offset?>(null);
     final handleDragPosition = useValueNotifier<Offset?>(null);
+    final interactionState = useMemoized(EditorInteractionState.new);
     final pendingScroll = useValueNotifier<VoidCallback?>(null);
     final pendingScrollPageIdx = useValueNotifier<int?>(null);
     final presentedViewport = useValueNotifier<PresentedViewport>(
@@ -229,6 +230,9 @@ class EditorView extends HookWidget {
     final dndController = useMemoized(() => DndController(editor: controller.editor, controller: controller), [
       controller,
     ]);
+
+    useEffect(() => interactionState.dispose, [interactionState]);
+    useEffect(() => dndController.dispose, [dndController]);
 
     final pref = useService<Pref>();
     final floatingCursorOrigin = useRef<CursorInfo?>(null);
@@ -559,10 +563,11 @@ class EditorView extends HookWidget {
               return;
             }
             final cursor = controller.state.cursor;
+            final interaction = interactionState.snapshot();
             if (controller.state.layout == null ||
                 cursor == null ||
                 !cursor.visible ||
-                isLongPressing.value ||
+                interaction.isLongPressing ||
                 !controller.state.isFocused) {
               return;
             }
@@ -618,7 +623,8 @@ class EditorView extends HookWidget {
         }
 
         final focused = controller.state.isFocused;
-        final blockedByInteraction = isLongPressing.value || dndController.isDropping.value || !focused;
+        final interaction = interactionState.snapshot();
+        final blockedByInteraction = interaction.isLongPressing || interaction.isDndActive || !focused;
         if (blockedByInteraction || nextLayout == null || !nextCursor.visible) {
           if (pendingMode != null) {
             controller.pendingScrollMode = null;
@@ -801,10 +807,11 @@ class EditorView extends HookWidget {
           controller: controller,
           ticker: ticker,
           dndController: dndController,
+          interactionState: interactionState,
+          interactionSnapshot: interactionState.listenable,
           verticalScrollController: verticalScrollController,
           horizontalScrollController: horizontalScrollController,
           inputController: inputController,
-          isLongPressing: isLongPressing,
           longPressPosition: longPressPosition,
           handleDragPosition: handleDragPosition,
           titleAreaHeight: titleAreaHeight,

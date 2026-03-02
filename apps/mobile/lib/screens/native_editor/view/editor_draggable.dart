@@ -8,62 +8,56 @@ import 'package:flutter_thumbhash/flutter_thumbhash.dart';
 import 'package:super_drag_and_drop/super_drag_and_drop.dart';
 import 'package:typie/screens/native_editor/external/models.dart';
 import 'package:typie/screens/native_editor/toolbar/scope.dart';
-import 'package:typie/screens/native_editor/view/gesture.dart';
+import 'package:typie/screens/native_editor/view/interaction/controller.dart';
 import 'package:typie/screens/native_editor/view/scope.dart';
 
-typedef DragLocationResolver =
-    ({Offset localPosition, int pageIdx, double localY, double pointerX})? Function(Offset globalPosition);
-
 class EditorDraggable extends StatelessWidget {
-  const EditorDraggable({super.key, required this.child, required this.gesture, required this.resolveDragLocation});
+  const EditorDraggable({super.key, required this.child, required this.interactionController});
 
   final Widget child;
-  final GestureController gesture;
-  final DragLocationResolver resolveDragLocation;
+  final EditorInteractionController interactionController;
 
   @override
   Widget build(BuildContext context) {
     final scope = ContentScope.of(context);
 
     bool isSelectionDraggable(Offset globalPosition) {
-      if (gesture.state.active) {
-        return false;
-      }
-      if (gesture.hasTextHandleDrag) {
-        return false;
-      }
-      final resolved = resolveDragLocation(globalPosition);
-      if (resolved == null) {
-        return false;
-      }
-      return scope.editor.isSelectionHit(resolved.pageIdx, resolved.pointerX, resolved.localY);
+      return interactionController.resolveSelectionDrag(globalPosition) != null;
     }
 
     return DragItemWidget(
       dragItemProvider: (request) async {
-        if (gesture.state.active) {
-          return null;
-        }
-        final resolved = resolveDragLocation(request.location);
+        final resolved = interactionController.resolveSelectionDrag(request.location);
         if (resolved == null) {
           return null;
         }
-        final canDrag = scope.editor.isSelectionHit(resolved.pageIdx, resolved.pointerX, resolved.localY);
+        interactionController.startLocalDndSession(resolved);
 
-        if (!canDrag) {
-          return null;
+        var isSessionListenerAttached = false;
+        late final VoidCallback onSessionCompleted;
+        void clearSessionCompletedListener() {
+          if (!isSessionListenerAttached) {
+            return;
+          }
+          request.session.dragCompleted.removeListener(onSessionCompleted);
+          isSessionListenerAttached = false;
         }
 
-        scope.dndController.handleDragStart(
-          resolved.pageIdx,
-          resolved.pointerX,
-          resolved.localY,
-          Offset(resolved.localPosition.dx, resolved.localPosition.dy),
-        );
+        onSessionCompleted = () {
+          if (request.session.dragCompleted.value == null) {
+            return;
+          }
+          clearSessionCompletedListener();
+          interactionController.endDndSession();
+        };
+        request.session.dragCompleted.addListener(onSessionCompleted);
+        isSessionListenerAttached = true;
+
         unawaited(HapticFeedback.lightImpact());
         final item = await scope.dndController.createDragItem();
         if (item == null) {
-          scope.dndController.handleDragEnd();
+          clearSessionCompletedListener();
+          interactionController.endDndSession();
         }
         return item;
       },
