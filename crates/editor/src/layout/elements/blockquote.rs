@@ -1,9 +1,13 @@
 use crate::layout::elements::{SplitEdges, Wrapper, WrapperPadding};
 use crate::model::{BlockquoteVariant, NodeId};
-use crate::types::Size;
+use crate::types::{PaintOverflow, Size};
 
 const MESSAGE_PADDING_X: f32 = 14.0;
 const MESSAGE_PADDING_Y: f32 = 8.0;
+pub const MESSAGE_TAIL_SIZE: f32 = 10.0;
+const MESSAGE_TAIL_X_OVERFLOW_FACTOR: f32 = 0.4;
+const MESSAGE_TAIL_BOTTOM_OVERFLOW_FACTOR: f32 = 0.15;
+const MESSAGE_TAIL_ANTIALIAS_MARGIN: f32 = 1.0;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct BlockquoteLineElement {
@@ -49,6 +53,31 @@ impl BlockquoteMessageElement {
             block_id,
             variant,
             split_edges,
+        }
+    }
+
+    pub fn paint_overflow(&self) -> PaintOverflow {
+        if self.split_edges.bottom {
+            return PaintOverflow::default();
+        }
+
+        let horizontal_overflow =
+            MESSAGE_TAIL_SIZE * MESSAGE_TAIL_X_OVERFLOW_FACTOR + MESSAGE_TAIL_ANTIALIAS_MARGIN;
+        let bottom_overflow =
+            MESSAGE_TAIL_SIZE * MESSAGE_TAIL_BOTTOM_OVERFLOW_FACTOR + MESSAGE_TAIL_ANTIALIAS_MARGIN;
+
+        match self.variant {
+            BlockquoteVariant::MessageSent => PaintOverflow {
+                right: horizontal_overflow,
+                bottom: bottom_overflow,
+                ..PaintOverflow::default()
+            },
+            BlockquoteVariant::MessageReceived => PaintOverflow {
+                left: horizontal_overflow,
+                bottom: bottom_overflow,
+                ..PaintOverflow::default()
+            },
+            _ => PaintOverflow::default(),
         }
     }
 }

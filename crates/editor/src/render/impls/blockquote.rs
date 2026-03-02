@@ -1,6 +1,6 @@
 use crate::layout::elements::SplitEdges;
 use crate::layout::elements::blockquote::{
-    BlockquoteLineElement, BlockquoteMessageElement, BlockquoteQuoteElement,
+    BlockquoteLineElement, BlockquoteMessageElement, BlockquoteQuoteElement, MESSAGE_TAIL_SIZE,
 };
 use crate::model::BlockquoteVariant;
 use crate::render::outline::ElementSink;
@@ -10,7 +10,6 @@ use tiny_skia::{Paint, PathBuilder, PixmapMut, Rect, Transform};
 
 const QUOTE_ICON_SIZE: f32 = 16.0;
 const MESSAGE_BORDER_RADIUS: f32 = 18.0;
-const MESSAGE_TAIL_SIZE: f32 = 10.0;
 
 impl Render for BlockquoteLineElement {
     fn render(
