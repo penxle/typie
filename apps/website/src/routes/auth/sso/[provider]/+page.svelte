@@ -38,14 +38,16 @@
         },
       });
 
-      location.href = qs.stringifyUrl({
-        url: `${env.PUBLIC_AUTH_URL}/authorize`,
-        query: {
-          client_id: env.PUBLIC_OIDC_CLIENT_ID,
-          response_type: 'code',
-          ...deserializeOAuthState(resp.authorizeSingleSignOn),
-        },
-      });
+      location.replace(
+        qs.stringifyUrl({
+          url: `${env.PUBLIC_AUTH_URL}/authorize`,
+          query: {
+            client_id: env.PUBLIC_OIDC_CLIENT_ID,
+            response_type: 'code',
+            ...deserializeOAuthState(resp.authorizeSingleSignOn),
+          },
+        }),
+      );
     } catch {
       const state = page.url.searchParams.get('state');
       const loginUrl = qs.stringifyUrl({

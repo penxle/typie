@@ -53,15 +53,17 @@
 
       mixpanel.track('login_with_email');
 
-      location.href = qs.stringifyUrl({
-        url: `${env.PUBLIC_AUTH_URL}/authorize`,
-        query: {
-          client_id: env.PUBLIC_OIDC_CLIENT_ID,
-          response_type: 'code',
-          redirect_uri: page.url.searchParams.get('redirect_uri') || `${env.PUBLIC_WEBSITE_URL}/authorize`,
-          state: page.url.searchParams.get('state') || serializeOAuthState({ redirect_uri: env.PUBLIC_WEBSITE_URL }),
-        },
-      });
+      location.replace(
+        qs.stringifyUrl({
+          url: `${env.PUBLIC_AUTH_URL}/authorize`,
+          query: {
+            client_id: env.PUBLIC_OIDC_CLIENT_ID,
+            response_type: 'code',
+            redirect_uri: page.url.searchParams.get('redirect_uri') || `${env.PUBLIC_WEBSITE_URL}/authorize`,
+            state: page.url.searchParams.get('state') || serializeOAuthState({ redirect_uri: env.PUBLIC_WEBSITE_URL }),
+          },
+        }),
+      );
     },
     onError: (error) => {
       if (error instanceof TypieError) {
@@ -93,7 +95,7 @@
     mixpanel.track('login_with_sso', { provider });
     fb.track('CompleteRegistration');
 
-    location.href = url;
+    location.replace(url);
   };
 
   onMount(() => {
