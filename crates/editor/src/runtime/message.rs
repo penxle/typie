@@ -147,6 +147,13 @@ define_messages! {
     => when When::key(ContextKey::CanEdit)
     => handle(rt) { rt.handle_paste_html(html, text) },
 
+    PasteHtmlAsText {
+        html: String,
+        text: String,
+    }
+    => when When::key(ContextKey::CanEdit)
+    => handle(rt) { rt.handle_paste_html_as_text(html, text) },
+
     PasteText {
         text: String,
     }

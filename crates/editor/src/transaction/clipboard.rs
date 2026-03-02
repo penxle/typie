@@ -61,6 +61,26 @@ impl Transaction {
         Ok(result.inserted())
     }
 
+    /// Insert a pre-built fragment as plain text (no HtmlPasted effect, no repaste).
+    pub fn paste_text_fragment(&mut self, fragment: Fragment) -> Result<bool> {
+        if fragment.is_empty() {
+            return Ok(false);
+        }
+
+        let result = self.insert_fragment(self.selection().head, fragment)?;
+        if let Some(selection) = result.as_selection() {
+            let selection = if selection.is_collapsed() {
+                let head = selection.head;
+                Selection::collapsed(Position::new(head.node_id, head.offset, Affinity::Upstream))
+            } else {
+                selection
+            };
+            self.set_selection(selection);
+        }
+
+        Ok(result.inserted())
+    }
+
     pub fn paste_fragment(&mut self, fragment: Fragment, text: Option<String>) -> Result<bool> {
         if fragment.is_empty() {
             return Ok(false);
