@@ -122,15 +122,10 @@ class EditorTexture(
   }
 
   private fun createPipeline(width: Int, height: Int) {
-    prevPrevImage?.close()
-    prevPrevImage = null
-    prevImage?.close()
-    prevImage = null
-    imageWriter?.close()
-    imageReader?.close()
+    releasePipeline()
 
     val reader = ImageReader.newInstance(
-      width, height, PixelFormat.RGBA_8888, 3,
+      width, height, PixelFormat.RGBA_8888, 4,
       HardwareBuffer.USAGE_CPU_WRITE_OFTEN or HardwareBuffer.USAGE_GPU_SAMPLED_IMAGE
     )
     val writer = ImageWriter.newInstance(reader.surface, 2)
@@ -139,6 +134,29 @@ class EditorTexture(
     imageWriter = writer
     currentWidth = width
     currentHeight = height
+  }
+
+  private fun releasePipeline() {
+    entry.pushImage(null)
+    safeClose(prevPrevImage)
+    prevPrevImage = null
+    safeClose(prevImage)
+    prevImage = null
+    imageWriter?.close()
+    imageWriter = null
+    imageReader?.close()
+    imageReader = null
+  }
+
+  private fun safeClose(image: android.media.Image?) {
+    if (image == null) {
+      return
+    }
+    try {
+      image.close()
+    } catch (_: IllegalStateException) {
+      // May already be closed by Flutter internals.
+    }
   }
 
   fun render(editorPtr: Long, pageIndex: Int, width: Int, height: Int): Boolean {
@@ -152,7 +170,7 @@ class EditorTexture(
       val writer = imageWriter ?: return false
       val reader = imageReader ?: return false
 
-      prevPrevImage?.close()
+      safeClose(prevPrevImage)
       prevPrevImage = prevImage
       prevImage = null
 
@@ -185,9 +203,18 @@ class EditorTexture(
         return false
       }
 
-      writer.queueInputImage(inputImage)
+      try {
+        writer.queueInputImage(inputImage)
+      } catch (_: IllegalStateException) {
+        inputImage.close()
+        return false
+      }
 
-      val outputImage = reader.acquireLatestImage() ?: return false
+      val outputImage = try {
+        reader.acquireLatestImage()
+      } catch (_: IllegalStateException) {
+        return false
+      } ?: return false
       entry.pushImage(outputImage)
       prevImage = outputImage
 
@@ -200,15 +227,8 @@ class EditorTexture(
   fun dispose() {
     bufferLock.lock()
     try {
+      releasePipeline()
       entry.release()
-      prevPrevImage?.close()
-      prevPrevImage = null
-      prevImage?.close()
-      prevImage = null
-      imageWriter?.close()
-      imageWriter = null
-      imageReader?.close()
-      imageReader = null
     } finally {
       bufferLock.unlock()
     }
