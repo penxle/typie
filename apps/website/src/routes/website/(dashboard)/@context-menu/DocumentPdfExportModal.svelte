@@ -109,12 +109,12 @@
     const result = await exportDocumentAsPdf({
       input: {
         documentId,
-        pageWidth: pageLayout.pageWidth,
-        pageHeight: pageLayout.pageHeight,
-        pageMarginTop: pageLayout.pageMarginTop,
-        pageMarginBottom: pageLayout.pageMarginBottom,
-        pageMarginLeft: pageLayout.pageMarginLeft,
-        pageMarginRight: pageLayout.pageMarginRight,
+        pageWidth: Math.round(pageLayout.pageWidth),
+        pageHeight: Math.round(pageLayout.pageHeight),
+        pageMarginTop: Math.round(pageLayout.pageMarginTop),
+        pageMarginBottom: Math.round(pageLayout.pageMarginBottom),
+        pageMarginLeft: Math.round(pageLayout.pageMarginLeft),
+        pageMarginRight: Math.round(pageLayout.pageMarginRight),
       },
     });
     isExporting = false;
