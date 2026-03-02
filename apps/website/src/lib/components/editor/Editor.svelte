@@ -14,6 +14,8 @@
   import type { FontFamily } from '$lib/editor/fonts';
   import type { Position } from '$lib/editor/types';
 
+  const PAGINATED_HEADER_FOOTER_MIN_WIDTH = 320;
+
   type Props = {
     unit?: 'px' | 'cm';
     rulerThickness?: number;
@@ -124,6 +126,16 @@
   const continuousPageMargin = $derived(layoutMode?.type === 'paginated' ? 0 : CONTINUOUS_PAGE_MARGIN);
   const viewPadding = $derived(layoutMode?.type === 'paginated' ? PAGINATED_VIEW_PADDING : readOnly ? 0 : CONTINUOUS_VIEW_PADDING);
   const paginatedContentWidth = $derived(pageWidth * effectiveDisplayZoom + viewPadding * 2);
+  const paginatedHeaderFooterWidth = $derived(
+    layoutMode?.type === 'paginated'
+      ? Math.max(
+          paginatedContentWidth,
+          Math.max(0, Math.min(PAGINATED_HEADER_FOOTER_MIN_WIDTH, containerClientWidth)) +
+            (layoutMode.pageMarginLeft + layoutMode.pageMarginRight) * effectiveDisplayZoom +
+            viewPadding * 2,
+        )
+      : 0,
+  );
   const width = $derived(
     layoutMode?.type === 'continuous'
       ? Math.max(CONTINUOUS_MIN_WIDTH - continuousPageMargin * 2, containerClientWidth - viewPadding * 2)
@@ -183,7 +195,7 @@
         >
           {#if header}
             <div
-              style:width={layoutMode?.type === 'paginated' ? `${paginatedContentWidth}px` : '100%'}
+              style:width={layoutMode?.type === 'paginated' ? `${paginatedHeaderFooterWidth}px` : '100%'}
               style:min-width={layoutMode?.type === 'paginated' && !readOnly ? 'max-content' : undefined}
               style:max-width={layoutMode?.type === 'paginated'
                 ? 'none'
@@ -213,7 +225,7 @@
           <View />
           {#if footer}
             <div
-              style:width={layoutMode?.type === 'paginated' ? `${paginatedContentWidth}px` : '100%'}
+              style:width={layoutMode?.type === 'paginated' ? `${paginatedHeaderFooterWidth}px` : '100%'}
               style:min-width={layoutMode?.type === 'paginated' && !readOnly ? 'max-content' : undefined}
               style:max-width={layoutMode?.type === 'paginated'
                 ? 'none'
