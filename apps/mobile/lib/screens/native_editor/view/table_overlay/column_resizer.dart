@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/context/theme.dart';
 import 'package:typie/screens/native_editor/table/models.dart';
+import 'package:typie/screens/native_editor/view/interaction/controller.dart';
+import 'package:typie/screens/native_editor/view/interaction/mode.dart';
 
 import 'constants.dart';
 import 'geometry.dart';
@@ -14,6 +16,7 @@ const tableResizeLimitEpsilon = 0.5;
 
 class TableColumnResizer extends HookWidget {
   const TableColumnResizer({
+    required this.interactionController,
     required this.overlay,
     required this.renderBounds,
     required this.selectedCol,
@@ -23,6 +26,7 @@ class TableColumnResizer extends HookWidget {
     super.key,
   });
 
+  final EditorInteractionController interactionController;
   final TableOverlayInfo overlay;
   final TableOverlayBounds renderBounds;
   final int selectedCol;
@@ -48,11 +52,14 @@ class TableColumnResizer extends HookWidget {
           draft.colIndex > maxResizableCol ||
           draft.initialWidths.length != overlay.colWidthsAsPx.length;
       if (shouldReset) {
+        interactionController.endAuxiliaryGesture();
         resizeDraft.value = null;
         activeResizePointer.value = null;
       }
       return null;
     }, [maxResizableCol, resizeDraft.value, overlay.tableId, overlay.colWidthsAsPx.length]);
+
+    useEffect(() => interactionController.endAuxiliaryGesture, const []);
 
     if (overlay.colWidthsAsPx.isEmpty) {
       return const SizedBox.shrink();
@@ -77,6 +84,7 @@ class TableColumnResizer extends HookWidget {
       if (activeResizePointer.value != null) {
         return;
       }
+      interactionController.startAuxiliaryGesture(AuxiliaryGestureKind.tableColumnResize);
       activeResizePointer.value = event.pointer;
       resizeDraft.value = ColumnResizeDraft(
         tableId: overlay.tableId,
@@ -95,6 +103,7 @@ class TableColumnResizer extends HookWidget {
       if (current == null) {
         return;
       }
+      interactionController.updateAuxiliaryGesture(AuxiliaryGestureKind.tableColumnResize);
       resizeDraft.value = current.copyWith(deltaX: event.position.dx - current.startX);
     }
 
@@ -107,6 +116,7 @@ class TableColumnResizer extends HookWidget {
       if (current == null) {
         return;
       }
+      interactionController.endAuxiliaryGesture();
       resizeDraft.value = null;
 
       if (current.colIndex == maxResizableCol) {

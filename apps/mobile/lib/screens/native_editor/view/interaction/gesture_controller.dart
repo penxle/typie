@@ -7,72 +7,6 @@ import 'package:typie/screens/native_editor/state/state.dart';
 import 'package:typie/screens/native_editor/view/geometry.dart';
 import 'package:typie/screens/native_editor/view/zoom.dart';
 
-class GestureStateMachine {
-  GestureStateMachine({required this.isLongPressing});
-
-  final ValueNotifier<bool> isLongPressing;
-
-  Offset? start;
-  _GesturePhase _phase = _GesturePhase.idle;
-
-  bool get longPressing => _phase == _GesturePhase.longPress;
-  bool get pending => _phase == _GesturePhase.doubleTapPending;
-  bool get dragging => _phase == _GesturePhase.doubleTapDragging;
-  bool get active => pending || dragging;
-
-  bool startLongPress() {
-    if (active) {
-      return false;
-    }
-    _setPhase(_GesturePhase.longPress);
-    return true;
-  }
-
-  void endLongPress() {
-    if (!longPressing) {
-      return;
-    }
-    _setPhase(_GesturePhase.idle);
-  }
-
-  void prepare(Offset startPosition) {
-    start = startPosition;
-    _setPhase(_GesturePhase.doubleTapPending);
-  }
-
-  void begin(Offset startPosition) {
-    start = startPosition;
-    _setPhase(_GesturePhase.doubleTapDragging);
-  }
-
-  void clearPending() {
-    if (!pending) {
-      return;
-    }
-    _setPhase(_GesturePhase.idle);
-  }
-
-  void stop() {
-    if (!active) {
-      return;
-    }
-    _setPhase(_GesturePhase.idle);
-  }
-
-  void _setPhase(_GesturePhase next) {
-    _phase = next;
-    final nextLongPressing = _phase == _GesturePhase.longPress;
-    if (isLongPressing.value != nextLongPressing) {
-      isLongPressing.value = nextLongPressing;
-    }
-    if (!pending && !dragging) {
-      start = null;
-    }
-  }
-}
-
-enum _GesturePhase { idle, longPress, doubleTapPending, doubleTapDragging }
-
 class SelectionHandleDragContext {
   const SelectionHandleDragContext({
     required this.startTouchPosition,
@@ -93,8 +27,7 @@ class GestureController {
     required this.getPageAtPosition,
     required this.getPointerX,
     required this.getHorizontalMetrics,
-    required ValueNotifier<bool> isLongPressing,
-  }) : state = GestureStateMachine(isLongPressing: isLongPressing);
+  });
 
   final ScrollController verticalScrollController;
   final ScrollController horizontalScrollController;
@@ -102,7 +35,6 @@ class GestureController {
   final (int, double) Function(double y) getPageAtPosition;
   final double Function(double localX) getPointerX;
   final HorizontalScrollMetrics Function() getHorizontalMetrics;
-  final GestureStateMachine state;
 
   static const _edgeThreshold = 30.0;
   static const _minScrollSpeed = 4.0;
@@ -270,10 +202,6 @@ class GestureController {
 
   void setTapDispatched(bool dispatched) {
     _tapDispatched = dispatched;
-  }
-
-  void holdScrollPositions() {
-    // no-op
   }
 
   void startScrollDrag({required DragStartDetails details, required bool allowHorizontal}) {
@@ -575,30 +503,7 @@ class GestureController {
 
   void dispose() {
     stopAutoScroll();
-    state.stop();
     cancelTapTimer();
     cancelScrollDrag();
-  }
-}
-
-class ConditionalLongPressGestureRecognizer extends LongPressGestureRecognizer {
-  ConditionalLongPressGestureRecognizer({required this.condition, super.duration, super.postAcceptSlopTolerance});
-
-  final bool Function(Offset globalPosition) condition;
-
-  @override
-  void didExceedDeadline() {
-    if (initialPosition == null) {
-      super.didExceedDeadline();
-      return;
-    }
-
-    final globalPosition = initialPosition!.global;
-    if (condition(globalPosition)) {
-      resolve(GestureDisposition.rejected);
-      stopTrackingPointer(primaryPointer!);
-    } else {
-      super.didExceedDeadline();
-    }
   }
 }

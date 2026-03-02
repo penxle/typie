@@ -3,7 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:typie/screens/native_editor/state/state.dart';
 import 'package:typie/screens/native_editor/table/models.dart';
-import 'package:typie/screens/native_editor/view/gesture.dart';
+import 'package:typie/screens/native_editor/view/interaction/controller.dart';
 import 'package:typie/screens/native_editor/view/scope.dart';
 
 import 'constants.dart';
@@ -112,7 +112,7 @@ class TableCellSelectorController {
   TableCellSelectorController({
     required this.context,
     required this.scope,
-    required this.gesture,
+    required this.interactionController,
     required this.overlay,
     required this.layout,
     required this.pages,
@@ -125,7 +125,6 @@ class TableCellSelectorController {
     required this.viewWidth,
     required this.viewHeight,
     required this.dropPosition,
-    required this.globalToViewport,
   }) : state = _resolveTableCellSelectorState(
          overlay: overlay,
          selection: selection,
@@ -139,7 +138,7 @@ class TableCellSelectorController {
 
   final BuildContext context;
   final ContentScope scope;
-  final GestureController gesture;
+  final EditorInteractionController interactionController;
   final TableOverlayInfo overlay;
   final Layout? layout;
   final List<PageSize> pages;
@@ -152,7 +151,6 @@ class TableCellSelectorController {
   final double viewWidth;
   final double viewHeight;
   final ValueNotifier<Offset?> dropPosition;
-  final Offset? Function(Offset globalPosition) globalToViewport;
   final TableCellSelectorState state;
 
   bool get shouldShow => state.shouldShow;
@@ -163,8 +161,7 @@ class TableCellSelectorController {
     if (!context.mounted) {
       return;
     }
-    gesture.startCellHandleDrag();
-    scope.longPressPosition.value = null;
+    interactionController.beginTableCellHandleDragDown();
   }
 
   void startDrag(DragStartDetails details) {
@@ -174,9 +171,6 @@ class TableCellSelectorController {
     if (!shouldShow || visual?.handleCenter == null) {
       return;
     }
-    gesture
-      ..stopAutoScroll()
-      ..startCellHandleDrag();
     final minVisibleRow = overlay.startRowIndex;
     final maxVisibleRow = overlay.startRowIndex + overlay.rowHeights.length - 1;
     if (maxVisibleRow < minVisibleRow) {
@@ -193,29 +187,26 @@ class TableCellSelectorController {
     final anchor = clampToVisible(state.range.anchor);
     final head = clampToVisible(state.range.head);
     dragDraftState.value = CellSelectionDragDraft(tableId: overlay.tableId, anchor: anchor, head: head);
-    scope.controller.setSelecting(true);
 
-    final viewportPosition = globalToViewport(details.globalPosition);
-    if (viewportPosition != null) {
-      cellHandleDragPosition.value = viewportPosition;
+    final viewportPosition = interactionController.viewportPositionFromGlobal(details.globalPosition);
+    SelectionHandleInfo? anchorHandle;
+    if (layout != null) {
+      final anchorPoint = tableCellCenterPagePoint(overlay: overlay, layout: layout!, pages: pages, cell: anchor);
+      if (anchorPoint != null) {
+        anchorHandle = SelectionEndpointBounds(
+          pageIdx: anchorPoint.pageIdx,
+          x: anchorPoint.x,
+          y: anchorPoint.y,
+          width: 0,
+          height: 0,
+        );
+      }
     }
 
-    gesture.setTextHandleDragType(SelectionHandleType.to);
-    if (layout == null) {
-      gesture.setDragAnchorHandle(null);
-      return;
-    }
-    final anchorPoint = tableCellCenterPagePoint(overlay: overlay, layout: layout!, pages: pages, cell: anchor);
-    gesture.setDragAnchorHandle(
-      anchorPoint == null
-          ? null
-          : SelectionEndpointBounds(
-              pageIdx: anchorPoint.pageIdx,
-              x: anchorPoint.x,
-              y: anchorPoint.y,
-              width: 0,
-              height: 0,
-            ),
+    interactionController.startTableCellHandleDrag(
+      anchorHandle: anchorHandle,
+      viewportPosition: viewportPosition,
+      cellHandleDragPosition: cellHandleDragPosition,
     );
   }
 
@@ -229,41 +220,27 @@ class TableCellSelectorController {
     }
     _updateHeadFromGlobalPosition(details.globalPosition);
 
-    final viewportPosition = globalToViewport(details.globalPosition);
+    final viewportPosition = interactionController.viewportPositionFromGlobal(details.globalPosition);
     if (viewportPosition == null) {
       return;
     }
-    cellHandleDragPosition.value = viewportPosition;
-    gesture.handleAutoScroll(
-      y: viewportPosition.dy,
-      x: viewportPosition.dx,
+    interactionController.updateTableCellHandleDrag(
+      viewportPosition: viewportPosition,
+      cellHandleDragPosition: cellHandleDragPosition,
+      tableDropPosition: dropPosition,
       viewWidth: viewWidth,
       viewHeight: viewHeight,
-      handleDragPosition: cellHandleDragPosition,
-      longPressPosition: scope.longPressPosition,
-      dropPosition: dropPosition,
     );
   }
 
   void endDragFromPanEnd(DragEndDetails _) => endDrag();
 
   void endDrag() {
-    final wasDraggingCellHandle = gesture.stopCellHandleDrag();
-    gesture
-      ..clearSelectionHandleState()
-      ..stopAutoScroll();
+    interactionController.endTableCellHandleDrag(cellHandleDragPosition: cellHandleDragPosition);
     if (!context.mounted) {
-      if (wasDraggingCellHandle && scope.controller.state.isSelecting) {
-        scope.controller.setSelecting(false);
-      }
       return;
     }
-    cellHandleDragPosition.value = null;
-    final hadDraft = dragDraftState.value != null;
     dragDraftState.value = null;
-    if ((hadDraft || wasDraggingCellHandle) && scope.controller.state.isSelecting) {
-      scope.controller.setSelecting(false);
-    }
   }
 
   void _updateHeadFromGlobalPosition(Offset globalPosition) {

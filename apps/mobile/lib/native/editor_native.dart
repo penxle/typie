@@ -277,9 +277,19 @@ abstract class DocExportMode {
 }
 
 final class NativeEditor {
-  NativeEditor._(this._handle);
+  NativeEditor._(this._handle) : _testConfig = null;
+
+  @visibleForTesting
+  NativeEditor.test({bool selectionHit = false, bool interactiveHit = false, Map<String, dynamic>? clipboardData})
+    : _handle = nullptr,
+      _testConfig = _NativeEditorTestConfig(
+        selectionHit: selectionHit,
+        interactiveHit: interactiveHit,
+        clipboardData: clipboardData,
+      );
 
   final Pointer<EditorHandle> _handle;
+  final _NativeEditorTestConfig? _testConfig;
   bool _disposed = false;
   bool _awake = false;
 
@@ -287,6 +297,7 @@ final class NativeEditor {
 
   bool get isDisposed => _disposed;
   bool get awake => _awake;
+  bool get isTest => _testConfig != null;
 
   void _wakeUp() {
     if (!_awake) {
@@ -301,6 +312,10 @@ final class NativeEditor {
 
   void dispatch(Map<String, dynamic> message) {
     _checkDisposed();
+    if (isTest) {
+      _wakeUp();
+      return;
+    }
     _wakeUp();
 
     final json = jsonEncode(message);
@@ -317,6 +332,9 @@ final class NativeEditor {
 
   int tick() {
     _checkDisposed();
+    if (isTest) {
+      return 0;
+    }
 
     final result = _bindings.editor_tick(_handle);
     if (result != 0) {
@@ -330,36 +348,57 @@ final class NativeEditor {
 
   Pointer<Uint8> getSlatePtr() {
     _checkDisposed();
+    if (isTest) {
+      return nullptr;
+    }
     return _bindings.editor_get_slate_ptr(_handle);
   }
 
   int getSlateLen() {
     _checkDisposed();
+    if (isTest) {
+      return 0;
+    }
     return _bindings.editor_get_slate_len(_handle);
   }
 
   Pointer<Uint8> getSlabPtr() {
     _checkDisposed();
+    if (isTest) {
+      return nullptr;
+    }
     return _bindings.editor_get_slab_ptr(_handle);
   }
 
   int getSlabLen() {
     _checkDisposed();
+    if (isTest) {
+      return 0;
+    }
     return _bindings.editor_get_slab_len(_handle);
   }
 
   void flush() {
     _checkDisposed();
+    if (isTest) {
+      return;
+    }
     _bindings.editor_flush(_handle);
   }
 
   int getPageCount() {
     _checkDisposed();
+    if (isTest) {
+      return 0;
+    }
     return _bindings.editor_get_page_count(_handle);
   }
 
   NativeEditorRenderInfo? getRenderInfo(int pageIndex) {
     _checkDisposed();
+    if (isTest) {
+      return null;
+    }
 
     final infoPtr = calloc<RenderInfo>();
     try {
@@ -382,6 +421,9 @@ final class NativeEditor {
 
   Uint8List? export(int mode, [Uint8List? version]) {
     _checkDisposed();
+    if (isTest) {
+      return null;
+    }
 
     final Pointer<Uint8> versionPtr;
     final int versionLen;
@@ -405,6 +447,10 @@ final class NativeEditor {
 
   void importUpdates(Uint8List updates) {
     _checkDisposed();
+    if (isTest) {
+      _wakeUp();
+      return;
+    }
     _withNativeBytes(updates, (ptr, len) {
       final result = _bindings.editor_import_updates(_handle, ptr, len);
       if (result != 0) {
@@ -416,6 +462,10 @@ final class NativeEditor {
 
   void insertTemplateFragment(Uint8List snapshot) {
     _checkDisposed();
+    if (isTest) {
+      _wakeUp();
+      return;
+    }
     _withNativeBytes(snapshot, (ptr, len) {
       final result = _bindings.editor_insert_template_fragment(_handle, ptr, len);
       if (result != 0) {
@@ -427,6 +477,10 @@ final class NativeEditor {
 
   void importUpdatesBatch(List<Uint8List> updatesBatch) {
     _checkDisposed();
+    if (isTest) {
+      _wakeUp();
+      return;
+    }
 
     if (updatesBatch.isEmpty) {
       return;
@@ -462,6 +516,9 @@ final class NativeEditor {
 
   Map<String, dynamic>? getClipboardData() {
     _checkDisposed();
+    if (isTest) {
+      return _testConfig!.clipboardData;
+    }
 
     final ptr = _bindings.editor_get_clipboard_data(_handle);
     if (ptr == nullptr) {
@@ -480,16 +537,32 @@ final class NativeEditor {
 
   bool isSelectionHit(int pageIdx, double x, double y) {
     _checkDisposed();
+    if (isTest) {
+      return _testConfig!.selectionHit;
+    }
     return _bindings.editor_is_selection_hit(_handle, pageIdx, x, y) == 1;
   }
 
   bool isInteractiveHit(int pageIdx, double x, double y) {
     _checkDisposed();
+    if (isTest) {
+      return _testConfig!.interactiveHit;
+    }
     return _bindings.editor_is_interactive_hit(_handle, pageIdx, x, y) == 1;
   }
 
   NativeEditorCharacterCounts getCharacterCounts() {
     _checkDisposed();
+    if (isTest) {
+      return const NativeEditorCharacterCounts(
+        docWithWhitespace: 0,
+        docWithoutWhitespace: 0,
+        docWithoutWhitespaceAndPunctuation: 0,
+        selectionWithWhitespace: 0,
+        selectionWithoutWhitespace: 0,
+        selectionWithoutWhitespaceAndPunctuation: 0,
+      );
+    }
 
     final countsPtr = calloc<CharacterCounts>();
     try {
@@ -513,6 +586,9 @@ final class NativeEditor {
 
   Map<String, dynamic>? getTextWithMappings() {
     _checkDisposed();
+    if (isTest) {
+      return null;
+    }
 
     final ptr = _bindings.editor_get_text_with_mappings(_handle);
     if (ptr == nullptr) {
@@ -531,6 +607,10 @@ final class NativeEditor {
 
   void setTrackedItems(int group, List<Map<String, dynamic>> items) {
     _checkDisposed();
+    if (isTest) {
+      _wakeUp();
+      return;
+    }
 
     final json = jsonEncode(items);
     final jsonPtr = json.toNativeUtf8().cast<Char>();
@@ -548,6 +628,10 @@ final class NativeEditor {
 
   void removeTrackedItems(int group, List<String> ids) {
     _checkDisposed();
+    if (isTest) {
+      _wakeUp();
+      return;
+    }
 
     final json = jsonEncode(ids);
     final jsonPtr = json.toNativeUtf8().cast<Char>();
@@ -565,6 +649,9 @@ final class NativeEditor {
 
   List<Map<String, dynamic>> performSearch(String query, bool matchWholeWord) {
     _checkDisposed();
+    if (isTest) {
+      return [];
+    }
 
     final queryPtr = query.toNativeUtf8().cast<Char>();
 
@@ -589,6 +676,9 @@ final class NativeEditor {
 
   bool replaceTextInBlock(String blockId, int startOffset, int endOffset, String replacement) {
     _checkDisposed();
+    if (isTest) {
+      return false;
+    }
 
     final blockIdPtr = blockId.toNativeUtf8().cast<Char>();
     final replacementPtr = replacement.toNativeUtf8().cast<Char>();
@@ -615,6 +705,10 @@ final class NativeEditor {
 
   void replaceTextInBlocks(List<List<dynamic>> items) {
     _checkDisposed();
+    if (isTest) {
+      _wakeUp();
+      return;
+    }
 
     final json = jsonEncode(items);
     final jsonPtr = json.toNativeUtf8().cast<Char>();
@@ -632,6 +726,9 @@ final class NativeEditor {
 
   NativeDragImageResult? renderDragImage(List<int> visiblePages, int pageIdx) {
     _checkDisposed();
+    if (isTest) {
+      return null;
+    }
 
     final visiblePagesPtr = _bindings.editor_alloc(visiblePages.length * sizeOf<Size>());
     final visiblePagesTyped = visiblePagesPtr.cast<Size>();
@@ -728,6 +825,18 @@ final class NativeEditor {
       throw const EditorException('Editor has been disposed');
     }
   }
+}
+
+final class _NativeEditorTestConfig {
+  const _NativeEditorTestConfig({
+    required this.selectionHit,
+    required this.interactiveHit,
+    required this.clipboardData,
+  });
+
+  final bool selectionHit;
+  final bool interactiveHit;
+  final Map<String, dynamic>? clipboardData;
 }
 
 final class NativeDragImageResult {
