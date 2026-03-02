@@ -1,5 +1,4 @@
 use crate::model::*;
-use crate::runtime::Effect;
 use crate::schema::ContentExpr;
 use crate::state::collect_top_level_blocks_in_range;
 use crate::state::position_helpers::{calculate_offset_before_child, find_child_at_offset};
@@ -78,11 +77,7 @@ impl Transaction {
             let index = current_block
                 .index()
                 .context("Current block has no index")?;
-            self.node_mut(current_block_id)
-                .context("Current block not found")?
-                .as_mut()
-                .delete()?;
-            self.push_effect(Effect::StructureChanged);
+            self.delete_node_recursive(current_block_id)?;
 
             let selection_index = if select_next {
                 index
@@ -134,10 +129,7 @@ impl Transaction {
                     )?;
 
                     if local_offset == 0 {
-                        self.node_mut(this_id)
-                            .context("Node not found")?
-                            .as_mut()
-                            .delete()?;
+                        self.delete_node_recursive(this_id)?;
                     } else {
                         self.node_mut(this_id)
                             .context("Node not found")?
@@ -155,13 +147,9 @@ impl Transaction {
                         }
                     }
 
-                    self.push_effect(Effect::NodeChanged {
-                        node_id: pos.node_id,
-                    });
-                    self.push_effect(Effect::NodeChanged {
-                        node_id: new_block_id,
-                    });
-                    self.push_effect(Effect::StructureChanged);
+                    self.mark_structure_mutation(new_block_id);
+                    self.mark_attr_mutation(pos.node_id);
+                    self.mark_attr_mutation(new_block_id);
 
                     if tail.is_empty() {
                         let new_pos = if let Some(next) = next_id {
@@ -184,6 +172,7 @@ impl Transaction {
                                 ..Default::default()
                             }),
                         )?;
+                        self.mark_structure_mutation(new_block_id);
                         return Ok(Some((
                             new_block_id,
                             Position::new(new_block_id, 0, Affinity::Downstream),
@@ -222,13 +211,9 @@ impl Transaction {
                         }
                     }
 
-                    self.push_effect(Effect::NodeChanged {
-                        node_id: pos.node_id,
-                    });
-                    self.push_effect(Effect::NodeChanged {
-                        node_id: new_block_id,
-                    });
-                    self.push_effect(Effect::StructureChanged);
+                    self.mark_structure_mutation(new_block_id);
+                    self.mark_attr_mutation(pos.node_id);
+                    self.mark_attr_mutation(new_block_id);
 
                     let new_block_node = self.node(new_block_id).context("New block not found")?;
                     if let Some(first_child) = new_block_node.first_child() {
@@ -261,13 +246,9 @@ impl Transaction {
                     .context("Cannot clone block type")?,
             )?;
 
-            self.push_effect(Effect::NodeChanged {
-                node_id: pos.node_id,
-            });
-            self.push_effect(Effect::NodeChanged {
-                node_id: new_block_id,
-            });
-            self.push_effect(Effect::StructureChanged);
+            self.mark_structure_mutation(new_block_id);
+            self.mark_attr_mutation(pos.node_id);
+            self.mark_attr_mutation(new_block_id);
 
             return Ok(Some((
                 new_block_id,
@@ -359,15 +340,13 @@ impl Transaction {
                 ..Default::default()
             }),
         )?;
+        self.mark_structure_mutation(new_block_id);
         self.set_selection(Selection::collapsed(Position::new(
             new_block_id,
             0,
             Affinity::default(),
         )));
-        self.push_effect(Effect::NodeChanged {
-            node_id: new_block_id,
-        });
-        self.push_effect(Effect::StructureChanged);
+        self.mark_attr_mutation(new_block_id);
         Ok(true)
     }
 
@@ -399,9 +378,7 @@ impl Transaction {
         };
 
         if self.try_select_adjacent_block(current_block_id, prev_sibling_id, false)? {
-            self.push_effect(Effect::NodeChanged {
-                node_id: prev_sibling_id,
-            });
+            self.mark_attr_mutation(prev_sibling_id);
             return Ok(true);
         }
 
@@ -465,13 +442,9 @@ impl Transaction {
             Affinity::Downstream,
         )));
 
-        self.push_effect(Effect::NodeChanged {
-            node_id: target_block_id,
-        });
+        self.mark_attr_mutation(target_block_id);
         if target_block_id != prev_sibling_id {
-            self.push_effect(Effect::NodeChanged {
-                node_id: prev_sibling_id,
-            });
+            self.mark_attr_mutation(prev_sibling_id);
         }
         Ok(true)
     }
@@ -517,9 +490,7 @@ impl Transaction {
         };
 
         if self.try_select_adjacent_block(current_block_id, next_sibling_id, true)? {
-            self.push_effect(Effect::NodeChanged {
-                node_id: next_sibling_id,
-            });
+            self.mark_attr_mutation(next_sibling_id);
             return Ok(true);
         }
 
@@ -583,16 +554,10 @@ impl Transaction {
             Affinity::Downstream,
         )));
 
-        self.push_effect(Effect::NodeChanged {
-            node_id: current_block_id,
-        });
-        self.push_effect(Effect::NodeChanged {
-            node_id: next_sibling_id,
-        });
+        self.mark_attr_mutation(current_block_id);
+        self.mark_attr_mutation(next_sibling_id);
         if target_block_id != next_sibling_id {
-            self.push_effect(Effect::NodeChanged {
-                node_id: target_block_id,
-            });
+            self.mark_attr_mutation(target_block_id);
         }
         Ok(true)
     }
@@ -611,7 +576,7 @@ impl Transaction {
                         p.align = align;
                     }
                 })?;
-                self.push_effect(Effect::NodeChanged { node_id: block_id });
+                self.mark_attr_mutation(block_id);
             }
         }
 
@@ -632,7 +597,7 @@ impl Transaction {
                         p.line_height = line_height;
                     }
                 })?;
-                self.push_effect(Effect::NodeChanged { node_id: block_id });
+                self.mark_attr_mutation(block_id);
             }
         }
 
@@ -699,7 +664,7 @@ impl Transaction {
                     }
                 })?;
                 if para_changed {
-                    self.push_effect(Effect::NodeChanged { node_id: para_id });
+                    self.mark_attr_mutation(para_id);
                     changed = true;
                 }
 

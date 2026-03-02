@@ -45,9 +45,7 @@ impl Transaction {
                 text_node
                     .text
                     .apply_annotation(start_offset..end_offset, &annotation)?;
-                self.push_effect(Effect::NodeChanged {
-                    node_id: text_node_id,
-                });
+                self.mark_attr_mutation(text_node_id);
             }
         }
 
@@ -92,9 +90,7 @@ impl Transaction {
                 text_node
                     .text
                     .apply_annotation(start_offset..end_offset, &annotation)?;
-                self.push_effect(Effect::NodeChanged {
-                    node_id: text_node_id,
-                });
+                self.mark_attr_mutation(text_node_id);
             }
         }
 
@@ -127,9 +123,7 @@ impl Transaction {
                 text_node
                     .text
                     .remove_annotation(start_offset..end_offset, ann_type)?;
-                self.push_effect(Effect::NodeChanged {
-                    node_id: text_node_id,
-                });
+                self.mark_attr_mutation(text_node_id);
             }
         }
 

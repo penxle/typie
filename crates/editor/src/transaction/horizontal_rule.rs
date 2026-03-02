@@ -1,5 +1,4 @@
 use crate::model::{HorizontalRuleNode, HorizontalRuleVariant, Node};
-use crate::runtime::Effect;
 use crate::state::selection_helpers::selected_single_block_id;
 use crate::transaction::Transaction;
 use anyhow::Result;
@@ -48,7 +47,7 @@ impl Transaction {
                 horizontal_rule.variant = variant;
             }
         })?;
-        self.push_effect(Effect::NodeChanged { node_id });
+        self.mark_attr_mutation(node_id);
         Ok(true)
     }
 }

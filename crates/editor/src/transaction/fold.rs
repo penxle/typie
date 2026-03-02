@@ -1,5 +1,4 @@
 use crate::model::{FoldContentNode, FoldNode, FoldTitleNode, Node, NodeId, NodeType};
-use crate::runtime::Effect;
 use crate::state::position_helpers::leaf_block_start;
 use crate::state::{
     Position, Selection, collect_top_level_blocks_in_range, selected_single_block_id,
@@ -110,10 +109,9 @@ impl Transaction {
         )));
 
         for block_id in &block_ids {
-            self.push_effect(Effect::NodeChanged { node_id: *block_id });
+            self.mark_attr_mutation(*block_id);
         }
-        self.push_effect(Effect::NodeChanged { node_id: fold_id });
-        self.push_effect(Effect::StructureChanged);
+        self.mark_attr_mutation(fold_id);
 
         Ok(Some(fold_id))
     }

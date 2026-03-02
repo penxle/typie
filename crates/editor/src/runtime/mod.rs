@@ -413,7 +413,7 @@ impl Runtime {
         };
 
         let new_state_frontiers = self.state.doc.loro_doc().state_frontiers();
-        let Some((changed_nodes, settings_changed)) =
+        let Some((node_mutations, settings_changed)) =
             self.analyze_external_doc_diff(old_state_frontiers, &new_state_frontiers)
         else {
             push_full_fallback_effects(&mut effects);
@@ -428,13 +428,15 @@ impl Runtime {
         }
 
         effects.extend(
-            changed_nodes
+            node_mutations
                 .iter()
-                .copied()
-                .map(|node_id| Effect::NodeChanged { node_id }),
+                .map(|(node_id, kind)| Effect::NodeMutated {
+                    node_id: *node_id,
+                    kind: *kind,
+                }),
         );
 
-        let fonts = if changed_nodes.is_empty() {
+        let fonts = if node_mutations.is_empty() {
             if !settings_changed {
                 push_full_fallback_effects(&mut effects);
                 self.collect_doc_fonts_from_nodes([NodeId::ROOT])
@@ -442,7 +444,7 @@ impl Runtime {
                 Vec::new()
             }
         } else {
-            self.collect_doc_fonts_from_nodes(changed_nodes)
+            self.collect_doc_fonts_from_nodes(node_mutations.keys().copied())
         };
 
         push_font_detected_effects(&mut effects, fonts);
@@ -450,11 +452,75 @@ impl Runtime {
         self.process_effects(effects);
     }
 
+    fn resolve_invalidation(node_id: NodeId, kind: MutationKind) -> LayoutInvalidationOp {
+        match kind {
+            MutationKind::Text | MutationKind::Attr | MutationKind::ViewState => {
+                LayoutInvalidationOp::NodeAndAncestors { node_id }
+            }
+            MutationKind::Structure | MutationKind::UnknownRemote => {
+                LayoutInvalidationOp::SubtreeAndAncestors { node_id }
+            }
+        }
+    }
+
+    fn merge_node_mutation_kind(prev: MutationKind, next: MutationKind) -> MutationKind {
+        const fn priority(kind: MutationKind) -> u8 {
+            match kind {
+                MutationKind::ViewState => 0,
+                MutationKind::Attr => 1,
+                MutationKind::Text => 2,
+                MutationKind::Structure => 3,
+                MutationKind::UnknownRemote => 4,
+            }
+        }
+
+        if priority(next) > priority(prev) {
+            next
+        } else {
+            prev
+        }
+    }
+
+    fn classify_external_node_mutation(
+        node_field_path: &[String],
+        container_diff: &loro::event::Diff<'_>,
+    ) -> MutationKind {
+        if matches!(container_diff, loro::event::Diff::Unknown) {
+            return MutationKind::UnknownRemote;
+        }
+
+        if node_field_path
+            .iter()
+            .any(|key| key == "children" || key == "parent")
+        {
+            return MutationKind::Structure;
+        }
+
+        match container_diff {
+            loro::event::Diff::Text(_) => MutationKind::Text,
+            loro::event::Diff::Map(_) => MutationKind::Attr,
+            loro::event::Diff::List(_) => MutationKind::UnknownRemote,
+            loro::event::Diff::Tree(_) => MutationKind::UnknownRemote,
+            loro::event::Diff::Unknown => MutationKind::UnknownRemote,
+        }
+    }
+
+    fn merge_external_node_mutation(
+        node_mutations: &mut FxHashMap<NodeId, MutationKind>,
+        node_id: NodeId,
+        next: MutationKind,
+    ) {
+        let merged = node_mutations
+            .get(&node_id)
+            .map_or(next, |prev| Self::merge_node_mutation_kind(*prev, next));
+        node_mutations.insert(node_id, merged);
+    }
+
     fn analyze_external_doc_diff(
         &self,
         old_state_frontiers: &Frontiers,
         new_state_frontiers: &Frontiers,
-    ) -> Option<(FxHashSet<NodeId>, bool)> {
+    ) -> Option<(FxHashMap<NodeId, MutationKind>, bool)> {
         const NODES_KEY: &str = "nodes";
         const SETTINGS_KEY: &str = "settings";
         const CASCADE_ATTRS_KEY: &str = "cascade_attrs";
@@ -466,43 +532,54 @@ impl Runtime {
             .diff(old_state_frontiers, new_state_frontiers)
             .ok()?;
 
-        let mut changed_nodes = FxHashSet::default();
+        let mut node_mutations: FxHashMap<NodeId, MutationKind> = FxHashMap::default();
         let mut settings_changed = false;
 
         for (container_id, container_diff) in diff.iter() {
-            if matches!(container_diff, loro::event::Diff::Unknown) {
-                return None;
-            }
-
             let path = self
                 .state
                 .doc
                 .loro_doc()
                 .get_path_to_container(container_id)?;
 
-            let mut key_iter = path.iter().filter_map(|(_, index)| match index {
-                loro::Index::Key(key) => Some(key.to_string()),
-                _ => None,
-            });
+            let key_path: Vec<String> = path
+                .iter()
+                .filter_map(|(_, index)| match index {
+                    loro::Index::Key(key) => Some(key.to_string()),
+                    _ => None,
+                })
+                .collect();
 
-            let root_key = key_iter.next()?;
+            let Some(root_key) = key_path.first() else {
+                return None;
+            };
             match root_key.as_str() {
                 SETTINGS_KEY => {
                     settings_changed = true;
                 }
                 NODES_KEY => {
-                    if let Some(node_key) = key_iter.next() {
+                    if key_path.len() >= 2 {
+                        let node_key = &key_path[1];
                         let node_id = NodeId::from_string(&node_key)?;
-                        if node_id == NodeId::ROOT && key_iter.any(|key| key == CASCADE_ATTRS_KEY) {
+                        if node_id == NodeId::ROOT
+                            && key_path.iter().skip(2).any(|key| key == CASCADE_ATTRS_KEY)
+                        {
                             settings_changed = true;
                         }
-                        changed_nodes.insert(node_id);
+                        let kind =
+                            Self::classify_external_node_mutation(&key_path[2..], container_diff);
+                        Self::merge_external_node_mutation(&mut node_mutations, node_id, kind);
                     } else {
                         let loro::event::Diff::Map(map_diff) = container_diff else {
                             return None;
                         };
                         for node_key in map_diff.updated.keys() {
-                            changed_nodes.insert(NodeId::from_string(node_key.as_ref())?);
+                            let node_id = NodeId::from_string(node_key.as_ref())?;
+                            Self::merge_external_node_mutation(
+                                &mut node_mutations,
+                                node_id,
+                                MutationKind::Structure,
+                            );
                         }
                     }
                 }
@@ -510,7 +587,7 @@ impl Runtime {
             }
         }
 
-        Some((changed_nodes, settings_changed))
+        Some((node_mutations, settings_changed))
     }
 
     pub fn replace_text_in_block(
@@ -1649,29 +1726,28 @@ impl Runtime {
                     self.pending.repaste = true;
                     self.pending.remarks = true;
                 }
-                Effect::NodeChanged { node_id } => {
-                    font_affected_nodes.insert(node_id);
-                    invalidation.push(LayoutInvalidationOp::NodeAndAncestors { node_id });
+                Effect::NodeMutated { node_id, kind } => {
                     self.selection_cache = None;
+                    if matches!(
+                        kind,
+                        MutationKind::Text
+                            | MutationKind::Attr
+                            | MutationKind::Structure
+                            | MutationKind::UnknownRemote
+                    ) {
+                        font_affected_nodes.insert(node_id);
+                    }
+                    invalidation.push(Self::resolve_invalidation(node_id, kind));
                     self.pending.layout = true;
                     self.pending.render = true;
                     self.pending.cursor = true;
                     self.pending.selection = true;
                     self.pending.active_styles = true;
                     self.pending.external_elements = true;
-                }
-                Effect::SubtreeChanged { node_id } => {
-                    font_affected_nodes.insert(node_id);
-                    invalidation.push(LayoutInvalidationOp::SubtreeAndAncestors { node_id });
-                    self.selection_cache = None;
-                    self.pending.layout = true;
-                    self.pending.render = true;
-                    self.pending.cursor = true;
-                    self.pending.selection = true;
-                    self.pending.active_styles = true;
-                    self.pending.external_elements = true;
-                    self.pending.table_overlays = true;
-                    self.pending.remarks = true;
+                    if matches!(kind, MutationKind::Structure | MutationKind::UnknownRemote) {
+                        self.pending.table_overlays = true;
+                        self.pending.remarks = true;
+                    }
                 }
                 Effect::SelectionChanged => {
                     self.selection_cache = None;
@@ -1715,12 +1791,6 @@ impl Runtime {
                 }
                 Effect::PointerStyleChanged { style } => {
                     self.pending.pointer_style = Some(style);
-                }
-                Effect::StructureChanged => {
-                    // normalize_to_schema 에서 사용하기 위한 Effect라 아래 pending flags 설정은 그냥 형식적인 것임
-                    self.pending.layout = true;
-                    self.pending.render = true;
-                    self.pending.external_elements = true;
                 }
                 Effect::PreeditChanged { node_id } => {
                     if let Some(nid) = node_id {
@@ -1823,15 +1893,10 @@ impl Runtime {
 
         match result {
             Ok((new_state, effects)) => {
-                let doc_changed = effects.iter().any(|e| {
-                    matches!(
-                        e,
-                        Effect::DocChanged
-                            | Effect::NodeChanged { .. }
-                            | Effect::SubtreeChanged { .. }
-                            | Effect::StructureChanged
-                    )
-                }) || new_state.frontiers != self.state.frontiers;
+                let doc_changed = effects
+                    .iter()
+                    .any(|e| matches!(e, Effect::DocChanged | Effect::NodeMutated { .. }))
+                    || new_state.frontiers != self.state.frontiers;
                 let selection_changed = effects
                     .iter()
                     .any(|e| matches!(e, Effect::SelectionChanged));
@@ -3884,6 +3949,166 @@ mod tests {
     }
 
     #[test]
+    fn import_updates_add_table_column_recomputes_table_external_element_width() {
+        let mut p = id!();
+        let mut t = id!();
+        let mut image_1 = id!();
+        let mut image_2 = id!();
+        let base_state = state! {
+            doc {
+                @p paragraph { text { "x" } }
+                @t table {
+                    table_row {
+                        table_cell {
+                            @image_1 image (id: Some("img-1".to_string()),)
+                        }
+                    }
+                    table_row {
+                        table_cell {
+                            @image_2 image (id: Some("img-2".to_string()),)
+                        }
+                    }
+                }
+            }
+            selection { (p, 0) }
+        };
+        let snapshot = base_state
+            .doc
+            .export(DocExportMode::Snapshot)
+            .expect("base should export snapshot");
+
+        let mut source = Runtime::new(
+            800.0,
+            1.0,
+            State::new(
+                Rc::new(
+                    Doc::from_snapshot(snapshot.clone()).expect("test: snapshot should decode"),
+                ),
+                Selection::collapsed(Position::new(p, 0, Affinity::Downstream)),
+            ),
+        );
+        let mut target = Runtime::new(
+            800.0,
+            1.0,
+            State::new(
+                Rc::new(Doc::from_snapshot(snapshot).expect("test: snapshot should decode")),
+                Selection::collapsed(Position::new(p, 0, Affinity::Downstream)),
+            ),
+        );
+
+        source.tick();
+        target.tick();
+
+        let external_width = |runtime: &Runtime, node_id: NodeId| {
+            runtime
+                .pages()
+                .iter()
+                .flat_map(|page| page.external_elements())
+                .find_map(|(_, ext)| (ext.id == node_id).then_some(ext.size.width))
+                .expect("external element should be present in page layout")
+        };
+
+        let before_width = external_width(&target, image_2);
+
+        let version = source
+            .export(DocExportMode::Version)
+            .expect("source should export version");
+        source.update(Message::AddTableColumn {
+            table_id: t.to_string(),
+            col: 0,
+            before: false,
+        });
+        source.flush();
+        let updates = source
+            .export(DocExportMode::UpdatesFrom { version })
+            .expect("source should export incremental updates");
+
+        target
+            .import_updates(&updates)
+            .expect("target should import updates");
+        target.tick();
+
+        let after_width = external_width(&target, image_2);
+        assert!(
+            after_width < before_width,
+            "remote table column insertion should shrink existing table external width: before={before_width}, after={after_width}"
+        );
+    }
+
+    #[test]
+    fn import_updates_table_attr_change_does_not_invalidate_table_descendant_cache() {
+        let mut p = id!();
+        let mut table = id!();
+        let mut row = id!();
+        let mut cell = id!();
+        let base_state = state! {
+            doc {
+                @p paragraph { text { "x" } }
+                @table table {
+                    @row table_row {
+                        @cell table_cell {
+                            paragraph { text { "cell" } }
+                        }
+                    }
+                }
+            }
+            selection { (p, 0) }
+        };
+        let snapshot = base_state
+            .doc
+            .export(DocExportMode::Snapshot)
+            .expect("base should export snapshot");
+
+        let mut source = Runtime::new(
+            800.0,
+            1.0,
+            State::new(
+                Rc::new(
+                    Doc::from_snapshot(snapshot.clone()).expect("test: snapshot should decode"),
+                ),
+                Selection::collapsed(Position::new(p, 0, Affinity::Downstream)),
+            ),
+        );
+        let mut target = Runtime::new(
+            800.0,
+            1.0,
+            State::new(
+                Rc::new(Doc::from_snapshot(snapshot).expect("test: snapshot should decode")),
+                Selection::collapsed(Position::new(p, 0, Affinity::Downstream)),
+            ),
+        );
+
+        source.tick();
+        target.tick();
+        assert!(
+            target.is_layout_cached(cell),
+            "precondition: table cell layout should be cached"
+        );
+
+        let version = source
+            .export(DocExportMode::Version)
+            .expect("source should export version");
+        source.update(Message::SetTableAlign {
+            table_id: table.to_string(),
+            align: TableAlign::Center,
+        });
+        source.flush();
+
+        let updates = source
+            .export(DocExportMode::UpdatesFrom { version })
+            .expect("source should export incremental updates");
+        target
+            .import_updates(&updates)
+            .expect("target should import updates");
+        target.tick();
+
+        assert!(
+            target.is_layout_cached(cell),
+            "remote table attr change should keep descendant layout cache (node-level invalidation only)"
+        );
+    }
+
+    #[test]
     fn test_pointer_down_moves_cursor() {
         let mut p = id!();
         let mut runtime = runtime! {
@@ -4388,7 +4613,7 @@ mod tests {
     }
 
     #[test]
-    fn subtree_changed_root_invalidates_layout_cache() {
+    fn structure_mutation_on_root_invalidates_layout_cache() {
         let mut p = id!();
         let mut runtime = runtime! {
             viewport { 800, 600, 1.0 }
@@ -4406,13 +4631,14 @@ mod tests {
             "precondition: paragraph layout should be cached"
         );
 
-        runtime.process_effects(vec![Effect::SubtreeChanged {
+        runtime.process_effects(vec![Effect::NodeMutated {
             node_id: NodeId::ROOT,
+            kind: MutationKind::Structure,
         }]);
 
         assert!(
             !runtime.is_layout_cached(p),
-            "SubtreeChanged(ROOT) should invalidate full layout cache"
+            "Structure mutation on ROOT should invalidate full layout cache"
         );
     }
 
@@ -4445,13 +4671,61 @@ mod tests {
         );
 
         runtime.process_effects(vec![
-            Effect::NodeChanged { node_id: list },
-            Effect::SubtreeChanged { node_id: list },
+            Effect::NodeMutated {
+                node_id: list,
+                kind: MutationKind::Attr,
+            },
+            Effect::NodeMutated {
+                node_id: list,
+                kind: MutationKind::Structure,
+            },
         ]);
 
         assert!(
             !runtime.is_layout_cached(item),
             "subtree invalidation should win over node invalidation for the same node"
+        );
+    }
+
+    #[test]
+    fn table_attr_mutation_does_not_over_escalate_to_subtree_cache_invalidation() {
+        let mut table = id!();
+        let mut row = id!();
+        let mut cell = id!();
+        let mut p = id!();
+        let mut runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @table table {
+                    @row table_row {
+                        @cell table_cell {
+                            paragraph {
+                                text { "cell" }
+                            }
+                        }
+                    }
+                }
+                @p paragraph {
+                    text { "tail" }
+                }
+            }
+            selection { (p, 0) }
+        };
+
+        runtime.layout();
+        assert!(
+            runtime.is_layout_cached(cell),
+            "precondition: table cell layout should be cached"
+        );
+
+        runtime.process_effects(vec![Effect::NodeMutated {
+            node_id: table,
+            kind: MutationKind::Attr,
+        }]);
+
+        assert!(
+            runtime.is_layout_cached(cell),
+            "Attr mutation should not invalidate table descendants as subtree"
         );
     }
 

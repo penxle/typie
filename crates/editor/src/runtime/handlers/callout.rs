@@ -23,7 +23,10 @@ impl Runtime {
             return vec![];
         }
 
-        vec![Effect::NodeChanged { node_id }]
+        vec![Effect::NodeMutated {
+            node_id,
+            kind: crate::runtime::MutationKind::Attr,
+        }]
     }
 
     pub(crate) fn handle_cycle_callout_variant_in_selection(&mut self) -> Vec<Effect> {

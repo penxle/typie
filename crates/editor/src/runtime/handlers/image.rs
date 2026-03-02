@@ -38,7 +38,7 @@ impl Runtime {
                 }
             })?;
 
-            tr.push_effect(Effect::NodeChanged { node_id });
+            tr.mark_attr_mutation(node_id);
             Ok(true)
         })
     }
@@ -62,7 +62,7 @@ impl Runtime {
                     image.id = Some(image_id);
                 }
             })?;
-            tr.push_effect(Effect::NodeChanged { node_id });
+            tr.mark_attr_mutation(node_id);
             Ok(true)
         })
     }
@@ -84,6 +84,9 @@ impl Runtime {
 
         self.layout_engine.set_external_height(node_id, height);
 
-        vec![Effect::NodeChanged { node_id }]
+        vec![Effect::NodeMutated {
+            node_id,
+            kind: crate::runtime::MutationKind::ViewState,
+        }]
     }
 }

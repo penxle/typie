@@ -575,7 +575,7 @@ mod tests {
 
         let has_item_changed = effects
             .iter()
-            .any(|e| matches!(e, Effect::NodeChanged { node_id } if *node_id == callout));
+            .any(|e| matches!(e, Effect::NodeMutated { node_id, kind: crate::runtime::MutationKind::Attr } if *node_id == callout));
 
         assert!(
             has_item_changed,
@@ -584,7 +584,7 @@ mod tests {
 
         let has_item_changed_2 = effects
             .iter()
-            .any(|e| matches!(e, Effect::NodeChanged { node_id } if *node_id == n1));
+            .any(|e| matches!(e, Effect::NodeMutated { node_id, kind: crate::runtime::MutationKind::Attr } if *node_id == n1));
 
         assert!(
             has_item_changed_2,
@@ -593,7 +593,7 @@ mod tests {
 
         let has_item_changed_3 = effects
             .iter()
-            .any(|e| matches!(e, Effect::NodeChanged { node_id } if *node_id == n2));
+            .any(|e| matches!(e, Effect::NodeMutated { node_id, kind: crate::runtime::MutationKind::Attr } if *node_id == n2));
 
         assert!(
             has_item_changed_3,

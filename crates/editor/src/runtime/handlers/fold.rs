@@ -65,7 +65,10 @@ impl Runtime {
         self.layout_engine
             .set_fold_state(node_id, !current_expanded);
 
-        effects.push(Effect::SubtreeChanged { node_id });
+        effects.push(Effect::NodeMutated {
+            node_id,
+            kind: crate::runtime::MutationKind::ViewState,
+        });
         effects
     }
 

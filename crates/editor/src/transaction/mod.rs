@@ -23,7 +23,7 @@ pub(crate) use style::{compute_styles_at_char_position, compute_styles_at_cursor
 pub use text::DeleteResult;
 
 use crate::model::*;
-use crate::runtime::{Effect, State};
+use crate::runtime::{Effect, MutationKind, State};
 use crate::schema::{RepairAction, Schema};
 use crate::state::position_helpers::find_child_at_offset;
 use crate::state::{BlockTraverser, Position, Selection};
@@ -91,6 +91,27 @@ impl Transaction {
 
     pub fn push_effect(&mut self, effect: Effect) {
         self.effects.push(effect);
+    }
+
+    pub fn mark_text_mutation(&mut self, node_id: NodeId) {
+        self.push_effect(Effect::NodeMutated {
+            node_id,
+            kind: MutationKind::Text,
+        });
+    }
+
+    pub fn mark_attr_mutation(&mut self, node_id: NodeId) {
+        self.push_effect(Effect::NodeMutated {
+            node_id,
+            kind: MutationKind::Attr,
+        });
+    }
+
+    pub fn mark_structure_mutation(&mut self, node_id: NodeId) {
+        self.push_effect(Effect::NodeMutated {
+            node_id,
+            kind: MutationKind::Structure,
+        });
     }
 
     pub(crate) fn resolve_attr_cascade(&self, node_id: NodeId) -> Vec<Attr> {
@@ -168,6 +189,7 @@ impl Transaction {
         if self.state.selection != pre_normalize_selection {
             self.recompute_pending_styles();
         }
+
         self.validate()?;
 
         let pending_txn_len = self.state.doc.loro_doc().get_pending_txn_len();
@@ -282,7 +304,7 @@ impl Transaction {
             .effects
             .iter()
             .filter_map(|e| match e {
-                Effect::NodeChanged { node_id } => Some(*node_id),
+                Effect::NodeMutated { node_id, .. } => Some(*node_id),
                 _ => None,
             })
             .collect();
@@ -318,7 +340,7 @@ impl Transaction {
 
     fn validate(&self) -> Result<()> {
         for effect in &self.effects {
-            if let Effect::NodeChanged { node_id } = effect {
+            if let Effect::NodeMutated { node_id, .. } = effect {
                 if self.doc().node(*node_id).is_none() {
                     continue;
                 }
@@ -337,10 +359,15 @@ impl Transaction {
     }
 
     fn normalize_to_schema(&mut self) -> Result<()> {
-        let structure_changed = self
-            .effects
-            .iter()
-            .any(|e| matches!(e, Effect::StructureChanged));
+        let structure_changed = self.effects.iter().any(|effect| {
+            matches!(
+                effect,
+                Effect::NodeMutated {
+                    kind: MutationKind::Structure | MutationKind::UnknownRemote,
+                    ..
+                }
+            )
+        });
 
         if !structure_changed {
             return Ok(());
@@ -401,7 +428,7 @@ impl Transaction {
         self.ensure_paragraph_after_pagebreak()?;
 
         if modified {
-            self.push_effect(Effect::StructureChanged);
+            self.mark_structure_mutation(NodeId::ROOT);
         }
 
         Ok(())
@@ -519,7 +546,7 @@ mod tests {
         };
 
         let actual = transact!(initial, |tr| {
-            tr.push_effect(Effect::StructureChanged);
+            tr.mark_structure_mutation(NodeId::ROOT);
         });
 
         let expected = state! {
@@ -552,7 +579,7 @@ mod tests {
         };
 
         let actual = transact!(initial, |tr| {
-            tr.push_effect(Effect::StructureChanged);
+            tr.mark_structure_mutation(NodeId::ROOT);
         });
 
         let expected = state! {
@@ -579,7 +606,7 @@ mod tests {
         };
 
         let actual = transact!(initial, |tr| {
-            tr.push_effect(Effect::StructureChanged);
+            tr.mark_structure_mutation(NodeId::ROOT);
         });
 
         let expected = state! {
@@ -606,7 +633,7 @@ mod tests {
         };
 
         let actual = transact!(initial, |tr| {
-            tr.push_effect(Effect::StructureChanged);
+            tr.mark_structure_mutation(NodeId::ROOT);
         });
 
         let expected = state! {
@@ -636,7 +663,7 @@ mod tests {
         };
 
         let actual = transact!(initial, |tr| {
-            tr.push_effect(Effect::StructureChanged);
+            tr.mark_structure_mutation(NodeId::ROOT);
         });
 
         let expected = state! {
@@ -662,7 +689,7 @@ mod tests {
         };
 
         let actual = transact!(initial, |tr| {
-            tr.push_effect(Effect::StructureChanged);
+            tr.mark_structure_mutation(NodeId::ROOT);
         });
 
         let expected = state! {
@@ -694,7 +721,7 @@ mod tests {
         };
 
         let actual = transact!(initial, |tr| {
-            tr.push_effect(Effect::StructureChanged);
+            tr.mark_structure_mutation(NodeId::ROOT);
         });
 
         let expected = state! {
@@ -719,7 +746,7 @@ mod tests {
         };
 
         let actual = transact!(initial, |tr| {
-            tr.push_effect(Effect::StructureChanged);
+            tr.mark_structure_mutation(NodeId::ROOT);
         });
 
         let expected = state! {
@@ -747,7 +774,7 @@ mod tests {
         initial.read_only = true;
 
         let actual = transact!(initial, |tr| {
-            tr.push_effect(Effect::StructureChanged);
+            tr.mark_structure_mutation(NodeId::ROOT);
         });
 
         assert_eq!(
@@ -786,7 +813,7 @@ mod tests {
         };
 
         let actual = transact!(initial, |tr| {
-            tr.push_effect(Effect::StructureChanged);
+            tr.mark_structure_mutation(NodeId::ROOT);
         });
 
         // 내부 Table이 삭제되고, FoldContent의 content가 repair됨
@@ -835,7 +862,7 @@ mod tests {
         };
 
         let actual = transact!(initial, |tr| {
-            tr.push_effect(Effect::StructureChanged);
+            tr.mark_structure_mutation(NodeId::ROOT);
         });
 
         // Table은 Table 안에 있는 게 아니므로 보존되어야 함
@@ -886,7 +913,7 @@ mod tests {
         };
 
         let actual = transact!(initial, |tr| {
-            tr.push_effect(Effect::StructureChanged);
+            tr.mark_structure_mutation(NodeId::ROOT);
         });
 
         // 깊이 중첩된 Table도 삭제되어야 함

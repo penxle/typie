@@ -197,6 +197,8 @@ impl Transaction {
         prev_id: Option<NodeId>,
         _next_id: Option<NodeId>,
     ) -> Result<()> {
+        let target_parent_id = parent_id.context("Parent ID not found for move_node_range")?;
+
         let mut index = if let Some(prev_id) = prev_id {
             let prev_node = self
                 .doc()
@@ -219,10 +221,7 @@ impl Transaction {
             let is_last = current_id == end_id;
             let next_id = node.next_sibling().map(|n| n.node_id());
 
-            node.as_mut().move_to(
-                parent_id.context("Parent ID not found for move_node_range")?,
-                index,
-            )?;
+            node.as_mut().move_to(target_parent_id, index)?;
             index += 1;
 
             if is_last {
@@ -235,16 +234,13 @@ impl Transaction {
             };
         }
 
-        if let Some(pid) = parent_id {
-            self.push_effect(Effect::NodeChanged { node_id: pid });
-        }
+        self.mark_attr_mutation(target_parent_id);
         if let Some(pid) = old_parent_id {
-            if Some(pid) != parent_id {
-                self.push_effect(Effect::NodeChanged { node_id: pid });
+            if pid != target_parent_id {
+                self.mark_attr_mutation(pid);
             }
         }
-
-        self.push_effect(Effect::StructureChanged);
+        self.mark_structure_mutation(target_parent_id);
 
         Ok(())
     }
@@ -258,10 +254,9 @@ impl Transaction {
         let node = self.node_mut(node_id).context("Node not found")?;
         node.as_mut().delete().context("Failed to delete node")?;
 
-        self.push_effect(Effect::StructureChanged);
-
         if let Some(pid) = parent_id {
-            self.push_effect(Effect::NodeChanged { node_id: pid });
+            self.mark_attr_mutation(pid);
+            self.mark_structure_mutation(pid);
         }
 
         Ok(())
@@ -319,7 +314,7 @@ impl Transaction {
                 .node(node_id)
                 .and_then(|n| n.parent().map(|p| p.node_id()))
             {
-                self.push_effect(Effect::NodeChanged { node_id: parent_id });
+                self.mark_attr_mutation(parent_id);
             }
 
             Ok(false)
@@ -416,8 +411,7 @@ impl Transaction {
         for &node_id in &node_ids {
             self.doc().mark_unreachable_subtree(node_id);
         }
-
-        self.push_effect(Effect::StructureChanged);
+        self.mark_structure_mutation(parent_id);
 
         Ok(())
     }
@@ -1556,7 +1550,7 @@ impl Transaction {
                 self.delete_node_recursive(node_id)?;
             }
 
-            self.push_effect(Effect::NodeChanged { node_id: keep_id });
+            self.mark_attr_mutation(keep_id);
         }
 
         Ok(())
@@ -1737,6 +1731,7 @@ impl Transaction {
             .context("Parent node not found")?;
 
         let mut changed_nodes = Vec::new();
+        let mut structure_changed = false;
 
         let (insert_index, split_tail) = if let Some((child_id, local_offset)) =
             find_child_at_offset(&parent_node, position.offset)
@@ -1787,6 +1782,7 @@ impl Transaction {
                     fragment_node.data().clone(),
                 )?;
                 index += 1;
+                structure_changed = true;
             }
         }
 
@@ -1794,6 +1790,7 @@ impl Transaction {
             parent_node
                 .as_mut()
                 .insert_child(index, Node::Text(TextNode { text: tail_text }))?;
+            structure_changed = true;
         }
 
         for (node_id, fragment_node) in fragment.iter() {
@@ -1815,18 +1812,18 @@ impl Transaction {
                             *node_id,
                             fragment_node.data().clone(),
                         )?;
+                        structure_changed = true;
                     }
                 }
             }
         }
-
-        self.push_effect(Effect::StructureChanged);
-        self.push_effect(Effect::NodeChanged {
-            node_id: position.node_id,
-        });
+        self.mark_attr_mutation(position.node_id);
+        if structure_changed {
+            self.mark_structure_mutation(position.node_id);
+        }
 
         for node_id in changed_nodes {
-            self.push_effect(Effect::NodeChanged { node_id });
+            self.mark_attr_mutation(node_id);
         }
 
         Ok(())
@@ -2188,14 +2185,11 @@ impl Transaction {
                 0,
                 Affinity::Downstream,
             ))?;
-            self.push_effect(Effect::NodeChanged {
-                node_id: position.node_id,
-            });
+            self.mark_attr_mutation(position.node_id);
         }
-        self.push_effect(Effect::StructureChanged);
 
+        self.mark_structure_mutation(parent_id);
         let head = Position::new(last_para_id, last_para_content_len, Affinity::Downstream);
-        self.push_effect(Effect::StructureChanged);
         Ok(head)
     }
 
