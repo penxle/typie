@@ -7,6 +7,7 @@
   import { Dialog } from '@typie/ui/notification';
   import { comma } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
+  import { tick } from 'svelte';
   import { EntityType, EntityVisibility } from '@/enums';
   import BlendIcon from '~icons/lucide/blend';
   import CheckIcon from '~icons/lucide/check';
@@ -199,11 +200,9 @@
       mixpanel.track('create_child_folder', { via });
       open();
 
-      // NOTE: Menu 컴포넌트의 focus-trap이 deactivate시 focus 되돌리기를 setTimeout으로 하므로,
-      // focus-trap에 의해 곧바로 편집 상태가 풀리는 일이 없도록 setTimeout 적용함.
-      setTimeout(() => {
-        app.state.newFolderId = resp.createFolder.id;
-      });
+      // NOTE: 메뉴 닫힘/포커스 복귀 사이클 이후 실행되도록 다음 tick으로 미룬다.
+      await tick();
+      app.state.newFolderId = resp.createFolder.id;
     }}
   >
     하위 폴더 생성
