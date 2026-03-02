@@ -29,6 +29,10 @@ type EditorZoomControllerOptions = {
 
 export class EditorZoomController {
   static readonly WHEEL_SESSION_RESET_MS = 150;
+  static readonly WHEEL_BURST_GAP_MS = 56;
+  static readonly WHEEL_TAIL_DELTA_PX = 0.8;
+  static readonly WHEEL_TAIL_STREAK_TO_RESET = 3;
+  static readonly WHEEL_MODE_SWITCH_MIN_DELTA_PX = 1.5;
   static readonly KEYBOARD_ZOOM_STEP = 0.1;
 
   displayZoom = $state(1);
@@ -38,6 +42,8 @@ export class EditorZoomController {
   #renderZoomTimer: ReturnType<typeof setTimeout> | null = null;
   #wheelSessionTimer: ReturnType<typeof setTimeout> | null = null;
   #wheelSessionMode: 'scroll' | 'zoom' | null = null;
+  #wheelLastEventTs: number | null = null;
+  #wheelLowDeltaStreak = 0;
   #wheelRawZoom: number | null = null;
   #options: EditorZoomControllerOptions;
 
@@ -50,12 +56,7 @@ export class EditorZoomController {
       clearTimeout(this.#renderZoomTimer);
       this.#renderZoomTimer = null;
     }
-    if (this.#wheelSessionTimer) {
-      clearTimeout(this.#wheelSessionTimer);
-      this.#wheelSessionTimer = null;
-    }
-    this.#wheelSessionMode = null;
-    this.#wheelRawZoom = null;
+    this.#resetWheelSession();
   }
 
   setZoom(nextZoom: number, { commitRender = false, source = 'programmatic' as 'wheel' | 'programmatic' } = {}): void {
@@ -159,8 +160,35 @@ export class EditorZoomController {
       return;
     }
 
+    const zoomDelta = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
+    const deltaMagnitude = Math.abs(zoomDelta);
+    if (deltaMagnitude === 0) {
+      return;
+    }
+
+    const elapsedSinceLastEvent = this.#wheelLastEventTs === null ? Number.POSITIVE_INFINITY : event.timeStamp - this.#wheelLastEventTs;
+    this.#wheelLastEventTs = event.timeStamp;
+
+    if (elapsedSinceLastEvent > EditorZoomController.WHEEL_BURST_GAP_MS) {
+      this.#clearWheelSessionModeState();
+    }
+
+    if (deltaMagnitude <= EditorZoomController.WHEEL_TAIL_DELTA_PX) {
+      this.#wheelLowDeltaStreak += 1;
+      if (this.#wheelLowDeltaStreak >= EditorZoomController.WHEEL_TAIL_STREAK_TO_RESET) {
+        this.#resetWheelSession();
+        return;
+      }
+    } else {
+      this.#wheelLowDeltaStreak = 0;
+    }
+
     const hasZoomModifier = event.metaKey || event.ctrlKey;
     if (!this.#wheelSessionMode) {
+      if (deltaMagnitude < EditorZoomController.WHEEL_MODE_SWITCH_MIN_DELTA_PX) {
+        this.#scheduleWheelSessionReset();
+        return;
+      }
       this.#wheelSessionMode = hasZoomModifier ? 'zoom' : 'scroll';
     }
     this.#scheduleWheelSessionReset();
@@ -170,11 +198,6 @@ export class EditorZoomController {
     }
 
     event.preventDefault();
-
-    const zoomDelta = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
-    if (zoomDelta === 0) {
-      return;
-    }
 
     const bounds = computePaginatedZoomBounds(pageWidth);
     const wheelBaseZoom = this.#wheelRawZoom ?? this.displayZoom;
@@ -278,9 +301,24 @@ export class EditorZoomController {
     }
     this.#wheelSessionTimer = setTimeout(() => {
       this.#wheelSessionTimer = null;
-      this.#wheelSessionMode = null;
-      this.#wheelRawZoom = null;
+      this.#wheelLastEventTs = null;
+      this.#clearWheelSessionModeState();
     }, EditorZoomController.WHEEL_SESSION_RESET_MS);
+  }
+
+  #clearWheelSessionModeState(): void {
+    this.#wheelSessionMode = null;
+    this.#wheelRawZoom = null;
+    this.#wheelLowDeltaStreak = 0;
+  }
+
+  #resetWheelSession(): void {
+    if (this.#wheelSessionTimer) {
+      clearTimeout(this.#wheelSessionTimer);
+      this.#wheelSessionTimer = null;
+    }
+    this.#wheelLastEventTs = null;
+    this.#clearWheelSessionModeState();
   }
 
   async #syncZoomAnchor(anchor: ZoomAnchor, zoom: number): Promise<void> {
