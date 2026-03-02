@@ -1,12 +1,17 @@
 use crate::layout::context::LayoutContext;
 use crate::layout::cursor::CursorNavigable;
 use crate::layout::elements::{Wrapper, *};
-use crate::layout::interactive::Interactive;
 use crate::model::{NodeId, TABLE_BORDER_WIDTH};
 use crate::render::{Outline, Render};
 use crate::types::{BoxConstraints, PaintOverflow, Point, PointerStyle, Size};
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
+
+pub struct InteractiveProps {
+    pub kind: u32,
+    pub node_id: NodeId,
+    pub wants_passthrough: bool,
+}
 
 pub use crate::layout::elements::SplitEdges;
 
@@ -95,6 +100,27 @@ impl Element {
             Element::Line(e) => e.paint_overflow(),
             Element::BlockquoteMessage(e) => e.paint_overflow(),
             _ => PaintOverflow::default(),
+        }
+    }
+
+    pub fn interactive_props(&self, read_only: bool) -> Option<InteractiveProps> {
+        match self {
+            Element::FoldTitle(e) => Some(InteractiveProps {
+                kind: 0,
+                node_id: e.fold_id,
+                wants_passthrough: !read_only,
+            }),
+            Element::FoldTitleBackground(e) => Some(InteractiveProps {
+                kind: 0,
+                node_id: e.fold_id,
+                wants_passthrough: !read_only,
+            }),
+            Element::CalloutIcon(e) if !read_only => Some(InteractiveProps {
+                kind: 1,
+                node_id: e.node_id,
+                wants_passthrough: false,
+            }),
+            _ => None,
         }
     }
 
@@ -190,15 +216,6 @@ impl Element {
             Element::FoldContent(e) => Some(e.fold_id),
             Element::TableBorder(e) => Some(e.node_id),
             Element::TableCell(e) => Some(e.node_id),
-        }
-    }
-
-    pub fn as_interactive(&self) -> Option<&dyn Interactive> {
-        match self {
-            Element::FoldTitle(e) => Some(e),
-            Element::FoldTitleBackground(e) => Some(e),
-            Element::CalloutIcon(e) => Some(e),
-            _ => None,
         }
     }
 

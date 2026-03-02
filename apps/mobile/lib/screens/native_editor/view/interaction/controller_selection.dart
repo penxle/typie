@@ -359,7 +359,19 @@ extension ControllerSelectionMethods on EditorInteractionController {
     gesture.recordTap(now: now, localPosition: localPosition);
 
     final pointerX = gesture.getPointerX(localPosition.dx);
-    final tappedInteractive = scope.editor.isInteractiveHit(pageIdx, pointerX, localY);
+
+    // Check interactive overlays (fold toggle, callout icon)
+    final hitOverlay = scope.controller.interactiveOverlays.firstWhereOrNull(
+      (o) => o.hitTest(pageIdx, pointerX, localY),
+    );
+    if (hitOverlay != null) {
+      if (hitOverlay.kind == 0) {
+        scope.controller.dispatch({'type': 'toggleFold', 'nodeId': hitOverlay.nodeId});
+      } else if (hitOverlay.kind == 1) {
+        scope.controller.dispatch({'type': 'cycleCalloutVariantAt', 'nodeId': hitOverlay.nodeId});
+      }
+      return;
+    }
 
     if (clickCount == 1) {
       final isSelectionHit = scope.editor.isSelectionHit(pageIdx, pointerX, localY);
@@ -413,13 +425,9 @@ extension ControllerSelectionMethods on EditorInteractionController {
             isCollapsed && newState.cursor != null && prevCursor != null && newState.cursor!.isSamePosition(prevCursor);
 
         if (isSameCursor) {
-          if (!tappedInteractive && !wasContextMenuOpen.value) {
+          if (!wasContextMenuOpen.value) {
             showContextMenu.value = true;
           }
-          return;
-        }
-
-        if (tappedInteractive) {
           return;
         }
 

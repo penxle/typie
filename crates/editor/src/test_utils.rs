@@ -104,46 +104,8 @@ pub fn init_test_env() {
 #[allow(unused)]
 pub fn click_fold_toggle(runtime: &mut crate::runtime::Runtime, fold_id: crate::model::NodeId) {
     runtime.layout();
-
-    let mut hit = None;
-    for (page_idx, page) in runtime.pages().iter().enumerate() {
-        let width = page.root.node.size.width.ceil().max(0.0) as usize;
-        let height = page.root.node.size.height.ceil().max(0.0) as usize;
-
-        'search: for y in (0..=height).step_by(4) {
-            for x in (0..=width).step_by(4) {
-                let x = x as f32 + 0.5;
-                let y = y as f32 + 0.5;
-                if matches!(
-                    page.find_interactive_at(x, y, runtime.is_read_only()),
-                    Some(crate::layout::interactive::InteractionKind::Toggle { node_id }) if node_id == fold_id
-                ) {
-                    hit = Some((page_idx, x, y));
-                    break 'search;
-                }
-            }
-        }
-
-        if hit.is_some() {
-            break;
-        }
-    }
-
-    let (page_idx, x, y) = hit.expect("fold toggle target should be hittable");
-    runtime.update(crate::runtime::Message::PointerDown {
-        page_idx,
-        x,
-        y,
-        click_count: 1,
-        button: crate::runtime::PointerButton::Primary,
-        modifier: crate::runtime::Modifier::default(),
-    });
-    runtime.update(crate::runtime::Message::PointerUp {
-        page_idx,
-        x,
-        y,
-        button: crate::runtime::PointerButton::Primary,
-        modifier: crate::runtime::Modifier::default(),
+    runtime.update(crate::runtime::Message::ToggleFold {
+        node_id: fold_id.to_string(),
     });
 }
 

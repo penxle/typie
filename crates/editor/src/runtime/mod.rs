@@ -88,6 +88,7 @@ struct PendingUpdates {
     link_overlays: bool,
     tracked_items: bool,
     table_overlays: bool,
+    interactive_overlays: bool,
     default_attrs: bool,
     repaste: bool,
     remarks: bool,
@@ -166,6 +167,7 @@ impl Runtime {
                 link_overlays: false,
                 tracked_items: false,
                 table_overlays: true,
+                interactive_overlays: true,
                 default_attrs: true,
                 repaste: false,
                 remarks: true,
@@ -231,6 +233,7 @@ impl Runtime {
         if self.state.read_only != read_only {
             self.state.read_only = read_only;
             self.pending.enabled_actions = true;
+            self.pending.interactive_overlays = true;
         }
     }
 
@@ -1261,6 +1264,7 @@ impl Runtime {
             }
 
             self.pending.table_overlays = true;
+            self.pending.interactive_overlays = true;
             self.pending.remarks = true;
         }
 
@@ -1500,6 +1504,13 @@ impl Runtime {
             self.pending.table_overlays = false;
         }
 
+        if self.pending.interactive_overlays {
+            let overlays = self.build_interactive_overlays();
+            self.slab
+                .write_interactive_overlays(&mut self.slate, &overlays);
+            self.pending.interactive_overlays = false;
+        }
+
         if self.pending.repaste {
             self.slate
                 .write_repaste_enabled(self.repaste_text.is_some());
@@ -1554,6 +1565,15 @@ impl Runtime {
         }
 
         elements
+    }
+
+    fn build_interactive_overlays(&self) -> Vec<InteractiveOverlay> {
+        let mut result = Vec::new();
+        let read_only = self.is_read_only();
+        for (page_idx, page) in self.pages().iter().enumerate() {
+            page.collect_interactive_overlays(page_idx, read_only, &mut result);
+        }
+        result
     }
 
     fn build_remark_overlays(&self) -> Vec<cmd::RemarkOverlay> {

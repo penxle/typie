@@ -29,6 +29,13 @@ impl Runtime {
         }]
     }
 
+    pub(crate) fn handle_cycle_callout_variant_at(&mut self, node_id: String) -> Vec<Effect> {
+        let Ok(node_id) = node_id.parse::<NodeId>() else {
+            return vec![];
+        };
+        self.cycle_callout_variant(node_id)
+    }
+
     pub(crate) fn handle_cycle_callout_variant_in_selection(&mut self) -> Vec<Effect> {
         let selection = self.state.selection;
         let Some(lca_id) =

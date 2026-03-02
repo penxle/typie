@@ -1,4 +1,3 @@
-use crate::layout::interactive::InteractionKind;
 use crate::state::{Position, Selection};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -6,7 +5,6 @@ pub enum PressContext {
     Empty,
     InSelection,
     OnSelectable(Selection),
-    Interactive(InteractionKind),
 }
 
 impl PressContext {

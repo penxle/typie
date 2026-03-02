@@ -42,6 +42,14 @@ export type RemarkOverlay = {
   bounds: Rect;
 };
 
+export type InteractiveOverlay = {
+  pageIdx: number;
+  nodeId: string;
+  kind: number; // 0 = ToggleFold, 1 = CycleCalloutVariant
+  bounds: Rect;
+  passthrough: Rect | null;
+};
+
 export const DIRTY_SETTINGS = 0;
 export const DIRTY_PAGES = 1;
 export const DIRTY_CURSOR = 2;
@@ -54,6 +62,7 @@ export const DIRTY_EXTERNAL_ELEMENTS = 8;
 export const DIRTY_ENABLED_ACTIONS = 9;
 export const DIRTY_LINK_OVERLAYS = 10;
 export const DIRTY_TRACKED_ITEMS = 11;
+export const DIRTY_INTERACTIVE_OVERLAYS = 12;
 export const DIRTY_TABLE_OVERLAYS = 14;
 export const DIRTY_DOC_CHANGED = 15;
 export const DIRTY_RENDER_REQUIRED = 16;
@@ -361,6 +370,12 @@ export class SlateReader {
     const count = this.#u32('remarks_count');
     const offset = this.#u32('remarks_offset');
     return readRemarkOverlays(this.#slabView, this.#slabPtr + offset, count);
+  }
+
+  readInteractiveOverlays(): InteractiveOverlay[] {
+    const count = this.#u32('interactive_overlays_count');
+    const offset = this.#u32('interactive_overlays_offset');
+    return readInteractiveOverlays(this.#slabView, this.#slabPtr + offset, count);
   }
 
   readCurrentBlock(): { nodeId: string; pageIdx: number; bounds: Rect } | null {
@@ -881,4 +896,43 @@ function readNodeIdFromSlab(view: DataView, offset: number): { nodeId: string; e
       .padStart(2, '0');
   }
   return { nodeId: hex, end: offset + 4 + align4(byteLen) };
+}
+
+function readInteractiveOverlays(view: DataView, offset: number, count: number): InteractiveOverlay[] {
+  const overlays: InteractiveOverlay[] = [];
+  let pos = offset;
+  for (let i = 0; i < count; i++) {
+    const pageIdx = view.getUint32(pos, true);
+    pos += 4;
+
+    const { nodeId, end: afterNodeId } = readNodeIdFromSlab(view, pos);
+    pos = afterNodeId;
+
+    const kind = view.getUint32(pos, true);
+    pos += 4;
+
+    const bounds: Rect = {
+      x: view.getFloat32(pos, true),
+      y: view.getFloat32(pos + 4, true),
+      width: view.getFloat32(pos + 8, true),
+      height: view.getFloat32(pos + 12, true),
+    };
+    pos += 16;
+
+    const hasPassthrough = view.getUint32(pos, true);
+    pos += 4;
+    let passthrough: Rect | null = null;
+    if (hasPassthrough) {
+      passthrough = {
+        x: view.getFloat32(pos, true),
+        y: view.getFloat32(pos + 4, true),
+        width: view.getFloat32(pos + 8, true),
+        height: view.getFloat32(pos + 12, true),
+      };
+      pos += 16;
+    }
+
+    overlays.push({ pageIdx, nodeId, kind, bounds, passthrough });
+  }
+  return overlays;
 }

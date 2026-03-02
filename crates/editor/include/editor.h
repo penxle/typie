@@ -75,7 +75,6 @@ int32_t editor_render_page_to(
     int32_t format
 );
 int32_t editor_is_selection_hit(EditorHandle* editor, size_t page_idx, float x, float y);
-int32_t editor_is_interactive_hit(EditorHandle* editor, size_t page_idx, float x, float y);
 int32_t editor_get_character_counts(EditorHandle* editor, CharacterCounts* out_counts);
 
 typedef struct {

@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:typie/native/editor_native.dart';
+import 'package:typie/native/slate_reader.dart';
 import 'package:typie/screens/native_editor/state/fonts.dart';
 import 'package:typie/screens/native_editor/state/scroll_mode.dart';
 import 'package:typie/screens/native_editor/state/state.dart';
@@ -32,6 +33,7 @@ class EditorController extends ChangeNotifier {
 
   ScrollMode? pendingScrollMode;
   final ValueNotifier<List<TableOverlayInfo>> tableOverlays = ValueNotifier<List<TableOverlayInfo>>([]);
+  List<InteractiveOverlayRaw> interactiveOverlays = const [];
 
   VoidCallback? _clearFocusCallback;
   VoidCallback? _requestFocusCallback;

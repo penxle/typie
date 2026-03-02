@@ -24,6 +24,7 @@ pub const DIRTY_EXTERNAL_ELEMENTS: u64 = 1 << 8;
 pub const DIRTY_ENABLED_ACTIONS: u64 = 1 << 9;
 pub const DIRTY_LINK_OVERLAYS: u64 = 1 << 10;
 pub const DIRTY_TRACKED_ITEMS: u64 = 1 << 11;
+pub const DIRTY_INTERACTIVE_OVERLAYS: u64 = 1 << 12;
 pub const DIRTY_TABLE_OVERLAYS: u64 = 1 << 14;
 pub const DIRTY_DOC_CHANGED: u64 = 1 << 15;
 pub const DIRTY_RENDER_REQUIRED: u64 = 1 << 16;
@@ -215,6 +216,9 @@ define_slate! {
 
         pub remarks_offset: u32,
         pub remarks_count: u32,
+
+        pub interactive_overlays_offset: u32,
+        pub interactive_overlays_count: u32,
 
         pub current_block_node_id: [u8; 16],
         pub current_block_page_idx: i32,
@@ -876,6 +880,32 @@ impl Slab {
         slate.table_overlays_offset = start;
         slate.table_overlays_count = overlays.len() as u32;
         slate.dirty |= DIRTY_TABLE_OVERLAYS;
+    }
+
+    pub fn write_interactive_overlays(
+        &mut self,
+        slate: &mut Slate,
+        overlays: &[super::InteractiveOverlay],
+    ) {
+        let start = self.alloc(0, 4);
+        for o in overlays {
+            self.write_u32_slice(&[o.page_idx as u32]);
+            self.write_bytes(o.node_id.as_uuid().as_bytes());
+            self.write_u32_slice(&[o.kind]);
+            self.write_f32_slice(&[o.bounds.x, o.bounds.y, o.bounds.width, o.bounds.height]);
+            match &o.passthrough {
+                Some(p) => {
+                    self.write_u32_slice(&[1]);
+                    self.write_f32_slice(&[p.x, p.y, p.width, p.height]);
+                }
+                None => {
+                    self.write_u32_slice(&[0]);
+                }
+            }
+        }
+        slate.interactive_overlays_offset = start;
+        slate.interactive_overlays_count = overlays.len() as u32;
+        slate.dirty |= DIRTY_INTERACTIVE_OVERLAYS;
     }
 
     pub fn write_remarks(&mut self, slate: &mut Slate, overlays: &[super::RemarkOverlay]) {
