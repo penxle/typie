@@ -21,6 +21,7 @@
     readOnly?: boolean;
     resizing?: boolean;
     useWindowScroll?: boolean;
+    active?: boolean;
     editor: Editor;
     fontFamilies: readonly FontFamily[];
     onDocChanged?: () => void;
@@ -39,6 +40,7 @@
     readOnly = false,
     resizing = false,
     useWindowScroll = false,
+    active = true,
     editor,
     fontFamilies,
     onDocChanged,
@@ -160,6 +162,7 @@
       {/if}
 
       <EditorZoom
+        {active}
         {editor}
         {resizing}
         {useWindowScroll}

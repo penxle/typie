@@ -1066,6 +1066,7 @@
             {/if}
 
             <EditorComponent
+              active={focused}
               {editor}
               {fontFamilies}
               onDocChanged={handleDocChanged}

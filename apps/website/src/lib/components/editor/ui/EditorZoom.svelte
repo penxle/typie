@@ -9,6 +9,7 @@
 
   type Props = {
     editor: Editor;
+    active?: boolean;
     resizing?: boolean;
     useWindowScroll?: boolean;
     containerClientWidth?: number;
@@ -33,6 +34,7 @@
 
   let {
     editor,
+    active = true,
     resizing = false,
     useWindowScroll = false,
     containerClientWidth = $bindable(0),
@@ -117,7 +119,7 @@
   };
 
   const handleBrowserZoomShortcut = (event: KeyboardEvent): void => {
-    if (!isPaginated) {
+    if (!active || !isPaginated) {
       return;
     }
 
