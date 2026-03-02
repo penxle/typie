@@ -521,7 +521,7 @@ class _EditorContent extends HookWidget {
         selectionSync.value?.dispose(titleFocusNode, subtitleFocusNode);
         syncManager.value?.dispose();
         syncManager.value = null;
-        editor.value?.dispose();
+        unawaited(editor.value?.dispose());
       };
     }, [document?.id]);
 

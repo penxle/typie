@@ -20,6 +20,7 @@ use std::ffi::{CStr, CString, c_char};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
+use std::sync::{Mutex, MutexGuard};
 
 #[cfg(target_os = "android")]
 use jni::EnvUnowned;
@@ -31,6 +32,7 @@ use jni::sys::jlong;
 use std::arch::aarch64::*;
 
 static PANIC_HOOK_INSTALLED: AtomicBool = AtomicBool::new(false);
+static EDITOR_FFI_LOCK: Mutex<()> = Mutex::new(());
 
 pub type LogCallback = extern "C" fn(level: i32, message: *const c_char);
 static LOG_CALLBACK: AtomicPtr<()> = AtomicPtr::new(std::ptr::null_mut());
@@ -78,6 +80,13 @@ fn install_panic_hook() {
 
 fn set_last_error(msg: impl Into<String>) {
     LAST_ERROR.with(|e| *e.borrow_mut() = Some(msg.into()));
+}
+
+fn lock_editor_ffi() -> MutexGuard<'static, ()> {
+    match EDITOR_FFI_LOCK.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    }
 }
 
 fn handle_panic(e: Box<dyn std::any::Any + Send>) {
@@ -161,6 +170,7 @@ impl IntoFfi for FfiResult<usize> {
 macro_rules! ffi {
     ($body:expr, $default:expr) => {{
         install_panic_hook();
+        let _guard = lock_editor_ffi();
         match catch_unwind(AssertUnwindSafe(|| $body)) {
             Ok(result) => result.into_ffi(),
             Err(e) => {
@@ -464,6 +474,7 @@ pub struct EditorHandle {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn editor_handle_free(editor: *mut EditorHandle) {
+    let _guard = lock_editor_ffi();
     if !editor.is_null() {
         unsafe { drop(Box::from_raw(editor as *mut EditorInner)) }
     }
@@ -507,6 +518,7 @@ pub extern "C" fn editor_tick(editor: *mut EditorHandle) -> i32 {
 #[unsafe(no_mangle)]
 pub extern "C" fn editor_get_slate_ptr(editor: *mut EditorHandle) -> *const u8 {
     install_panic_hook();
+    let _guard = lock_editor_ffi();
     if editor.is_null() {
         return std::ptr::null();
     }
@@ -522,6 +534,7 @@ pub extern "C" fn editor_get_slate_len(_editor: *mut EditorHandle) -> u32 {
 #[unsafe(no_mangle)]
 pub extern "C" fn editor_get_slab_ptr(editor: *mut EditorHandle) -> *const u8 {
     install_panic_hook();
+    let _guard = lock_editor_ffi();
     if editor.is_null() {
         return std::ptr::null();
     }
@@ -532,6 +545,7 @@ pub extern "C" fn editor_get_slab_ptr(editor: *mut EditorHandle) -> *const u8 {
 #[unsafe(no_mangle)]
 pub extern "C" fn editor_get_slab_len(editor: *mut EditorHandle) -> u32 {
     install_panic_hook();
+    let _guard = lock_editor_ffi();
     if editor.is_null() {
         return 0;
     }

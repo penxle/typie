@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/services.dart';
 import 'package:typie/native/editor_native.dart';
+import 'package:typie/native/editor_render_coordinator.dart';
 
 class _BatchRenderItem {
   _BatchRenderItem({
@@ -64,7 +65,12 @@ class EditorTextureRenderer {
   }
 
   Future<bool> render(int pageIndex) async {
-    if (_textureId == null) {
+    if (_textureId == null || editor.isDisposed) {
+      return false;
+    }
+
+    final editorPtr = editor.handle.address;
+    if (EditorRenderCoordinator.isEditorDisposing(editorPtr)) {
       return false;
     }
 
@@ -86,7 +92,7 @@ class EditorTextureRenderer {
       _BatchRenderItem(
         textureId: _textureId!,
         editor: editor,
-        editorPtr: editor.handle.address,
+        editorPtr: editorPtr,
         pageIndex: pageIndex,
         width: info.width,
         height: info.height,
@@ -154,7 +160,18 @@ class EditorTextureRenderer {
         continue;
       }
 
-      final latestInfo = item.editor.getRenderInfo(item.pageIndex);
+      if (item.editor.isDisposed || EditorRenderCoordinator.isEditorDisposing(item.editorPtr)) {
+        item.completer.complete(false);
+        continue;
+      }
+
+      NativeEditorRenderInfo? latestInfo;
+      try {
+        latestInfo = item.editor.getRenderInfo(item.pageIndex);
+      } on EditorException {
+        item.completer.complete(false);
+        continue;
+      }
       final stableSize =
           latestInfo != null &&
           latestInfo.width > 0 &&
@@ -181,6 +198,8 @@ class EditorTextureRenderer {
       return;
     }
 
+    final editorPtrs = submitted.map((item) => item.editorPtr).toSet();
+    EditorRenderCoordinator.markBatchStarted(editorPtrs);
     try {
       final response = await _channel.invokeMethod<dynamic>('render', {'items': payloadItems});
 
@@ -205,6 +224,8 @@ class EditorTextureRenderer {
       for (final item in submitted) {
         item.completer.complete(false);
       }
+    } finally {
+      EditorRenderCoordinator.markBatchFinished(editorPtrs);
     }
   }
 

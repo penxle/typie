@@ -6,6 +6,7 @@ import 'package:ffi/ffi.dart';
 import 'package:flutter/foundation.dart';
 
 import 'editor_bindings.dart';
+import 'editor_render_coordinator.dart';
 
 const _logLevelDebug = 0;
 const _logLevelInfo = 1;
@@ -716,10 +717,18 @@ final class NativeEditor {
     }
   }
 
-  void dispose() {
+  Future<void> dispose() async {
     if (!_disposed) {
-      _bindings.editor_handle_free(_handle);
       _disposed = true;
+
+      final editorPtr = _handle.address;
+      EditorRenderCoordinator.markEditorDisposing(editorPtr);
+      try {
+        await EditorRenderCoordinator.waitForEditorIdle(editorPtr);
+        _bindings.editor_handle_free(_handle);
+      } finally {
+        EditorRenderCoordinator.markEditorDisposed(editorPtr);
+      }
     }
   }
 
