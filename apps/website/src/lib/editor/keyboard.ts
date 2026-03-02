@@ -158,6 +158,14 @@ export const handleKeyEvent = (editor: Editor, e: KeyboardEvent): boolean => {
       }
       break;
     }
+    case 'v':
+    case 'V': {
+      if (e.shiftKey && ((IS_MAC && e.metaKey) || (!IS_MAC && e.ctrlKey))) {
+        editor.handlePasteTextOnly();
+        return true;
+      }
+      break;
+    }
     case 'z':
     case 'Z': {
       if ((IS_MAC && e.metaKey) || (!IS_MAC && e.ctrlKey)) {

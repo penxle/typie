@@ -55,6 +55,10 @@ impl Transaction {
         &self.state.selection
     }
 
+    pub fn pending_styles(&self) -> Vec<crate::model::Style> {
+        self.state.pending_styles.clone()
+    }
+
     pub fn set_selection(&mut self, selection: Selection) {
         self.state.selection = selection;
         self.recompute_pending_styles();

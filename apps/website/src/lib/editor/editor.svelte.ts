@@ -1096,10 +1096,33 @@ export class Editor {
 
   async handlePasteTextOnly(): Promise<void> {
     try {
-      const text = await navigator.clipboard.readText();
-      this.dispatch({ type: 'pasteText', text }).scrollIntoView();
+      const items = await navigator.clipboard.read();
+      let html: string | undefined = undefined;
+      let text = '';
+
+      for (const item of items) {
+        if (item.types.includes('text/html')) {
+          const blob = await item.getType('text/html');
+          html = await blob.text();
+        }
+        if (item.types.includes('text/plain')) {
+          const blob = await item.getType('text/plain');
+          text = await blob.text();
+        }
+      }
+
+      if (html) {
+        this.dispatch({ type: 'pasteHtmlAsText', html, text }).scrollIntoView();
+      } else if (text !== '') {
+        this.dispatch({ type: 'pasteText', text }).scrollIntoView();
+      }
     } catch {
-      // ignore
+      try {
+        const text = await navigator.clipboard.readText();
+        this.dispatch({ type: 'pasteText', text }).scrollIntoView();
+      } catch {
+        // ignore
+      }
     }
     this.closeContextMenu();
   }

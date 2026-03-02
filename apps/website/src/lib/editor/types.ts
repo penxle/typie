@@ -86,7 +86,10 @@ export type ImageAsset = {
   placeholder: string;
 };
 
-export type PasteData = { type: 'pasteHtml'; html: string; text: string } | { type: 'pasteText'; text: string };
+export type PasteData =
+  | { type: 'pasteHtml'; html: string; text: string }
+  | { type: 'pasteHtmlAsText'; html: string; text: string }
+  | { type: 'pasteText'; text: string };
 
 export type FileAsset = {
   id: string;
