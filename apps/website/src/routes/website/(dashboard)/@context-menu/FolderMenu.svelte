@@ -7,7 +7,7 @@
   import { Dialog } from '@typie/ui/notification';
   import { comma } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
-  import { tick } from 'svelte';
+  import { getContext, tick } from 'svelte';
   import { EntityType, EntityVisibility } from '@/enums';
   import BlendIcon from '~icons/lucide/blend';
   import CheckIcon from '~icons/lucide/check';
@@ -46,7 +46,7 @@
 
   let { folder, entity, via, onRename, open }: Props = $props();
 
-  let descendantsEntityId = $state<string | null>(null);
+  let deleteOpen = $state(false);
 
   const descendants = createQuery(
     graphql(`
@@ -61,8 +61,8 @@
         }
       }
     `),
-    () => ({ entityId: descendantsEntityId ?? '' }),
-    () => ({ skip: !descendantsEntityId }),
+    () => ({ entityId: entity.id }),
+    () => ({ skip: !deleteOpen }),
   );
 
   const info = createQuery(
@@ -124,17 +124,9 @@
     `),
   );
 
+  const close = getContext<undefined | (() => void)>('close');
   const app = getAppContext();
   const paneGroup = getPaneGroup();
-
-  let loadingDescendants = $state(false);
-  let loadingInfo = $state(false);
-
-  $effect(() => {
-    if (descendantsEntityId && descendants.data && !descendants.loading) {
-      loadingDescendants = false;
-    }
-  });
 </script>
 
 <MenuItem
@@ -213,10 +205,9 @@
 
 <MenuItem
   icon={TrashIcon}
-  onclick={async () => {
-    loadingDescendants = true;
-    descendantsEntityId = entity.id;
-    descendants.refetch();
+  noCloseOnClick
+  onclick={() => {
+    deleteOpen = true;
 
     Dialog.confirm({
       title: '폴더 삭제',
@@ -239,6 +230,10 @@
           paneGroup.replacePane(focusedPaneId, { kind: 'home' });
         }
       },
+      onclose: () => {
+        deleteOpen = false;
+        close?.();
+      },
     });
   }}
   variant="danger"
@@ -259,7 +254,7 @@
     {/if}
   </div>
 
-  {#if loadingInfo}
+  {#if info.loading}
     <span class={flex({ alignItems: 'center', gap: '4px' })}>
       <RingSpinner style={css.raw({ size: '12px' })} />
       불러오는 중...
@@ -285,7 +280,7 @@
 </div>
 
 {#snippet descendantsView()}
-  {#if loadingDescendants || !descendants.data}
+  {#if descendants.loading}
     <div
       class={flex({
         alignItems: 'center',
@@ -299,7 +294,7 @@
       <RingSpinner style={css.raw({ size: '13px', color: 'text.faint' })} />
       <span class={css({ fontSize: '13px', color: 'text.faint' })}>함께 삭제될 항목 계산중...</span>
     </div>
-  {:else}
+  {:else if descendants.data}
     {@const folders = descendants.data.entity.descendants.filter((d) => d.type === EntityType.FOLDER).length}
     {@const documents = descendants.data.entity.descendants.filter((d) => d.type === EntityType.DOCUMENT).length}
 
@@ -335,19 +330,19 @@
         <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.success' })}>비어있는 폴더에요</span>
       </div>
     {/if}
-
-    <div
-      class={flex({
-        alignItems: 'center',
-        gap: '6px',
-        borderRadius: '8px',
-        paddingX: '12px',
-        paddingY: '8px',
-        backgroundColor: 'surface.subtle',
-      })}
-    >
-      <Icon style={css.raw({ color: 'text.muted' })} icon={InfoIcon} size={14} />
-      <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.muted' })}>삭제 후 30일 동안 휴지통에 보관돼요</span>
-    </div>
   {/if}
+
+  <div
+    class={flex({
+      alignItems: 'center',
+      gap: '6px',
+      borderRadius: '8px',
+      paddingX: '12px',
+      paddingY: '8px',
+      backgroundColor: 'surface.subtle',
+    })}
+  >
+    <Icon style={css.raw({ color: 'text.muted' })} icon={InfoIcon} size={14} />
+    <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.muted' })}>삭제 후 30일 동안 휴지통에 보관돼요</span>
+  </div>
 {/snippet}

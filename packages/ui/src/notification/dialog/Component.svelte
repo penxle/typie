@@ -22,6 +22,7 @@
       dialog.cancelHandler?.();
     }
 
+    dialog.onclose?.();
     dismiss();
   }}
   open={true}
