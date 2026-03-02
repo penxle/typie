@@ -37,6 +37,7 @@ export class EditorZoomController {
   #didApplyPaginatedInitialZoom = false;
   #renderZoomTimer: ReturnType<typeof setTimeout> | null = null;
   #wheelSessionTimer: ReturnType<typeof setTimeout> | null = null;
+  #wheelSessionMode: 'scroll' | 'zoom' | null = null;
   #wheelRawZoom: number | null = null;
   #options: EditorZoomControllerOptions;
 
@@ -53,6 +54,7 @@ export class EditorZoomController {
       clearTimeout(this.#wheelSessionTimer);
       this.#wheelSessionTimer = null;
     }
+    this.#wheelSessionMode = null;
     this.#wheelRawZoom = null;
   }
 
@@ -156,7 +158,14 @@ export class EditorZoomController {
     if (!isPaginated || pageWidth <= 0) {
       return;
     }
-    if (!event.ctrlKey && !event.metaKey) {
+
+    const hasZoomModifier = event.metaKey || event.ctrlKey;
+    if (!this.#wheelSessionMode) {
+      this.#wheelSessionMode = hasZoomModifier ? 'zoom' : 'scroll';
+    }
+    this.#scheduleWheelSessionReset();
+
+    if (this.#wheelSessionMode !== 'zoom') {
       return;
     }
 
@@ -171,7 +180,6 @@ export class EditorZoomController {
     const wheelBaseZoom = this.#wheelRawZoom ?? this.displayZoom;
     const nextRawZoom = clampDocumentZoom(wheelBaseZoom * Math.exp(-zoomDelta / 240), bounds);
     this.#wheelRawZoom = nextRawZoom;
-    this.#scheduleWheelSessionReset();
 
     const viewportWidth = this.#options.viewportWidth() > 0 ? this.#options.viewportWidth() : pageWidth;
     const nextZoom = clampPaginatedZoom({
@@ -270,6 +278,7 @@ export class EditorZoomController {
     }
     this.#wheelSessionTimer = setTimeout(() => {
       this.#wheelSessionTimer = null;
+      this.#wheelSessionMode = null;
       this.#wheelRawZoom = null;
     }, EditorZoomController.WHEEL_SESSION_RESET_MS);
   }
