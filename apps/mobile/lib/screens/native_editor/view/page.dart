@@ -17,7 +17,6 @@ import 'package:typie/services/preference.dart';
 const _cropMarkerSize = 32.0;
 const _renderRetryBaseDelayMs = 32;
 const _renderRetryMaxDelayMs = 512;
-const _renderRetryMaxAttempts = 6;
 
 class PageItem extends HookWidget {
   const PageItem({required this.pageIndex, super.key});
@@ -67,9 +66,6 @@ class PageItem extends HookWidget {
 
     void scheduleRetry(Future<void> Function() task) {
       if (!isMounted.value) {
-        return;
-      }
-      if (retryAttempts.value >= _renderRetryMaxAttempts) {
         return;
       }
 
