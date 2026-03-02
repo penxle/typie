@@ -471,7 +471,7 @@
               optimisticResponse: {
                 updateDocument: {
                   id: documentId,
-                  title: localTitle,
+                  title: localTitle || '(제목 없음)',
                   nullableTitle: localTitle || null,
                   subtitle: localSubtitle,
                   locked: newValue,
