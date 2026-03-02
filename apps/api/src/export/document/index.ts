@@ -144,6 +144,7 @@ export async function generateDocumentPdf(params: GenerateDocumentPdfParams): Pr
         return parseVectorPageBinary(bytes);
       });
 
+      slate.refresh(editor.getSlatePtr(), editor.getSlabPtr());
       const laidExternals = slate.readExternalElements();
       return await createPdfFromVectorPages(pages, title, author, laidExternals, assets);
     } finally {
