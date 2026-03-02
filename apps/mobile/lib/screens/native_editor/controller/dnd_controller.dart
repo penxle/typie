@@ -8,6 +8,8 @@ import 'package:super_drag_and_drop/super_drag_and_drop.dart';
 import 'package:typie/native/editor_native.dart';
 import 'package:typie/screens/native_editor/state/controller.dart';
 
+enum DndDropResult { handled, needsDragEnd }
+
 class DndController {
   DndController({required this.editor, required this.controller});
 
@@ -188,7 +190,7 @@ class DndController {
     controller.dispatch({'type': 'dragOver', 'pageIdx': pageIdx, 'x': x, 'y': y});
   }
 
-  Future<void> handleDrop({
+  Future<DndDropResult> handleDrop({
     required int pageIdx,
     required double x,
     required double y,
@@ -196,8 +198,7 @@ class DndController {
   }) async {
     final item = session.items.firstOrNull;
     if (item == null) {
-      _handleDragEnd();
-      return;
+      return DndDropResult.needsDragEnd;
     }
 
     // 내부 드래그인 경우
@@ -215,14 +216,13 @@ class DndController {
           'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
         })
         ..scrollIntoView();
-      return;
+      return DndDropResult.handled;
     }
 
     // 외부 드래그인 경우
     final reader = item.dataReader;
     if (reader == null) {
-      _handleDragEnd();
-      return;
+      return DndDropResult.needsDragEnd;
     }
 
     if (reader.canProvide(Formats.plainText)) {
@@ -249,11 +249,11 @@ class DndController {
             'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
           })
           ..scrollIntoView();
-        return;
+        return DndDropResult.handled;
       }
     }
 
-    _handleDragEnd();
+    return DndDropResult.needsDragEnd;
   }
 
   void handleDragEnd() {

@@ -119,7 +119,21 @@ class PageList extends HookWidget {
         readViewHeight: () => viewportSize.value.height,
         readGeometry: () => scope.geometry,
       ),
-      [scope, gesture, pinch, wheelZoomSession],
+      [
+        scope.controller,
+        scope.inputController,
+        scope.interactionState,
+        scope.verticalScrollController,
+        scope.horizontalScrollController,
+        scope.longPressPosition,
+        scope.handleDragPosition,
+        scope.titleAreaHeight,
+        scope.displayZoom,
+        scope.renderZoom,
+        gesture,
+        pinch,
+        wheelZoomSession,
+      ],
     );
     final interactionController = useMemoized(() => EditorInteractionController(deps: interactionControllerDeps), [
       interactionControllerDeps,
@@ -384,6 +398,7 @@ class PageList extends HookWidget {
             onDropOver: interactionController.onDropOver,
             onDropEnter: interactionController.onDropEnter,
             onDropLeave: interactionController.onDropLeave,
+            onDropEnded: interactionController.onDropEnded,
             onPerformDrop: interactionController.onPerformDrop,
             child: Listener(
               key: interactionRegionKey,

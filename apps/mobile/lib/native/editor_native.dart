@@ -289,6 +289,7 @@ final class NativeEditor {
 
   final Pointer<EditorHandle> _handle;
   final _NativeEditorTestConfig? _testConfig;
+  final List<Map<String, dynamic>> _testDispatchedMessages = [];
   bool _disposed = false;
   bool _awake = false;
 
@@ -297,6 +298,14 @@ final class NativeEditor {
   bool get isDisposed => _disposed;
   bool get awake => _awake;
   bool get isTest => _testConfig != null;
+
+  @visibleForTesting
+  List<Map<String, dynamic>> get testDispatchedMessages => List.unmodifiable(_testDispatchedMessages);
+
+  @visibleForTesting
+  void clearTestDispatchedMessages() {
+    _testDispatchedMessages.clear();
+  }
 
   void _wakeUp() {
     if (!_awake) {
@@ -312,6 +321,7 @@ final class NativeEditor {
   void dispatch(Map<String, dynamic> message) {
     _checkDisposed();
     if (isTest) {
+      _testDispatchedMessages.add(Map<String, dynamic>.from(message));
       _wakeUp();
       return;
     }

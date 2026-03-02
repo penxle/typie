@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:super_drag_and_drop/super_drag_and_drop.dart';
+import 'package:typie/screens/native_editor/controller/dnd_controller.dart';
 import 'package:typie/screens/native_editor/state/state.dart';
 import 'package:typie/screens/native_editor/view/geometry.dart';
 import 'package:typie/screens/native_editor/view/interaction/controller_state.dart';
@@ -120,6 +121,7 @@ class EditorInteractionController {
 
   final _gestureState = ControllerSelectionGestureState();
   final _resumedPanState = ControllerResumedPanState();
+  final _dndSession = _DndSessionState();
 
   bool get interactionActive => _gestureState.active;
   bool get hasTextHandleDrag => gesture.hasTextHandleDrag;
@@ -158,7 +160,7 @@ class EditorInteractionController {
   }
 
   ResolvedDragLocation? resolveSelectionDrag(Offset globalPosition) {
-    if (interactionActive || hasTextHandleDrag || pinch.isPinching) {
+    if (interactionActive || _gestureState.longPressing || hasTextHandleDrag || pinch.isPinching) {
       return null;
     }
 
@@ -241,9 +243,19 @@ class EditorInteractionController {
   }
 
   void _recoverDndLockIfStale() {
-    if (!_hasActiveDndLock()) {
+    final snapshot = scope.interactionState.snapshot();
+    if (!snapshot.isDndActive) {
       return;
     }
+
+    if (snapshot.mode == InteractionMode.dndLocal && _dndSession.isNativeLocalDragActive) {
+      return;
+    }
+
+    if (snapshot.mode == InteractionMode.dndExternal) {
+      return;
+    }
+
     endDndSession();
   }
 
@@ -263,5 +275,40 @@ class EditorInteractionController {
 
   void _clearResumedPanState() {
     _resumedPanState.clear();
+  }
+}
+
+class _DndSessionState {
+  bool _active = false;
+  bool _local = false;
+  bool _nativeLocalDragActive = false;
+
+  bool get isActive => _active;
+  bool get isLocal => _local;
+  bool get isNativeLocalDragActive => _nativeLocalDragActive;
+
+  void startLocal() {
+    _active = true;
+    _local = true;
+    _nativeLocalDragActive = true;
+  }
+
+  void startExternalIfIdle() {
+    if (_active) {
+      return;
+    }
+    _active = true;
+    _local = false;
+    _nativeLocalDragActive = false;
+  }
+
+  void endNativeLocalDrag() {
+    _nativeLocalDragActive = false;
+  }
+
+  void clear() {
+    _active = false;
+    _local = false;
+    _nativeLocalDragActive = false;
   }
 }

@@ -1,7 +1,28 @@
 part of 'controller.dart';
 
 extension ControllerDndMethods on EditorInteractionController {
+  void _endNativeLocalDragIfNeeded() {
+    if (!_dndSession.isNativeLocalDragActive) {
+      return;
+    }
+    scope.dndController.handleDragEnd();
+    _dndSession.endNativeLocalDrag();
+  }
+
+  void onLocalDragCompleted(DropOperation operation) {
+    if (!_dndSession.isActive || !_dndSession.isLocal) {
+      return;
+    }
+
+    if (operation == DropOperation.none ||
+        operation == DropOperation.userCancelled ||
+        operation == DropOperation.forbidden) {
+      endDndSession();
+    }
+  }
+
   void startLocalDndSession(ResolvedDragLocation location) {
+    _dndSession.startLocal();
     _handleInteractionInput(const DndStartInput(local: true));
     scope.dndController.handleDragStart(
       location.pageIdx,
@@ -15,7 +36,8 @@ extension ControllerDndMethods on EditorInteractionController {
     _handleInteractionInput(const DndSessionEndInput());
     dropPosition.value = null;
     gesture.stopAutoScroll();
-    scope.dndController.handleDragEnd();
+    _endNativeLocalDragIfNeeded();
+    _dndSession.clear();
   }
 
   void beginTableCellHandleDragDown() {
@@ -105,6 +127,7 @@ extension ControllerDndMethods on EditorInteractionController {
     if (pinch.isPinching) {
       return;
     }
+    _dndSession.startExternalIfIdle();
     _handleInteractionInput(const DndEnterInput());
     scope.dndController.handleDragEnter();
   }
@@ -114,6 +137,18 @@ extension ControllerDndMethods on EditorInteractionController {
     dropPosition.value = null;
     gesture.stopAutoScroll();
     scope.dndController.handleDragLeave();
+    if (!_dndSession.isNativeLocalDragActive) {
+      _dndSession.clear();
+    }
+  }
+
+  void onDropEnded(dynamic event) {
+    if (_hasActiveDndLock()) {
+      endDndSession();
+      return;
+    }
+    _endNativeLocalDragIfNeeded();
+    _dndSession.clear();
   }
 
   Future<void> onPerformDrop(PerformDropEvent event) async {
@@ -135,6 +170,17 @@ extension ControllerDndMethods on EditorInteractionController {
 
     final pointerX = gesture.getPointerX(position.dx);
     unawaited(HapticFeedback.lightImpact());
-    await scope.dndController.handleDrop(pageIdx: pageIdx, x: pointerX, y: localY, session: event.session);
+    final result = await scope.dndController.handleDrop(
+      pageIdx: pageIdx,
+      x: pointerX,
+      y: localY,
+      session: event.session,
+    );
+    if (result == DndDropResult.needsDragEnd) {
+      scope.dndController.handleDragEnd();
+      _dndSession.endNativeLocalDrag();
+    }
+    _endNativeLocalDragIfNeeded();
+    _dndSession.clear();
   }
 }

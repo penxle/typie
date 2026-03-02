@@ -426,7 +426,14 @@ extension ControllerPointerMethods on EditorInteractionController {
       return;
     }
 
+    final hadPendingDoubleTap = _gestureState.pending;
     _gestureState.clearPending();
+    if (!canceled && hadPendingDoubleTap) {
+      final hasRangeSelection = !(scope.controller.state.selection?.collapsed ?? true);
+      if (hasRangeSelection) {
+        showContextMenu.value = true;
+      }
+    }
     endLongPress();
     _endTextHandleDrag();
   }
