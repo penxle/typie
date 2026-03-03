@@ -15,6 +15,7 @@
   import type { Position } from '$lib/editor/types';
 
   const PAGINATED_HEADER_FOOTER_MIN_WIDTH = 320;
+  const PAGINATED_HEADER_FOOTER_MIN_SCALE = 0.75;
 
   type Props = {
     unit?: 'px' | 'cm';
@@ -137,15 +138,23 @@
   const continuousPageMargin = $derived(layoutMode?.type === 'paginated' ? 0 : CONTINUOUS_PAGE_MARGIN);
   const viewPadding = $derived(layoutMode?.type === 'paginated' ? PAGINATED_VIEW_PADDING : readOnly ? 0 : CONTINUOUS_VIEW_PADDING);
   const paginatedContentWidth = $derived(pageWidth * effectiveDisplayZoom + viewPadding * 2);
-  const paginatedHeaderFooterWidth = $derived(
+  const paginatedHeaderFooterMinContentWidth = $derived(
+    Math.max(
+      PAGINATED_HEADER_FOOTER_MIN_WIDTH * effectiveDisplayZoom,
+      PAGINATED_HEADER_FOOTER_MIN_WIDTH * PAGINATED_HEADER_FOOTER_MIN_SCALE,
+    ),
+  );
+  const paginatedHeaderFooterHorizontalInset = $derived(
     layoutMode?.type === 'paginated'
-      ? Math.max(
-          paginatedContentWidth,
-          Math.max(0, Math.min(PAGINATED_HEADER_FOOTER_MIN_WIDTH, containerClientWidth)) +
-            (layoutMode.pageMarginLeft + layoutMode.pageMarginRight) * effectiveDisplayZoom +
-            viewPadding * 2,
-        )
+      ? (layoutMode.pageMarginLeft + layoutMode.pageMarginRight) * effectiveDisplayZoom + viewPadding * 2
       : 0,
+  );
+  const paginatedHeaderFooterMaxContentWidth = $derived(Math.max(0, containerClientWidth - paginatedHeaderFooterHorizontalInset));
+  const paginatedHeaderFooterTargetWidth = $derived(
+    paginatedHeaderFooterHorizontalInset + Math.min(paginatedHeaderFooterMinContentWidth, paginatedHeaderFooterMaxContentWidth),
+  );
+  const paginatedHeaderFooterWidth = $derived(
+    layoutMode?.type === 'paginated' ? Math.max(paginatedContentWidth, paginatedHeaderFooterTargetWidth) : 0,
   );
   const width = $derived(
     layoutMode?.type === 'continuous'
