@@ -11,6 +11,7 @@
   import mixpanel from 'mixpanel-browser';
   import qs from 'query-string';
   import { onMount } from 'svelte';
+  import { defaultPlanRules } from '@/const';
   import { browser } from '$app/environment';
   import { updated } from '$app/state';
   import Logo from '$assets/logos/logo.svg?component';
@@ -115,6 +116,17 @@
 
   setupPaneGroup(app);
   setupEditorRegistry();
+
+  $effect(() => {
+    app.state.usage.current.totalCharacterCount = query.data.me.usage.totalCharacterCount;
+    app.state.usage.current.totalBlobSize = query.data.me.usage.totalBlobSize;
+
+    app.state.usage.limit.totalCharacterCount =
+      query.data.me.subscription?.plan.rule.maxTotalCharacterCount ?? defaultPlanRules.maxTotalCharacterCount;
+    app.state.usage.limit.totalBlobSize = String(
+      query.data.me.subscription?.plan.rule.maxTotalBlobSize ?? defaultPlanRules.maxTotalBlobSize,
+    );
+  });
 
   let referralWelcomeModalOpen = $state(false);
   let marketingConsentModalOpen = $state(false);

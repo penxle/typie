@@ -103,6 +103,20 @@ const NON_EDIT_MESSAGE_TYPES = new Set<Message['type']>([
   'removeRemark',
 ]);
 
+/** 텍스트를 삽입하는 메시지 타입 (restricted 모드에서 차단) */
+const INSERTION_MESSAGE_TYPES = new Set<Message['type']>([
+  'input',
+  'replaceBackward',
+  'pasteHtml',
+  'pasteHtmlAsText',
+  'pasteText',
+  'repasteAsText',
+  'compositionStart',
+  'compositionUpdate',
+  'commitPreedit',
+  'drop',
+]);
+
 const CLICK_INTERVAL = 500;
 const CLICK_DISTANCE = 5;
 
@@ -234,6 +248,8 @@ export class Editor {
   pointerState = $state(0);
   readOnly = $state(false);
   locked = $state(false);
+  restrictedText = $state(false);
+  restrictedBlob = $state(false);
   protectContent = $state(false);
   contentReady = $state(false);
 
@@ -680,15 +696,20 @@ export class Editor {
     });
   }
 
-  #onEditBlocked?: () => void;
+  #onEditBlocked?: (reason: 'locked' | 'restrictedText' | 'restrictedBlob') => void;
 
-  setEditBlockedHandler(handler: () => void): void {
+  setEditBlockedHandler(handler: (reason: 'locked' | 'restrictedText' | 'restrictedBlob') => void): void {
     this.#onEditBlocked = handler;
   }
 
   dispatch(message: Message): Editor {
     if (this.locked && !NON_EDIT_MESSAGE_TYPES.has(message.type)) {
-      this.#onEditBlocked?.();
+      this.#onEditBlocked?.('locked');
+      return this;
+    }
+
+    if (this.restrictedText && INSERTION_MESSAGE_TYPES.has(message.type)) {
+      this.#onEditBlocked?.('restrictedText');
       return this;
     }
 
@@ -744,6 +765,10 @@ export class Editor {
   }
 
   insertTemplateFragment(snapshot: Uint8Array): void {
+    if (this.locked || this.restrictedText) {
+      this.#onEditBlocked?.(this.locked ? 'locked' : 'restrictedText');
+      return;
+    }
     this.#wasmEditor?.insertTemplateFragment(snapshot);
     this.#wakeUp();
   }
@@ -1442,6 +1467,12 @@ export class Editor {
     const { pageIdx, x, y } = resolved;
 
     if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      if (this.restrictedBlob) {
+        this.#onEditBlocked?.('restrictedBlob');
+        this.dispatch({ type: 'dragEnd' });
+        return;
+      }
+
       const allFiles = [...e.dataTransfer.files];
       const imageFiles = allFiles.filter((file) => file.type.startsWith('image/'));
       const otherFiles = allFiles.filter((file) => !file.type.startsWith('image/'));
@@ -1485,6 +1516,12 @@ export class Editor {
       if (imageFiles.length > 0 || otherFiles.length > 0) {
         return;
       }
+    }
+
+    if (this.restrictedText) {
+      this.#onEditBlocked?.('restrictedText');
+      this.dispatch({ type: 'dragEnd' });
+      return;
     }
 
     let html: string | undefined;
@@ -1571,8 +1608,8 @@ export class Editor {
   }
 
   replaceTextInBlock(blockId: string, startOffset: number, endOffset: number, replacement: string): boolean {
-    if (this.locked) {
-      this.#onEditBlocked?.();
+    if (this.locked || this.restrictedText) {
+      this.#onEditBlocked?.(this.locked ? 'locked' : 'restrictedText');
       return false;
     }
     const result = this.#wasmEditor?.replaceTextInBlock(blockId, startOffset, endOffset, replacement) ?? false;
@@ -1714,8 +1751,8 @@ export class Editor {
     const item = this.trackedItems.find((v) => v.group === 2 && v.id === match.id);
     if (!item) return;
 
-    if (this.locked) {
-      this.#onEditBlocked?.();
+    if (this.locked || this.restrictedText) {
+      this.#onEditBlocked?.(this.locked ? 'locked' : 'restrictedText');
       return;
     }
 
@@ -1735,8 +1772,8 @@ export class Editor {
   replaceAll(replacement: string): void {
     if (this.searchMatches.length === 0 || !this.#wasmEditor) return;
 
-    if (this.locked) {
-      this.#onEditBlocked?.();
+    if (this.locked || this.restrictedText) {
+      this.#onEditBlocked?.(this.locked ? 'locked' : 'restrictedText');
       return;
     }
 
