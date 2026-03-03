@@ -119,6 +119,8 @@ export type EditorOptions = {
   theme: ThemeColors;
   snapshot?: Uint8Array;
   fontFamilies: readonly FontFamily[];
+  initialViewportWidth: number;
+  initialViewportHeight: number;
   readOnly?: boolean;
   onDocChanged?: () => void;
   onExitedDocumentStart?: () => void;
@@ -343,6 +345,9 @@ export class Editor {
     this.dispatch({
       type: 'initialize',
       theme: options.theme,
+      viewportWidth: options.initialViewportWidth,
+      viewportHeight: options.initialViewportHeight,
+      scaleFactor,
     });
 
     if (options.readOnly) {

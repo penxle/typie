@@ -3,8 +3,20 @@ use crate::runtime::{Effect, Runtime};
 use crate::types::Theme;
 
 impl Runtime {
-    pub(crate) fn handle_initialize(&mut self, theme: Theme) -> Vec<Effect> {
+    pub(crate) fn handle_initialize(
+        &mut self,
+        theme: Theme,
+        viewport_width: f32,
+        viewport_height: f32,
+        scale_factor: f64,
+    ) -> Vec<Effect> {
         self.renderer.set_theme(theme);
+        self.layout_engine
+            .set_viewport(viewport_width, viewport_height);
+
+        let layout_mode = self.doc().settings().layout_mode;
+        self.sync_layout_width(layout_mode);
+        self.layout_engine.set_scale_factor(scale_factor);
 
         let mut effects = vec![
             Effect::DocChanged,

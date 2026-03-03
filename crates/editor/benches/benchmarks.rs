@@ -77,6 +77,9 @@ fn runtime_with_paragraphs(count: usize) -> Runtime {
     let mut runtime = Runtime::new(800.0, 1.0, state);
     runtime.update(Message::Initialize {
         theme: test_theme(),
+        viewport_width: 800.0,
+        viewport_height: 600.0,
+        scale_factor: 1.0,
     });
     runtime.tick();
     runtime.flush();
@@ -178,6 +181,9 @@ fn bench_editing(c: &mut Criterion) {
                 let mut runtime = Runtime::new(800.0, 1.0, state);
                 runtime.update(Message::Initialize {
                     theme: test_theme(),
+                    viewport_width: 800.0,
+                    viewport_height: 600.0,
+                    scale_factor: 1.0,
                 });
                 runtime.tick();
                 runtime.flush();
@@ -231,6 +237,9 @@ fn bench_editing(c: &mut Criterion) {
                 let mut runtime = Runtime::new(800.0, 1.0, state);
                 runtime.update(Message::Initialize {
                     theme: test_theme(),
+                    viewport_width: 800.0,
+                    viewport_height: 600.0,
+                    scale_factor: 1.0,
                 });
                 runtime.tick();
                 runtime.flush();
