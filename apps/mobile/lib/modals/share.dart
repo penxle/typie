@@ -245,7 +245,7 @@ class ShareDocumentsContent extends HookWidget {
                             HookFormSelectItem(
                               icon: LucideLightIcons.globe,
                               label: '공개',
-                              description: '누구나 볼 수 있어요.',
+                              description: '누구나 볼 수 있고 스페이스에 노출돼요.',
                               value: GEntityVisibility.PUBLIC,
                             ),
                             HookFormSelectItem(
@@ -606,7 +606,7 @@ class ShareFoldersContent extends HookWidget {
                             HookFormSelectItem(
                               icon: LucideLightIcons.globe,
                               label: '공개',
-                              description: '누구나 볼 수 있어요.',
+                              description: '누구나 볼 수 있고 스페이스에 노출돼요.',
                               value: GEntityVisibility.PUBLIC,
                             ),
                             HookFormSelectItem(
