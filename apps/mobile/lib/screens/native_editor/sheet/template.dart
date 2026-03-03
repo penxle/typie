@@ -107,7 +107,7 @@ class TemplateSheet extends HookWidget {
                               margin: const Pad(bottom: 8),
                               child: Row(
                                 children: [
-                                  Icon(LucideLightIcons.file_text, size: 18, color: context.colors.textSubtle),
+                                  Icon(LucideLightIcons.layout_template, size: 18, color: context.colors.textSubtle),
                                   const Gap(10),
                                   Expanded(
                                     child: Text(

@@ -195,7 +195,7 @@ class _Content extends HookWidget {
                   heading: Heading(
                     titleIcon: document?.type == GDocumentType.TEMPLATE
                         ? LucideLightIcons.layout_template
-                        : LucideLightIcons.file_text,
+                        : LucideLightIcons.file,
                     title: headingTitle,
                     backgroundColor: context.colors.surfaceDefault,
                     onTap: () => editorContext.controller?.clearFocus(),

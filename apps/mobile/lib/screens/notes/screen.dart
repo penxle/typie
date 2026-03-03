@@ -524,7 +524,7 @@ class _SliverNotesReorderableList extends StatelessWidget {
             final documentNode = node as GNotesScreen_QueryData_notes_entity_node__asDocument;
             return documentNode.documentType == GDocumentType.TEMPLATE
                 ? LucideLightIcons.layout_template
-                : LucideLightIcons.file_text;
+                : LucideLightIcons.file;
           }
           return null;
         }
@@ -640,7 +640,7 @@ class _EntitySelector extends StatelessWidget {
                     title = documentNode.title;
                     icon = documentNode.documentType == GDocumentType.TEMPLATE
                         ? LucideLightIcons.layout_template
-                        : LucideLightIcons.file_text;
+                        : LucideLightIcons.file;
                   }
 
                   if (title == null || icon == null) {

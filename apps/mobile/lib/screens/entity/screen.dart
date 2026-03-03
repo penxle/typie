@@ -1093,7 +1093,7 @@ class _Document extends StatelessWidget {
             Icon(
               document.documentType == GDocumentType.TEMPLATE
                   ? LucideLightIcons.layout_template
-                  : LucideLightIcons.file_text,
+                  : LucideLightIcons.file,
               size: 18,
             ),
             Expanded(
@@ -1137,7 +1137,7 @@ class _BottomMenuHeader extends StatelessWidget {
                     folder: (_) => LucideLightIcons.folder,
                     document: (doc) => doc.documentType == GDocumentType.TEMPLATE
                         ? LucideLightIcons.layout_template
-                        : LucideLightIcons.file_text,
+                        : LucideLightIcons.file,
                     orElse: () => throw UnimplementedError(),
                   ) ??
                   LucideLightIcons.folder_open,
