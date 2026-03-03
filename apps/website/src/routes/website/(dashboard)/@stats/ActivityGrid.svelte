@@ -161,7 +161,7 @@
     gridTemplateRows: 'auto repeat(7, minmax(0, 1fr))',
     gridTemplateColumns: 'repeat(auto-fit, minmax(0px, 1fr))',
     gridAutoFlow: 'column',
-    gap: '4px',
+    gap: '3px',
     width: 'full',
   })}
 >

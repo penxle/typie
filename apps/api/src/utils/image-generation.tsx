@@ -328,7 +328,7 @@ export async function generateActivityImage(userId: string): Promise<Uint8Array>
           style={{
             display: 'flex',
             flexDirection: 'column',
-            gap: '14px',
+            gap: '20px',
             alignItems: 'center',
           }}
         >
@@ -337,7 +337,7 @@ export async function generateActivityImage(userId: string): Promise<Uint8Array>
               key={rowIndex}
               style={{
                 display: 'flex',
-                gap: '14px',
+                gap: '20px',
               }}
             >
               {sortedMonths.slice(rowIndex * 4, (rowIndex + 1) * 4).map((month) => {
@@ -356,7 +356,7 @@ export async function generateActivityImage(userId: string): Promise<Uint8Array>
                       display: 'flex',
                       flexDirection: 'column',
                       gap: '8px',
-                      width: '217px',
+                      width: '212px',
                     }}
                   >
                     <div
@@ -374,16 +374,16 @@ export async function generateActivityImage(userId: string): Promise<Uint8Array>
                       style={{
                         display: 'flex',
                         flexWrap: 'wrap',
-                        gap: '3px',
-                        width: '217px',
+                        gap: '5px',
+                        width: '212px',
                       }}
                     >
                       {emptyCells.map((_, i) => (
                         <div
                           key={`empty-${i}`}
                           style={{
-                            width: '28px',
-                            height: '28px',
+                            width: '26px',
+                            height: '26px',
                           }}
                         />
                       ))}
@@ -394,8 +394,8 @@ export async function generateActivityImage(userId: string): Promise<Uint8Array>
                           <div
                             key={day}
                             style={{
-                              width: '28px',
-                              height: '28px',
+                              width: '26px',
+                              height: '26px',
                               backgroundColor: levelColors[activity.level] ?? levelColors[0],
                               borderRadius: '4px',
                             }}
