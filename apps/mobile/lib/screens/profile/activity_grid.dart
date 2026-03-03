@@ -10,6 +10,7 @@ import 'package:typie/extensions/num.dart';
 import 'package:typie/hooks/async_effect.dart';
 import 'package:typie/screens/profile/__generated__/profile_query.data.gql.dart';
 import 'package:typie/styles/colors.dart';
+import 'package:typie/widgets/fader.dart';
 import 'package:typie/widgets/tappable.dart';
 
 class ActivityGrid extends HookWidget {
@@ -44,6 +45,11 @@ class ActivityGrid extends HookWidget {
       scrollController.addListener(updateScroll);
 
       return () => scrollController.removeListener(updateScroll);
+    }, []);
+    useEffect(() {
+      return () {
+        tooltipTimer.value?.cancel();
+      };
     }, []);
 
     final endDate = Jiffy.now();
@@ -172,11 +178,11 @@ class ActivityGrid extends HookWidget {
           left: 0,
           top: 0,
           bottom: 0,
-          child: AnimatedOpacity(
-            opacity: canScrollLeft.value ? 1.0 : 0.0,
-            duration: const Duration(milliseconds: 100),
-            child: IgnorePointer(
-              ignoring: !canScrollLeft.value,
+          child: IgnorePointer(
+            ignoring: !canScrollLeft.value,
+            child: Fader(
+              show: canScrollLeft.value,
+              duration: const Duration(milliseconds: 100),
               child: Tappable(
                 onTap: scrollLeft,
                 child: Container(
@@ -200,11 +206,11 @@ class ActivityGrid extends HookWidget {
           right: 0,
           top: 0,
           bottom: 0,
-          child: AnimatedOpacity(
-            opacity: canScrollRight.value ? 1.0 : 0.0,
-            duration: const Duration(milliseconds: 100),
-            child: IgnorePointer(
-              ignoring: !canScrollRight.value,
+          child: IgnorePointer(
+            ignoring: !canScrollRight.value,
+            child: Fader(
+              show: canScrollRight.value,
+              duration: const Duration(milliseconds: 100),
               child: Tappable(
                 onTap: scrollRight,
                 child: Container(
@@ -224,52 +230,62 @@ class ActivityGrid extends HookWidget {
             ),
           ),
         ),
-        if (tooltipData.value != null)
-          Positioned.fill(
-            child: CustomSingleChildLayout(
-              delegate: _TooltipPositionDelegate(
-                cellPosition: Offset(
-                  tooltipData.value!.weekIndex * (cellSize + cellGap) + 16 - scrollController.offset,
-                  tooltipData.value!.dayIndex * (cellSize + cellGap) + labelHeight + cellGap,
-                ),
-                cellSize: const Size(cellSize, cellSize),
-              ),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(color: context.colors.surfaceDark, borderRadius: BorderRadius.circular(6)),
-                child: IntrinsicWidth(
-                  child: IntrinsicHeight(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          tooltipData.value!.activity.date.format(pattern: 'yyyy년 M월 d일'),
-                          style: TextStyle(
-                            color: context.colors.textBright,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            decoration: TextDecoration.none,
+        Positioned.fill(
+          child: IgnorePointer(
+            child: Fader(
+              show: tooltipData.value != null,
+              duration: const Duration(milliseconds: 140),
+              child: tooltipData.value == null
+                  ? const SizedBox.shrink()
+                  : CustomSingleChildLayout(
+                      delegate: _TooltipPositionDelegate(
+                        cellPosition: Offset(
+                          tooltipData.value!.weekIndex * (cellSize + cellGap) + 16 - scrollController.offset,
+                          tooltipData.value!.dayIndex * (cellSize + cellGap) + labelHeight + cellGap,
+                        ),
+                        cellSize: const Size(cellSize, cellSize),
+                      ),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: context.colors.surfaceDark,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: IntrinsicWidth(
+                          child: IntrinsicHeight(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  tooltipData.value!.activity.date.format(pattern: 'yyyy년 M월 d일'),
+                                  style: TextStyle(
+                                    color: context.colors.textBright,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                    decoration: TextDecoration.none,
+                                  ),
+                                ),
+                                Text(
+                                  tooltipData.value!.activity.additions > 0
+                                      ? '${tooltipData.value!.activity.additions.comma}자 작성했어요'
+                                      : '기록이 없어요',
+                                  style: TextStyle(
+                                    color: context.colors.textBright,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    decoration: TextDecoration.none,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                        Text(
-                          tooltipData.value!.activity.additions > 0
-                              ? '${tooltipData.value!.activity.additions.comma}자 작성했어요'
-                              : '기록이 없어요',
-                          style: TextStyle(
-                            color: context.colors.textBright,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            decoration: TextDecoration.none,
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
-                  ),
-                ),
-              ),
             ),
           ),
+        ),
       ],
     );
   }
