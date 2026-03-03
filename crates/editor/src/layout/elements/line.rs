@@ -1377,7 +1377,10 @@ pub fn build_metrics(
     layout: &parley::Layout<String>,
     text: &str,
     scale_factor: f64,
-    default_height: f32,
+    strut_ascent: f32,
+    strut_descent: f32,
+    strut_font_size: f32,
+    line_height_ratio: f32,
 ) -> Vec<LineMetric> {
     let mut lines = Vec::new();
 
@@ -1385,29 +1388,29 @@ pub fn build_metrics(
     let global_grapheme_offsets = compute_grapheme_boundaries(text);
 
     let mut top = 0.0;
+    let safe_strut_font_size = if strut_font_size > 0.0 {
+        strut_font_size
+    } else {
+        1.0
+    };
+    let ascent_ratio = (strut_ascent.max(0.0)) / safe_strut_font_size;
+    let descent_ratio = (strut_descent.max(0.0)) / safe_strut_font_size;
+    let fallback_ascent = strut_ascent.max(0.0);
+    let fallback_descent = strut_descent.max(0.0);
+    let safe_line_height_ratio = if line_height_ratio > 0.0 {
+        line_height_ratio
+    } else {
+        1.0
+    };
 
     for line in layout.lines() {
         let line_metrics = line.metrics();
-        let mut height = line_metrics.ascent + line_metrics.descent;
-        let line_top;
-
-        let mut leading = line_metrics.leading;
-
-        if height == 0.0 {
-            height = default_height;
-            let offset = (line_metrics.line_height - height) / 2.0;
-            line_top = offset;
-            leading = line_metrics.line_height - height;
-        } else {
-            line_top = line_metrics.baseline - line_metrics.ascent - top;
-        }
-
-        top += line_metrics.line_height;
 
         let mut clusters = Vec::new();
         let mut advance_x: f32 = 0.0;
         let mut inline_prefix = 0.0;
         let mut seen_glyph = false;
+        let mut max_run_font_size = 0.0f32;
         let mut min_cluster_x: Option<f32> = None;
         let mut max_cluster_right: Option<f32> = None;
         let mut max_ascent_overflow = 0.0f32;
@@ -1420,6 +1423,7 @@ pub fn build_metrics(
                 parley::PositionedLayoutItem::GlyphRun(glyph_run) => {
                     let run = glyph_run.run();
                     let run_offset = glyph_run.offset();
+                    max_run_font_size = max_run_font_size.max(run.font_size());
 
                     if !indices.insert(run.index()) {
                         continue;
@@ -1483,6 +1487,30 @@ pub fn build_metrics(
             }
         }
 
+        let line_font_size = if max_run_font_size > 0.0 {
+            max_run_font_size
+        } else {
+            safe_strut_font_size
+        };
+        let mut ascent = ascent_ratio * line_font_size;
+        let mut descent = descent_ratio * line_font_size;
+        if ascent <= 0.0 && descent <= 0.0 {
+            ascent = fallback_ascent;
+            descent = fallback_descent;
+        }
+        let mut height = (ascent + descent).max(0.0);
+        if height <= 0.0 {
+            height = (line_metrics.ascent + line_metrics.descent).max(0.0);
+        }
+        let mut line_box_height = (line_font_size * safe_line_height_ratio).max(height);
+        if !line_box_height.is_finite() || line_box_height <= 0.0 {
+            line_box_height = height;
+        }
+        let leading = (line_box_height - height).max(0.0);
+        let line_top = leading * 0.5;
+        let baseline = top + line_top + ascent;
+        top += line_box_height;
+
         let text_range = line.text_range();
         let line_start_char = byte_to_char_offset_with_map(&char_to_byte, text_range.start);
         let line_end_char = byte_to_char_offset_with_map(&char_to_byte, text_range.end);
@@ -1524,8 +1552,8 @@ pub fn build_metrics(
             left: snap_to_pixel(left, scale_factor),
             height,
             leading,
-            baseline: snap_to_pixel(line_metrics.baseline, scale_factor),
-            ascent: snap_to_pixel(line_metrics.ascent, scale_factor),
+            baseline: snap_to_pixel(baseline, scale_factor),
+            ascent: snap_to_pixel(ascent, scale_factor),
             // NOTE: width를 스냅하면 실제 glyph 폭보다 작아져 overflow가 생길 수 있어 원본값 유지
             content_width,
             start_offset: line_start_char,

@@ -118,14 +118,35 @@ impl Layout for FoldTitleNode {
             dummy_layout.break_all_lines(None);
             let dummy_line = dummy_layout.lines().next().unwrap();
             let dummy_metrics = dummy_line.metrics();
-            let default_height = dummy_metrics.ascent + dummy_metrics.descent;
+            let strut_font_size = dummy_line
+                .items()
+                .find_map(|item| match item {
+                    parley::PositionedLayoutItem::GlyphRun(glyph_run) => {
+                        Some(glyph_run.run().font_size())
+                    }
+                    _ => None,
+                })
+                .unwrap_or(14.0);
 
-            (layout, default_height)
+            (
+                layout,
+                dummy_metrics.ascent,
+                dummy_metrics.descent,
+                strut_font_size,
+            )
         });
 
-        let (layout, default_height) = layout;
+        let (layout, strut_ascent, strut_descent, strut_font_size) = layout;
         let layout = Rc::new(layout);
-        let metrics = build_metrics(&layout, &text, ctx.scale_factor, default_height);
+        let metrics = build_metrics(
+            &layout,
+            &text,
+            ctx.scale_factor,
+            strut_ascent,
+            strut_descent,
+            strut_font_size,
+            line_height,
+        );
 
         let expanded = ctx
             .view_states

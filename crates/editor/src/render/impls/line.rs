@@ -213,14 +213,13 @@ impl LineElement {
         &self,
         sink: &mut dyn ElementSink,
         transform: Transform,
-        line_metrics: &parley::layout::LineMetrics,
         ctx: &RenderContext<'_>,
     ) {
         if self.background_segments.is_empty() {
             return;
         }
 
-        let line_height = line_metrics.ascent + line_metrics.descent;
+        let line_height = self.metric.height;
 
         for segment in &self.background_segments {
             let color = ctx.theme.color(&format!("bg.{}", segment.color_key));
@@ -256,7 +255,6 @@ impl LineElement {
         &self,
         sink: &mut dyn ElementSink,
         transform: Transform,
-        line_metrics: &parley::layout::LineMetrics,
         ctx: &RenderContext<'_>,
     ) {
         if self.ruby_segments.is_empty() {
@@ -264,7 +262,7 @@ impl LineElement {
         }
 
         let scale = ctx.scale_factor as f32;
-        let run_y = self.metric.top + line_metrics.ascent;
+        let run_y = self.metric.top + self.metric.ascent;
 
         GLOBALS.with(|globals| {
             use parley::style::*;
@@ -317,9 +315,8 @@ impl LineElement {
                     let ruby_x_offset = (base_x + (base_width - ruby_width) / 2.0)
                         .clamp(0.0, (self.size.width - ruby_width).max(0.0));
 
-                    let line_baseline = run_y + line_metrics.ascent;
                     let ruby_height = ruby_metrics.ascent + ruby_metrics.descent;
-                    let ruby_y_offset = line_baseline - line_metrics.ascent - ruby_height;
+                    let ruby_y_offset = run_y - ruby_height;
 
                     let color = ctx.theme.color("text.black");
                     let ruby_paint = create_solid_paint(color);
@@ -400,12 +397,11 @@ impl LineElement {
             return;
         };
 
-        let line_metrics = line.metrics();
         let point = Point::zero();
 
         match ctx.phase {
             RenderPhase::Background => {
-                self.render_background_segments(sink, transform, &line_metrics, ctx);
+                self.render_background_segments(sink, transform, ctx);
             }
             RenderPhase::Selection => {
                 self.render_line_selection(sink, transform, point, ctx);
@@ -413,7 +409,7 @@ impl LineElement {
             }
             RenderPhase::Content => {
                 let scale = ctx.scale_factor as f32;
-                let run_y = self.metric.top + line_metrics.ascent;
+                let run_y = self.metric.top + self.metric.ascent;
                 let mut last_text_run_idx = None;
 
                 for item in line.items() {
@@ -495,8 +491,8 @@ impl LineElement {
                             let run_width = glyph_run.advance();
 
                             if let Some(underline_style) = &style.underline {
-                                let metrics = line_metrics;
-                                let default_offset = metrics.descent * 0.5;
+                                let descent = (self.metric.height - self.metric.ascent).max(0.0);
+                                let default_offset = descent * 0.5;
                                 let offset = underline_style.offset.unwrap_or(default_offset);
                                 let size = underline_style.size.unwrap_or(1.0);
 
@@ -508,8 +504,7 @@ impl LineElement {
                             }
 
                             if let Some(strikethrough_style) = &style.strikethrough {
-                                let metrics = line_metrics;
-                                let default_offset = -metrics.ascent * 0.3;
+                                let default_offset = -self.metric.ascent * 0.3;
                                 let offset = strikethrough_style.offset.unwrap_or(default_offset);
                                 let size = strikethrough_style.size.unwrap_or(1.0);
 
@@ -524,7 +519,7 @@ impl LineElement {
                 }
 
                 self.render_preedit(sink, transform, point, ctx);
-                self.render_ruby_annotations(sink, transform, &line_metrics, ctx);
+                self.render_ruby_annotations(sink, transform, ctx);
             }
         }
     }
@@ -1024,6 +1019,135 @@ mod tests {
         assert!(
             page_break_rect.is_some(),
             "Page break indicator should be present"
+        );
+    }
+
+    #[test]
+    fn line_metrics_do_not_shift_with_box_drawing_char() {
+        let mut plain = id!();
+        let plain_state = state! {
+            doc {
+                @plain paragraph {
+                    text { "AAAA" }
+                }
+            }
+            selection { (plain, 0) }
+        };
+        let plain_layout = layout_for_paragraph(&plain_state, plain);
+        let plain_line = plain_layout
+            .children
+            .as_ref()
+            .and_then(|children| {
+                children
+                    .iter()
+                    .find_map(|child| match child.node.element.as_ref() {
+                        Some(Element::Line(line)) => Some(line),
+                        _ => None,
+                    })
+            })
+            .expect("plain line should exist");
+
+        let mut mixed = id!();
+        let mixed_state = state! {
+            doc {
+                @mixed paragraph {
+                    text { "AA─AA" }
+                }
+            }
+            selection { (mixed, 0) }
+        };
+        let mixed_layout = layout_for_paragraph(&mixed_state, mixed);
+        let mixed_line = mixed_layout
+            .children
+            .as_ref()
+            .and_then(|children| {
+                children
+                    .iter()
+                    .find_map(|child| match child.node.element.as_ref() {
+                        Some(Element::Line(line)) => Some(line),
+                        _ => None,
+                    })
+            })
+            .expect("mixed line should exist");
+
+        let eps = 0.01;
+        assert!(
+            (plain_line.metric.top - mixed_line.metric.top).abs() <= eps,
+            "line top should stay stable when box drawing char is present: plain={}, mixed={}",
+            plain_line.metric.top,
+            mixed_line.metric.top
+        );
+        assert!(
+            (plain_line.metric.ascent - mixed_line.metric.ascent).abs() <= eps,
+            "line ascent should stay stable when box drawing char is present: plain={}, mixed={}",
+            plain_line.metric.ascent,
+            mixed_line.metric.ascent
+        );
+        assert!(
+            ((plain_line.metric.height + plain_line.metric.leading)
+                - (mixed_line.metric.height + mixed_line.metric.leading))
+                .abs()
+                <= eps,
+            "line box height should stay stable when box drawing char is present"
+        );
+    }
+
+    #[test]
+    fn line_box_expands_when_mixed_with_larger_font_size() {
+        let mut small = id!();
+        let small_state = state! {
+            doc {
+                @small paragraph {
+                    text { "ab" }
+                }
+            }
+            selection { (small, 0) }
+        };
+        let small_layout = layout_for_paragraph(&small_state, small);
+        let small_line = small_layout
+            .children
+            .as_ref()
+            .and_then(|children| {
+                children
+                    .iter()
+                    .find_map(|child| match child.node.element.as_ref() {
+                        Some(Element::Line(line)) => Some(line),
+                        _ => None,
+                    })
+            })
+            .expect("small line should exist");
+
+        let mut mixed = id!();
+        let mixed_state = state! {
+            doc {
+                @mixed paragraph {
+                    text { "a" }
+                    text(styles: [font_size(2400)]) { "b" }
+                }
+            }
+            selection { (mixed, 0) }
+        };
+        let mixed_layout = layout_for_paragraph(&mixed_state, mixed);
+        let mixed_line = mixed_layout
+            .children
+            .as_ref()
+            .and_then(|children| {
+                children
+                    .iter()
+                    .find_map(|child| match child.node.element.as_ref() {
+                        Some(Element::Line(line)) => Some(line),
+                        _ => None,
+                    })
+            })
+            .expect("mixed line should exist");
+
+        let small_box_height = small_line.metric.height + small_line.metric.leading;
+        let mixed_box_height = mixed_line.metric.height + mixed_line.metric.leading;
+        assert!(
+            mixed_box_height > small_box_height,
+            "line box should expand for larger mixed font size: small={}, mixed={}",
+            small_box_height,
+            mixed_box_height
         );
     }
 
