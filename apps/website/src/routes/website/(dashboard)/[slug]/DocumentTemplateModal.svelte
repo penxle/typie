@@ -93,7 +93,7 @@
 
   <HorizontalDivider />
 
-  <div class={flex({ flexDirection: 'column', paddingX: '24px', paddingY: '16px' })}>
+  <div class={flex({ flexDirection: 'column', padding: '16px' })}>
     {#each site.data.documentTemplates as template (template.id)}
       <button
         class={cx(
@@ -112,9 +112,14 @@
         onclick={() => loadTemplate(template.entity.slug)}
         type="button"
       >
-        <div class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.subtle' })}>{template.title}</div>
+        <div class={flex({ alignItems: 'center', gap: '4px' })}>
+          <Icon style={css.raw({ color: 'text.faint' })} icon={LayoutTemplateIcon} size={14} />
+          <div class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.subtle', lineClamp: '1' })}>
+            {template.title}
+          </div>
+        </div>
         <div class={flex({ alignItems: 'center', gap: '4px', opacity: '0', transition: 'common', _groupHover: { opacity: '100' } })}>
-          <div class={css({ fontSize: '13px', color: 'text.faint' })}>사용하기</div>
+          <div class={css({ fontSize: '13px', color: 'text.faint', whiteSpace: 'nowrap' })}>사용하기</div>
           <Icon style={css.raw({ color: 'text.faint' })} icon={ChevronRightIcon} size={16} />
         </div>
       </button>
