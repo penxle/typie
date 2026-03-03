@@ -2,19 +2,55 @@
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { getAppContext } from '@typie/ui/context';
+  import type { LayoutMode } from '$lib/editor/types';
   import type { Pane } from './types';
+
+  const DEFAULT_CONTENT_WIDTH = 600;
+  const DEFAULT_PARAGRAPH_TOP_PADDING = 16;
+  const PAGE_HEADER_GAP = 20;
 
   type Props = {
     pane: Pane;
+    documentLayoutMode?: LayoutMode | null;
   };
 
-  let { pane }: Props = $props();
+  let { pane, documentLayoutMode = null }: Props = $props();
 
   const app = getAppContext();
   const toolbarSize = $derived(app.preference.current.toolbarStyle === 'compact' ? 'medium' : 'large');
   const insertSize = $derived(toolbarSize === 'large' ? '48px' : '28px');
   const panelTabWidth = $derived(toolbarSize === 'large' ? '48px' : '40px');
   const panelTabHeight = $derived(toolbarSize === 'large' ? '37px' : '24px');
+
+  const layoutMetrics = $derived.by(() => {
+    if (!documentLayoutMode) {
+      return {
+        isPaginated: false,
+        contentWidth: DEFAULT_CONTENT_WIDTH,
+        paragraphTopPadding: DEFAULT_PARAGRAPH_TOP_PADDING,
+      };
+    }
+
+    if (documentLayoutMode.type === 'continuous') {
+      const width = Math.round(documentLayoutMode.maxWidth);
+      return {
+        isPaginated: false,
+        contentWidth: width,
+        paragraphTopPadding: DEFAULT_PARAGRAPH_TOP_PADDING,
+      };
+    }
+
+    return {
+      isPaginated: true,
+      contentWidth: Math.round(documentLayoutMode.pageWidth - documentLayoutMode.pageMarginLeft - documentLayoutMode.pageMarginRight),
+      paragraphTopPadding: Math.round(documentLayoutMode.pageMarginTop),
+    };
+  });
+
+  const isPaginated = $derived(layoutMetrics.isPaginated);
+  const bodyMaxWidth = $derived(`${layoutMetrics.contentWidth}px`);
+  const contentMaxWidth = $derived(`${layoutMetrics.contentWidth}px`);
+  const paragraphPaddingTop = $derived(`${layoutMetrics.paragraphTopPadding}px`);
 
   function seededRandom(seed: number) {
     return () => {
@@ -193,43 +229,71 @@
     <!-- Body: centered content with constrained width -->
     <div class={flex({ flexGrow: '1', overflow: 'hidden' })}>
       <div
+        style:max-width={bodyMaxWidth}
         class={flex({
           flexDirection: 'column',
           width: 'full',
-          maxWidth: '600px',
           marginX: 'auto',
           paddingTop: '60px',
         })}
       >
-        <!-- Title (fontSize 28px) -->
-        <div style:width="45%" style:height="1lh" style:font-size="28px" class={bar}></div>
-        <!-- Subtitle (marginTop 4px, fontSize 16px) -->
-        <div style:width="30%" style:height="1lh" style:font-size="16px" style:margin-top="4px" class={bar}></div>
-        <!-- Divider (marginTop 10px) -->
-        <div style:margin-top="10px" class={divider}></div>
-        <!-- Paragraphs (fontSize 16px, lineHeight 1.6, paragraphSpacing 16px) -->
-        <div style:font-size="16px" style:line-height="1.6" class={flex({ flexDirection: 'column', gap: '16px', paddingTop: '16px' })}>
-          {#each linesBefore as line, i (i)}
-            <div style:height="1lh" class={flex({ alignItems: 'center' })}>
-              <div style:width={line.width} style:height="16px" style:animation={line.animation} class={textLine}></div>
-            </div>
-          {/each}
-          <!-- Image placeholder -->
-          <div
-            class={css({
-              backgroundColor: 'surface.muted',
-              borderRadius: '8px',
-              width: 'full',
-              height: '320px',
-              animation: 'pulse 2s ease-in-out infinite',
-            })}
-          ></div>
-          {#each linesAfter as line, i (i)}
-            <div style:height="1lh" class={flex({ alignItems: 'center' })}>
-              <div style:width={line.width} style:height="16px" style:animation={line.animation} class={textLine}></div>
-            </div>
-          {/each}
+        <div style:max-width={contentMaxWidth} class={css({ width: 'full', marginX: 'auto' })}>
+          <!-- Title (fontSize 28px) -->
+          <div style:width="45%" style:height="1lh" style:font-size="28px" class={bar}></div>
+          <!-- Subtitle (marginTop 4px, fontSize 16px) -->
+          <div style:width="30%" style:height="1lh" style:font-size="16px" style:margin-top="4px" class={bar}></div>
+          {#if !isPaginated}
+            <!-- Divider (continuous mode only) -->
+            <div style:margin-top="10px" class={divider}></div>
+          {/if}
         </div>
+
+        {#snippet paragraphs()}
+          <!-- Paragraphs (fontSize 16px, lineHeight 1.6, paragraphSpacing 16px) -->
+          <div
+            style:font-size="16px"
+            style:line-height="1.6"
+            style:padding-top={paragraphPaddingTop}
+            class={flex({ flexDirection: 'column', gap: '16px' })}
+          >
+            {#each linesBefore as line, i (i)}
+              <div style:height="1lh" class={flex({ alignItems: 'center' })}>
+                <div style:width={line.width} style:height="16px" style:animation={line.animation} class={textLine}></div>
+              </div>
+            {/each}
+            <!-- Image placeholder -->
+            <div
+              class={css({
+                backgroundColor: 'surface.muted',
+                borderRadius: '8px',
+                width: 'full',
+                height: '320px',
+                animation: 'pulse 2s ease-in-out infinite',
+              })}
+            ></div>
+            {#each linesAfter as line, i (i)}
+              <div style:height="1lh" class={flex({ alignItems: 'center' })}>
+                <div style:width={line.width} style:height="16px" style:animation={line.animation} class={textLine}></div>
+              </div>
+            {/each}
+          </div>
+        {/snippet}
+
+        {#key isPaginated}
+          {#if isPaginated}
+            <div
+              style:max-width={contentMaxWidth}
+              style:margin-top={`${PAGE_HEADER_GAP}px`}
+              class={css({ width: 'full', marginX: 'auto' })}
+            >
+              {@render paragraphs()}
+            </div>
+          {:else}
+            <div style:max-width={contentMaxWidth} class={css({ width: 'full', marginX: 'auto' })}>
+              {@render paragraphs()}
+            </div>
+          {/if}
+        {/key}
       </div>
     </div>
   </div>
