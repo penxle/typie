@@ -285,6 +285,7 @@ type DocumentView implements IDocument {
   hasPassword: Boolean!
   id: ID!
   nullableTitle: String
+  passwordUnlocked: Boolean!
   protectContent: Boolean!
   reactions: [DocumentReaction!]!
   snapshot: Binary

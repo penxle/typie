@@ -6,6 +6,8 @@
   import dayjs from 'dayjs';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
   import FolderIcon from '~icons/lucide/folder';
+  import LockIcon from '~icons/lucide/lock';
+  import LockOpenIcon from '~icons/lucide/lock-open';
   import { env } from '$env/dynamic/public';
   import { Img } from '$lib/components';
   import { graphql } from '$mearie';
@@ -70,6 +72,8 @@
               id
               title
               subtitle
+              hasPassword
+              passwordUnlocked
               excerpt
               createdAt
               updatedAt
@@ -272,18 +276,30 @@
                   href={`/${entity.slug}`}
                 >
                   <div class={css({ flex: '1', minWidth: '0' })}>
-                    <h2
-                      class={css({
-                        fontSize: '16px',
-                        fontWeight: 'semibold',
-                        lineHeight: '[1.5]',
-                        letterSpacing: '-0.01em',
-                        lineClamp: '2',
-                        transition: 'colors',
-                      })}
-                    >
-                      <span class="document-title">{entity.node.title}</span>
-                    </h2>
+                    <div class={flex({ alignItems: 'center', gap: '6px' })}>
+                      {#if entity.node.hasPassword}
+                        <Icon
+                          style={css.raw({ flexShrink: '0', color: 'text.faint' })}
+                          icon={entity.node.passwordUnlocked ? LockOpenIcon : LockIcon}
+                          size={14}
+                        />
+                      {/if}
+
+                      <h2
+                        class={css({
+                          flex: '1',
+                          minWidth: '0',
+                          fontSize: '16px',
+                          fontWeight: 'semibold',
+                          lineHeight: '[1.5]',
+                          letterSpacing: '-0.01em',
+                          lineClamp: '2',
+                          transition: 'colors',
+                        })}
+                      >
+                        <span class="document-title">{entity.node.title}</span>
+                      </h2>
+                    </div>
 
                     {#if entity.node.subtitle}
                       <h3

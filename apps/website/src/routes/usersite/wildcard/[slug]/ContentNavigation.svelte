@@ -5,6 +5,8 @@
   import { Icon } from '@typie/ui/components';
   import ChevronLeftIcon from '~icons/lucide/chevron-left';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
+  import LockIcon from '~icons/lucide/lock';
+  import LockOpenIcon from '~icons/lucide/lock-open';
   import { Img } from '$lib/components';
   import { graphql } from '$mearie';
   import type { UsersiteWildcardSlugPage_ContentNavigation_entityView$key } from '$mearie';
@@ -30,6 +32,8 @@
             ... on DocumentView {
               id
               title
+              hasPassword
+              passwordUnlocked
               thumbnail {
                 id
                 ...Img_image
@@ -48,6 +52,8 @@
             ... on DocumentView {
               id
               title
+              hasPassword
+              passwordUnlocked
               thumbnail {
                 id
                 ...Img_image
@@ -115,6 +121,19 @@
             <span>이전 글</span>
           </div>
           <p class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.default', lineClamp: '2' })}>
+            {#if prevNode.hasPassword}
+              <span
+                class={css({
+                  display: 'inline-flex',
+                  verticalAlign: 'middle',
+                  marginRight: '4px',
+                  color: 'text.faint',
+                  transform: 'translateY(-2px)',
+                })}
+              >
+                <Icon icon={prevNode.passwordUnlocked ? LockOpenIcon : LockIcon} size={12} />
+              </span>
+            {/if}
             {prevNode.title}
           </p>
         </div>
@@ -172,6 +191,19 @@
             <Icon icon={ChevronRightIcon} size={14} />
           </div>
           <p class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.default', lineClamp: '2', textAlign: 'right' })}>
+            {#if nextNode.hasPassword}
+              <span
+                class={css({
+                  display: 'inline-flex',
+                  verticalAlign: 'middle',
+                  marginRight: '4px',
+                  color: 'text.faint',
+                  transform: 'translateY(-2px)',
+                })}
+              >
+                <Icon icon={nextNode.passwordUnlocked ? LockOpenIcon : LockIcon} size={12} />
+              </span>
+            {/if}
             {nextNode.title}
           </p>
         </div>
