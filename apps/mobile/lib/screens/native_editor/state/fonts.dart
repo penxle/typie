@@ -161,11 +161,28 @@ class FontManager {
   }
 
   Font? findFont(String family, int weight) {
-    return fontFamilies
-        .where((f) => f.familyName == family)
-        .expand((f) => f.fonts)
-        .where((f) => f.weight == weight)
-        .firstOrNull;
+    final familyFonts = fontFamilies.where((f) => f.familyName == family).expand((f) => f.fonts).toList();
+    if (familyFonts.isEmpty) {
+      return null;
+    }
+
+    final exact = familyFonts.where((f) => f.weight == weight).firstOrNull;
+    if (exact != null) {
+      return exact;
+    }
+
+    // see: Rust nearest_weight()
+    return familyFonts.reduce((prev, curr) {
+      final prevDiff = (prev.weight - weight).abs();
+      final currDiff = (curr.weight - weight).abs();
+      if (currDiff < prevDiff) {
+        return curr;
+      }
+      if (currDiff == prevDiff && curr.weight > prev.weight) {
+        return curr;
+      }
+      return prev;
+    });
   }
 
   Future<Uint8List> _fetchFont(String url) async {

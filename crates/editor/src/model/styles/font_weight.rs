@@ -11,6 +11,9 @@ pub struct FontWeightStyle {
 
 /// 주어진 후보 중 target에 가장 가까운 weight를 반환한다.
 /// 거리가 동일하면 더 높은 weight를 선택한다.
+/// NOTE: 웹 로더 쪽도 동일 규칙(가까운 값 + 동점 시 더 무거운 weight)이어야 한다.
+/// - apps/website/src/lib/editor/editor.svelte.ts (#handleFontRequired)
+/// - apps/website/src/lib/editor/fonts.ts (ensureRequiredFallbackFont)
 pub fn nearest_weight(weights: &[u16], target: u16) -> u16 {
     weights
         .iter()
