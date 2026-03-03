@@ -1117,6 +1117,7 @@ builder.mutationFields((t) => ({
           id: Documents.id,
           siteId: Entities.siteId,
           entityId: Entities.id,
+          password: Documents.password,
         })
         .from(Documents)
         .innerJoin(Entities, eq(Documents.entityId, Entities.id))
@@ -1177,6 +1178,19 @@ builder.mutationFields((t) => ({
             );
         }
       });
+
+      if (input.password !== undefined) {
+        const passwordChangedDocIds = documents.filter((doc) => doc.password !== input.password).map((doc) => doc.id);
+
+        for (const docId of passwordChangedDocIds) {
+          const stream = redis.scanStream({ match: `documentview:unlock:${docId}:*`, count: 100 });
+          for await (const keys of stream) {
+            if (keys.length > 0) {
+              await redis.del(...keys);
+            }
+          }
+        }
+      }
 
       pubsub.publish('site:update', siteId, { scope: 'site' });
       for (const doc of documents) {
