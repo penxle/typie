@@ -169,8 +169,20 @@
     };
   };
 
+  type PendingTouchDrag = {
+    event: PointerEvent;
+    element: HTMLElement;
+    startX: number;
+    startY: number;
+    lastY: number;
+  };
+
+  const TOUCH_LONG_PRESS_MS = 350;
+  const TOUCH_MOVE_THRESHOLD = 10;
+
   let tree = $state<HTMLElement>();
   let dragging = $state<Dragging | null>(null);
+  let pendingTouchDrag = $state<PendingTouchDrag | null>(null);
   let pointerType = $state<PointerEvent['pointerType']>('mouse');
   let dragTimeout = $state<NodeJS.Timeout | null>(null);
   let folderHoverTimeout = $state<NodeJS.Timeout | null>(null);
@@ -242,6 +254,18 @@
     }
   };
 
+  const clearDragTimeout = () => {
+    if (dragTimeout) {
+      clearTimeout(dragTimeout);
+      dragTimeout = null;
+    }
+  };
+
+  const clearPendingTouchDrag = () => {
+    clearDragTimeout();
+    pendingTouchDrag = null;
+  };
+
   const handlePointerDown: PointerEventHandler<HTMLDivElement> = (e) => {
     // NOTE: 우클릭 무시
     if (e.button === 2) {
@@ -264,22 +288,60 @@
 
     pointerType = e.pointerType;
 
-    if (pointerType === 'mouse') {
+    if (pointerType === 'touch') {
+      clearPendingTouchDrag();
+
+      pendingTouchDrag = {
+        event: e,
+        element,
+        startX: e.clientX,
+        startY: e.clientY,
+        lastY: e.clientY,
+      };
+      dragTimeout = setTimeout(() => {
+        if (!pendingTouchDrag || pendingTouchDrag.event.pointerId !== e.pointerId) {
+          return;
+        }
+
+        const rect = pendingTouchDrag.element.getBoundingClientRect();
+
+        dragging = {
+          eligible: true,
+          event: pendingTouchDrag.event,
+          element: pendingTouchDrag.element,
+          indicator: {},
+          ghost: {
+            x: pendingTouchDrag.event.clientX,
+            y: pendingTouchDrag.event.clientY,
+            offsetX: pendingTouchDrag.event.clientX - rect.left,
+            offsetY: pendingTouchDrag.event.clientY - rect.top,
+          },
+        };
+
+        if (!pendingTouchDrag.element.hasPointerCapture(e.pointerId)) {
+          pendingTouchDrag.element.setPointerCapture(e.pointerId);
+        }
+
+        lastPointerX = pendingTouchDrag.event.clientX;
+        lastPointerY = pendingTouchDrag.event.clientY;
+        pendingTouchDrag = null;
+        dragTimeout = null;
+
+        updateDropTarget(lastPointerX, lastPointerY);
+      }, TOUCH_LONG_PRESS_MS);
+
+      return;
+    }
+
+    clearPendingTouchDrag();
+
+    if (pointerType === 'mouse' || pointerType === 'pen') {
       dragging = {
         eligible: false,
         event: e,
         element,
         indicator: {},
       };
-    } else {
-      dragTimeout = setTimeout(() => {
-        dragging = {
-          eligible: false,
-          event: e,
-          element,
-          indicator: {},
-        };
-      }, 50);
     }
   };
 
@@ -500,11 +562,33 @@
 
   const handlePointerMove: PointerEventHandler<HTMLDivElement> = (e) => {
     if (!dragging || !tree) {
-      if (dragTimeout) {
-        clearTimeout(dragTimeout);
-        dragTimeout = null;
+      if (pendingTouchDrag && pendingTouchDrag.event.pointerId === e.pointerId) {
+        const movedDistance = Math.abs(pendingTouchDrag.startX - e.clientX) + Math.abs(pendingTouchDrag.startY - e.clientY);
+
+        if (dragTimeout && movedDistance > TOUCH_MOVE_THRESHOLD) {
+          clearDragTimeout();
+        }
+
+        if (!dragTimeout) {
+          if (e.cancelable) {
+            e.preventDefault();
+          }
+
+          const scrollContainer = tree?.parentElement;
+          if (scrollContainer) {
+            scrollContainer.scrollTop -= e.clientY - pendingTouchDrag.lastY;
+          }
+        }
+
+        pendingTouchDrag.lastY = e.clientY;
+      } else if (!dragging && !pendingTouchDrag) {
+        clearDragTimeout();
       }
 
+      return;
+    }
+
+    if (e.pointerId !== dragging.event.pointerId) {
       return;
     }
 
@@ -512,6 +596,14 @@
     lastPointerY = e.clientY;
 
     if (dragging.eligible) {
+      if (dragging.event.pointerType === 'touch' && e.cancelable) {
+        e.preventDefault();
+      }
+
+      if (!dragging.element.hasPointerCapture(e.pointerId)) {
+        dragging.element.setPointerCapture(e.pointerId);
+      }
+
       dragging.ghost = {
         x: e.clientX,
         y: e.clientY,
@@ -520,7 +612,7 @@
       };
 
       updateDropTarget(e.clientX, e.clientY);
-    } else if (Math.abs(dragging.event.clientX - e.clientX) + Math.abs(dragging.event.clientY - e.clientY) > 10) {
+    } else if (Math.abs(dragging.event.clientX - e.clientX) + Math.abs(dragging.event.clientY - e.clientY) > TOUCH_MOVE_THRESHOLD) {
       dragging.eligible = true;
       dragging.element.setPointerCapture(e.pointerId);
 
@@ -534,13 +626,18 @@
     }
   };
 
-  const handlePointerUp: PointerEventHandler<HTMLDivElement> = async () => {
+  const handlePointerUp: PointerEventHandler<HTMLDivElement> = async (e) => {
     if (!dragging) {
-      if (dragTimeout) {
-        clearTimeout(dragTimeout);
-        dragTimeout = null;
+      if (pendingTouchDrag && pendingTouchDrag.event.pointerId !== e.pointerId) {
+        return;
       }
 
+      clearPendingTouchDrag();
+
+      return;
+    }
+
+    if (e.pointerId !== dragging.event.pointerId) {
       return;
     }
 
@@ -602,15 +699,29 @@
     endDragging(true);
   };
 
-  const endDragging = (canceled = false) => {
-    if (!dragging) {
+  const handlePointerCancel: PointerEventHandler<HTMLDivElement> = () => {
+    if (dragging) {
+      endDragging(true);
       return;
     }
 
-    if (dragTimeout) {
-      clearTimeout(dragTimeout);
-      dragTimeout = null;
+    clearPendingTouchDrag();
+  };
+
+  const handleContextMenuCapture: MouseEventHandler<HTMLDivElement> = (e) => {
+    if (pendingTouchDrag || (dragging && dragging.event.pointerType === 'touch')) {
+      e.preventDefault();
+      e.stopPropagation();
     }
+  };
+
+  const endDragging = (canceled = false) => {
+    if (!dragging) {
+      clearPendingTouchDrag();
+      return;
+    }
+
+    clearPendingTouchDrag();
 
     clearFolderHoverTimeout();
 
@@ -682,6 +793,8 @@
     touchAction: 'none',
   })}
   onclick={handleClick}
+  oncontextmenucapture={handleContextMenuCapture}
+  onpointercancelcapture={handlePointerCancel}
   onpointerdowncapture={handlePointerDown}
   onpointermovecapture={handlePointerMove}
   onpointerupcapture={handlePointerUp}
