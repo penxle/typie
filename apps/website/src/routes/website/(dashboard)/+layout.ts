@@ -45,6 +45,20 @@ export const load: LayoutLoad = async (event) => {
 
           usage {
             totalCharacterCount
+            totalBlobSize
+          }
+
+          subscription {
+            id
+
+            plan {
+              id
+
+              rule {
+                maxTotalCharacterCount
+                maxTotalBlobSize
+              }
+            }
           }
 
           documentFontFamilies {

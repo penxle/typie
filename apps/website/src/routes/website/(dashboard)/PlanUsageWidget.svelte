@@ -2,7 +2,6 @@
   import { createFragment } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
-  import { getAppContext } from '@typie/ui/context';
   import { comma, formatBytes } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import { defaultPlanRules } from '@/const';
@@ -46,8 +45,6 @@
     () => user$key,
   );
 
-  const app = getAppContext();
-
   const planRule = $derived(user.data.subscription?.plan?.rule ?? defaultPlanRules);
 
   const totalCharacterCountProgress = $derived.by(() => {
@@ -64,11 +61,6 @@
     }
 
     return Math.min(1, Number(user.data.usage.totalBlobSize) / planRule.maxTotalBlobSize);
-  });
-
-  $effect(() => {
-    app.state.progress.totalCharacterCount = totalCharacterCountProgress;
-    app.state.progress.totalBlobSize = totalBlobSizeProgress;
   });
 </script>
 

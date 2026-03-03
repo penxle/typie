@@ -51,9 +51,10 @@ type AppState = {
   shareOpen: string[];
   statsOpen: boolean;
   upgradeOpen: boolean;
-  progress: {
-    totalCharacterCount: number;
-    totalBlobSize: number;
+
+  usage: {
+    current: { totalCharacterCount: number; totalBlobSize: string };
+    limit: { totalCharacterCount: number; totalBlobSize: string };
   };
 
   newFolderId?: string;
@@ -90,9 +91,16 @@ export const setupAppContext = (userId: string) => {
     shareOpen: [],
     statsOpen: false,
     upgradeOpen: false,
-    progress: {
-      totalCharacterCount: 0,
-      totalBlobSize: 0,
+
+    usage: {
+      current: {
+        totalCharacterCount: 0,
+        totalBlobSize: '0',
+      },
+      limit: {
+        totalCharacterCount: 0,
+        totalBlobSize: '0',
+      },
     },
 
     openMenuCount: 0,

@@ -10,6 +10,7 @@
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
   import { nanoid } from 'nanoid';
+  import { setContext } from 'svelte';
   import { fly } from 'svelte/transition';
   import { DocumentSyncType } from '@/enums';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
@@ -347,6 +348,9 @@
     return () => clearTimeout(timer);
   });
 
+  let totalCharacterCountPlanUpgradeModalOpen = $state(false);
+  let totalBlobSizePlanUpgradeModalOpen = $state(false);
+
   let planUpgradeModalOpen = $state(false);
   let fontUploadModalOpen = $state(false);
   let fontPlanUpgradeModalOpen = $state(false);
@@ -361,6 +365,10 @@
   let renderDebugEnabled = $state(debugStore.current.renderDebugEnabled);
   let layoutDebugEnabled = $state(debugStore.current.layoutDebugEnabled);
   const showRenderDebugToggle = $derived(dev || query.data.me.role === 'ADMIN' || query.data.impersonation?.admin.role === 'ADMIN');
+
+  setContext('setTotalBlobSizePlanUpgradeModalOpen', () => {
+    totalBlobSizePlanUpgradeModalOpen = true;
+  });
 
   const selectionsStore = new LocalStore<Record<string, { selection?: unknown; type?: string; element?: string; timestamp: number }>>(
     'typie:selections',
@@ -448,15 +456,26 @@
     editor.locked = document?.locked ?? false;
   });
 
+  $effect(() => {
+    editor.restrictedText = app.state.usage.current.totalCharacterCount >= app.state.usage.limit.totalCharacterCount;
+    editor.restrictedBlob = Number(app.state.usage.current.totalBlobSize) >= Number(app.state.usage.limit.totalBlobSize);
+  });
+
   let showEditLockedToast = $state(false);
   let lockedToastTimer: ReturnType<typeof setTimeout> | null = null;
 
-  editor.setEditBlockedHandler(() => {
-    if (showEditLockedToast) return;
-    showEditLockedToast = true;
-    lockedToastTimer = setTimeout(() => {
-      showEditLockedToast = false;
-    }, 5000);
+  editor.setEditBlockedHandler((reason) => {
+    if (reason === 'locked') {
+      if (showEditLockedToast) return;
+      showEditLockedToast = true;
+      lockedToastTimer = setTimeout(() => {
+        showEditLockedToast = false;
+      }, 5000);
+    } else if (reason === 'restrictedText') {
+      totalCharacterCountPlanUpgradeModalOpen = true;
+    } else if (reason === 'restrictedBlob') {
+      totalBlobSizePlanUpgradeModalOpen = true;
+    }
   });
 
   function toggleEditLock() {
@@ -1406,6 +1425,18 @@
     </div>
   </div>
 
+  <PlanUpgradeModal user$key={query.data.me} bind:open={totalCharacterCountPlanUpgradeModalOpen}>
+    현재 플랜의 최대 입력 가능 글자 수를 초과했어요.
+    <br />
+    FULL ACCESS로 업그레이드하고 이어서 작성하세요.
+  </PlanUpgradeModal>
+
+  <PlanUpgradeModal user$key={query.data.me} bind:open={totalBlobSizePlanUpgradeModalOpen}>
+    현재 플랜의 최대 업로드 가능 용량을 초과했어요.
+    <br />
+    FULL ACCESS로 업그레이드하고 이어서 업로드하세요.
+  </PlanUpgradeModal>
+
   <PlanUpgradeModal user$key={query.data.me} bind:open={planUpgradeModalOpen}>
     FULL ACCESS로 업그레이드하면
     <br />
@@ -1416,7 +1447,7 @@
 
   <FontUploadModal userId={query.data.me.id} bind:open={fontUploadModalOpen} />
   <PlanUpgradeModal user$key={query.data.me} bind:open={fontPlanUpgradeModalOpen}>
-    폰트 업로드 기능은 FULL ACCESS 플랜에서 사용할 수 있어요.
+    폰트 업로드 기능은 FULL ACCESS에서 사용할 수 있어요.
   </PlanUpgradeModal>
 
   {#if query.data.me.sites[0]}
