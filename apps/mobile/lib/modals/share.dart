@@ -120,6 +120,7 @@ class ShareDocumentsContent extends HookWidget {
     final initialPassword = documents.length > 1 && documents.any((d) => d.password != documents.first.password)
         ? null
         : documents.first.password;
+    final hasInitialPassword = initialPassword != null;
 
     void generateRandomPassword() {
       const digits = '0123456789';
@@ -223,6 +224,11 @@ class ShareDocumentsContent extends HookWidget {
         unawaited(mixpanel.track('update_document_option', properties: trackProperties));
       },
       builder: (context, form) {
+        if (!form.data.containsKey('hasPassword')) {
+          form.setInitialValue('hasPassword', hasInitialPassword);
+        }
+        final hasPassword = form.data['hasPassword'] as bool;
+
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -282,13 +288,11 @@ class ShareDocumentsContent extends HookWidget {
                         label: '비밀번호 보호',
                         trailing: HookFormSwitch(
                           name: 'hasPassword',
-                          initialValue:
-                              documents.map((d) => d.password != null).toSet().length == 1 &&
-                              documents.first.password != null,
+                          initialValue: hasInitialPassword,
                           values: documents.map((d) => d.password != null).toList(),
                         ),
                       ),
-                      if (form.data['hasPassword'] as bool? ?? false)
+                      if (hasPassword)
                         HookFormTextField(
                           name: 'password',
                           label: '비밀번호',
