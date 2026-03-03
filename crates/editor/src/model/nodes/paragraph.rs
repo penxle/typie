@@ -639,7 +639,11 @@ impl Layout for ParagraphNode {
             );
 
             let (strut_ascent, strut_descent, strut_font_size) = {
-                let ps_styles = pending_styles.map(|ps| &ps.styles[..]);
+                let ps_styles = if preedit.is_some() || is_text_empty {
+                    pending_styles.map(|ps| &ps.styles[..])
+                } else {
+                    None
+                };
 
                 let mut dummy_builder = lcx.ranged_builder(&mut fcx, "\u{200B}", 1.0, false);
                 dummy_builder.push_default(StyleProperty::FontFamily(FontFamily::Single(
@@ -790,10 +794,10 @@ impl Layout for ParagraphNode {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::layout::LayoutCache;
+    use crate::layout::{Element, LayoutCache, LayoutNode};
     use crate::model::{
-        BackgroundColorStyle, Decorations, DefaultAttrs, FontWeightStyle, PendingStylesDecor,
-        PreeditDecor,
+        BackgroundColorStyle, Decorations, DefaultAttrs, FontSizeStyle, FontWeightStyle,
+        PendingStylesDecor, PreeditDecor,
     };
     use crate::runtime::ViewStates;
     use crate::types::BoxConstraints;
@@ -883,6 +887,80 @@ mod tests {
         } else {
             panic!("paragraph node expected");
         }
+    }
+
+    #[test]
+    fn layout_hard_break_leading_line_height_is_stable_with_pending_styles() {
+        let mut p = id!();
+        let state = state! {
+            doc {
+                @p paragraph {
+                    hard_break {}
+                    text(styles: [font_size(1800)]) { "ㅁㄴㅇㄹ" }
+                }
+            }
+            selection { (p, 0) }
+        };
+
+        let doc = &state.doc;
+        let para = doc.node(p).unwrap();
+        let settings = doc.settings();
+        let default_attrs = DefaultAttrs::default();
+        let view_states = ViewStates::default();
+        let constraints = BoxConstraints::new(0.0, 800.0, 0.0, f32::INFINITY);
+
+        let layout_with_decorations = |decorations: Decorations| -> LayoutNode {
+            let cache = RefCell::new(LayoutCache::new());
+            let ctx = LayoutContext::new(
+                &para,
+                &settings,
+                &default_attrs,
+                &decorations,
+                1.0,
+                &view_states,
+                &cache,
+            );
+
+            if let Some(Node::Paragraph(paragraph)) = para.node() {
+                paragraph.layout(&ctx, constraints)
+            } else {
+                panic!("paragraph node expected");
+            }
+        };
+
+        let line_box_height = |layout: &LayoutNode, line_idx: usize| -> f32 {
+            let line = layout
+                .children
+                .as_ref()
+                .and_then(|children| {
+                    children
+                        .get(line_idx)
+                        .and_then(|child| match child.node.element.as_ref() {
+                            Some(Element::Line(line)) => Some(line),
+                            _ => None,
+                        })
+                })
+                .expect("line element expected");
+            line.metric.height + line.metric.leading
+        };
+
+        let baseline_layout = layout_with_decorations(Decorations::default());
+        let mut pending_decorations = Decorations::default();
+        pending_decorations.pending_styles = PendingStylesDecor {
+            node_id: p,
+            styles: vec![Style::FontSize(FontSizeStyle { size: 1800 })],
+        };
+        let pending_layout = layout_with_decorations(pending_decorations);
+
+        let baseline_first_line_height = line_box_height(&baseline_layout, 0);
+        let pending_first_line_height = line_box_height(&pending_layout, 0);
+        let eps = 0.01;
+        assert!(
+            (baseline_first_line_height - pending_first_line_height).abs() <= eps,
+            "first line before hard-break should not change with pending styles: baseline={}, pending={}",
+            baseline_first_line_height,
+            pending_first_line_height
+        );
     }
 
     #[test]
