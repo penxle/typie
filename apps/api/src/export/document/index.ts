@@ -90,7 +90,18 @@ export async function generateDocumentPdf(params: GenerateDocumentPdfParams): Pr
 
       // 폰트 요청 파싱 & 로드
       for (const req of slate.readFontRequests()) {
-        const font = fonts.find((f) => f.familyName === req.family)?.fonts.find((f) => f.weight === req.weight);
+        const familyFonts = fonts.find((f) => f.familyName === req.family)?.fonts ?? [];
+        // see: Rust nearest_weight()
+        const font =
+          familyFonts.find((f) => f.weight === req.weight) ??
+          familyFonts.reduce<(typeof familyFonts)[number] | null>((prev, curr) => {
+            if (!prev) return curr;
+            const prevDiff = Math.abs(prev.weight - req.weight);
+            const currDiff = Math.abs(curr.weight - req.weight);
+            if (currDiff < prevDiff) return curr;
+            if (currDiff === prevDiff && curr.weight > prev.weight) return curr;
+            return prev;
+          }, null);
         if (font) {
           tasks.push(
             Promise.all([

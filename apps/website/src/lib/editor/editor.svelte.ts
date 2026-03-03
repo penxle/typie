@@ -619,7 +619,18 @@ export class Editor {
   }
 
   #handleFontRequired(family: string, weight: number, codepoints: number[]): void {
-    const font = this.fontFamilies.find((f) => f.familyName === family)?.fonts.find((f) => f.weight === weight);
+    const familyFonts = this.fontFamilies.find((f) => f.familyName === family)?.fonts ?? [];
+    // see: Rust nearest_weight()
+    const font =
+      familyFonts.find((f) => f.weight === weight) ??
+      familyFonts.reduce<FontFamily['fonts'][number] | null>((prev, curr) => {
+        if (!prev) return curr;
+        const prevDiff = Math.abs(prev.weight - weight);
+        const currDiff = Math.abs(curr.weight - weight);
+        if (currDiff < prevDiff) return curr;
+        if (currDiff === prevDiff && curr.weight > prev.weight) return curr;
+        return prev;
+      }, null);
     if (!font) return;
 
     Promise.all([

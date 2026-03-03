@@ -312,6 +312,7 @@ export async function ensureRequiredFallbackFont(app: Application, weight: numbe
     if (remaining.length === 0) break;
 
     if (fallbackFontFamily.fonts.length === 0) continue;
+    // see: Rust nearest_weight()
     const fallbackFont = fallbackFontFamily.fonts.reduce((prev, curr) => {
       const prevDiff = Math.abs(prev.weight - weight);
       const currDiff = Math.abs(curr.weight - weight);
