@@ -1,0 +1,10 @@
+subscription NativeEditor_UserUsageUpdateStream_Subscription($userId: ID!) {
+  userUsageUpdateStream(userId: $userId) {
+    id
+
+    usage {
+      totalCharacterCount
+      totalBlobSize
+    }
+  }
+}

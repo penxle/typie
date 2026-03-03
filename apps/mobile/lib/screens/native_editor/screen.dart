@@ -20,6 +20,7 @@ import 'package:typie/screens/native_editor/__generated__/delete_document_mutati
 import 'package:typie/screens/native_editor/__generated__/document_note_query.req.gql.dart';
 import 'package:typie/screens/native_editor/__generated__/native_editor_query.data.gql.dart';
 import 'package:typie/screens/native_editor/__generated__/native_editor_query.req.gql.dart';
+import 'package:typie/screens/native_editor/__generated__/user_usage_update_stream.req.gql.dart';
 import 'package:typie/screens/native_editor/auto_discard.dart';
 import 'package:typie/screens/native_editor/context.dart';
 import 'package:typie/screens/native_editor/init.dart';
@@ -612,6 +613,17 @@ class _EditorContent extends HookWidget {
           editorReady.value = true;
         },
       );
+      editorController.value!.onEditBlocked = (reason) {
+        if (!context.mounted) {
+          return;
+        }
+        final type = switch (reason) {
+          'restrictedText' => LimitBottomSheetType.restrictedText,
+          'restrictedBlob' => LimitBottomSheetType.restrictedBlob,
+          _ => LimitBottomSheetType.limit,
+        };
+        unawaited(context.showBottomSheet(intercept: true, child: LimitBottomSheet(type: type)));
+      };
       editorControllerReady.value = true;
       editorContext.controller = editorController.value;
 
@@ -691,6 +703,42 @@ class _EditorContent extends HookWidget {
 
       return null;
     }, [editor.value, document?.id]);
+
+    useEffect(
+      () {
+        final ctrl = editorController.value;
+        if (ctrl == null) {
+          return null;
+        }
+
+        const defaultMaxCharCount = 200000;
+        const defaultMaxBlobSize = 100000000;
+
+        final maxChar = data.me!.subscription?.plan.rule.maxTotalCharacterCount ?? defaultMaxCharCount;
+        final maxBlob = data.me!.subscription?.plan.rule.maxTotalBlobSize ?? defaultMaxBlobSize;
+
+        ctrl
+          ..restrictedText = maxChar >= 0 && data.me!.usage.totalCharacterCount >= maxChar
+          ..restrictedBlob = maxBlob >= 0 && int.parse(data.me!.usage.totalBlobSize.value) >= maxBlob;
+
+        return null;
+      },
+      [
+        editorController.value,
+        data.me?.usage.totalCharacterCount,
+        data.me?.usage.totalBlobSize.value,
+        data.me?.subscription?.plan.rule.maxTotalCharacterCount,
+        data.me?.subscription?.plan.rule.maxTotalBlobSize,
+      ],
+    );
+
+    useEffect(() {
+      final subscription = client
+          .subscribe(GNativeEditor_UserUsageUpdateStream_SubscriptionReq((b) => b..vars.userId = data.me!.id))
+          .listen((_) {});
+
+      return subscription.cancel;
+    }, []);
 
     useEffect(() {
       final ts = titleSync.value;

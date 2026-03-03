@@ -194,6 +194,10 @@ class FindReplaceSheet extends HookWidget {
     }
 
     void replace() {
+      if (controller.restrictedText) {
+        controller.onEditBlocked?.call('restrictedText');
+        return;
+      }
       if (searchMatches.value.isEmpty) {
         return;
       }
@@ -212,6 +216,10 @@ class FindReplaceSheet extends HookWidget {
     }
 
     void replaceAll() {
+      if (controller.restrictedText) {
+        controller.onEditBlocked?.call('restrictedText');
+        return;
+      }
       if (searchMatches.value.isEmpty) {
         return;
       }

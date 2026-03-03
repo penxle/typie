@@ -31,6 +31,10 @@ class EditorController extends ChangeNotifier {
   final void Function(Map<String, dynamic> anchor, Map<String, dynamic> head)? onSelectionChanged;
   final void Function()? onEditorReady;
 
+  bool restrictedText = false;
+  bool restrictedBlob = false;
+  void Function(String reason)? onEditBlocked;
+
   ScrollMode? pendingScrollMode;
   final ValueNotifier<List<TableOverlayInfo>> tableOverlays = ValueNotifier<List<TableOverlayInfo>>([]);
   List<InteractiveOverlayRaw> interactiveOverlays = const [];
@@ -98,8 +102,25 @@ class EditorController extends ChangeNotifier {
     }
   }
 
+  static const _insertionMessageTypes = {
+    'input',
+    'replaceBackward',
+    'pasteHtml',
+    'pasteHtmlAsText',
+    'pasteText',
+    'repasteAsText',
+    'compositionStart',
+    'compositionUpdate',
+    'commitPreedit',
+    'drop',
+  };
+
   void dispatch(Map<String, dynamic> message) {
     if (isDisposed) {
+      return;
+    }
+    if (restrictedText && _insertionMessageTypes.contains(message['type'])) {
+      onEditBlocked?.call('restrictedText');
       return;
     }
     try {

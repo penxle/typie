@@ -1035,7 +1035,12 @@ class _DocumentPlaceholder extends StatelessWidget {
                   controller.clearFocus();
                   await context.showBottomSheet(
                     intercept: true,
-                    child: TemplateSheet(templates: documentTemplates, editor: controller.editor, client: client),
+                    child: TemplateSheet(
+                      templates: documentTemplates,
+                      editor: controller.editor,
+                      controller: controller,
+                      client: client,
+                    ),
                   );
                 },
                 child: Row(
