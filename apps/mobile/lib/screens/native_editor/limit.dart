@@ -20,7 +20,7 @@ import 'package:typie/screens/native_editor/__generated__/subscribe_plan_with_tr
 import 'package:typie/widgets/horizontal_divider.dart';
 import 'package:typie/widgets/tappable.dart';
 
-enum LimitBottomSheetType { limit, spellCheck, aiFeedback }
+enum LimitBottomSheetType { limit, restrictedText, restrictedBlob, spellCheck, aiFeedback }
 
 class LimitBottomSheet extends HookWidget {
   const LimitBottomSheet({this.type = LimitBottomSheetType.limit, super.key});
@@ -88,6 +88,28 @@ class LimitBottomSheet extends HookWidget {
                 ),
                 Text(
                   '이어서 작성하려면 플랜을 업그레이드 해주세요.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 14, color: context.colors.textFaint),
+                ),
+              ] else if (type == LimitBottomSheetType.restrictedText) ...[
+                Text(
+                  '현재 플랜의 최대 입력 가능 글자 수를 초과했어요.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 14, color: context.colors.textFaint),
+                ),
+                Text(
+                  '이어서 작성하려면 플랜을 업그레이드 해주세요.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 14, color: context.colors.textFaint),
+                ),
+              ] else if (type == LimitBottomSheetType.restrictedBlob) ...[
+                Text(
+                  '현재 플랜의 최대 업로드 가능 용량을 초과했어요.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 14, color: context.colors.textFaint),
+                ),
+                Text(
+                  '이어서 업로드하려면 플랜을 업그레이드 해주세요.',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 14, color: context.colors.textFaint),
                 ),

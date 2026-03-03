@@ -49,6 +49,10 @@ class NativeEditorInsertBottomToolbar extends HookWidget {
       children: nodes.map((node) {
         return ToolbarButton(
           onTap: () {
+            if ((node.type == 'insertImage' || node.type == 'insertFile') && scope.controller.restrictedBlob) {
+              scope.controller.onEditBlocked?.call('restrictedBlob');
+              return;
+            }
             if (node.type == 'horizontalRule') {
               scope.bottomToolbarMode.value = BottomToolbarMode.horizontalRule;
             } else if (node.type == 'blockquote') {

@@ -55,6 +55,11 @@ class NativeEditorFileFloatingToolbar extends StatelessWidget {
   }
 
   Future<void> _handleUpload(NativeEditorToolbarScope scope, UploadManager uploadManager, BuildContext context) async {
+    if (scope.controller.restrictedBlob) {
+      scope.controller.onEditBlocked?.call('restrictedBlob');
+      return;
+    }
+
     final result = await FilePicker.platform.pickFiles(allowMultiple: true).catchError((err) {
       if (context.mounted) {
         context.toast(ToastType.error, '파일을 선택할 수 없습니다');

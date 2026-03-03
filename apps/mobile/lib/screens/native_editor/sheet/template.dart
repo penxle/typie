@@ -15,13 +15,21 @@ import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/native/editor_native.dart';
 import 'package:typie/screens/native_editor/__generated__/load_template_document.req.gql.dart';
 import 'package:typie/screens/native_editor/__generated__/native_editor_query.data.gql.dart';
+import 'package:typie/screens/native_editor/state/controller.dart';
 import 'package:typie/widgets/tappable.dart';
 
 class TemplateSheet extends HookWidget {
-  const TemplateSheet({required this.templates, required this.editor, required this.client, super.key});
+  const TemplateSheet({
+    required this.templates,
+    required this.editor,
+    required this.controller,
+    required this.client,
+    super.key,
+  });
 
   final List<GNativeEditorScreen_QueryData_entity_site_documentTemplates> templates;
   final NativeEditor editor;
+  final EditorController controller;
   final GraphQLClient client;
 
   @override
@@ -30,6 +38,10 @@ class TemplateSheet extends HookWidget {
     final bottomPadding = MediaQuery.paddingOf(context).bottom;
 
     Future<void> loadTemplate(GNativeEditorScreen_QueryData_entity_site_documentTemplates template) async {
+      if (controller.restrictedText) {
+        controller.onEditBlocked?.call('restrictedText');
+        return;
+      }
       isLoading.value = true;
       try {
         final resp = await client.request(
