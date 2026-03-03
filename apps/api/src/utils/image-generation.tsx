@@ -7,7 +7,7 @@ import ky from 'ky';
 import { renderToStaticMarkup } from 'react-dom/server';
 import satori from 'satori';
 import twemoji from 'twemoji';
-import { db, first, Images, PostCharacterCountChanges, Users } from '@/db';
+import { db, DocumentCharacterCountChanges, first, Images, Users } from '@/db';
 
 const generateRandomGradient = () => {
   const first = random({
@@ -114,19 +114,19 @@ export async function generateActivityImage(userId: string): Promise<Uint8Array>
   const startDate = endDate.subtract(364, 'days');
   const startOfTomorrow = endDate.add(1, 'day');
 
-  const date = sql<string>`DATE(${PostCharacterCountChanges.bucket} AT TIME ZONE 'Asia/Seoul')`.mapWith(dayjs.kst);
+  const date = sql<string>`DATE(${DocumentCharacterCountChanges.bucket} AT TIME ZONE 'Asia/Seoul')`.mapWith(dayjs.kst);
   const characterCountChanges = await db
     .select({
       date,
-      additions: sum(PostCharacterCountChanges.additions).mapWith(Number),
-      deletions: sum(PostCharacterCountChanges.deletions).mapWith(Number),
+      additions: sum(DocumentCharacterCountChanges.additions).mapWith(Number),
+      deletions: sum(DocumentCharacterCountChanges.deletions).mapWith(Number),
     })
-    .from(PostCharacterCountChanges)
+    .from(DocumentCharacterCountChanges)
     .where(
       and(
-        eq(PostCharacterCountChanges.userId, userId),
-        gte(PostCharacterCountChanges.bucket, startDate),
-        lt(PostCharacterCountChanges.bucket, startOfTomorrow),
+        eq(DocumentCharacterCountChanges.userId, userId),
+        gte(DocumentCharacterCountChanges.bucket, startDate),
+        lt(DocumentCharacterCountChanges.bucket, startOfTomorrow),
       ),
     )
     .groupBy(date)
