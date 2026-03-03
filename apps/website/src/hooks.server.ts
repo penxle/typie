@@ -11,6 +11,7 @@ import type { Handle, HandleServerError } from '@sveltejs/kit';
 Sentry.init({
   dsn: env.PUBLIC_SENTRY_DSN,
   sendDefaultPii: true,
+  integrations: (defaults) => defaults.filter((i) => i.name !== 'NodeSystemError'),
 });
 
 const log = logger.getChild('http');
