@@ -152,7 +152,7 @@ export const handleKeyEvent = (editor: Editor, e: KeyboardEvent): boolean => {
     }
     case 's':
     case 'S': {
-      if ((e.shiftKey && IS_MAC && e.metaKey) || (!IS_MAC && e.ctrlKey)) {
+      if ((e.shiftKey && IS_MAC && e.metaKey) || (e.shiftKey && !IS_MAC && e.ctrlKey)) {
         editor.dispatch({ type: 'toggleStyle', style: { type: 'strikethrough' } }).scrollIntoView();
         return true;
       }
@@ -160,7 +160,7 @@ export const handleKeyEvent = (editor: Editor, e: KeyboardEvent): boolean => {
     }
     case 'v':
     case 'V': {
-      if (e.shiftKey && ((IS_MAC && e.metaKey) || (!IS_MAC && e.ctrlKey))) {
+      if (e.shiftKey && ((IS_MAC && e.metaKey) || (e.shiftKey && !IS_MAC && e.ctrlKey))) {
         editor.handlePasteTextOnly();
         return true;
       }
