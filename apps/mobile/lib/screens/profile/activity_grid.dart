@@ -536,19 +536,19 @@ class ActivityGrid extends HookWidget {
 
     switch (level) {
       case 0:
-        return isDark ? AppColors.dark.gray_800 : AppColors.gray_100;
+        return isDark ? AppColors.dark.gray_800 : AppColors.gray_200;
       case 1:
-        return isDark ? AppColors.dark.green_800 : AppColors.green_100;
+        return isDark ? AppColors.dark.green_700 : AppColors.green_300;
       case 2:
-        return isDark ? AppColors.dark.green_600 : AppColors.green_300;
-      case 3:
         return isDark ? AppColors.dark.green_500 : AppColors.green_500;
+      case 3:
+        return isDark ? AppColors.dark.green_400 : AppColors.green_600;
       case 4:
         return isDark ? AppColors.dark.green_300 : AppColors.green_700;
       case 5:
-        return isDark ? AppColors.dark.green_100 : AppColors.green_900;
+        return isDark ? AppColors.dark.green_200 : AppColors.green_800;
       default:
-        return isDark ? AppColors.dark.gray_800 : AppColors.gray_100;
+        return isDark ? AppColors.dark.gray_800 : AppColors.gray_200;
     }
   }
 }

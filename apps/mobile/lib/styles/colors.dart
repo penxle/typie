@@ -47,17 +47,17 @@ class AppColors {
   static const red_900 = Color(0xFF82181A);
   static const red_950 = Color(0xFF460809);
 
-  static const green_50 = Color(0xFFF0FDF4);
-  static const green_100 = Color(0xFFDCFCE7);
-  static const green_200 = Color(0xFFB9F8CF);
-  static const green_300 = Color(0xFF7BF1A8);
-  static const green_400 = Color(0xFF05DF72);
-  static const green_500 = Color(0xFF00C951);
-  static const green_600 = Color(0xFF00A63E);
-  static const green_700 = Color(0xFF008236);
-  static const green_800 = Color(0xFF016630);
-  static const green_900 = Color(0xFF0D542B);
-  static const green_950 = Color(0xFF032E15);
+  static const green_50 = Color(0xFFF0FFF4);
+  static const green_100 = Color(0xFFDCFFE4);
+  static const green_200 = Color(0xFFBEF5CB);
+  static const green_300 = Color(0xFF85E89D);
+  static const green_400 = Color(0xFF34D058);
+  static const green_500 = Color(0xFF28A745);
+  static const green_600 = Color(0xFF22863A);
+  static const green_700 = Color(0xFF176F2C);
+  static const green_800 = Color(0xFF165C26);
+  static const green_900 = Color(0xFF144620);
+  static const green_950 = Color(0xFF0F3318);
 
   static const blue_50 = Color(0xFFEAF5FF);
   static const blue_100 = Color(0xFFD6EDFF);
@@ -112,17 +112,17 @@ class _LightColors {
   final red_900 = const Color(0xFF82181A);
   final red_950 = const Color(0xFF460809);
 
-  final green_50 = const Color(0xFFF0FDF4);
-  final green_100 = const Color(0xFFDCFCE7);
-  final green_200 = const Color(0xFFB9F8CF);
-  final green_300 = const Color(0xFF7BF1A8);
-  final green_400 = const Color(0xFF05DF72);
-  final green_500 = const Color(0xFF00C951);
-  final green_600 = const Color(0xFF00A63E);
-  final green_700 = const Color(0xFF008236);
-  final green_800 = const Color(0xFF016630);
-  final green_900 = const Color(0xFF0D542B);
-  final green_950 = const Color(0xFF032E15);
+  final green_50 = const Color(0xFFF0FFF4);
+  final green_100 = const Color(0xFFDCFFE4);
+  final green_200 = const Color(0xFFBEF5CB);
+  final green_300 = const Color(0xFF85E89D);
+  final green_400 = const Color(0xFF34D058);
+  final green_500 = const Color(0xFF28A745);
+  final green_600 = const Color(0xFF22863A);
+  final green_700 = const Color(0xFF176F2C);
+  final green_800 = const Color(0xFF165C26);
+  final green_900 = const Color(0xFF144620);
+  final green_950 = const Color(0xFF0F3318);
 
   final blue_50 = const Color(0xFFEAF5FF);
   final blue_100 = const Color(0xFFD6EDFF);
@@ -177,17 +177,17 @@ class _DarkColors {
   final red_900 = const Color(0xFF400405);
   final red_950 = const Color(0xFF290605);
 
-  final green_50 = const Color(0xFFA7DDB4);
-  final green_100 = const Color(0xFF85CA98);
-  final green_200 = const Color(0xFF58B575);
-  final green_300 = const Color(0xFF0EA053);
-  final green_400 = const Color(0xFF008C38);
-  final green_500 = const Color(0xFF00752B);
-  final green_600 = const Color(0xFF006121);
-  final green_700 = const Color(0xFF004E17);
-  final green_800 = const Color(0xFF003C0D);
-  final green_900 = const Color(0xFF002909);
-  final green_950 = const Color(0xFF001B05);
+  final green_50 = const Color(0xFFAFF5B4);
+  final green_100 = const Color(0xFF7EE787);
+  final green_200 = const Color(0xFF56D364);
+  final green_300 = const Color(0xFF3FB950);
+  final green_400 = const Color(0xFF2EA043);
+  final green_500 = const Color(0xFF238636);
+  final green_600 = const Color(0xFF196C2E);
+  final green_700 = const Color(0xFF0F5323);
+  final green_800 = const Color(0xFF033A16);
+  final green_900 = const Color(0xFF04260F);
+  final green_950 = const Color(0xFF031B0C);
 
   final blue_50 = const Color(0xFFACD1FF);
   final blue_100 = const Color(0xFF8DBAF7);
