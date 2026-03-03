@@ -638,7 +638,7 @@ impl Layout for ParagraphNode {
                 parley::AlignmentOptions::default(),
             );
 
-            let default_height = {
+            let (strut_ascent, strut_descent, strut_font_size) = {
                 let ps_styles = pending_styles.map(|ps| &ps.styles[..]);
 
                 let mut dummy_builder = lcx.ranged_builder(&mut fcx, "\u{200B}", 1.0, false);
@@ -681,15 +681,38 @@ impl Layout for ParagraphNode {
                 dummy_layout.break_all_lines(None);
                 let dummy_line = dummy_layout.lines().next().unwrap();
                 let dummy_metrics = dummy_line.metrics();
-                dummy_metrics.ascent + dummy_metrics.descent
+                let dummy_font_size = dummy_line
+                    .items()
+                    .find_map(|item| match item {
+                        parley::PositionedLayoutItem::GlyphRun(glyph_run) => {
+                            Some(glyph_run.run().font_size())
+                        }
+                        _ => None,
+                    })
+                    .unwrap_or_else(|| {
+                        convert_length(
+                            cascade_font_size as f32 / 100.0,
+                            LengthUnit::Pt,
+                            LengthUnit::Px,
+                        )
+                    });
+                (dummy_metrics.ascent, dummy_metrics.descent, dummy_font_size)
             };
 
-            (layout, default_height)
+            (layout, strut_ascent, strut_descent, strut_font_size)
         });
 
-        let (layout, default_height) = layout;
+        let (layout, strut_ascent, strut_descent, strut_font_size) = layout;
         let layout = Rc::new(layout);
-        let metrics = build_metrics(&layout, &text, ctx.scale_factor, default_height);
+        let metrics = build_metrics(
+            &layout,
+            &text,
+            ctx.scale_factor,
+            strut_ascent,
+            strut_descent,
+            strut_font_size,
+            line_height,
+        );
 
         let ruby_segments = extract_ruby_segments(ctx);
         let background_segments = extract_background_segments(ctx);
