@@ -238,26 +238,13 @@ pub fn build_selection_decorations(
     let block_id_set: FxHashSet<NodeId> = block_ids.iter().cloned().collect();
 
     for &block_id in &block_ids {
-        let Some(block) = doc.node(block_id) else {
-            continue;
-        };
-
-        if !block.spec().map_or(false, |s| s.is_textblock(doc.schema())) {
+        if should_skip_block_decoration(doc, block_id, &processed_structural_nodes) {
             continue;
         }
 
-        if should_skip_block_decoration(doc, block, &processed_structural_nodes) {
-            continue;
+        if let Some(decor) = build_block_selection_decoration(doc, block_id, from, to) {
+            decorations.push(decor);
         }
-
-        let block_len = block_content_len(&doc.node(block_id).unwrap()).max(1);
-        let (start_offset, end_offset) = calculate_block_offsets(block_id, block_len, from, to);
-
-        decorations.push(SelectionDecor::Text {
-            node_id: block_id,
-            start_offset,
-            end_offset,
-        });
     }
 
     add_ancestor_decorations(
@@ -284,7 +271,7 @@ fn collect_structure_decorations(
             let cells = collect_cells_in_range(doc, *table_id, *range);
             for cell_id in cells {
                 if processed_structural_nodes.insert(cell_id) {
-                    decorations.push(SelectionDecor::Cell { node_id: cell_id });
+                    decorations.push(SelectionDecor::Block { node_id: cell_id });
                 }
             }
         }
@@ -293,24 +280,22 @@ fn collect_structure_decorations(
                 let Some(node) = doc.node(block_id) else {
                     continue;
                 };
-                if should_skip_block_decoration(doc, node, processed_structural_nodes) {
+                if should_skip_block_decoration(doc, block_id, processed_structural_nodes) {
                     continue;
                 }
 
-                if let Some(node) = doc.node(block_id) {
-                    if matches!(node.node(), Some(Node::Table(_))) {
-                        for row in node.children() {
-                            for cell in row.children() {
-                                let cell_id = cell.node_id();
-                                if processed_structural_nodes.insert(cell_id) {
-                                    decorations.push(SelectionDecor::Cell { node_id: cell_id });
-                                }
+                if matches!(node.node(), Some(Node::Table(_))) {
+                    for row in node.children() {
+                        for cell in row.children() {
+                            let cell_id = cell.node_id();
+                            if processed_structural_nodes.insert(cell_id) {
+                                decorations.push(SelectionDecor::Block { node_id: cell_id });
                             }
                         }
-                    } else if matches!(node.node(), Some(Node::Fold(_))) {
-                        decorations.push(SelectionDecor::Fold { node_id: block_id });
-                        processed_structural_nodes.insert(block_id);
                     }
+                } else if matches!(node.node(), Some(Node::Fold(_))) {
+                    decorations.push(SelectionDecor::Block { node_id: block_id });
+                    processed_structural_nodes.insert(block_id);
                 }
             }
         }
@@ -319,12 +304,37 @@ fn collect_structure_decorations(
     decorations
 }
 
+fn build_block_selection_decoration(
+    doc: &Doc,
+    block_id: NodeId,
+    from: Position,
+    to: Position,
+) -> Option<SelectionDecor> {
+    let block = doc.node(block_id)?;
+
+    if matches!(block.node(), Some(Node::HorizontalRule(_))) {
+        return Some(SelectionDecor::Block { node_id: block_id });
+    }
+
+    if !block.spec().map_or(false, |s| s.is_textblock(doc.schema())) {
+        return None;
+    }
+
+    let block_len = block_content_len(&block).max(1);
+    let (start_offset, end_offset) = calculate_block_offsets(block_id, block_len, from, to);
+    Some(SelectionDecor::TextRange {
+        node_id: block_id,
+        start_offset,
+        end_offset,
+    })
+}
+
 fn should_skip_block_decoration(
     doc: &Doc,
-    block: NodeRef,
+    block_id: NodeId,
     processed_structural_nodes: &FxHashSet<NodeId>,
 ) -> bool {
-    let mut current_id = Some(block.node_id());
+    let mut current_id = Some(block_id);
     while let Some(id) = current_id {
         if processed_structural_nodes.contains(&id) {
             return true;
@@ -440,11 +450,21 @@ fn add_ancestor_decorations(
         }
 
         if end_offset > start_offset {
-            decorations.push(SelectionDecor::Text {
-                node_id: ancestor_id,
-                start_offset,
-                end_offset,
-            });
+            let decor = if ancestor
+                .spec()
+                .map_or(false, |s| s.is_textblock(doc.schema()))
+            {
+                SelectionDecor::TextRange {
+                    node_id: ancestor_id,
+                    start_offset,
+                    end_offset,
+                }
+            } else {
+                SelectionDecor::Block {
+                    node_id: ancestor_id,
+                }
+            };
+            decorations.push(decor);
         }
 
         break;
@@ -1027,13 +1047,14 @@ mod tests {
     #[test]
     fn test_build_selection_decorations_selecting_all() {
         let mut n1 = id!();
+        let mut fold_id = id!();
         let mut n2 = id!();
         let mut n3 = id!();
 
         let state = state! {
             doc {
                 @n1 paragraph { text { "1" } }
-                fold {
+                @fold_id fold {
                     @n2 fold_title { text { "2" } }
                     fold_content { paragraph {} }
                 }
@@ -1060,7 +1081,7 @@ mod tests {
 
         let fold_decor = decorations
             .iter()
-            .find(|d| matches!(d, SelectionDecor::Fold { .. }));
+            .find(|d| matches!(d, SelectionDecor::Block { node_id } if *node_id == fold_id));
         assert!(fold_decor.is_some(), "Fold should have a Fold decoration");
 
         let para_3_decor = decorations.iter().find(|d| d.node_id() == n3);
@@ -1074,10 +1095,11 @@ mod tests {
 
     #[test]
     fn test_build_selection_decorations_single_horizontal_rule() {
+        let mut hr = id!();
         let state = state! {
             doc {
                 paragraph { text { "before" } }
-                horizontal_rule {}
+                @hr horizontal_rule {}
                 paragraph { text { "after" } }
             }
             selection { (NodeId::ROOT, 1) -> (NodeId::ROOT, 2) }
@@ -1085,21 +1107,12 @@ mod tests {
 
         let decorations = build_selection_decorations(&state.doc, &state.selection, None);
 
-        let root_decor = decorations.iter().find(|d| d.node_id() == NodeId::ROOT);
+        let hr_decor = decorations
+            .iter()
+            .find(|d| matches!(d, SelectionDecor::Block { node_id } if *node_id == hr));
         assert!(
-            root_decor.is_some(),
-            "ROOT should have a selection decoration when selecting a single HR"
-        );
-        let decor = root_decor.unwrap();
-        assert_eq!(
-            decor.start_offset(),
-            1,
-            "decoration should start at offset 1 (before HR)"
-        );
-        assert_eq!(
-            decor.end_offset(),
-            2,
-            "decoration should end at offset 2 (after HR)"
+            hr_decor.is_some(),
+            "HorizontalRule should have a dedicated selection decoration"
         );
     }
 
@@ -1368,13 +1381,40 @@ mod tests {
 
         let fold_decor = decorations
             .iter()
-            .find(|d| matches!(d, SelectionDecor::Fold { node_id } if *node_id == fold_id));
+            .find(|d| matches!(d, SelectionDecor::Block { node_id } if *node_id == fold_id));
         assert!(fold_decor.is_some(), "Fold should have Fold decoration");
 
         let p1_decor = decorations.iter().find(|d| d.node_id() == p1);
         assert!(
             p1_decor.is_none(),
             "Inner paragraph should NOT have text decoration when Fold is structurally selected"
+        );
+    }
+
+    #[test]
+    fn test_build_selection_decorations_adds_container_block_for_cross_child_selection() {
+        let mut callout_id = id!();
+        let mut p1 = id!();
+        let mut p2 = id!();
+
+        let state = state! {
+            doc {
+                @callout_id callout {
+                    @p1 paragraph { text { "A" } }
+                    @p2 paragraph { text { "B" } }
+                }
+            }
+            selection { (p1, 0) -> (p2, 1) }
+        };
+
+        let decorations = build_selection_decorations(&state.doc, &state.selection, None);
+
+        let callout_decor = decorations
+            .iter()
+            .find(|d| matches!(d, SelectionDecor::Block { node_id } if *node_id == callout_id));
+        assert!(
+            callout_decor.is_some(),
+            "Cross-child selection should add a Block decoration for the shared container"
         );
     }
 
