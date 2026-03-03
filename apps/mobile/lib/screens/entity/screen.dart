@@ -917,7 +917,7 @@ class _EntityList extends HookWidget {
                                 border: Border.all(color: context.colors.borderStrong),
                                 borderRadius: const BorderRadius.all(Radius.circular(8)),
                                 color: isSelecting.value && selectedItems.value.contains(entities[index].id)
-                                    ? context.colors.accentBrand.withValues(alpha: 0.1)
+                                    ? context.colors.accentInfo.withValues(alpha: 0.1)
                                     : context.colors.surfaceDefault,
                               ),
                               child: Row(

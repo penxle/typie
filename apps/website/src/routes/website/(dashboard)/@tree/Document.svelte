@@ -96,7 +96,9 @@
     ),
   )}
   aria-selected="false"
+  data-document-type={document.data.documentType}
   data-id={document.data.entity.id}
+  data-name={document.data.title}
   data-order={document.data.entity.order}
   data-path-depth={document.data.entity.depth}
   data-slug={document.data.entity.slug}

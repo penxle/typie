@@ -11,8 +11,10 @@
   import { on } from 'svelte/events';
   import { SvelteMap } from 'svelte/reactivity';
   import { fade } from 'svelte/transition';
+  import { DocumentType } from '@/enums';
   import FileIcon from '~icons/lucide/file';
   import FolderIcon from '~icons/lucide/folder';
+  import LayoutTemplateIcon from '~icons/lucide/layout-template';
   import { graphql } from '$mearie';
   import { getPaneGroup } from '../[slug]/@pane/context.svelte';
   import SelectedEntitiesBar from './@selection/SelectedEntitiesBar.svelte';
@@ -764,6 +766,45 @@
 
     return count;
   });
+
+  const ghostEntityCount = $derived.by(() => {
+    if (!dragging?.eligible) {
+      return {
+        document: 0,
+        folder: 0,
+      };
+    }
+
+    const entityId = dragging.element.dataset.id;
+    const isMultipleDrag = entityId && treeState.selectedEntityIds.has(entityId) && treeState.selectedEntityIds.size > 1;
+    if (isMultipleDrag) {
+      return draggingEntityCount;
+    }
+
+    return {
+      document: dragging.element.dataset.type === 'document' ? 1 : 0,
+      folder: dragging.element.dataset.type === 'folder' ? 1 : 0,
+    };
+  });
+
+  const ghostEntityName = $derived.by(() => {
+    if (!dragging?.eligible) {
+      return;
+    }
+
+    const entityId = dragging.element.dataset.id;
+    const isMultipleDrag = entityId && treeState.selectedEntityIds.has(entityId) && treeState.selectedEntityIds.size > 1;
+    if (isMultipleDrag) {
+      return;
+    }
+
+    const name = dragging.element.dataset.name?.trim();
+    return name ?? undefined;
+  });
+
+  const ghostEntityType = $derived.by(() => {
+    return ghostEntityName ? dragging?.element.dataset.type : undefined;
+  });
 </script>
 
 <svelte:window
@@ -825,7 +866,7 @@
       class={css({
         position: 'fixed',
         borderRadius: '2px',
-        backgroundColor: 'accent.brand.subtle',
+        backgroundColor: { base: 'accent.info.default/30', _dark: 'accent.info.default/40' },
         pointerEvents: 'none',
         zIndex: 'sidebar',
       })}
@@ -835,59 +876,66 @@
   {/key}
 
   {#if dragging.ghost}
-    {@const entityId = dragging.element.dataset.id}
-    {@const isMultipleDrag = entityId && treeState.selectedEntityIds.has(entityId) && treeState.selectedEntityIds.size > 1}
-    {#if isMultipleDrag}
-      <div
-        style:left={`${dragging.ghost.x + 8}px`}
-        style:top={`${dragging.ghost.y}px`}
-        class={flex({
-          position: 'fixed',
-          backgroundColor: 'accent.brand.default',
-          opacity: dragging.drop ? undefined : '[0.5]',
-          gap: '8px',
-          color: 'text.bright',
-          alignItems: 'center',
-          justifyContent: 'center',
-          paddingX: '8px',
-          paddingY: '4px',
-          borderRadius: 'full',
-          fontSize: '14px',
-          fontWeight: 'bold',
-          pointerEvents: 'none',
-          zIndex: 'ghost',
-        })}
-        use:portal
-      >
-        {#if draggingEntityCount.folder > 0}
+    <div
+      style:left={`${dragging.ghost.x + 8}px`}
+      style:top={`${dragging.ghost.y}px`}
+      style:max-width={ghostEntityName ? `${dragging.element.offsetWidth}px` : undefined}
+      class={flex({
+        position: 'fixed',
+        backgroundColor: 'accent.info.default',
+        opacity: dragging.drop ? undefined : '[0.5]',
+        gap: '8px',
+        color: 'text.bright',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingX: '8px',
+        paddingY: '4px',
+        borderRadius: 'full',
+        fontSize: '14px',
+        fontWeight: 'bold',
+        pointerEvents: 'none',
+        zIndex: 'ghost',
+      })}
+      use:portal
+    >
+      {#if ghostEntityName}
+        <div class={flex({ alignItems: 'center', gap: '2px', minWidth: '0' })}>
+          <Icon
+            style={css.raw({ color: 'text.bright', flexShrink: '0' })}
+            icon={ghostEntityType === 'folder'
+              ? FolderIcon
+              : dragging?.element.dataset.documentType === DocumentType.TEMPLATE
+                ? LayoutTemplateIcon
+                : FileIcon}
+            size={14}
+          />
+          <span
+            class={css({
+              display: 'block',
+              flexGrow: '1',
+              minWidth: '0',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            })}
+          >
+            {ghostEntityName}
+          </span>
+        </div>
+      {:else}
+        {#if ghostEntityCount.folder > 0}
           <div class={center({ gap: '2px' })}>
             <Icon style={css.raw({ color: 'text.bright' })} icon={FolderIcon} size={14} />
-            {draggingEntityCount.folder}
+            {ghostEntityCount.folder}
           </div>
         {/if}
-        {#if draggingEntityCount.document > 0}
+        {#if ghostEntityCount.document > 0}
           <div class={center({ gap: '2px' })}>
             <Icon style={css.raw({ color: 'text.bright' })} icon={FileIcon} size={14} />
-            {draggingEntityCount.document}
+            {ghostEntityCount.document}
           </div>
         {/if}
-      </div>
-    {:else}
-      <div
-        style:left={`${dragging.ghost.x - dragging.ghost.offsetX}px`}
-        style:top={`${dragging.ghost.y - dragging.ghost.offsetY}px`}
-        style:width={`${dragging.element.offsetWidth}px`}
-        class={css({
-          position: 'fixed',
-          opacity: '[0.2]',
-          pointerEvents: 'none',
-          zIndex: 'ghost',
-        })}
-        use:portal
-      >
-        <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-        {@html dragging.element.outerHTML}
-      </div>
-    {/if}
+      {/if}
+    </div>
   {/if}
 {/if}

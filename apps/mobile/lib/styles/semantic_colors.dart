@@ -24,6 +24,7 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
     required this.borderInverse,
 
     required this.accentBrand,
+    required this.accentInfo,
     required this.accentDanger,
     required this.accentSuccess,
 
@@ -56,6 +57,7 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
   final Color borderInverse;
 
   final Color accentBrand;
+  final Color accentInfo;
   final Color accentDanger;
   final Color accentSuccess;
 
@@ -88,6 +90,7 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
     borderInverse: AppColors.gray_950,
 
     accentBrand: AppColors.brand_500,
+    accentInfo: AppColors.blue_500,
     accentDanger: AppColors.red_500,
     accentSuccess: AppColors.green_500,
 
@@ -121,6 +124,7 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
     borderInverse: AppColors.dark.gray_50,
 
     accentBrand: AppColors.dark.brand_400,
+    accentInfo: AppColors.dark.blue_200,
     accentDanger: AppColors.dark.red_400,
     accentSuccess: AppColors.dark.green_400,
 
@@ -155,6 +159,7 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
     Color? borderInverse,
 
     Color? accentBrand,
+    Color? accentInfo,
     Color? accentDanger,
     Color? accentSuccess,
 
@@ -187,6 +192,7 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
       borderInverse: borderInverse ?? this.borderInverse,
 
       accentBrand: accentBrand ?? this.accentBrand,
+      accentInfo: accentInfo ?? this.accentInfo,
       accentDanger: accentDanger ?? this.accentDanger,
       accentSuccess: accentSuccess ?? this.accentSuccess,
 
@@ -226,6 +232,7 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
       borderInverse: Color.lerp(borderInverse, other.borderInverse, t)!,
 
       accentBrand: Color.lerp(accentBrand, other.accentBrand, t)!,
+      accentInfo: Color.lerp(accentInfo, other.accentInfo, t)!,
       accentDanger: Color.lerp(accentDanger, other.accentDanger, t)!,
       accentSuccess: Color.lerp(accentSuccess, other.accentSuccess, t)!,
 
