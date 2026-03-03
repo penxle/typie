@@ -166,6 +166,6 @@
       selected && { opacity: '100' },
     )}
   >
-    <Checkbox checked={selected} clickPadding={true} onclick={handleToggle} size="sm" />
+    <Checkbox checked={selected} clickPadding={true} onclick={handleToggle} size="sm" variant="info" />
   </div>
 </div>

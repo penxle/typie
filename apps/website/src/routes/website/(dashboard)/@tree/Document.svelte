@@ -88,10 +88,12 @@
         backgroundColor: 'surface.muted',
       },
       selected && {
-        backgroundColor: 'accent.brand.subtle',
-        _supportHover: { backgroundColor: 'accent.brand.subtle' },
-        '&:has([aria-pressed="true"])': { backgroundColor: 'accent.brand.subtle' },
-        '&[data-context-menu-open="true"]': { backgroundColor: 'accent.brand.subtle' },
+        backgroundColor: 'accent.info.subtle',
+        _supportHover: { backgroundColor: 'accent.info.subtle' },
+        '&:has([aria-pressed="true"])': { backgroundColor: 'accent.info.subtle' },
+        '&[data-context-menu-open="true"]': {
+          backgroundColor: 'accent.info.subtle',
+        },
       },
     ),
   )}
