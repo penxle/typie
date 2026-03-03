@@ -310,7 +310,7 @@
               mixpanel.track('update_marketing_consent', { marketingConsent: !user.data.marketingConsent });
               Dialog.alert({
                 title: '마케팅 수신 동의',
-                message: `${dayjs().formatAsDate()}에 ${user.data.marketingConsent ? '거부' : '동의'}처리됐어요.`,
+                message: `${dayjs().formatAsDate()}에 ${user.data.marketingConsent ? '동의' : '거부'}처리됐어요.`,
               });
             }}
           />
