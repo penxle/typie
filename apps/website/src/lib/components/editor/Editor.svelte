@@ -64,14 +64,22 @@
   let scrollLeft = $state(0);
   let scrollTop = $state(0);
   let scrollContainerEl: HTMLElement | null = $state(null);
+  let rootContainerEl: HTMLDivElement | null = $state(null);
   let initialized = $state(false);
 
   $effect(() => {
     untrack(() => {
-      editor.initialize({
+      const initialViewport = {
+        width: Math.floor(rootContainerEl?.clientWidth || window.document.documentElement.clientWidth || window.innerWidth),
+        height: Math.floor(rootContainerEl?.clientHeight || window.document.documentElement.clientHeight || window.innerHeight),
+      };
+
+      void editor.initialize({
         theme: getEditorTheme(theme.effectiveTheme, theme.lightVariant, theme.darkVariant),
         snapshot,
         fontFamilies,
+        initialViewportWidth: initialViewport.width,
+        initialViewportHeight: initialViewport.height,
         readOnly,
         onDocChanged,
         onSelectionChanged,
@@ -92,6 +100,9 @@
   });
 
   $effect(() => {
+    if (!initialized) {
+      return;
+    }
     if (width > 0 && containerClientHeight > 0 && scaleFactor > 0) {
       editor.dispatch({ type: 'resize', width, height: containerClientHeight, scaleFactor: scaleFactor * zoomRenderScale });
     }
@@ -157,7 +168,7 @@
   });
 </script>
 
-<div class={flex({ flex: '1', direction: 'column', height: 'full', width: 'full' })}>
+<div bind:this={rootContainerEl} class={flex({ flex: '1', direction: 'column', height: 'full', width: 'full' })}>
   {#if initialized}
     <div
       style:grid-template-columns={showRuler ? `${rulerThickness}px 1fr` : '1fr'}

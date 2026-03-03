@@ -287,10 +287,34 @@
       let pending = false;
       let timeoutId: ReturnType<typeof setTimeout>;
       let resizeEndTimeoutId: ReturnType<typeof setTimeout>;
+      const syncViewportMetrics = () => {
+        if (useWindowScroll) {
+          containerClientWidth = window.innerWidth;
+          containerClientHeight = window.innerHeight;
+          zoomViewportWidth = window.innerWidth;
+          scrollLeft = window.scrollX;
+          scrollTop = window.scrollY;
+          return;
+        }
+
+        containerClientWidth = el.clientWidth;
+        containerClientHeight = el.clientHeight;
+        zoomViewportWidth = el.clientWidth;
+        scrollLeft = el.scrollLeft;
+        scrollTop = el.scrollTop;
+      };
+      const handleWindowViewportChange = () => {
+        syncViewportMetrics();
+      };
+
       el.addEventListener('touchstart', handleTouchStartForPinch, { passive: true });
       el.addEventListener('touchmove', handleTouchMoveForPinch, { passive: false });
       el.addEventListener('touchend', handleTouchEndForPinch, { passive: true });
       el.addEventListener('touchcancel', handleTouchCancelForPinch, { passive: true });
+      if (useWindowScroll) {
+        window.addEventListener('resize', handleWindowViewportChange);
+        window.visualViewport?.addEventListener('resize', handleWindowViewportChange);
+      }
       const observer = new ResizeObserver(() => {
         editor.containerResizing = true;
         clearTimeout(resizeEndTimeoutId);
@@ -304,29 +328,17 @@
         }
         clearTimeout(timeoutId);
         timeoutId = setTimeout(() => {
-          containerClientWidth = el.clientWidth;
-          containerClientHeight = el.clientHeight;
-          zoomViewportWidth = el.clientWidth;
-          scrollLeft = el.scrollLeft;
-          scrollTop = el.scrollTop;
+          syncViewportMetrics();
         }, 50);
       });
       observer.observe(el);
-      containerClientWidth = el.clientWidth;
-      containerClientHeight = el.clientHeight;
-      zoomViewportWidth = el.clientWidth;
-      scrollLeft = el.scrollLeft;
-      scrollTop = el.scrollTop;
+      syncViewportMetrics();
 
       const teardown = $effect.root(() => {
         $effect(() => {
           if (!resizing && pending) {
             pending = false;
-            containerClientWidth = el.clientWidth;
-            containerClientHeight = el.clientHeight;
-            zoomViewportWidth = el.clientWidth;
-            scrollLeft = el.scrollLeft;
-            scrollTop = el.scrollTop;
+            syncViewportMetrics();
           }
         });
       });
@@ -338,6 +350,10 @@
         el.removeEventListener('touchmove', handleTouchMoveForPinch);
         el.removeEventListener('touchend', handleTouchEndForPinch);
         el.removeEventListener('touchcancel', handleTouchCancelForPinch);
+        if (useWindowScroll) {
+          window.removeEventListener('resize', handleWindowViewportChange);
+          window.visualViewport?.removeEventListener('resize', handleWindowViewportChange);
+        }
         teardown();
         observer.disconnect();
       };

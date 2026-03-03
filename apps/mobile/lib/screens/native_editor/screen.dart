@@ -425,7 +425,10 @@ class _EditorContent extends HookWidget {
     final appState = useService<AppState>();
 
     final document = data.entity.node.when(document: (doc) => doc, orElse: () => null);
-    final scaleFactor = ui.PlatformDispatcher.instance.views.first.devicePixelRatio;
+    final initialView = ui.PlatformDispatcher.instance.views.first;
+    final initialViewportWidth = initialView.physicalSize.width / initialView.devicePixelRatio;
+    final initialViewportHeight = initialView.physicalSize.height / initialView.devicePixelRatio;
+    final scaleFactor = initialView.devicePixelRatio;
     final brightness = context.theme.brightness;
 
     useEffect(() {
@@ -505,6 +508,9 @@ class _EditorContent extends HookWidget {
             ..dispatch({
               'type': 'initialize',
               'theme': {'colors': theme},
+              'viewportWidth': initialViewportWidth,
+              'viewportHeight': initialViewportHeight,
+              'scaleFactor': scaleFactor,
             });
           editorContext.editor = editor.value;
         } on EditorException catch (err) {

@@ -128,9 +128,14 @@ pub fn tracked_actions_with_when() -> Vec<(&'static str, When)> {
 }
 
 define_messages! {
-    Initialize { theme: Theme }
+    Initialize {
+        theme: Theme,
+        viewport_width: f32,
+        viewport_height: f32,
+        scale_factor: f64,
+    }
     => when When::True
-    => handle(rt) { rt.handle_initialize(theme) },
+    => handle(rt) { rt.handle_initialize(theme, viewport_width, viewport_height, scale_factor) },
 
     Input { text: String }
     => when When::key(ContextKey::CanEdit)
