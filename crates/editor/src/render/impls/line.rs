@@ -1001,7 +1001,7 @@ mod tests {
             true, // has_page_break
         );
 
-        let selection = SelectionDecor::Text {
+        let selection = SelectionDecor::TextRange {
             node_id: line.block_id,
             start_offset: 0,
             end_offset: 1,

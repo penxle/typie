@@ -1,8 +1,7 @@
 use crate::layout::elements::HorizontalRuleElement;
-use crate::model::HorizontalRuleVariant;
+use crate::model::{HorizontalRuleVariant, SelectionDecor};
 use crate::render::outline::ElementSink;
 use crate::render::{GlyphRenderer, Outline, RasterSink, Render, RenderContext, RenderPhase};
-use crate::state::position_helpers::calculate_offset_before_child;
 use tiny_skia::{Paint, PathBuilder, PixmapMut, Rect, Stroke, Transform};
 
 const LINE_HEIGHT: f32 = 1.0;
@@ -31,20 +30,12 @@ impl Outline for HorizontalRuleElement {
 
 impl HorizontalRuleElement {
     fn paint_to(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
-        let is_selected = if let Some(selection) = ctx
-            .selections
-            .iter()
-            .find(|sel| sel.node_id() == self.parent_id)
-        {
-            if let Some(parent) = ctx.doc.node(self.parent_id) {
-                let offset = calculate_offset_before_child(&parent, self.node_id);
-                selection.start_offset() <= offset && offset < selection.end_offset()
-            } else {
-                false
-            }
-        } else {
-            false
-        };
+        let is_selected = ctx.selections.iter().any(|selection| {
+            matches!(
+                selection,
+                SelectionDecor::Block { node_id } if *node_id == self.node_id
+            )
+        });
 
         match ctx.phase {
             RenderPhase::Background => {

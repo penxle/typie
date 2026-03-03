@@ -86,7 +86,7 @@ fn selection_overlay_keeps_content_on_top_in_selected_region() {
         &page,
         0,
         None,
-        &[SelectionDecor::Cell { node_id: cell_id }],
+        &[SelectionDecor::Block { node_id: cell_id }],
         None,
         &doc,
         &mut selected
@@ -162,7 +162,7 @@ fn selection_overlay_does_not_double_blend_selected_content() {
     let height = renderer.height() as usize;
     let mut warmup = vec![0u8; width * height * 4];
     let mut actual = vec![0u8; width * height * 4];
-    let selections = [SelectionDecor::Cell { node_id: cell_id }];
+    let selections = [SelectionDecor::Block { node_id: cell_id }];
 
     assert!(renderer.render_to(&page, 0, None, &[], None, &doc, &mut warmup));
     assert!(renderer.render_to(&page, 0, None, &selections, None, &doc, &mut actual));
@@ -287,7 +287,7 @@ fn selection_non_text_clipped_phase_avoids_double_fill_for_pixel_snapped_overlap
         &renderer.theme,
         renderer.is_focused,
         &page,
-        &[SelectionDecor::Cell { node_id: cell_id }],
+        &[SelectionDecor::Block { node_id: cell_id }],
         &doc,
         &selection_data,
     );
@@ -357,7 +357,7 @@ fn selection_non_text_clipped_phase_respects_disjoint_clip_regions() {
         &renderer.theme,
         renderer.is_focused,
         &page,
-        &[SelectionDecor::Cell { node_id: cell_id }],
+        &[SelectionDecor::Block { node_id: cell_id }],
         &doc,
         &selection_data,
     );
@@ -442,7 +442,7 @@ fn render_debug_marker_tracks_selection_overlay_repaint() {
         &page,
         0,
         None,
-        &[SelectionDecor::Cell { node_id: cell_id }],
+        &[SelectionDecor::Block { node_id: cell_id }],
         None,
         &doc,
         &mut buffer

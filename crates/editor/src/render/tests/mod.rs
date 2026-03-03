@@ -87,6 +87,7 @@ fn rgba_at(buf: &[u8], width: usize, x: usize, y: usize) -> [u8; 4] {
 }
 
 mod cache;
+mod horizontal_rule;
 mod layout_debug;
 mod overflow;
 mod overlay;

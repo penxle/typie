@@ -319,10 +319,7 @@ impl Outline for TableCellElement {
 
 impl TableCellElement {
     fn paint_to(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
-        let is_selected = ctx
-            .selections
-            .iter()
-            .any(|s| s.is_cell() && s.node_id() == self.node_id);
+        let is_selected = ctx.selections.iter().any(|s| s.node_id() == self.node_id);
         match ctx.phase {
             RenderPhase::Background => {}
             RenderPhase::Selection => {
