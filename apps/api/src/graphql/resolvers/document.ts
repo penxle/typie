@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import dayjs from 'dayjs';
 import dedent from 'dedent';
 import { and, asc, count, desc, eq, gt, gte, inArray, isNull, lt, sum } from 'drizzle-orm';
@@ -440,7 +441,13 @@ async function checkDocumentViewAccess(
   }
 
   if (document.password !== null) {
-    const passwordUnlock = await redis.get(`documentview:unlock:${document.id}:${ctx.deviceId}`);
+    const passwordUnlock = await redis.get(
+      getDocumentViewUnlockKey({
+        documentId: document.id,
+        deviceId: ctx.deviceId,
+        password: document.password,
+      }),
+    );
 
     if (passwordUnlock !== 'true') {
       return { accessible: false, reason: DocumentViewBodyUnavailableReason.REQUIRE_PASSWORD };
@@ -448,6 +455,12 @@ async function checkDocumentViewAccess(
   }
 
   return { accessible: true };
+}
+
+function getDocumentViewUnlockKey({ documentId, deviceId, password }: { documentId: string; deviceId: string; password: string }): string {
+  const passwordHash = createHash('sha256').update(password).digest('hex');
+
+  return `documentview:unlock:${documentId}:${deviceId}:${passwordHash}`;
 }
 
 DocumentView.implement({
@@ -1396,7 +1409,15 @@ builder.mutationFields((t) => ({
         throw new TypieError({ code: 'invalid_password' });
       }
 
-      await redis.setex(`documentview:unlock:${input.documentId}:${ctx.deviceId}`, 60 * 60 * 24, 'true');
+      await redis.setex(
+        getDocumentViewUnlockKey({
+          documentId: input.documentId,
+          deviceId: ctx.deviceId,
+          password: document.password,
+        }),
+        60 * 60 * 24,
+        'true',
+      );
 
       return input.documentId;
     },
