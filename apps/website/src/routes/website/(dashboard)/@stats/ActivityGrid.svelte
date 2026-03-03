@@ -136,12 +136,12 @@
   const weekdays = [null, '월', null, '수', null, '금', null];
 
   const cssByLevel = {
-    0: css.raw({ backgroundColor: { base: 'gray.100', _dark: 'dark.gray.800' } }),
-    1: css.raw({ backgroundColor: { base: 'green.100', _dark: 'dark.green.800' } }),
-    2: css.raw({ backgroundColor: { base: 'green.300', _dark: 'dark.green.600' } }),
-    3: css.raw({ backgroundColor: { base: 'green.500', _dark: 'dark.green.500' } }),
+    0: css.raw({ backgroundColor: { base: 'gray.200', _dark: 'dark.gray.800' } }),
+    1: css.raw({ backgroundColor: { base: 'green.300', _dark: 'dark.green.700' } }),
+    2: css.raw({ backgroundColor: { base: 'green.500', _dark: 'dark.green.500' } }),
+    3: css.raw({ backgroundColor: { base: 'green.600', _dark: 'dark.green.400' } }),
     4: css.raw({ backgroundColor: { base: 'green.700', _dark: 'dark.green.300' } }),
-    5: css.raw({ backgroundColor: { base: 'green.900', _dark: 'dark.green.100' } }),
+    5: css.raw({ backgroundColor: { base: 'green.800', _dark: 'dark.green.200' } }),
   };
 
   const { anchor, floating } = createFloatingActions({
