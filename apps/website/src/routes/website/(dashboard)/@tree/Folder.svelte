@@ -268,7 +268,20 @@
   {/snippet}
 
   <div class={flex({ flexDirection: 'column', borderLeftWidth: '1px', marginLeft: '24px' })} aria-hidden={!open} role="tree">
-    {#if children.loading || children.data?.entity.children == null}
+    {#if children.error}
+      <div
+        class={css({
+          paddingLeft: '14px',
+          paddingRight: '8px',
+          paddingY: '6px',
+          fontSize: '14px',
+          fontWeight: 'medium',
+          color: 'text.disabled',
+        })}
+      >
+        폴더 내용을 불러오지 못했어요
+      </div>
+    {:else if !children.data}
       <div class={css({ paddingLeft: '14px', paddingRight: '8px', paddingY: '6px', color: 'text.disabled' })}>
         <RingSpinner style={css.raw({ size: '14px' })} />
       </div>
