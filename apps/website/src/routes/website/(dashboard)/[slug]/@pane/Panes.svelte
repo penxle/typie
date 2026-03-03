@@ -188,10 +188,10 @@
           pointerEvents: 'none',
           transition:
             '[left 150ms cubic-bezier(0.2,0,0,1), top 150ms cubic-bezier(0.2,0,0,1), width 150ms cubic-bezier(0.2,0,0,1), height 150ms cubic-bezier(0.2,0,0,1)]',
-          backgroundColor: { base: '[rgb(0 135 255 / 0.08)]', _dark: '[rgb(102 160 238 / 0.15)]' },
+          backgroundColor: { base: 'accent.info.default/8', _dark: 'accent.info.default/15' },
           borderWidth: '[1.5px]',
           borderStyle: 'solid',
-          borderColor: { base: '[rgb(0 135 255 / 0.3)]', _dark: '[rgb(102 160 238 / 0.4)]' },
+          borderColor: { base: 'accent.info.default/30', _dark: 'accent.info.default/40' },
           borderRadius: '8px',
           zIndex: 'ghost',
         })}

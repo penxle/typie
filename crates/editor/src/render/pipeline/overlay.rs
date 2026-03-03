@@ -593,7 +593,7 @@ impl Renderer {
         transform: Transform,
         ctx: &RenderContext,
     ) {
-        let indicator_color = ctx.theme.color("ui.accent.brand.default");
+        let indicator_color = ctx.theme.color("ui.accent.info.default");
         let mut paint = tiny_skia::Paint::default();
         paint.set_color(indicator_color);
         paint.anti_alias = true;

@@ -120,6 +120,7 @@
 <details
   bind:this={detailsEl}
   data-id={folder.data.entity.id}
+  data-name={folder.data.name}
   data-order={folder.data.entity.order}
   data-path-depth={folder.data.entity.depth}
   data-type="folder"
