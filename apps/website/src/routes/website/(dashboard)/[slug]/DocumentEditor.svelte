@@ -457,8 +457,17 @@
   });
 
   $effect(() => {
-    editor.restrictedText = app.state.usage.current.totalCharacterCount >= app.state.usage.limit.totalCharacterCount;
-    editor.restrictedBlob = Number(app.state.usage.current.totalBlobSize) >= Number(app.state.usage.limit.totalBlobSize);
+    if (app.state.usage.limit.totalCharacterCount === -1) {
+      editor.restrictedText = false;
+    } else {
+      editor.restrictedText = app.state.usage.current.totalCharacterCount >= app.state.usage.limit.totalCharacterCount;
+    }
+
+    if (Number(app.state.usage.limit.totalBlobSize) === -1) {
+      editor.restrictedBlob = false;
+    } else {
+      editor.restrictedBlob = Number(app.state.usage.current.totalBlobSize) >= Number(app.state.usage.limit.totalBlobSize);
+    }
   });
 
   let showEditLockedToast = $state(false);
