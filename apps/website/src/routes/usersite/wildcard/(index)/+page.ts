@@ -39,6 +39,8 @@ export const load = async (event) => {
                   id
                   title
                   subtitle
+                  hasPassword
+                  passwordUnlocked
                   excerpt
                   createdAt
                   updatedAt

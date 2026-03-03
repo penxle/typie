@@ -469,6 +469,23 @@ DocumentView.implement({
   fields: (t) => ({
     entity: t.expose('entityId', { type: EntityView }),
     hasPassword: t.boolean({ resolve: (self) => !!self.password }),
+    passwordUnlocked: t.boolean({
+      resolve: async (self, _, ctx) => {
+        if (!self.password) {
+          return false;
+        }
+
+        const unlocked = await redis.get(
+          getDocumentViewUnlockKey({
+            documentId: self.id,
+            deviceId: ctx.deviceId,
+            password: self.password,
+          }),
+        );
+
+        return unlocked === 'true';
+      },
+    }),
     protectContent: t.exposeBoolean('protectContent'),
     allowReaction: t.exposeBoolean('allowReaction'),
 

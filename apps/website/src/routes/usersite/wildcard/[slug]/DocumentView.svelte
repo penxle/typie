@@ -14,6 +14,7 @@
   import { z } from 'zod';
   import { TypieError } from '@/errors';
   import LockIcon from '~icons/lucide/lock';
+  import LockOpenIcon from '~icons/lucide/lock-open';
   import ShieldAlertIcon from '~icons/lucide/shield-alert';
   import SmileIcon from '~icons/lucide/smile';
   import { page } from '$app/state';
@@ -431,6 +432,29 @@
             {#if document.subtitle}
               <div class={css({ marginTop: '8px', fontSize: { base: '14px', lg: '16px' }, fontWeight: 'medium' })}>
                 {document.subtitle}
+              </div>
+            {/if}
+
+            {#if document.hasPassword}
+              <div
+                class={flex({
+                  alignItems: 'center',
+                  gap: '4px',
+                  marginTop: document.subtitle ? '10px' : '12px',
+                  width: 'fit',
+                  paddingX: '8px',
+                  paddingY: '4px',
+                  borderRadius: 'full',
+                  borderWidth: '1px',
+                  borderColor: 'border.subtle',
+                  backgroundColor: 'surface.subtle',
+                  fontSize: '12px',
+                  fontWeight: 'medium',
+                  color: 'text.muted',
+                })}
+              >
+                <Icon icon={LockOpenIcon} size={12} />
+                <span>비밀번호 확인 후 열람 중</span>
               </div>
             {/if}
 
