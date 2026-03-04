@@ -5,7 +5,7 @@ use crate::model::{
 use crate::runtime::Effect;
 use crate::state::selection_helpers::StructureSelectionInfo;
 use crate::state::selection_helpers::selected_single_block_id;
-use crate::state::table_helpers::find_table_cell;
+use crate::state::table_helpers::{find_table_cell, is_full_table_range};
 use crate::state::{Position, Selection, leaf_block_end, leaf_block_start};
 use crate::transaction::Transaction;
 use crate::types::Affinity;
@@ -699,6 +699,11 @@ impl Transaction {
             StructureSelectionInfo::None => Ok(false),
             StructureSelectionInfo::Structural(_) => Ok(false),
             StructureSelectionInfo::Rectangular { table_id, range } => {
+                if is_full_table_range(self.doc(), *table_id, *range) {
+                    self.delete_node_with_selection_adjustment(*table_id)?;
+                    return Ok(true);
+                }
+
                 let table_node = self.node(*table_id).context("Table not found")?;
                 let row_ids: Vec<_> = table_node.children().map(|c| c.node_id()).collect();
 
@@ -857,6 +862,39 @@ mod tests {
         assert_eq!(cell2.children().count(), 1);
         let p2_new = cell2.first_child().unwrap();
         assert_eq!(p2_new.children().count(), 0);
+    }
+
+    #[test]
+    fn test_delete_cell_selection_rectangular_full_table_deletes_table() {
+        let mut t = id!();
+        let mut p1 = id!();
+        let mut p4 = id!();
+
+        let mut rt = runtime! {
+            doc {
+                @t table {
+                    table_row {
+                        table_cell { @p1 paragraph { text { "cell1" } } }
+                        table_cell { paragraph { text { "cell2" } } }
+                    }
+                    table_row {
+                        table_cell { paragraph { text { "cell3" } } }
+                        table_cell { @p4 paragraph { text { "cell4" } } }
+                    }
+                }
+                paragraph { text { "after" } }
+            }
+            selection { (p1, 0) -> (p4, 5) }
+        };
+
+        rt.update(Message::DeleteSelection);
+        rt.flush();
+
+        let doc = rt.doc();
+        assert!(
+            doc.node(t).is_none(),
+            "full-table rectangular selection should delete table"
+        );
     }
 
     #[test]
