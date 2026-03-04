@@ -199,6 +199,7 @@ mod tests {
     use super::*;
     use crate::model::CalloutVariant;
     use crate::runtime::Message;
+    use crate::types::Affinity;
 
     #[test]
     fn test_delete_word_backward_after_horizontal_rule_does_nothing() {
@@ -545,6 +546,320 @@ mod tests {
         };
 
         assert_state_eq!(*rt.state(), expected);
+    }
+
+    #[test]
+    fn test_delete_backward_reverse_selection_from_list_item_start_to_prev_paragraph() {
+        let mut n1 = id!();
+        let mut n2 = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @n1 paragraph {}
+                bullet_list {
+                    list_item {
+                        @n2 paragraph {
+                            text { "a" }
+                        }
+                        bullet_list {
+                            list_item {
+                                paragraph {
+                                    text { "b" }
+                                }
+                            }
+                        }
+                    }
+                }
+                paragraph {}
+            }
+            selection { (n2, 0) -> (n1, 0) }
+        };
+
+        rt.layout();
+        rt.update(Message::DeleteBackward);
+        rt.tick();
+
+        let expected = state! {
+            doc {
+                @n1 paragraph {
+                    text { "a" }
+                }
+                bullet_list {
+                    list_item {
+                        paragraph {
+                            text { "b" }
+                        }
+                    }
+                }
+                paragraph {}
+            }
+            selection { (n1, 0) }
+        };
+
+        assert_state_eq!(*rt.state(), expected);
+    }
+
+    #[test]
+    fn test_delete_backward_reverse_selection_from_nested_list_item_start_to_prev_paragraph() {
+        let mut n1 = id!();
+        let mut n2 = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @n1 paragraph {}
+                bullet_list {
+                    list_item {
+                        paragraph {
+                            text { "1" }
+                        }
+                        bullet_list {
+                            list_item {
+                                @n2 paragraph {
+                                    text { "2" }
+                                }
+                                bullet_list {
+                                    list_item {
+                                        paragraph {
+                                            text { "3" }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                paragraph {}
+            }
+            selection { (n2, 0) -> (n1, 0) }
+        };
+
+        rt.layout();
+        rt.update(Message::DeleteBackward);
+        rt.tick();
+
+        let expected = state! {
+            doc {
+                @n1 paragraph {
+                    text { "2" }
+                }
+                bullet_list {
+                    list_item {
+                        paragraph {
+                            text { "3" }
+                        }
+                    }
+                }
+                paragraph {}
+            }
+            selection { (n1, 0) }
+        };
+
+        assert_state_eq!(*rt.state(), expected);
+    }
+
+    #[test]
+    fn delete_selection_nested_list_crossing_outside_deletes_outer_list_item() {
+        let mut n1 = id!();
+        let mut n2 = id!();
+
+        let initial = state! {
+            doc {
+                bullet_list {
+                    list_item {
+                        @n1 paragraph {
+                            text { "a" }
+                        }
+                        bullet_list {
+                            list_item {
+                                paragraph {
+                                    text { "b" }
+                                }
+                            }
+                        }
+                    }
+                }
+                @n2 paragraph {}
+            }
+            selection { (n1, 0) -> (n2, 0) }
+        };
+
+        let actual = transact!(initial, |tr| tr.delete_selection().unwrap());
+        let expected = state! {
+            doc {
+                @n1 paragraph {}
+            }
+            selection { (n1, 0) }
+        };
+        assert_state_eq!(actual, expected);
+    }
+
+    #[test]
+    fn delete_selection_across_two_list_items_mid_offsets_deletes_right_list_item() {
+        let mut p1 = id!();
+        let mut p2 = id!();
+
+        let initial = state! {
+            doc {
+                bullet_list {
+                    list_item {
+                        @p1 paragraph {
+                            text { "asdf" }
+                        }
+                    }
+                    list_item {
+                        @p2 paragraph {
+                            text { "asdf" }
+                        }
+                    }
+                }
+                paragraph {}
+            }
+            selection { (p1, 2) -> (p2, 2) }
+        };
+
+        let actual = transact!(initial, |tr| tr.delete_selection().unwrap());
+
+        let expected = state! {
+            doc {
+                bullet_list {
+                    list_item {
+                        @p1 paragraph {
+                            text { "asdf" }
+                        }
+                    }
+                }
+                paragraph {}
+            }
+            selection { (p1, 2) }
+        };
+
+        assert_state_eq!(actual, expected);
+    }
+
+    #[test]
+    fn delete_selection_nested_list_cross_to_outside_deletes_only_one_list_item() {
+        let mut n1 = id!();
+        let mut n2 = id!();
+
+        let initial = state! {
+            doc {
+                bullet_list {
+                    list_item {
+                        paragraph {
+                            text { "a" }
+                        }
+                        bullet_list {
+                            list_item {
+                                paragraph {
+                                    text { "b" }
+                                }
+                            }
+                            list_item {
+                                @n1 paragraph {
+                                    text { "c" }
+                                }
+                            }
+                        }
+                    }
+                    list_item {
+                        paragraph {
+                            text { "d" }
+                        }
+                    }
+                }
+                @n2 paragraph {}
+            }
+            selection { (n1, 0) -> (n2, 0) }
+        };
+
+        let actual = transact!(initial, |tr| tr.delete_selection().unwrap());
+
+        let expected = state! {
+            doc {
+                bullet_list {
+                    list_item {
+                        paragraph {
+                            text { "a" }
+                        }
+                        bullet_list {
+                            list_item {
+                                paragraph {
+                                    text { "b" }
+                                }
+                            }
+                            list_item {
+                                @n1 paragraph {}
+                            }
+                        }
+                    }
+                }
+                paragraph {}
+            }
+            selection { (n1, 0) }
+        };
+
+        assert_state_eq!(actual, expected);
+    }
+
+    #[test]
+    fn delete_selection_deep_nested_list_reverse_upstream_affinity_deletes_range() {
+        let mut n1 = id!();
+        let mut n2 = id!();
+
+        let initial = state! {
+            doc {
+                paragraph {}
+                bullet_list {
+                    list_item {
+                        paragraph {
+                            text { "3" }
+                        }
+                        bullet_list {
+                            list_item {
+                                @n1 paragraph {
+                                    text { "4" }
+                                }
+                                bullet_list {
+                                    list_item {
+                                        paragraph {
+                                            text { "6" }
+                                        }
+                                        bullet_list {
+                                            list_item {
+                                                @n2 paragraph {
+                                                    text { "7" }
+                                                }
+                                                bullet_list {
+                                                    list_item {
+                                                        paragraph {
+                                                            text { "8" }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                paragraph {}
+            }
+            selection { (n2, 1, Affinity::Upstream) -> (n1, 0) }
+        };
+
+        let actual = transact!(initial, |tr| tr.delete_selection().unwrap());
+        let plain_text = actual.doc.to_plain_text();
+
+        assert!(actual.selection.is_collapsed());
+        assert!(plain_text.contains('3'));
+        assert!(plain_text.contains('8'));
+        assert!(!plain_text.contains('4'));
+        assert!(!plain_text.contains('6'));
+        assert!(!plain_text.contains('7'));
     }
 
     #[test]

@@ -27,6 +27,21 @@ impl Schema {
     }
 
     pub fn add_node(&mut self, node_type: NodeType, spec: NodeSpec) {
+        if let Some(item_type) = spec.promote_item_type_on_delete {
+            assert!(
+                spec.content.repeated_single_type() == Some(item_type),
+                "Node {:?} has promote_item_type_on_delete={:?}, but content is not repeated single type {:?}",
+                node_type,
+                item_type,
+                item_type
+            );
+            assert!(
+                !spec.inline,
+                "Node {:?} cannot set promote_item_type_on_delete when inline=true",
+                node_type
+            );
+        }
+
         self.nodes.insert(node_type, spec);
     }
 
@@ -165,6 +180,7 @@ impl Default for Schema {
             NodeType::BulletList,
             NodeSpec {
                 content: content_expr!(ListItem+),
+                promote_item_type_on_delete: Some(NodeType::ListItem),
                 ..Default::default()
             },
         );
@@ -173,6 +189,7 @@ impl Default for Schema {
             NodeType::OrderedList,
             NodeSpec {
                 content: content_expr!(ListItem+),
+                promote_item_type_on_delete: Some(NodeType::ListItem),
                 ..Default::default()
             },
         );
