@@ -400,14 +400,17 @@ class EditorScrollbar extends HookWidget {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  buildLongPressDetector(
-                    onStart: (globalPosition) {
-                      startVerticalDrag(globalPosition.dy);
-                    },
-                    onMove: (globalPosition) {
-                      updateVerticalDrag(globalPosition.dy);
-                    },
-                    onEnd: stopVerticalDrag,
+                  IgnorePointer(
+                    ignoring: !canDirectInteractV,
+                    child: buildLongPressDetector(
+                      onStart: (globalPosition) {
+                        startVerticalDrag(globalPosition.dy);
+                      },
+                      onMove: (globalPosition) {
+                        updateVerticalDrag(globalPosition.dy);
+                      },
+                      onEnd: stopVerticalDrag,
+                    ),
                   ),
                   Align(
                     alignment: Alignment.centerRight,
@@ -523,14 +526,17 @@ class EditorScrollbar extends HookWidget {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  buildLongPressDetector(
-                    onStart: (globalPosition) {
-                      startHorizontalDrag(globalPosition.dx);
-                    },
-                    onMove: (globalPosition) {
-                      updateHorizontalDrag(globalPosition.dx);
-                    },
-                    onEnd: stopHorizontalDrag,
+                  IgnorePointer(
+                    ignoring: !canDirectInteractH,
+                    child: buildLongPressDetector(
+                      onStart: (globalPosition) {
+                        startHorizontalDrag(globalPosition.dx);
+                      },
+                      onMove: (globalPosition) {
+                        updateHorizontalDrag(globalPosition.dx);
+                      },
+                      onEnd: stopHorizontalDrag,
+                    ),
                   ),
                   Align(
                     alignment: Alignment.bottomCenter,
