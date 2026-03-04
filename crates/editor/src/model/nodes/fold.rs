@@ -1,4 +1,4 @@
-use crate::layout::elements::{FoldContentElement, FoldTitleBackgroundElement, SplitEdges};
+use crate::layout::elements::{FoldContentElement, FoldTitleElement, SplitEdges};
 use crate::layout::{Element, Layout, LayoutContext, LayoutNode, PageBreakPolicy, PositionedNode};
 use crate::model::Node;
 use crate::model::html::{DomSpec, NodeHtmlCodec, NodeParseRule};
@@ -150,9 +150,11 @@ impl FoldNode {
             position: Point::new(0.0, 0.0),
             node: Rc::new(LayoutNode {
                 size,
-                element: Some(Element::FoldTitleBackground(
-                    FoldTitleBackgroundElement::new(size, expanded, ctx.node.node_id()),
-                )),
+                element: Some(Element::FoldTitle(FoldTitleElement::new(
+                    size,
+                    expanded,
+                    ctx.node.node_id(),
+                ))),
                 children: None,
                 page_break_policy: PageBreakPolicy::Avoid,
                 render_hints: Default::default(),
