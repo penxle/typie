@@ -242,10 +242,11 @@ class TableCellSelectorController {
   void endDragFromPanEnd(DragEndDetails _) => endDrag();
 
   void endDrag() {
-    interactionController.endTableCellHandleDrag(cellHandleDragPosition: cellHandleDragPosition);
     if (!context.mounted) {
+      interactionController.endTableCellHandleDrag();
       return;
     }
+    interactionController.endTableCellHandleDrag(cellHandleDragPosition: cellHandleDragPosition);
     dragDraftState.value = null;
   }
 

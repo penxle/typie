@@ -87,7 +87,7 @@ extension TableHandleGestureMethods on EditorInteractionController {
     return true;
   }
 
-  bool endTableCellHandleDrag({required ValueNotifier<Offset?> cellHandleDragPosition}) {
+  bool endTableCellHandleDrag({ValueNotifier<Offset?>? cellHandleDragPosition}) {
     _selectionHandleSemantic
       ..clearPendingSelectionHandleDrag()
       ..clearSelectionHandleState();
@@ -97,7 +97,7 @@ extension TableHandleGestureMethods on EditorInteractionController {
       transitionEvent: InteractionEvent.tableHandleDragEnd,
       expectedMode: InteractionMode.idle,
     );
-    cellHandleDragPosition.value = null;
+    cellHandleDragPosition?.value = null;
     return ended;
   }
 }
