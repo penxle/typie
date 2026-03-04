@@ -1,9 +1,10 @@
 use crate::model::{
-    Node, NodeId, NodeType, ParagraphNode, TableAlign, TableBorderStyle, TableCellNode, TableNode,
+    Node, NodeId, ParagraphNode, TableAlign, TableBorderStyle, TableCellNode, TableNode,
     TableRowNode, TableWidthModel,
 };
 use crate::runtime::Effect;
 use crate::state::selection_helpers::StructureSelectionInfo;
+use crate::state::selection_helpers::selected_single_block_id;
 use crate::state::table_helpers::find_table_cell;
 use crate::state::{Position, Selection, leaf_block_end, leaf_block_start};
 use crate::transaction::Transaction;
@@ -12,37 +13,23 @@ use anyhow::{Context, Result};
 
 impl Transaction {
     pub fn insert_table(&mut self, rows: u32, cols: u32) -> Result<Option<NodeId>> {
-        let selection = self.selection().clone();
-        let pos = selection.anchor;
-
-        let Some(parent_node) = self.node(pos.node_id) else {
-            return Ok(None);
-        };
-
-        let Some(parent) = parent_node.parent() else {
-            return Ok(None);
-        };
-
-        let parent_id = parent.node_id();
-        let parent_spec = parent.spec().context("Parent spec not found")?;
-
-        let table_type = NodeType::Table;
-        if !parent_spec.content.matches(table_type) {
+        if !self.insert_node(Node::Table(TableNode::default()))? {
             return Ok(None);
         }
 
-        let block_index = parent_node.index().context("Block has no index")?;
-
-        let table_id = NodeId::new();
+        let selection = self.selection().clone();
+        let Some(table_id) = selected_single_block_id(self.doc(), &selection) else {
+            return Ok(None);
+        };
+        let is_inserted_node_table = self
+            .node(table_id)
+            .map(|node| matches!(node.node(), Some(Node::Table(_))))
+            .unwrap_or(false);
+        if !is_inserted_node_table {
+            return Ok(None);
+        }
         let mut row_ids = Vec::new();
         let mut first_cell_id = None;
-
-        let parent_mut = self.node_mut(parent_id).context("Parent not found")?;
-        parent_mut.as_mut().insert_child_with_id(
-            block_index + 1,
-            table_id,
-            Node::Table(TableNode::default()),
-        )?;
 
         for row_idx in 0..rows {
             let row_id = NodeId::new();
@@ -768,7 +755,7 @@ impl Transaction {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::runtime::Message;
+    use crate::{model::NodeType, runtime::Message};
 
     #[test]
     fn insert_table_appends_trailing_paragraph_when_inserted_at_end() {
@@ -778,7 +765,7 @@ mod tests {
             doc {
                 @p paragraph { text { "start" } }
             }
-            selection { (p, 0) }
+            selection { (p, 5) }
         };
 
         let actual = transact!(initial, |tr| {
@@ -796,6 +783,35 @@ mod tests {
             child_types,
             vec![NodeType::Paragraph, NodeType::Table, NodeType::Paragraph],
             "insert_table should preserve root trailing paragraph invariant"
+        );
+    }
+
+    #[test]
+    fn insert_table_in_empty_paragraph_uses_same_block_positioning_as_insert_node() {
+        let mut p = id!();
+
+        let initial = state! {
+            doc {
+                @p paragraph {}
+            }
+            selection { (p, 0) }
+        };
+
+        let actual = transact!(initial, |tr| {
+            let inserted = tr.insert_table(1, 1).unwrap();
+            assert!(inserted.is_some());
+        });
+
+        let root = actual.doc.node(NodeId::ROOT).unwrap();
+        let child_types: Vec<NodeType> = root
+            .children()
+            .filter_map(|child| child.node_type())
+            .collect();
+
+        assert_eq!(
+            child_types,
+            vec![NodeType::Table, NodeType::Paragraph],
+            "insert_table should insert before an empty paragraph at offset 0 like other block nodes"
         );
     }
 
