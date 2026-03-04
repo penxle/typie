@@ -87,7 +87,7 @@ impl Transaction {
             )));
         }
 
-        self.mark_attr_mutation(table_id);
+        self.mark_structure_mutation(table_id);
 
         Ok(Some(table_id))
     }
@@ -769,6 +769,35 @@ impl Transaction {
 mod tests {
     use super::*;
     use crate::runtime::Message;
+
+    #[test]
+    fn insert_table_appends_trailing_paragraph_when_inserted_at_end() {
+        let mut p = id!();
+
+        let initial = state! {
+            doc {
+                @p paragraph { text { "start" } }
+            }
+            selection { (p, 0) }
+        };
+
+        let actual = transact!(initial, |tr| {
+            let inserted = tr.insert_table(1, 1).unwrap();
+            assert!(inserted.is_some());
+        });
+
+        let root = actual.doc.node(NodeId::ROOT).unwrap();
+        let child_types: Vec<NodeType> = root
+            .children()
+            .filter_map(|child| child.node_type())
+            .collect();
+
+        assert_eq!(
+            child_types,
+            vec![NodeType::Paragraph, NodeType::Table, NodeType::Paragraph],
+            "insert_table should preserve root trailing paragraph invariant"
+        );
+    }
 
     #[test]
     fn test_delete_cell_selection_rectangular() {
