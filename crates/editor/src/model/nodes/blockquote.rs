@@ -263,10 +263,11 @@ impl BlockquoteNode {
             let child_width = child_layout.size.width;
 
             let line_node = LayoutNode {
-                size: Size::new(LINE_WIDTH, line_height),
+                size: Size::new(CONTENT_OFFSET + child_width, line_height),
                 element: Some(Element::Blockquote(BlockquoteLineElement::new(
-                    Size::new(LINE_WIDTH, line_height),
+                    Size::new(CONTENT_OFFSET + child_width, line_height),
                     ctx.node.node_id(),
+                    LINE_WIDTH,
                 ))),
                 children: None,
                 page_break_policy: Default::default(),
@@ -322,23 +323,6 @@ impl BlockquoteNode {
         let block_gap = ctx.settings.block_gap;
         let node_id = ctx.node.node_id();
 
-        let quote_node = LayoutNode {
-            size: Size::new(QUOTE_SIZE, QUOTE_SIZE),
-            element: Some(Element::BlockquoteQuote(BlockquoteQuoteElement::new(
-                Size::new(QUOTE_SIZE, QUOTE_SIZE),
-                node_id,
-            ))),
-            children: None,
-            page_break_policy: PageBreakPolicy::Avoid,
-            render_hints: Default::default(),
-            scope_id: None,
-        };
-
-        child_nodes.push(PositionedNode {
-            position: Point::new(0.0, 0.0),
-            node: Rc::new(quote_node),
-        });
-
         for (idx, child) in children.iter().enumerate() {
             let child_layout = ctx.layout(child, child_constraints);
             let is_last = idx == child_count - 1;
@@ -360,6 +344,25 @@ impl BlockquoteNode {
         }
 
         let total_height = y_offset.max(QUOTE_SIZE);
+        let quote_size = Size::new(max_width + CONTENT_OFFSET, total_height);
+        let quote_node = LayoutNode {
+            size: quote_size,
+            element: Some(Element::BlockquoteQuote(BlockquoteQuoteElement::new(
+                quote_size, node_id,
+            ))),
+            children: None,
+            page_break_policy: PageBreakPolicy::Avoid,
+            render_hints: Default::default(),
+            scope_id: None,
+        };
+
+        child_nodes.insert(
+            0,
+            PositionedNode {
+                position: Point::new(0.0, 0.0),
+                node: Rc::new(quote_node),
+            },
+        );
 
         LayoutNode {
             size: Size::new(max_width + CONTENT_OFFSET, total_height),

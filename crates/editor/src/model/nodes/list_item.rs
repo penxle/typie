@@ -7,6 +7,9 @@ use macros::Codec;
 use serde::{Deserialize, Serialize};
 use std::rc::Rc;
 
+pub const LIST_ITEM_MARKER_WIDTH: f32 = 20.0;
+pub const LIST_ITEM_MARKER_GAP: f32 = 8.0;
+
 #[derive(Debug, Clone, Default, PartialEq, Hash, Serialize, Deserialize, Codec)]
 #[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 pub struct ListItemNode {}
@@ -25,9 +28,7 @@ impl NodeHtmlCodec for ListItemNode {
 
 impl Layout for ListItemNode {
     fn layout(&self, ctx: &LayoutContext, constraints: BoxConstraints) -> LayoutNode {
-        const MARKER_WIDTH: f32 = 20.0;
-        const MARKER_GAP: f32 = 8.0;
-        const CONTENT_OFFSET: f32 = MARKER_WIDTH + MARKER_GAP;
+        const CONTENT_OFFSET: f32 = LIST_ITEM_MARKER_WIDTH + LIST_ITEM_MARKER_GAP;
 
         let child_constraints = BoxConstraints::new(
             (constraints.min_width - CONTENT_OFFSET).max(0.0),
@@ -69,21 +70,23 @@ impl Layout for ListItemNode {
             max_width = max_width.max(child_width);
         }
 
-        let Some((baseline, line_mid, marker_height)) = child_nodes.get(0).and_then(|positioned| {
-            positioned.node.children.as_ref().and_then(|children| {
-                children.first().and_then(|first_line| {
-                    if let Some(Element::Line(line_element)) = &first_line.node.element {
-                        let baseline = first_line.position.y + line_element.metric.baseline;
-                        let line_mid = first_line.position.y
-                            + line_element.metric.top
-                            + line_element.metric.height / 2.0;
-                        Some((baseline, line_mid, line_element.metric.height))
-                    } else {
-                        None
-                    }
+        let Some((baseline, line_mid, marker_selection_height)) =
+            child_nodes.get(0).and_then(|positioned| {
+                positioned.node.children.as_ref().and_then(|children| {
+                    children.first().and_then(|first_line| {
+                        if let Some(Element::Line(line_element)) = &first_line.node.element {
+                            let baseline = first_line.position.y + line_element.metric.baseline;
+                            let line_mid = first_line.position.y
+                                + line_element.metric.top
+                                + line_element.metric.height / 2.0;
+                            Some((baseline, line_mid, line_element.size.height))
+                        } else {
+                            None
+                        }
+                    })
                 })
             })
-        }) else {
+        else {
             return LayoutNode {
                 size: Size::new(max_width + CONTENT_OFFSET, y_offset),
                 element: None,
@@ -95,12 +98,15 @@ impl Layout for ListItemNode {
         };
 
         let marker_node = LayoutNode {
-            size: Size::new(MARKER_WIDTH, marker_height),
+            size: Size::new(CONTENT_OFFSET, marker_selection_height),
             element: Some(Element::ListMarker(ListMarkerElement::new(
                 marker_type,
                 baseline,
                 line_mid,
-                MARKER_WIDTH,
+                LIST_ITEM_MARKER_WIDTH,
+                ctx.node.node_id(),
+                CONTENT_OFFSET,
+                marker_selection_height,
             ))),
             children: None,
             page_break_policy: Default::default(),

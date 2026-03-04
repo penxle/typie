@@ -13,11 +13,16 @@ const MESSAGE_TAIL_ANTIALIAS_MARGIN: f32 = 1.0;
 pub struct BlockquoteLineElement {
     pub size: Size,
     pub block_id: NodeId,
+    pub line_width: f32,
 }
 
 impl BlockquoteLineElement {
-    pub fn new(size: Size, block_id: NodeId) -> Self {
-        Self { size, block_id }
+    pub fn new(size: Size, block_id: NodeId, line_width: f32) -> Self {
+        Self {
+            size,
+            block_id,
+            line_width,
+        }
     }
 }
 

@@ -1,6 +1,9 @@
 use crate::global::GLOBALS;
+use crate::model::{LIST_ITEM_MARKER_GAP, NodeId, SelectionDecor};
 use crate::render::outline::ElementSink;
-use crate::render::{GlyphRenderer, Outline, RasterSink, Render, RenderContext, glyph::Glyph};
+use crate::render::{
+    GlyphRenderer, Outline, RasterSink, Render, RenderContext, RenderPhase, glyph::Glyph,
+};
 use parley::setting::{FontFeature, Tag};
 use parley::style::{FontFamily, FontFamilyName, FontFeatures, StyleProperty};
 use std::fmt;
@@ -22,6 +25,9 @@ pub struct ListMarkerElement {
     pub baseline: f32,
     pub line_mid: f32,
     pub marker_width: f32,
+    pub selection_node_id: NodeId,
+    pub selection_width: f32,
+    pub selection_height: f32,
 }
 
 impl fmt::Debug for ListMarkerElement {
@@ -31,6 +37,9 @@ impl fmt::Debug for ListMarkerElement {
             .field("baseline", &self.baseline)
             .field("line_mid", &self.line_mid)
             .field("marker_width", &self.marker_width)
+            .field("selection_node_id", &self.selection_node_id)
+            .field("selection_width", &self.selection_width)
+            .field("selection_height", &self.selection_height)
             .finish()
     }
 }
@@ -41,12 +50,18 @@ impl ListMarkerElement {
         baseline: f32,
         line_mid: f32,
         marker_width: f32,
+        selection_node_id: NodeId,
+        selection_width: f32,
+        selection_height: f32,
     ) -> Self {
         Self {
             marker_type,
             baseline,
             line_mid,
             marker_width,
+            selection_node_id,
+            selection_width,
+            selection_height,
         }
     }
 }
@@ -72,16 +87,65 @@ impl Outline for ListMarkerElement {
 
 impl ListMarkerElement {
     fn paint_to(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
-        match &self.marker_type {
-            ListMarkerType::Bullet => self.render_bullet(sink, transform, ctx),
-            ListMarkerType::Ordered(index) => {
-                self.render_ordered_marker(*index, sink, transform, ctx);
+        match ctx.phase {
+            RenderPhase::Content => {
+                let color = ctx.theme.color("ui.text.default");
+                match &self.marker_type {
+                    ListMarkerType::Bullet => self.render_bullet(sink, transform, color),
+                    ListMarkerType::Ordered(index) => {
+                        self.render_ordered_marker(*index, sink, transform, ctx, color);
+                    }
+                }
             }
+            RenderPhase::Selection => {
+                self.render_selection_background(sink, transform, ctx);
+            }
+            _ => {}
         }
     }
 
-    fn render_bullet(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext) {
-        let color = ctx.theme.color("ui.text.default");
+    fn render_selection_background(
+        &self,
+        sink: &mut dyn ElementSink,
+        transform: Transform,
+        ctx: &RenderContext<'_>,
+    ) {
+        let includes_front_boundary = ctx.selections.iter().any(|selection| {
+            matches!(
+                selection,
+                SelectionDecor::Block { node_id } if *node_id == self.selection_node_id
+            )
+        });
+
+        if !includes_front_boundary {
+            return;
+        }
+
+        let width = self
+            .selection_width
+            .max(self.marker_width + LIST_ITEM_MARKER_GAP);
+        let Some(rect) = tiny_skia::Rect::from_xywh(0.0, 0.0, width, self.selection_height) else {
+            return;
+        };
+
+        let color = if ctx.is_focused {
+            ctx.theme.color_with_alpha("selection", 77)
+        } else {
+            ctx.theme.color_with_alpha("selection", 48)
+        };
+
+        let mut paint = Paint::default();
+        paint.set_color(color);
+        paint.anti_alias = true;
+        sink.fill_rect(rect, &paint, transform);
+    }
+
+    fn render_bullet(
+        &self,
+        sink: &mut dyn ElementSink,
+        transform: Transform,
+        color: tiny_skia::Color,
+    ) {
         let paint = Paint {
             shader: tiny_skia::Shader::SolidColor(color),
             anti_alias: true,
@@ -103,11 +167,11 @@ impl ListMarkerElement {
         sink: &mut dyn ElementSink,
         transform: Transform,
         ctx: &RenderContext,
+        color: tiny_skia::Color,
     ) {
         let text = format!("{}.", index);
         let scale = ctx.scale_factor as f32;
 
-        let color = ctx.theme.color("ui.text.default");
         let mut paint = Paint::default();
         paint.set_color(color);
         paint.anti_alias = true;

@@ -82,6 +82,7 @@ impl Default for Schema {
             NodeType::Blockquote,
             NodeSpec {
                 content: content_expr!((Paragraph | BulletList | OrderedList)+),
+                block_selection_boundary_mode: Some(BlockSelectionBoundaryMode::FrontOnly),
                 ..Default::default()
             },
         );
@@ -172,6 +173,7 @@ impl Default for Schema {
             NodeType::HorizontalRule,
             NodeSpec {
                 selectable: true,
+                block_selection_boundary_mode: Some(BlockSelectionBoundaryMode::Both),
                 ..Default::default()
             },
         );
@@ -199,6 +201,7 @@ impl Default for Schema {
             NodeSpec {
                 content: content_expr!([(Paragraph), ((BulletList | OrderedList) *)]),
                 structural: true,
+                block_selection_boundary_mode: Some(BlockSelectionBoundaryMode::FrontOnly),
                 ..Default::default()
             },
         );
@@ -208,6 +211,7 @@ impl Default for Schema {
             NodeSpec {
                 content: content_expr!([(FoldTitle), (FoldContent)]),
                 isolating: true,
+                block_selection_boundary_mode: Some(BlockSelectionBoundaryMode::FrontOrBack),
                 ..Default::default()
             },
         );
@@ -236,6 +240,7 @@ impl Default for Schema {
             NodeType::Callout,
             NodeSpec {
                 content: content_expr!((Paragraph | BulletList | OrderedList)+),
+                block_selection_boundary_mode: Some(BlockSelectionBoundaryMode::FrontOnly),
                 ..Default::default()
             },
         );
@@ -245,6 +250,7 @@ impl Default for Schema {
             NodeSpec {
                 content: content_expr!(TableRow+),
                 isolating: true,
+                block_selection_boundary_mode: Some(BlockSelectionBoundaryMode::FrontOrBack),
                 forbidden_descendants: Some(&[NodeType::Table]),
                 ..Default::default()
             },

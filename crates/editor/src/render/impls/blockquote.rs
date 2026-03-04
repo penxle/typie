@@ -2,7 +2,7 @@ use crate::layout::elements::SplitEdges;
 use crate::layout::elements::blockquote::{
     BlockquoteLineElement, BlockquoteMessageElement, BlockquoteQuoteElement, MESSAGE_TAIL_SIZE,
 };
-use crate::model::BlockquoteVariant;
+use crate::model::{BlockquoteVariant, SelectionDecor};
 use crate::render::outline::ElementSink;
 use crate::render::{GlyphRenderer, Outline, RasterSink, Render, RenderContext, RenderPhase};
 use macros::svg_icon_path;
@@ -10,6 +10,7 @@ use tiny_skia::{Paint, PathBuilder, PixmapMut, Rect, Transform};
 
 const QUOTE_ICON_SIZE: f32 = 16.0;
 const MESSAGE_BORDER_RADIUS: f32 = 18.0;
+const BLOCKQUOTE_DECORATION_GAP: f32 = 16.0;
 
 impl Render for BlockquoteLineElement {
     fn render(
@@ -32,18 +33,62 @@ impl Outline for BlockquoteLineElement {
 
 impl BlockquoteLineElement {
     fn paint_to(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
-        if let RenderPhase::Content = ctx.phase {
-            let Some(rect) = Rect::from_xywh(0.0, 0.0, self.size.width, self.size.height) else {
-                return;
-            };
+        let is_selected = ctx.selections.iter().any(|selection| {
+            matches!(
+                selection,
+                SelectionDecor::Block { node_id } if *node_id == self.block_id
+            )
+        });
 
-            let color = ctx.theme.color("ui.border.default");
-            let mut paint = Paint::default();
-            paint.set_color(color);
-            paint.anti_alias = true;
+        match ctx.phase {
+            RenderPhase::Content => {
+                let line_width = self.line_width.min(self.size.width).max(0.0);
+                let Some(rect) = Rect::from_xywh(0.0, 0.0, line_width, self.size.height) else {
+                    return;
+                };
 
-            sink.fill_rect(rect, &paint, transform);
+                let color = ctx.theme.color("ui.border.default");
+                let mut paint = Paint::default();
+                paint.set_color(color);
+                paint.anti_alias = true;
+
+                sink.fill_rect(rect, &paint, transform);
+            }
+            RenderPhase::Selection => {
+                if !is_selected {
+                    return;
+                }
+
+                let selection_width = if self.has_descendant_text_selection(ctx) {
+                    (self.line_width + BLOCKQUOTE_DECORATION_GAP).min(self.size.width)
+                } else {
+                    self.size.width
+                };
+
+                let Some(rect) = Rect::from_xywh(0.0, 0.0, selection_width, self.size.height)
+                else {
+                    return;
+                };
+
+                let color = if ctx.is_focused {
+                    ctx.theme.color_with_alpha("selection", 77)
+                } else {
+                    ctx.theme.color_with_alpha("selection", 48)
+                };
+
+                let mut paint = Paint::default();
+                paint.set_color(color);
+                paint.anti_alias = true;
+                sink.fill_rect(rect, &paint, transform);
+            }
+            _ => {}
         }
+    }
+
+    fn has_descendant_text_selection(&self, ctx: &RenderContext<'_>) -> bool {
+        ctx.selections.iter().any(|selection| {
+            matches!(selection, SelectionDecor::TextRange { node_id, .. } if *node_id == self.block_id || ctx.doc.is_ancestor(self.block_id, *node_id))
+        })
     }
 }
 
@@ -68,21 +113,64 @@ impl Outline for BlockquoteQuoteElement {
 
 impl BlockquoteQuoteElement {
     fn paint_to(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
-        if let RenderPhase::Content = ctx.phase {
-            let color = ctx.theme.color("ui.text.muted");
-            let mut paint = Paint::default();
-            paint.set_color(color);
-            paint.anti_alias = true;
+        let is_selected = ctx.selections.iter().any(|selection| {
+            matches!(
+                selection,
+                SelectionDecor::Block { node_id } if *node_id == self.block_id
+            )
+        });
 
-            let cx = self.size.width / 2.0;
-            let cy = self.size.height / 2.0;
+        match ctx.phase {
+            RenderPhase::Content => {
+                let color = ctx.theme.color("ui.text.muted");
+                let mut paint = Paint::default();
+                paint.set_color(color);
+                paint.anti_alias = true;
 
-            let path = svg_icon_path!("typie/blockquote-quote", QUOTE_ICON_SIZE, cx, cy);
+                let cx = QUOTE_ICON_SIZE / 2.0;
+                let cy = QUOTE_ICON_SIZE / 2.0;
 
-            if let Some(path) = path {
-                sink.fill_path(&path, &paint, tiny_skia::FillRule::Winding, transform);
+                let path = svg_icon_path!("typie/blockquote-quote", QUOTE_ICON_SIZE, cx, cy);
+
+                if let Some(path) = path {
+                    sink.fill_path(&path, &paint, tiny_skia::FillRule::Winding, transform);
+                }
             }
+            RenderPhase::Selection => {
+                if !is_selected {
+                    return;
+                }
+
+                let selection_width = if self.has_descendant_text_selection(ctx) {
+                    (QUOTE_ICON_SIZE + BLOCKQUOTE_DECORATION_GAP).min(self.size.width)
+                } else {
+                    self.size.width
+                };
+
+                let Some(rect) = Rect::from_xywh(0.0, 0.0, selection_width, self.size.height)
+                else {
+                    return;
+                };
+
+                let color = if ctx.is_focused {
+                    ctx.theme.color_with_alpha("selection", 77)
+                } else {
+                    ctx.theme.color_with_alpha("selection", 48)
+                };
+
+                let mut paint = Paint::default();
+                paint.set_color(color);
+                paint.anti_alias = true;
+                sink.fill_rect(rect, &paint, transform);
+            }
+            _ => {}
         }
+    }
+
+    fn has_descendant_text_selection(&self, ctx: &RenderContext<'_>) -> bool {
+        ctx.selections.iter().any(|selection| {
+            matches!(selection, SelectionDecor::TextRange { node_id, .. } if *node_id == self.block_id || ctx.doc.is_ancestor(self.block_id, *node_id))
+        })
     }
 }
 
@@ -107,42 +195,95 @@ impl Outline for BlockquoteMessageElement {
 
 impl BlockquoteMessageElement {
     fn paint_to(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
-        if let RenderPhase::Background = ctx.phase {
-            let is_sent = matches!(self.variant, BlockquoteVariant::MessageSent);
-            let has_tail = !self.split_edges.bottom;
+        let is_selected = ctx.selections.iter().any(|selection| {
+            matches!(
+                selection,
+                SelectionDecor::Block { node_id } if *node_id == self.block_id
+            )
+        });
 
-            let bg_color = if is_sent {
-                ctx.theme.color("ui.blockquote.message-sent")
-            } else {
-                ctx.theme.color("ui.blockquote.message-received")
-            };
+        match ctx.phase {
+            RenderPhase::Background => {
+                let is_sent = matches!(self.variant, BlockquoteVariant::MessageSent);
+                let has_tail = !self.split_edges.bottom;
 
-            let mut paint = Paint::default();
-            paint.set_color(bg_color);
-            paint.anti_alias = true;
-
-            let (tl, tr, mut br, mut bl) = corner_radii(MESSAGE_BORDER_RADIUS, &self.split_edges);
-
-            if has_tail {
-                if is_sent {
-                    br = 0.0;
+                let bg_color = if is_sent {
+                    ctx.theme.color("ui.blockquote.message-sent")
                 } else {
-                    bl = 0.0;
+                    ctx.theme.color("ui.blockquote.message-received")
+                };
+
+                let mut paint = Paint::default();
+                paint.set_color(bg_color);
+                paint.anti_alias = true;
+
+                let (tl, tr, mut br, mut bl) =
+                    corner_radii(MESSAGE_BORDER_RADIUS, &self.split_edges);
+
+                if has_tail {
+                    if is_sent {
+                        br = 0.0;
+                    } else {
+                        bl = 0.0;
+                    }
+                }
+
+                if let Some(path) =
+                    build_rounded_rect(0.0, 0.0, self.size.width, self.size.height, tl, tr, br, bl)
+                {
+                    sink.fill_path(&path, &paint, tiny_skia::FillRule::Winding, transform);
+                }
+
+                if has_tail
+                    && let Some(tail_path) =
+                        build_message_tail(self.size.width, self.size.height, is_sent)
+                {
+                    sink.fill_path(&tail_path, &paint, tiny_skia::FillRule::Winding, transform);
                 }
             }
+            RenderPhase::Selection => {
+                if !is_selected {
+                    return;
+                }
 
-            if let Some(path) =
-                build_rounded_rect(0.0, 0.0, self.size.width, self.size.height, tl, tr, br, bl)
-            {
-                sink.fill_path(&path, &paint, tiny_skia::FillRule::Winding, transform);
-            }
+                let is_sent = matches!(self.variant, BlockquoteVariant::MessageSent);
+                let has_tail = !self.split_edges.bottom;
 
-            if has_tail
-                && let Some(tail_path) =
-                    build_message_tail(self.size.width, self.size.height, is_sent)
-            {
-                sink.fill_path(&tail_path, &paint, tiny_skia::FillRule::Winding, transform);
+                let color = if ctx.is_focused {
+                    ctx.theme.color_with_alpha("selection", 77)
+                } else {
+                    ctx.theme.color_with_alpha("selection", 48)
+                };
+
+                let mut paint = Paint::default();
+                paint.set_color(color);
+                paint.anti_alias = true;
+
+                let (tl, tr, mut br, mut bl) =
+                    corner_radii(MESSAGE_BORDER_RADIUS, &self.split_edges);
+
+                if has_tail {
+                    if is_sent {
+                        br = 0.0;
+                    } else {
+                        bl = 0.0;
+                    }
+                }
+
+                if let Some(path) =
+                    build_rounded_rect(0.0, 0.0, self.size.width, self.size.height, tl, tr, br, bl)
+                {
+                    sink.fill_path(&path, &paint, tiny_skia::FillRule::Winding, transform);
+                }
+
+                if has_tail
+                    && let Some(tail_path) =
+                        build_message_tail(self.size.width, self.size.height, is_sent)
+                {
+                    sink.fill_path(&tail_path, &paint, tiny_skia::FillRule::Winding, transform);
+                }
             }
+            _ => {}
         }
     }
 }
