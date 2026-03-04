@@ -1,6 +1,6 @@
 part of '../controller.dart';
 
-class TapSession implements InteractionSession {
+class TapGesture implements InteractionGesture {
   DateTime? lastTapTime;
   Offset? lastTapPosition;
   Timer? tapTimer;
@@ -51,9 +51,9 @@ class TapSession implements InteractionSession {
   }
 }
 
-extension TapInteractionMethods on EditorInteractionController {
+extension TapGestureMethods on EditorInteractionController {
   bool _isConsecutiveTap({required Offset localPosition, required DateTime now}) {
-    return _tapSession.isConsecutiveTap(localPosition: localPosition, now: now);
+    return _tapGesture.isConsecutiveTap(localPosition: localPosition, now: now);
   }
 
   void _dispatchTap(Offset localPosition) {
@@ -71,7 +71,7 @@ extension TapInteractionMethods on EditorInteractionController {
     final now = DateTime.now();
     final clickCount = _isConsecutiveTap(localPosition: localPosition, now: now) ? 2 : 1;
 
-    _tapSession.recordTap(now: now, localPosition: localPosition);
+    _tapGesture.recordTap(now: now, localPosition: localPosition);
 
     final pointerX = _resolvePointerX(localPosition.dx);
 
@@ -79,11 +79,7 @@ extension TapInteractionMethods on EditorInteractionController {
       (o) => o.hitTest(pageIdx, pointerX, localY),
     );
     if (hitOverlay != null) {
-      if (hitOverlay.kind == 0) {
-        scope.controller.dispatch({'type': 'toggleFold', 'nodeId': hitOverlay.nodeId});
-      } else if (hitOverlay.kind == 1) {
-        scope.controller.dispatch({'type': 'cycleCalloutVariantAt', 'nodeId': hitOverlay.nodeId});
-      }
+      _semanticDispatchOverlayAction(hitOverlay);
       return;
     }
 
@@ -103,23 +99,13 @@ extension TapInteractionMethods on EditorInteractionController {
 
     final prevCursor = scope.controller.state.cursor;
 
-    scope.controller.dispatch({
-      'type': 'pointerDown',
-      'pageIdx': pageIdx,
-      'x': pointerX,
-      'y': localY,
-      'clickCount': clickCount,
-      'button': 'primary',
-      'modifier': {'shift': isShiftHeader, 'ctrl': false, 'alt': false, 'meta': false},
-    });
-    scope.controller.dispatch({
-      'type': 'pointerUp',
-      'pageIdx': pageIdx,
-      'x': pointerX,
-      'y': localY,
-      'button': 'primary',
-      'modifier': {'shift': isShiftHeader, 'ctrl': false, 'alt': false, 'meta': false},
-    });
+    _semanticDispatchPrimaryClick(
+      pageIdx: pageIdx,
+      pointerX: pointerX,
+      localY: localY,
+      clickCount: clickCount,
+      isShiftPressed: isShiftHeader,
+    );
 
     if (clickCount != 1) {
       scope.controller.scrollIntoView();
@@ -160,17 +146,17 @@ extension TapInteractionMethods on EditorInteractionController {
       showContextMenu.value = false;
     }
 
-    _tapSession.cancelTapTimer();
+    _tapGesture.cancelTapTimer();
 
     if (_isConsecutiveTap(localPosition: details.localPosition, now: DateTime.now())) {
-      _tapSession.tapDispatched = true;
+      _tapGesture.tapDispatched = true;
       if (_dispatchDoubleTapSelection(details.localPosition)) {
         prepareDoubleTapDrag(details.localPosition);
       }
       return;
     }
 
-    _tapSession
+    _tapGesture
       ..tapDispatched = false
       ..scheduleTapTimer(const Duration(milliseconds: 150), () {
         final pointerX = _resolvePointerX(details.localPosition.dx);
@@ -178,7 +164,7 @@ extension TapInteractionMethods on EditorInteractionController {
 
         final canDrag = scope.editor.isSelectionHit(pageIdx, pointerX, localY);
         if (canDrag) {
-          _tapSession.tapDispatched = true;
+          _tapGesture.tapDispatched = true;
           return;
         }
 
@@ -187,7 +173,7 @@ extension TapInteractionMethods on EditorInteractionController {
           return;
         }
 
-        _tapSession.tapDispatched = true;
+        _tapGesture.tapDispatched = true;
         _dispatchTap(details.localPosition);
       });
   }
@@ -197,9 +183,9 @@ extension TapInteractionMethods on EditorInteractionController {
       return;
     }
 
-    _doubleTapDragSession.clearPending();
-    _tapSession.cancelTapTimer();
-    if (!_tapSession.tapDispatched) {
+    _doubleTapDragGesture.clearPending();
+    _tapGesture.cancelTapTimer();
+    if (!_tapGesture.tapDispatched) {
       _dispatchTap(details.localPosition);
     }
   }
@@ -209,7 +195,7 @@ extension TapInteractionMethods on EditorInteractionController {
       return;
     }
 
-    _doubleTapDragSession.clearPending();
-    _tapSession.cancelTapTimer();
+    _doubleTapDragGesture.clearPending();
+    _tapGesture.cancelTapTimer();
   }
 }

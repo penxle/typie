@@ -1,6 +1,6 @@
 part of '../controller.dart';
 
-class AutoScrollSession implements InteractionSession {
+class AutoScrollSemantic implements InteractionSemantic {
   Timer? _autoScrollTimer;
   double _verticalEdgeDistance = 0;
   double _horizontalEdgeDistance = 0;
@@ -12,8 +12,6 @@ class AutoScrollSession implements InteractionSession {
   static const _edgeThreshold = 30.0;
   static const _minScrollSpeed = 4.0;
   static const _maxScrollSpeed = 16.0;
-
-  bool get isActive => _autoScrollTimer != null;
 
   void stop() {
     _autoScrollTimer?.cancel();
@@ -35,9 +33,7 @@ class AutoScrollSession implements InteractionSession {
     required HorizontalScrollMetrics Function() resolveHorizontalMetrics,
     required (int pageIdx, double localY) Function(double y) getPageAtPosition,
     required double Function(double localX) getPointerX,
-    required SelectionHandleType? Function() readDraggingHandleType,
-    required SelectionHandleInfo? Function() readDragAnchorHandle,
-    required Map<String, dynamic>? Function() readDoubleTapInitialRange,
+    required AutoScrollSelectionContext Function() readSelectionContext,
     required void Function(Map<String, dynamic> event) dispatch,
     required VoidCallback scrollIntoView,
   }) {
@@ -72,9 +68,7 @@ class AutoScrollSession implements InteractionSession {
         resolveHorizontalMetrics: resolveHorizontalMetrics,
         getPageAtPosition: getPageAtPosition,
         getPointerX: getPointerX,
-        readDraggingHandleType: readDraggingHandleType,
-        readDragAnchorHandle: readDragAnchorHandle,
-        readDoubleTapInitialRange: readDoubleTapInitialRange,
+        readSelectionContext: readSelectionContext,
         dispatch: dispatch,
         scrollIntoView: scrollIntoView,
       );
@@ -92,9 +86,7 @@ class AutoScrollSession implements InteractionSession {
     required HorizontalScrollMetrics Function() resolveHorizontalMetrics,
     required (int pageIdx, double localY) Function(double y) getPageAtPosition,
     required double Function(double localX) getPointerX,
-    required SelectionHandleType? Function() readDraggingHandleType,
-    required SelectionHandleInfo? Function() readDragAnchorHandle,
-    required Map<String, dynamic>? Function() readDoubleTapInitialRange,
+    required AutoScrollSelectionContext Function() readSelectionContext,
     required void Function(Map<String, dynamic> event) dispatch,
     required VoidCallback scrollIntoView,
   }) {
@@ -174,42 +166,36 @@ class AutoScrollSession implements InteractionSession {
         return;
       }
 
-      final draggingHandleType = readDraggingHandleType();
-      final dragAnchorHandle = readDragAnchorHandle();
-      if (draggingHandleType != null && dragAnchorHandle != null) {
-        dispatch({
-          'type': 'extendSelectionTo',
-          'anchorPageIdx': dragAnchorHandle.pageIdx,
-          'anchorX': dragAnchorHandle.x,
-          'anchorY': dragAnchorHandle.y + dragAnchorHandle.height / 2,
-          'headPageIdx': pageIdx,
-          'headX': pointerX,
-          'headY': localY,
-          if (readDoubleTapInitialRange() != null) 'doubleTapInitialRange': readDoubleTapInitialRange(),
-        });
+      final selectionContext = readSelectionContext();
+      final selectionAnchor = selectionContext.anchor;
+      if (selectionAnchor != null) {
+        dispatch(
+          buildExtendSelectionEvent(
+            anchor: selectionAnchor,
+            headPageIdx: pageIdx,
+            headX: pointerX,
+            headY: localY,
+            initialRange: selectionContext.initialRange,
+          ),
+        );
         return;
       }
 
-      if (draggingHandleType == null) {
-        dispatch({
-          'type': 'pointerDown',
-          'pageIdx': pageIdx,
-          'x': pointerX,
-          'y': localY,
-          'clickCount': 1,
-          'button': 'primary',
-          'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
-        });
-        dispatch({
-          'type': 'pointerUp',
-          'pageIdx': pageIdx,
-          'x': pointerX,
-          'y': localY,
-          'button': 'primary',
-          'modifier': {'shift': false, 'ctrl': false, 'alt': false, 'meta': false},
-        });
-        scrollIntoView();
+      if (selectionContext.blockCursorFallback) {
+        return;
       }
+
+      dispatch(
+        buildPrimaryPointerDownEvent(
+          pageIdx: pageIdx,
+          pointerX: pointerX,
+          localY: localY,
+          clickCount: 1,
+          isShiftPressed: false,
+        ),
+      );
+      dispatch(buildPrimaryPointerUpEvent(pageIdx: pageIdx, pointerX: pointerX, localY: localY, isShiftPressed: false));
+      scrollIntoView();
     });
   }
 

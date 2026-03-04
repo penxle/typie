@@ -10,6 +10,7 @@ enum InteractionMode {
   selectionHandleDragging,
   tableCellHandleDragging,
   longPressSelecting,
+  longPressWordSelecting,
   doubleTapSelecting,
   dndLocal,
   dndExternal,
@@ -30,8 +31,10 @@ class InteractionSnapshot {
       mode == InteractionMode.selectionHandleDragging ||
       mode == InteractionMode.tableCellHandleDragging ||
       mode == InteractionMode.longPressSelecting ||
+      mode == InteractionMode.longPressWordSelecting ||
       mode == InteractionMode.doubleTapSelecting;
-  bool get isLongPressing => mode == InteractionMode.longPressSelecting;
+  bool get isLongPressing =>
+      mode == InteractionMode.longPressSelecting || mode == InteractionMode.longPressWordSelecting;
 
   InteractionSnapshot copyWith({
     InteractionMode? mode,

@@ -10,7 +10,6 @@ import 'package:typie/screens/native_editor/controller/clipboard.dart';
 import 'package:typie/screens/native_editor/state/state.dart';
 import 'package:typie/screens/native_editor/view/context_menu.dart';
 import 'package:typie/screens/native_editor/view/editor_draggable.dart';
-import 'package:typie/screens/native_editor/view/geometry.dart';
 import 'package:typie/screens/native_editor/view/interaction/controller.dart';
 import 'package:typie/screens/native_editor/view/interaction/state.dart';
 import 'package:typie/screens/native_editor/view/page.dart';
@@ -145,13 +144,13 @@ class PageList extends HookWidget {
         if (shouldResetSelectionHandleDrag) {
           interactionController.stopSelectionHandlesAndAutoScroll();
           showContextMenu.value = false;
-        } else if (!isSelecting && !interactionController.interactionActive) {
+        } else if (!isSelecting && !interactionController.isDoubleTapDragActive) {
           if (justFinishedSelecting || selectionChanged) {
             showContextMenu.value = true;
           }
         }
 
-        if (isSelecting || interactionController.interactionActive) {
+        if (isSelecting || interactionController.isDoubleTapDragActive) {
           showContextMenu.value = false;
         }
 
@@ -393,7 +392,7 @@ class PageList extends HookWidget {
                   if (showContextMenu.value &&
                       longPressPosition.value == null &&
                       !interactionController.hasSelectionHandleDrag &&
-                      !interactionController.interactionActive)
+                      !interactionController.isDoubleTapDragActive)
                     SelectionContextMenu(clipboard: clipboard, onDismiss: () => showContextMenu.value = false),
                 ],
               ),
@@ -434,38 +433,6 @@ String? dropIndicatorKey(DropIndicatorInfo? info) {
     return null;
   }
   return '${info.pageIdx}:${info.x}:${info.y}:${info.width}:${info.height}';
-}
-
-(int pageIdx, double localY) resolvePageAtPosition(ContentScope scope, double y) {
-  final geo = scope.geometry;
-  final offsets = geo.computeCumulativePageOffsets();
-  final scrollOffset = resolveScrollOffset(scope.verticalScrollController);
-  final absoluteY = y + scrollOffset;
-  final extensionAreaTop = (geo.titleAreaHeight - geo.toDisplayY(ContentGeometry.pagePadding)).clamp(
-    0.0,
-    double.infinity,
-  );
-
-  if (absoluteY < extensionAreaTop) {
-    return (-1, absoluteY);
-  }
-
-  final adjustedY = absoluteY - geo.titleAreaHeight;
-
-  var low = 0;
-  var high = offsets.length - 1;
-  while (low < high) {
-    final mid = (low + high) ~/ 2;
-    if (offsets[mid] <= adjustedY) {
-      low = mid + 1;
-    } else {
-      high = mid;
-    }
-  }
-
-  final pageIdx = (low - 1).clamp(0, geo.pages.length - 1);
-  final localY = geo.toLogicalY(adjustedY - offsets[pageIdx]);
-  return (pageIdx, localY);
 }
 
 class TrackedHorizontalScrollView extends HookWidget {

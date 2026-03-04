@@ -12,6 +12,8 @@ enum InteractionEventType {
   panCancel,
   longPressStart,
   longPressEnd,
+  longPressWordStart,
+  longPressWordEnd,
   pinchStart,
   pinchEnd,
   selectionHandleDragStart,
@@ -54,6 +56,8 @@ class InteractionEvent {
 
   static const longPressStart = InteractionEvent(InteractionEventType.longPressStart);
   static const longPressEnd = InteractionEvent(InteractionEventType.longPressEnd);
+  static const longPressWordStart = InteractionEvent(InteractionEventType.longPressWordStart);
+  static const longPressWordEnd = InteractionEvent(InteractionEventType.longPressWordEnd);
 
   static const pinchStart = InteractionEvent(InteractionEventType.pinchStart);
   static const pinchEnd = InteractionEvent(InteractionEventType.pinchEnd);
@@ -74,17 +78,6 @@ class InteractionEvent {
   static const dndSessionEnd = InteractionEvent(InteractionEventType.dndSessionEnd);
 
   static const auxiliaryGestureEnd = InteractionEvent(InteractionEventType.auxiliaryGestureEnd);
-}
-
-enum InteractionCommandCategory {
-  tap,
-  doubleTapDrag,
-  longPress,
-  pan,
-  selectionHandle,
-  tableCellHandle,
-  dnd,
-  auxiliaryGesture,
 }
 
 enum InteractionCommandType {
@@ -144,7 +137,6 @@ enum InteractionBlockReason {
   viewportUnavailable,
   sessionAlreadyActive,
   notActive,
-  modeRejected,
   noActiveDrag,
   pageOutOfRange,
   doubleTapDragging,
@@ -180,8 +172,12 @@ class InteractionCommand {
   const InteractionCommand.longPressStart({required Offset? viewportPosition})
     : this._(InteractionCommandType.longPressStart, viewportPosition: viewportPosition);
 
-  const InteractionCommand.panApplyRaw({required bool hasPreviousPointerPosition})
-    : this._(InteractionCommandType.panApplyRaw, hasPreviousPointerPosition: hasPreviousPointerPosition);
+  const InteractionCommand.panApplyRaw({required bool hasPreviousPointerPosition, bool fromPointerSignal = false})
+    : this._(
+        InteractionCommandType.panApplyRaw,
+        hasPreviousPointerPosition: hasPreviousPointerPosition,
+        fromPointerSignal: fromPointerSignal,
+      );
   const InteractionCommand.selectionHandleEnd({required bool hasActiveDrag})
     : this._(InteractionCommandType.selectionHandleEnd, hasActiveDrag: hasActiveDrag);
   const InteractionCommand.dndHandleDropOverItem({required bool hasItem})
@@ -196,6 +192,7 @@ class InteractionCommand {
     this.viewportPosition,
     this.hasActiveDrag,
     this.hasPreviousPointerPosition,
+    this.fromPointerSignal,
     this.localPosition,
     this.dragStartPosition,
   });
@@ -207,60 +204,9 @@ class InteractionCommand {
   final Offset? viewportPosition;
   final bool? hasActiveDrag;
   final bool? hasPreviousPointerPosition;
+  final bool? fromPointerSignal;
   final Offset? localPosition;
   final Offset? dragStartPosition;
-
-  InteractionCommandCategory get category {
-    switch (type) {
-      case InteractionCommandType.tapDown:
-      case InteractionCommandType.tapUp:
-      case InteractionCommandType.tapCancel:
-      case InteractionCommandType.tapDispatch:
-        return InteractionCommandCategory.tap;
-      case InteractionCommandType.doubleTapDispatchSelection:
-      case InteractionCommandType.doubleTapPrepareDrag:
-      case InteractionCommandType.doubleTapStartDrag:
-      case InteractionCommandType.doubleTapBeginSelecting:
-      case InteractionCommandType.doubleTapUpdateSelection:
-      case InteractionCommandType.doubleTapExtendSelection:
-        return InteractionCommandCategory.doubleTapDrag;
-      case InteractionCommandType.longPressStart:
-      case InteractionCommandType.longPressBeginSelecting:
-      case InteractionCommandType.longPressUpdate:
-      case InteractionCommandType.longPressEnd:
-        return InteractionCommandCategory.longPress;
-      case InteractionCommandType.panStart:
-      case InteractionCommandType.panUpdate:
-      case InteractionCommandType.panEnd:
-      case InteractionCommandType.panCancel:
-      case InteractionCommandType.panResume:
-      case InteractionCommandType.panApplyRaw:
-        return InteractionCommandCategory.pan;
-      case InteractionCommandType.selectionHandleStart:
-      case InteractionCommandType.selectionHandleBeginDragging:
-      case InteractionCommandType.selectionHandleUpdate:
-      case InteractionCommandType.selectionHandleEnd:
-        return InteractionCommandCategory.selectionHandle;
-      case InteractionCommandType.tableCellHandleBeginDown:
-      case InteractionCommandType.tableCellHandleBeginDragging:
-      case InteractionCommandType.tableCellHandleUpdate:
-      case InteractionCommandType.tableCellHandleEnd:
-        return InteractionCommandCategory.tableCellHandle;
-      case InteractionCommandType.dndBeginLocal:
-      case InteractionCommandType.dndHandleDropOver:
-      case InteractionCommandType.dndHandleDropOverItem:
-      case InteractionCommandType.dndHandleDropEnter:
-      case InteractionCommandType.dndBeginExternal:
-      case InteractionCommandType.dndShouldEndOnDropEnded:
-      case InteractionCommandType.dndPerformDrop:
-      case InteractionCommandType.dndPerformDropOnPage:
-        return InteractionCommandCategory.dnd;
-      case InteractionCommandType.auxiliaryBegin:
-      case InteractionCommandType.auxiliaryUpdate:
-      case InteractionCommandType.auxiliaryEnd:
-        return InteractionCommandCategory.auxiliaryGesture;
-    }
-  }
 
   static const tapDown = InteractionCommand._(InteractionCommandType.tapDown);
   static const tapUp = InteractionCommand._(InteractionCommandType.tapUp);
@@ -310,11 +256,9 @@ class InteractionRuntimeRead {
     required this.doubleTapActive,
     required this.doubleTapDragging,
     required this.tableCellHandleDragging,
-    required this.longPressActive,
     required this.hasPendingSelectionHandleDrag,
     required this.hasAnyHandleDrag,
     required this.panDragActive,
-    required this.dndLocked,
   });
 
   final InteractionSnapshot snapshot;
@@ -323,27 +267,16 @@ class InteractionRuntimeRead {
   final bool doubleTapActive;
   final bool doubleTapDragging;
   final bool tableCellHandleDragging;
-  final bool longPressActive;
   final bool hasPendingSelectionHandleDrag;
   final bool hasAnyHandleDrag;
   final bool panDragActive;
-  final bool dndLocked;
-}
-
-class InteractionDecision {
-  const InteractionDecision({required this.allowed, this.reason, this.nextSnapshot});
-
-  final bool allowed;
-  final InteractionBlockReason? reason;
-  final InteractionSnapshot? nextSnapshot;
 }
 
 class InteractionCore {
   const InteractionCore();
 
-  InteractionDecision decide({required InteractionCommand command, required InteractionRuntimeRead runtime}) {
-    final reason = _blockReason(command: command, runtime: runtime);
-    return InteractionDecision(allowed: reason == null, reason: reason);
+  bool decide({required InteractionCommand command, required InteractionRuntimeRead runtime}) {
+    return _blockReason(command: command, runtime: runtime) == null;
   }
 
   InteractionSnapshot reduce({required InteractionSnapshot previous, required InteractionEvent event}) {
@@ -460,7 +393,7 @@ class InteractionCore {
         }
         return null;
       case InteractionCommandType.longPressBeginSelecting:
-        if (runtime.longPressActive) {
+        if (runtime.snapshot.isLongPressing) {
           return InteractionBlockReason.sessionAlreadyActive;
         }
         return null;
@@ -469,7 +402,7 @@ class InteractionCore {
         if (runtime.pinchIsPinching) {
           return InteractionBlockReason.pinching;
         }
-        if (!runtime.longPressActive) {
+        if (!runtime.snapshot.isLongPressing) {
           return InteractionBlockReason.notActive;
         }
         if (runtime.doubleTapActive) {
@@ -480,7 +413,7 @@ class InteractionCore {
         if (runtime.pinchIsPinching) {
           return InteractionBlockReason.pinching;
         }
-        if (runtime.dndLocked) {
+        if (runtime.snapshot.isDndActive) {
           return InteractionBlockReason.dndLocked;
         }
         if (runtime.doubleTapActive) {
@@ -494,7 +427,7 @@ class InteractionCore {
         if (runtime.pinchIsPinching) {
           return InteractionBlockReason.pinching;
         }
-        if (runtime.dndLocked) {
+        if (runtime.snapshot.isDndActive) {
           return InteractionBlockReason.dndLocked;
         }
         return null;
@@ -503,7 +436,7 @@ class InteractionCore {
         if (runtime.pinchIsPinching) {
           return InteractionBlockReason.pinching;
         }
-        if (runtime.dndLocked) {
+        if (runtime.snapshot.isDndActive) {
           return InteractionBlockReason.dndLocked;
         }
         if (runtime.doubleTapActive) {
@@ -525,11 +458,14 @@ class InteractionCore {
         }
         return null;
       case InteractionCommandType.panApplyRaw:
-        if (runtime.pinchPointerCount != 1) {
-          return InteractionBlockReason.nonSinglePointer;
-        }
-        if (!(command.hasPreviousPointerPosition ?? false)) {
-          return InteractionBlockReason.pointerTrackMissing;
+        final fromPointerSignal = command.fromPointerSignal ?? false;
+        if (!fromPointerSignal) {
+          if (runtime.pinchPointerCount != 1) {
+            return InteractionBlockReason.nonSinglePointer;
+          }
+          if (!(command.hasPreviousPointerPosition ?? false)) {
+            return InteractionBlockReason.pointerTrackMissing;
+          }
         }
         if (runtime.snapshot.isSelecting) {
           return InteractionBlockReason.selecting;
@@ -543,7 +479,7 @@ class InteractionCore {
         if (runtime.hasPendingSelectionHandleDrag) {
           return InteractionBlockReason.selectionHandlePending;
         }
-        if (runtime.panDragActive) {
+        if (!fromPointerSignal && runtime.panDragActive) {
           return InteractionBlockReason.panDragActive;
         }
         return null;
@@ -551,7 +487,7 @@ class InteractionCore {
         if (runtime.pinchIsPinching) {
           return InteractionBlockReason.pinching;
         }
-        if (runtime.dndLocked) {
+        if (runtime.snapshot.isDndActive) {
           return InteractionBlockReason.dndLocked;
         }
         if (runtime.tableCellHandleDragging) {
@@ -559,9 +495,16 @@ class InteractionCore {
         }
         return null;
       case InteractionCommandType.selectionHandleBeginDragging:
+        if (runtime.pinchIsPinching) {
+          return InteractionBlockReason.pinching;
+        }
+        return null;
       case InteractionCommandType.selectionHandleUpdate:
         if (runtime.pinchIsPinching) {
           return InteractionBlockReason.pinching;
+        }
+        if (runtime.snapshot.mode != InteractionMode.selectionHandleDragging) {
+          return InteractionBlockReason.notActive;
         }
         return null;
       case InteractionCommandType.selectionHandleEnd:
@@ -579,7 +522,7 @@ class InteractionCore {
         if (runtime.pinchIsPinching) {
           return InteractionBlockReason.pinching;
         }
-        if (runtime.dndLocked) {
+        if (runtime.snapshot.isDndActive) {
           return InteractionBlockReason.dndLocked;
         }
         return null;
@@ -680,6 +623,14 @@ class InteractionCore {
       return InteractionMode.idle;
     }
 
+    if (event.type == InteractionEventType.longPressWordStart) {
+      return InteractionMode.longPressWordSelecting;
+    }
+
+    if (event.type == InteractionEventType.longPressWordEnd && mode == InteractionMode.longPressWordSelecting) {
+      return InteractionMode.idle;
+    }
+
     if (event.type == InteractionEventType.doubleTapDragStart) {
       return InteractionMode.doubleTapSelecting;
     }
@@ -739,6 +690,7 @@ class InteractionCore {
       if (mode == InteractionMode.selectionHandleDragging ||
           mode == InteractionMode.tableCellHandleDragging ||
           mode == InteractionMode.longPressSelecting ||
+          mode == InteractionMode.longPressWordSelecting ||
           mode == InteractionMode.doubleTapSelecting) {
         return mode;
       }

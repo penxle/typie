@@ -1,7 +1,7 @@
 use crate::global::{add_font_base, add_font_chunk, set_available_fonts, set_fallback_fonts};
 use crate::global::{clear_text_replacement_rules, set_text_replacement_rules};
 use crate::icu_data::{get_general_category_map, load_icu_data};
-use crate::layout::query::is_selection_hit;
+use crate::layout::query::{is_cursor_hit, is_selection_hit};
 use crate::model::{
     CONTINUOUS_PAGE_MARGIN, Doc, DocExportMode, LayoutMode, Node, NodeId, ParagraphNode,
     TextMapping,
@@ -777,6 +777,34 @@ pub extern "C" fn editor_is_selection_hit(
             let editor = unsafe { &*(editor as *const EditorInner) };
             Ok(if let Some(page) = editor.runtime.pages().get(page_idx) {
                 if is_selection_hit(editor.runtime.doc(), page, editor.runtime.selection(), x, y) {
+                    1
+                } else {
+                    0
+                }
+            } else {
+                0
+            })
+        },
+        -1
+    )
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn editor_is_cursor_hit(
+    editor: *mut EditorHandle,
+    page_idx: usize,
+    x: f32,
+    y: f32,
+) -> i32 {
+    ffi!(
+        {
+            if editor.is_null() {
+                return Err("Editor is null".into());
+            }
+
+            let editor = unsafe { &*(editor as *const EditorInner) };
+            Ok(if let Some(page) = editor.runtime.pages().get(page_idx) {
+                if is_cursor_hit(editor.runtime.doc(), page, editor.runtime.selection(), x, y) {
                     1
                 } else {
                     0

@@ -280,10 +280,11 @@ final class NativeEditor {
   NativeEditor._(this._handle) : _testConfig = null;
 
   @visibleForTesting
-  NativeEditor.test({bool selectionHit = false, Map<String, dynamic>? clipboardData})
+  NativeEditor.test({bool selectionHit = false, bool? cursorHit, Map<String, dynamic>? clipboardData})
     : _handle = nullptr,
       _testConfig = _NativeEditorTestConfig(
         selectionHit: selectionHit,
+        cursorHit: cursorHit,
         clipboardData: clipboardData,
       );
 
@@ -552,6 +553,13 @@ final class NativeEditor {
     return _bindings.editor_is_selection_hit(_handle, pageIdx, x, y) == 1;
   }
 
+  bool isCursorHit(int pageIdx, double x, double y) {
+    _checkDisposed();
+    if (isTest) {
+      return _testConfig!.cursorHit ?? _testConfig.selectionHit;
+    }
+    return _bindings.editor_is_cursor_hit(_handle, pageIdx, x, y) == 1;
+  }
 
   NativeEditorCharacterCounts getCharacterCounts() {
     _checkDisposed();
@@ -830,12 +838,10 @@ final class NativeEditor {
 }
 
 final class _NativeEditorTestConfig {
-  const _NativeEditorTestConfig({
-    required this.selectionHit,
-    required this.clipboardData,
-  });
+  const _NativeEditorTestConfig({required this.selectionHit, required this.cursorHit, required this.clipboardData});
 
   final bool selectionHit;
+  final bool? cursorHit;
   final Map<String, dynamic>? clipboardData;
 }
 
