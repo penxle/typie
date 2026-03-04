@@ -524,15 +524,6 @@ class EditorView extends HookWidget {
     }
 
     void applyCursorScrollAndVisual(CursorInfo nextCursor, {required bool typewriter}) {
-      if (typewriter) {
-        queueRenderSynchronizedCursorUpdate(
-          nextCursor: nextCursor,
-          typewriter: true,
-          targetPageIdx: nextCursor.pageIdx,
-        );
-        return;
-      }
-
       if (canApplyCursorScrollNow()) {
         pendingScroll.value = null;
         pendingScrollPageIdx.value = null;
@@ -613,8 +604,8 @@ class EditorView extends HookWidget {
         final nextCursor = controller.state.cursor;
 
         if (nextCursor == null) {
-          if (pendingMode != null) {
-            controller.pendingScrollMode = null;
+          if (pendingMode != null && !controller.pendingScrollWaitForCursorUpdate) {
+            controller.clearPendingScroll();
           }
           pendingScroll.value = null;
           pendingScrollPageIdx.value = null;
@@ -626,8 +617,8 @@ class EditorView extends HookWidget {
         final interaction = interactionState.snapshot();
         final blockedByInteraction = interaction.isLongPressing || interaction.isDndActive || !focused;
         if (blockedByInteraction || nextLayout == null || !nextCursor.visible) {
-          if (pendingMode != null) {
-            controller.pendingScrollMode = null;
+          if (pendingMode != null && !controller.pendingScrollWaitForCursorUpdate) {
+            controller.clearPendingScroll();
           }
           pendingScroll.value = null;
           pendingScrollPageIdx.value = null;
@@ -637,7 +628,7 @@ class EditorView extends HookWidget {
 
         if (pendingMode != null) {
           final useTypewriter = pref.typewriterEnabled && pendingMode == ScrollMode.typewriter;
-          controller.pendingScrollMode = null;
+          controller.clearPendingScroll();
           applyCursorScrollAndVisual(nextCursor, typewriter: useTypewriter);
           return;
         }

@@ -36,6 +36,7 @@ class EditorController extends ChangeNotifier {
   void Function(String reason)? onEditBlocked;
 
   ScrollMode? pendingScrollMode;
+  bool pendingScrollWaitForCursorUpdate = false;
   final ValueNotifier<List<TableOverlayInfo>> tableOverlays = ValueNotifier<List<TableOverlayInfo>>([]);
   List<InteractiveOverlayRaw> interactiveOverlays = const [];
 
@@ -141,8 +142,14 @@ class EditorController extends ChangeNotifier {
     requestFocus();
   }
 
-  void scrollIntoView({ScrollMode mode = ScrollMode.auto}) {
+  void scrollIntoView({ScrollMode mode = ScrollMode.auto, bool waitForCursorUpdate = false}) {
     pendingScrollMode = mode;
+    pendingScrollWaitForCursorUpdate = waitForCursorUpdate;
+  }
+
+  void clearPendingScroll() {
+    pendingScrollMode = null;
+    pendingScrollWaitForCursorUpdate = false;
   }
 
   final ValueNotifier<RemarkOverlayInfo?> remarkScrollTarget = ValueNotifier(null);
@@ -158,7 +165,7 @@ class EditorController extends ChangeNotifier {
   void setFocused(bool focused) {
     if (_state.isFocused != focused) {
       if (!focused) {
-        pendingScrollMode = null;
+        clearPendingScroll();
       }
       _state = _state.copyWith(isFocused: focused);
       dispatch({'type': 'setFocused', 'focused': focused});

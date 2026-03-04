@@ -97,7 +97,7 @@ class SelectionSyncManager {
             'headAffinity': savedHead['affinity'],
           })
           ..requestFocus()
-          ..scrollIntoView(mode: ScrollMode.typewriter);
+          ..scrollIntoView(mode: ScrollMode.typewriter, waitForCursorUpdate: true);
       }
     } catch (err) {
       titleFocusNode.requestFocus();
