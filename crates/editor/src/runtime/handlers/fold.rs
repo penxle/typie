@@ -3,6 +3,22 @@ use crate::runtime::{Effect, Runtime};
 use crate::state::{Selection, leaf_block_end};
 
 impl Runtime {
+    fn fold_title_id(&self, fold_id: NodeId) -> Option<NodeId> {
+        let fold = self.doc().node(fold_id)?;
+        let first_child = fold.children().next()?;
+
+        debug_assert!(
+            matches!(first_child.node(), Some(Node::FoldTitle(_))),
+            "fold must have FoldTitle as first child by schema invariant"
+        );
+
+        if !matches!(first_child.node(), Some(Node::FoldTitle(_))) {
+            return None;
+        }
+
+        Some(first_child.node_id())
+    }
+
     fn remap_selection_out_of_fold_content(&self, fold_id: NodeId) -> Option<Selection> {
         let fold = self.doc().node(fold_id)?;
         let mut fold_title_id = None;
@@ -48,6 +64,7 @@ impl Runtime {
 
     pub(crate) fn toggle_view_state(&mut self, node_id: NodeId) -> Vec<Effect> {
         let current_expanded = self.layout_engine.fold_expanded(node_id);
+        let fold_title_id = self.fold_title_id(node_id);
 
         let mut effects = if current_expanded {
             self.remap_selection_out_of_fold_content(node_id)
@@ -69,6 +86,12 @@ impl Runtime {
             node_id,
             kind: crate::runtime::MutationKind::ViewState,
         });
+        if let Some(fold_title_id) = fold_title_id {
+            effects.push(Effect::NodeMutated {
+                node_id: fold_title_id,
+                kind: crate::runtime::MutationKind::ViewState,
+            });
+        }
         effects
     }
 
@@ -207,5 +230,42 @@ mod tests {
         assert_eq!(selection.anchor.offset, 3);
         assert_eq!(selection.head.node_id, title);
         assert_eq!(selection.head.offset, 5);
+    }
+
+    #[test]
+    fn toggle_fold_invalidates_fold_title_layout_cache() {
+        let mut fold = id!();
+        let mut title = id!();
+        let mut p = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @fold fold {
+                    @title fold_title {
+                        text { "Title" }
+                    }
+                    fold_content {
+                        @p paragraph {
+                            text { "Hello" }
+                        }
+                    }
+                }
+            }
+            selection { (p, 0) }
+        };
+
+        rt.layout();
+        assert!(
+            rt.is_layout_cached(title),
+            "precondition: fold title layout should be cached"
+        );
+
+        click_fold_toggle(&mut rt, fold);
+
+        assert!(
+            !rt.is_layout_cached(title),
+            "fold title layout cache should be invalidated when fold view state toggles"
+        );
     }
 }
