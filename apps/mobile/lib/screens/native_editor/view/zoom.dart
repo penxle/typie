@@ -146,31 +146,63 @@ ScrollPosition? resolveScrollPosition(ScrollController controller) {
     return null;
   }
 
-  ScrollPosition best = positions.first;
+  final withContentDimensions = positions.where((position) => position.hasContentDimensions).toList(growable: false);
+  final candidates = withContentDimensions.isNotEmpty ? withContentDimensions : positions;
 
-  for (final position in positions.skip(1)) {
-    final bestHasDims = best.hasContentDimensions;
-    final nextHasDims = position.hasContentDimensions;
-
-    if (bestHasDims != nextHasDims) {
-      if (nextHasDims) {
-        best = position;
-      }
+  ScrollPosition? outOfRange;
+  var outOfRangeDistance = -1.0;
+  for (final position in candidates) {
+    if (!position.hasContentDimensions || !position.outOfRange) {
       continue;
     }
 
-    if (!nextHasDims) {
-      continue;
+    final distance = _verticalOverflowDistance(position);
+    if (distance > outOfRangeDistance) {
+      outOfRangeDistance = distance;
+      outOfRange = position;
     }
+  }
+  if (outOfRange != null) {
+    return outOfRange;
+  }
 
-    final bestScore = best.maxScrollExtent + best.viewportDimension * 0.001;
-    final nextScore = position.maxScrollExtent + position.viewportDimension * 0.001;
-    if (nextScore > bestScore) {
-      best = position;
+  for (final position in candidates) {
+    if (position.hasContentDimensions && position.isScrollingNotifier.value) {
+      return position;
     }
   }
 
+  ScrollPosition best = candidates.first;
+  var bestScore = _verticalScore(best);
+  for (final position in candidates.skip(1)) {
+    final score = _verticalScore(position);
+    if (score > bestScore) {
+      best = position;
+      bestScore = score;
+    }
+  }
   return best;
+}
+
+double _verticalScore(ScrollPosition position) {
+  if (!position.hasContentDimensions) {
+    return double.negativeInfinity;
+  }
+  return position.maxScrollExtent + position.viewportDimension * 0.001;
+}
+
+double _verticalOverflowDistance(ScrollPosition position) {
+  if (!position.hasContentDimensions) {
+    return 0;
+  }
+
+  if (position.pixels < position.minScrollExtent) {
+    return position.minScrollExtent - position.pixels;
+  }
+  if (position.pixels > position.maxScrollExtent) {
+    return position.pixels - position.maxScrollExtent;
+  }
+  return 0;
 }
 
 HorizontalScrollMetrics resolveHorizontalScrollMetrics({
