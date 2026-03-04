@@ -210,7 +210,7 @@ impl Element {
             Element::BlockquoteMessage(e) => Some(e.block_id),
             Element::CalloutBackground(e) => Some(e.node_id),
             Element::CalloutIcon(e) => Some(e.node_id),
-            Element::ListMarker(_) => None,
+            Element::ListMarker(e) => Some(e.selection_node_id),
             Element::FoldTitleIcon(e) => Some(e.block_id),
             Element::FoldTitle(e) => Some(e.fold_id),
             Element::FoldContent(e) => Some(e.fold_id),

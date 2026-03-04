@@ -1,7 +1,7 @@
 use crate::layout::elements::SplitEdges;
 use crate::layout::elements::{CalloutBackgroundElement, CalloutIconElement};
-use crate::model::CalloutVariant;
 use crate::model::{CALLOUT_BORDER_RADIUS, CALLOUT_BORDER_WIDTH};
+use crate::model::{CalloutVariant, SelectionDecor};
 use crate::render::outline::ElementSink;
 use crate::render::{GlyphRenderer, Outline, RasterSink, Render, RenderContext, RenderPhase};
 use macros::svg_icon_path;
@@ -32,6 +32,12 @@ impl Outline for CalloutBackgroundElement {
 impl CalloutBackgroundElement {
     fn paint_to(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
         let color_key = format!("ui.callout.{}", self.variant);
+        let is_selected = ctx.selections.iter().any(|selection| {
+            matches!(
+                selection,
+                SelectionDecor::Block { node_id } if *node_id == self.node_id
+            )
+        });
 
         match ctx.phase {
             RenderPhase::Background => {
@@ -86,7 +92,39 @@ impl CalloutBackgroundElement {
                     sink.stroke_path(&path, &border_paint, &stroke, transform);
                 }
             }
-            _ => {}
+            RenderPhase::Selection => {
+                if !is_selected {
+                    return;
+                }
+
+                let color = if ctx.is_focused {
+                    ctx.theme.color_with_alpha("selection", 77)
+                } else {
+                    ctx.theme.color_with_alpha("selection", 48)
+                };
+                let mut selection_paint = Paint::default();
+                selection_paint.set_color(color);
+                selection_paint.anti_alias = true;
+
+                let (tl, tr, br, bl) = corner_radii(CALLOUT_BORDER_RADIUS, &self.split_edges);
+                if let Some(path) = build_rounded_rect_corners(
+                    0.0,
+                    0.0,
+                    self.size.width,
+                    self.size.height,
+                    tl,
+                    tr,
+                    br,
+                    bl,
+                ) {
+                    sink.fill_path(
+                        &path,
+                        &selection_paint,
+                        tiny_skia::FillRule::Winding,
+                        transform,
+                    );
+                }
+            }
         }
     }
 }

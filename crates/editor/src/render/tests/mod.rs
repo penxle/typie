@@ -1,9 +1,10 @@
 use super::*;
 use crate::diagnostics::LayoutPassRecorder;
 use crate::layout::elements::{
-    BackgroundSegment, BlockquoteLineElement, BlockquoteMessageElement, CalloutBackgroundElement,
-    CalloutIconElement, FoldContentElement, LineElement, LineMetric, ListMarkerElement,
-    ListMarkerType, RubySegment, SplitEdges, TableBorderElement, TableCellElement,
+    BackgroundSegment, BlockquoteLineElement, BlockquoteMessageElement, BlockquoteQuoteElement,
+    CalloutBackgroundElement, CalloutIconElement, FoldContentElement, LineElement, LineMetric,
+    ListMarkerElement, ListMarkerType, RubySegment, SplitEdges, TableBorderElement,
+    TableCellElement,
 };
 use crate::layout::{LayoutNode, PageBreakPolicy};
 use crate::model::{BlockquoteVariant, CalloutVariant, NodeId, TableAlign, TableBorderStyle};
@@ -26,13 +27,65 @@ fn root_with_children(children: Option<Vec<PositionedNode>>, size: Size) -> Page
 }
 
 fn marker_node(size: Size) -> Rc<LayoutNode> {
+    marker_node_for(NodeId::new(), size)
+}
+
+fn marker_node_for(selection_node_id: NodeId, size: Size) -> Rc<LayoutNode> {
     Rc::new(LayoutNode {
         size,
         element: Some(Element::ListMarker(ListMarkerElement::new(
             ListMarkerType::Bullet,
             8.0,
             6.0,
+            size.width.min(crate::model::LIST_ITEM_MARKER_WIDTH),
+            selection_node_id,
             size.width,
+            size.height,
+        ))),
+        children: None,
+        page_break_policy: PageBreakPolicy::default(),
+        render_hints: RenderHints::default(),
+        scope_id: None,
+    })
+}
+
+fn line_node(block_id: NodeId, text: &str, size: Size) -> Rc<LayoutNode> {
+    let text_len = text.chars().count();
+    let grapheme_offsets = if text_len == 0 {
+        vec![0]
+    } else {
+        vec![0, text_len]
+    };
+
+    Rc::new(LayoutNode {
+        size,
+        element: Some(Element::Line(LineElement::build(
+            block_id,
+            size,
+            0,
+            Rc::new(parley::Layout::default()),
+            LineMetric {
+                top: 0.0,
+                left: 0.0,
+                height: size.height,
+                leading: 0.0,
+                baseline: (size.height * 0.75).round(),
+                ascent: (size.height * 0.75).round(),
+                content_width: size.width,
+                start_offset: 0,
+                end_offset: text_len,
+                clusters: vec![],
+                break_reason: parley::layout::BreakReason::None,
+                grapheme_offsets,
+                ascent_overflow: 0.0,
+                descent_overflow: 0.0,
+            },
+            None,
+            text_len == 0,
+            Rc::from(text),
+            vec![],
+            vec![],
+            false,
         ))),
         children: None,
         page_break_policy: PageBreakPolicy::default(),

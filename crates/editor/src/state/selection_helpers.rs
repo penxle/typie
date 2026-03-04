@@ -2,9 +2,11 @@ use crate::model::{
     Annotation, AnnotationType, Attr, Doc, Node, NodeId, NodeRef, SelectionDecor, Style, StyleType,
     TextAlign,
 };
+use crate::schema::BlockSelectionBoundaryMode;
 use crate::state::position::Position;
-use crate::state::position_helpers::compare_positions;
-use crate::state::position_helpers::find_child_at_offset;
+use crate::state::position_helpers::{
+    compare_positions, find_child_at_offset, position_in_selection,
+};
 use crate::state::table_helpers::{collect_cells_in_range, compute_table_selection};
 use crate::state::{BlockTraverser, Selection};
 use crate::types::Affinity;
@@ -222,12 +224,12 @@ pub fn build_selection_decorations(
     };
 
     let structure_selection_info = compute_structure_selection(doc, selection);
-    let mut processed_structural_nodes = FxHashSet::default();
+    let mut descendant_suppression_roots = FxHashSet::default();
 
     decorations.extend(collect_structure_decorations(
         doc,
         &structure_selection_info,
-        &mut processed_structural_nodes,
+        &mut descendant_suppression_roots,
     ));
 
     let block_ids = match block_ids {
@@ -238,11 +240,33 @@ pub fn build_selection_decorations(
     let block_id_set: FxHashSet<NodeId> = block_ids.iter().cloned().collect();
 
     for &block_id in &block_ids {
-        if should_skip_block_decoration(doc, block_id, &processed_structural_nodes) {
+        let Some(node) = doc.node(block_id) else {
             continue;
-        }
+        };
+        let suppress_descendants_on_full_boundary = node.spec().is_some_and(|spec| {
+            if spec.block_selection_boundary_mode.is_none() || spec.structural || spec.isolating {
+                return false;
+            }
+            if node.children().next().is_none() {
+                return false;
+            }
+            is_node_front_boundary_in_selection(doc, block_id, selection)
+                && is_node_back_boundary_in_selection(doc, block_id, selection)
+        });
 
-        if let Some(decor) = build_block_selection_decoration(doc, block_id, from, to) {
+        let Some(suppress_descendants) =
+            block_decoration_suppression(doc, block_id, &descendant_suppression_roots)
+        else {
+            continue;
+        };
+
+        if let Some(decor) = build_block_selection_decoration(doc, selection, block_id, from, to) {
+            let should_suppress_descendants = matches!(decor, SelectionDecor::Block { .. })
+                && (suppress_descendants || suppress_descendants_on_full_boundary);
+
+            if should_suppress_descendants {
+                descendant_suppression_roots.insert(block_id);
+            }
             decorations.push(decor);
         }
     }
@@ -253,25 +277,62 @@ pub fn build_selection_decorations(
         to,
         &structure_selection_info,
         &block_id_set,
-        &processed_structural_nodes,
+        &descendant_suppression_roots,
         &mut decorations,
     );
 
     decorations
 }
 
+fn is_node_front_boundary_in_selection(doc: &Doc, node_id: NodeId, selection: &Selection) -> bool {
+    let Some(node) = doc.node(node_id) else {
+        return false;
+    };
+    let Some(parent) = node.parent() else {
+        return false;
+    };
+    let Some(index) = node.index() else {
+        return false;
+    };
+
+    let front_boundary = Position::new(parent.node_id(), index, Affinity::Downstream);
+    position_in_selection(doc, front_boundary, selection)
+}
+
+fn is_node_back_boundary_in_selection(doc: &Doc, node_id: NodeId, selection: &Selection) -> bool {
+    let Some(node) = doc.node(node_id) else {
+        return false;
+    };
+    let Some(parent) = node.parent() else {
+        return false;
+    };
+    let Some(index) = node.index() else {
+        return false;
+    };
+
+    let back_boundary = Position::new(parent.node_id(), index + 1, Affinity::Upstream);
+    position_in_selection(doc, back_boundary, selection)
+}
+
 fn collect_structure_decorations(
     doc: &Doc,
     structure_selection: &StructureSelectionInfo,
-    processed_structural_nodes: &mut FxHashSet<NodeId>,
+    descendant_suppression_roots: &mut FxHashSet<NodeId>,
 ) -> Vec<SelectionDecor> {
     let mut decorations = Vec::new();
     match structure_selection {
         StructureSelectionInfo::Rectangular { table_id, range } => {
             let cells = collect_cells_in_range(doc, *table_id, *range);
             for cell_id in cells {
-                if processed_structural_nodes.insert(cell_id) {
-                    decorations.push(SelectionDecor::Block { node_id: cell_id });
+                let Some(suppress_descendants) =
+                    block_decoration_suppression(doc, cell_id, descendant_suppression_roots)
+                else {
+                    continue;
+                };
+
+                decorations.push(SelectionDecor::Block { node_id: cell_id });
+                if suppress_descendants {
+                    descendant_suppression_roots.insert(cell_id);
                 }
             }
         }
@@ -280,22 +341,36 @@ fn collect_structure_decorations(
                 let Some(node) = doc.node(block_id) else {
                     continue;
                 };
-                if should_skip_block_decoration(doc, block_id, processed_structural_nodes) {
+
+                let Some(suppress_descendants) =
+                    block_decoration_suppression(doc, block_id, descendant_suppression_roots)
+                else {
                     continue;
-                }
+                };
 
                 if matches!(node.node(), Some(Node::Table(_))) {
                     for row in node.children() {
                         for cell in row.children() {
                             let cell_id = cell.node_id();
-                            if processed_structural_nodes.insert(cell_id) {
-                                decorations.push(SelectionDecor::Block { node_id: cell_id });
+                            let Some(cell_suppress_descendants) = block_decoration_suppression(
+                                doc,
+                                cell_id,
+                                descendant_suppression_roots,
+                            ) else {
+                                continue;
+                            };
+
+                            decorations.push(SelectionDecor::Block { node_id: cell_id });
+                            if cell_suppress_descendants {
+                                descendant_suppression_roots.insert(cell_id);
                             }
                         }
                     }
                 } else if matches!(node.node(), Some(Node::Fold(_))) {
                     decorations.push(SelectionDecor::Block { node_id: block_id });
-                    processed_structural_nodes.insert(block_id);
+                    if suppress_descendants {
+                        descendant_suppression_roots.insert(block_id);
+                    }
                 }
             }
         }
@@ -306,17 +381,30 @@ fn collect_structure_decorations(
 
 fn build_block_selection_decoration(
     doc: &Doc,
+    selection: &Selection,
     block_id: NodeId,
     from: Position,
     to: Position,
 ) -> Option<SelectionDecor> {
     let block = doc.node(block_id)?;
+    let spec = block.spec()?;
 
-    if matches!(block.node(), Some(Node::HorizontalRule(_))) {
+    if let Some(mode) = spec.block_selection_boundary_mode {
+        let front_in = is_node_front_boundary_in_selection(doc, block_id, selection);
+        let back_in = is_node_back_boundary_in_selection(doc, block_id, selection);
+        let selected = match mode {
+            BlockSelectionBoundaryMode::FrontOnly => front_in,
+            BlockSelectionBoundaryMode::FrontOrBack => front_in || back_in,
+            BlockSelectionBoundaryMode::Both => front_in && back_in,
+        };
+
+        if !selected {
+            return None;
+        }
         return Some(SelectionDecor::Block { node_id: block_id });
     }
 
-    if !block.spec().map_or(false, |s| s.is_textblock(doc.schema())) {
+    if !spec.is_textblock(doc.schema()) {
         return None;
     }
 
@@ -329,15 +417,15 @@ fn build_block_selection_decoration(
     })
 }
 
-fn should_skip_block_decoration(
+fn block_decoration_suppression(
     doc: &Doc,
     block_id: NodeId,
-    processed_structural_nodes: &FxHashSet<NodeId>,
-) -> bool {
+    descendant_suppression_roots: &FxHashSet<NodeId>,
+) -> Option<bool> {
     let mut current_id = Some(block_id);
     while let Some(id) = current_id {
-        if processed_structural_nodes.contains(&id) {
-            return true;
+        if descendant_suppression_roots.contains(&id) {
+            return None;
         }
 
         if let Some(node) = doc.node(id) {
@@ -346,7 +434,12 @@ fn should_skip_block_decoration(
             break;
         }
     }
-    false
+
+    let suppress_descendants = doc
+        .node(block_id)
+        .is_some_and(|node| matches!(node.node(), Some(Node::TableCell(_) | Node::Fold(_))));
+
+    Some(suppress_descendants)
 }
 
 fn add_ancestor_decorations(
@@ -355,7 +448,7 @@ fn add_ancestor_decorations(
     to: Position,
     structure_selection: &StructureSelectionInfo,
     processed_blocks: &FxHashSet<NodeId>,
-    processed_structural_nodes: &FxHashSet<NodeId>,
+    descendant_suppression_roots: &FxHashSet<NodeId>,
     decorations: &mut Vec<SelectionDecor>,
 ) {
     let Some(from_node) = doc.node(from.node_id) else {
@@ -370,7 +463,7 @@ fn add_ancestor_decorations(
 
     for (from_idx, &ancestor_id) in from_path.iter().enumerate() {
         if processed_blocks.contains(&ancestor_id)
-            || processed_structural_nodes.contains(&ancestor_id)
+            || descendant_suppression_roots.contains(&ancestor_id)
         {
             continue;
         }
@@ -450,10 +543,19 @@ fn add_ancestor_decorations(
         }
 
         if end_offset > start_offset {
-            let decor = if ancestor
+            let is_textblock = ancestor
                 .spec()
-                .map_or(false, |s| s.is_textblock(doc.schema()))
+                .map_or(false, |s| s.is_textblock(doc.schema()));
+
+            if !is_textblock
+                && ancestor
+                    .spec()
+                    .is_some_and(|spec| spec.block_selection_boundary_mode.is_some())
             {
+                break;
+            }
+
+            let decor = if is_textblock {
                 SelectionDecor::TextRange {
                     node_id: ancestor_id,
                     start_offset,
@@ -697,6 +799,23 @@ pub fn is_node_fully_selected(doc: &Doc, selection: &Selection, node_id: NodeId)
     Ok(start_ok && end_ok)
 }
 
+fn is_node_effectively_selected_as_whole(
+    doc: &Doc,
+    selection: &Selection,
+    node_id: NodeId,
+) -> Result<bool> {
+    if is_node_fully_selected(doc, selection, node_id)? {
+        return Ok(true);
+    }
+
+    let contains_anchor =
+        node_id == selection.anchor.node_id || doc.is_ancestor(node_id, selection.anchor.node_id);
+    let contains_head =
+        node_id == selection.head.node_id || doc.is_ancestor(node_id, selection.head.node_id);
+
+    Ok(contains_anchor != contains_head)
+}
+
 pub fn collect_nodes_in_selection<F>(
     doc: &Doc,
     selection: &Selection,
@@ -934,11 +1053,11 @@ fn collect_relevant_blocks(doc: &Doc, selection: &Selection) -> Result<Vec<NodeI
             if let Some(node) = doc.node(id) {
                 if node
                     .spec()
-                    .map_or(false, |s| s.is_structural_root(doc.schema()))
+                    .is_some_and(|spec| spec.is_structural_root(doc.schema()))
                 {
                     block_ids.insert(id);
                 }
-                current_id = node.parent().map(|n| n.node_id());
+                current_id = node.parent().map(|parent| parent.node_id());
             } else {
                 break;
             }
@@ -947,16 +1066,7 @@ fn collect_relevant_blocks(doc: &Doc, selection: &Selection) -> Result<Vec<NodeI
 
     let mut result: Vec<_> = block_ids
         .into_iter()
-        .filter(|&id| {
-            let fully_selected = is_node_fully_selected(doc, selection, id).unwrap_or(false);
-
-            let contains_anchor =
-                id == selection.anchor.node_id || doc.is_ancestor(id, selection.anchor.node_id);
-            let contains_head =
-                id == selection.head.node_id || doc.is_ancestor(id, selection.head.node_id);
-
-            fully_selected || (contains_anchor != contains_head)
-        })
+        .filter(|&id| is_node_effectively_selected_as_whole(doc, selection, id).unwrap_or(false))
         .collect();
 
     result.sort_by(|&a, &b| {
@@ -1094,6 +1204,877 @@ mod tests {
     }
 
     #[test]
+    fn test_build_selection_decorations_includes_blockquote_block() {
+        let mut blockquote_id = id!();
+        let mut p = id!();
+
+        let state = state! {
+            doc {
+                paragraph {
+                    text { "before" }
+                }
+                @blockquote_id blockquote {
+                    @p paragraph {
+                        text { "quoted" }
+                    }
+                }
+                paragraph {
+                    text { "after" }
+                }
+            }
+            selection { (NodeId::ROOT, 1) -> (NodeId::ROOT, 2) }
+        };
+
+        let decorations = build_selection_decorations(&state.doc, &state.selection, None);
+
+        assert!(
+            decorations.iter().any(
+                |d| matches!(d, SelectionDecor::Block { node_id } if *node_id == blockquote_id)
+            ),
+            "Blockquote should have a block selection decoration"
+        );
+        assert!(
+            decorations
+                .iter()
+                .all(|d| !matches!(d, SelectionDecor::TextRange { node_id, .. } if *node_id == p)),
+            "Blockquote paragraph text range should be suppressed when blockquote is fully selected"
+        );
+    }
+
+    #[test]
+    fn test_build_selection_decorations_includes_callout_block() {
+        let mut callout_id = id!();
+        let mut p = id!();
+
+        let state = state! {
+            doc {
+                paragraph {
+                    text { "before" }
+                }
+                @callout_id callout {
+                    @p paragraph {
+                        text { "note" }
+                    }
+                }
+                paragraph {
+                    text { "after" }
+                }
+            }
+            selection { (NodeId::ROOT, 1) -> (NodeId::ROOT, 2) }
+        };
+
+        let decorations = build_selection_decorations(&state.doc, &state.selection, None);
+
+        assert!(
+            decorations
+                .iter()
+                .any(|d| matches!(d, SelectionDecor::Block { node_id } if *node_id == callout_id)),
+            "Callout should have a block selection decoration"
+        );
+        assert!(
+            decorations
+                .iter()
+                .all(|d| !matches!(d, SelectionDecor::TextRange { node_id, .. } if *node_id == p)),
+            "Callout paragraph text range should be suppressed when callout is fully selected"
+        );
+    }
+
+    #[test]
+    fn test_build_selection_decorations_includes_blockquote_block_when_front_boundary_is_selected()
+    {
+        let mut prev = id!();
+        let mut blockquote_id = id!();
+        let mut p = id!();
+
+        let state = state! {
+            doc {
+                @prev paragraph {}
+                @blockquote_id blockquote {
+                    @p paragraph {
+                        text { "quoted" }
+                    }
+                }
+                paragraph {}
+            }
+            selection { (prev, 0) -> (p, 2) }
+        };
+
+        let decorations = build_selection_decorations(&state.doc, &state.selection, None);
+
+        assert!(
+            decorations.iter().any(
+                |d| matches!(d, SelectionDecor::Block { node_id } if *node_id == blockquote_id)
+            ),
+            "Blockquote front boundary가 selection에 포함되면 block decoration이 있어야 함"
+        );
+        assert!(
+            decorations
+                .iter()
+                .any(|d| matches!(d, SelectionDecor::TextRange { node_id, .. } if *node_id == p)),
+            "Blockquote가 fully selected가 아니면 내부 paragraph text selection은 유지되어야 함"
+        );
+    }
+
+    #[test]
+    fn test_build_selection_decorations_includes_callout_block_when_front_boundary_is_selected() {
+        let mut prev = id!();
+        let mut callout_id = id!();
+        let mut p = id!();
+
+        let state = state! {
+            doc {
+                @prev paragraph {}
+                @callout_id callout {
+                    @p paragraph {
+                        text { "note" }
+                    }
+                }
+                paragraph {}
+            }
+            selection { (prev, 0) -> (p, 2) }
+        };
+
+        let decorations = build_selection_decorations(&state.doc, &state.selection, None);
+
+        assert!(
+            decorations
+                .iter()
+                .any(|d| matches!(d, SelectionDecor::Block { node_id } if *node_id == callout_id)),
+            "Callout front boundary가 selection에 포함되면 block decoration이 있어야 함"
+        );
+        assert!(
+            decorations
+                .iter()
+                .any(|d| matches!(d, SelectionDecor::TextRange { node_id, .. } if *node_id == p)),
+            "Callout이 fully selected가 아니면 내부 paragraph text selection은 유지되어야 함"
+        );
+    }
+
+    #[test]
+    fn test_build_selection_decorations_blockquote_cross_selection_marks_only_front_boundary_container()
+     {
+        let mut bq1 = id!();
+        let mut bq2 = id!();
+        let mut n1 = id!();
+        let mut n2 = id!();
+
+        let state = state! {
+            doc {
+                @bq1 blockquote {
+                    @n1 paragraph {
+                        text { "asdf" }
+                    }
+                }
+                @bq2 blockquote {
+                    @n2 paragraph {
+                        text { "asdf" }
+                    }
+                }
+                paragraph {}
+            }
+            selection { (n1, 2) -> (n2, 2) }
+        };
+
+        let decorations = build_selection_decorations(&state.doc, &state.selection, None);
+
+        assert!(
+            decorations
+                .iter()
+                .all(|d| !matches!(d, SelectionDecor::Block { node_id } if *node_id == bq1)),
+            "Left blockquote front boundary가 selection에 포함되지 않으면 block decoration이 없어야 함"
+        );
+        assert!(
+            decorations
+                .iter()
+                .any(|d| matches!(d, SelectionDecor::Block { node_id } if *node_id == bq2)),
+            "Right blockquote front boundary가 selection에 포함되면 block decoration이 있어야 함"
+        );
+        assert!(
+            decorations
+                .iter()
+                .any(|d| matches!(d, SelectionDecor::TextRange { node_id, .. } if *node_id == n1)),
+            "Left paragraph text decoration should remain"
+        );
+        assert!(
+            decorations
+                .iter()
+                .any(|d| matches!(d, SelectionDecor::TextRange { node_id, .. } if *node_id == n2)),
+            "Right paragraph text decoration should remain"
+        );
+    }
+
+    #[test]
+    fn test_build_selection_decorations_includes_list_item_block() {
+        let mut list_id = id!();
+        let mut list_item_id = id!();
+        let mut p = id!();
+
+        let state = state! {
+            doc {
+                @list_id bullet_list {
+                    @list_item_id list_item {
+                        @p paragraph {
+                            text { "item" }
+                        }
+                    }
+                }
+                paragraph {
+                    text { "after" }
+                }
+            }
+            selection { (list_id, 0) -> (list_id, 1) }
+        };
+
+        let decorations = build_selection_decorations(&state.doc, &state.selection, None);
+
+        assert!(
+            decorations.iter().any(
+                |d| matches!(d, SelectionDecor::Block { node_id } if *node_id == list_item_id)
+            ),
+            "ListItem front boundary가 포함되면 block selection decoration이 있어야 함"
+        );
+        assert!(
+            decorations
+                .iter()
+                .any(|d| matches!(d, SelectionDecor::TextRange { node_id, .. } if *node_id == p)),
+            "ListItem paragraph text range should remain"
+        );
+    }
+
+    #[test]
+    fn test_build_selection_decorations_excludes_partial_list_item_block() {
+        let mut list_item_id = id!();
+        let mut p = id!();
+
+        let state = state! {
+            doc {
+                bullet_list {
+                    @list_item_id list_item {
+                        @p paragraph {
+                            text { "item" }
+                        }
+                    }
+                }
+            }
+            selection { (p, 1) -> (p, 3) }
+        };
+
+        let decorations = build_selection_decorations(&state.doc, &state.selection, None);
+
+        assert!(
+            decorations.iter().all(
+                |d| !matches!(d, SelectionDecor::Block { node_id } if *node_id == list_item_id)
+            ),
+            "Partially selected list item should not have a block selection decoration"
+        );
+    }
+
+    #[test]
+    fn test_build_selection_decorations_does_not_add_list_item_block_without_front_boundary() {
+        let mut list_item_id = id!();
+        let mut p = id!();
+
+        let state = state! {
+            doc {
+                bullet_list {
+                    @list_item_id list_item {
+                        @p paragraph {
+                            text { "item" }
+                        }
+                    }
+                }
+            }
+            selection { (p, 1) -> (p, 3) }
+        };
+
+        let decorations = build_selection_decorations(&state.doc, &state.selection, None);
+
+        assert!(
+            decorations.iter().all(|d| {
+                !matches!(
+                    d,
+                    SelectionDecor::Block { node_id } if *node_id == list_item_id
+                )
+            }),
+            "List item front boundary가 선택 범위에 없으면 block decoration이 추가되면 안 됨"
+        );
+    }
+
+    #[test]
+    fn test_build_selection_decorations_includes_list_item_block_when_selection_crosses_boundary() {
+        let mut list_item_id = id!();
+        let mut n1 = id!();
+        let mut n2 = id!();
+
+        let state = state! {
+            doc {
+                bullet_list {
+                    @list_item_id list_item {
+                        @n1 paragraph {
+                            text { "a" }
+                        }
+                        bullet_list {
+                            list_item {
+                                paragraph {
+                                    text { "b" }
+                                }
+                            }
+                        }
+                    }
+                }
+                @n2 paragraph {}
+            }
+            selection { (n1, 0) -> (n2, 0) }
+        };
+
+        let decorations = build_selection_decorations(&state.doc, &state.selection, None);
+
+        assert!(
+            decorations.iter().all(
+                |d| !matches!(d, SelectionDecor::Block { node_id } if *node_id == list_item_id)
+            ),
+            "ListItem should not have a block selection decoration when selection crosses from inside to outside"
+        );
+        assert!(
+            decorations
+                .iter()
+                .any(|d| matches!(d, SelectionDecor::TextRange { node_id, .. } if *node_id == n1)),
+            "ListItem paragraph text range should remain"
+        );
+    }
+
+    #[test]
+    fn test_build_selection_decorations_keeps_upstream_end_text_selected_in_nested_list() {
+        let mut n1 = id!();
+        let mut n2 = id!();
+
+        let state = state! {
+            doc {
+                paragraph {}
+                bullet_list {
+                    list_item {
+                        @n1 paragraph {
+                            text { "1" }
+                        }
+                        bullet_list {
+                            list_item {
+                                @n2 paragraph {
+                                    text { "2" }
+                                }
+                            }
+                        }
+                    }
+                }
+                paragraph {}
+            }
+            selection { (n1, 0) -> (n2, 1, Affinity::Upstream) }
+        };
+
+        let decorations = build_selection_decorations(&state.doc, &state.selection, None);
+
+        assert!(
+            decorations.iter().any(|d| {
+                matches!(
+                    d,
+                    SelectionDecor::TextRange {
+                        node_id,
+                        start_offset,
+                        end_offset
+                    } if *node_id == n2 && *start_offset == 0 && *end_offset == 1
+                )
+            }),
+            "Upstream end selection should keep nested paragraph text range visible"
+        );
+        assert!(
+            decorations.iter().all(|d| {
+                !matches!(
+                    d,
+                    SelectionDecor::TextRange {
+                        node_id,
+                        start_offset,
+                        end_offset
+                    } if *node_id == n2 && *start_offset == *end_offset
+                )
+            }),
+            "Nested paragraph should not get an extra zero-length anchor decoration when non-empty range exists"
+        );
+    }
+
+    #[test]
+    fn test_build_selection_decorations_includes_list_item_block_for_reverse_start_boundary_with_nested_list()
+     {
+        let mut n1 = id!();
+        let mut list_item_id = id!();
+        let mut n2 = id!();
+
+        let state = state! {
+            doc {
+                @n1 paragraph {}
+                bullet_list {
+                    @list_item_id list_item {
+                        @n2 paragraph {
+                            text { "a" }
+                        }
+                        bullet_list {
+                            list_item {
+                                paragraph {
+                                    text { "b" }
+                                }
+                            }
+                        }
+                    }
+                }
+                paragraph {}
+            }
+            selection { (n2, 0) -> (n1, 0) }
+        };
+
+        let decorations = build_selection_decorations(&state.doc, &state.selection, None);
+
+        assert!(
+            decorations.iter().any(
+                |d| matches!(d, SelectionDecor::Block { node_id } if *node_id == list_item_id)
+            ),
+            "List item front boundary가 포함된 경우 block decoration이 있어야 함"
+        );
+        assert!(
+            decorations
+                .iter()
+                .all(|d| !matches!(d, SelectionDecor::TextRange { node_id, .. } if *node_id == n2)),
+            "Reverse start-boundary selection에서는 별도 descendant anchor가 없어야 함"
+        );
+    }
+
+    #[test]
+    fn test_build_selection_decorations_includes_list_item_block_for_reverse_upstream_end_with_nested_list()
+     {
+        let mut n1 = id!();
+        let mut list_item_id = id!();
+        let mut n2 = id!();
+
+        let state = state! {
+            doc {
+                @n1 paragraph {}
+                bullet_list {
+                    @list_item_id list_item {
+                        @n2 paragraph {
+                            text { "1" }
+                        }
+                        bullet_list {
+                            list_item {
+                                paragraph {
+                                    text { "2" }
+                                }
+                            }
+                        }
+                    }
+                }
+                paragraph {}
+            }
+            selection { (n2, 1, Affinity::Upstream) -> (n1, 0) }
+        };
+
+        let decorations = build_selection_decorations(&state.doc, &state.selection, None);
+
+        assert!(
+            decorations.iter().any(
+                |d| matches!(d, SelectionDecor::Block { node_id } if *node_id == list_item_id)
+            ),
+            "List item front boundary가 포함된 경우 block decoration이 있어야 함"
+        );
+        assert!(
+            decorations.iter().any(|d| {
+                matches!(
+                    d,
+                    SelectionDecor::TextRange {
+                        node_id,
+                        start_offset,
+                        end_offset
+                    } if *node_id == n2 && *start_offset == 0 && *end_offset == 1
+                )
+            }),
+            "List item first paragraph text range should remain so marker highlight can be partial"
+        );
+    }
+
+    #[test]
+    fn test_build_selection_decorations_does_not_select_from_side_nested_leaf_list_item_on_mid_cross()
+     {
+        let mut li_22 = id!();
+        let mut li_33 = id!();
+        let mut li_44 = id!();
+        let mut n1 = id!();
+        let mut n2 = id!();
+
+        let state = state! {
+            doc {
+                paragraph {}
+                bullet_list {
+                    list_item {
+                        paragraph {
+                            text { "1" }
+                        }
+                        bullet_list {
+                            @li_22 list_item {
+                                paragraph {
+                                    text { "22" }
+                                }
+                                bullet_list {
+                                    @li_33 list_item {
+                                        @n1 paragraph {
+                                            text { "33" }
+                                        }
+                                    }
+                                }
+                            }
+                            @li_44 list_item {
+                                @n2 paragraph {
+                                    text { "44" }
+                                }
+                            }
+                        }
+                    }
+                    list_item {
+                        paragraph {
+                            text { "55" }
+                        }
+                    }
+                }
+                paragraph {}
+            }
+            selection { (n2, 1) -> (n1, 0) }
+        };
+
+        let decorations = build_selection_decorations(&state.doc, &state.selection, None);
+
+        assert!(
+            decorations
+                .iter()
+                .all(|d| !matches!(d, SelectionDecor::Block { node_id } if *node_id == li_22)),
+            "From-side ancestor list item should not have block selection decoration for mid cross selection"
+        );
+        assert!(
+            decorations
+                .iter()
+                .all(|d| !matches!(d, SelectionDecor::Block { node_id } if *node_id == li_33)),
+            "From-side nested leaf list item should not have block selection decoration for mid cross selection"
+        );
+        assert!(
+            decorations
+                .iter()
+                .any(|d| matches!(d, SelectionDecor::Block { node_id } if *node_id == li_44)),
+            "Right-side list item front boundary가 포함되면 block selection decoration이 있어야 함"
+        );
+        assert!(
+            decorations
+                .iter()
+                .any(|d| matches!(d, SelectionDecor::TextRange { node_id, .. } if *node_id == n2)),
+            "Right-side paragraph text range should remain"
+        );
+    }
+
+    #[test]
+    fn test_build_selection_decorations_does_not_select_from_side_list_item_on_reverse_upstream_end_cross()
+     {
+        let mut li_22 = id!();
+        let mut li_44 = id!();
+        let mut n1 = id!();
+        let mut n2 = id!();
+
+        let state = state! {
+            doc {
+                paragraph {}
+                bullet_list {
+                    list_item {
+                        paragraph {
+                            text { "1" }
+                        }
+                        bullet_list {
+                            @li_22 list_item {
+                                @n1 paragraph {
+                                    text { "22" }
+                                }
+                                bullet_list {
+                                    list_item {
+                                        paragraph {
+                                            text { "33" }
+                                        }
+                                    }
+                                }
+                            }
+                            @li_44 list_item {
+                                @n2 paragraph {
+                                    text { "44" }
+                                }
+                            }
+                        }
+                    }
+                    list_item {
+                        paragraph {
+                            text { "55" }
+                        }
+                    }
+                }
+                paragraph {}
+            }
+            selection { (n2, 2, Affinity::Upstream) -> (n1, 0) }
+        };
+
+        let decorations = build_selection_decorations(&state.doc, &state.selection, None);
+
+        assert!(
+            decorations
+                .iter()
+                .all(|d| !matches!(d, SelectionDecor::Block { node_id } if *node_id == li_22)),
+            "From-side list item should not have block selection decoration on reverse upstream-end cross selection"
+        );
+    }
+
+    #[test]
+    fn test_build_selection_decorations_does_not_select_from_side_list_item_when_end_in_ancestor_sibling_item()
+     {
+        let mut li_22 = id!();
+        let mut n1 = id!();
+        let mut n2 = id!();
+
+        let state = state! {
+            doc {
+                paragraph {}
+                bullet_list {
+                    list_item {
+                        paragraph {
+                            text { "1" }
+                        }
+                        bullet_list {
+                            @li_22 list_item {
+                                @n1 paragraph {
+                                    text { "22" }
+                                }
+                                bullet_list {
+                                    list_item {
+                                        paragraph {
+                                            text { "33" }
+                                        }
+                                    }
+                                }
+                            }
+                            list_item {
+                                paragraph {
+                                    text { "44" }
+                                }
+                            }
+                        }
+                    }
+                    list_item {
+                        @n2 paragraph {
+                            text { "55" }
+                        }
+                    }
+                }
+                paragraph {}
+                paragraph {}
+                fold {
+                    fold_title {}
+                    fold_content {
+                        paragraph {}
+                    }
+                }
+                paragraph {}
+            }
+            selection { (n2, 2, Affinity::Upstream) -> (n1, 0) }
+        };
+
+        let decorations = build_selection_decorations(&state.doc, &state.selection, None);
+
+        assert!(
+            decorations
+                .iter()
+                .all(|d| !matches!(d, SelectionDecor::Block { node_id } if *node_id == li_22)),
+            "From-side list item should not have block selection decoration when selection ends in an ancestor sibling list item"
+        );
+    }
+
+    #[test]
+    fn test_build_selection_decorations_list_item_cross_selection_marks_deleted_container_only() {
+        let mut li1 = id!();
+        let mut li2 = id!();
+        let mut p1 = id!();
+        let mut p2 = id!();
+
+        let state = state! {
+            doc {
+                bullet_list {
+                    @li1 list_item {
+                        @p1 paragraph {
+                            text { "asdf" }
+                        }
+                    }
+                    @li2 list_item {
+                        @p2 paragraph {
+                            text { "asdf" }
+                        }
+                    }
+                }
+                paragraph {}
+            }
+            selection { (p1, 2) -> (p2, 2) }
+        };
+
+        let decorations = build_selection_decorations(&state.doc, &state.selection, None);
+
+        assert!(
+            decorations
+                .iter()
+                .all(|d| !matches!(d, SelectionDecor::Block { node_id } if *node_id == li1)),
+            "Left list item should not have a block selection decoration"
+        );
+        assert!(
+            decorations
+                .iter()
+                .any(|d| matches!(d, SelectionDecor::Block { node_id } if *node_id == li2)),
+            "Right list item front boundary가 포함되면 block selection decoration이 있어야 함"
+        );
+        assert!(
+            decorations
+                .iter()
+                .any(|d| matches!(d, SelectionDecor::TextRange { node_id, .. } if *node_id == p1)),
+            "Left paragraph text decoration should remain"
+        );
+        assert!(
+            decorations
+                .iter()
+                .any(|d| matches!(d, SelectionDecor::TextRange { node_id, .. } if *node_id == p2)),
+            "Right paragraph text decoration should remain"
+        );
+    }
+
+    #[test]
+    fn test_build_selection_decorations_does_not_select_fold_block_from_title_to_content() {
+        let mut fold_id = id!();
+        let mut title = id!();
+        let mut content = id!();
+
+        let state = state! {
+            doc {
+                @fold_id fold {
+                    @title fold_title {
+                        text { "title" }
+                    }
+                    fold_content {
+                        @content paragraph {
+                            text { "inside" }
+                        }
+                    }
+                }
+            }
+            selection { (title, 2) -> (content, 3) }
+        };
+
+        let decorations = build_selection_decorations(&state.doc, &state.selection, None);
+
+        assert!(
+            decorations
+                .iter()
+                .all(|d| !matches!(d, SelectionDecor::Block { node_id } if *node_id == fold_id)),
+            "Fold should not have block selection decoration for title-to-content selection"
+        );
+    }
+
+    #[test]
+    fn test_build_selection_decorations_nested_list_cross_to_outside_selects_only_deleted_list_item()
+     {
+        let mut li_nested_b = id!();
+        let mut li_nested_c = id!();
+        let mut li_d = id!();
+        let mut n1 = id!();
+        let mut n2 = id!();
+
+        let state = state! {
+            doc {
+                bullet_list {
+                    list_item {
+                        paragraph {
+                            text { "a" }
+                        }
+                        bullet_list {
+                            @li_nested_b list_item {
+                                paragraph {
+                                    text { "b" }
+                                }
+                            }
+                            @li_nested_c list_item {
+                                @n1 paragraph {
+                                    text { "c" }
+                                }
+                            }
+                        }
+                    }
+                    @li_d list_item {
+                        paragraph {
+                            text { "d" }
+                        }
+                    }
+                }
+                @n2 paragraph {}
+            }
+            selection { (n1, 0) -> (n2, 0) }
+        };
+
+        let decorations = build_selection_decorations(&state.doc, &state.selection, None);
+
+        assert!(
+            decorations.iter().all(
+                |d| !matches!(d, SelectionDecor::Block { node_id } if *node_id == li_nested_b)
+            ),
+            "Nested sibling list item should not have block selection decoration"
+        );
+        assert!(
+            decorations.iter().all(
+                |d| !matches!(d, SelectionDecor::Block { node_id } if *node_id == li_nested_c)
+            ),
+            "From-side nested list item should not have block selection decoration when it is preserved"
+        );
+        assert!(
+            decorations
+                .iter()
+                .any(|d| matches!(d, SelectionDecor::Block { node_id } if *node_id == li_d)),
+            "Top-level list item front boundary가 포함되면 block selection decoration이 있어야 함"
+        );
+        assert!(
+            decorations
+                .iter()
+                .any(|d| matches!(d, SelectionDecor::TextRange { node_id, .. } if *node_id == n1)),
+            "From-side paragraph text range should remain"
+        );
+    }
+
+    #[test]
+    fn test_build_selection_decorations_excludes_partial_callout_block() {
+        let mut callout_id = id!();
+        let mut p = id!();
+
+        let state = state! {
+            doc {
+                @callout_id callout {
+                    @p paragraph {
+                        text { "note" }
+                    }
+                }
+            }
+            selection { (p, 1) -> (p, 3) }
+        };
+
+        let decorations = build_selection_decorations(&state.doc, &state.selection, None);
+
+        assert!(
+            decorations
+                .iter()
+                .all(|d| !matches!(d, SelectionDecor::Block { node_id } if *node_id == callout_id)),
+            "Partially selected callout should not have a block selection decoration"
+        );
+    }
+
+    #[test]
     fn test_build_selection_decorations_single_horizontal_rule() {
         let mut hr = id!();
         let state = state! {
@@ -1113,6 +2094,33 @@ mod tests {
         assert!(
             hr_decor.is_some(),
             "HorizontalRule should have a dedicated selection decoration"
+        );
+    }
+
+    #[test]
+    fn test_build_selection_decorations_excludes_horizontal_rule_when_only_front_boundary_included()
+    {
+        let mut before = id!();
+        let mut hr = id!();
+
+        let state = state! {
+            doc {
+                @before paragraph {
+                    text { "before" }
+                }
+                @hr horizontal_rule {}
+                paragraph { text { "after" } }
+            }
+            selection { (before, 1) -> (NodeId::ROOT, 1) }
+        };
+
+        let decorations = build_selection_decorations(&state.doc, &state.selection, None);
+
+        assert!(
+            decorations
+                .iter()
+                .all(|d| !matches!(d, SelectionDecor::Block { node_id } if *node_id == hr)),
+            "HorizontalRule는 앞/뒤 경계가 모두 selection에 포함될 때만 block decoration이 있어야 함"
         );
     }
 
@@ -1392,7 +2400,7 @@ mod tests {
     }
 
     #[test]
-    fn test_build_selection_decorations_adds_container_block_for_cross_child_selection() {
+    fn test_build_selection_decorations_skips_container_block_for_cross_child_selection() {
         let mut callout_id = id!();
         let mut p1 = id!();
         let mut p2 = id!();
@@ -1413,8 +2421,8 @@ mod tests {
             .iter()
             .find(|d| matches!(d, SelectionDecor::Block { node_id } if *node_id == callout_id));
         assert!(
-            callout_decor.is_some(),
-            "Cross-child selection should add a Block decoration for the shared container"
+            callout_decor.is_none(),
+            "Cross-child selection should not add a callout Block decoration"
         );
     }
 
