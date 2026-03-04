@@ -1,7 +1,8 @@
 import '@typie/lib/dayjs';
 import '@/mq';
 
-import { getClientAddress, logger } from '@typie/lib';
+import * as Sentry from '@sentry/bun';
+import { getClientAddress, logger, withContext } from '@typie/lib';
 import { websocket } from 'hono/bun';
 import { HTTPException } from 'hono/http-exception';
 import { app } from '@/app';
@@ -26,7 +27,20 @@ app.use('*', async (c, next) => {
   const context = await deriveContext(c);
   c.set('context', context);
 
-  return next();
+  return Sentry.withIsolationScope((scope) => {
+    if (context.session) {
+      scope.setUser({ id: context.session.userId });
+    }
+
+    scope.setTransactionName(`${c.req.method} ${c.req.path}`);
+    scope.setContext('request', {
+      method: c.req.method,
+      url: c.req.url,
+      query: c.req.query(),
+    });
+
+    return withContext({ userId: context.session?.userId, ip: context.ip }, next);
+  });
 });
 
 app.route('/', rest);
@@ -42,6 +56,7 @@ app.onError((error, c) => {
   }
 
   log.error('Unhandled error {*}', { error });
+  Sentry.captureException(error);
 
   return c.text('Internal Server Error', { status: 500 });
 });

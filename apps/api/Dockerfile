@@ -37,6 +37,8 @@ RUN bun install --no-save --omit=dev
 FROM debian:12-slim AS runtime
 WORKDIR /app
 
+ARG IMAGE_TAG
+ENV IMAGE_TAG=$IMAGE_TAG
 ENV PATH="/root/.bun/bin:$PATH"
 ENV LD_LIBRARY_PATH="/app/apps/api/lib"
 ENV NODE_ENV=production

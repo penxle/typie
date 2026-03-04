@@ -9,6 +9,7 @@ import { crons, jobs } from './tasks';
 const log = logger.getChild('mq');
 const lane = dev ? os.hostname() : stack;
 const taskMap = Object.fromEntries([...jobs, ...crons].map((job) => [job.name, job.fn]));
+const cronNames = new Set(crons.map((c) => c.name));
 
 export const queue = new Queue(lane, {
   connection: new Redis({
@@ -33,7 +34,11 @@ export const worker = new Worker(
   lane,
   async (job) => {
     const fn = taskMap[job.name];
-    await fn?.(job.data);
+    if (cronNames.has(job.name)) {
+      await Sentry.withMonitor(job.name, () => fn?.(job.data));
+    } else {
+      await fn?.(job.data);
+    }
   },
   {
     connection: new Redis({
@@ -53,7 +58,9 @@ worker.on('completed', (job) => {
 
 worker.on('failed', (job, error) => {
   log.error('Job failed {*}', { id: job?.id, name: job?.name, data: job?.data, error });
-  Sentry.captureException(error);
+  Sentry.captureException(error, {
+    extra: { jobId: job?.id, jobName: job?.name, jobData: job?.data },
+  });
 });
 
 worker.on('error', (error) => {
