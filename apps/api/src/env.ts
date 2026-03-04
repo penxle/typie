@@ -37,6 +37,7 @@ const schema = z.object({
   PORTONE_CHANNEL_KEY: z.string(),
   REDIS_URL: z.string(),
   SENTRY_DSN: z.string().optional(),
+  IMAGE_TAG: z.string().optional(),
   SLACK_WEBHOOK_URL: z.string(),
   SPELLCHECK_API_KEY: z.string(),
   SPELLCHECK_URL: z.string(),

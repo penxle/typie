@@ -22,6 +22,9 @@ RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash \
 
 FROM builder AS build
 
+ARG IMAGE_TAG
+ENV PUBLIC_IMAGE_TAG=$IMAGE_TAG
+
 COPY out/json/ .
 RUN bun install --no-save
 
@@ -37,6 +40,8 @@ RUN bun install --no-save --omit=dev
 FROM debian:12-slim AS runtime
 WORKDIR /app
 
+ARG IMAGE_TAG
+ENV PUBLIC_IMAGE_TAG=$IMAGE_TAG
 ENV PATH="/root/.bun/bin:$PATH"
 ENV NODE_ENV=production
 

@@ -5,12 +5,19 @@ import { isAggregatedError } from '@mearie/svelte';
 import * as Sentry from '@sentry/sveltekit';
 import { sequence } from '@sveltejs/kit/hooks';
 import { logger, logging } from '@typie/lib/svelte';
+import { dev } from '$app/environment';
 import { env } from '$env/dynamic/public';
+import { PUBLIC_IMAGE_TAG } from '$env/static/public';
 import type { Handle, HandleServerError } from '@sveltejs/kit';
 
 Sentry.init({
+  enabled: !dev,
   dsn: env.PUBLIC_SENTRY_DSN,
+  environment: env.PUBLIC_ENVIRONMENT,
+  release: PUBLIC_IMAGE_TAG,
   sendDefaultPii: true,
+  enableLogs: true,
+  tracesSampleRate: 0.1,
   integrations: (defaults) => defaults.filter((i) => i.name !== 'NodeSystemError'),
 });
 

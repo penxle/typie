@@ -1,19 +1,51 @@
 import { isAsyncIterable } from '@envelop/core';
 import * as Sentry from '@sentry/bun';
 import { logger } from '@typie/lib';
-import { GraphQLError } from 'graphql';
+import { GraphQLError, print } from 'graphql';
 import { dev } from '@/env';
 import { TypieError } from '@/errors';
+import { truncateVariables } from './utils';
 import type { AsyncIterableIteratorOrValue, ExecutionResult } from '@envelop/core';
 import type { Plugin } from 'graphql-yoga';
+import type { Context } from '@/context';
 
 const log = logger.getChild('graphql');
+
+type OperationInfo = {
+  operationName?: string | null;
+  variableValues?: unknown;
+  query?: string;
+  userId?: string;
+  ip?: string;
+};
 
 class UnexpectedError extends GraphQLError {
   public eventId: string;
 
-  constructor(error: Error) {
-    const eventId = Sentry.captureException(error);
+  constructor(error: Error, operation?: OperationInfo) {
+    const eventId = Sentry.captureException(error, {
+      tags: {
+        ...(operation?.operationName ? { 'graphql.operation': operation.operationName } : {}),
+      },
+      contexts: {
+        ...(operation
+          ? {
+              graphql: {
+                operationName: operation.operationName,
+                variables: operation.variableValues,
+                query: operation.query,
+              },
+            }
+          : {}),
+      },
+      user:
+        operation?.userId || operation?.ip
+          ? {
+              ...(operation.userId ? { id: operation.userId } : {}),
+              ...(operation.ip ? { ip_address: operation.ip } : {}),
+            }
+          : undefined,
+    });
     const originalError = dev ? error : undefined;
 
     super(dev ? error.message : 'Unexpected error', {
@@ -30,57 +62,83 @@ class UnexpectedError extends GraphQLError {
   }
 }
 
-const transformError = (error: unknown): GraphQLError => {
+const transformError = (error: unknown, operation?: OperationInfo): GraphQLError => {
   if (error instanceof TypieError) {
     return error;
   } else if (error instanceof GraphQLError && error.extensions?.code === 'RATE_LIMITED') {
     return error;
   } else if (error instanceof GraphQLError && error.originalError) {
-    return transformError(error.originalError);
+    return transformError(error.originalError, operation);
   } else if (error instanceof Error) {
     log.error('Unexpected error {*}', { error });
-    return new UnexpectedError(error);
+    return new UnexpectedError(error, operation);
   } else {
     log.error('Unexpected error {*}', { error });
-    return new UnexpectedError(new Error(String(error)));
+    return new UnexpectedError(new Error(String(error)), operation);
   }
 };
 
 type ErrorHandlerPayload = { error: unknown; setError: (err: unknown) => void };
-const errorHandler = ({ error, setError }: ErrorHandlerPayload) => {
+const contextErrorHandler = ({ error, setError }: ErrorHandlerPayload) => {
   setError(transformError(error));
 };
 
 type ResultHandlerPayload<T> = { result: T; setResult: (result: T) => void };
-const resultHandler = ({ result, setResult }: ResultHandlerPayload<AsyncIterableIteratorOrValue<ExecutionResult>>) => {
-  const handler = ({ result, setResult }: ResultHandlerPayload<ExecutionResult>) => {
-    if (result.errors) {
-      setResult({
-        ...result,
-        errors: result.errors.map((error) => transformError(error)),
-      });
+const createResultHandler = (operation: OperationInfo) => {
+  return ({ result, setResult }: ResultHandlerPayload<AsyncIterableIteratorOrValue<ExecutionResult>>) => {
+    const handler = ({ result, setResult }: ResultHandlerPayload<ExecutionResult>) => {
+      if (result.errors) {
+        setResult({
+          ...result,
+          errors: result.errors.map((error) => transformError(error, operation)),
+        });
+      }
+    };
+
+    if (isAsyncIterable(result)) {
+      return { onNext: handler };
+    } else {
+      handler({ result, setResult });
+      return;
     }
   };
-
-  if (isAsyncIterable(result)) {
-    return { onNext: handler };
-  } else {
-    handler({ result, setResult });
-    return;
-  }
 };
 
-export const useError = (): Plugin => {
+const extractOperationInfo = (args: {
+  operationName?: string | null;
+  variableValues?: Readonly<Record<string, unknown>> | null;
+  document: Parameters<typeof print>[0];
+  contextValue?: unknown;
+}): OperationInfo => {
+  const context = args.contextValue as Context | undefined;
+  return {
+    operationName: args.operationName,
+    variableValues: truncateVariables(args.variableValues as Record<string, unknown> | null | undefined),
+    query: print(args.document),
+    userId: context?.session?.userId,
+    ip: context?.ip,
+  };
+};
+
+export const useError = (): Plugin<Context> => {
   return {
     onPluginInit: ({ registerContextErrorHandler }) => {
-      registerContextErrorHandler(errorHandler);
+      registerContextErrorHandler(contextErrorHandler);
     },
-    onExecute: () => ({
-      onExecuteDone: resultHandler,
-    }),
-    onSubscribe: () => ({
-      onSubscribeResult: resultHandler,
-      onSubscribeError: errorHandler,
-    }),
+    onExecute: ({ args }) => {
+      const operation = extractOperationInfo(args);
+      return {
+        onExecuteDone: createResultHandler(operation),
+      };
+    },
+    onSubscribe: ({ args }) => {
+      const operation = extractOperationInfo(args);
+      return {
+        onSubscribeResult: createResultHandler(operation),
+        onSubscribeError: ({ error, setError }: ErrorHandlerPayload) => {
+          setError(transformError(error, operation));
+        },
+      };
+    },
   };
 };

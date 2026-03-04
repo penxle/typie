@@ -234,6 +234,7 @@
       "version": "0.0.1",
       "dependencies": {
         "@logtape/logtape": "^2.0.4",
+        "@logtape/sentry": "^2.0.4",
         "dayjs": "^1.11.19",
         "hono": "^4.12.3",
         "ipaddr.js": "^2.3.0",
@@ -960,6 +961,8 @@
     "@js-sdsl/ordered-map": ["@js-sdsl/ordered-map@4.4.2", "", {}, "sha512-iUKgm52T8HOE/makSxjqoWhe95ZJA1/G1sYsGev2JDKUSS14KAgg1LHb+Ba+IPow0xflbnSkOsZcO08C7w1gYw=="],
 
     "@logtape/logtape": ["@logtape/logtape@2.0.4", "", {}, "sha512-Z4COeAMdedcBFuFkXaPFvDPOVuHoEom1hwNnPCIkSyojyikuNguplwPoSG+kZthWrS7GiOJo1USQyjWwIFfTKA=="],
+
+    "@logtape/sentry": ["@logtape/sentry@2.0.4", "", { "peerDependencies": { "@logtape/logtape": "^2.0.4", "@sentry/core": ">=8.0.0" } }, "sha512-HZHZxtWKJc+NPFQss2CHci5Au23b7cdpWS5m05zgbUnFEzyuz7hiO4/yUdJ7GDZY9I/IkdUQdtFcD21n3O6q7Q=="],
 
     "@mearie/cli": ["@mearie/cli@0.1.6", "", { "dependencies": { "@mearie/codegen": "0.1.6", "@mearie/config": "0.1.2", "citty": "^0.2.1" }, "bin": { "mearie": "dist/cli.mjs" } }, "sha512-Oe+QK+JLpWUYUlFpyR2pFSjKevoBSPLv5xpntpulb3zmJS8sSpwIzV4MQRKLcIFOdUPPItcsD432nkDp3BXraA=="],
 
