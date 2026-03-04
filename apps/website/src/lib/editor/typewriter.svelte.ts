@@ -21,14 +21,15 @@ export function setupTypewriter(getTargetEl: () => HTMLElement | undefined, defa
 
   let scrollContainerHeight = $state(0);
 
-  const scrollBy = (scroller: HTMLElement, delta: number) => {
+  const scrollBy = (scroller: HTMLElement, delta: number): boolean => {
     const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
     const targetScrollTop = Math.max(0, Math.min(maxScrollTop, scroller.scrollTop + delta));
     if (Math.abs(targetScrollTop - scroller.scrollTop) <= 1) {
-      return;
+      return false;
     }
 
     scroller.scrollTop = targetScrollTop;
+    return true;
   };
 
   const computeTypewriterScrollMetrics = () => {
@@ -133,6 +134,9 @@ export function setupTypewriter(getTargetEl: () => HTMLElement | undefined, defa
     if (!metrics || Math.abs(metrics.delta) <= 1) {
       return;
     }
-    scrollBy(metrics.scroller, metrics.delta);
+    const didScroll = scrollBy(metrics.scroller, metrics.delta);
+    if (didScroll) {
+      editor.registerCursorAutoScroll('typewriter');
+    }
   });
 }

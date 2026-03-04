@@ -226,6 +226,9 @@ export class Editor {
   #pendingDocChanged = false;
   #pendingTypewriterRequest = false;
   #typewriterAvailable = false;
+  #cursorFollowScrollActive = false;
+  #cursorFollowScrollMode: 'cursor' | 'typewriter' = 'cursor';
+  #programmaticScrollDepth = 0;
 
   inputElement = $state<HTMLInputElement | null>(null);
 
@@ -523,13 +526,14 @@ export class Editor {
         this.cursor.bounds = c.bounds;
         this.cursor.visible = c.visible;
         if (this.#pendingTypewriterRequest) {
-          this.pendingScrollConsumer = this.#typewriterAvailable ? 'typewriter' : 'cursor';
+          this.#armPendingScrollConsumer();
         }
       } else {
         this.cursor.pageIdx = -1;
         this.cursor.bounds = null;
         this.cursor.visible = false;
         this.pendingScrollConsumer = null;
+        this.#cursorFollowScrollActive = false;
       }
     }
 
@@ -553,6 +557,12 @@ export class Editor {
 
     if (slate.isDirty(DIRTY_EXTERNAL_ELEMENTS)) {
       this.externalElements = slate.readExternalElements();
+      if (this.#cursorFollowScrollActive) {
+        this.#armScrollConsumerForMode(this.#cursorFollowScrollMode);
+      }
+      if (this.#pendingTypewriterRequest) {
+        this.#armPendingScrollConsumer();
+      }
     }
 
     if (slate.isDirty(DIRTY_POINTER)) {
@@ -1794,6 +1804,43 @@ export class Editor {
     this.#wasmEditor.replaceTextInBlocks(items.map((v) => [v.nodeId, v.startOffset, v.endOffset, replacement]));
     this.#wasmEditor.removeTrackedItems(2, [...ids]);
     this.#wakeUp();
+  }
+
+  #armPendingScrollConsumer(): void {
+    if (!this.#pendingTypewriterRequest) {
+      return;
+    }
+
+    this.#armScrollConsumerForCurrentCursor();
+  }
+
+  #armScrollConsumerForMode(mode: 'cursor' | 'typewriter'): void {
+    if (this.cursor.pageIdx < 0 || !this.cursor.bounds) {
+      return;
+    }
+
+    this.pendingScrollConsumer = mode === 'typewriter' && this.#typewriterAvailable ? 'typewriter' : 'cursor';
+  }
+
+  #armScrollConsumerForCurrentCursor(): void {
+    this.#armScrollConsumerForMode('typewriter');
+  }
+
+  registerCursorAutoScroll(mode: 'cursor' | 'typewriter'): void {
+    this.#cursorFollowScrollActive = true;
+    this.#cursorFollowScrollMode = mode;
+    this.#programmaticScrollDepth++;
+
+    requestAnimationFrame(() => {
+      this.#programmaticScrollDepth = Math.max(0, this.#programmaticScrollDepth - 1);
+    });
+  }
+
+  notifyViewportScrolled(): void {
+    if (this.#programmaticScrollDepth > 0) {
+      return;
+    }
+    this.#cursorFollowScrollActive = false;
   }
 
   scrollIntoView({ mode = 'auto' }: { mode?: 'auto' | 'typewriter' } = {}): Editor {
