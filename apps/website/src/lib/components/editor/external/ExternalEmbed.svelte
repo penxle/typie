@@ -56,8 +56,10 @@
     middleware: [flip(), hide()],
   });
 
+  const isOnlySelectedElement = $derived(el.isSelected && (editor.selection?.selectedBlockCount ?? 0) === 1);
+
   $effect(() => {
-    pickerOpened = el.isSelected;
+    pickerOpened = isOnlySelectedElement;
   });
 
   $effect(() => {
