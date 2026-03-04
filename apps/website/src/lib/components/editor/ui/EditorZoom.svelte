@@ -362,6 +362,7 @@
       const target = e.currentTarget;
       scrollLeft = target.scrollLeft;
       scrollTop = target.scrollTop;
+      editor.notifyViewportScrolled();
     }}
     onwheel={(event) => zoom.handleWheel(event)}
   >

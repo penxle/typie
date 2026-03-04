@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
@@ -109,6 +110,10 @@ class EditorView extends HookWidget {
     final currentZoomViewportWidth = useValueListenable(zoomViewportWidth);
     final currentDisplayZoom = useValueListenable(displayZoom);
     final currentRenderZoom = useValueListenable(renderZoom);
+    final cursorFollowScrollActive = useRef(false);
+    final cursorFollowScrollMode = useRef(ScrollMode.auto);
+    final typewriterRecoveryPending = useRef(false);
+    final previousExternalElements = useRef<List<ExternalElement>?>(controller.state.externalElements);
 
     final lastSize = useRef<(double, double, double)>((0, 0, 0));
 
@@ -388,8 +393,8 @@ class EditorView extends HookWidget {
 
     final keyboard = useService<Keyboard>();
 
-    void scrollToCursorWith(CursorInfo c, {bool typewriter = false}) {
-      scrollToCursor(
+    bool scrollToCursorWith(CursorInfo c, {bool typewriter = false}) {
+      return scrollToCursor(
         verticalController: verticalScrollController,
         horizontalController: horizontalScrollController,
         geometry: ContentGeometry(
@@ -405,6 +410,11 @@ class EditorView extends HookWidget {
       );
     }
 
+    void registerCursorAutoScroll({required bool typewriter}) {
+      cursorFollowScrollActive.value = true;
+      cursorFollowScrollMode.value = typewriter ? ScrollMode.typewriter : ScrollMode.auto;
+    }
+
     bool canApplyCursorScrollNow() {
       final verticalPosition = resolveScrollPosition(verticalScrollController);
       return verticalPosition != null && verticalPosition.hasContentDimensions;
@@ -413,7 +423,10 @@ class EditorView extends HookWidget {
     void runCursorScroll(CursorInfo targetCursor, {required bool typewriter}) {
       suppressScrollbarTimer.value?.cancel();
       setSuppressScrollbarVisibility(true);
-      scrollToCursorWith(targetCursor, typewriter: typewriter);
+      final didScroll = scrollToCursorWith(targetCursor, typewriter: typewriter);
+      if (didScroll) {
+        registerCursorAutoScroll(typewriter: typewriter);
+      }
       suppressScrollbarTimer.value = Timer(const Duration(milliseconds: 150), () {
         suppressScrollbarTimer.value = null;
         setSuppressScrollbarVisibility(false);
@@ -602,8 +615,13 @@ class EditorView extends HookWidget {
         final pendingMode = controller.pendingScrollMode;
         final nextLayout = controller.state.layout;
         final nextCursor = controller.state.cursor;
+        final nextExternalElements = controller.state.externalElements;
+        final externalElementsChanged = !identical(previousExternalElements.value, nextExternalElements);
+        previousExternalElements.value = nextExternalElements;
 
         if (nextCursor == null) {
+          typewriterRecoveryPending.value = false;
+          cursorFollowScrollActive.value = false;
           if (pendingMode != null && !controller.pendingScrollWaitForCursorUpdate) {
             controller.clearPendingScroll();
           }
@@ -617,6 +635,12 @@ class EditorView extends HookWidget {
         final interaction = interactionState.snapshot();
         final blockedByInteraction = interaction.isLongPressing || interaction.isDndActive || !focused;
         if (blockedByInteraction || nextLayout == null || !nextCursor.visible) {
+          if (blockedByInteraction) {
+            typewriterRecoveryPending.value = false;
+          }
+          if (!focused || !nextCursor.visible) {
+            cursorFollowScrollActive.value = false;
+          }
           if (pendingMode != null && !controller.pendingScrollWaitForCursorUpdate) {
             controller.clearPendingScroll();
           }
@@ -628,8 +652,28 @@ class EditorView extends HookWidget {
 
         if (pendingMode != null) {
           final useTypewriter = pref.typewriterEnabled && pendingMode == ScrollMode.typewriter;
+          typewriterRecoveryPending.value = useTypewriter;
           controller.clearPendingScroll();
           applyCursorScrollAndVisual(nextCursor, typewriter: useTypewriter);
+          return;
+        }
+
+        if (externalElementsChanged) {
+          if (cursorFollowScrollActive.value) {
+            final followTypewriter = cursorFollowScrollMode.value == ScrollMode.typewriter && pref.typewriterEnabled;
+            typewriterRecoveryPending.value = false;
+            applyCursorScrollAndVisual(nextCursor, typewriter: followTypewriter);
+            return;
+          }
+
+          if (typewriterRecoveryPending.value && pref.typewriterEnabled) {
+            typewriterRecoveryPending.value = false;
+            applyCursorScrollAndVisual(nextCursor, typewriter: true);
+            return;
+          }
+
+          typewriterRecoveryPending.value = false;
+          setRenderedCursorSnapshot(nextCursor);
           return;
         }
 
@@ -844,12 +888,21 @@ class EditorView extends HookWidget {
                       fit: StackFit.expand,
                       children: [
                         if (isPaginatedLayout) Positioned.fill(child: ColoredBox(color: context.colors.surfaceSubtle)),
-                        NotificationListener<ScrollMetricsNotification>(
-                          onNotification: (_) {
-                            scrollMetricsRevision.value++;
+                        NotificationListener<UserScrollNotification>(
+                          onNotification: (notification) {
+                            if (notification.direction != ScrollDirection.idle) {
+                              cursorFollowScrollActive.value = false;
+                              typewriterRecoveryPending.value = false;
+                            }
                             return false;
                           },
-                          child: const PageList(),
+                          child: NotificationListener<ScrollMetricsNotification>(
+                            onNotification: (_) {
+                              scrollMetricsRevision.value++;
+                              return false;
+                            },
+                            child: const PageList(),
+                          ),
                         ),
                         _DocumentPlaceholder(
                           controller: controller,

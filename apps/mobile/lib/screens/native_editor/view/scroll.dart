@@ -8,7 +8,7 @@ import 'package:typie/screens/native_editor/view/zoom.dart';
 
 const _scrollMargin = 60.0;
 
-void scrollToCursor({
+bool scrollToCursor({
   required ScrollController verticalController,
   required ScrollController horizontalController,
   required ContentGeometry geometry,
@@ -16,17 +16,24 @@ void scrollToCursor({
   bool typewriterEnabled = false,
   double typewriterPosition = 0.5,
 }) {
-  _scrollVertical(
+  final didScrollVertical = _scrollVertical(
     controller: verticalController,
     geometry: geometry,
     cursor: cursor,
     typewriterEnabled: typewriterEnabled,
     typewriterPosition: typewriterPosition,
   );
-  _scrollHorizontal(controller: horizontalController, geometry: geometry, cursor: cursor, animate: !typewriterEnabled);
+  final didScrollHorizontal = _scrollHorizontal(
+    controller: horizontalController,
+    geometry: geometry,
+    cursor: cursor,
+    animate: !typewriterEnabled,
+  );
+
+  return didScrollVertical || didScrollHorizontal;
 }
 
-void _scrollVertical({
+bool _scrollVertical({
   required ScrollController controller,
   required ContentGeometry geometry,
   required CursorInfo cursor,
@@ -35,7 +42,7 @@ void _scrollVertical({
 }) {
   final position = resolveScrollPosition(controller);
   if (position == null || !position.hasContentDimensions) {
-    return;
+    return false;
   }
 
   final cursorGlobalY = geometry.cursorTopInContent(cursor);
@@ -56,14 +63,14 @@ void _scrollVertical({
     final clampedTarget = targetScroll.clamp(0.0, maxScrollExtent);
     final distance = (position.pixels - clampedTarget).abs();
     if (distance <= 1) {
-      return;
+      return false;
     }
 
     position.jumpTo(clampedTarget);
-    return;
+    return true;
   }
 
-  _jumpToKeepCursorInScrollMargin(
+  return _jumpToKeepCursorInScrollMargin(
     position: position,
     cursorTop: cursorGlobalY,
     cursorHeight: cursorHeight,
@@ -72,7 +79,7 @@ void _scrollVertical({
   );
 }
 
-void _jumpToKeepCursorInScrollMargin({
+bool _jumpToKeepCursorInScrollMargin({
   required ScrollPosition position,
   required double cursorTop,
   required double cursorHeight,
@@ -83,13 +90,25 @@ void _jumpToKeepCursorInScrollMargin({
   final cursorBottom = cursorTop + cursorHeight;
 
   if (cursorBottom > scrollOffset + viewportHeight - _scrollMargin) {
-    position.jumpTo((cursorBottom - viewportHeight + _scrollMargin).clamp(0.0, maxScrollExtent));
+    final target = (cursorBottom - viewportHeight + _scrollMargin).clamp(0.0, maxScrollExtent);
+    if ((target - scrollOffset).abs() <= 1) {
+      return false;
+    }
+    position.jumpTo(target);
+    return true;
   } else if (cursorTop < scrollOffset + _scrollMargin) {
-    position.jumpTo((cursorTop - _scrollMargin).clamp(0.0, maxScrollExtent));
+    final target = (cursorTop - _scrollMargin).clamp(0.0, maxScrollExtent);
+    if ((target - scrollOffset).abs() <= 1) {
+      return false;
+    }
+    position.jumpTo(target);
+    return true;
   }
+
+  return false;
 }
 
-void _scrollHorizontal({
+bool _scrollHorizontal({
   required ScrollController controller,
   required ContentGeometry geometry,
   required CursorInfo cursor,
@@ -102,7 +121,7 @@ void _scrollHorizontal({
   );
   final position = horizontalMetrics.activePosition;
   if (!horizontalMetrics.canScrollHorizontally || position == null) {
-    return;
+    return false;
   }
 
   const scrollMargin = _scrollMargin;
@@ -113,19 +132,29 @@ void _scrollHorizontal({
 
   if (cursorRight > scrollOffset + viewportWidth - scrollMargin) {
     final target = (cursorRight - viewportWidth + scrollMargin).clamp(0.0, position.maxScrollExtent);
+    if ((target - scrollOffset).abs() <= 1) {
+      return false;
+    }
     if (animate) {
       unawaited(position.animateTo(target, duration: const Duration(milliseconds: 100), curve: Curves.easeOut));
     } else {
       position.jumpTo(target);
     }
+    return true;
   } else if (cursorX < scrollOffset + scrollMargin) {
     final target = (cursorX - scrollMargin).clamp(0.0, position.maxScrollExtent);
+    if ((target - scrollOffset).abs() <= 1) {
+      return false;
+    }
     if (animate) {
       unawaited(position.animateTo(target, duration: const Duration(milliseconds: 100), curve: Curves.easeOut));
     } else {
       position.jumpTo(target);
     }
+    return true;
   }
+
+  return false;
 }
 
 void scrollToOverlayTarget({

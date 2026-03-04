@@ -19,12 +19,12 @@
     });
   }
 
-  function keepCursorInViewport() {
-    if (!element) return;
-    if (editor.pointerState >= 2) return;
+  function keepCursorInViewport(): boolean {
+    if (!element) return false;
+    if (editor.pointerState >= 2) return false;
 
     const scroller = editor.scrollContainerEl;
-    if (!scroller) return;
+    if (!scroller) return false;
 
     const scrollerRect = scroller.getBoundingClientRect();
     const cursorRect = element.getBoundingClientRect();
@@ -50,10 +50,11 @@
     }
 
     if (delta === 0) {
-      return;
+      return false;
     }
 
     scroller.scrollBy({ top: delta, behavior: 'instant' });
+    return true;
   }
 
   $effect(() => {
@@ -88,7 +89,10 @@
           if (editor.pendingScrollConsumer !== 'cursor') {
             return;
           }
-          keepCursorInViewport();
+          const didScroll = keepCursorInViewport();
+          if (didScroll) {
+            editor.registerCursorAutoScroll('cursor');
+          }
           editor.consumePendingScroll('cursor');
         });
       }
