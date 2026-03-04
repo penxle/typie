@@ -55,6 +55,16 @@ impl ContentExpr {
         }
     }
 
+    pub fn repeated_single_type(&self) -> Option<NodeType> {
+        match self {
+            Self::ZeroOrMore(inner) | Self::OneOrMore(inner) => match inner.as_ref() {
+                Self::Single(t) => Some(*t),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
     pub fn allows_empty(&self) -> bool {
         match self {
             Self::Empty => true,

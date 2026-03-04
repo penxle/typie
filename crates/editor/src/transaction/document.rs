@@ -6,6 +6,7 @@ use crate::state::{Position, Selection, block_content_len};
 use crate::transaction::Transaction;
 use crate::types::Affinity;
 use anyhow::{Context, Result};
+use rustc_hash::FxHashSet;
 
 #[derive(Debug, Clone)]
 pub enum InsertResult {
@@ -690,6 +691,7 @@ impl Transaction {
         to: Position,
         fragment: Fragment,
     ) -> Result<()> {
+        let is_delete = fragment.is_empty();
         let mut fragment = Some(fragment);
 
         let from_node = self
@@ -697,6 +699,19 @@ impl Transaction {
             .node(from.node_id)
             .context("From node not found")?;
         let to_node = self.doc().node(to.node_id).context("To node not found")?;
+        let flatten_seed_ids = if is_delete {
+            let mut seen = FxHashSet::default();
+            let mut seed_ids = Vec::new();
+            for node in from_node.ancestors().chain(to_node.ancestors()) {
+                let node_id = node.node_id();
+                if seen.insert(node_id) {
+                    seed_ids.push(node_id);
+                }
+            }
+            seed_ids
+        } else {
+            Vec::new()
+        };
 
         let from_ancestors: Vec<NodeId> = from_node.ancestors().map(|n| n.node_id()).collect();
         let to_ancestors: Vec<NodeId> = to_node.ancestors().map(|n| n.node_id()).collect();
@@ -729,6 +744,9 @@ impl Transaction {
                     }
 
                     self.set_selection(preserved_selection);
+                    if is_delete {
+                        self.promote_container_items(&flatten_seed_ids)?;
+                    }
                     return Ok(());
                 }
             }
@@ -817,6 +835,167 @@ impl Transaction {
             self.set_selection_position(head);
         } else {
             self.set_selection_position(final_selection_pos);
+        }
+
+        if is_delete {
+            self.promote_container_items(&flatten_seed_ids)?;
+        }
+
+        Ok(())
+    }
+
+    fn promote_item_type_on_delete(&self, node: &NodeRef<'_>) -> Option<NodeType> {
+        node.spec()
+            .and_then(|spec| spec.promote_item_type_on_delete)
+    }
+
+    fn collect_promotion_candidates(&self, node_ids: &[NodeId]) -> Vec<NodeId> {
+        let mut seen = FxHashSet::default();
+        let mut result = Vec::new();
+
+        for &start_id in node_ids {
+            let Some(start) = self.doc().node(start_id) else {
+                continue;
+            };
+
+            for node in start.ancestors() {
+                let Some(parent) = node.parent() else {
+                    continue;
+                };
+
+                if node.node_type() == self.promote_item_type_on_delete(&parent) {
+                    let node_id = node.node_id();
+                    if seen.insert(node_id) {
+                        result.push(node_id);
+                    }
+                }
+            }
+        }
+
+        result
+    }
+
+    fn promote_container_item(&mut self, item_id: NodeId) -> Result<bool> {
+        let (container_id, nested_container_ids, mut prev_id) = {
+            let Some(item) = self.doc().node(item_id) else {
+                return Ok(false);
+            };
+            let prev_id = item.prev_sibling().map(|n| n.node_id());
+
+            let Some(container) = item.parent() else {
+                return Ok(false);
+            };
+            let container_id = container.node_id();
+
+            let Some(item_type) = self.promote_item_type_on_delete(&container) else {
+                return Ok(false);
+            };
+            if item.node_type() != Some(item_type) {
+                return Ok(false);
+            };
+
+            let Some(first_child) = item.first_child() else {
+                return Ok(false);
+            };
+
+            let container_type = container.node_type();
+            let schema = self.doc().schema();
+            let mut nested_container_ids = Vec::new();
+
+            match first_child.spec() {
+                Some(spec) if spec.is_textblock(schema) => {
+                    if block_content_len(&first_child) != 0 {
+                        return Ok(false);
+                    }
+
+                    for child in item.children().skip(1) {
+                        let child_item_type = self.promote_item_type_on_delete(&child);
+                        if child_item_type != Some(item_type) || child.node_type() != container_type
+                        {
+                            return Ok(false);
+                        }
+                        nested_container_ids.push(child.node_id());
+                    }
+                }
+                _ if self.promote_item_type_on_delete(&first_child) == Some(item_type)
+                    && first_child.node_type() == container_type =>
+                {
+                    for child in item.children() {
+                        let child_item_type = self.promote_item_type_on_delete(&child);
+                        if child_item_type != Some(item_type) || child.node_type() != container_type
+                        {
+                            return Ok(false);
+                        }
+                        nested_container_ids.push(child.node_id());
+                    }
+                }
+                _ => {
+                    return Ok(false);
+                }
+            }
+
+            if nested_container_ids.is_empty() {
+                return Ok(false);
+            }
+
+            (container_id, nested_container_ids, prev_id)
+        };
+
+        for nested_container_id in nested_container_ids {
+            let nested_item_ids: Vec<NodeId> = self
+                .doc()
+                .node(nested_container_id)
+                .map(|node| node.children().map(|c| c.node_id()).collect())
+                .unwrap_or_default();
+
+            for nested_item_id in nested_item_ids {
+                self.move_node_range(
+                    nested_item_id,
+                    nested_item_id,
+                    Some(container_id),
+                    prev_id,
+                    None,
+                )?;
+                prev_id = Some(nested_item_id);
+            }
+        }
+
+        self.delete_node_with_selection_adjustment(item_id)?;
+        self.clean_up_empty_ancestors(container_id)?;
+
+        Ok(true)
+    }
+
+    fn promote_container_items(&mut self, seed_node_ids: &[NodeId]) -> Result<()> {
+        let mut seed_node_ids = seed_node_ids.to_vec();
+        seed_node_ids.push(self.selection().head.node_id);
+
+        let mut pass = 0;
+        loop {
+            pass += 1;
+            if pass > 32 {
+                break;
+            }
+
+            let candidates = self.collect_promotion_candidates(&seed_node_ids);
+            if candidates.is_empty() {
+                break;
+            }
+
+            let mut changed = false;
+            for candidate in candidates {
+                if self.promote_container_item(candidate)? {
+                    changed = true;
+                }
+            }
+
+            if !changed {
+                break;
+            }
+
+            if let Some(last) = seed_node_ids.last_mut() {
+                *last = self.selection().head.node_id;
+            }
         }
 
         Ok(())
