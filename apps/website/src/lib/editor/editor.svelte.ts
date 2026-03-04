@@ -1161,6 +1161,10 @@ export class Editor {
       modifier: this.#toModifier(e),
     });
 
+    if (this.readOnly) {
+      this.dispatch({ type: 'selectWord' });
+    }
+
     this.openContextMenu({ x: e.clientX, y: e.clientY, source: 'mouse', placement: 'bottom-start' });
   }
 
