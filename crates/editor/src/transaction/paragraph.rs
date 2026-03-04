@@ -63,7 +63,10 @@ impl Transaction {
         select_next: bool,
     ) -> Result<bool> {
         let sibling = self.node(sibling_id).context("Sibling not found")?;
-        if !sibling.spec().map_or(false, |s| s.selectable) {
+        if !sibling
+            .spec()
+            .map_or(false, |s| s.selectable || (s.isolating && !s.structural))
+        {
             return Ok(false);
         }
 
@@ -1743,50 +1746,6 @@ mod tests {
         };
 
         assert_state_eq!(actual, expected);
-    }
-
-    #[test]
-    fn join_backward_does_not_enter_isolating_node() {
-        let mut p1 = id!();
-
-        let initial = state! {
-            doc {
-                fold {
-                    fold_title { text { "title" } }
-                    fold_content {
-                        paragraph { text { "inside" } }
-                    }
-                }
-                @p1 paragraph { text { "outside" } }
-            }
-            selection { (p1, 0) }
-        };
-
-        let actual = transact!(initial.clone(), |tr| tr.join_backward().unwrap());
-
-        assert_state_eq!(actual, initial);
-    }
-
-    #[test]
-    fn join_forward_does_not_enter_isolating_node() {
-        let mut p1 = id!();
-
-        let initial = state! {
-            doc {
-                @p1 paragraph { text { "outside" } }
-                fold {
-                    fold_title { text { "title" } }
-                    fold_content {
-                        paragraph { text { "inside" } }
-                    }
-                }
-            }
-            selection { (p1, 7) }
-        };
-
-        let actual = transact!(initial.clone(), |tr| tr.join_forward().unwrap());
-
-        assert_state_eq!(actual, initial);
     }
 
     #[test]
