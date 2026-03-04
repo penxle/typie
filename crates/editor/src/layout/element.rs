@@ -68,8 +68,8 @@ pub enum Element {
     CalloutIcon(CalloutIconElement),
     HorizontalRule(HorizontalRuleElement),
     ListMarker(ListMarkerElement),
+    FoldTitleIcon(FoldTitleIconElement),
     FoldTitle(FoldTitleElement),
-    FoldTitleBackground(FoldTitleBackgroundElement),
     FoldContent(FoldContentElement),
     TableBorder(TableBorderElement),
     TableCell(TableCellElement),
@@ -87,8 +87,8 @@ impl Element {
             Element::CalloutIcon(e) => e.size,
             Element::HorizontalRule(e) => e.size,
             Element::ListMarker(_) => Size::zero(),
+            Element::FoldTitleIcon(e) => e.size,
             Element::FoldTitle(e) => e.size,
-            Element::FoldTitleBackground(e) => e.size,
             Element::FoldContent(e) => e.size,
             Element::TableBorder(e) => e.size,
             Element::TableCell(e) => e.size,
@@ -105,12 +105,12 @@ impl Element {
 
     pub fn interactive_props(&self, read_only: bool) -> Option<InteractiveProps> {
         match self {
-            Element::FoldTitle(e) => Some(InteractiveProps {
+            Element::FoldTitleIcon(e) => Some(InteractiveProps {
                 kind: 0,
                 node_id: e.fold_id,
                 wants_passthrough: !read_only,
             }),
-            Element::FoldTitleBackground(e) => Some(InteractiveProps {
+            Element::FoldTitle(e) => Some(InteractiveProps {
                 kind: 0,
                 node_id: e.fold_id,
                 wants_passthrough: !read_only,
@@ -135,8 +135,8 @@ impl Element {
             Element::CalloutIcon(_) => None,
             Element::HorizontalRule(e) => Some(e),
             Element::ListMarker(_) => None,
+            Element::FoldTitleIcon(_) => None,
             Element::FoldTitle(_) => None,
-            Element::FoldTitleBackground(_) => None,
             Element::FoldContent(_) => None,
             Element::TableBorder(_) => None,
             Element::TableCell(_) => None,
@@ -154,8 +154,8 @@ impl Element {
             Element::CalloutIcon(e) => Some(e),
             Element::HorizontalRule(e) => Some(e),
             Element::ListMarker(e) => Some(e),
+            Element::FoldTitleIcon(e) => Some(e),
             Element::FoldTitle(e) => Some(e),
-            Element::FoldTitleBackground(e) => Some(e),
             Element::FoldContent(e) => Some(e),
             Element::TableBorder(e) => Some(e),
             Element::TableCell(e) => Some(e),
@@ -173,8 +173,8 @@ impl Element {
             Element::CalloutIcon(e) => Some(e),
             Element::HorizontalRule(e) => Some(e),
             Element::ListMarker(e) => Some(e),
+            Element::FoldTitleIcon(e) => Some(e),
             Element::FoldTitle(e) => Some(e),
-            Element::FoldTitleBackground(e) => Some(e),
             Element::FoldContent(e) => Some(e),
             Element::TableBorder(e) => Some(e),
             Element::TableCell(e) => Some(e),
@@ -192,8 +192,8 @@ impl Element {
             Element::CalloutIcon(_) => PointerStyle::Pointer,
             Element::HorizontalRule(_) => PointerStyle::Default,
             Element::ListMarker(_) => PointerStyle::Default,
+            Element::FoldTitleIcon(_) => PointerStyle::Pointer,
             Element::FoldTitle(_) => PointerStyle::Pointer,
-            Element::FoldTitleBackground(_) => PointerStyle::Pointer,
             Element::FoldContent(_) => PointerStyle::Default,
             Element::TableBorder(_) => PointerStyle::Text,
             Element::TableCell(_) => PointerStyle::Text,
@@ -211,8 +211,8 @@ impl Element {
             Element::CalloutBackground(e) => Some(e.node_id),
             Element::CalloutIcon(e) => Some(e.node_id),
             Element::ListMarker(_) => None,
-            Element::FoldTitle(e) => Some(e.block_id),
-            Element::FoldTitleBackground(e) => Some(e.fold_id),
+            Element::FoldTitleIcon(e) => Some(e.block_id),
+            Element::FoldTitle(e) => Some(e.fold_id),
             Element::FoldContent(e) => Some(e.fold_id),
             Element::TableBorder(e) => Some(e.node_id),
             Element::TableCell(e) => Some(e.node_id),
@@ -257,8 +257,8 @@ impl Element {
             | Element::CalloutIcon(_)
             | Element::HorizontalRule(_)
             | Element::ListMarker(_)
+            | Element::FoldTitleIcon(_)
             | Element::FoldTitle(_)
-            | Element::FoldTitleBackground(_)
             | Element::TableCell(_) => false,
         }
     }

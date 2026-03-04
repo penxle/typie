@@ -1,5 +1,5 @@
 use crate::global::GLOBALS;
-use crate::layout::elements::{FoldTitleElement, LineElement, build_metrics};
+use crate::layout::elements::{FoldTitleIconElement, LineElement, build_metrics};
 use crate::layout::{Element, Layout, LayoutContext, LayoutNode, PageBreakPolicy, PositionedNode};
 use crate::model::html::{DomSpec, NodeHtmlCodec, NodeParseRule};
 use crate::model::{Node, PreeditDecor};
@@ -202,7 +202,7 @@ impl Layout for FoldTitleNode {
 
         let total_size = Size::new(constraints.max_width, y_offset);
 
-        let toggle_element = FoldTitleElement::new(
+        let toggle_element = FoldTitleIconElement::new(
             Size::new(TOGGLE_ICON_WIDTH, y_offset),
             ctx.node.node_id(),
             fold_id,
@@ -215,7 +215,7 @@ impl Layout for FoldTitleNode {
                 position: Point::new(0.0, 0.0),
                 node: Rc::new(LayoutNode {
                     size: Size::new(TOGGLE_ICON_WIDTH, y_offset),
-                    element: Some(Element::FoldTitle(toggle_element)),
+                    element: Some(Element::FoldTitleIcon(toggle_element)),
                     children: None,
                     page_break_policy: PageBreakPolicy::Avoid,
                     render_hints: Default::default(),

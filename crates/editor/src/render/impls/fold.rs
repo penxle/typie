@@ -1,4 +1,4 @@
-use crate::layout::elements::{FoldContentElement, FoldTitleBackgroundElement, FoldTitleElement};
+use crate::layout::elements::{FoldContentElement, FoldTitleElement, FoldTitleIconElement};
 use crate::model::{FOLD_BORDER_RADIUS, FOLD_BORDER_WIDTH};
 use crate::render::outline::ElementSink;
 use crate::render::{GlyphRenderer, Outline, RasterSink, Render, RenderContext, RenderPhase};
@@ -8,7 +8,7 @@ use tiny_skia::{Paint, Path, PathBuilder, PixmapMut, Stroke, Transform};
 const CHEVRON_SIZE: f32 = 20.0;
 const CHEVRON_STROKE_WIDTH: f32 = 1.5;
 
-impl Render for FoldTitleElement {
+impl Render for FoldTitleIconElement {
     fn render(
         &self,
         pixmap: &mut PixmapMut,
@@ -21,13 +21,13 @@ impl Render for FoldTitleElement {
     }
 }
 
-impl Outline for FoldTitleElement {
+impl Outline for FoldTitleIconElement {
     fn outline(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
         self.paint_to(sink, transform, ctx);
     }
 }
 
-impl FoldTitleElement {
+impl FoldTitleIconElement {
     fn paint_to(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
         if let RenderPhase::Content = ctx.phase {
             let color = ctx.theme.color("ui.text.faint");
@@ -58,7 +58,7 @@ impl FoldTitleElement {
     }
 }
 
-impl Render for FoldTitleBackgroundElement {
+impl Render for FoldTitleElement {
     fn render(
         &self,
         pixmap: &mut PixmapMut,
@@ -71,13 +71,13 @@ impl Render for FoldTitleBackgroundElement {
     }
 }
 
-impl Outline for FoldTitleBackgroundElement {
+impl Outline for FoldTitleElement {
     fn outline(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
         self.paint_to(sink, transform, ctx);
     }
 }
 
-impl FoldTitleBackgroundElement {
+impl FoldTitleElement {
     fn paint_to(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
         let inner_radius = (FOLD_BORDER_RADIUS - FOLD_BORDER_WIDTH).max(0.0);
         let (top_left_radius, top_right_radius, bottom_right_radius, bottom_left_radius) =
