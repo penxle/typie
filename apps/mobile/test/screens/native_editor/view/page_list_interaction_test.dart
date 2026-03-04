@@ -1655,6 +1655,33 @@ void main() {
       expect(cellHandleDragPosition.value, isNull);
     });
 
+    testWidgets('table-cell handle end succeeds without external drag-position notifier', (tester) async {
+      final deps = _PageListHarnessDeps.create();
+      addTearDown(deps.dispose);
+      await tester.pumpWidget(deps.build());
+      await tester.pumpAndSettle();
+
+      final interaction = interactionControllerOf(tester);
+      final point = interactionPoint(tester, deps);
+      final viewportPosition = interaction.viewportPositionFromGlobal(point);
+      expect(viewportPosition, isNotNull);
+
+      final cellHandleDragPosition = ValueNotifier<Offset?>(null);
+
+      expect(interaction.beginTableCellHandleDragDown(DragDownDetails(globalPosition: point)), isTrue);
+      final started = interaction.startTableCellHandleDrag(
+        anchorHandle: null,
+        viewportPosition: viewportPosition,
+        cellHandleDragPosition: cellHandleDragPosition,
+      );
+      expect(started, isTrue);
+      expect(deps.interactionState.snapshot().mode, InteractionMode.tableCellHandleDragging);
+
+      cellHandleDragPosition.dispose();
+      expect(interaction.endTableCellHandleDrag(), isTrue);
+      expect(deps.interactionState.snapshot().mode, InteractionMode.idle);
+    });
+
     testWidgets('external dnd dropEnded ends session and unlocks pan', (tester) async {
       final deps = _PageListHarnessDeps.create();
       addTearDown(deps.dispose);
