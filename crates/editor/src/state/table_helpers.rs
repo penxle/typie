@@ -49,6 +49,42 @@ pub fn collect_cells_in_range(doc: &Doc, table_id: NodeId, range: TableCellRange
     cells
 }
 
+pub fn table_size(doc: &Doc, table_id: NodeId) -> Option<(usize, usize)> {
+    let table = doc.node(table_id)?;
+    if table.node_type() != Some(NodeType::Table) {
+        return None;
+    }
+
+    let row_count = table.children().count();
+    if row_count == 0 {
+        return Some((0, 0));
+    }
+
+    let col_count = table
+        .children()
+        .next()
+        .map(|row| row.children().count())
+        .unwrap_or(0);
+
+    Some((row_count, col_count))
+}
+
+pub fn is_full_table_range(doc: &Doc, table_id: NodeId, range: TableCellRange) -> bool {
+    let Some((row_count, col_count)) = table_size(doc, table_id) else {
+        return false;
+    };
+
+    if row_count == 0 || col_count == 0 {
+        return false;
+    }
+
+    let ((r_start, r_end), (c_start, c_end)) = range;
+    r_start == 0
+        && c_start == 0
+        && r_end.saturating_add(1) >= row_count
+        && c_end.saturating_add(1) >= col_count
+}
+
 pub fn find_table_cell(doc: &Doc, node_id: NodeId) -> Option<(NodeId, NodeId, usize, usize)> {
     let mut current_id = node_id;
 
