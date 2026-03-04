@@ -80,4 +80,8 @@ dependencies {
   implementation("androidx.window:window-java:1.5.1")
   implementation("com.squareup.moshi:moshi:1.15.2")
   coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
+
+  testImplementation("androidx.test:core:1.6.1")
+  testImplementation("junit:junit:4.13.2")
+  testImplementation("org.robolectric:robolectric:4.13")
 }

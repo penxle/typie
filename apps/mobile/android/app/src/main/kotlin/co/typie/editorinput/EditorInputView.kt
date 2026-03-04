@@ -89,9 +89,44 @@ class EditorInputNativeView(
   private var batchEditStartSelectionEnd = -1
   private var batchEditHadBridgedMutation = false
   private var batchEditHadComposingMutation = false
-
+  private var suppressRegionComposeAfterBoundaryDelete = false
+  private var pendingHandledKeyDownTime = -1L
+  private var pendingHandledKeyCode = KeyEvent.KEYCODE_UNKNOWN
+  private var pendingHandledDeviceId = Int.MIN_VALUE
+  private var pendingHandledKeyRepeatCount = -1
   private val inputMethodManager: InputMethodManager
     get() = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+
+  private fun markHandledKeyDown(event: KeyEvent) {
+    pendingHandledKeyDownTime = event.downTime
+    pendingHandledKeyCode = event.keyCode
+    pendingHandledDeviceId = event.deviceId
+    pendingHandledKeyRepeatCount = event.repeatCount
+  }
+
+  private fun clearHandledKeyDown() {
+    pendingHandledKeyDownTime = -1L
+    pendingHandledKeyCode = KeyEvent.KEYCODE_UNKNOWN
+    pendingHandledDeviceId = Int.MIN_VALUE
+    pendingHandledKeyRepeatCount = -1
+  }
+
+  private fun consumeHandledKeyDown(event: KeyEvent): Boolean {
+    if (pendingHandledKeyCode == KeyEvent.KEYCODE_UNKNOWN) return false
+    val isMatch =
+      pendingHandledKeyDownTime == event.downTime &&
+        pendingHandledKeyCode == event.keyCode &&
+        pendingHandledDeviceId == event.deviceId &&
+        pendingHandledKeyRepeatCount == event.repeatCount
+    if (isMatch) {
+      clearHandledKeyDown()
+      return true
+    }
+    if (event.downTime > pendingHandledKeyDownTime) {
+      clearHandledKeyDown()
+    }
+    return false
+  }
 
   private fun clearComposingRegionTracking() {
     composingRegionLength = 0
@@ -328,6 +363,17 @@ class EditorInputNativeView(
     channel.invokeMethod("deleteBackward", emptyMap<String, Any>())
   }
 
+  private fun hasDeletableTextBeforeCursor(): Boolean {
+    val editable = text ?: return false
+    val startRaw = Selection.getSelectionStart(editable)
+    val endRaw = Selection.getSelectionEnd(editable)
+    if (startRaw < 0 || endRaw < 0) return editable.isNotEmpty()
+    val start = kotlin.math.min(startRaw, endRaw)
+    val end = kotlin.math.max(startRaw, endRaw)
+    if (end > start) return true
+    return start > 0
+  }
+
   private fun performNewline(isShiftPressed: Boolean) {
     commitComposingState()
     if (isShiftPressed) {
@@ -367,12 +413,43 @@ class EditorInputNativeView(
   }
 
   override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+    if (consumeHandledKeyDown(event)) {
+      return true
+    }
     val meta = event.metaState and (META_CTRL or META_SHIFT or META_ALT)
     val shortcut = SHORTCUTS.find { it.keyCode == keyCode && it.meta == meta }
 
     if (shortcut != null) {
       commitComposingState()
       channel.invokeMethod("shortcut", mapOf("action" to shortcut.action))
+      return true
+    }
+
+    resolveNavigationDirection(event)?.let { direction ->
+      commitComposingState()
+      channel.invokeMethod(
+        "navigate",
+        mapOf(
+          "direction" to direction,
+          "extend" to event.isShiftPressed
+        )
+      )
+      return true
+    }
+
+    val shouldBridgePrintable =
+      shouldBridgePrintableKey(
+        keyCode = keyCode,
+        unicode = event.unicodeChar,
+        isCtrlPressed = event.isCtrlPressed,
+        isAltPressed = event.isAltPressed,
+        isMetaPressed = event.isMetaPressed,
+        isSoftKeyboardEvent = (event.flags and KeyEvent.FLAG_SOFT_KEYBOARD) != 0
+      )
+    if (shouldBridgePrintable) {
+      val text = String(Character.toChars(event.unicodeChar))
+      commitComposingState()
+      insertTextOrNewline(text)
       return true
     }
 
@@ -525,16 +602,84 @@ class EditorInputNativeView(
       override fun setComposingText(text: CharSequence?, newCursorPosition: Int): Boolean {
         val rawStr = text?.toString().orEmpty()
         noteComposingMutation()
-        // 디자인키보드의 천지인 키보드는 조합 문자열 전체(예: '살ㅇ' -> '살이' -> '살아')를 넘기므로
-        // setComposingText에서는 seed prefix 제거/삭제 브리지 없이 원문 조합을 그대로 반영한다.
-        val str = rawStr
-        val superText: CharSequence? = text
+        if (suppressRegionComposeAfterBoundaryDelete) {
+          val shouldSkipReplayedCompose = !isComposing && composingRegionLength > 0 && rawStr.isNotEmpty()
+          suppressRegionComposeAfterBoundaryDelete = false
+          if (shouldSkipReplayedCompose) {
+            clearComposingRegionTracking()
+            clearComposingPrefixTracking()
+            super.finishComposingText()
+            notifyCursorUpdate()
+            return true
+          }
+        }
+        val hasPendingRegionOnComposeStart = !isComposing && hasPendingRegionNormalization && composingRegionLength > 0
+        val regionLengthOnComposeStart = if (hasPendingRegionOnComposeStart) composingRegionLength else 0
+        // 삼성 키보드처럼 setComposingRegion 이후 setComposingText에 seed prefix(기존 텍스트)가
+        // 붙어오는 경우, compose 시작 프레임에서만 seed를 제거해 앞글자 삭제를 방지한다.
+        val seedOnComposeStart =
+          if (hasPendingRegionOnComposeStart) {
+            currentComposingRegionText()
+          } else {
+            ""
+          }
+        val shouldNormalizeSeedOnComposeStart =
+          seedOnComposeStart.isNotEmpty() &&
+            rawStr.length > seedOnComposeStart.length &&
+            rawStr.startsWith(seedOnComposeStart)
+        val shouldNormalizeRegionLengthOnComposeStart =
+          !shouldNormalizeSeedOnComposeStart &&
+            hasPendingRegionOnComposeStart &&
+            composingRegionStart == 0 &&
+            regionLengthOnComposeStart > 0 &&
+            rawStr.length > regionLengthOnComposeStart
+        val shouldNormalizeByPrefix = composingPrefixToStrip.isNotEmpty()
+        val str =
+          if (shouldNormalizeSeedOnComposeStart || shouldNormalizeByPrefix) {
+            normalizeSeededComposingText(rawStr)
+          } else if (shouldNormalizeRegionLengthOnComposeStart) {
+            hasPendingRegionNormalization = false
+            val prefix = rawStr.substring(0, regionLengthOnComposeStart)
+            val normalized = rawStr.substring(regionLengthOnComposeStart)
+            if (normalized.isNotEmpty()) {
+              composingPrefixToStrip = prefix
+            } else {
+              clearComposingPrefixTracking()
+            }
+            normalized
+          } else {
+            rawStr
+          }
+        val wasRegionNormalized = str != rawStr
+        if (shouldNormalizeSeedOnComposeStart && wasRegionNormalized) {
+          clearComposingRegionTracking()
+        } else if (shouldNormalizeRegionLengthOnComposeStart && wasRegionNormalized) {
+          clearComposingRegionTracking()
+        }
+        val superText: CharSequence? = if (str == rawStr) text else str
 
         // 문제 시나리오:
         // - LG 키보드에서 "안녕 " 입력 후 백스페이스를 누르면
         //   setComposingRegion(0..2) + setComposingText("안녕")으로 재조합을 시작한다.
         // - 이때 기존 범위를 먼저 소비하지 않으면 preedit이 뒤에 붙어 "안녕안녕"이 된다.
-        val shouldConsumeRegionOnComposeStart = !isComposing && str.isNotEmpty() && composingRegionLength > 0
+        val shouldConsumeRegionOnComposeStart =
+          !isComposing &&
+            !wasRegionNormalized &&
+            str.isNotEmpty() &&
+            composingRegionLength > 0
+        val trackedRegionLengthOnComposeStart = composingRegionLength
+        val regionSeedLengthOnComposeStart =
+          if (shouldConsumeRegionOnComposeStart) currentComposingRegionText().length else 0
+        val hasStaleRegionOnComposeStart =
+          shouldConsumeRegionOnComposeStart && regionSeedLengthOnComposeStart < trackedRegionLengthOnComposeStart
+        // stale region(start/end은 남아 있지만 현재 editable에 해당 범위 텍스트가 없음)에서는
+        // 이전 문맥 preedit이 재생성될 수 있으므로 이번 compose 프레임은 무시한다.
+        if (hasStaleRegionOnComposeStart) {
+          clearComposingRegionTracking()
+          clearComposingPrefixTracking()
+          notifyCursorUpdate()
+          return true
+        }
         if (shouldConsumeRegionOnComposeStart) {
           consumeComposingRegion(requireActiveComposition = false)
         }
@@ -577,7 +722,7 @@ class EditorInputNativeView(
         if (batchEditDepth == 0) {
           val finalText = text?.toString().orEmpty()
           // 배치 내 브리지 반영이 있으면 중복 반영 금지
-          // 조합 문자열 업데이트(setComposingText)로 바뀐 shadow text는 에디터 본문 변경으로 재해석하지 않는다.
+          // 조합 문자열 업데이트(setComposingText)로 바뀐 텍스트는 에디터 본문 변경으로 재해석하지 않는다.
           val shouldReconcile = !batchEditHadBridgedMutation && !batchEditHadComposingMutation && finalText != batchEditStartText
           if (shouldReconcile) {
             reconcileBatchTextMutation(batchEditStartText, finalText)
@@ -682,11 +827,12 @@ class EditorInputNativeView(
       }
 
       override fun sendKeyEvent(event: KeyEvent): Boolean {
-        if (event.action != KeyEvent.ACTION_DOWN) return true
-
         resolveNavigationDirection(event)?.let { direction ->
-          commitComposingState()
-          super.finishComposingText()
+          if (event.action != KeyEvent.ACTION_DOWN) return true
+          if (isComposing) {
+            commitComposingState()
+            super.finishComposingText()
+          }
           channel.invokeMethod(
             "navigate",
             mapOf(
@@ -695,15 +841,21 @@ class EditorInputNativeView(
             )
           )
           notifyCursorUpdate()
+          markHandledKeyDown(event)
           return true
         }
+
+        if (event.action != KeyEvent.ACTION_DOWN) return true
 
         return when (event.keyCode) {
           KeyEvent.KEYCODE_DEL -> {
             if (isComposing) {
+              suppressRegionComposeAfterBoundaryDelete = false
               cancelComposingState()
               super.commitText("", 1)
             } else {
+              val hasDeletionTarget = hasDeletableTextBeforeCursor()
+              suppressRegionComposeAfterBoundaryDelete = !hasDeletionTarget
               if (event.repeatCount > 0) {
                 val now = System.currentTimeMillis()
                 if (now - lastDeleteTime < 300) return true
@@ -713,10 +865,12 @@ class EditorInputNativeView(
               super.deleteSurroundingText(1, 0)
             }
             notifyCursorUpdate()
+            markHandledKeyDown(event)
             true
           }
           KeyEvent.KEYCODE_ENTER -> {
             handleNewline()
+            markHandledKeyDown(event)
             true
           }
           KeyEvent.KEYCODE_SPACE -> {
@@ -728,24 +882,28 @@ class EditorInputNativeView(
             insertTextOrNewline(" ")
             super.commitText(" ", 1)
             notifyCursorUpdate()
+            markHandledKeyDown(event)
             true
           }
           else -> {
             val unicode = event.unicodeChar
-            val isHardwarePrintableKey =
-              event.deviceId != KeyCharacterMap.VIRTUAL_KEYBOARD &&
-              unicode >= 0x20 &&
-              (unicode and KeyCharacterMap.COMBINING_ACCENT == 0) &&
-              !event.isCtrlPressed &&
-              !event.isAltPressed &&
-              !event.isMetaPressed
-            if (isHardwarePrintableKey) {
+            val shouldBridgePrintable =
+              shouldBridgePrintableKey(
+                keyCode = event.keyCode,
+                unicode = unicode,
+                isCtrlPressed = event.isCtrlPressed,
+                isAltPressed = event.isAltPressed,
+                isMetaPressed = event.isMetaPressed,
+                isSoftKeyboardEvent = (event.flags and KeyEvent.FLAG_SOFT_KEYBOARD) != 0
+              )
+            if (shouldBridgePrintable) {
               val text = String(Character.toChars(unicode))
               commitComposingState()
               super.finishComposingText()
               insertTextOrNewline(text)
               super.commitText(text, 1)
               notifyCursorUpdate()
+              markHandledKeyDown(event)
               return true
             }
 
@@ -768,6 +926,27 @@ class EditorInputNativeView(
     private const val META_SHIFT = KeyEvent.META_SHIFT_ON
     private const val META_ALT = KeyEvent.META_ALT_ON
     private const val META_CTRL_SHIFT = META_CTRL or META_SHIFT
+
+    internal fun shouldBridgePrintableKey(
+      keyCode: Int,
+      unicode: Int,
+      isCtrlPressed: Boolean,
+      isAltPressed: Boolean,
+      isMetaPressed: Boolean,
+      isSoftKeyboardEvent: Boolean
+    ): Boolean {
+      val isPrintableUnicode = unicode >= 0x20 && (unicode and KeyCharacterMap.COMBINING_ACCENT == 0)
+      if (!isPrintableUnicode || isCtrlPressed || isAltPressed || isMetaPressed) {
+        return false
+      }
+
+      if (!isSoftKeyboardEvent) return true
+
+      val isAsciiDigit = unicode in '0'.code..'9'.code
+      val isDigitKeyCode = keyCode in KeyEvent.KEYCODE_0..KeyEvent.KEYCODE_9
+      val isNumpadDigitKeyCode = keyCode in KeyEvent.KEYCODE_NUMPAD_0..KeyEvent.KEYCODE_NUMPAD_9
+      return isAsciiDigit || isDigitKeyCode || isNumpadDigitKeyCode
+    }
 
     private val SHORTCUTS = listOf(
       Shortcut(KeyEvent.KEYCODE_A, META_CTRL, "selectAll"),
