@@ -41,6 +41,7 @@ export type SelectionEndpointBounds = {
 export type Selection = {
   collapsed: boolean;
   cmp: number;
+  selectedBlockCount: number;
   anchor: Position;
   head: Position;
   anchorBounds: SelectionEndpointBounds | null;

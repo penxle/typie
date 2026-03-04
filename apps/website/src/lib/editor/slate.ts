@@ -229,6 +229,7 @@ export class SlateReader {
   readSelection(): Selection {
     const cmp = this.#i32('selection_cmp');
     const collapsed = cmp === 0;
+    const selectedBlockCount = this.#u32('selection_block_ids_count');
 
     const anchorAffinity = this.#u32('selection_anchor_affinity');
     const headAffinity = this.#u32('selection_head_affinity');
@@ -276,6 +277,7 @@ export class SlateReader {
     return {
       collapsed,
       cmp,
+      selectedBlockCount,
       anchor,
       head,
       anchorBounds,
