@@ -2,7 +2,7 @@ part of '../controller.dart';
 
 typedef PinchPageResolver = (int pageIdx, double localY) Function(double y);
 
-class PinchViewportSession implements InteractionSession {
+class PinchViewportGesture implements InteractionGesture {
   PinchAnchor? _anchor;
   PinchScrollTarget? _pendingTarget;
   double _pendingContentWidth = 0;
@@ -174,10 +174,10 @@ class PinchViewportSession implements InteractionSession {
   }
 }
 
-class PinchSession implements InteractionSession {
-  PinchSession({required PinchViewportSession viewportSession}) : _viewportSession = viewportSession;
+class PinchGesture implements InteractionGesture {
+  PinchGesture({required PinchViewportGesture viewport}) : _viewport = viewport;
 
-  final PinchViewportSession _viewportSession;
+  final PinchViewportGesture _viewport;
   final Map<int, Offset> _activePointers = {};
   double? _pinchStartDistance;
   double _pinchStartZoom = 1;
@@ -216,7 +216,7 @@ class PinchSession implements InteractionSession {
     _pinchStartDistance = null;
     _pinchStartZoom = 1;
     _isPinching = false;
-    _viewportSession.reset();
+    _viewport.reset();
   }
 
   bool beginIfNeeded({
@@ -237,13 +237,13 @@ class PinchSession implements InteractionSession {
     _pinchStartDistance = distance;
     _pinchStartZoom = currentZoom;
     _isPinching = true;
-    _viewportSession.reset();
+    _viewport.reset();
 
     final focal = _currentPinchFocal();
     if (focal != null) {
       final logicalX = resolveLogicalX(focal.dx);
       final (pageIdx, logicalY) = resolvePageAtPosition(focal.dy);
-      _viewportSession.captureAnchor(pageIdx: pageIdx, logicalX: logicalX, logicalY: logicalY);
+      _viewport.captureAnchor(pageIdx: pageIdx, logicalX: logicalX, logicalY: logicalY);
     }
 
     return true;
@@ -287,7 +287,7 @@ class PinchSession implements InteractionSession {
 
     final logicalX = resolveLogicalX(focal.dx);
     final (pageIdx, logicalY) = resolvePageAtPosition(focal.dy);
-    _viewportSession.ensureAnchor(pageIdx: pageIdx, logicalX: logicalX, logicalY: logicalY);
+    _viewport.ensureAnchor(pageIdx: pageIdx, logicalX: logicalX, logicalY: logicalY);
 
     final nextZoom = clampPaginatedZoom(
       zoom: _pinchStartZoom * (distance / startDistance),
@@ -300,7 +300,7 @@ class PinchSession implements InteractionSession {
       setZoom(nextZoom);
     }
 
-    _viewportSession.syncViewport(
+    _viewport.syncViewport(
       focal: focal,
       geometry: geometryBuilder(zoomForSync),
       viewportWidth: viewportWidth,
@@ -317,7 +317,7 @@ class PinchSession implements InteractionSession {
     }
     _isPinching = false;
     _pinchStartDistance = null;
-    _viewportSession.reset();
+    _viewport.reset();
     setZoom(currentZoom, commitRender: true);
   }
 
@@ -346,7 +346,7 @@ class PinchSession implements InteractionSession {
   }
 }
 
-extension PinchInteractionMethods on EditorInteractionController {
+extension PinchGestureMethods on EditorInteractionController {
   String? _zoomSnapKey(double value) {
     final layout = scope.controller.state.layout;
     final viewWidth = readViewWidth();
@@ -386,7 +386,7 @@ extension PinchInteractionMethods on EditorInteractionController {
 
   void _beginPinchIfNeeded() {
     final geometry = readGeometry();
-    final started = pinchSession.beginIfNeeded(
+    final started = pinchGesture.beginIfNeeded(
       isPaginated: geometry.isPaginated,
       currentZoom: scope.displayZoom.value,
       resolveLogicalX: _resolvePointerX,
@@ -397,22 +397,11 @@ extension PinchInteractionMethods on EditorInteractionController {
     }
 
     _applyTransition(InteractionEvent.pinchStart);
-
-    _clearResumedPanState();
-
-    _tapSession.cancelTapTimer();
-    stopSelectionHandlesAndAutoScroll();
-    _panSession.cancelDrag();
-    _doubleTapDragSession.stop();
-    _longPressSession.end();
-    longPressPosition.value = null;
-    handleDragPosition.value = null;
-    showContextMenu.value = false;
   }
 
   void _updatePinchZoom() {
     final geometry = readGeometry();
-    pinchSession.updateIfNeeded(
+    pinchGesture.updateIfNeeded(
       isPaginated: geometry.isPaginated,
       layout: scope.controller.state.layout,
       viewportWidth: readViewWidth(),
@@ -437,7 +426,7 @@ extension PinchInteractionMethods on EditorInteractionController {
   }
 
   void _endPinchIfNeeded() {
-    pinchSession.endIfNeeded(currentZoom: scope.displayZoom.value, setZoom: scope.setZoom);
+    pinchGesture.endIfNeeded(currentZoom: scope.displayZoom.value, setZoom: scope.setZoom);
     _applyTransition(InteractionEvent.pinchEnd);
   }
 
@@ -481,12 +470,12 @@ extension PinchInteractionMethods on EditorInteractionController {
     final focal = event.localPosition;
     final logicalX = _resolvePointerX(focal.dx);
     final (pageIdx, logicalY) = getPageAtPosition(focal.dy);
-    pinchViewportSession.captureAnchor(pageIdx: pageIdx, logicalX: logicalX, logicalY: logicalY);
+    pinchViewportGesture.captureAnchor(pageIdx: pageIdx, logicalX: logicalX, logicalY: logicalY);
 
     _maybeSendZoomSnapHaptic(previousZoom: currentZoom, nextZoom: nextZoom);
     scope.setZoom(nextZoom);
 
-    pinchViewportSession.syncViewport(
+    pinchViewportGesture.syncViewport(
       focal: focal,
       geometry: ContentGeometry(
         layout: layout,

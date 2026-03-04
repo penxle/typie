@@ -319,6 +319,7 @@ export class Editor {
     inspectSelectionAsFragmentMacro(): string | undefined;
     inspectState(): string;
     inspectStateAsMacro(): string;
+    isCursorHit(page_idx: number, x: number, y: number): boolean;
     isDetached(): boolean;
     isReadOnly(): boolean;
     isSelectionHit(page_idx: number, x: number, y: number): boolean;

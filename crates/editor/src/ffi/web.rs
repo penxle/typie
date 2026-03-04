@@ -5,7 +5,7 @@ use crate::global::{
     clear_text_replacement_rules, set_auto_surround_enabled, set_text_replacement_rules,
 };
 use crate::icu_data::{get_general_category_map, load_icu_data};
-use crate::layout::query::is_selection_hit;
+use crate::layout::query::{is_cursor_hit, is_selection_hit};
 use crate::model::{
     CONTINUOUS_PAGE_MARGIN, Doc, DocExportMode, DocumentJson, LayoutMode, Node, NodeId,
     ParagraphNode, TextMapping, json_to_snapshot, snapshot_to_json,
@@ -382,6 +382,15 @@ impl Editor {
     pub fn is_selection_hit(&self, page_idx: usize, x: f32, y: f32) -> bool {
         if let Some(page) = self.runtime.pages().get(page_idx) {
             is_selection_hit(self.runtime.doc(), page, self.runtime.selection(), x, y)
+        } else {
+            false
+        }
+    }
+
+    #[wasm_bindgen(js_name = isCursorHit)]
+    pub fn is_cursor_hit(&self, page_idx: usize, x: f32, y: f32) -> bool {
+        if let Some(page) = self.runtime.pages().get(page_idx) {
+            is_cursor_hit(self.runtime.doc(), page, self.runtime.selection(), x, y)
         } else {
             false
         }

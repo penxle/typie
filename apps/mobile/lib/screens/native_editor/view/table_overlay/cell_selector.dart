@@ -157,11 +157,11 @@ class TableCellSelectorController {
   TableSelectionVisual? get visual => state.visual;
   int get rightEdgeCol => state.range.colEnd;
 
-  void beginDrag(DragDownDetails _) {
+  void beginDrag(DragDownDetails details) {
     if (!context.mounted) {
       return;
     }
-    interactionController.beginTableCellHandleDragDown();
+    interactionController.beginTableCellHandleDragDown(details);
   }
 
   void startDrag(DragStartDetails details) {

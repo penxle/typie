@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:collection/collection.dart';
@@ -7,26 +8,39 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:super_drag_and_drop/super_drag_and_drop.dart';
+import 'package:typie/native/slate_reader.dart';
 import 'package:typie/screens/native_editor/controller/dnd_controller.dart';
 import 'package:typie/screens/native_editor/state/state.dart';
 import 'package:typie/screens/native_editor/view/geometry.dart';
+import 'package:typie/screens/native_editor/view/interaction/contracts.dart';
 import 'package:typie/screens/native_editor/view/interaction/core.dart';
-import 'package:typie/screens/native_editor/view/interaction/session.dart';
 import 'package:typie/screens/native_editor/view/interaction/state.dart';
 import 'package:typie/screens/native_editor/view/scope.dart';
 import 'package:typie/screens/native_editor/view/zoom.dart';
 
-part 'sessions/auto_scroll_session.dart';
-part 'sessions/dnd_session.dart';
-part 'sessions/double_tap_drag_session.dart';
-part 'sessions/handle_drag_session.dart';
-part 'sessions/long_press_session.dart';
-part 'sessions/pan_session.dart';
-part 'sessions/pinch_session.dart';
-part 'sessions/tap_session.dart';
+part 'gestures/dnd_gesture.dart';
+part 'gestures/double_tap_drag_gesture.dart';
+part 'gestures/long_press_gesture.dart';
+part 'gestures/pan_gesture.dart';
+part 'gestures/pinch_gesture.dart';
+part 'gestures/pointer_gesture.dart';
+part 'gestures/selection_handle_gesture.dart';
+part 'gestures/table_handle_gesture.dart';
+part 'gestures/tap_gesture.dart';
+part 'semantics/auto_scroll_semantic.dart';
+part 'semantics/cursor_move_semantic.dart';
+part 'semantics/selection_expansion_semantic.dart';
+part 'semantics/selection_handle_semantic.dart';
+part 'utils.dart';
 
 typedef PagePositionResolver = (int pageIdx, double localY) Function(double y);
 typedef ResolvedDragLocation = ({Offset localPosition, int pageIdx, double localY, double pointerX});
+typedef WordSelectionDragContext = ({SelectionHandleInfo anchor, Map<String, dynamic> initialRange});
+typedef AutoScrollSelectionContext = ({
+  SelectionHandleInfo? anchor,
+  Map<String, dynamic>? initialRange,
+  bool blockCursorFallback,
+});
 
 class EditorInteractionRuntime {
   const EditorInteractionRuntime({
@@ -50,42 +64,48 @@ EditorInteractionRuntime useEditorInteractionRuntime({
   final dropPosition = useValueNotifier<Offset?>(null);
   final interactionRegionKey = useMemoized(GlobalKey.new);
 
-  final tapSession = useMemoized(TapSession.new);
-  final doubleTapDragSession = useMemoized(DoubleTapDragSession.new);
-  final longPressSession = useMemoized(LongPressSession.new);
-  final panSession = useMemoized(PanSession.new);
-  final panResumeSession = useMemoized(PanResumeSession.new);
-  final pinchViewportSession = useMemoized(PinchViewportSession.new);
-  final pinchSession = useMemoized(() => PinchSession(viewportSession: pinchViewportSession), [pinchViewportSession]);
-  final handleDragSession = useMemoized(HandleDragSession.new);
-  final autoScrollSession = useMemoized(AutoScrollSession.new);
-  final dndSession = useMemoized(DndSession.new);
+  final tapGesture = useMemoized(TapGesture.new);
+  final doubleTapDragGesture = useMemoized(DoubleTapDragGesture.new);
+  final longPressGesture = useMemoized(LongPressGesture.new);
+  final panGesture = useMemoized(PanGesture.new);
+  final panResumeGesture = useMemoized(PanResumeGesture.new);
+  final pinchViewportGesture = useMemoized(PinchViewportGesture.new);
+  final pinchGesture = useMemoized(() => PinchGesture(viewport: pinchViewportGesture), [pinchViewportGesture]);
 
-  final sessions = useMemoized(
-    () => EditorInteractionSessions(
-      tap: tapSession,
-      doubleTapDrag: doubleTapDragSession,
-      longPress: longPressSession,
-      pan: panSession,
-      panResume: panResumeSession,
-      pinch: pinchSession,
-      pinchViewport: pinchViewportSession,
-      handleDrag: handleDragSession,
-      autoScroll: autoScrollSession,
-      dnd: dndSession,
+  final cursorMoveSemantic = useMemoized(CursorMoveSemantic.new);
+  final selectionExpansionSemantic = useMemoized(SelectionExpansionSemantic.new);
+  final selectionHandleSemantic = useMemoized(SelectionHandleSemantic.new);
+  final autoScrollSemantic = useMemoized(AutoScrollSemantic.new);
+
+  final gestures = useMemoized(
+    () => EditorInteractionGestures(
+      tap: tapGesture,
+      doubleTapDrag: doubleTapDragGesture,
+      longPress: longPressGesture,
+      pan: panGesture,
+      panResume: panResumeGesture,
+      pinch: pinchGesture,
+      pinchViewport: pinchViewportGesture,
     ),
     [
-      tapSession,
-      doubleTapDragSession,
-      longPressSession,
-      panSession,
-      panResumeSession,
-      pinchSession,
-      pinchViewportSession,
-      handleDragSession,
-      autoScrollSession,
-      dndSession,
+      tapGesture,
+      doubleTapDragGesture,
+      longPressGesture,
+      panGesture,
+      panResumeGesture,
+      pinchGesture,
+      pinchViewportGesture,
     ],
+  );
+
+  final semantics = useMemoized(
+    () => EditorInteractionSemantics(
+      cursorMove: cursorMoveSemantic,
+      selectionExpansion: selectionExpansionSemantic,
+      selectionHandle: selectionHandleSemantic,
+      autoScroll: autoScrollSemantic,
+    ),
+    [cursorMoveSemantic, selectionExpansionSemantic, selectionHandleSemantic, autoScrollSemantic],
   );
 
   final uiState = useMemoized(
@@ -104,7 +124,8 @@ EditorInteractionRuntime useEditorInteractionRuntime({
       context: context,
       interactionRegionKey: interactionRegionKey,
       scope: scope,
-      sessions: sessions,
+      gestures: gestures,
+      semantics: semantics,
       getPageAtPosition: (y) => _resolvePageAtPosition(scope, y),
       ui: uiState,
       readViewWidth: () => viewportSize.value.width,
@@ -124,12 +145,18 @@ EditorInteractionRuntime useEditorInteractionRuntime({
       scope.displayZoom,
       scope.renderZoom,
       viewportSize,
-      sessions,
+      gestures,
+      semantics,
       uiState,
     ],
   );
 
-  useEffect(() => sessions.reset, [sessions]);
+  useEffect(() {
+    return () {
+      gestures.reset();
+      semantics.reset();
+    };
+  }, [gestures, semantics]);
 
   return EditorInteractionRuntime(
     controller: interactionController,
@@ -191,8 +218,8 @@ class EditorInteractionControllerScope extends InheritedWidget {
   }
 }
 
-class EditorInteractionSessions {
-  const EditorInteractionSessions({
+class EditorInteractionGestures {
+  const EditorInteractionGestures({
     required this.tap,
     required this.doubleTapDrag,
     required this.longPress,
@@ -200,21 +227,15 @@ class EditorInteractionSessions {
     required this.panResume,
     required this.pinch,
     required this.pinchViewport,
-    required this.handleDrag,
-    required this.autoScroll,
-    required this.dnd,
   });
 
-  final TapSession tap;
-  final DoubleTapDragSession doubleTapDrag;
-  final LongPressSession longPress;
-  final PanSession pan;
-  final PanResumeSession panResume;
-  final PinchSession pinch;
-  final PinchViewportSession pinchViewport;
-  final HandleDragSession handleDrag;
-  final AutoScrollSession autoScroll;
-  final DndSession dnd;
+  final TapGesture tap;
+  final DoubleTapDragGesture doubleTapDrag;
+  final LongPressGesture longPress;
+  final PanGesture pan;
+  final PanResumeGesture panResume;
+  final PinchGesture pinch;
+  final PinchViewportGesture pinchViewport;
 
   void reset() {
     tap.reset();
@@ -223,9 +244,27 @@ class EditorInteractionSessions {
     pan.reset();
     panResume.reset();
     pinch.reset();
-    handleDrag.reset();
+  }
+}
+
+class EditorInteractionSemantics {
+  const EditorInteractionSemantics({
+    required this.cursorMove,
+    required this.selectionExpansion,
+    required this.selectionHandle,
+    required this.autoScroll,
+  });
+
+  final CursorMoveSemantic cursorMove;
+  final SelectionExpansionSemantic selectionExpansion;
+  final SelectionHandleSemantic selectionHandle;
+  final AutoScrollSemantic autoScroll;
+
+  void reset() {
+    cursorMove.reset();
+    selectionExpansion.reset();
+    selectionHandle.reset();
     autoScroll.reset();
-    dnd.reset();
   }
 }
 
@@ -250,22 +289,23 @@ class EditorInteractionController {
     required this.context,
     required this.interactionRegionKey,
     required this.scope,
-    required EditorInteractionSessions sessions,
+    required EditorInteractionGestures gestures,
+    required EditorInteractionSemantics semantics,
     required this.getPageAtPosition,
     required EditorInteractionUiState ui,
     required this.readViewWidth,
     required this.readViewHeight,
     required this.readGeometry,
-  }) : _tapSession = sessions.tap,
-       _doubleTapDragSession = sessions.doubleTapDrag,
-       _longPressSession = sessions.longPress,
-       _panSession = sessions.pan,
-       _panResumeSession = sessions.panResume,
-       pinchSession = sessions.pinch,
-       pinchViewportSession = sessions.pinchViewport,
-       _handleDragSession = sessions.handleDrag,
-       _autoScrollSession = sessions.autoScroll,
-       _dndSession = sessions.dnd,
+  }) : _tapGesture = gestures.tap,
+       _doubleTapDragGesture = gestures.doubleTapDrag,
+       _longPressGesture = gestures.longPress,
+       _panGesture = gestures.pan,
+       _panResumeGesture = gestures.panResume,
+       pinchGesture = gestures.pinch,
+       pinchViewportGesture = gestures.pinchViewport,
+       _selectionExpansionSemantic = semantics.selectionExpansion,
+       _selectionHandleSemantic = semantics.selectionHandle,
+       _autoScrollSemantic = semantics.autoScroll,
        showContextMenu = ui.showContextMenu,
        wasContextMenuOpen = ui.wasContextMenuOpen,
        longPressPosition = ui.longPressPosition,
@@ -275,16 +315,18 @@ class EditorInteractionController {
   final BuildContext context;
   final GlobalKey interactionRegionKey;
   final ContentScope scope;
-  final TapSession _tapSession;
-  final DoubleTapDragSession _doubleTapDragSession;
-  final LongPressSession _longPressSession;
-  final PanSession _panSession;
-  final PanResumeSession _panResumeSession;
-  final PinchSession pinchSession;
-  final PinchViewportSession pinchViewportSession;
-  final HandleDragSession _handleDragSession;
-  final AutoScrollSession _autoScrollSession;
-  final DndSession _dndSession;
+
+  final TapGesture _tapGesture;
+  final DoubleTapDragGesture _doubleTapDragGesture;
+  final LongPressGesture _longPressGesture;
+  final PanGesture _panGesture;
+  final PanResumeGesture _panResumeGesture;
+  final PinchGesture pinchGesture;
+  final PinchViewportGesture pinchViewportGesture;
+
+  final SelectionExpansionSemantic _selectionExpansionSemantic;
+  final SelectionHandleSemantic _selectionHandleSemantic;
+  final AutoScrollSemantic _autoScrollSemantic;
   final PagePositionResolver getPageAtPosition;
   final ValueNotifier<bool> showContextMenu;
   final ObjectRef<bool> wasContextMenuOpen;
@@ -294,13 +336,19 @@ class EditorInteractionController {
   final double Function() readViewWidth;
   final double Function() readViewHeight;
   final ContentGeometry Function() readGeometry;
+  @visibleForTesting
+  static bool? debugIsAndroidOverride;
 
-  bool get interactionActive => _doubleTapDragSession.active;
-  bool get hasSelectionHandleDrag => _handleDragSession.hasSelectionHandleDrag;
-  bool get isTableCellHandleDragging => _handleDragSession.isCellHandleDragging;
+  InteractionMode get _interactionMode => scope.interactionState.snapshot().mode;
+  bool get _isSelectionHandleMode => _interactionMode == InteractionMode.selectionHandleDragging;
+  bool get _isTableCellHandleMode => _interactionMode == InteractionMode.tableCellHandleDragging;
+  bool get isDoubleTapDragActive => _doubleTapDragGesture.active;
+  bool get hasSelectionHandleDrag => _isSelectionHandleMode || _selectionHandleSemantic.hasSelectionHandleDrag;
+  bool get isTableCellHandleDragging => _isTableCellHandleMode;
+  bool get _isAndroid => debugIsAndroidOverride ?? Platform.isAndroid;
 
   Offset? selectionHandleViewportPosition(SelectionHandleInfo? handle, ContentGeometry geometry) {
-    return _handleDragSession.getHandlePosition(
+    return _selectionHandleSemantic.getHandlePosition(
       handle,
       geometry,
       verticalScrollController: scope.verticalScrollController,
@@ -309,16 +357,19 @@ class EditorInteractionController {
   }
 
   void stopSelectionHandlesAndAutoScroll() {
-    _handleDragSession.clearSelectionHandleState();
-    _autoScrollSession.stop();
+    _selectionHandleSemantic.clearSelectionHandleState();
+    if (scope.interactionState.snapshot().mode != InteractionMode.longPressWordSelecting) {
+      _selectionExpansionSemantic.clear();
+    }
+    _autoScrollSemantic.stop();
   }
 
   void stopInteractionAutoScroll() {
-    _autoScrollSession.stop();
+    _autoScrollSemantic.stop();
   }
 
   void cancelInteractionScrollDrag() {
-    _panSession.cancelDrag();
+    _panGesture.cancelDrag();
   }
 
   bool startAuxiliaryGesture(AuxiliaryGestureKind kind) {
@@ -347,23 +398,6 @@ class EditorInteractionController {
 
   bool get _allowHorizontalPan => readGeometry().isPaginated;
   static const InteractionCore _core = InteractionCore();
-  InteractionBlockReason? _lastAuxiliaryGestureBlockReason;
-  InteractionBlockReason? _lastDndBlockReason;
-  InteractionBlockReason? _lastDoubleTapDragBlockReason;
-  InteractionBlockReason? _lastLongPressBlockReason;
-  InteractionBlockReason? _lastPanBlockReason;
-  InteractionBlockReason? _lastSelectionHandleBlockReason;
-  InteractionBlockReason? _lastTableCellHandleBlockReason;
-  InteractionBlockReason? _lastTapBlockReason;
-
-  String? get debugAuxiliaryGestureBlockReason => _lastAuxiliaryGestureBlockReason?.name;
-  String? get debugDndBlockReason => _lastDndBlockReason?.name;
-  String? get debugDoubleTapDragBlockReason => _lastDoubleTapDragBlockReason?.name;
-  String? get debugLongPressBlockReason => _lastLongPressBlockReason?.name;
-  String? get debugPanBlockReason => _lastPanBlockReason?.name;
-  String? get debugSelectionHandleBlockReason => _lastSelectionHandleBlockReason?.name;
-  String? get debugTableCellHandleBlockReason => _lastTableCellHandleBlockReason?.name;
-  String? get debugTapBlockReason => _lastTapBlockReason?.name;
 
   HorizontalScrollMetrics _resolveHorizontalMetrics() {
     final geometry = readGeometry();
@@ -388,11 +422,11 @@ class EditorInteractionController {
   }
 
   SelectionHandleDragContext? _selectionHandleDragContext() {
-    return _handleDragSession.selectionHandleDragContext();
+    return _selectionHandleSemantic.selectionHandleDragContext();
   }
 
   Offset? _handleStemCenter(SelectionHandleInfo? handle, ContentGeometry geometry) {
-    return _handleDragSession.getHandleStemCenter(
+    return _selectionHandleSemantic.getHandleStemCenter(
       handle,
       geometry,
       verticalScrollController: scope.verticalScrollController,
@@ -401,7 +435,7 @@ class EditorInteractionController {
   }
 
   void _handleAutoScroll({required double y, required double x}) {
-    _autoScrollSession.handle(
+    _autoScrollSemantic.handle(
       y: y,
       x: x,
       viewWidth: readViewWidth(),
@@ -413,9 +447,7 @@ class EditorInteractionController {
       resolveHorizontalMetrics: _resolveHorizontalMetrics,
       getPageAtPosition: getPageAtPosition,
       getPointerX: _resolvePointerX,
-      readDraggingHandleType: () => _handleDragSession.draggingHandleType,
-      readDragAnchorHandle: () => _handleDragSession.dragAnchorHandle,
-      readDoubleTapInitialRange: () => _handleDragSession.doubleTapInitialRange,
+      readSelectionContext: _resolveAutoScrollSelectionContext,
       dispatch: scope.controller.dispatch,
       scrollIntoView: scope.controller.scrollIntoView,
     );
@@ -439,7 +471,10 @@ class EditorInteractionController {
   }
 
   ResolvedDragLocation? resolveSelectionDrag(Offset globalPosition) {
-    if (interactionActive || _longPressSession.active || hasSelectionHandleDrag || pinchSession.isPinching) {
+    final snapshot = scope.interactionState.snapshot();
+    final blockedBySelectionMode = snapshot.isSelecting;
+    final blockedByPendingDoubleTap = _doubleTapDragGesture.pending;
+    if (blockedBySelectionMode || blockedByPendingDoubleTap || pinchGesture.isPinching) {
       return null;
     }
 
@@ -467,61 +502,132 @@ class EditorInteractionController {
     return (localPosition: viewportPosition, pageIdx: pageIdx, localY: localY, pointerX: pointerX);
   }
 
-  bool shouldRejectLongPress(Offset globalPosition) {
-    if (_handleDragSession.isCellHandleDragging || _doubleTapDragSession.active) {
-      return false;
+  ({Offset viewportPosition, _LongPressSemanticIntent semanticIntent})? _resolveLongPressAdmission({
+    required Offset? viewportPosition,
+    required InteractionRuntimeRead runtime,
+  }) {
+    if (!_core.decide(
+      command: InteractionCommand.longPressStart(viewportPosition: viewportPosition),
+      runtime: runtime,
+    )) {
+      return null;
     }
-
-    final viewportPosition = viewportPositionFromGlobal(globalPosition);
-    if (viewportPosition == null) {
-      return true;
+    if (!_core.decide(command: InteractionCommand.longPressBeginSelecting, runtime: runtime)) {
+      return null;
+    }
+    if (_longPressGesture.active || viewportPosition == null) {
+      return null;
     }
 
     final (pageIdx, localY) = getPageAtPosition(viewportPosition.dy);
     final pointerX = _resolvePointerX(viewportPosition.dx);
-    return scope.editor.isSelectionHit(pageIdx, pointerX, localY);
+    final selectionHit = scope.editor.isSelectionHit(pageIdx, pointerX, localY);
+    if (selectionHit) {
+      if (!_isAndroid) {
+        return null;
+      }
+      final isCollapsed = scope.controller.state.selection?.collapsed ?? true;
+      if (!isCollapsed) {
+        return null;
+      }
+    }
+
+    final semanticIntent = _resolveLongPressSemanticIntent(viewportPosition);
+    return (viewportPosition: viewportPosition, semanticIntent: semanticIntent);
+  }
+
+  bool shouldRejectLongPress(Offset globalPosition) {
+    final viewportPosition = viewportPositionFromGlobal(globalPosition);
+    return _resolveLongPressAdmission(viewportPosition: viewportPosition, runtime: _runtimeRead()) == null;
+  }
+
+  WordSelectionDragContext? _resolveWordSelectionDragContext() {
+    final cached = _selectionExpansionSemantic.context;
+    if (cached != null) {
+      return cached;
+    }
+
+    final selection = scope.controller.state.selection;
+    if (selection == null || selection.collapsed) {
+      return null;
+    }
+
+    final anchor = selection.fromBounds;
+    if (anchor == null) {
+      return null;
+    }
+
+    final initialRange = selection.range;
+    _selectionExpansionSemantic.set(anchor: anchor, initialRange: initialRange);
+    return _selectionExpansionSemantic.context;
+  }
+
+  WordSelectionDragContext? _resolveLongPressWordSelectionContext() {
+    if (scope.interactionState.snapshot().mode != InteractionMode.longPressWordSelecting) {
+      return null;
+    }
+
+    final cached = _selectionExpansionSemantic.context;
+    if (cached != null) {
+      return cached;
+    }
+
+    _selectionExpansionSemantic.adoptWordSelection(scope.controller.state.selection);
+    return _selectionExpansionSemantic.context;
+  }
+
+  AutoScrollSelectionContext _resolveAutoScrollSelectionContext() {
+    final interactionMode = scope.interactionState.snapshot().mode;
+
+    if (interactionMode == InteractionMode.doubleTapSelecting) {
+      final doubleTapContext = _resolveWordSelectionDragContext();
+      if (doubleTapContext != null) {
+        return (
+          anchor: doubleTapContext.anchor,
+          initialRange: doubleTapContext.initialRange,
+          blockCursorFallback: true,
+        );
+      }
+      return (anchor: null, initialRange: null, blockCursorFallback: true);
+    }
+
+    final draggingHandleType = _selectionHandleSemantic.draggingHandleType;
+    final dragAnchorHandle = _selectionHandleSemantic.dragAnchorHandle;
+    if (interactionMode == InteractionMode.selectionHandleDragging || draggingHandleType != null) {
+      return (anchor: dragAnchorHandle, initialRange: null, blockCursorFallback: true);
+    }
+
+    if (interactionMode == InteractionMode.longPressWordSelecting) {
+      final longPressWordSelectionContext = _resolveLongPressWordSelectionContext();
+      if (longPressWordSelectionContext != null) {
+        return (
+          anchor: longPressWordSelectionContext.anchor,
+          initialRange: longPressWordSelectionContext.initialRange,
+          blockCursorFallback: true,
+        );
+      }
+      return (anchor: null, initialRange: null, blockCursorFallback: true);
+    }
+
+    return (anchor: null, initialRange: null, blockCursorFallback: false);
   }
 
   InteractionRuntimeRead _runtimeRead() {
     final snapshot = scope.interactionState.snapshot();
     return InteractionRuntimeRead(
       snapshot: snapshot,
-      pinchIsPinching: pinchSession.isPinching,
-      pinchPointerCount: pinchSession.pointerCount,
-      doubleTapActive: _doubleTapDragSession.active,
-      doubleTapDragging: _doubleTapDragSession.dragging,
-      tableCellHandleDragging: _handleDragSession.isCellHandleDragging,
-      longPressActive: _longPressSession.active,
-      hasPendingSelectionHandleDrag: _handleDragSession.hasPendingSelectionHandleDrag,
-      hasAnyHandleDrag: _handleDragSession.hasAnyHandleDrag,
-      panDragActive: _panSession.hasScrollDrag,
-      dndLocked: snapshot.isDndActive,
+      pinchIsPinching: pinchGesture.isPinching,
+      pinchPointerCount: pinchGesture.pointerCount,
+      doubleTapActive: _doubleTapDragGesture.active,
+      doubleTapDragging: _doubleTapDragGesture.dragging,
+      tableCellHandleDragging: snapshot.mode == InteractionMode.tableCellHandleDragging,
+      hasPendingSelectionHandleDrag: _selectionHandleSemantic.hasPendingSelectionHandleDrag,
+      hasAnyHandleDrag:
+          snapshot.mode == InteractionMode.selectionHandleDragging ||
+          snapshot.mode == InteractionMode.tableCellHandleDragging ||
+          _selectionHandleSemantic.hasAnyHandleDrag,
+      panDragActive: _panGesture.hasScrollDrag,
     );
-  }
-
-  void _setBlockReason(InteractionCommandCategory category, InteractionBlockReason? reason) {
-    switch (category) {
-      case InteractionCommandCategory.tap:
-        _lastTapBlockReason = reason;
-      case InteractionCommandCategory.doubleTapDrag:
-        _lastDoubleTapDragBlockReason = reason;
-      case InteractionCommandCategory.longPress:
-        _lastLongPressBlockReason = reason;
-      case InteractionCommandCategory.pan:
-        _lastPanBlockReason = reason;
-      case InteractionCommandCategory.selectionHandle:
-        _lastSelectionHandleBlockReason = reason;
-      case InteractionCommandCategory.tableCellHandle:
-        _lastTableCellHandleBlockReason = reason;
-      case InteractionCommandCategory.dnd:
-        _lastDndBlockReason = reason;
-      case InteractionCommandCategory.auxiliaryGesture:
-        _lastAuxiliaryGestureBlockReason = reason;
-    }
-  }
-
-  void _reject(InteractionCommandCategory category, InteractionBlockReason reason) {
-    _setBlockReason(category, reason);
   }
 
   bool _decide({
@@ -529,21 +635,16 @@ class EditorInteractionController {
     InteractionEvent? transitionEvent,
     InteractionMode? expectedMode,
   }) {
-    final decision = _core.decide(command: command, runtime: _runtimeRead());
-    _setBlockReason(command.category, decision.reason);
-    if (!decision.allowed) {
+    if (!_core.decide(command: command, runtime: _runtimeRead())) {
       return false;
     }
 
     if (transitionEvent != null) {
       final next = _applyTransition(transitionEvent);
       if (expectedMode != null && next.mode != expectedMode) {
-        _setBlockReason(command.category, InteractionBlockReason.modeRejected);
         return false;
       }
     }
-
-    _setBlockReason(command.category, null);
     return true;
   }
 
@@ -552,32 +653,100 @@ class EditorInteractionController {
     scope.interactionState.handle(event);
     final current = scope.interactionState.snapshot();
 
-    final enteredPinch = !previous.isPinching && current.isPinching;
-    final enteredAuxiliary = !previous.isAuxiliaryGesture && current.isAuxiliaryGesture;
-    final exitedAutoScrollMode = _usesAutoScrollMode(previous.mode) && !_usesAutoScrollMode(current.mode);
-
-    if (enteredPinch || enteredAuxiliary || exitedAutoScrollMode || event.type == InteractionEventType.pointerCancel) {
-      _autoScrollSession.stop();
-    }
+    _cleanupForModeTransition(previousMode: previous.mode, currentMode: current.mode);
 
     if (event.type == InteractionEventType.pointerCancel) {
-      _tapSession.cancelTapTimer();
-      _doubleTapDragSession.reset();
-      _longPressSession.reset();
-      _panSession.cancelDrag();
-      _panResumeSession.reset();
-      pinchSession.reset();
-      _handleDragSession.clearSelectionHandleState();
-      _dndSession.reset();
+      _tapGesture.cancelTapTimer();
+      _doubleTapDragGesture.reset();
+      _longPressGesture.reset();
+      _selectionExpansionSemantic.reset();
+      _panGesture.cancelDrag();
+      _panResumeGesture.reset();
+      pinchGesture.reset();
+      _selectionHandleSemantic.clearSelectionHandleState();
       longPressPosition.value = null;
       handleDragPosition.value = null;
     }
 
-    if (enteredPinch || enteredAuxiliary) {
-      showContextMenu.value = false;
+    return current;
+  }
+
+  void _cleanupForModeTransition({required InteractionMode previousMode, required InteractionMode currentMode}) {
+    if (previousMode == currentMode) {
+      return;
     }
 
-    return current;
+    if (_usesAutoScrollMode(previousMode) && !_usesAutoScrollMode(currentMode)) {
+      _autoScrollSemantic.stop();
+    }
+
+    if (previousMode == InteractionMode.longPressSelecting || previousMode == InteractionMode.longPressWordSelecting) {
+      _clearLongPressState();
+      _selectionExpansionSemantic.clear();
+    }
+
+    switch (currentMode) {
+      case InteractionMode.pinching:
+        _tapGesture.cancelTapTimer();
+        _doubleTapDragGesture.stop();
+        _clearSelectionExpansionState();
+        _panGesture.cancelDrag();
+        _panResumeGesture.reset();
+        _clearLongPressState();
+        _dismissSelectionUi();
+        return;
+      case InteractionMode.longPressSelecting:
+        _tapGesture.cancelTapTimer();
+        _clearSelectionExpansionState();
+        _dismissSelectionUi();
+        return;
+      case InteractionMode.longPressWordSelecting:
+        _tapGesture.cancelTapTimer();
+        _clearHandleDragState();
+        _dismissSelectionUi();
+        return;
+      case InteractionMode.doubleTapSelecting:
+        _clearSelectionExpansionState();
+        _clearLongPressState();
+        _dismissSelectionUi();
+        return;
+      case InteractionMode.selectionHandleDragging:
+      case InteractionMode.tableCellHandleDragging:
+        _clearLongPressState();
+        _selectionExpansionSemantic.clear();
+        _dismissSelectionUi();
+        return;
+      case InteractionMode.dndLocal:
+      case InteractionMode.dndExternal:
+        _dismissSelectionUi();
+        return;
+      case InteractionMode.auxiliaryGesture:
+        _dismissSelectionUi();
+        return;
+      case InteractionMode.idle:
+      case InteractionMode.panning:
+        return;
+    }
+  }
+
+  void _clearSelectionExpansionState() {
+    _clearHandleDragState();
+    _selectionExpansionSemantic.clear();
+  }
+
+  void _clearHandleDragState() {
+    _selectionHandleSemantic.clearSelectionHandleState();
+    handleDragPosition.value = null;
+  }
+
+  void _clearLongPressState() {
+    _longPressGesture.end();
+    longPressPosition.value = null;
+  }
+
+  void _dismissSelectionUi() {
+    showContextMenu.value = false;
+    _autoScrollSemantic.stop();
   }
 
   bool _usesAutoScrollMode(InteractionMode mode) {
@@ -585,6 +754,7 @@ class EditorInteractionController {
       case InteractionMode.selectionHandleDragging:
       case InteractionMode.tableCellHandleDragging:
       case InteractionMode.longPressSelecting:
+      case InteractionMode.longPressWordSelecting:
       case InteractionMode.doubleTapSelecting:
       case InteractionMode.dndLocal:
       case InteractionMode.dndExternal:
@@ -597,30 +767,7 @@ class EditorInteractionController {
     }
   }
 
-  void _recoverDndLockIfStale() {
-    final snapshot = scope.interactionState.snapshot();
-    if (!snapshot.isDndActive) {
-      return;
-    }
-
-    if (snapshot.mode == InteractionMode.dndLocal && _dndSession.isNativeLocalDragActive) {
-      return;
-    }
-
-    if (snapshot.mode == InteractionMode.dndExternal) {
-      return;
-    }
-
-    endDndSession();
-  }
-
-  bool _consumeIfDndLocked({bool recover = false, VoidCallback? onLocked}) {
-    if (!scope.interactionState.snapshot().isDndActive) {
-      return false;
-    }
-    if (recover) {
-      _recoverDndLockIfStale();
-    }
+  bool _consumeIfDndLocked({VoidCallback? onLocked}) {
     if (!scope.interactionState.snapshot().isDndActive) {
       return false;
     }
@@ -629,6 +776,6 @@ class EditorInteractionController {
   }
 
   void _clearResumedPanState() {
-    _panResumeSession.reset();
+    _panResumeGesture.reset();
   }
 }

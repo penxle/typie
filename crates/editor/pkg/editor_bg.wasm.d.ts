@@ -80,6 +80,7 @@ export const editor_inspectPageElement: (a: number, b: number, c: number, d: num
 export const editor_inspectSelectionAsFragmentMacro: (a: number) => [number, number];
 export const editor_inspectState: (a: number) => [number, number];
 export const editor_inspectStateAsMacro: (a: number) => [number, number];
+export const editor_isCursorHit: (a: number, b: number, c: number, d: number) => number;
 export const editor_isDetached: (a: number) => number;
 export const editor_isReadOnly: (a: number) => number;
 export const editor_isSelectionHit: (a: number, b: number, c: number, d: number) => number;

@@ -380,6 +380,26 @@ pub fn is_selection_hit(doc: &Doc, page: &Page, selection: &Selection, x: f32, y
     false
 }
 
+pub fn is_cursor_hit(doc: &Doc, page: &Page, selection: &Selection, x: f32, y: f32) -> bool {
+    if !selection.is_collapsed() {
+        return false;
+    }
+
+    let ctx = NavigationContext::new(doc);
+    let Some(hit_selection) = Cursor::hit_test(&ctx, page, x, y) else {
+        return false;
+    };
+
+    if !hit_selection.is_collapsed() {
+        return false;
+    }
+
+    matches!(
+        compare_positions(doc, selection.head, hit_selection.head),
+        Ok(Ordering::Equal)
+    )
+}
+
 pub fn is_selectable_block_hit(doc: &Doc, hit_selection: &Selection) -> bool {
     if hit_selection.is_collapsed() {
         return false;

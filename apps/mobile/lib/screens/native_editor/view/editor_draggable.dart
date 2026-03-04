@@ -31,7 +31,7 @@ class EditorDraggable extends StatelessWidget {
         if (resolved == null) {
           return null;
         }
-        interactionController.startLocalDndSession(resolved);
+        interactionController.startLocalDnd(resolved);
 
         var isSessionListenerAttached = false;
         late final VoidCallback onSessionCompleted;
@@ -58,7 +58,7 @@ class EditorDraggable extends StatelessWidget {
         final item = await scope.dndController.createDragItem();
         if (item == null) {
           clearSessionCompletedListener();
-          interactionController.endDndSession();
+          interactionController.endDnd();
         }
         return item;
       },
