@@ -90,14 +90,17 @@ class Heading extends StatelessWidget implements PreferredSizeWidget {
                       ] else if (route?.canPop ?? false) ...[
                         Tappable(
                           onTap: () => context.router.maybePop(),
-                          padding: const Pad(vertical: 4),
                           child: SizedBox(
                             width: 52,
-                            child: Icon(
-                              route?.settings is AutoRoutePage && (route!.settings as AutoRoutePage).fullscreenDialog
-                                  ? LucideLightIcons.x
-                                  : LucideLightIcons.chevron_left,
-                              color: context.colors.textDefault,
+                            height: _headingHeight,
+                            child: Center(
+                              child: Icon(
+                                route?.settings is AutoRoutePage && (route!.settings as AutoRoutePage).fullscreenDialog
+                                    ? LucideLightIcons.x
+                                    : LucideLightIcons.chevron_left,
+                                size: 24,
+                                color: context.colors.textDefault,
+                              ),
                             ),
                           ),
                         ),
@@ -189,8 +192,11 @@ class HeadingLeading extends StatelessWidget {
   Widget build(BuildContext context) {
     return Tappable(
       onTap: onTap,
-      padding: const Pad(vertical: 4),
-      child: SizedBox(width: 52, child: Icon(icon, size: 24)),
+      child: SizedBox(
+        width: 52,
+        height: Heading._headingHeight,
+        child: Center(child: Icon(icon, size: 24)),
+      ),
     );
   }
 }
@@ -205,8 +211,11 @@ class HeadingAction extends StatelessWidget {
   Widget build(BuildContext context) {
     return Tappable(
       onTap: onTap,
-      padding: const Pad(vertical: 4),
-      child: ConstrainedBox(constraints: const BoxConstraints(minWidth: 52), child: Icon(icon, size: 24)),
+      child: SizedBox(
+        width: 52,
+        height: Heading._headingHeight,
+        child: Center(child: Icon(icon, size: 24)),
+      ),
     );
   }
 }
