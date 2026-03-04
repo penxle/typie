@@ -4571,6 +4571,55 @@ mod tests {
     }
 
     #[test]
+    fn regression_insert_newline_on_first_selected_image_in_fold_content_inserts_paragraph_before()
+    {
+        let mut content = id!();
+        let mut inserted = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                fold {
+                    fold_title {
+                        text { "title" }
+                    }
+                    @content fold_content {
+                        image(id: Some("image-in-fold".to_string()),)
+                        paragraph {
+                            text { "after image" }
+                        }
+                    }
+                }
+                paragraph { text { "tail" } }
+            }
+            selection { (content, 0) -> (content, 1, Affinity::Upstream) }
+        };
+
+        rt.update(Message::InsertNewline);
+
+        let expected = state! {
+            doc {
+                fold {
+                    fold_title {
+                        text { "title" }
+                    }
+                    @content fold_content {
+                        @inserted paragraph {}
+                        image(id: Some("image-in-fold".to_string()),)
+                        paragraph {
+                            text { "after image" }
+                        }
+                    }
+                }
+                paragraph { text { "tail" } }
+            }
+            selection { (inserted, 0) }
+        };
+
+        assert_state_eq!(rt.state(), expected);
+    }
+
+    #[test]
     fn regression_delete_backward_from_empty_paragraph_after_table_selects_table() {
         let mut empty = id!();
 

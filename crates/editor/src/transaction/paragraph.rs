@@ -315,8 +315,7 @@ impl Transaction {
             return Ok(false);
         }
 
-        let insert_before = matches!(parent.node(), Some(Node::Root(_)))
-            && parent.first_child().map(|child| child.node_id()) == Some(block_id);
+        let insert_before = parent.first_child().map(|child| child.node_id()) == Some(block_id);
         let prev = if insert_before {
             block.prev_sibling().map(|n| n.node_id())
         } else {
