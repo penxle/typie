@@ -4341,6 +4341,445 @@ mod tests {
     }
 
     #[test]
+    fn regression_insert_newline_on_selected_fold_inserts_paragraph_after_fold() {
+        let mut inserted = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                paragraph { text { "before" } }
+                fold {
+                    fold_title {}
+                    fold_content {
+                        paragraph {}
+                    }
+                }
+                paragraph { text { "after" } }
+            }
+            selection { (NodeId::ROOT, 1) -> (NodeId::ROOT, 2) }
+        };
+
+        rt.update(Message::InsertNewline);
+
+        let expected = state! {
+            doc {
+                paragraph { text { "before" } }
+                fold {
+                    fold_title {}
+                    fold_content {
+                        paragraph {}
+                    }
+                }
+                @inserted paragraph {}
+                paragraph { text { "after" } }
+            }
+            selection { (inserted, 0) }
+        };
+
+        assert_state_eq!(rt.state(), expected);
+    }
+
+    #[test]
+    fn regression_insert_newline_on_first_selected_fold_inserts_paragraph_before_fold() {
+        let mut inserted = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                fold {
+                    fold_title {}
+                    fold_content {
+                        paragraph {}
+                    }
+                }
+                paragraph { text { "after" } }
+            }
+            selection { (NodeId::ROOT, 0) -> (NodeId::ROOT, 1, Affinity::Upstream) }
+        };
+
+        rt.update(Message::InsertNewline);
+
+        let expected = state! {
+            doc {
+                @inserted paragraph {}
+                fold {
+                    fold_title {}
+                    fold_content {
+                        paragraph {}
+                    }
+                }
+                paragraph { text { "after" } }
+            }
+            selection { (inserted, 0) }
+        };
+
+        assert_state_eq!(rt.state(), expected);
+    }
+
+    #[test]
+    fn regression_delete_backward_from_empty_paragraph_after_fold_selects_fold() {
+        let mut empty = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                fold {
+                    fold_title {}
+                    fold_content {
+                        paragraph {}
+                    }
+                }
+                @empty paragraph {}
+                paragraph { text { "after" } }
+            }
+            selection { (empty, 0) }
+        };
+
+        rt.update(Message::DeleteBackward);
+
+        let expected = state! {
+            doc {
+                fold {
+                    fold_title {}
+                    fold_content {
+                        paragraph {}
+                    }
+                }
+                paragraph { text { "after" } }
+            }
+            selection { (NodeId::ROOT, 0, Affinity::Downstream) -> (NodeId::ROOT, 1, Affinity::Upstream) }
+        };
+
+        assert_state_eq!(rt.state(), expected);
+    }
+
+    #[test]
+    fn regression_delete_forward_from_empty_paragraph_before_fold_selects_fold() {
+        let mut empty = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @empty paragraph {}
+                fold {
+                    fold_title {}
+                    fold_content {
+                        paragraph {}
+                    }
+                }
+                paragraph { text { "after" } }
+            }
+            selection { (empty, 0) }
+        };
+
+        rt.update(Message::DeleteForward);
+
+        let expected = state! {
+            doc {
+                fold {
+                    fold_title {}
+                    fold_content {
+                        paragraph {}
+                    }
+                }
+                paragraph { text { "after" } }
+            }
+            selection { (NodeId::ROOT, 0, Affinity::Downstream) -> (NodeId::ROOT, 1, Affinity::Upstream) }
+        };
+
+        assert_state_eq!(rt.state(), expected);
+    }
+
+    #[test]
+    fn regression_insert_newline_on_selected_table_inserts_paragraph_after_table() {
+        let mut inserted = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                paragraph { text { "before" } }
+                table {
+                    table_row {
+                        table_cell {
+                            paragraph {}
+                        }
+                    }
+                }
+                paragraph { text { "after" } }
+            }
+            selection { (NodeId::ROOT, 1) -> (NodeId::ROOT, 2) }
+        };
+
+        rt.update(Message::InsertNewline);
+
+        let expected = state! {
+            doc {
+                paragraph { text { "before" } }
+                table {
+                    table_row {
+                        table_cell {
+                            paragraph {}
+                        }
+                    }
+                }
+                @inserted paragraph {}
+                paragraph { text { "after" } }
+            }
+            selection { (inserted, 0) }
+        };
+
+        assert_state_eq!(rt.state(), expected);
+    }
+
+    #[test]
+    fn regression_insert_newline_on_first_selected_table_inserts_paragraph_before_table() {
+        let mut inserted = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                table {
+                    table_row {
+                        table_cell {
+                            paragraph {}
+                        }
+                    }
+                }
+                paragraph { text { "after" } }
+            }
+            selection { (NodeId::ROOT, 0) -> (NodeId::ROOT, 1, Affinity::Upstream) }
+        };
+
+        rt.update(Message::InsertNewline);
+
+        let expected = state! {
+            doc {
+                @inserted paragraph {}
+                table {
+                    table_row {
+                        table_cell {
+                            paragraph {}
+                        }
+                    }
+                }
+                paragraph { text { "after" } }
+            }
+            selection { (inserted, 0) }
+        };
+
+        assert_state_eq!(rt.state(), expected);
+    }
+
+    #[test]
+    fn regression_delete_backward_from_empty_paragraph_after_table_selects_table() {
+        let mut empty = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                table {
+                    table_row {
+                        table_cell {
+                            paragraph {}
+                        }
+                    }
+                }
+                @empty paragraph {}
+                paragraph { text { "after" } }
+            }
+            selection { (empty, 0) }
+        };
+
+        rt.update(Message::DeleteBackward);
+
+        let expected = state! {
+            doc {
+                table {
+                    table_row {
+                        table_cell {
+                            paragraph {}
+                        }
+                    }
+                }
+                paragraph { text { "after" } }
+            }
+            selection { (NodeId::ROOT, 0, Affinity::Downstream) -> (NodeId::ROOT, 1, Affinity::Upstream) }
+        };
+
+        assert_state_eq!(rt.state(), expected);
+    }
+
+    #[test]
+    fn regression_delete_forward_from_empty_paragraph_before_table_selects_table() {
+        let mut empty = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @empty paragraph {}
+                table {
+                    table_row {
+                        table_cell {
+                            paragraph {}
+                        }
+                    }
+                }
+                paragraph { text { "after" } }
+            }
+            selection { (empty, 0) }
+        };
+
+        rt.update(Message::DeleteForward);
+
+        let expected = state! {
+            doc {
+                table {
+                    table_row {
+                        table_cell {
+                            paragraph {}
+                        }
+                    }
+                }
+                paragraph { text { "after" } }
+            }
+            selection { (NodeId::ROOT, 0, Affinity::Downstream) -> (NodeId::ROOT, 1, Affinity::Upstream) }
+        };
+
+        assert_state_eq!(rt.state(), expected);
+    }
+
+    #[test]
+    fn regression_delete_forward_at_fold_title_end_keeps_selection() {
+        let mut fold = id!();
+        let mut title = id!();
+        let mut content = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @fold fold {
+                    @title fold_title {
+                        text { "title" }
+                    }
+                    @content fold_content {
+                        paragraph {
+                            text { "inside" }
+                        }
+                    }
+                }
+                paragraph { text { "after" } }
+            }
+            selection { (title, 5) }
+        };
+
+        let expected = rt.state().clone();
+
+        rt.update(Message::DeleteForward);
+
+        assert_state_eq!(rt.state(), expected);
+    }
+
+    #[test]
+    fn regression_delete_backward_at_fold_content_start_keeps_cursor_in_first_paragraph() {
+        let mut fold = id!();
+        let mut title = id!();
+        let mut content = id!();
+        let mut p = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @fold fold {
+                    @title fold_title {
+                        text { "title" }
+                    }
+                    @content fold_content {
+                        @p paragraph {
+                            text { "inside" }
+                        }
+                    }
+                }
+                paragraph { text { "after" } }
+            }
+            selection { (p, 0) }
+        };
+
+        let expected = rt.state().clone();
+
+        rt.update(Message::DeleteBackward);
+
+        assert_state_eq!(rt.state(), expected);
+    }
+
+    #[test]
+    fn regression_delete_forward_at_table_cell_paragraph_end_keeps_selection() {
+        let mut p1 = id!();
+        let mut p2 = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                table {
+                    table_row {
+                        table_cell {
+                            @p1 paragraph {
+                                text { "a" }
+                            }
+                        }
+                        table_cell {
+                            @p2 paragraph {
+                                text { "b" }
+                            }
+                        }
+                    }
+                }
+                paragraph { text { "after" } }
+            }
+            selection { (p1, 1) }
+        };
+
+        let expected = rt.state().clone();
+
+        rt.update(Message::DeleteForward);
+
+        assert_state_eq!(rt.state(), expected);
+    }
+
+    #[test]
+    fn regression_delete_backward_at_table_cell_paragraph_start_keeps_selection() {
+        let mut p1 = id!();
+        let mut p2 = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                table {
+                    table_row {
+                        table_cell {
+                            @p1 paragraph {
+                                text { "a" }
+                            }
+                        }
+                        table_cell {
+                            @p2 paragraph {
+                                text { "b" }
+                            }
+                        }
+                    }
+                }
+                paragraph { text { "after" } }
+            }
+            selection { (p2, 0) }
+        };
+
+        let expected = rt.state().clone();
+
+        rt.update(Message::DeleteBackward);
+
+        assert_state_eq!(rt.state(), expected);
+    }
+
+    #[test]
     fn regression_delete_forward_invalidates_list_layout_after_lift() {
         let mut p = id!();
         let mut list = id!();
