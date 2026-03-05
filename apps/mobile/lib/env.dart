@@ -44,6 +44,9 @@ abstract class Env {
   static String usersiteUrl = _Env.usersiteUrl;
 
   @EnviedField()
+  static String usersiteHost = _Env.usersiteHost;
+
+  @EnviedField()
   static String websiteUrl = _Env.websiteUrl;
 
   @EnviedField()

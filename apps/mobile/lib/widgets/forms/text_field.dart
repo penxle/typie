@@ -29,6 +29,7 @@ class HookFormTextField extends HookWidget {
     this.inputFormatters,
     this.onChanged,
     this.suffix,
+    this.errorBelowField = false,
   });
 
   const factory HookFormTextField.collapsed({
@@ -64,6 +65,7 @@ class HookFormTextField extends HookWidget {
   final List<TextInputFormatter>? inputFormatters;
   final void Function(String)? onChanged;
   final Widget? suffix;
+  final bool errorBelowField;
 
   @override
   Widget build(BuildContext context) {
@@ -140,7 +142,7 @@ class HookFormTextField extends HookWidget {
                       Expanded(
                         child: Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
                       ),
-                      if (field.error != null)
+                      if (field.error != null && !errorBelowField)
                         Text(
                           field.error!,
                           style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: context.colors.textDanger),
@@ -163,6 +165,15 @@ class HookFormTextField extends HookWidget {
                     ],
                   ),
                 ),
+                if (field.error != null && errorBelowField) ...[
+                  const Gap(4),
+                  Text(
+                    field.error!,
+                    softWrap: true,
+                    overflow: TextOverflow.visible,
+                    style: TextStyle(fontSize: 12, color: context.colors.textDanger),
+                  ),
+                ],
               ],
             );
           },

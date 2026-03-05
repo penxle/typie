@@ -148,6 +148,18 @@ class SettingsScreen extends HookWidget {
                   ],
                 ),
                 _Section(
+                  title: '스페이스',
+                  children: [
+                    _Item(
+                      label: '현재 스페이스 설정',
+                      onTap: () async {
+                        unawaited(mixpanel.track('open_site_settings', properties: {'via': 'settings'}));
+                        await context.router.push(const SiteSettingsRoute());
+                      },
+                    ),
+                  ],
+                ),
+                _Section(
                   title: '이벤트 알림 설정',
                   children: [
                     HookForm(
@@ -184,27 +196,6 @@ class SettingsScreen extends HookWidget {
                     ),
                   ],
                 ),
-                if (data.me!.subscription != null)
-                  _Section(
-                    title: '타이피 멤버십',
-                    children: [
-                      _Item(
-                        label: '스페이스 주소 변경',
-                        onTap: () async {
-                          await context.router.push(const UpdateSiteSlugRoute());
-                        },
-                      ),
-                      const _Divider(),
-                      _Item(
-                        label: '타이피 유저 커뮤니티',
-                        trailing: const Icon(LucideLightIcons.external_link, size: 16),
-                        onTap: () async {
-                          final url = Uri.parse('https://typie.link/community');
-                          await launchUrl(url, mode: LaunchMode.externalApplication);
-                        },
-                      ),
-                    ],
-                  ),
                 _Section(
                   title: '서비스 정보',
                   children: [

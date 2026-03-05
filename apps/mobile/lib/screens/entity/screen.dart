@@ -167,6 +167,21 @@ class _EntityList extends HookWidget {
       return () => primaryScrollController.removeListener(listener);
     }, [primaryScrollController]);
 
+    useEffect(() {
+      currentSiteLogoUrl.value = site?.logo.url;
+      return null;
+    }, [site?.logo.url]);
+
+    useEffect(() {
+      currentSiteName.value = siteName;
+
+      if (!isSiteRenaming.value) {
+        siteNameController.text = siteName ?? '';
+      }
+
+      return null;
+    }, [siteName]);
+
     useAsyncEffect(() async {
       if (isRenaming.value) {
         textEditingController.selection = TextSelection(baseOffset: 0, extentOffset: textEditingController.text.length);
@@ -200,8 +215,23 @@ class _EntityList extends HookWidget {
 
           await context.showBottomSheet(
             child: BottomMenu(
-              header: _BottomMenuHeader(entity: entity, siteName: currentSiteName.value),
+              header: _BottomMenuHeader(
+                entity: entity,
+                siteName: currentSiteName.value,
+                siteLogoUrl: currentSiteLogoUrl.value,
+              ),
               items: [
+                if (entity == null) ...[
+                  BottomMenuItem(
+                    icon: LucideLightIcons.settings,
+                    label: '스페이스 설정',
+                    onTap: () async {
+                      unawaited(mixpanel.track('open_site_settings', properties: {'via': 'entity_menu'}));
+                      await context.router.push(const SiteSettingsRoute());
+                    },
+                  ),
+                  const BottomMenuSeparator(),
+                ],
                 if (entity != null) ...[
                   BottomMenuItem(
                     icon: LucideLightIcons.folder_symlink,
@@ -331,56 +361,6 @@ class _EntityList extends HookWidget {
                   ),
                 ],
                 if (entity == null) ...[
-                  BottomMenuItem(
-                    icon: LucideLightIcons.image,
-                    label: '스페이스 로고 변경',
-                    onTap: () async {
-                      final result = await FilePicker.platform.pickFiles(type: FileType.image);
-                      if (result == null) {
-                        return;
-                      }
-
-                      final pickedFile = result.files.firstOrNull;
-                      if (pickedFile == null) {
-                        return;
-                      }
-
-                      final file = File(pickedFile.path!);
-                      final path = await blob.upload(file);
-                      final resp = await client.request(
-                        GEntityScreen_PersistBlobAsImage_MutationReq(
-                          (b) => b
-                            ..vars.input.path = path
-                            ..vars.input.modification = Value.present(
-                              JsonObject({
-                                'resize': {'width': 512, 'height': 512, 'fit': 'cover', 'withoutEnlargement': true},
-                                'format': 'png',
-                              }),
-                            ),
-                        ),
-                      );
-
-                      await client.request(
-                        GEntityScreen_UpdateSite_MutationReq(
-                          (b) => b
-                            ..vars.input.siteId = site!.id
-                            ..vars.input.logoId = Value.present(resp.persistBlobAsImage.id),
-                        ),
-                      );
-
-                      currentSiteLogoUrl.value = resp.persistBlobAsImage.url;
-                      unawaited(mixpanel.track('update_site_logo', properties: {'via': 'bottom_menu'}));
-                    },
-                  ),
-                  BottomMenuItem(
-                    icon: LucideLightIcons.pen_line,
-                    label: '스페이스 이름 변경',
-                    onTap: () {
-                      siteNameController.text = currentSiteName.value ?? '';
-                      isSiteRenaming.value = true;
-                    },
-                  ),
-                  const BottomMenuSeparator(),
                   BottomMenuItem(
                     icon: LucideLightIcons.trash_2,
                     label: '휴지통',
@@ -1123,10 +1103,11 @@ class _Document extends StatelessWidget {
 }
 
 class _BottomMenuHeader extends StatelessWidget {
-  const _BottomMenuHeader({this.entity, this.siteName});
+  const _BottomMenuHeader({this.entity, this.siteName, this.siteLogoUrl});
 
   final GEntityScreen_Entity_entity? entity;
   final String? siteName;
+  final String? siteLogoUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -1137,17 +1118,23 @@ class _BottomMenuHeader extends StatelessWidget {
         Row(
           spacing: 16,
           children: [
-            Icon(
-              entity?.node.when(
-                    folder: (_) => LucideLightIcons.folder,
-                    document: (doc) => doc.documentType == GDocumentType.TEMPLATE
-                        ? LucideLightIcons.layout_template
-                        : LucideLightIcons.file,
-                    orElse: () => throw UnimplementedError(),
-                  ) ??
-                  LucideLightIcons.folder_open,
-              size: 20,
-            ),
+            if (entity == null && siteLogoUrl != null)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: CachedNetworkImage(imageUrl: siteLogoUrl!, width: 20, height: 20, fit: BoxFit.cover),
+              )
+            else
+              Icon(
+                entity?.node.when(
+                      folder: (_) => LucideLightIcons.folder,
+                      document: (doc) => doc.documentType == GDocumentType.TEMPLATE
+                          ? LucideLightIcons.layout_template
+                          : LucideLightIcons.file,
+                      orElse: () => throw UnimplementedError(),
+                    ) ??
+                    LucideLightIcons.folder_open,
+                size: 20,
+              ),
             Expanded(
               child: Text(
                 entity?.node.when(
