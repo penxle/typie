@@ -912,24 +912,30 @@ builder.mutationFields((t) => ({
         siteId: entity.siteId,
       });
 
-      const isParentActive = entity.parentEntity?.state === EntityState.ACTIVE;
+      const hasParent = entity.parentEntity?.id !== null && entity.parentEntity?.id !== undefined;
+      const isParentActive = hasParent && entity.parentEntity?.state === EntityState.ACTIVE;
+      const shouldReattachToRoot = hasParent && !isParentActive;
 
-      const rootLastChildOrder = isParentActive
-        ? null
-        : await db
+      const rootLastChildOrder = shouldReattachToRoot
+        ? await db
             .select({ order: Entities.order })
             .from(Entities)
             .where(and(eq(Entities.siteId, entity.siteId), eq(Entities.state, EntityState.ACTIVE), isNull(Entities.parentId)))
             .orderBy(desc(Entities.order))
             .limit(1)
             .then(first)
-            .then((result) => result?.order ?? null);
+            .then((result) => result?.order ?? null)
+        : null;
 
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      const depthDelta = isParentActive ? entity.parentEntity!.depth + 1 - entity.depth : -entity.depth;
+      const depthDelta = isParentActive
+        ? // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+          entity.parentEntity!.depth + 1 - entity.depth
+        : shouldReattachToRoot
+          ? -entity.depth
+          : 0;
 
       return await db.transaction(async (tx) => {
-        if (!isParentActive) {
+        if (shouldReattachToRoot) {
           await tx
             .update(Entities)
             .set({
