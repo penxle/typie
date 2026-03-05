@@ -39,9 +39,6 @@ class _TestPref implements Pref {
   bool lineHighlightEnabled = false;
 
   @override
-  String pasteMode = 'ask';
-
-  @override
   bool autoSurroundEnabled = true;
 
   @override

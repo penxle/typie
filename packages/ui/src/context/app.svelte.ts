@@ -23,8 +23,6 @@ export type AppPreference = {
 
   lineHighlightEnabled: boolean;
 
-  pasteMode: 'ask' | 'html' | 'text';
-
   autoSurroundEnabled: boolean;
 
   zenModeEnabled: boolean;
@@ -127,8 +125,6 @@ export const setupAppContext = (userId: string) => {
       typewriterPosition: 0.5,
 
       lineHighlightEnabled: true,
-
-      pasteMode: 'ask',
 
       autoSurroundEnabled: true,
 
