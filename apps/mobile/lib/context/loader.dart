@@ -10,8 +10,10 @@ extension LoaderExtension on BuildContext {
   static ValueNotifier<bool>? _shouldDismiss;
   static Completer<void>? _animationCompleter;
 
-  Future<T> runWithLoader<T>(Future<T> Function() fn) async {
+  Future<T> runWithLoader<T>(Future<T> Function() fn, {Duration showDelay = Duration.zero}) async {
     BackButtonInterceptor.add(_backButtonInterceptor);
+    Timer? showTimer;
+    var isCompleted = false;
 
     try {
       if (_shouldDismiss != null) {
@@ -22,7 +24,11 @@ extension LoaderExtension on BuildContext {
       _shouldDismiss = ValueNotifier(false);
       _animationCompleter = Completer<void>();
 
-      try {
+      void showOverlay() {
+        if (isCompleted || _entry != null || !mounted) {
+          return;
+        }
+
         _entry = OverlayEntry(
           builder: (context) {
             return _Widget(
@@ -37,9 +43,24 @@ extension LoaderExtension on BuildContext {
         );
 
         Overlay.of(this, rootOverlay: true).insert(_entry!);
+      }
+
+      try {
+        if (showDelay > Duration.zero) {
+          showTimer = Timer(showDelay, showOverlay);
+        } else {
+          showOverlay();
+        }
 
         return await fn();
       } finally {
+        isCompleted = true;
+        showTimer?.cancel();
+
+        if (_entry == null && _animationCompleter?.isCompleted == false) {
+          _animationCompleter?.complete();
+        }
+
         _shouldDismiss?.value = true;
 
         await _animationCompleter?.future;

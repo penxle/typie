@@ -33,6 +33,8 @@ class EditorSettingsScreen extends HookWidget {
   Widget build(BuildContext context) {
     final pref = useService<Pref>();
     final mixpanel = useService<Mixpanel>();
+    final isUpdatingAiOptIn = useState(false);
+    const aiOptInLoaderDelay = Duration(milliseconds: 150);
 
     return Screen(
       heading: const Heading(title: '에디터 설정'),
@@ -42,29 +44,47 @@ class EditorSettingsScreen extends HookWidget {
           final aiOptIn = data.me!.preferences.asMap['aiOptIn'] as bool? ?? false;
 
           Future<void> toggleAiOptIn() async {
+            if (isUpdatingAiOptIn.value) {
+              return;
+            }
+
             if (aiOptIn) {
-              await context.runWithLoader(() async {
-                await client.request(
-                  GEditorSettingsScreen_UpdatePreferences_MutationReq(
-                    (b) => b..vars.input.value = JsonObject({'aiOptIn': false}),
-                  ),
-                );
-              });
-              unawaited(mixpanel.track('ai_opt_in', properties: {'enabled': false}));
+              isUpdatingAiOptIn.value = true;
+              try {
+                await context.runWithLoader(() async {
+                  await client.request(
+                    GEditorSettingsScreen_UpdatePreferences_MutationReq(
+                      (b) => b..vars.input.value = JsonObject({'aiOptIn': false}),
+                    ),
+                  );
+                }, showDelay: aiOptInLoaderDelay);
+                unawaited(mixpanel.track('ai_opt_in', properties: {'enabled': false}));
+              } finally {
+                isUpdatingAiOptIn.value = false;
+              }
             } else {
               await context.showBottomSheet(
                 child: ConfirmBottomSheet(
                   title: 'AI 기능을 활성화하시겠어요?',
                   confirmText: '활성화',
                   onConfirm: () async {
-                    await context.runWithLoader(() async {
-                      await client.request(
-                        GEditorSettingsScreen_UpdatePreferences_MutationReq(
-                          (b) => b..vars.input.value = JsonObject({'aiOptIn': true}),
-                        ),
-                      );
-                    });
-                    unawaited(mixpanel.track('ai_opt_in', properties: {'enabled': true}));
+                    if (isUpdatingAiOptIn.value) {
+                      return;
+                    }
+
+                    isUpdatingAiOptIn.value = true;
+                    try {
+                      await context.runWithLoader(() async {
+                        await client.request(
+                          GEditorSettingsScreen_UpdatePreferences_MutationReq(
+                            (b) => b..vars.input.value = JsonObject({'aiOptIn': true}),
+                          ),
+                        );
+                      }, showDelay: aiOptInLoaderDelay);
+                      unawaited(mixpanel.track('ai_opt_in', properties: {'enabled': true}));
+                    } finally {
+                      isUpdatingAiOptIn.value = false;
+                    }
                   },
                   child: const _AiOptInNotice(),
                 ),
