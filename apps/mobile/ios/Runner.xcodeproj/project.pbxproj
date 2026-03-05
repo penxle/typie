@@ -23,8 +23,7 @@
 		B6D0B1992DEDFC6800CC8EF8 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B6D0B1982DEDFC6800CC8EF8 /* LaunchScreen.storyboard */; };
 		B6FC503F2DD388C900F2B218 /* AppWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6FC503E2DD388C900F2B218 /* AppWebView.swift */; };
 		B6FC50412DD3890600F2B218 /* AppWebViewFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6FC50402DD3890000F2B218 /* AppWebViewFactory.swift */; };
-		C10A00012E1E000000000001 /* EditorInputFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10A00002E1E000000000001 /* EditorInputFactory.swift */; };
-		C10A00032E1E000000000002 /* EditorInputView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10A00022E1E000000000002 /* EditorInputView.swift */; };
+
 		C10A00062E1E000000000005 /* EditorTexturePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10A00052E1E000000000004 /* EditorTexturePlugin.swift */; };
 		C10A00092E1E000000000008 /* ClipboardPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10A00082E1E000000000007 /* ClipboardPlugin.swift */; };
 /* End PBXBuildFile section */
@@ -84,8 +83,7 @@
 		B6FC503E2DD388C900F2B218 /* AppWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppWebView.swift; sourceTree = "<group>"; };
 		B6FC50402DD3890000F2B218 /* AppWebViewFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppWebViewFactory.swift; sourceTree = "<group>"; };
 		B76A326C78E413C9D2E31BF6 /* Pods_RunnerTests.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_RunnerTests.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		C10A00002E1E000000000001 /* EditorInputFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorInputFactory.swift; sourceTree = "<group>"; };
-		C10A00022E1E000000000002 /* EditorInputView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorInputView.swift; sourceTree = "<group>"; };
+
 		C10A00052E1E000000000004 /* EditorTexturePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorTexturePlugin.swift; sourceTree = "<group>"; };
 		C10A00082E1E000000000007 /* ClipboardPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardPlugin.swift; sourceTree = "<group>"; };
 		F5ACF650D6281E78D67DD211 /* Pods-Runner.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"; sourceTree = "<group>"; };
@@ -155,7 +153,7 @@
 			isa = PBXGroup;
 			children = (
 				C10A000A2E1E000000000009 /* Clipboard */,
-				C10A00042E1E000000000003 /* EditorInput */,
+	
 				C10A00072E1E000000000006 /* EditorTexture */,
 				B60149352DD4C8E00055A06B /* Keyboard */,
 				B6FC503C2DD3882000F2B218 /* WebView */,
@@ -214,15 +212,7 @@
 			path = Clipboard;
 			sourceTree = "<group>";
 		};
-		C10A00042E1E000000000003 /* EditorInput */ = {
-			isa = PBXGroup;
-			children = (
-				C10A00002E1E000000000001 /* EditorInputFactory.swift */,
-				C10A00022E1E000000000002 /* EditorInputView.swift */,
-			);
-			path = EditorInput;
-			sourceTree = "<group>";
-		};
+	
 		C10A00072E1E000000000006 /* EditorTexture */ = {
 			isa = PBXGroup;
 			children = (
@@ -480,8 +470,7 @@
 				B60149392DD4D5460055A06B /* AppWKWebView.swift in Sources */,
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 				B6FC503F2DD388C900F2B218 /* AppWebView.swift in Sources */,
-				C10A00012E1E000000000001 /* EditorInputFactory.swift in Sources */,
-				C10A00032E1E000000000002 /* EditorInputView.swift in Sources */,
+
 				C10A00062E1E000000000005 /* EditorTexturePlugin.swift in Sources */,
 				C10A00092E1E000000000008 /* ClipboardPlugin.swift in Sources */,
 			);

@@ -33,6 +33,7 @@ class MenuSheet extends StatelessWidget {
     required this.onOpenRemark,
     required this.onOpenAiFeedback,
     required this.onOpenRelatedNotes,
+    this.onSendInputLog,
     super.key,
   });
 
@@ -46,6 +47,7 @@ class MenuSheet extends StatelessWidget {
   final VoidCallback onOpenRemark;
   final VoidCallback onOpenAiFeedback;
   final VoidCallback onOpenRelatedNotes;
+  final VoidCallback? onSendInputLog;
 
   @override
   Widget build(BuildContext context) {
@@ -195,6 +197,12 @@ class MenuSheet extends StatelessWidget {
               );
             },
           ),
+          if (onSendInputLog != null) ...[
+            const Gap(16),
+            HorizontalDivider(color: context.colors.borderDefault),
+            const Gap(16),
+            BottomMenuItem(icon: LucideLightIcons.send, label: '입력 로그 보내기', onTap: onSendInputLog!),
+          ],
         ],
       ),
     );

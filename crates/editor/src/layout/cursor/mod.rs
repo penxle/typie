@@ -90,15 +90,6 @@ pub trait CursorNavigable {
         None
     }
 
-    fn preceding_char_widths(
-        &self,
-        _ctx: &NavigationContext,
-        _position: &Position,
-        _count: usize,
-    ) -> Option<Vec<f32>> {
-        None
-    }
-
     fn navigate_left(
         &self,
         ctx: &NavigationContext,
@@ -209,15 +200,6 @@ impl Cursor {
         position: Position,
     ) -> Option<(usize, Rect)> {
         navigation::selection_handle_bounds(ctx, pages, position)
-    }
-
-    pub fn preceding_char_widths(
-        ctx: &NavigationContext,
-        pages: &[Page],
-        position: Position,
-        count: usize,
-    ) -> Option<Vec<f32>> {
-        navigation::preceding_char_widths(ctx, pages, position, count)
     }
 
     pub fn hit_test(ctx: &NavigationContext, page: &Page, x: f32, y: f32) -> Option<Selection> {

@@ -312,13 +312,144 @@ fn find_prev_cursor_position_backward(doc: &Doc, node_id: NodeId) -> Option<Posi
     leaf_block_end(&node)
 }
 
+pub fn get_surrounding_text(
+    doc: &Doc,
+    position: Position,
+    preceding_count: usize,
+    following_count: usize,
+) -> (String, String) {
+    let Some(block) = doc.node(position.node_id) else {
+        return (String::new(), String::new());
+    };
+
+    let children: Vec<_> = block.children().collect();
+    if children.is_empty() {
+        return (String::new(), String::new());
+    }
+
+    // Build cumulative offset map (only calls char_len = O(1), not as_str)
+    let mut child_lens: Vec<usize> = Vec::with_capacity(children.len());
+    let mut child_starts: Vec<usize> = Vec::with_capacity(children.len());
+    let mut cumulative = 0usize;
+    for child in &children {
+        child_starts.push(cumulative);
+        let len = child.node().map_or(1, |n| n.len());
+        child_lens.push(len);
+        cumulative += len;
+    }
+
+    let pos_offset = position.offset.min(cumulative);
+
+    // Find the child containing the cursor
+    let cursor_idx = child_starts
+        .iter()
+        .rposition(|&start| start <= pos_offset)
+        .unwrap_or(0);
+    let internal_offset = pos_offset - child_starts[cursor_idx];
+
+    // --- Preceding ---
+    let preceding = if preceding_count > 0 {
+        let mut chunks: Vec<String> = Vec::new();
+        let mut remaining = preceding_count;
+
+        // Portion from cursor child (chars before internal_offset)
+        if internal_offset > 0 {
+            if let Some(Node::Text(t)) = children[cursor_idx].node() {
+                let s = t.text.as_str();
+                if internal_offset <= remaining {
+                    chunks.push(s.chars().take(internal_offset).collect());
+                    remaining -= internal_offset;
+                } else {
+                    let skip = internal_offset - remaining;
+                    chunks.push(s.chars().skip(skip).take(remaining).collect());
+                    remaining = 0;
+                }
+            }
+        }
+
+        // Walk backwards through consecutive text nodes
+        let mut i = cursor_idx;
+        while i > 0 && remaining > 0 {
+            i -= 1;
+            match children[i].node() {
+                Some(Node::Text(t)) => {
+                    let char_len = child_lens[i];
+                    if char_len <= remaining {
+                        chunks.push(t.text.as_str());
+                        remaining -= char_len;
+                    } else {
+                        let s = t.text.as_str();
+                        let skip = char_len - remaining;
+                        chunks.push(s.chars().skip(skip).collect());
+                        remaining = 0;
+                    }
+                }
+                _ => break,
+            }
+        }
+
+        chunks.reverse();
+        chunks.concat()
+    } else {
+        String::new()
+    };
+
+    // --- Following ---
+    let following = if following_count > 0 {
+        let mut result = String::new();
+        let mut remaining = following_count;
+
+        // Portion from cursor child (chars after internal_offset)
+        if let Some(Node::Text(t)) = children[cursor_idx].node() {
+            let char_len = child_lens[cursor_idx];
+            let after = char_len - internal_offset;
+            if after > 0 {
+                let s = t.text.as_str();
+                let take = after.min(remaining);
+                let chunk: String = s.chars().skip(internal_offset).take(take).collect();
+                remaining -= chunk.chars().count();
+                result.push_str(&chunk);
+            }
+        } else {
+            return (preceding, String::new());
+        }
+
+        // Walk forwards through consecutive text nodes
+        let mut i = cursor_idx + 1;
+        while i < children.len() && remaining > 0 {
+            match children[i].node() {
+                Some(Node::Text(t)) => {
+                    let char_len = child_lens[i];
+                    if char_len <= remaining {
+                        result.push_str(&t.text.as_str());
+                        remaining -= char_len;
+                    } else {
+                        let s = t.text.as_str();
+                        let chunk: String = s.chars().take(remaining).collect();
+                        remaining -= chunk.chars().count();
+                        result.push_str(&chunk);
+                    }
+                }
+                _ => break,
+            }
+            i += 1;
+        }
+
+        result
+    } else {
+        String::new()
+    };
+
+    (preceding, following)
+}
+
 #[cfg(test)]
 mod tests {
 
     use crate::{
         model::NodeId,
         state::selection_helpers::{StructureSelectionInfo, compute_structure_selection},
-        state::{Position, leaf_block_end, leaf_block_start},
+        state::{Position, get_surrounding_text, leaf_block_end, leaf_block_start},
         types::Affinity,
     };
 
@@ -478,5 +609,142 @@ mod tests {
             super::position_in_selection(&state.doc, after_table, &state.selection),
             "Range position outside block_ids should still be considered inside selection"
         );
+    }
+
+    #[test]
+    fn get_surrounding_text_single_text_node() {
+        let mut p = id!();
+        let doc = doc! {
+            @p paragraph { text { "Hello" } }
+        };
+
+        let pos = Position::new(p, 2, Affinity::Downstream);
+        let (pre, fol) = get_surrounding_text(&doc, pos, 10, 10);
+        assert_eq!(pre, "He");
+        assert_eq!(fol, "llo");
+    }
+
+    #[test]
+    fn get_surrounding_text_multiple_consecutive_text_nodes() {
+        let mut p = id!();
+        let doc = doc! {
+            @p paragraph {
+                text { "AB" }
+                text { "CD" }
+                text { "EF" }
+            }
+        };
+
+        let pos = Position::new(p, 3, Affinity::Downstream);
+        let (pre, fol) = get_surrounding_text(&doc, pos, 2, 2);
+        assert_eq!(pre, "BC");
+        assert_eq!(fol, "DE");
+    }
+
+    #[test]
+    fn get_surrounding_text_stops_at_hard_break() {
+        let mut p = id!();
+        let doc = doc! {
+            @p paragraph {
+                text { "AB" }
+                hard_break {}
+                text { "CD" }
+            }
+        };
+
+        // Cursor within "CD" at internal offset 1
+        let pos = Position::new(p, 4, Affinity::Downstream);
+        let (pre, fol) = get_surrounding_text(&doc, pos, 10, 10);
+        assert_eq!(pre, "C");
+        assert_eq!(fol, "D");
+    }
+
+    #[test]
+    fn get_surrounding_text_cursor_at_block_boundaries() {
+        let mut p = id!();
+        let doc = doc! {
+            @p paragraph { text { "ABC" } }
+        };
+
+        // At start
+        let (pre, fol) =
+            get_surrounding_text(&doc, Position::new(p, 0, Affinity::Downstream), 5, 5);
+        assert_eq!(pre, "");
+        assert_eq!(fol, "ABC");
+
+        // At end
+        let (pre, fol) =
+            get_surrounding_text(&doc, Position::new(p, 3, Affinity::Downstream), 5, 5);
+        assert_eq!(pre, "ABC");
+        assert_eq!(fol, "");
+    }
+
+    #[test]
+    fn get_surrounding_text_count_limits_result() {
+        let mut p = id!();
+        let doc = doc! {
+            @p paragraph { text { "ABCDEF" } }
+        };
+
+        let pos = Position::new(p, 3, Affinity::Downstream);
+        let (pre, fol) = get_surrounding_text(&doc, pos, 2, 1);
+        assert_eq!(pre, "BC");
+        assert_eq!(fol, "D");
+    }
+
+    #[test]
+    fn get_surrounding_text_empty_block() {
+        let mut p = id!();
+        let doc = doc! {
+            @p paragraph {}
+        };
+
+        let pos = Position::new(p, 0, Affinity::Downstream);
+        let (pre, fol) = get_surrounding_text(&doc, pos, 5, 5);
+        assert_eq!(pre, "");
+        assert_eq!(fol, "");
+    }
+
+    #[test]
+    fn get_surrounding_text_korean() {
+        let mut p = id!();
+        let doc = doc! {
+            @p paragraph { text { "안녕하세요" } }
+        };
+
+        let pos = Position::new(p, 2, Affinity::Downstream);
+        let (pre, fol) = get_surrounding_text(&doc, pos, 10, 10);
+        assert_eq!(pre, "안녕");
+        assert_eq!(fol, "하세요");
+    }
+
+    #[test]
+    fn get_surrounding_text_korean_across_text_nodes() {
+        let mut p = id!();
+        let doc = doc! {
+            @p paragraph {
+                text { "가나" }
+                text { "다라" }
+                text { "마바" }
+            }
+        };
+
+        let pos = Position::new(p, 3, Affinity::Downstream);
+        let (pre, fol) = get_surrounding_text(&doc, pos, 2, 2);
+        assert_eq!(pre, "나다");
+        assert_eq!(fol, "라마");
+    }
+
+    #[test]
+    fn get_surrounding_text_korean_with_count_limit() {
+        let mut p = id!();
+        let doc = doc! {
+            @p paragraph { text { "가나다라마바사" } }
+        };
+
+        let pos = Position::new(p, 4, Affinity::Downstream);
+        let (pre, fol) = get_surrounding_text(&doc, pos, 2, 2);
+        assert_eq!(pre, "다라");
+        assert_eq!(fol, "마바");
     }
 }

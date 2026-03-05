@@ -10,6 +10,7 @@ apps/api/drizzle/*
 apps/mobile/android/*
 apps/mobile/ios/*
 crates/editor/benches/fixtures/**
+apps/mobile/test/fixtures/**
 
 **/build/**
 **/vendor/**

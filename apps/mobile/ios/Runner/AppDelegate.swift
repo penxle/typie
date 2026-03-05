@@ -7,10 +7,6 @@ private func registerCustomPlugins(with registry: FlutterPluginRegistry) {
   let factory = AppWebViewFactory(messenger: registrar!.messenger())
   registrar?.register(factory, withId: "co.typie.webview")
 
-  let editorInputRegistrar = registry.registrar(forPlugin: "co.typie.editor_input")
-  let editorInputFactory = EditorInputFactory(messenger: editorInputRegistrar!.messenger())
-  editorInputRegistrar?.register(editorInputFactory, withId: "co.typie.editor_input")
-
   KeyboardPlugin.register(with: registry.registrar(forPlugin: "co.typie.keyboard")!)
   EditorTexturePlugin.register(with: registry.registrar(forPlugin: "co.typie.editor_texture")!)
   ClipboardPlugin.register(with: registry.registrar(forPlugin: "co.typie.clipboard")!)

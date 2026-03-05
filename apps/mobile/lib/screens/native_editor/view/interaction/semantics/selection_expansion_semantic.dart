@@ -101,7 +101,7 @@ extension SelectionExpansionSemanticActions on EditorInteractionController {
 
     showContextMenu.value = false;
     scope.inputController
-      ..commitComposing()
+      ..invalidate()
       ..openInput();
 
     _semanticDispatchPrimaryClick(

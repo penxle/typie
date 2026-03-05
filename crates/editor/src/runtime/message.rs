@@ -56,7 +56,7 @@ pub enum Direction {
 macro_rules! define_messages {
     (
         $(
-            $name:ident $( { $($field:ident : $type:ty),* $(,)? } )?
+            $name:ident $( { $($(#[$field_attr:meta])* $field:ident : $type:ty),* $(,)? } )?
             => when $when:expr
             => handle($rt:ident) $block:block
         ),* $(,)?
@@ -67,7 +67,7 @@ macro_rules! define_messages {
         pub enum Message {
             $(
                 #[serde(rename_all = "camelCase")]
-                $name $( { $($field: $type),* } )?,
+                $name $( { $($(#[$field_attr])* $field: $type),* } )?,
             )*
         }
 
@@ -171,11 +171,11 @@ define_messages! {
 
     CompositionStart { text: String }
     => when When::key(ContextKey::CanEdit)
-    => handle(rt) { rt.handle_composition_update(&text) },
+    => handle(rt) { rt.handle_composition_update(&text, None) },
 
-    CompositionUpdate { text: String }
+    CompositionUpdate { text: String, #[serde(default)] replace_length: Option<usize> }
     => when When::key(ContextKey::CanEdit)
-    => handle(rt) { rt.handle_composition_update(&text) },
+    => handle(rt) { rt.handle_composition_update(&text, replace_length) },
 
     CompositionEnd
     => when When::key(ContextKey::CanEdit)
@@ -297,9 +297,9 @@ define_messages! {
         .and(When::key(ContextKey::CanEdit))
     => handle(rt) { rt.transact(|tr| tr.delete_selection()) },
 
-    DeleteBackward
+    DeleteBackward { #[serde(default)] length: Option<usize> }
     => when When::key(ContextKey::CanEdit)
-    => handle(rt) { rt.handle_delete_backward() },
+    => handle(rt) { rt.handle_delete_backward(length) },
 
     DeleteForward
     => when When::key(ContextKey::CanEdit)

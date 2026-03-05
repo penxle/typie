@@ -8,7 +8,7 @@ pre-commit:
       stage_fixed: true
     prettier:
       glob: '*.{ts,tsx,js,jsx,svelte,json,yaml,yml,md,graphql}'
-      run: bunx prettier --write --ignore-unknown {staged_files}
+      run: bunx prettier --write --ignore-unknown --no-error-on-unmatched-pattern {staged_files}
       stage_fixed: true
     cspell:
       glob: '*'

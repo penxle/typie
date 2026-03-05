@@ -12,6 +12,7 @@ import 'package:typie/hooks/debounce.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/screens/native_editor/__generated__/native_editor_query.data.gql.dart';
+import 'package:typie/screens/native_editor/context.dart';
 import 'package:typie/screens/native_editor/controller/clipboard.dart';
 import 'package:typie/screens/native_editor/controller/dnd_controller.dart';
 import 'package:typie/screens/native_editor/controller/input.dart';
@@ -72,7 +73,10 @@ class EditorView extends HookWidget {
     final tickerProvider = useSingleTickerProvider();
     final verticalScrollController = useScrollController();
     final horizontalScrollController = useScrollController();
-    final inputKey = useMemoized(GlobalKey<InputViewState>.new);
+    final inputKey = useMemoized(GlobalKey<EditorTextInputState>.new);
+    EditorScope.of(context).showInputRecordingSheet = () {
+      inputKey.currentState?.showRecordingSheet();
+    };
     final controllerRef = useRef(controller)..value = controller;
 
     final keyboardHeight = useValueNotifier<double>(0);
@@ -120,6 +124,12 @@ class EditorView extends HookWidget {
 
     final titleNotifier = useValueNotifier(title)..value = title;
     final subtitleNotifier = useValueNotifier(subtitle)..value = subtitle;
+
+    final state = useListenable(controller);
+    final currentLayout = state.state.layout;
+    final isPaginatedLayout = currentLayout is PaginatedLayout;
+    final renderedCursorValue = useValueListenable(presentedViewport).cursor;
+    final didApplyPaginatedInitialZoom = useRef(false);
 
     useEffect(() {
       return () => renderZoomTimer.value?.cancel();
@@ -229,6 +239,7 @@ class EditorView extends HookWidget {
             bottomToolbarMode.value = BottomToolbarMode.hidden;
           }
         },
+        getEditorSelection: () => state.state.selection,
       ),
       [controller],
     );
@@ -376,8 +387,9 @@ class EditorView extends HookWidget {
     final keyboardHandler = useMemoized(
       () => KeyboardHandler(
         dispatch: controller.dispatch,
-        commitComposing: inputController.commitComposing,
+        reconcileInput: inputController.invalidate,
         scrollIntoView: controller.scrollIntoView,
+        onShortcut: inputController.onShortcut,
       ),
       [controller, inputController],
     );
@@ -466,12 +478,7 @@ class EditorView extends HookWidget {
       final screenX =
           geo.contentStartX(viewportWidth: viewportWidth, horizontalScrollOffset: horizontalScrollOffset) +
           geo.toDisplayX(activeCursor.x);
-      inputController.updateCursor(
-        screenX,
-        screenY,
-        geo.toDisplayY(activeCursor.height),
-        activeCursor.precedingCharWidths,
-      );
+      inputController.updateCursor(screenX, screenY, geo.toDisplayY(activeCursor.height));
     }
 
     PresentedViewport buildPresentedViewportSnapshot({required CursorInfo? cursor, required bool projectTypewriter}) {
@@ -605,12 +612,6 @@ class EditorView extends HookWidget {
       return () => HardwareKeyboard.instance.removeHandler(onKeyEvent);
     }, []);
 
-    final state = useListenable(controller);
-    final currentLayout = state.state.layout;
-    final isPaginatedLayout = currentLayout is PaginatedLayout;
-    final renderedCursorValue = useValueListenable(presentedViewport).cursor;
-    final didApplyPaginatedInitialZoom = useRef(false);
-
     useEffect(() {
       void applyPendingCursorScroll() {
         final pendingMode = controller.pendingScrollMode;
@@ -735,6 +736,11 @@ class EditorView extends HookWidget {
     }, [state.state.selection, state.state.attrs, state.state.externalElements, state.state.isFocused]);
 
     useEffect(() {
+      inputController.reconcile();
+      return null;
+    }, [state.state.selection]);
+
+    useEffect(() {
       syncInputCursorPosition(renderedCursorValue);
       return null;
     }, [renderedCursorValue, state.state.renderVersion, currentDisplayZoom]);
@@ -849,7 +855,7 @@ class EditorView extends HookWidget {
     }
 
     return Listener(
-      onPointerDown: (_) => inputController.commitComposing(),
+      onPointerDown: (_) => inputController.invalidate(),
       child: NativeEditorToolbarScope(
         controller: controller,
         keyboardHeight: keyboardHeight,
@@ -868,7 +874,7 @@ class EditorView extends HookWidget {
         requestFocus: inputController.requestFocus,
         clearFocus: inputController.clearFocus,
         dismissKeyboard: inputController.dismissKeyboard,
-        commitComposing: inputController.commitComposing,
+        reconcileInput: inputController.invalidate,
         child: ContentScope(
           controller: controller,
           ticker: ticker,
@@ -964,32 +970,10 @@ class EditorView extends HookWidget {
                             );
                           },
                         ),
-                        Positioned.fill(
-                          child: IgnorePointer(
-                            child: InputView(
-                              key: inputKey,
-                              brightness: context.theme.brightness,
-                              onInsertText: inputController.onInsertText,
-                              onDeleteBackward: inputController.onDeleteBackward,
-                              onSetMarkedText: inputController.onSetMarkedText,
-                              onUnmarkText: inputController.onUnmarkText,
-                              onCancelMarkedText: inputController.onCancelMarkedText,
-                              onPerformAction: inputController.onPerformAction,
-                              onShortcut: inputController.onShortcut,
-                              onFloatingCursorBegin: inputController.onFloatingCursorBegin,
-                              onFloatingCursorUpdate: inputController.onFloatingCursorUpdate,
-                              onFloatingCursorEnd: inputController.onFloatingCursorEnd,
-                              onFocusLost: inputController.onFocusLost,
-                              onReady: inputController.onInputReady,
-                              onReplaceBackward: inputController.onReplaceBackward,
-                              onNavigate: (direction, extend) {
-                                inputController.commitComposing();
-                                controller
-                                  ..dispatch({'type': 'navigate', 'direction': direction, 'extend': extend})
-                                  ..scrollIntoView(mode: extend ? ScrollMode.auto : ScrollMode.typewriter);
-                              },
-                            ),
-                          ),
+                        EditorTextInput(
+                          key: inputKey,
+                          brightness: context.theme.brightness,
+                          controller: inputController,
                         ),
                         if (pref.characterCountFloatingEnabled) const NativeCharacterCountFloating(),
                         const NativeEditorZoomOverlay(),

@@ -65,7 +65,7 @@ extension TapGestureMethods on EditorInteractionController {
     showContextMenu.value = false;
 
     scope.inputController
-      ..commitComposing()
+      ..invalidate()
       ..openInput();
 
     final now = DateTime.now();

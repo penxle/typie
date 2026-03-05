@@ -35,7 +35,8 @@ use crate::state::selection_helpers::{
     collect_selected_block_ids, compute_selection_attrs, compute_structure_selection,
 };
 use crate::state::{
-    Position, Preedit, Selection, find_child_at_offset, find_text_at_offset, position_in_selection,
+    Position, Preedit, Selection, find_child_at_offset, find_text_at_offset, get_surrounding_text,
+    position_in_selection,
 };
 use crate::transaction::{
     Transaction, compute_styles_at_cursor, paragraph_range_at, sentence_range_at, word_range_at,
@@ -207,8 +208,10 @@ impl Runtime {
                 true
             }
             (
-                Message::CompositionUpdate { text: last_text },
-                Message::CompositionUpdate { text: new_text },
+                Message::CompositionUpdate {
+                    text: last_text, ..
+                },
+                Message::CompositionUpdate { text: new_text, .. },
             ) => {
                 *last_text = new_text.clone();
                 true
@@ -1275,19 +1278,8 @@ impl Runtime {
                 .map(|(idx, rect)| (Some(idx), Some(rect), selection.is_collapsed()))
                 .unwrap_or((None, None, false));
 
-            let preceding_char_widths = if selection.is_collapsed() {
-                Cursor::preceding_char_widths(&ctx, self.pages(), selection.head, 64)
-            } else {
-                None
-            };
-
-            self.slab.write_cursor(
-                &mut self.slate,
-                page_idx,
-                bounds,
-                visible,
-                preceding_char_widths.as_deref(),
-            );
+            self.slab
+                .write_cursor(&mut self.slate, page_idx, bounds, visible);
             self.pending.cursor = false;
         }
 
@@ -1369,6 +1361,10 @@ impl Runtime {
                     }
                 }
             }
+
+            let (preceding, following) = get_surrounding_text(self.doc(), selection.anchor, 64, 16);
+            self.slab
+                .write_surrounding_texts(&mut self.slate, preceding, following);
 
             self.pending.selection = false;
         }

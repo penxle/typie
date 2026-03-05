@@ -84,7 +84,7 @@ extension LongPressGestureMethods on EditorInteractionController {
       return false;
     }
 
-    scope.inputController.commitComposing();
+    scope.inputController.invalidate();
 
     final localPosition = admission.viewportPosition;
     final semanticIntent = admission.semanticIntent;

@@ -169,7 +169,8 @@ impl Transaction {
     }
 
     pub fn insert_text(&mut self, s: &str) -> Result<bool> {
-        if s.is_empty() {
+        if s.is_empty() || s.contains(['\n', '\r']) {
+            log!("insert_text failed");
             return Ok(false);
         }
 

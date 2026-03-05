@@ -9,6 +9,7 @@ class EditorContext {
   Uint8List? serverSnapshot;
   String? serverVersion;
   int serverGeneration = 0;
+  VoidCallback? showInputRecordingSheet;
 
   final ValueNotifier<int> resetKey = ValueNotifier(0);
 
