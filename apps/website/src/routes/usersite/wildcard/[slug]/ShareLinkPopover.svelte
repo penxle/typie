@@ -7,9 +7,9 @@
   import CheckIcon from '~icons/lucide/check';
   import CopyIcon from '~icons/lucide/copy';
   import ShareIcon from '~icons/lucide/share';
-  import XIcon from '~icons/lucide/x';
+  import CloseIcon from '~icons/lucide/x';
   import MastodonIcon from '~icons/simple-icons/mastodon';
-  import TwitterIcon from '~icons/simple-icons/twitter';
+  import XBrandIcon from '~icons/simple-icons/x';
 
   type Props = {
     href: string;
@@ -118,7 +118,7 @@
         onclick={() => (open = false)}
         type="button"
       >
-        <Icon icon={XIcon} size={16} />
+        <Icon icon={CloseIcon} size={16} />
       </button>
     </div>
 
@@ -135,9 +135,9 @@
           rel="noopener noreferrer"
           target="_blank"
         >
-          <Icon style={css.raw({ color: '[#1D9BF0]' })} icon={TwitterIcon} size={20} />
+          <Icon icon={XBrandIcon} size={20} />
         </a>
-        <p class={css({ marginTop: '4px', fontSize: '12px', textAlign: 'center', color: 'text.muted' })}>트위터</p>
+        <p class={css({ marginTop: '4px', fontSize: '12px', textAlign: 'center', color: 'text.muted' })}>X</p>
       </div>
 
       <div>

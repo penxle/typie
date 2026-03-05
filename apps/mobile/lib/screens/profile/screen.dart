@@ -16,6 +16,7 @@ import 'package:typie/screens/profile/feedback_bottom_sheet.dart';
 import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/horizontal_divider.dart';
 import 'package:typie/widgets/screen.dart';
+import 'package:typie/widgets/svg_image.dart';
 import 'package:typie/widgets/tappable.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -302,12 +303,12 @@ class ProfileScreen extends StatelessWidget {
                                 await launchUrl(url, mode: LaunchMode.externalApplication);
                               },
                               child: const Row(
-                                spacing: 8,
+                                spacing: 10,
                                 children: [
-                                  Icon(LucideLightIcons.twitter, size: 20),
+                                  SvgImage('brands/x', width: 18, height: 18),
                                   Expanded(
                                     child: Text(
-                                      '타이피 공식 트위터',
+                                      '타이피 공식 X',
                                       style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
                                     ),
                                   ),
