@@ -14,7 +14,7 @@ export const handleKeyEvent = (editor: Editor, e: KeyboardEvent): boolean => {
         editor.dispatch({ type: 'navigate', direction: 'left', extend: e.shiftKey });
       }
 
-      editor.scrollIntoView({ mode: e.shiftKey ? 'auto' : 'typewriter' });
+      editor.scrollIntoView({ mode: 'typewriter' });
       return true;
     }
     case 'ArrowRight': {
@@ -26,7 +26,7 @@ export const handleKeyEvent = (editor: Editor, e: KeyboardEvent): boolean => {
         editor.dispatch({ type: 'navigate', direction: 'right', extend: e.shiftKey });
       }
 
-      editor.scrollIntoView({ mode: e.shiftKey ? 'auto' : 'typewriter' });
+      editor.scrollIntoView({ mode: 'typewriter' });
       return true;
     }
     case 'ArrowUp': {
@@ -38,7 +38,7 @@ export const handleKeyEvent = (editor: Editor, e: KeyboardEvent): boolean => {
         editor.dispatch({ type: 'navigate', direction: 'up', extend: e.shiftKey });
       }
 
-      editor.scrollIntoView({ mode: e.shiftKey ? 'auto' : 'typewriter' });
+      editor.scrollIntoView({ mode: 'typewriter' });
       return true;
     }
     case 'ArrowDown': {
@@ -50,7 +50,7 @@ export const handleKeyEvent = (editor: Editor, e: KeyboardEvent): boolean => {
         editor.dispatch({ type: 'navigate', direction: 'down', extend: e.shiftKey });
       }
 
-      editor.scrollIntoView({ mode: e.shiftKey ? 'auto' : 'typewriter' });
+      editor.scrollIntoView({ mode: 'typewriter' });
       return true;
     }
     case 'Home': {
@@ -60,7 +60,7 @@ export const handleKeyEvent = (editor: Editor, e: KeyboardEvent): boolean => {
         editor.dispatch({ type: 'navigate', direction: 'lineStart', extend: e.shiftKey });
       }
 
-      editor.scrollIntoView({ mode: e.shiftKey ? 'auto' : 'typewriter' });
+      editor.scrollIntoView({ mode: 'typewriter' });
       return true;
     }
     case 'End': {
@@ -70,17 +70,17 @@ export const handleKeyEvent = (editor: Editor, e: KeyboardEvent): boolean => {
         editor.dispatch({ type: 'navigate', direction: 'lineEnd', extend: e.shiftKey });
       }
 
-      editor.scrollIntoView({ mode: e.shiftKey ? 'auto' : 'typewriter' });
+      editor.scrollIntoView({ mode: 'typewriter' });
       return true;
     }
     case 'PageUp': {
       editor.dispatch({ type: 'navigate', direction: 'pageUp', extend: e.shiftKey });
-      editor.scrollIntoView({ mode: e.shiftKey ? 'auto' : 'typewriter' });
+      editor.scrollIntoView({ mode: 'typewriter' });
       return true;
     }
     case 'PageDown': {
       editor.dispatch({ type: 'navigate', direction: 'pageDown', extend: e.shiftKey });
-      editor.scrollIntoView({ mode: e.shiftKey ? 'auto' : 'typewriter' });
+      editor.scrollIntoView({ mode: 'typewriter' });
       return true;
     }
     case 'Backspace': {

@@ -60,7 +60,7 @@
   $effect(() => {
     if (!element) return;
 
-    const { pageIdx, bounds, visible } = editor.cursor;
+    const { pageIdx, bounds, visible } = editor.presentedCursor;
     const scrollToCursor = editor.pendingScrollConsumer === 'cursor';
     const containerEls = editor.pageContainerEls;
     const inputEl = editor.inputElement;
@@ -84,17 +84,12 @@
         prevCursorPos = { x: bounds.x, y: bounds.y };
       }
 
-      if (scrollToCursor) {
-        requestAnimationFrame(() => {
-          if (editor.pendingScrollConsumer !== 'cursor') {
-            return;
-          }
-          const didScroll = keepCursorInViewport();
-          if (didScroll) {
-            editor.registerCursorAutoScroll('cursor');
-          }
-          editor.consumePendingScroll('cursor');
-        });
+      if (scrollToCursor && editor.pendingScrollConsumer === 'cursor') {
+        const didScroll = keepCursorInViewport();
+        if (didScroll) {
+          editor.registerCursorAutoScroll('cursor');
+        }
+        editor.consumePendingScroll('cursor');
       }
     } else {
       element.style.visibility = 'hidden';
