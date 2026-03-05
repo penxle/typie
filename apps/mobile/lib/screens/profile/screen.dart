@@ -283,7 +283,7 @@ class ProfileScreen extends StatelessWidget {
                                 child: const Row(
                                   spacing: 8,
                                   children: [
-                                    Icon(LucideLightIcons.users, size: 20),
+                                    SvgImage('brands/discord', width: 20, height: 20),
                                     Expanded(
                                       child: Text(
                                         '타이피 유저 커뮤니티',

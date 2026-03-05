@@ -9,7 +9,7 @@
   import HelpCircleIcon from '~icons/lucide/help-circle';
   import LogOutIcon from '~icons/lucide/log-out';
   import SettingsIcon from '~icons/lucide/settings';
-  import UsersIcon from '~icons/lucide/users';
+  import DiscordIcon from '~icons/simple-icons/discord';
   import XBrandIcon from '~icons/simple-icons/x';
   import { pushState } from '$app/navigation';
   import { env } from '$env/dynamic/public';
@@ -93,7 +93,7 @@
   </MenuItem>
 
   {#if user.data.subscription}
-    <MenuItem external href="https://typie.link/community" icon={UsersIcon} type="link">타이피 커뮤니티</MenuItem>
+    <MenuItem external href="https://typie.link/community" icon={DiscordIcon} type="link">타이피 유저 커뮤니티</MenuItem>
   {/if}
 
   <MenuItem external href="https://x.com/typieofficial" icon={XBrandIcon} type="link">타이피 공식 X</MenuItem>
