@@ -3,6 +3,10 @@
 query EntityScreen_WithEntityId_Query($entityId: ID!) {
   entity(entityId: $entityId) {
     id
+    site {
+      id
+      name
+    }
     ...EntityScreen_Entity_entity
 
     children {

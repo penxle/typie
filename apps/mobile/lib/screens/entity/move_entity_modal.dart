@@ -57,6 +57,7 @@ class MoveEntityModal extends HookWidget {
     final loading = useState(false);
     final folderEntities = useState<List<GEntityScreen_Entity_entity>?>(null);
     final currentEntity = useState<GEntityScreen_WithEntityId_QueryData_entity?>(null);
+    final currentSiteName = useState<String?>(null);
 
     final selectedItems = isMultiple ? entities!.map((e) => e.id).toSet() : {singleEntity!.id};
 
@@ -99,6 +100,7 @@ class MoveEntityModal extends HookWidget {
       } else {
         final res = await client.request(GEntityScreen_WithSiteId_QueryReq((b) => b..vars.siteId = pref.siteId));
         currentEntity.value = null;
+        currentSiteName.value = res.site.name;
         folderEntities.value = res.site.entities.toList();
       }
       loading.value = false;
@@ -142,7 +144,7 @@ class MoveEntityModal extends HookWidget {
                       }
                     },
                     child: Text(
-                      '내 문서',
+                      currentSiteName.value ?? '내 스페이스',
                       style: TextStyle(fontWeight: currentEntity.value == null ? FontWeight.w600 : null),
                     ),
                   ),
