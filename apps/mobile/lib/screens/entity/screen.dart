@@ -170,9 +170,12 @@ class _EntityList extends HookWidget {
       if (isRenaming.value) {
         textEditingController.selection = TextSelection(baseOffset: 0, extentOffset: textEditingController.text.length);
       }
+      if (isSiteRenaming.value) {
+        siteNameController.selection = TextSelection(baseOffset: 0, extentOffset: siteNameController.text.length);
+      }
 
       return null;
-    }, [isRenaming.value]);
+    }, [isRenaming.value, isSiteRenaming.value]);
 
     return HookForm(
       schema: l.schema({'name': l.string().min(1).required()}),
