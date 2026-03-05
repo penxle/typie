@@ -33,7 +33,8 @@ export function setupTypewriter(getTargetEl: () => HTMLElement | undefined, defa
   };
 
   const computeTypewriterScrollMetrics = () => {
-    const bounds = editor.cursor.bounds;
+    const selectionHeadBounds = editor.selection?.collapsed === false ? editor.selection.headBounds : null;
+    const bounds = selectionHeadBounds?.bounds ?? editor.cursor.bounds;
     if (!bounds) {
       return;
     }
@@ -43,7 +44,7 @@ export function setupTypewriter(getTargetEl: () => HTMLElement | undefined, defa
       return;
     }
 
-    const pageIdx = editor.cursor.pageIdx;
+    const pageIdx = selectionHeadBounds?.pageIdx ?? editor.cursor.pageIdx;
     const containerEl = editor.pageContainerEls[pageIdx];
     if (!containerEl) {
       return;

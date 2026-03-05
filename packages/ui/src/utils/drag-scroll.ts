@@ -97,12 +97,16 @@ const getStickyTopBoundary = (
 
 const getAdjustedRect = (
   rect: { top: number; bottom: number; left: number; right: number },
-  stickyCandidates: HTMLElement[],
-  topAnchorThresholdPx: number,
+  stickyTop: number,
+  scrollZoneSize: number,
 ): { top: number; bottom: number; left: number; right: number } => {
+  const maxTopForBidirectionalScroll = rect.bottom - scrollZoneSize * 2;
+
   return {
-    ...rect,
-    top: getStickyTopBoundary(rect, stickyCandidates, topAnchorThresholdPx),
+    left: rect.left,
+    right: rect.right,
+    bottom: rect.bottom,
+    top: Math.max(rect.top, Math.min(stickyTop, maxTopForBidirectionalScroll)),
   };
 };
 
@@ -112,8 +116,6 @@ export function handleDragScroll(
   isDragging: boolean,
   options: DragScrollOptions = {},
 ): (() => void) | undefined {
-  if (!isDragging || !viewport) return;
-
   const {
     scrollZoneSize = 50,
     minScrollSpeed = 1,
@@ -124,9 +126,23 @@ export function handleDragScroll(
     onScrollThrottleMs = 50,
   } = options;
 
+  if (!isDragging || !viewport) {
+    return;
+  }
+
   const useHorizontalScroll = axis === 'both';
   const stickyCandidates = collectStickyCandidates(viewport.target);
   const topAnchorThresholdPx = Math.max(scrollZoneSize * 2, 96);
+  const toRect = (rect: { top: number; bottom: number; left: number; right: number }) => ({
+    top: rect.top,
+    bottom: rect.bottom,
+    left: rect.left,
+    right: rect.right,
+  });
+  const initialRawRect = toRect(viewport.getRect());
+  const initialStickyTop = getStickyTopBoundary(initialRawRect, stickyCandidates, topAnchorThresholdPx);
+  const stickyTopInset = Math.max(0, initialStickyTop - initialRawRect.top);
+  const getStableStickyTop = (rawRect: { top: number; bottom: number; left: number; right: number }) => rawRect.top + stickyTopInset;
 
   let lastPointerX = 0;
   let lastPointerY = 0;
@@ -150,7 +166,9 @@ export function handleDragScroll(
     lastPointerX = clientX;
     lastPointerY = clientY;
 
-    const rect = getAdjustedRect(viewport.getRect(), stickyCandidates, topAnchorThresholdPx);
+    const rawRect = toRect(viewport.getRect());
+    const stickyTop = getStableStickyTop(rawRect);
+    const rect = getAdjustedRect(rawRect, stickyTop, scrollZoneSize);
 
     if (!useHorizontalScroll && (lastPointerX < rect.left || lastPointerX > rect.right)) {
       return;
@@ -170,7 +188,9 @@ export function handleDragScroll(
   };
 
   const scroll = () => {
-    const rect = getAdjustedRect(viewport.getRect(), stickyCandidates, topAnchorThresholdPx);
+    const rawRect = toRect(viewport.getRect());
+    const stickyTop = getStableStickyTop(rawRect);
+    const rect = getAdjustedRect(rawRect, stickyTop, scrollZoneSize);
 
     if (!useHorizontalScroll && (lastPointerX < rect.left || lastPointerX > rect.right)) {
       animationId = null;

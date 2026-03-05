@@ -222,13 +222,26 @@ export class Editor {
     visible: false,
   });
 
+  presentedCursor = $state({
+    pageIdx: -1,
+    bounds: null as Rect | null,
+    visible: false,
+  });
+
   pendingScrollConsumer = $state<'cursor' | 'typewriter' | null>(null);
   #pendingDocChanged = false;
   #pendingTypewriterRequest = false;
+  #pendingCursorRequest = false;
   #typewriterAvailable = false;
   #cursorFollowScrollActive = false;
   #cursorFollowScrollMode: 'cursor' | 'typewriter' = 'cursor';
   #programmaticScrollDepth = 0;
+  #pageRenderedVersionByPage = new SvelteMap<number, number>();
+  #pendingScrollAfterRender: {
+    mode: 'cursor' | 'typewriter';
+    pageIdx: number;
+    cursor: { pageIdx: number; bounds: Rect | null; visible: boolean };
+  } | null = null;
 
   inputElement = $state<HTMLInputElement | null>(null);
 
@@ -424,6 +437,7 @@ export class Editor {
         this.#onDocChanged?.();
       }
       this.#pendingTypewriterRequest = false;
+      this.#pendingCursorRequest = false;
 
       if (!this.#flushPending) {
         this.#flushPending = true;
@@ -526,15 +540,24 @@ export class Editor {
         this.cursor.pageIdx = c.pageIdx;
         this.cursor.bounds = c.bounds;
         this.cursor.visible = c.visible;
-        if (this.#pendingTypewriterRequest) {
-          this.#armPendingScrollConsumer();
-        }
       } else {
         this.cursor.pageIdx = -1;
         this.cursor.bounds = null;
         this.cursor.visible = false;
+      }
+
+      if (this.#pendingTypewriterRequest) {
+        this.#armPendingScrollConsumer();
+      }
+
+      const scrollTarget = this.#snapshotScrollTarget();
+      if (!scrollTarget) {
+        this.#applyPresentedCursor(null);
+        this.#clearPendingScrollAfterRender();
         this.pendingScrollConsumer = null;
         this.#cursorFollowScrollActive = false;
+      } else if (!this.#pendingScrollAfterRender) {
+        this.#applyPresentedCursor(scrollTarget);
       }
     }
 
@@ -546,6 +569,10 @@ export class Editor {
       this.#onSelectionChanged?.(sel.anchor, sel.head);
       this.#updateActiveTrackedItems();
       this.currentBlock = slate.readCurrentBlock();
+
+      if (!this.#pendingScrollAfterRender) {
+        this.#applyPresentedCursor(this.#snapshotScrollTarget());
+      }
 
       if (this.#pendingSelectAllShortcut && (selectionExpandable & SELECTION_EXPAND_ALL) !== 0) {
         Tip.show('editor.shortcut.select-all-document', '`Mod-A`를 한 번 더 누르면 문서 전체가 선택돼요.');
@@ -627,6 +654,8 @@ export class Editor {
     if (slate.isDirty(DIRTY_REMARKS)) {
       this.remarkOverlays = slate.readRemarks();
     }
+
+    this.#armPendingCursorConsumer();
   }
 
   #handleFontRequired(family: string, weight: number, codepoints: number[]): void {
@@ -1123,7 +1152,7 @@ export class Editor {
 
     const { pageIdx, x, y } = resolved;
 
-    this.dispatch({
+    const dispatched = this.dispatch({
       type: 'pointerUp',
       pageIdx,
       x,
@@ -1131,6 +1160,9 @@ export class Editor {
       button: this.#toPointerButton(e.button),
       modifier: this.#toModifier(e),
     });
+    if (e.button === 0) {
+      dispatched.scrollIntoView();
+    }
 
     this.pointer.isPressed = false;
   }
@@ -1826,12 +1858,130 @@ export class Editor {
     this.#armScrollConsumerForCurrentCursor();
   }
 
-  #armScrollConsumerForMode(mode: 'cursor' | 'typewriter'): void {
-    if (this.cursor.pageIdx < 0 || !this.cursor.bounds) {
+  #armPendingCursorConsumer(): void {
+    if (!this.#pendingCursorRequest) {
       return;
     }
 
-    this.pendingScrollConsumer = mode === 'typewriter' && this.#typewriterAvailable ? 'typewriter' : 'cursor';
+    this.#pendingCursorRequest = false;
+    this.#armScrollConsumerForMode('cursor');
+  }
+
+  #snapshotCurrentCursor(): { pageIdx: number; bounds: Rect | null; visible: boolean } {
+    return {
+      pageIdx: this.cursor.pageIdx,
+      bounds: this.cursor.bounds ? { ...this.cursor.bounds } : null,
+      visible: this.cursor.visible,
+    };
+  }
+
+  #snapshotSelectionHead(): { pageIdx: number; bounds: Rect | null; visible: boolean } | null {
+    const headBounds = this.selection?.collapsed === false ? this.selection.headBounds : null;
+    if (!headBounds) {
+      return null;
+    }
+
+    return {
+      pageIdx: headBounds.pageIdx,
+      bounds: { ...headBounds.bounds },
+      visible: false,
+    };
+  }
+
+  #snapshotScrollTarget(): { pageIdx: number; bounds: Rect | null; visible: boolean } | null {
+    const selectionHead = this.#snapshotSelectionHead();
+    if (selectionHead) {
+      return selectionHead;
+    }
+
+    const cursorSnapshot = this.#snapshotCurrentCursor();
+    if (cursorSnapshot.pageIdx < 0 || !cursorSnapshot.bounds) {
+      return null;
+    }
+
+    return cursorSnapshot;
+  }
+
+  #isSameCursorSnapshot(
+    a: { pageIdx: number; bounds: Rect | null; visible: boolean },
+    b: { pageIdx: number; bounds: Rect | null; visible: boolean },
+  ): boolean {
+    if (a.pageIdx !== b.pageIdx) {
+      return false;
+    }
+
+    if (!a.bounds || !b.bounds) {
+      return a.bounds === b.bounds;
+    }
+
+    return (
+      a.bounds.x === b.bounds.x && a.bounds.y === b.bounds.y && a.bounds.width === b.bounds.width && a.bounds.height === b.bounds.height
+    );
+  }
+
+  #applyPresentedCursor(cursor: { pageIdx: number; bounds: Rect | null; visible: boolean } | null): void {
+    if (!cursor || cursor.pageIdx < 0 || !cursor.bounds) {
+      this.presentedCursor.pageIdx = -1;
+      this.presentedCursor.bounds = null;
+      this.presentedCursor.visible = false;
+      return;
+    }
+
+    this.presentedCursor.pageIdx = cursor.pageIdx;
+    this.presentedCursor.bounds = { ...cursor.bounds };
+    this.presentedCursor.visible = cursor.visible;
+  }
+
+  #clearPendingScrollAfterRender(): void {
+    this.#pendingScrollAfterRender = null;
+  }
+
+  #isPageRenderableSoon(pageIdx: number): boolean {
+    const pageEl = this.pageContainerEls[pageIdx];
+    const viewport = this.scrollViewport;
+    if (!pageEl || !viewport) {
+      return false;
+    }
+
+    const viewportRect = viewport.getRect();
+    const viewportHeight = viewportRect.bottom - viewportRect.top;
+    const marginPx = viewportHeight * 2;
+    const pageRect = pageEl.getBoundingClientRect();
+
+    return pageRect.bottom > viewportRect.top - marginPx && pageRect.top < viewportRect.bottom + marginPx;
+  }
+
+  #shouldDeferScrollUntilRender(pageIdx: number): boolean {
+    if (!this.#isPageRenderableSoon(pageIdx)) {
+      return false;
+    }
+
+    const renderedVersion = this.#pageRenderedVersionByPage.get(pageIdx);
+    return renderedVersion === undefined || renderedVersion < this.renderVersion;
+  }
+
+  #armScrollConsumerForMode(mode: 'cursor' | 'typewriter'): void {
+    const scrollTarget = this.#snapshotScrollTarget();
+    if (!scrollTarget) {
+      return;
+    }
+
+    const resolvedMode = mode === 'typewriter' && this.#typewriterAvailable ? 'typewriter' : 'cursor';
+    const cursorSnapshot = scrollTarget;
+
+    if (this.#shouldDeferScrollUntilRender(cursorSnapshot.pageIdx)) {
+      this.#pendingScrollAfterRender = {
+        mode: resolvedMode,
+        pageIdx: cursorSnapshot.pageIdx,
+        cursor: cursorSnapshot,
+      };
+      this.pendingScrollConsumer = null;
+      return;
+    }
+
+    this.#clearPendingScrollAfterRender();
+    this.#applyPresentedCursor(cursorSnapshot);
+    this.pendingScrollConsumer = resolvedMode;
   }
 
   #armScrollConsumerForCurrentCursor(): void {
@@ -1858,8 +2008,11 @@ export class Editor {
   scrollIntoView({ mode = 'auto' }: { mode?: 'auto' | 'typewriter' } = {}): Editor {
     if (mode === 'typewriter') {
       this.#pendingTypewriterRequest = true;
+      this.#pendingCursorRequest = false;
     } else {
-      this.pendingScrollConsumer = 'cursor';
+      this.#pendingCursorRequest = true;
+      this.pendingScrollConsumer = null;
+      this.#clearPendingScrollAfterRender();
       this.#pendingTypewriterRequest = false;
     }
     return this;
@@ -1876,12 +2029,51 @@ export class Editor {
     if (!nextAvailable && this.pendingScrollConsumer === 'typewriter') {
       this.pendingScrollConsumer = 'cursor';
     }
+    if (!nextAvailable && this.#pendingScrollAfterRender?.mode === 'typewriter') {
+      this.#pendingScrollAfterRender = {
+        ...this.#pendingScrollAfterRender,
+        mode: 'cursor',
+      };
+    }
   }
 
   consumePendingScroll(consumer: 'cursor' | 'typewriter'): void {
     if (this.pendingScrollConsumer === consumer) {
       this.pendingScrollConsumer = null;
     }
+  }
+
+  notifyPageRendered(pageIdx: number, version: number): void {
+    const prevVersion = this.#pageRenderedVersionByPage.get(pageIdx) ?? -1;
+    if (version > prevVersion) {
+      this.#pageRenderedVersionByPage.set(pageIdx, version);
+    }
+
+    const pending = this.#pendingScrollAfterRender;
+    if (!pending || pending.pageIdx !== pageIdx || (this.#pageRenderedVersionByPage.get(pageIdx) ?? -1) < this.renderVersion) {
+      return;
+    }
+
+    if (this.pointer.isPressed || this.pointerState !== 0) {
+      this.#clearPendingScrollAfterRender();
+      return;
+    }
+
+    const liveCursor = this.#snapshotScrollTarget();
+    if (!liveCursor) {
+      this.#clearPendingScrollAfterRender();
+      return;
+    }
+
+    if (!this.#isSameCursorSnapshot(liveCursor, pending.cursor)) {
+      this.#clearPendingScrollAfterRender();
+      return;
+    }
+
+    const cursorSnapshot = liveCursor.pageIdx === pageIdx && liveCursor.bounds ? liveCursor : pending.cursor;
+    this.#applyPresentedCursor(cursorSnapshot);
+    this.pendingScrollConsumer = pending.mode;
+    this.#clearPendingScrollAfterRender();
   }
 
   focus(): Editor {

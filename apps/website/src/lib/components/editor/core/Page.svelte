@@ -38,14 +38,17 @@
   let visible = $state(false);
 
   function render() {
-    if (!ctx2d) return;
-    editor.renderPageToCanvas(page, ctx2d);
+    if (!ctx2d) return false;
+    return editor.renderPageToCanvas(page, ctx2d);
   }
 
   $effect(() => {
-    void editor.renderVersion;
+    const renderVersion = editor.renderVersion;
     if (!visible || !ctx2d) return;
-    render();
+    const rendered = render();
+    if (rendered) {
+      editor.notifyPageRendered(page, renderVersion);
+    }
   });
 
   $effect(() => {

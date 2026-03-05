@@ -8,9 +8,9 @@
 
   const PADDING = 4;
 
-  const show = $derived(editor.isFocused && editor.cursor.visible && !!editor.cursor.bounds);
-  const pageIdx = $derived(editor.cursor.pageIdx);
-  const bounds = $derived(editor.cursor.bounds);
+  const show = $derived(editor.isFocused && editor.presentedCursor.visible && !!editor.presentedCursor.bounds);
+  const pageIdx = $derived(editor.presentedCursor.pageIdx);
+  const bounds = $derived(editor.presentedCursor.bounds);
 
   const isPaginated = $derived(editor.layout?.layoutMode.type === 'paginated');
 
