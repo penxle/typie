@@ -50,7 +50,7 @@ class _WithSiteId extends HookWidget {
       initialBackgroundColor: context.colors.surfaceSubtle,
       operation: GTrashScreen_WithSiteId_QueryReq((b) => b..vars.siteId = pref.siteId),
       builder: (context, client, data) {
-        return _TrashList(null, data.site.deletedEntities.toList(), siteName: data.site.name);
+        return _TrashList(null, data.site.deletedEntities.toList(), data.site.name);
       },
     );
   }
@@ -67,18 +67,18 @@ class _WithEntityId extends StatelessWidget {
       initialBackgroundColor: context.colors.surfaceSubtle,
       operation: GTrashScreen_WithEntityId_QueryReq((b) => b..vars.entityId = entityId),
       builder: (context, client, data) {
-        return _TrashList(data.entity, data.entity.deletedChildren.toList(), siteName: data.entity.site.name);
+        return _TrashList(data.entity, data.entity.deletedChildren.toList(), data.entity.site.name);
       },
     );
   }
 }
 
 class _TrashList extends HookWidget {
-  const _TrashList(this.entity, this.entities, {this.siteName});
+  const _TrashList(this.entity, this.entities, this.siteName);
 
   final GTrashScreen_WithEntityId_QueryData_entity? entity;
   final List<GTrashScreen_Entity_entity> entities;
-  final String? siteName;
+  final String siteName;
 
   GTrashScreen_WithEntityId_QueryData_entity_node__asFolder? get folder =>
       entity?.node as GTrashScreen_WithEntityId_QueryData_entity_node__asFolder?;
