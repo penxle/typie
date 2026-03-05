@@ -40,6 +40,27 @@
           id
 
           state
+          ancestors {
+            id
+            node {
+              __typename
+              ... on Folder {
+                id
+                name
+              }
+            }
+          }
+          node {
+            __typename
+            ... on Folder {
+              id
+              name
+            }
+            ... on Document {
+              id
+              title
+            }
+          }
 
           site {
             id
@@ -106,8 +127,24 @@
       })}
       onclick={async () => {
         try {
-          await recoverEntity({ input: { entityId: document.data.entity.id } });
+          const resp = await recoverEntity({ input: { entityId: document.data.entity.id } });
+          const currentName =
+            resp.recoverEntity.node.__typename === 'Document'
+              ? resp.recoverEntity.node.title
+              : resp.recoverEntity.node.__typename === 'Folder'
+                ? resp.recoverEntity.node.name
+                : '';
+          const path = [
+            ...resp.recoverEntity.ancestors
+              .map((ancestor) => (ancestor.node.__typename === 'Folder' ? ancestor.node.name : ''))
+              .filter((name) => name.length > 0),
+            currentName,
+          ]
+            .filter((segment) => segment.length > 0)
+            .join(' › ');
+
           mixpanel.track('recover_entity', { via: 'trash', type: 'document' });
+          Toast.success(`"${path}" 문서를 복원했어요`);
         } catch {
           Toast.error('문서 복원에 실패했어요');
         }

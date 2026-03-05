@@ -1,5 +1,25 @@
 mutation TrashScreen_RecoverEntity_Mutation($input: RecoverEntityInput!) {
   recoverEntity(input: $input) {
     id
+    ancestors {
+      id
+      node {
+        ... on Folder {
+          id
+          name
+        }
+      }
+    }
+    node {
+      ... on Folder {
+        id
+        name
+      }
+
+      ... on Document {
+        id
+        title
+      }
+    }
   }
 }

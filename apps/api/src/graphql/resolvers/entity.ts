@@ -972,10 +972,12 @@ builder.mutationFields((t) => ({
             ),
           );
 
+        const recoveredEntity = await tx.select().from(Entities).where(eq(Entities.id, entity.id)).then(firstOrThrow);
+
         pubsub.publish('site:update', entity.siteId, { scope: 'site' });
         pubsub.publish('user:usage:update', ctx.session.userId, null);
 
-        return entity.id;
+        return recoveredEntity;
       });
     },
   }),

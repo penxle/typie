@@ -18,6 +18,7 @@ import 'package:typie/icons/typie.dart';
 import 'package:typie/routers/app.gr.dart';
 import 'package:typie/screens/trash/__generated__/entity_fragment.data.gql.dart';
 import 'package:typie/screens/trash/__generated__/purge_entities_mutation.req.gql.dart';
+import 'package:typie/screens/trash/__generated__/recover_entity_mutation.data.gql.dart';
 import 'package:typie/screens/trash/__generated__/recover_entity_mutation.req.gql.dart';
 import 'package:typie/screens/trash/__generated__/screen_with_entity_id_query.data.gql.dart';
 import 'package:typie/screens/trash/__generated__/screen_with_entity_id_query.req.gql.dart';
@@ -49,7 +50,7 @@ class _WithSiteId extends HookWidget {
       initialBackgroundColor: context.colors.surfaceSubtle,
       operation: GTrashScreen_WithSiteId_QueryReq((b) => b..vars.siteId = pref.siteId),
       builder: (context, client, data) {
-        return _TrashList(null, data.site.deletedEntities.toList());
+        return _TrashList(null, data.site.deletedEntities.toList(), siteName: data.site.name);
       },
     );
   }
@@ -66,17 +67,18 @@ class _WithEntityId extends StatelessWidget {
       initialBackgroundColor: context.colors.surfaceSubtle,
       operation: GTrashScreen_WithEntityId_QueryReq((b) => b..vars.entityId = entityId),
       builder: (context, client, data) {
-        return _TrashList(data.entity, data.entity.deletedChildren.toList());
+        return _TrashList(data.entity, data.entity.deletedChildren.toList(), siteName: data.entity.site.name);
       },
     );
   }
 }
 
 class _TrashList extends HookWidget {
-  const _TrashList(this.entity, this.entities);
+  const _TrashList(this.entity, this.entities, {this.siteName});
 
   final GTrashScreen_WithEntityId_QueryData_entity? entity;
   final List<GTrashScreen_Entity_entity> entities;
+  final String? siteName;
 
   GTrashScreen_WithEntityId_QueryData_entity_node__asFolder? get folder =>
       entity?.node as GTrashScreen_WithEntityId_QueryData_entity_node__asFolder?;
@@ -103,21 +105,32 @@ class _TrashList extends HookWidget {
       return entity.node.G__typename.toLowerCase();
     }
 
+    String getRecoveredPath(GTrashScreen_RecoverEntity_MutationData_recoverEntity entity) {
+      final path = <String>[
+        ...entity.ancestors.map((ancestor) => ancestor.node.when(folder: (folder) => folder.name, orElse: () => '')),
+        entity.node.when(folder: (folder) => folder.name, document: (document) => document.title, orElse: () => ''),
+      ].where((segment) => segment.isNotEmpty).join(' › ');
+
+      return path;
+    }
+
     Future<void> recoverEntity(
       GTrashScreen_Entity_entity entity, {
       String via = 'trash',
       bool shouldPop = false,
     }) async {
-      final title = getEntityTitle(entity);
       final type = getEntityType(entity);
       final typename = getEntityTypename(entity);
       try {
-        await client.request(GTrashScreen_RecoverEntity_MutationReq((b) => b..vars.input.entityId = entity.id));
+        final resp = await client.request(
+          GTrashScreen_RecoverEntity_MutationReq((b) => b..vars.input.entityId = entity.id),
+        );
+        final restoredPath = getRecoveredPath(resp.recoverEntity);
 
         unawaited(mixpanel.track('recover_entity', properties: {'via': via, 'type': typename.toLowerCase()}));
 
         if (context.mounted) {
-          context.toast(ToastType.success, '"$title" $type가 복원되었어요.');
+          context.toast(ToastType.success, '"$restoredPath" $type를 복원했어요');
           if (shouldPop) {
             await context.router.maybePop();
           }
@@ -167,7 +180,7 @@ class _TrashList extends HookWidget {
     Future<void> showEntityMenu(GTrashScreen_Entity_entity entity) async {
       await context.showBottomSheet(
         child: BottomMenu(
-          header: _BottomMenuHeader(entity: entity),
+          header: _BottomMenuHeader(entity: entity, siteName: siteName),
           items: [
             BottomMenuItem(
               label: '복원',
@@ -211,7 +224,7 @@ class _TrashList extends HookWidget {
             onTap: () async {
               await context.showBottomSheet(
                 child: BottomMenu(
-                  header: _BottomMenuHeader(entity: entity),
+                  header: _BottomMenuHeader(entity: entity, siteName: siteName),
                   items: [
                     if (entity != null) ...[
                       BottomMenuItem(
@@ -418,9 +431,10 @@ class _Document extends StatelessWidget {
 }
 
 class _BottomMenuHeader extends StatelessWidget {
-  const _BottomMenuHeader({this.entity});
+  const _BottomMenuHeader({this.entity, this.siteName});
 
   final GTrashScreen_Entity_entity? entity;
+  final String? siteName;
 
   @override
   Widget build(BuildContext context) {
@@ -461,30 +475,63 @@ class _BottomMenuHeader extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               spacing: 4,
               children: [
-                Row(
-                  children: [
-                    Text('휴지통', style: TextStyle(fontSize: 14, color: context.colors.textSubtle)),
-                    ...?entity?.ancestors
-                        .map(
-                          (ancestor) => [
-                            const Icon(LucideLightIcons.chevron_right, size: 14),
-                            Text(
-                              ancestor.node.when(
-                                folder: (folder) => folder.name,
-                                orElse: () => throw UnimplementedError(),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final textStyle = TextStyle(fontSize: 14, color: context.colors.textSubtle);
+                    final maxItemWidth = (constraints.maxWidth * 0.6).clamp(120.0, 220.0);
+
+                    return Wrap(
+                      spacing: 4,
+                      runSpacing: 2,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        _BottomMenuBreadcrumbLabel(
+                          text: siteName ?? '내 스페이스',
+                          style: textStyle,
+                          maxWidth: maxItemWidth,
+                        ),
+                        ...entity!.ancestors.map(
+                          (ancestor) => Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(LucideLightIcons.chevron_right, size: 14),
+                              const SizedBox(width: 4),
+                              _BottomMenuBreadcrumbLabel(
+                                text: ancestor.node.when(
+                                  folder: (folder) => folder.name,
+                                  orElse: () => throw UnimplementedError(),
+                                ),
+                                style: textStyle,
+                                maxWidth: maxItemWidth,
                               ),
-                              style: TextStyle(fontSize: 14, color: context.colors.textSubtle),
-                            ),
-                          ],
-                        )
-                        .expand((e) => e),
-                  ],
+                            ],
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
                 Text('삭제됨', style: TextStyle(fontSize: 14, color: context.colors.textFaint)),
               ],
             ),
           ),
       ],
+    );
+  }
+}
+
+class _BottomMenuBreadcrumbLabel extends StatelessWidget {
+  const _BottomMenuBreadcrumbLabel({required this.text, required this.style, required this.maxWidth});
+
+  final String text;
+  final TextStyle style;
+  final double maxWidth;
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: maxWidth),
+      child: Text(text, style: style, overflow: TextOverflow.ellipsis, maxLines: 1),
     );
   }
 }
