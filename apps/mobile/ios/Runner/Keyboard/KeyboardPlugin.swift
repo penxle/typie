@@ -3,19 +3,19 @@ import GameController
 import UIKit
 
 class KeyboardPlugin: NSObject, FlutterStreamHandler {
-  private let channel: FlutterEventChannel
+  private let eventChannel: FlutterEventChannel
   private var events: FlutterEventSink?
-  
-  required init(channel: FlutterEventChannel) {
-    self.channel = channel
+
+  required init(eventChannel: FlutterEventChannel) {
+    self.eventChannel = eventChannel
     
     super.init()
   }
   
   static func register(with registrar: any FlutterPluginRegistrar) {
-    let channel = FlutterEventChannel(name: "co.typie.keyboard", binaryMessenger: registrar.messenger())
-    let instance = self.init(channel: channel)
-    channel.setStreamHandler(instance)
+    let eventChannel = FlutterEventChannel(name: "co.typie.keyboard.event", binaryMessenger: registrar.messenger())
+    let instance = self.init(eventChannel: eventChannel)
+    eventChannel.setStreamHandler(instance)
   }
   
   func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
