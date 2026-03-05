@@ -91,7 +91,7 @@ class _WithSiteId extends HookWidget {
       operation: GEntityScreen_WithSiteId_QueryReq((b) => b..vars.siteId = pref.siteId),
       refreshNotifier: refreshNotifier,
       builder: (context, client, data) {
-        return _EntityList(null, data.site.entities.toList(), site: data.site);
+        return _EntityList(null, data.site.entities.toList(), site: data.site, siteName: data.site.name);
       },
     );
   }
@@ -113,18 +113,19 @@ class _WithEntityId extends HookWidget {
       operation: GEntityScreen_WithEntityId_QueryReq((b) => b..vars.entityId = entityId),
       refreshNotifier: refreshNotifier,
       builder: (context, client, data) {
-        return _EntityList(data.entity, data.entity.children.toList());
+        return _EntityList(data.entity, data.entity.children.toList(), siteName: data.entity.site.name);
       },
     );
   }
 }
 
 class _EntityList extends HookWidget {
-  const _EntityList(this.entity, this.entities, {this.site});
+  const _EntityList(this.entity, this.entities, {this.site, this.siteName});
 
   final GEntityScreen_WithEntityId_QueryData_entity? entity;
   final List<GEntityScreen_Entity_entity> entities;
   final GEntityScreen_Site_site? site;
+  final String? siteName;
 
   GEntityScreen_WithEntityId_QueryData_entity_node__asFolder? get folder =>
       entity?.node as GEntityScreen_WithEntityId_QueryData_entity_node__asFolder?;
@@ -138,7 +139,7 @@ class _EntityList extends HookWidget {
 
     final animationController = useAnimationController(duration: const Duration(milliseconds: 150));
     final textEditingController = useTextEditingController();
-    final siteNameController = useTextEditingController(text: site?.name ?? '');
+    final siteNameController = useTextEditingController(text: siteName ?? '');
     final primaryScrollController = PrimaryScrollController.of(context);
 
     final isReordering = useState(false);
@@ -147,7 +148,7 @@ class _EntityList extends HookWidget {
     final isSelecting = useState(false);
     final selectedItems = useState<Set<String>>({});
     final currentSiteLogoUrl = useState(site?.logo.url);
-    final currentSiteName = useState(site?.name);
+    final currentSiteName = useState(siteName);
 
     useEffect(() {
       void listener() {
@@ -501,7 +502,7 @@ class _EntityList extends HookWidget {
                           },
                           child: Text(
                             entity == null
-                                ? currentSiteName.value ?? '내 문서'
+                                ? currentSiteName.value ?? '내 스페이스'
                                 : textEditingController.text.isEmpty
                                 ? folder!.name
                                 : textEditingController.text,
@@ -1131,6 +1132,7 @@ class _BottomMenuHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: 4,
       children: [
         Row(
           spacing: 16,
@@ -1154,7 +1156,7 @@ class _BottomMenuHeader extends StatelessWidget {
                       orElse: () => throw UnimplementedError(),
                     ) ??
                     siteName ??
-                    '내 문서',
+                    '내 스페이스',
                 style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
                 overflow: TextOverflow.ellipsis,
                 maxLines: 1,
@@ -1169,24 +1171,41 @@ class _BottomMenuHeader extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               spacing: 4,
               children: [
-                Row(
-                  children: [
-                    Text(siteName ?? '내 문서', style: TextStyle(fontSize: 14, color: context.colors.textSubtle)),
-                    ...?entity?.ancestors
-                        .map(
-                          (ancestor) => [
-                            const Icon(LucideLightIcons.chevron_right, size: 14),
-                            Text(
-                              ancestor.node.when(
-                                folder: (folder) => folder.name,
-                                orElse: () => throw UnimplementedError(),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final textStyle = TextStyle(fontSize: 14, color: context.colors.textSubtle);
+                    final maxItemWidth = (constraints.maxWidth * 0.6).clamp(120.0, 220.0);
+
+                    return Wrap(
+                      spacing: 4,
+                      runSpacing: 2,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        _BottomMenuBreadcrumbLabel(
+                          text: siteName ?? '내 스페이스',
+                          style: textStyle,
+                          maxWidth: maxItemWidth,
+                        ),
+                        ...entity!.ancestors.map(
+                          (ancestor) => Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(LucideLightIcons.chevron_right, size: 14),
+                              const SizedBox(width: 4),
+                              _BottomMenuBreadcrumbLabel(
+                                text: ancestor.node.when(
+                                  folder: (folder) => folder.name,
+                                  orElse: () => throw UnimplementedError(),
+                                ),
+                                style: textStyle,
+                                maxWidth: maxItemWidth,
                               ),
-                              style: TextStyle(fontSize: 14, color: context.colors.textSubtle),
-                            ),
-                          ],
-                        )
-                        .flattened,
-                  ],
+                            ],
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
                 if (entity!.node.when(folder: (folder) => true, document: (document) => true, orElse: () => false))
                   Column(
@@ -1237,6 +1256,22 @@ class _BottomMenuHeader extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+class _BottomMenuBreadcrumbLabel extends StatelessWidget {
+  const _BottomMenuBreadcrumbLabel({required this.text, required this.style, required this.maxWidth});
+
+  final String text;
+  final TextStyle style;
+  final double maxWidth;
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: maxWidth),
+      child: Text(text, style: style, overflow: TextOverflow.ellipsis, maxLines: 1),
     );
   }
 }

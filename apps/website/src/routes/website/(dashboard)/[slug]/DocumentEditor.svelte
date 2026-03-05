@@ -89,6 +89,11 @@
           visibility
           availability
 
+          site {
+            id
+            name
+          }
+
           ancestors {
             id
 
@@ -186,6 +191,7 @@
   );
 
   const entity = $derived(query.data.entity);
+  const siteName = $derived(entity?.site.name ?? '내 스페이스');
 
   const [syncDocument] = createMutation(
     graphql(`
@@ -898,7 +904,20 @@
         <div class={flex({ alignItems: 'center', gap: '4px', overflowX: 'hidden' })}>
           <Icon style={css.raw({ color: 'text.disabled' })} icon={FolderIcon} size={12} />
 
-          <div class={css({ flex: 'none', fontSize: '12px', color: 'text.disabled' })}>내 문서</div>
+          <div
+            class={css({
+              flex: 'none',
+              maxWidth: '160px',
+              fontSize: '12px',
+              color: 'text.disabled',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            })}
+            title={siteName}
+          >
+            {siteName}
+          </div>
           <Icon style={css.raw({ color: 'text.disabled' })} icon={ChevronRightIcon} size={12} />
 
           {#each entity.ancestors as ancestor (ancestor.id)}
