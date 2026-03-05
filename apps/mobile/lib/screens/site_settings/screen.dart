@@ -178,40 +178,35 @@ class _GeneralTab extends HookWidget {
         children: [
           Padding(
             padding: const Pad(top: 24, bottom: 20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Center(
-                  child: Tappable(
-                    onTap: updateSiteLogo,
-                    child: Stack(
-                      children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(14),
-                          child: CachedNetworkImage(
-                            imageUrl: '${logoUrl.value}?s=$imageSize&q=75',
-                            width: logoSize,
-                            height: logoSize,
-                            fit: BoxFit.cover,
-                            fadeInDuration: Duration.zero,
-                            fadeOutDuration: Duration.zero,
-                            placeholderFadeInDuration: Duration.zero,
-                          ),
-                        ),
-                        Container(
-                          width: logoSize,
-                          height: logoSize,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(14),
-                            color: context.colors.textDefault.withValues(alpha: 0.15),
-                          ),
-                          child: Icon(LucideLightIcons.camera, size: 28, color: context.colors.textBright),
-                        ),
-                      ],
+            child: Center(
+              child: Tappable(
+                onTap: updateSiteLogo,
+                child: Stack(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(14),
+                      child: CachedNetworkImage(
+                        imageUrl: '${logoUrl.value}?s=$imageSize&q=75',
+                        width: logoSize,
+                        height: logoSize,
+                        fit: BoxFit.cover,
+                        fadeInDuration: Duration.zero,
+                        fadeOutDuration: Duration.zero,
+                        placeholderFadeInDuration: Duration.zero,
+                      ),
                     ),
-                  ),
+                    Container(
+                      width: logoSize,
+                      height: logoSize,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(14),
+                        color: context.colors.textDefault.withValues(alpha: 0.15),
+                      ),
+                      child: Icon(LucideLightIcons.camera, size: 28, color: context.colors.textBright),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
           HookForm(

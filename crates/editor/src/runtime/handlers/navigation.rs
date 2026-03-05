@@ -628,7 +628,7 @@ mod tests {
         };
 
         rt.layout();
-        rt.update(Message::DeleteBackward);
+        rt.update(Message::DeleteBackward { length: None });
 
         let selection = &rt.state().selection;
         assert_eq!(selection.anchor.node_id, NodeId::ROOT);
