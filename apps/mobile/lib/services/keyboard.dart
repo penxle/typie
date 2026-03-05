@@ -8,7 +8,7 @@ enum KeyboardType { software, hardware }
 @singleton
 class Keyboard {
   Keyboard() {
-    _subscription = _channel.receiveBroadcastStream().listen((event) {
+    _subscription = _eventChannel.receiveBroadcastStream().listen((event) {
       final data = event as Map<dynamic, dynamic>;
 
       switch (data['type']) {
@@ -22,7 +22,13 @@ class Keyboard {
     });
   }
 
-  static const _channel = EventChannel('co.typie.keyboard');
+  static const _eventChannel = EventChannel('co.typie.keyboard.event');
+  static const _methodChannel = MethodChannel('co.typie.keyboard.method');
+
+  static Future<Map<String, dynamic>?> getCurrentKeyboard() {
+    return _methodChannel.invokeMapMethod<String, dynamic>('getCurrentKeyboard');
+  }
+
   late final StreamSubscription<dynamic> _subscription;
 
   final _heightStreamController = StreamController<double>.broadcast();
