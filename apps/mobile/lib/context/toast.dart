@@ -59,60 +59,72 @@ class _Widget extends HookWidget {
       bottom: safeAreaBottom + keyboardHeight + bottom,
       left: 0,
       right: 0,
-      child: Material(
-        type: MaterialType.transparency,
-        child: ResponsiveContainer(
-          child: Padding(
-            padding: const Pad(horizontal: 24),
-            child: SlideTransition(
-              position: tweenedOffset,
-              child: FadeTransition(
-                opacity: tweenedOpacity,
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: context.colors.surfaceDark,
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  padding: const Pad(all: 12),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 20,
-                        height: 20,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(999),
-                          color: switch (type) {
-                            ToastType.success => context.colors.accentSuccess,
-                            ToastType.error => context.colors.accentDanger,
-                            ToastType.notification => context.colors.accentSuccess,
-                          },
-                        ),
-                        child: Center(
-                          child: switch (type) {
-                            ToastType.success => Icon(
-                              LucideLightIcons.check,
-                              color: context.colors.textBright,
-                              size: 12,
+      child: IgnorePointer(
+        child: Material(
+          type: MaterialType.transparency,
+          child: ResponsiveContainer(
+            child: Padding(
+              padding: const Pad(horizontal: 24),
+              child: SlideTransition(
+                position: tweenedOffset,
+                child: FadeTransition(
+                  opacity: tweenedOpacity,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: context.colors.surfaceDark,
+                      borderRadius: BorderRadius.circular(22),
+                    ),
+                    padding: const Pad(all: 12),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(top: 1),
+                          child: Container(
+                            width: 20,
+                            height: 20,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(999),
+                              color: switch (type) {
+                                ToastType.success => context.colors.accentSuccess,
+                                ToastType.error => context.colors.accentDanger,
+                                ToastType.notification => context.colors.accentSuccess,
+                              },
                             ),
-                            ToastType.error => Icon(TypieIcons.exclamation, color: context.colors.textBright, size: 12),
-                            ToastType.notification => Icon(
-                              LucideLightIcons.bell,
-                              color: context.colors.textBright,
-                              size: 12,
+                            child: Center(
+                              child: switch (type) {
+                                ToastType.success => Icon(
+                                  LucideLightIcons.check,
+                                  color: context.colors.textBright,
+                                  size: 12,
+                                ),
+                                ToastType.error => Icon(
+                                  TypieIcons.exclamation,
+                                  color: context.colors.textBright,
+                                  size: 12,
+                                ),
+                                ToastType.notification => Icon(
+                                  LucideLightIcons.bell,
+                                  color: context.colors.textBright,
+                                  size: 12,
+                                ),
+                              },
                             ),
-                          },
+                          ),
                         ),
-                      ),
-                      const Gap(8),
-                      Expanded(
-                        child: Text(
-                          message,
-                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: context.colors.textBright),
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 1,
+                        const Gap(8),
+                        Expanded(
+                          child: Text(
+                            message,
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              color: context.colors.textBright,
+                            ),
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -126,17 +138,25 @@ class _Widget extends HookWidget {
 
 extension ToastExtension on BuildContext {
   static OverlayEntry? _entry;
+  static Duration _getAdaptiveDuration(Duration baseDuration, String message) {
+    final extraMsFromLength = (message.length - 18).clamp(0, 100) * 12;
+    final extraDuration = Duration(milliseconds: extraMsFromLength);
+    const maxExtraDuration = Duration(milliseconds: 1200);
+
+    return baseDuration + (extraDuration > maxExtraDuration ? maxExtraDuration : extraDuration);
+  }
 
   void toast(ToastType type, String message, {Duration duration = const Duration(seconds: 2), double bottom = 12}) {
     if (_entry != null) {
       _entry?.remove();
     }
 
+    final adaptiveDuration = _getAdaptiveDuration(duration, message);
     final completer = Completer<void>();
 
     _entry = OverlayEntry(
       builder: (context) {
-        return _Widget(type: type, message: message, bottom: bottom, duration: duration, completer: completer);
+        return _Widget(type: type, message: message, bottom: bottom, duration: adaptiveDuration, completer: completer);
       },
     );
 
