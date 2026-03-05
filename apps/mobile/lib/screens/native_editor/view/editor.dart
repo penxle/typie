@@ -550,14 +550,12 @@ class EditorView extends HookWidget {
       bool synchronizeWithRender = true,
     }) {
       final shouldSynchronizeWithRender =
-          synchronizeWithRender &&
-          typewriter &&
-          !identical(presentedViewport.value.renderVersion, controller.state.renderVersion);
+          synchronizeWithRender && !identical(presentedViewport.value.renderVersion, controller.state.renderVersion);
       if (shouldSynchronizeWithRender) {
         queueRenderSynchronizedCursorUpdate(
           nextCursor: nextCursor,
-          typewriter: true,
-          targetPageIdx: nextCursor.pageIdx,
+          typewriter: typewriter,
+          targetPageIdx: typewriter ? nextCursor.pageIdx : null,
         );
         return;
       }
@@ -571,6 +569,20 @@ class EditorView extends HookWidget {
       } else {
         queueRenderSynchronizedCursorUpdate(nextCursor: nextCursor, typewriter: typewriter, targetPageIdx: null);
       }
+    }
+
+    CursorInfo? resolveScrollTargetCursor({required CursorInfo? cursor, required EditorSelection? selection}) {
+      final headBounds = selection?.collapsed == false ? selection?.headBounds : null;
+      if (headBounds != null) {
+        return CursorInfo(
+          pageIdx: headBounds.pageIdx,
+          x: headBounds.x,
+          y: headBounds.y,
+          height: headBounds.height,
+          visible: cursor?.visible ?? false,
+        );
+      }
+      return cursor;
     }
 
     useEffect(() {
@@ -634,11 +646,13 @@ class EditorView extends HookWidget {
         final pendingMode = controller.pendingScrollMode;
         final nextLayout = controller.state.layout;
         final nextCursor = controller.state.cursor;
+        final nextSelection = controller.state.selection;
+        final nextScrollTargetCursor = resolveScrollTargetCursor(cursor: nextCursor, selection: nextSelection);
         final nextExternalElements = controller.state.externalElements;
         final externalElementsChanged = !identical(previousExternalElements.value, nextExternalElements);
         previousExternalElements.value = nextExternalElements;
 
-        if (nextCursor == null) {
+        if (nextCursor == null && nextScrollTargetCursor == null) {
           typewriterRecoveryPending.value = false;
           cursorFollowScrollActive.value = false;
           if (pendingMode != null && !controller.pendingScrollWaitForCursorUpdate) {
@@ -653,11 +667,11 @@ class EditorView extends HookWidget {
         final focused = controller.state.isFocused;
         final interaction = interactionState.snapshot();
         final blockedByInteraction = interaction.isLongPressing || interaction.isDndActive || !focused;
-        if (blockedByInteraction || nextLayout == null || !nextCursor.visible) {
+        if (blockedByInteraction || nextLayout == null || nextScrollTargetCursor == null) {
           if (blockedByInteraction) {
             typewriterRecoveryPending.value = false;
           }
-          if (!focused || !nextCursor.visible) {
+          if (!focused || nextScrollTargetCursor == null) {
             cursorFollowScrollActive.value = false;
           }
           if (pendingMode != null && !controller.pendingScrollWaitForCursorUpdate) {
@@ -675,7 +689,7 @@ class EditorView extends HookWidget {
           typewriterRecoveryPending.value = useTypewriter;
           controller.clearPendingScroll();
           applyCursorScrollAndVisual(
-            nextCursor,
+            nextScrollTargetCursor,
             typewriter: useTypewriter,
             synchronizeWithRender: !waitForCursorUpdate,
           );
@@ -686,13 +700,13 @@ class EditorView extends HookWidget {
           if (cursorFollowScrollActive.value) {
             final followTypewriter = cursorFollowScrollMode.value == ScrollMode.typewriter && pref.typewriterEnabled;
             typewriterRecoveryPending.value = false;
-            applyCursorScrollAndVisual(nextCursor, typewriter: followTypewriter);
+            applyCursorScrollAndVisual(nextScrollTargetCursor, typewriter: followTypewriter);
             return;
           }
 
           if (typewriterRecoveryPending.value && pref.typewriterEnabled) {
             typewriterRecoveryPending.value = false;
-            applyCursorScrollAndVisual(nextCursor, typewriter: true);
+            applyCursorScrollAndVisual(nextScrollTargetCursor, typewriter: true);
             return;
           }
 
@@ -701,11 +715,7 @@ class EditorView extends HookWidget {
           return;
         }
 
-        if (pref.typewriterEnabled) {
-          applyCursorScrollAndVisual(nextCursor, typewriter: true);
-        } else {
-          setRenderedCursorSnapshot(nextCursor);
-        }
+        applyCursorScrollAndVisual(nextScrollTargetCursor, typewriter: pref.typewriterEnabled);
       }
 
       controller.addListener(applyPendingCursorScroll);

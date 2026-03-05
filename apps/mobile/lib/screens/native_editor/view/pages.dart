@@ -32,7 +32,8 @@ class PageList extends HookWidget {
 
     final pages = state.state.pages;
     final cursor = state.state.cursor;
-    final renderedCursor = useValueListenable(scope.presentedViewport).cursor;
+    final presentedViewport = useValueListenable(scope.presentedViewport);
+    final renderedCursor = presentedViewport.cursor;
     final isFocused = state.state.isFocused;
     final selection = state.state.selection;
     final fromHandle = state.state.selection?.fromBounds;
@@ -89,9 +90,24 @@ class PageList extends HookWidget {
 
     final prevFromHandle = useRef<SelectionHandleInfo?>(null);
     final prevToHandle = useRef<SelectionHandleInfo?>(null);
+    final syncedFromHandle = useRef<SelectionHandleInfo?>(fromHandle);
+    final syncedToHandle = useRef<SelectionHandleInfo?>(toHandle);
     final prevSelectionRangeKey = useRef<String?>(null);
     final wasSelecting = useRef(false);
     final previousDropIndicatorKey = useRef<String?>(null);
+    final isFrameSynchronized = identical(presentedViewport.renderVersion, state.state.renderVersion);
+    final shouldUseLiveHandlePosition = isFrameSynchronized;
+
+    useEffect(() {
+      if (shouldUseLiveHandlePosition) {
+        syncedFromHandle.value = fromHandle;
+        syncedToHandle.value = toHandle;
+      }
+      return null;
+    }, [shouldUseLiveHandlePosition, fromHandle, toHandle]);
+
+    final renderedFromHandle = shouldUseLiveHandlePosition ? fromHandle : syncedFromHandle.value;
+    final renderedToHandle = shouldUseLiveHandlePosition ? toHandle : syncedToHandle.value;
 
     useEffect(
       () {
@@ -369,25 +385,25 @@ class PageList extends HookWidget {
                       handleMetricsRevision,
                     ]),
                     builder: (context, _) {
-                      final fromPos = interactionController.selectionHandleViewportPosition(fromHandle, geo);
-                      final toPos = interactionController.selectionHandleViewportPosition(toHandle, geo);
+                      final fromPos = interactionController.selectionHandleViewportPosition(renderedFromHandle, geo);
+                      final toPos = interactionController.selectionHandleViewportPosition(renderedToHandle, geo);
 
                       return Stack(
                         clipBehavior: Clip.none,
                         children: [
-                          if (isFocused && fromHandle != null && fromPos != null)
+                          if (isFocused && renderedFromHandle != null && fromPos != null)
                             if (!isTableCellSelectorSelection)
                               Positioned(
                                 left: fromPos.dx,
                                 top: fromPos.dy,
-                                child: buildSelectionHandle(fromHandle, SelectionHandleType.from),
+                                child: buildSelectionHandle(renderedFromHandle, SelectionHandleType.from),
                               ),
-                          if (isFocused && toHandle != null && toPos != null)
+                          if (isFocused && renderedToHandle != null && toPos != null)
                             if (!isTableCellSelectorSelection)
                               Positioned(
                                 left: toPos.dx,
                                 top: toPos.dy,
-                                child: buildSelectionHandle(toHandle, SelectionHandleType.to),
+                                child: buildSelectionHandle(renderedToHandle, SelectionHandleType.to),
                               ),
                         ],
                       );
