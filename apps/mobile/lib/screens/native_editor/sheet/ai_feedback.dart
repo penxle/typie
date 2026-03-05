@@ -44,6 +44,7 @@ class AiFeedbackSheet extends HookWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isAiOptIn = useState(aiOptIn);
     final isLoading = useState(false);
     final hasChecked = useState(false);
     final checkFailed = useState(false);
@@ -187,7 +188,7 @@ class AiFeedbackSheet extends HookWidget {
 
     final bottomPadding = MediaQuery.paddingOf(context).bottom;
 
-    if (!aiOptIn) {
+    if (!isAiOptIn.value) {
       return AppBottomSheet(
         includeBottomPadding: false,
         padding: const Pad(horizontal: 20),
@@ -223,6 +224,7 @@ class AiFeedbackSheet extends HookWidget {
                             ),
                           );
                         });
+                        isAiOptIn.value = true;
                       },
                       child: const _AiOptInNotice(),
                     ),
