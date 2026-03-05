@@ -28,6 +28,7 @@ class ActivityGrid extends HookWidget {
     final canScrollLeft = useState(false);
     final canScrollRight = useState(true);
     final tooltipData = useState<({Activity activity, int weekIndex, int dayIndex})?>(null);
+    final isTooltipVisible = tooltipData.value != null;
     final tooltipTimer = useRef<Timer?>(null);
 
     useAsyncEffect(() async {
@@ -103,73 +104,62 @@ class ActivityGrid extends HookWidget {
         SingleChildScrollView(
           controller: scrollController,
           scrollDirection: Axis.horizontal,
-          physics: const NeverScrollableScrollPhysics(),
+          physics: isTooltipVisible ? const NeverScrollableScrollPhysics() : null,
           padding: const Pad(horizontal: 16, bottom: 8),
           child: SizedBox(
             width: totalWidth,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onHorizontalDragUpdate: (details) {
-                    scrollController.jumpTo(
-                      (scrollController.offset - details.delta.dx).clamp(
-                        0.0,
-                        scrollController.position.maxScrollExtent,
-                      ),
-                    );
-                  },
-                  child: SizedBox(
-                    height: labelHeight + 12,
-                    child: Stack(
-                      clipBehavior: Clip.none,
-                      alignment: Alignment.bottomCenter,
-                      children: [
-                        for (int i = 0; i < monthSpans.length; i++)
-                          if (monthSpans[i].end - monthSpans[i].start >= 1 || i == monthSpans.length - 1)
-                            Positioned(
-                              left: monthSpans[i].start * (cellSize + cellGap),
-                              child: GestureDetector(
-                                onTap: () {
-                                  final span = monthSpans[i];
-                                  final monthWidth = (span.end - span.start + 1) * (cellSize + cellGap) - cellGap;
-                                  final monthStartPosition = span.start * (cellSize + cellGap);
-                                  final monthCenterPosition = monthStartPosition + (monthWidth / 2);
+                SizedBox(
+                  height: labelHeight + 12,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    alignment: Alignment.bottomCenter,
+                    children: [
+                      for (int i = 0; i < monthSpans.length; i++)
+                        if (monthSpans[i].end - monthSpans[i].start >= 1 || i == monthSpans.length - 1)
+                          Positioned(
+                            left: monthSpans[i].start * (cellSize + cellGap),
+                            child: GestureDetector(
+                              onTap: () {
+                                final span = monthSpans[i];
+                                final monthWidth = (span.end - span.start + 1) * (cellSize + cellGap) - cellGap;
+                                final monthStartPosition = span.start * (cellSize + cellGap);
+                                final monthCenterPosition = monthStartPosition + (monthWidth / 2);
 
-                                  final viewportWidth = scrollController.position.viewportDimension;
+                                final viewportWidth = scrollController.position.viewportDimension;
 
-                                  final targetPosition = monthCenterPosition - (viewportWidth / 2);
+                                final targetPosition = monthCenterPosition - (viewportWidth / 2);
 
-                                  unawaited(
-                                    scrollController.animateTo(
-                                      targetPosition.clamp(0.0, scrollController.position.maxScrollExtent),
-                                      duration: const Duration(milliseconds: 200),
-                                      curve: Curves.easeOutCubic,
-                                    ),
-                                  );
-                                },
-                                child: SizedBox(
-                                  width: (monthSpans[i].end - monthSpans[i].start + 1) * (cellSize + cellGap) - cellGap,
-                                  child: Text(
-                                    '${monthSpans[i].month}월',
-                                    overflow: TextOverflow.visible,
-                                    softWrap: false,
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w500,
-                                      color: context.colors.textFaint,
-                                    ),
+                                unawaited(
+                                  scrollController.animateTo(
+                                    targetPosition.clamp(0.0, scrollController.position.maxScrollExtent),
+                                    duration: const Duration(milliseconds: 200),
+                                    curve: Curves.easeOutCubic,
+                                  ),
+                                );
+                              },
+                              child: SizedBox(
+                                width: (monthSpans[i].end - monthSpans[i].start + 1) * (cellSize + cellGap) - cellGap,
+                                child: Text(
+                                  '${monthSpans[i].month}월',
+                                  overflow: TextOverflow.visible,
+                                  softWrap: false,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w500,
+                                    color: context.colors.textFaint,
                                   ),
                                 ),
                               ),
                             ),
-                      ],
-                    ),
+                          ),
+                    ],
                   ),
                 ),
                 const SizedBox(height: cellGap),
-                _buildActivityGrid(context, activities, scrollController, tooltipData, tooltipTimer),
+                _buildActivityGrid(context, activities, tooltipData, tooltipTimer),
               ],
             ),
           ),
@@ -304,11 +294,11 @@ class ActivityGrid extends HookWidget {
   Widget _buildActivityGrid(
     BuildContext context,
     List<Activity> activities,
-    ScrollController scrollController,
     ValueNotifier<({Activity activity, int weekIndex, int dayIndex})?> tooltipData,
     ObjectRef<Timer?> tooltipTimer,
   ) {
     final selectedCell = useState<({int weekIndex, int dayIndex})?>(null);
+    final isTooltipVisible = tooltipData.value != null;
     final weeks = <List<Activity>>[];
     final weekCount = (activities.length / 7).ceil();
 
@@ -377,14 +367,25 @@ class ActivityGrid extends HookWidget {
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onVerticalDragStart: (details) => handleTooltipInteraction(details.localPosition, withHaptic: true),
-      onVerticalDragUpdate: (details) => handleTooltipInteraction(details.localPosition, withHaptic: true),
-      onVerticalDragEnd: (_) => handleInteractionEnd(),
-      onPanStart: (details) => handleTooltipInteraction(details.localPosition, withHaptic: true),
-      onPanUpdate: (details) => handleTooltipInteraction(details.localPosition, withHaptic: true),
-      onPanEnd: (_) => handleInteractionEnd(),
-      onTapDown: (details) => handleTooltipInteraction(details.localPosition),
-      onTapUp: (_) => handleInteractionEnd(),
+      onVerticalDragStart: isTooltipVisible
+          ? (details) => handleTooltipInteraction(details.localPosition, withHaptic: true)
+          : null,
+      onVerticalDragUpdate: isTooltipVisible
+          ? (details) => handleTooltipInteraction(details.localPosition, withHaptic: true)
+          : null,
+      onVerticalDragEnd: isTooltipVisible ? (_) => handleInteractionEnd() : null,
+      onPanStart: isTooltipVisible
+          ? (details) => handleTooltipInteraction(details.localPosition, withHaptic: true)
+          : null,
+      onPanUpdate: isTooltipVisible
+          ? (details) => handleTooltipInteraction(details.localPosition, withHaptic: true)
+          : null,
+      onPanEnd: isTooltipVisible ? (_) => handleInteractionEnd() : null,
+      onTapDown: isTooltipVisible ? (details) => handleTooltipInteraction(details.localPosition) : null,
+      onTapUp: (details) {
+        handleTooltipInteraction(details.localPosition);
+        handleInteractionEnd();
+      },
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
