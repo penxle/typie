@@ -246,7 +246,6 @@ class ProfileScreen extends StatelessWidget {
                                   onTap: () async {
                                     await context.showBottomSheet(
                                       intercept: true,
-                                      resizeToAvoidBottomInset: true,
                                       child: FeedbackBottomSheet(client: client),
                                     );
                                   },
