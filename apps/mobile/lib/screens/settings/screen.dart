@@ -196,7 +196,8 @@ class SettingsScreen extends HookWidget {
                       ),
                       const _Divider(),
                       _Item(
-                        label: '타이피 커뮤니티 참여하기',
+                        label: '타이피 유저 커뮤니티',
+                        trailing: const Icon(LucideLightIcons.external_link, size: 16),
                         onTap: () async {
                           final url = Uri.parse('https://typie.link/community');
                           await launchUrl(url, mode: LaunchMode.externalApplication);
