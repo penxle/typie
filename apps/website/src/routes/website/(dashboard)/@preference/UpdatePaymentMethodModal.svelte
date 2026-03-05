@@ -77,7 +77,7 @@
             id
             ...DashboardLayout_PreferenceModal_BillingTab_user
             ...DashboardLayout_PlanUsageWidget_user
-            ...DashboardLayout_UserMenu_user
+            ...DashboardLayout_Profile_user
           }
         }
       }
