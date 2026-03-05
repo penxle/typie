@@ -132,3 +132,82 @@ impl Layout for ListItemNode {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::layout::LayoutCache;
+    use crate::model::{Decorations, DefaultAttrs};
+    use crate::runtime::ViewStates;
+    use std::cell::RefCell;
+
+    #[test]
+    fn marker_height_matches_first_line_height() {
+        let mut item = id!();
+        let mut p = id!();
+        let state = state! {
+            doc {
+                bullet_list {
+                    @item list_item {
+                        @p paragraph {
+                            text { "hello" }
+                        }
+                    }
+                }
+            }
+            selection { (p, 0) }
+        };
+
+        let doc = &state.doc;
+        let item_node = doc.node(item).expect("list item should exist");
+        let settings = doc.settings();
+        let default_attrs = DefaultAttrs::default();
+        let decorations = Decorations::default();
+        let cache = RefCell::new(LayoutCache::new());
+        let view_states = ViewStates::default();
+
+        let ctx = LayoutContext::new(
+            &item_node,
+            &settings,
+            &default_attrs,
+            &decorations,
+            1.0,
+            &view_states,
+            &cache,
+        );
+        let constraints = BoxConstraints::new(0.0, 400.0, 0.0, f32::INFINITY);
+
+        let layout = match item_node.node() {
+            Some(Node::ListItem(node)) => node.layout(&ctx, constraints),
+            _ => panic!("expected list item node"),
+        };
+
+        let children = layout
+            .children
+            .as_ref()
+            .expect("list item should have children");
+        assert!(
+            children.len() >= 2,
+            "list item should contain marker + paragraph children"
+        );
+
+        let marker = &children[0].node;
+        let paragraph = &children[1].node;
+        let first_line = paragraph
+            .children
+            .as_ref()
+            .and_then(|lines| lines.first())
+            .expect("paragraph should contain first line");
+
+        assert_eq!(
+            marker.size.width,
+            LIST_ITEM_MARKER_WIDTH + LIST_ITEM_MARKER_GAP,
+            "marker width must include marker gap area"
+        );
+
+        assert!(
+            (marker.size.height - first_line.node.size.height).abs() < 0.001,
+            "marker height should match first line height to avoid marker/line page-split drift"
+        );
+    }
+}
