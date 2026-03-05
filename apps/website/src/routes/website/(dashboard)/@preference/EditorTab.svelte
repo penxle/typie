@@ -2,7 +2,7 @@
   import { createFragment } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
-  import { Select, Slider, Switch } from '@typie/ui/components';
+  import { Slider, Switch } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import mixpanel from 'mixpanel-browser';
   import { SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
@@ -124,34 +124,6 @@
     <h2 class={css({ fontSize: '16px', fontWeight: 'semibold', color: 'text.default', marginBottom: '24px' })}>입력 보조</h2>
 
     <SettingsCard>
-      <SettingsRow>
-        {#snippet label()}
-          붙여넣기 옵션
-        {/snippet}
-        {#snippet description()}
-          복사한 텍스트의 서식을 유지할지, 현재 문서 스타일로 통일할지 선택해요.
-        {/snippet}
-        {#snippet value()}
-          <Select
-            items={[
-              { value: 'ask', label: '매번 묻기', description: '붙여넣기 시 선택해요.' },
-              { value: 'html', label: '원본 서식 유지', description: '복사한 텍스트의 서식을 그대로 유지해요.' },
-              { value: 'text', label: '문서 서식 적용', description: '현재 문서의 서식을 적용하여 붙여넣어요.' },
-            ] as const}
-            onselect={(value) => {
-              mixpanel.track('change_paste_mode', {
-                mode: app.preference.current.pasteMode,
-              });
-
-              app.preference.current.pasteMode = value;
-            }}
-            value={app.preference.current.pasteMode}
-          />
-        {/snippet}
-      </SettingsRow>
-
-      <SettingsDivider />
-
       <SettingsRow>
         {#snippet label()}
           선택 영역 둘러싸기
