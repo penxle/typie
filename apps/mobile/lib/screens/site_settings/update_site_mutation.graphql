@@ -1,0 +1,12 @@
+mutation SiteSettingsScreen_UpdateSite_Mutation($input: UpdateSiteInput!) {
+  updateSite(input: $input) {
+    id
+    name
+    dateDisplay
+
+    logo {
+      id
+      url
+    }
+  }
+}

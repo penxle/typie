@@ -1,0 +1,21 @@
+query SiteSettingsScreen_Query($siteId: ID!) {
+  me {
+    id
+
+    subscription {
+      id
+    }
+  }
+
+  site(siteId: $siteId) {
+    id
+    name
+    slug
+    dateDisplay
+
+    logo {
+      id
+      url
+    }
+  }
+}
