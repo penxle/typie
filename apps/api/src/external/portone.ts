@@ -110,6 +110,21 @@ export const payWithBillingKey = async (params: PayWithBillingKeyParams): Promis
   }
 };
 
+type CancelPaymentParams = { paymentId: string; reason: string };
+type CancelPaymentResult = PortOneResult<unknown>;
+export const cancelPayment = async (params: CancelPaymentParams): Promise<CancelPaymentResult> => {
+  try {
+    await client.payment.cancelPayment({
+      paymentId: params.paymentId,
+      reason: params.reason,
+    });
+
+    return makeSuccessResult({});
+  } catch (err) {
+    return makeFailureResult(err);
+  }
+};
+
 type GetPaymentParams = { paymentId: string };
 type GetPaymentResult = PortOneResult<{ amount: number; customData: string | undefined }>;
 export const getPayment = async (params: GetPaymentParams): Promise<GetPaymentResult> => {

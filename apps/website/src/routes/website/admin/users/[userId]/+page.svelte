@@ -7,6 +7,7 @@
   import ArrowLeftIcon from '~icons/lucide/arrow-left';
   import { AdminIcon, AdminModal } from '$lib/components/admin';
   import { hydrateQuery } from '$lib/graphql';
+  import { unwrapError } from '$lib/graphql/error';
   import { graphql } from '$mearie';
 
   let { data } = $props();
@@ -35,6 +36,52 @@
       }
     `),
   );
+
+  const [adminRefundPayment] = createMutation(
+    graphql(`
+      mutation AdminUserDetail_AdminRefundPayment_Mutation($input: AdminRefundPaymentInput!) {
+        adminRefundPayment(input: $input)
+      }
+    `),
+  );
+
+  let refundModalOpen = $state(false);
+  let selectedInvoice: (typeof query.data.adminUser.paymentInvoices)[number] | null = $state(null);
+  let refundReason = $state('');
+
+  const handleRefund = async () => {
+    if (!selectedInvoice) return;
+    try {
+      await adminRefundPayment({ input: { invoiceId: selectedInvoice.id, reason: refundReason || undefined } });
+      refundModalOpen = false;
+      refundReason = '';
+      selectedInvoice = null;
+      query.refetch();
+    } catch (err) {
+      const unwrapped = unwrapError(err);
+      alert(unwrapped instanceof Error ? unwrapped.message : 'Refund failed');
+    }
+  };
+
+  const invoiceStateColor = (state: string) => {
+    switch (state) {
+      case 'PAID': {
+        return 'green.400';
+      }
+      case 'CANCELED': {
+        return 'gray.400';
+      }
+      case 'OVERDUE': {
+        return 'red.400';
+      }
+      case 'UPCOMING': {
+        return 'amber.400';
+      }
+      default: {
+        return 'gray.400';
+      }
+    }
+  };
 </script>
 
 <div class={flex({ flexDirection: 'column', gap: '24px', color: 'amber.500' })}>
@@ -137,6 +184,89 @@
               <div class={css({ fontSize: '11px', color: 'amber.400' })}>CHARACTERS</div>
             </div>
           </div>
+        </div>
+
+        <!-- PAYMENT HISTORY -->
+        <div
+          class={css({
+            borderWidth: '2px',
+            borderColor: 'amber.500',
+            padding: '24px',
+            backgroundColor: 'gray.900',
+          })}
+        >
+          <h3 class={css({ fontSize: '16px', color: 'amber.500', marginBottom: '20px' })}>
+            PAYMENT HISTORY ({query.data.adminUser.paymentInvoices.length})
+          </h3>
+
+          {#if query.data.adminUser.paymentInvoices.length > 0}
+            <div class={flex({ flexDirection: 'column', gap: '12px' })}>
+              {#each query.data.adminUser.paymentInvoices as invoice (invoice.id)}
+                {@const successRecord = invoice.records.find((r: { outcome: string }) => r.outcome === 'SUCCESS')}
+                <div
+                  class={css({
+                    borderWidth: '1px',
+                    borderColor: 'amber.500',
+                    padding: '16px',
+                  })}
+                >
+                  <div class={flex({ alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' })}>
+                    <div class={flex({ alignItems: 'center', gap: '8px' })}>
+                      <span class={css({ fontSize: '12px', color: 'amber.500' })}>
+                        {dayjs(invoice.dueAt).format('YYYY-MM-DD')}
+                      </span>
+                      <span class={css({ fontSize: '12px', color: invoiceStateColor(invoice.state) })}>
+                        [{invoice.state}]
+                      </span>
+                    </div>
+                    <span class={css({ fontSize: '14px', fontWeight: 'bold', color: 'amber.500' })}>
+                      ₩{comma(invoice.amount)}
+                    </span>
+                  </div>
+
+                  <div class={css({ fontSize: '11px', color: 'amber.400', marginBottom: '4px' })}>
+                    {invoice.subscription.plan.name}
+                  </div>
+
+                  {#if successRecord}
+                    <div class={css({ fontSize: '11px', color: 'amber.400' })}>
+                      BILLING: ₩{comma(successRecord.billingAmount)} / CREDIT: ₩{comma(successRecord.creditAmount)}
+                    </div>
+                  {/if}
+
+                  {#if invoice.state === 'PAID' && successRecord}
+                    <button
+                      class={css({
+                        marginTop: '8px',
+                        borderWidth: '1px',
+                        borderColor: 'red.500',
+                        paddingX: '10px',
+                        paddingY: '4px',
+                        fontSize: '11px',
+                        color: 'red.500',
+                        backgroundColor: 'transparent',
+                        cursor: 'pointer',
+                        _hover: {
+                          backgroundColor: 'red.500',
+                          color: 'gray.900',
+                        },
+                      })}
+                      onclick={() => {
+                        selectedInvoice = invoice;
+                        refundReason = '';
+                        refundModalOpen = true;
+                      }}
+                      type="button"
+                    >
+                      REFUND
+                    </button>
+                  {/if}
+                </div>
+              {/each}
+            </div>
+          {:else}
+            <div class={css({ fontSize: '12px', color: 'gray.400' })}>NO PAYMENT HISTORY</div>
+          {/if}
         </div>
 
         <!-- SITES -->
@@ -532,6 +662,61 @@
           USER: {query.data.adminUser.name.toUpperCase()} ({query.data.adminUser.email})
         </p>
       </div>
+    </AdminModal>
+
+    <AdminModal
+      actions={{
+        cancel: {},
+        confirm: {
+          label: 'CONFIRM REFUND',
+          onclick: handleRefund,
+          variant: 'danger',
+        },
+      }}
+      title="CONFIRM REFUND"
+      bind:open={refundModalOpen}
+    >
+      {#if selectedInvoice}
+        <div class={flex({ flexDirection: 'column', gap: '12px' })}>
+          <div>
+            <div class={css({ fontSize: '11px', color: 'amber.400', marginBottom: '4px' })}>INVOICE</div>
+            <div class={css({ fontSize: '12px', color: 'amber.500' })}>{selectedInvoice.id}</div>
+          </div>
+
+          <div>
+            <div class={css({ fontSize: '11px', color: 'amber.400', marginBottom: '4px' })}>PLAN</div>
+            <div class={css({ fontSize: '12px', color: 'amber.500' })}>{selectedInvoice.subscription.plan.name}</div>
+          </div>
+
+          <div>
+            <div class={css({ fontSize: '11px', color: 'amber.400', marginBottom: '4px' })}>AMOUNT</div>
+            <div class={css({ fontSize: '14px', fontWeight: 'bold', color: 'amber.500' })}>₩{comma(selectedInvoice.amount)}</div>
+          </div>
+
+          <div class={css({ color: 'red.400', fontSize: '11px', padding: '8px', borderWidth: '1px', borderColor: 'red.500' })}>
+            THIS WILL CANCEL THE PAYMENT AND EXPIRE THE SUBSCRIPTION IMMEDIATELY.
+          </div>
+
+          <div>
+            <div class={css({ fontSize: '11px', color: 'amber.400', marginBottom: '4px' })}>REASON</div>
+            <input
+              class={css({
+                width: 'full',
+                padding: '8px',
+                fontSize: '12px',
+                color: 'amber.500',
+                backgroundColor: 'transparent',
+                borderWidth: '1px',
+                borderColor: 'amber.500',
+                outline: 'none',
+                _focus: { borderColor: 'amber.400' },
+              })}
+              placeholder="Enter refund reason..."
+              bind:value={refundReason}
+            />
+          </div>
+        </div>
+      {/if}
     </AdminModal>
   {/if}
 </div>

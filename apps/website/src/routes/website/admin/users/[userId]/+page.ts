@@ -56,6 +56,28 @@ export const load = async (event) => {
             usage {
               totalCharacterCount
             }
+            paymentInvoices {
+              id
+              state
+              amount
+              dueAt
+              createdAt
+              subscription {
+                id
+                plan {
+                  id
+                  name
+                }
+              }
+              records {
+                id
+                outcome
+                billingAmount
+                creditAmount
+                data
+                createdAt
+              }
+            }
           }
         }
       `),

@@ -1,9 +1,26 @@
+import dayjs from 'dayjs';
 import { and, count, desc, eq, getTableColumns, ilike, or, sql } from 'drizzle-orm';
 import { fetchBootstrap, putBootstrap } from '@/bootstrap';
 import { redis } from '@/cache';
-import { db, Documents, Entities, first, firstOrThrow, pgr, TableCode, UserPaymentCredits, Users, UserSessions, validateDbId } from '@/db';
-import { DocumentType, EntityState, UserRole, UserState } from '@/enums';
+import {
+  db,
+  Documents,
+  Entities,
+  first,
+  firstOrThrow,
+  PaymentInvoices,
+  PaymentRecords,
+  pgr,
+  Subscriptions,
+  TableCode,
+  UserPaymentCredits,
+  Users,
+  UserSessions,
+  validateDbId,
+} from '@/db';
+import { DocumentType, EntityState, PaymentInvoiceState, PaymentOutcome, SubscriptionState, UserRole, UserState } from '@/enums';
 import { TypieError } from '@/errors';
+import * as portone from '@/external/portone';
 import { assertAdminPermission } from '@/utils/permission';
 import { bootstrapSchema } from '@/validation';
 import { builder } from '../builder';
@@ -248,6 +265,51 @@ builder.mutationFields((t) => ({
         });
 
       return true;
+    },
+  }),
+
+  adminRefundPayment: t.withAuth({ session: true }).fieldWithInput({
+    type: 'Boolean',
+    input: {
+      invoiceId: t.input.string({ validate: validateDbId(TableCode.PAYMENT_INVOICES) }),
+      reason: t.input.string({ required: false }),
+    },
+    resolve: async (_, { input }, ctx) => {
+      await assertAdminPermission({ sessionId: ctx.session.id });
+
+      return await db.transaction(async (tx) => {
+        const invoice = await tx
+          .select()
+          .from(PaymentInvoices)
+          .where(and(eq(PaymentInvoices.id, input.invoiceId), eq(PaymentInvoices.state, PaymentInvoiceState.PAID)))
+          .for('no key update')
+          .then(firstOrThrow);
+
+        const record = await tx
+          .select()
+          .from(PaymentRecords)
+          .where(and(eq(PaymentRecords.invoiceId, invoice.id), eq(PaymentRecords.outcome, PaymentOutcome.SUCCESS)))
+          .then(first);
+
+        if (record && record.billingAmount > 0) {
+          const result = await portone.cancelPayment({
+            paymentId: invoice.id,
+            reason: input.reason ?? '관리자 환불',
+          });
+          if (result.status === 'failed') {
+            throw new TypieError({ code: 'refund_failed', message: `[${result.code}] ${result.message}` });
+          }
+        }
+
+        await tx.update(PaymentInvoices).set({ state: PaymentInvoiceState.CANCELED }).where(eq(PaymentInvoices.id, invoice.id));
+
+        await tx
+          .update(Subscriptions)
+          .set({ state: SubscriptionState.EXPIRED, expiresAt: dayjs() })
+          .where(eq(Subscriptions.id, invoice.subscriptionId));
+
+        return true;
+      });
     },
   }),
 

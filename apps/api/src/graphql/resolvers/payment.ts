@@ -10,6 +10,7 @@ import {
   firstOrThrow,
   firstOrThrowWith,
   PaymentInvoices,
+  PaymentRecords,
   Plans,
   PostPaywallPurchases,
   PostPaywalls,
@@ -22,7 +23,15 @@ import {
   UserTrials,
   validateDbId,
 } from '@/db';
-import { CreditCodeState, InAppPurchaseStore, PaymentInvoiceState, PlanAvailability, PlanInterval, SubscriptionState } from '@/enums';
+import {
+  CreditCodeState,
+  InAppPurchaseStore,
+  PaymentInvoiceState,
+  PaymentOutcome,
+  PlanAvailability,
+  PlanInterval,
+  SubscriptionState,
+} from '@/enums';
 import { NotFoundError, TypieError } from '@/errors';
 import * as appstore from '@/external/appstore';
 import * as googleplay from '@/external/googleplay';
@@ -31,7 +40,18 @@ import { getSubscriptionExpiresAt, payAmountWithBillingKey, payInvoiceWithBillin
 import { delay } from '@/utils/promise';
 import { cardSchema, redeemCodeSchema } from '@/validation';
 import { builder } from '../builder';
-import { CreditCode, isTypeOf, PaymentInvoice, Plan, PlanRule, Subscription, User, UserBillingKey, UserTrial } from '../objects';
+import {
+  CreditCode,
+  isTypeOf,
+  PaymentInvoice,
+  PaymentRecord,
+  Plan,
+  PlanRule,
+  Subscription,
+  User,
+  UserBillingKey,
+  UserTrial,
+} from '../objects';
 
 /**
  * * Types
@@ -51,7 +71,31 @@ PaymentInvoice.implement({
   fields: (t) => ({
     id: t.exposeID('id'),
     state: t.expose('state', { type: PaymentInvoiceState }),
+    amount: t.exposeInt('amount'),
     dueAt: t.expose('dueAt', { type: 'DateTime' }),
+    createdAt: t.expose('createdAt', { type: 'DateTime' }),
+    subscription: t.field({
+      type: Subscription,
+      resolve: (self) => self.subscriptionId,
+    }),
+    records: t.field({
+      type: [PaymentRecord],
+      resolve: async (self) => {
+        return await db.select().from(PaymentRecords).where(eq(PaymentRecords.invoiceId, self.id));
+      },
+    }),
+  }),
+});
+
+PaymentRecord.implement({
+  isTypeOf: isTypeOf(TableCode.PAYMENT_RECORDS),
+  fields: (t) => ({
+    id: t.exposeID('id'),
+    outcome: t.expose('outcome', { type: PaymentOutcome }),
+    billingAmount: t.exposeInt('billingAmount'),
+    creditAmount: t.exposeInt('creditAmount'),
+    data: t.expose('data', { type: 'JSON' }),
+    createdAt: t.expose('createdAt', { type: 'DateTime' }),
   }),
 });
 
