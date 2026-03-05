@@ -363,7 +363,7 @@ mod tests {
         };
 
         rt.layout();
-        rt.update(Message::DeleteBackward);
+        rt.update(Message::DeleteBackward { length: None });
         rt.tick();
 
         assert_state_eq!(*rt.state(), initial);
@@ -390,7 +390,7 @@ mod tests {
         };
 
         rt.layout();
-        rt.update(Message::DeleteBackward);
+        rt.update(Message::DeleteBackward { length: None });
         rt.tick();
 
         let expected = state! {
@@ -425,7 +425,7 @@ mod tests {
         };
 
         rt.layout();
-        rt.update(Message::DeleteBackward);
+        rt.update(Message::DeleteBackward { length: None });
         rt.tick();
 
         let expected = state! {
@@ -460,7 +460,7 @@ mod tests {
         };
 
         rt.layout();
-        rt.update(Message::DeleteBackward);
+        rt.update(Message::DeleteBackward { length: None });
         rt.tick();
 
         let expected = state! {
@@ -497,7 +497,7 @@ mod tests {
         };
 
         rt.layout();
-        rt.update(Message::DeleteBackward);
+        rt.update(Message::DeleteBackward { length: None });
         rt.tick();
 
         let expected = state! {
@@ -543,7 +543,7 @@ mod tests {
         };
 
         rt.layout();
-        rt.update(Message::DeleteBackward);
+        rt.update(Message::DeleteBackward { length: None });
         rt.tick();
 
         let expected = state! {
@@ -591,7 +591,7 @@ mod tests {
         };
 
         rt.layout();
-        rt.update(Message::DeleteBackward);
+        rt.update(Message::DeleteBackward { length: None });
         rt.tick();
 
         let expected = state! {
@@ -650,7 +650,7 @@ mod tests {
         };
 
         rt.layout();
-        rt.update(Message::DeleteBackward);
+        rt.update(Message::DeleteBackward { length: None });
         rt.tick();
 
         let expected = state! {

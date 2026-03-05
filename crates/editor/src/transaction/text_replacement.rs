@@ -380,7 +380,7 @@ mod tests {
             text: ")".to_string(),
         });
 
-        rt.update(Message::DeleteBackward);
+        rt.update(Message::DeleteBackward { length: None });
 
         let actual = rt.state();
         let expected = state! {
@@ -426,7 +426,7 @@ mod tests {
             extend: false,
         });
 
-        rt.update(Message::DeleteBackward);
+        rt.update(Message::DeleteBackward { length: None });
 
         let text = rt.doc().to_plain_text();
         assert!(
@@ -546,6 +546,7 @@ mod tests {
         });
         rt.update(Message::CompositionUpdate {
             text: "c".to_string(),
+            replace_length: None,
         });
 
         let text = rt.doc().to_plain_text();
@@ -579,6 +580,7 @@ mod tests {
         });
         rt.update(Message::CompositionUpdate {
             text: "\u{B155}".to_string(),
+            replace_length: None,
         });
 
         rt.update(Message::Input {
@@ -815,6 +817,7 @@ mod tests {
         });
         rt.update(Message::CompositionUpdate {
             text: ")".to_string(),
+            replace_length: None,
         });
         rt.update(Message::CommitPreedit);
 

@@ -2402,7 +2402,10 @@ mod tests {
                 let start = parts.next().unwrap_or_default().to_string();
                 let update = parts.next().unwrap_or_default().to_string();
                 runtime.update(Message::CompositionStart { text: start });
-                runtime.update(Message::CompositionUpdate { text: update });
+                runtime.update(Message::CompositionUpdate {
+                    text: update,
+                    replace_length: None,
+                });
                 runtime.update(Message::CommitPreedit);
             }
 
@@ -2559,7 +2562,10 @@ mod tests {
                     let start = parts.next().unwrap_or_default().to_string();
                     let update = parts.next().unwrap_or_default().to_string();
                     runtime.update(Message::CompositionStart { text: start });
-                    runtime.update(Message::CompositionUpdate { text: update });
+                    runtime.update(Message::CompositionUpdate {
+                        text: update,
+                        replace_length: None,
+                    });
                     runtime.update(Message::CommitPreedit);
                 }
                 _ => {
@@ -4282,7 +4288,7 @@ mod tests {
             selection { (p2, 0, Affinity::Downstream) }
         };
 
-        runtime.update(Message::DeleteBackward);
+        runtime.update(Message::DeleteBackward { length: None });
 
         let actual = runtime.state();
         let expected = state! {
@@ -4449,7 +4455,7 @@ mod tests {
             selection { (empty, 0) }
         };
 
-        rt.update(Message::DeleteBackward);
+        rt.update(Message::DeleteBackward { length: None });
 
         let expected = state! {
             doc {
@@ -4653,7 +4659,7 @@ mod tests {
             selection { (empty, 0) }
         };
 
-        rt.update(Message::DeleteBackward);
+        rt.update(Message::DeleteBackward { length: None });
 
         let expected = state! {
             doc {
@@ -4769,7 +4775,7 @@ mod tests {
 
         let expected = rt.state().clone();
 
-        rt.update(Message::DeleteBackward);
+        rt.update(Message::DeleteBackward { length: None });
 
         assert_state_eq!(rt.state(), expected);
     }
@@ -4837,7 +4843,7 @@ mod tests {
 
         let expected = rt.state().clone();
 
-        rt.update(Message::DeleteBackward);
+        rt.update(Message::DeleteBackward { length: None });
 
         assert_state_eq!(rt.state(), expected);
     }

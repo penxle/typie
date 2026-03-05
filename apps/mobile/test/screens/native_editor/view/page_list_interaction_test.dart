@@ -646,14 +646,15 @@ void main() {
       await tester.pump(const Duration(milliseconds: 120));
 
       final beforePendingPan = deps.verticalScrollController.offset;
-      interaction.onPanStart(DragStartDetails(globalPosition: point, localPosition: localPoint));
-      interaction.onPanUpdate(
-        DragUpdateDetails(
-          globalPosition: point + const Offset(0, -140),
-          localPosition: localPoint + const Offset(0, -140),
-          delta: const Offset(0, -140),
-        ),
-      );
+      interaction
+        ..onPanStart(DragStartDetails(globalPosition: point, localPosition: localPoint))
+        ..onPanUpdate(
+          DragUpdateDetails(
+            globalPosition: point + const Offset(0, -140),
+            localPosition: localPoint + const Offset(0, -140),
+            delta: const Offset(0, -140),
+          ),
+        );
       await tester.pump();
       final afterPendingPan = deps.verticalScrollController.offset;
       expect((afterPendingPan - beforePendingPan).abs(), lessThan(0.1));
@@ -665,20 +666,21 @@ void main() {
       expect(deps.interactionState.snapshot().mode, InteractionMode.doubleTapSelecting);
 
       final beforeDraggingPan = deps.verticalScrollController.offset;
-      interaction.onPanStart(
-        DragStartDetails(
-          globalPosition: point + const Offset(0, -90),
-          localPosition: localPoint + const Offset(0, -90),
-        ),
-      );
-      interaction.onPanUpdate(
-        DragUpdateDetails(
-          globalPosition: point + const Offset(0, -210),
-          localPosition: localPoint + const Offset(0, -210),
-          delta: const Offset(0, -120),
-        ),
-      );
-      interaction.onPanEnd(DragEndDetails());
+      interaction
+        ..onPanStart(
+          DragStartDetails(
+            globalPosition: point + const Offset(0, -90),
+            localPosition: localPoint + const Offset(0, -90),
+          ),
+        )
+        ..onPanUpdate(
+          DragUpdateDetails(
+            globalPosition: point + const Offset(0, -210),
+            localPosition: localPoint + const Offset(0, -210),
+            delta: const Offset(0, -120),
+          ),
+        )
+        ..onPanEnd(DragEndDetails());
       await tester.pump();
       final afterDraggingPan = deps.verticalScrollController.offset;
       expect((afterDraggingPan - beforeDraggingPan).abs(), lessThan(0.1));
@@ -1529,15 +1531,16 @@ void main() {
       final localPoint = point - localTopLeft;
 
       final beforeOnPan = deps.verticalScrollController.offset;
-      interaction.onPanStart(DragStartDetails(globalPosition: point, localPosition: localPoint));
-      interaction.onPanUpdate(
-        DragUpdateDetails(
-          globalPosition: point + const Offset(0, -180),
-          localPosition: localPoint + const Offset(0, -180),
-          delta: const Offset(0, -180),
-        ),
-      );
-      interaction.onPanEnd(DragEndDetails());
+      interaction
+        ..onPanStart(DragStartDetails(globalPosition: point, localPosition: localPoint))
+        ..onPanUpdate(
+          DragUpdateDetails(
+            globalPosition: point + const Offset(0, -180),
+            localPosition: localPoint + const Offset(0, -180),
+            delta: const Offset(0, -180),
+          ),
+        )
+        ..onPanEnd(DragEndDetails());
       await tester.pump();
       final afterOnPan = deps.verticalScrollController.offset;
       expect((afterOnPan - beforeOnPan).abs(), lessThan(0.1));
@@ -1547,9 +1550,10 @@ void main() {
       final pointerUp = PointerUpEvent(pointer: 11, position: point + const Offset(0, -180));
 
       final beforeOnPointer = deps.verticalScrollController.offset;
-      interaction.onPointerDown(pointerDown);
-      interaction.onPointerMove(pointerMove);
-      interaction.onPointerUp(pointerUp);
+      interaction
+        ..onPointerDown(pointerDown)
+        ..onPointerMove(pointerMove)
+        ..onPointerUp(pointerUp);
       await tester.pump();
       final afterOnPointer = deps.verticalScrollController.offset;
       expect((afterOnPointer - beforeOnPointer).abs(), lessThan(0.1));
@@ -1686,8 +1690,7 @@ void main() {
       await tester.pumpWidget(deps.build());
       await tester.pumpAndSettle();
 
-      final interaction = interactionControllerOf(tester);
-      interaction.onDropEnter(null);
+      final interaction = interactionControllerOf(tester)..onDropEnter(null);
       await tester.pump();
       expect(deps.interactionState.snapshot().mode, InteractionMode.dndExternal);
 

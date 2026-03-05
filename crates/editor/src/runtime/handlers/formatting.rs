@@ -538,6 +538,7 @@ mod tests {
 
         runtime.update(Message::CompositionUpdate {
             text: "abc".to_string(),
+            replace_length: None,
         });
         assert_eq!(runtime.state().preedit.as_ref().unwrap().text, "abc");
         assert!(runtime.state().doc.to_plain_text().ends_with("start "));

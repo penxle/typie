@@ -35,7 +35,7 @@ class DndController {
     dragUiImage.value = null;
     _imageCompleter = Completer<void>();
 
-    // TODO: 안드로이드 드래그 이미지 지원
+    // XXX 안드로이드 드래그 이미지 지원
     final result = Platform.isAndroid ? null : await _tryRenderDragImage(pageIdx);
     if (result != null) {
       final decoded = await _decodeImageSafe(result.pixels, result.width, result.height);

@@ -409,7 +409,7 @@ class _ImageResizeHandle extends StatelessWidget {
         onPointerMove: onPointerMove,
         onPointerUp: onPointerUp,
         onPointerCancel: onPointerCancel,
-        child: Align(
+        child: Center(
           child: CustomPaint(
             painter: _ImageResizeHandlePainter(active: active),
             child: const SizedBox(height: double.infinity, width: _resizeHandleVisualWidth),
