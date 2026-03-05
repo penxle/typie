@@ -146,9 +146,6 @@ define_slate! {
         pub cursor_height: f32,
         pub cursor_visible: u32,
 
-        pub preceding_char_widths_offset: u32,
-        pub preceding_char_widths_count: u32,
-
         pub selection_cmp: i32,
         pub selection_block_ids_offset: u32,
         pub selection_block_ids_count: u32,
@@ -178,6 +175,9 @@ define_slate! {
         pub selection_head_height: f32,
 
         pub selection_expandable: u32,
+
+        pub preceding_text_offset: u32,
+        pub following_text_offset: u32,
 
         pub pointer_style: u32,
         pub pointer_state: u32,
@@ -573,7 +573,6 @@ impl Slab {
         page_idx: Option<usize>,
         bounds: Option<Rect>,
         visible: bool,
-        preceding_char_widths: Option<&[f32]>,
     ) {
         slate.cursor_page_idx = page_idx.map(|i| i as i32).unwrap_or(-1);
         if let Some(b) = bounds {
@@ -589,14 +588,6 @@ impl Slab {
         }
         slate.cursor_visible = visible as u32;
 
-        if let Some(widths) = preceding_char_widths {
-            let (off, cnt) = self.write_f32_slice(widths);
-            slate.preceding_char_widths_offset = off;
-            slate.preceding_char_widths_count = cnt;
-        } else {
-            slate.preceding_char_widths_offset = 0;
-            slate.preceding_char_widths_count = 0;
-        }
         slate.dirty |= DIRTY_CURSOR;
     }
 
@@ -672,6 +663,16 @@ impl Slab {
             slate.selection_head_height = 0.0;
         }
         slate.dirty |= DIRTY_SELECTION;
+    }
+
+    pub fn write_surrounding_texts(
+        &mut self,
+        slate: &mut Slate,
+        preceding: String,
+        following: String,
+    ) {
+        slate.preceding_text_offset = self.write_str(&preceding);
+        slate.following_text_offset = self.write_str(&following);
     }
 
     pub fn write_attrs(&mut self, slate: &mut Slate, attrs: Option<&SelectionAttributes>) {

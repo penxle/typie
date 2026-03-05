@@ -885,47 +885,6 @@ impl CursorNavigable for LineElement {
         self.selection_handle_bounds_internal(position)
     }
 
-    fn preceding_char_widths(
-        &self,
-        _ctx: &NavigationContext,
-        position: &Position,
-        count: usize,
-    ) -> Option<Vec<f32>> {
-        let offset = self.position_to_offset(position)?;
-
-        let clusters = &self.metric.clusters;
-        if clusters.is_empty() {
-            return Some(Vec::new());
-        }
-
-        let mut result = Vec::with_capacity(count);
-        let mut curr = offset;
-
-        let i = clusters.partition_point(|c| c.end_offset < curr);
-
-        for j in (0..=i.min(clusters.len().saturating_sub(1))).rev() {
-            if result.len() >= count {
-                break;
-            }
-            let cluster = &clusters[j];
-
-            if cluster.end_offset == curr {
-                result.push(cluster.width);
-                curr = cluster.start_offset;
-            } else if cluster.end_offset > curr && cluster.start_offset < curr {
-                let len = cluster.end_offset - cluster.start_offset;
-                let sub_len = curr - cluster.start_offset;
-                if len > 0 {
-                    let ratio = sub_len as f32 / len as f32;
-                    result.push(cluster.width * ratio);
-                }
-                curr = cluster.start_offset;
-            }
-        }
-
-        Some(result)
-    }
-
     fn navigate_left(
         &self,
         _ctx: &NavigationContext,

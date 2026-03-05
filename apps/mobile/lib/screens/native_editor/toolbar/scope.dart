@@ -40,7 +40,7 @@ class NativeEditorToolbarScope extends InheritedWidget {
     required this.requestFocus,
     required this.clearFocus,
     required this.dismissKeyboard,
-    required this.commitComposing,
+    required this.reconcileInput,
     super.key,
   });
 
@@ -65,7 +65,7 @@ class NativeEditorToolbarScope extends InheritedWidget {
   final void Function() requestFocus;
   final void Function() clearFocus;
   final void Function() dismissKeyboard;
-  final void Function() commitComposing;
+  final void Function() reconcileInput;
 
   static NativeEditorToolbarScope of(BuildContext context) {
     final scope = context.getInheritedWidgetOfExactType<NativeEditorToolbarScope>();

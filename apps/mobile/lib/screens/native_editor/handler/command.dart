@@ -175,16 +175,12 @@ class CommandHandler {
       return;
     }
 
-    final precedingOffset = reader.getU32('preceding_char_widths_offset');
-    final precedingCount = reader.getU32('preceding_char_widths_count');
-
     final cursor = CursorInfo(
       pageIdx: pageIdx,
       x: reader.getF32('cursor_x'),
       y: reader.getF32('cursor_y'),
       height: reader.getF32('cursor_height'),
       visible: reader.getU32('cursor_visible') != 0,
-      precedingCharWidths: reader.readF32List(precedingOffset, precedingCount),
     );
 
     controller.updateState((state) => state.copyWith(cursor: cursor));
@@ -244,6 +240,8 @@ class CommandHandler {
           headBounds: headBounds,
           range: {'anchor': anchor, 'head': head},
           expandable: expandable,
+          precedingText: reader.readStr(reader.getU32('preceding_text_offset')),
+          followingText: reader.readStr(reader.getU32('following_text_offset')),
         ),
       ),
     );

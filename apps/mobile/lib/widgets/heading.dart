@@ -65,9 +65,8 @@ class Heading extends StatelessWidget implements PreferredSizeWidget {
         systemNavigationBarContrastEnforced: false,
         systemStatusBarContrastEnforced: false,
       ),
-      child: GestureDetector(
-        onTap: onTap,
-        behavior: HitTestBehavior.translucent,
+      child: Listener(
+        onPointerDown: (_) => onTap?.call(),
         child: DecoratedBox(
           decoration: BoxDecoration(color: backgroundColor ?? context.colors.surfaceSubtle),
           child: SafeArea(

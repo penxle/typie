@@ -4,36 +4,49 @@ import 'package:flutter/widgets.dart';
 import 'package:typie/native/editor_native.dart';
 import 'package:typie/screens/native_editor/controller/clipboard.dart';
 import 'package:typie/screens/native_editor/state/scroll_mode.dart';
+import 'package:typie/screens/native_editor/state/state.dart';
 import 'package:typie/screens/native_editor/toolbar/scope.dart';
 import 'package:typie/screens/native_editor/view/input.dart';
 
 class InputController {
   InputController({
     required this.inputKey,
-    required this.dispatch,
+    required void Function(Map<String, dynamic>) dispatch,
     required this.editor,
     required this.onFocusChanged,
     required this.scrollIntoView,
     required ValueGetter<BottomToolbarMode> getBottomToolbarMode,
+    required ValueGetter<EditorSelection?> getEditorSelection,
     this.onInputAttempt,
-  }) : _getBottomToolbarMode = getBottomToolbarMode;
+  }) : _rawDispatch = dispatch,
+       _getBottomToolbarMode = getBottomToolbarMode,
+       _getEditorSelection = getEditorSelection;
 
-  final GlobalKey<InputViewState> inputKey;
-  final void Function(Map<String, dynamic>) dispatch;
+  final GlobalKey<EditorTextInputState> inputKey;
+  final void Function(Map<String, dynamic>) _rawDispatch;
+  void Function(Map<String, dynamic>)? onDispatchRecorded;
+
+  void dispatch(Map<String, dynamic> message) {
+    _rawDispatch(message);
+    onDispatchRecorded?.call(message);
+  }
+
   final NativeEditor editor;
   final void Function(bool focused) onFocusChanged;
   final void Function({ScrollMode mode}) scrollIntoView;
   final ValueGetter<BottomToolbarMode> _getBottomToolbarMode;
+  final ValueGetter<EditorSelection?> _getEditorSelection;
   final VoidCallback? onInputAttempt;
 
   bool _isActive = false;
   bool get isActive => _isActive;
-  bool isComposing = false;
   bool _pendingFocus = false;
   bool _inputReady = false;
 
   DateTime? _deleteStartTime;
   DateTime? _lastDeleteSignal;
+
+  String? lastNodeId;
 
   void onInputReady() {
     _inputReady = true;
@@ -70,27 +83,49 @@ class InputController {
       return;
     }
     _pendingFocus = false;
-    commitComposing();
+    invalidate();
     _isActive = false;
     onFocusChanged(false);
     inputKey.currentState?.deactivateInput();
   }
 
   void dismissKeyboard() {
-    commitComposing();
+    invalidate();
     inputKey.currentState?.deactivateInput();
   }
 
-  void updateCursor(double x, double y, double height, [List<double>? precedingCharWidths]) {
-    inputKey.currentState?.updateCursor(x, y, height, precedingCharWidths);
+  void updateCursor(double x, double y, double height) {
+    inputKey.currentState?.updateCursor(x, y, height);
   }
 
-  void commitComposing() {
-    if (isComposing) {
-      isComposing = false;
-      dispatch({'type': 'commitPreedit'});
-      inputKey.currentState?.resetInputContext();
+  void reconcile() {
+    final selection = _getEditorSelection();
+    if (selection != null) {
+      final nodeId = (selection.range['anchor'] as Map<String, dynamic>)['nodeId'] as String;
+      var precedingText = selection.precedingText ?? '';
+      var followingText = selection.followingText ?? '';
+
+      if (nodeId != lastNodeId) {
+        inputKey.currentState?.invalidate();
+        lastNodeId = nodeId;
+      }
+
+      if (!selection.collapsed) {
+        inputKey.currentState?.invalidate();
+        precedingText = '';
+        followingText = '';
+      }
+
+      final reconciled = inputKey.currentState?.reconcile(nodeId, precedingText, followingText);
+      if (reconciled ?? false) {
+        dispatch({'type': 'commitPreedit'});
+      }
     }
+  }
+
+  void invalidate() {
+    inputKey.currentState?.invalidate();
+    reconcile();
   }
 
   void onInsertText(String text) {
@@ -100,7 +135,7 @@ class InputController {
     scrollIntoView(mode: ScrollMode.typewriter);
   }
 
-  void onDeleteBackward() {
+  void onDeleteBackward({int length = 1}) {
     onInputAttempt?.call();
     final now = DateTime.now();
     final lastSignal = _lastDeleteSignal;
@@ -120,27 +155,23 @@ class InputController {
     } else if (duration > 1.5) {
       dispatch({'type': 'deleteWordBackward'});
     } else {
-      dispatch({'type': 'deleteBackward'});
+      dispatch({'type': 'deleteBackward', if (length > 1) 'length': length});
     }
+
     scrollIntoView(mode: ScrollMode.typewriter);
   }
 
-  void onSetMarkedText(String text) {
+  void compositionUpdate(String text, {int replaceLength = 0}) {
     onInputAttempt?.call();
-    isComposing = true;
-    dispatch({'type': 'compositionUpdate', 'text': text});
+    dispatch({'type': 'compositionUpdate', 'text': text, if (replaceLength > 0) 'replaceLength': replaceLength});
     scrollIntoView(mode: ScrollMode.typewriter);
   }
 
-  void onUnmarkText() {
-    if (isComposing) {
-      isComposing = false;
-      dispatch({'type': 'commitPreedit'});
-    }
+  void commitPreedit() {
+    dispatch({'type': 'commitPreedit'});
   }
 
-  void onCancelMarkedText() {
-    isComposing = false;
+  void compositionEnd() {
     dispatch({'type': 'compositionEnd'});
     scrollIntoView(mode: ScrollMode.typewriter);
   }
@@ -177,6 +208,12 @@ class InputController {
           }),
         );
       }
+    } else if (action == 'toggleBold') {
+      dispatch({
+        'type': 'toggleStyle',
+        'style': {'type': 'bold'},
+      });
+      scrollIntoView();
     } else if (action == 'toggleItalic') {
       dispatch({
         'type': 'toggleStyle',
@@ -210,7 +247,7 @@ class InputController {
   VoidCallback? floatingCursorEndHandler;
 
   void onFloatingCursorBegin() {
-    commitComposing();
+    invalidate();
     floatingCursorBeginHandler?.call();
   }
 
@@ -233,12 +270,5 @@ class InputController {
     onInputAttempt?.call();
     dispatch({'type': 'replaceBackward', 'length': length, 'text': text});
     scrollIntoView(mode: ScrollMode.typewriter);
-  }
-
-  void onKeyboardHidden() {
-    if (_isActive) {
-      _isActive = false;
-      onFocusChanged(false);
-    }
   }
 }

@@ -4,7 +4,21 @@ use crate::runtime::{Effect, Runtime};
 use crate::state::Selection;
 
 impl Runtime {
-    pub(crate) fn handle_delete_backward(&mut self) -> Vec<Effect> {
+    pub(crate) fn handle_delete_backward(&mut self, length: Option<usize>) -> Vec<Effect> {
+        let count = length.unwrap_or(1);
+
+        if count > 1 {
+            return self.transact(|tr| {
+                tr.delete_selection()?;
+                for _ in 0..count {
+                    if !tr.delete_text_backward()? {
+                        break;
+                    }
+                }
+                Ok(true)
+            });
+        }
+
         let undo = self.text_replacement_undo.clone();
         self.transact(|tr| {
             if let Some(undo) = undo.as_ref()
@@ -70,7 +84,7 @@ impl Runtime {
         let end_position = end_selection.head;
 
         if end_position.node_id != self.state.selection.head.node_id {
-            return self.handle_delete_backward();
+            return self.handle_delete_backward(None);
         }
 
         let selection = self.state.selection;
@@ -138,7 +152,7 @@ impl Runtime {
         let end_position = end_selection.head;
 
         if end_position.node_id != self.state.selection.head.node_id {
-            return self.handle_delete_backward();
+            return self.handle_delete_backward(None);
         }
 
         let selection = self.state.selection;

@@ -39,6 +39,7 @@ import 'package:typie/screens/native_editor/sync/persistence.dart';
 import 'package:typie/screens/native_editor/sync/selection.dart';
 import 'package:typie/screens/native_editor/sync/title.dart';
 import 'package:typie/screens/native_editor/view/editor.dart';
+import 'package:typie/services/preference.dart';
 import 'package:typie/services/state.dart';
 import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/screen.dart';
@@ -75,6 +76,7 @@ class _Content extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final editorContext = useMemoized(EditorContext.new);
+    final pref = useService<Pref>();
     final error = useState<String?>(null);
     final pageController = usePageController();
     final drag = useRef<Drag?>(null);
@@ -326,6 +328,7 @@ class _Content extends HookWidget {
                                   curve: Curves.easeInOut,
                                 );
                               },
+                              onSendInputLog: pref.devMode ? editorContext.showInputRecordingSheet : null,
                             ),
                           );
                         },

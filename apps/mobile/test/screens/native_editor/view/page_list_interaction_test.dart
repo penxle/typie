@@ -132,12 +132,13 @@ class _PageListHarnessDeps {
     final renderZoom = ValueNotifier<double>(1);
 
     final inputController = InputController(
-      inputKey: GlobalKey<InputViewState>(),
+      inputKey: GlobalKey<EditorTextInputState>(),
       dispatch: controller.dispatch,
       editor: editor,
       onFocusChanged: controller.setFocused,
       scrollIntoView: controller.scrollIntoView,
       getBottomToolbarMode: _hiddenBottomToolbarMode,
+      getEditorSelection: () => null,
     );
 
     EditorController readController() => controller;
@@ -253,7 +254,7 @@ class _PageListHarnessDeps {
     }
 
     final content = rebuildContentScopeOnControllerChange
-        ? AnimatedBuilder(animation: controller, builder: (_, __) => buildContentScope())
+        ? AnimatedBuilder(animation: controller, builder: (_, _) => buildContentScope())
         : buildContentScope();
 
     return MaterialApp(
@@ -277,7 +278,7 @@ class _PageListHarnessDeps {
           requestFocus: inputController.requestFocus,
           clearFocus: inputController.clearFocus,
           dismissKeyboard: inputController.dismissKeyboard,
-          commitComposing: inputController.commitComposing,
+          reconcileInput: inputController.invalidate,
           child: content,
         ),
       ),
@@ -373,7 +374,7 @@ void main() {
   }
 
   CursorInfo seededCursor() {
-    return const CursorInfo(pageIdx: 0, x: 160, y: 360, height: 20, visible: true, precedingCharWidths: []);
+    return const CursorInfo(pageIdx: 0, x: 160, y: 360, height: 20, visible: true);
   }
 
   Future<void> quickTap(WidgetTester tester, Offset position) async {

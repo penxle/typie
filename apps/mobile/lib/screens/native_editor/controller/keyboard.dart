@@ -9,15 +9,25 @@ Map<String, dynamic> _nav(String direction, bool extend) => {
 };
 
 class KeyboardHandler {
-  KeyboardHandler({required this.dispatch, required this.commitComposing, required this.scrollIntoView});
+  KeyboardHandler({
+    required this.dispatch,
+    required this.reconcileInput,
+    required this.scrollIntoView,
+    required this.onShortcut,
+  });
 
   final void Function(Map<String, dynamic> message) dispatch;
-  final void Function() commitComposing;
+  final void Function() reconcileInput;
   final void Function({ScrollMode mode}) scrollIntoView;
+  final void Function(String action) onShortcut;
 
   bool handleKeyEvent(KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return false;
+    }
+
+    if (_handleShortcut(event)) {
+      return true;
     }
 
     final message = _getActionFromKeyEvent(event);
@@ -27,7 +37,7 @@ class KeyboardHandler {
 
     final type = message['type'] as String;
     if (type == 'navigate') {
-      commitComposing();
+      reconcileInput();
     }
     dispatch(message);
 
@@ -41,6 +51,74 @@ class KeyboardHandler {
     }
 
     return true;
+  }
+
+  bool _handleShortcut(KeyEvent event) {
+    final key = event.logicalKey;
+    final shift = HardwareKeyboard.instance.isShiftPressed;
+    final meta = HardwareKeyboard.instance.isMetaPressed;
+    final alt = HardwareKeyboard.instance.isAltPressed;
+
+    if (!meta && !alt) {
+      if (key == LogicalKeyboardKey.tab) {
+        onShortcut(shift ? 'outdent' : 'indent');
+        return true;
+      }
+      if (shift && key == LogicalKeyboardKey.enter) {
+        onShortcut('insertHardBreak');
+        return true;
+      }
+      return false;
+    }
+
+    if (meta && !alt) {
+      if (key == LogicalKeyboardKey.keyB && !shift) {
+        onShortcut('toggleBold');
+        return true;
+      } else if (key == LogicalKeyboardKey.keyI && !shift) {
+        onShortcut('toggleItalic');
+        return true;
+      } else if (key == LogicalKeyboardKey.keyU && !shift) {
+        onShortcut('toggleUnderline');
+        return true;
+      } else if (key == LogicalKeyboardKey.keyS && shift) {
+        onShortcut('toggleStrikethrough');
+        return true;
+      } else if (key == LogicalKeyboardKey.backslash && !shift) {
+        onShortcut('clearFormatting');
+        return true;
+      } else if (key == LogicalKeyboardKey.keyZ) {
+        onShortcut(shift ? 'redo' : 'undo');
+        return true;
+      } else if (key == LogicalKeyboardKey.keyC && !shift) {
+        onShortcut('copy');
+        return true;
+      } else if (key == LogicalKeyboardKey.keyX && !shift) {
+        onShortcut('cut');
+        return true;
+      } else if (key == LogicalKeyboardKey.keyV && !shift) {
+        onShortcut('paste');
+        return true;
+      } else if (key == LogicalKeyboardKey.keyA && !shift) {
+        onShortcut('selectAll');
+        return true;
+      } else if (key == LogicalKeyboardKey.enter && !shift) {
+        onShortcut('insertPageBreak');
+        return true;
+      } else if (key == LogicalKeyboardKey.backspace && !shift) {
+        onShortcut('deleteToLineStart');
+        return true;
+      }
+    }
+
+    if (alt && !meta) {
+      if (key == LogicalKeyboardKey.backspace && !shift) {
+        onShortcut('deleteWordBackward');
+        return true;
+      }
+    }
+
+    return false;
   }
 
   Map<String, dynamic>? _getActionFromKeyEvent(KeyEvent event) {

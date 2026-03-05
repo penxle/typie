@@ -55,6 +55,8 @@ abstract class EditorSelection with _$EditorSelection {
     SelectionEndpointBounds? headBounds,
     required Map<String, dynamic> range,
     @Default(0) int expandable,
+    String? precedingText,
+    String? followingText,
   }) = _EditorSelection;
 
   const EditorSelection._();
@@ -79,22 +81,9 @@ abstract class CursorInfo with _$CursorInfo {
     required double y,
     required double height,
     required bool visible,
-    required List<double> precedingCharWidths,
   }) = _CursorInfo;
 
   const CursorInfo._();
-
-  factory CursorInfo.fromMap(Map<String, dynamic> map) {
-    final bounds = map['bounds'] as Map<String, dynamic>?;
-    return CursorInfo(
-      pageIdx: map['pageIdx'] as int? ?? 0,
-      x: (bounds?['x'] as num?)?.toDouble() ?? 0,
-      y: (bounds?['y'] as num?)?.toDouble() ?? 0,
-      height: (bounds?['height'] as num?)?.toDouble() ?? 0,
-      visible: map['visible'] as bool? ?? false,
-      precedingCharWidths: (map['precedingCharWidths'] as List?)?.map((e) => (e as num).toDouble()).toList() ?? [],
-    );
-  }
 
   bool isSamePosition(CursorInfo other) {
     return pageIdx == other.pageIdx && x == other.x && y == other.y;
